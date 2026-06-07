@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="RigMatch.AI icon">
+  <defs>
+    <linearGradient id="bg" x1="34" y1="22" x2="222" y2="236" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#442348"/>
+      <stop offset=".55" stop-color="#241b35"/>
+      <stop offset="1" stop-color="#101a23"/>
+    </linearGradient>
+    <linearGradient id="case" x1="66" y1="48" x2="190" y2="184" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff0be"/>
+      <stop offset=".72" stop-color="#f3ba54"/>
+      <stop offset="1" stop-color="#d98a3d"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="82" y1="74" x2="174" y2="144" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#172736"/>
+      <stop offset="1" stop-color="#091119"/>
+    </linearGradient>
+    <linearGradient id="heart" x1="94" y1="86" x2="166" y2="147" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff7ea7"/>
+      <stop offset="1" stop-color="#ff3d76"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="10" y="10" width="236" height="236" rx="38" fill="url(#bg)"/>
+  <rect x="14" y="14" width="228" height="228" rx="34" fill="none" stroke="#f1bd53" stroke-width="8"/>
+  <rect x="26" y="26" width="204" height="204" rx="28" fill="none" stroke="#ff6d92" stroke-opacity=".26" stroke-width="3"/>
+
+  <path d="M98 47 80 28" fill="none" stroke="#f1bd53" stroke-width="9" stroke-linecap="round"/>
+  <path d="m158 47 18-19" fill="none" stroke="#f1bd53" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="80" cy="28" r="8" fill="#ff6d92"/>
+  <circle cx="176" cy="28" r="8" fill="#ff6d92"/>
+
+  <rect x="50" y="48" width="156" height="140" rx="26" fill="#1b141f" opacity=".65"/>
+  <rect x="43" y="42" width="164" height="142" rx="28" fill="url(#case)" stroke="#ffefd4" stroke-width="6"/>
+  <rect x="62" y="62" width="126" height="100" rx="18" fill="url(#screen)" stroke="#2bd4c8" stroke-opacity=".55" stroke-width="5"/>
+
+  <path d="M128 142c-28-19-50-37-50-62 0-16 11-28 27-28 11 0 19 5 23 14 4-9 12-14 23-14 16 0 27 12 27 28 0 25-22 43-50 62Z" fill="url(#heart)"/>
+  <path d="M128 130c-22-15-38-29-38-48 0-8 5-14 13-14 8 0 13 4 17 12l8 17 8-17c4-8 9-12 17-12 8 0 13 6 13 14 0 19-16 33-38 48Z" fill="#fff7e9" opacity=".22"/>
+
+  <rect x="97" y="184" width="58" height="16" rx="8" fill="#f1bd53"/>
+  <path d="M78 214h98" stroke="#f1bd53" stroke-width="14" stroke-linecap="round"/>
+  <path d="M96 214v-14m32 14v-14m32 14v-14" stroke="#fff0be" stroke-opacity=".82" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="198" cy="74" r="9" fill="#2bd4c8"/>
+  <circle cx="198" cy="101" r="7" fill="#ff6d92"/>
+  <circle cx="198" cy="126" r="7" fill="#fff0be"/>
+</svg>

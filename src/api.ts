@@ -6,16 +6,21 @@ import {
   demoSystem,
 } from './sampleData';
 import { buildBenchmarkPromptPlan, normalizeBenchmarkQuestionCount } from './benchmarkSuite';
-import type { AgentArcadeApi, BenchmarkProgressUpdate, UpdateChannel } from './types';
+import type { AgentArcadeApi, BenchmarkProgressUpdate, PullProgressUpdate, UpdateChannel } from './types';
 
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
 const RIGMATCH_RELEASES_URL = 'https://github.com/daveeuson/RigMatch.AI/releases';
 const APP_VERSION = '0.1.0';
 const benchmarkProgressListeners = new Set<(update: BenchmarkProgressUpdate) => void>();
+const pullProgressListeners = new Set<(update: PullProgressUpdate) => void>();
 
 function emitBenchmarkProgress(update: BenchmarkProgressUpdate) {
   benchmarkProgressListeners.forEach((listener) => listener(update));
+}
+
+function emitPullProgress(update: PullProgressUpdate) {
+  pullProgressListeners.forEach((listener) => listener(update));
 }
 
 const fallbackApi: AgentArcadeApi = {
@@ -50,11 +55,46 @@ const fallbackApi: AgentArcadeApi = {
     throw new Error('Remote Ollama hosts are disabled for v1. Remote runners are planned for RigMatch 2.0.');
   },
   async pullModel(request) {
-    await delay(1500);
+    const progressId = request.progressId || `preview-pull-${Date.now()}`;
+    const baseUrl = request.baseUrl || demoOllama.baseUrl;
+    const totalBytes = 3.4 * 1024 * 1024 * 1024;
+    const startedAt = Date.now();
+
+    emitPullProgress({
+      id: progressId,
+      model: request.model,
+      baseUrl,
+      phase: 'started',
+      status: 'Starting preview download',
+      percent: 0,
+      completedBytes: 0,
+      totalBytes,
+      speedBps: 0,
+      updatedAt: new Date().toISOString(),
+    });
+
+    for (let step = 1; step <= 10; step += 1) {
+      await delay(180);
+      const completedBytes = Math.round((totalBytes * step) / 10);
+      const elapsedSeconds = Math.max(0.1, (Date.now() - startedAt) / 1000);
+      emitPullProgress({
+        id: progressId,
+        model: request.model,
+        baseUrl,
+        phase: step === 10 ? 'complete' : 'pulling',
+        status: step === 10 ? 'Preview download complete' : 'Pulling preview layer',
+        percent: step * 10,
+        completedBytes,
+        totalBytes,
+        speedBps: step === 10 ? 0 : completedBytes / elapsedSeconds,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
     return {
       model: request.model,
       status: 'Preview pull complete',
-      baseUrl: request.baseUrl || demoOllama.baseUrl,
+      baseUrl,
       completedAt: new Date().toISOString(),
     };
   },
@@ -147,6 +187,12 @@ const fallbackApi: AgentArcadeApi = {
     benchmarkProgressListeners.add(callback);
     return () => {
       benchmarkProgressListeners.delete(callback);
+    };
+  },
+  onPullProgress(callback) {
+    pullProgressListeners.add(callback);
+    return () => {
+      pullProgressListeners.delete(callback);
     };
   },
   async sendChat(request) {

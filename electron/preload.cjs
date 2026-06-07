@@ -15,6 +15,11 @@ const api = {
     ipcRenderer.on('benchmark:progress', listener);
     return () => ipcRenderer.removeListener('benchmark:progress', listener);
   },
+  onPullProgress: (callback) => {
+    const listener = (_event, update) => callback(update);
+    ipcRenderer.on('ollama:pullProgress', listener);
+    return () => ipcRenderer.removeListener('ollama:pullProgress', listener);
+  },
   sendChat: (request) => ipcRenderer.invoke('chat:send', request),
   getLogs: (limit) => ipcRenderer.invoke('logs:list', limit),
   appendLog: (entry) => ipcRenderer.invoke('logs:append', entry),

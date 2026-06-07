@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -54,6 +54,7 @@ import type {
   NetworkHost,
   OllamaModel,
   OllamaStatus,
+  PullProgressUpdate,
   SystemProfile,
   UpdateChannel,
   UpdateCheckResponse,
@@ -66,15 +67,13 @@ import modelAvatarLlama from './assets/model-avatar-llama.png';
 import modelAvatarMistral from './assets/model-avatar-mistral.png';
 import modelAvatarPhi from './assets/model-avatar-phi.png';
 import modelAvatarQwen from './assets/model-avatar-qwen.png';
-import rigmatchBrandIcon from './assets/rigmatch-brand-icon.png';
+import rigmatchBrandIcon from './assets/rigmatch-brand-icon.svg';
 import robotContestantWall from './assets/robot-contestant-wall.png';
 import robotModelTest from './assets/robot-model-test.png';
 import robotRigGreenroom from './assets/robot-rig-greenroom.png';
 import robotRomanceHero from './assets/robot-romance-hero.png';
 import robotScorecardCeremony from './assets/robot-scorecard-ceremony.png';
 import robotSpeedDateShow from './assets/robot-speed-date-show.png';
-import statusLocalScan from './assets/status-local-scan.png';
-import statusOllamaService from './assets/status-ollama-service.png';
 import './App.css';
 
 type ChatMessage = {
@@ -178,12 +177,11 @@ type HardwareFit = {
 };
 
 const navItems: NavItem[] = [
-  { id: 'lan', label: 'Your Rig', description: 'Check this computer', icon: Network },
-  { id: 'models', label: 'Contestants', description: 'Browse local models', icon: Boxes },
-  { id: 'speedDate', label: 'Speed Dating', description: 'Compare up to 5 models', icon: Trophy },
-  { id: 'bench', label: 'Test One Model', description: 'Ask questions, get score', icon: Gauge },
+  { id: 'models', label: 'Contestants', description: 'Browse, test, compare', icon: Boxes },
+  { id: 'speedDate', label: 'Speed Dating', description: 'Comparison details', icon: Trophy },
   { id: 'agent', label: 'Top Pick', description: 'Best match profile', icon: Bot },
-  { id: 'history', label: 'Scorecards', description: 'Past test results', icon: History },
+  { id: 'history', label: 'Scorecards', description: 'Test rankings', icon: History },
+  { id: 'lan', label: 'Your Rig', description: 'Hardware and Ollama', icon: Network },
   { id: 'settings', label: 'Settings', description: 'Theme and app prefs', icon: Settings },
   { id: 'about', label: 'About', description: 'Version and support', icon: Info },
 ];
@@ -276,8 +274,11 @@ function App() {
   const [isBenchmarking, setIsBenchmarking] = useState(false);
   const [isListTesting, setIsListTesting] = useState(false);
   const [isPullingModels, setIsPullingModels] = useState(false);
+  const [isPullCancelRequested, setIsPullCancelRequested] = useState(false);
   const [isDeletingModel, setIsDeletingModel] = useState(false);
   const [pullingModel, setPullingModel] = useState<string | null>(null);
+  const [pullProgressByModel, setPullProgressByModel] = useState<Record<string, PullProgressUpdate>>({});
+  const pullQueueCancelRef = useRef(false);
   const [pendingDeleteModel, setPendingDeleteModel] = useState<ModelRow | null>(null);
   const [listTestResult, setListTestResult] = useState<ListTestResult | null>(savedHistory?.listTestResult ?? null);
   const [modelScores, setModelScores] = useState<Record<string, TestedModelScore>>(() =>
@@ -289,8 +290,8 @@ function App() {
   const [benchmarkQuestions, setBenchmarkQuestions] = useState<BenchmarkQuestion[]>(() => getSavedBenchmarkQuestions());
   const [suiteEditorOpen, setSuiteEditorOpen] = useState(false);
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null);
-  const [activity, setActivity] = useState('Ready to check this computer and find a local AI match.');
-  const [activeNavId, setActiveNavId] = useState<NavId>('lan');
+  const [activity, setActivity] = useState('Contestants is your hub: browse models, run tests, manage downloads, and start Speed Dating.');
+  const [activeNavId, setActiveNavId] = useState<NavId>('models');
   const [appLogs, setAppLogs] = useState<AppLogEntry[]>([]);
   const [logPath, setLogPath] = useState('');
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
@@ -542,7 +543,7 @@ function App() {
       setBenchmark(createEmptyBenchmark(selectedModel, ollama.baseUrl));
       setRunProgress(null);
       setPendingScoreClear(null);
-      setActivity('All saved match scores and date transcripts were cleared. Ollama models stayed installed.');
+      setActivity('All saved match scores and test transcripts were cleared. Ollama models stayed installed.');
       return;
     }
 
@@ -563,14 +564,14 @@ function App() {
     );
     setRunProgress(null);
     setPendingScoreClear(null);
-    setActivity(`${pendingScoreClear.model} score and date transcript cleared. The model is still installed.`);
+    setActivity(`${pendingScoreClear.model} score and test transcript cleared. The model is still installed.`);
   }, [modelRows, ollama.baseUrl, pendingScoreClear, selectedModel]);
 
 
   const closeTutorial = useCallback(() => {
     window.localStorage.setItem(TUTORIAL_STORAGE_KEY, 'seen');
     setTutorialOpen(false);
-    setActivity('Tutorial closed. Use Start Tour whenever you want the host back.');
+    setActivity('Quick guide closed. Use the Matchmaker Menu to move through the app.');
   }, []);
 
   const confirmClearData = useCallback(async () => {
@@ -659,7 +660,7 @@ function App() {
       }
 
       setPendingDeleteModel(null);
-      setActivity(`${result.model} deleted from ${targetHost}. Download it again if that match deserves a second date.`);
+      setActivity(`${result.model} deleted from ${targetHost}. Download it again if that match deserves another test.`);
     } catch (error) {
       setActivity(`Model delete failed: ${getErrorMessage(error)}`);
     } finally {
@@ -838,8 +839,9 @@ function App() {
       const next = new Set(current);
       if (next.has(row.displayName)) {
         next.delete(row.displayName);
+        setPullProgressByModel((current) => removePullProgress(current, row.displayName));
         const remainingGb = sumQueuedGb(modelRows, next);
-        setActivity(`${row.displayName} removed. Queue now totals ${formatGb(remainingGb)}.`);
+        setActivity(`${row.displayName} removed from the download queue. Queue now totals ${formatGb(remainingGb)}.`);
       } else {
         const rowGb = row.sizeGb || 0;
         const nextQueuedGb = sumQueuedGb(modelRows, next) + rowGb;
@@ -862,12 +864,57 @@ function App() {
         }
 
         next.add(row.displayName);
+        setPullProgressByModel((current) => ({
+          ...current,
+          [row.displayName]: createQueuedPullProgress(row.displayName, ollama.baseUrl),
+        }));
         const warning = freeAfterQueue < 25 ? ' Low-space warning.' : '';
-        setActivity(`${row.displayName} queued (+${formatGb(rowGb)}). Queue totals ${formatGb(nextQueuedGb)}; ${formatGb(freeAfterQueue)} free after queue.${warning}`);
+        setActivity(`${row.displayName} added to the download queue (+${formatGb(rowGb)}). Queue totals ${formatGb(nextQueuedGb)}; ${formatGb(freeAfterQueue)} free after queue.${warning}`);
       }
       return next;
     });
-  }, [modelRows, system.gpu.vramGb, system.storage.availableGb]);
+  }, [modelRows, ollama.baseUrl, system.gpu.vramGb, system.storage.availableGb]);
+
+  const cancelDownloadQueue = useCallback(() => {
+    if (isPullingModels) {
+      if (isPullCancelRequested) {
+        setActivity('Download queue stop is already requested. Waiting for the current Ollama pull to finish.');
+        return;
+      }
+
+      pullQueueCancelRef.current = true;
+      setIsPullCancelRequested(true);
+      setQueuedModelIds(new Set<string>());
+      setPullProgressByModel((current) => {
+        if (!pullingModel) return {};
+        const activeProgress = current[pullingModel] ?? createQueuedPullProgress(pullingModel, ollama.baseUrl);
+        return {
+          [pullingModel]: {
+            ...activeProgress,
+            phase: activeProgress.phase === 'complete' ? 'complete' : 'pulling',
+            status: 'Stopping after current pull',
+            updatedAt: new Date().toISOString(),
+          },
+        };
+      });
+      setActivity(
+        pullingModel
+          ? `Stopping the download queue after ${pullingModel}. Ollama may finish this pull, but no more queued models will start.`
+          : 'Stopping the download queue. No more queued models will start.',
+      );
+      return;
+    }
+
+    if (queuedModelIds.size === 0) {
+      setActivity('Download queue is already empty.');
+      return;
+    }
+
+    const queuedGb = sumQueuedGb(modelRows, queuedModelIds);
+    setQueuedModelIds(new Set<string>());
+    setPullProgressByModel((current) => removePullProgressForModels(current, queuedModelIds));
+    setActivity(`Download queue canceled. Removed ${formatGb(queuedGb)} of planned downloads.`);
+  }, [isPullCancelRequested, isPullingModels, modelRows, ollama.baseUrl, pullingModel, queuedModelIds]);
 
   const pullQueuedModels = useCallback(async () => {
     if (queuedRows.length === 0) {
@@ -880,15 +927,43 @@ function App() {
       return;
     }
 
+    pullQueueCancelRef.current = false;
+    setIsPullCancelRequested(false);
     setIsPullingModels(true);
+    let completedCount = 0;
+    let wasCancelled = false;
+    let activePullModel: string | null = null;
+    const startingCount = queuedRows.length;
 
     try {
       for (const row of queuedRows) {
+        if (pullQueueCancelRef.current) {
+          wasCancelled = true;
+          break;
+        }
+
+        const progressId = createRunProgressId('pull');
+        activePullModel = row.displayName;
         setPullingModel(row.displayName);
+        setPullProgressByModel((current) => ({
+          ...current,
+          [row.displayName]: {
+            ...(current[row.displayName] ?? createQueuedPullProgress(row.displayName, ollama.baseUrl)),
+            id: progressId,
+            model: row.displayName,
+            baseUrl: ollama.baseUrl,
+            phase: 'started',
+            status: 'Starting download',
+            percent: 0,
+            speedBps: 0,
+            updatedAt: new Date().toISOString(),
+          },
+        }));
         setActivity(`Downloading ${row.displayName} into ${selectedHost?.hostname ?? 'this computer'}... This can take a while.`);
         await agentArcadeApi.pullModel({
           model: row.displayName,
           baseUrl: ollama.baseUrl,
+          progressId,
         });
 
         setOllama((current) => {
@@ -907,16 +982,71 @@ function App() {
             ],
           };
         });
+
+        completedCount += 1;
+        setPullProgressByModel((current) => ({
+          ...current,
+          [row.displayName]: {
+            ...(current[row.displayName] ?? createQueuedPullProgress(row.displayName, ollama.baseUrl)),
+            id: progressId,
+            model: row.displayName,
+            baseUrl: ollama.baseUrl,
+            phase: 'complete',
+            status: 'Download complete',
+            percent: 100,
+            speedBps: 0,
+            updatedAt: new Date().toISOString(),
+          },
+        }));
+        setQueuedModelIds((current) => {
+          const next = new Set(current);
+          next.delete(row.displayName);
+          return next;
+        });
+      }
+
+      if (pullQueueCancelRef.current) {
+        wasCancelled = true;
+      }
+
+      if (wasCancelled) {
+        const finishedLabel = completedCount === 0
+          ? 'No models finished downloading.'
+          : `${completedCount} of ${startingCount} model${startingCount === 1 ? '' : 's'} finished. Refreshing the model list...`;
+        setActivity(`Download queue stopped. ${finishedLabel}`);
+        if (completedCount > 0) {
+          await refreshRig();
+        }
+        return;
       }
 
       setQueuedModelIds(new Set<string>());
-      setActivity(`${queuedRows.length} model${queuedRows.length === 1 ? '' : 's'} downloaded. Refreshing the model list...`);
+      setActivity(`${completedCount} model${completedCount === 1 ? '' : 's'} downloaded. Refreshing the model list...`);
       await refreshRig();
     } catch (error) {
+      if (activePullModel) {
+        const failedModel = activePullModel;
+        setPullProgressByModel((current) => ({
+          ...current,
+          [failedModel]: {
+            ...(current[failedModel] ?? createQueuedPullProgress(failedModel, ollama.baseUrl)),
+            model: failedModel,
+            baseUrl: ollama.baseUrl,
+            phase: 'failed',
+            status: 'Download failed',
+            percent: current[failedModel]?.percent ?? null,
+            speedBps: 0,
+            error: getErrorMessage(error),
+            updatedAt: new Date().toISOString(),
+          },
+        }));
+      }
       setActivity(`Model download failed: ${getErrorMessage(error)}`);
     } finally {
       setPullingModel(null);
       setIsPullingModels(false);
+      setIsPullCancelRequested(false);
+      pullQueueCancelRef.current = false;
     }
   }, [ollama.baseUrl, ollama.ready, queuedRows, refreshRig, selectedHost?.hostname]);
 
@@ -1265,6 +1395,20 @@ function App() {
     });
   }, [benchmarkPromptPlan.length]);
 
+  useEffect(() => {
+    if (!agentArcadeApi.onPullProgress) return undefined;
+
+    return agentArcadeApi.onPullProgress((update) => {
+      setPullProgressByModel((current) => ({
+        ...current,
+        [update.model]: {
+          ...(current[update.model] ?? {}),
+          ...update,
+        },
+      }));
+    });
+  }, []);
+
   return (
     <div className="app-shell" data-theme={themeId} data-ui-mode={uiMode}>
       <TopDeck isScanning={isScanningRig} onScan={refreshRig}
@@ -1309,21 +1453,30 @@ function App() {
             installedModelNames={installedModelNames}
             shortlistIds={shortlistIds}
             queuedModelIds={queuedModelIds}
+            pullProgressByModel={pullProgressByModel}
             modelScores={modelScores}
             diskGuard={diskGuard}
             vramGb={system.gpu.vramGb}
             queuedCount={queuedRows.length}
             isBenchmarking={isBenchmarking || isListTesting}
+            isListTesting={isListTesting}
             isPulling={isPullingModels}
+            isPullCancelRequested={isPullCancelRequested}
             isDeletingModel={isDeletingModel}
             pullingModel={pullingModel}
+            listTestResult={listTestResult}
+            runProgress={runProgress}
+            questionCount={benchmarkQuestionCount}
             shortlistedCount={shortlistedRows.length}
             onSelect={setSelectedModel}
             onScoreModel={requestBenchmarkRow}
             onDeleteModel={requestDeleteModel}
             onQueueModel={queueModel}
             onPullQueued={pullQueuedModels}
+            onCancelQueue={cancelDownloadQueue}
             onToggleShortlist={toggleShortlist}
+            onRunListTest={requestListTest}
+            onOpenSuiteEditor={() => setSuiteEditorOpen(true)}
             onOpenSpeedDate={() => selectNav('speedDate')}
             onOpenTopPick={() => selectNav('agent')}
             onRefresh={refreshRig}
@@ -1390,7 +1543,6 @@ function App() {
         {(activeNavId === 'history' || activeNavId === 'settings' || activeNavId === 'about') && (
           <UtilityPanel
             panel={activeNavId}
-            benchmark={benchmark}
             listTestResult={listTestResult}
             selectedHost={selectedHost}
             selectedModel={selectedModel}
@@ -1515,17 +1667,10 @@ function App() {
           modelCount={modelRows.length}
           shortlistCount={shortlistedRows.length}
           scoredCount={scoredModelCount}
-          canBenchmark={canBenchmark}
           ollamaReady={ollama.ready}
-          isScanning={isScanningRig}
-          isBenchmarking={isBenchmarking}
           onStepChange={setTutorialStep}
           onClose={closeTutorial}
           onSelectNav={selectNav}
-          onCheckComputer={refreshRig}
-          onRunTest={requestBenchmark}
-          onOpenCompare={() => selectNav('speedDate')}
-          onOpenSetupGuide={openSetupGuide}
         />
       )}
     </div>
@@ -1544,7 +1689,10 @@ function TopDeck({
   onScan: () => void;
 }) {
   const gpuLabel = `${system.gpu.model}${system.gpu.vramGb ? ` ${system.gpu.vramGb}GB` : ''}`;
-  const hostCountLabel = ollama.ready ? 'Local Ollama' : 'Check local app';
+  const statusTitle = ollama.ready ? 'Local Ollama Ready' : 'Ollama Not Found';
+  const statusDetail = ollama.ready
+    ? `${ollama.models.length} installed model${ollama.models.length === 1 ? '' : 's'} visible.`
+    : 'Install or start Ollama, then check this computer again.';
   const localMachine = {
     hostname: system.hostname,
     ip: system.networks[0]?.address ?? '127.0.0.1',
@@ -1578,26 +1726,14 @@ function TopDeck({
         <MetricTile label="VRAM" value={`${system.gpu.vramGb || '?'} GB`} level={system.gpu.vramGb ? Math.min(100, (system.gpu.vramGb / 16) * 100) : 18} />
       </section>
 
-      <section className="service-card" aria-label="Ollama service">
-        <img className="status-art service-bot" src={statusOllamaService} alt="" draggable={false} />
-        <div>
-          <span>Ollama Service</span>
-          <strong className={ollama.ready ? 'status-good' : 'status-bad'}>
-            {ollama.ready ? 'Running' : 'Not Found'}
-          </strong>
+      <section className="local-status-card" aria-label="Local AI status">
+        <div className={ollama.ready ? 'local-status-icon ready' : 'local-status-icon needs-setup'} aria-hidden="true">
+          {isScanning ? <RefreshCw className="spin" /> : ollama.ready ? <ShieldCheck /> : <AlertTriangle />}
         </div>
-      </section>
-
-      <section className="scan-card" aria-label="Scan status">
-        <img
-          className={`status-art ${isScanning ? 'radar-spin' : ''}`}
-          src={statusLocalScan}
-          alt=""
-          draggable={false}
-        />
         <div>
-          <span>Scan Status</span>
-          <strong>{hostCountLabel}</strong>
+          <span>Local AI Status</span>
+          <strong className={ollama.ready ? 'status-good' : 'status-bad'}>{statusTitle}</strong>
+          <em>{statusDetail}</em>
           <button type="button" className="primary-button compact" onClick={onScan}>
             <ScanLine aria-hidden="true" />
             Check Local
@@ -1643,8 +1779,8 @@ function SideMenu({
   return (
     <aside className="side-menu" aria-label="RigMatch.AI menu">
       <div className="side-menu-title">
-        <span>Matchmaker Menu</span>
-        <strong>Choose a round</strong>
+        <span>Matchmaker Hub</span>
+        <strong>Start with Contestants</strong>
       </div>
       <nav className="side-menu-nav" aria-label="Primary navigation">
         {items.map((item, index) => {
@@ -1680,16 +1816,16 @@ function SideMenu({
       )}
       <button
         type="button"
-        className={activeId === 'speedDate' ? 'side-menu-summary active' : 'side-menu-summary'}
-        onClick={() => onSelect('speedDate')}
-        aria-label={`Open Speed Dating. Tonight's lineup has ${shortlistCount} of 5 picked and ${
+        className={activeId === 'models' ? 'side-menu-summary active' : 'side-menu-summary'}
+        onClick={() => onSelect('models')}
+        aria-label={`Open Contestants hub. Speed Dating lineup has ${shortlistCount} of 5 picked and ${
           scoredCount > 0 ? `${scoredCount} scored` : 'no scored models yet'
         }.`}
-        title="Open Speed Dating lineup"
+        title="Open Contestants hub"
       >
-        <span>Tonight's lineup</span>
-        <strong>{shortlistCount}/5 picked</strong>
-        <em>{scoredCount > 0 ? `${scoredCount} scored` : 'Run a test to crown a match'}</em>
+        <span>Contestants Hub</span>
+        <strong>Browse, test, compare</strong>
+        <em>{shortlistCount}/5 picked · {scoredCount > 0 ? `${scoredCount} scored` : 'no scores yet'}</em>
       </button>
     </aside>
   );
@@ -1703,17 +1839,10 @@ function FirstRunTutorial({
   modelCount,
   shortlistCount,
   scoredCount,
-  canBenchmark,
   ollamaReady,
-  isScanning,
-  isBenchmarking,
   onStepChange,
   onClose,
   onSelectNav,
-  onCheckComputer,
-  onRunTest,
-  onOpenCompare,
-  onOpenSetupGuide,
 }: {
   stepIndex: number;
   selectedModel: string;
@@ -1721,72 +1850,53 @@ function FirstRunTutorial({
   modelCount: number;
   shortlistCount: number;
   scoredCount: number;
-  canBenchmark: boolean;
   ollamaReady: boolean;
-  isScanning: boolean;
-  isBenchmarking: boolean;
   onStepChange: (stepIndex: number) => void;
   onClose: () => void;
   onSelectNav: (id: NavId) => void;
-  onCheckComputer: () => void;
-  onRunTest: () => void;
-  onOpenCompare: () => void;
-  onOpenSetupGuide: () => void;
 }) {
   const steps = [
     {
-      round: 'Welcome',
-      title: 'Welcome to RigMatch',
-      body: 'This tour helps you find one local AI model that works well on this computer. The app should be helpful first, easy second, and fun third.',
-      prize: 'Goal: get one local AI model working on this computer.',
-      navId: 'lan' as NavId,
-      primaryLabel: 'Start Round 1',
-    },
-    {
-      round: 'Round 1',
-      title: 'Check this computer',
-      body: ollamaReady
-        ? `${hostCount || 1} computer${hostCount === 1 ? '' : 's'} checked. Ollama is ready, so the show can go on.`
-        : 'RigMatch needs Ollama running before it can test local AI models. If Ollama is missing, open the setup guide first.',
-      prize: ollamaReady ? 'Prize: your computer is eligible.' : 'Prize: get Ollama ready.',
-      navId: 'lan' as NavId,
-      primaryLabel: ollamaReady ? (isScanning ? 'Checking' : 'Check Again') : 'Open Setup Guide',
-    },
-    {
-      round: 'Round 2',
-      title: 'Pick the contestants',
-      body: `${modelCount} model${modelCount === 1 ? '' : 's'} are in the dating pool. Pick installed models for Speed Dating, or download one if the pool is empty.`,
+      round: 'Hub',
+      title: 'Start in Contestants',
+      body: `${modelCount} model${modelCount === 1 ? '' : 's'} are visible. Contestants is the main workspace for browsing, testing, downloads, and Speed Dating.`,
       prize: `${shortlistCount}/5 models picked for comparison.`,
       navId: 'models' as NavId,
-      primaryLabel: 'Show Models',
+      targetLabel: 'Contestants',
     },
     {
-      round: 'Round 3',
-      title: 'Run one model test',
-      body: canBenchmark
-        ? `${selectedModel} is ready. A test checks speed, reliability, and whether this computer can comfortably run it.`
-        : 'Choose an installed model first. Once one is selected, the Start button in Test Model becomes the big green moment.',
+      round: 'Test',
+      title: 'Test the selected model',
+      body: `Use Test Selected or the row Test button for ${selectedModel || 'a model'} when you want one score before comparing a lineup.`,
       prize: scoredCount > 0 ? `${scoredCount} model${scoredCount === 1 ? '' : 's'} tested so far.` : 'Prize: get your first match score.',
-      navId: 'bench' as NavId,
-      primaryLabel: canBenchmark ? (isBenchmarking ? 'Testing' : 'Run Test') : 'Pick a Model',
+      navId: 'models' as NavId,
+      targetLabel: 'Contestants',
     },
     {
-      round: 'Bonus Round',
-      title: 'Compare a few models',
-      body: 'Speed Dating compares up to five picked models using the same questions. This is the fastest way to find a winner without reading every spec.',
+      round: 'Compare',
+      title: 'Run Speed Dating here',
+      body: 'Pick two to five installed contestants, then start Speed Dating from the Contestants command menu. The details tab is there when you want transcripts.',
       prize: shortlistCount >= 2 ? 'Ready to compare.' : 'Pick at least two installed models first.',
-      navId: 'speedDate' as NavId,
-      primaryLabel: 'Open Speed Dating',
+      navId: 'models' as NavId,
+      targetLabel: 'Contestants',
     },
     {
-      round: 'Finale',
-      title: 'Crown the best match',
+      round: 'Setup',
+      title: 'Check this computer',
+      body: 'Your Rig is the setup and hardware panel for Ollama status, VRAM, storage, and local system details.',
+      prize: ollamaReady ? `${hostCount || 1} local computer ready.` : 'Start Ollama, then check this computer again.',
+      navId: 'lan' as NavId,
+      targetLabel: 'Your Rig',
+    },
+    {
+      round: 'Rank',
+      title: 'Read the scorecards',
       body: scoredCount > 0
-        ? 'The Best Match panel explains the result in plain language, then lets you chat with the selected local model.'
-        : 'Once a test finishes, come here for the recommendation. No confetti cannon yet, but emotionally, yes.',
-      prize: scoredCount > 0 ? 'Prize: a model worth chatting with.' : 'Prize: almost there.',
-      navId: 'agent' as NavId,
-      primaryLabel: scoredCount > 0 ? 'Show Best Match' : 'Go to Test Model',
+        ? 'Scorecards ranks every saved test so the best match is visible without hunting through transcripts.'
+        : 'Once tests finish, Scorecards becomes the ranking board.',
+      prize: scoredCount > 0 ? 'Prize: highest saved score floats to the top.' : 'Prize: rankings appear after testing.',
+      navId: 'history' as NavId,
+      targetLabel: 'Scorecards',
     },
   ];
   const currentIndex = Math.min(Math.max(stepIndex, 0), steps.length - 1);
@@ -1801,44 +1911,7 @@ function FirstRunTutorial({
 
   const runPrimaryAction = () => {
     onSelectNav(step.navId);
-
-    if (currentIndex === 0) {
-      goToStep(1);
-      return;
-    }
-
-    if (currentIndex === 1) {
-      if (ollamaReady) {
-        onCheckComputer();
-      } else {
-        onOpenSetupGuide();
-      }
-      return;
-    }
-
-    if (currentIndex === 2) {
-      onSelectNav('models');
-      return;
-    }
-
-    if (currentIndex === 3) {
-      if (canBenchmark) {
-        onRunTest();
-      } else {
-        onSelectNav('models');
-      }
-      return;
-    }
-
-    if (currentIndex === 4) {
-      onOpenCompare();
-      return;
-    }
-
-    if (currentIndex === 5) {
-      onSelectNav(scoredCount > 0 ? 'agent' : 'bench');
-      onClose();
-    }
+    onClose();
   };
 
   return (
@@ -1854,26 +1927,14 @@ function FirstRunTutorial({
           </div>
           <button type="button" className="mini-button outline" onClick={onClose}>
             <X aria-hidden="true" />
-            Skip
+            Close
           </button>
-        </div>
-
-        <div
-          className="tutorial-romance-hero"
-          style={{ backgroundImage: `url(${robotRomanceHero})` }}
-          aria-label="A retro robot dating-show illustration with a local computer meeting an AI model."
-        >
-          <div className="tutorial-romance-copy">
-            <span>RigMatch personals</span>
-            <strong>Local computer seeks emotionally available AI model</strong>
-            <em>Must enjoy short tests, clear prompts, and healthy VRAM boundaries.</em>
-          </div>
         </div>
 
         <div className="tutorial-body">
           <p>{step.body}</p>
           <div className="tutorial-prize">
-            <span>Show Host Note</span>
+            <span>Quick Note</span>
             <strong>{step.prize}</strong>
           </div>
           <ol className="tutorial-steps" aria-label="Tutorial progress">
@@ -1892,9 +1953,9 @@ function FirstRunTutorial({
           <button type="button" className="mini-button outline" onClick={() => goToStep(currentIndex - 1)} disabled={currentIndex === 0}>
             Back
           </button>
-          <button type="button" className="primary-button compact" onClick={runPrimaryAction} disabled={isScanning || isBenchmarking}>
+          <button type="button" className="primary-button compact" onClick={runPrimaryAction}>
             <Trophy aria-hidden="true" />
-            {step.primaryLabel}
+            Open {step.targetLabel}
           </button>
           {isLastStep ? (
             <button type="button" className="mini-button outline" onClick={onClose}>
@@ -2081,7 +2142,7 @@ function SetupDoctor({
     {
       label: 'Model Pool',
       value: ollama.models.length > 0 ? 'Contestants ready' : 'No local models',
-      detail: ollama.models.length > 0 ? `${modelCount} model${modelCount === 1 ? '' : 's'} in the dating pool.` : 'Download one model before the first compatibility date.',
+      detail: ollama.models.length > 0 ? `${modelCount} model${modelCount === 1 ? '' : 's'} in the model pool.` : 'Download one model before the first compatibility test.',
       tone: ollama.models.length > 0 ? 'ready' : 'warn',
       action: ollama.models.length > 0 ? null : { label: 'Check', onClick: onCheckComputer },
     },
@@ -2106,7 +2167,7 @@ function SetupDoctor({
       <div className="setup-doctor-head">
         <div>
           <span>Setup Doctor</span>
-          <strong>{ollama.ready ? 'Ready for a compatibility date' : 'One setup step before the show starts'}</strong>
+          <strong>{ollama.ready ? 'Ready for local model tests' : 'One setup step before the show starts'}</strong>
         </div>
         <button type="button" className="mini-button outline" onClick={onOpenSetupGuide}>
           <ExternalLink aria-hidden="true" />
@@ -2327,9 +2388,12 @@ function RunWarningModal({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const title = mode === 'single' ? 'Start Model Test?' : 'Start Speed Dating?';
+  const title = mode === 'single' ? 'Test One Selected Model?' : 'Start Speed Dating?';
   const subject = mode === 'single' ? selectedModel : `${shortlistedCount} picked models`;
   const totalQuestions = mode === 'single' ? questionCount : questionCount * shortlistedCount;
+  const runScope = mode === 'single'
+    ? 'This tests only the model you selected in Contestants. Use Speed Dating when you want to compare a full lineup.'
+    : 'This compares every picked model with the same questions and ranks the final Match scores.';
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -2337,7 +2401,7 @@ function RunWarningModal({
         <div className="modal-title">
           <AlertTriangle aria-hidden="true" />
           <div>
-            <span>Resource Warning</span>
+            <span>{mode === 'single' ? 'One-model test' : 'Resource Warning'}</span>
             <strong id="run-warning-title">{title}</strong>
           </div>
         </div>
@@ -2347,6 +2411,7 @@ function RunWarningModal({
             {totalQuestions === 1 ? '' : 's'}. This can heavily use CPU, GPU, VRAM, RAM,
             storage bandwidth, fans, and battery until the run finishes.
           </p>
+          <p>{runScope}</p>
           <div className="modal-warning-grid">
             <div>
               <span>GPU</span>
@@ -2481,7 +2546,7 @@ function ClearDataModal({
             <div>
               <span>Keeps</span>
               <strong>Ollama models</strong>
-              <em>Use the trash button in Dating Pool to delete downloaded model files.</em>
+              <em>Use the trash button in Contestants to delete downloaded model files.</em>
             </div>
           </div>
         </div>
@@ -2530,11 +2595,11 @@ function ClearScoresModal({
             {isAll ? (
               <>
                 This clears <strong>{scoreCount}</strong> saved score{scoreCount === 1 ? '' : 's'}, Speed Dating rankings,
-                and date transcripts.
+                and test transcripts.
               </>
             ) : (
               <>
-                This clears the saved scorecard and date transcript for <strong>{pending.model}</strong>.
+                This clears the saved scorecard and test transcript for <strong>{pending.model}</strong>.
               </>
             )}{' '}
             It does <strong>not</strong> delete any installed Ollama model.
@@ -2722,7 +2787,6 @@ function ThemePicker({
 
 function UtilityPanel({
   panel,
-  benchmark,
   listTestResult,
   selectedHost,
   selectedModel,
@@ -2753,7 +2817,6 @@ function UtilityPanel({
   onOpenUpdatePage,
 }: {
   panel: UtilityPanelId;
-  benchmark: BenchmarkResult;
   listTestResult: ListTestResult | null;
   selectedHost?: NetworkHost;
   selectedModel: string;
@@ -2785,6 +2848,8 @@ function UtilityPanel({
 }) {
   const Icon = panel === 'history' ? History : panel === 'settings' ? Settings : Info;
   const recentModelScores = useMemo(() => getRecentModelScores(modelScores), [modelScores]);
+  const rankedModelScores = useMemo(() => getRankedModelScores(modelScores), [modelScores]);
+  const topRankedScore = rankedModelScores[0];
   const savedChatMessageCount = Math.max(0, chatMessages.length - 1);
 
   return (
@@ -2807,46 +2872,35 @@ function UtilityPanel({
           image={robotScorecardCeremony}
           className="scorecard-art-banner"
           kicker="Scorecard ceremony"
-          title="Past dates, saved scores, crowned matches"
-          body={recentModelScores.length > 0 ? `${recentModelScores.length} model score${recentModelScores.length === 1 ? '' : 's'} saved locally.` : 'Run a model test or Speed Dating to start the ceremony.'}
+          title="Saved tests, ranked scores, crowned matches"
+          body={rankedModelScores.length > 0 ? `${rankedModelScores.length} tested model${rankedModelScores.length === 1 ? '' : 's'} ranked by Match score.` : 'Run a model test or Speed Dating to start the ceremony.'}
         />
       )}
 
       {panel === 'history' && (
         <div className="utility-body">
           <div className="utility-stat">
-            <span>Saved app history</span>
-            <strong>{recentModelScores.length} model score{recentModelScores.length === 1 ? '' : 's'}</strong>
+            <span>Ranking board</span>
+            <strong>{rankedModelScores.length} tested model{rankedModelScores.length === 1 ? '' : 's'}</strong>
             <em>
-              {savedChatMessageCount > 0
-                ? `${savedChatMessageCount} chat message${savedChatMessageCount === 1 ? '' : 's'} saved locally`
-                : 'Chat starts saving locally after your first message'}
+              {rankedModelScores.length > 0
+                ? 'Sorted by highest saved Match score.'
+                : 'Run a single test or Speed Dating to build the ranking.'}
             </em>
           </div>
           <div className="utility-stat">
-            <span>Last compatibility test</span>
-            <strong>{recentModelScores.length > 0 ? benchmark.model : 'No saved score'}</strong>
-            <em>{recentModelScores.length > 0 ? `${benchmark.scores.total} total · ${benchmark.scores.grade}` : 'Run a date to save the next scorecard.'}</em>
+            <span>Best saved test</span>
+            <strong>{topRankedScore ? topRankedScore.model : 'No saved score'}</strong>
+            <em>{topRankedScore ? `${topRankedScore.total} total · ${topRankedScore.grade}` : 'Run a test to save the next scorecard.'}</em>
           </div>
-          <section className="score-cleanup-panel" aria-label="Score cleanup">
-            <div>
-              <span>Score Cleanup</span>
-              <strong>Forget stale match history</strong>
-              <em>Clears scorecards and transcripts only. Installed Ollama models stay put.</em>
-            </div>
-            <button type="button" className="danger-button compact" onClick={onClearAllScores} disabled={!recentModelScores.length}>
-              <Trash2 aria-hidden="true" />
-              Clear All Scores
-            </button>
-          </section>
-          <HistoryTimeline scores={recentModelScores} onClearScore={onClearScore} />
-          {recentModelScores.length > 0 && (
-            <ol className="utility-list" aria-label="Saved model scores">
-              {recentModelScores.slice(0, 5).map((score, index) => (
+          {rankedModelScores.length > 0 && (
+            <ol className="utility-list score-ranking-list" aria-label="Ranked model scores">
+              {rankedModelScores.map((score, index) => (
                 <li key={`${score.model}-${score.completedAt}`}>
                   <b>{index + 1}</b>
                   <span>{score.model}</span>
-                  <strong>{score.total}</strong>
+                  <em>{score.speed} speed · {score.sobriety} trust · {score.fit} fit</em>
+                  <strong>{score.total} · {score.grade}</strong>
                   <button
                     type="button"
                     className="icon-action score-clear-button"
@@ -2860,10 +2914,31 @@ function UtilityPanel({
               ))}
             </ol>
           )}
+          <section className="score-cleanup-panel" aria-label="Score cleanup">
+            <div>
+              <span>Score Cleanup</span>
+              <strong>Forget stale match history</strong>
+              <em>Clears scorecards and test transcripts only. Installed Ollama models stay put.</em>
+            </div>
+            <button type="button" className="danger-button compact" onClick={onClearAllScores} disabled={!rankedModelScores.length}>
+              <Trash2 aria-hidden="true" />
+              Clear All Scores
+            </button>
+          </section>
+          <HistoryTimeline scores={recentModelScores} onClearScore={onClearScore} />
           <div className="utility-stat">
             <span>Current match</span>
             <strong>{selectedHost?.hostname ?? 'Local machine'}</strong>
             <em>{selectedModel}</em>
+          </div>
+          <div className="utility-stat">
+            <span>Saved app history</span>
+            <strong>{recentModelScores.length} scorecard{recentModelScores.length === 1 ? '' : 's'}</strong>
+            <em>
+              {savedChatMessageCount > 0
+                ? `${savedChatMessageCount} chat message${savedChatMessageCount === 1 ? '' : 's'} saved locally`
+                : 'Chat starts saving locally after your first message'}
+            </em>
           </div>
           {listTestResult ? (
             <ol className="utility-list" aria-label="Latest Speed Dating ranking">
@@ -3081,7 +3156,7 @@ function UpdateCenter({
           aria-pressed={channel === 'release'}
         >
           <strong>Release</strong>
-          <span>Stable date</span>
+          <span>Stable build</span>
           <em>Best for normal users.</em>
         </button>
         <button
@@ -3091,7 +3166,7 @@ function UpdateCenter({
           aria-pressed={channel === 'nightly'}
         >
           <strong>Nightly</strong>
-          <span>Wild card date</span>
+          <span>Experimental build</span>
           <em>Newest experiments, more risk.</em>
         </button>
       </div>
@@ -3145,7 +3220,7 @@ function HistoryTimeline({
     return (
       <div className="history-timeline empty" aria-label="Test history timeline">
         <strong>No test timeline yet</strong>
-        <span>Run a compatibility date and RigMatch will keep the local score story here.</span>
+        <span>Run a compatibility test and RigMatch will keep the local score story here.</span>
       </div>
     );
   }
@@ -3217,21 +3292,30 @@ function ModelCabinet({
   installedModelNames,
   shortlistIds,
   queuedModelIds,
+  pullProgressByModel,
   modelScores,
   diskGuard,
   vramGb,
   queuedCount,
   isBenchmarking,
+  isListTesting,
   isPulling,
+  isPullCancelRequested,
   isDeletingModel,
   pullingModel,
+  listTestResult,
+  runProgress,
+  questionCount,
   shortlistedCount,
   onSelect,
   onScoreModel,
   onDeleteModel,
   onQueueModel,
   onPullQueued,
+  onCancelQueue,
   onToggleShortlist,
+  onRunListTest,
+  onOpenSuiteEditor,
   onOpenSpeedDate,
   onOpenTopPick,
   onRefresh,
@@ -3242,21 +3326,30 @@ function ModelCabinet({
   installedModelNames: Set<string>;
   shortlistIds: Set<string>;
   queuedModelIds: Set<string>;
+  pullProgressByModel: Record<string, PullProgressUpdate>;
   modelScores: Record<string, TestedModelScore>;
   diskGuard: ReturnType<typeof getDiskGuard>;
   vramGb: number;
   queuedCount: number;
   isBenchmarking: boolean;
+  isListTesting: boolean;
   isPulling: boolean;
+  isPullCancelRequested: boolean;
   isDeletingModel: boolean;
   pullingModel: string | null;
+  listTestResult: ListTestResult | null;
+  runProgress: RunProgress | null;
+  questionCount: BenchmarkQuestionCount;
   shortlistedCount: number;
   onSelect: (model: string) => void;
   onScoreModel: (row: ModelRow) => void;
   onDeleteModel: (row: ModelRow) => void;
   onQueueModel: (row: ModelRow) => void;
   onPullQueued: () => void;
+  onCancelQueue: () => void;
   onToggleShortlist: (row: ModelRow) => void;
+  onRunListTest: () => void;
+  onOpenSuiteEditor: () => void;
   onOpenSpeedDate: () => void;
   onOpenTopPick: () => void;
   onRefresh: () => void;
@@ -3271,6 +3364,8 @@ function ModelCabinet({
   const selectedQueued = selectedRow ? queuedModelIds.has(selectedRow.displayName) : false;
   const selectedShortlisted = selectedRow ? shortlistIds.has(selectedRow.displayName) : false;
   const selectedInstalled = selectedRow ? installedModelNames.has(selectedRow.displayName) || selectedRow.installed : false;
+  const selectedPullProgress = selectedRow ? pullProgressByModel[selectedRow.displayName] : undefined;
+  const selectedPulling = Boolean(selectedRow && pullingModel === selectedRow.displayName);
   const query = modelQuery.trim().toLowerCase();
   const quickFilters = useMemo(
     () => getModelQuickFilters(rows, modelScores, vramGb),
@@ -3285,6 +3380,30 @@ function ModelCabinet({
     () => rows.filter((row) => shortlistIds.has(row.displayName)).slice(0, 5),
     [rows, shortlistIds],
   );
+  const speedDateLineupFull = shortlistedRows.length >= 5;
+  const queuedRows = useMemo(
+    () => rows.filter((row) => queuedModelIds.has(row.displayName)),
+    [queuedModelIds, rows],
+  );
+  const queuedPreviewRows = queuedRows.filter((row) => row.displayName !== pullingModel);
+  const queuePreviewLimit = isPulling ? 2 : 3;
+  const visibleQueuePreview = queuedPreviewRows.slice(0, queuePreviewLimit);
+  const hiddenQueueCount = Math.max(0, queuedPreviewRows.length - visibleQueuePreview.length);
+  const queueStatusLabel = isPullCancelRequested
+    ? 'Stopping after current'
+    : isPulling
+      ? 'Downloading now'
+      : queuedCount > 0
+        ? `${queuedCount} queued · ${formatGb(diskGuard.queuedGb)}`
+        : 'No downloads queued';
+  const queuePreviewText = visibleQueuePreview.map((row) => row.displayName).join(', ');
+  const queueHelperText = isPullCancelRequested
+    ? `Finishing ${pullingModel ?? 'the current Ollama pull'}, then stopping the queue.`
+    : isPulling
+      ? `Pulling ${pullingModel ?? 'the current model'} through Ollama. Stop Queue skips anything not started yet.`
+      : queuedCount > 0
+        ? `Ready to download ${queuePreviewText || 'queued models'}${hiddenQueueCount > 0 ? ` and ${hiddenQueueCount} more` : ''}.`
+        : 'Use Get Model on a contestant to stage a download.';
   const visibleRows = useMemo(() => {
     const filteredRows = rows.filter((row) => {
       const score = getModelScore(row, modelScores);
@@ -3312,7 +3431,7 @@ function ModelCabinet({
     <section className={active ? 'panel model-panel panel-focused' : 'panel model-panel'}>
       <PanelHeader
         icon={Boxes}
-        title="Contestant Pool"
+        title="Contestants"
         actionLabel="Refresh"
         onAction={onRefresh}
         meta={modelCountLabel}
@@ -3320,9 +3439,46 @@ function ModelCabinet({
       <RomanceArtBanner
         image={robotContestantWall}
         className="model-pool-art-banner"
-        kicker="Model personals"
-        title="Browse AI contestants for this rig"
-        body={`${vramSafeCount} models look like realistic dates for ${vramLabel}. Pick up to five for Speed Dating.`}
+        kicker="Command menu"
+        title="Browse, test, and compare AI contestants"
+        body={`${vramSafeCount} models look realistic for ${vramLabel}. Test one model or run Speed Dating from here.`}
+      />
+      <ContestantsCommandDeck
+        selectedRow={selectedRow}
+        selectedScore={selectedScore}
+        selectedInstalled={selectedInstalled}
+        selectedQueued={selectedQueued}
+        selectedShortlisted={selectedShortlisted}
+        speedDateLineupFull={speedDateLineupFull}
+        shortlistedRows={shortlistedRows}
+        rigPick={rigPick}
+        diskGuard={diskGuard}
+        queuedCount={queuedCount}
+        isBenchmarking={isBenchmarking}
+        isListTesting={isListTesting}
+        isPulling={isPulling}
+        isPullCancelRequested={isPullCancelRequested}
+        listTestResult={listTestResult}
+        runProgress={runProgress}
+        questionCount={questionCount}
+        vramGb={vramGb}
+        onScoreModel={onScoreModel}
+        onQueueModel={onQueueModel}
+        onToggleShortlist={onToggleShortlist}
+        onRunListTest={onRunListTest}
+        onOpenSuiteEditor={onOpenSuiteEditor}
+        onOpenSpeedDate={onOpenSpeedDate}
+        onPullQueued={onPullQueued}
+        onCancelQueue={onCancelQueue}
+        onOpenTopPick={onOpenTopPick}
+      />
+      <ModelPoolLineupStrip
+        className="speed-date-lineup-builder"
+        rows={shortlistedRows}
+        modelScores={modelScores}
+        disabled={isBenchmarking}
+        onRemove={onToggleShortlist}
+        onOpenSpeedDate={onOpenSpeedDate}
       />
       <div className="model-tools">
         <label className="model-search">
@@ -3375,6 +3531,10 @@ function ModelCabinet({
           installed={selectedInstalled}
           queued={selectedQueued}
           shortlisted={selectedShortlisted}
+          speedDateLineupFull={speedDateLineupFull}
+          pullProgress={selectedPullProgress}
+          isPulling={selectedPulling}
+          isPullStopping={Boolean(isPullCancelRequested && selectedPulling)}
           isBenchmarking={isBenchmarking}
           onScoreModel={onScoreModel}
           onQueueModel={onQueueModel}
@@ -3401,7 +3561,7 @@ function ModelCabinet({
               <SortableModelHeader label="From" sortName="source" sortKey={sortKey} direction={sortDirection} onSort={changeSort} />
               <SortableModelHeader label="Status" sortName="status" sortKey={sortKey} direction={sortDirection} onSort={changeSort} />
               <SortableModelHeader label="Match" sortName="score" sortKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <th>Action</th>
+              <th>Speed Dating / Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -3409,6 +3569,8 @@ function ModelCabinet({
               const selected = selectedModel === row.displayName || selectedModel === row.id;
               const installed = installedModelNames.has(row.displayName) || row.installed;
               const queued = queuedModelIds.has(row.displayName);
+              const rowPullProgress = pullProgressByModel[row.displayName];
+              const isPullingRow = pullingModel === row.displayName;
               const shortlisted = shortlistIds.has(row.displayName);
               const profile = getModelProfile(row.displayName);
               const origin = getModelOrigin(row.displayName);
@@ -3416,10 +3578,38 @@ function ModelCabinet({
               const statusLabel = getModelStatusLabel(row, queued);
               const score = getModelScore(row, modelScores);
               const hardwareFit = getHardwareFit(row, vramGb);
+              const speedDateLineupFullForRow = shortlistedCount >= 5;
+              const canChangeSpeedDateSlot = installed && hardwareFit.recommend && (shortlisted || !speedDateLineupFullForRow);
+              const speedDateSlotLabel = !installed
+                ? 'Download First'
+                : hardwareFit.recommend
+                  ? shortlisted
+                    ? 'Selected'
+                    : speedDateLineupFullForRow
+                      ? 'Lineup Full'
+                      : 'Add to Speed Dating'
+                  : 'Too Big';
+              const speedDateSlotTitle = !installed
+                ? 'Download this model before adding it to Speed Dating'
+                : !hardwareFit.recommend
+                  ? hardwareFit.detail
+                  : shortlisted
+                    ? `Remove ${row.displayName} from Speed Dating`
+                    : speedDateLineupFullForRow
+                      ? 'Speed Dating lineup is full. Remove one contestant from the lineup first.'
+                      : `Add ${row.displayName} to Speed Dating`;
+              const speedDateSlotAriaLabel = !installed
+                ? `Download ${row.displayName} before adding it to Speed Dating`
+                : shortlisted
+                  ? `Remove ${row.displayName} from Speed Dating`
+                  : hardwareFit.recommend
+                    ? `Add ${row.displayName} to Speed Dating`
+                    : `${row.displayName} is too large for Speed Dating on this computer`;
               const rowClassName = [
                 selected ? 'selected' : '',
                 hardwareFit.tone === 'out-of-league' ? 'out-of-league' : '',
               ].filter(Boolean).join(' ');
+              const showDownloadProgress = !installed && (queued || isPullingRow || isVisiblePullProgress(rowPullProgress));
               return (
                 <tr key={row.id} className={rowClassName}>
                   <td>
@@ -3448,17 +3638,17 @@ function ModelCabinet({
                   <td>
                     <ModelScorePill score={score} />
                   </td>
-                  <td>
+                  <td className={showDownloadProgress ? 'action-cell has-download-progress' : 'action-cell'}>
                     <div className="row-actions">
                       <button
                         type="button"
-                        className={shortlisted ? 'slot-button active' : 'slot-button'}
+                        className={shortlisted ? 'slot-button speed-date-row-button active' : 'slot-button speed-date-row-button'}
                         onClick={() => onToggleShortlist(row)}
-                        disabled={!installed || !hardwareFit.recommend}
-                        title={!installed ? 'Download before comparing' : hardwareFit.recommend ? 'Pick for Speed Dating' : hardwareFit.detail}
-                        aria-label={`${shortlisted ? 'Remove' : 'Add'} ${row.displayName} from Speed Dating`}
+                        disabled={!canChangeSpeedDateSlot}
+                        title={speedDateSlotTitle}
+                        aria-label={speedDateSlotAriaLabel}
                       >
-                        {hardwareFit.recommend ? shortlisted ? 'Picked' : 'Date' : 'Too Big'}
+                        <span>{speedDateSlotLabel}</span>
                       </button>
                       {installed ? (
                         <>
@@ -3486,15 +3676,25 @@ function ModelCabinet({
                       ) : (
                         <button
                           type="button"
-                          className={queued ? 'mini-button queued' : 'mini-button outline'}
+                          className={queued ? 'mini-button queued download-row-button' : 'mini-button outline download-row-button'}
                           onClick={() => onQueueModel(row)}
                           disabled={!queued && !hardwareFit.recommend}
-                          title={hardwareFit.recommend ? `${queued ? 'Remove from queue' : 'Queue download'}: ${row.sizeGb ? formatGb(row.sizeGb) : 'unknown size'}` : hardwareFit.detail}
+                          title={hardwareFit.recommend ? `${queued ? 'Remove from queue' : `Get ${row.displayName}`}: ${row.sizeGb ? formatGb(row.sizeGb) : 'unknown size'}` : hardwareFit.detail}
+                          aria-label={hardwareFit.recommend ? queued ? `Remove ${row.displayName} from the download queue` : `Get ${row.displayName}` : hardwareFit.detail}
                         >
-                          {hardwareFit.recommend ? queued ? 'Drop' : `Get ${row.sizeGb ? `${row.sizeGb}G` : '?'}` : 'Too Big'}
+                          <span>{hardwareFit.recommend ? queued ? 'Remove' : `Get ${getQueueChipModelName(row.displayName)}` : 'Too Big'}</span>
                         </button>
                       )}
                     </div>
+                    {showDownloadProgress && (
+                      <DownloadProgressInline
+                        model={row.displayName}
+                        queued={queued}
+                        isActive={isPullingRow}
+                        isStopping={isPullCancelRequested && isPullingRow}
+                        progress={rowPullProgress}
+                      />
+                    )}
                   </td>
                 </tr>
               );
@@ -3504,7 +3704,7 @@ function ModelCabinet({
                 <td colSpan={9}>
                   <div className="table-empty-state">
                     <strong>No contestants match these filters</strong>
-                    <span>Clear the search or show the full dating pool.</span>
+                    <span>Clear the search or show the full model pool.</span>
                     <button
                       type="button"
                       className="mini-button outline"
@@ -3523,13 +3723,6 @@ function ModelCabinet({
         </table>
       </div>
       <div className="model-footer">
-        <ModelPoolLineupStrip
-          rows={shortlistedRows}
-          modelScores={modelScores}
-          disabled={isBenchmarking}
-          onRemove={onToggleShortlist}
-          onOpenSpeedDate={onOpenSpeedDate}
-        />
         <div className="selected-specialties">
           <AvatarBust model={selectedRow?.displayName ?? selectedModel} size="small" />
           <div>
@@ -3554,10 +3747,292 @@ function ModelCabinet({
           </button>
         </div>
         <DiskGuard guard={diskGuard} />
-        <div className="pull-queue">
-          <span>Download Queue</span>
-          <strong>{isPulling ? 'Downloading' : `${queuedCount} queued`}</strong>
-          <em>{isPulling ? pullingModel ?? 'Working...' : 'Download queued models into Ollama.'}</em>
+        <div className="pull-queue" aria-live="polite">
+          <div className="queue-status-copy">
+            <span>Download Queue</span>
+            <strong>{queueStatusLabel}</strong>
+            <em>{queueHelperText}</em>
+          </div>
+          <div className="queue-chip-list" aria-label="Queued downloads">
+            {isPulling && pullingModel && (
+              <span
+                className={isPullCancelRequested ? 'queue-chip stopping' : 'queue-chip active'}
+                title={pullingModel}
+              >
+                <RefreshCw aria-hidden="true" />
+                {getQueueChipModelName(pullingModel)}
+              </span>
+            )}
+            {visibleQueuePreview.map((row) => (
+              <span key={row.displayName} className="queue-chip" title={row.displayName}>
+                {getQueueChipModelName(row.displayName)}
+              </span>
+            ))}
+            {hiddenQueueCount > 0 && (
+              <span className="queue-chip muted">+{hiddenQueueCount} more</span>
+            )}
+            {queuedCount === 0 && !isPulling && (
+              <span className="queue-chip muted">Empty</span>
+            )}
+          </div>
+          <div className="queue-actions">
+            <button
+              type="button"
+              className="primary-button compact"
+              onClick={onPullQueued}
+              disabled={queuedCount === 0 || isPulling}
+            >
+              <Download aria-hidden="true" />
+              {isPulling ? 'Downloading' : queuedCount > 0 ? 'Start Download' : 'Download'}
+            </button>
+            <button
+              type="button"
+              className="mini-button outline queue-cancel-button"
+              onClick={onCancelQueue}
+              disabled={(queuedCount === 0 && !isPulling) || isPullCancelRequested}
+              title={isPulling ? 'Stop after the current Ollama pull finishes' : 'Cancel all queued downloads'}
+            >
+              <X aria-hidden="true" />
+              {isPullCancelRequested ? 'Stopping' : isPulling ? 'Stop Queue' : 'Cancel Queue'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DownloadProgressInline({
+  model,
+  queued,
+  isActive,
+  isStopping,
+  progress,
+}: {
+  model: string;
+  queued: boolean;
+  isActive: boolean;
+  isStopping: boolean;
+  progress?: PullProgressUpdate;
+}) {
+  const phase = progress?.phase ?? (queued ? 'queued' : 'started');
+  const percent = getPullProgressPercent(progress, queued);
+  const hasMeasuredPercent = typeof progress?.percent === 'number';
+  const trackPercent = hasMeasuredPercent
+    ? Math.max(3, Math.min(100, percent))
+    : queued
+      ? 6
+      : 28;
+  const percentLabel = hasMeasuredPercent || phase === 'complete'
+    ? `${Math.round(percent)}%`
+    : queued
+      ? '0%'
+      : '--%';
+  const statusLabel = getPullProgressStatusLabel(model, phase, queued, isActive, isStopping, progress);
+  const detailLabel = getPullProgressDetailLabel(phase, queued, progress);
+  const className = [
+    'download-progress-inline',
+    phase,
+    isActive ? 'active' : '',
+    isStopping ? 'stopping' : '',
+    !hasMeasuredPercent && phase !== 'queued' ? 'indeterminate' : '',
+  ].filter(Boolean).join(' ');
+
+  return (
+    <div className={className} aria-label={`${model} download status`}>
+      <div className="download-progress-copy">
+        <span>{statusLabel}</span>
+        <strong>{percentLabel}</strong>
+      </div>
+      <div className="download-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
+        <i style={{ width: `${trackPercent}%` }} />
+      </div>
+      <em>{detailLabel}</em>
+    </div>
+  );
+}
+
+function ContestantsCommandDeck({
+  selectedRow,
+  selectedScore,
+  selectedInstalled,
+  selectedQueued,
+  selectedShortlisted,
+  speedDateLineupFull,
+  shortlistedRows,
+  rigPick,
+  diskGuard,
+  queuedCount,
+  isBenchmarking,
+  isListTesting,
+  isPulling,
+  isPullCancelRequested,
+  listTestResult,
+  runProgress,
+  questionCount,
+  vramGb,
+  onScoreModel,
+  onQueueModel,
+  onToggleShortlist,
+  onRunListTest,
+  onOpenSuiteEditor,
+  onOpenSpeedDate,
+  onPullQueued,
+  onCancelQueue,
+  onOpenTopPick,
+}: {
+  selectedRow?: ModelRow;
+  selectedScore?: TestedModelScore;
+  selectedInstalled: boolean;
+  selectedQueued: boolean;
+  selectedShortlisted: boolean;
+  speedDateLineupFull: boolean;
+  shortlistedRows: ModelRow[];
+  rigPick?: RigPick | null;
+  diskGuard: ReturnType<typeof getDiskGuard>;
+  queuedCount: number;
+  isBenchmarking: boolean;
+  isListTesting: boolean;
+  isPulling: boolean;
+  isPullCancelRequested: boolean;
+  listTestResult: ListTestResult | null;
+  runProgress: RunProgress | null;
+  questionCount: BenchmarkQuestionCount;
+  vramGb: number;
+  onScoreModel: (row: ModelRow) => void;
+  onQueueModel: (row: ModelRow) => void;
+  onToggleShortlist: (row: ModelRow) => void;
+  onRunListTest: () => void;
+  onOpenSuiteEditor: () => void;
+  onOpenSpeedDate: () => void;
+  onPullQueued: () => void;
+  onCancelQueue: () => void;
+  onOpenTopPick: () => void;
+}) {
+  const selectedFit = selectedRow ? getHardwareFit(selectedRow, vramGb) : null;
+  const canUseSelected = Boolean(selectedRow && selectedFit?.recommend);
+  const canRunSelectedAction = Boolean(
+    selectedRow
+    && !isBenchmarking
+    && !isListTesting
+    && (selectedInstalled ? canUseSelected : selectedQueued || canUseSelected),
+  );
+  const selectedActionLabel = selectedInstalled
+    ? 'Test Selected'
+    : selectedQueued
+      ? 'Remove Queue'
+      : 'Get Model';
+  const selectedStatus = selectedRow
+    ? selectedInstalled
+      ? selectedScore
+        ? `${selectedScore.total} Match · ${selectedScore.grade}. Retest when you want fresh proof.`
+        : 'Installed and ready for a one-model test.'
+      : selectedQueued
+        ? 'Queued for download. Remove it here or clear the queue.'
+        : selectedFit?.detail ?? 'Check this model before downloading.'
+    : 'Pick a contestant from the table to test, download, or compare.';
+  const speedProgress = runProgress?.mode === 'speed-date' ? runProgress : null;
+  const speedWinner = listTestResult?.winner;
+  const speedWinnerScore = speedWinner
+    ? listTestResult?.results.find((result) => result.model === speedWinner)
+    : null;
+  const canRunSpeedDate = shortlistedRows.length >= 2 && !isListTesting && !isBenchmarking;
+  const speedStatus = isListTesting && speedProgress
+    ? `${speedProgress.percent}% · testing ${getQueueChipModelName(speedProgress.currentModel)}.`
+    : speedWinner && speedWinnerScore
+      ? `${speedWinner} leads with ${speedWinnerScore.total} Match.`
+      : shortlistedRows.length >= 2
+        ? `${shortlistedRows.length} contestants ready for ${questionCount} questions each.`
+        : 'Pick at least two installed contestants for a fair comparison.';
+  const downloadStatus = isPullCancelRequested
+    ? 'Stopping after the current Ollama pull.'
+    : isPulling
+      ? 'Ollama pull is running. Stop Queue skips anything not started.'
+      : queuedCount > 0
+        ? `${queuedCount} queued · ${formatGb(diskGuard.queuedGb)} · ${formatGb(diskGuard.availableAfterQueue)} free after queue.`
+        : 'Queue empty. Use Get Model on a contestant to stage a download.';
+  const topPickStatus = rigPick
+    ? rigPick.score
+      ? `${rigPick.score.total} Match · ${rigPick.score.grade}.`
+      : rigPick.reason
+    : 'Run a test or Speed Dating to crown the best match.';
+
+  const runSelectedAction = () => {
+    if (!selectedRow) return;
+    if (selectedInstalled) {
+      onScoreModel(selectedRow);
+      return;
+    }
+
+    onQueueModel(selectedRow);
+  };
+
+  return (
+    <section className="contestants-command-deck" aria-label="Contestants command menu">
+      <article className="contestants-command-card featured">
+        <div className="command-card-head">
+          <Gauge aria-hidden="true" />
+          <span>Selected Test</span>
+        </div>
+        <strong>{selectedRow?.displayName ?? 'No contestant selected'}</strong>
+        <em>{selectedStatus}</em>
+        <div className="command-card-actions">
+          <button
+            type="button"
+            className="primary-button compact"
+            onClick={runSelectedAction}
+            disabled={!canRunSelectedAction}
+          >
+            {selectedInstalled ? <Gauge aria-hidden="true" /> : selectedQueued ? <X aria-hidden="true" /> : <Download aria-hidden="true" />}
+            {selectedActionLabel}
+          </button>
+          <button
+            type="button"
+            className={selectedShortlisted ? 'mini-button active-soft' : 'mini-button outline'}
+            onClick={() => selectedRow && onToggleShortlist(selectedRow)}
+            disabled={!selectedRow || isBenchmarking || isListTesting || (!selectedShortlisted && (!selectedInstalled || !canUseSelected || speedDateLineupFull))}
+          >
+            <Heart aria-hidden="true" />
+            {selectedShortlisted ? 'Selected' : speedDateLineupFull ? 'Lineup Full' : 'Add to Speed Dating'}
+          </button>
+        </div>
+      </article>
+
+      <article className="contestants-command-card">
+        <div className="command-card-head">
+          <Trophy aria-hidden="true" />
+          <span>Speed Dating</span>
+        </div>
+        <strong>{shortlistedRows.length}/5 picked</strong>
+        <em>{speedStatus}</em>
+        <div className="command-card-actions">
+          <button
+            type="button"
+            className="primary-button compact"
+            onClick={onRunListTest}
+            disabled={!canRunSpeedDate}
+          >
+            <Trophy aria-hidden="true" />
+            {isListTesting ? 'Testing' : shortlistedRows.length >= 2 ? 'Start Speed Dating' : 'Pick 2+'}
+          </button>
+          <button type="button" className="mini-button outline" onClick={onOpenSuiteEditor} disabled={isListTesting}>
+            <Settings aria-hidden="true" />
+            Questions
+          </button>
+          <button type="button" className="mini-button outline" onClick={onOpenSpeedDate}>
+            Open Details
+          </button>
+        </div>
+      </article>
+
+      <article className="contestants-command-card">
+        <div className="command-card-head">
+          <Download aria-hidden="true" />
+          <span>Downloads</span>
+        </div>
+        <strong>{isPulling ? 'Downloading' : queuedCount > 0 ? `${queuedCount} queued` : 'Queue clear'}</strong>
+        <em>{downloadStatus}</em>
+        <div className="command-card-actions">
           <button
             type="button"
             className="primary-button compact"
@@ -3565,21 +4040,47 @@ function ModelCabinet({
             disabled={queuedCount === 0 || isPulling}
           >
             <Download aria-hidden="true" />
-            {isPulling ? 'Downloading' : 'Download'}
+            {queuedCount > 0 ? 'Start Download' : 'Download'}
+          </button>
+          <button
+            type="button"
+            className="mini-button outline queue-cancel-button"
+            onClick={onCancelQueue}
+            disabled={(queuedCount === 0 && !isPulling) || isPullCancelRequested}
+          >
+            <X aria-hidden="true" />
+            {isPulling ? 'Stop Queue' : 'Cancel Queue'}
           </button>
         </div>
-      </div>
+      </article>
+
+      <article className="contestants-command-card">
+        <div className="command-card-head">
+          <Bot aria-hidden="true" />
+          <span>Current Pick</span>
+        </div>
+        <strong>{rigPick?.row.displayName ?? 'No winner yet'}</strong>
+        <em>{topPickStatus}</em>
+        <div className="command-card-actions">
+          <button type="button" className="mini-button outline" onClick={onOpenTopPick}>
+            <Bot aria-hidden="true" />
+            Top Pick
+          </button>
+        </div>
+      </article>
     </section>
   );
 }
 
 function ModelPoolLineupStrip({
+  className = '',
   rows,
   modelScores,
   disabled,
   onRemove,
   onOpenSpeedDate,
 }: {
+  className?: string;
   rows: ModelRow[];
   modelScores: Record<string, TestedModelScore>;
   disabled: boolean;
@@ -3588,18 +4089,23 @@ function ModelPoolLineupStrip({
 }) {
   const slots = Array.from({ length: 5 }, (_item, index) => rows[index]);
   const full = rows.length >= 5;
+  const classNames = [
+    'model-pool-lineup',
+    full ? 'full' : '',
+    className,
+  ].filter(Boolean).join(' ');
 
   return (
-    <section className={full ? 'model-pool-lineup full' : 'model-pool-lineup'} aria-label="Speed Dating lineup">
+    <section className={classNames} aria-label="Speed Dating lineup">
       <div className="model-pool-lineup-head">
         <div>
-          <span>Speed Dating Lineup</span>
-          <strong>{rows.length}/5 picked</strong>
-          <em>{full ? 'Lineup full. Remove one here before adding another.' : 'Use Date in the table to add contestants.'}</em>
+          <span>Speed Dating Selection</span>
+          <strong>{rows.length}/5 contestants selected</strong>
+          <em>{full ? 'Lineup full. Remove a contestant here before adding another.' : 'Click Add to Speed Dating in the table rows below.'}</em>
         </div>
         <button type="button" className="mini-button outline" onClick={onOpenSpeedDate}>
           <Trophy aria-hidden="true" />
-          Open
+          Details
         </button>
       </div>
       <div className="model-pool-lineup-slots">
@@ -3609,7 +4115,7 @@ function ModelPoolLineupStrip({
               <span key={`empty-${index}`} className="model-pool-empty-slot">
                 <b>{index + 1}</b>
                 <strong>Open seat</strong>
-                <em>Pick Date</em>
+                <em>Pick for Speed Dating</em>
               </span>
             );
           }
@@ -3677,6 +4183,10 @@ function SelectedContestantCard({
   installed,
   queued,
   shortlisted,
+  speedDateLineupFull,
+  pullProgress,
+  isPulling,
+  isPullStopping,
   isBenchmarking,
   onScoreModel,
   onQueueModel,
@@ -3690,6 +4200,10 @@ function SelectedContestantCard({
   installed: boolean;
   queued: boolean;
   shortlisted: boolean;
+  speedDateLineupFull: boolean;
+  pullProgress?: PullProgressUpdate;
+  isPulling: boolean;
+  isPullStopping: boolean;
   isBenchmarking: boolean;
   onScoreModel: (row: ModelRow) => void;
   onQueueModel: (row: ModelRow) => void;
@@ -3720,7 +4234,9 @@ function SelectedContestantCard({
         : 'Catalog pick';
   const vramLabel = vramGb > 0 ? `${formatGb(vramGb)} VRAM` : 'detected VRAM';
   const canJoinSpeedDate = installed && hardwareFit.recommend;
+  const canChangeSpeedDateSlot = shortlisted || (canJoinSpeedDate && !speedDateLineupFull);
   const origin = getModelOrigin(row.displayName);
+  const showDownloadProgress = !installed && (queued || isPulling || isVisiblePullProgress(pullProgress));
 
   return (
     <section className="contestant-spotlight" aria-label={`Selected contestant is ${row.displayName}`}>
@@ -3764,7 +4280,7 @@ function SelectedContestantCard({
               disabled={isBenchmarking || !hardwareFit.recommend}
             >
               <Gauge aria-hidden="true" />
-              Run Date
+              Test Model
             </button>
           ) : (
             <button
@@ -3772,25 +4288,36 @@ function SelectedContestantCard({
               className={queued ? 'primary-button compact queued' : 'primary-button compact'}
               onClick={() => onQueueModel(row)}
               disabled={!queued && !hardwareFit.recommend}
+              title={queued ? 'Remove this model from the download queue' : 'Add this model to the download queue'}
             >
-              <Download aria-hidden="true" />
-              {queued ? 'Queued' : 'Get Model'}
+              {queued ? <X aria-hidden="true" /> : <Download aria-hidden="true" />}
+              {queued ? 'Remove from Queue' : 'Get Model'}
             </button>
           )}
           <button
             type="button"
             className={shortlisted ? 'mini-button contestant-date-button active' : 'mini-button contestant-date-button'}
             onClick={() => onToggleShortlist(row)}
-            disabled={isBenchmarking || (!shortlisted && !canJoinSpeedDate)}
+            disabled={isBenchmarking || !canChangeSpeedDateSlot}
+            title={shortlisted ? 'Remove this model from Speed Dating' : speedDateLineupFull ? 'Speed Dating lineup is full. Remove one contestant first.' : 'Add this model to Speed Dating'}
           >
             <Heart aria-hidden="true" />
-            {shortlisted ? 'Picked' : 'Pick for Speed Dating'}
+            {shortlisted ? 'Selected' : speedDateLineupFull ? 'Lineup Full' : 'Add to Speed Dating'}
           </button>
           <button type="button" className="mini-button outline" onClick={onOpenSpeedDate}>
             <Trophy aria-hidden="true" />
             Lineup
           </button>
         </div>
+        {showDownloadProgress && (
+          <DownloadProgressInline
+            model={row.displayName}
+            queued={queued}
+            isActive={isPulling}
+            isStopping={isPullStopping}
+            progress={pullProgress}
+          />
+        )}
       </div>
     </section>
   );
@@ -3889,7 +4416,7 @@ function SortableModelHeader({
 function ModelScorePill({ score }: { score?: TestedModelScore }) {
   if (!score) {
     return (
-      <span className="score-pill empty" title="Not tested yet. Run a date to score this model on this computer.">
+      <span className="score-pill empty" title="Not tested yet. Run a test to score this model on this computer.">
         <strong>--</strong>
         <em>Test</em>
       </span>
@@ -3971,7 +4498,7 @@ function BenchmarkRun({
     <section className={active ? 'panel benchmark-panel panel-focused' : 'panel benchmark-panel'}>
       <PanelHeader
         icon={Gauge}
-        title="Test One Model"
+        title="Single Model Test"
         actionLabel={runActionLabel}
         onAction={onStart}
         busy={isRunning}
@@ -4397,6 +4924,13 @@ function SpeedDatePanel({
           </div>
         </div>
 
+        <SpeedDateShowAnimation
+          rows={shortlistedRows}
+          runProgress={runProgress?.mode === 'speed-date' ? runProgress : null}
+          winner={listTestResult?.winner}
+          host={host}
+        />
+
         <SpeedDateTranscriptPanel
           rows={shortlistedRows}
           benchmarks={benchmarkByModel}
@@ -4496,6 +5030,75 @@ function SpeedDatePanel({
   );
 }
 
+function SpeedDateShowAnimation({
+  rows,
+  runProgress,
+  winner,
+  host,
+}: {
+  rows: ModelRow[];
+  runProgress: RunProgress | null;
+  winner?: string;
+  host?: NetworkHost;
+}) {
+  const activeModel = runProgress?.phase === 'running'
+    ? runProgress.currentModel
+    : winner ?? rows[0]?.displayName ?? '';
+  const stageStatus = runProgress?.phase === 'running'
+    ? `Now testing ${getShortModelName(runProgress.currentModel)}`
+    : winner
+      ? `${getShortModelName(winner)} is holding the top score`
+      : rows.length >= 2
+        ? `${rows.length} contestants ready for the same questions`
+        : 'Pick at least two contestants to start the show';
+  const cue = runProgress?.questionLabel
+    ? `Question: ${runProgress.questionLabel}`
+    : runProgress?.phase === 'running'
+      ? 'Same questions, one model at a time.'
+      : 'When the show starts, each model gets the same prompt set.';
+  const slots = Array.from({ length: 5 }, (_item, index) => rows[index]);
+
+  return (
+    <section
+      className={runProgress?.phase === 'running' ? 'speed-date-show-stage running' : 'speed-date-show-stage'}
+      aria-label="Speed Dating stage animation"
+    >
+      <div className="speed-date-host">
+        <MachineAvatar host={host} size="small" />
+        <div>
+          <span>This computer</span>
+          <strong>{host?.hostname ?? 'Local rig'}</strong>
+        </div>
+      </div>
+      <ol className="speed-date-stage-lineup" aria-label="Speed Dating contestants on stage">
+        {slots.map((row, index) => {
+          const isActive = Boolean(row && row.displayName === activeModel);
+          return (
+            <li
+              key={row?.displayName ?? `empty-stage-${index}`}
+              className={isActive ? 'active' : row ? 'filled' : 'empty'}
+            >
+              {row ? (
+                <>
+                  <AvatarBust model={row.displayName} size="tiny" />
+                  <span>{index + 1}</span>
+                </>
+              ) : (
+                <Plus aria-hidden="true" />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      <div className="speed-date-stage-cue">
+        <span>{runProgress?.phase === 'running' ? 'Live Speed Dating' : winner ? 'Current Winner' : 'Ready Check'}</span>
+        <strong>{stageStatus}</strong>
+        <em>{cue}</em>
+      </div>
+    </section>
+  );
+}
+
 function SpeedDateContestantCard({
   row,
   index,
@@ -4583,7 +5186,7 @@ function SpeedDateTranscriptPanel({
     <section className="speed-date-transcript-card" aria-label="Speed Dating questions and answers">
       <div className="speed-date-transcript-head">
         <div>
-          <span>Date Q&A</span>
+          <span>Speed Dating Q&A</span>
           <strong>See what RigMatch asked and how each model answered</strong>
           <em>{benchmark ? `${benchmark.prompts.length} answers saved for ${activeRow.displayName}.` : isLiveModel ? 'This contestant is answering now.' : 'This contestant has not been tested yet.'}</em>
         </div>
@@ -4643,7 +5246,7 @@ function SpeedDateTranscriptPanel({
             </div>
           ) : (
             <div className="speed-date-live-question waiting">
-              <span>Waiting for a date</span>
+              <span>Waiting for a test</span>
               <strong>{activeRow.displayName} has no saved answers yet</strong>
               <p>Start Speed Dating and this panel will fill in after each contestant finishes the same question set.</p>
             </div>
@@ -4944,7 +5547,7 @@ function AgentReveal({
       </div>
 
       <div className={selectedScore ? 'top-pick-ribbon scored' : 'top-pick-ribbon'} aria-label="Top pick status">
-        <span>{selectedScore ? 'Bachelor Number 1 for this rig' : 'Awaiting a first date'}</span>
+        <span>{selectedScore ? 'Bachelor Number 1 for this rig' : 'Awaiting a first test'}</span>
         <strong>{agentName}</strong>
         <em>{selectedScore ? `${selectedScore.total} Match · ${selectedScore.grade}` : 'Run a compatibility test to crown the winner.'}</em>
       </div>
@@ -5070,7 +5673,7 @@ function AgentDatingProfile({
   const locationLabel = host?.hostname ?? system.hostname;
   const matchLine = score
     ? `${score.total} Match score · ${score.grade} chemistry`
-    : 'Waiting for a first compatibility date';
+    : 'Waiting for a first compatibility test';
   const questionCount = benchmark?.prompts.length ?? 0;
   const profileTabs: Array<{ id: typeof activeProfileTab; label: string; badge: string; title: string }> = [
     { id: 'about', label: 'About', badge: 'Profile', title: 'Show the model dating profile.' },
@@ -5207,7 +5810,7 @@ function ProfileScoreDetails({
     {
       label: 'Match',
       value: exactScores ? String(exactScores.total) : score ? String(score.total) : 'N/A',
-      note: exactScores?.grade ?? score?.grade ?? 'Run a date',
+      note: exactScores?.grade ?? score?.grade ?? 'Run a test',
     },
     {
       label: 'Answer Quality',
@@ -5242,7 +5845,7 @@ function ProfileScoreDetails({
         <div className="profile-scoreboard-title">
           <span>Judge Card</span>
           <strong>{model}</strong>
-          <em>{score ? `RigMatch scored this model ${score.total} with ${score.grade} chemistry.` : 'No scored compatibility date yet.'}</em>
+          <em>{score ? `RigMatch scored this model ${score.total} with ${score.grade} chemistry.` : 'No scored compatibility test yet.'}</em>
         </div>
         <div className="profile-score-grid">
           {scoreCards.map((card) => (
@@ -5267,7 +5870,7 @@ function ProfileScoreDetails({
         ) : (
           <div className="profile-empty-note">
             <strong>No prompt proof yet</strong>
-            <span>Run this model in Test One Model or Speed Dating to save prompt-level proof.</span>
+            <span>Use Test in Contestants or run Speed Dating to save prompt-level proof.</span>
           </div>
         )}
       </div>
@@ -5310,9 +5913,9 @@ function ProfileQuestionTranscript({
         aria-labelledby="profile-tab-questions"
       >
         <MessageSquare aria-hidden="true" />
-        <strong>No date transcript yet</strong>
-        <span>Run this model in Test One Model or Speed Dating. RigMatch will save each question, answer, score, and timing here.</span>
-        <em>Questions can still be changed with Edit Questions in Test One Model or Edit Suite in Speed Dating.</em>
+        <strong>No test transcript yet</strong>
+        <span>Use Test in Contestants or run Speed Dating. RigMatch will save each question, answer, score, and timing here.</span>
+        <em>Questions can still be changed from the test popup or Edit Suite in Speed Dating.</em>
         <button type="button" className="mini-button outline" onClick={onEditQuestions}>
           <Settings aria-hidden="true" />
           Edit Questions
@@ -5331,7 +5934,7 @@ function ProfileQuestionTranscript({
     >
       <div className="profile-question-summary">
         <div>
-          <span>Date Transcript</span>
+          <span>Test Transcript</span>
           <strong>{prompts.length} questions asked</strong>
           <em>{formatHistoryTime(benchmark.completedAt)} · {benchmark.scores.total} Match · {benchmark.scores.grade}</em>
         </div>
@@ -5487,7 +6090,7 @@ function getAgentDatingProfileDetails(
 
   return [
     { label: 'Last Online', value: statusLabel },
-    { label: 'Last Date', value: score ? formatHistoryTime(score.completedAt) : 'Not tested yet' },
+    { label: 'Last Test', value: score ? formatHistoryTime(score.completedAt) : 'Not tested yet' },
     { label: 'Looking For', value: getCleanHostName(host?.hostname ?? system.hostname) },
     { label: 'Model', value: model },
     { label: 'Origin', value: `${origin.country} · ${origin.organization}` },
@@ -5496,7 +6099,7 @@ function getAgentDatingProfileDetails(
     { label: 'Size', value: sizeLabel },
     { label: 'VRAM Fit', value: getFootprintFit(sizeGb, system) },
     { label: 'Best At', value: profile.specialties.join(', ') },
-    { label: 'Match Score', value: score ? `${score.total} (${score.grade})` : 'Run a date' },
+    { label: 'Match Score', value: score ? `${score.total} (${score.grade})` : 'Run a test' },
     { label: 'Trust', value: score ? `${score.sobriety}%` : 'Unknown' },
     { label: 'Dealbreaker', value: getDatingDealbreaker(sizeGb, score, system) },
   ];
@@ -5528,7 +6131,7 @@ function getDatingFirstImpression(
     case 'chrome':
       return 'Big reasoning presence. Shows up wearing analysis like formalwear.';
     default:
-      return 'Wildcard confidence and just enough mystery to justify one compatibility date.';
+      return 'Wildcard confidence and just enough mystery to justify one compatibility test.';
   }
 }
 
@@ -5953,7 +6556,7 @@ function FlirtTestAnimation({
   const modelLine = questionLabel
     ? 'I dressed for this prompt.'
     : mode === 'speed-date'
-    ? 'I love a fair date.'
+    ? 'I love a fair contest.'
     : 'You had me at prompt.';
 
   return (
@@ -6178,6 +6781,15 @@ function getRecentModelScores(modelScores: Record<string, TestedModelScore>) {
     .sort((left, right) => Date.parse(right.completedAt) - Date.parse(left.completedAt));
 }
 
+function getRankedModelScores(modelScores: Record<string, TestedModelScore>) {
+  return Object.values(modelScores)
+    .filter(isTestedModelScore)
+    .sort((left, right) => {
+      if (right.total !== left.total) return right.total - left.total;
+      return Date.parse(right.completedAt) - Date.parse(left.completedAt);
+    });
+}
+
 function getModelScore(row: ModelRow, modelScores: Record<string, TestedModelScore>) {
   return (
     modelScores[row.displayName] ||
@@ -6375,7 +6987,7 @@ function getModelProfileHighlights(
 
   return [
     {
-      label: 'Date vibe',
+      label: 'Best use',
       value: profile.archetype,
     },
     {
@@ -6427,7 +7039,7 @@ function getRigPick(
       profile: getModelProfile(installedPick.displayName),
       tone: 'installed',
       fitLabel: getRigPickFitLabel(installedPick, vramGb),
-      reason: `${installedPick.displayName} is already installed and sized for this rig. Give this contestant the first date.`,
+      reason: `${installedPick.displayName} is already installed and sized for this rig. Give this contestant the first test.`,
     };
   }
 
@@ -6725,7 +7337,7 @@ function getSelectedContestantBlurb(
   }
 
   if (row.installed) {
-    return `${row.displayName} is installed and ready for a compatibility date. ${hardwareFit.detail}`;
+    return `${row.displayName} is installed and ready for a compatibility test. ${hardwareFit.detail}`;
   }
 
   if (hardwareFit.recommend) {
@@ -7161,7 +7773,7 @@ function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb'>, vramGb: number
     return {
       tone: 'out-of-league',
       label: 'Out of league',
-      detail: `${row.params} is a heavyweight date for ${vramLabel}. Try a 3B-14B contestant first.`,
+      detail: `${row.params} is a heavyweight model for ${vramLabel}. Try a 3B-14B contestant first.`,
       recommend: false,
     };
   }
@@ -7251,6 +7863,113 @@ function getSizeRisk(sizeGb: number | null) {
 
 function getShortModelName(model: string) {
   return model.replace(':latest', '').replace(/-instruct/gi, '').slice(0, 12);
+}
+
+function getQueueChipModelName(model: string) {
+  return model.replace(':latest', '').replace(/-instruct/gi, '');
+}
+
+function createQueuedPullProgress(model: string, baseUrl?: string): PullProgressUpdate {
+  return {
+    id: createRunProgressId('queued-pull'),
+    model,
+    baseUrl,
+    phase: 'queued',
+    status: 'Queued',
+    percent: 0,
+    completedBytes: 0,
+    totalBytes: null,
+    speedBps: 0,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function removePullProgress(
+  current: Record<string, PullProgressUpdate>,
+  model: string,
+) {
+  const next = { ...current };
+  delete next[model];
+  return next;
+}
+
+function removePullProgressForModels(
+  current: Record<string, PullProgressUpdate>,
+  models: Set<string>,
+) {
+  const next = { ...current };
+  models.forEach((model) => {
+    delete next[model];
+  });
+  return next;
+}
+
+function isVisiblePullProgress(progress?: PullProgressUpdate) {
+  return Boolean(progress && progress.phase !== 'queued');
+}
+
+function getPullProgressPercent(progress: PullProgressUpdate | undefined, queued: boolean) {
+  if (progress?.phase === 'complete') return 100;
+  if (typeof progress?.percent === 'number') return Math.max(0, Math.min(100, progress.percent));
+  return queued ? 0 : 0;
+}
+
+function getPullProgressStatusLabel(
+  model: string,
+  phase: PullProgressUpdate['phase'],
+  queued: boolean,
+  isActive: boolean,
+  isStopping: boolean,
+  progress?: PullProgressUpdate,
+) {
+  if (phase === 'failed') return 'Download failed';
+  if (phase === 'complete') return 'Download complete';
+  if (isStopping) return 'Stopping after current pull';
+  if (isActive) return progress?.status || `Downloading ${getQueueChipModelName(model)}`;
+  if (queued) return 'Queued for download';
+  return progress?.status || 'Waiting for download';
+}
+
+function getPullProgressDetailLabel(
+  phase: PullProgressUpdate['phase'],
+  queued: boolean,
+  progress?: PullProgressUpdate,
+) {
+  if (phase === 'failed') return progress?.error || 'Ollama reported an error.';
+  if (phase === 'complete') return '100% complete.';
+  if (phase === 'queued') return '0% · waiting for Start Download.';
+
+  const percent = typeof progress?.percent === 'number' ? `${Math.round(progress.percent)}%` : '--%';
+  const speed = formatBytesPerSecond(progress?.speedBps);
+  const size = progress?.completedBytes && progress?.totalBytes
+    ? `${formatBytes(progress.completedBytes)} / ${formatBytes(progress.totalBytes)}`
+    : progress?.completedBytes
+      ? formatBytes(progress.completedBytes)
+      : queued
+        ? 'waiting for bytes'
+        : 'starting';
+
+  return `${percent} · ${speed} · ${size}`;
+}
+
+function formatBytesPerSecond(value?: number | null) {
+  if (!Number.isFinite(value) || !value || value <= 0) return '-- MB/s';
+  return `${formatBytes(value)}/s`;
+}
+
+function formatBytes(value?: number | null) {
+  if (!Number.isFinite(value) || value === null || value === undefined || value < 0) return '--';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let normalized = value;
+  let unitIndex = 0;
+
+  while (normalized >= 1024 && unitIndex < units.length - 1) {
+    normalized /= 1024;
+    unitIndex += 1;
+  }
+
+  const precision = normalized >= 100 || unitIndex === 0 ? 0 : normalized >= 10 ? 1 : 2;
+  return `${normalized.toFixed(precision)} ${units[unitIndex]}`;
 }
 
 function formatGb(value: number) {

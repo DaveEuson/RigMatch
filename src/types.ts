@@ -161,6 +161,21 @@ export type BenchmarkProgressUpdate = {
   message?: string;
 };
 
+export type PullProgressUpdate = {
+  id: string;
+  model: string;
+  baseUrl?: string;
+  phase: 'queued' | 'started' | 'pulling' | 'complete' | 'failed';
+  status: string;
+  percent: number | null;
+  completedBytes?: number | null;
+  totalBytes?: number | null;
+  speedBps?: number | null;
+  digest?: string | null;
+  error?: string | null;
+  updatedAt: string;
+};
+
 export type ChatResponse = {
   model: string;
   message: string;
@@ -221,7 +236,7 @@ export type AgentArcadeApi = {
   openOllamaDownload: () => Promise<void>;
   scanLan: () => Promise<ScanResponse>;
   addHostByAddress: (address: string) => Promise<NetworkHost>;
-  pullModel: (request: { model: string; baseUrl?: string }) => Promise<PullModelResponse>;
+  pullModel: (request: { model: string; baseUrl?: string; progressId?: string }) => Promise<PullModelResponse>;
   deleteModel: (request: { model: string; baseUrl?: string }) => Promise<DeleteModelResponse>;
   runBenchmark: (request: {
     model: string;
@@ -231,6 +246,7 @@ export type AgentArcadeApi = {
     progressId?: string;
   }) => Promise<BenchmarkResult>;
   onBenchmarkProgress?: (callback: (update: BenchmarkProgressUpdate) => void) => () => void;
+  onPullProgress?: (callback: (update: PullProgressUpdate) => void) => () => void;
   sendChat: (request: { model: string; message: string; baseUrl?: string }) => Promise<ChatResponse>;
   getLogs: (limit?: number) => Promise<AppLogResponse>;
   appendLog: (entry: Partial<AppLogEntry>) => Promise<AppLogEntry>;

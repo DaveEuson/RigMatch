@@ -31,6 +31,7 @@ const OLLAMA_LIBRARY_DETAIL_LIMIT = 56;
 const OLLAMA_LIBRARY_MODEL_LIMIT = 260;
 const OLLAMA_FAMILY_TAG_LIMIT = 18;
 const OLLAMA_DETAIL_CONCURRENCY = 8;
+const CPU_LOAD_SAMPLE_MS = 750;
 let ollamaCatalogCache = null;
 let ollamaCatalogCacheAt = 0;
 
@@ -111,7 +112,7 @@ function registerHandlers() {
   handleLogged('ollama:getStatus', 'ollama', (_event, baseUrl) => getOllamaStatus(baseUrl || OLLAMA_LOCAL_URL));
   handleLogged('ollama:getCatalog', 'catalog', (_event, options) => getOllamaCatalog(options));
   handleLogged('ollama:openDownload', 'ollama', () => openOllamaDownload());
-  handleLogged('ollama:pullModel', 'ollama', (_event, request) => pullModel(request));
+  handleLogged('ollama:pullModel', 'ollama', (event, request) => pullModel(request, event.sender));
   handleLogged('ollama:deleteModel', 'ollama', (_event, request) => deleteModel(request));
   handleLogged('network:scanLan', 'network', () => scanLanForOllama());
   handleLogged('network:addHostByAddress', 'network', (_event, address) => addHostByAddress(address));
@@ -447,13 +448,62 @@ function mbToGb(mb) {
   return Math.round((mb / 1024) * 10) / 10;
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function clampPercent(value) {
+  if (!Number.isFinite(value)) return null;
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+function getCpuTimesSnapshot() {
+  return os.cpus().map((cpu) => {
+    const total = Object.values(cpu.times).reduce((sum, time) => sum + time, 0);
+    return {
+      idle: cpu.times.idle,
+      total,
+    };
+  });
+}
+
+function calculateCpuLoadPercent(startSnapshot, endSnapshot) {
+  const sampleCount = Math.min(startSnapshot.length, endSnapshot.length);
+  let idleDelta = 0;
+  let totalDelta = 0;
+
+  for (let index = 0; index < sampleCount; index += 1) {
+    idleDelta += Math.max(0, endSnapshot[index].idle - startSnapshot[index].idle);
+    totalDelta += Math.max(0, endSnapshot[index].total - startSnapshot[index].total);
+  }
+
+  if (totalDelta <= 0) return null;
+  return clampPercent((1 - idleDelta / totalDelta) * 100);
+}
+
+async function getCpuLoadPercent() {
+  const startSnapshot = getCpuTimesSnapshot();
+  await delay(CPU_LOAD_SAMPLE_MS);
+  const sampledLoad = calculateCpuLoadPercent(startSnapshot, getCpuTimesSnapshot());
+
+  if (sampledLoad !== null) {
+    return sampledLoad;
+  }
+
+  try {
+    const load = await si.currentLoad();
+    return clampPercent(load.currentLoad) ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function getSystemProfile() {
-  const [cpu, mem, graphics, osInfo, load, fsSize, battery] = await Promise.all([
+  const [cpu, mem, graphics, osInfo, fsSize, battery] = await Promise.all([
     si.cpu(),
     si.mem(),
     si.graphics(),
     si.osInfo(),
-    si.currentLoad(),
     si.fsSize(),
     si.battery().catch(() => ({ hasBattery: false })),
   ]);
@@ -466,6 +516,7 @@ async function getSystemProfile() {
   const primaryFs = (fsSize || []).sort((a, b) => (b.size || 0) - (a.size || 0))[0] || {};
   const networks = getPrivateNetworkAddresses();
   const cuda = await getCudaStatus(primaryGpu);
+  const cpuLoadPercent = await getCpuLoadPercent();
 
   return {
     hostname: os.hostname(),
@@ -481,7 +532,7 @@ async function getSystemProfile() {
       brand: cpu.brand,
       physicalCores: cpu.physicalCores,
       cores: cpu.cores,
-      loadPercent: Math.round(load.currentLoad || 0),
+      loadPercent: cpuLoadPercent,
     },
     memory: {
       totalGb: bytesToGb(mem.total),
@@ -1248,32 +1299,255 @@ function sortDiscoveredHosts(a, b) {
   return (a.pingMs || 9999) - (b.pingMs || 9999);
 }
 
-async function pullModel(request = {}) {
+async function pullModel(request = {}, sender) {
   const model = request.model;
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
+  const progressId = request.progressId || `pull-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   if (!model) {
     throw new Error('No model selected to pull');
   }
 
-  const response = await fetchJson(
-    `${baseUrl}/api/pull`,
-    {
+  const emit = createPullProgressEmitter(sender, {
+    id: progressId,
+    model,
+    baseUrl,
+  });
+  const controller = new AbortController();
+  const timeoutMs = 1000 * 60 * 45;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let lastStatus = 'Pulled';
+
+  emit({
+    phase: 'started',
+    status: 'Starting download',
+    percent: null,
+    completedBytes: null,
+    totalBytes: null,
+    speedBps: null,
+  }, true);
+
+  try {
+    const response = await fetch(`${baseUrl}/api/pull`, {
       method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         model,
-        stream: false,
+        stream: true,
       }),
-    },
-    1000 * 60 * 45,
-  );
+    });
+
+    if (!response.ok) {
+      const detail = extractResponseDetail(await response.text());
+      throw new Error(`${response.status} ${response.statusText} from ${getUrlLabel(`${baseUrl}/api/pull`)}${detail ? `: ${detail}` : ''}`);
+    }
+
+    if (!response.body) {
+      emit({
+        phase: 'pulling',
+        status: 'Ollama did not stream progress, waiting for completion',
+        percent: null,
+        completedBytes: null,
+        totalBytes: null,
+        speedBps: null,
+      }, true);
+      emit({
+        phase: 'complete',
+        status: 'Download complete',
+        percent: 100,
+        completedBytes: null,
+        totalBytes: null,
+        speedBps: 0,
+      }, true);
+      return {
+        model,
+        baseUrl,
+        status: 'Pulled',
+        completedAt: new Date().toISOString(),
+      };
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const tracker = createPullProgressTracker();
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (value) {
+        buffer += decoder.decode(value, { stream: !done });
+      }
+
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const update = normalizePullProgressLine(line, tracker);
+        if (!update) continue;
+        if (update.error) throw new Error(update.error);
+        lastStatus = update.status || lastStatus;
+        emit(update, update.phase !== 'pulling');
+      }
+
+      if (done) break;
+    }
+
+    const finalUpdate = normalizePullProgressLine(buffer, tracker);
+    if (finalUpdate?.error) throw new Error(finalUpdate.error);
+    if (finalUpdate) {
+      lastStatus = finalUpdate.status || lastStatus;
+      emit(finalUpdate, finalUpdate.phase !== 'pulling');
+    }
+
+    emit({
+      phase: 'complete',
+      status: lastStatus === 'success' ? 'Download complete' : lastStatus,
+      percent: 100,
+      completedBytes: tracker.lastCompletedBytes,
+      totalBytes: tracker.lastTotalBytes,
+      speedBps: 0,
+      digest: tracker.lastDigest,
+    }, true);
+  } catch (error) {
+    const message = error?.name === 'AbortError'
+      ? `Timed out downloading ${model} from ${getUrlOrigin(baseUrl)} after ${timeoutMs} ms.`
+      : getLogErrorMessage(error);
+    emit({
+      phase: 'failed',
+      status: 'Download failed',
+      percent: null,
+      completedBytes: null,
+      totalBytes: null,
+      speedBps: 0,
+      error: message,
+    }, true);
+
+    if (error?.name === 'AbortError') {
+      throw new Error(message);
+    }
+
+    if (error?.message === 'fetch failed' || error?.name === 'TypeError') {
+      throw new Error(`Cannot reach local Ollama at ${getUrlOrigin(baseUrl)}. Make sure the Ollama app is installed and running on this computer.`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 
   return {
     model,
     baseUrl,
-    status: response.status || 'Pulled',
+    status: lastStatus,
     completedAt: new Date().toISOString(),
   };
+}
+
+function createPullProgressEmitter(sender, baseUpdate) {
+  let lastEmitAt = 0;
+  let lastPercent = null;
+
+  return (partial, force = false) => {
+    const now = Date.now();
+    const update = {
+      ...baseUpdate,
+      phase: partial.phase || 'pulling',
+      status: partial.status || 'Downloading',
+      percent: typeof partial.percent === 'number' ? Math.max(0, Math.min(100, Math.round(partial.percent))) : null,
+      completedBytes: normalizeByteCount(partial.completedBytes),
+      totalBytes: normalizeByteCount(partial.totalBytes),
+      speedBps: normalizeByteCount(partial.speedBps),
+      digest: partial.digest || null,
+      error: partial.error || null,
+      updatedAt: new Date(now).toISOString(),
+    };
+    const percentChanged = update.percent !== lastPercent;
+
+    if (!force && update.phase === 'pulling' && now - lastEmitAt < 250 && !percentChanged) {
+      return;
+    }
+
+    lastEmitAt = now;
+    lastPercent = update.percent;
+
+    if (sender && !sender.isDestroyed()) {
+      sender.send('ollama:pullProgress', update);
+    }
+  };
+}
+
+function createPullProgressTracker() {
+  return {
+    lastDigest: null,
+    lastCompletedBytes: null,
+    lastTotalBytes: null,
+    lastSampleBytes: null,
+    lastSampleAt: 0,
+    lastSpeedBps: null,
+  };
+}
+
+function normalizePullProgressLine(line, tracker) {
+  const trimmed = String(line || '').trim();
+  if (!trimmed) return null;
+
+  let chunk;
+  try {
+    chunk = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+
+  const status = String(chunk.status || 'Downloading');
+  const statusLower = status.toLowerCase();
+  const completedBytes = normalizeByteCount(chunk.completed);
+  const totalBytes = normalizeByteCount(chunk.total);
+  const digest = chunk.digest || tracker.lastDigest || null;
+  const now = Date.now();
+
+  if (digest !== tracker.lastDigest || (completedBytes !== null && tracker.lastSampleBytes !== null && completedBytes < tracker.lastSampleBytes)) {
+    tracker.lastDigest = digest;
+    tracker.lastSampleBytes = completedBytes;
+    tracker.lastSampleAt = now;
+    tracker.lastSpeedBps = null;
+  } else if (completedBytes !== null && tracker.lastSampleBytes !== null && tracker.lastSampleAt > 0) {
+    const elapsedSeconds = Math.max(0.001, (now - tracker.lastSampleAt) / 1000);
+    const deltaBytes = Math.max(0, completedBytes - tracker.lastSampleBytes);
+    tracker.lastSpeedBps = deltaBytes / elapsedSeconds;
+    tracker.lastSampleBytes = completedBytes;
+    tracker.lastSampleAt = now;
+  } else if (completedBytes !== null) {
+    tracker.lastSampleBytes = completedBytes;
+    tracker.lastSampleAt = now;
+  }
+
+  if (completedBytes !== null) tracker.lastCompletedBytes = completedBytes;
+  if (totalBytes !== null) tracker.lastTotalBytes = totalBytes;
+
+  const percent = completedBytes !== null && totalBytes !== null && totalBytes > 0
+    ? Math.min(statusLower === 'success' ? 100 : 99, Math.round((completedBytes / totalBytes) * 100))
+    : statusLower === 'success'
+      ? 100
+      : null;
+
+  return {
+    phase: statusLower === 'success' ? 'complete' : 'pulling',
+    status: statusLower === 'success' ? 'Download complete' : status,
+    percent,
+    completedBytes,
+    totalBytes,
+    speedBps: tracker.lastSpeedBps,
+    digest,
+    error: chunk.error ? String(chunk.error) : null,
+  };
+}
+
+function normalizeByteCount(value) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue >= 0 ? numberValue : null;
 }
 
 async function deleteModel(request = {}) {
