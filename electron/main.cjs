@@ -12,6 +12,9 @@ const { buildBenchmarkPromptPlan, normalizeBenchmarkQuestionCount } = require('.
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const OLLAMA_LIBRARY_URL = 'https://ollama.com/library';
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
+const RIGMATCH_REPOSITORY_URL = process.env.RIGMATCH_REPOSITORY_URL || 'https://github.com/daveeuson/RigMatch.AI';
+const RIGMATCH_RELEASES_URL = process.env.RIGMATCH_RELEASES_URL || `${RIGMATCH_REPOSITORY_URL}/releases`;
+const RIGMATCH_RELEASES_API_URL = process.env.RIGMATCH_RELEASES_API_URL || 'https://api.github.com/repos/daveeuson/RigMatch.AI/releases';
 const CUDA_TOOLKIT_URL = 'https://developer.nvidia.com/cuda-toolkit';
 const CUDA_TOOLKIT_ARCHIVE_URL = 'https://developer.nvidia.com/cuda-toolkit-archive';
 const CUDA_REDIST_INDEX_URL = 'https://developer.download.nvidia.com/compute/cuda/redist/';
@@ -22,6 +25,14 @@ const APP_USER_AGENT = 'RigMatchAI/0.1';
 const BENCHMARK_REPEATS = 1;
 const COMPUTER_PROBE_PORTS = [11434, 22, 445, 3389, 80, 443];
 const LOG_LIMIT = 250;
+const OLLAMA_CATALOG_CACHE_MS = 1000 * 60 * 10;
+const OLLAMA_LIBRARY_FAMILY_LIMIT = 96;
+const OLLAMA_LIBRARY_DETAIL_LIMIT = 56;
+const OLLAMA_LIBRARY_MODEL_LIMIT = 260;
+const OLLAMA_FAMILY_TAG_LIMIT = 18;
+const OLLAMA_DETAIL_CONCURRENCY = 8;
+let ollamaCatalogCache = null;
+let ollamaCatalogCacheAt = 0;
 
 const curatedCatalog = [
   { name: 'llama3.2', tag: '1b', sizeGb: 1.3, params: '1B', pack: 'Lightweight' },
@@ -40,6 +51,12 @@ function isDev() {
   return !app.isPackaged && process.env.RIGMATCH_FORCE_BUILT_RENDERER !== '1';
 }
 
+if (process.platform === 'linux' && isDev() && process.env.RIGMATCH_ENABLE_GPU !== '1') {
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-gpu');
+  app.disableHardwareAcceleration();
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1600,
@@ -48,6 +65,7 @@ function createWindow() {
     minHeight: 760,
     backgroundColor: '#080b0d',
     title: 'RigMatch.AI',
+    icon: getWindowIconPath(),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -69,6 +87,12 @@ function createWindow() {
   }
 }
 
+function getWindowIconPath() {
+  return isDev()
+    ? path.join(__dirname, '..', 'public', 'rigmatch-brand-icon.png')
+    : path.join(__dirname, '..', 'dist', 'rigmatch-brand-icon.png');
+}
+
 app.whenReady().then(() => {
   registerHandlers();
   createWindow();
@@ -85,18 +109,20 @@ app.on('window-all-closed', () => {
 function registerHandlers() {
   handleLogged('system:getProfile', 'system', () => getSystemProfile());
   handleLogged('ollama:getStatus', 'ollama', (_event, baseUrl) => getOllamaStatus(baseUrl || OLLAMA_LOCAL_URL));
-  handleLogged('ollama:getCatalog', 'catalog', () => getOllamaCatalog());
+  handleLogged('ollama:getCatalog', 'catalog', (_event, options) => getOllamaCatalog(options));
   handleLogged('ollama:openDownload', 'ollama', () => openOllamaDownload());
   handleLogged('ollama:pullModel', 'ollama', (_event, request) => pullModel(request));
   handleLogged('ollama:deleteModel', 'ollama', (_event, request) => deleteModel(request));
   handleLogged('network:scanLan', 'network', () => scanLanForOllama());
   handleLogged('network:addHostByAddress', 'network', (_event, address) => addHostByAddress(address));
-  handleLogged('benchmark:run', 'benchmark', (_event, request) => runBenchmark(request));
+  handleLogged('benchmark:run', 'benchmark', (event, request) => runBenchmark(request, event.sender));
   handleLogged('chat:send', 'chat', (_event, request) => sendChat(request));
   handleLogged('logs:list', 'logs', (_event, limit) => readAppLogs(limit));
   handleLogged('logs:append', 'logs', (_event, entry) => appendAppLog(entry));
   handleLogged('logs:clear', 'logs', () => clearAppLogs());
   handleLogged('logs:openFolder', 'logs', () => openAppLogsFolder());
+  handleLogged('app:checkForUpdates', 'updates', (_event, channel) => checkForRigmatchUpdates(channel));
+  handleLogged('app:openUpdatePage', 'updates', (_event, channel) => openRigmatchUpdatePage(channel));
 }
 
 function handleLogged(channel, source, handler) {
@@ -230,6 +256,87 @@ async function openOllamaDownload() {
   await shell.openExternal(OLLAMA_DOWNLOAD_URL);
 }
 
+async function checkForRigmatchUpdates(channel = 'release') {
+  const normalizedChannel = normalizeUpdateChannel(channel);
+  const currentVersion = getAppVersion();
+  const checkedAt = new Date().toISOString();
+
+  try {
+    const releases = await fetchRemoteJson(RIGMATCH_RELEASES_API_URL, {}, 7000);
+    const latest = pickLatestRigmatchRelease(Array.isArray(releases) ? releases : [], normalizedChannel);
+
+    if (!latest) {
+      return {
+        channel: normalizedChannel,
+        currentVersion,
+        checkedAt,
+        latestVersion: null,
+        latestName: null,
+        latestDate: null,
+        releaseUrl: RIGMATCH_RELEASES_URL,
+        downloadUrl: RIGMATCH_RELEASES_URL,
+        releaseNotes: null,
+        hasUpdate: false,
+        status: 'unknown',
+        error: normalizedChannel === 'nightly'
+          ? 'No nightly or prerelease builds were found yet.'
+          : 'No published releases were found yet.',
+      };
+    }
+
+    const latestVersion = normalizeReleaseVersion(latest.tag_name || latest.name);
+    const hasUpdate = hasNewerRigmatchRelease({
+      currentVersion,
+      latestVersion,
+      currentTag: `v${currentVersion}`,
+      latestTag: latest.tag_name,
+      channel: normalizedChannel,
+      isPrerelease: Boolean(latest.prerelease),
+    });
+    const releaseUrl = latest.html_url || RIGMATCH_RELEASES_URL;
+    const downloadUrl = pickRigmatchDownloadUrl(latest) || releaseUrl;
+
+    return {
+      channel: normalizedChannel,
+      currentVersion,
+      checkedAt,
+      latestVersion,
+      latestName: latest.name || latest.tag_name || 'RigMatch.AI release',
+      latestDate: latest.published_at || latest.created_at || null,
+      releaseUrl,
+      downloadUrl,
+      releaseNotes: summarizeReleaseNotes(latest.body),
+      hasUpdate,
+      status: hasUpdate ? 'available' : 'current',
+      error: null,
+    };
+  } catch (error) {
+    return {
+      channel: normalizedChannel,
+      currentVersion,
+      checkedAt,
+      latestVersion: null,
+      latestName: null,
+      latestDate: null,
+      releaseUrl: RIGMATCH_RELEASES_URL,
+      downloadUrl: RIGMATCH_RELEASES_URL,
+      releaseNotes: null,
+      hasUpdate: false,
+      status: 'unknown',
+      error: error.message || 'Could not check RigMatch.AI releases.',
+    };
+  }
+}
+
+async function openRigmatchUpdatePage(channel = 'release') {
+  const normalizedChannel = normalizeUpdateChannel(channel);
+  const url = normalizedChannel === 'nightly'
+    ? `${RIGMATCH_RELEASES_URL}?channel=nightly`
+    : RIGMATCH_RELEASES_URL;
+  await shell.openExternal(url);
+  return { url };
+}
+
 async function fetchJson(url, options = {}, timeoutMs = 2500) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -257,13 +364,25 @@ async function fetchJson(url, options = {}, timeoutMs = 2500) {
     }
 
     if (error?.message === 'fetch failed' || error?.name === 'TypeError') {
-      throw new Error(`Cannot reach Ollama at ${getUrlOrigin(url)}. Make sure Ollama is running on that machine, listening on 0.0.0.0:11434, and the firewall allows TCP 11434.`);
+      throw new Error(`Cannot reach local Ollama at ${getUrlOrigin(url)}. Make sure the Ollama app is installed and running on this computer.`);
     }
 
     throw error;
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function fetchRemoteJson(url, options = {}, timeoutMs = 5000) {
+  const text = await fetchText(url, {
+    ...options,
+    headers: {
+      Accept: 'application/vnd.github+json',
+      ...(options.headers || {}),
+    },
+  }, timeoutMs);
+
+  return text ? JSON.parse(text) : {};
 }
 
 function getUrlOrigin(url) {
@@ -576,6 +695,97 @@ function compareVersions(a, b) {
   return 0;
 }
 
+function getAppVersion() {
+  try {
+    return app.getVersion();
+  } catch {
+    return '0.1.0';
+  }
+}
+
+function normalizeUpdateChannel(channel) {
+  return channel === 'nightly' ? 'nightly' : 'release';
+}
+
+function pickLatestRigmatchRelease(releases, channel) {
+  const published = releases
+    .filter((release) => release && !release.draft)
+    .sort((a, b) => new Date(b.published_at || b.created_at || 0) - new Date(a.published_at || a.created_at || 0));
+
+  if (channel === 'nightly') {
+    return published.find(isNightlyRelease) || published.find((release) => release.prerelease) || published[0] || null;
+  }
+
+  return published.find((release) => !release.prerelease && !isNightlyRelease(release)) || null;
+}
+
+function isNightlyRelease(release) {
+  return /nightly|alpha|beta|canary|preview/i.test(`${release?.tag_name || ''} ${release?.name || ''}`);
+}
+
+function normalizeReleaseVersion(value) {
+  const match = String(value || '').match(/v?(\d+(?:\.\d+){1,3})/i);
+  return match ? match[1] : null;
+}
+
+function hasNewerRigmatchRelease({ currentVersion, latestVersion, currentTag, latestTag, channel, isPrerelease }) {
+  if (latestVersion && compareVersions(latestVersion, currentVersion) > 0) return true;
+  if (channel === 'nightly' && isPrerelease && latestTag && latestTag !== currentTag) return true;
+  return false;
+}
+
+function pickRigmatchDownloadUrl(release) {
+  const assets = release?.assets || [];
+  if (!assets.length) return null;
+
+  const platformTerms = getReleaseAssetTerms();
+  const rankedAssets = assets
+    .map((asset) => ({
+      asset,
+      score: scoreReleaseAsset(asset?.name || '', platformTerms),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  return rankedAssets[0]?.asset?.browser_download_url || null;
+}
+
+function getReleaseAssetTerms() {
+  const arch = process.arch === 'x64' ? ['x64', 'amd64'] : [process.arch];
+
+  if (process.platform === 'linux') {
+    return ['linux', 'appimage', 'deb', ...arch];
+  }
+
+  if (process.platform === 'win32') {
+    return ['win', 'windows', 'exe', 'nsis', 'zip', ...arch];
+  }
+
+  if (process.platform === 'darwin') {
+    return ['mac', 'macos', 'darwin', 'dmg', 'zip', process.arch === 'arm64' ? 'arm64' : 'x64'];
+  }
+
+  return arch;
+}
+
+function scoreReleaseAsset(name, terms) {
+  const lower = String(name).toLowerCase();
+  return terms.reduce((score, term) => score + (lower.includes(term) ? 1 : 0), 0);
+}
+
+function summarizeReleaseNotes(body) {
+  const text = String(body || '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/!\[[^\]]*]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
+    .replace(/^#+\s*/gm, '')
+    .replace(/\r/g, '')
+    .trim();
+
+  if (!text) return null;
+  return text.length > 1400 ? `${text.slice(0, 1400).trim()}...` : text;
+}
+
 function getPrivateNetworkAddresses() {
   const interfaces = os.networkInterfaces();
   const addresses = [];
@@ -663,28 +873,36 @@ async function getOllamaStatus(baseUrl = OLLAMA_LOCAL_URL) {
   }
 }
 
-async function getOllamaCatalog() {
+async function getOllamaCatalog(options = {}) {
   const fallback = curatedCatalog.map((entry) => ({
     ...entry,
     id: `${entry.name}:${entry.tag}`,
     source: 'Curated fallback',
     live: false,
   }));
+  const now = Date.now();
+
+  if (!options?.force && ollamaCatalogCache?.models?.length && now - ollamaCatalogCacheAt < OLLAMA_CATALOG_CACHE_MS) {
+    return {
+      ...ollamaCatalogCache,
+      syncedAt: new Date(ollamaCatalogCacheAt).toISOString(),
+    };
+  }
 
   try {
-    const html = await fetchText(OLLAMA_LIBRARY_URL, {}, 6500);
-    const names = Array.from(html.matchAll(/href="\/library\/([a-zA-Z0-9._-]+)"/g))
-      .map((match) => decodeURIComponent(match[1]))
-      .filter((name) => /^[a-z0-9][a-z0-9._-]*$/i.test(name));
-
-    const uniqueNames = Array.from(new Set(names)).slice(0, 40);
-    const detailedCatalogs = await Promise.all(
-      uniqueNames.slice(0, 24).map((name) => getOllamaFamilyCatalog(name).catch(() => [])),
+    const libraryPages = await getOllamaLibraryPages();
+    const uniqueNames = Array.from(new Set(libraryPages.flatMap((html) => extractOllamaLibraryNames(html))))
+      .slice(0, OLLAMA_LIBRARY_FAMILY_LIMIT);
+    const detailedNames = uniqueNames.slice(0, OLLAMA_LIBRARY_DETAIL_LIMIT);
+    const detailedCatalogs = await mapWithConcurrency(
+      detailedNames,
+      OLLAMA_DETAIL_CONCURRENCY,
+      (name) => getOllamaFamilyCatalog(name).catch(() => []),
     );
     const detailedCatalog = detailedCatalogs.flat();
-    const detailedNames = new Set(detailedCatalog.map((entry) => entry.name));
+    const detailedCatalogNames = new Set(detailedCatalog.map((entry) => entry.name));
     const familyOnlyCatalog = uniqueNames
-      .filter((name) => !detailedNames.has(name))
+      .filter((name) => !detailedCatalogNames.has(name))
       .map((name) => ({
         id: `${name}:latest`,
         name,
@@ -695,15 +913,26 @@ async function getOllamaCatalog() {
         source: 'Ollama library',
         live: true,
       }));
-    const liveCatalog = [...detailedCatalog, ...familyOnlyCatalog].slice(0, 120);
+    const liveCatalog = [...detailedCatalog, ...familyOnlyCatalog].slice(0, OLLAMA_LIBRARY_MODEL_LIMIT);
 
-    return {
+    const result = {
       syncedAt: new Date().toISOString(),
-      source: OLLAMA_LIBRARY_URL,
+      source: 'Ollama library live scan',
       models: mergeCatalogs(liveCatalog, fallback),
       error: null,
     };
+    ollamaCatalogCache = result;
+    ollamaCatalogCacheAt = Date.now();
+    return result;
   } catch (error) {
+    if (ollamaCatalogCache?.models?.length) {
+      return {
+        ...ollamaCatalogCache,
+        syncedAt: new Date(ollamaCatalogCacheAt).toISOString(),
+        error: `Live sync failed; showing cached Ollama library: ${error.message || 'Could not sync Ollama library'}`,
+      };
+    }
+
     return {
       syncedAt: new Date().toISOString(),
       source: 'Curated fallback',
@@ -720,6 +949,30 @@ function mergeCatalogs(liveCatalog, fallback) {
     map.set(`${entry.name}:${entry.tag}`, entry);
   });
   return Array.from(map.values());
+}
+
+async function getOllamaLibraryPages() {
+  const urls = [
+    `${OLLAMA_LIBRARY_URL}?sort=newest`,
+    OLLAMA_LIBRARY_URL,
+    `${OLLAMA_LIBRARY_URL}?sort=popular`,
+  ];
+  const pages = await Promise.all(
+    urls.map((url) => fetchText(url, {}, 7000).catch(() => '')),
+  );
+  const usablePages = pages.filter(Boolean);
+
+  if (usablePages.length === 0) {
+    throw new Error('Could not reach the Ollama model library.');
+  }
+
+  return usablePages;
+}
+
+function extractOllamaLibraryNames(html) {
+  return Array.from(String(html || '').matchAll(/href=["']\/library\/([a-zA-Z0-9._-]+)(?::[^"'#?/]+)?["']/gi))
+    .map((match) => decodeURIComponentSafe(match[1]))
+    .filter(isValidOllamaName);
 }
 
 async function getOllamaFamilyCatalog(name) {
@@ -745,15 +998,15 @@ async function getOllamaFamilyCatalog(name) {
 function parseOllamaFamilyRows(name, html) {
   const rows = [];
   const seen = new Set();
-  const rowPattern = new RegExp(
-    `<a href="/library/${escapeRegExp(name)}:([^"#?/]+)" class="sm:hidden[\\s\\S]*?<p class="flex text-neutral-500">([^<]+)</p>`,
-    'gi',
-  );
+  const source = String(html || '');
+  const rowPattern = new RegExp(`href=["']/library/${escapeRegExp(name)}:([^"'#?/<>\\s]+)["']`, 'gi');
 
-  for (const match of html.matchAll(rowPattern)) {
-    const tag = decodeHtml(match[1]);
-    if (!/^[a-z0-9._-]+$/i.test(tag)) continue;
-    const detail = decodeHtml(match[2]);
+  for (const match of source.matchAll(rowPattern)) {
+    const tag = decodeURIComponentSafe(decodeHtml(match[1]));
+    if (!isValidOllamaTag(tag)) continue;
+    const start = Math.max(0, (match.index || 0) - 220);
+    const end = Math.min(source.length, (match.index || 0) + 1400);
+    const detail = getPlainText(source.slice(start, end));
     const sizeGb = parseSizeToGb(detail);
     const key = `${name}:${tag}`;
     if (seen.has(key)) continue;
@@ -771,7 +1024,18 @@ function parseOllamaFamilyRows(name, html) {
     });
   }
 
-  return rows.slice(0, 10);
+  return sortOllamaFamilyRows(rows).slice(0, OLLAMA_FAMILY_TAG_LIMIT);
+}
+
+function sortOllamaFamilyRows(rows) {
+  return [...rows].sort((a, b) => {
+    if (a.tag === 'latest') return -1;
+    if (b.tag === 'latest') return 1;
+    if (Boolean(a.sizeGb) !== Boolean(b.sizeGb)) return a.sizeGb ? -1 : 1;
+    const sizeDelta = (a.sizeGb || Number.POSITIVE_INFINITY) - (b.sizeGb || Number.POSITIVE_INFINITY);
+    if (sizeDelta !== 0) return sizeDelta;
+    return a.tag.localeCompare(b.tag);
+  });
 }
 
 function parseSizeToGb(detail) {
@@ -795,7 +1059,47 @@ function decodeHtml(value) {
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"')
     .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
     .trim();
+}
+
+function decodeURIComponentSafe(value) {
+  try {
+    return decodeURIComponent(String(value || ''));
+  } catch {
+    return String(value || '');
+  }
+}
+
+function getPlainText(html) {
+  return decodeHtml(String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' '));
+}
+
+function isValidOllamaName(name) {
+  return /^[a-z0-9][a-z0-9._-]*$/i.test(String(name || ''));
+}
+
+function isValidOllamaTag(tag) {
+  return /^[a-z0-9][a-z0-9._-]*$/i.test(String(tag || ''));
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = [];
+  let index = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (index < items.length) {
+      const currentIndex = index;
+      index += 1;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
 }
 
 function escapeRegExp(value) {
@@ -805,41 +1109,9 @@ function escapeRegExp(value) {
 async function scanLanForOllama() {
   const startedAt = Date.now();
   const networks = getPrivateNetworkAddresses();
-  const subnets = Array.from(new Set(networks.map((network) => network.subnet))).slice(0, 8);
-  const localAddresses = new Set(networks.map((network) => network.address));
-  const candidates = [];
-
-  subnets.forEach((subnet) => {
-    for (let i = 1; i <= 254; i += 1) {
-      candidates.push(`${subnet}.${i}`);
-    }
-  });
-
-  const hosts = [];
-  const concurrency = 64;
-  let index = 0;
-
-  async function worker() {
-    while (index < candidates.length) {
-      const ip = candidates[index];
-      index += 1;
-      const isLocal = localAddresses.has(ip);
-      const result = await probeOllamaHost(ip, isLocal);
-      if (result) {
-        hosts.push(result);
-        continue;
-      }
-
-      const computer = await probeComputerHost(ip, isLocal);
-      if (computer) hosts.push(computer);
-    }
-  }
-
-  await Promise.all(Array.from({ length: concurrency }, worker));
-
   const local = await getOllamaStatus();
-  if (local.ready && !hosts.some((host) => host.ip === '127.0.0.1' || localAddresses.has(host.ip))) {
-    hosts.unshift({
+  const hosts = local.ready
+    ? [{
       id: 'localhost',
       hostname: `${os.hostname()} (Localhost)`,
       ip: '127.0.0.1',
@@ -849,31 +1121,21 @@ async function scanLanForOllama() {
       pingMs: local.pingMs,
       baseUrl: OLLAMA_LOCAL_URL,
       isLocal: true,
-    });
-  }
+    }]
+    : [];
 
   return {
     scannedAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt,
-    checkedHosts: candidates.length,
-    subnets,
+    checkedHosts: 1,
+    subnets: [],
     networks,
-    hosts: hosts.sort(sortDiscoveredHosts),
+    hosts,
   };
 }
 
-async function addHostByAddress(address) {
-  const baseUrl = normalizeOllamaAddress(address);
-  const url = new URL(baseUrl);
-  const host = await probeOllamaHost(url.hostname, url.hostname === '127.0.0.1' || url.hostname === 'localhost', baseUrl);
-
-  if (!host) {
-    const computer = await probeComputerHost(url.hostname, url.hostname === '127.0.0.1' || url.hostname === 'localhost');
-    if (computer) return computer;
-    throw new Error(`No computer or Ollama service answered at ${baseUrl}`);
-  }
-
-  return host;
+async function addHostByAddress() {
+  throw new Error('Remote Ollama hosts are disabled for v1. Remote runners are planned for RigMatch 2.0.');
 }
 
 function normalizeOllamaAddress(address) {
@@ -939,12 +1201,12 @@ async function probeComputerHost(ip, isLocal) {
     provider: openPorts.includes(22) ? 'Computer / SSH' : 'Computer',
     discovery: 'computer',
     models: 0,
-    status: ollamaRefused ? 'Ollama not exposed' : 'Computer found',
+    status: ollamaRefused ? 'Remote disabled for v1' : 'Computer found',
     pingMs: Date.now() - startedAt,
     baseUrl: `http://${ip}:11434`,
     isLocal: false,
     openPorts,
-    setupHint: 'Ollama API is not reachable from this PC. Set OLLAMA_HOST=0.0.0.0:11434 or install the future RigMatch runner.',
+    setupHint: 'Remote systems are disabled for RigMatch v1. Use local Ollama on this computer.',
   };
 }
 
@@ -1051,11 +1313,21 @@ async function deleteModel(request = {}) {
   };
 }
 
-async function runBenchmark(request = {}) {
+async function runBenchmark(request = {}, sender) {
   const model = request.model;
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
   const questionCount = normalizeBenchmarkQuestionCount(request.questionCount);
   const benchmarkPrompts = buildBenchmarkPromptPlan(questionCount, request.questions);
+  const progressId = typeof request.progressId === 'string' ? request.progressId : null;
+  const sendProgress = (update) => {
+    if (!progressId || !sender || sender.isDestroyed()) return;
+    sender.send('benchmark:progress', {
+      id: progressId,
+      model,
+      promptTotal: benchmarkPrompts.length,
+      ...update,
+    });
+  };
 
   if (!model) {
     throw new Error('No model selected for benchmark');
@@ -1081,8 +1353,22 @@ async function runBenchmark(request = {}) {
     },
   });
 
-  for (const prompt of benchmarkPrompts) {
+  sendProgress({
+    phase: 'started',
+    promptIndex: 0,
+    message: `${model} is entering the compatibility round.`,
+  });
+
+  for (const [promptIndex, prompt] of benchmarkPrompts.entries()) {
     const runs = [];
+    sendProgress({
+      phase: 'prompt-start',
+      promptIndex,
+      promptId: prompt.id,
+      promptLabel: prompt.label,
+      prompt: prompt.prompt,
+      message: `Asking ${prompt.label}.`,
+    });
 
     for (let runIndex = 0; runIndex < BENCHMARK_REPEATS; runIndex += 1) {
       const promptStart = Date.now();
@@ -1121,6 +1407,14 @@ async function runBenchmark(request = {}) {
             error: serializeError(error),
           },
         });
+        sendProgress({
+          phase: 'failed',
+          promptIndex,
+          promptId: prompt.id,
+          promptLabel: prompt.label,
+          prompt: prompt.prompt,
+          message: getLogErrorMessage(error),
+        });
         throw error;
       }
 
@@ -1149,6 +1443,17 @@ async function runBenchmark(request = {}) {
       sobrietyScore: Math.round(average(runs.map((run) => run.sobrietyScore))),
       response: runs[runs.length - 1]?.response || '',
       doneReason: `${runs.length} run average`,
+    });
+    sendProgress({
+      phase: 'prompt-complete',
+      promptIndex,
+      promptId: prompt.id,
+      promptLabel: prompt.label,
+      prompt: prompt.prompt,
+      elapsedMs: promptResults[promptResults.length - 1].elapsedMs,
+      tokensPerSecond: promptResults[promptResults.length - 1].tokensPerSecond,
+      sobrietyScore: promptResults[promptResults.length - 1].sobrietyScore,
+      message: `${prompt.label} scored ${promptResults[promptResults.length - 1].sobrietyScore}.`,
     });
   }
 
@@ -1189,6 +1494,12 @@ async function runBenchmark(request = {}) {
       scores: result.scores,
       promptCount: promptResults.length,
     },
+  });
+
+  sendProgress({
+    phase: 'complete',
+    promptIndex: benchmarkPrompts.length,
+    message: `${model} finished with ${result.scores.total} match score.`,
   });
 
   return result;

@@ -4,7 +4,12 @@ const electronPath = require('electron');
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE;
 
-const child = spawn(electronPath, ['.'], {
+const electronArgs = ['.'];
+if (process.platform === 'linux' && process.env.RIGMATCH_ENABLE_GPU !== '1') {
+  electronArgs.push('--no-sandbox', '--disable-gpu');
+}
+
+const child = spawn(electronPath, electronArgs, {
   cwd: process.cwd(),
   env,
   stdio: 'inherit',

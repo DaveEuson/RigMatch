@@ -6,10 +6,17 @@ import {
   demoSystem,
 } from './sampleData';
 import { buildBenchmarkPromptPlan, normalizeBenchmarkQuestionCount } from './benchmarkSuite';
-import type { AgentArcadeApi } from './types';
+import type { AgentArcadeApi, BenchmarkProgressUpdate, UpdateChannel } from './types';
 
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
+const RIGMATCH_RELEASES_URL = 'https://github.com/daveeuson/RigMatch.AI/releases';
+const APP_VERSION = '0.1.0';
+const benchmarkProgressListeners = new Set<(update: BenchmarkProgressUpdate) => void>();
+
+function emitBenchmarkProgress(update: BenchmarkProgressUpdate) {
+  benchmarkProgressListeners.forEach((listener) => listener(update));
+}
 
 const fallbackApi: AgentArcadeApi = {
   async getSystemProfile() {
@@ -28,31 +35,19 @@ const fallbackApi: AgentArcadeApi = {
     window.open(OLLAMA_DOWNLOAD_URL, '_blank', 'noopener,noreferrer');
   },
   async scanLan() {
-    await delay(800);
+    await delay(250);
     return {
       scannedAt: new Date().toISOString(),
-      subnets: ['192.168.1'],
-      checkedHosts: 254,
-      durationMs: 800,
+      subnets: [],
+      checkedHosts: 1,
+      durationMs: 250,
       networks: demoSystem.networks,
-      hosts: demoHosts,
+      hosts: demoHosts.filter((host) => host.isLocal),
     };
   },
-  async addHostByAddress(address) {
-    await delay(350);
-    const normalized = address.trim() || '192.168.1.99';
-    return {
-      id: normalized,
-      hostname: normalized,
-      ip: normalized.replace(/^https?:\/\//, '').replace(/:11434\/?$/, ''),
-      provider: 'Ollama',
-      models: 6,
-      status: 'Ready',
-      pingMs: 7,
-      baseUrl: normalized.startsWith('http') ? normalized : `http://${normalized}:11434`,
-      isLocal: false,
-      isDemo: true,
-    };
+  async addHostByAddress() {
+    await delay(120);
+    throw new Error('Remote Ollama hosts are disabled for v1. Remote runners are planned for RigMatch 2.0.');
   },
   async pullModel(request) {
     await delay(1500);
@@ -73,10 +68,64 @@ const fallbackApi: AgentArcadeApi = {
     };
   },
   async runBenchmark(request) {
-    await delay(1200);
     const scores = demoScoresForModel(request.model);
     const questionCount = normalizeBenchmarkQuestionCount(request.questionCount);
     const promptPlan = buildBenchmarkPromptPlan(questionCount, request.questions);
+    const progressId = request.progressId;
+
+    if (progressId) {
+      emitBenchmarkProgress({
+        id: progressId,
+        model: request.model,
+        phase: 'started',
+        promptIndex: 0,
+        promptTotal: promptPlan.length,
+        message: `${request.model} is entering the preview compatibility round.`,
+      });
+
+      for (const [index, prompt] of promptPlan.entries()) {
+        emitBenchmarkProgress({
+          id: progressId,
+          model: request.model,
+          phase: 'prompt-start',
+          promptIndex: index,
+          promptTotal: promptPlan.length,
+          promptId: prompt.id,
+          promptLabel: prompt.label,
+          prompt: prompt.prompt,
+          message: `Asking ${prompt.label}.`,
+        });
+        await delay(Math.max(35, Math.round(720 / promptPlan.length)));
+        emitBenchmarkProgress({
+          id: progressId,
+          model: request.model,
+          phase: 'prompt-complete',
+          promptIndex: index,
+          promptTotal: promptPlan.length,
+          promptId: prompt.id,
+          promptLabel: prompt.label,
+          prompt: prompt.prompt,
+          elapsedMs: 650 + index * 35,
+          tokensPerSecond: Math.max(22, scores.speed + 12 - index * 7),
+          sobrietyScore: Math.max(40, scores.sobriety - index * 2),
+          message: `${prompt.label} scored ${Math.max(40, scores.sobriety - index * 2)}.`,
+        });
+      }
+    } else {
+      await delay(1200);
+    }
+
+    if (progressId) {
+      emitBenchmarkProgress({
+        id: progressId,
+        model: request.model,
+        phase: 'complete',
+        promptIndex: promptPlan.length,
+        promptTotal: promptPlan.length,
+        message: `${request.model} finished the preview round with ${scores.total} match score.`,
+      });
+    }
+
     return {
       ...demoBenchmark,
       model: request.model,
@@ -92,6 +141,12 @@ const fallbackApi: AgentArcadeApi = {
         response: demoBenchmark.prompts[index % demoBenchmark.prompts.length]?.response ?? '',
         doneReason: 'preview',
       })),
+    };
+  },
+  onBenchmarkProgress(callback) {
+    benchmarkProgressListeners.add(callback);
+    return () => {
+      benchmarkProgressListeners.delete(callback);
     };
   },
   async sendChat(request) {
@@ -133,6 +188,33 @@ const fallbackApi: AgentArcadeApi = {
     return {
       logPath: 'Preview mode',
     };
+  },
+  async checkForUpdates(channel: UpdateChannel = 'release') {
+    await delay(550);
+    return {
+      channel,
+      currentVersion: APP_VERSION,
+      checkedAt: new Date().toISOString(),
+      latestVersion: APP_VERSION,
+      latestName: channel === 'nightly' ? 'Preview nightly channel' : 'RigMatch.AI preview release',
+      latestDate: new Date().toISOString(),
+      releaseUrl: RIGMATCH_RELEASES_URL,
+      downloadUrl: RIGMATCH_RELEASES_URL,
+      releaseNotes:
+        channel === 'nightly'
+          ? 'Preview mode can show the Nightly channel. Desktop builds will check GitHub prereleases and nightly-tagged releases.'
+          : 'Preview mode can show the Release channel. Desktop builds will check the latest stable GitHub release.',
+      hasUpdate: false,
+      status: 'current',
+      error: null,
+    };
+  },
+  async openUpdatePage(channel: UpdateChannel = 'release') {
+    const url = channel === 'nightly'
+      ? `${RIGMATCH_RELEASES_URL}?channel=nightly`
+      : RIGMATCH_RELEASES_URL;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return { url };
   },
 };
 

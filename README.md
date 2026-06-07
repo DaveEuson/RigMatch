@@ -1,6 +1,18 @@
 # RigMatch.AI
 
-RigMatch.AI pairs a local computer with the best Ollama model for that rig. It scans hardware, checks Ollama, lists model candidates, warns before heavy runs, pulls queued models, and runs compatibility tests for speed, sobriety, stability, and rig fit.
+RigMatch.AI helps everyday users find the best local Ollama model for their computer. It checks the machine, confirms Ollama is running, shows model candidates, downloads selected models, and runs simple match tests for speed, reliability, stability, and hardware fit.
+
+<p align="center">
+  <img src="src/assets/robot-scorecard-ceremony.png" alt="RigMatch.AI scorecard ceremony banner with retro robot contestants holding scorecards" width="100%">
+</p>
+
+The product priorities are:
+
+1. Helpful: recommend models that make sense for the user's computer.
+2. Easy: make the next useful step obvious and keep advanced choices optional.
+3. Fun: use the matchmaking/game-show theme to make testing local AI less boring.
+
+The product voice is a friendly AI matchmaking game show, but clarity always wins over the joke.
 
 ## Compatibility Goal
 
@@ -32,8 +44,8 @@ npm run dist:linux
 
 ## Notes
 
-- Desktop mode uses Electron IPC to scan the machine, LAN, Ollama, CUDA, and model catalog.
+- Desktop mode uses Electron IPC to scan this machine, local Ollama, CUDA, and the model catalog.
 - Browser preview mode uses clearly marked sample data.
-- Remote systems must be running Ollama on port `11434` before RigMatch.AI can test them.
+- RigMatch.AI v1 is local-only. Remote systems and trusted runners are planned for a later 2.0 phase.
 - Compatibility tests can heavily use CPU, GPU, VRAM, RAM, disk, fans, and battery.
 - Windows, macOS, and Ubuntu/Linux should remain first-class targets for UI, setup guidance, and release packaging.

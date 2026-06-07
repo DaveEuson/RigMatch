@@ -146,6 +146,21 @@ export type BenchmarkResult = {
   };
 };
 
+export type BenchmarkProgressUpdate = {
+  id: string;
+  model: string;
+  phase: 'started' | 'prompt-start' | 'prompt-complete' | 'complete' | 'failed';
+  promptIndex: number;
+  promptTotal: number;
+  promptId?: string;
+  promptLabel?: string;
+  prompt?: string;
+  elapsedMs?: number;
+  tokensPerSecond?: number;
+  sobrietyScore?: number;
+  message?: string;
+};
+
 export type ChatResponse = {
   model: string;
   message: string;
@@ -182,10 +197,27 @@ export type AppLogResponse = {
   logPath: string;
 };
 
+export type UpdateChannel = 'release' | 'nightly';
+
+export type UpdateCheckResponse = {
+  channel: UpdateChannel;
+  currentVersion: string;
+  checkedAt: string;
+  latestVersion: string | null;
+  latestName: string | null;
+  latestDate: string | null;
+  releaseUrl: string | null;
+  downloadUrl: string | null;
+  releaseNotes: string | null;
+  hasUpdate: boolean;
+  status: 'current' | 'available' | 'unknown';
+  error: string | null;
+};
+
 export type AgentArcadeApi = {
   getSystemProfile: () => Promise<SystemProfile>;
   getOllamaStatus: (baseUrl?: string) => Promise<OllamaStatus>;
-  getOllamaCatalog: () => Promise<CatalogResponse>;
+  getOllamaCatalog: (options?: { force?: boolean }) => Promise<CatalogResponse>;
   openOllamaDownload: () => Promise<void>;
   scanLan: () => Promise<ScanResponse>;
   addHostByAddress: (address: string) => Promise<NetworkHost>;
@@ -196,12 +228,16 @@ export type AgentArcadeApi = {
     baseUrl?: string;
     questionCount?: number;
     questions?: Array<{ id: string; label: string; type: string; prompt: string }>;
+    progressId?: string;
   }) => Promise<BenchmarkResult>;
+  onBenchmarkProgress?: (callback: (update: BenchmarkProgressUpdate) => void) => () => void;
   sendChat: (request: { model: string; message: string; baseUrl?: string }) => Promise<ChatResponse>;
   getLogs: (limit?: number) => Promise<AppLogResponse>;
   appendLog: (entry: Partial<AppLogEntry>) => Promise<AppLogEntry>;
   clearLogs: () => Promise<AppLogResponse>;
   openLogsFolder: () => Promise<{ logPath: string }>;
+  checkForUpdates: (channel?: UpdateChannel) => Promise<UpdateCheckResponse>;
+  openUpdatePage: (channel?: UpdateChannel) => Promise<{ url: string }>;
 };
 
 export type ModelRow = CatalogModel & {
