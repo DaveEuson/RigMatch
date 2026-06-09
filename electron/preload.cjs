@@ -29,6 +29,14 @@ const api = {
   openUpdatePage: (channel) => ipcRenderer.invoke('app:openUpdatePage', channel),
   syncScores: (scores) => ipcRenderer.invoke('scores:sync', scores),
   openChatApp: () => ipcRenderer.invoke('app:openChatApp'),
+  checkAutoUpdate: () => ipcRenderer.invoke('app:checkAutoUpdate'),
+  downloadUpdate: () => ipcRenderer.invoke('app:downloadUpdate'),
+  installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
+  onUpdaterStatus: (callback) => {
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on('updater:status', listener);
+    return () => ipcRenderer.removeListener('updater:status', listener);
+  },
 };
 
 contextBridge.exposeInMainWorld('agentArcade', api);

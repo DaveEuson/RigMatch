@@ -105,3 +105,4 @@ jobs:
             release/**/*.AppImage
             release/**/*.deb
             release/**/*.zip
+            release/**/latest*.yml

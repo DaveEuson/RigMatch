@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const os = require('node:os');
 const dns = require('node:dns').promises;
@@ -95,6 +96,22 @@ function createWindow() {
   } else {
     win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
+  setupAutoUpdater(win);
+}
+
+function setupAutoUpdater(win) {
+  if (!app.isPackaged) return;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  const send = (payload) => {
+    if (!win.isDestroyed()) win.webContents.send('updater:status', payload);
+  };
+  autoUpdater.on('checking-for-update', () => send({ phase: 'checking' }));
+  autoUpdater.on('update-available', (info) => send({ phase: 'available', version: info.version }));
+  autoUpdater.on('update-not-available', () => send({ phase: 'not-available' }));
+  autoUpdater.on('download-progress', (p) => send({ phase: 'downloading', percent: Math.round(p.percent) }));
+  autoUpdater.on('update-downloaded', (info) => send({ phase: 'downloaded', version: info.version }));
+  autoUpdater.on('error', (err) => send({ phase: 'error', error: err.message }));
 }
 
 function getWindowIconPath() {
@@ -182,6 +199,14 @@ function registerHandlers() {
   handleLogged('logs:openFolder', 'logs', () => openAppLogsFolder());
   handleLogged('app:checkForUpdates', 'updates', (_event, channel) => checkForRigmatchUpdates(channel));
   handleLogged('app:openUpdatePage', 'updates', (_event, channel) => openRigmatchUpdatePage(channel));
+  ipcMain.handle('app:checkAutoUpdate', async () => {
+    if (!app.isPackaged) return { phase: 'not-available' };
+    try { await autoUpdater.checkForUpdates(); } catch (err) { return { phase: 'error', error: err.message }; }
+  });
+  ipcMain.handle('app:downloadUpdate', async () => {
+    try { await autoUpdater.downloadUpdate(); } catch (err) { return { phase: 'error', error: err.message }; }
+  });
+  ipcMain.handle('app:installUpdate', () => { autoUpdater.quitAndInstall(); });
   ipcMain.handle('scores:sync', (_event, data) => {
     if (!data || typeof data !== 'object') return;
     if ('scores' in data) {

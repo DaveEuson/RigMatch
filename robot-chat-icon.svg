@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="glow" cx="48%" cy="52%" r="50%">
+      <stop offset="0%" stop-color="#00e5ff" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#00e5ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="180" fill="#0d1b2e"/>
+  <ellipse cx="490" cy="560" rx="380" ry="360" fill="url(#glow)"/>
+
+  <!-- ── Draw order: back pieces first, front pieces last ────────────── -->
+
+  <!-- BACK ARM (right arm, trailing behind body — lower left) -->
+  <line x1="640" y1="448" x2="430" y2="648" stroke="#00b8d0" stroke-width="72" stroke-linecap="round"/>
+  <circle cx="410" cy="666" r="48" fill="#00b8d0"/>
+
+  <!-- BACK LEG (left leg, trailing behind — kicked slightly left) -->
+  <line x1="436" y1="668" x2="232" y2="882" stroke="#00b8d0" stroke-width="78" stroke-linecap="round"/>
+  <ellipse cx="208" cy="900" rx="96" ry="42" fill="#00b8d0"/>
+
+  <!-- FORWARD ARM (left arm, pumped up — drawn before head so head occludes overlap) -->
+  <!-- Hand ends ABOVE the head at (636, 96) -->
+  <line x1="356" y1="446" x2="620" y2="104" stroke="#00d8f0" stroke-width="72" stroke-linecap="round"/>
+  <circle cx="636" cy="88" r="48" fill="#00d8f0"/>
+
+  <!-- ── Head (on top of forward arm, covers any overlap) ───────────── -->
+  <rect x="350" y="148" width="264" height="218" rx="28" fill="#00c8e0"/>
+  <!-- Face plate -->
+  <rect x="380" y="176" width="204" height="162" rx="18" fill="#061828"/>
+  <!-- Left eye -->
+  <rect x="398" y="204" width="70" height="40" rx="10" fill="#00e5ff"/>
+  <!-- Right eye -->
+  <rect x="496" y="204" width="70" height="40" rx="10" fill="#00e5ff"/>
+  <!-- Eye highlights -->
+  <rect x="406" y="210" width="54" height="28" rx="7" fill="#fff" opacity="0.22"/>
+  <rect x="504" y="210" width="54" height="28" rx="7" fill="#fff" opacity="0.22"/>
+  <!-- Mouth grill -->
+  <rect x="404" y="278" width="156" height="14" rx="6" fill="#00e5ff" opacity="0.55"/>
+  <rect x="418" y="300" width="128" height="10" rx="5" fill="#00e5ff" opacity="0.28"/>
+
+  <!-- Antenna (on top of head) -->
+  <rect x="472" y="62" width="20" height="96" rx="7" fill="#00e5ff"/>
+  <circle cx="482" cy="52" r="30" fill="#00e5ff"/>
+  <circle cx="482" cy="52" r="44" fill="none" stroke="#00e5ff" stroke-width="6" opacity="0.3"/>
+
+  <!-- Neck -->
+  <rect x="452" y="364" width="80" height="48" rx="14" fill="#00c8e0"/>
+
+  <!-- Torso -->
+  <rect x="320" y="406" width="320" height="248" rx="36" fill="#00c8e0"/>
+  <!-- Chest panel -->
+  <circle cx="482" cy="516" r="56" fill="#061828"/>
+  <circle cx="482" cy="516" r="36" fill="#00e5ff" opacity="0.88"/>
+  <circle cx="482" cy="516" r="20" fill="#fff" opacity="0.42"/>
+  <!-- Circuit lines -->
+  <line x1="556" y1="480" x2="616" y2="480" stroke="#00e5ff" stroke-width="8" opacity="0.4"/>
+  <line x1="556" y1="502" x2="610" y2="502" stroke="#00e5ff" stroke-width="8" opacity="0.4"/>
+  <line x1="556" y1="524" x2="620" y2="524" stroke="#00e5ff" stroke-width="8" opacity="0.4"/>
+  <circle cx="622" cy="480" r="7" fill="#00e5ff" opacity="0.5"/>
+  <circle cx="614" cy="524" r="7" fill="#00e5ff" opacity="0.5"/>
+
+  <!-- Hip band -->
+  <rect x="354" y="648" width="256" height="46" rx="16" fill="#009ab5"/>
+
+  <!-- FORWARD LEG (right leg, striding forward-right) -->
+  <line x1="564" y1="676" x2="780" y2="900" stroke="#00c8e0" stroke-width="80" stroke-linecap="round"/>
+  <ellipse cx="806" cy="918" rx="94" ry="42" fill="#00c8e0"/>
+</svg>

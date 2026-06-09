@@ -215,6 +215,13 @@ export type AppLogResponse = {
 
 export type UpdateChannel = 'release' | 'nightly';
 
+export type AutoUpdateStatus = {
+  phase: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
+  version?: string;
+  percent?: number;
+  error?: string;
+};
+
 export type UpdateCheckResponse = {
   channel: UpdateChannel;
   currentVersion: string;
@@ -257,6 +264,10 @@ export type AgentArcadeApi = {
   openUpdatePage: (channel?: UpdateChannel) => Promise<{ url: string }>;
   syncScores: (scores: Record<string, unknown>) => Promise<void>;
   openChatApp: () => Promise<{ ok: boolean; reason?: string }>;
+  checkAutoUpdate: () => Promise<void>;
+  downloadUpdate: () => Promise<void>;
+  installUpdate: () => Promise<void>;
+  onUpdaterStatus?: (callback: (status: AutoUpdateStatus) => void) => () => void;
 };
 
 export type ModelRow = CatalogModel & {

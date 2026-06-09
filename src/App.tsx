@@ -65,6 +65,7 @@ import type {
   OllamaStatus,
   PullProgressUpdate,
   SystemProfile,
+  AutoUpdateStatus,
   UpdateChannel,
   UpdateCheckResponse,
 } from './types';
@@ -394,6 +395,7 @@ function App() {
   const [updateChannel, setUpdateChannel] = useState<UpdateChannel>('release');
   const [updateCheck, setUpdateCheck] = useState<UpdateCheckResponse | null>(null);
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [autoUpdateStatus, setAutoUpdateStatus] = useState<AutoUpdateStatus>({ phase: 'idle' });
   const [themeId, setThemeId] = useState<ThemeId>(() => getSavedThemeId());
   const [uiMode, setUiMode] = useState<UiMode>(() => getSavedUiMode());
   const [chatOpen, setChatOpen] = useState(false);
@@ -583,6 +585,19 @@ function App() {
     }
   }, [appLogs]);
 
+  useEffect(() => {
+    return agentArcadeApi.onUpdaterStatus?.((status) => setAutoUpdateStatus(status));
+  }, []);
+
+  const downloadUpdate = useCallback(async () => {
+    setAutoUpdateStatus({ phase: 'downloading', percent: 0 });
+    try { await agentArcadeApi.downloadUpdate(); } catch { /* events handle feedback */ }
+  }, []);
+
+  const installUpdate = useCallback(() => {
+    void agentArcadeApi.installUpdate();
+  }, []);
+
   const selectUpdateChannel = useCallback((channel: UpdateChannel) => {
     setUpdateChannel(channel);
     setUpdateCheck(null);
@@ -592,6 +607,7 @@ function App() {
   const checkForUpdates = useCallback(async () => {
     setIsCheckingUpdates(true);
     setActivity(`Checking ${getUpdateChannelLabel(updateChannel).toLowerCase()} upgrades...`);
+    if (updateChannel === 'release') void agentArcadeApi.checkAutoUpdate();
 
     try {
       const result = await agentArcadeApi.checkForUpdates(updateChannel);
@@ -1727,6 +1743,9 @@ function App() {
             onUpdateChannelChange={selectUpdateChannel}
             onCheckForUpdates={checkForUpdates}
             onOpenUpdatePage={openUpdatePage}
+            autoUpdateStatus={autoUpdateStatus}
+            onDownloadUpdate={downloadUpdate}
+            onInstallUpdate={installUpdate}
             onSelectTopPick={(model) => { setSelectedModel(model); selectNav('agent'); }}
           />
         )}
@@ -3625,6 +3644,9 @@ function UtilityPanel({
   onUpdateChannelChange,
   onCheckForUpdates,
   onOpenUpdatePage,
+  autoUpdateStatus,
+  onDownloadUpdate,
+  onInstallUpdate,
   onSelectTopPick,
 }: {
   panel: UtilityPanelId;
@@ -3656,6 +3678,9 @@ function UtilityPanel({
   onUpdateChannelChange: (channel: UpdateChannel) => void;
   onCheckForUpdates: () => void;
   onOpenUpdatePage: () => void;
+  autoUpdateStatus: AutoUpdateStatus;
+  onDownloadUpdate: () => void;
+  onInstallUpdate: () => void;
   onSelectTopPick?: (model: string) => void;
 }) {
   const Icon = panel === 'history' ? History : panel === 'settings' ? Settings : Info;
@@ -4006,9 +4031,12 @@ function UtilityPanel({
             channel={updateChannel}
             result={updateCheck}
             isChecking={isCheckingUpdates}
+            autoUpdateStatus={autoUpdateStatus}
             onChannelChange={onUpdateChannelChange}
             onCheck={onCheckForUpdates}
             onOpenPage={onOpenUpdatePage}
+            onDownload={onDownloadUpdate}
+            onInstall={onInstallUpdate}
           />
           <section className={`ollama-update-card ${ollamaHasUpdate ? 'has-update' : ''}`} aria-label="Ollama version">
             <div className="ollama-update-head">
@@ -4077,20 +4105,27 @@ function UpdateCenter({
   channel,
   result,
   isChecking,
+  autoUpdateStatus,
   onChannelChange,
   onCheck,
   onOpenPage,
+  onDownload,
+  onInstall,
 }: {
   channel: UpdateChannel;
   result: UpdateCheckResponse | null;
   isChecking: boolean;
+  autoUpdateStatus: AutoUpdateStatus;
   onChannelChange: (channel: UpdateChannel) => void;
   onCheck: () => void;
   onOpenPage: () => void;
+  onDownload: () => void;
+  onInstall: () => void;
 }) {
   const status = result?.status ?? 'unknown';
   const statusLabel = getUpdateStatusLabel(result, isChecking);
   const channelLabel = getUpdateChannelLabel(channel);
+  const au = autoUpdateStatus;
 
   return (
     <section className={`update-center ${status}`} aria-label="RigMatch update center">
@@ -4101,14 +4136,31 @@ function UpdateCenter({
           <em>Choose stable releases or nightly builds, then check what RigMatch can download.</em>
         </div>
         <div className="update-actions">
-          <button type="button" className="mini-button outline" onClick={onCheck} disabled={isChecking}>
+          <button type="button" className="mini-button outline" onClick={onCheck} disabled={isChecking || au.phase === 'downloading'}>
             <RefreshCw className={isChecking ? 'spin' : ''} aria-hidden="true" />
             {isChecking ? 'Checking' : 'Check'}
           </button>
-          <button type="button" className="primary-button compact" onClick={onOpenPage}>
-            <Download aria-hidden="true" />
-            View Downloads
-          </button>
+          {au.phase === 'downloaded' ? (
+            <button type="button" className="primary-button compact" onClick={onInstall}>
+              <Download aria-hidden="true" />
+              Install &amp; Restart
+            </button>
+          ) : au.phase === 'available' ? (
+            <button type="button" className="primary-button compact" onClick={onDownload}>
+              <Download aria-hidden="true" />
+              Download v{au.version}
+            </button>
+          ) : au.phase === 'downloading' ? (
+            <button type="button" className="primary-button compact" disabled>
+              <RefreshCw className="spin" aria-hidden="true" />
+              {au.percent ?? 0}%
+            </button>
+          ) : (
+            <button type="button" className="primary-button compact" onClick={onOpenPage}>
+              <Download aria-hidden="true" />
+              View Downloads
+            </button>
+          )}
         </div>
       </div>
 

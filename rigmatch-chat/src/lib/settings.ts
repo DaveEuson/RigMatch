@@ -7,6 +7,7 @@ export type AppSettings = {
   theme: "dark" | "light";
   muted: boolean;
   hiddenModels: string[];
+  showSystemMonitor: boolean;
 };
 
 const DEFAULTS: AppSettings = {
@@ -16,6 +17,7 @@ const DEFAULTS: AppSettings = {
   theme: "dark",
   muted: false,
   hiddenModels: [],
+  showSystemMonitor: true,
 };
 
 export function loadSettings(): AppSettings {
