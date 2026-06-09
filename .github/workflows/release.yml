@@ -13,13 +13,13 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            script: dist:win
+            platform: win
             artifact: win
           - os: macos-latest
-            script: dist:mac
+            platform: mac
             artifact: mac
           - os: ubuntu-latest
-            script: dist:linux
+            platform: linux
             artifact: linux
 
     runs-on: ${{ matrix.os }}
@@ -40,12 +40,11 @@ jobs:
         shell: bash
 
       - name: Build
-        run: npm run ${{ matrix.script }}
+        run: npm run build && npx electron-builder --${{ matrix.platform }} --publish never
         env:
           # Disable Mac code signing for unsigned beta builds.
           # Add CSC_LINK / CSC_KEY_PASSWORD secrets to enable signing.
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
