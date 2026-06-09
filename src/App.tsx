@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AlertTriangle,
   ArrowUpDown,
+  BookOpen,
   Bot,
   Boxes,
+  Check,
+  Code2,
   Coffee,
   Copy,
   Download,
@@ -11,16 +14,20 @@ import {
   FolderOpen,
   Gauge,
   Heart,
+  HelpCircle,
   History,
   Info,
+  Lightbulb,
   MessageSquare,
   Network,
+  PenLine,
   Plus,
   RefreshCw,
   Search,
   ScanLine,
   Settings,
   ShieldCheck,
+  ShoppingCart,
   Terminal,
   Trash2,
   Trophy,
@@ -176,17 +183,57 @@ type HardwareFit = {
   recommend: boolean;
 };
 
+function playJingle(type: 'speed-date-complete' | 'new-winner') {
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    const notes =
+      type === 'speed-date-complete'
+        ? [
+            { freq: 261.63, start: 0,    dur: 0.08, vol: 0.15 },
+            { freq: 329.63, start: 0.09, dur: 0.08, vol: 0.15 },
+            { freq: 392.00, start: 0.18, dur: 0.08, vol: 0.15 },
+            { freq: 523.25, start: 0.28, dur: 0.30, vol: 0.20 },
+            { freq: 659.25, start: 0.34, dur: 0.25, vol: 0.14 },
+          ]
+        : [
+            { freq: 523.25, start: 0,    dur: 0.09, vol: 0.18 },
+            { freq: 659.25, start: 0.11, dur: 0.09, vol: 0.18 },
+            { freq: 783.99, start: 0.22, dur: 0.09, vol: 0.18 },
+            { freq: 1046.5, start: 0.36, dur: 0.38, vol: 0.20 },
+          ];
+    for (const note of notes) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = note.freq;
+      gain.gain.setValueAtTime(0, now + note.start);
+      gain.gain.linearRampToValueAtTime(note.vol, now + note.start + 0.012);
+      gain.gain.linearRampToValueAtTime(0, now + note.start + note.dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + note.start);
+      osc.stop(now + note.start + note.dur + 0.05);
+    }
+    const totalDur = Math.max(...notes.map((n) => n.start + n.dur));
+    window.setTimeout(() => void ctx.close(), (totalDur + 0.3) * 1000);
+  } catch {
+    // AudioContext unavailable
+  }
+}
+
 const navItems: NavItem[] = [
-  { id: 'models', label: 'Contestants', description: 'Browse, test, compare', icon: Boxes },
-  { id: 'speedDate', label: 'Speed Dating', description: 'Comparison details', icon: Trophy },
-  { id: 'agent', label: 'Top Pick', description: 'Best match profile', icon: Bot },
+  { id: 'models', label: 'Models', description: 'Browse, test, compare', icon: Boxes },
+  { id: 'speedDate', label: 'Comparison', description: 'Ranked results & details', icon: Trophy },
   { id: 'history', label: 'Scorecards', description: 'Test rankings', icon: History },
+  { id: 'agent', label: 'Top Pick', description: 'Best match profile', icon: Bot },
   { id: 'lan', label: 'Your Rig', description: 'Hardware and Ollama', icon: Network },
   { id: 'settings', label: 'Settings', description: 'Theme and app prefs', icon: Settings },
   { id: 'about', label: 'About', description: 'Version and support', icon: Info },
 ];
 
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
+const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
 const APP_VERSION = '0.1.0';
 const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
 const HISTORY_STORAGE_KEY = 'rigmatch:history:v1';
@@ -248,10 +295,44 @@ type PersistedHistory = {
   benchmarkByModel?: Record<string, BenchmarkResult>;
   listTestResult: ListTestResult | null;
   modelScores: Record<string, TestedModelScore>;
-  chatMessages: ChatMessage[];
+  chatMessagesByModel: Record<string, ChatMessage[]>;
+  chatMessages?: ChatMessage[]; // kept for migrating old saves
   selectedModel?: string;
   savedAt: string;
 };
+
+const USE_CASE_CARDS: Array<{ icon: LucideIcon; title: string; description: string; prompt: string }> = [
+  {
+    icon: PenLine,
+    title: 'Writing',
+    description: 'Draft emails, letters, summaries, and blog posts',
+    prompt: 'Help me write a short professional email to a client explaining that their project delivery will be delayed by one week.',
+  },
+  {
+    icon: Code2,
+    title: 'Coding',
+    description: 'Explain code, fix bugs, write functions',
+    prompt: 'Explain what this Python function does, then suggest how to make it faster:\n\ndef find_dupes(items):\n    seen = []\n    dupes = []\n    for item in items:\n        if item in seen:\n            dupes.append(item)\n        else:\n            seen.append(item)\n    return dupes',
+  },
+  {
+    icon: BookOpen,
+    title: 'Research',
+    description: 'Summarize topics, explain concepts, answer questions',
+    prompt: "Explain how large language models work in plain English, as if you're talking to someone who has never studied AI.",
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Privacy',
+    description: "Ask anything you wouldn't want searched online",
+    prompt: "I'd like to understand my options for dealing with a difficult situation at work where my manager takes credit for my ideas. What are some approaches I could consider?",
+  },
+  {
+    icon: Lightbulb,
+    title: 'Brainstorm',
+    description: 'Generate ideas, names, plans, and creative options',
+    prompt: "I'm starting a small side project and need a name. It's a tool that helps people track their daily habits and reflect on their progress. Give me 10 name ideas, from professional to playful.",
+  },
+];
 
 function App() {
   const savedHistory = useMemo(() => getSavedHistory(), []);
@@ -308,9 +389,10 @@ function App() {
   const [tutorialOpen, setTutorialOpen] = useState(() => !getSavedTutorialSeen());
   const [tutorialStep, setTutorialStep] = useState(0);
   const [chatInput, setChatInput] = useState('');
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(
-    savedHistory?.chatMessages ?? [welcomeChatMessage],
+  const [chatMessagesByModel, setChatMessagesByModel] = useState<Record<string, ChatMessage[]>>(
+    savedHistory?.chatMessagesByModel ?? {},
   );
+  const chatMessages = chatMessagesByModel[selectedModel] ?? [welcomeChatMessage];
 
   const selectedHost = hosts.find((host) => host.id === selectedHostId) ?? hosts[0];
 
@@ -599,7 +681,7 @@ function App() {
       setThemeId('orange');
       setUiMode('beginner');
       setChatInput('');
-      setChatMessages([welcomeChatMessage]);
+      setChatMessagesByModel({});
       setChosenModel(null);
       setSuiteEditorOpen(false);
       setTutorialStep(0);
@@ -801,6 +883,7 @@ function App() {
         },
       });
       setActivity(`${result.model} finished with ${result.scores.grade} grade and ${result.scores.total} match score.`);
+      playDoneJingle();
     } catch (error) {
       const errorMessage = getErrorMessage(error);
       await agentArcadeApi.appendLog({
@@ -849,6 +932,12 @@ function App() {
 
         if (rowGb <= 0) {
           setActivity(`${row.displayName} has unknown size. Check the model page before downloading.`);
+          return current;
+        }
+
+        const platformFit = getPlatformFit(row.displayName, system.platform);
+        if (!platformFit.compatible) {
+          setActivity(`${row.displayName} is macOS-only (MLX format) and cannot be downloaded on ${system.platform === 'win32' ? 'Windows' : 'Linux'}.`);
           return current;
         }
 
@@ -1216,7 +1305,7 @@ function App() {
         completed: runnableRows.length,
         total: runnableRows.length,
         percent: 100,
-        message: `${winner.model} gets the rose for this computer.`,
+        message: `${winner.model} gets the rose for this computer. 🌹`,
         questionIndex: winner.prompts.length - 1,
         questionTotal: winner.prompts.length,
         questionLabel: winner.prompts[winner.prompts.length - 1]?.label,
@@ -1236,6 +1325,7 @@ function App() {
           .sort((a, b) => b.total - a.total),
       });
       setActivity(`Best match: ${winner.model} scored ${winner.scores.total} for this setup.`);
+      playJingle('speed-date-complete');
     } catch (error) {
       const errorMessage = getErrorMessage(error);
       await agentArcadeApi.appendLog({
@@ -1299,38 +1389,49 @@ function App() {
       role: 'user',
       content: message,
     };
-    setChatMessages((current) => [...current, userMessage]);
+    const chatModel = selectedModel;
+    setChatMessagesByModel((prev) => ({
+      ...prev,
+      [chatModel]: [...(prev[chatModel] ?? [welcomeChatMessage]), userMessage],
+    }));
     setChatInput('');
 
     try {
       const response = await agentArcadeApi.sendChat({
-        model: selectedModel,
+        model: chatModel,
         message,
         baseUrl: ollama.baseUrl,
       });
-      setChatMessages((current) => [
-        ...current,
-        {
-          id: `${Date.now()}-agent`,
-          role: 'agent',
-          content: response.message,
-        },
-      ]);
+      setChatMessagesByModel((prev) => ({
+        ...prev,
+        [chatModel]: [
+          ...(prev[chatModel] ?? [welcomeChatMessage]),
+          { id: `${Date.now()}-agent`, role: 'agent', content: response.message },
+        ],
+      }));
     } catch (error) {
-      setChatMessages((current) => [
-        ...current,
-        {
-          id: `${Date.now()}-error`,
-          role: 'agent',
-          content: `I could not reach the selected model: ${getErrorMessage(error)}`,
-        },
-      ]);
+      setChatMessagesByModel((prev) => ({
+        ...prev,
+        [chatModel]: [
+          ...(prev[chatModel] ?? [welcomeChatMessage]),
+          { id: `${Date.now()}-error`, role: 'agent', content: `I could not reach the selected model: ${getErrorMessage(error)}` },
+        ],
+      }));
     }
   }, [chatInput, ollama.baseUrl, selectedModel]);
 
   useEffect(() => {
     void refreshRig();
   }, [refreshRig]);
+
+  // Auto-reconnect: poll every 15s while Ollama is offline so the app self-heals
+  // once the user installs or starts Ollama without needing to click "Check Local".
+  useEffect(() => {
+    if (!isDesktopRuntime) return;
+    if (ollama.ready) return;
+    const id = setInterval(() => { void refreshRig(); }, 15_000);
+    return () => clearInterval(id);
+  }, [ollama.ready, refreshRig]);
 
   useEffect(() => {
     window.localStorage.setItem(TEST_SUITE_STORAGE_KEY, JSON.stringify(benchmarkQuestions));
@@ -1350,12 +1451,17 @@ function App() {
       benchmarkByModel,
       listTestResult,
       modelScores,
-      chatMessages,
+      chatMessagesByModel,
       selectedModel,
       savedAt: new Date().toISOString(),
     };
     window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
-  }, [benchmark, benchmarkByModel, chatMessages, listTestResult, modelScores, selectedModel]);
+  }, [benchmark, benchmarkByModel, chatMessagesByModel, listTestResult, modelScores, selectedModel]);
+
+  useEffect(() => {
+    if (!isDesktopRuntime) return;
+    void agentArcadeApi.syncScores({ scores: modelScores, chosen: selectedModel } as Record<string, unknown>);
+  }, [modelScores, selectedModel]);
 
   useEffect(() => {
     if (!agentArcadeApi.onBenchmarkProgress) return undefined;
@@ -1409,15 +1515,39 @@ function App() {
     });
   }, []);
 
+  useEffect(() => {
+    if (queuedRows.length > 0 && !isPullingModels && ollama.ready) {
+      void pullQueuedModels();
+    }
+  }, [isPullingModels, ollama.ready, pullQueuedModels, queuedRows.length]);
+
+  const prevTopScoreRef = useRef<number | null>(null);
+  useEffect(() => {
+    const score = topRigPick?.score?.total ?? null;
+    const prev = prevTopScoreRef.current;
+    if (score !== null && score !== prev) {
+      if (prev !== null && score > prev) {
+        playJingle('new-winner');
+      }
+      prevTopScoreRef.current = score;
+    }
+  }, [topRigPick?.score?.total]);
+
+  const visibleNavItems = useMemo(
+    () => navItems.filter((item) => item.id !== 'agent' || scoredModelCount > 0),
+    [scoredModelCount],
+  );
+
   return (
     <div className="app-shell" data-theme={themeId} data-ui-mode={uiMode}>
       <TopDeck isScanning={isScanningRig} onScan={refreshRig}
         system={system}
         ollama={ollama}
+        topPick={topRigPick}
       />
 
       <SideMenu
-        items={navItems}
+        items={visibleNavItems}
         ollamaReady={ollama.ready}
         modelCount={modelRows.length}
         shortlistCount={shortlistedRows.length}
@@ -1426,6 +1556,7 @@ function App() {
         activeId={activeNavId}
         scoredCount={scoredModelCount}
         onSelect={selectNav}
+        onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
       />
 
       <main className="stage-content">
@@ -1457,6 +1588,7 @@ function App() {
             modelScores={modelScores}
             diskGuard={diskGuard}
             vramGb={system.gpu.vramGb}
+            platform={system.platform}
             queuedCount={queuedRows.length}
             isBenchmarking={isBenchmarking || isListTesting}
             isListTesting={isListTesting}
@@ -1537,7 +1669,9 @@ function App() {
             onSelect={setSelectedModel}
             onTalk={() => setChatOpen(true)}
             onChoose={() => setChosenModel(selectedModel)}
+            onRunTest={() => { void startBenchmark(); }}
             onEditQuestions={() => setSuiteEditorOpen(true)}
+            onTalkWithPrompt={(prompt) => { setChatInput(prompt); setChatOpen(true); }}
           />
         )}
         {(activeNavId === 'history' || activeNavId === 'settings' || activeNavId === 'about') && (
@@ -1571,14 +1705,29 @@ function App() {
             onUpdateChannelChange={selectUpdateChannel}
             onCheckForUpdates={checkForUpdates}
             onOpenUpdatePage={openUpdatePage}
+            onSelectTopPick={(model) => { setSelectedModel(model); selectNav('agent'); }}
           />
         )}
       </main>
 
+      <ModelPoolLineupStrip
+        className="speed-date-lineup-builder global-lineup-strip"
+        rows={shortlistedRows}
+        installedRows={modelRows.filter((row) => row.installed && !shortlistIds.has(row.displayName))}
+        modelScores={modelScores}
+        disabled={isBenchmarking || isListTesting}
+        isListTesting={isListTesting}
+        canRunSpeedDate={shortlistedRows.filter((row) => row.installed).length >= 2 && !isBenchmarking && !isListTesting}
+        onRemove={toggleShortlist}
+        onAdd={toggleShortlist}
+        onRunListTest={requestListTest}
+        onOpenSpeedDate={() => selectNav('speedDate')}
+      />
+
       <Ticker
         activity={activity}
-        benchmark={benchmark}
         isDesktopRuntime={isDesktopRuntime}
+        topPick={topRigPick}
       />
 
       {chatOpen && (
@@ -1601,7 +1750,7 @@ function App() {
         />
       )}
 
-      {runProgress?.phase === 'running' && runProgress.mode === 'single' && (
+      {runProgress?.phase === 'running' && (
         <LiveFlirtSpotlight progress={runProgress} host={selectedHost} />
       )}
 
@@ -1620,9 +1769,12 @@ function App() {
           selectedModel={pendingSingleModel ?? selectedModel}
           shortlistedCount={shortlistedRows.length}
           questionCount={benchmarkQuestionCount}
+          benchmarkQuestions={benchmarkQuestions}
           system={system}
           onCancel={cancelPendingRun}
           onConfirm={confirmPendingRun}
+          onChangeQuestionCount={setBenchmarkQuestionCount}
+          onEditQuestions={() => { cancelPendingRun(); setSuiteEditorOpen(true); }}
         />
       )}
 
@@ -1659,6 +1811,18 @@ function App() {
         />
       )}
 
+      {!tutorialOpen && (
+        <button
+          type="button"
+          className="help-float-btn"
+          onClick={() => { setTutorialOpen(true); setTutorialStep(0); }}
+          title="Reopen the getting started guide"
+          aria-label="Open getting started guide"
+        >
+          <HelpCircle aria-hidden="true" />
+        </button>
+      )}
+
       {tutorialOpen && (
         <FirstRunTutorial
           stepIndex={tutorialStep}
@@ -1682,11 +1846,13 @@ function TopDeck({
   ollama,
   isScanning,
   onScan,
+  topPick,
 }: {
   system: SystemProfile;
   ollama: OllamaStatus;
   isScanning: boolean;
   onScan: () => void;
+  topPick?: RigPick | null;
 }) {
   const gpuLabel = `${system.gpu.model}${system.gpu.vramGb ? ` ${system.gpu.vramGb}GB` : ''}`;
   const statusTitle = ollama.ready ? 'Local Ollama Ready' : 'Ollama Not Found';
@@ -1740,6 +1906,26 @@ function TopDeck({
           </button>
         </div>
       </section>
+
+      {topPick ? (
+        <section className="top-deck-winner" aria-label="Current best model">
+          <Trophy aria-hidden="true" />
+          <div>
+            <span>{topPickLabel(topPick.score?.grade)}</span>
+            <strong>{topPick.row.displayName}</strong>
+            <em>{topPick.score ? `${topPick.score.total} Match · ${topPick.score.grade}` : topPick.fitLabel}</em>
+          </div>
+        </section>
+      ) : (
+        <section className="top-deck-winner empty" aria-label="No winner yet">
+          <Trophy aria-hidden="true" />
+          <div>
+            <span>Best Match</span>
+            <strong>No tests yet</strong>
+            <em>Test a model to crown the winner.</em>
+          </div>
+        </section>
+      )}
     </header>
   );
 }
@@ -1754,6 +1940,7 @@ function SideMenu({
   isRunning,
   topPick,
   onSelect,
+  onOpenTutorial,
 }: {
   items: NavItem[];
   activeId: NavId;
@@ -1764,6 +1951,7 @@ function SideMenu({
   isRunning: boolean;
   topPick: RigPick | null;
   onSelect: (id: NavId) => void;
+  onOpenTutorial: () => void;
 }) {
   const navMeta: Record<NavId, string> = {
     lan: ollamaReady ? 'Ready' : 'Setup',
@@ -1778,10 +1966,10 @@ function SideMenu({
 
   return (
     <aside className="side-menu" aria-label="RigMatch.AI menu">
-      <div className="side-menu-title">
+      <button type="button" className="side-menu-title" onClick={onOpenTutorial} title="Re-open the getting started guide" aria-label="Open getting started guide">
         <span>Matchmaker Hub</span>
-        <strong>Start with Contestants</strong>
-      </div>
+        <strong>Start with Models</strong>
+      </button>
       <nav className="side-menu-nav" aria-label="Primary navigation">
         {items.map((item, index) => {
           const Icon = item.icon;
@@ -1809,7 +1997,7 @@ function SideMenu({
       {topPick && (
         <button type="button" className="side-menu-winner" onClick={() => onSelect('agent')}>
           <Trophy aria-hidden="true" />
-          <span>Bachelor Number 1</span>
+          <span>{topPickLabel(topPick.score?.grade)}</span>
           <strong>{topPick.profile.agentName}</strong>
           <em>{topPick.score ? `${topPick.score.total} Match · ${topPick.score.grade}` : topPick.fitLabel}</em>
         </button>
@@ -1818,12 +2006,12 @@ function SideMenu({
         type="button"
         className={activeId === 'models' ? 'side-menu-summary active' : 'side-menu-summary'}
         onClick={() => onSelect('models')}
-        aria-label={`Open Contestants hub. Speed Dating lineup has ${shortlistCount} of 5 picked and ${
+        aria-label={`Open Models hub. Speed Dating lineup has ${shortlistCount} of 5 picked and ${
           scoredCount > 0 ? `${scoredCount} scored` : 'no scored models yet'
         }.`}
-        title="Open Contestants hub"
+        title="Open Models hub"
       >
-        <span>Contestants Hub</span>
+        <span>Models Hub</span>
         <strong>Browse, test, compare</strong>
         <em>{shortlistCount}/5 picked · {scoredCount > 0 ? `${scoredCount} scored` : 'no scores yet'}</em>
       </button>
@@ -1855,7 +2043,152 @@ function FirstRunTutorial({
   onClose: () => void;
   onSelectNav: (id: NavId) => void;
 }) {
-  const steps = [
+  const steps: Array<{ round: string; title: string; body: ReactNode; prize: string; navId: NavId; targetLabel: string }> = [
+    {
+      round: '🎬 Welcome',
+      title: 'The AI Dating Show — on your PC',
+      body: (
+        <div className="tutorial-intro-body">
+          <div className="tutorial-welcome-hero">
+            <p className="tutorial-intro-lead">
+              There are hundreds of AI models out there — and the one that feels <em>magical</em> on someone else's computer might crawl on yours.<br /><br />
+              RigMatch.AI helps you find <strong>your</strong> perfect match. And it does it like a <strong>gameshow</strong>. 🎬
+            </p>
+          </div>
+          <div className="tutorial-show-format">
+            <div className="show-format-step">
+              <span>🎤</span>
+              <div><strong>Auditions</strong><em>Browse 180+ AI models. We flag which ones your rig can actually handle.</em></div>
+            </div>
+            <div className="show-format-step">
+              <span>⚡</span>
+              <div><strong>Speed Dating</strong><em>Pick up to 5 contestants. We run them through the same questions and time every answer.</em></div>
+            </div>
+            <div className="show-format-step">
+              <span>🏆</span>
+              <div><strong>The Final Rose</strong><em>Scorecards rank every model by speed, trust, and fit. One walks away as Bachelor Number 1.</em></div>
+            </div>
+          </div>
+          <div className="tutorial-intro-callout">
+            🎯 Everything runs <strong>on this computer</strong>. No cloud, no subscription, no data leaving your machine.
+          </div>
+        </div>
+      ),
+      prize: "Let's find your perfect local AI match.",
+      navId: 'models' as NavId,
+      targetLabel: 'Contestants',
+    },
+    {
+      round: '🤔 What is AI?',
+      title: 'Meet your AI',
+      body: (
+        <div className="tutorial-intro-body">
+          <p className="tutorial-intro-lead">You know how ChatGPT seems to <em>"just know"</em> almost everything? That's an <strong>LLM</strong> — a Large Language Model.</p>
+          <p>It's a program trained on billions of pages of text — books, code, articles, conversations. It learned patterns in language so it can write, explain, translate, code, and brainstorm.</p>
+          <div className="tutorial-intro-callout">
+            💡 Think of it like a really well-read friend who never gets tired of your questions — and never judges you for asking the same thing twice.
+          </div>
+        </div>
+      ),
+      prize: 'LLM = Large Language Model. The brain behind the chat.',
+      navId: 'lan' as NavId,
+      targetLabel: 'Your Rig',
+    },
+    {
+      round: '🌐 Local vs Online',
+      title: 'What makes local AI different?',
+      body: (
+        <div className="tutorial-intro-body">
+          <div className="tutorial-compare">
+            <div className="tutorial-compare-col cloud">
+              <strong>☁️ Online AI (ChatGPT etc.)</strong>
+              <ul>
+                <li>Needs internet to work</li>
+                <li>Monthly subscription fees</li>
+                <li>Your chats go to their servers</li>
+                <li>Queue times at peak hours</li>
+              </ul>
+            </div>
+            <div className="tutorial-compare-divider">vs</div>
+            <div className="tutorial-compare-col local">
+              <strong>🖥️ Local AI (You!)</strong>
+              <ul>
+                <li>Works totally offline</li>
+                <li>Free forever, no account</li>
+                <li>Your data never leaves this PC</li>
+                <li>Responds at your GPU's speed</li>
+              </ul>
+            </div>
+          </div>
+          <div className="tutorial-intro-callout">🔑 Online AI is renting a brain. Local AI is <strong>owning one</strong>.</div>
+        </div>
+      ),
+      prize: 'Your conversations are private. They never leave this computer.',
+      navId: 'lan' as NavId,
+      targetLabel: 'Your Rig',
+    },
+    {
+      round: '🏆 Why go local?',
+      title: 'Five great reasons to run AI yourself',
+      body: (
+        <ul className="tutorial-benefits">
+          <li><span>🔒</span><div><strong>Total Privacy</strong> — Nothing uploaded. Your prompts are yours alone.</div></li>
+          <li><span>⚡</span><div><strong>No Waiting</strong> — No server queue. Responds as fast as your GPU allows.</div></li>
+          <li><span>💸</span><div><strong>Completely Free</strong> — No subscription, no API bill, ever.</div></li>
+          <li><span>📡</span><div><strong>Works Offline</strong> — Plane, cabin, basement — doesn't matter.</div></li>
+          <li><span>🎛️</span><div><strong>You're in Control</strong> — Swap models, own the stack, no vendor lock-in.</div></li>
+        </ul>
+      ),
+      prize: 'One setup. Runs forever. Your AI, your rules.',
+      navId: 'lan' as NavId,
+      targetLabel: 'Your Rig',
+    },
+    {
+      round: '💻 Do I need a beefy PC?',
+      title: "Don't I need a supercomputer?",
+      body: (
+        <div className="tutorial-intro-body">
+          <p className="tutorial-intro-lead">Nope. Modern AI models come in all sizes — and the small ones run comfortably on everyday hardware.</p>
+          <div className="tutorial-size-table">
+            <div className="tutorial-size-row header">
+              <span>VRAM</span><span>What fits</span><span>Example</span>
+            </div>
+            <div className="tutorial-size-row">
+              <span>4 GB</span><span>Small models (3B)</span><span>Phi-3 Mini, Gemma 2B</span>
+            </div>
+            <div className="tutorial-size-row">
+              <span>8 GB</span><span>Mid models (7B)</span><span>Mistral, Llama 3.2</span>
+            </div>
+            <div className="tutorial-size-row highlight">
+              <span>12 GB</span><span>Larger models (13B)</span><span>Llama 3.1, Qwen 14B</span>
+            </div>
+            <div className="tutorial-size-row">
+              <span>CPU only</span><span>Tiny models (1–3B)</span><span>Slower, but works!</span>
+            </div>
+          </div>
+          <div className="tutorial-intro-callout">🎯 RigMatch scans your hardware and tells you exactly which models your rig can handle — no guessing required.</div>
+        </div>
+      ),
+      prize: 'No RTX 4090 needed. A 4GB GPU (or even just CPU) can get started.',
+      navId: 'lan' as NavId,
+      targetLabel: 'Your Rig',
+    },
+    {
+      round: 'Intro',
+      title: 'Local AI on your computer',
+      body: 'AI models are programs that think and respond like ChatGPT — but run entirely on this machine. No internet required, no account, no monthly fee. Your conversations never leave your computer.',
+      prize: 'Everything stays on your computer. Your questions never leave.',
+      navId: 'lan' as NavId,
+      targetLabel: 'Your Rig',
+    },
+    {
+      round: 'Setup',
+      title: 'Ollama runs the models',
+      body: 'Ollama is a free program that loads and runs AI models on your computer. RigMatch.AI checks your hardware and helps you pick which models Ollama can handle comfortably. Install it once, then come back.',
+      prize: "It's free. No account needed. Just download and open it.",
+      navId: 'lan' as NavId,
+      targetLabel: 'Your Rig',
+    },
     {
       round: 'Hub',
       title: 'Start in Contestants',
@@ -1881,7 +2214,7 @@ function FirstRunTutorial({
       targetLabel: 'Contestants',
     },
     {
-      round: 'Setup',
+      round: 'Rig Setup',
       title: 'Check this computer',
       body: 'Your Rig is the setup and hardware panel for Ollama status, VRAM, storage, and local system details.',
       prize: ollamaReady ? `${hostCount || 1} local computer ready.` : 'Start Ollama, then check this computer again.',
@@ -1932,7 +2265,7 @@ function FirstRunTutorial({
         </div>
 
         <div className="tutorial-body">
-          <p>{step.body}</p>
+          {typeof step.body === 'string' ? <p>{step.body}</p> : step.body}
           <div className="tutorial-prize">
             <span>Quick Note</span>
             <strong>{step.prize}</strong>
@@ -1968,6 +2301,195 @@ function FirstRunTutorial({
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+type UpgradeCard = {
+  name: string;
+  category: 'GPU' | 'RAM' | 'System';
+  spec: string;
+  priceRange: string;
+  benefit: string;
+  searchQuery: string;
+};
+
+function amazonUrl(query: string): string {
+  return `https://www.amazon.com/s?k=${encodeURIComponent(query)}&tag=${AMAZON_AFFILIATE_TAG}`;
+}
+
+function getUpgradeRecommendations(system: SystemProfile): UpgradeCard[] {
+  const vram = system.gpu.vramGb ?? 0;
+  const vendor = (system.gpu.vendor ?? '').toLowerCase();
+  const totalRamGb = system.memory.totalGb ?? 0;
+  const isAppleSilicon = vendor.includes('apple') || (system.platform === 'darwin' && vram === 0);
+
+  if (isAppleSilicon) {
+    if (totalRamGb < 18) {
+      return [{
+        name: 'MacBook Pro M3 Pro / M4 Pro',
+        category: 'System',
+        spec: '18–36 GB unified',
+        priceRange: 'from ~$1,999',
+        benefit: 'Unified memory architecture runs 13B models smoothly without a discrete GPU',
+        searchQuery: 'MacBook Pro M3 Pro 18GB',
+      }];
+    }
+    return [];
+  }
+
+  const cards: UpgradeCard[] = [];
+
+  if (vram <= 2) {
+    cards.push(
+      {
+        name: 'NVIDIA RTX 4060',
+        category: 'GPU',
+        spec: '8 GB VRAM',
+        priceRange: '~$300',
+        benefit: 'Run 7B models on the GPU — dramatically faster than CPU-only inference',
+        searchQuery: 'NVIDIA GeForce RTX 4060 graphics card',
+      },
+      {
+        name: 'NVIDIA RTX 4060 Ti',
+        category: 'GPU',
+        spec: '16 GB VRAM',
+        priceRange: '~$450',
+        benefit: 'Run 7B–13B models comfortably, plus quantized 30B variants',
+        searchQuery: 'NVIDIA GeForce RTX 4060 Ti 16GB graphics card',
+      },
+    );
+  } else if (vram <= 6) {
+    cards.push(
+      {
+        name: 'NVIDIA RTX 4060',
+        category: 'GPU',
+        spec: '8 GB VRAM',
+        priceRange: '~$300',
+        benefit: 'Full 7B model support — the entry point for comfortable local AI',
+        searchQuery: 'NVIDIA GeForce RTX 4060 graphics card',
+      },
+      {
+        name: 'NVIDIA RTX 4060 Ti',
+        category: 'GPU',
+        spec: '16 GB VRAM',
+        priceRange: '~$450',
+        benefit: 'Run 13B models and larger quantized variants without breaking a sweat',
+        searchQuery: 'NVIDIA GeForce RTX 4060 Ti 16GB graphics card',
+      },
+    );
+  } else if (vram <= 10) {
+    cards.push(
+      {
+        name: 'NVIDIA RTX 4060 Ti',
+        category: 'GPU',
+        spec: '16 GB VRAM',
+        priceRange: '~$450',
+        benefit: 'Doubles your VRAM — unlocks 13B models and quantized 30B variants',
+        searchQuery: 'NVIDIA GeForce RTX 4060 Ti 16GB graphics card',
+      },
+      {
+        name: 'NVIDIA RTX 4090',
+        category: 'GPU',
+        spec: '24 GB VRAM',
+        priceRange: '~$1,800',
+        benefit: 'Top consumer GPU — runs 70B models with full quantization support',
+        searchQuery: 'NVIDIA GeForce RTX 4090 graphics card',
+      },
+    );
+  } else if (vram <= 14) {
+    cards.push(
+      {
+        name: 'NVIDIA RTX 4070 Ti Super',
+        category: 'GPU',
+        spec: '16 GB VRAM',
+        priceRange: '~$800',
+        benefit: 'Adds 4 GB VRAM — opens larger 13B variants and quantized 30B models',
+        searchQuery: 'NVIDIA GeForce RTX 4070 Ti Super graphics card',
+      },
+      {
+        name: 'NVIDIA RTX 4090',
+        category: 'GPU',
+        spec: '24 GB VRAM',
+        priceRange: '~$1,800',
+        benefit: 'Doubles your VRAM — full 70B model access on consumer hardware',
+        searchQuery: 'NVIDIA GeForce RTX 4090 graphics card',
+      },
+    );
+  } else if (vram <= 20) {
+    cards.push({
+      name: 'NVIDIA RTX 4090',
+      category: 'GPU',
+      spec: '24 GB VRAM',
+      priceRange: '~$1,800',
+      benefit: 'Unlocks 70B models — the biggest single jump on consumer hardware',
+      searchQuery: 'NVIDIA GeForce RTX 4090 graphics card',
+    });
+  }
+
+  if (cards.length === 0 && totalRamGb < 32) {
+    cards.push({
+      name: '32 GB DDR5 RAM Kit',
+      category: 'RAM',
+      spec: '32 GB system RAM',
+      priceRange: '~$80–120',
+      benefit: 'More RAM helps CPU-offloaded model layers and keeps the system stable under load',
+      searchQuery: '32GB DDR5 RAM desktop kit',
+    });
+  }
+
+  return cards;
+}
+
+function UpgradeRig({ system }: { system: SystemProfile }) {
+  const cards = getUpgradeRecommendations(system);
+  if (cards.length === 0) return null;
+
+  const currentSpec = system.gpu.vramGb
+    ? `${system.gpu.vramGb} GB VRAM · ${system.gpu.model}`
+    : `${Math.round(system.memory.totalGb)} GB RAM · No discrete GPU`;
+
+  return (
+    <div className="upgrade-rig-panel">
+      <div className="upgrade-rig-heading">
+        <Zap aria-hidden="true" />
+        <div>
+          <span>Upgrade path</span>
+          <strong>Unlock more models</strong>
+        </div>
+      </div>
+      <p className="upgrade-rig-intro">
+        Your rig: <strong>{currentSpec}</strong>. Here {cards.length === 1 ? 'is the next upgrade' : `are ${cards.length} upgrades`} that open more models.
+      </p>
+      <div className="upgrade-cards">
+        {cards.map((card) => (
+          <div key={card.name} className="upgrade-card">
+            <div className="upgrade-card-head">
+              <span className={`upgrade-card-category category-${card.category.toLowerCase()}`}>{card.category}</span>
+              <strong>{card.name}</strong>
+              <div className="upgrade-card-meta">
+                <span className="upgrade-card-spec">{card.spec}</span>
+                <span className="upgrade-card-price">{card.priceRange}</span>
+              </div>
+            </div>
+            <p className="upgrade-card-benefit">{card.benefit}</p>
+            <a
+              href={amazonUrl(card.searchQuery)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="amazon-buy-btn"
+              aria-label={`Search for ${card.name} on Amazon`}
+            >
+              <ShoppingCart aria-hidden="true" />
+              View on Amazon
+              <ExternalLink aria-hidden="true" className="amazon-ext-icon" />
+            </a>
+          </div>
+        ))}
+      </div>
+      <p className="upgrade-disclosure">
+        Affiliate links — purchases support RigMatch.AI at no extra cost to you.
+      </p>
     </div>
   );
 }
@@ -2104,6 +2626,7 @@ function LanBrowser({
         system={system}
         ollama={ollama}
       />
+      <UpgradeRig system={system} />
     </section>
   );
 }
@@ -2258,38 +2781,77 @@ function OllamaPrep({
 }) {
   const platformName = getPlatformName(system.platform);
   const ready = ollama.ready;
-  const prepTitle = isDesktopRuntime
-    ? ready ? `${platformName} ready` : `${platformName} needs Ollama`
-    : 'Preview sample data';
-  const prepMessage = isDesktopRuntime
-    ? ready
-      ? 'This computer is ready. RigMatch v1 tests local Ollama models on this machine.'
-      : 'Install or start Ollama here, then check this computer again.'
-    : 'Preview sample data is local-only. The desktop app checks the real Ollama install on this computer.';
 
+  // Ready state — compact success strip
+  if (ready || !isDesktopRuntime) {
+    const prepTitle = isDesktopRuntime ? `${platformName} ready` : 'Preview sample data';
+    const prepMessage = isDesktopRuntime
+      ? 'This computer is ready. RigMatch tests local Ollama models on this machine.'
+      : 'Preview sample data is local-only. The desktop app checks your real Ollama install.';
+    return (
+      <div className="ollama-prep ready">
+        <div className="prep-badge" aria-hidden="true"><ShieldCheck /></div>
+        <div className="prep-copy">
+          <span>Local AI Setup</span>
+          <strong>{prepTitle}</strong>
+          <em>{prepMessage}</em>
+        </div>
+        <div className="prep-actions">
+          <button type="button" className="mini-button outline" onClick={onScanRig}>
+            <RefreshCw aria-hidden="true" />
+            Check Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Not-ready state — full install hero for first-timers
   return (
-    <div className={`ollama-prep ${ready && isDesktopRuntime ? 'ready' : 'needs-setup'}`}>
-      <div className="prep-badge" aria-hidden="true">
-        <ShieldCheck />
+    <div className="ollama-install-hero">
+      <div className="install-hero-top">
+        <div className="install-hero-icon" aria-hidden="true"><Download /></div>
+        <div className="install-hero-copy">
+          <span>One-time setup</span>
+          <strong>Install Ollama to get started</strong>
+          <p>
+            Ollama is a <strong>free, open-source</strong> program that runs AI models on your computer.
+            Download it, run the installer, and it sits quietly in the background — ready whenever you are.
+          </p>
+        </div>
       </div>
-      <div className="prep-copy">
-        <span>Local AI Setup</span>
-        <strong>{prepTitle}</strong>
-        <em>{prepMessage}</em>
-      </div>
-      <div className="prep-actions">
-        <button type="button" className="mini-button" onClick={onInstallOllama}>
-          <Download aria-hidden="true" />
-          Ollama
-        </button>
+
+      <button type="button" className="install-ollama-btn" onClick={onInstallOllama}>
+        <Download aria-hidden="true" />
+        Download Ollama for {platformName} — Free
+        <ExternalLink aria-hidden="true" />
+      </button>
+
+      <ol className="install-steps-flow">
+        <li className="install-step">
+          <b>1</b>
+          <span>Click the button above to open the official download page</span>
+        </li>
+        <li className="install-step">
+          <b>2</b>
+          <span>Run the installer — it starts Ollama automatically in the background</span>
+        </li>
+        <li className="install-step">
+          <b>3</b>
+          <span>Come back here and click <strong>Check Again</strong></span>
+        </li>
+      </ol>
+
+      <div className="install-hero-footer">
         <button type="button" className="mini-button outline" onClick={onScanRig}>
           <RefreshCw aria-hidden="true" />
           Check Again
         </button>
         <button type="button" className="mini-button outline" onClick={onOpenSetupGuide}>
           <ExternalLink aria-hidden="true" />
-          Setup
+          Full Setup Guide
         </button>
+        <span className="install-hero-note">No account needed · Free forever · Works offline</span>
       </div>
     </div>
   );
@@ -2376,24 +2938,38 @@ function RunWarningModal({
   selectedModel,
   shortlistedCount,
   questionCount,
+  benchmarkQuestions,
   system,
   onCancel,
   onConfirm,
+  onChangeQuestionCount,
+  onEditQuestions,
 }: {
   mode: PendingRunMode;
   selectedModel: string;
   shortlistedCount: number;
-  questionCount: number;
+  questionCount: BenchmarkQuestionCount;
+  benchmarkQuestions: BenchmarkQuestion[];
   system: SystemProfile;
   onCancel: () => void;
   onConfirm: () => void;
+  onChangeQuestionCount: (count: BenchmarkQuestionCount) => void;
+  onEditQuestions?: () => void;
 }) {
+  const [questionsExpanded, setQuestionsExpanded] = useState(false);
   const title = mode === 'single' ? 'Test One Selected Model?' : 'Start Speed Dating?';
   const subject = mode === 'single' ? selectedModel : `${shortlistedCount} picked models`;
   const totalQuestions = mode === 'single' ? questionCount : questionCount * shortlistedCount;
   const runScope = mode === 'single'
     ? 'This tests only the model you selected in Contestants. Use Speed Dating when you want to compare a full lineup.'
     : 'This compares every picked model with the same questions and ranks the final Match scores.';
+
+  const questionLabels: Record<BenchmarkQuestionCount, string> = {
+    10:  '10 — Quick (2–3 min)',
+    20:  '20 — Standard (5 min)',
+    50:  '50 — Deep (15 min)',
+    100: '100 — Full suite (30+ min)',
+  };
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -2412,6 +2988,51 @@ function RunWarningModal({
             storage bandwidth, fans, and battery until the run finishes.
           </p>
           <p>{runScope}</p>
+
+          <div className="run-question-picker">
+            <div className="run-question-picker-head">
+              <span>Questions per model</span>
+              <div className="run-question-picker-actions">
+                <button
+                  type="button"
+                  className="run-question-preview-toggle"
+                  onClick={() => setQuestionsExpanded((v) => !v)}
+                  aria-expanded={questionsExpanded}
+                >
+                  {questionsExpanded ? 'Hide questions' : 'Preview questions'}
+                </button>
+                {onEditQuestions && (
+                  <button type="button" className="run-question-edit-link" onClick={onEditQuestions}>
+                    Edit suite ↗
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="run-question-options" role="group" aria-label="Questions per model">
+              {([10, 20, 50, 100] as BenchmarkQuestionCount[]).map((count) => (
+                <button
+                  key={count}
+                  type="button"
+                  className={count === questionCount ? 'active' : ''}
+                  onClick={() => onChangeQuestionCount(count)}
+                  aria-pressed={count === questionCount}
+                >
+                  {questionLabels[count]}
+                </button>
+              ))}
+            </div>
+            {questionsExpanded && (
+              <ol className="run-question-preview-list">
+                {benchmarkQuestions.slice(0, questionCount).map((q) => (
+                  <li key={q.id}>
+                    <span className="run-q-label">{q.label}</span>
+                    <em className="run-q-prompt">{q.prompt}</em>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+
           <div className="modal-warning-grid">
             <div>
               <span>GPU</span>
@@ -2690,6 +3311,58 @@ function ChoiceCruiseModal({
           <strong>{hostName} + {shortModelName}</strong>
           <em>This is just the victory animation. Your installed models and Ollama settings are unchanged.</em>
         </div>
+
+        <div className="cruise-what-next">
+          <span>Your chosen model is ready — here&apos;s how to use it</span>
+          <div className="whats-next-grid">
+            <button
+              type="button"
+              className="whats-next-item whats-next-action"
+              onClick={() => void agentArcadeApi.openChatApp()}
+            >
+              <MessageSquare aria-hidden="true" />
+              <div>
+                <strong>RigMatch Chat</strong>
+                <em>Open RigMatch Chat — your AIM-style local AI messenger. {shortModelName} is already online.</em>
+              </div>
+            </button>
+            <div className="whats-next-item">
+              <Terminal aria-hidden="true" />
+              <div>
+                <strong>Terminal</strong>
+                <code>ollama run {model}</code>
+              </div>
+            </div>
+            <div className="whats-next-item">
+              <Code2 aria-hidden="true" />
+              <div>
+                <strong>VS Code (Continue.dev)</strong>
+                <em>Install the Continue extension, then select {shortModelName} as your Autocomplete or Chat model. No API key needed.</em>
+              </div>
+            </div>
+            <div className="whats-next-item">
+              <ExternalLink aria-hidden="true" />
+              <div>
+                <strong>Open WebUI</strong>
+                <em>A full ChatGPT-style browser interface. Run it with Docker and it auto-connects to Ollama at localhost:11434.</em>
+              </div>
+            </div>
+            <div className="whats-next-item">
+              <Code2 aria-hidden="true" />
+              <div>
+                <strong>Python / JavaScript</strong>
+                <code>{'import ollama\nollama.chat("' + model + '",\n  [{"role":"user","content":"Hi"}])'}</code>
+              </div>
+            </div>
+            <div className="whats-next-item">
+              <ExternalLink aria-hidden="true" />
+              <div>
+                <strong>Any app via REST</strong>
+                <em>Anything that speaks OpenAI format works. Point it at <code>localhost:11434/v1</code> with no API key.</em>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
     </div>
   );
@@ -2815,6 +3488,7 @@ function UtilityPanel({
   onUpdateChannelChange,
   onCheckForUpdates,
   onOpenUpdatePage,
+  onSelectTopPick,
 }: {
   panel: UtilityPanelId;
   listTestResult: ListTestResult | null;
@@ -2845,12 +3519,42 @@ function UtilityPanel({
   onUpdateChannelChange: (channel: UpdateChannel) => void;
   onCheckForUpdates: () => void;
   onOpenUpdatePage: () => void;
+  onSelectTopPick?: (model: string) => void;
 }) {
   const Icon = panel === 'history' ? History : panel === 'settings' ? Settings : Info;
   const recentModelScores = useMemo(() => getRecentModelScores(modelScores), [modelScores]);
   const rankedModelScores = useMemo(() => getRankedModelScores(modelScores), [modelScores]);
+  const taskPicks = useMemo(() => getTaskTopPicks(modelScores), [modelScores]);
   const topRankedScore = rankedModelScores[0];
   const savedChatMessageCount = Math.max(0, chatMessages.length - 1);
+  const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
+  const [scoreCopied, setScoreCopied] = useState(false);
+  const [ollamaUpdateLatest, setOllamaUpdateLatest] = useState<string | null>(null);
+  const [isCheckingOllamaUpdate, setIsCheckingOllamaUpdate] = useState(false);
+
+  const checkOllamaUpdate = useCallback(async () => {
+    setIsCheckingOllamaUpdate(true);
+    try {
+      const res = await fetch('https://api.github.com/repos/ollama/ollama/releases/latest');
+      const data = await res.json() as { tag_name: string };
+      setOllamaUpdateLatest(data.tag_name.replace(/^v/, ''));
+    } catch {
+      // network unavailable
+    } finally {
+      setIsCheckingOllamaUpdate(false);
+    }
+  }, []);
+
+  const ollamaHasUpdate = ollamaUpdateLatest !== null && ollama.version != null
+    && compareVersionStrings(ollamaUpdateLatest, ollama.version) > 0;
+
+  const copyScorecard = useCallback(() => {
+    const text = buildShareableScorecard(rankedModelScores, taskPicks, system);
+    void navigator.clipboard.writeText(text).then(() => {
+      setScoreCopied(true);
+      setTimeout(() => setScoreCopied(false), 2500);
+    });
+  }, [rankedModelScores, taskPicks, system]);
 
   return (
     <section
@@ -2867,6 +3571,55 @@ function UtilityPanel({
         </div>
       </div>
 
+      {scoreExplainerOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="How we score" onClick={() => setScoreExplainerOpen(false)}>
+          <div className="run-warning-modal score-explainer-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title">
+              <Trophy aria-hidden="true" />
+              <div>
+                <span>Scoring system</span>
+                <strong>How RigMatch scores your models</strong>
+              </div>
+              <button type="button" className="icon-action" onClick={() => setScoreExplainerOpen(false)} aria-label="Close">
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="score-explainer-body">
+              <p>RigMatch runs the same set of prompts across each model on <strong>your actual computer</strong> and combines three signals into a single Match score (0–100).</p>
+              <div className="score-explainer-grid">
+                <div>
+                  <span>Speed</span>
+                  <strong>How fast it responds</strong>
+                  <em>Tokens per second, measured live on your hardware. Faster = higher speed score.</em>
+                </div>
+                <div>
+                  <span>Reliability</span>
+                  <strong>How trustworthy the answers are</strong>
+                  <em>Did it follow instructions, stay on topic, and give complete answers? Checked across all test prompts.</em>
+                </div>
+                <div>
+                  <span>Hardware Fit</span>
+                  <strong>How well it suits your rig</strong>
+                  <em>Models that run comfortably within your VRAM and RAM get a bonus. Models that strain your hardware get penalised.</em>
+                </div>
+              </div>
+              <div className="score-explainer-grades">
+                <span>Grade bands</span>
+                <div>
+                  {([['S', 'elite', '95–100'], ['A', 'good', '80–94'], ['B', 'good', '65–79'], ['C', 'ok', '50–64'], ['D', 'low', '0–49']] as const).map(([grade, tone, range]) => (
+                    <div key={grade} className={`grade-chip ${tone}`}>
+                      <strong>{grade}</strong>
+                      <em>{range}</em>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className="score-explainer-note">All tests run locally — no data leaves your machine.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {panel === 'history' && (
         <RomanceArtBanner
           image={robotScorecardCeremony}
@@ -2880,7 +3633,33 @@ function UtilityPanel({
       {panel === 'history' && (
         <div className="utility-body">
           <div className="utility-stat">
-            <span>Ranking board</span>
+            <div className="utility-stat-head">
+              <span>Ranking board</span>
+              <div className="utility-stat-head-actions">
+                {rankedModelScores.length > 0 && (
+                  <button
+                    type="button"
+                    className={`how-we-score-trigger${scoreCopied ? ' copied' : ''}`}
+                    onClick={copyScorecard}
+                    title="Copy results as markdown to share on Reddit, Discord, etc."
+                    aria-label="Copy scorecard to clipboard"
+                  >
+                    {scoreCopied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                    {scoreCopied ? 'Copied!' : 'Share results'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="how-we-score-trigger"
+                  onClick={() => setScoreExplainerOpen(true)}
+                  title="How scores are calculated"
+                  aria-label="How we score — open explanation"
+                >
+                  <HelpCircle aria-hidden="true" />
+                  How we score
+                </button>
+              </div>
+            </div>
             <strong>{rankedModelScores.length} tested model{rankedModelScores.length === 1 ? '' : 's'}</strong>
             <em>
               {rankedModelScores.length > 0
@@ -2893,25 +3672,60 @@ function UtilityPanel({
             <strong>{topRankedScore ? topRankedScore.model : 'No saved score'}</strong>
             <em>{topRankedScore ? `${topRankedScore.total} total · ${topRankedScore.grade}` : 'Run a test to save the next scorecard.'}</em>
           </div>
+          {taskPicks.length > 0 && (
+            <div className="task-picks-section" aria-label="Category picks">
+              <span>Category picks</span>
+              <div className="task-picks-grid">
+                {taskPicks.map((pick) => (
+                  <div key={pick.id} className="task-pick-card">
+                    <em>{pick.label}</em>
+                    <strong title={pick.model}>{pick.model}</strong>
+                    <span className={`score-row-grade ${getScoreTone(pick.score.total)}`}>
+                      {pick.score.total} · {pick.score.grade}
+                    </span>
+                    <span className="task-pick-response-time">{getResponseEstimate(pick.score.speed)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {rankedModelScores.length > 0 && (
             <ol className="utility-list score-ranking-list" aria-label="Ranked model scores">
-              {rankedModelScores.map((score, index) => (
-                <li key={`${score.model}-${score.completedAt}`}>
-                  <b>{index + 1}</b>
-                  <span>{score.model}</span>
-                  <em>{score.speed} speed · {score.sobriety} trust · {score.fit} fit</em>
-                  <strong>{score.total} · {score.grade}</strong>
-                  <button
-                    type="button"
-                    className="icon-action score-clear-button"
-                    onClick={() => onClearScore(score.model)}
-                    title={`Clear ${score.model} score`}
-                    aria-label={`Clear ${score.model} score`}
+              {rankedModelScores.map((score, index) => {
+                const prevScore = rankedModelScores[index - 1];
+                const isTied = prevScore !== undefined && prevScore.total === score.total;
+                return (
+                  <li
+                    key={`${score.model}-${score.completedAt}`}
+                    className={`${isTied ? 'score-row-tied' : ''}${onSelectTopPick ? ' score-row-clickable' : ''}`}
+                    onClick={() => onSelectTopPick?.(score.model)}
+                    title={onSelectTopPick ? `View ${score.model} in Top Pick` : undefined}
+                    role={onSelectTopPick ? 'button' : undefined}
+                    tabIndex={onSelectTopPick ? 0 : undefined}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelectTopPick?.(score.model); }}
                   >
-                    <Trash2 aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
+                    <b>{isTied ? '=' : index + 1}</b>
+                    <div className="score-row-name">
+                      <span>{score.model}</span>
+                      <em>{score.speed} spd · {score.sobriety} trust · {score.fit} fit · {getResponseEstimate(score.speed)}</em>
+                    </div>
+                    <strong className={`score-row-grade ${getScoreTone(score.total)}`}>
+                      {isTied && <span className="tie-badge">TIED</span>}
+                      {score.total} · {score.grade}
+                    </strong>
+                    <button
+                      type="button"
+                      className="icon-action score-clear-button"
+                      onClick={(e) => { e.stopPropagation(); onClearScore(score.model); }}
+                      title={`Clear ${score.model} score`}
+                      aria-label={`Clear ${score.model} score`}
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </button>
+                  </li>
+                );
+              })}
             </ol>
           )}
           <section className="score-cleanup-panel" aria-label="Score cleanup">
@@ -3058,6 +3872,41 @@ function UtilityPanel({
             onCheck={onCheckForUpdates}
             onOpenPage={onOpenUpdatePage}
           />
+          <section className={`ollama-update-card ${ollamaHasUpdate ? 'has-update' : ''}`} aria-label="Ollama version">
+            <div className="ollama-update-head">
+              <div>
+                <span>Ollama Engine</span>
+                <strong>
+                  {ollama.version ? `v${ollama.version} installed` : 'Not detected'}
+                  {ollamaUpdateLatest && !ollamaHasUpdate ? ' — up to date' : ''}
+                </strong>
+                {ollamaHasUpdate && (
+                  <em className="ollama-update-badge">v{ollamaUpdateLatest} available</em>
+                )}
+              </div>
+              <button
+                type="button"
+                className="mini-button outline"
+                onClick={() => void checkOllamaUpdate()}
+                disabled={isCheckingOllamaUpdate}
+              >
+                <RefreshCw className={isCheckingOllamaUpdate ? 'spin' : ''} aria-hidden="true" />
+                {isCheckingOllamaUpdate ? 'Checking' : 'Check'}
+              </button>
+            </div>
+            {ollamaHasUpdate && (
+              <a
+                href="https://ollama.com/download"
+                target="_blank"
+                rel="noreferrer"
+                className="ollama-update-dl-btn"
+              >
+                <Download aria-hidden="true" />
+                Download Ollama v{ollamaUpdateLatest}
+                <ExternalLink aria-hidden="true" />
+              </a>
+            )}
+          </section>
           <ReleaseNotes />
           <section className="product-principles" aria-label="Product promise">
             <div>
@@ -3285,6 +4134,181 @@ function BrandMark() {
   );
 }
 
+type FirstModelUseCase = 'chat' | 'code' | 'writing' | 'reasoning' | 'speed';
+
+const USE_CASES: Array<{ id: FirstModelUseCase; emoji: string; label: string; description: string }> = [
+  { id: 'chat',      emoji: '💬', label: 'Chat & Daily Help',   description: 'Ask questions, get summaries, brainstorm ideas' },
+  { id: 'code',      emoji: '💻', label: 'Coding',              description: 'Write code, debug, explain errors' },
+  { id: 'writing',   emoji: '✍️',  label: 'Writing',            description: 'Drafts, emails, creative content' },
+  { id: 'reasoning', emoji: '🧠', label: 'Research & Analysis', description: 'Deep thinking, comparisons, long documents' },
+  { id: 'speed',     emoji: '⚡', label: 'Just the Fastest',    description: 'Quick answers, low-latency, lightweight' },
+];
+
+type FirstModelPick = { id: string; name: string; size: string; why: string; vramNote: string };
+
+function getFirstModelPicks(useCase: FirstModelUseCase, vramGb: number): FirstModelPick[] {
+  const tier = vramGb >= 16 ? 'large' : vramGb >= 10 ? 'medium' : vramGb >= 6 ? 'small' : 'tiny';
+
+  const picks: Record<FirstModelUseCase, Record<string, FirstModelPick[]>> = {
+    chat: {
+      large:  [
+        { id: 'llama3.1:8b',   name: 'Llama 3.1 8B',   size: '4.9 GB', why: 'Meta\'s flagship chat model — balanced, articulate, great for everyday conversation', vramNote: 'Runs fully in VRAM' },
+        { id: 'gemma3:4b',     name: 'Gemma 3 4B',     size: '3.3 GB', why: 'Google\'s compact model — fast, friendly, surprisingly capable for its size', vramNote: 'Runs fully in VRAM' },
+      ],
+      medium: [
+        { id: 'gemma3:4b',     name: 'Gemma 3 4B',     size: '3.3 GB', why: 'Google\'s compact model — fast, friendly, great for daily chat', vramNote: 'Runs fully in VRAM' },
+        { id: 'llama3.2:3b',   name: 'Llama 3.2 3B',   size: '2.0 GB', why: 'Meta\'s small but sharp chat model — snappy and reliable', vramNote: 'Runs fully in VRAM' },
+      ],
+      small:  [
+        { id: 'llama3.2:3b',   name: 'Llama 3.2 3B',   size: '2.0 GB', why: 'Meta\'s small but sharp chat model — snappy and reliable', vramNote: 'Runs fully in VRAM' },
+        { id: 'phi3:mini',     name: 'Phi-3 Mini',     size: '2.3 GB', why: 'Microsoft\'s tiny powerhouse — efficient and surprisingly good at conversation', vramNote: 'Runs fully in VRAM' },
+      ],
+      tiny:   [
+        { id: 'phi3:mini',     name: 'Phi-3 Mini',     size: '2.3 GB', why: 'Microsoft\'s tiny powerhouse — the best chat you\'ll get on limited hardware', vramNote: 'May use system RAM' },
+        { id: 'llama3.2:1b',   name: 'Llama 3.2 1B',   size: '1.3 GB', why: 'Ultra-light — runs anywhere, answers quickly', vramNote: 'Runs on CPU too' },
+      ],
+    },
+    code: {
+      large:  [
+        { id: 'qwen2.5-coder:7b',  name: 'Qwen 2.5 Coder 7B',  size: '4.7 GB', why: 'Best-in-class local coding model — great at completions, explanations, and debugging', vramNote: 'Runs fully in VRAM' },
+        { id: 'deepseek-coder:6.7b', name: 'DeepSeek Coder 7B', size: '3.8 GB', why: 'Built specifically for code — strong on Python, JS, and TypeScript', vramNote: 'Runs fully in VRAM' },
+      ],
+      medium: [
+        { id: 'qwen2.5-coder:7b',  name: 'Qwen 2.5 Coder 7B',  size: '4.7 GB', why: 'Best-in-class local coding model — completions, debugging, and explanations', vramNote: 'Runs fully in VRAM' },
+        { id: 'qwen2.5-coder:3b',  name: 'Qwen 2.5 Coder 3B',  size: '2.0 GB', why: 'Smaller but still very capable — good fallback if 7B is too slow', vramNote: 'Runs fully in VRAM' },
+      ],
+      small:  [
+        { id: 'qwen2.5-coder:3b',  name: 'Qwen 2.5 Coder 3B',  size: '2.0 GB', why: 'Compact coding model — better at code than most general models twice its size', vramNote: 'Runs fully in VRAM' },
+        { id: 'qwen2.5-coder:1.5b',name: 'Qwen 2.5 Coder 1.5B',size: '1.0 GB', why: 'Tiny but surprisingly good at short code tasks and explaining errors', vramNote: 'Runs fully in VRAM' },
+      ],
+      tiny:   [
+        { id: 'qwen2.5-coder:1.5b',name: 'Qwen 2.5 Coder 1.5B',size: '1.0 GB', why: 'The best coding help you can get on minimal hardware', vramNote: 'Runs on CPU too' },
+      ],
+    },
+    writing: {
+      large:  [
+        { id: 'llama3.1:8b',   name: 'Llama 3.1 8B',   size: '4.9 GB', why: 'Excellent writer — handles tone, structure, and style with ease', vramNote: 'Runs fully in VRAM' },
+        { id: 'mistral:7b',    name: 'Mistral 7B',     size: '4.1 GB', why: 'Strong prose model — clean, confident writing output', vramNote: 'Runs fully in VRAM' },
+      ],
+      medium: [
+        { id: 'mistral:7b',    name: 'Mistral 7B',     size: '4.1 GB', why: 'Strong prose model — clean, confident writing output', vramNote: 'Runs fully in VRAM' },
+        { id: 'gemma3:4b',     name: 'Gemma 3 4B',     size: '3.3 GB', why: 'Great at summaries, emails, and short-form creative writing', vramNote: 'Runs fully in VRAM' },
+      ],
+      small:  [
+        { id: 'gemma3:4b',     name: 'Gemma 3 4B',     size: '3.3 GB', why: 'Great at summaries, emails, and short-form creative writing', vramNote: 'Runs fully in VRAM' },
+        { id: 'phi3:mini',     name: 'Phi-3 Mini',     size: '2.3 GB', why: 'Compact and surprisingly good at structured writing tasks', vramNote: 'Runs fully in VRAM' },
+      ],
+      tiny:   [
+        { id: 'phi3:mini',     name: 'Phi-3 Mini',     size: '2.3 GB', why: 'Best writing quality available on limited hardware', vramNote: 'May use system RAM' },
+      ],
+    },
+    reasoning: {
+      large:  [
+        { id: 'deepseek-r1:7b', name: 'DeepSeek R1 7B', size: '4.7 GB', why: 'Built for step-by-step reasoning — explains its thinking, great for analysis', vramNote: 'Runs fully in VRAM' },
+        { id: 'qwen2.5:7b',     name: 'Qwen 2.5 7B',    size: '4.7 GB', why: 'Excellent at following complex instructions and multi-step tasks', vramNote: 'Runs fully in VRAM' },
+      ],
+      medium: [
+        { id: 'deepseek-r1:7b', name: 'DeepSeek R1 7B', size: '4.7 GB', why: 'Built for step-by-step reasoning — explains its thinking, great for analysis', vramNote: 'Runs fully in VRAM' },
+        { id: 'llama3.2:3b',    name: 'Llama 3.2 3B',   size: '2.0 GB', why: 'Solid reasoning for its size — good for structured Q&A and comparisons', vramNote: 'Runs fully in VRAM' },
+      ],
+      small:  [
+        { id: 'llama3.2:3b',    name: 'Llama 3.2 3B',   size: '2.0 GB', why: 'Best reasoning option at this VRAM level — follows instructions well', vramNote: 'Runs fully in VRAM' },
+        { id: 'phi3:mini',      name: 'Phi-3 Mini',      size: '2.3 GB', why: 'Microsoft trained it specifically for logical tasks — punches above its weight', vramNote: 'Runs fully in VRAM' },
+      ],
+      tiny:   [
+        { id: 'phi3:mini',      name: 'Phi-3 Mini',      size: '2.3 GB', why: 'The reasoning standout at this size — Microsoft\'s focus was logic and instruction-following', vramNote: 'May use system RAM' },
+      ],
+    },
+    speed: {
+      large:  [
+        { id: 'llama3.2:3b',    name: 'Llama 3.2 3B',   size: '2.0 GB', why: 'Tiny model on a capable GPU = instant responses. Best speed/quality ratio for quick answers', vramNote: 'Flies in VRAM' },
+        { id: 'gemma3:1b',      name: 'Gemma 3 1B',     size: '0.8 GB', why: 'Google\'s smallest model — basically instant on modern hardware', vramNote: 'Flies in VRAM' },
+      ],
+      medium: [
+        { id: 'llama3.2:3b',    name: 'Llama 3.2 3B',   size: '2.0 GB', why: 'Fast and capable — the sweet spot for quick, reliable responses', vramNote: 'Flies in VRAM' },
+        { id: 'phi3:mini',      name: 'Phi-3 Mini',      size: '2.3 GB', why: 'Snappy and smart — responds quickly without sacrificing too much quality', vramNote: 'Flies in VRAM' },
+      ],
+      small:  [
+        { id: 'llama3.2:1b',    name: 'Llama 3.2 1B',   size: '1.3 GB', why: 'Ultra-light — the fastest responses you\'ll get on any hardware', vramNote: 'Very fast even on CPU' },
+        { id: 'gemma3:1b',      name: 'Gemma 3 1B',     size: '0.8 GB', why: 'Google\'s smallest — basically instant responses', vramNote: 'Runs on CPU too' },
+      ],
+      tiny:   [
+        { id: 'llama3.2:1b',    name: 'Llama 3.2 1B',   size: '1.3 GB', why: 'The speed king at any VRAM level — downloads fast, responds fast', vramNote: 'Runs on CPU' },
+        { id: 'gemma3:1b',      name: 'Gemma 3 1B',     size: '0.8 GB', why: 'Tiny but functional — a good first download just to see it work', vramNote: 'Runs on CPU' },
+      ],
+    },
+  };
+
+  return picks[useCase][tier] ?? picks[useCase].small ?? [];
+}
+
+function FirstModelWizard({ vramGb, onQueueModel }: { vramGb: number; onQueueModel: (modelId: string) => void }) {
+  const [useCase, setUseCase] = useState<FirstModelUseCase | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  if (dismissed) return null;
+
+  const picks = useCase ? getFirstModelPicks(useCase, vramGb) : [];
+
+  return (
+    <div className="first-model-wizard">
+      <div className="fmw-header">
+        <div className="fmw-title">
+          <span>🎬 Start here</span>
+          <strong>Yeah, 180+ models is a lot.</strong>
+          <em>Answer one question and we'll pick your first contestant.</em>
+        </div>
+        <button type="button" className="icon-action" onClick={() => setDismissed(true)} aria-label="Dismiss" title="Show me the full list instead">
+          <X aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="fmw-use-cases" role="group" aria-label="What do you mainly want to use AI for?">
+        <p className="fmw-question">What do you mainly want to use AI for?</p>
+        {USE_CASES.map((uc) => (
+          <button
+            key={uc.id}
+            type="button"
+            className={`fmw-use-case-btn${useCase === uc.id ? ' active' : ''}`}
+            onClick={() => setUseCase(useCase === uc.id ? null : uc.id)}
+            aria-pressed={useCase === uc.id}
+          >
+            <span className="fmw-emoji">{uc.emoji}</span>
+            <span className="fmw-label">{uc.label}</span>
+            <span className="fmw-desc">{uc.description}</span>
+          </button>
+        ))}
+      </div>
+
+      {useCase && picks.length > 0 && (
+        <div className="fmw-picks">
+          <p className="fmw-picks-label">
+            Perfect picks for your rig{vramGb > 0 ? ` (${vramGb} GB VRAM)` : ''} →
+          </p>
+          {picks.map((pick, i) => (
+            <div key={pick.id} className={`fmw-pick-card${i === 0 ? ' recommended' : ''}`}>
+              {i === 0 && <span className="fmw-pick-badge">⭐ Best match</span>}
+              <div className="fmw-pick-info">
+                <strong>{pick.name}</strong>
+                <em>{pick.size} · {pick.vramNote}</em>
+                <p>{pick.why}</p>
+              </div>
+              <button
+                type="button"
+                className={i === 0 ? 'primary-button compact' : 'mini-button'}
+                onClick={() => { onQueueModel(pick.id); setDismissed(true); }}
+              >
+                <Download aria-hidden="true" />
+                {i === 0 ? 'Download & Queue' : 'Queue'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ModelCabinet({
   active,
   rows,
@@ -3296,6 +4320,7 @@ function ModelCabinet({
   modelScores,
   diskGuard,
   vramGb,
+  platform,
   queuedCount,
   isBenchmarking,
   isListTesting,
@@ -3330,6 +4355,7 @@ function ModelCabinet({
   modelScores: Record<string, TestedModelScore>;
   diskGuard: ReturnType<typeof getDiskGuard>;
   vramGb: number;
+  platform: string;
   queuedCount: number;
   isBenchmarking: boolean;
   isListTesting: boolean;
@@ -3358,6 +4384,25 @@ function ModelCabinet({
   const [quickFilter, setQuickFilter] = useState<ModelQuickFilterId>('fits-vram');
   const [sortKey, setSortKey] = useState<ModelSortKey>('status');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  // Column widths: Model, Size, Good For, Origin, Status, Match (Actions fills remainder)
+  const [colWidths, setColWidths] = useState([165, 68, 92, 100, 90, 72]);
+  const colWidthsRef = useRef(colWidths);
+  colWidthsRef.current = colWidths;
+  const handleColResizeStart = useCallback((colIndex: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = colWidthsRef.current[colIndex];
+    const onMouseMove = (ev: MouseEvent) => {
+      const newWidth = Math.max(40, startWidth + ev.clientX - startX);
+      setColWidths(prev => { const next = [...prev]; next[colIndex] = newWidth; return next; });
+    };
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, []);
   const selectedRow = rows.find((row) => row.displayName === selectedModel || row.id === selectedModel);
   const selectedProfile = getModelProfile(selectedRow?.displayName ?? selectedModel);
   const selectedScore = selectedRow ? getModelScore(selectedRow, modelScores) : modelScores[selectedModel];
@@ -3431,7 +4476,7 @@ function ModelCabinet({
     <section className={active ? 'panel model-panel panel-focused' : 'panel model-panel'}>
       <PanelHeader
         icon={Boxes}
-        title="Contestants"
+        title="Models"
         actionLabel="Refresh"
         onAction={onRefresh}
         meta={modelCountLabel}
@@ -3440,46 +4485,17 @@ function ModelCabinet({
         image={robotContestantWall}
         className="model-pool-art-banner"
         kicker="Command menu"
-        title="Browse, test, and compare AI contestants"
+        title="Browse, test, and compare AI models"
         body={`${vramSafeCount} models look realistic for ${vramLabel}. Test one model or run Speed Dating from here.`}
       />
-      <ContestantsCommandDeck
-        selectedRow={selectedRow}
-        selectedScore={selectedScore}
-        selectedInstalled={selectedInstalled}
-        selectedQueued={selectedQueued}
-        selectedShortlisted={selectedShortlisted}
-        speedDateLineupFull={speedDateLineupFull}
-        shortlistedRows={shortlistedRows}
-        rigPick={rigPick}
-        diskGuard={diskGuard}
-        queuedCount={queuedCount}
-        isBenchmarking={isBenchmarking}
-        isListTesting={isListTesting}
-        isPulling={isPulling}
-        isPullCancelRequested={isPullCancelRequested}
-        listTestResult={listTestResult}
-        runProgress={runProgress}
-        questionCount={questionCount}
-        vramGb={vramGb}
-        onScoreModel={onScoreModel}
-        onQueueModel={onQueueModel}
-        onToggleShortlist={onToggleShortlist}
-        onRunListTest={onRunListTest}
-        onOpenSuiteEditor={onOpenSuiteEditor}
-        onOpenSpeedDate={onOpenSpeedDate}
-        onPullQueued={onPullQueued}
-        onCancelQueue={onCancelQueue}
-        onOpenTopPick={onOpenTopPick}
-      />
-      <ModelPoolLineupStrip
-        className="speed-date-lineup-builder"
-        rows={shortlistedRows}
-        modelScores={modelScores}
-        disabled={isBenchmarking}
-        onRemove={onToggleShortlist}
-        onOpenSpeedDate={onOpenSpeedDate}
-      />
+      <div className="cabinet-body">
+      <div className="cabinet-main">
+      {installedModelNames.size === 0 && isDesktopRuntime && (
+        <FirstModelWizard vramGb={vramGb} onQueueModel={(modelId) => {
+          const row = rows.find((r) => r.id === modelId || r.displayName === modelId);
+          if (row) onQueueModel(row);
+        }} />
+      )}
       <div className="model-tools">
         <label className="model-search">
           <Search aria-hidden="true" />
@@ -3522,46 +4538,22 @@ function ModelCabinet({
           </div>
         )}
       </div>
-      <div className="contestant-focus-row">
-        <SelectedContestantCard
-          row={selectedRow}
-          profile={selectedProfile}
-          score={selectedScore}
-          vramGb={vramGb}
-          installed={selectedInstalled}
-          queued={selectedQueued}
-          shortlisted={selectedShortlisted}
-          speedDateLineupFull={speedDateLineupFull}
-          pullProgress={selectedPullProgress}
-          isPulling={selectedPulling}
-          isPullStopping={Boolean(isPullCancelRequested && selectedPulling)}
-          isBenchmarking={isBenchmarking}
-          onScoreModel={onScoreModel}
-          onQueueModel={onQueueModel}
-          onToggleShortlist={onToggleShortlist}
-          onOpenSpeedDate={onOpenSpeedDate}
-        />
-        {rigPick && (
-          <CurrentWinnerCard
-            pick={rigPick}
-            onSelect={onSelect}
-            onOpenTopPick={onOpenTopPick}
-          />
-        )}
-      </div>
       <div className="table-wrap model-table">
         <table>
+          <colgroup>
+            {/* eslint-disable-next-line react/forbid-dom-props */}
+            {colWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
+            <col />
+          </colgroup>
           <thead>
             <tr>
-              <SortableModelHeader label="Model" sortName="name" sortKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableModelHeader label="Brains" sortName="params" sortKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableModelHeader label="Size" sortName="size" sortKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableModelHeader label="Good For" sortName="skill" sortKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableModelHeader label="Origin" sortName="origin" sortKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableModelHeader label="From" sortName="source" sortKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableModelHeader label="Status" sortName="status" sortKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableModelHeader label="Match" sortName="score" sortKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <th>Speed Dating / Actions</th>
+              <SortableModelHeader label="Model" sortName="name" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(0, e)} />
+              <SortableModelHeader label="Size" sortName="size" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(1, e)} />
+              <SortableModelHeader label="Good For" sortName="skill" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(2, e)} />
+              <SortableModelHeader label="Origin" sortName="origin" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(3, e)} />
+              <SortableModelHeader label="Status" sortName="status" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(4, e)} />
+              <SortableModelHeader label="Match" sortName="score" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(5, e)} />
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -3578,6 +4570,7 @@ function ModelCabinet({
               const statusLabel = getModelStatusLabel(row, queued);
               const score = getModelScore(row, modelScores);
               const hardwareFit = getHardwareFit(row, vramGb);
+              const platformFit = getPlatformFit(row.displayName, platform);
               const speedDateLineupFullForRow = shortlistedCount >= 5;
               const canChangeSpeedDateSlot = installed && hardwareFit.recommend && (shortlisted || !speedDateLineupFullForRow);
               const speedDateSlotLabel = !installed
@@ -3615,23 +4608,30 @@ function ModelCabinet({
                   <td>
                     <button type="button" className="model-name-button" onClick={() => onSelect(row.displayName)}>
                       <AvatarBust model={row.displayName} size="tiny" />
-                      <span>{row.displayName}</span>
+                      <span>
+                        {row.displayName}
+                        {row.params && <em className="model-params-sub">{row.params}</em>}
+                      </span>
                     </button>
+                    {!platformFit.compatible && (
+                      <span className="platform-tag" title={platformFit.reason}>macOS only</span>
+                    )}
                   </td>
-                  <td>{row.params}</td>
-                  <td title={`${sizeRisk.message} ${hardwareFit.detail}`}>
+                  <td title={platformFit.compatible ? `${sizeRisk.message} ${hardwareFit.detail}` : platformFit.reason}>
                     <div className="size-fit-cell">
                       <span className={`size-pill ${sizeRisk.tone}`}>
                         {row.sizeGb ? `${row.sizeGb} GB` : '?'}
                       </span>
-                      <span className={`fit-pill ${hardwareFit.tone}`}>{hardwareFit.label}</span>
+                      {platformFit.compatible
+                        ? <span className={`fit-pill ${hardwareFit.tone}`}>{hardwareFit.label}</span>
+                        : <span className="fit-pill out-of-league">macOS Only</span>
+                      }
                     </div>
                   </td>
                   <td title={profile.specialties.join(', ')}>{profile.specialties[0]}</td>
                   <td title={`${origin.organization} · ${origin.country}`}>
                     <span className={`origin-pill origin-${origin.family}`}>{origin.country}</span>
                   </td>
-                  <td>{row.source}</td>
                   <td>
                     <ModelStatusPill installed={installed} queued={queued} label={statusLabel} />
                   </td>
@@ -3678,11 +4678,11 @@ function ModelCabinet({
                           type="button"
                           className={queued ? 'mini-button queued download-row-button' : 'mini-button outline download-row-button'}
                           onClick={() => onQueueModel(row)}
-                          disabled={!queued && !hardwareFit.recommend}
-                          title={hardwareFit.recommend ? `${queued ? 'Remove from queue' : `Get ${row.displayName}`}: ${row.sizeGb ? formatGb(row.sizeGb) : 'unknown size'}` : hardwareFit.detail}
-                          aria-label={hardwareFit.recommend ? queued ? `Remove ${row.displayName} from the download queue` : `Get ${row.displayName}` : hardwareFit.detail}
+                          disabled={!queued && (!hardwareFit.recommend || !platformFit.compatible)}
+                          title={!platformFit.compatible ? platformFit.reason : hardwareFit.recommend ? `${queued ? 'Remove from queue' : `Get ${row.displayName}`}: ${row.sizeGb ? formatGb(row.sizeGb) : 'unknown size'}` : hardwareFit.detail}
+                          aria-label={!platformFit.compatible ? platformFit.reason : hardwareFit.recommend ? queued ? `Remove ${row.displayName} from the download queue` : `Get ${row.displayName}` : hardwareFit.detail}
                         >
-                          <span>{hardwareFit.recommend ? queued ? 'Remove' : `Get ${getQueueChipModelName(row.displayName)}` : 'Too Big'}</span>
+                          <span>{!platformFit.compatible ? 'macOS Only' : hardwareFit.recommend ? queued ? 'Remove' : `Get ${getQueueChipModelName(row.displayName)}` : 'Too Big'}</span>
                         </button>
                       )}
                     </div>
@@ -3701,7 +4701,7 @@ function ModelCabinet({
             })}
             {visibleRows.length === 0 && (
               <tr className="empty-row">
-                <td colSpan={9}>
+                <td colSpan={7}>
                   <div className="table-empty-state">
                     <strong>No contestants match these filters</strong>
                     <span>Clear the search or show the full model pool.</span>
@@ -3723,29 +4723,6 @@ function ModelCabinet({
         </table>
       </div>
       <div className="model-footer">
-        <div className="selected-specialties">
-          <AvatarBust model={selectedRow?.displayName ?? selectedModel} size="small" />
-          <div>
-            <strong>{selectedProfile.archetype}</strong>
-            <span>{selectedProfile.specialties.join(' · ')}</span>
-          </div>
-          <ModelProfileMini
-            row={selectedRow}
-            profile={selectedProfile}
-            score={selectedScore}
-            vramGb={vramGb}
-          />
-          <button
-            type="button"
-            className="mini-button outline speed-date-launch"
-            onClick={onOpenSpeedDate}
-            title="Compare up to 5 models and rank the best match."
-          >
-            <Trophy aria-hidden="true" />
-            Speed Dating
-            <em>{shortlistedCount}/5 picked</em>
-          </button>
-        </div>
         <DiskGuard guard={diskGuard} />
         <div className="pull-queue" aria-live="polite">
           <div className="queue-status-copy">
@@ -3778,25 +4755,49 @@ function ModelCabinet({
           <div className="queue-actions">
             <button
               type="button"
-              className="primary-button compact"
+              className={queuedCount > 0 || isPulling ? 'primary-button compact' : 'mini-button outline'}
               onClick={onPullQueued}
               disabled={queuedCount === 0 || isPulling}
             >
               <Download aria-hidden="true" />
               {isPulling ? 'Downloading' : queuedCount > 0 ? 'Start Download' : 'Download'}
             </button>
-            <button
-              type="button"
-              className="mini-button outline queue-cancel-button"
-              onClick={onCancelQueue}
-              disabled={(queuedCount === 0 && !isPulling) || isPullCancelRequested}
-              title={isPulling ? 'Stop after the current Ollama pull finishes' : 'Cancel all queued downloads'}
-            >
-              <X aria-hidden="true" />
-              {isPullCancelRequested ? 'Stopping' : isPulling ? 'Stop Queue' : 'Cancel Queue'}
-            </button>
+            {(queuedCount > 0 || isPulling) && (
+              <button
+                type="button"
+                className="mini-button outline queue-cancel-button"
+                onClick={onCancelQueue}
+                disabled={isPullCancelRequested}
+                title={isPulling ? 'Stop after the current Ollama pull finishes' : 'Cancel all queued downloads'}
+              >
+                <X aria-hidden="true" />
+                {isPullCancelRequested ? 'Stopping' : isPulling ? 'Stop Queue' : 'Cancel Queue'}
+              </button>
+            )}
           </div>
         </div>
+      </div>
+      </div>
+      <div className="cabinet-sidebar">
+        <SelectedContestantCard
+          row={selectedRow}
+          profile={selectedProfile}
+          score={selectedScore}
+          vramGb={vramGb}
+          installed={selectedInstalled}
+          queued={selectedQueued}
+          shortlisted={selectedShortlisted}
+          speedDateLineupFull={speedDateLineupFull}
+          pullProgress={selectedPullProgress}
+          isPulling={selectedPulling}
+          isPullStopping={Boolean(isPullCancelRequested && selectedPulling)}
+          isBenchmarking={isBenchmarking}
+          onScoreModel={onScoreModel}
+          onQueueModel={onQueueModel}
+          onToggleShortlist={onToggleShortlist}
+          onOpenSpeedDate={onOpenSpeedDate}
+        />
+      </div>
       </div>
     </section>
   );
@@ -4075,48 +5076,112 @@ function ContestantsCommandDeck({
 function ModelPoolLineupStrip({
   className = '',
   rows,
+  installedRows,
   modelScores,
   disabled,
+  isListTesting,
+  canRunSpeedDate,
   onRemove,
+  onAdd,
+  onRunListTest,
   onOpenSpeedDate,
 }: {
   className?: string;
   rows: ModelRow[];
+  installedRows: ModelRow[];
   modelScores: Record<string, TestedModelScore>;
   disabled: boolean;
+  isListTesting: boolean;
+  canRunSpeedDate: boolean;
   onRemove: (row: ModelRow) => void;
+  onAdd: (row: ModelRow) => void;
+  onRunListTest: () => void;
   onOpenSpeedDate: () => void;
 }) {
+  const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const slots = Array.from({ length: 5 }, (_item, index) => rows[index]);
   const full = rows.length >= 5;
-  const classNames = [
-    'model-pool-lineup',
-    full ? 'full' : '',
-    className,
-  ].filter(Boolean).join(' ');
+  const classNames = ['model-pool-lineup', full ? 'full' : '', className].filter(Boolean).join(' ');
+  const startLabel = isListTesting ? 'Testing…' : rows.length >= 2 ? 'Start Speed Dating' : `Pick ${Math.max(0, 2 - rows.length)} more`;
 
   return (
     <section className={classNames} aria-label="Speed Dating lineup">
       <div className="model-pool-lineup-head">
         <div>
-          <span>Speed Dating Selection</span>
-          <strong>{rows.length}/5 contestants selected</strong>
-          <em>{full ? 'Lineup full. Remove a contestant here before adding another.' : 'Click Add to Speed Dating in the table rows below.'}</em>
+          <span>Dating Game Setup</span>
+          <strong>{rows.length}/5 contestants picked</strong>
+          <em>{full ? 'Lineup full. Remove a contestant to swap.' : rows.length >= 2 ? 'Ready. Add more or start the show.' : 'Pick at least two installed contestants before the show starts.'}</em>
         </div>
-        <button type="button" className="mini-button outline" onClick={onOpenSpeedDate}>
-          <Trophy aria-hidden="true" />
-          Details
-        </button>
+        <div className="lineup-head-actions">
+          <button
+            type="button"
+            className="primary-button compact"
+            onClick={onRunListTest}
+            disabled={!canRunSpeedDate}
+          >
+            <Trophy aria-hidden="true" />
+            {startLabel}
+          </button>
+          <button type="button" className="mini-button outline" onClick={onOpenSpeedDate}>
+            Details
+          </button>
+        </div>
       </div>
       <div className="model-pool-lineup-slots">
         {slots.map((row, index) => {
           if (!row) {
+            const isPickerOpen = pickerSlot === index;
             return (
-              <span key={`empty-${index}`} className="model-pool-empty-slot">
-                <b>{index + 1}</b>
-                <strong>Open seat</strong>
-                <em>Pick for Speed Dating</em>
-              </span>
+              <div key={`empty-${index}`} className="model-pool-empty-slot-wrapper">
+                <button
+                  type="button"
+                  className={`model-pool-empty-slot interactive${isPickerOpen ? ' picker-open' : ''}`}
+                  onClick={() => setPickerSlot(isPickerOpen ? null : index)}
+                  disabled={disabled || full}
+                  aria-label="Add contestant to Speed Dating lineup"
+                  aria-expanded={isPickerOpen}
+                >
+                  <Plus aria-hidden="true" />
+                  <strong>Add</strong>
+                </button>
+                {isPickerOpen && (
+                  <>
+                    <div
+                      className="picker-backdrop"
+                      role="presentation"
+                      onClick={() => setPickerSlot(null)}
+                    />
+                    <div className="model-picker-popover" role="listbox" aria-label="Choose a model">
+                      <div className="picker-header">
+                        <span>Pick a contestant</span>
+                      </div>
+                      {installedRows.length === 0 ? (
+                        <p className="picker-empty">No installed models left. Download one from the list below.</p>
+                      ) : (
+                        installedRows.slice(0, 8).map((candidate) => {
+                          const score = getModelScore(candidate, modelScores);
+                          return (
+                            <button
+                              key={candidate.displayName}
+                              type="button"
+                              role="option"
+                              aria-selected={false}
+                              className="picker-model-row"
+                              onClick={() => { onAdd(candidate); setPickerSlot(null); }}
+                            >
+                              <AvatarBust model={candidate.displayName} size="tiny" />
+                              <span className="picker-model-name">{candidate.displayName}</span>
+                              <span className="picker-model-meta">
+                                {score ? `${score.grade}` : formatGb(candidate.sizeGb)}
+                              </span>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             );
           }
 
@@ -4214,7 +5279,7 @@ function SelectedContestantCard({
     return (
       <section className="contestant-spotlight empty" aria-label="Selected contestant">
         <div>
-          <span>Selected Contestant</span>
+          <span>Selected Model</span>
           <strong>No model selected</strong>
           <em>Pick a model from the table to inspect its profile, fit, and next action.</em>
         </div>
@@ -4390,12 +5455,14 @@ function SortableModelHeader({
   sortKey,
   direction,
   onSort,
+  onResizeStart,
 }: {
   label: string;
   sortName: ModelSortKey;
   sortKey: ModelSortKey;
   direction: SortDirection;
   onSort: (sortName: ModelSortKey) => void;
+  onResizeStart?: (e: React.MouseEvent) => void;
 }) {
   const active = sortName === sortKey;
 
@@ -4409,6 +5476,15 @@ function SortableModelHeader({
         <span>{label}</span>
         <ArrowUpDown aria-hidden="true" />
       </button>
+      {onResizeStart && (
+        <span
+          className="col-resize-handle"
+          onMouseDown={onResizeStart}
+          onClick={(e) => e.stopPropagation()}
+          role="separator"
+          aria-label={`Resize ${label} column`}
+        />
+      )}
     </th>
   );
 }
@@ -5012,7 +6088,7 @@ function SpeedDatePanel({
                 <li key={result.model} className={result.model === listTestResult.winner ? 'winner' : ''}>
                   <b>{index + 1}</b>
                   <span>{result.model}</span>
-                  <em>{result.speed} speed · {result.sobriety} trust</em>
+                  <em>{result.speed} spd · {result.sobriety} trust · {getResponseEstimate(result.speed)}</em>
                   <strong>{result.total}</strong>
                 </li>
               ))}
@@ -5140,7 +6216,7 @@ function SpeedDateContestantCard({
       </div>
       <div className="speed-date-contestant-facts">
         <span>{score ? `${score.total} Match · ${score.grade}` : 'Not tested yet'}</span>
-        <span>{sizeLabel}</span>
+        <span>{score ? getResponseEstimate(score.speed) : sizeLabel}</span>
         <span>{hardwareFit.label}</span>
       </div>
       <p>{profile.specialties.join(' · ')}</p>
@@ -5464,7 +6540,9 @@ function AgentReveal({
   onSelect,
   onTalk,
   onChoose,
+  onRunTest,
   onEditQuestions,
+  onTalkWithPrompt,
 }: {
   active: boolean;
   agentName: string;
@@ -5479,12 +6557,27 @@ function AgentReveal({
   onSelect: (model: string) => void;
   onTalk: () => void;
   onChoose: () => void;
+  onRunTest: () => void;
   onEditQuestions: () => void;
+  onTalkWithPrompt: (prompt: string) => void;
 }) {
   const activeProfile = getModelProfile(model);
   const matchNotes = getMatchNotes(activeProfile, selectedScore, host);
-  const selectedRow = rows.find((row) => row.displayName === selectedModel || row.id === selectedModel);
-  const rosterRows = rows.slice(0, 6);
+
+  // Top 6 by score; unscored sort to the bottom; currently-viewed model always visible
+  const validRows = rows.filter(Boolean);
+  const sortedByScore = [...validRows].sort((a, b) => {
+    const sA = getModelScore(a, modelScores)?.total ?? -1;
+    const sB = getModelScore(b, modelScores)?.total ?? -1;
+    return sB - sA;
+  });
+  const top6 = sortedByScore.slice(0, 6);
+  const inStrip = top6.some((r) => r.displayName === selectedModel || r.id === selectedModel);
+  if (!inStrip && top6.length > 0) {
+    const selRow = validRows.find((r) => r.displayName === selectedModel || r.id === selectedModel);
+    if (selRow) top6[Math.min(5, top6.length - 1)] = selRow;
+  }
+  const rosterRows = top6;
 
   return (
     <section className={active ? 'panel agent-panel panel-focused' : 'panel agent-panel'}>
@@ -5547,9 +6640,20 @@ function AgentReveal({
       </div>
 
       <div className={selectedScore ? 'top-pick-ribbon scored' : 'top-pick-ribbon'} aria-label="Top pick status">
-        <span>{selectedScore ? 'Bachelor Number 1 for this rig' : 'Awaiting a first test'}</span>
+        <span>{selectedScore ? `${topPickLabel(selectedScore.grade)} for this rig` : 'Awaiting a first test'}</span>
         <strong>{agentName}</strong>
-        <em>{selectedScore ? `${selectedScore.total} Match · ${selectedScore.grade}` : 'Run a compatibility test to crown the winner.'}</em>
+        <em>{selectedScore ? `${selectedScore.total} Match · ${selectedScore.grade} · ${getResponseEstimate(selectedScore.speed)}` : 'Run a compatibility test to crown the winner.'}</em>
+        {selectedScore && (
+          <div className="top-pick-ribbon-actions">
+            <button type="button" className="pick-this-one-btn" onClick={onChoose}>
+              🌹 Pick This One
+            </button>
+            <button type="button" className="test-again-btn" onClick={onRunTest}>
+              <RefreshCw aria-hidden="true" />
+              Test Again
+            </button>
+          </div>
+        )}
       </div>
 
       <AgentDatingProfile
@@ -5563,6 +6667,7 @@ function AgentReveal({
         onTalk={onTalk}
         onChoose={onChoose}
         onEditQuestions={onEditQuestions}
+        onTalkWithPrompt={onTalkWithPrompt}
       />
 
       <div className="match-hero">
@@ -5592,7 +6697,7 @@ function AgentReveal({
           host={host}
         />
 
-        <button type="button" className="talk-button" onClick={onTalk}>
+        <button type="button" className="talk-button" onClick={() => void agentArcadeApi.openChatApp()}>
           <MessageSquare aria-hidden="true" />
           Chat With Match
         </button>
@@ -5654,6 +6759,7 @@ function AgentDatingProfile({
   onTalk,
   onChoose,
   onEditQuestions,
+  onTalkWithPrompt,
 }: {
   model: string;
   profile: ModelProfile;
@@ -5665,14 +6771,15 @@ function AgentDatingProfile({
   onTalk: () => void;
   onChoose: () => void;
   onEditQuestions: () => void;
+  onTalkWithPrompt: (prompt: string) => void;
 }) {
   const sections = getAgentDatingProfileSections(model, profile, score, row, host, system);
   const details = getAgentDatingProfileDetails(model, profile, score, row, host, system);
-  const [activeProfileTab, setActiveProfileTab] = useState<'about' | 'scores' | 'questions'>('about');
+  const [activeProfileTab, setActiveProfileTab] = useState<'about' | 'scores' | 'questions' | 'try-it'>('about');
   const statusLabel = row?.installed ? 'Online now' : row?.live ? 'Available' : 'Catalog only';
   const locationLabel = host?.hostname ?? system.hostname;
   const matchLine = score
-    ? `${score.total} Match score · ${score.grade} chemistry`
+    ? `${score.total} Match score · ${score.grade} chemistry · ${getResponseEstimate(score.speed)}`
     : 'Waiting for a first compatibility test';
   const questionCount = benchmark?.prompts.length ?? 0;
   const profileTabs: Array<{ id: typeof activeProfileTab; label: string; badge: string; title: string }> = [
@@ -5689,6 +6796,7 @@ function AgentDatingProfile({
       badge: questionCount ? `${questionCount} asked` : 'No transcript',
       title: questionCount ? `Show ${questionCount} questions asked during the test.` : 'Show test questions after a run.',
     },
+    { id: 'try-it', label: 'Try It', badge: 'starter prompts', title: 'See example prompts to get started.' },
   ];
 
   return (
@@ -5784,6 +6892,37 @@ function AgentDatingProfile({
           benchmark={benchmark}
           onEditQuestions={onEditQuestions}
         />
+      )}
+
+      {activeProfileTab === 'try-it' && (
+        <div
+          id="profile-panel-try-it"
+          className="dating-profile-body"
+          role="tabpanel"
+          aria-labelledby="profile-tab-try-it"
+        >
+          <p className="try-it-intro">Pick a prompt to open chat with a real example. Works with any installed model.</p>
+          <div className="use-case-grid">
+            {USE_CASE_CARDS.map((card) => {
+              const Icon = card.icon;
+              return (
+                <div key={card.title} className="use-case-card">
+                  <Icon className="use-case-icon" aria-hidden="true" />
+                  <strong>{card.title}</strong>
+                  <span>{card.description}</span>
+                  <button
+                    type="button"
+                    className="mini-button"
+                    onClick={() => onTalkWithPrompt(card.prompt)}
+                  >
+                    <MessageSquare aria-hidden="true" />
+                    Try It
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
     </section>
   );
@@ -6236,13 +7375,14 @@ function getSavedHistory(): PersistedHistory | null {
       ? parsed.modelScores
       : upsertModelScores({}, Object.values(benchmarkByModel));
 
+    const selectedModel = typeof parsed.selectedModel === 'string' ? parsed.selectedModel : parsed.benchmark.model;
     return {
       benchmark: parsed.benchmark,
       benchmarkByModel,
       listTestResult: isListTestResult(parsed.listTestResult) ? parsed.listTestResult : null,
       modelScores,
-      chatMessages: normalizeSavedChatMessages(parsed.chatMessages),
-      selectedModel: typeof parsed.selectedModel === 'string' ? parsed.selectedModel : parsed.benchmark.model,
+      chatMessagesByModel: normalizeSavedChatMessagesByModel(parsed.chatMessagesByModel, parsed.chatMessages, selectedModel),
+      selectedModel,
       savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : parsed.benchmark.completedAt,
     };
   } catch {
@@ -6256,6 +7396,25 @@ function normalizeSavedChatMessages(value: unknown): ChatMessage[] {
   const messages = value.filter(isChatMessage);
   const conversation = messages.filter((message) => message.id !== welcomeChatMessage.id).slice(-99);
   return [welcomeChatMessage, ...conversation];
+}
+
+function normalizeSavedChatMessagesByModel(
+  byModel: unknown,
+  legacyMessages: unknown,
+  legacyModel: string,
+): Record<string, ChatMessage[]> {
+  if (byModel !== null && typeof byModel === 'object' && !Array.isArray(byModel)) {
+    const result: Record<string, ChatMessage[]> = {};
+    for (const [key, val] of Object.entries(byModel as Record<string, unknown>)) {
+      result[key] = normalizeSavedChatMessages(val);
+    }
+    return result;
+  }
+  // Migrate old flat chatMessages → put under the selected model's key
+  if (legacyModel && Array.isArray(legacyMessages) && legacyMessages.length > 0) {
+    return { [legacyModel]: normalizeSavedChatMessages(legacyMessages) };
+  }
+  return {};
 }
 
 function isChatMessage(value: unknown): value is ChatMessage {
@@ -6317,26 +7476,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function Ticker({
   activity,
-  benchmark,
   isDesktopRuntime,
+  topPick,
 }: {
   activity: string;
-  benchmark: BenchmarkResult;
   isDesktopRuntime: boolean;
+  topPick?: RigPick | null;
 }) {
+  const pickScore = topPick?.score?.total ?? 0;
+  const pickGrade = topPick?.score?.grade;
+  const pickName = topPick?.row.displayName ?? null;
+
   return (
     <footer className="ticker">
       <div>
-        <span>Match Ticker</span>
+        <span>Activity</span>
         <strong>{activity}</strong>
       </div>
       <div>
         <span>{isDesktopRuntime ? 'Desktop bridge online' : 'Preview mode'}</span>
-        <strong>Local-only v1 · {benchmark.scores.total} score</strong>
+        <strong>
+          {pickName
+            ? `${pickName} · ${pickScore} Match · ${pickGrade}`
+            : 'No model tested yet'}
+        </strong>
       </div>
-      <div className="queue-meter" aria-label="Benchmark queue">
+      <div className="queue-meter" aria-label="Top pick score">
         {Array.from({ length: 12 }).map((_, index) => (
-          <i key={index} className={index < Math.round(benchmark.scores.total / 10) ? 'lit' : ''} />
+          <i key={index} className={pickName && index < Math.round(pickScore / 10) ? 'lit' : ''} />
         ))}
       </div>
     </footer>
@@ -6731,7 +7898,7 @@ function DiskGuard({ guard }: { guard: ReturnType<typeof getDiskGuard> }) {
   return (
     <div className={`disk-guard ${guard.tone}`}>
       <div>
-        <span>Disk Guard</span>
+        <span>Storage</span>
         <strong>{guard.summary}</strong>
       </div>
       <div className="disk-bar" aria-label={guard.summary}>
@@ -6781,12 +7948,53 @@ function getRecentModelScores(modelScores: Record<string, TestedModelScore>) {
     .sort((left, right) => Date.parse(right.completedAt) - Date.parse(left.completedAt));
 }
 
+function buildShareableScorecard(
+  ranked: TestedModelScore[],
+  taskPicks: TaskPick[],
+  system: SystemProfile,
+): string {
+  const gpu = system.gpu.model ?? 'Unknown GPU';
+  const vram = system.gpu.vramGb ? `${system.gpu.vramGb} GB VRAM` : '';
+  const ram = system.memory.totalGb ? `${Math.round(system.memory.totalGb)} GB RAM` : '';
+  const rigLine = [gpu, vram, ram].filter(Boolean).join(' · ');
+
+  const rows = ranked.map((score, i) => {
+    const prev = ranked[i - 1];
+    const tied = prev !== undefined && prev.total === score.total;
+    const rank = tied ? '=' : `${i + 1}`;
+    const tiedTag = tied ? ' [TIED]' : '';
+    return `${rank}. ${score.model} — ${score.total} · ${score.grade}${tiedTag}  (${score.speed} spd · ${score.sobriety} trust · ${score.fit} fit)`;
+  });
+
+  const categoryLines = taskPicks.map((p) => `- ${p.label}: ${p.model} (${p.score.total} · ${p.score.grade})`);
+
+  const sections: string[] = [
+    `## 🏆 RigMatch.AI — My Local AI Results`,
+    `**Rig:** ${rigLine}`,
+    '',
+    `### Rankings`,
+    ...rows,
+  ];
+
+  if (categoryLines.length > 0) {
+    sections.push('', '### Category Picks', ...categoryLines);
+  }
+
+  sections.push('', '---', '_Tested with [RigMatch.AI](https://github.com/DaveEuson/rigmatch) — find your best local AI model_');
+
+  return sections.join('\n');
+}
+
 function getRankedModelScores(modelScores: Record<string, TestedModelScore>) {
   return Object.values(modelScores)
     .filter(isTestedModelScore)
     .sort((left, right) => {
       if (right.total !== left.total) return right.total - left.total;
-      return Date.parse(right.completedAt) - Date.parse(left.completedAt);
+      // Tiebreakers: trust (sobriety) → rig fit → speed → alphabetical
+      if (right.sobriety !== left.sobriety) return right.sobriety - left.sobriety;
+      if (right.fit !== left.fit) return right.fit - left.fit;
+      if (right.speed !== left.speed) return right.speed - left.speed;
+      return left.model.localeCompare(right.model);
     });
 }
 
@@ -6935,6 +8143,14 @@ function getScoreTone(total: number) {
   if (total >= 80) return 'good';
   if (total >= 70) return 'ok';
   return 'low';
+}
+
+function getResponseEstimate(speedScore: number): string {
+  if (speedScore >= 90) return '~1s';
+  if (speedScore >= 75) return '~3s';
+  if (speedScore >= 55) return '~8s';
+  if (speedScore >= 35) return '~20s';
+  return '30s+';
 }
 
 function getResultExplanation(
@@ -7296,9 +8512,10 @@ function createRunProgressId(prefix: string) {
 
 function getCudaSummary(cuda: SystemProfile['cuda']) {
   if (cuda.status === 'not-nvidia') return 'No NVIDIA GPU';
-  if (cuda.status === 'current') return `Toolkit ${cuda.toolkitVersion}`;
-  if (cuda.status === 'behind') return 'Update available';
-  if (cuda.status === 'toolkit-missing') return 'Toolkit not found';
+  if (cuda.status === 'current') return `CUDA ready (${cuda.toolkitVersion})`;
+  if (cuda.status === 'behind') return 'CUDA update available';
+  // Driver is present but the developer toolkit (nvcc) isn't installed — models still run fine via the driver
+  if (cuda.status === 'toolkit-missing') return 'Driver ready, toolkit optional';
   if (cuda.driverCudaVersion) return `Driver CUDA ${cuda.driverCudaVersion}`;
   return 'Unknown';
 }
@@ -7308,19 +8525,20 @@ function getCudaDetail(cuda: SystemProfile['cuda']) {
   const driver = cuda.driverCudaVersion ? `driver supports ${cuda.driverCudaVersion}` : 'driver CUDA unknown';
 
   if (cuda.status === 'not-nvidia') {
-    return 'CUDA acceleration applies to NVIDIA GPUs.';
+    return 'CUDA acceleration applies to NVIDIA GPUs. Models will run on CPU.';
   }
 
   if (cuda.status === 'current') {
-    return `${driver}; ${latest}.`;
+    return `${driver}; ${latest}. Full CUDA acceleration active.`;
   }
 
   if (cuda.status === 'behind') {
-    return `Toolkit ${cuda.toolkitVersion}; ${latest}.`;
+    return `Toolkit ${cuda.toolkitVersion} installed; ${latest} available. Models run fine — update when convenient.`;
   }
 
   if (cuda.status === 'toolkit-missing') {
-    return `${driver}; ${latest}. nvcc not installed.`;
+    // The CUDA driver is enough for Ollama to use the GPU — the toolkit (nvcc) is only needed for compiling CUDA code
+    return `${driver}. Ollama uses the GPU driver directly — models run with full GPU acceleration. The CUDA Toolkit is only needed if you compile CUDA programs.`;
   }
 
   return cuda.error || `${driver}; ${latest}.`;
@@ -7663,6 +8881,54 @@ function getModelProfile(model: string): ModelProfile {
   };
 }
 
+const TASK_CATEGORIES = [
+  { id: 'coding',    label: 'Best for coding',    keywords: ['coding', 'math', 'json/tools', 'instructions'] },
+  { id: 'writing',   label: 'Best for writing',   keywords: ['writing', 'summaries', 'brainstorming'] },
+  { id: 'assistant', label: 'Best assistant',     keywords: ['assistant', 'daily chat', 'general help', 'chat', 'utility'] },
+  { id: 'reasoning', label: 'Best for reasoning', keywords: ['reasoning', 'hard prompts', 'analysis'] },
+  { id: 'tiny',      label: 'Best tiny model',    keywords: ['low memory', 'small rigs', 'quick chat'] },
+  { id: 'speed',     label: 'Fastest on this rig', keywords: [] },
+] as const;
+
+type TaskCategoryId = typeof TASK_CATEGORIES[number]['id'];
+
+type TaskPick = {
+  id: TaskCategoryId;
+  label: string;
+  model: string;
+  score: TestedModelScore;
+};
+
+function getTaskTopPicks(modelScores: Record<string, TestedModelScore>): TaskPick[] {
+  const scored = Object.values(modelScores);
+  if (scored.length === 0) return [];
+
+  const picks: TaskPick[] = [];
+
+  for (const category of TASK_CATEGORIES) {
+    let best: TestedModelScore | null = null;
+
+    if (category.id === 'speed') {
+      best = [...scored].sort((a, b) => b.speed - a.speed)[0] ?? null;
+    } else {
+      const matching = scored.filter((s) => {
+        const specialties = getModelProfile(s.model).specialties.map((x) => x.toLowerCase());
+        return category.keywords.some((kw) => specialties.some((sp) => sp.includes(kw)));
+      });
+      best = matching.length > 0 ? [...matching].sort((a, b) => b.total - a.total)[0] : null;
+    }
+
+    if (best) {
+      // Avoid duplicate model entries (keep the first matching category)
+      if (!picks.some((p) => p.model === best!.model)) {
+        picks.push({ id: category.id, label: category.label, model: best.model, score: best });
+      }
+    }
+  }
+
+  return picks;
+}
+
 function getDiskGuard(rows: ModelRow[], queuedRows: ModelRow[], freeGb: number) {
   const installedGb = rows
     .filter((row) => row.installed)
@@ -7681,11 +8947,14 @@ function getDiskGuard(rows: ModelRow[], queuedRows: ModelRow[], freeGb: number) 
     queuedCount: queuedRows.length,
     percent: Math.max(queuedGb > 0 ? 5 : 0, queuePercent),
     tone,
-    summary: `${formatGb(plannedGb)} planned · ${queuedRows.length} queued`,
+    summary:
+      queuedGb === 0
+        ? `${formatGb(installedGb)} installed · ${formatGb(freeGb)} free`
+        : `+${formatGb(queuedGb)} queued · ${formatGb(availableAfterQueue)} free after`,
     message:
       queuedGb === 0
-        ? `${formatGb(installedGb)} installed. ${formatGb(freeGb)} free.`
-        : `${formatGb(queuedGb)} queued downloads. ${formatGb(availableAfterQueue)} free after queue.`,
+        ? `${formatGb(installedGb)} used by installed models.`
+        : `${formatGb(installedGb)} installed + ${formatGb(queuedGb)} downloading.`,
   };
 }
 
@@ -7720,6 +8989,18 @@ function modelMatchesQuickFilter(
 
 function modelFitsVram(row: ModelRow, vramGb: number) {
   return getHardwareFit(row, vramGb).recommend;
+}
+
+function getPlatformFit(displayName: string, platform: string): { compatible: boolean; reason: string } {
+  const lower = displayName.toLowerCase();
+  const isMlx = lower.includes('-mlx') || lower.includes(':mlx');
+  if (isMlx && platform !== 'darwin') {
+    return {
+      compatible: false,
+      reason: 'MLX models require macOS with Apple Silicon and cannot run on Windows or Linux.',
+    };
+  }
+  return { compatible: true, reason: '' };
 }
 
 function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb'>, vramGb: number): HardwareFit {
@@ -8000,6 +9281,14 @@ function gradeFor(score: number) {
   return 'D';
 }
 
+function topPickLabel(grade: string | undefined): string {
+  if (!grade) return 'Best Tested';
+  if (grade.startsWith('S') || grade.startsWith('A')) return 'Bachelor Number 1';
+  if (grade.startsWith('B')) return 'Strong Contender';
+  if (grade.startsWith('C')) return 'Best So Far';
+  return 'Best Tested';
+}
+
 function formatLogTime(timestamp: string) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
@@ -8065,6 +9354,43 @@ function formatLogsForClipboard(logs: AppLogEntry[]) {
 function getErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return message.replace(/^Error invoking remote method '[^']+':\s*/i, '');
+}
+
+function compareVersionStrings(a: string, b: string): number {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+function playDoneJingle() {
+  try {
+    const ctx = new AudioContext();
+    const melody: Array<[number, number, number]> = [
+      [523.25, 0,    0.15],
+      [659.25, 0.14, 0.15],
+      [783.99, 0.28, 0.15],
+      [1046.5, 0.42, 0.45],
+    ];
+    for (const [freq, offset, dur] of melody) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const t = ctx.currentTime + offset;
+      gain.gain.setValueAtTime(0.25, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      osc.start(t);
+      osc.stop(t + dur + 0.05);
+    }
+  } catch {
+    // audio not available
+  }
 }
 
 export default App;

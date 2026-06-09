@@ -4,7 +4,9 @@ const os = require('node:os');
 const dns = require('node:dns').promises;
 const net = require('node:net');
 const fs = require('node:fs/promises');
-const { execFile } = require('node:child_process');
+const http = require('node:http');
+const { execFile, spawn } = require('node:child_process');
+const fsSync = require('node:fs');
 const { promisify } = require('node:util');
 const si = require('systeminformation');
 const { buildBenchmarkPromptPlan, normalizeBenchmarkQuestionCount } = require('./benchmarkSuite.cjs');
@@ -12,9 +14,15 @@ const { buildBenchmarkPromptPlan, normalizeBenchmarkQuestionCount } = require('.
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const OLLAMA_LIBRARY_URL = 'https://ollama.com/library';
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
-const RIGMATCH_REPOSITORY_URL = process.env.RIGMATCH_REPOSITORY_URL || 'https://github.com/daveeuson/RigMatch.AI';
-const RIGMATCH_RELEASES_URL = process.env.RIGMATCH_RELEASES_URL || `${RIGMATCH_REPOSITORY_URL}/releases`;
-const RIGMATCH_RELEASES_API_URL = process.env.RIGMATCH_RELEASES_API_URL || 'https://api.github.com/repos/daveeuson/RigMatch.AI/releases';
+const RIGMATCH_REPOSITORY_URL = app.isPackaged
+  ? 'https://github.com/daveeuson/RigMatch.AI'
+  : (process.env.RIGMATCH_REPOSITORY_URL || 'https://github.com/daveeuson/RigMatch.AI');
+const RIGMATCH_RELEASES_URL = app.isPackaged
+  ? `${RIGMATCH_REPOSITORY_URL}/releases`
+  : (process.env.RIGMATCH_RELEASES_URL || `${RIGMATCH_REPOSITORY_URL}/releases`);
+const RIGMATCH_RELEASES_API_URL = app.isPackaged
+  ? 'https://api.github.com/repos/daveeuson/RigMatch.AI/releases'
+  : (process.env.RIGMATCH_RELEASES_API_URL || 'https://api.github.com/repos/daveeuson/RigMatch.AI/releases');
 const CUDA_TOOLKIT_URL = 'https://developer.nvidia.com/cuda-toolkit';
 const CUDA_TOOLKIT_ARCHIVE_URL = 'https://developer.nvidia.com/cuda-toolkit-archive';
 const CUDA_REDIST_INDEX_URL = 'https://developer.download.nvidia.com/compute/cuda/redist/';
@@ -22,6 +30,7 @@ const execFileAsync = promisify(execFile);
 let latestCudaCache = null;
 let latestCudaCacheAt = 0;
 const APP_USER_AGENT = 'RigMatchAI/0.1';
+const SCORES_SERVER_PORT = 11435;
 const BENCHMARK_REPEATS = 1;
 const COMPUTER_PROBE_PORTS = [11434, 22, 445, 3389, 80, 443];
 const LOG_LIMIT = 250;
@@ -72,12 +81,12 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (/^https?:\/\//.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
 
@@ -93,6 +102,55 @@ function getWindowIconPath() {
     ? path.join(__dirname, '..', 'public', 'rigmatch-brand-icon.png')
     : path.join(__dirname, '..', 'dist', 'rigmatch-brand-icon.png');
 }
+
+// ── Scores bridge server ──────────────────────────────────────────────────────
+// Serves scores + chosen model as JSON on localhost:11435 so RigMatch Chat
+// can read them without requiring a shared filesystem or IPC protocol.
+
+// Only the Tauri WebView origins may read the bridge — blocks any browser tab
+// from fetching this endpoint via a wildcard CORS grant.
+const BRIDGE_ALLOWED_ORIGINS = new Set([
+  'http://127.0.0.1:1420',  // Tauri dev server
+  'tauri://localhost',        // Tauri production WebView
+]);
+
+const SCORES_MAX_ENTRIES = 500;   // N-07: reject oversized payloads from renderer
+let benchmarkRunning = false;     // N-06: single-benchmark mutex
+let lastLogClearAt = 0;           // N-03: rate-limit log clearing
+
+let latestScores = {};
+let latestChosen = null;
+
+const scoresServer = http.createServer((req, res) => {
+  // Only GET is valid — reject other methods before touching CORS
+  if (req.method !== 'GET') {
+    res.statusCode = 405;
+    res.end();
+    return;
+  }
+
+  const origin = req.headers.origin;
+  if (origin) {
+    if (!BRIDGE_ALLOWED_ORIGINS.has(origin)) {
+      res.statusCode = 403;
+      res.end();
+      return;
+    }
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify({ scores: latestScores, chosen: latestChosen }));
+});
+
+scoresServer.listen(SCORES_SERVER_PORT, '127.0.0.1', () => {
+  console.log(`RigMatch scores bridge listening on port ${SCORES_SERVER_PORT}`);
+});
+
+scoresServer.on('error', () => {
+  // Port in use — scores bridging unavailable, non-fatal
+});
 
 app.whenReady().then(() => {
   registerHandlers();
@@ -124,10 +182,40 @@ function registerHandlers() {
   handleLogged('logs:openFolder', 'logs', () => openAppLogsFolder());
   handleLogged('app:checkForUpdates', 'updates', (_event, channel) => checkForRigmatchUpdates(channel));
   handleLogged('app:openUpdatePage', 'updates', (_event, channel) => openRigmatchUpdatePage(channel));
+  ipcMain.handle('scores:sync', (_event, data) => {
+    if (!data || typeof data !== 'object') return;
+    if ('scores' in data) {
+      const scores = data.scores ?? {};
+      if (typeof scores !== 'object' || Object.keys(scores).length > SCORES_MAX_ENTRIES) return;
+      latestScores = scores;
+      latestChosen = data.chosen ?? null;
+    } else {
+      if (Object.keys(data).length > SCORES_MAX_ENTRIES) return;
+      latestScores = data;
+    }
+  });
+  ipcMain.handle('app:openChatApp', () => {
+    const candidates = [
+      path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'release', 'rigmatch-chat.exe'),
+      path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'debug', 'rigmatch-chat.exe'),
+      path.join(process.env.LOCALAPPDATA || '', 'Programs', 'RigMatch Chat', 'RigMatch Chat.exe'),
+    ];
+    for (const candidate of candidates) {
+      if (fsSync.existsSync(candidate)) {
+        spawn(candidate, [], { detached: true, stdio: 'ignore' }).unref();
+        return { ok: true };
+      }
+    }
+    return { ok: false, reason: 'RigMatch Chat not installed' };
+  });
 }
 
 function handleLogged(channel, source, handler) {
   ipcMain.handle(channel, async (event, ...args) => {
+    // U-02: reject IPC from any frame that isn't one of our BrowserWindows
+    if (!BrowserWindow.fromWebContents(event.sender)) {
+      throw new Error('Unauthorized IPC sender');
+    }
     try {
       return await handler(event, ...args);
     } catch (error) {
@@ -189,6 +277,12 @@ async function readAppLogs(limit = LOG_LIMIT) {
 }
 
 async function clearAppLogs() {
+  const now = Date.now();
+  const LOG_CLEAR_MIN_INTERVAL_MS = 60_000;
+  if (now - lastLogClearAt < LOG_CLEAR_MIN_INTERVAL_MS) {
+    throw new Error('Log clear is rate-limited. Please wait before clearing again.');
+  }
+  lastLogClearAt = now;
   const filePath = getLogFilePath();
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, '', 'utf8');
@@ -334,7 +428,7 @@ async function openRigmatchUpdatePage(channel = 'release') {
   const url = normalizedChannel === 'nightly'
     ? `${RIGMATCH_RELEASES_URL}?channel=nightly`
     : RIGMATCH_RELEASES_URL;
-  await shell.openExternal(url);
+  if (/^https?:\/\//.test(url)) await shell.openExternal(url);
   return { url };
 }
 
@@ -886,7 +980,17 @@ function isPrivateIp(ip) {
   );
 }
 
+// ID-03: Validate that a baseUrl is localhost-only before using it in fetch calls.
+function assertLocalhostUrl(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch { throw new Error(`Invalid Ollama URL: ${url}`); }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('Ollama URL must use http(s)');
+  const host = parsed.hostname.toLowerCase();
+  if (host !== 'localhost' && host !== '127.0.0.1' && host !== '::1') throw new Error('Ollama URL must point to localhost');
+}
+
 async function getOllamaStatus(baseUrl = OLLAMA_LOCAL_URL) {
+  assertLocalhostUrl(baseUrl);
   try {
     const startedAt = Date.now();
     const [version, tags] = await Promise.all([
@@ -1302,6 +1406,7 @@ function sortDiscoveredHosts(a, b) {
 async function pullModel(request = {}, sender) {
   const model = request.model;
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
+  assertLocalhostUrl(baseUrl);
   const progressId = request.progressId || `pull-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   if (!model) {
@@ -1553,7 +1658,7 @@ function normalizeByteCount(value) {
 async function deleteModel(request = {}) {
   const model = request.model;
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
-
+  assertLocalhostUrl(baseUrl);
   if (!model) {
     throw new Error('No model selected to delete');
   }
@@ -1588,8 +1693,21 @@ async function deleteModel(request = {}) {
 }
 
 async function runBenchmark(request = {}, sender) {
+  if (benchmarkRunning) {
+    throw new Error('A benchmark is already running. Please wait for it to complete.');
+  }
+  benchmarkRunning = true;
+  try {
+    return await runBenchmarkInner(request, sender);
+  } finally {
+    benchmarkRunning = false;
+  }
+}
+
+async function runBenchmarkInner(request = {}, sender) {
   const model = request.model;
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
+  assertLocalhostUrl(baseUrl);
   const questionCount = normalizeBenchmarkQuestionCount(request.questionCount);
   const benchmarkPrompts = buildBenchmarkPromptPlan(questionCount, request.questions);
   const progressId = typeof request.progressId === 'string' ? request.progressId : null;
@@ -1783,10 +1901,13 @@ async function sendChat(request = {}) {
   const model = request.model;
   const message = request.message;
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
-
+  assertLocalhostUrl(baseUrl);
   if (!model || !message) {
     throw new Error('Model and message are required');
   }
+
+  // U-01: collapse newlines so user input cannot inject additional "Assistant:" turns
+  const safeMessage = String(message).replace(/[\r\n]+/g, ' ').slice(0, 4000);
 
   const response = await fetchJson(
     `${baseUrl}/api/generate`,
@@ -1794,7 +1915,7 @@ async function sendChat(request = {}) {
       method: 'POST',
       body: JSON.stringify({
         model,
-        prompt: `You are the selected local RigMatch.AI assistant. Be warm, concise, and honest about limits.\n\nUser: ${message}\nAssistant:`,
+        prompt: `You are the selected local RigMatch.AI assistant. Be warm, concise, and honest about limits.\n\nUser: ${safeMessage}\nAssistant:`,
         stream: false,
         options: {
           temperature: 0.5,

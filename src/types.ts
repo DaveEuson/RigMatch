@@ -254,6 +254,8 @@ export type AgentArcadeApi = {
   openLogsFolder: () => Promise<{ logPath: string }>;
   checkForUpdates: (channel?: UpdateChannel) => Promise<UpdateCheckResponse>;
   openUpdatePage: (channel?: UpdateChannel) => Promise<{ url: string }>;
+  syncScores: (scores: Record<string, unknown>) => Promise<void>;
+  openChatApp: () => Promise<{ ok: boolean; reason?: string }>;
 };
 
 export type ModelRow = CatalogModel & {

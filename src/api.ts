@@ -262,6 +262,12 @@ const fallbackApi: AgentArcadeApi = {
     window.open(url, '_blank', 'noopener,noreferrer');
     return { url };
   },
+  async syncScores() {
+    // no-op in preview mode
+  },
+  async openChatApp() {
+    return { ok: false, reason: 'Not in desktop runtime' };
+  },
 };
 
 export const agentArcadeApi: AgentArcadeApi = window.agentArcade ?? fallbackApi;

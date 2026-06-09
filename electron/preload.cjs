@@ -27,6 +27,8 @@ const api = {
   openLogsFolder: () => ipcRenderer.invoke('logs:openFolder'),
   checkForUpdates: (channel) => ipcRenderer.invoke('app:checkForUpdates', channel),
   openUpdatePage: (channel) => ipcRenderer.invoke('app:openUpdatePage', channel),
+  syncScores: (scores) => ipcRenderer.invoke('scores:sync', scores),
+  openChatApp: () => ipcRenderer.invoke('app:openChatApp'),
 };
 
 contextBridge.exposeInMainWorld('agentArcade', api);
