@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listModels, streamChat, getVersion, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
 import { loadSettings, saveSettings, type AppSettings } from "./lib/settings";
 import avatarLlama    from "../assets/model-avatar-llama.png";
@@ -29,6 +31,7 @@ type AppMessage = {
 
 type ConnectionStatus = "connected" | "disconnected" | "checking";
 type ModelScore = { speed: number; sobriety: number; stability: number; fit: number; total: number; grade: string };
+type SystemStats = { cpuPercent: number; ramUsedGb: number; ramTotalGb: number };
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
@@ -191,6 +194,7 @@ export default function App() {
   const [rigScores, setRigScores] = useState<Record<string, ModelScore>>(() => loadCachedBridge().scores);
   const [chosenModel, setChosenModel] = useState<string | null>(() => loadCachedBridge().chosen);
   const [profileModal, setProfileModal] = useState<Buddy | null>(null);
+  const [sysStats, setSysStats] = useState<SystemStats | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const prevTypingRef = useRef<string | null>(null);
@@ -254,7 +258,19 @@ export default function App() {
       setOllamaVersion(version);
       setConnectionStatus("connected");
       if (models.length > 0 && activeBuddy === null) {
-        setActiveBuddy(models[0].name);
+        const bridge = loadCachedBridge();
+        const modelNames = models.map((m) => m.name);
+        const topFromScores = Object.entries(bridge.scores).reduce<string | null>(
+          (best, [model, score]) =>
+            modelNames.includes(model) && (!best || score.total > (bridge.scores[best]?.total ?? 0))
+              ? model
+              : best,
+          null,
+        );
+        const preferred = [bridge.chosen, topFromScores].find(
+          (m): m is string => !!m && modelNames.includes(m),
+        );
+        setActiveBuddy(preferred ?? models[0].name);
       }
     } catch {
       setBuddies([]);
@@ -278,10 +294,7 @@ export default function App() {
   useEffect(() => {
     const fetchScores = async () => {
       try {
-        const res = await fetch("http://localhost:11435");
-        if (!res.ok) return;
-        const raw = await res.json() as Record<string, unknown>;
-        // Bridge v2 sends { scores, chosen }; v1 sent scores directly
+        const raw = await invoke<Record<string, unknown>>("get_rig_scores");
         const payload: BridgePayload = (raw.scores && typeof raw.scores === "object")
           ? { scores: raw.scores as Record<string, ModelScore>, chosen: (raw.chosen as string | null) ?? null }
           : { scores: raw as Record<string, ModelScore>, chosen: null };
@@ -296,6 +309,19 @@ export default function App() {
     const id = setInterval(() => void fetchScores(), 15_000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!settings.showSystemMonitor) { setSysStats(null); return; }
+    const poll = async () => {
+      try {
+        const stats = await invoke<SystemStats>("get_system_stats");
+        setSysStats(stats);
+      } catch { /* ignore */ }
+    };
+    void poll();
+    const id = setInterval(() => void poll(), 2000);
+    return () => clearInterval(id);
+  }, [settings.showSystemMonitor]);
 
   // ── Persist conversations ────────────────────────────────────────────────
 
@@ -419,6 +445,7 @@ export default function App() {
       theme: draftSettings.theme,
       muted: draftSettings.muted,
       hiddenModels: draftSettings.hiddenModels,
+      showSystemMonitor: draftSettings.showSystemMonitor,
     };
     saveSettings(next);
     setSettings(next);
@@ -452,9 +479,49 @@ export default function App() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  const cpuClass = sysStats
+    ? sysStats.cpuPercent > 85 ? "hot" : sysStats.cpuPercent > 60 ? "warm" : ""
+    : "";
+  const ramPct = sysStats ? sysStats.ramUsedGb / sysStats.ramTotalGb : 0;
+  const ramClass = ramPct > 0.88 ? "hot" : ramPct > 0.70 ? "warm" : "";
+
   return (
     <div className="rm-app" data-theme={settings.theme}>
 
+      {/* ── Custom Title Bar ───────────────────────────────────────── */}
+      <div className="rm-titlebar" data-tauri-drag-region>
+        <span className="rm-titlebar-title" data-tauri-drag-region>⚡ RigMatch Chat</span>
+        <div className="rm-titlebar-controls">
+          <button
+            type="button"
+            className="rm-titlebar-btn minimize"
+            onClick={() => getCurrentWindow().minimize()}
+            aria-label="Minimize"
+          >−</button>
+          <button
+            type="button"
+            className="rm-titlebar-btn close"
+            onClick={() => getCurrentWindow().close()}
+            aria-label="Close"
+          >×</button>
+        </div>
+      </div>
+
+      {/* ── System Monitor Bar ─────────────────────────────────────── */}
+      {settings.showSystemMonitor && sysStats && (
+        <div className="rm-system-bar">
+          <span className={`rm-sys-stat ${cpuClass}`}>
+            CPU <strong>{Math.round(sysStats.cpuPercent)}%</strong>
+          </span>
+          <span className="rm-sys-divider" />
+          <span className={`rm-sys-stat ${ramClass}`}>
+            RAM <strong>{sysStats.ramUsedGb.toFixed(1)}</strong>
+            <em>/ {Math.round(sysStats.ramTotalGb)} GB</em>
+          </span>
+        </div>
+      )}
+
+      <div className="rm-content">
       {/* ── Buddy List ─────────────────────────────────────────────── */}
       <aside className="rm-buddy-panel">
         <div className="rm-buddy-panel-header">
@@ -515,8 +582,8 @@ export default function App() {
                     {buddy.displayName}
                   </span>
                   <span className="rm-buddy-score-line">
-                    {score
-                      ? <><span className={`rm-score-inline rm-score-${score.grade.replace('+', 'plus').replace('-', 'minus')}`}>{score.total} · {score.grade}</span><span className="rm-response-time">{getResponseLabel(score, buddy.sizeGb)}</span></>
+                    {score && score.grade != null
+                      ? <><span className={`rm-score-inline rm-score-${String(score.grade).replace('+', 'plus').replace('-', 'minus')}`}>{score.total} · {score.grade}</span><span className="rm-response-time">{getResponseLabel(score, buddy.sizeGb)}</span></>
                       : <span className="rm-response-time">{buddy.sizeGb} GB · {getResponseLabel(undefined, buddy.sizeGb)}</span>
                     }
                   </span>
@@ -536,10 +603,28 @@ export default function App() {
         </div>
 
         <div className="rm-buddy-panel-footer">
-          <button type="button" className="rm-settings-btn" onClick={openSettings}>
-            ⚙ Settings
+          <button
+            type="button"
+            className="rm-open-rigmatch-btn"
+            title="Open RigMatch.AI — benchmark and rank your models"
+            onClick={() => void invoke("open_rigmatch_ai").catch(() => undefined)}
+          >
+            ⚡ RigMatch.AI
           </button>
-          <button type="button" className="rm-refresh-btn" onClick={() => void refresh()}>↻</button>
+          <div className="rm-buddy-panel-footer-row">
+            <button type="button" className="rm-settings-btn" onClick={openSettings}>
+              ⚙ Settings
+            </button>
+            <button
+              type="button"
+              className="rm-donate-btn"
+              title="Support RigMatch development"
+              onClick={() => window.open("https://buymeacoffee.com/daveeuson", "_blank", "noopener,noreferrer")}
+            >
+              ☕
+            </button>
+            <button type="button" className="rm-refresh-btn" onClick={() => void refresh()}>↻</button>
+          </div>
         </div>
       </aside>
 
@@ -651,6 +736,7 @@ export default function App() {
           </div>
         )}
       </main>
+      </div>
 
       {/* ── Buddy Profile Modal ─────────────────────────────────────── */}
       {profileModal && (() => {
@@ -683,7 +769,7 @@ export default function App() {
                     <>
                       <div className="rm-profile-stat">
                         <span>Match Score</span>
-                        <strong className={`rm-score-inline rm-score-${score.grade.replace('+','plus').replace('-','minus')}`}>{score.total} · {score.grade}</strong>
+                        <strong className={`rm-score-inline rm-score-${String(score.grade ?? '').replace('+','plus').replace('-','minus')}`}>{score.total} · {score.grade}</strong>
                       </div>
                       <div className="rm-profile-stat">
                         <span>Speed</span>
@@ -773,6 +859,17 @@ export default function App() {
                   onChange={(e) => setDraftSettings((s) => ({ ...s, muted: e.target.checked }))}
                 />
                 <span>Mute all sounds</span>
+              </label>
+
+              {/* ── System Monitor ── */}
+              <div className="rm-settings-section-label">System</div>
+              <label className="rm-settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={draftSettings.showSystemMonitor}
+                  onChange={(e) => setDraftSettings((s) => ({ ...s, showSystemMonitor: e.target.checked }))}
+                />
+                <span>Show CPU &amp; RAM monitor bar</span>
               </label>
 
               {/* ── Profile ── */}

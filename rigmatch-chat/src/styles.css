@@ -3,19 +3,19 @@
    ================================================================ */
 
 :root {
-  --bg:           #0e0c14;
-  --bg-panel:     #141221;
-  --bg-card:      #1b1928;
-  --bg-hover:     #201e30;
-  --bg-active:    #252338;
+  --bg:           #100d18;
+  --bg-panel:     #1a1628;
+  --bg-card:      #211e32;
+  --bg-hover:     #27233a;
+  --bg-active:    #2d2942;
   --bg-bubble-u:  #2c5f2e;
   --bg-bubble-a:  #1e1c2e;
   --gold:         #efbc5a;
   --green:        #95b46a;
-  --pink:         #e36775;
-  --text:         #b8b2cc;
-  --text-strong:  #f0ecff;
-  --text-muted:   #6e6880;
+  --pink:         #e37185;
+  --text:         #d0c5ba;
+  --text-strong:  #fff9ef;
+  --text-muted:   #7a7264;
   --border:       rgba(255,255,255,0.08);
   --border-gold:  rgba(239,188,90,0.28);
   --font:         -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -74,11 +74,89 @@ textarea:focus {
 /* ── Layout ─────────────────────────────────────────────────────── */
 
 .rm-app {
-  display: grid;
-  grid-template-columns: 220px 1fr;
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   overflow: hidden;
 }
+
+.rm-content {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Custom Title Bar ───────────────────────────────────────────── */
+
+.rm-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 0 0 12px;
+  background: #0a0812;
+  border-bottom: 1px solid rgba(239, 188, 90, 0.12);
+  flex-shrink: 0;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.rm-titlebar-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.rm-titlebar-controls {
+  display: flex;
+  height: 100%;
+}
+
+.rm-titlebar-btn {
+  width: 46px;
+  height: 100%;
+  font-size: 16px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, color 0.1s;
+}
+
+.rm-titlebar-btn:hover {
+  color: var(--text-strong);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rm-titlebar-btn.close:hover {
+  background: #c0392b;
+  color: #fff;
+}
+
+.rm-system-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  background: rgba(0, 0, 0, 0.35);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.rm-sys-stat { display: flex; align-items: center; gap: 4px; }
+.rm-sys-stat strong { color: var(--text); font-weight: 600; }
+.rm-sys-stat em { color: var(--text-muted); font-style: normal; font-size: 10px; }
+.rm-sys-stat.warm strong { color: #e8a030; }
+.rm-sys-stat.hot strong { color: #e85050; }
+.rm-sys-divider { width: 1px; height: 10px; background: var(--border); margin: 0 4px; }
 
 /* ── Avatar ─────────────────────────────────────────────────────── */
 
@@ -313,10 +391,38 @@ textarea:focus {
 
 .rm-buddy-panel-footer {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 4px;
   padding: 8px 10px;
   border-top: 1px solid var(--border);
+}
+
+.rm-buddy-panel-footer-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rm-open-rigmatch-btn {
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255, 200, 0, 0.08);
+  color: #f0c040;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid rgba(255, 200, 0, 0.22);
+  transition: background 0.1s, border-color 0.1s;
+  text-align: left;
+}
+
+.rm-open-rigmatch-btn:hover {
+  background: rgba(255, 200, 0, 0.16);
+  border-color: rgba(255, 200, 0, 0.45);
+}
+
+.rm-buddy-panel-footer .rm-settings-btn {
+  flex: 1;
 }
 
 .rm-settings-btn {
@@ -349,6 +455,21 @@ textarea:focus {
 }
 
 .rm-refresh-btn:hover { color: var(--gold); }
+
+.rm-donate-btn {
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 14px;
+  border: 1px solid var(--border);
+  transition: color 0.1s, border-color 0.1s;
+  flex-shrink: 0;
+}
+.rm-donate-btn:hover {
+  color: #c8a84b;
+  border-color: rgba(255, 200, 0, 0.3);
+}
 
 /* ── Chat Panel ──────────────────────────────────────────────────── */
 

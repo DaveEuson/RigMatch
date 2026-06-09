@@ -361,7 +361,7 @@
   font-weight: 750;
   line-height: 1.15;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
@@ -422,6 +422,26 @@
 .side-menu-summary:hover strong,
 .side-menu-summary.active strong {
   color: var(--gold);
+}
+
+.side-menu-donate {
+  display: block;
+  width: calc(100% - 16px);
+  margin: 4px 8px 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.side-menu-donate:hover {
+  background: rgba(255, 200, 0, 0.08);
+  border-color: rgba(255, 200, 0, 0.25);
+  color: #c8a84b;
 }
 
 .side-menu-summary strong {
@@ -918,16 +938,16 @@
   inset: 0;
   z-index: 40;
   padding: 18px;
-  background: linear-gradient(90deg, rgba(5, 7, 9, 0.08), rgba(5, 7, 9, 0.28));
+  background: rgba(5, 7, 9, 0.78);
   display: grid;
-  align-items: end;
-  justify-items: end;
+  align-items: center;
+  justify-items: center;
   pointer-events: none;
 }
 
 .tutorial-modal {
-  width: min(460px, calc(100vw - 36px));
-  max-height: min(620px, calc(100vh - 36px));
+  width: min(600px, calc(100vw - 36px));
+  max-height: min(780px, calc(100vh - 36px));
   border: 1px solid var(--line-bright);
   background: var(--panel);
   box-shadow:
@@ -1127,16 +1147,143 @@
 }
 
 /* Beginner intro slides */
+.tutorial-ollama-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.tutorial-ollama-status svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.tutorial-ollama-status.ready {
+  background: rgba(0, 200, 100, 0.1);
+  color: #22c97a;
+  border: 1px solid rgba(0, 200, 100, 0.28);
+}
+.tutorial-ollama-status.offline {
+  background: rgba(255, 90, 90, 0.1);
+  color: #ff7070;
+  border: 1px solid rgba(255, 90, 90, 0.25);
+}
+
+.tutorial-install-steps {
+  display: grid;
+  gap: 10px;
+}
+.tutorial-install-steps .primary-button {
+  justify-content: center;
+  gap: 8px;
+}
+.tutorial-install-steps p {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
 .tutorial-intro-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .tutorial-intro-lead {
   font-size: 14px;
   color: var(--text-strong);
   line-height: 1.5;
+}
+
+/* New welcome screen */
+.tutorial-welcome-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tutorial-status-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tutorial-status-strip svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.tutorial-status-strip.ready {
+  background: rgba(0, 200, 100, 0.1);
+  color: #22c97a;
+  border: 1px solid rgba(0, 200, 100, 0.28);
+}
+
+.tutorial-status-strip.offline {
+  background: rgba(255, 90, 90, 0.1);
+  color: #ff7070;
+  border: 1px solid rgba(255, 90, 90, 0.25);
+}
+
+.tutorial-how-it-works {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.tutorial-how-card {
+  padding: 12px 10px;
+  border: 1px solid rgba(var(--primary-rgb), 0.24);
+  border-radius: 10px;
+  background: rgba(var(--primary-rgb), 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  text-align: center;
+  align-items: center;
+}
+
+.tutorial-how-card svg {
+  width: 18px;
+  height: 18px;
+  color: var(--gold);
+  margin-bottom: 2px;
+}
+
+.tutorial-how-card strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.tutorial-how-card em {
+  display: block;
+  color: var(--text);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+button.inline-link {
+  display: inline;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
 }
 
 .tutorial-intro-callout {
@@ -5770,15 +5917,17 @@ tbody tr.computer-row.selected {
   max-height: 180px;
   overflow: auto;
   padding: 8px;
-  border: 1px solid rgba(255, 249, 239, 0.08);
+  border: 1px solid rgba(255, 249, 239, 0.18);
   border-radius: 8px;
-  background: rgba(5, 9, 13, 0.5);
+  background: rgba(5, 9, 13, 0.45);
+  color: var(--text);
 }
 
 .speed-date-qa-block.answered pre {
   color: var(--text-strong);
-  background: rgba(5, 9, 13, 0.74);
-  font-weight: 750;
+  background: rgba(8, 12, 18, 0.72);
+  border-color: rgba(239, 188, 90, 0.18);
+  font-weight: 500;
 }
 
 .speed-date-qa-pending {
@@ -5972,6 +6121,39 @@ tbody tr.computer-row.selected {
   color: var(--blue);
 }
 
+.suite-autosave-label {
+  margin-left: 0 !important;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--green, #5cba8a);
+  opacity: 0.8;
+}
+
+.suite-autosave-label svg {
+  width: 12px;
+  height: 12px;
+}
+
+.suite-custom-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(227, 183, 101, 0.08);
+  border-bottom: 1px solid rgba(227, 183, 101, 0.18);
+  font-size: 12px;
+  color: var(--gold, #e3b765);
+}
+
+.suite-custom-warning svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+}
+
 .suite-editor-list {
   min-height: 0;
   padding: 10px;
@@ -6131,12 +6313,25 @@ tbody tr.computer-row.selected {
 
 .avatar-frame {
   min-height: 88px;
-  flex: 0 0 88px;
+  flex: 0 0 auto;
   border: 2px solid #354150;
   background: var(--panel);
   background-size: 20px 20px, 20px 20px, auto, auto;
   display: grid;
   place-items: center;
+  gap: 6px;
+  padding: 10px 8px;
+}
+
+.avatar-frame-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-strong);
+  text-align: center;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .avatar-bust {
@@ -6238,12 +6433,14 @@ tbody tr.computer-row.selected {
 .roster-name {
   max-width: 100%;
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+  text-align: center;
 }
 
 .roster-score {
@@ -7338,6 +7535,13 @@ tbody tr.computer-row.selected {
   color: var(--muted);
 }
 
+.score-explainer-weight {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .score-explainer-note {
   margin: 0;
   color: var(--muted);
@@ -8277,6 +8481,18 @@ tbody tr.computer-row.selected {
 .donation-link:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
+}
+
+.donation-link-prominent {
+  width: 100%;
+  justify-content: center;
+  border-color: rgba(239, 188, 90, 0.72);
+  background: rgba(239, 188, 90, 0.1);
+}
+
+.donation-link-prominent:hover {
+  background: var(--gold);
+  border-color: var(--gold);
 }
 
 .danger-zone {
@@ -11531,7 +11747,7 @@ tbody tr.selected {
 }
 
 .romance-art-banner {
-  min-height: 144px;
+  min-height: 96px;
   margin: 10px 16px 12px;
   padding: 14px;
   border: 1px solid rgba(239, 188, 90, 0.42);
@@ -11589,7 +11805,7 @@ tbody tr.selected {
 }
 
 .speed-date-art-banner {
-  min-height: 150px;
+  min-height: 96px;
   margin-top: 10px;
   margin-bottom: 0;
   background-position: 21% center;
@@ -11600,8 +11816,30 @@ tbody tr.selected {
 }
 
 .scorecard-art-banner {
-  min-height: 148px;
+  min-height: 96px;
   background-position: 22% center;
+}
+
+.cruise-confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.cruise-confetti-piece {
+  position: absolute;
+  top: -12px;
+  border-radius: 2px;
+  animation: confettiFall linear infinite;
+  opacity: 0;
+}
+
+@keyframes confettiFall {
+  0%   { transform: translateY(0)   rotate(0deg);   opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateY(520px) rotate(540deg); opacity: 0; }
 }
 
 .cruise-backdrop {
@@ -11611,6 +11849,7 @@ tbody tr.selected {
 }
 
 .choice-cruise-modal {
+  position: relative;
   width: min(760px, calc(100vw - 36px));
   max-height: calc(100vh - 36px);
   border: 1px solid rgba(239, 188, 90, 0.72);
@@ -11856,16 +12095,30 @@ tbody tr.selected {
   color: inherit;
 }
 
-button.whats-next-action {
+button.whats-next-action,
+a.whats-next-action {
   cursor: pointer;
   border-color: rgba(var(--primary-rgb), 0.35);
   background: rgba(var(--primary-rgb), 0.08);
   transition: background 0.15s, border-color 0.15s;
+  text-decoration: none;
+  color: inherit;
 }
 
-button.whats-next-action:hover {
+button.whats-next-action:hover,
+a.whats-next-action:hover {
   background: rgba(var(--primary-rgb), 0.16);
   border-color: rgba(var(--primary-rgb), 0.55);
+}
+
+a.whats-next-support {
+  border-color: rgba(239, 188, 90, 0.35);
+  background: rgba(239, 188, 90, 0.07);
+}
+
+a.whats-next-support:hover {
+  background: rgba(239, 188, 90, 0.15);
+  border-color: rgba(239, 188, 90, 0.55);
 }
 
 .whats-next-item > svg {
