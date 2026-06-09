@@ -8,13 +8,13 @@ Find the best local AI model for your computer. RigMatch benchmarks your install
 
 ## Download
 
-**Beta v0.1.0** — [All releases](../../releases)
+**Beta v0.1.0** — [All platforms →](../../releases/latest)
 
-| Platform | Download |
+| Platform | Installer |
 |---|---|
-| Windows | [RigMatch.AI-0.1.0-win-x64.exe](../../releases/download/v0.1.0/RigMatch.AI-0.1.0-win-x64.exe) |
-| macOS | [RigMatch.AI-0.1.0-mac-x64.dmg](../../releases/download/v0.1.0/RigMatch.AI-0.1.0-mac-x64.dmg) — unsigned beta, see [Platform Notes](#platform-notes) |
-| Linux | [RigMatch.AI-0.1.0-linux-x86_64.AppImage](../../releases/download/v0.1.0/RigMatch.AI-0.1.0-linux-x86_64.AppImage) · [.deb](../../releases/download/v0.1.0/RigMatch.AI-0.1.0-linux-amd64.deb) |
+| Windows | `.exe` installer — [Releases page](../../releases/latest) |
+| macOS | `.dmg` — unsigned beta, see [Platform Notes](#platform-notes) · [Releases page](../../releases/latest) |
+| Linux | `.AppImage` or `.deb` · [Releases page](../../releases/latest) |
 
 ## Quick Start
 

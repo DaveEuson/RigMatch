@@ -7,12 +7,17 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Node
 node_modules
 dist
 dist-ssr
 release
 release-*
 *.local
+
+# Rust / Tauri build artifacts (can be several GB — never commit)
+rigmatch-chat/src-tauri/target/
+rigmatch-chat/src-tauri/gen/
 
 # Editor directories and files
 .vscode/*
@@ -24,3 +29,11 @@ release-*
 *.njsproj
 *.sln
 *.sw?
+
+# OS
+Thumbs.db
+
+# Internal / not for publishing
+SESSION_NOTES.md
+review-ai-handoff/
+design/
