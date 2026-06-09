@@ -25,6 +25,7 @@ export type SystemProfile = {
     vramGb: number;
     driverVersion: string;
     bus: string;
+    isUnifiedMemory?: boolean;
   };
   storage: {
     sizeGb: number;

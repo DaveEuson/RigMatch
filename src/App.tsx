@@ -1653,6 +1653,7 @@ function App() {
             onOpenLogs={openLogsPanel}
             onOpenModelPool={() => selectNav('models')}
             onRemoveCandidate={toggleShortlist}
+            onQueueModel={queueModel}
             onRunListTest={requestListTest}
           />
         )}
@@ -1877,7 +1878,9 @@ function TopDeck({
   onScan: () => void;
   topPick?: RigPick | null;
 }) {
-  const gpuLabel = `${system.gpu.model}${system.gpu.vramGb ? ` ${system.gpu.vramGb}GB` : ''}`;
+  const gpuLabel = system.gpu.isUnifiedMemory
+    ? `${system.gpu.model} · Unified Memory`
+    : `${system.gpu.model}${system.gpu.vramGb ? ` ${system.gpu.vramGb}GB` : ''}`;
   const statusTitle = ollama.ready ? 'Local Ollama Ready' : 'Ollama Not Found';
   const statusDetail = ollama.ready
     ? `${ollama.models.length} installed model${ollama.models.length === 1 ? '' : 's'} visible.`
@@ -1912,7 +1915,11 @@ function TopDeck({
       <section className="monitor-grid" aria-label="System monitor">
         <MetricTile label="CPU" value={`${system.cpu.loadPercent}%`} level={system.cpu.loadPercent} />
         <MetricTile label="RAM" value={`${system.memory.usedGb} / ${system.memory.totalGb} GB`} level={(system.memory.usedGb / Math.max(1, system.memory.totalGb)) * 100} />
-        <MetricTile label="VRAM" value={`${system.gpu.vramGb || '?'} GB`} level={system.gpu.vramGb ? Math.min(100, (system.gpu.vramGb / 16) * 100) : 18} />
+        <MetricTile
+          label={system.gpu.isUnifiedMemory ? 'Memory' : 'VRAM'}
+          value={system.gpu.isUnifiedMemory ? `${system.memory.totalGb} GB unified` : `${system.gpu.vramGb || '?'} GB`}
+          level={system.gpu.isUnifiedMemory ? Math.min(100, (system.memory.totalGb / 32) * 100) : system.gpu.vramGb ? Math.min(100, (system.gpu.vramGb / 16) * 100) : 18}
+        />
       </section>
 
       <section className="local-status-card" aria-label="Local AI status">
@@ -6018,6 +6025,7 @@ function SpeedDatePanel({
   onOpenLogs,
   onOpenModelPool,
   onRemoveCandidate,
+  onQueueModel,
   onRunListTest,
 }: {
   active: boolean;
@@ -6036,12 +6044,14 @@ function SpeedDatePanel({
   onOpenLogs: () => void;
   onOpenModelPool: () => void;
   onRemoveCandidate: (row: ModelRow) => void;
+  onQueueModel: (row: ModelRow) => void;
   onRunListTest: () => void;
 }) {
   const [setupCollapsed, setSetupCollapsed] = useState(false);
   const winnerResult = listTestResult?.results.find((result) => result.model === listTestResult.winner);
   const canRunListTest = shortlistedRows.length >= 2 && !isListTesting;
   const selectedSlots = Array.from({ length: 5 }, (_, index) => shortlistedRows[index]);
+  const uninstalledLineupRows = shortlistedRows.filter((row) => !row.installed);
   const questionLabel = `${questionCount} questions per model`;
   const runReadiness = shortlistedRows.length >= 2
     ? `${shortlistedRows.length} contestants will answer the same ${questionCount} questions.`
@@ -6136,6 +6146,18 @@ function SpeedDatePanel({
             <div className="speed-date-lineup-stats" aria-label="Speed Dating setup summary">
               <span>{questionLabel}</span>
               <strong>{shortlistedRows.length * questionCount} total prompts</strong>
+              {uninstalledLineupRows.length > 0 && (
+                <button
+                  type="button"
+                  className="mini-button outline"
+                  onClick={() => uninstalledLineupRows.forEach(onQueueModel)}
+                  disabled={isListTesting}
+                  title={`Queue ${uninstalledLineupRows.length} uninstalled model${uninstalledLineupRows.length !== 1 ? 's' : ''} for download`}
+                >
+                  <Download aria-hidden="true" />
+                  Download All ({uninstalledLineupRows.length})
+                </button>
+              )}
             </div>
           </div>
 

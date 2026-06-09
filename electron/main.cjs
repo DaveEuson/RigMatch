@@ -194,15 +194,48 @@ function registerHandlers() {
       latestScores = data;
     }
   });
-  ipcMain.handle('app:openChatApp', () => {
+  ipcMain.handle('app:openChatApp', async () => {
+    // Skip launch if Chat is already running — two instances share the same
+    // WebView2 user data folder, causing the second to show a blank window.
+    try {
+      const { stdout } = await execFileAsync('tasklist', ['/FI', 'IMAGENAME eq rigmatch-chat.exe', '/NH'], { timeout: 2000 });
+      if (stdout.toLowerCase().includes('rigmatch-chat.exe')) {
+        return { ok: true, reason: 'already running' };
+      }
+    } catch { /* tasklist unavailable — proceed with launch */ }
+
     const candidates = [
+      // Bundled install: companions/ lives next to RigMatch.AI.exe
+      path.join(path.dirname(process.execPath), 'companions', 'rigmatch-chat.exe'),
+      // Dev: Tauri release/debug build in repo
       path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'release', 'rigmatch-chat.exe'),
       path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'debug', 'rigmatch-chat.exe'),
       path.join(process.env.LOCALAPPDATA || '', 'Programs', 'RigMatch Chat', 'RigMatch Chat.exe'),
     ];
+    // Strip env vars that poison WebView2 when launched from Electron:
+    // - WEBVIEW2_PIPE_FOR_PROTOCOL_HANDLER: Electron's internal Chromium IPC pipe;
+    //   if inherited, rigmatch-chat's WebView2 tries to talk to Electron → blank window.
+    // - ELECTRON_*, CHROME_*: Electron/Chromium runtime flags not meant for child processes.
+    // - NODE_OPTIONS, NODE_PATH: Node-specific flags that confuse the Rust binary's env.
+    const cleanEnv = Object.fromEntries(
+      Object.entries(process.env).filter(([k]) =>
+        !k.startsWith('ELECTRON_') &&
+        !k.startsWith('WEBVIEW2_') &&
+        !k.startsWith('CHROME_') &&
+        k !== 'NODE_OPTIONS' &&
+        k !== 'NODE_PATH'
+      )
+    );
     for (const candidate of candidates) {
       if (fsSync.existsSync(candidate)) {
-        spawn(candidate, [], { detached: true, stdio: 'ignore' }).unref();
+        const child = spawn(candidate, [], {
+          cwd: path.dirname(candidate),
+          env: cleanEnv,
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: false,
+        });
+        child.unref();
         return { ok: true };
       }
     }
@@ -612,6 +645,21 @@ async function getSystemProfile() {
   const cuda = await getCudaStatus(primaryGpu);
   const cpuLoadPercent = await getCpuLoadPercent();
 
+  const isMac = process.platform === 'darwin';
+  const isAppleSilicon = isMac && os.arch() === 'arm64';
+
+  // On Apple Silicon, GPU memory is unified with RAM — no separate VRAM pool.
+  // systeminformation returns 0/null for vram on macOS; use total RAM as the pool size.
+  const vramGb = primaryGpu.vram
+    ? mbToGb(primaryGpu.vram)
+    : isAppleSilicon
+      ? bytesToGb(mem.total)
+      : 0;
+
+  // macOS uses Metal; Windows exposes actual driver version strings.
+  const driverVersion = primaryGpu.driverVersion ||
+    (isMac ? 'Apple Metal' : 'Unknown');
+
   return {
     hostname: os.hostname(),
     platform: process.platform,
@@ -634,11 +682,12 @@ async function getSystemProfile() {
       usedGb: bytesToGb(mem.used),
     },
     gpu: {
-      vendor: primaryGpu.vendor || 'Unknown',
-      model: primaryGpu.model || 'Unknown GPU',
-      vramGb: mbToGb(primaryGpu.vram),
-      driverVersion: primaryGpu.driverVersion || 'Unknown',
-      bus: primaryGpu.bus || 'Unknown',
+      vendor: primaryGpu.vendor || (isMac ? 'Apple' : 'Unknown'),
+      model: primaryGpu.model || (isAppleSilicon ? 'Apple Silicon GPU' : 'Unknown GPU'),
+      vramGb,
+      driverVersion,
+      bus: primaryGpu.bus || (isMac ? 'Built-in' : 'Unknown'),
+      isUnifiedMemory: isAppleSilicon,
     },
     storage: {
       sizeGb: bytesToGb(primaryFs.size),
