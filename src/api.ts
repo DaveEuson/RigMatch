@@ -268,6 +268,9 @@ const fallbackApi: AgentArcadeApi = {
   async openChatApp() {
     return { ok: false, reason: 'Not in desktop runtime' };
   },
+  async checkAutoUpdate() { /* no-op in preview */ },
+  async downloadUpdate() { /* no-op in preview */ },
+  async installUpdate() { /* no-op in preview */ },
 };
 
 export const agentArcadeApi: AgentArcadeApi = window.agentArcade ?? fallbackApi;
