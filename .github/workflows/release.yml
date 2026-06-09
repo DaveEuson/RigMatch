@@ -15,12 +15,15 @@ jobs:
           - os: windows-latest
             platform: win
             artifact: win
+            companion: rigmatch-chat.exe
           - os: macos-latest
             platform: mac
             artifact: mac
+            companion: rigmatch-chat
           - os: ubuntu-latest
             platform: linux
             artifact: linux
+            companion: rigmatch-chat
 
     runs-on: ${{ matrix.os }}
 
@@ -32,18 +35,42 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rigmatch-chat/src-tauri
+
+      - name: Install Linux system dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install main app dependencies
         run: npm ci
 
-      - name: Create companions directory
-        run: mkdir -p companions
-        shell: bash
+      - name: Install RigMatch Chat dependencies
+        run: npm ci
+        working-directory: rigmatch-chat
 
-      - name: Build
+      - name: Build RigMatch Chat companion
+        run: npx tauri build --no-bundle
+        working-directory: rigmatch-chat
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Copy companion binary
+        shell: bash
+        run: |
+          mkdir -p companions
+          cp rigmatch-chat/src-tauri/target/release/${{ matrix.companion }} companions/
+
+      - name: Build RigMatch.AI
         run: npm run build && npx electron-builder --${{ matrix.platform }} --publish never
         env:
-          # Disable Mac code signing for unsigned beta builds.
-          # Add CSC_LINK / CSC_KEY_PASSWORD secrets to enable signing.
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Upload artifacts

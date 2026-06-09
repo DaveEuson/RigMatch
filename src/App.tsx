@@ -3454,7 +3454,10 @@ function ChoiceCruiseModal({
             <button
               type="button"
               className="whats-next-item whats-next-action"
-              onClick={() => void agentArcadeApi.openChatApp()}
+              onClick={async () => {
+                const result = await agentArcadeApi.openChatApp();
+                if (!result?.ok) alert('RigMatch Chat companion not found.\n\nDownload it from the Releases page or build it from source:\n  cd rigmatch-chat && npx tauri build');
+              }}
             >
               <MessageSquare aria-hidden="true" />
               <div>
@@ -6853,7 +6856,10 @@ function AgentReveal({
           host={host}
         />
 
-        <button type="button" className="talk-button" onClick={() => void agentArcadeApi.openChatApp()}>
+        <button type="button" className="talk-button" onClick={async () => {
+          const result = await agentArcadeApi.openChatApp();
+          if (!result?.ok) alert('RigMatch Chat companion not found.\n\nDownload it from the Releases page or build it from source:\n  cd rigmatch-chat && npx tauri build');
+        }}>
           <MessageSquare aria-hidden="true" />
           Chat With Match
         </button>

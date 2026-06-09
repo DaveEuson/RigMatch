@@ -195,28 +195,43 @@ function registerHandlers() {
     }
   });
   ipcMain.handle('app:openChatApp', async () => {
-    // Skip launch if Chat is already running — two instances share the same
-    // WebView2 user data folder, causing the second to show a blank window.
-    try {
-      const { stdout } = await execFileAsync('tasklist', ['/FI', 'IMAGENAME eq rigmatch-chat.exe', '/NH'], { timeout: 2000 });
-      if (stdout.toLowerCase().includes('rigmatch-chat.exe')) {
-        return { ok: true, reason: 'already running' };
-      }
-    } catch { /* tasklist unavailable — proceed with launch */ }
+    const platform = process.platform;
+    const isWin = platform === 'win32';
+    const isMac = platform === 'darwin';
+    const execDir = path.dirname(process.execPath);
 
-    const candidates = [
-      // Bundled install: companions/ lives next to RigMatch.AI.exe
-      path.join(path.dirname(process.execPath), 'companions', 'rigmatch-chat.exe'),
-      // Dev: Tauri release/debug build in repo
+    // Check if already running (skip second launch — shared data dir causes blank window)
+    try {
+      if (isWin) {
+        const { stdout } = await execFileAsync('tasklist', ['/FI', 'IMAGENAME eq rigmatch-chat.exe', '/NH'], { timeout: 2000 });
+        if (stdout.toLowerCase().includes('rigmatch-chat.exe')) return { ok: true, reason: 'already running' };
+      } else {
+        const { stdout } = await execFileAsync('pgrep', ['-x', 'rigmatch-chat'], { timeout: 2000 });
+        if (stdout.trim()) return { ok: true, reason: 'already running' };
+      }
+    } catch { /* process check unavailable — proceed */ }
+
+    const candidates = isWin ? [
+      path.join(execDir, 'companions', 'rigmatch-chat.exe'),
       path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'release', 'rigmatch-chat.exe'),
       path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'debug', 'rigmatch-chat.exe'),
       path.join(process.env.LOCALAPPDATA || '', 'Programs', 'RigMatch Chat', 'RigMatch Chat.exe'),
+    ] : isMac ? [
+      // Packaged: companion sits next to the .app bundle
+      path.join(execDir, '..', '..', '..', 'companions', 'rigmatch-chat'),
+      path.join(execDir, 'companions', 'rigmatch-chat'),
+      // Dev: Tauri build in repo
+      path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'release', 'rigmatch-chat'),
+      path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'debug', 'rigmatch-chat'),
+      path.join(os.homedir(), 'Applications', 'RigMatch Chat.app', 'Contents', 'MacOS', 'rigmatch-chat'),
+      '/Applications/RigMatch Chat.app/Contents/MacOS/rigmatch-chat',
+    ] : [
+      // Linux
+      path.join(execDir, 'companions', 'rigmatch-chat'),
+      path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'release', 'rigmatch-chat'),
     ];
-    // Strip env vars that poison WebView2 when launched from Electron:
-    // - WEBVIEW2_PIPE_FOR_PROTOCOL_HANDLER: Electron's internal Chromium IPC pipe;
-    //   if inherited, rigmatch-chat's WebView2 tries to talk to Electron → blank window.
-    // - ELECTRON_*, CHROME_*: Electron/Chromium runtime flags not meant for child processes.
-    // - NODE_OPTIONS, NODE_PATH: Node-specific flags that confuse the Rust binary's env.
+
+    // Strip env vars that can poison child processes launched from Electron
     const cleanEnv = Object.fromEntries(
       Object.entries(process.env).filter(([k]) =>
         !k.startsWith('ELECTRON_') &&
@@ -226,6 +241,7 @@ function registerHandlers() {
         k !== 'NODE_PATH'
       )
     );
+
     for (const candidate of candidates) {
       if (fsSync.existsSync(candidate)) {
         const child = spawn(candidate, [], {
@@ -239,7 +255,7 @@ function registerHandlers() {
         return { ok: true };
       }
     }
-    return { ok: false, reason: 'RigMatch Chat not installed' };
+    return { ok: false, reason: 'not-found' };
   });
 }
 
