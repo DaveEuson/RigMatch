@@ -1,6 +1,6 @@
 # RigMatch.AI
 
-AI model matchmaking for your computer. RigMatch.AI benchmarks your local Ollama models, scores them for speed, answer quality, and hardware fit, and finds the best one for your specific rig — wrapped in a dating game show theme to make testing less boring.
+Find the best local AI model for your computer. RigMatch benchmarks your installed Ollama models on your actual hardware — scored for speed, answer quality, and hardware fit — wrapped in a dating game show theme to make testing less boring.
 
 <p align="center">
   <img src="src/assets/robot-scorecard-ceremony.png" alt="RigMatch.AI scorecard ceremony" width="100%">
@@ -8,24 +8,48 @@ AI model matchmaking for your computer. RigMatch.AI benchmarks your local Ollama
 
 ## Download
 
-> **Beta v0.1.0** — Windows, macOS, and Linux builds are available on the [Releases](../../releases) page.
+**Beta v0.1.0** — [All releases](../../releases)
 
-| Platform | Installer |
+| Platform | Download |
 |---|---|
-| Windows | `.exe` (NSIS installer) |
-| macOS | `.dmg` — unsigned beta, see [macOS note](#platform-notes) |
-| Linux | `.AppImage` / `.deb` |
+| Windows | [RigMatch.AI-0.1.0-win-x64.exe](../../releases/download/v0.1.0/RigMatch.AI-0.1.0-win-x64.exe) |
+| macOS | [RigMatch.AI-0.1.0-mac-x64.dmg](../../releases/download/v0.1.0/RigMatch.AI-0.1.0-mac-x64.dmg) — unsigned beta, see [Platform Notes](#platform-notes) |
+| Linux | [RigMatch.AI-0.1.0-linux-x86_64.AppImage](../../releases/download/v0.1.0/RigMatch.AI-0.1.0-linux-x86_64.AppImage) · [.deb](../../releases/download/v0.1.0/RigMatch.AI-0.1.0-linux-amd64.deb) |
+
+## Quick Start
+
+1. Install and start [Ollama](https://ollama.com).
+2. Download RigMatch.AI from the [Releases](../../releases) page and install it.
+3. Open RigMatch and click **Check Local** — it will detect your Ollama setup.
+4. Pick up to five models from the Models hub.
+5. Click **Start Speed Dating** to run the benchmark.
+6. Review the Scorecards and lock in your **Top Match**.
+7. Open **RigMatch Chat** to talk to your winner.
 
 ## What It Does
 
 - Scans your machine (CPU, RAM, VRAM) and detects installed Ollama models
 - Downloads models directly from the Ollama library
-- Runs a Speed Dating benchmark — up to five models, same questions, timed and scored on your hardware
-- Scores each model on **answer quality**, **speed**, and **hardware fit**
+- Runs the same benchmark questions across every selected model, timed on your hardware
+- Scores each model on answer quality, speed, and hardware fit
 - Picks a **Top Match** for your specific rig
 - Opens **RigMatch Chat** so you can talk to your top model right away
 
-Everything runs locally. No cloud, no account, no subscription.
+## How Scoring Works
+
+RigMatch runs each selected model through the same local test suite on your actual hardware. Nothing is sent to a server.
+
+The **Match Score** combines three signals:
+
+- **Answer quality** — did the model follow the prompt and complete the task?
+- **Speed** — how quickly it generated tokens on this machine
+- **Hardware fit** — whether it runs comfortably within your RAM and VRAM
+
+Scores are meant to compare models on *your* computer, not to claim a universal benchmark ranking. A model that scores 91 here might score differently on different hardware.
+
+## Privacy
+
+Everything runs locally. No cloud, no account, no subscription. Your prompts and results never leave your machine.
 
 ## Screenshots
 
@@ -34,56 +58,18 @@ Everything runs locally. No cloud, no account, no subscription.
   <img src="Screenshots/0.1/Screenshot_1.jpg" alt="RigMatch Chat — talk to your top-ranked model" width="49%">
 </p>
 
-## Apps
-
-This repo contains two apps that ship together:
-
-| App | Tech | Purpose |
-|---|---|---|
-| **RigMatch.AI** | Electron + React + TypeScript | Main matchmaking UI |
-| **RigMatch Chat** | Tauri + React + TypeScript + Rust | Chat with your top model |
-
-RigMatch Chat ships as a companion binary inside `companions/` and is launched from the match screen.
-
 ## Requirements
 
+### To use RigMatch
+
 - [Ollama](https://ollama.com) installed and running locally
+- At least one Ollama model installed — or use RigMatch to download one
+- Windows, macOS, or Linux
+
+### To build from source
+
 - Node.js 20+
-- Rust + Cargo (to build RigMatch Chat from source)
-
-## Run Locally
-
-```bash
-npm install
-npm run dev
-```
-
-## Build
-
-Builds are handled automatically by GitHub Actions on every tagged release. To build manually:
-
-```bash
-# Windows installer (run on Windows)
-npm run dist:win
-
-# macOS disk image (run on macOS)
-npm run dist:mac
-
-# Linux AppImage + deb (run on Linux)
-npm run dist:linux
-
-# Unpacked directory — faster, no installer
-npm run pack:win
-```
-
-### Building RigMatch Chat (companion)
-
-```bash
-cd rigmatch-chat
-npx tauri build
-# Copy output to companions/
-cp src-tauri/target/release/rigmatch-chat ../companions/
-```
+- Rust + Cargo (for RigMatch Chat)
 
 ## Platform Notes
 
@@ -91,34 +77,56 @@ cp src-tauri/target/release/rigmatch-chat ../companions/
 - **macOS**: Unsigned beta builds — right-click → Open on first launch, or run `xattr -cr /Applications/RigMatch.AI.app` in Terminal
 - **Linux**: AppImage (run anywhere) and .deb (Debian/Ubuntu)
 
+## Build from Source
+
+```bash
+npm install
+npm run dev
+```
+
+To build installers (must run on the matching OS):
+
+```bash
+npm run dist:win    # Windows
+npm run dist:mac    # macOS
+npm run dist:linux  # Linux
+```
+
+Builds are also produced automatically by GitHub Actions on every tagged release.
+
+### Building RigMatch Chat
+
+```bash
+cd rigmatch-chat
+npx tauri build
+cp src-tauri/target/release/rigmatch-chat ../companions/
+```
+
+## Project Structure
+
+Two apps ship together:
+
+| App | Tech | Purpose |
+|---|---|---|
+| **RigMatch.AI** | Electron + React + TypeScript | Main matchmaking UI |
+| **RigMatch Chat** | Tauri + React + TypeScript + Rust | Chat with your top model |
+
+RigMatch Chat ships as a companion binary inside `companions/` and is launched from the match screen. It also runs standalone.
+
 ## Donationware
 
-Free to use during beta. If it saves you time or helps you find a better model:
+RigMatch.AI is free to use during beta.
+
+If it helps you find a better local model, saves you time, or makes local AI less confusing — donations help cover code signing, testing hardware, builds, and artwork.
 
 [buymeacoffee.com/daveeuson](https://buymeacoffee.com/daveeuson)
 
 ## Contributing
 
-Issues and PRs welcome. The codebase is Electron + React + TypeScript (main app) and Tauri + Rust (companion chat).
+Issues and PRs welcome.
 
-### Call for Artists
+## Call for Artists
 
-RigMatch.AI needs illustrated avatar portraits for each Ollama model family. Currently the app ships with placeholder avatars — we want real character portraits that fit the dating-show aesthetic.
+RigMatch uses illustrated contestant portraits for each AI model family (llama, gemma, mistral, phi, qwen, deepseek, and a generic fallback). The app has a dating-show aesthetic — portraits appear in the buddy list, profile modals, and chat header.
 
-**Seven families needed:**
-
-| Family | Models |
-|---|---|
-| `llama` | Meta's Llama family |
-| `gemma` | Google's Gemma family |
-| `mistral` | Mistral AI family |
-| `phi` | Microsoft's Phi family |
-| `qwen` | Alibaba's Qwen family |
-| `deepseek` | DeepSeek family |
-| `generic` | Fallback for unrecognised models |
-
-**Style brief:** Square portrait, ~512×512px or larger, PNG or SVG, transparent or dark background. Tone: playful and character-driven — think dating show contestant portraits, not corporate AI mascots. They appear in buddy lists, profile modals, and chat headers at 40–80px, so they need to read as distinct personalities at small sizes.
-
-**The deal:** This is a donationware project — no budget right now. Contributors get full credit in the app's About page (name + link of your choice). If you only want to tackle one family rather than all seven, that works too.
-
-Open an issue or email [daveeuson@gmail.com](mailto:daveeuson@gmail.com) if you're interested.
+If you want to contribute avatar art, open an issue or email [daveeuson@gmail.com](mailto:daveeuson@gmail.com). Full style brief and family list available on request. Credit appears in the app's About page.
