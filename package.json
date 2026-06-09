@@ -2,6 +2,8 @@
   "name": "rigmatch-ai",
   "private": true,
   "version": "0.1.0",
+  "description": "AI model matchmaking for your computer",
+  "author": "Dave Euson <daveeuson@gmail.com>",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -28,8 +30,18 @@
       "electron/**",
       "package.json"
     ],
+    "extraFiles": [
+      {
+        "from": "companions",
+        "to": "companions"
+      }
+    ],
     "directories": {
       "output": "release"
+    },
+    "nsis": {
+      "oneClick": false,
+      "include": "build/installer.nsh"
     },
     "win": {
       "target": [
