@@ -8,6 +8,7 @@ import {
   Boxes,
   Check,
   CheckCircle,
+  ChevronDown,
   Code2,
   Coffee,
   Copy,
@@ -3452,6 +3453,80 @@ function ChoiceCruiseModal({
   );
 }
 
+const SCORE_WEIGHTS = [
+  { label: 'Quality', pct: 34, detail: 'Average per-prompt answer quality score (0–100). Measured by rule-based heuristics: does JSON parse? Does the truth-trap get a humble answer? Does the format match? No cloud AI judge — entirely local.' },
+  { label: 'Speed', pct: 32, detail: 'Tokens/sec on your hardware × 1.5, plus a bonus for responses under ~6 s. This reflects your machine, not some cloud baseline.' },
+  { label: 'Reliability', pct: 18, detail: 'Percentage of prompts that returned a non-empty response. A model that crashes or stalls hurts here.' },
+  { label: 'Computer Fit', pct: 16, detail: 'How well the model size matches a typical home rig. Tiny 1–3B models score highest (96); 70B+ models score lowest (38) unless you have 48 GB+ VRAM.' },
+];
+
+const GRADE_ROWS = [
+  { grade: 'S', range: '95–100' },
+  { grade: 'A', range: '88–94' },
+  { grade: 'B+', range: '80–87' },
+  { grade: 'B', range: '72–79' },
+  { grade: 'C', range: '64–71' },
+  { grade: 'D', range: '0–63' },
+];
+
+function HowWeScoreSection() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <section className="how-we-score-section">
+      <button
+        type="button"
+        className="how-we-score-toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open ? 'true' : 'false'}
+      >
+        <span>How We Score</span>
+        <ChevronDown className={open ? 'rotated' : ''} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="how-we-score-body">
+          <p className="how-we-score-intro">
+            All scoring is deterministic rule-based heuristics running locally. No cloud AI judge, no telemetry.
+            Results reflect <em>your</em> hardware.
+          </p>
+
+          <div className="score-weight-list">
+            {SCORE_WEIGHTS.map(({ label, pct, detail }) => (
+              <div key={label} className="score-weight-row">
+                <div className="score-weight-head">
+                  <strong>{label}</strong>
+                  <span className="score-weight-pct">{pct}%</span>
+                </div>
+                <div className="score-weight-bar">
+                  <div className="score-weight-fill" style={{ width: `${pct * 2}%` }} />
+                </div>
+                <p>{detail}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="score-grade-table">
+            <span className="score-grade-label">Grade scale</span>
+            <div className="score-grade-rows">
+              {GRADE_ROWS.map(({ grade, range }) => (
+                <div key={grade} className="score-grade-row">
+                  <strong>{grade}</strong>
+                  <em>{range}</em>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <p className="how-we-score-footer">
+            Scores are <em>relative to your rig</em>. A model that scores 88 on a 12 GB GPU will score differently
+            on a Mac Studio with 64 GB unified memory.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function UiModePicker({
   uiMode,
   onUiModeChange,
@@ -3915,6 +3990,8 @@ function UtilityPanel({
             <ExternalLink aria-hidden="true" />
             Setup Guide
           </button>
+          <HowWeScoreSection />
+
           <section className="danger-zone" aria-label="Data reset">
             <div>
               <span>Danger Zone</span>

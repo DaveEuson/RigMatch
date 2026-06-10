@@ -12574,3 +12574,158 @@ a.whats-next-support:hover {
     white-space: normal;
   }
 }
+
+/* ── How We Score ─────────────────────────────────────────── */
+.how-we-score-section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.how-we-score-toggle {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  box-sizing: border-box;
+  transition: color 0.15s, background 0.15s;
+}
+
+.how-we-score-toggle:hover {
+  color: var(--text-primary);
+  background: var(--surface-active);
+}
+
+.how-we-score-toggle svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+.how-we-score-toggle svg.rotated {
+  transform: rotate(180deg);
+}
+
+.how-we-score-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.how-we-score-intro,
+.how-we-score-footer {
+  margin: 0;
+  font-size: 0.73rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.how-we-score-intro em,
+.how-we-score-footer em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.score-weight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.score-weight-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.score-weight-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.score-weight-head strong {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.score-weight-pct {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.score-weight-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.score-weight-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  max-width: 100%;
+}
+
+.score-weight-row p {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.score-grade-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.score-grade-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.score-grade-rows {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.score-grade-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5px 4px;
+  border-radius: 5px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+}
+
+.score-grade-row strong {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.score-grade-row em {
+  font-size: 0.65rem;
+  font-style: normal;
+  color: var(--text-secondary);
+}
