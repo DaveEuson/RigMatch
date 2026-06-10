@@ -255,7 +255,7 @@ const navItems: NavItem[] = [
 
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
 const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
-const APP_VERSION = '0.1.0';
+const APP_VERSION = '0.1.1';
 const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
 const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
 const HISTORY_STORAGE_KEY = 'rigmatch:history:v1';
@@ -270,9 +270,19 @@ const releaseNotes: Array<{
   notes: string[];
 }> = [
   {
+    version: '0.1.1',
+    label: 'Beta Hardening',
+    date: 'Current build',
+    notes: [
+      'Bug report button, markdown chat rendering, VRAM header, sticky profile tabs, and lineup banner.',
+      'UI polish: single-row tabs, Top Pick hero card, roster X buttons, avatar glow.',
+      'Stability and hardening improvements across the board.',
+    ],
+  },
+  {
     version: '0.1.0',
     label: 'Local Matchmaker Preview',
-    date: 'Current build',
+    date: 'June 2026',
     notes: [
       'Local-only v1 flow focused on this computer and local Ollama.',
       'Dating profile, Top Pick, Speed Dating, scorecards, and editable test questions.',
