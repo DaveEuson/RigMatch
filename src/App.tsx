@@ -1770,6 +1770,7 @@ function App() {
         activity={activity}
         isDesktopRuntime={isDesktopRuntime}
         topPick={topRigPick}
+        onOpenChat={() => setChatOpen(true)}
       />
 
       {chatOpen && (
@@ -7917,26 +7918,77 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+const LEARNING_TIPS: { term: string; tip: string }[] = [
+  { term: 'Match Score', tip: 'A 0–100 rating combining speed, quality, reliability, and hardware fit.' },
+  { term: 'Speed Dating', tip: 'Test multiple models with the same questions side-by-side to find your best fit.' },
+  { term: 'VRAM', tip: "Video RAM on your GPU. Models must fit here to run fast — too big means slow or won't load." },
+  { term: 'Rig Picks', tip: 'Models our algorithm recommends specifically for your GPU and hardware.' },
+  { term: 'Ollama', tip: 'The local server that downloads and runs AI models privately on your machine.' },
+  { term: 'Tokens/s', tip: 'Roughly how many words a model produces per second. Higher = faster responses.' },
+  { term: 'Parameters (3B, 7B…)', tip: 'Billions of values the model learned. Bigger = more capable but slower and heavier.' },
+  { term: 'Quantization (Q4/Q8)', tip: 'Compression that shrinks model size. Q4 = smaller and faster, Q8 = more accurate.' },
+  { term: 'Sobriety', tip: 'Whether a model follows instructions and avoids making things up (hallucinating).' },
+  { term: 'Grade (S/A/B/C)', tip: 'Overall rating: S is exceptional, A is great, B is solid, C needs improvement.' },
+  { term: 'Embedding model', tip: 'Converts text into search vectors — not for chat or generation, so filtered out here.' },
+  { term: 'Contestants', tip: 'Your shortlist of up to 5 models competing in Speed Dating. Add them from the model table.' },
+  { term: 'Context window', tip: 'How much text a model can hold in memory at once. Bigger = longer conversations without forgetting.' },
+];
+
 function Ticker({
   activity,
   isDesktopRuntime,
   topPick,
+  onOpenChat,
 }: {
   activity: string;
   isDesktopRuntime: boolean;
   topPick?: RigPick | null;
+  onOpenChat: () => void;
 }) {
+  const [tipIndex, setTipIndex] = useState(0);
+  const [showActivity, setShowActivity] = useState(false);
+  const activityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!activity) return;
+    setShowActivity(true);
+    if (activityTimerRef.current) clearTimeout(activityTimerRef.current);
+    activityTimerRef.current = setTimeout(() => setShowActivity(false), 5000);
+    return () => { if (activityTimerRef.current) clearTimeout(activityTimerRef.current); };
+  }, [activity]);
+
+  useEffect(() => {
+    if (showActivity) return;
+    const id = setInterval(() => setTipIndex((i) => (i + 1) % LEARNING_TIPS.length), 8000);
+    return () => clearInterval(id);
+  }, [showActivity]);
+
+  const tip = LEARNING_TIPS[tipIndex];
   const pickScore = topPick?.score?.total ?? 0;
   const pickGrade = topPick?.score?.grade;
   const pickName = topPick?.row.displayName ?? null;
 
   return (
     <footer className="ticker">
-      <div>
-        <span>Activity</span>
-        <strong>{activity}</strong>
+      <button type="button" className="ticker-chat-link" onClick={onOpenChat} title="Open RigMatch Chat">
+        <MessageSquare size={13} aria-hidden="true" />
+        <span>Chat</span>
+      </button>
+      <div className="ticker-learn">
+        {showActivity ? (
+          <>
+            <span className="ticker-label ticker-label-activity">Activity</span>
+            <strong className="ticker-activity-text">{activity}</strong>
+          </>
+        ) : (
+          <>
+            <span className="ticker-label ticker-label-learn">Learn</span>
+            <strong className="ticker-term">{tip.term}</strong>
+            <span className="ticker-tip">{tip.tip}</span>
+          </>
+        )}
       </div>
-      <div>
+      <div className="ticker-right">
         <span>{isDesktopRuntime ? 'Desktop bridge online' : 'Preview mode'}</span>
         <strong>
           {pickName

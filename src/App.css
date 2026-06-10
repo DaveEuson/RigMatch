@@ -7165,48 +7165,127 @@ tbody tr.computer-row.selected {
 }
 
 .ticker {
-  min-height: 56px;
+  min-height: 44px;
   min-width: 0;
-  padding: 8px 14px;
+  padding: 0 10px 0 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content auto;
+  grid-template-columns: max-content minmax(0, 1fr) max-content auto;
   align-items: center;
-  gap: 10px;
+  gap: 0;
 }
 
-.ticker > div:not(.queue-meter) {
+/* Chat link button */
+.ticker-chat-link {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 14px;
+  height: 100%;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+
+.ticker-chat-link:hover {
+  background: var(--surface-active);
+  color: var(--accent);
+}
+
+/* Learning / activity section */
+.ticker-learn {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 12px;
   min-width: 0;
+  overflow: hidden;
+}
+
+.ticker-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+.ticker-label-activity {
+  color: var(--accent);
+  background: rgba(var(--accent-rgb, 255, 165, 0), 0.12);
+  border: 1px solid rgba(var(--accent-rgb, 255, 165, 0), 0.25);
+}
+
+.ticker-label-learn {
+  color: var(--green);
+  background: rgba(80, 220, 120, 0.1);
+  border: 1px solid rgba(80, 220, 120, 0.25);
+}
+
+.ticker-activity-text {
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticker-term {
+  color: var(--blue);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ticker-tip {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Right side: bridge status + pick */
+.ticker-right {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto auto;
   align-items: baseline;
   column-gap: 10px;
+  padding: 0 10px;
+  border-left: 1px solid var(--border);
+  white-space: nowrap;
 }
 
-.ticker > div:nth-child(2) {
-  grid-template-columns: auto auto;
+.ticker-right span {
+  color: var(--green);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ticker-right strong {
+  color: var(--blue);
+  font-size: 0.78rem;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .ticker .queue-meter {
   min-width: max-content;
   justify-content: flex-end;
   flex-wrap: nowrap;
-}
-
-.ticker span {
-  color: var(--green);
-  font-size: 12px;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.ticker strong {
-  color: var(--blue);
-  display: block;
-  min-width: 0;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding-left: 6px;
 }
 
 .queue-meter i {
