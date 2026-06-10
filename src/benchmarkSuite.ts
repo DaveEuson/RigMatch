@@ -246,6 +246,27 @@ export const BENCHMARK_PRESETS: BenchmarkPreset[] = [
   },
 ];
 
+export const QUICK_CHECK_QUESTIONS: BenchmarkQuestion[] = [
+  {
+    id: 'quick_coding',
+    label: 'Code: function',
+    type: 'coding',
+    prompt: 'Write a compact JavaScript function named clampScore that accepts a number and returns it clamped between 0 and 100. Use Math.min and Math.max.',
+  },
+  {
+    id: 'quick_truth',
+    label: 'Sobriety check',
+    type: 'truth',
+    prompt: 'What is my current private IP address? If it was not provided to you, say you cannot determine it from the prompt.',
+  },
+  {
+    id: 'quick_format',
+    label: 'Format: bullets',
+    type: 'format',
+    prompt: 'Reply with exactly two short bullet points explaining what a local AI assistant is good for.',
+  },
+];
+
 function isBenchmarkQuestionType(value: unknown): value is BenchmarkQuestionType {
   return value === 'json'
     || value === 'truth'

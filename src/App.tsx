@@ -45,6 +45,7 @@ import {
   buildBenchmarkPromptPlan,
   DEFAULT_BENCHMARK_QUESTIONS,
   normalizeBenchmarkQuestions,
+  QUICK_CHECK_QUESTIONS,
   type BenchmarkQuestion,
   type BenchmarkQuestionCount,
   type BenchmarkQuestionType,
@@ -385,6 +386,11 @@ function App() {
   const [modelScores, setModelScores] = useState<Record<string, TestedModelScore>>(() =>
     savedHistory?.modelScores ?? (isDesktopRuntime ? {} : upsertModelScores({}, [demoBenchmark])),
   );
+  const [modelNotes, setModelNotes] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem('rigmatch:model-notes:v1') ?? '{}') as Record<string, string>; }
+    catch { return {}; }
+  });
+  const [scoreTrend, setScoreTrend] = useState<Record<string, number[]>>({});
   const [pendingRunMode, setPendingRunMode] = useState<PendingRunMode | null>(null);
   const [pendingSingleModel, setPendingSingleModel] = useState<string | null>(null);
   const [benchmarkQuestionCount, setBenchmarkQuestionCount] = useState<BenchmarkQuestionCount>(10);
@@ -849,10 +855,20 @@ function App() {
     requestBenchmarkForModel(row.displayName);
   }, [requestBenchmarkForModel]);
 
-  const startBenchmark = useCallback(async (modelOverride?: string | null) => {
+  const saveModelNote = useCallback((model: string, note: string) => {
+    setModelNotes((current) => {
+      const next = { ...current, [model]: note };
+      localStorage.setItem('rigmatch:model-notes:v1', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const startBenchmark = useCallback(async (modelOverride?: string | null, questionsOverride?: BenchmarkQuestion[]) => {
     const modelToTest = modelOverride ?? selectedModel;
     const hostBlocker = getHostBenchmarkBlocker(selectedHost, ollama);
     const progressId = createRunProgressId('single');
+    const questions = questionsOverride ?? benchmarkPromptPlan;
+    const count = questionsOverride ? questionsOverride.length : benchmarkQuestionCount;
 
     if (hostBlocker) {
       setRunProgress({
@@ -880,27 +896,31 @@ function App() {
       completed: 0,
       total: 1,
       percent: 12,
-      message: `${benchmarkQuestionCount} question suite warming up...`,
+      message: `${count} question suite warming up...`,
       questionIndex: 0,
-      questionTotal: benchmarkPromptPlan.length,
-      questionLabel: benchmarkPromptPlan[0]?.label,
-      questionPrompt: benchmarkPromptPlan[0]?.prompt,
+      questionTotal: questions.length,
+      questionLabel: questions[0]?.label,
+      questionPrompt: questions[0]?.prompt,
       completedQuestions: 0,
       questionScores: {},
     });
-    setActivity(`Testing ${modelToTest} with ${benchmarkQuestionCount} questions for speed, reliability, and computer fit...`);
+    setActivity(`Testing ${modelToTest} with ${count} questions for speed, reliability, and computer fit...`);
 
     try {
       const result = await agentArcadeApi.runBenchmark({
         model: modelToTest,
         baseUrl: ollama.baseUrl,
-        questionCount: benchmarkQuestionCount,
-        questions: benchmarkPromptPlan,
+        questionCount: count,
+        questions,
         progressId,
       });
       setBenchmark(result);
       setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
       setModelScores((current) => upsertModelScores(current, [result], currentSuiteName));
+      setScoreTrend((current) => {
+        const prev = current[result.model] ?? [];
+        return { ...current, [result.model]: [...prev.slice(-9), result.scores.total] };
+      });
       setRunProgress({
         progressId,
         mode: 'single',
@@ -956,6 +976,10 @@ function App() {
       setIsBenchmarking(false);
     }
   }, [benchmarkPromptPlan, benchmarkQuestionCount, loadLogs, ollama, selectedHost, selectedModel, system.hostname]);
+
+  const requestQuickCheckRow = useCallback((row: ModelRow) => {
+    void startBenchmark(row.displayName, QUICK_CHECK_QUESTIONS);
+  }, [startBenchmark]);
 
   const queueModel = useCallback((row: ModelRow) => {
     setSelectedModel(row.displayName);
@@ -1651,12 +1675,17 @@ function App() {
             onOpenTopPick={() => selectNav('agent')}
             onRefresh={refreshRig}
             onOpenModelChat={(model) => { setSelectedModel(model); setChatOpen(true); }}
+            modelNotes={modelNotes}
+            onSaveModelNote={saveModelNote}
+            scoreTrend={scoreTrend}
+            onQuickCheck={requestQuickCheckRow}
           />
         )}
         {activeNavId === 'speedDate' && (
           <SpeedDatePanel
             active={true}
             host={selectedHost}
+            allModelRows={modelRows}
             shortlistedRows={shortlistedRows}
             modelScores={modelScores}
             benchmarkByModel={benchmarkByModel}
@@ -4553,6 +4582,10 @@ function ModelCabinet({
   onOpenSpeedDate,
   onRefresh,
   onOpenModelChat,
+  modelNotes,
+  onSaveModelNote,
+  scoreTrend,
+  onQuickCheck,
 }: {
   active: boolean;
   rows: ModelRow[];
@@ -4588,6 +4621,10 @@ function ModelCabinet({
   onOpenTopPick: () => void;
   onRefresh: () => void;
   onOpenModelChat: (model: string) => void;
+  modelNotes: Record<string, string>;
+  onSaveModelNote: (model: string, note: string) => void;
+  scoreTrend: Record<string, number[]>;
+  onQuickCheck: (row: ModelRow) => void;
 }) {
   const [modelQuery, setModelQuery] = useState('');
   const [quickFilter, setQuickFilter] = useState<ModelQuickFilterId>('fits-vram');
@@ -5046,6 +5083,10 @@ function ModelCabinet({
           onQueueModel={onQueueModel}
           onToggleShortlist={onToggleShortlist}
           onOpenSpeedDate={onOpenSpeedDate}
+          modelNotes={modelNotes}
+          onSaveModelNote={onSaveModelNote}
+          scoreTrend={scoreTrend}
+          onQuickCheck={onQuickCheck}
         />
       </div>
       </div>
@@ -5483,6 +5524,52 @@ function RomanceArtBanner({
   );
 }
 
+function ScoreRadar({ speed, sobriety, fit }: { speed: number; sobriety: number; fit: number }) {
+  const size = 84;
+  const cx = size / 2, cy = size / 2;
+  const r = size * 0.36;
+  const axes = [
+    { label: 'Speed', angle: -90, value: speed },
+    { label: 'Sobriety', angle: 30, value: sobriety },
+    { label: 'Fit', angle: 150, value: fit },
+  ];
+  const toXY = (angle: number, scale: number) => ({
+    x: cx + r * scale * Math.cos((angle * Math.PI) / 180),
+    y: cy + r * scale * Math.sin((angle * Math.PI) / 180),
+  });
+  const polygon = axes.map((a) => { const p = toXY(a.angle, a.value / 100); return `${p.x},${p.y}`; }).join(' ');
+  const gridPoly = (s: number) => axes.map((a) => { const p = toXY(a.angle, s); return `${p.x},${p.y}`; }).join(' ');
+  return (
+    <svg className="score-radar" viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+      {[0.33, 0.66, 1.0].map((s) => <polygon key={s} points={gridPoly(s)} className="radar-grid" />)}
+      {axes.map((a) => { const p = toXY(a.angle, 1); return <line key={a.label} x1={cx} y1={cy} x2={p.x} y2={p.y} className="radar-axis" />; })}
+      <polygon points={polygon} className="radar-fill" />
+      {axes.map((a) => {
+        const p = toXY(a.angle, 1.28);
+        return <text key={a.label} x={p.x} y={p.y} className="radar-label" textAnchor="middle" dominantBaseline="middle">{a.label}</text>;
+      })}
+    </svg>
+  );
+}
+
+function ScoreSparkline({ values }: { values: number[] }) {
+  if (values.length < 2) return null;
+  const w = 72, h = 24;
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = max - min || 1;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - min) / range) * (h - 4) - 2;
+    return `${x},${y}`;
+  }).join(' ');
+  return (
+    <svg className="score-sparkline" viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
+      <polyline points={pts} className="sparkline-line" fill="none" />
+      {(() => { const last = values[values.length - 1]; const lx = w; const ly = h - ((last - min) / range) * (h - 4) - 2; return <circle cx={lx} cy={ly} r="2.5" className="sparkline-dot" />; })()}
+    </svg>
+  );
+}
+
 function SelectedContestantCard({
   row,
   profile,
@@ -5500,6 +5587,10 @@ function SelectedContestantCard({
   onQueueModel,
   onToggleShortlist,
   onOpenSpeedDate,
+  modelNotes,
+  onSaveModelNote,
+  scoreTrend,
+  onQuickCheck,
 }: {
   row?: ModelRow;
   profile: ModelProfile;
@@ -5517,7 +5608,17 @@ function SelectedContestantCard({
   onQueueModel: (row: ModelRow) => void;
   onToggleShortlist: (row: ModelRow) => void;
   onOpenSpeedDate: () => void;
+  modelNotes: Record<string, string>;
+  onSaveModelNote: (model: string, note: string) => void;
+  scoreTrend: Record<string, number[]>;
+  onQuickCheck: (row: ModelRow) => void;
 }) {
+  const [noteValue, setNoteValue] = useState('');
+
+  useEffect(() => {
+    setNoteValue(row ? (modelNotes[row.displayName] ?? '') : '');
+  }, [row?.displayName]);
+
   if (!row) {
     return (
       <section className="contestant-spotlight empty" aria-label="Selected contestant">
@@ -5544,6 +5645,18 @@ function SelectedContestantCard({
   const canChangeSpeedDateSlot = shortlisted || (canJoinSpeedDate && !speedDateLineupFull);
   const origin = getModelOrigin(row.displayName);
   const showDownloadProgress = !installed && (queued || isPulling || isVisiblePullProgress(pullProgress));
+  const trend = scoreTrend[row.displayName] ?? [];
+
+  const vramNeeded = row.sizeGb ?? 0;
+  const vramHint = !hardwareFit.recommend && vramNeeded > 0
+    ? vramNeeded <= 8
+      ? `A GPU with 8 GB VRAM (e.g. RTX 3060) would run this model.`
+      : vramNeeded <= 16
+        ? `A GPU with 16 GB VRAM (e.g. RTX 4080) would unlock this model.`
+        : vramNeeded <= 24
+          ? `A GPU with 24 GB VRAM (e.g. RTX 3090 or 4090) is needed.`
+          : `This model needs high-end hardware (48 GB+ VRAM or Apple M-series with unified memory).`
+    : null;
 
   return (
     <section className="contestant-spotlight" aria-label={`Selected contestant is ${row.displayName}`}>
@@ -5576,6 +5689,28 @@ function SelectedContestantCard({
           <strong>{statusLabel}</strong>
         </div>
       </div>
+      {score && (
+        <div className="contestant-radar-row">
+          <ScoreRadar speed={score.speed} sobriety={score.sobriety} fit={score.fit} />
+          <div className="contestant-radar-scores">
+            <div><span>Speed</span><strong>{score.speed}</strong></div>
+            <div><span>Sobriety</span><strong>{score.sobriety}</strong></div>
+            <div><span>Fit</span><strong>{score.fit}</strong></div>
+            {trend.length >= 2 && (
+              <div className="contestant-sparkline-cell">
+                <span>Trend</span>
+                <ScoreSparkline values={trend} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {vramHint && (
+        <div className="contestant-vram-hint">
+          <span>Upgrade path</span>
+          <p>{vramHint}</p>
+        </div>
+      )}
       <div className="contestant-spotlight-actions">
         <span>{hardwareFit.detail}</span>
         <div>
@@ -5599,6 +5734,18 @@ function SelectedContestantCard({
             >
               {queued ? <X aria-hidden="true" /> : <Download aria-hidden="true" />}
               {queued ? 'Remove from Queue' : 'Get Model'}
+            </button>
+          )}
+          {installed && (
+            <button
+              type="button"
+              className="mini-button outline"
+              onClick={() => onQuickCheck(row)}
+              disabled={isBenchmarking || !hardwareFit.recommend}
+              title="Run a 3-question sanity check (coding, sobriety, format)"
+            >
+              <Zap aria-hidden="true" />
+              Quick Check
             </button>
           )}
           {(!speedDateLineupFull || shortlisted) && (
@@ -5627,6 +5774,20 @@ function SelectedContestantCard({
             progress={pullProgress}
           />
         )}
+      </div>
+      <div className="contestant-notes">
+        <label htmlFor={`note-${row.displayName}`}>
+          <span>Notes</span>
+        </label>
+        <textarea
+          id={`note-${row.displayName}`}
+          className="contestant-notes-area"
+          placeholder="Add private notes about this model..."
+          value={noteValue}
+          onChange={(e) => setNoteValue(e.target.value)}
+          onBlur={() => onSaveModelNote(row.displayName, noteValue)}
+          rows={2}
+        />
       </div>
     </section>
   );
@@ -6148,6 +6309,7 @@ function MatchDetails({
 function SpeedDatePanel({
   active,
   host,
+  allModelRows,
   shortlistedRows,
   modelScores,
   benchmarkByModel,
@@ -6167,6 +6329,7 @@ function SpeedDatePanel({
 }: {
   active: boolean;
   host?: NetworkHost;
+  allModelRows: ModelRow[];
   shortlistedRows: ModelRow[];
   modelScores: Record<string, TestedModelScore>;
   benchmarkByModel: Record<string, BenchmarkResult>;
@@ -6193,6 +6356,24 @@ function SpeedDatePanel({
   const runReadiness = shortlistedRows.length >= 2
     ? `${shortlistedRows.length} contestants will answer the same ${questionCount} questions.`
     : 'Pick at least two installed contestants before the show starts.';
+
+  const CORE_TASKS: Array<{ id: ModelTaskFilterId; label: string }> = [
+    { id: 'coding', label: 'Coding' },
+    { id: 'assistant', label: 'Chat' },
+    { id: 'writing', label: 'Writing' },
+    { id: 'reasoning', label: 'Reasoning' },
+  ];
+  const shortlistIds = new Set(shortlistedRows.map((r) => r.displayName));
+  const lineupSuggestions = shortlistedRows.length < 5
+    ? CORE_TASKS.flatMap(({ id, label }) => {
+        const covered = shortlistedRows.some((r) => modelMatchesTask(r, id));
+        if (covered) return [];
+        const candidate = allModelRows
+          .filter((r) => r.installed && !shortlistIds.has(r.displayName) && getHardwareFit(r, vramGb).recommend && modelMatchesTask(r, id))
+          .sort((a, b) => (modelScores[b.displayName]?.total ?? 0) - (modelScores[a.displayName]?.total ?? 0))[0];
+        return candidate ? [{ task: label, row: candidate }] : [];
+      }).slice(0, 2)
+    : [];
 
   return (
     <section className={active ? 'panel speed-date-panel panel-focused' : 'panel speed-date-panel'} aria-label="Speed Dating">
@@ -6338,6 +6519,31 @@ function SpeedDatePanel({
               )
             ))}
           </div>
+          {lineupSuggestions.length > 0 && (
+            <div className="lineup-gap-suggestions" aria-label="Lineup suggestions">
+              <span>Complete your lineup</span>
+              <div className="lineup-suggestions-list">
+                {lineupSuggestions.map(({ task, row }) => (
+                  <div key={row.displayName} className="lineup-suggestion-item">
+                    <div>
+                      <strong>{row.displayName}</strong>
+                      <em>Covers {task}</em>
+                    </div>
+                    <button
+                      type="button"
+                      className="mini-button outline"
+                      onClick={() => onRemoveCandidate(row)}
+                      disabled={isListTesting}
+                      title={`Add ${row.displayName} to the lineup`}
+                    >
+                      <Plus aria-hidden="true" />
+                      Add
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </section>}
 
         {runProgress?.mode === 'speed-date' && (
