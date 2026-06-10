@@ -11442,7 +11442,7 @@ td {
   background:
     linear-gradient(180deg, rgba(255, 249, 239, 0.07), rgba(255, 249, 239, 0.035)),
     rgba(15, 16, 24, 0.62);
-  overflow: hidden;
+  overflow: clip;
   display: grid;
 }
 
@@ -11574,6 +11574,9 @@ td {
 }
 
 .profile-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   min-height: 54px;
   border-top: 1px solid rgba(255, 249, 239, 0.08);
   border-bottom: 1px solid rgba(255, 249, 239, 0.08);

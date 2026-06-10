@@ -20,13 +20,6 @@ The "Best for Reasoning" and similar category cards filter by model specialties.
 
 ---
 
-## Interface
-
-**Profile header can slide under the sticky bar**
-When scrolling quickly in the selected model panel, the heading sometimes briefly overlaps the sticky section header. No interaction is blocked.
-
----
-
 ## Chat Companion (RigMatch Chat)
 
 **"Visible Models" control has no effect**
