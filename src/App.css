@@ -12659,21 +12659,21 @@ a.whats-next-support:hover {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px 12px 4px;
-  border-top: 1px solid var(--border);
+  gap: 5px;
+  padding: 6px 12px 5px;
+  border-top: 1px solid #2a353c;
 }
 
 .model-task-filters-label {
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  color: var(--text-secondary);
+  color: rgba(200, 210, 220, 0.55);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   padding: 2px 8px;
   border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--surface-raised);
+  border: 1px solid #3a454c;
+  background: #151d22;
   flex-shrink: 0;
   -webkit-user-select: none;
   user-select: none;
@@ -12681,27 +12681,41 @@ a.whats-next-support:hover {
 
 .model-task-filters button {
   all: unset;
+  box-sizing: border-box;
+  display: inline-block;
   cursor: pointer;
   font-size: 0.7rem;
   font-weight: 500;
-  padding: 2px 9px;
+  padding: 2px 10px;
   border-radius: 10px;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  background: transparent;
+  border: 1px solid #3a454c;
+  color: rgba(200, 210, 220, 0.7);
+  background: #151d22;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
   white-space: nowrap;
 }
 
+.model-task-filters button em {
+  font-style: normal;
+  color: var(--blue);
+  margin-left: 3px;
+  font-size: 0.68rem;
+}
+
 .model-task-filters button:hover {
-  background: var(--surface-raised);
-  color: var(--text-primary);
+  border-color: rgba(var(--primary-rgb), 0.5);
+  background: rgba(var(--primary-rgb), 0.08);
+  color: var(--text);
 }
 
 .model-task-filters button.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+  border-color: rgba(var(--primary-rgb), 0.7);
+  background: rgba(var(--primary-rgb), 0.15);
+  color: var(--green);
+}
+
+.model-task-filters button.active em {
+  color: var(--green);
 }
 
 /* Uncensored badge in Good For column */

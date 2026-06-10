@@ -1650,6 +1650,7 @@ function App() {
             onOpenSpeedDate={() => selectNav('speedDate')}
             onOpenTopPick={() => selectNav('agent')}
             onRefresh={refreshRig}
+            onOpenModelChat={(model) => { setSelectedModel(model); setChatOpen(true); }}
           />
         )}
         {activeNavId === 'speedDate' && (
@@ -1770,7 +1771,14 @@ function App() {
         activity={activity}
         isDesktopRuntime={isDesktopRuntime}
         topPick={topRigPick}
-        onOpenChat={() => setChatOpen(true)}
+        onOpenChat={async () => {
+          if (isDesktopRuntime) {
+            const result = await agentArcadeApi.openChatApp();
+            if (!result?.ok) alert('RigMatch Chat not found.\n\nBuild it with: cd rigmatch-chat && npx tauri build');
+          } else {
+            setChatOpen(true);
+          }
+        }}
       />
 
       {chatOpen && (
@@ -4544,6 +4552,7 @@ function ModelCabinet({
   onToggleShortlist,
   onOpenSpeedDate,
   onRefresh,
+  onOpenModelChat,
 }: {
   active: boolean;
   rows: ModelRow[];
@@ -4578,6 +4587,7 @@ function ModelCabinet({
   onOpenSpeedDate: () => void;
   onOpenTopPick: () => void;
   onRefresh: () => void;
+  onOpenModelChat: (model: string) => void;
 }) {
   const [modelQuery, setModelQuery] = useState('');
   const [quickFilter, setQuickFilter] = useState<ModelQuickFilterId>('fits-vram');
@@ -4892,6 +4902,15 @@ function ModelCabinet({
                           >
                             <Gauge aria-hidden="true" />
                             Test
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-action chat-model-button"
+                            onClick={() => onOpenModelChat(row.displayName)}
+                            title={`Chat with ${row.displayName}`}
+                            aria-label={`Chat with ${row.displayName}`}
+                          >
+                            <MessageSquare aria-hidden="true" />
                           </button>
                           <button
                             type="button"
