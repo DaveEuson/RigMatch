@@ -49,11 +49,19 @@
         "zip"
       ]
     },
+    "afterPack": "./scripts/afterPack.cjs",
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [
         "dmg",
         "zip"
+      ]
+    },
+    "dmg": {
+      "contents": [
+        { "x": 180, "y": 240, "type": "file" },
+        { "x": 480, "y": 240, "type": "link", "path": "/Applications" },
+        { "x": 180, "y": 430, "type": "file", "name": "RigMatch Chat.app" }
       ]
     },
     "linux": {

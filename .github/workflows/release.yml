@@ -57,16 +57,28 @@ jobs:
         working-directory: rigmatch-chat
 
       - name: Build RigMatch Chat companion
-        run: npx tauri build --no-bundle
+        run: npx tauri build
         working-directory: rigmatch-chat
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          TAURI_SIGNING_PRIVATE_KEY: ''
 
-      - name: Copy companion binary
+      - name: Copy companion binary (button launch fallback)
         shell: bash
         run: |
           mkdir -p companions
           cp rigmatch-chat/src-tauri/target/release/${{ matrix.companion }} companions/
+
+      - name: Collect Chat standalone installer
+        shell: bash
+        run: |
+          mkdir -p release
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            cp rigmatch-chat/src-tauri/target/release/bundle/nsis/*-setup.exe release/ 2>/dev/null || true
+          elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            cp rigmatch-chat/src-tauri/target/release/bundle/appimage/*.AppImage release/ 2>/dev/null || true
+          fi
+          # Mac: handled by afterPack hook — Chat.app is bundled into the DMG
 
       - name: Build RigMatch.AI
         run: npm run build && npx electron-builder --${{ matrix.platform }} --publish never

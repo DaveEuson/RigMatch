@@ -237,22 +237,28 @@ function registerHandlers() {
     } catch { /* process check unavailable — proceed */ }
 
     const candidates = isWin ? [
+      // Packaged: extraFiles land next to the .exe in the install dir
       path.join(execDir, 'companions', 'rigmatch-chat.exe'),
+      // Dev
       path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'release', 'rigmatch-chat.exe'),
       path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'debug', 'rigmatch-chat.exe'),
       path.join(process.env.LOCALAPPDATA || '', 'Programs', 'RigMatch Chat', 'RigMatch Chat.exe'),
     ] : isMac ? [
-      // Packaged: companion sits next to the .app bundle
-      path.join(execDir, '..', '..', '..', 'companions', 'rigmatch-chat'),
-      path.join(execDir, 'companions', 'rigmatch-chat'),
-      // Dev: Tauri build in repo
+      // Installed standalone: user dragged Chat.app from DMG to Applications
+      '/Applications/RigMatch Chat.app/Contents/MacOS/rigmatch-chat',
+      path.join(os.homedir(), 'Applications', 'RigMatch Chat.app', 'Contents', 'MacOS', 'rigmatch-chat'),
+      // Packaged fallback: extraFiles land at Contents/companions/ inside the .app bundle
+      path.join(execDir, '..', 'companions', 'rigmatch-chat'),
+      // Dev
       path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'release', 'rigmatch-chat'),
       path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'debug', 'rigmatch-chat'),
-      path.join(os.homedir(), 'Applications', 'RigMatch Chat.app', 'Contents', 'MacOS', 'rigmatch-chat'),
-      '/Applications/RigMatch Chat.app/Contents/MacOS/rigmatch-chat',
     ] : [
-      // Linux
+      // Linux: installed AppImage or standalone binary
+      path.join(os.homedir(), '.local', 'bin', 'rigmatch-chat'),
+      path.join(os.homedir(), 'Applications', 'rigmatch-chat.AppImage'),
+      // Packaged fallback: extraFiles land next to the binary
       path.join(execDir, 'companions', 'rigmatch-chat'),
+      // Dev
       path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'release', 'rigmatch-chat'),
     ];
 
