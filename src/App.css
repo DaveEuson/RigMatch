@@ -12586,13 +12586,18 @@ a.whats-next-support:hover {
 }
 
 .model-task-filters-label {
-  font-size: 0.68rem;
-  font-weight: 600;
+  font-size: 0.65rem;
+  font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-right: 2px;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
   flex-shrink: 0;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .model-task-filters button {
@@ -12648,13 +12653,18 @@ a.whats-next-support:hover {
 }
 
 .suite-preset-label {
-  font-size: 0.68rem;
-  font-weight: 600;
+  font-size: 0.65rem;
+  font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-right: 2px;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
   flex-shrink: 0;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .suite-editor-presets button {
@@ -12687,11 +12697,38 @@ a.whats-next-support:hover {
 }
 
 .run-focus-label {
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  -webkit-user-select: none;
+  user-select: none;
+  align-self: flex-start;
+}
+
+.run-download-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: rgba(238, 0, 85, 0.1);
+  border: 1px solid rgba(238, 0, 85, 0.3);
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.run-download-warning svg {
+  flex-shrink: 0;
+  color: #ee0055;
+  margin-top: 1px;
 }
 
 .run-focus-chips {

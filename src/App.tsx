@@ -1191,11 +1191,6 @@ function App() {
         return next;
       }
 
-      if (!row.installed) {
-        setActivity(`${row.displayName} needs to be installed before it can join Speed Dating.`);
-        return current;
-      }
-
       if (!hardwareFit.recommend) {
         setActivity(`${row.displayName} is ${hardwareFit.label.toLowerCase()} for this rig, so it is staying out of the Speed Dating lineup.`);
         return current;
@@ -1816,6 +1811,7 @@ function App() {
           mode={pendingRunMode}
           selectedModel={pendingSingleModel ?? selectedModel}
           shortlistedCount={shortlistedRows.length}
+          uninstalledContestantCount={shortlistedRows.filter((r) => !r.installed).length}
           questionCount={benchmarkQuestionCount}
           benchmarkQuestions={benchmarkQuestions}
           system={system}
@@ -2968,6 +2964,7 @@ function RunWarningModal({
   mode,
   selectedModel,
   shortlistedCount,
+  uninstalledContestantCount,
   questionCount,
   benchmarkQuestions,
   system,
@@ -2980,6 +2977,7 @@ function RunWarningModal({
   mode: PendingRunMode;
   selectedModel: string;
   shortlistedCount: number;
+  uninstalledContestantCount: number;
   questionCount: BenchmarkQuestionCount;
   benchmarkQuestions: BenchmarkQuestion[];
   system: SystemProfile;
@@ -3119,12 +3117,28 @@ function RunWarningModal({
             </div>
           </div>
         </div>
+        {uninstalledContestantCount > 0 && mode === 'speed-date' && (
+          <div className="run-download-warning">
+            <AlertTriangle size={14} aria-hidden="true" />
+            <span>
+              {uninstalledContestantCount === 1
+                ? "1 contestant in your lineup isn’t downloaded yet."
+                : `${uninstalledContestantCount} contestants in your lineup aren’t downloaded yet.`}
+              {' '}Download them from the Contestants panel before starting.
+            </span>
+          </div>
+        )}
         <div className="modal-actions">
           <button type="button" className="mini-button outline" onClick={onCancel}>
             <X aria-hidden="true" />
             Cancel
           </button>
-          <button type="button" className="primary-button compact" onClick={onConfirm}>
+          <button
+            type="button"
+            className="primary-button compact"
+            onClick={onConfirm}
+            disabled={uninstalledContestantCount > 0 && mode === 'speed-date'}
+          >
             <Zap aria-hidden="true" />
             {mode === 'single' ? 'Start Test' : 'Start Speed Dating'}
           </button>
@@ -4779,32 +4793,30 @@ function ModelCabinet({
               const hardwareFit = getHardwareFit(row, vramGb);
               const platformFit = getPlatformFit(row.displayName, platform);
               const speedDateLineupFullForRow = shortlistedCount >= 5;
-              const canChangeSpeedDateSlot = installed && hardwareFit.recommend && (shortlisted || !speedDateLineupFullForRow);
-              const speedDateSlotLabel = !installed
-                ? 'Download First'
-                : hardwareFit.recommend
-                  ? shortlisted
-                    ? 'Selected'
-                    : speedDateLineupFullForRow
-                      ? 'Lineup Full'
-                      : 'Add to Speed Dating'
-                  : 'Too Big';
-              const speedDateSlotTitle = !installed
-                ? 'Download this model before adding it to Speed Dating'
+              const canChangeSpeedDateSlot = hardwareFit.recommend && (shortlisted || !speedDateLineupFullForRow);
+              const speedDateSlotLabel = shortlisted
+                ? 'Selected'
                 : !hardwareFit.recommend
-                  ? hardwareFit.detail
-                  : shortlisted
-                    ? `Remove ${row.displayName} from Speed Dating`
-                    : speedDateLineupFullForRow
-                      ? 'Speed Dating lineup is full. Remove one contestant from the lineup first.'
-                      : `Add ${row.displayName} to Speed Dating`;
-              const speedDateSlotAriaLabel = !installed
-                ? `Download ${row.displayName} before adding it to Speed Dating`
+                  ? 'Too Big'
+                  : speedDateLineupFullForRow
+                    ? 'Lineup Full'
+                    : 'Add to Speed Dating';
+              const speedDateSlotTitle = !hardwareFit.recommend
+                ? hardwareFit.detail
                 : shortlisted
-                  ? `Remove ${row.displayName} from Speed Dating`
-                  : hardwareFit.recommend
-                    ? `Add ${row.displayName} to Speed Dating`
-                    : `${row.displayName} is too large for Speed Dating on this computer`;
+                  ? installed
+                    ? `Remove ${row.displayName} from Speed Dating`
+                    : `In lineup — download ${row.displayName} before running the test. Click to remove.`
+                  : speedDateLineupFullForRow
+                    ? 'Speed Dating lineup is full. Remove one contestant from the lineup first.'
+                    : installed
+                      ? `Add ${row.displayName} to Speed Dating`
+                      : `Add ${row.displayName} to lineup — download it before starting the test`;
+              const speedDateSlotAriaLabel = shortlisted
+                ? `Remove ${row.displayName} from Speed Dating`
+                : hardwareFit.recommend
+                  ? `Add ${row.displayName} to Speed Dating`
+                  : `${row.displayName} is too large for Speed Dating on this computer`;
               const rowClassName = [
                 selected ? 'selected' : '',
                 hardwareFit.tone === 'out-of-league' ? 'out-of-league' : '',
