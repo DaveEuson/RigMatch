@@ -4527,6 +4527,7 @@ function ModelCabinet({
 }) {
   const [modelQuery, setModelQuery] = useState('');
   const [quickFilter, setQuickFilter] = useState<ModelQuickFilterId>('fits-vram');
+  const [taskFilter, setTaskFilter] = useState<ModelTaskFilterId | null>(null);
   const [sortKey, setSortKey] = useState<ModelSortKey>('status');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   // Column widths: Model, Size, Good For, Origin, Status, Match (Actions fills remainder)
@@ -4600,12 +4601,14 @@ function ModelCabinet({
       const score = getModelScore(row, modelScores);
       const queued = queuedModelIds.has(row.displayName);
       const matchesQuery = !query || getModelSearchText(row, queued, score).includes(query);
-      return matchesQuery && modelMatchesQuickFilter(row, quickFilter, score, vramGb);
+      return matchesQuery
+        && modelMatchesQuickFilter(row, quickFilter, score, vramGb)
+        && (!taskFilter || modelMatchesTask(row, taskFilter));
     });
 
     return sortModelRows(filteredRows, sortKey, sortDirection, queuedModelIds, modelScores);
-  }, [modelScores, query, quickFilter, queuedModelIds, rows, sortDirection, sortKey, vramGb]);
-  const modelCountLabel = query || quickFilter !== 'all' ? `${visibleRows.length}/${rows.length} models` : `${rows.length} models`;
+  }, [modelScores, query, quickFilter, taskFilter, queuedModelIds, rows, sortDirection, sortKey, vramGb]);
+  const modelCountLabel = query || quickFilter !== 'all' || taskFilter ? `${visibleRows.length}/${rows.length} models` : `${rows.length} models`;
   const vramLabel = vramGb > 0 ? `${formatGb(vramGb)} VRAM` : 'detected VRAM';
 
   const changeSort = (nextKey: ModelSortKey) => {
@@ -4673,6 +4676,20 @@ function ModelCabinet({
             >
               <span>{filter.label}</span>
               <em>{filter.count}</em>
+            </button>
+          ))}
+        </div>
+        <div className="model-task-filters" aria-label="Filter by use case">
+          <span className="model-task-filters-label">For:</span>
+          {TASK_FILTER_CHIPS.map((chip) => (
+            <button
+              key={chip.id}
+              type="button"
+              className={taskFilter === chip.id ? 'active' : ''}
+              onClick={() => setTaskFilter(taskFilter === chip.id ? null : chip.id)}
+              aria-pressed={taskFilter === chip.id ? 'true' : 'false'}
+            >
+              {chip.label}
             </button>
           ))}
         </div>
@@ -4780,7 +4797,12 @@ function ModelCabinet({
                       }
                     </div>
                   </td>
-                  <td title={profile.specialties.join(', ')}>{profile.specialties[0]}</td>
+                  <td title={profile.specialties.join(', ')}>
+                    {profile.specialties[0]}
+                    {isUncensoredModel(row.displayName) && (
+                      <span className="uncensored-badge" title="Uncensored / unrestricted model">unrestricted</span>
+                    )}
+                  </td>
                   <td title={`${origin.organization} · ${origin.country}`}>
                     <span className={`origin-pill origin-${origin.family}`}>{origin.organization}</span>
                   </td>
@@ -9285,6 +9307,32 @@ const TASK_CATEGORIES = [
 ] as const;
 
 type TaskCategoryId = typeof TASK_CATEGORIES[number]['id'];
+type ModelTaskFilterId = TaskCategoryId | 'uncensored';
+
+const TASK_FILTER_CHIPS: Array<{ id: ModelTaskFilterId; label: string }> = [
+  { id: 'coding',     label: 'Coding' },
+  { id: 'assistant',  label: 'Chat' },
+  { id: 'writing',    label: 'Writing' },
+  { id: 'reasoning',  label: 'Reasoning' },
+  { id: 'tiny',       label: 'Tiny' },
+  { id: 'uncensored', label: 'Uncensored' },
+];
+
+function isUncensoredModel(name: string): boolean {
+  const lower = (name || '').toLowerCase();
+  return lower.includes('uncensored') || lower.includes('abliterated') ||
+    lower.includes('dolphin') || lower.includes('nous-hermes') ||
+    lower.includes('openhermes') || lower.includes('hermes-3') ||
+    lower.includes('hermes-2');
+}
+
+function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolean {
+  if (task === 'uncensored') return isUncensoredModel(row.displayName);
+  const category = TASK_CATEGORIES.find((c) => c.id === task);
+  if (!category || category.keywords.length === 0) return true;
+  const specialties = getModelProfile(row.displayName).specialties.map((s) => s.toLowerCase());
+  return category.keywords.some((kw) => specialties.some((sp) => sp.includes(kw)));
+}
 
 type TaskPick = {
   id: TaskCategoryId;

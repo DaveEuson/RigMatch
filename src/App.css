@@ -12575,6 +12575,67 @@ a.whats-next-support:hover {
   }
 }
 
+/* ── Task filter chips ────────────────────────────────────── */
+.model-task-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 12px 4px;
+  border-top: 1px solid var(--border);
+}
+
+.model-task-filters-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+
+.model-task-filters button {
+  all: unset;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 2px 9px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: transparent;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+
+.model-task-filters button:hover {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+
+.model-task-filters button.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* Uncensored badge in Good For column */
+.uncensored-badge {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-active);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  vertical-align: middle;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 /* ── How We Score ─────────────────────────────────────────── */
 .how-we-score-section {
   border: 1px solid var(--border);
