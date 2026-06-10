@@ -136,6 +136,23 @@ fn get_system_stats(state: tauri::State<SysInfoState>) -> SystemStats {
 }
 
 #[tauri::command]
+async fn get_ollama_vram(base_url: String) -> Option<f32> {
+    validate_localhost(&base_url).ok()?;
+    let url = format!("{}/api/ps", base_url.trim_end_matches('/'));
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .ok()?;
+    let json: serde_json::Value = client.get(&url).send().await.ok()?.json().await.ok()?;
+    let models = json["models"].as_array()?;
+    let total_bytes: u64 = models.iter()
+        .filter_map(|m| m["size_vram"].as_u64())
+        .sum();
+    if total_bytes == 0 { return None; }
+    Some(total_bytes as f32 / 1_073_741_824.0)
+}
+
+#[tauri::command]
 async fn get_rig_scores() -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(2))
@@ -183,6 +200,7 @@ pub fn run() {
             open_rigmatch_ai,
             get_system_stats,
             get_rig_scores,
+            get_ollama_vram,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Caroline Companion");

@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 import { listModels, streamChat, getVersion, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
 import { loadSettings, saveSettings, type AppSettings } from "./lib/settings";
+
+marked.use({ breaks: true, gfm: true });
+
+function renderMarkdown(content: string): string {
+  return DOMPurify.sanitize(marked.parse(content) as string, { USE_PROFILES: { html: true } });
+}
 import avatarLlama    from "../assets/model-avatar-llama.png";
 import avatarGemma    from "../assets/model-avatar-gemma.png";
 import avatarMistral  from "../assets/model-avatar-mistral.png";
@@ -225,6 +233,7 @@ export default function App() {
   const [chosenModel, setChosenModel] = useState<string | null>(() => loadCachedBridge().chosen);
   const [profileModal, setProfileModal] = useState<Buddy | null>(null);
   const [sysStats, setSysStats] = useState<SystemStats | null>(null);
+  const [vramUsedGb, setVramUsedGb] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const prevTypingRef = useRef<string | null>(null);
@@ -342,17 +351,21 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!settings.showSystemMonitor) { setSysStats(null); return; }
+    if (!settings.showSystemMonitor) { setSysStats(null); setVramUsedGb(null); return; }
     const poll = async () => {
       try {
         const stats = await invoke<SystemStats>("get_system_stats");
         setSysStats(stats);
       } catch { /* ignore */ }
+      try {
+        const gb = await invoke<number | null>("get_ollama_vram", { baseUrl: settings.ollamaUrl });
+        setVramUsedGb(gb ?? null);
+      } catch { /* ignore */ }
     };
     void poll();
     const id = setInterval(() => void poll(), 2000);
     return () => clearInterval(id);
-  }, [settings.showSystemMonitor]);
+  }, [settings.showSystemMonitor, settings.ollamaUrl]);
 
   // ── Persist conversations ────────────────────────────────────────────────
 
@@ -549,6 +562,14 @@ export default function App() {
             RAM <strong>{sysStats.ramUsedGb.toFixed(1)}</strong>
             <em>/ {Math.round(sysStats.ramTotalGb)} GB</em>
           </span>
+          {vramUsedGb !== null && (
+            <>
+              <span className="rm-sys-divider" />
+              <span className="rm-sys-stat" title="VRAM used by loaded Ollama models">
+                VRAM <strong>{vramUsedGb.toFixed(1)} GB</strong>
+              </span>
+            </>
+          )}
         </div>
       )}
 
@@ -678,7 +699,7 @@ export default function App() {
               <div className="rm-chat-header-info">
                 <strong>
                   {activeBuddy && modelRankings.has(activeBuddy) && (
-                    <span className="rm-rank-medal">{RANK_MEDALS[modelRankings.get(activeBuddy)!]}</span>
+                    <span className="rm-rank-medal" title={`Ranked #${modelRankings.get(activeBuddy)} by RigMatch score`}>{RANK_MEDALS[modelRankings.get(activeBuddy)!]}</span>
                   )}
                   {activeBuddyObj.displayName}
                 </strong>
@@ -714,7 +735,14 @@ export default function App() {
                     <div className="rm-message-sender">
                       {msg.role === "user" ? settings.userName : activeBuddyObj.displayName}
                     </div>
-                    <div className="rm-message-text">{msg.content}</div>
+                    {msg.role === "assistant" ? (
+                      <div
+                        className="rm-message-text rm-message-md"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+                      />
+                    ) : (
+                      <div className="rm-message-text">{msg.content}</div>
+                    )}
                     <div className="rm-message-time">
                       {new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </div>
@@ -800,8 +828,8 @@ export default function App() {
               <div className="rm-profile-body">
                 <BuddyAvatar family={pb.avatarFamily} size="lg" />
                 <div className="rm-profile-name-row">
-                  {isChosen && <span className="rm-chosen-badge">⭐</span>}
-                  {rank !== undefined && <span className="rm-rank-medal">{RANK_MEDALS[rank]}</span>}
+                  {isChosen && <span className="rm-chosen-badge" title="Your Top Pick from RigMatch.AI">⭐</span>}
+                  {rank !== undefined && <span className="rm-rank-medal" title={`Ranked #${rank} by RigMatch score`}>{RANK_MEDALS[rank]}</span>}
                   <strong className="rm-profile-name">{pb.displayName}</strong>
                 </div>
                 <div className="rm-profile-model-id">{pb.modelName}</div>
@@ -817,7 +845,7 @@ export default function App() {
                         <strong>{speedToToks(score.speed)}</strong>
                       </div>
                       <div className="rm-profile-stat">
-                        <span>Quality</span>
+                        <span>Sobriety</span>
                         <strong>{score.sobriety}</strong>
                       </div>
                       <div className="rm-profile-stat">
@@ -949,7 +977,7 @@ export default function App() {
                   className="rm-settings-textarea"
                   value={draftSettings.systemPrompt}
                   onChange={(e) => setDraftSettings((s) => ({ ...s, systemPrompt: e.target.value }))}
-                  placeholder="e.g. You are a helpful assistant. The user is a maker and developer working on Electron and Tauri apps…"
+                  placeholder="e.g. You are a helpful assistant. Keep responses concise and practical…"
                   rows={4}
                 />
               </label>
@@ -972,7 +1000,7 @@ export default function App() {
                         >
                           <span className="rm-model-toggle" aria-hidden="true">{isVisible ? "✓" : ""}</span>
                           <span className="rm-hide-model-name">
-                            {rank !== undefined && <span className="rm-rank-medal">{RANK_MEDALS[rank]}</span>}
+                            {rank !== undefined && <span className="rm-rank-medal" title={`Ranked #${rank} by RigMatch score`}>{RANK_MEDALS[rank]}</span>}
                             {b.displayName}
                           </span>
                           <em className="rm-hide-model-size">{b.sizeGb > 0 ? `${b.sizeGb} GB` : ""}</em>

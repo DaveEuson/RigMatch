@@ -6,6 +6,7 @@ import {
   BookOpen,
   Bot,
   Boxes,
+  Bug,
   Check,
   CheckCircle,
   ChevronDown,
@@ -247,7 +248,7 @@ const navItems: NavItem[] = [
   { id: 'speedDate', label: 'Comparison', description: 'Ranked results & details', icon: Trophy },
   { id: 'history', label: 'Scorecards', description: 'Test rankings', icon: History },
   { id: 'agent', label: 'Top Pick', description: 'Best match profile', icon: Bot },
-  { id: 'lan', label: 'Your Rig', description: 'Hardware and Ollama', icon: Network },
+  { id: 'lan', label: 'Your Rig', description: 'Hardware & Ollama', icon: Network },
   { id: 'settings', label: 'Settings', description: 'Theme and app prefs', icon: Settings },
   { id: 'about', label: 'About', description: 'Version and support', icon: Info },
 ];
@@ -255,6 +256,7 @@ const navItems: NavItem[] = [
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
 const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
 const APP_VERSION = '0.1.0';
+const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
 const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
 const HISTORY_STORAGE_KEY = 'rigmatch:history:v1';
 const THEME_STORAGE_KEY = 'agentArcadeTheme';
@@ -409,6 +411,7 @@ function App() {
   const [themeId, setThemeId] = useState<ThemeId>(() => getSavedThemeId());
   const [uiMode, setUiMode] = useState<UiMode>(() => getSavedUiMode());
   const [chatOpen, setChatOpen] = useState(false);
+  const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [chosenModel, setChosenModel] = useState<string | null>(null);
   const [setupGuideOpen, setSetupGuideOpen] = useState(false);
   const [clearDataOpen, setClearDataOpen] = useState(false);
@@ -1620,6 +1623,7 @@ function App() {
         topPick={topRigPick}
         onSelect={selectNav}
         onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
+        onOpenSupport={() => setSupportModalOpen(true)}
       />
 
       <main className="stage-content">
@@ -1838,7 +1842,9 @@ function App() {
         <TestSuiteEditorDock
           questions={benchmarkQuestions}
           isCustom={currentSuiteName === 'Custom Suite'}
+          questionCount={benchmarkQuestionCount}
           onChange={setBenchmarkQuestions}
+          onQuestionCountChange={setBenchmarkQuestionCount}
           onReset={() => setBenchmarkQuestions([...DEFAULT_BENCHMARK_QUESTIONS])}
           onClose={() => setSuiteEditorOpen(false)}
         />
@@ -1884,6 +1890,9 @@ function App() {
           onCancel={() => setClearDataOpen(false)}
           onConfirm={confirmClearData}
         />
+      )}
+      {supportModalOpen && (
+        <SupportModal onClose={() => setSupportModalOpen(false)} />
       )}
       {pendingScoreClear && (
         <ClearScoresModal
@@ -2028,6 +2037,7 @@ function SideMenu({
   topPick,
   onSelect,
   onOpenTutorial,
+  onOpenSupport,
 }: {
   items: NavItem[];
   activeId: NavId;
@@ -2039,6 +2049,7 @@ function SideMenu({
   topPick: RigPick | null;
   onSelect: (id: NavId) => void;
   onOpenTutorial: () => void;
+  onOpenSupport: () => void;
 }) {
   const navMeta: Record<NavId, string> = {
     lan: ollamaReady ? 'Ready' : 'Setup',
@@ -2085,7 +2096,7 @@ function SideMenu({
         type="button"
         className="side-menu-donate"
         title="Support RigMatch development"
-        onClick={() => window.open('https://buymeacoffee.com/daveeuson', '_blank', 'noopener,noreferrer')}
+        onClick={onOpenSupport}
       >
         ☕ Support RigMatch
       </button>
@@ -3251,6 +3262,99 @@ function DeleteModelModal({
   );
 }
 
+const SUPPORT_HARDWARE_LINKS = [
+  {
+    label: 'RTX 4070 Ti GPU',
+    desc: '12 GB VRAM — runs 13B models with headroom. Best price-to-VRAM upgrade for most rigs.',
+    query: 'RTX 4070 Ti graphics card 12GB',
+  },
+  {
+    label: 'RTX 4090 GPU',
+    desc: '24 GB VRAM — the local AI endgame. 70B models in reach. Serious kit for serious models.',
+    query: 'RTX 4090 graphics card 24GB',
+  },
+  {
+    label: 'AI-Ready Gaming Desktop',
+    desc: 'Pre-built Windows PC with high-VRAM GPU — plug in Ollama and go, no assembly required.',
+    query: 'gaming desktop RTX 4070 Ti AI machine learning',
+  },
+  {
+    label: 'Apple Mac Studio M4 Max',
+    desc: '36–128 GB unified memory. Runs 30B models silently. Every GB counts for local AI.',
+    query: 'Apple Mac Studio M4 Max',
+  },
+] as const;
+
+function SupportModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <section
+        className="support-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="support-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button type="button" className="modal-close-btn" onClick={onClose} aria-label="Close">
+          <X aria-hidden="true" />
+        </button>
+        <div className="support-modal-header">
+          <span>☕</span>
+          <div>
+            <h2 id="support-modal-title">Support RigMatch</h2>
+            <p>Free to use, forever. If it saved you time hunting the right model, a coffee keeps the lights on.</p>
+          </div>
+        </div>
+
+        <a
+          className="support-coffee-btn"
+          href={BUY_ME_A_COFFEE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Coffee aria-hidden="true" />
+          Buy Me a Coffee
+          <ExternalLink aria-hidden="true" className="support-ext-icon" />
+        </a>
+
+        <div className="support-divider">
+          <span>or level up your rig</span>
+        </div>
+
+        <p className="support-hardware-intro">
+          More VRAM = more models. These affiliate links cost you nothing extra and send a small cut back to RigMatch development.
+        </p>
+
+        <div className="support-hardware-grid">
+          {SUPPORT_HARDWARE_LINKS.map((link) => (
+            <a
+              key={link.label}
+              href={`https://www.amazon.com/s?k=${encodeURIComponent(link.query)}&tag=${AMAZON_AFFILIATE_TAG}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="support-hardware-card"
+              aria-label={`Search for ${link.label} on Amazon`}
+            >
+              <div className="support-hardware-card-inner">
+                <strong>{link.label}</strong>
+                <p>{link.desc}</p>
+              </div>
+              <span className="support-amazon-badge">
+                <ShoppingCart aria-hidden="true" />
+                Amazon
+              </span>
+            </a>
+          ))}
+        </div>
+
+        <p className="support-disclosure">
+          Affiliate links — purchases support RigMatch.AI at no extra cost to you.
+        </p>
+      </section>
+    </div>
+  );
+}
+
 function ClearDataModal({
   onCancel,
   onConfirm,
@@ -3951,7 +4055,7 @@ function UtilityPanel({
                     <b>{isTied ? '=' : index + 1}</b>
                     <div className="score-row-name">
                       <span>{score.model}</span>
-                      <em>{score.speed} spd · {score.sobriety} quality · {score.fit} fit · {getResponseEstimate(score.speed)}</em>
+                      <em>{score.speed} spd · {score.sobriety} sobriety · {score.fit} fit · {getResponseEstimate(score.speed)}</em>
                     </div>
                     <strong className={`score-row-grade ${getScoreTone(score.total)}`}>
                       {isTied && <span className="tie-badge">TIED</span>}
@@ -4074,7 +4178,7 @@ function UtilityPanel({
           <div className="utility-stat">
             <span>Scope</span>
             <strong>Local computer only</strong>
-            <em>All AI runs on this machine. No data leaves your computer.</em>
+            <em>Local models run entirely on this machine — no data leaves. Models tagged ☁ Cloud run on remote servers.</em>
           </div>
 
           <button type="button" className="primary-button compact" onClick={onOpenSetupGuide}>
@@ -4166,6 +4270,32 @@ function UtilityPanel({
               Support RigMatch — Buy Me a Coffee
               <ExternalLink aria-hidden="true" />
             </a>
+          </div>
+          <div className="utility-stat bug-report-stat">
+            <span>Beta feedback</span>
+            <strong>Found something broken?</strong>
+            <em>One click opens a prefilled GitHub issue with your hardware specs attached. No telemetry — this is the only way I hear about bugs.</em>
+            <div className="bug-report-actions">
+              <a
+                className="primary-button compact"
+                href={buildBugReportUrl(system, ollama, logPath)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Bug aria-hidden="true" />
+                Report a Bug
+                <ExternalLink aria-hidden="true" />
+              </a>
+              <button
+                type="button"
+                className="mini-button outline"
+                onClick={() => void navigator.clipboard.writeText(buildDiagnosticsText(system, ollama, logPath))}
+                title="Copy hardware + version info to clipboard"
+              >
+                <Copy aria-hidden="true" />
+                Copy Diagnostics
+              </button>
+            </div>
           </div>
           <div className="utility-stat">
             <span>Current target</span>
@@ -4580,6 +4710,7 @@ function ModelCabinet({
   onCancelQueue,
   onToggleShortlist,
   onOpenSpeedDate,
+  onOpenTopPick,
   onRefresh,
   onOpenModelChat,
   modelNotes,
@@ -4807,6 +4938,11 @@ function ModelCabinet({
           </div>
         )}
       </div>
+      {shortlistedCount >= 5 && (
+        <div className="lineup-full-banner" role="status">
+          <span>⚡ Speed Dating lineup is full — 5/5 contestants selected. Remove one to swap in another.</span>
+        </div>
+      )}
       <div className="table-wrap model-table">
         <table>
           <colgroup>
@@ -4847,7 +4983,7 @@ function ModelCabinet({
                 : !hardwareFit.recommend
                   ? 'Too Big'
                   : speedDateLineupFullForRow
-                    ? 'Lineup Full'
+                    ? '+ Speed Date'
                     : 'Add to Speed Dating';
               const speedDateSlotTitle = !hardwareFit.recommend
                 ? hardwareFit.detail
@@ -4871,7 +5007,12 @@ function ModelCabinet({
               ].filter(Boolean).join(' ');
               const showDownloadProgress = !installed && (queued || isPullingRow || isVisiblePullProgress(rowPullProgress));
               return (
-                <tr key={row.id} className={rowClassName}>
+                <tr
+                  key={row.id}
+                  className={rowClassName}
+                  onDoubleClick={() => { onSelect(row.displayName); onOpenTopPick(); }}
+                  title="Double-click to open profile"
+                >
                   <td>
                     <button type="button" className="model-name-button" onClick={() => onSelect(row.displayName)}>
                       <AvatarBust model={row.displayName} size="tiny" />
@@ -6577,7 +6718,7 @@ function SpeedDatePanel({
                 <li key={result.model} className={result.model === listTestResult.winner ? 'winner' : ''}>
                   <b>{index + 1}</b>
                   <span>{result.model}</span>
-                  <em>{result.speed} spd · {result.sobriety} quality · {getResponseEstimate(result.speed)}</em>
+                  <em>{result.speed} spd · {result.sobriety} sobriety · {getResponseEstimate(result.speed)}</em>
                   <strong>{result.total}</strong>
                 </li>
               ))}
@@ -7028,13 +7169,17 @@ const BENCHMARK_TYPE_LABELS: Record<BenchmarkQuestionType, string> = {
 function TestSuiteEditorDock({
   questions,
   isCustom,
+  questionCount,
   onChange,
+  onQuestionCountChange,
   onReset,
   onClose,
 }: {
   questions: BenchmarkQuestion[];
   isCustom: boolean;
+  questionCount: BenchmarkQuestionCount;
   onChange: (questions: BenchmarkQuestion[]) => void;
+  onQuestionCountChange: (count: BenchmarkQuestionCount) => void;
   onReset: () => void;
   onClose: () => void;
 }) {
@@ -7110,6 +7255,20 @@ function TestSuiteEditorDock({
           Reset Defaults
         </button>
         <span>{questions.length} base questions</span>
+        <div className="suite-count-picker" aria-label="Questions per run">
+          <span>Run count:</span>
+          {BENCHMARK_QUESTION_LEVELS.map((level) => (
+            <button
+              key={level}
+              type="button"
+              className={questionCount === level ? 'active' : ''}
+              onClick={() => onQuestionCountChange(level)}
+              title={`Run ${level} questions per model`}
+            >
+              {level}
+            </button>
+          ))}
+        </div>
         <span className="suite-autosave-label">
           <CheckCircle aria-hidden="true" />
           Changes autosave
@@ -7351,7 +7510,6 @@ function AgentReveal({
         host={host}
         system={system}
         onTalk={onTalk}
-        onChoose={onChoose}
         onEditQuestions={onEditQuestions}
         onTalkWithPrompt={onTalkWithPrompt}
       />
@@ -7446,7 +7604,6 @@ function AgentDatingProfile({
   host,
   system,
   onTalk,
-  onChoose,
   onEditQuestions,
   onTalkWithPrompt,
 }: {
@@ -7458,14 +7615,12 @@ function AgentDatingProfile({
   host?: NetworkHost;
   system: SystemProfile;
   onTalk: () => void;
-  onChoose: () => void;
   onEditQuestions: () => void;
   onTalkWithPrompt: (prompt: string) => void;
 }) {
   const sections = getAgentDatingProfileSections(model, profile, score, row, host, system);
   const details = getAgentDatingProfileDetails(model, profile, score, row, host, system);
   const [activeProfileTab, setActiveProfileTab] = useState<'about' | 'scores' | 'questions' | 'try-it'>('about');
-  const statusLabel = row?.installed ? 'Online now' : row?.live ? 'Available' : 'Catalog only';
   const locationLabel = host?.hostname ?? system.hostname;
   const matchLine = score
     ? `${score.total} Match score · ${score.grade} chemistry · ${getResponseEstimate(score.speed)}`
@@ -7490,11 +7645,7 @@ function AgentDatingProfile({
 
   return (
     <section className="dating-profile-card" aria-label={`${profile.agentName} dating profile`}>
-      <div className="dating-profile-head">
-        <div className="profile-photo-card">
-          <AvatarBust model={model} size="large" />
-          <span>{statusLabel}</span>
-        </div>
+      <div className="dating-profile-head dating-profile-head-slim">
         <div className="dating-profile-intro">
           <span>AI dating profile</span>
           <strong>{profile.agentName}</strong>
@@ -7504,10 +7655,6 @@ function AgentDatingProfile({
             <button type="button" className="primary-button compact" onClick={onTalk}>
               <MessageSquare aria-hidden="true" />
               Talk to Model
-            </button>
-            <button type="button" className="choose-me-button compact" onClick={onChoose} title="Set as your active model">
-              <Heart aria-hidden="true" />
-              Use This Model
             </button>
           </div>
         </div>
@@ -8764,7 +8911,7 @@ function buildShareableScorecard(
 
 function getRankedModelScores(modelScores: Record<string, TestedModelScore>) {
   return Object.values(modelScores)
-    .filter(isTestedModelScore)
+    .filter((s) => isTestedModelScore(s) && !isCloudModel(s.model))
     .sort((left, right) => {
       if (right.total !== left.total) return right.total - left.total;
       // Tiebreakers: trust (sobriety) → rig fit → speed → alphabetical
@@ -8776,12 +8923,23 @@ function getRankedModelScores(modelScores: Record<string, TestedModelScore>) {
 }
 
 function getModelScore(row: ModelRow, modelScores: Record<string, TestedModelScore>) {
-  return (
+  const direct =
     modelScores[row.displayName] ||
     modelScores[row.installedModel?.model ?? ''] ||
     modelScores[row.installedModel?.name ?? ''] ||
-    modelScores[`${row.name}:${row.tag}`]
-  );
+    modelScores[`${row.name}:${row.tag}`];
+  if (direct) return direct;
+  // Fuzzy fallback: Ollama sometimes returns a more specific tag than the catalog name
+  // e.g. stored as "qwen2.5:7b" but run returned "qwen2.5:7b-instruct"
+  const displayNorm = normalizeModelKey(row.displayName);
+  return Object.values(modelScores).find((s) => {
+    const sNorm = normalizeModelKey(s.model);
+    return sNorm === displayNorm ||
+      sNorm.startsWith(displayNorm + ':') ||
+      displayNorm.startsWith(sNorm + ':') ||
+      sNorm.startsWith(displayNorm + '-') ||
+      displayNorm.startsWith(sNorm + '-');
+  });
 }
 
 function getBenchmarkForModel(
@@ -9008,8 +9166,15 @@ function getRigPick(
 
   const scoredPick = fittingRows
     .map((row) => ({ row, score: getModelScore(row, scores) }))
-    .filter((item): item is { row: ModelRow; score: TestedModelScore } => Boolean(item.score))
-    .sort((left, right) => right.score.total - left.score.total || right.score.speed - left.score.speed)[0];
+    .filter((item): item is { row: ModelRow; score: TestedModelScore } =>
+      Boolean(item.score) && !isCloudModel(item.row.displayName))
+    .sort((left, right) => {
+      if (right.score.total !== left.score.total) return right.score.total - left.score.total;
+      if (right.score.sobriety !== left.score.sobriety) return right.score.sobriety - left.score.sobriety;
+      if (right.score.fit !== left.score.fit) return right.score.fit - left.score.fit;
+      if (right.score.speed !== left.score.speed) return right.score.speed - left.score.speed;
+      return left.row.displayName.localeCompare(right.row.displayName);
+    })[0];
 
   if (scoredPick) {
     return {
@@ -9694,7 +9859,7 @@ const TASK_CATEGORIES = [
   { id: 'coding',    label: 'Best for coding',    keywords: ['coding', 'math', 'json/tools', 'instructions'] },
   { id: 'writing',   label: 'Best for writing',   keywords: ['writing', 'summaries', 'brainstorming'] },
   { id: 'assistant', label: 'Best assistant',     keywords: ['assistant', 'daily chat', 'general help', 'chat', 'utility'] },
-  { id: 'reasoning', label: 'Best for reasoning', keywords: ['reasoning', 'hard prompts', 'analysis'] },
+  { id: 'reasoning', label: 'Best for reasoning', keywords: ['reasoning', 'hard prompts', 'logic'] },
   { id: 'tiny',      label: 'Best tiny model',    keywords: ['low memory', 'small rigs', 'quick chat'] },
   { id: 'speed',     label: 'Fastest on this rig', keywords: [] },
 ] as const;
@@ -9735,7 +9900,7 @@ type TaskPick = {
 };
 
 function getTaskTopPicks(modelScores: Record<string, TestedModelScore>): TaskPick[] {
-  const scored = Object.values(modelScores);
+  const scored = Object.values(modelScores).filter((s) => !isCloudModel(s.model));
   if (scored.length === 0) return [];
 
   const picks: TaskPick[] = [];
@@ -9901,7 +10066,7 @@ function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb'>, vramGb: number
   if (sizeGb <= comfortLimit) {
     return {
       tone: 'sweet-spot',
-      label: `Sweet spot · ${formatGb(sizeGb)}`,
+      label: 'Sweet spot',
       detail: `${formatGb(sizeGb)} leaves comfortable headroom on ${vramLabel}.`,
       recommend: true,
     };
@@ -10086,6 +10251,45 @@ function formatBytes(value?: number | null) {
 
   const precision = normalized >= 100 || unitIndex === 0 ? 0 : normalized >= 10 ? 1 : 2;
   return `${normalized.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function buildDiagnosticsText(system: SystemProfile, ollama: OllamaStatus, logPath: string): string {
+  const lines = [
+    `RigMatch.AI v${APP_VERSION}`,
+    `OS: ${system.os.distro} ${system.os.release} (${system.platform} ${system.arch})`,
+    `CPU: ${system.cpu.brand} · ${system.cpu.physicalCores} cores`,
+    `RAM: ${Math.round(system.memory.totalGb)} GB`,
+    `GPU: ${system.gpu.model} · ${system.gpu.vramGb} GB VRAM`,
+    `Ollama: ${ollama.version ? `v${ollama.version}` : 'not detected'}`,
+    `Log: ${logPath || 'unknown'}`,
+  ];
+  return lines.join('\n');
+}
+
+function buildBugReportUrl(system: SystemProfile, ollama: OllamaStatus, logPath: string): string {
+  const diag = buildDiagnosticsText(system, ollama, logPath);
+  const body = [
+    '**Describe the bug**',
+    '[What happened?]',
+    '',
+    '**Steps to reproduce**',
+    '1. ',
+    '2. ',
+    '',
+    '**Expected behavior**',
+    '[What did you expect?]',
+    '',
+    '**Diagnostics**',
+    '```',
+    diag,
+    '```',
+  ].join('\n');
+  const params = new URLSearchParams({
+    labels: 'bug',
+    title: `Bug Report [v${APP_VERSION}]`,
+    body,
+  });
+  return `${GITHUB_ISSUES_URL}?${params.toString()}`;
 }
 
 function formatGb(value: number) {

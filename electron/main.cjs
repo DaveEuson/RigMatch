@@ -1949,7 +1949,8 @@ async function runBenchmarkInner(request = {}, sender) {
   const avgLatency = average(promptResults.map((result) => result.elapsedMs));
   const avgSobriety = average(promptResults.map((result) => result.sobrietyScore));
   const stabilityScore = Math.round((rawRuns.filter((result) => result.response.trim()).length / rawRuns.length) * 100);
-  const speedScore = clamp(Math.round(avgTokens * 1.5 + Math.max(0, 30 - avgLatency / 200)));
+  // Scale: 5 tok/s = 0, 100 tok/s = 100. Latency adds up to 5 bonus points for sub-second first response.
+  const speedScore = clamp(Math.round((avgTokens - 5) / 95 * 100 + Math.max(0, 5 - avgLatency / 200)));
   const fitScore = scoreRigFit(model);
   const totalScore = clamp(Math.round(speedScore * 0.32 + avgSobriety * 0.34 + stabilityScore * 0.18 + fitScore * 0.16));
   const elapsedMs = Date.now() - startedAt;

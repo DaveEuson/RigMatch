@@ -588,6 +588,17 @@ textarea:focus {
   user-select: text;
 }
 
+.rm-message-md { white-space: normal; }
+.rm-message-md p { margin: 0 0 6px; }
+.rm-message-md p:last-child { margin-bottom: 0; }
+.rm-message-md ul, .rm-message-md ol { margin: 4px 0 6px; padding-left: 18px; }
+.rm-message-md li { margin-bottom: 2px; }
+.rm-message-md code { padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,0.1); font-family: monospace; font-size: 12px; }
+.rm-message-md pre { margin: 6px 0; padding: 8px 10px; border-radius: 6px; background: rgba(0,0,0,0.35); overflow-x: auto; }
+.rm-message-md pre code { padding: 0; background: none; }
+.rm-message-md strong { color: var(--text-strong); }
+.rm-message-md h1, .rm-message-md h2, .rm-message-md h3 { margin: 6px 0 4px; font-size: 14px; color: var(--text-strong); }
+
 .rm-message-assistant .rm-message-text {
   background: var(--bg-bubble-a);
   border: 1px solid var(--border);
