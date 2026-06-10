@@ -5769,13 +5769,15 @@ tbody tr.computer-row.selected {
 
 .speed-date-transcript-tabs {
   min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: 5px;
+  padding-bottom: 2px;
 }
 
 .speed-date-transcript-tabs button {
-  min-width: 0;
+  flex: 1 0 110px;
   min-height: 44px;
   padding: 6px;
   border: 1px solid rgba(112, 189, 210, 0.24);
@@ -6506,6 +6508,37 @@ tbody tr.computer-row.selected {
   color: var(--text-strong);
 }
 
+/* Top Pick hero — combined avatar + result card */
+.top-pick-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid rgba(239, 188, 90, 0.35);
+  border-radius: 14px;
+  background: rgba(239, 188, 90, 0.07);
+}
+
+.top-pick-hero.scored {
+  border-color: rgba(149, 180, 106, 0.52);
+  background: rgba(149, 180, 106, 0.09);
+}
+
+.top-pick-hero-left {
+  display: grid;
+  place-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+
+.top-pick-hero-right {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+/* legacy .avatar-frame kept for any other call sites */
 .avatar-frame {
   min-height: 88px;
   flex: 0 0 auto;
@@ -6527,6 +6560,15 @@ tbody tr.computer-row.selected {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Avatar glow for top-pick model */
+.avatar-bust.large.is-top-pick {
+  border-color: var(--gold);
+  box-shadow:
+    0 0 0 3px rgba(239, 188, 90, 0.45),
+    0 0 28px rgba(239, 188, 90, 0.4),
+    0 0 60px rgba(239, 188, 90, 0.18);
 }
 
 .avatar-bust {
@@ -6606,35 +6648,71 @@ tbody tr.computer-row.selected {
 }
 
 .roster-card {
+  position: relative;
   min-width: 0;
   min-height: 70px;
-  border: none; border-radius: 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
   background: #11161a;
   color: var(--text);
   display: grid;
   align-content: center;
   justify-items: center;
   gap: 4px;
-  padding: 6px 4px;
+  padding: 6px 4px 6px;
   cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
 }
 
 .roster-card.active,
 .roster-card:hover {
-  border-color: var(--green);
+  border-color: rgba(var(--primary-rgb), 0.5);
   background: rgba(var(--primary-rgb), 0.1);
+}
+
+.roster-remove-btn {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: rgba(238, 0, 85, 0.0);
+  color: rgba(255, 249, 239, 0.0);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.roster-card:hover .roster-remove-btn {
+  background: rgba(238, 0, 85, 0.18);
+  color: rgba(238, 0, 85, 0.9);
+}
+
+.roster-remove-btn:hover {
+  background: rgba(238, 0, 85, 0.35) !important;
+}
+
+.roster-remove-btn svg {
+  width: 10px;
+  height: 10px;
 }
 
 .roster-name {
   max-width: 100%;
   color: var(--text-strong);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: normal;
-  word-break: break-word;
+  white-space: nowrap;
   text-align: center;
 }
 
@@ -8303,12 +8381,15 @@ tbody tr.computer-row.selected {
 }
 
 .task-picks-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: 6px;
+  padding-bottom: 2px;
 }
 
 .task-pick-card {
+  flex: 1 0 150px;
   min-width: 0;
   padding: 8px 10px;
   border: 1px solid rgba(255, 249, 239, 0.07);

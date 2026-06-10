@@ -7226,6 +7226,12 @@ function AgentReveal({
 }) {
   const activeProfile = getModelProfile(model);
   const matchNotes = getMatchNotes(activeProfile, selectedScore, host);
+  const [dismissedModels, setDismissedModels] = useState<Set<string>>(new Set());
+
+  const dismissRosterModel = useCallback((name: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDismissedModels((prev) => new Set([...prev, name]));
+  }, []);
 
   // Top 6 by score; unscored sort to the bottom; currently-viewed model always visible
   const validRows = rows.filter(Boolean);
@@ -7235,7 +7241,9 @@ function AgentReveal({
     const sB = getModelScore(b, modelScores)?.total ?? -1;
     return sB - sA;
   });
-  const top6 = sortedByScore.slice(0, 6);
+  const topModel = sortedByScore[0]?.displayName;
+  const isTopPick = Boolean(selectedScore && model === topModel);
+  const top6 = sortedByScore.filter((r) => !dismissedModels.has(r.displayName) || r.displayName === selectedModel || r.id === selectedModel).slice(0, 6);
   const inStrip = top6.some((r) => r.displayName === selectedModel || r.id === selectedModel);
   if (!inStrip && top6.length > 0) {
     const selRow = validRows.find((r) => r.displayName === selectedModel || r.id === selectedModel);
@@ -7266,9 +7274,29 @@ function AgentReveal({
         </div>
       </div>
 
-      <div className="avatar-frame" aria-label={`${agentName} avatar`}>
-        <AvatarBust model={model} size="large" />
-        <span className="avatar-frame-name">{getShortModelName(model)}</span>
+      <div className={selectedScore ? 'top-pick-hero scored' : 'top-pick-hero'} aria-label="Top pick result">
+        <div className="top-pick-hero-left">
+          <AvatarBust model={model} size="large" extraClass={isTopPick ? 'is-top-pick' : undefined} />
+          <span className="avatar-frame-name">{getShortModelName(model)}</span>
+        </div>
+        <div className="top-pick-hero-right">
+          <span>{selectedScore ? `Compatibility result · ${selectedScore.grade}` : 'Awaiting a first test'}</span>
+          <strong style={{ color: 'var(--text-strong)', fontSize: '20px', lineHeight: 1.1 }}>{agentName}</strong>
+          <em style={{ color: 'var(--text)', fontSize: '12px', fontStyle: 'normal' }}>
+            {selectedScore ? `${selectedScore.total} Match · ${selectedScore.grade} · ${getResponseEstimate(selectedScore.speed)}` : 'Run a compatibility test to crown the winner.'}
+          </em>
+          {selectedScore && (
+            <div className="top-pick-ribbon-actions" style={{ justifyContent: 'flex-start', marginTop: '6px' }}>
+              <button type="button" className="pick-this-one-btn" onClick={onChoose} title="Set as your active model">
+                🌹 Use This Model
+              </button>
+              <button type="button" className="test-again-btn" onClick={onRunTest}>
+                <RefreshCw aria-hidden="true" />
+                Test Again
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="character-roster" aria-label="Model shortlist">
@@ -7280,15 +7308,25 @@ function AgentReveal({
           const title = rowScore
             ? `${row.displayName}: Match ${rowScore.total}, grade ${rowScore.grade}.`
             : `${row.displayName}: not tested yet.`;
+          const isActive = row.displayName === selectedModel;
 
           return (
             <button
               key={row.displayName}
               type="button"
-              className={row.displayName === selectedModel ? 'roster-card active' : 'roster-card'}
+              className={isActive ? 'roster-card active' : 'roster-card'}
               onClick={() => onSelect(row.displayName)}
               title={title}
             >
+              <button
+                type="button"
+                className="roster-remove-btn"
+                onClick={(e) => dismissRosterModel(row.displayName, e)}
+                title={`Remove ${row.displayName} from comparison`}
+                aria-label={`Remove ${row.displayName}`}
+              >
+                <X aria-hidden="true" />
+              </button>
               <AvatarBust model={row.displayName} size="tiny" />
               <span className="roster-name">{getShortModelName(row.displayName)}</span>
               <span className={rowScore ? `roster-score ${getScoreTone(rowScore.total)}` : 'roster-score empty'}>
@@ -7302,23 +7340,6 @@ function AgentReveal({
       <div className="match-tagline">
         <span>Matchmaker note</span>
         <strong>{host?.hostname ?? 'Local machine'} + {model}</strong>
-      </div>
-
-      <div className={selectedScore ? 'top-pick-ribbon scored' : 'top-pick-ribbon'} aria-label="Top pick status">
-        <span>{selectedScore ? `Compatibility result · ${selectedScore.grade}` : 'Awaiting a first test'}</span>
-        <strong>{agentName}</strong>
-        <em>{selectedScore ? `${selectedScore.total} Match · ${selectedScore.grade} · ${getResponseEstimate(selectedScore.speed)}` : 'Run a compatibility test to crown the winner.'}</em>
-        {selectedScore && (
-          <div className="top-pick-ribbon-actions">
-            <button type="button" className="pick-this-one-btn" onClick={onChoose} title="Set as your active model">
-              🌹 Use This Model
-            </button>
-            <button type="button" className="test-again-btn" onClick={onRunTest}>
-              <RefreshCw aria-hidden="true" />
-              Test Again
-            </button>
-          </div>
-        )}
       </div>
 
       <AgentDatingProfile
@@ -8598,13 +8619,13 @@ function getScoreTooltip(label: string) {
   return 'Score from the latest model test.';
 }
 
-function AvatarBust({ model, size }: { model: string; size: 'tiny' | 'small' | 'large' }) {
+function AvatarBust({ model, size, extraClass }: { model: string; size: 'tiny' | 'small' | 'large'; extraClass?: string }) {
   const family = getModelFamily(model);
   const avatarSrc = MODEL_AVATAR_ASSETS[family] ?? modelAvatarGeneric;
 
   return (
     <span
-      className={`avatar-bust ${size} family-${family}`}
+      className={['avatar-bust', size, `family-${family}`, extraClass].filter(Boolean).join(' ')}
       aria-hidden="true"
     >
       <img src={avatarSrc} alt="" draggable={false} />
