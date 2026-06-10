@@ -3,18 +3,18 @@
 Find the best local AI model for your computer. RigMatch benchmarks your installed Ollama models on your actual hardware — scored for speed, answer quality, and hardware fit — wrapped in a dating game show theme to make testing less boring.
 
 <p align="center">
-  <img src="src/assets/robot-scorecard-ceremony.png" alt="RigMatch.AI scorecard ceremony" width="100%">
+  <img src="Screenshots/0.1/Rigmatch1.gif" alt="RigMatch.AI demo" width="100%">
 </p>
 
 ## Download
 
-**Beta v0.1.0** — [All platforms →](../../releases/latest)
+**Beta v0.1.1 — Windows** — [Releases page](../../releases/latest)
 
-| Platform | Installer |
+| Platform | Status |
 |---|---|
-| Windows | `.exe` installer — [Releases page](../../releases/latest) |
-| macOS | `.dmg` — unsigned beta, see [Platform Notes](#platform-notes) · [Releases page](../../releases/latest) |
-| Linux | `.AppImage` or `.deb` · [Releases page](../../releases/latest) |
+| Windows | ✅ `.exe` installer — [Download →](../../releases/latest) |
+| macOS | Coming soon |
+| Linux | Coming soon |
 
 ## Quick Start
 
