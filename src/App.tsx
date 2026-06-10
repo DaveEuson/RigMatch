@@ -376,6 +376,7 @@ function App() {
   const [pullingModel, setPullingModel] = useState<string | null>(null);
   const [pullProgressByModel, setPullProgressByModel] = useState<Record<string, PullProgressUpdate>>({});
   const pullQueueCancelRef = useRef(false);
+  const stopRunRef = useRef(false);
   const [pendingDeleteModel, setPendingDeleteModel] = useState<ModelRow | null>(null);
   const [listTestResult, setListTestResult] = useState<ListTestResult | null>(savedHistory?.listTestResult ?? null);
   const [modelScores, setModelScores] = useState<Record<string, TestedModelScore>>(() =>
@@ -505,7 +506,7 @@ function App() {
       const mode = isDesktopRuntime ? 'desktop bridge' : 'preview fallback';
       const catalogNote = catalogResponse.error ? ` Catalog fallback: ${catalogResponse.error}` : '';
       const catalogSyncNote = !catalogResponse.error && catalogResponse.models.length > 0
-        ? ` Synced ${catalogResponse.models.length} library contestants from ${catalogResponse.source}.`
+        ? ` Model catalog synced from ${catalogResponse.source}.`
         : '';
       setActivity(
         isDesktopRuntime
@@ -1248,6 +1249,7 @@ function App() {
       return;
     }
 
+    stopRunRef.current = false;
     setIsListTesting(true);
     setListTestResult(null);
     setRunProgress({
@@ -1302,16 +1304,17 @@ function App() {
         results.push(result);
         setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
         setModelScores((current) => upsertModelScores(current, [result], currentSuiteName));
+        const isStopped = stopRunRef.current;
         setRunProgress({
-          progressId: runnableRows[index + 1] ? `${listRunId}-${index + 1}` : progressId,
+          progressId: !isStopped && runnableRows[index + 1] ? `${listRunId}-${index + 1}` : progressId,
           mode: 'speed-date',
-          phase: 'running',
+          phase: isStopped ? 'complete' : 'running',
           label: 'Speed Dating',
           currentModel: runnableRows[index + 1]?.displayName ?? result.model,
           completed: index + 1,
           total: runnableRows.length,
-          percent: Math.round(((index + 1) / runnableRows.length) * 100),
-          message: `${result.model} scored ${result.scores.total} (${result.scores.grade}).`,
+          percent: isStopped ? 100 : Math.round(((index + 1) / runnableRows.length) * 100),
+          message: isStopped ? `Stopped early — ${index + 1} of ${runnableRows.length} models tested.` : `${result.model} scored ${result.scores.total} (${result.scores.grade}).`,
           questionIndex: result.prompts.length - 1,
           questionTotal: result.prompts.length,
           questionLabel: result.prompts[result.prompts.length - 1]?.label,
@@ -1324,6 +1327,7 @@ function App() {
             grade: result.scores.grade,
           },
         });
+        if (isStopped) break;
       }
 
       const winner = results.reduce((best, result) =>
@@ -1792,7 +1796,7 @@ function App() {
       )}
 
       {runProgress?.phase === 'running' && (
-        <LiveFlirtSpotlight progress={runProgress} host={selectedHost} />
+        <LiveFlirtSpotlight progress={runProgress} host={selectedHost} onStop={() => { stopRunRef.current = true; }} />
       )}
 
       {suiteEditorOpen && (
@@ -1870,6 +1874,7 @@ function App() {
           stepIndex={tutorialStep}
           selectedModel={selectedModel}
           hostCount={hosts.length}
+          installedCount={ollama.models.length}
           modelCount={modelRows.length}
           shortlistCount={shortlistedRows.length}
           scoredCount={scoredModelCount}
@@ -1936,8 +1941,8 @@ function TopDeck({
         <MetricTile label="RAM" value={`${system.memory.usedGb} / ${system.memory.totalGb} GB`} level={(system.memory.usedGb / Math.max(1, system.memory.totalGb)) * 100} />
         <MetricTile
           label={system.gpu.isUnifiedMemory ? 'Memory' : 'VRAM'}
-          value={system.gpu.isUnifiedMemory ? `${system.memory.totalGb} GB unified` : `${system.gpu.vramGb || '?'} GB`}
-          level={system.gpu.isUnifiedMemory ? Math.min(100, (system.memory.totalGb / 32) * 100) : system.gpu.vramGb ? Math.min(100, (system.gpu.vramGb / 16) * 100) : 18}
+          value={system.gpu.isUnifiedMemory ? `${system.memory.totalGb} GB unified` : system.gpu.vramGb ? `${system.gpu.vramGb} GB capacity` : '? GB'}
+          level={0}
         />
       </section>
 
@@ -2060,6 +2065,7 @@ function FirstRunTutorial({
   stepIndex,
   selectedModel,
   hostCount,
+  installedCount,
   modelCount,
   shortlistCount,
   scoredCount,
@@ -2072,6 +2078,7 @@ function FirstRunTutorial({
   stepIndex: number;
   selectedModel: string;
   hostCount: number;
+  installedCount: number;
   modelCount: number;
   shortlistCount: number;
   scoredCount: number;
@@ -2081,11 +2088,10 @@ function FirstRunTutorial({
   onClose: () => void;
   onSelectNav: (id: NavId) => void;
 }) {
-  const steps: Array<{ round: string; title: string; body: ReactNode; prize: string; navId: NavId; targetLabel: string; primaryLabel?: string }> = [
+  const steps: Array<{ round: string; title: string; body: ReactNode; prize: string; navId: NavId }> = [
     {
       round: '👋 Welcome',
       title: 'Find the best local AI for this computer',
-      primaryLabel: 'Start Matching',
       body: (
         <div className="tutorial-welcome-screen">
           <p className="tutorial-intro-lead">
@@ -2093,7 +2099,7 @@ function FirstRunTutorial({
           </p>
           <div className={`tutorial-status-strip ${ollamaReady ? 'ready' : 'offline'}`}>
             {ollamaReady ? (
-              <><CheckCircle aria-hidden="true" /> Ollama ready{ollamaVersion ? ` · v${ollamaVersion}` : ''}{modelCount > 0 ? ` · ${modelCount} model${modelCount !== 1 ? 's' : ''} found` : ''}</>
+              <><CheckCircle aria-hidden="true" /> Ollama ready{ollamaVersion ? ` · v${ollamaVersion}` : ''}{installedCount > 0 ? ` · ${installedCount} installed` : ''}{modelCount > installedCount ? ` · ${modelCount} in library` : ''}</>
             ) : (
               <><AlertCircle aria-hidden="true" /> Ollama not detected — <button type="button" className="inline-link" onClick={() => window.open('https://ollama.ai', '_blank', 'noopener,noreferrer')}>install it free at ollama.ai</button></>
             )}
@@ -2119,10 +2125,9 @@ function FirstRunTutorial({
       ),
       prize: 'Everything runs on this computer. No cloud, no account, no subscription.',
       navId: 'models' as NavId,
-      targetLabel: 'Models',
     },
     {
-      round: '🔧 Step 1',
+      round: '🔧 Setup',
       title: ollamaReady ? 'Ollama is running — you\'re set up!' : 'Install Ollama to get started',
       body: ollamaReady ? (
         <div className="tutorial-intro-body">
@@ -2156,10 +2161,9 @@ function FirstRunTutorial({
       ),
       prize: ollamaReady ? 'Engine ready — let\'s meet the contestants.' : 'Install Ollama, start it, then relaunch RigMatch.AI.',
       navId: 'lan' as NavId,
-      targetLabel: 'Your Rig',
     },
     {
-      round: '🎬 Welcome',
+      round: '🎬 The Show',
       title: 'The AI Dating Show — on your PC',
       body: (
         <div className="tutorial-intro-body">
@@ -2172,7 +2176,7 @@ function FirstRunTutorial({
           <div className="tutorial-show-format">
             <div className="show-format-step">
               <span>🎤</span>
-              <div><strong>Auditions</strong><em>Browse 180+ AI models. We flag which ones your rig can actually handle.</em></div>
+              <div><strong>Auditions</strong><em>Browse hundreds of AI models. We flag which ones your rig can actually handle.</em></div>
             </div>
             <div className="show-format-step">
               <span>⚡</span>
@@ -2180,7 +2184,7 @@ function FirstRunTutorial({
             </div>
             <div className="show-format-step">
               <span>🏆</span>
-              <div><strong>The Final Rose</strong><em>Scorecards rank every model by speed, trust, and fit. One walks away as your Top Match.</em></div>
+              <div><strong>The Final Rose</strong><em>Scorecards rank every model by speed, quality, and fit — one walks away as your Top Match.</em></div>
             </div>
           </div>
           <div className="tutorial-intro-callout">
@@ -2190,10 +2194,9 @@ function FirstRunTutorial({
       ),
       prize: "Let's find your perfect local AI match.",
       navId: 'models' as NavId,
-      targetLabel: 'Contestants',
     },
     {
-      round: '🤔 What is AI?',
+      round: '🤔 Meet AI',
       title: 'Meet your AI',
       body: (
         <div className="tutorial-intro-body">
@@ -2205,145 +2208,7 @@ function FirstRunTutorial({
         </div>
       ),
       prize: 'LLM = Large Language Model. The brain behind the chat.',
-      navId: 'lan' as NavId,
-      targetLabel: 'Your Rig',
-    },
-    {
-      round: '🌐 Local vs Online',
-      title: 'What makes local AI different?',
-      body: (
-        <div className="tutorial-intro-body">
-          <div className="tutorial-compare">
-            <div className="tutorial-compare-col cloud">
-              <strong>☁️ Online AI (ChatGPT etc.)</strong>
-              <ul>
-                <li>Needs internet to work</li>
-                <li>Monthly subscription fees</li>
-                <li>Your chats go to their servers</li>
-                <li>Queue times at peak hours</li>
-              </ul>
-            </div>
-            <div className="tutorial-compare-divider">vs</div>
-            <div className="tutorial-compare-col local">
-              <strong>🖥️ Local AI (You!)</strong>
-              <ul>
-                <li>Works totally offline</li>
-                <li>Free forever, no account</li>
-                <li>Your data never leaves this PC</li>
-                <li>Responds at your GPU's speed</li>
-              </ul>
-            </div>
-          </div>
-          <div className="tutorial-intro-callout">🔑 Online AI is renting a brain. Local AI is <strong>owning one</strong>.</div>
-        </div>
-      ),
-      prize: 'Your conversations are private. They never leave this computer.',
-      navId: 'lan' as NavId,
-      targetLabel: 'Your Rig',
-    },
-    {
-      round: '🏆 Why go local?',
-      title: 'Five great reasons to run AI yourself',
-      body: (
-        <ul className="tutorial-benefits">
-          <li><span>🔒</span><div><strong>Total Privacy</strong> — Nothing uploaded. Your prompts are yours alone.</div></li>
-          <li><span>⚡</span><div><strong>No Waiting</strong> — No server queue. Responds as fast as your GPU allows.</div></li>
-          <li><span>💸</span><div><strong>Completely Free</strong> — No subscription, no API bill, ever.</div></li>
-          <li><span>📡</span><div><strong>Works Offline</strong> — Plane, cabin, basement — doesn't matter.</div></li>
-          <li><span>🎛️</span><div><strong>You're in Control</strong> — Swap models, own the stack, no vendor lock-in.</div></li>
-        </ul>
-      ),
-      prize: 'One setup. Runs forever. Your AI, your rules.',
-      navId: 'lan' as NavId,
-      targetLabel: 'Your Rig',
-    },
-    {
-      round: '💻 Do I need a beefy PC?',
-      title: "Don't I need a supercomputer?",
-      body: (
-        <div className="tutorial-intro-body">
-          <p className="tutorial-intro-lead">Nope. Modern AI models come in all sizes — and the small ones run comfortably on everyday hardware.</p>
-          <div className="tutorial-size-table">
-            <div className="tutorial-size-row header">
-              <span>VRAM</span><span>What fits</span><span>Example</span>
-            </div>
-            <div className="tutorial-size-row">
-              <span>4 GB</span><span>Small models (3B)</span><span>Phi-3 Mini, Gemma 2B</span>
-            </div>
-            <div className="tutorial-size-row">
-              <span>8 GB</span><span>Mid models (7B)</span><span>Mistral, Llama 3.2</span>
-            </div>
-            <div className="tutorial-size-row highlight">
-              <span>12 GB</span><span>Larger models (13B)</span><span>Llama 3.1, Qwen 14B</span>
-            </div>
-            <div className="tutorial-size-row">
-              <span>CPU only</span><span>Tiny models (1–3B)</span><span>Slower, but works!</span>
-            </div>
-          </div>
-          <div className="tutorial-intro-callout">🎯 RigMatch scans your hardware and tells you exactly which models your rig can handle — no guessing required.</div>
-        </div>
-      ),
-      prize: 'No RTX 4090 needed. A 4GB GPU (or even just CPU) can get started.',
-      navId: 'lan' as NavId,
-      targetLabel: 'Your Rig',
-    },
-    {
-      round: 'Intro',
-      title: 'Local AI on your computer',
-      body: 'AI models are programs that think and respond like ChatGPT — but run entirely on this machine. No internet required, no account, no monthly fee. Your conversations never leave your computer.',
-      prize: 'Everything stays on your computer. Your questions never leave.',
-      navId: 'lan' as NavId,
-      targetLabel: 'Your Rig',
-    },
-    {
-      round: 'Setup',
-      title: 'Ollama runs the models',
-      body: 'Ollama is a free program that loads and runs AI models on your computer. RigMatch.AI checks your hardware and helps you pick which models Ollama can handle comfortably. Install it once, then come back.',
-      prize: "It's free. No account needed. Just download and open it.",
-      navId: 'lan' as NavId,
-      targetLabel: 'Your Rig',
-    },
-    {
-      round: 'Hub',
-      title: 'Start in Contestants',
-      body: `${modelCount} model${modelCount === 1 ? '' : 's'} are visible. Contestants is the main workspace for browsing, testing, downloads, and Speed Dating.`,
-      prize: `${shortlistCount}/5 models picked for comparison.`,
       navId: 'models' as NavId,
-      targetLabel: 'Contestants',
-    },
-    {
-      round: 'Test',
-      title: 'Test the selected model',
-      body: `Use Test Selected or the row Test button for ${selectedModel || 'a model'} when you want one score before comparing a lineup.`,
-      prize: scoredCount > 0 ? `${scoredCount} model${scoredCount === 1 ? '' : 's'} tested so far.` : 'Prize: get your first match score.',
-      navId: 'models' as NavId,
-      targetLabel: 'Contestants',
-    },
-    {
-      round: 'Compare',
-      title: 'Run Speed Dating here',
-      body: 'Pick two to five installed contestants, then start Speed Dating from the Contestants command menu. The details tab is there when you want transcripts.',
-      prize: shortlistCount >= 2 ? 'Ready to compare.' : 'Pick at least two installed models first.',
-      navId: 'models' as NavId,
-      targetLabel: 'Contestants',
-    },
-    {
-      round: 'Rig Setup',
-      title: 'Check this computer',
-      body: 'Your Rig is the setup and hardware panel for Ollama status, VRAM, storage, and local system details.',
-      prize: ollamaReady ? `${hostCount || 1} local computer ready.` : 'Start Ollama, then check this computer again.',
-      navId: 'lan' as NavId,
-      targetLabel: 'Your Rig',
-    },
-    {
-      round: 'Rank',
-      title: 'Read the scorecards',
-      body: scoredCount > 0
-        ? 'Scorecards ranks every saved test so the best match is visible without hunting through transcripts.'
-        : 'Once tests finish, Scorecards becomes the ranking board.',
-      prize: scoredCount > 0 ? 'Prize: highest saved score floats to the top.' : 'Prize: rankings appear after testing.',
-      navId: 'history' as NavId,
-      targetLabel: 'Scorecards',
     },
   ];
   const currentIndex = Math.min(Math.max(stepIndex, 0), steps.length - 1);
@@ -2354,11 +2219,6 @@ function FirstRunTutorial({
     const boundedIndex = Math.min(Math.max(nextIndex, 0), steps.length - 1);
     onStepChange(boundedIndex);
     onSelectNav(steps[boundedIndex].navId);
-  };
-
-  const runPrimaryAction = () => {
-    onSelectNav(step.navId);
-    onClose();
   };
 
   return (
@@ -2400,19 +2260,19 @@ function FirstRunTutorial({
           <button type="button" className="mini-button outline" onClick={() => goToStep(currentIndex - 1)} disabled={currentIndex === 0}>
             Back
           </button>
-          <button type="button" className="primary-button compact" onClick={runPrimaryAction}>
-            <Trophy aria-hidden="true" />
-            {step.primaryLabel ?? `Open ${step.targetLabel}`}
-          </button>
           {isLastStep ? (
-            <button type="button" className="mini-button outline" onClick={onClose}>
-              Finish
+            <button type="button" className="primary-button compact" onClick={() => { onSelectNav('models'); onClose(); }}>
+              <Trophy aria-hidden="true" />
+              Start Matching
             </button>
           ) : (
-            <button type="button" className="mini-button outline" onClick={() => goToStep(currentIndex + 1)}>
+            <button type="button" className="primary-button compact" onClick={() => goToStep(currentIndex + 1)}>
               Next
             </button>
           )}
+          <button type="button" className="quiet-link" onClick={onClose}>
+            Skip tour
+          </button>
         </div>
       </section>
     </div>
@@ -2555,9 +2415,38 @@ function getUpgradeRecommendations(system: SystemProfile): UpgradeCard[] {
   return cards;
 }
 
+type TurnkeySystem = {
+  name: string;
+  spec: string;
+  priceRange: string;
+  benefit: string;
+  searchQuery: string;
+};
+
+const TURNKEY_SYSTEMS: TurnkeySystem[] = [
+  {
+    name: 'Apple Mac Studio (M4 Max)',
+    spec: '36–128 GB unified memory',
+    priceRange: 'from ~$1,999',
+    benefit: 'Unified memory means every GB counts for AI — a 36 GB M4 Max runs 30B models with headroom to spare, silently, without a separate GPU',
+    searchQuery: 'Apple Mac Studio M4 Max',
+  },
+  {
+    name: 'CyberpowerPC Gamer Xtreme',
+    spec: 'RTX 4070 Ti · 16 GB VRAM',
+    priceRange: 'from ~$1,499',
+    benefit: 'Pre-built Windows AI rig — 16 GB VRAM handles 13B models comfortably, plug-and-play, ready for Ollama out of the box',
+    searchQuery: 'CyberpowerPC gaming desktop RTX 4070 Ti 16GB',
+  },
+];
+
 function UpgradeRig({ system }: { system: SystemProfile }) {
   const cards = getUpgradeRecommendations(system);
-  if (cards.length === 0) return null;
+  const vendor = (system.gpu.vendor ?? '').toLowerCase();
+  const isAppleSilicon = vendor.includes('apple') || (system.platform === 'darwin' && (system.gpu.vramGb ?? 0) === 0);
+  const showTurnkey = !isAppleSilicon;
+
+  if (cards.length === 0 && !showTurnkey) return null;
 
   const currentSpec = system.gpu.vramGb
     ? `${system.gpu.vramGb} GB VRAM · ${system.gpu.model}`
@@ -2572,35 +2461,72 @@ function UpgradeRig({ system }: { system: SystemProfile }) {
           <strong>Unlock more models</strong>
         </div>
       </div>
-      <p className="upgrade-rig-intro">
-        Your rig: <strong>{currentSpec}</strong>. Here {cards.length === 1 ? 'is the next upgrade' : `are ${cards.length} upgrades`} that open more models.
-      </p>
-      <div className="upgrade-cards">
-        {cards.map((card) => (
-          <div key={card.name} className="upgrade-card">
-            <div className="upgrade-card-head">
-              <span className={`upgrade-card-category category-${card.category.toLowerCase()}`}>{card.category}</span>
-              <strong>{card.name}</strong>
-              <div className="upgrade-card-meta">
-                <span className="upgrade-card-spec">{card.spec}</span>
-                <span className="upgrade-card-price">{card.priceRange}</span>
+      {cards.length > 0 && (
+        <>
+          <p className="upgrade-rig-intro">
+            Your rig: <strong>{currentSpec}</strong>. Here {cards.length === 1 ? 'is the next upgrade' : `are ${cards.length} upgrades`} that open more models.
+          </p>
+          <div className="upgrade-cards">
+            {cards.map((card) => (
+              <div key={card.name} className="upgrade-card">
+                <div className="upgrade-card-head">
+                  <span className={`upgrade-card-category category-${card.category.toLowerCase()}`}>{card.category}</span>
+                  <strong>{card.name}</strong>
+                  <div className="upgrade-card-meta">
+                    <span className="upgrade-card-spec">{card.spec}</span>
+                    <span className="upgrade-card-price">{card.priceRange}</span>
+                  </div>
+                </div>
+                <p className="upgrade-card-benefit">{card.benefit}</p>
+                <a
+                  href={amazonUrl(card.searchQuery)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="amazon-buy-btn"
+                  aria-label={`Search for ${card.name} on Amazon`}
+                >
+                  <ShoppingCart aria-hidden="true" />
+                  View on Amazon
+                  <ExternalLink aria-hidden="true" className="amazon-ext-icon" />
+                </a>
               </div>
-            </div>
-            <p className="upgrade-card-benefit">{card.benefit}</p>
-            <a
-              href={amazonUrl(card.searchQuery)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="amazon-buy-btn"
-              aria-label={`Search for ${card.name} on Amazon`}
-            >
-              <ShoppingCart aria-hidden="true" />
-              View on Amazon
-              <ExternalLink aria-hidden="true" className="amazon-ext-icon" />
-            </a>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
+      {showTurnkey && (
+        <>
+          <p className="upgrade-rig-intro upgrade-turnkey-intro">
+            Or skip the upgrade path — these turnkey systems are built for local AI from day one:
+          </p>
+          <div className="upgrade-cards">
+            {TURNKEY_SYSTEMS.map((sys) => (
+              <div key={sys.name} className="upgrade-card upgrade-card-turnkey">
+                <div className="upgrade-card-head">
+                  <span className="upgrade-card-category category-system">System</span>
+                  <strong>{sys.name}</strong>
+                  <div className="upgrade-card-meta">
+                    <span className="upgrade-card-spec">{sys.spec}</span>
+                    <span className="upgrade-card-price">{sys.priceRange}</span>
+                  </div>
+                </div>
+                <p className="upgrade-card-benefit">{sys.benefit}</p>
+                <a
+                  href={amazonUrl(sys.searchQuery)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="amazon-buy-btn"
+                  aria-label={`Search for ${sys.name} on Amazon`}
+                >
+                  <ShoppingCart aria-hidden="true" />
+                  View on Amazon
+                  <ExternalLink aria-hidden="true" className="amazon-ext-icon" />
+                </a>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       <p className="upgrade-disclosure">
         Affiliate links — purchases support RigMatch.AI at no extra cost to you.
       </p>
@@ -3978,13 +3904,8 @@ function UtilityPanel({
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
           <div className="utility-stat">
             <span>Runtime</span>
-            <strong>{isDesktopRuntime ? 'Desktop bridge' : 'Preview mode'}</strong>
+            <strong>{isDesktopRuntime ? 'Desktop' : 'Preview mode'}</strong>
             <em>{system.os.distro} · {system.arch}</em>
-          </div>
-          <div className="utility-stat">
-            <span>Platform Target</span>
-            <strong>Windows · macOS · Ubuntu/Linux</strong>
-            <em>Electron desktop builds should stay local-first and portable across all three operating systems.</em>
           </div>
           <div className="utility-stat">
             <span>Ollama</span>
@@ -3999,7 +3920,7 @@ function UtilityPanel({
           <div className="utility-stat">
             <span>Scope</span>
             <strong>Local computer only</strong>
-            <em>Remote systems are planned for RigMatch 2.0.</em>
+            <em>All AI runs on this machine. No data leaves your computer.</em>
           </div>
 
           <button type="button" className="primary-button compact" onClick={onOpenSetupGuide}>
@@ -4422,7 +4343,7 @@ function FirstModelWizard({ vramGb, onQueueModel }: { vramGb: number; onQueueMod
       <div className="fmw-header">
         <div className="fmw-title">
           <span>🎬 Start here</span>
-          <strong>Yeah, 180+ models is a lot.</strong>
+          <strong>Yeah, a lot of models. Let's narrow it down.</strong>
           <em>Answer one question and we'll pick your first contestant.</em>
         </div>
         <button type="button" className="icon-action" onClick={() => setDismissed(true)} aria-label="Dismiss" title="Show me the full list instead">
@@ -4774,6 +4695,12 @@ function ModelCabinet({
                         {row.params && <em className="model-params-sub">{row.params}</em>}
                       </span>
                     </button>
+                    {isCloudModel(row.displayName) && (
+                      <span className="model-warning-tag" title="This model runs on remote servers — prompts leave your computer">☁ Cloud</span>
+                    )}
+                    {isEmbeddingModel(row.displayName) && (
+                      <span className="model-warning-tag" title="Embedding model — not for chat or text generation">Embed only</span>
+                    )}
                     {!platformFit.compatible && (
                       <span className="platform-tag" title={platformFit.reason}>macOS only</span>
                     )}
@@ -5149,15 +5076,17 @@ function _ContestantsCommandDeck({
             {selectedInstalled ? <Gauge aria-hidden="true" /> : selectedQueued ? <X aria-hidden="true" /> : <Download aria-hidden="true" />}
             {selectedActionLabel}
           </button>
-          <button
-            type="button"
-            className={selectedShortlisted ? 'mini-button active-soft' : 'mini-button outline'}
-            onClick={() => selectedRow && onToggleShortlist(selectedRow)}
-            disabled={!selectedRow || isBenchmarking || isListTesting || (!selectedShortlisted && (!selectedInstalled || !canUseSelected || speedDateLineupFull))}
-          >
-            <Heart aria-hidden="true" />
-            {selectedShortlisted ? 'Selected' : speedDateLineupFull ? 'Lineup Full' : 'Add to Speed Dating'}
-          </button>
+          {(!speedDateLineupFull || selectedShortlisted) && (
+            <button
+              type="button"
+              className={selectedShortlisted ? 'mini-button active-soft' : 'mini-button outline'}
+              onClick={() => selectedRow && onToggleShortlist(selectedRow)}
+              disabled={!selectedRow || isBenchmarking || isListTesting || (!selectedShortlisted && (!selectedInstalled || !canUseSelected))}
+            >
+              <Heart aria-hidden="true" />
+              {selectedShortlisted ? 'Selected' : 'Add to Speed Dating'}
+            </button>
+          )}
         </div>
       </article>
 
@@ -5169,21 +5098,13 @@ function _ContestantsCommandDeck({
         <strong>{shortlistedRows.length}/5 picked</strong>
         <em>{speedStatus}</em>
         <div className="command-card-actions">
-          <button
-            type="button"
-            className="primary-button compact"
-            onClick={onRunListTest}
-            disabled={!canRunSpeedDate}
-          >
+          <button type="button" className="primary-button compact" onClick={onOpenSpeedDate}>
             <Trophy aria-hidden="true" />
-            {isListTesting ? 'Testing' : shortlistedRows.length >= 2 ? 'Start Speed Dating' : 'Pick 2+'}
+            Open Speed Dating
           </button>
           <button type="button" className="mini-button outline" onClick={onOpenSuiteEditor} disabled={isListTesting}>
             <Settings aria-hidden="true" />
             Questions
-          </button>
-          <button type="button" className="mini-button outline" onClick={onOpenSpeedDate}>
-            Open Details
           </button>
         </div>
       </article>
@@ -5521,16 +5442,18 @@ function SelectedContestantCard({
               {queued ? 'Remove from Queue' : 'Get Model'}
             </button>
           )}
-          <button
-            type="button"
-            className={shortlisted ? 'mini-button contestant-date-button active' : 'mini-button contestant-date-button'}
-            onClick={() => onToggleShortlist(row)}
-            disabled={isBenchmarking || !canChangeSpeedDateSlot}
-            title={shortlisted ? 'Remove this model from Speed Dating' : speedDateLineupFull ? 'Speed Dating lineup is full. Remove one contestant first.' : 'Add this model to Speed Dating'}
-          >
-            <Heart aria-hidden="true" />
-            {shortlisted ? 'Selected' : speedDateLineupFull ? 'Lineup Full' : 'Add to Speed Dating'}
-          </button>
+          {(!speedDateLineupFull || shortlisted) && (
+            <button
+              type="button"
+              className={shortlisted ? 'mini-button contestant-date-button active' : 'mini-button contestant-date-button'}
+              onClick={() => onToggleShortlist(row)}
+              disabled={isBenchmarking || !canChangeSpeedDateSlot}
+              title={shortlisted ? 'Remove this model from Speed Dating' : 'Add this model to Speed Dating'}
+            >
+              <Heart aria-hidden="true" />
+              {shortlisted ? 'Selected' : 'Add to Speed Dating'}
+            </button>
+          )}
           <button type="button" className="mini-button outline" onClick={onOpenSpeedDate}>
             <Trophy aria-hidden="true" />
             Lineup
@@ -6851,13 +6774,13 @@ function AgentReveal({
       </div>
 
       <div className={selectedScore ? 'top-pick-ribbon scored' : 'top-pick-ribbon'} aria-label="Top pick status">
-        <span>{selectedScore ? `${topPickLabel(selectedScore.grade)} for this rig` : 'Awaiting a first test'}</span>
+        <span>{selectedScore ? `Compatibility result · ${selectedScore.grade}` : 'Awaiting a first test'}</span>
         <strong>{agentName}</strong>
         <em>{selectedScore ? `${selectedScore.total} Match · ${selectedScore.grade} · ${getResponseEstimate(selectedScore.speed)}` : 'Run a compatibility test to crown the winner.'}</em>
         {selectedScore && (
           <div className="top-pick-ribbon-actions">
-            <button type="button" className="pick-this-one-btn" onClick={onChoose}>
-              🌹 Pick This One
+            <button type="button" className="pick-this-one-btn" onClick={onChoose} title="Set as your active model">
+              🌹 Use This Model
             </button>
             <button type="button" className="test-again-btn" onClick={onRunTest}>
               <RefreshCw aria-hidden="true" />
@@ -7030,9 +6953,9 @@ function AgentDatingProfile({
               <MessageSquare aria-hidden="true" />
               Talk to Model
             </button>
-            <button type="button" className="choose-me-button compact" onClick={onChoose}>
+            <button type="button" className="choose-me-button compact" onClick={onChoose} title="Set as your active model">
               <Heart aria-hidden="true" />
-              Choose Me
+              Use This Model
             </button>
           </div>
         </div>
@@ -7897,16 +7820,31 @@ function RunProgressPanel({
 function LiveFlirtSpotlight({
   progress,
   host,
+  onStop,
 }: {
   progress: RunProgress;
   host?: NetworkHost;
+  onStop?: () => void;
 }) {
+  const modelCounter = progress.total > 1
+    ? `model ${progress.completed + 1}/${progress.total}`
+    : null;
+  const questionCounter = progress.questionTotal
+    ? `q ${(progress.questionIndex ?? 0) + 1}/${progress.questionTotal}`
+    : null;
+  const counterLabel = [modelCounter, questionCounter].filter(Boolean).join(' · ');
+
   return (
     <aside className="live-flirt-spotlight" aria-label="Live model test animation">
       <div className="live-flirt-head">
         <span>{progress.mode === 'speed-date' ? 'Live Speed Dating' : 'Live Model Test'}</span>
         <strong>{progress.currentModel}</strong>
-        <em>{progress.completed}/{progress.total}</em>
+        {counterLabel && <em>{counterLabel}</em>}
+        {onStop && (
+          <button type="button" className="mini-button outline stop-run-btn" onClick={onStop} title="Stop after current model finishes">
+            Stop
+          </button>
+        )}
       </div>
       <FlirtTestAnimation
         model={progress.currentModel}
@@ -8165,39 +8103,58 @@ function getRecentModelScores(modelScores: Record<string, TestedModelScore>) {
     .sort((left, right) => Date.parse(right.completedAt) - Date.parse(left.completedAt));
 }
 
+function scoreToToks(speed: number): string {
+  if (speed >= 90) return '~20 tok/s';
+  if (speed >= 75) return '~10 tok/s';
+  if (speed >= 55) return '~5 tok/s';
+  if (speed >= 35) return '~2 tok/s';
+  return '<2 tok/s';
+}
+
 function buildShareableScorecard(
   ranked: TestedModelScore[],
   taskPicks: TaskPick[],
   system: SystemProfile,
 ): string {
   const gpu = system.gpu.model ?? 'Unknown GPU';
-  const vram = system.gpu.vramGb ? `${system.gpu.vramGb} GB VRAM` : '';
+  const vram = system.gpu.vramGb ? `${system.gpu.vramGb} GB VRAM` : 'no discrete GPU';
   const ram = system.memory.totalGb ? `${Math.round(system.memory.totalGb)} GB RAM` : '';
-  const rigLine = [gpu, vram, ram].filter(Boolean).join(' · ');
+  const os = system.platform === 'darwin' ? 'macOS' : system.platform === 'win32' ? 'Windows' : 'Linux';
+  const rigLine = [gpu, vram, ram, os].filter(Boolean).join(' · ');
 
-  const rows = ranked.map((score, i) => {
+  // Markdown table — works natively on Reddit, Discord, GitHub
+  const header = '| # | Model | Score | Grade | Speed | Quality | Fit |';
+  const divider = '|---|-------|-------|-------|-------|---------|-----|';
+  const tableRows = ranked.map((score, i) => {
     const prev = ranked[i - 1];
     const tied = prev !== undefined && prev.total === score.total;
     const rank = tied ? '=' : `${i + 1}`;
-    const tiedTag = tied ? ' [TIED]' : '';
-    return `${rank}. ${score.model} — ${score.total} · ${score.grade}${tiedTag}  (${score.speed} spd · ${score.sobriety} trust · ${score.fit} fit)`;
+    const toks = scoreToToks(score.speed);
+    return `| ${rank} | ${score.model} | ${score.total} | **${score.grade}** | ${toks} | ${score.sobriety} | ${score.fit} |`;
   });
 
-  const categoryLines = taskPicks.map((p) => `- ${p.label}: ${p.model} (${p.score.total} · ${p.score.grade})`);
-
   const sections: string[] = [
-    `## 🏆 RigMatch.AI — My Local AI Results`,
+    `## 🏆 My Local AI Results — RigMatch.AI`,
+    '',
     `**Rig:** ${rigLine}`,
     '',
-    `### Rankings`,
-    ...rows,
+    header,
+    divider,
+    ...tableRows,
   ];
 
-  if (categoryLines.length > 0) {
-    sections.push('', '### Category Picks', ...categoryLines);
+  if (taskPicks.length > 0) {
+    sections.push('', '**Category picks:**');
+    for (const p of taskPicks) {
+      sections.push(`- **${p.label}:** ${p.model} (${p.score.total} · ${p.score.grade} · ${scoreToToks(p.score.speed)})`);
+    }
   }
 
-  sections.push('', '---', '_Tested with [RigMatch.AI](https://github.com/DaveEuson/rigmatch) — find your best local AI model_');
+  sections.push(
+    '',
+    '---',
+    '_Scored with [RigMatch.AI](https://github.com/DaveEuson/RigMatch.AI) — benchmarks your installed Ollama models and finds your best local AI match._',
+  );
 
   return sections.join('\n');
 }
@@ -8691,11 +8648,27 @@ function mergeModelRows(catalog: CatalogModel[], installedModels: OllamaModel[])
       installLabel: 'Installed',
     }));
 
-  return [...extras, ...dedupedRows.values()].slice(0, 180);
+  return [...extras, ...dedupedRows.values()].slice(0, 500);
 }
 
 function normalizeModelKey(model: string | null | undefined) {
   return String(model || '').trim().toLowerCase();
+}
+
+function isCloudModel(model: string): boolean {
+  const lower = (model || '').toLowerCase();
+  return lower.includes('-cloud') || lower.endsWith(':cloud') || lower.includes('cloud:');
+}
+
+function isEmbeddingModel(model: string): boolean {
+  const lower = (model || '').toLowerCase();
+  return lower.includes('embed') || lower.includes('minilm') || lower.includes('bge-');
+}
+
+function isVisionOnlyModel(model: string): boolean {
+  const lower = (model || '').toLowerCase();
+  return (lower.includes('deepseek') && (lower.includes('ocr') || lower.includes('vl'))) ||
+    lower.includes('llava') || lower.includes('bakllava') || lower.includes('moondream');
 }
 
 function shouldPreferModelRow(next: ModelRow, current: ModelRow) {
@@ -9074,6 +9047,28 @@ function getModelProfile(model: string): ModelProfile {
       hue: 178,
       accentHue: 24,
       variant: 'pilot',
+    };
+  }
+
+  if (lower.includes('embed')) {
+    return {
+      agentName: modelName,
+      archetype: 'Embedding specialist',
+      specialties: ['embeddings', 'search', 'similarity'],
+      hue,
+      accentHue,
+      variant: 'pilot',
+    };
+  }
+
+  if (lower.includes('deepseek') && (lower.includes('ocr') || lower.includes('vision') || lower.includes('vl'))) {
+    return {
+      agentName: modelName,
+      archetype: 'Visual analyst',
+      specialties: ['image analysis', 'OCR', 'vision tasks'],
+      hue: 350,
+      accentHue: 212,
+      variant: 'chrome',
     };
   }
 

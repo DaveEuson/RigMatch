@@ -1014,6 +1014,28 @@ textarea:focus {
   flex-shrink: 0;
 }
 
+.rm-out-of-league {
+  margin-right: 3px;
+  font-size: 11px;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0.75;
+  color: #e08c3a;
+  cursor: help;
+}
+
+.rm-badge-legend {
+  display: flex;
+  gap: 8px;
+  padding: 3px 10px 5px;
+  font-size: 10px;
+  color: var(--text-muted, #667788);
+  border-bottom: 1px solid var(--border, rgba(255,255,255,0.07));
+}
+.rm-badge-legend span {
+  cursor: help;
+}
+
 .rm-buddy-chosen {
   border-left: 2px solid var(--gold);
   background: rgba(247, 189, 67, 0.06);

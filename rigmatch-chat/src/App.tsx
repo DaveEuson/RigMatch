@@ -79,6 +79,36 @@ function getAvatarFamily(modelName: string): AvatarFamily {
   return "generic";
 }
 
+function isEmbeddingModel(name: string): boolean {
+  const n = name.toLowerCase();
+  return n.includes("embed") || n.includes("nomic") || n.includes("bge") || n.includes("all-minilm") || n.includes("mxbai");
+}
+
+// Deduplicate: if a base model has both :latest and explicit tags, drop the :latest alias
+function deduplicateModels(models: OllamaModel[]): OllamaModel[] {
+  const byBase = new Map<string, OllamaModel[]>();
+  for (const m of models) {
+    const base = m.name.split(":")[0] ?? m.name;
+    if (!byBase.has(base)) byBase.set(base, []);
+    byBase.get(base)!.push(m);
+  }
+  const result: OllamaModel[] = [];
+  for (const [, group] of byBase) {
+    if (group.length === 1) { result.push(group[0]); continue; }
+    const nonLatest = group.filter((m) => { const tag = m.name.split(":")[1]; return tag && tag !== "latest"; });
+    result.push(...(nonLatest.length > 0 ? nonLatest : [group[0]!]));
+  }
+  return result;
+}
+
+function speedToToks(speed: number): string {
+  if (speed >= 90) return "~20 tok/s";
+  if (speed >= 75) return "~10 tok/s";
+  if (speed >= 55) return "~5 tok/s";
+  if (speed >= 35) return "~2 tok/s";
+  return "<2 tok/s";
+}
+
 function getDisplayName(raw: string): string {
   const [base, tag] = raw.split(":");
   const formatted = (base ?? raw)
@@ -254,12 +284,13 @@ export default function App() {
         listModels(settings.ollamaUrl),
         getVersion(settings.ollamaUrl),
       ]);
-      setBuddies(models.map(modelToBuddy));
+      const chatModels = deduplicateModels(models.filter((m) => !isEmbeddingModel(m.name)));
+      setBuddies(chatModels.map(modelToBuddy));
       setOllamaVersion(version);
       setConnectionStatus("connected");
-      if (models.length > 0 && activeBuddy === null) {
+      if (chatModels.length > 0 && activeBuddy === null) {
         const bridge = loadCachedBridge();
-        const modelNames = models.map((m) => m.name);
+        const modelNames = chatModels.map((m) => m.name);
         const topFromScores = Object.entries(bridge.scores).reduce<string | null>(
           (best, [model, score]) =>
             modelNames.includes(model) && (!best || score.total > (bridge.scores[best]?.total ?? 0))
@@ -270,7 +301,7 @@ export default function App() {
         const preferred = [bridge.chosen, topFromScores].find(
           (m): m is string => !!m && modelNames.includes(m),
         );
-        setActiveBuddy(preferred ?? models[0].name);
+        setActiveBuddy(preferred ?? chatModels[0].name);
       }
     } catch {
       setBuddies([]);
@@ -542,6 +573,13 @@ export default function App() {
               ? "Connecting to Ollama…"
               : "Ollama not found — retrying…"}
         </div>
+        {(chosenModel || modelRankings.size > 0) && (
+          <div className="rm-badge-legend">
+            <span title="Your Top Pick from RigMatch.AI">⭐ Top Pick</span>
+            <span title="Ranked by RigMatch score">🥇 Rank 1–3</span>
+            <span title="Low hardware fit — may be slow">⚠ Low fit</span>
+          </div>
+        )}
 
         <div className="rm-buddy-list">
           {visibleBuddies.length === 0 && connectionStatus === "connected" && (
@@ -578,6 +616,9 @@ export default function App() {
                       <span className="rm-rank-medal" title={`Ranked #${modelRankings.get(buddy.modelName)} by RigMatch score`}>
                         {RANK_MEDALS[modelRankings.get(buddy.modelName)!]}
                       </span>
+                    )}
+                    {score && score.fit < 40 && (
+                      <span className="rm-out-of-league" title="Low hardware fit score from RigMatch — may be slow on this rig">⚠</span>
                     )}
                     {buddy.displayName}
                   </span>
@@ -773,10 +814,10 @@ export default function App() {
                       </div>
                       <div className="rm-profile-stat">
                         <span>Speed</span>
-                        <strong>{score.speed}</strong>
+                        <strong>{speedToToks(score.speed)}</strong>
                       </div>
                       <div className="rm-profile-stat">
-                        <span>Trust</span>
+                        <span>Quality</span>
                         <strong>{score.sobriety}</strong>
                       </div>
                       <div className="rm-profile-stat">
@@ -809,7 +850,7 @@ export default function App() {
                     className="rm-btn-danger rm-btn-sm"
                     onClick={() => hideModelNow(pb.modelName)}
                   >
-                    Hide Buddy
+                    Hide from list
                   </button>
                 </div>
               </div>

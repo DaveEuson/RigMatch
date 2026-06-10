@@ -1095,8 +1095,23 @@
   border-top: none;
   background: #11171b;
   display: flex;
+  align-items: center;
   justify-content: end;
   gap: 8px;
+}
+
+.quiet-link {
+  background: none;
+  border: none;
+  color: #5a7080;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 6px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.quiet-link:hover {
+  color: #8aa0b0;
 }
 
 /* Welcome slide */
@@ -7120,6 +7135,16 @@ tbody tr.computer-row.selected {
 .upgrade-card-category.category-system {
   background: rgba(247, 189, 67, 0.12);
   color: var(--gold);
+}
+
+.upgrade-turnkey-intro {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+.upgrade-card-turnkey {
+  border-color: rgba(247, 189, 67, 0.2);
 }
 
 .upgrade-card-head strong {
