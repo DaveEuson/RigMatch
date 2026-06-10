@@ -12636,6 +12636,94 @@ a.whats-next-support:hover {
   letter-spacing: 0.04em;
 }
 
+/* ── Suite editor presets ─────────────────────────────────── */
+.suite-editor-presets {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.suite-preset-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+
+.suite-editor-presets button {
+  all: unset;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 2px 9px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: transparent;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.suite-editor-presets button:hover { background: var(--surface-active); color: var(--text-primary); }
+.suite-editor-presets button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ── Run modal focus picker ────────────────────────────────── */
+.run-focus-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.run-focus-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.run-focus-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.run-focus-chips button {
+  all: unset;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 3px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: transparent;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.run-focus-chips button:hover { background: var(--surface-active); color: var(--text-primary); }
+.run-focus-chips button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.run-focus-hint {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  font-style: normal;
+  line-height: 1.4;
+}
+
 /* ── How We Score ─────────────────────────────────────────── */
 .how-we-score-section {
   border: 1px solid var(--border);

@@ -41,6 +41,7 @@ import {
 import { agentArcadeApi, isDesktopRuntime } from './api';
 import {
   BENCHMARK_QUESTION_LEVELS,
+  BENCHMARK_PRESETS,
   buildBenchmarkPromptPlan,
   DEFAULT_BENCHMARK_QUESTIONS,
   normalizeBenchmarkQuestions,
@@ -1821,6 +1822,7 @@ function App() {
           onCancel={cancelPendingRun}
           onConfirm={confirmPendingRun}
           onChangeQuestionCount={setBenchmarkQuestionCount}
+          onLoadPreset={setBenchmarkQuestions}
           onEditQuestions={() => { cancelPendingRun(); setSuiteEditorOpen(true); }}
         />
       )}
@@ -2972,6 +2974,7 @@ function RunWarningModal({
   onCancel,
   onConfirm,
   onChangeQuestionCount,
+  onLoadPreset,
   onEditQuestions,
 }: {
   mode: PendingRunMode;
@@ -2983,9 +2986,14 @@ function RunWarningModal({
   onCancel: () => void;
   onConfirm: () => void;
   onChangeQuestionCount: (count: BenchmarkQuestionCount) => void;
+  onLoadPreset?: (questions: BenchmarkQuestion[]) => void;
   onEditQuestions?: () => void;
 }) {
   const [questionsExpanded, setQuestionsExpanded] = useState(false);
+  const activePreset = BENCHMARK_PRESETS.find(
+    (p) => p.questions.length === benchmarkQuestions.length &&
+      p.questions.every((q, i) => q.id === benchmarkQuestions[i]?.id),
+  ) ?? null;
   const title = mode === 'single' ? 'Test One Selected Model?' : 'Start Speed Dating?';
   const subject = mode === 'single' ? selectedModel : `${shortlistedCount} picked models`;
   const totalQuestions = mode === 'single' ? questionCount : questionCount * shortlistedCount;
@@ -3017,6 +3025,37 @@ function RunWarningModal({
             storage bandwidth, fans, and battery until the run finishes.
           </p>
           <p>{runScope}</p>
+
+          {onLoadPreset && (
+            <div className="run-focus-picker">
+              <span className="run-focus-label">Test Focus</span>
+              <div className="run-focus-chips">
+                <button
+                  type="button"
+                  className={!activePreset ? 'active' : ''}
+                  onClick={() => onLoadPreset(DEFAULT_BENCHMARK_QUESTIONS)}
+                  aria-pressed={!activePreset ? 'true' : 'false'}
+                >
+                  General
+                </button>
+                {BENCHMARK_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={activePreset?.id === preset.id ? 'active' : ''}
+                    onClick={() => onLoadPreset(preset.questions)}
+                    aria-pressed={activePreset?.id === preset.id ? 'true' : 'false'}
+                    title={preset.description}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <em className="run-focus-hint">
+                {activePreset ? activePreset.description : 'Mixed general-purpose questions covering JSON output, instruction following, and daily tasks.'}
+              </em>
+            </div>
+          )}
 
           <div className="run-question-picker">
             <div className="run-question-picker-head">
@@ -4563,6 +4602,10 @@ function ModelCabinet({
     [modelScores, rows, vramGb],
   );
   const vramSafeCount = quickFilters.find((filter) => filter.id === 'fits-vram')?.count ?? 0;
+  const taskFilterCounts = useMemo(
+    () => Object.fromEntries(TASK_FILTER_CHIPS.map((chip) => [chip.id, rows.filter((row) => modelMatchesTask(row, chip.id)).length])),
+    [rows],
+  );
   // @ts-ignore
   const _rigPick = useMemo(
     () => getRigPick(rows, modelScores, vramGb),
@@ -4690,6 +4733,7 @@ function ModelCabinet({
               aria-pressed={taskFilter === chip.id ? 'true' : 'false'}
             >
               {chip.label}
+              <em>{taskFilterCounts[chip.id] ?? 0}</em>
             </button>
           ))}
         </div>
@@ -6153,6 +6197,18 @@ function SpeedDatePanel({
               <Boxes aria-hidden="true" />
               Choose Models
             </button>
+            {uninstalledLineupRows.length > 0 && (
+              <button
+                type="button"
+                className="mini-button outline"
+                onClick={() => uninstalledLineupRows.forEach((row) => onQueueModel(row))}
+                disabled={isListTesting}
+                title={`Queue ${uninstalledLineupRows.length} uninstalled contestant${uninstalledLineupRows.length === 1 ? '' : 's'} for download`}
+              >
+                <Download aria-hidden="true" />
+                Download All ({uninstalledLineupRows.length})
+              </button>
+            )}
             <button
               type="button"
               className="mini-button outline"
@@ -6744,6 +6800,10 @@ function TestSuiteEditorDock({
   onReset: () => void;
   onClose: () => void;
 }) {
+  const activePreset = BENCHMARK_PRESETS.find(
+    (p) => p.questions.length === questions.length &&
+      p.questions.every((q, i) => q.id === questions[i]?.id),
+  ) ?? null;
   const updateQuestion = (index: number, patch: Partial<BenchmarkQuestion>) => {
     onChange(questions.map((question, questionIndex) =>
       questionIndex === index ? { ...question, ...patch } : question,
@@ -6779,6 +6839,29 @@ function TestSuiteEditorDock({
           Close
         </button>
       </div>
+      <div className="suite-editor-presets">
+        <span className="suite-preset-label">Load preset:</span>
+        <button
+          type="button"
+          className={!activePreset ? 'active' : ''}
+          onClick={onReset}
+          title="Mixed general-purpose questions covering JSON output, instruction following, and daily tasks."
+        >
+          General
+        </button>
+        {BENCHMARK_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            className={activePreset?.id === preset.id ? 'active' : ''}
+            onClick={() => onChange([...preset.questions])}
+            title={preset.description}
+          >
+            {preset.label}
+          </button>
+        ))}
+      </div>
+
       <div className="suite-editor-toolbar">
         <button type="button" className="mini-button" onClick={addQuestion}>
           <Zap aria-hidden="true" />
