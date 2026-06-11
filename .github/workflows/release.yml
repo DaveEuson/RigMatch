@@ -62,6 +62,7 @@ jobs:
         working-directory: rigmatch-chat
 
       - name: Audit Rust dependencies
+        shell: bash
         run: |
           cargo install cargo-audit --quiet 2>/dev/null || true
           cargo audit
