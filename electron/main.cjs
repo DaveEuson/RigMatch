@@ -2279,28 +2279,45 @@ function scoreSobriety(prompt, response) {
   if (!text) return 0;
 
   if (prompt.type === 'json') {
+    // Strip markdown code fences if model wrapped the JSON
+    const jsonText = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
     try {
-      const parsed = JSON.parse(text);
-      const required = ['intent', 'action', 'target', 'media'];
-      const found = required.filter((key) => Object.prototype.hasOwnProperty.call(parsed, key)).length;
-      return clamp(45 + found * 14);
+      const parsed = JSON.parse(jsonText);
+      const keys = Object.keys(parsed).length;
+      if (keys >= 4) return 92;
+      if (keys >= 3) return 82;
+      if (keys >= 2) return 70;
+      return 52;
     } catch {
-      return text.includes('{') && text.includes('}') ? 42 : 25;
+      return jsonText.includes('{') && jsonText.includes('}') ? 42 : 22;
     }
   }
 
   if (prompt.type === 'truth') {
-    const admits = /cannot|can't|not provided|not enough|don't know|unknown|unable|no access|not able|not have access|no information|not aware|no way to|outside my|beyond my|do not have|i have no|have access to/i.test(text);
+    // Model should admit it doesn't know — catch all common refusal/uncertainty phrasings
+    const admits = /cannot|can't|can not|not provided|not enough|don't know|do not know|unknown|unable|not able|no information|not aware|no way to|outside my|beyond my|do not have|i have no|don't have access|do not have access|not available|isn't available|is not available|lack(?:s)? (?:the )?(?:access|ability|information|context)|without (?:access|knowing|that information)|not (?:been )?(?:given|provided|told)/i.test(text);
     return admits ? 96 : 38;
   }
 
   if (prompt.type === 'format') {
-    const bullets = text.split('\n').filter((line) => /^\s*[-*]/.test(line)).length;
-    return bullets === 2 ? 95 : bullets > 0 ? 72 : 48;
+    // Count both bullet lines (-, *, •) and numbered lines (1. 1) a. etc.)
+    const lines = text.split('\n');
+    const bulletLines = lines.filter((line) => /^\s*[-*•]\s/.test(line)).length;
+    const numberedLines = lines.filter((line) => /^\s*(?:\d+|[a-z])[.)]\s/i.test(line)).length;
+    const listLines = bulletLines + numberedLines;
+    if (listLines >= 2 && listLines <= 5) return 92;
+    if (listLines === 1) return 65;
+    if (listLines > 5) return 75; // gave too many but tried
+    return 48;
   }
 
   if (prompt.type === 'coding') {
-    return /function\s+clampScore|const\s+clampScore|=>/.test(text) && /Math\.min|Math\.max/.test(text) ? 92 : 62;
+    const hasFunction = /function\s+clampScore|const\s+clampScore|clampScore\s*[=(]|=>/.test(text);
+    const hasClamping = /Math\.min|Math\.max/.test(text);
+    if (hasFunction && hasClamping) return 92;
+    if (hasClamping) return 72;
+    if (/function|const|=>/.test(text)) return 58;
+    return 38;
   }
 
   return clamp(78 + Math.min(14, Math.floor(text.length / 80)));

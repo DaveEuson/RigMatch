@@ -272,9 +272,28 @@ const releaseNotes: Array<{
   notes: string[];
 }> = [
   {
+    version: '0.1.3',
+    label: 'Smarter Benchmarks & Scoring',
+    date: 'Current build',
+    notes: [
+      'Benchmark now streams tokens live — no more frozen "Asking now" during generation.',
+      'Added num_ctx cap so large-context models (Gemma4, Qwen3) don\'t blow out VRAM.',
+      'Increased max response length so models can finish answering.',
+      'Fixed answer-quality scoring to catch more natural refusal phrasing.',
+      'ScoreBars now shows real Avg Response Time and First Token latency in ms/s.',
+      'Bottleneck explainer: Judge Card now flags CPU-only mode, VRAM overflow, slow drive, GPU not active.',
+      'Out-of-league models now show amber warning instead of being blocked — test anyway at your own risk.',
+      'Section flow: View Scorecards → after Speed Dating; Top Pick → in Scorecards header.',
+      'Stop Run button in single test panel now actually stops the run.',
+      'Fixed model size scoring for 12b, 27b, 9b and other missing sizes.',
+      'In-app Ollama installer for Windows and Mac.',
+      'Live VRAM used and GPU % in the system header.',
+    ],
+  },
+  {
     version: '0.1.2',
     label: 'Stability & Security',
-    date: 'Current build',
+    date: 'June 2026',
     notes: [
       'Download cancel now immediately aborts the active Ollama pull, not just the queue.',
       'Chat timeouts and failures now surface in the activity ticker.',
