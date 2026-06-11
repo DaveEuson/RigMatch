@@ -272,9 +272,19 @@ const releaseNotes: Array<{
   notes: string[];
 }> = [
   {
+    version: '0.1.4',
+    label: 'Speed & Popularity in the Table',
+    date: 'Current build',
+    notes: [
+      'New Speed column in the model table — shows tok/s for benchmarked models, pull count otherwise.',
+      'Speed column is sortable: click the header to rank by real benchmark speed.',
+      'Pull counts (popularity) now visible at a glance for every model with Ollama library data.',
+    ],
+  },
+  {
     version: '0.1.3',
     label: 'Smarter Benchmarks & Scoring',
-    date: 'Current build',
+    date: 'June 2026',
     notes: [
       'Benchmark now streams tokens live — no more frozen "Asking now" during generation.',
       'Added num_ctx cap so large-context models (Gemma4, Qwen3) don\'t blow out VRAM.',
