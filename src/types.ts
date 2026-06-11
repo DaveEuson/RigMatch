@@ -23,6 +23,8 @@ export type SystemProfile = {
     vendor: string;
     model: string;
     vramGb: number;
+    vramUsedGb: number | null;
+    gpuLoadPercent: number | null;
     driverVersion: string;
     bus: string;
     isUnifiedMemory?: boolean;

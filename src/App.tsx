@@ -2016,9 +2016,24 @@ function TopDeck({
         <MetricTile label="RAM" value={`${system.memory.usedGb} / ${system.memory.totalGb} GB`} level={(system.memory.usedGb / Math.max(1, system.memory.totalGb)) * 100} />
         <MetricTile
           label={system.gpu.isUnifiedMemory ? 'Memory' : 'VRAM'}
-          value={system.gpu.isUnifiedMemory ? `${system.memory.totalGb} GB unified` : system.gpu.vramGb ? `${system.gpu.vramGb} GB capacity` : '? GB'}
-          level={0}
+          value={
+            system.gpu.isUnifiedMemory
+              ? `${system.memory.totalGb} GB unified`
+              : system.gpu.vramUsedGb != null && system.gpu.vramGb
+                ? `${system.gpu.vramUsedGb} / ${system.gpu.vramGb} GB`
+                : system.gpu.vramGb
+                  ? `${system.gpu.vramGb} GB`
+                  : '? GB'
+          }
+          level={
+            system.gpu.vramUsedGb != null && system.gpu.vramGb
+              ? (system.gpu.vramUsedGb / system.gpu.vramGb) * 100
+              : 0
+          }
         />
+        {system.gpu.gpuLoadPercent != null && (
+          <MetricTile label="GPU" value={`${system.gpu.gpuLoadPercent}%`} level={system.gpu.gpuLoadPercent} />
+        )}
       </section>
 
       <section className="local-status-card" aria-label="Local AI status">

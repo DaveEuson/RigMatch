@@ -30,6 +30,8 @@ export const demoSystem: SystemProfile = {
     vendor: 'NVIDIA',
     model: 'RTX 3060',
     vramGb: 12,
+    vramUsedGb: 4.2,
+    gpuLoadPercent: 35,
     driverVersion: 'ready',
     bus: 'PCIe',
   },

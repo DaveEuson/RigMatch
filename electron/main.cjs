@@ -787,6 +787,8 @@ async function getSystemProfile() {
       vendor: primaryGpu.vendor || (isMac ? 'Apple' : 'Unknown'),
       model: primaryGpu.model || (isAppleSilicon ? 'Apple Silicon GPU' : 'Unknown GPU'),
       vramGb,
+      vramUsedGb: primaryGpu.memoryUsed ? mbToGb(primaryGpu.memoryUsed) : null,
+      gpuLoadPercent: primaryGpu.utilizationGpu ?? null,
       driverVersion,
       bus: primaryGpu.bus || (isMac ? 'Built-in' : 'Unknown'),
       isUnifiedMemory: isAppleSilicon,
