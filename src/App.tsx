@@ -9313,10 +9313,10 @@ function getResultExplanation(
   // Bottleneck detection
   let bottleneck: string | null = null;
   const vramGb = system?.gpu.vramGb ?? 0;
-  const ramGb = system?.ram.totalGb ?? 0;
+  const ramGb = system?.memory.totalGb ?? 0;
   const tps = benchmark?.avgTokensPerSecond ?? 0;
   const firstToken = benchmark?.avgFirstTokenMs ?? 0;
-  const gpuName = system?.gpu.name ?? '';
+  const gpuName = system?.gpu.model ?? '';
   const hasGpu = Boolean(gpuName && gpuName !== 'Unknown' && !gpuName.toLowerCase().includes('integrated'));
 
   const modelSizeGb = (() => {
