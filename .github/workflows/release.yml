@@ -28,18 +28,18 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
           cache: 'npm'
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
 
       - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
           workspaces: rigmatch-chat/src-tauri
 
@@ -49,12 +49,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
+      - name: Audit npm dependencies
+        run: npm audit --audit-level=critical
+
       - name: Install main app dependencies
         run: npm ci
 
       - name: Install RigMatch Chat dependencies
         run: npm ci
         working-directory: rigmatch-chat
+
+      - name: Audit Rust dependencies
+        run: |
+          cargo install cargo-audit --quiet 2>/dev/null || true
+          cargo audit
+        working-directory: rigmatch-chat/src-tauri
 
       - name: Build RigMatch Chat companion
         run: npx tauri build
@@ -86,7 +95,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-${{ matrix.artifact }}
           path: release/
@@ -100,14 +109,20 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: release-*
           merge-multiple: true
           path: release/
 
+      - name: Generate SHA-256 checksums
+        run: |
+          cd release
+          sha256sum $(find . -maxdepth 2 -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.zip" \)) > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       - name: Create draft release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           draft: true
           generate_release_notes: true
@@ -118,3 +133,4 @@ jobs:
             release/**/*.deb
             release/**/*.zip
             release/**/latest*.yml
+            release/SHA256SUMS.txt

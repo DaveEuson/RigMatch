@@ -28,6 +28,27 @@ const CUDA_TOOLKIT_URL = 'https://developer.nvidia.com/cuda-toolkit';
 const CUDA_TOOLKIT_ARCHIVE_URL = 'https://developer.nvidia.com/cuda-toolkit-archive';
 const CUDA_REDIST_INDEX_URL = 'https://developer.download.nvidia.com/compute/cuda/redist/';
 const execFileAsync = promisify(execFile);
+
+const ALLOWED_EXTERNAL_HOSTS = new Set([
+  'ollama.com',
+  'www.ollama.com',
+  'github.com',
+  'www.github.com',
+  'api.github.com',
+  'buymeacoffee.com',
+  'www.buymeacoffee.com',
+  'developer.nvidia.com',
+  'www.developer.nvidia.com',
+]);
+
+function openExternalSafe(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch { return; }
+  if (parsed.protocol !== 'https:') return;
+  const host = parsed.hostname.toLowerCase();
+  if (!ALLOWED_EXTERNAL_HOSTS.has(host)) return;
+  shell.openExternal(url);
+}
 let latestCudaCache = null;
 let latestCudaCacheAt = 0;
 const APP_USER_AGENT = 'RigMatchAI/0.1';
@@ -87,7 +108,7 @@ function createWindow() {
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//.test(url)) shell.openExternal(url);
+    openExternalSafe(url);
     return { action: 'deny' };
   });
 
@@ -211,16 +232,28 @@ function registerHandlers() {
   });
   ipcMain.handle('app:installUpdate', () => { autoUpdater.quitAndInstall(); });
   ipcMain.handle('scores:sync', (_event, data) => {
-    if (!data || typeof data !== 'object') return;
-    if ('scores' in data) {
-      const scores = data.scores ?? {};
-      if (typeof scores !== 'object' || Object.keys(scores).length > SCORES_MAX_ENTRIES) return;
-      latestScores = scores;
-      latestChosen = data.chosen ?? null;
-    } else {
-      if (Object.keys(data).length > SCORES_MAX_ENTRIES) return;
-      latestScores = data;
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+
+    const rawScores = 'scores' in data ? (data.scores ?? {}) : data;
+    const chosen = 'scores' in data ? (data.chosen ?? null) : null;
+
+    if (!rawScores || typeof rawScores !== 'object' || Array.isArray(rawScores)) return;
+
+    const keys = Object.keys(rawScores);
+    if (keys.length > SCORES_MAX_ENTRIES) return;
+
+    const validated = {};
+    for (const key of keys) {
+      if (typeof key !== 'string' || key.length > 200) continue;
+      const val = rawScores[key];
+      if (!val || typeof val !== 'object' || Array.isArray(val)) continue;
+      const serialized = JSON.stringify(val);
+      if (!serialized || serialized.length > 4096) continue;
+      validated[key] = val;
     }
+
+    latestScores = validated;
+    latestChosen = typeof chosen === 'string' && chosen.length <= 200 ? chosen : null;
   });
   ipcMain.handle('app:openChatApp', async () => {
     const platform = process.platform;
@@ -277,17 +310,23 @@ function registerHandlers() {
     );
 
     for (const candidate of candidates) {
-      if (fsSync.existsSync(candidate)) {
-        const child = spawn(candidate, [], {
-          cwd: path.dirname(candidate),
-          env: cleanEnv,
-          detached: true,
-          stdio: 'ignore',
-          windowsHide: false,
-        });
-        child.unref();
-        return { ok: true };
+      if (!fsSync.existsSync(candidate)) continue;
+      try {
+        const stat = fsSync.statSync(candidate);
+        // Reject if world-writable (mode & 0o002) — prevents binary replacement attacks
+        if (stat.mode & 0o002) continue;
+      } catch {
+        continue;
       }
+      const child = spawn(candidate, [], {
+        cwd: path.dirname(candidate),
+        env: cleanEnv,
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: false,
+      });
+      child.unref();
+      return { ok: true };
     }
     return { ok: false, reason: 'not-found' };
   });
@@ -321,10 +360,23 @@ function getLogFilePath() {
   return path.join(app.getPath('userData'), 'rigmatch-log.jsonl');
 }
 
+const LOG_MAX_BYTES = 10 * 1024 * 1024; // 10 MB — rotate when exceeded
+
+async function rotateLogIfNeeded(filePath) {
+  try {
+    const stat = await fs.stat(filePath);
+    if (stat.size < LOG_MAX_BYTES) return;
+    const rotated = `${filePath}.1`;
+    try { await fs.unlink(rotated); } catch { /* no previous backup */ }
+    await fs.rename(filePath, rotated);
+  } catch { /* file doesn't exist yet, nothing to rotate */ }
+}
+
 async function appendAppLog(entry = {}) {
   const logEntry = normalizeLogEntry(entry);
   const filePath = getLogFilePath();
   await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await rotateLogIfNeeded(filePath);
   await fs.appendFile(filePath, `${JSON.stringify(logEntry)}\n`, 'utf8');
   return logEntry;
 }
@@ -431,7 +483,7 @@ function redactSecrets(value) {
 }
 
 async function openOllamaDownload() {
-  await shell.openExternal(OLLAMA_DOWNLOAD_URL);
+  openExternalSafe(OLLAMA_DOWNLOAD_URL);
 }
 
 async function checkForRigmatchUpdates(channel = 'release') {
@@ -511,7 +563,7 @@ async function openRigmatchUpdatePage(channel = 'release') {
   const url = normalizedChannel === 'nightly'
     ? `${RIGMATCH_RELEASES_URL}?channel=nightly`
     : RIGMATCH_RELEASES_URL;
-  if (/^https?:\/\//.test(url)) await shell.openExternal(url);
+  openExternalSafe(url);
   return { url };
 }
 
@@ -1213,6 +1265,31 @@ function mergeCatalogs(liveCatalog, fallback) {
   return Array.from(map.values());
 }
 
+const OLLAMA_LIBRARY_MAX_BYTES = 5 * 1024 * 1024; // 5 MB per page
+
+async function fetchOllamaHtml(url, timeoutMs = 7000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': APP_USER_AGENT },
+    });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
+      throw new Error(`Unexpected content-type from Ollama library: ${contentType}`);
+    }
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > OLLAMA_LIBRARY_MAX_BYTES) {
+      throw new Error(`Ollama library response too large: ${buffer.byteLength} bytes`);
+    }
+    return new TextDecoder().decode(buffer);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function getOllamaLibraryPages() {
   const urls = [
     `${OLLAMA_LIBRARY_URL}?sort=newest`,
@@ -1220,7 +1297,7 @@ async function getOllamaLibraryPages() {
     `${OLLAMA_LIBRARY_URL}?sort=popular`,
   ];
   const pages = await Promise.all(
-    urls.map((url) => fetchText(url, {}, 7000).catch(() => '')),
+    urls.map((url) => fetchOllamaHtml(url, 7000).catch(() => '')),
   );
   const usablePages = pages.filter(Boolean);
 
@@ -1238,7 +1315,7 @@ function extractOllamaLibraryNames(html) {
 }
 
 async function getOllamaFamilyCatalog(name) {
-  const html = await fetchText(`${OLLAMA_LIBRARY_URL}/${name}`, {}, 6500);
+  const html = await fetchOllamaHtml(`${OLLAMA_LIBRARY_URL}/${name}`, 6500);
   const rows = parseOllamaFamilyRows(name, html);
 
   if (rows.length === 0) {
