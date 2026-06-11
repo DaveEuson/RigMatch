@@ -121,7 +121,7 @@ jobs:
       - name: Generate SHA-256 checksums
         run: |
           cd release
-          sha256sum $(find . -maxdepth 2 -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.zip" \)) > SHA256SUMS.txt
+          find . -maxdepth 2 -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.zip" \) -print0 | xargs -0 sha256sum > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Create draft release
