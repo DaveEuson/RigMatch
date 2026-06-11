@@ -181,6 +181,9 @@ export const demoBenchmark: BenchmarkResult = {
   questionCount: 10,
   completedAt: new Date().toISOString(),
   elapsedMs: 97000,
+  avgLatencyMs: 792,
+  avgFirstTokenMs: 210,
+  avgTokensPerSecond: 91.2,
   prompts: [
     {
       id: 'json_tool_call',

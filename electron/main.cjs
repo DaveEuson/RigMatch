@@ -1405,7 +1405,10 @@ function extractOllamaLibraryModels(html) {
     const name = decodeURIComponentSafe(nameMatch[1]);
     if (!isValidOllamaName(name) || seen.has(name)) continue;
     seen.add(name);
-    const pullMatch = section.match(/x-test-pull-count[^>]*>([^<]+)<\/span>/i);
+    // Try x-test-pull-count attr (old Alpine.js site), then "1.2M Pulls" text pattern (Next.js site)
+    const pullMatch = section.match(/x-test-pull-count[^>]*>([^<]+)<\/span>/i)
+      || section.match(/([\d.]+[KMBkmb])\s+Pulls/i)
+      || section.match(/"pullCount"\s*:\s*(\d+)/i);
     results.push({ name, pulls: pullMatch ? parsePullCount(pullMatch[1]) : null });
   }
   return results;
@@ -2051,25 +2054,71 @@ async function runBenchmarkInner(request = {}, sender) {
 
     for (let runIndex = 0; runIndex < BENCHMARK_REPEATS; runIndex += 1) {
       const promptStart = Date.now();
-      let response;
+      let responseText = '';
+      let evalCount = 0;
+      let evalDurationSeconds = 0;
+      let firstTokenMs = null;
 
       try {
-        response = await fetchJson(
+        const httpResponse = await fetch(
           `${baseUrl}/api/generate`,
           {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               model,
               prompt: prompt.prompt,
-              stream: false,
+              stream: true,
               options: {
                 temperature: 0.15,
-                num_predict: 180,
+                num_predict: 300,
+                num_ctx: 2048,
               },
             }),
+            signal: AbortSignal.timeout(120000),
           },
-          120000,
         );
+
+        if (!httpResponse.ok) {
+          const detail = extractResponseDetail(await httpResponse.text());
+          throw new Error(`${httpResponse.status} ${httpResponse.statusText}${detail ? `: ${detail}` : ''}`);
+        }
+
+        const reader = httpResponse.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (value) buffer += decoder.decode(value, { stream: !done });
+
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const chunk = JSON.parse(line);
+              if (chunk.response) {
+                if (firstTokenMs === null) firstTokenMs = Date.now() - promptStart;
+                responseText += chunk.response;
+                sendProgress({
+                  phase: 'prompt-token',
+                  promptIndex,
+                  promptId: prompt.id,
+                  promptLabel: prompt.label,
+                  tokenCount: responseText.length,
+                });
+              }
+              if (chunk.done) {
+                evalCount = chunk.eval_count || estimateTokens(responseText);
+                evalDurationSeconds = chunk.eval_duration ? chunk.eval_duration / 1_000_000_000 : (Date.now() - promptStart) / 1000;
+              }
+            } catch { /* skip malformed chunk */ }
+          }
+
+          if (done) break;
+        }
       } catch (error) {
         await appendAppLog({
           level: 'error',
@@ -2098,17 +2147,16 @@ async function runBenchmarkInner(request = {}, sender) {
       }
 
       const elapsedMs = Date.now() - promptStart;
-      const evalCount = response.eval_count || estimateTokens(response.response || '');
-      const evalDurationSeconds = response.eval_duration ? response.eval_duration / 1_000_000_000 : elapsedMs / 1000;
       const tokensPerSecond = evalDurationSeconds > 0 ? evalCount / evalDurationSeconds : 0;
-      const sobrietyScore = scoreSobriety(prompt, response.response || '');
+      const sobrietyScore = scoreSobriety(prompt, responseText);
 
       runs.push({
         elapsedMs,
+        firstTokenMs: firstTokenMs ?? elapsedMs,
         tokensPerSecond,
         sobrietyScore,
-        response: response.response || '',
-        doneReason: response.done_reason || 'complete',
+        response: responseText,
+        doneReason: 'complete',
       });
       rawRuns.push({ prompt, ...runs[runs.length - 1] });
     }
@@ -2138,6 +2186,7 @@ async function runBenchmarkInner(request = {}, sender) {
 
   const avgTokens = average(promptResults.map((result) => result.tokensPerSecond));
   const avgLatency = average(promptResults.map((result) => result.elapsedMs));
+  const avgFirstToken = average(rawRuns.map((r) => r.firstTokenMs).filter(Number.isFinite));
   const avgSobriety = average(promptResults.map((result) => result.sobrietyScore));
   const stabilityScore = Math.round((rawRuns.filter((result) => result.response.trim()).length / rawRuns.length) * 100);
   // Scale: 5 tok/s = 0, 100 tok/s = 100. Latency adds up to 5 bonus points for sub-second first response.
@@ -2151,6 +2200,9 @@ async function runBenchmarkInner(request = {}, sender) {
     questionCount,
     completedAt: new Date().toISOString(),
     elapsedMs,
+    avgLatencyMs: Math.round(avgLatency),
+    avgFirstTokenMs: Math.round(avgFirstToken),
+    avgTokensPerSecond: Math.round(avgTokens * 10) / 10,
     prompts: promptResults,
     scores: {
       speed: speedScore,
@@ -2238,7 +2290,8 @@ function scoreSobriety(prompt, response) {
   }
 
   if (prompt.type === 'truth') {
-    return /cannot|can't|not provided|not enough|don't know|unknown/i.test(text) ? 96 : 38;
+    const admits = /cannot|can't|not provided|not enough|don't know|unknown|unable|no access|not able|not have access|no information|not aware|no way to|outside my|beyond my|do not have|i have no|have access to/i.test(text);
+    return admits ? 96 : 38;
   }
 
   if (prompt.type === 'format') {
@@ -2255,11 +2308,11 @@ function scoreSobriety(prompt, response) {
 
 function scoreRigFit(model) {
   const lower = String(model || '').toLowerCase();
-  if (/(0\.5b|1b|1\.5b|3b|mini|270m)/.test(lower)) return 96;
-  if (/(4b|7b|8b)/.test(lower)) return 88;
-  if (/(13b|14b)/.test(lower)) return 74;
-  if (/(30b|32b|34b)/.test(lower)) return 58;
-  if (/(70b|72b|90b|405b)/.test(lower)) return 38;
+  if (/(0\.5b|1b|1\.5b|2b|3b|mini|270m|nano)/.test(lower)) return 96;
+  if (/(4b|6b|7b|8b|9b)/.test(lower)) return 88;
+  if (/(10b|11b|12b|13b|14b)/.test(lower)) return 74;
+  if (/(22b|24b|27b|30b|32b|34b)/.test(lower)) return 58;
+  if (/(70b|72b|90b|110b|123b|235b|405b)/.test(lower)) return 38;
   return 82;
 }
 

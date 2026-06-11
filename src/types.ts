@@ -139,6 +139,9 @@ export type BenchmarkResult = {
   questionCount: number;
   completedAt: string;
   elapsedMs: number;
+  avgLatencyMs?: number;
+  avgFirstTokenMs?: number;
+  avgTokensPerSecond?: number;
   prompts: BenchmarkPromptResult[];
   scores: {
     speed: number;
@@ -153,7 +156,7 @@ export type BenchmarkResult = {
 export type BenchmarkProgressUpdate = {
   id: string;
   model: string;
-  phase: 'started' | 'prompt-start' | 'prompt-complete' | 'complete' | 'failed';
+  phase: 'started' | 'prompt-start' | 'prompt-token' | 'prompt-complete' | 'complete' | 'failed';
   promptIndex: number;
   promptTotal: number;
   promptId?: string;

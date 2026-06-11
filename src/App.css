@@ -4145,6 +4145,19 @@ tbody tr.computer-row.selected {
   opacity: 0.75;
 }
 
+.mini-button.warn,
+.primary-button.warn {
+  border-color: #e8a020 !important;
+  color: #e8a020 !important;
+}
+
+.mini-button.warn:hover:not(:disabled),
+.primary-button.warn:hover:not(:disabled) {
+  background: rgba(232, 160, 32, 0.12) !important;
+  border-color: #e8a020 !important;
+  color: #e8a020 !important;
+}
+
 .platform-tag {
   display: inline-block;
   margin-top: 3px;
@@ -7289,6 +7302,26 @@ tbody tr.computer-row.selected {
   line-height: 1.35;
 }
 
+.result-explainer-bottleneck {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(232, 160, 32, 0.1);
+  border: 1px solid rgba(232, 160, 32, 0.35);
+  color: #e8a020 !important;
+  font-size: 10px !important;
+  line-height: 1.4 !important;
+}
+
+.result-explainer-bottleneck svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
 .grade-track {
   position: relative;
   min-height: 28px;
@@ -9578,7 +9611,7 @@ tbody tr.computer-row.selected {
 
 .score-ranking-list li {
   min-height: 50px;
-  grid-template-columns: 24px minmax(0, 1fr) auto auto;
+  grid-template-columns: 24px minmax(0, 1fr) auto auto auto;
   background:
     linear-gradient(90deg, rgba(239, 188, 90, 0.08), transparent 52%),
     #11161a;
@@ -9673,6 +9706,37 @@ tbody tr.computer-row.selected {
 
 .score-row-clickable:hover {
   background: rgba(var(--primary-rgb), 0.08);
+}
+
+.score-row-nav-arrow {
+  width: 13px;
+  height: 13px;
+  color: var(--text);
+  opacity: 0.35;
+  flex-shrink: 0;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.score-row-clickable:hover .score-row-nav-arrow {
+  opacity: 0.8;
+  transform: translateX(2px);
+}
+
+.flow-next-trigger {
+  color: var(--accent) !important;
+  border-color: rgba(var(--accent-rgb), 0.4) !important;
+  background: rgba(var(--accent-rgb), 0.08) !important;
+}
+
+.flow-next-trigger:hover {
+  background: rgba(var(--accent-rgb), 0.15) !important;
+  border-color: rgba(var(--accent-rgb), 0.6) !important;
+}
+
+.speed-date-next-btn {
+  margin-top: 12px;
+  width: 100%;
+  justify-content: center;
 }
 
 .utility-list li.winner b,
@@ -13140,7 +13204,7 @@ a.whats-next-support:hover {
 
 @media (max-width: 920px) {
   .score-ranking-list li {
-    grid-template-columns: 24px minmax(0, 1fr) auto auto;
+    grid-template-columns: 24px minmax(0, 1fr) auto auto auto;
   }
 
   .speed-date-show-stage {

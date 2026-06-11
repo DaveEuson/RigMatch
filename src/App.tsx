@@ -10,6 +10,7 @@ import {
   Check,
   CheckCircle,
   ChevronDown,
+  ChevronRight,
   Code2,
   Coffee,
   Copy,
@@ -1764,6 +1765,7 @@ function App() {
             onOpenSuiteEditor={() => setSuiteEditorOpen(true)}
             onOpenLogs={openLogsPanel}
             onOpenModelPool={() => selectNav('models')}
+            onOpenHistory={() => selectNav('history')}
             onRemoveCandidate={toggleShortlist}
             onQueueModel={queueModel}
             onRunListTest={requestListTest}
@@ -1786,6 +1788,7 @@ function App() {
             onOpenSuiteEditor={() => setSuiteEditorOpen(true)}
             onOpenLogs={openLogsPanel}
             onStart={requestBenchmark}
+            onStop={() => { stopRunRef.current = true; }}
           />
         )}
         {activeNavId === 'agent' && (
@@ -4117,6 +4120,18 @@ function UtilityPanel({
             <div className="utility-stat-head">
               <span>Ranking board</span>
               <div className="utility-stat-head-actions">
+                {rankedModelScores.length > 0 && onSelectTopPick && (
+                  <button
+                    type="button"
+                    className="how-we-score-trigger flow-next-trigger"
+                    onClick={() => onSelectTopPick(rankedModelScores[0].model)}
+                    title={`Open ${rankedModelScores[0].model} in Top Pick`}
+                  >
+                    <Bot aria-hidden="true" />
+                    Top Pick
+                    <ChevronRight aria-hidden="true" />
+                  </button>
+                )}
                 {rankedModelScores.length > 0 && (
                   <button
                     type="button"
@@ -4144,7 +4159,7 @@ function UtilityPanel({
             <strong>{rankedModelScores.length} tested model{rankedModelScores.length === 1 ? '' : 's'}</strong>
             <em>
               {rankedModelScores.length > 0
-                ? 'Sorted by highest saved Match score.'
+                ? 'Click any row to open it in Top Pick.'
                 : 'Run a single test or Speed Dating to build the ranking.'}
             </em>
           </div>
@@ -4195,6 +4210,7 @@ function UtilityPanel({
                       {isTied && <span className="tie-badge">TIED</span>}
                       {score.total} · {score.grade}
                     </strong>
+                    {onSelectTopPick && <ChevronRight className="score-row-nav-arrow" aria-hidden="true" />}
                     <button
                       type="button"
                       className="icon-action score-clear-button"
@@ -5210,10 +5226,10 @@ function ModelCabinet({
                         <>
                           <button
                             type="button"
-                            className="mini-button score-row-button"
+                            className={`mini-button score-row-button${!hardwareFit.recommend ? ' warn' : ''}`}
                             onClick={() => onScoreModel(row)}
-                            disabled={isBenchmarking || !hardwareFit.recommend}
-                            title={hardwareFit.recommend ? `Test ${row.displayName} on this computer` : hardwareFit.detail}
+                            disabled={isBenchmarking}
+                            title={hardwareFit.recommend ? `Test ${row.displayName} on this computer` : `⚠ Too big for your VRAM — will be slow, test anyway?`}
                           >
                             <Gauge aria-hidden="true" />
                             Test
@@ -5241,13 +5257,13 @@ function ModelCabinet({
                       ) : (
                         <button
                           type="button"
-                          className={queued ? 'mini-button queued download-row-button' : 'mini-button outline download-row-button'}
+                          className={queued ? 'mini-button queued download-row-button' : `mini-button outline download-row-button${!hardwareFit.recommend ? ' warn' : ''}`}
                           onClick={() => onQueueModel(row)}
-                          disabled={!queued && (!hardwareFit.recommend || !platformFit.compatible)}
-                          title={!platformFit.compatible ? platformFit.reason : hardwareFit.recommend ? `${queued ? 'Remove from queue' : `Get ${row.displayName}`}: ${row.sizeGb ? formatGb(row.sizeGb) : 'unknown size'}` : hardwareFit.detail}
-                          aria-label={!platformFit.compatible ? platformFit.reason : hardwareFit.recommend ? queued ? `Remove ${row.displayName} from the download queue` : `Get ${row.displayName}` : hardwareFit.detail}
+                          disabled={!queued && !platformFit.compatible}
+                          title={!platformFit.compatible ? platformFit.reason : !hardwareFit.recommend ? `⚠ Too big for your VRAM — download anyway?` : `${queued ? 'Remove from queue' : `Get ${row.displayName}`}: ${row.sizeGb ? formatGb(row.sizeGb) : 'unknown size'}`}
+                          aria-label={!platformFit.compatible ? platformFit.reason : queued ? `Remove ${row.displayName} from the download queue` : `Get ${row.displayName}`}
                         >
-                          <span>{!platformFit.compatible ? 'macOS Only' : hardwareFit.recommend ? queued ? 'Remove' : `Get ${getQueueChipModelName(row.displayName)}` : 'Too Big'}</span>
+                          <span>{!platformFit.compatible ? 'macOS Only' : queued ? 'Remove' : `Get ${getQueueChipModelName(row.displayName)}`}</span>
                         </button>
                       )}
                     </div>
@@ -5995,9 +6011,10 @@ function SelectedContestantCard({
           {installed ? (
             <button
               type="button"
-              className="primary-button compact"
+              className={`primary-button compact${!hardwareFit.recommend ? ' warn' : ''}`}
               onClick={() => onScoreModel(row)}
-              disabled={isBenchmarking || !hardwareFit.recommend}
+              disabled={isBenchmarking}
+              title={!hardwareFit.recommend ? '⚠ Too big for your VRAM — will be slow, test anyway?' : undefined}
             >
               <Gauge aria-hidden="true" />
               Test Model
@@ -6005,10 +6022,9 @@ function SelectedContestantCard({
           ) : (
             <button
               type="button"
-              className={queued ? 'primary-button compact queued' : 'primary-button compact'}
+              className={queued ? 'primary-button compact queued' : `primary-button compact${!hardwareFit.recommend ? ' warn' : ''}`}
               onClick={() => onQueueModel(row)}
-              disabled={!queued && !hardwareFit.recommend}
-              title={queued ? 'Remove this model from the download queue' : 'Add this model to the download queue'}
+              title={!hardwareFit.recommend && !queued ? '⚠ Too big for your VRAM — download anyway?' : queued ? 'Remove this model from the download queue' : 'Add this model to the download queue'}
             >
               {queued ? <X aria-hidden="true" /> : <Download aria-hidden="true" />}
               {queued ? 'Remove from Queue' : 'Get Model'}
@@ -6017,10 +6033,10 @@ function SelectedContestantCard({
           {installed && (
             <button
               type="button"
-              className="mini-button outline"
+              className={`mini-button outline${!hardwareFit.recommend ? ' warn' : ''}`}
               onClick={() => onQuickCheck(row)}
-              disabled={isBenchmarking || !hardwareFit.recommend}
-              title="Run a 3-question sanity check (coding, sobriety, format)"
+              disabled={isBenchmarking}
+              title={!hardwareFit.recommend ? '⚠ Too big for your VRAM — quick check anyway?' : 'Run a 3-question sanity check (coding, sobriety, format)'}
             >
               <Zap aria-hidden="true" />
               Quick Check
@@ -6231,6 +6247,7 @@ function BenchmarkRun({
   onOpenSuiteEditor,
   onOpenLogs,
   onStart,
+  onStop,
 }: {
   active: boolean;
   model: string;
@@ -6247,6 +6264,7 @@ function BenchmarkRun({
   onOpenSuiteEditor: () => void;
   onOpenLogs: () => void;
   onStart: () => void;
+  onStop: () => void;
 }) {
   const scoreStatus = isRunning
     ? 'Model test in progress'
@@ -6323,9 +6341,11 @@ function BenchmarkRun({
         type="button"
         className="danger-button"
         disabled={!isRunning}
+        onClick={onStop}
+        title="Stop after the current question finishes"
       >
         <Zap aria-hidden="true" />
-        Cancel Run
+        Stop Run
       </button>
     </section>
   );
@@ -6604,6 +6624,7 @@ function SpeedDatePanel({
   onRemoveCandidate,
   onQueueModel,
   onRunListTest,
+  onOpenHistory,
 }: {
   active: boolean;
   host?: NetworkHost;
@@ -6624,6 +6645,7 @@ function SpeedDatePanel({
   onRemoveCandidate: (row: ModelRow) => void;
   onQueueModel: (row: ModelRow) => void;
   onRunListTest: () => void;
+  onOpenHistory: () => void;
 }) {
   const [setupCollapsed, setSetupCollapsed] = useState(false);
   const winnerResult = listTestResult?.results.find((result) => result.model === listTestResult.winner);
@@ -6860,6 +6882,11 @@ function SpeedDatePanel({
                 </li>
               ))}
             </ol>
+            <button type="button" className="primary-button compact speed-date-next-btn" onClick={onOpenHistory}>
+              <History aria-hidden="true" />
+              View Scorecards
+              <ChevronRight aria-hidden="true" />
+            </button>
           </div>
         ) : (
           <div className="speed-date-empty">
@@ -7676,6 +7703,8 @@ function AgentReveal({
           profile={activeProfile}
           score={selectedScore}
           host={host}
+          benchmark={benchmark}
+          system={system}
         />
 
         <button type="button" className="talk-button" onClick={async () => {
@@ -8599,11 +8628,13 @@ function QuestionStatusBar({
     ? 'Crowned'
     : progress.questionPhase === 'prompt-complete'
       ? 'Scored'
-      : progress.questionPhase === 'prompt-start'
-        ? 'Asking now'
-        : progress.questionPhase === 'failed'
-          ? 'Needs attention'
-          : 'Warming up';
+      : progress.questionPhase === 'prompt-token'
+        ? 'Responding…'
+        : progress.questionPhase === 'prompt-start'
+          ? 'Asking now'
+          : progress.questionPhase === 'failed'
+            ? 'Needs attention'
+            : 'Warming up';
 
   return (
     <section className="question-status-bar" aria-label="Live question status">
@@ -8802,14 +8833,26 @@ function ScoreBars({
   score?: TestedModelScore;
   active: boolean;
 }) {
+  const avgTps = benchmark?.avgTokensPerSecond ?? benchmark?.prompts[0]?.tokensPerSecond;
+  const firstTokenMs = benchmark?.avgFirstTokenMs ?? benchmark?.prompts[0]?.elapsedMs;
+  const avgResponseMs = benchmark?.avgLatencyMs;
   const rows = [
-    { label: 'Prompt Throughput', value: benchmark?.prompts[0]?.tokensPerSecond, max: 140, unit: 'tok/s' },
+    { label: 'Speed (tok/s)', value: avgTps, max: 140, unit: ' tok/s', raw: avgTps },
     { label: 'Generation Speed', value: score?.speed ?? benchmark?.scores.speed, max: 100, unit: '%' },
     {
-      label: 'First Token Latency',
-      value: benchmark ? Math.max(0, 100 - (benchmark.prompts[0]?.elapsedMs ?? 600) / 20) : undefined,
-      max: 100,
-      unit: '%',
+      label: 'Avg Response Time',
+      value: avgResponseMs,
+      max: 30000,
+      unit: 'ms',
+      display: avgResponseMs != null ? (avgResponseMs >= 1000 ? `${(avgResponseMs / 1000).toFixed(1)}s` : `${avgResponseMs}ms`) : undefined,
+    },
+    {
+      label: 'First Token',
+      value: firstTokenMs,
+      max: 10000,
+      unit: 'ms',
+      display: firstTokenMs != null ? (firstTokenMs >= 1000 ? `${(firstTokenMs / 1000).toFixed(1)}s` : `${firstTokenMs}ms`) : undefined,
+      invertBar: true,
     },
     { label: 'Answer Quality', value: score?.sobriety ?? benchmark?.scores.sobriety, max: 100, unit: '%' },
   ];
@@ -8822,17 +8865,20 @@ function ScoreBars({
         <strong>{active ? '42%' : hasScore ? '100%' : 'N/A'}</strong>
         <i style={{ width: active ? '42%' : hasScore ? '100%' : '0%' }} />
       </div>
-      {rows.map((row) => (
-        <div className={Number.isFinite(row.value) ? 'bar-row' : 'bar-row empty'} key={row.label}>
-          <span>{row.label}</span>
-          <div>
-            <i style={{ width: `${Number.isFinite(row.value) ? Math.min(100, ((row.value ?? 0) / row.max) * 100) : 0}%` }} />
+      {rows.map((row) => {
+        const pct = Number.isFinite(row.value) ? Math.min(100, ((row.value ?? 0) / row.max) * 100) : 0;
+        const barPct = row.invertBar ? Math.max(0, 100 - pct) : pct;
+        const displayVal = row.display ?? (Number.isFinite(row.value) ? `${Math.round(row.value ?? 0)}${row.unit}` : 'N/A');
+        return (
+          <div className={Number.isFinite(row.value) ? 'bar-row' : 'bar-row empty'} key={row.label}>
+            <span>{row.label}</span>
+            <div>
+              <i style={{ width: `${barPct}%` }} />
+            </div>
+            <strong>{displayVal}</strong>
           </div>
-          <strong>
-            {Number.isFinite(row.value) ? `${Math.round(row.value ?? 0)}${row.unit}` : 'N/A'}
-          </strong>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -8842,19 +8888,29 @@ function ResultExplanationCard({
   profile,
   score,
   host,
+  benchmark,
+  system,
 }: {
   model: string;
   profile: ModelProfile;
   score?: TestedModelScore;
   host?: NetworkHost;
+  benchmark?: BenchmarkResult | null;
+  system?: SystemProfile;
 }) {
-  const explanation = getResultExplanation(model, profile, score, host);
+  const explanation = getResultExplanation(model, profile, score, host, benchmark, system);
 
   return (
     <div className={`result-explainer ${score ? getScoreTone(score.total) : 'empty'}`}>
       <span>{score ? 'Judge Card' : 'Judge Card Pending'}</span>
       <strong>{explanation.title}</strong>
       <p>{explanation.body}</p>
+      {explanation.bottleneck && (
+        <p className="result-explainer-bottleneck">
+          <AlertTriangle aria-hidden="true" />
+          {explanation.bottleneck}
+        </p>
+      )}
     </div>
   );
 }
@@ -9230,11 +9286,14 @@ function getResultExplanation(
   profile: ModelProfile,
   score?: TestedModelScore,
   host?: NetworkHost,
+  benchmark?: BenchmarkResult | null,
+  system?: SystemProfile,
 ) {
   if (!score) {
     return {
       title: 'No chemistry test yet',
       body: `Run a model test and RigMatch will explain whether ${profile.agentName} is a good fit for ${host?.hostname ?? 'this computer'}.`,
+      bottleneck: null as string | null,
     };
   }
 
@@ -9251,9 +9310,40 @@ function getResultExplanation(
         ? 'Use it for lighter tasks until it proves itself on stricter prompts.'
         : 'It is usable, but another contestant may be a stronger daily driver.';
 
+  // Bottleneck detection
+  let bottleneck: string | null = null;
+  const vramGb = system?.gpu.vramGb ?? 0;
+  const ramGb = system?.ram.totalGb ?? 0;
+  const tps = benchmark?.avgTokensPerSecond ?? 0;
+  const firstToken = benchmark?.avgFirstTokenMs ?? 0;
+  const gpuName = system?.gpu.name ?? '';
+  const hasGpu = Boolean(gpuName && gpuName !== 'Unknown' && !gpuName.toLowerCase().includes('integrated'));
+
+  const modelSizeGb = (() => {
+    const m = model.match(/([\d.]+)b\b/i);
+    if (!m) return 0;
+    return parseFloat(m[1]) * 0.7; // rough GB estimate per billion params
+  })();
+
+  if (!hasGpu && tps > 0 && tps < 15) {
+    bottleneck = 'Running on CPU — no GPU detected. Install CUDA drivers and ensure Ollama is using your GPU (`ollama ps` shows which device is active). Expect 5–20× faster speeds after.';
+  } else if (vramGb > 0 && modelSizeGb > 0 && modelSizeGb > vramGb * 0.95) {
+    const overflow = Math.round((modelSizeGb - vramGb) * 10) / 10;
+    bottleneck = `Model (~${Math.round(modelSizeGb)} GB) exceeds your ${vramGb} GB VRAM by ~${overflow} GB. Ollama spills the overflow to system RAM, which is 5–20× slower. Try a smaller variant or a quantized Q4 build.`;
+  } else if (tps > 0 && tps < 10 && hasGpu) {
+    bottleneck = `Only ${Math.round(tps)} tok/s despite a GPU — Ollama may not be using it. Run \`ollama ps\` while testing to confirm GPU is active. Updated drivers or a CUDA reinstall often fix this.`;
+  } else if (firstToken > 5000) {
+    bottleneck = `First token took ${(firstToken / 1000).toFixed(1)}s. Long load time suggests the model is being read from a slow drive or paged from RAM. Moving your Ollama model folder to an SSD helps significantly.`;
+  } else if (ramGb > 0 && ramGb < 16 && score.speed < 50) {
+    bottleneck = `Low system RAM (${ramGb} GB detected). When VRAM overflows, the system RAM becomes the bottleneck. 32 GB+ makes a noticeable difference for larger models.`;
+  } else if (score.sobriety < 50) {
+    bottleneck = 'Answer quality is very low — the model may have misunderstood the test prompts or hit the output token limit mid-answer. It may be an instruction-tuned model that needs a system prompt, or it needs a longer context.';
+  }
+
   return {
     title: `${profile.agentName} scored ${score.total} (${score.grade})`,
     body: `${model} is a ${score.grade} match because ${strongestTrait}, scored ${score.speed}% speed, ${score.sobriety}% answer quality, and ${score.fit}% computer fit on ${host?.hostname ?? 'this computer'}. ${caution}`,
+    bottleneck,
   };
 }
 
