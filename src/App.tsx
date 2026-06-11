@@ -257,7 +257,7 @@ const navItems: NavItem[] = [
 
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
 const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
-const APP_VERSION = '0.1.2';
+const APP_VERSION = '0.1.6';
 const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
 const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
 const HISTORY_STORAGE_KEY = 'rigmatch:history:v1';
@@ -272,9 +272,36 @@ const releaseNotes: Array<{
   notes: string[];
 }> = [
   {
+    version: '0.1.6',
+    label: 'Release Safety & Download Consent',
+    date: 'Current build',
+    notes: [
+      'Added third-party model notices in Settings and About for Ollama/Gemma model terms.',
+      'Bulk Download All now requires an explicit third-party model terms acknowledgement before queueing pulls.',
+      'Added a bottom download status window for active Ollama pulls and queued model downloads.',
+      'Top Match now includes a Use this model action in the top deck.',
+      'System resource meters are compacted so CPU, RAM, VRAM, and GPU fit the header row.',
+      'Default desktop window now opens wider to give the header, lineup, and download dock more room.',
+      'Added a repo-level THIRD_PARTY_MODELS.md release checklist.',
+    ],
+  },
+  {
+    version: '0.1.5',
+    label: 'Ollama Parity Benchmarks',
+    date: 'June 2026',
+    notes: [
+      'Benchmark timing now uses an unscored Warm-up Period before measuring Ollama parity requests.',
+      'Scored prompts now use stream:false, keep_alive, deterministic options, and Ollama official timing fields.',
+      'Speed score now comes from Ollama official eval_count / eval_duration metrics.',
+      'Truncated Ollama runs now affect stability instead of being treated as clean finishes.',
+      'Closing RigMatch now warns about Ollama model storage and can delete unscored or low-scored models.',
+      'Added local speed comparison diagnostics for beta tester reports.',
+    ],
+  },
+  {
     version: '0.1.4',
     label: 'Speed & Popularity in the Table',
-    date: 'Current build',
+    date: 'June 2026',
     notes: [
       'New Speed column in the model table — shows tok/s for benchmarked models, pull count otherwise.',
       'Speed column is sortable: click the header to rank by real benchmark speed.',
@@ -450,6 +477,9 @@ function App() {
   const [scoreTrend, setScoreTrend] = useState<Record<string, number[]>>({});
   const [pendingRunMode, setPendingRunMode] = useState<PendingRunMode | null>(null);
   const [pendingSingleModel, setPendingSingleModel] = useState<string | null>(null);
+  const [closeCleanupOpen, setCloseCleanupOpen] = useState(false);
+  const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
+  const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
   const [benchmarkQuestionCount, setBenchmarkQuestionCount] = useState<BenchmarkQuestionCount>(10);
   const [benchmarkQuestions, setBenchmarkQuestions] = useState<BenchmarkQuestion[]>(() => getSavedBenchmarkQuestions());
   const [suiteEditorOpen, setSuiteEditorOpen] = useState(false);
@@ -468,6 +498,7 @@ function App() {
   const [uiMode, setUiMode] = useState<UiMode>(() => getSavedUiMode());
   const [chatOpen, setChatOpen] = useState(false);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
+  const [pendingThirdPartyDownloadRows, setPendingThirdPartyDownloadRows] = useState<ModelRow[] | null>(null);
   const [chosenModel, setChosenModel] = useState<string | null>(null);
   const [setupGuideOpen, setSetupGuideOpen] = useState(false);
   const [clearDataOpen, setClearDataOpen] = useState(false);
@@ -513,6 +544,21 @@ function App() {
   const shortlistedRows = useMemo(
     () => modelRows.filter((row) => shortlistIds.has(row.displayName)).slice(0, 5),
     [modelRows, shortlistIds],
+  );
+  const installedRowsForCleanup = useMemo(
+    () => modelRows.filter((row) => row.installed),
+    [modelRows],
+  );
+  const unscoredRowsForCleanup = useMemo(
+    () => installedRowsForCleanup.filter((row) => !getModelScore(row, modelScores)),
+    [installedRowsForCleanup, modelScores],
+  );
+  const lowScoredRowsForCleanup = useMemo(
+    () => installedRowsForCleanup.filter((row) => {
+      const score = getModelScore(row, modelScores);
+      return Boolean(score && score.total <= 80);
+    }),
+    [installedRowsForCleanup, modelScores],
   );
   const scoredModelCount = Object.keys(modelScores).length;
   const benchmarkPromptPlan = useMemo(
@@ -839,10 +885,34 @@ function App() {
     setPendingDeleteModel(null);
   }, [isDeletingModel]);
 
+  const removeDeletedModelFromState = useCallback((row: ModelRow) => {
+    const aliases = getModelAliases(row);
+
+    setOllama((current) => ({
+      ...current,
+      models: current.models.filter((model) => !ollamaModelMatchesAliases(model, aliases)),
+    }));
+    setHosts((current) => current.map((host) =>
+      host.id === selectedHostId
+        ? { ...host, models: Math.max(0, (host.models || 0) - 1) }
+        : host,
+    ));
+    setModelScores((current) => removeModelScores(current, aliases));
+    setBenchmarkByModel((current) => removeBenchmarkResults(current, aliases));
+    setShortlistIds((current) => removeSetValues(current, aliases));
+    setQueuedModelIds((current) => removeSetValues(current, aliases));
+
+    if (aliases.includes(selectedModel)) {
+      const nextModel = modelRows.find((candidate) => !aliases.includes(candidate.displayName) && candidate.installed)?.displayName
+        ?? modelRows.find((candidate) => !aliases.includes(candidate.displayName))?.displayName
+        ?? 'qwen2.5:7b';
+      setSelectedModel(nextModel);
+    }
+  }, [modelRows, selectedHostId, selectedModel]);
+
   const confirmDeleteModel = useCallback(async () => {
     if (!pendingDeleteModel) return;
 
-    const aliases = getModelAliases(pendingDeleteModel);
     const modelName = pendingDeleteModel.installedModel?.model ?? pendingDeleteModel.displayName;
     const targetHost = selectedHost?.hostname ?? 'selected computer';
 
@@ -855,27 +925,7 @@ function App() {
         baseUrl: ollama.baseUrl,
       });
 
-      setOllama((current) => ({
-        ...current,
-        models: current.models.filter((model) => !ollamaModelMatchesAliases(model, aliases)),
-      }));
-      setHosts((current) => current.map((host) =>
-        host.id === selectedHostId
-          ? { ...host, models: Math.max(0, (host.models || 0) - 1) }
-          : host,
-      ));
-      setModelScores((current) => removeModelScores(current, aliases));
-      setBenchmarkByModel((current) => removeBenchmarkResults(current, aliases));
-      setShortlistIds((current) => removeSetValues(current, aliases));
-      setQueuedModelIds((current) => removeSetValues(current, aliases));
-
-      if (aliases.includes(selectedModel)) {
-        const nextModel = modelRows.find((row) => !aliases.includes(row.displayName) && row.installed)?.displayName
-          ?? modelRows.find((row) => !aliases.includes(row.displayName))?.displayName
-          ?? 'qwen2.5:7b';
-        setSelectedModel(nextModel);
-      }
-
+      removeDeletedModelFromState(pendingDeleteModel);
       setPendingDeleteModel(null);
       setActivity(`${result.model} deleted from ${targetHost}. Download it again if that match deserves another test.`);
     } catch (error) {
@@ -883,7 +933,60 @@ function App() {
     } finally {
       setIsDeletingModel(false);
     }
-  }, [modelRows, ollama.baseUrl, pendingDeleteModel, selectedHost?.hostname, selectedHostId, selectedModel]);
+  }, [ollama.baseUrl, pendingDeleteModel, removeDeletedModelFromState, selectedHost?.hostname]);
+
+  const closeAppAfterCleanup = useCallback(async () => {
+    setCloseCleanupOpen(false);
+    setCloseCleanupMessage(null);
+    await agentArcadeApi.closeApp();
+  }, []);
+
+  const deleteRowsThenClose = useCallback(async (rows: ModelRow[], label: string) => {
+    if (rows.length === 0) {
+      setCloseCleanupMessage(`No ${label} models were found.`);
+      return;
+    }
+
+    setIsCloseCleanupDeleting(true);
+    setCloseCleanupMessage(null);
+    setActivity(`Deleting ${rows.length} ${label} model${rows.length === 1 ? '' : 's'} before closing...`);
+
+    let deletedCount = 0;
+    try {
+      for (const row of rows) {
+        const modelName = row.installedModel?.model ?? row.displayName;
+        await agentArcadeApi.deleteModel({
+          model: modelName,
+          baseUrl: ollama.baseUrl,
+        });
+        removeDeletedModelFromState(row);
+        deletedCount += 1;
+      }
+
+      setActivity(`Deleted ${deletedCount} ${label} model${deletedCount === 1 ? '' : 's'} before closing.`);
+      await closeAppAfterCleanup();
+    } catch (error) {
+      const message = `Deleted ${deletedCount} of ${rows.length}. Cleanup stopped: ${getErrorMessage(error)}`;
+      setCloseCleanupMessage(message);
+      setActivity(message);
+    } finally {
+      setIsCloseCleanupDeleting(false);
+    }
+  }, [closeAppAfterCleanup, ollama.baseUrl, removeDeletedModelFromState]);
+
+  useEffect(() => {
+    if (!agentArcadeApi.onAppCloseRequest) return undefined;
+
+    return agentArcadeApi.onAppCloseRequest(() => {
+      if (installedRowsForCleanup.length === 0) {
+        void agentArcadeApi.closeApp();
+        return;
+      }
+
+      setCloseCleanupMessage(null);
+      setCloseCleanupOpen(true);
+    });
+  }, [installedRowsForCleanup.length]);
 
   const selectNav = useCallback((id: NavId) => {
     setActiveNavId(id);
@@ -1293,6 +1396,86 @@ function App() {
     }
   }, [ollama.baseUrl, ollama.ready, queuedRows, refreshRig, selectedHost?.hostname]);
 
+  const queueMissingSpeedDateModels = useCallback((rows: ModelRow[]) => {
+    const missingRows = rows.filter((row) => !row.installed && !queuedModelIds.has(row.displayName));
+
+    if (missingRows.length === 0) {
+      const queuedMissingCount = rows.filter((row) => !row.installed && queuedModelIds.has(row.displayName)).length;
+      setActivity(
+        queuedMissingCount > 0
+          ? 'All missing Speed Dating contestants are already queued for download.'
+          : 'All selected Speed Dating contestants are already downloaded.',
+      );
+      return;
+    }
+
+    const nextQueuedIds = new Set(queuedModelIds);
+    let nextQueuedGb = sumQueuedGb(modelRows, nextQueuedIds);
+    const queuedRowsForDownload: ModelRow[] = [];
+    const blockedReasons: string[] = [];
+
+    for (const row of missingRows) {
+      const rowGb = row.sizeGb || 0;
+
+      if (rowGb <= 0) {
+        blockedReasons.push(`${row.displayName}: unknown size`);
+        continue;
+      }
+
+      const platformFit = getPlatformFit(row.displayName, system.platform);
+      if (!platformFit.compatible) {
+        blockedReasons.push(`${row.displayName}: ${platformFit.reason}`);
+        continue;
+      }
+
+      const hardwareFit = getHardwareFit(row, system.gpu.vramGb);
+      if (!hardwareFit.recommend) {
+        blockedReasons.push(`${row.displayName}: ${hardwareFit.label.toLowerCase()}`);
+        continue;
+      }
+
+      const freeAfterQueue = system.storage.availableGb - nextQueuedGb - rowGb;
+      if (freeAfterQueue < 10) {
+        blockedReasons.push(`${row.displayName}: would leave ${formatGb(freeAfterQueue)} free`);
+        continue;
+      }
+
+      nextQueuedIds.add(row.displayName);
+      nextQueuedGb += rowGb;
+      queuedRowsForDownload.push(row);
+    }
+
+    if (queuedRowsForDownload.length === 0) {
+      setActivity(`No missing Speed Dating contestants were queued. ${blockedReasons[0] ?? 'Check model availability first.'}`);
+      return;
+    }
+
+    setSelectedModel(queuedRowsForDownload[0].displayName);
+    setQueuedModelIds(nextQueuedIds);
+    setPullProgressByModel((current) => {
+      const next = { ...current };
+      queuedRowsForDownload.forEach((row) => {
+        next[row.displayName] = next[row.displayName] ?? createQueuedPullProgress(row.displayName, ollama.baseUrl);
+      });
+      return next;
+    });
+
+    const blockedNote = blockedReasons.length > 0 ? ` ${blockedReasons.length} could not be queued.` : '';
+    setActivity(`${queuedRowsForDownload.length} missing Speed Dating contestant${queuedRowsForDownload.length === 1 ? '' : 's'} queued for download.${blockedNote}`);
+  }, [modelRows, ollama.baseUrl, queuedModelIds, system.gpu.vramGb, system.platform, system.storage.availableGb]);
+
+  const requestThirdPartyModelDownloads = useCallback((rows: ModelRow[]) => {
+    const missingRows = rows.filter((row) => !row.installed);
+    if (missingRows.length === 0) return;
+    setPendingThirdPartyDownloadRows(missingRows);
+  }, []);
+
+  const confirmThirdPartyModelDownloads = useCallback(() => {
+    if (!pendingThirdPartyDownloadRows) return;
+    queueMissingSpeedDateModels(pendingThirdPartyDownloadRows);
+    setPendingThirdPartyDownloadRows(null);
+  }, [pendingThirdPartyDownloadRows, queueMissingSpeedDateModels]);
+
   const toggleShortlist = useCallback((row: ModelRow) => {
     const hardwareFit = getHardwareFit(row, system.gpu.vramGb);
 
@@ -1322,7 +1505,13 @@ function App() {
 
   const requestListTest = useCallback(() => {
     const runnableRows = shortlistedRows.filter((row) => row.installed).slice(0, 5);
+    const missingDownloadCount = shortlistedRows.filter((row) => !row.installed).length;
     const hostBlocker = getHostBenchmarkBlocker(selectedHost, ollama);
+
+    if (missingDownloadCount > 0) {
+      setActivity(`${missingDownloadCount} Speed Dating contestant${missingDownloadCount === 1 ? '' : 's'} need downloads first. Open setup and use Download All.`);
+      return;
+    }
 
     if (runnableRows.length < 2) {
       setActivity('Pick at least 2 installed models for Speed Dating. Five is the sweet spot.');
@@ -1698,6 +1887,10 @@ function App() {
         system={system}
         ollama={ollama}
         topPick={topRigPick}
+        onUseTopPick={(model) => {
+          setSelectedModel(model);
+          setChosenModel(model);
+        }}
       />
 
       <SideMenu
@@ -1797,7 +1990,7 @@ function App() {
             onOpenModelPool={() => selectNav('models')}
             onOpenHistory={() => selectNav('history')}
             onRemoveCandidate={toggleShortlist}
-            onQueueModel={queueModel}
+            onQueueMissingModels={requestThirdPartyModelDownloads}
             onRunListTest={requestListTest}
           />
         )}
@@ -1887,7 +2080,7 @@ function App() {
         modelScores={modelScores}
         disabled={isBenchmarking || isListTesting}
         isListTesting={isListTesting}
-        canRunSpeedDate={shortlistedRows.filter((row) => row.installed).length >= 2 && !isBenchmarking && !isListTesting}
+        canRunSpeedDate={shortlistedRows.length >= 2 && shortlistedRows.every((row) => row.installed) && !isBenchmarking && !isListTesting}
         onRemove={toggleShortlist}
         onAdd={toggleShortlist}
         onRunListTest={requestListTest}
@@ -1898,6 +2091,13 @@ function App() {
         activity={activity}
         isDesktopRuntime={isDesktopRuntime}
         topPick={topRigPick}
+        queuedRows={queuedRows}
+        pullProgressByModel={pullProgressByModel}
+        isPulling={isPullingModels}
+        pullingModel={pullingModel}
+        isPullCancelRequested={isPullCancelRequested}
+        onCancelQueue={cancelDownloadQueue}
+        onOpenDownloads={() => selectNav('models')}
         onOpenChat={async () => {
           if (isDesktopRuntime) {
             const result = await agentArcadeApi.openChatApp();
@@ -1955,9 +2155,18 @@ function App() {
           system={system}
           onCancel={cancelPendingRun}
           onConfirm={confirmPendingRun}
+          onDownloadMissing={() => requestThirdPartyModelDownloads(shortlistedRows)}
           onChangeQuestionCount={setBenchmarkQuestionCount}
           onLoadPreset={setBenchmarkQuestions}
           onEditQuestions={() => { cancelPendingRun(); setSuiteEditorOpen(true); }}
+        />
+      )}
+
+      {pendingThirdPartyDownloadRows && (
+        <ThirdPartyDownloadConsentModal
+          rows={pendingThirdPartyDownloadRows}
+          onCancel={() => setPendingThirdPartyDownloadRows(null)}
+          onConfirm={confirmThirdPartyModelDownloads}
         />
       )}
 
@@ -1983,6 +2192,18 @@ function App() {
         <ClearDataModal
           onCancel={() => setClearDataOpen(false)}
           onConfirm={confirmClearData}
+        />
+      )}
+      {closeCleanupOpen && (
+        <CloseCleanupModal
+          installedRows={installedRowsForCleanup}
+          unscoredRows={unscoredRowsForCleanup}
+          lowScoredRows={lowScoredRowsForCleanup}
+          isDeleting={isCloseCleanupDeleting}
+          message={closeCleanupMessage}
+          onDeleteUnscored={() => { void deleteRowsThenClose(unscoredRowsForCleanup, 'unscored'); }}
+          onDeleteLowScored={() => { void deleteRowsThenClose(lowScoredRowsForCleanup, 'low-scored'); }}
+          onUnderstand={() => { void closeAppAfterCleanup(); }}
         />
       )}
       {supportModalOpen && (
@@ -2031,12 +2252,14 @@ function TopDeck({
   isScanning,
   onScan,
   topPick,
+  onUseTopPick,
 }: {
   system: SystemProfile;
   ollama: OllamaStatus;
   isScanning: boolean;
   onScan: () => void;
   topPick?: RigPick | null;
+  onUseTopPick: (model: string) => void;
 }) {
   const gpuLabel = system.gpu.isUnifiedMemory
     ? `${system.gpu.model} · Unified Memory`
@@ -2115,8 +2338,18 @@ function TopDeck({
       {topPick ? (
         <section className="top-deck-winner" aria-label="Current best model">
           <Trophy aria-hidden="true" />
-          <div>
-            <span>{topPickLabel(topPick.score?.grade)}</span>
+          <div className="top-deck-winner-copy">
+            <div className="top-deck-winner-head">
+              <span>{topPickLabel(topPick.score?.grade)}</span>
+              <button
+                type="button"
+                className="top-deck-use-model-btn"
+                onClick={() => onUseTopPick(topPick.row.displayName)}
+                title="Set this as your active model"
+              >
+                Use this model
+              </button>
+            </div>
             <strong>{topPick.row.displayName}</strong>
             <em>{topPick.score ? `${topPick.score.total} Match · ${topPick.score.grade}` : topPick.fitLabel}</em>
           </div>
@@ -3183,6 +3416,7 @@ function RunWarningModal({
   system,
   onCancel,
   onConfirm,
+  onDownloadMissing,
   onChangeQuestionCount,
   onLoadPreset,
   onEditQuestions,
@@ -3196,6 +3430,7 @@ function RunWarningModal({
   system: SystemProfile;
   onCancel: () => void;
   onConfirm: () => void;
+  onDownloadMissing?: () => void;
   onChangeQuestionCount: (count: BenchmarkQuestionCount) => void;
   onLoadPreset?: (questions: BenchmarkQuestion[]) => void;
   onEditQuestions?: () => void;
@@ -3337,8 +3572,14 @@ function RunWarningModal({
               {uninstalledContestantCount === 1
                 ? "1 contestant in your lineup isn’t downloaded yet."
                 : `${uninstalledContestantCount} contestants in your lineup aren’t downloaded yet.`}
-              {' '}Download them from the Contestants panel before starting.
+              {' '}Download them before starting. Downloads run through your local Ollama install and may be subject to third-party model terms.
             </span>
+            {onDownloadMissing && (
+              <button type="button" className="mini-button outline" onClick={onDownloadMissing}>
+                <Download aria-hidden="true" />
+                Download All
+              </button>
+            )}
           </div>
         )}
         <div className="modal-actions">
@@ -3419,6 +3660,97 @@ function DeleteModelModal({
           <button type="button" className="danger-button compact" onClick={onConfirm} disabled={isDeleting}>
             <Trash2 aria-hidden="true" />
             {isDeleting ? 'Deleting' : 'Delete Model'}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function CloseCleanupModal({
+  installedRows,
+  unscoredRows,
+  lowScoredRows,
+  isDeleting,
+  message,
+  onDeleteUnscored,
+  onDeleteLowScored,
+  onUnderstand,
+}: {
+  installedRows: ModelRow[];
+  unscoredRows: ModelRow[];
+  lowScoredRows: ModelRow[];
+  isDeleting: boolean;
+  message: string | null;
+  onDeleteUnscored: () => void;
+  onDeleteLowScored: () => void;
+  onUnderstand: () => void;
+}) {
+  const installedGb = sumModelRowGb(installedRows);
+  const unscoredGb = sumModelRowGb(unscoredRows);
+  const lowScoredGb = sumModelRowGb(lowScoredRows);
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section className="run-warning-modal destructive-modal model-cleanup-modal" role="dialog" aria-modal="true" aria-labelledby="close-cleanup-title">
+        <div className="modal-title danger">
+          <Trash2 aria-hidden="true" />
+          <div>
+            <span>Before You Close</span>
+            <strong id="close-cleanup-title">Unused Ollama models can take up a lot of space</strong>
+          </div>
+        </div>
+        <div className="modal-body">
+          <p>
+            RigMatch leaves downloaded Ollama models on this computer so you can test or chat later.
+            If you are not using some of them, deleting those models can free meaningful disk space.
+          </p>
+          <div className="modal-warning-grid model-cleanup-summary">
+            <div>
+              <span>Installed Models</span>
+              <strong>{installedRows.length}</strong>
+              <em>{formatGb(installedGb)} estimated on disk.</em>
+            </div>
+            <div>
+              <span>Not Scored</span>
+              <strong>{unscoredRows.length}</strong>
+              <em>{formatGb(unscoredGb)} that RigMatch has not benchmarked.</em>
+            </div>
+            <div>
+              <span>Scored 80 or Below</span>
+              <strong>{lowScoredRows.length}</strong>
+              <em>{formatGb(lowScoredGb)} from lower-ranked matches.</em>
+            </div>
+          </div>
+          {message && (
+            <div className="run-download-warning model-cleanup-message">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>{message}</span>
+            </div>
+          )}
+        </div>
+        <div className="model-cleanup-actions" aria-label="Model cleanup options">
+          <button
+            type="button"
+            className="danger-button compact"
+            onClick={onDeleteUnscored}
+            disabled={isDeleting || unscoredRows.length === 0}
+          >
+            <Trash2 aria-hidden="true" />
+            {isDeleting ? 'Deleting...' : `Delete Not Scored (${unscoredRows.length})`}
+          </button>
+          <button
+            type="button"
+            className="danger-button compact"
+            onClick={onDeleteLowScored}
+            disabled={isDeleting || lowScoredRows.length === 0}
+          >
+            <Trash2 aria-hidden="true" />
+            {isDeleting ? 'Deleting...' : `Delete 80 or Below (${lowScoredRows.length})`}
+          </button>
+          <button type="button" className="mini-button outline" onClick={onUnderstand} disabled={isDeleting}>
+            <Check aria-hidden="true" />
+            I Understand
           </button>
         </div>
       </section>
@@ -3962,6 +4294,123 @@ function ThemePicker({
   );
 }
 
+const THIRD_PARTY_MODEL_LINKS = [
+  { label: 'Ollama model library', href: 'https://ollama.com/library' },
+  { label: 'Ollama terms', href: 'https://ollama.com/terms' },
+  { label: 'Gemma terms', href: 'https://ai.google.dev/gemma/terms' },
+  { label: 'Gemma prohibited use', href: 'https://ai.google.dev/gemma/prohibited_use_policy' },
+  { label: 'Gemma 4 license', href: 'https://ai.google.dev/gemma/apache_2' },
+] as const;
+
+function ThirdPartyModelNotice({ compact = false }: { compact?: boolean }) {
+  return (
+    <section className={compact ? 'third-party-model-notice compact' : 'third-party-model-notice'} aria-label="Third-party model notice">
+      <div>
+        <span>Third-party model notice</span>
+        <strong>Models have their own terms</strong>
+        <em>
+          RigMatch benchmarks models through the user's Ollama setup. It does not bundle model weights, sell model access,
+          or claim endorsement from model providers.
+        </em>
+      </div>
+      {!compact && (
+        <ul>
+          <li>Review each provider's model license or terms before downloading, using, sharing, or redistributing model weights.</li>
+          <li>Benchmark prompts and outputs are test artifacts. They may be inaccurate and are not legal, medical, financial, or safety advice.</li>
+          <li>If RigMatch ever ships model weights directly, add the provider's required license, notice, and use-restriction files before release.</li>
+        </ul>
+      )}
+      <div className="third-party-model-links">
+        {THIRD_PARTY_MODEL_LINKS.map((link) => (
+          <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer">
+            {link.label}
+            <ExternalLink aria-hidden="true" />
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ThirdPartyDownloadConsentModal({
+  rows,
+  onCancel,
+  onConfirm,
+}: {
+  rows: ModelRow[];
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const [accepted, setAccepted] = useState(false);
+  const visibleRows = rows.slice(0, 5);
+  const hiddenCount = Math.max(0, rows.length - visibleRows.length);
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section className="run-warning-modal third-party-download-modal" role="dialog" aria-modal="true" aria-labelledby="third-party-download-title">
+        <div className="modal-title">
+          <AlertTriangle aria-hidden="true" />
+          <div>
+            <span>Third-party model download</span>
+            <strong id="third-party-download-title">Review model terms first</strong>
+          </div>
+        </div>
+
+        <div className="modal-body">
+          <p>
+            RigMatch will ask your local Ollama install to download <strong>{rows.length}</strong> third-party model
+            {rows.length === 1 ? '' : 's'}. RigMatch does not bundle these model weights or control their provider terms.
+          </p>
+
+          <ol className="third-party-download-list" aria-label="Models queued for download">
+            {visibleRows.map((row) => (
+              <li key={row.id}>
+                <span>{row.displayName}</span>
+                <em>{row.sizeGb != null ? `${formatGb(row.sizeGb)} download` : 'Size unknown'}</em>
+              </li>
+            ))}
+            {hiddenCount > 0 && (
+              <li>
+                <span>+{hiddenCount} more</span>
+                <em>Review each model's provider terms if needed.</em>
+              </li>
+            )}
+          </ol>
+
+          <div className="third-party-download-links" aria-label="Model provider terms">
+            {THIRD_PARTY_MODEL_LINKS.map((link) => (
+              <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer">
+                {link.label}
+                <ExternalLink aria-hidden="true" />
+              </a>
+            ))}
+          </div>
+
+          <label className="third-party-download-consent">
+            <input
+              type="checkbox"
+              checked={accepted}
+              onChange={(event) => setAccepted(event.currentTarget.checked)}
+            />
+            <span>I understand these models are provided by third parties and may be subject to separate licenses and use policies.</span>
+          </label>
+        </div>
+
+        <div className="modal-actions">
+          <button type="button" className="mini-button outline" onClick={onCancel}>
+            <X aria-hidden="true" />
+            Cancel
+          </button>
+          <button type="button" className="primary-button compact" onClick={onConfirm} disabled={!accepted}>
+            <Download aria-hidden="true" />
+            Download All
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function UtilityPanel({
   panel,
   listTestResult,
@@ -4360,6 +4809,7 @@ function UtilityPanel({
             <strong>Local computer only</strong>
             <em>Local models run entirely on this machine — no data leaves. Models tagged ☁ Cloud run on remote servers.</em>
           </div>
+          <ThirdPartyModelNotice compact />
 
           <button type="button" className="primary-button compact" onClick={onOpenSetupGuide}>
             <ExternalLink aria-hidden="true" />
@@ -4434,6 +4884,7 @@ function UtilityPanel({
               </a>
             )}
           </section>
+          <ThirdPartyModelNotice />
           <ReleaseNotes />
 
           <div className="utility-stat">
@@ -5720,8 +6171,23 @@ function ModelPoolLineupStrip({
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const slots = Array.from({ length: 5 }, (_item, index) => rows[index]);
   const full = rows.length >= 5;
+  const missingDownloadCount = rows.filter((row) => !row.installed).length;
+  const canUsePrimaryAction = rows.length >= 2 && !disabled;
   const classNames = ['model-pool-lineup', full ? 'full' : '', className].filter(Boolean).join(' ');
-  const startLabel = isListTesting ? 'Testing…' : rows.length >= 2 ? 'Start Speed Dating' : `Pick ${Math.max(0, 2 - rows.length)} more`;
+  const startLabel = isListTesting
+    ? 'Testing...'
+    : rows.length < 2
+      ? `Pick ${Math.max(0, 2 - rows.length)} more`
+      : missingDownloadCount > 0
+        ? 'Open Setup'
+        : 'Start Speed Dating';
+  const lineupStatus = rows.length < 2
+    ? 'Pick at least two contestants before the show starts.'
+    : missingDownloadCount > 0
+      ? `${missingDownloadCount} contestant${missingDownloadCount === 1 ? '' : 's'} need downloads. Open setup to download the selected lineup.`
+      : full
+        ? 'Lineup full. Remove a contestant to swap.'
+        : 'Ready. Add more or start the show.';
 
   return (
     <section className={classNames} aria-label="Speed Dating lineup">
@@ -5729,14 +6195,15 @@ function ModelPoolLineupStrip({
         <div>
           <span>Dating Game Setup</span>
           <strong>{rows.length}/5 contestants picked</strong>
-          <em>{full ? 'Lineup full. Remove a contestant to swap.' : rows.length >= 2 ? 'Ready. Add more or start the show.' : 'Pick at least two installed contestants before the show starts.'}</em>
+          <em>{lineupStatus}</em>
         </div>
         <div className="lineup-head-actions">
           <button
             type="button"
             className="primary-button compact"
-            onClick={onRunListTest}
-            disabled={!canRunSpeedDate}
+            onClick={canRunSpeedDate ? onRunListTest : onOpenSpeedDate}
+            disabled={!canUsePrimaryAction}
+            title={missingDownloadCount > 0 ? 'Open Speed Dating setup to download the selected lineup' : undefined}
           >
             <Trophy aria-hidden="true" />
             {startLabel}
@@ -6664,7 +7131,7 @@ function SpeedDatePanel({
   onOpenLogs,
   onOpenModelPool,
   onRemoveCandidate,
-  onQueueModel,
+  onQueueMissingModels,
   onRunListTest,
   onOpenHistory,
 }: {
@@ -6685,18 +7152,20 @@ function SpeedDatePanel({
   onOpenLogs: () => void;
   onOpenModelPool: () => void;
   onRemoveCandidate: (row: ModelRow) => void;
-  onQueueModel: (row: ModelRow) => void;
+  onQueueMissingModels: (rows: ModelRow[]) => void;
   onRunListTest: () => void;
   onOpenHistory: () => void;
 }) {
   const [setupCollapsed, setSetupCollapsed] = useState(false);
   const winnerResult = listTestResult?.results.find((result) => result.model === listTestResult.winner);
-  const canRunListTest = shortlistedRows.length >= 2 && !isListTesting;
   const selectedSlots = Array.from({ length: 5 }, (_, index) => shortlistedRows[index]);
   const uninstalledLineupRows = shortlistedRows.filter((row) => !row.installed);
+  const canRunListTest = shortlistedRows.length >= 2 && uninstalledLineupRows.length === 0 && !isListTesting;
   const questionLabel = `${questionCount} questions per model`;
   const runReadiness = shortlistedRows.length >= 2
-    ? `${shortlistedRows.length} contestants will answer the same ${questionCount} questions.`
+    ? uninstalledLineupRows.length > 0
+      ? `${uninstalledLineupRows.length} contestant${uninstalledLineupRows.length === 1 ? '' : 's'} need downloads before the show starts.`
+      : `${shortlistedRows.length} contestants will answer the same ${questionCount} questions.`
     : 'Pick at least two installed contestants before the show starts.';
 
   const CORE_TASKS: Array<{ id: ModelTaskFilterId; label: string }> = [
@@ -6756,7 +7225,7 @@ function SpeedDatePanel({
               <button
                 type="button"
                 className="mini-button outline"
-                onClick={() => uninstalledLineupRows.forEach((row) => onQueueModel(row))}
+                onClick={() => onQueueMissingModels(uninstalledLineupRows)}
                 disabled={isListTesting}
                 title={`Queue ${uninstalledLineupRows.length} uninstalled contestant${uninstalledLineupRows.length === 1 ? '' : 's'} for download`}
               >
@@ -6780,7 +7249,7 @@ function SpeedDatePanel({
               disabled={!canRunListTest}
             >
               <Trophy aria-hidden="true" />
-              {isListTesting ? 'Testing' : shortlistedRows.length >= 2 ? 'Start Speed Dating' : 'Pick 2+'}
+              {isListTesting ? 'Testing' : shortlistedRows.length >= 2 ? uninstalledLineupRows.length > 0 ? 'Download First' : 'Start Speed Dating' : 'Pick 2+'}
             </button>
             <button
               type="button"
@@ -6822,7 +7291,7 @@ function SpeedDatePanel({
                 <button
                   type="button"
                   className="mini-button outline"
-                  onClick={() => uninstalledLineupRows.forEach(onQueueModel)}
+                  onClick={() => onQueueMissingModels(uninstalledLineupRows)}
                   disabled={isListTesting}
                   title={`Queue ${uninstalledLineupRows.length} uninstalled model${uninstalledLineupRows.length !== 1 ? 's' : ''} for download`}
                 >
@@ -7176,7 +7645,10 @@ function SpeedDateTranscriptPanel({
                 <b>{String(index + 1).padStart(2, '0')}</b>
                 <div>
                   <span>{prompt.label}</span>
-                  <strong>{prompt.sobrietyScore} answer quality</strong>
+                  <strong>
+                    {prompt.sobrietyScore} answer quality
+                    <PromptStatusPill status={prompt.status} />
+                  </strong>
                 </div>
                 <em>{prompt.tokensPerSecond} tok/s · {formatMs(prompt.elapsedMs)}</em>
               </div>
@@ -7280,6 +7752,7 @@ function SpeedDateTranscriptPanel({
                             <span title="Answer quality score">{prompt.sobrietyScore} quality</span>
                             <span title="Generation speed">{prompt.tokensPerSecond} tok/s</span>
                             <span title="Time to complete">{formatMs(prompt.elapsedMs)}</span>
+                            <PromptStatusPill status={prompt.status} />
                           </div>
                         )}
                       </div>
@@ -7360,6 +7833,18 @@ function QuestionSuitePreview({
       </div>
     </section>
   );
+}
+
+function PromptStatusPill({ status }: { status?: BenchmarkPromptResult['status'] }) {
+  if (!status || status === 'ok') return null;
+
+  const label = status === 'no-response'
+    ? 'No response'
+    : status === 'truncated'
+      ? 'Truncated'
+      : 'Failed';
+
+  return <span className={`prompt-status-pill ${status}`}>{label}</span>;
 }
 
 const BENCHMARK_QUESTION_TYPES: BenchmarkQuestionType[] = ['assistant', 'json', 'truth', 'format', 'coding'];
@@ -8139,7 +8624,10 @@ function ProfileQuestionTranscript({
               <b>{String(index + 1).padStart(2, '0')}</b>
               <div>
                 <span>{prompt.label}</span>
-                <strong>{prompt.sobrietyScore} answer quality</strong>
+                <strong>
+                  {prompt.sobrietyScore} answer quality
+                  <PromptStatusPill status={prompt.status} />
+                </strong>
               </div>
               <em>{prompt.tokensPerSecond} tok/s · {formatMs(prompt.elapsedMs)}</em>
             </div>
@@ -8539,11 +9027,25 @@ function Ticker({
   activity,
   isDesktopRuntime,
   topPick,
+  queuedRows,
+  pullProgressByModel,
+  isPulling,
+  pullingModel,
+  isPullCancelRequested,
+  onCancelQueue,
+  onOpenDownloads,
   onOpenChat,
 }: {
   activity: string;
   isDesktopRuntime: boolean;
   topPick?: RigPick | null;
+  queuedRows: ModelRow[];
+  pullProgressByModel: Record<string, PullProgressUpdate>;
+  isPulling: boolean;
+  pullingModel: string | null;
+  isPullCancelRequested: boolean;
+  onCancelQueue: () => void;
+  onOpenDownloads: () => void;
   onOpenChat: () => void;
 }) {
   const [tipIndex, setTipIndex] = useState(0);
@@ -8568,9 +9070,14 @@ function Ticker({
   const pickScore = topPick?.score?.total ?? 0;
   const pickGrade = topPick?.score?.grade;
   const pickName = topPick?.row.displayName ?? null;
+  const showDownloadDock = Boolean(
+    queuedRows.length > 0 ||
+    pullingModel ||
+    Object.values(pullProgressByModel).some((progress) => isVisiblePullProgress(progress)),
+  );
 
   return (
-    <footer className="ticker">
+    <footer className={showDownloadDock ? 'ticker has-download-dock' : 'ticker'}>
       <button type="button" className="ticker-chat-link" onClick={onOpenChat} title="Open RigMatch Chat">
         <MessageSquare size={13} aria-hidden="true" />
         <span>Chat</span>
@@ -8589,6 +9096,17 @@ function Ticker({
           </>
         )}
       </div>
+      {showDownloadDock && (
+        <DownloadTickerDock
+          queuedRows={queuedRows}
+          pullProgressByModel={pullProgressByModel}
+          isPulling={isPulling}
+          pullingModel={pullingModel}
+          isPullCancelRequested={isPullCancelRequested}
+          onCancelQueue={onCancelQueue}
+          onOpenDownloads={onOpenDownloads}
+        />
+      )}
       <div className="ticker-right">
         <span>{isDesktopRuntime ? 'Desktop bridge online' : 'Preview mode'}</span>
         <strong>
@@ -8603,6 +9121,93 @@ function Ticker({
         ))}
       </div>
     </footer>
+  );
+}
+
+function DownloadTickerDock({
+  queuedRows,
+  pullProgressByModel,
+  isPulling,
+  pullingModel,
+  isPullCancelRequested,
+  onCancelQueue,
+  onOpenDownloads,
+}: {
+  queuedRows: ModelRow[];
+  pullProgressByModel: Record<string, PullProgressUpdate>;
+  isPulling: boolean;
+  pullingModel: string | null;
+  isPullCancelRequested: boolean;
+  onCancelQueue: () => void;
+  onOpenDownloads: () => void;
+}) {
+  const visibleProgress = Object.values(pullProgressByModel).filter((progress) => isVisiblePullProgress(progress));
+  const activeProgress = pullingModel ? pullProgressByModel[pullingModel] : visibleProgress[0];
+  const activeModel = pullingModel ?? activeProgress?.model ?? queuedRows[0]?.displayName ?? null;
+  const phase = activeProgress?.phase ?? (activeModel ? 'queued' : 'queued');
+  const queuedBehindCount = queuedRows.filter((row) => row.displayName !== activeModel).length;
+  const queued = phase === 'queued' || (!isPulling && queuedRows.some((row) => row.displayName === activeModel));
+  const percent = getPullProgressPercent(activeProgress, queued);
+  const hasMeasuredPercent = typeof activeProgress?.percent === 'number';
+  const trackPercent = hasMeasuredPercent || phase === 'complete'
+    ? Math.max(3, Math.min(100, percent))
+    : queued
+      ? 6
+      : 28;
+  const percentLabel = hasMeasuredPercent || phase === 'complete'
+    ? `${Math.round(percent)}%`
+    : queued
+      ? 'Queued'
+      : '--%';
+  const detailLabel = activeProgress
+    ? getPullProgressDetailLabel(phase, queued, activeProgress)
+    : queuedRows.length > 0
+      ? `${queuedRows.length} model${queuedRows.length === 1 ? '' : 's'} waiting to download.`
+      : 'Waiting for download status.';
+  const statusLabel = phase === 'failed'
+    ? 'Download failed'
+    : phase === 'complete'
+      ? 'Download complete'
+      : isPullCancelRequested
+        ? 'Stopping download'
+        : isPulling
+          ? 'Downloading'
+          : queuedRows.length > 0
+            ? 'Download queued'
+            : 'Download status';
+
+  return (
+    <section className={`ticker-download-dock ${phase}`} aria-label="Download status">
+      <button type="button" className="ticker-download-main" onClick={onOpenDownloads} title="Open model downloads">
+        <Download aria-hidden="true" />
+        <div className="ticker-download-copy">
+          <div>
+            <span>{statusLabel}</span>
+            <strong title={activeModel ?? undefined}>{activeModel ? getQueueChipModelName(activeModel) : 'Ollama queue'}</strong>
+          </div>
+          <em>
+            {detailLabel}
+            {queuedBehindCount > 0 ? ` · ${queuedBehindCount} waiting` : ''}
+          </em>
+        </div>
+        <b>{percentLabel}</b>
+      </button>
+      <div className="ticker-download-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
+        <i style={{ width: `${trackPercent}%` }} />
+      </div>
+      {(queuedRows.length > 0 || isPulling) && (
+        <button
+          type="button"
+          className="ticker-download-stop"
+          onClick={onCancelQueue}
+          disabled={isPullCancelRequested}
+          title={isPulling ? 'Stop after the current Ollama pull finishes' : 'Cancel all queued downloads'}
+        >
+          <X aria-hidden="true" />
+          {isPullCancelRequested ? 'Stopping' : isPulling ? 'Stop' : 'Cancel'}
+        </button>
+      )}
+    </section>
   );
 }
 
@@ -10582,6 +11187,10 @@ function buildBugReportUrl(system: SystemProfile, ollama: OllamaStatus, logPath:
 function formatGb(value: number) {
   if (!Number.isFinite(value)) return '? GB';
   return `${Math.round(value * 10) / 10} GB`;
+}
+
+function sumModelRowGb(rows: ModelRow[]) {
+  return rows.reduce((sum, row) => sum + (row.sizeGb ?? row.installedModel?.sizeGb ?? 0), 0);
 }
 
 function formatMs(value: number) {
