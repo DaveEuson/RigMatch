@@ -8,6 +8,7 @@ const api = {
   scanLan: () => ipcRenderer.invoke('network:scanLan'),
   addHostByAddress: (address) => ipcRenderer.invoke('network:addHostByAddress', address),
   pullModel: (request) => ipcRenderer.invoke('ollama:pullModel', request),
+  abortPull: () => ipcRenderer.invoke('ollama:abortPull'),
   deleteModel: (request) => ipcRenderer.invoke('ollama:deleteModel', request),
   runBenchmark: (request) => ipcRenderer.invoke('benchmark:run', request),
   onBenchmarkProgress: (callback) => {

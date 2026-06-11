@@ -11,7 +11,7 @@ import type { AgentArcadeApi, BenchmarkProgressUpdate, PullProgressUpdate, Updat
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
 const RIGMATCH_RELEASES_URL = 'https://github.com/daveeuson/RigMatch.AI/releases';
-const APP_VERSION = '0.1.0';
+const APP_VERSION = '0.1.2';
 const benchmarkProgressListeners = new Set<(update: BenchmarkProgressUpdate) => void>();
 const pullProgressListeners = new Set<(update: PullProgressUpdate) => void>();
 
@@ -271,6 +271,7 @@ const fallbackApi: AgentArcadeApi = {
   async checkAutoUpdate() { /* no-op in preview */ },
   async downloadUpdate() { /* no-op in preview */ },
   async installUpdate() { /* no-op in preview */ },
+  async abortPull() { /* no-op in preview */ },
 };
 
 export const agentArcadeApi: AgentArcadeApi = window.agentArcade ?? fallbackApi;

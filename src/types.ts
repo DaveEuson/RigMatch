@@ -245,6 +245,7 @@ export type AgentArcadeApi = {
   scanLan: () => Promise<ScanResponse>;
   addHostByAddress: (address: string) => Promise<NetworkHost>;
   pullModel: (request: { model: string; baseUrl?: string; progressId?: string }) => Promise<PullModelResponse>;
+  abortPull: () => Promise<void>;
   deleteModel: (request: { model: string; baseUrl?: string }) => Promise<DeleteModelResponse>;
   runBenchmark: (request: {
     model: string;

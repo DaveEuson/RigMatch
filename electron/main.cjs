@@ -134,6 +134,8 @@ const BRIDGE_ALLOWED_ORIGINS = new Set([
 const SCORES_MAX_ENTRIES = 500;   // N-07: reject oversized payloads from renderer
 let benchmarkRunning = false;     // N-06: single-benchmark mutex
 let lastLogClearAt = 0;           // N-03: rate-limit log clearing
+let activePullController = null;  // abortable by ollama:abortPull IPC
+let catalogFetchPromise = null;   // dedup concurrent catalog fetches
 
 let latestScores = {};
 let latestChosen = null;
@@ -188,6 +190,7 @@ function registerHandlers() {
   handleLogged('ollama:getCatalog', 'catalog', (_event, options) => getOllamaCatalog(options));
   handleLogged('ollama:openDownload', 'ollama', () => openOllamaDownload());
   handleLogged('ollama:pullModel', 'ollama', (event, request) => pullModel(request, event.sender));
+  ipcMain.handle('ollama:abortPull', () => { activePullController?.abort(); });
   handleLogged('ollama:deleteModel', 'ollama', (_event, request) => deleteModel(request));
   handleLogged('network:scanLan', 'network', () => scanLanForOllama());
   handleLogged('network:addHostByAddress', 'network', (_event, address) => addHostByAddress(address));
@@ -1140,6 +1143,9 @@ async function getOllamaCatalog(options = {}) {
     };
   }
 
+  if (catalogFetchPromise) return catalogFetchPromise;
+
+  catalogFetchPromise = (async () => {
   try {
     const libraryPages = await getOllamaLibraryPages();
     const uniqueNames = Array.from(new Set(libraryPages.flatMap((html) => extractOllamaLibraryNames(html))))
@@ -1190,7 +1196,12 @@ async function getOllamaCatalog(options = {}) {
       models: fallback,
       error: error.message || 'Could not sync Ollama library',
     };
+  } finally {
+    catalogFetchPromise = null;
   }
+  })();
+
+  return catalogFetchPromise;
 }
 
 function mergeCatalogs(liveCatalog, fallback) {
@@ -1515,6 +1526,7 @@ async function pullModel(request = {}, sender) {
     baseUrl,
   });
   const controller = new AbortController();
+  activePullController = controller;
   const timeoutMs = 1000 * 60 * 45;
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let lastStatus = 'Pulled';
@@ -1637,6 +1649,7 @@ async function pullModel(request = {}, sender) {
     throw error;
   } finally {
     clearTimeout(timer);
+    if (activePullController === controller) activePullController = null;
   }
 
   return {
@@ -2003,8 +2016,9 @@ async function sendChat(request = {}) {
     throw new Error('Model and message are required');
   }
 
-  // U-01: collapse newlines so user input cannot inject additional "Assistant:" turns
-  const safeMessage = String(message).replace(/[\r\n]+/g, ' ').slice(0, 4000);
+  // U-01: strip control chars so user input cannot inject additional "Assistant:" turns
+  const safeMessage = String(message).replace(/[\x00-\x1F\x7F]+/g, ' ').slice(0, 4000).trim();
+  if (!safeMessage) throw new Error('Message is empty after sanitization');
 
   const response = await fetchJson(
     `${baseUrl}/api/generate`,

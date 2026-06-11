@@ -255,7 +255,7 @@ const navItems: NavItem[] = [
 
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
 const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
-const APP_VERSION = '0.1.1';
+const APP_VERSION = '0.1.2';
 const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
 const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
 const HISTORY_STORAGE_KEY = 'rigmatch:history:v1';
@@ -270,9 +270,23 @@ const releaseNotes: Array<{
   notes: string[];
 }> = [
   {
+    version: '0.1.2',
+    label: 'Stability & Security',
+    date: 'Current build',
+    notes: [
+      'Download cancel now immediately aborts the active Ollama pull, not just the queue.',
+      'Chat timeouts and failures now surface in the activity ticker.',
+      'Clearing app data now confirms disk write before resetting UI state.',
+      'Fixed catalog double-fetch race when clicking Refresh rapidly.',
+      'Fixed stale model selection crash when a model is removed from Ollama.',
+      'Ollama update check now times out after 5 seconds instead of hanging.',
+      'Hardened chat message sanitization against control-character injection.',
+    ],
+  },
+  {
     version: '0.1.1',
     label: 'Beta Hardening',
-    date: 'Current build',
+    date: 'June 2026',
     notes: [
       'Bug report button, markdown chat rendering, VRAM header, sticky profile tabs, and lineup banner.',
       'UI polish: single-row tabs, Top Pick hero card, roster X buttons, avatar glow.',
@@ -455,6 +469,12 @@ function App() {
     () => new Set(ollama.models.map((model) => model.model || model.name)),
     [ollama.models],
   );
+
+  useEffect(() => {
+    if (modelRows.length > 0 && !selectedRow) {
+      setSelectedModel('qwen2.5:7b');
+    }
+  }, [modelRows, selectedRow]);
 
   const canBenchmark = Boolean(selectedRow?.installed && selectedHostCanBenchmark);
   const agentName = getAgentName(selectedModel);
@@ -718,12 +738,12 @@ function App() {
 
   const confirmClearData = useCallback(async () => {
     try {
+      const result = await agentArcadeApi.clearLogs();
       window.localStorage.removeItem(TEST_SUITE_STORAGE_KEY);
       window.localStorage.removeItem(HISTORY_STORAGE_KEY);
       window.localStorage.removeItem(THEME_STORAGE_KEY);
       window.localStorage.removeItem(TUTORIAL_STORAGE_KEY);
       window.localStorage.removeItem(UI_MODE_STORAGE_KEY);
-      const result = await agentArcadeApi.clearLogs();
 
       setAppLogs(result.entries);
       setLogPath(result.logPath);
@@ -1051,6 +1071,7 @@ function App() {
 
       pullQueueCancelRef.current = true;
       setIsPullCancelRequested(true);
+      void agentArcadeApi.abortPull();
       setQueuedModelIds(new Set<string>());
       setPullProgressByModel((current) => {
         if (!pullingModel) return {};
@@ -1486,11 +1507,13 @@ function App() {
         ],
       }));
     } catch (error) {
+      const errMsg = getErrorMessage(error);
+      setActivity(`Chat failed: ${errMsg}`);
       setChatMessagesByModel((prev) => ({
         ...prev,
         [chatModel]: [
           ...(prev[chatModel] ?? [welcomeChatMessage]),
-          { id: `${Date.now()}-error`, role: 'agent', content: `I could not reach the selected model: ${getErrorMessage(error)}` },
+          { id: `${Date.now()}-error`, role: 'agent', content: `I could not reach the selected model: ${errMsg}` },
         ],
       }));
     }
@@ -1575,7 +1598,7 @@ function App() {
         };
       });
     });
-  }, [benchmarkPromptPlan.length]);
+  }, []);
 
   useEffect(() => {
     if (!agentArcadeApi.onPullProgress) return undefined;
@@ -3890,13 +3913,16 @@ function UtilityPanel({
 
   const checkOllamaUpdate = useCallback(async () => {
     setIsCheckingOllamaUpdate(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
     try {
-      const res = await fetch('https://api.github.com/repos/ollama/ollama/releases/latest');
+      const res = await fetch('https://api.github.com/repos/ollama/ollama/releases/latest', { signal: controller.signal });
       const data = await res.json() as { tag_name: string };
       setOllamaUpdateLatest(data.tag_name.replace(/^v/, ''));
     } catch {
-      // network unavailable
+      // network unavailable or timed out
     } finally {
+      clearTimeout(timer);
       setIsCheckingOllamaUpdate(false);
     }
   }, []);
