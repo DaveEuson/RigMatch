@@ -114,7 +114,7 @@ type ThemeId = 'orange' | 'avocado' | 'mustard' | 'teal' | 'chocolate';
 type UiMode = 'beginner' | 'advanced';
 type PendingRunMode = 'single' | 'speed-date';
 type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
-type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'origin' | 'source' | 'status' | 'score';
+type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'origin' | 'source' | 'status' | 'score' | 'speed' | 'pulls';
 type SortDirection = 'asc' | 'desc';
 type ModelQuickFilterId = 'all' | 'installed' | 'fits-vram' | 'scored' | 'unscored' | 'huge';
 type ModelFamilyId = 'deepseek' | 'llama' | 'qwen' | 'mistral' | 'gemma' | 'phi' | 'generic';
@@ -1734,6 +1734,7 @@ function App() {
             queuedModelIds={queuedModelIds}
             pullProgressByModel={pullProgressByModel}
             modelScores={modelScores}
+            benchmarkByModel={benchmarkByModel}
             diskGuard={diskGuard}
             vramGb={system.gpu.vramGb}
             platform={system.platform}
@@ -4861,6 +4862,7 @@ function ModelCabinet({
   queuedModelIds,
   pullProgressByModel,
   modelScores,
+  benchmarkByModel,
   diskGuard,
   vramGb,
   platform,
@@ -4895,6 +4897,7 @@ function ModelCabinet({
   queuedModelIds: Set<string>;
   pullProgressByModel: Record<string, PullProgressUpdate>;
   modelScores: Record<string, TestedModelScore>;
+  benchmarkByModel: Record<string, BenchmarkResult>;
   diskGuard: ReturnType<typeof getDiskGuard>;
   vramGb: number;
   platform: string;
@@ -4932,7 +4935,7 @@ function ModelCabinet({
   const [sortKey, setSortKey] = useState<ModelSortKey>('status');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   // Column widths: Model, Size, Good For, Origin, Status, Match (Actions fills remainder)
-  const [colWidths, setColWidths] = useState([165, 68, 92, 100, 90, 72]);
+  const [colWidths, setColWidths] = useState([165, 68, 92, 100, 90, 72, 80]);
   const colWidthsRef = useRef(colWidths);
   colWidthsRef.current = colWidths;
   const handleColResizeStart = useCallback((colIndex: number, e: React.MouseEvent) => {
@@ -5011,8 +5014,8 @@ function ModelCabinet({
         && (!taskFilter || modelMatchesTask(row, taskFilter));
     });
 
-    return sortModelRows(filteredRows, sortKey, sortDirection, queuedModelIds, modelScores);
-  }, [modelScores, query, quickFilter, taskFilter, queuedModelIds, rows, sortDirection, sortKey, vramGb]);
+    return sortModelRows(filteredRows, sortKey, sortDirection, queuedModelIds, modelScores, benchmarkByModel);
+  }, [benchmarkByModel, modelScores, query, quickFilter, taskFilter, queuedModelIds, rows, sortDirection, sortKey, vramGb]);
   const modelCountLabel = query || quickFilter !== 'all' || taskFilter ? `${visibleRows.length}/${rows.length} models` : `${rows.length} models`;
   const vramLabel = vramGb > 0 ? `${formatGb(vramGb)} VRAM` : 'detected VRAM';
 
@@ -5127,6 +5130,7 @@ function ModelCabinet({
               <SortableModelHeader label="By" sortName="origin" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(3, e)} />
               <SortableModelHeader label="Status" sortName="status" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(4, e)} />
               <SortableModelHeader label="Match" sortName="score" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(5, e)} />
+              <SortableModelHeader label="Speed" sortName="speed" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(6, e)} />
               <th>Actions</th>
             </tr>
           </thead>
@@ -5143,6 +5147,7 @@ function ModelCabinet({
               const sizeRisk = getSizeRisk(row.sizeGb);
               const statusLabel = getModelStatusLabel(row, queued);
               const score = getModelScore(row, modelScores);
+              const rowBenchmark = benchmarkByModel[row.displayName];
               const hardwareFit = getHardwareFit(row, vramGb);
               const platformFit = getPlatformFit(row.displayName, platform);
               const speedDateLineupFullForRow = shortlistedCount >= 5;
@@ -5228,6 +5233,14 @@ function ModelCabinet({
                   </td>
                   <td>
                     <ModelScorePill score={score} />
+                  </td>
+                  <td className="speed-cell">
+                    {rowBenchmark?.avgTokensPerSecond != null
+                      ? <span className="speed-pill tested">{Math.round(rowBenchmark.avgTokensPerSecond)} tok/s</span>
+                      : row.pulls != null
+                        ? <span className="speed-pill pulls">{formatPullCount(row.pulls)} pulls</span>
+                        : <span className="speed-pill empty">—</span>
+                    }
                   </td>
                   <td className={showDownloadProgress ? 'action-cell has-download-progress' : 'action-cell'}>
                     <div className="row-actions">
@@ -9487,6 +9500,7 @@ function sortModelRows(
   direction: SortDirection,
   queuedModelIds: Set<string>,
   modelScores: Record<string, TestedModelScore>,
+  benchmarkByModel: Record<string, BenchmarkResult> = {},
 ) {
   const directionFactor = direction === 'asc' ? 1 : -1;
 
@@ -9503,8 +9517,8 @@ function sortModelRows(
       return sizeDelta === 0 ? left.displayName.localeCompare(right.displayName) : sizeDelta * directionFactor;
     }
 
-    const leftValue = getModelSortValue(left, sortKey, queuedModelIds.has(left.displayName), modelScores);
-    const rightValue = getModelSortValue(right, sortKey, queuedModelIds.has(right.displayName), modelScores);
+    const leftValue = getModelSortValue(left, sortKey, queuedModelIds.has(left.displayName), modelScores, benchmarkByModel);
+    const rightValue = getModelSortValue(right, sortKey, queuedModelIds.has(right.displayName), modelScores, benchmarkByModel);
 
     if (typeof leftValue === 'number' && typeof rightValue === 'number') {
       const delta = leftValue - rightValue;
@@ -9523,6 +9537,7 @@ function getModelSortValue(
   sortKey: ModelSortKey,
   queued: boolean,
   modelScores: Record<string, TestedModelScore>,
+  benchmarkByModel: Record<string, BenchmarkResult> = {},
 ) {
   switch (sortKey) {
     case 'params':
@@ -9537,6 +9552,10 @@ function getModelSortValue(
       return getModelStatusRank(row, queued);
     case 'score':
       return getModelScore(row, modelScores)?.total ?? -1;
+    case 'speed':
+      return benchmarkByModel[row.displayName]?.avgTokensPerSecond ?? getModelScore(row, modelScores)?.speed ?? -1;
+    case 'pulls':
+      return row.pulls ?? -1;
     case 'name':
     default:
       return row.displayName;
@@ -9606,6 +9625,10 @@ function getModelSortLabel(sortKey: ModelSortKey) {
       return 'Status';
     case 'score':
       return 'Match';
+    case 'speed':
+      return 'Speed';
+    case 'pulls':
+      return 'Popularity';
     case 'name':
     default:
       return 'Model';

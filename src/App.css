@@ -4145,6 +4145,35 @@ tbody tr.computer-row.selected {
   opacity: 0.75;
 }
 
+.speed-cell {
+  white-space: nowrap;
+  text-align: center;
+}
+
+.speed-pill {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.speed-pill.tested {
+  background: rgba(var(--accent-rgb, 100, 220, 180), 0.15);
+  color: var(--accent);
+}
+
+.speed-pill.pulls {
+  background: rgba(120, 120, 180, 0.12);
+  color: var(--muted);
+}
+
+.speed-pill.empty {
+  color: var(--muted);
+  opacity: 0.4;
+}
+
 .mini-button.warn,
 .primary-button.warn {
   border-color: #e8a020 !important;
