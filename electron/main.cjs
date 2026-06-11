@@ -157,6 +157,7 @@ let benchmarkRunning = false;     // N-06: single-benchmark mutex
 let lastLogClearAt = 0;           // N-03: rate-limit log clearing
 let activePullController = null;  // abortable by ollama:abortPull IPC
 let catalogFetchPromise = null;   // dedup concurrent catalog fetches
+let ollamaInstallController = null;
 
 let latestScores = {};
 let latestChosen = null;
@@ -231,6 +232,11 @@ function registerHandlers() {
     try { await autoUpdater.downloadUpdate(); } catch (err) { return { phase: 'error', error: err.message }; }
   });
   ipcMain.handle('app:installUpdate', () => { autoUpdater.quitAndInstall(); });
+  ipcMain.handle('ollama:startInstall', (event) => startOllamaInstall(event.sender));
+  ipcMain.handle('ollama:launchInstaller', (_event, installerPath) => {
+    if (typeof installerPath !== 'string' || !installerPath) return;
+    return shell.openPath(installerPath);
+  });
   ipcMain.handle('scores:sync', (_event, data) => {
     if (!data || typeof data !== 'object' || Array.isArray(data)) return;
 
@@ -484,6 +490,62 @@ function redactSecrets(value) {
 
 async function openOllamaDownload() {
   openExternalSafe(OLLAMA_DOWNLOAD_URL);
+}
+
+const OLLAMA_INSTALLER_URLS = {
+  win32: 'https://ollama.com/download/OllamaSetup.exe',
+  darwin: 'https://ollama.com/download/Ollama-darwin.zip',
+};
+const OLLAMA_INSTALLER_MAX_BYTES = 300 * 1024 * 1024; // 300 MB cap
+
+async function startOllamaInstall(sender) {
+  const send = (payload) => {
+    if (!sender.isDestroyed()) sender.send('ollama:installProgress', payload);
+  };
+
+  const platform = process.platform;
+
+  if (platform === 'linux') {
+    send({ phase: 'script', command: 'curl -fsSL https://ollama.com/install.sh | sh' });
+    return;
+  }
+
+  const url = OLLAMA_INSTALLER_URLS[platform];
+  if (!url) {
+    send({ phase: 'error', error: `No installer available for platform: ${platform}` });
+    return;
+  }
+
+  const filename = platform === 'win32' ? 'OllamaSetup.exe' : 'Ollama-darwin.zip';
+  const dest = path.join(app.getPath('temp'), filename);
+
+  ollamaInstallController = new AbortController();
+  try {
+    send({ phase: 'downloading', percent: 0, receivedBytes: 0, totalBytes: 0 });
+    const response = await fetch(url, {
+      signal: ollamaInstallController.signal,
+      headers: { 'User-Agent': APP_USER_AGENT },
+    });
+    if (!response.ok) throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+    const total = parseInt(response.headers.get('content-length') || '0', 10);
+    let received = 0;
+    const fileStream = fsSync.createWriteStream(dest);
+    const reader = response.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (received + value.length > OLLAMA_INSTALLER_MAX_BYTES) throw new Error('Installer download too large');
+      fileStream.write(Buffer.from(value));
+      received += value.length;
+      send({ phase: 'downloading', percent: total ? Math.round((received / total) * 100) : 0, receivedBytes: received, totalBytes: total });
+    }
+    await new Promise((resolve, reject) => fileStream.end((err) => (err ? reject(err) : resolve())));
+    send({ phase: 'ready', installerPath: dest });
+  } catch (err) {
+    if (err.name !== 'AbortError') send({ phase: 'error', error: err.message || 'Download failed' });
+  } finally {
+    ollamaInstallController = null;
+  }
 }
 
 async function checkForRigmatchUpdates(channel = 'release') {

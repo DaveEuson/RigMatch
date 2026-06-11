@@ -2323,6 +2323,73 @@ button.inline-link {
   height: 13px;
 }
 
+.install-ollama-btn.ready {
+  background: var(--accent);
+  color: #000;
+}
+
+.install-progress-bar {
+  position: relative;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--surface2);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.install-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: var(--accent);
+  opacity: 0.25;
+  transition: width 0.3s ease;
+}
+
+.install-script-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 12px 14px;
+  flex-wrap: wrap;
+}
+
+.install-script-cmd {
+  flex: 1;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--accent);
+  word-break: break-all;
+}
+
+.install-script-hint {
+  width: 100%;
+  margin: 6px 0 0;
+  font-size: 11px;
+  opacity: 0.6;
+  color: var(--text);
+}
+
+.install-error-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.install-error-msg {
+  font-size: 12px;
+  color: #ef6464;
+  flex: 1;
+}
+
 .install-steps-flow {
   list-style: none;
   margin: 0;

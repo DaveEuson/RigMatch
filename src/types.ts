@@ -240,6 +240,13 @@ export type UpdateCheckResponse = {
   error: string | null;
 };
 
+export type OllamaInstallProgress =
+  | { phase: 'idle' }
+  | { phase: 'downloading'; percent: number; receivedBytes: number; totalBytes: number }
+  | { phase: 'ready'; installerPath: string }
+  | { phase: 'script'; command: string }
+  | { phase: 'error'; error: string };
+
 export type AgentArcadeApi = {
   getSystemProfile: () => Promise<SystemProfile>;
   getOllamaStatus: (baseUrl?: string) => Promise<OllamaStatus>;
@@ -272,6 +279,9 @@ export type AgentArcadeApi = {
   downloadUpdate: () => Promise<void>;
   installUpdate: () => Promise<void>;
   onUpdaterStatus?: (callback: (status: AutoUpdateStatus) => void) => () => void;
+  startOllamaInstall: () => Promise<void>;
+  launchOllamaInstaller: (installerPath: string) => Promise<void>;
+  onOllamaInstallProgress?: (callback: (progress: OllamaInstallProgress) => void) => () => void;
 };
 
 export type ModelRow = CatalogModel & {

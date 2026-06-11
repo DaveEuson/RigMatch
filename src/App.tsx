@@ -71,6 +71,7 @@ import type {
   PullProgressUpdate,
   SystemProfile,
   AutoUpdateStatus,
+  OllamaInstallProgress,
   UpdateChannel,
   UpdateCheckResponse,
 } from './types';
@@ -432,6 +433,7 @@ function App() {
   const [updateCheck, setUpdateCheck] = useState<UpdateCheckResponse | null>(null);
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const [autoUpdateStatus, setAutoUpdateStatus] = useState<AutoUpdateStatus>({ phase: 'idle' });
+  const [ollamaInstallProgress, setOllamaInstallProgress] = useState<OllamaInstallProgress>({ phase: 'idle' });
   const [themeId, setThemeId] = useState<ThemeId>(() => getSavedThemeId());
   const [uiMode, setUiMode] = useState<UiMode>(() => getSavedUiMode());
   const [chatOpen, setChatOpen] = useState(false);
@@ -570,6 +572,29 @@ function App() {
       setActivity('Ollama download page opened. Install it, then check this computer again.');
     } catch (error) {
       setActivity(`Could not open Ollama download page: ${getErrorMessage(error)}`);
+    }
+  }, []);
+
+  useEffect(() => {
+    return agentArcadeApi.onOllamaInstallProgress?.((progress) => {
+      setOllamaInstallProgress(progress);
+    });
+  }, []);
+
+  const startOllamaInstall = useCallback(async () => {
+    setOllamaInstallProgress({ phase: 'downloading', percent: 0, receivedBytes: 0, totalBytes: 0 });
+    try {
+      await agentArcadeApi.startOllamaInstall();
+    } catch (err) {
+      setOllamaInstallProgress({ phase: 'error', error: getErrorMessage(err) });
+    }
+  }, []);
+
+  const launchOllamaInstaller = useCallback(async (installerPath: string) => {
+    try {
+      await agentArcadeApi.launchOllamaInstaller(installerPath);
+    } catch (err) {
+      setActivity(`Could not launch installer: ${getErrorMessage(err)}`);
     }
   }, []);
 
@@ -1672,6 +1697,9 @@ function App() {
             onScan={refreshRig}
             onSelect={setSelectedHostId}
             onInstallOllama={openOllamaDownload}
+            ollamaInstallProgress={ollamaInstallProgress}
+            onStartOllamaInstall={startOllamaInstall}
+            onLaunchOllamaInstaller={launchOllamaInstaller}
             onScanRig={refreshRig}
             onOpenSetupGuide={openSetupGuide}
           />
@@ -2629,6 +2657,9 @@ function LanBrowser({
   onScan,
   onSelect,
   onInstallOllama,
+  ollamaInstallProgress,
+  onStartOllamaInstall,
+  onLaunchOllamaInstaller,
   onScanRig,
   onOpenSetupGuide,
 }: {
@@ -2642,6 +2673,9 @@ function LanBrowser({
   onScan: () => void;
   onSelect: (id: string) => void;
   onInstallOllama: () => void;
+  ollamaInstallProgress: OllamaInstallProgress;
+  onStartOllamaInstall: () => void;
+  onLaunchOllamaInstaller: (path: string) => void;
   onScanRig: () => void;
   onOpenSetupGuide: () => void;
 }) {
@@ -2689,6 +2723,9 @@ function LanBrowser({
         system={system}
         ollama={ollama}
         onInstallOllama={onInstallOllama}
+        ollamaInstallProgress={ollamaInstallProgress}
+        onStartOllamaInstall={onStartOllamaInstall}
+        onLaunchOllamaInstaller={onLaunchOllamaInstaller}
         onScanRig={onScanRig}
         onOpenSetupGuide={onOpenSetupGuide}
       />
@@ -2894,12 +2931,18 @@ function OllamaPrep({
   system,
   ollama,
   onInstallOllama,
+  ollamaInstallProgress,
+  onStartOllamaInstall,
+  onLaunchOllamaInstaller,
   onScanRig,
   onOpenSetupGuide,
 }: {
   system: SystemProfile;
   ollama: OllamaStatus;
   onInstallOllama: () => void;
+  ollamaInstallProgress: OllamaInstallProgress;
+  onStartOllamaInstall: () => void;
+  onLaunchOllamaInstaller: (path: string) => void;
   onScanRig: () => void;
   onOpenSetupGuide: () => void;
 }) {
@@ -2931,6 +2974,13 @@ function OllamaPrep({
   }
 
   // Not-ready state — full install hero for first-timers
+  const ip = ollamaInstallProgress;
+  const isLinux = system.platform === 'linux';
+  const isDownloading = ip.phase === 'downloading';
+  const isReady = ip.phase === 'ready';
+  const isScript = ip.phase === 'script';
+  const hasError = ip.phase === 'error';
+
   return (
     <div className="ollama-install-hero">
       <div className="install-hero-top">
@@ -2939,32 +2989,65 @@ function OllamaPrep({
           <span>One-time setup</span>
           <strong>Install Ollama to get started</strong>
           <p>
-            Ollama is a <strong>free, open-source</strong> program that runs AI models on your computer.
-            Download it, run the installer, and it sits quietly in the background — ready whenever you are.
+            Ollama is a <strong>free, open-source</strong> program that runs AI models locally.
+            {isLinux
+              ? ' Run the one-line install command below — it sets everything up automatically.'
+              : ' Click below to download and run the installer — it starts Ollama automatically in the background.'}
           </p>
         </div>
       </div>
 
-      <button type="button" className="install-ollama-btn" onClick={onInstallOllama}>
-        <Download aria-hidden="true" />
-        Download Ollama for {platformName} — Free
-        <ExternalLink aria-hidden="true" />
-      </button>
+      {isScript && 'command' in ip ? (
+        <div className="install-script-block">
+          <code className="install-script-cmd">{ip.command}</code>
+          <button
+            type="button"
+            className="mini-button outline"
+            onClick={() => navigator.clipboard.writeText(ip.command)}
+          >
+            Copy
+          </button>
+          <p className="install-script-hint">Open a terminal, paste, and press Enter. Then click Check Again below.</p>
+        </div>
+      ) : isReady && 'installerPath' in ip ? (
+        <button type="button" className="install-ollama-btn ready" onClick={() => onLaunchOllamaInstaller(ip.installerPath)}>
+          <Download aria-hidden="true" />
+          Launch Installer
+        </button>
+      ) : isDownloading && 'percent' in ip ? (
+        <div className="install-progress-bar">
+          <div className="install-progress-fill" style={{ width: `${ip.percent}%` }} />
+          <span>Downloading Ollama… {ip.percent}%</span>
+        </div>
+      ) : hasError && 'error' in ip ? (
+        <div className="install-error-row">
+          <span className="install-error-msg">{ip.error}</span>
+          <button type="button" className="install-ollama-btn" onClick={isLinux ? onStartOllamaInstall : onStartOllamaInstall}>
+            <Download aria-hidden="true" />
+            Retry
+          </button>
+        </div>
+      ) : (
+        <button type="button" className="install-ollama-btn" onClick={isDesktopRuntime ? onStartOllamaInstall : onInstallOllama}>
+          <Download aria-hidden="true" />
+          {isLinux ? 'Show Install Command' : `Download Ollama for ${platformName} — Free`}
+          {!isDesktopRuntime && <ExternalLink aria-hidden="true" />}
+        </button>
+      )}
 
-      <ol className="install-steps-flow">
-        <li className="install-step">
-          <b>1</b>
-          <span>Click the button above to open the official download page</span>
-        </li>
-        <li className="install-step">
-          <b>2</b>
-          <span>Run the installer — it starts Ollama automatically in the background</span>
-        </li>
-        <li className="install-step">
-          <b>3</b>
-          <span>Come back here and click <strong>Check Again</strong></span>
-        </li>
-      </ol>
+      {!isScript && !isDownloading && !isReady && (
+        <ol className="install-steps-flow">
+          <li className="install-step"><b>1</b>
+            <span>{isLinux ? 'Click to reveal the install command' : 'Click above to download the Ollama installer'}</span>
+          </li>
+          <li className="install-step"><b>2</b>
+            <span>{isLinux ? 'Open a terminal, paste the command, and press Enter' : 'Run the installer — Ollama starts automatically in the background'}</span>
+          </li>
+          <li className="install-step"><b>3</b>
+            <span>Come back here and click <strong>Check Again</strong></span>
+          </li>
+        </ol>
+      )}
 
       <div className="install-hero-footer">
         <button type="button" className="mini-button outline" onClick={onScanRig}>

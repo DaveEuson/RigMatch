@@ -38,6 +38,13 @@ const api = {
     ipcRenderer.on('updater:status', listener);
     return () => ipcRenderer.removeListener('updater:status', listener);
   },
+  startOllamaInstall: () => ipcRenderer.invoke('ollama:startInstall'),
+  launchOllamaInstaller: (installerPath) => ipcRenderer.invoke('ollama:launchInstaller', installerPath),
+  onOllamaInstallProgress: (callback) => {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on('ollama:installProgress', listener);
+    return () => ipcRenderer.removeListener('ollama:installProgress', listener);
+  },
 };
 
 contextBridge.exposeInMainWorld('agentArcade', api);

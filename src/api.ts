@@ -272,6 +272,8 @@ const fallbackApi: AgentArcadeApi = {
   async downloadUpdate() { /* no-op in preview */ },
   async installUpdate() { /* no-op in preview */ },
   async abortPull() { /* no-op in preview */ },
+  async startOllamaInstall() { /* no-op in preview */ },
+  async launchOllamaInstaller() { /* no-op in preview */ },
 };
 
 export const agentArcadeApi: AgentArcadeApi = window.agentArcade ?? fallbackApi;
