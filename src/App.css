@@ -4068,6 +4068,16 @@ tbody tr.computer-row.selected {
   opacity: 0.7;
 }
 
+.model-pulls-sub {
+  display: block;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 500;
+  color: var(--accent);
+  margin-top: 1px;
+  opacity: 0.75;
+}
+
 .platform-tag {
   display: inline-block;
   margin-top: 3px;

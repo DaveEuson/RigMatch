@@ -5055,6 +5055,9 @@ function ModelCabinet({
                       <span>
                         {row.displayName}
                         {row.params && <em className="model-params-sub">{row.params}</em>}
+                        {row.pulls != null && (
+                          <em className="model-pulls-sub" title={`${row.pulls.toLocaleString()} pulls on Ollama`}>{formatPullCount(row.pulls)} pulls</em>
+                        )}
                       </span>
                     </button>
                     {isCloudModel(row.displayName) && (
@@ -10267,6 +10270,14 @@ function getPullProgressDetailLabel(
         : 'starting';
 
   return `${percent} · ${speed} · ${size}`;
+}
+
+function formatPullCount(n: number | null | undefined): string {
+  if (n == null) return '';
+  if (n >= 1_000_000_000) return `${+(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${+(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${+(n / 1_000).toFixed(1)}K`;
+  return String(n);
 }
 
 function formatBytesPerSecond(value?: number | null) {

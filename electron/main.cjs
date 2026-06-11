@@ -1200,15 +1200,26 @@ async function getOllamaCatalog(options = {}) {
   catalogFetchPromise = (async () => {
   try {
     const libraryPages = await getOllamaLibraryPages();
-    const uniqueNames = Array.from(new Set(libraryPages.flatMap((html) => extractOllamaLibraryNames(html))))
-      .slice(0, OLLAMA_LIBRARY_FAMILY_LIMIT);
+    const libraryModels = libraryPages.flatMap((html) => extractOllamaLibraryModels(html));
+    const pullsMap = new Map();
+    const seenNames = new Set();
+    for (const { name, pulls } of libraryModels) {
+      if (!seenNames.has(name)) {
+        seenNames.add(name);
+        pullsMap.set(name, pulls);
+      }
+    }
+    const uniqueNames = Array.from(seenNames).slice(0, OLLAMA_LIBRARY_FAMILY_LIMIT);
     const detailedNames = uniqueNames.slice(0, OLLAMA_LIBRARY_DETAIL_LIMIT);
     const detailedCatalogs = await mapWithConcurrency(
       detailedNames,
       OLLAMA_DETAIL_CONCURRENCY,
       (name) => getOllamaFamilyCatalog(name).catch(() => []),
     );
-    const detailedCatalog = detailedCatalogs.flat();
+    const detailedCatalog = detailedCatalogs.flat().map((entry) => ({
+      ...entry,
+      pulls: pullsMap.get(entry.name) ?? null,
+    }));
     const detailedCatalogNames = new Set(detailedCatalog.map((entry) => entry.name));
     const familyOnlyCatalog = uniqueNames
       .filter((name) => !detailedCatalogNames.has(name))
@@ -1221,6 +1232,7 @@ async function getOllamaCatalog(options = {}) {
         pack: 'Live Family',
         source: 'Ollama library',
         live: true,
+        pulls: pullsMap.get(name) ?? null,
       }));
     const liveCatalog = [...detailedCatalog, ...familyOnlyCatalog].slice(0, OLLAMA_LIBRARY_MODEL_LIMIT);
 
@@ -1308,10 +1320,35 @@ async function getOllamaLibraryPages() {
   return usablePages;
 }
 
+function parsePullCount(text) {
+  if (!text) return null;
+  const m = String(text).trim().match(/^([\d.]+)\s*([KMBkmb]?)$/);
+  if (!m) return null;
+  const num = parseFloat(m[1]);
+  if (isNaN(num)) return null;
+  const mul = { k: 1_000, m: 1_000_000, b: 1_000_000_000 }[m[2].toLowerCase()] || 1;
+  return Math.round(num * mul);
+}
+
+function extractOllamaLibraryModels(html) {
+  const source = String(html || '');
+  const results = [];
+  const seen = new Set();
+  // Each model card is a <li> element on the library list page
+  for (const section of source.split(/<li[\s>]/i)) {
+    const nameMatch = section.match(/href=["']\/library\/([a-zA-Z0-9._-]+)["']/i);
+    if (!nameMatch) continue;
+    const name = decodeURIComponentSafe(nameMatch[1]);
+    if (!isValidOllamaName(name) || seen.has(name)) continue;
+    seen.add(name);
+    const pullMatch = section.match(/x-test-pull-count[^>]*>([^<]+)<\/span>/i);
+    results.push({ name, pulls: pullMatch ? parsePullCount(pullMatch[1]) : null });
+  }
+  return results;
+}
+
 function extractOllamaLibraryNames(html) {
-  return Array.from(String(html || '').matchAll(/href=["']\/library\/([a-zA-Z0-9._-]+)(?::[^"'#?/]+)?["']/gi))
-    .map((match) => decodeURIComponentSafe(match[1]))
-    .filter(isValidOllamaName);
+  return extractOllamaLibraryModels(html).map((m) => m.name);
 }
 
 async function getOllamaFamilyCatalog(name) {

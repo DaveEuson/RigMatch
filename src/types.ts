@@ -84,6 +84,7 @@ export type CatalogModel = {
   pack: string;
   source: string;
   live: boolean;
+  pulls?: number | null;
 };
 
 export type CatalogResponse = {
