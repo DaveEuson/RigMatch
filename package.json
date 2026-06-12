@@ -25,7 +25,7 @@
     "compare:ollama-speed": "node scripts/compare-ollama-speed.mjs",
     "smoke:bench": "node scripts/smoke-benchmark.mjs",
     "smoke:bench:strict": "node scripts/smoke-benchmark.mjs --strict",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node scripts/run-tests.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
