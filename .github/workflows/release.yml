@@ -74,7 +74,7 @@ jobs:
       - name: Audit Rust dependencies
         shell: bash
         run: |
-          cargo install cargo-audit --version 0.21.2 --locked --quiet 2>/dev/null || true
+          cargo install cargo-audit --version 0.22.2 --locked --quiet 2>/dev/null || true
           cargo audit
         working-directory: rigmatch-chat/src-tauri
 
