@@ -22,21 +22,25 @@ jobs:
             artifact: win
             companion: rigmatch-chat.exe
             builderArgs: --win
+            chatBuilderArgs: ''
           - os: macos-latest
             platform: mac
             artifact: mac
             companion: rigmatch-chat
             builderArgs: --mac
+            chatBuilderArgs: ''
           - os: ubuntu-latest
             platform: linux
             artifact: linux-x64
             companion: rigmatch-chat
             builderArgs: --linux --x64
+            chatBuilderArgs: --bundles deb
           - os: ubuntu-24.04-arm
             platform: linux
             artifact: linux-arm64
             companion: rigmatch-chat
             builderArgs: --linux --arm64
+            chatBuilderArgs: --bundles deb
 
     runs-on: ${{ matrix.os }}
     env:
@@ -87,7 +91,7 @@ jobs:
         working-directory: rigmatch-chat/src-tauri
 
       - name: Build RigMatch Chat companion
-        run: npm exec -- tauri build
+        run: npm exec -- tauri build ${{ matrix.chatBuilderArgs }}
         working-directory: rigmatch-chat
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
