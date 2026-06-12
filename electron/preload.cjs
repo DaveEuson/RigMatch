@@ -28,6 +28,12 @@ const api = {
   openLogsFolder: () => ipcRenderer.invoke('logs:openFolder'),
   checkForUpdates: (channel) => ipcRenderer.invoke('app:checkForUpdates', channel),
   openUpdatePage: (channel) => ipcRenderer.invoke('app:openUpdatePage', channel),
+  closeApp: () => ipcRenderer.invoke('app:closeReady'),
+  onAppCloseRequest: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('app:closeRequested', listener);
+    return () => ipcRenderer.removeListener('app:closeRequested', listener);
+  },
   syncScores: (scores) => ipcRenderer.invoke('scores:sync', scores),
   openChatApp: () => ipcRenderer.invoke('app:openChatApp'),
   checkAutoUpdate: () => ipcRenderer.invoke('app:checkAutoUpdate'),

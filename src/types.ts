@@ -131,6 +131,7 @@ export type BenchmarkPromptResult = {
   sobrietyScore: number;
   response: string;
   doneReason: string;
+  status?: 'ok' | 'no-response' | 'truncated' | 'failed';
 };
 
 export type BenchmarkResult = {
@@ -276,6 +277,8 @@ export type AgentArcadeApi = {
   openLogsFolder: () => Promise<{ logPath: string }>;
   checkForUpdates: (channel?: UpdateChannel) => Promise<UpdateCheckResponse>;
   openUpdatePage: (channel?: UpdateChannel) => Promise<{ url: string }>;
+  closeApp: () => Promise<{ ok: boolean }>;
+  onAppCloseRequest?: (callback: () => void) => () => void;
   syncScores: (scores: Record<string, unknown>) => Promise<void>;
   openChatApp: () => Promise<{ ok: boolean; reason?: string }>;
   checkAutoUpdate: () => Promise<void>;

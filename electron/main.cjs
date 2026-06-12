@@ -54,6 +54,20 @@ let latestCudaCacheAt = 0;
 const APP_USER_AGENT = 'RigMatchAI/0.1';
 const SCORES_SERVER_PORT = 11435;
 const BENCHMARK_REPEATS = 1;
+const BENCHMARK_TIMEOUT_MS = 120000;
+const BENCHMARK_KEEP_ALIVE = '10m';
+const BENCHMARK_GENERATE_OPTIONS = Object.freeze({
+  temperature: 0,
+  seed: 1,
+  num_predict: 300,
+  num_ctx: 2048,
+});
+const BENCHMARK_WARMUP_OPTIONS = Object.freeze({
+  temperature: 0,
+  seed: 1,
+  num_predict: 8,
+  num_ctx: 2048,
+});
 const COMPUTER_PROBE_PORTS = [11434, 22, 445, 3389, 80, 443];
 const LOG_LIMIT = 250;
 const OLLAMA_CATALOG_CACHE_MS = 1000 * 60 * 10;
@@ -91,10 +105,10 @@ if (process.platform === 'linux' && isDev() && process.env.RIGMATCH_ENABLE_GPU !
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1600,
-    height: 1000,
-    minWidth: 1120,
-    minHeight: 760,
+    width: 1800,
+    height: 1020,
+    minWidth: 1280,
+    minHeight: 820,
     backgroundColor: '#080b0d',
     title: 'RigMatch.AI',
     icon: getWindowIconPath(),
@@ -117,6 +131,26 @@ function createWindow() {
   } else {
     win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
+  win.on('close', (event) => {
+    if (closeApprovedWindowIds.has(win.id)) return;
+    if (win.webContents.isDestroyed()) return;
+
+    event.preventDefault();
+
+    if (closePromptPendingWindowIds.has(win.id)) {
+      win.focus();
+      return;
+    }
+
+    closePromptPendingWindowIds.add(win.id);
+    win.webContents.send('app:closeRequested');
+  });
+
+  win.on('closed', () => {
+    closeApprovedWindowIds.delete(win.id);
+    closePromptPendingWindowIds.delete(win.id);
+  });
+
   setupAutoUpdater(win);
 }
 
@@ -158,6 +192,8 @@ let lastLogClearAt = 0;           // N-03: rate-limit log clearing
 let activePullController = null;  // abortable by ollama:abortPull IPC
 let catalogFetchPromise = null;   // dedup concurrent catalog fetches
 let ollamaInstallController = null;
+const closeApprovedWindowIds = new Set();
+const closePromptPendingWindowIds = new Set();
 
 let latestScores = {};
 let latestChosen = null;
@@ -224,6 +260,15 @@ function registerHandlers() {
   handleLogged('logs:openFolder', 'logs', () => openAppLogsFolder());
   handleLogged('app:checkForUpdates', 'updates', (_event, channel) => checkForRigmatchUpdates(channel));
   handleLogged('app:openUpdatePage', 'updates', (_event, channel) => openRigmatchUpdatePage(channel));
+  ipcMain.handle('app:closeReady', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) return { ok: false };
+
+    closeApprovedWindowIds.add(win.id);
+    closePromptPendingWindowIds.delete(win.id);
+    win.close();
+    return { ok: true };
+  });
   ipcMain.handle('app:checkAutoUpdate', async () => {
     if (!app.isPackaged) return { phase: 'not-available' };
     try { await autoUpdater.checkForUpdates(); } catch (err) { return { phase: 'error', error: err.message }; }
@@ -2027,6 +2072,13 @@ async function runBenchmarkInner(request = {}, sender) {
       model,
       baseUrl,
       questionCount,
+      benchmarkMode: 'ollama-parity',
+      warmup: {
+        enabled: true,
+        scored: false,
+        keepAlive: BENCHMARK_KEEP_ALIVE,
+      },
+      options: BENCHMARK_GENERATE_OPTIONS,
       prompts: benchmarkPrompts.map((prompt) => ({
         id: prompt.id,
         label: prompt.label,
@@ -2038,7 +2090,15 @@ async function runBenchmarkInner(request = {}, sender) {
   sendProgress({
     phase: 'started',
     promptIndex: 0,
-    message: `${model} is entering the compatibility round.`,
+    message: `Warm-up period: loading ${model} before scoring. This prompt is not scored.`,
+  });
+
+  await warmBenchmarkModel(baseUrl, model);
+
+  sendProgress({
+    phase: 'started',
+    promptIndex: 0,
+    message: `${model} is entering the compatibility round with Ollama parity timing.`,
   });
 
   for (const [promptIndex, prompt] of benchmarkPrompts.entries()) {
@@ -2058,67 +2118,14 @@ async function runBenchmarkInner(request = {}, sender) {
       let evalCount = 0;
       let evalDurationSeconds = 0;
       let firstTokenMs = null;
+      let doneReason = null;
 
       try {
-        const httpResponse = await fetch(
-          `${baseUrl}/api/generate`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model,
-              prompt: prompt.prompt,
-              stream: true,
-              options: {
-                temperature: 0.15,
-                num_predict: 300,
-                num_ctx: 2048,
-              },
-            }),
-            signal: AbortSignal.timeout(120000),
-          },
-        );
-
-        if (!httpResponse.ok) {
-          const detail = extractResponseDetail(await httpResponse.text());
-          throw new Error(`${httpResponse.status} ${httpResponse.statusText}${detail ? `: ${detail}` : ''}`);
-        }
-
-        const reader = httpResponse.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (value) buffer += decoder.decode(value, { stream: !done });
-
-          const lines = buffer.split(/\r?\n/);
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const chunk = JSON.parse(line);
-              if (chunk.response) {
-                if (firstTokenMs === null) firstTokenMs = Date.now() - promptStart;
-                responseText += chunk.response;
-                sendProgress({
-                  phase: 'prompt-token',
-                  promptIndex,
-                  promptId: prompt.id,
-                  promptLabel: prompt.label,
-                  tokenCount: responseText.length,
-                });
-              }
-              if (chunk.done) {
-                evalCount = chunk.eval_count || estimateTokens(responseText);
-                evalDurationSeconds = chunk.eval_duration ? chunk.eval_duration / 1_000_000_000 : (Date.now() - promptStart) / 1000;
-              }
-            } catch { /* skip malformed chunk */ }
-          }
-
-          if (done) break;
-        }
+        const generateResult = await runBenchmarkPromptParity(baseUrl, model, prompt.prompt);
+        responseText = generateResult.responseText;
+        evalCount = generateResult.evalCount;
+        evalDurationSeconds = generateResult.evalDurationSeconds;
+        doneReason = generateResult.doneReason;
       } catch (error) {
         await appendAppLog({
           level: 'error',
@@ -2147,16 +2154,20 @@ async function runBenchmarkInner(request = {}, sender) {
       }
 
       const elapsedMs = Date.now() - promptStart;
+      if (!evalCount) evalCount = estimateTokens(responseText);
+      if (!evalDurationSeconds) evalDurationSeconds = elapsedMs / 1000;
       const tokensPerSecond = evalDurationSeconds > 0 ? evalCount / evalDurationSeconds : 0;
       const sobrietyScore = scoreSobriety(prompt, responseText);
+      const promptStatus = getBenchmarkPromptStatus(responseText, doneReason);
 
       runs.push({
         elapsedMs,
-        firstTokenMs: firstTokenMs ?? elapsedMs,
+        firstTokenMs,
         tokensPerSecond,
         sobrietyScore,
         response: responseText,
-        doneReason: 'complete',
+        doneReason: doneReason || 'complete',
+        status: promptStatus,
       });
       rawRuns.push({ prompt, ...runs[runs.length - 1] });
     }
@@ -2169,28 +2180,33 @@ async function runBenchmarkInner(request = {}, sender) {
       tokensPerSecond: Math.round(average(runs.map((run) => run.tokensPerSecond)) * 10) / 10,
       sobrietyScore: Math.round(average(runs.map((run) => run.sobrietyScore))),
       response: runs[runs.length - 1]?.response || '',
-      doneReason: `${runs.length} run average`,
+      doneReason: summarizeDoneReasons(runs.map((run) => run.doneReason)),
+      status: summarizePromptStatuses(runs.map((run) => run.status)),
     });
+    const completedPrompt = promptResults[promptResults.length - 1];
     sendProgress({
       phase: 'prompt-complete',
       promptIndex,
       promptId: prompt.id,
       promptLabel: prompt.label,
       prompt: prompt.prompt,
-      elapsedMs: promptResults[promptResults.length - 1].elapsedMs,
-      tokensPerSecond: promptResults[promptResults.length - 1].tokensPerSecond,
-      sobrietyScore: promptResults[promptResults.length - 1].sobrietyScore,
-      message: `${prompt.label} scored ${promptResults[promptResults.length - 1].sobrietyScore}.`,
+      elapsedMs: completedPrompt.elapsedMs,
+      tokensPerSecond: completedPrompt.tokensPerSecond,
+      sobrietyScore: completedPrompt.sobrietyScore,
+      message: completedPrompt.status === 'no-response'
+        ? `${prompt.label} returned no response.`
+        : `${prompt.label} scored ${completedPrompt.sobrietyScore}.`,
     });
   }
 
   const avgTokens = average(promptResults.map((result) => result.tokensPerSecond));
   const avgLatency = average(promptResults.map((result) => result.elapsedMs));
-  const avgFirstToken = average(rawRuns.map((r) => r.firstTokenMs).filter(Number.isFinite));
+  const firstTokenSamples = rawRuns.map((r) => r.firstTokenMs).filter(Number.isFinite);
+  const avgFirstToken = firstTokenSamples.length > 0 ? average(firstTokenSamples) : null;
   const avgSobriety = average(promptResults.map((result) => result.sobrietyScore));
-  const stabilityScore = Math.round((rawRuns.filter((result) => result.response.trim()).length / rawRuns.length) * 100);
-  // Scale: 5 tok/s = 0, 100 tok/s = 100. Latency adds up to 5 bonus points for sub-second first response.
-  const speedScore = clamp(Math.round((avgTokens - 5) / 95 * 100 + Math.max(0, 5 - avgLatency / 200)));
+  const stabilityScore = Math.round((rawRuns.filter(isStableBenchmarkRun).length / rawRuns.length) * 100);
+  // Scale official Ollama generation speed: 5 tok/s = 0, 100 tok/s = 100.
+  const speedScore = clamp(Math.round((avgTokens - 5) / 95 * 100));
   const fitScore = scoreRigFit(model);
   const totalScore = clamp(Math.round(speedScore * 0.32 + avgSobriety * 0.34 + stabilityScore * 0.18 + fitScore * 0.16));
   const elapsedMs = Date.now() - startedAt;
@@ -2201,7 +2217,6 @@ async function runBenchmarkInner(request = {}, sender) {
     completedAt: new Date().toISOString(),
     elapsedMs,
     avgLatencyMs: Math.round(avgLatency),
-    avgFirstTokenMs: Math.round(avgFirstToken),
     avgTokensPerSecond: Math.round(avgTokens * 10) / 10,
     prompts: promptResults,
     scores: {
@@ -2213,6 +2228,9 @@ async function runBenchmarkInner(request = {}, sender) {
       grade: gradeFor(totalScore),
     },
   };
+  if (avgFirstToken !== null) {
+    result.avgFirstTokenMs = Math.round(avgFirstToken);
+  }
 
   await appendAppLog({
     level: 'info',
@@ -2235,6 +2253,53 @@ async function runBenchmarkInner(request = {}, sender) {
   });
 
   return result;
+}
+
+async function warmBenchmarkModel(baseUrl, model) {
+  await fetchJson(
+    `${baseUrl}/api/generate`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        model,
+        prompt: 'Reply READY only.',
+        stream: false,
+        keep_alive: BENCHMARK_KEEP_ALIVE,
+        options: BENCHMARK_WARMUP_OPTIONS,
+      }),
+    },
+    BENCHMARK_TIMEOUT_MS,
+  );
+}
+
+async function runBenchmarkPromptParity(baseUrl, model, prompt) {
+  const response = await fetchJson(
+    `${baseUrl}/api/generate`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        model,
+        prompt,
+        stream: false,
+        keep_alive: BENCHMARK_KEEP_ALIVE,
+        options: BENCHMARK_GENERATE_OPTIONS,
+      }),
+    },
+    BENCHMARK_TIMEOUT_MS,
+  );
+
+  const responseText = String(response.response || '');
+  const evalCount = normalizePositiveNumber(response.eval_count) || estimateTokens(responseText);
+  const evalDurationSeconds = normalizePositiveNumber(response.eval_duration)
+    ? Number(response.eval_duration) / 1_000_000_000
+    : 0;
+
+  return {
+    responseText,
+    evalCount,
+    evalDurationSeconds,
+    doneReason: response.done_reason || (response.done ? 'stop' : 'unknown'),
+  };
 }
 
 async function sendChat(request = {}) {
@@ -2337,6 +2402,49 @@ function average(values) {
   const valid = values.filter((value) => Number.isFinite(value));
   if (!valid.length) return 0;
   return valid.reduce((sum, value) => sum + value, 0) / valid.length;
+}
+
+function normalizePositiveNumber(value) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
+}
+
+function summarizeDoneReasons(reasons) {
+  const counts = reasons.reduce((summary, reason) => {
+    const key = reason || 'unknown';
+    summary[key] = (summary[key] || 0) + 1;
+    return summary;
+  }, {});
+
+  return Object.entries(counts)
+    .map(([reason, count]) => count === 1 ? reason : `${reason} x${count}`)
+    .join(', ');
+}
+
+function getBenchmarkPromptStatus(response, doneReason) {
+  if (!String(response || '').trim()) return 'no-response';
+
+  const reason = String(doneReason || '').toLowerCase();
+  if (/(?:length|timeout|error|cancel|abort|fail)/.test(reason)) return 'truncated';
+
+  return 'ok';
+}
+
+function summarizePromptStatuses(statuses) {
+  if (statuses.some((status) => status === 'no-response')) return 'no-response';
+  if (statuses.some((status) => status === 'failed')) return 'failed';
+  if (statuses.some((status) => status === 'truncated')) return 'truncated';
+  return 'ok';
+}
+
+function isStableBenchmarkRun(result) {
+  if (result.status === 'no-response' || result.status === 'failed' || result.status === 'truncated') return false;
+  if (!result.response.trim()) return false;
+
+  const reason = String(result.doneReason || '').toLowerCase();
+  if (!reason || reason === 'complete' || reason === 'stop') return true;
+
+  return !/(?:length|timeout|error|cancel|abort|fail)/.test(reason);
 }
 
 function estimateTokens(text) {
