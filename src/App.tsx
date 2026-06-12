@@ -135,14 +135,52 @@ type TestedModelScore = {
   grade: string;
   speed: number;
   sobriety: number;
+  stability?: number;
   fit: number;
   completedAt: string;
   suiteName?: string;
+  preciseTotal?: number;
+  scoreSchemaVersion?: number;
 };
 
 type ListTestResult = {
   winner: string;
   results: TestedModelScore[];
+};
+
+type AdvancedLabCheck = {
+  label: string;
+  passed: boolean;
+  detail: string;
+};
+
+type AdvancedLabResult = {
+  model: string;
+  challenge: 'app-builder' | 'image-generation';
+  score: number;
+  grade: string;
+  elapsedMs: number;
+  response: string;
+  checks: AdvancedLabCheck[];
+  completedAt: string;
+  imageDataUrl?: string;
+  width?: number;
+  height?: number;
+  error?: string;
+};
+
+type AdvancedLabRunState = {
+  phase: 'idle' | 'running' | 'complete' | 'failed';
+  result: AdvancedLabResult | null;
+  message: string;
+};
+
+type ImageGenerationModelOption = {
+  model: string;
+  label: string;
+  sizeGb: number;
+  license: string;
+  note: string;
 };
 
 type RunProgress = {
@@ -257,13 +295,46 @@ const navItems: NavItem[] = [
 
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
 const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
-const APP_VERSION = '0.1.6';
+const APP_VERSION = '0.1.7';
+const CURRENT_SCORE_SCHEMA_VERSION = 3;
 const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
 const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
 const HISTORY_STORAGE_KEY = 'rigmatch:history:v1';
 const THEME_STORAGE_KEY = 'agentArcadeTheme';
 const TUTORIAL_STORAGE_KEY = 'rigmatch:first-run-tutorial:v1';
 const UI_MODE_STORAGE_KEY = 'rigmatch:ui-mode:v1';
+const ADVANCED_LAB_STORAGE_KEY = 'rigmatch:advanced-lab:v1';
+
+const ADVANCED_APP_BUILDER_PROMPT = `Create a complete single-file HTML Tetris-style falling block game.
+
+Requirements:
+- Return only the code for one HTML file.
+- Include HTML, CSS, and JavaScript in the same file.
+- Include keyboard controls for left, right, rotate, soft drop, and restart.
+- Include a visible score display.
+- Include collision detection, line clearing, and game-over handling.
+- Do not use external libraries, CDNs, or network calls.`;
+
+const ADVANCED_IMAGE_GENERATION_PROMPT = 'A cheerful robot dog sitting beside a retro computer, warm studio lighting, playful but realistic, detailed fur-like metal texture, cozy workshop background';
+const ADVANCED_IMAGE_WIDTH = 512;
+const ADVANCED_IMAGE_HEIGHT = 512;
+const ADVANCED_IMAGE_STEPS = 12;
+const IMAGE_GENERATION_MODEL_OPTIONS: ImageGenerationModelOption[] = [
+  {
+    model: 'x/flux2-klein:4b',
+    label: 'FLUX.2 Klein 4B',
+    sizeGb: 5.7,
+    license: 'Apache 2.0 weights',
+    note: 'Smallest current Ollama image option; still a large pull.',
+  },
+  {
+    model: 'x/z-image-turbo',
+    label: 'Z-Image Turbo fp8',
+    sizeGb: 13,
+    license: 'Apache 2.0 weights',
+    note: 'Photorealistic image model; much bigger download.',
+  },
+];
 
 const releaseNotes: Array<{
   version: string;
@@ -272,9 +343,24 @@ const releaseNotes: Array<{
   notes: string[];
 }> = [
   {
+    version: '0.1.7',
+    label: 'Advanced Capability Lab',
+    date: 'Current build',
+    notes: [
+      'Added an optional Advanced Lab for larger capability checks that do not affect the core Match score.',
+      'App Builder challenge asks an installed Ollama model to create a complete single-file Tetris-style HTML game.',
+      'Lab grading checks for structure, controls, scoring, gameplay loop, collision logic, line clearing, and truncation risk.',
+      'Image Generation Lab is extra beta: explicit size/platform warnings, opt-in image model pulls, and separate image grades.',
+      'Model table Good For now shows multiple strengths per model and adds Image/OCR and Search filters.',
+      'Popularity is now visible as a pull-count meter using Ollama library catalog data when available.',
+      'RigChat installer shortcut creation is more explicit and uses the RigChat shortcut name.',
+      'Amazon support links now open through the desktop external-link allowlist.',
+    ],
+  },
+  {
     version: '0.1.6',
     label: 'Release Safety & Download Consent',
-    date: 'Current build',
+    date: 'June 2026',
     notes: [
       'Added third-party model notices in Settings and About for Ollama/Gemma model terms.',
       'Bulk Download All now requires an explicit third-party model terms acknowledgement before queueing pulls.',
@@ -941,6 +1027,11 @@ function App() {
     await agentArcadeApi.closeApp();
   }, []);
 
+  const cancelCloseCleanup = useCallback(() => {
+    setCloseCleanupOpen(false);
+    setCloseCleanupMessage(null);
+  }, []);
+
   const deleteRowsThenClose = useCallback(async (rows: ModelRow[], label: string) => {
     if (rows.length === 0) {
       setCloseCleanupMessage(`No ${label} models were found.`);
@@ -1098,13 +1189,13 @@ function App() {
     setActivity(`Testing ${modelToTest} with ${count} questions for speed, reliability, and computer fit...`);
 
     try {
-      const result = await agentArcadeApi.runBenchmark({
+      const result = normalizeBenchmarkResultModel(await agentArcadeApi.runBenchmark({
         model: modelToTest,
         baseUrl: ollama.baseUrl,
         questionCount: count,
         questions,
         progressId,
-      });
+      }), modelToTest);
       setBenchmark(result);
       setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
       setModelScores((current) => upsertModelScores(current, [result], currentSuiteName));
@@ -1478,6 +1569,7 @@ function App() {
 
   const toggleShortlist = useCallback((row: ModelRow) => {
     const hardwareFit = getHardwareFit(row, system.gpu.vramGb);
+    const platformFit = getPlatformFit(row.displayName, system.platform);
 
     setShortlistIds((current) => {
       const next = new Set(current);
@@ -1485,6 +1577,11 @@ function App() {
         next.delete(row.displayName);
         setActivity(`${row.displayName} removed from the Speed Dating lineup.`);
         return next;
+      }
+
+      if (!platformFit.compatible) {
+        setActivity(`${row.displayName} cannot join Speed Dating on this computer: ${platformFit.reason}`);
+        return current;
       }
 
       if (!hardwareFit.recommend) {
@@ -1501,9 +1598,17 @@ function App() {
       setActivity(`${row.displayName} added to the Speed Dating lineup.`);
       return next;
     });
-  }, [system.gpu.vramGb]);
+  }, [system.gpu.vramGb, system.platform]);
 
   const requestListTest = useCallback(() => {
+    const incompatibleLineupRows = shortlistedRows.filter((row) => !getPlatformFit(row.displayName, system.platform).compatible);
+    if (incompatibleLineupRows.length > 0) {
+      const first = incompatibleLineupRows[0];
+      const reason = getPlatformFit(first.displayName, system.platform).reason;
+      setActivity(`${first.displayName} cannot run Speed Dating on this computer: ${reason}. Remove it from the lineup first.`);
+      return;
+    }
+
     const runnableRows = shortlistedRows.filter((row) => row.installed).slice(0, 5);
     const missingDownloadCount = shortlistedRows.filter((row) => !row.installed).length;
     const hostBlocker = getHostBenchmarkBlocker(selectedHost, ollama);
@@ -1526,10 +1631,10 @@ function App() {
     setPendingSingleModel(null);
     setPendingRunMode('speed-date');
     setActivity(`Confirm resource warning before comparing ${runnableRows.length} models with ${benchmarkQuestionCount} questions each.`);
-  }, [benchmarkQuestionCount, ollama, selectedHost, shortlistedRows]);
+  }, [benchmarkQuestionCount, ollama, selectedHost, shortlistedRows, system.platform]);
 
   const runListTest = useCallback(async () => {
-    const runnableRows = shortlistedRows.filter((row) => row.installed).slice(0, 5);
+    const runnableRows = shortlistedRows.filter((row) => row.installed && getPlatformFit(row.displayName, system.platform).compatible).slice(0, 5);
     const hostBlocker = getHostBenchmarkBlocker(selectedHost, ollama);
     const listRunId = createRunProgressId('speed-date');
     const firstProgressId = `${listRunId}-0`;
@@ -1594,13 +1699,13 @@ function App() {
           lastResult: current?.lastResult,
         }));
         setActivity(`Speed Dating: testing compatibility with ${row.displayName}...`);
-        const result = await agentArcadeApi.runBenchmark({
+        const result = normalizeBenchmarkResultModel(await agentArcadeApi.runBenchmark({
           model: row.displayName,
           baseUrl: ollama.baseUrl,
           questionCount: benchmarkQuestionCount,
           questions: benchmarkPromptPlan,
           progressId,
-        });
+        }), row.displayName);
         results.push(result);
         setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
         setModelScores((current) => upsertModelScores(current, [result], currentSuiteName));
@@ -1631,7 +1736,7 @@ function App() {
       }
 
       const winner = results.reduce((best, result) =>
-        result.scores.total > best.scores.total ? result : best,
+        compareBenchmarkResults(result, best) < 0 ? result : best,
       );
 
       setBenchmark(winner);
@@ -1663,7 +1768,7 @@ function App() {
         winner: winner.model,
         results: results
           .map((r) => toTestedModelScore(r, currentSuiteName))
-          .sort((a, b) => b.total - a.total),
+          .sort(compareTestedModelScores),
       });
       setActivity(`Best match: ${winner.model} scored ${winner.scores.total} for this setup.`);
       playJingle('speed-date-complete');
@@ -1697,7 +1802,7 @@ function App() {
     } finally {
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, loadLogs, ollama, selectedHost, shortlistedRows, system.hostname]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, loadLogs, ollama, selectedHost, shortlistedRows, system.hostname, system.platform]);
 
   const confirmPendingRun = useCallback(() => {
     const mode = pendingRunMode;
@@ -1905,6 +2010,7 @@ function App() {
         onSelect={selectNav}
         onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
         onOpenSupport={() => setSupportModalOpen(true)}
+        bugReportUrl={buildBugReportUrl(system, ollama, logPath)}
       />
 
       <main className="stage-content">
@@ -2101,7 +2207,7 @@ function App() {
         onOpenChat={async () => {
           if (isDesktopRuntime) {
             const result = await agentArcadeApi.openChatApp();
-            if (!result?.ok) alert('RigMatch Chat not found.\n\nBuild it with: cd rigmatch-chat && npx tauri build');
+            if (!result?.ok) alert('RigMatch Chat was not found in this local build.\n\nFor preview/dev testing, build and copy the companion first:\n\nnpm run build:chat\nnpm run prepare:companions\n\nRelease installers include RigChat when the companion is packaged.');
           } else {
             setChatOpen(true);
           }
@@ -2203,6 +2309,7 @@ function App() {
           message={closeCleanupMessage}
           onDeleteUnscored={() => { void deleteRowsThenClose(unscoredRowsForCleanup, 'unscored'); }}
           onDeleteLowScored={() => { void deleteRowsThenClose(lowScoredRowsForCleanup, 'low-scored'); }}
+          onCancel={cancelCloseCleanup}
           onUnderstand={() => { void closeAppAfterCleanup(); }}
         />
       )}
@@ -2380,6 +2487,7 @@ function SideMenu({
   onSelect,
   onOpenTutorial,
   onOpenSupport,
+  bugReportUrl,
 }: {
   items: NavItem[];
   activeId: NavId;
@@ -2392,6 +2500,7 @@ function SideMenu({
   onSelect: (id: NavId) => void;
   onOpenTutorial: () => void;
   onOpenSupport: () => void;
+  bugReportUrl: string;
 }) {
   const navMeta: Record<NavId, string> = {
     lan: ollamaReady ? 'Ready' : 'Setup',
@@ -2440,8 +2549,17 @@ function SideMenu({
         title="Support RigMatch development"
         onClick={onOpenSupport}
       >
-        ☕ Support RigMatch
+        ☕ Support + upgrade links
       </button>
+      <a
+        className="side-menu-bug-report"
+        href={bugReportUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <Bug aria-hidden="true" />
+        Report a bug
+      </a>
     </aside>
   );
 }
@@ -3675,6 +3793,7 @@ function CloseCleanupModal({
   message,
   onDeleteUnscored,
   onDeleteLowScored,
+  onCancel,
   onUnderstand,
 }: {
   installedRows: ModelRow[];
@@ -3684,6 +3803,7 @@ function CloseCleanupModal({
   message: string | null;
   onDeleteUnscored: () => void;
   onDeleteLowScored: () => void;
+  onCancel: () => void;
   onUnderstand: () => void;
 }) {
   const installedGb = sumModelRowGb(installedRows);
@@ -3730,6 +3850,10 @@ function CloseCleanupModal({
           )}
         </div>
         <div className="model-cleanup-actions" aria-label="Model cleanup options">
+          <button type="button" className="mini-button outline model-cleanup-cancel" onClick={onCancel} disabled={isDeleting}>
+            <X aria-hidden="true" />
+            Cancel
+          </button>
           <button
             type="button"
             className="danger-button compact"
@@ -3825,7 +3949,7 @@ function SupportModal({ onClose }: { onClose: () => void }) {
           {SUPPORT_HARDWARE_LINKS.map((link) => (
             <a
               key={link.label}
-              href={`https://www.amazon.com/s?k=${encodeURIComponent(link.query)}&tag=${AMAZON_AFFILIATE_TAG}`}
+              href={amazonUrl(link.query)}
               target="_blank"
               rel="noopener noreferrer"
               className="support-hardware-card"
@@ -4411,6 +4535,647 @@ function ThirdPartyDownloadConsentModal({
   );
 }
 
+function readAdvancedLabResults(): Record<string, AdvancedLabResult> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(ADVANCED_LAB_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, AdvancedLabResult>;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeAdvancedLabResults(results: Record<string, AdvancedLabResult>) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(ADVANCED_LAB_STORAGE_KEY, JSON.stringify(results));
+  } catch {
+    // local storage may be unavailable in preview contexts
+  }
+}
+
+function getAdvancedLabGrade(score: number) {
+  if (score >= 92) return 'S';
+  if (score >= 82) return 'A';
+  if (score >= 70) return 'B';
+  if (score >= 55) return 'C';
+  if (score >= 40) return 'D';
+  return 'F';
+}
+
+function scoreAdvancedAppBuilderResponse(response: string, doneReason: string): Pick<AdvancedLabResult, 'score' | 'grade' | 'checks'> {
+  const text = response.trim();
+  const lower = text.toLowerCase();
+  const has = (pattern: RegExp) => pattern.test(text);
+  const checks: AdvancedLabCheck[] = [
+    {
+      label: 'Single-file HTML',
+      passed: has(/<!doctype|<html|<body|<script/i) && has(/<style|style=/i),
+      detail: 'Includes document structure, script, and styling in one answer.',
+    },
+    {
+      label: 'Keyboard controls',
+      passed: has(/keydown|keyboardevent|onkeydown/i) && has(/arrowleft|arrowright|arrowdown|space|keyup|rotate/i),
+      detail: 'Handles movement, dropping, rotation, and restart-style input.',
+    },
+    {
+      label: 'Visible score',
+      passed: has(/score/i) && has(/innertext|textcontent|queryselector|getelementbyid/i),
+      detail: 'Tracks score and updates something visible in the page.',
+    },
+    {
+      label: 'Game loop',
+      passed: has(/requestanimationframe|setinterval|settimeout|dropinterval|gameloop/i),
+      detail: 'Contains a timed loop so pieces keep falling without extra prompts.',
+    },
+    {
+      label: 'Board and pieces',
+      passed: has(/tetromino|piece|shape|matrix|board|grid|arena/i),
+      detail: 'Represents falling pieces and a playfield/grid.',
+    },
+    {
+      label: 'Collision logic',
+      passed: has(/collid|validmove|canmove|intersect|occupied|bounds/i),
+      detail: 'Checks whether pieces can move before committing state.',
+    },
+    {
+      label: 'Line clearing',
+      passed: has(/line|row/i) && has(/clear|splice|filter|every|full/i),
+      detail: 'Looks for completed rows and removes them.',
+    },
+    {
+      label: 'Game over/restart',
+      passed: has(/game over|gameover|restart|resetgame|newgame/i),
+      detail: 'Handles losing and restarting instead of running forever silently.',
+    },
+    {
+      label: 'No network dependencies',
+      passed: !has(/https?:\/\/|<script[^>]+src=|<link[^>]+href=|cdn/i),
+      detail: 'Avoids external libraries, CDNs, and network calls.',
+    },
+    {
+      label: 'Not obviously truncated',
+      passed: text.length >= 1200 && doneReason !== 'length' && !lower.includes('truncated'),
+      detail: 'Large enough to be plausible and did not report a length cutoff.',
+    },
+  ];
+  const score = Math.round((checks.filter((check) => check.passed).length / checks.length) * 100);
+  return { score, grade: getAdvancedLabGrade(score), checks };
+}
+
+async function runAdvancedAppBuilderChallenge(model: string, baseUrl: string): Promise<AdvancedLabResult> {
+  const startedAt = performance.now();
+
+  try {
+    const data = await agentArcadeApi.runAdvancedGenerate({
+      model,
+      baseUrl,
+      prompt: ADVANCED_APP_BUILDER_PROMPT,
+      keep_alive: '10m',
+      timeoutMs: 180000,
+      options: {
+        temperature: 0.2,
+        seed: 7,
+        num_ctx: 4096,
+        num_predict: 1600,
+      },
+    });
+    if (data.error) throw new Error(data.error);
+
+    const raw = data.response ?? '';
+    const scored = scoreAdvancedAppBuilderResponse(raw, data.done_reason ?? '');
+    return {
+      model,
+      challenge: 'app-builder',
+      ...scored,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      response: raw,
+      completedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Advanced test failed.';
+    return {
+      model,
+      challenge: 'app-builder',
+      score: 0,
+      grade: 'F',
+      elapsedMs: Math.round(performance.now() - startedAt),
+      response: '',
+      checks: [],
+      completedAt: new Date().toISOString(),
+      error: message,
+    };
+  }
+}
+
+function imageModelMatches(installedModel: string, requestedModel: string) {
+  const installed = installedModel.toLowerCase();
+  const requested = requestedModel.toLowerCase();
+  const requestedBase = requested.replace(/:latest$/, '');
+  return installed === requested || installed === `${requested}:latest` || installed === requestedBase || installed.startsWith(`${requestedBase}:`);
+}
+
+function getInstalledImageModelName(installedModels: string[], requestedModel: string) {
+  return installedModels.find((model) => imageModelMatches(model, requestedModel)) ?? '';
+}
+
+function buildImageDataUrl(image: string) {
+  const trimmed = image.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('data:image/')) return trimmed;
+  return `data:image/png;base64,${trimmed}`;
+}
+
+function scoreAdvancedImageResponse(imageDataUrl: string, doneReason: string): Pick<AdvancedLabResult, 'score' | 'grade' | 'checks'> {
+  const checks: AdvancedLabCheck[] = [
+    {
+      label: 'Image returned',
+      passed: imageDataUrl.startsWith('data:image/'),
+      detail: 'Ollama returned an image payload instead of a text-only answer.',
+    },
+    {
+      label: 'PNG/base64 payload',
+      passed: /^data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+/.test(imageDataUrl),
+      detail: 'The image payload looks like a browser-renderable base64 image.',
+    },
+    {
+      label: 'Completed cleanly',
+      passed: doneReason !== 'length' && doneReason !== 'error',
+      detail: 'The image run did not report an obvious truncation or error stop.',
+    },
+    {
+      label: 'Small beta size',
+      passed: ADVANCED_IMAGE_WIDTH <= 512 && ADVANCED_IMAGE_HEIGHT <= 512,
+      detail: 'The beta test keeps image size small to reduce VRAM and time pressure.',
+    },
+  ];
+  const score = Math.round((checks.filter((check) => check.passed).length / checks.length) * 100);
+  return { score, grade: getAdvancedLabGrade(score), checks };
+}
+
+async function runAdvancedImageGenerationChallenge(model: string, baseUrl: string): Promise<AdvancedLabResult> {
+  const startedAt = performance.now();
+
+  try {
+    const data = await agentArcadeApi.runAdvancedGenerate({
+      model,
+      baseUrl,
+      prompt: ADVANCED_IMAGE_GENERATION_PROMPT,
+      timeoutMs: 240000,
+      width: ADVANCED_IMAGE_WIDTH,
+      height: ADVANCED_IMAGE_HEIGHT,
+      steps: ADVANCED_IMAGE_STEPS,
+      keep_alive: '5m',
+    });
+    if (data.error) throw new Error(data.error);
+
+    const imageDataUrl = buildImageDataUrl(data.image ?? data.images?.[0] ?? '');
+    const scored = scoreAdvancedImageResponse(imageDataUrl, data.done_reason ?? '');
+    return {
+      model,
+      challenge: 'image-generation',
+      ...scored,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      response: data.response ?? '',
+      imageDataUrl,
+      width: ADVANCED_IMAGE_WIDTH,
+      height: ADVANCED_IMAGE_HEIGHT,
+      completedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Image generation failed.';
+    return {
+      model,
+      challenge: 'image-generation',
+      score: 0,
+      grade: 'F',
+      elapsedMs: Math.round(performance.now() - startedAt),
+      response: '',
+      checks: [],
+      completedAt: new Date().toISOString(),
+      error: message,
+    };
+  }
+}
+
+async function pullOllamaModelWithProgress(
+  model: string,
+  baseUrl: string,
+  onProgress: (message: string, percent: number | null) => void,
+  signal: AbortSignal,
+) {
+  const progressId = `advanced-image-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  if (signal.aborted) throw new DOMException('Image model pull cancelled.', 'AbortError');
+  const unsubscribe = agentArcadeApi.onPullProgress?.((update) => {
+    if (update.id !== progressId) return;
+    onProgress(update.status || 'Downloading image model...', update.percent);
+  });
+  const abortPull = () => void agentArcadeApi.abortPull(progressId);
+
+  try {
+    signal.addEventListener('abort', abortPull, { once: true });
+    await agentArcadeApi.pullModel({ model, baseUrl, progressId });
+  } finally {
+    signal.removeEventListener('abort', abortPull);
+    unsubscribe?.();
+  }
+}
+
+function AdvancedCapabilityLab({
+  selectedModel,
+  ollama,
+  system,
+}: {
+  selectedModel: string;
+  ollama: OllamaStatus;
+  system: SystemProfile;
+}) {
+  const installedModels = useMemo(
+    () => ollama.models.map((model) => model.name || model.model).filter(Boolean),
+    [ollama.models],
+  );
+  const defaultModel = installedModels.includes(selectedModel) ? selectedModel : (installedModels[0] ?? '');
+  const [labModel, setLabModel] = useState(defaultModel);
+  const [savedResults, setSavedResults] = useState<Record<string, AdvancedLabResult>>(() => readAdvancedLabResults());
+  const [runState, setRunState] = useState<AdvancedLabRunState>({ phase: 'idle', result: null, message: '' });
+  const [copied, setCopied] = useState(false);
+  const [imageModel, setImageModel] = useState(IMAGE_GENERATION_MODEL_OPTIONS[0].model);
+  const [imageConsent, setImageConsent] = useState(false);
+  const [imageTryAnyway, setImageTryAnyway] = useState(false);
+  const [imageRunState, setImageRunState] = useState<AdvancedLabRunState>({ phase: 'idle', result: null, message: '' });
+  const [pulledImageModels, setPulledImageModels] = useState<Set<string>>(() => new Set());
+  const [imagePullState, setImagePullState] = useState<{
+    phase: 'idle' | 'pulling' | 'complete' | 'failed';
+    percent: number | null;
+    message: string;
+  }>({ phase: 'idle', percent: null, message: '' });
+  const imagePullAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!labModel && defaultModel) setLabModel(defaultModel);
+  }, [defaultModel, labModel]);
+
+  const activeModel = installedModels.includes(labModel) ? labModel : defaultModel;
+  const activeModelInfo = ollama.models.find((model) => model.name === activeModel || model.model === activeModel);
+  const savedResult = activeModel ? savedResults[activeModel] ?? null : null;
+  const visibleResult = runState.result?.model === activeModel ? runState.result : savedResult;
+  const isRunning = runState.phase === 'running';
+  const isLargeModel = (activeModelInfo?.sizeGb ?? 0) >= Math.max(8, system.gpu.vramGb || 0);
+  const canRun = ollama.ready && Boolean(activeModel) && !isRunning;
+  const imageOption = IMAGE_GENERATION_MODEL_OPTIONS.find((option) => option.model === imageModel) ?? IMAGE_GENERATION_MODEL_OPTIONS[0];
+  const installedImageModel = getInstalledImageModelName(installedModels, imageOption.model);
+  const pulledImageModel = pulledImageModels.has(imageOption.model) ? imageOption.model : '';
+  const activeImageModel = installedImageModel || pulledImageModel || imageOption.model;
+  const imageResultKey = `image:${activeImageModel}`;
+  const visibleImageResult = imageRunState.result?.model === activeImageModel ? imageRunState.result : savedResults[imageResultKey] ?? null;
+  const imagePlatformSupported = system.platform === 'darwin';
+  const imagePlatformAllowed = imagePlatformSupported || imageTryAnyway;
+  const imageInstalled = Boolean(installedImageModel || pulledImageModel);
+  const imagePulling = imagePullState.phase === 'pulling';
+  const imageRunning = imageRunState.phase === 'running';
+  const canPullImageModel = ollama.ready && imagePlatformAllowed && imageConsent && !imageInstalled && !imagePulling && !imageRunning;
+  const canRunImageTest = ollama.ready && imagePlatformAllowed && imageInstalled && !imagePulling && !imageRunning;
+
+  const startChallenge = useCallback(async () => {
+    if (!activeModel || !ollama.ready) return;
+    setCopied(false);
+    setRunState({ phase: 'running', result: null, message: `Asking ${activeModel} to build a tiny app...` });
+    const result = await runAdvancedAppBuilderChallenge(activeModel, ollama.baseUrl);
+    setRunState({
+      phase: result.error ? 'failed' : 'complete',
+      result,
+      message: result.error ? result.error : `${activeModel} finished the App Builder challenge.`,
+    });
+    if (!result.error) {
+      setSavedResults((current) => {
+        const next = { ...current, [activeModel]: result };
+        writeAdvancedLabResults(next);
+        return next;
+      });
+    }
+  }, [activeModel, ollama.baseUrl, ollama.ready]);
+
+  const copyResult = useCallback(() => {
+    if (!visibleResult?.response) return;
+    void navigator.clipboard.writeText(visibleResult.response).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2200);
+    });
+  }, [visibleResult?.response]);
+
+  const startImagePull = useCallback(async () => {
+    if (!canPullImageModel) return;
+    const controller = new AbortController();
+    imagePullAbortRef.current = controller;
+    setImagePullState({ phase: 'pulling', percent: null, message: `Pulling ${imageOption.label} (${formatGb(imageOption.sizeGb)})...` });
+    try {
+      await pullOllamaModelWithProgress(
+        imageOption.model,
+        ollama.baseUrl,
+        (message, percent) => setImagePullState({ phase: 'pulling', percent, message }),
+        controller.signal,
+      );
+      setPulledImageModels((current) => {
+        const next = new Set(current);
+        next.add(imageOption.model);
+        return next;
+      });
+      setImagePullState({ phase: 'complete', percent: 100, message: `${imageOption.label} is ready for the Image Lab.` });
+    } catch (error) {
+      const message = error instanceof DOMException && error.name === 'AbortError'
+        ? 'Image model pull cancelled.'
+        : error instanceof Error ? error.message : 'Image model pull failed.';
+      setImagePullState({ phase: 'failed', percent: null, message });
+    } finally {
+      imagePullAbortRef.current = null;
+    }
+  }, [canPullImageModel, imageOption, ollama.baseUrl]);
+
+  const cancelImagePull = useCallback(() => {
+    imagePullAbortRef.current?.abort();
+  }, []);
+
+  const startImageChallenge = useCallback(async () => {
+    if (!canRunImageTest) return;
+    setImageRunState({ phase: 'running', result: null, message: `Generating a ${ADVANCED_IMAGE_WIDTH}x${ADVANCED_IMAGE_HEIGHT} beta image with ${activeImageModel}...` });
+    const result = await runAdvancedImageGenerationChallenge(activeImageModel, ollama.baseUrl);
+    setImageRunState({
+      phase: result.error ? 'failed' : 'complete',
+      result,
+      message: result.error ? result.error : `${activeImageModel} generated an image in ${(result.elapsedMs / 1000).toFixed(1)}s.`,
+    });
+    if (!result.error) {
+      setSavedResults((current) => {
+        const next = { ...current, [imageResultKey]: result };
+        writeAdvancedLabResults(next);
+        return next;
+      });
+    }
+  }, [activeImageModel, canRunImageTest, imageResultKey, ollama.baseUrl]);
+
+  return (
+    <section className="advanced-lab" aria-label="Advanced capability lab">
+      <div className="advanced-lab-head">
+        <div>
+          <span>Advanced Lab</span>
+          <strong>Optional skill tests beyond quick questions</strong>
+          <em>Separate Lab Grades. They do not affect the core RigMatch score.</em>
+        </div>
+        <div className="advanced-lab-model">
+          <label htmlFor="advanced-lab-model">Installed model</label>
+          <select
+            id="advanced-lab-model"
+            value={activeModel}
+            onChange={(event) => setLabModel(event.target.value)}
+            disabled={!installedModels.length || isRunning}
+          >
+            {installedModels.length ? installedModels.map((model) => (
+              <option key={model} value={model}>{model}</option>
+            )) : (
+              <option value="">No installed models</option>
+            )}
+          </select>
+        </div>
+      </div>
+
+      <div className="advanced-lab-grid">
+        <article className="advanced-lab-card runnable">
+          <div className="advanced-lab-card-head">
+            <Code2 aria-hidden="true" />
+            <div>
+              <span>Text model challenge</span>
+              <strong>App Builder: tiny Tetris</strong>
+            </div>
+            {visibleResult && (
+              <b className={`advanced-lab-grade ${getScoreTone(visibleResult.score)}`}>
+                {visibleResult.score} · {visibleResult.grade}
+              </b>
+            )}
+          </div>
+          <p>
+            Runs one larger local Ollama prompt and grades whether the answer looks like a complete single-file HTML game.
+          </p>
+          <div className="advanced-lab-safeguards">
+            <span>No auto-downloads</span>
+            <span>3 minute timeout</span>
+            <span>{activeModelInfo?.sizeGb ? `${formatGb(activeModelInfo.sizeGb)} installed` : 'Installed models only'}</span>
+          </div>
+          {isLargeModel && (
+            <div className="advanced-lab-warning">
+              <AlertTriangle aria-hidden="true" />
+              <span>This is a heavier prompt for your current VRAM. It may run slowly, but RigMatch will not pull anything new.</span>
+            </div>
+          )}
+          <div className="advanced-lab-actions">
+            <button type="button" className="primary-button compact" onClick={() => void startChallenge()} disabled={!canRun}>
+              <RefreshCw className={isRunning ? 'spin' : ''} aria-hidden="true" />
+              {isRunning ? 'Running Lab Test' : 'Run App Builder'}
+            </button>
+            <button type="button" className="mini-button outline" onClick={copyResult} disabled={!visibleResult?.response}>
+              {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+              {copied ? 'Copied' : 'Copy Output'}
+            </button>
+          </div>
+          {!ollama.ready && (
+            <div className="utility-empty compact">
+              <strong>Ollama is offline</strong>
+              <span>Start Ollama before running advanced local tests.</span>
+            </div>
+          )}
+          {runState.message && (
+            <p className={`advanced-lab-message ${runState.phase}`}>{runState.message}</p>
+          )}
+          {visibleResult && (
+            <div className="advanced-lab-result">
+              <div className="advanced-lab-result-head">
+                <span>{visibleResult.error ? 'Run failed' : `Completed in ${(visibleResult.elapsedMs / 1000).toFixed(1)}s`}</span>
+                <strong>{visibleResult.model}</strong>
+              </div>
+              {visibleResult.error ? (
+                <div className="utility-empty compact">
+                  <strong>{visibleResult.error}</strong>
+                  <span>No Lab Grade was saved for this run.</span>
+                </div>
+              ) : (
+                <>
+                  <div className="advanced-lab-checks">
+                    {visibleResult.checks.map((check) => (
+                      <div key={check.label} className={check.passed ? 'passed' : 'failed'} title={check.detail}>
+                        <span>{check.passed ? 'Pass' : 'Miss'}</span>
+                        <strong>{check.label}</strong>
+                      </div>
+                    ))}
+                  </div>
+                  <pre className="advanced-lab-output">{visibleResult.response || 'No response returned.'}</pre>
+                </>
+              )}
+            </div>
+          )}
+        </article>
+
+        <article className="advanced-lab-card image-beta">
+          <div className="advanced-lab-card-head">
+            <Lightbulb aria-hidden="true" />
+            <div>
+              <span>Extra beta creative test</span>
+              <strong>Image Generation</strong>
+            </div>
+            <b className={visibleImageResult ? `advanced-lab-grade ${getScoreTone(visibleImageResult.score)}` : 'advanced-lab-grade locked'}>
+              {visibleImageResult ? `${visibleImageResult.score} · ${visibleImageResult.grade}` : 'Extra beta'}
+            </b>
+          </div>
+          <p>
+            Runs an experimental Ollama image model through the same local API. This is intentionally separate from the core Match score.
+          </p>
+          <div className="advanced-lab-image-controls">
+            <label htmlFor="advanced-image-model">Image model</label>
+            <select
+              id="advanced-image-model"
+              value={imageOption.model}
+              onChange={(event) => {
+                setImageModel(event.target.value);
+                setImageConsent(false);
+              }}
+              disabled={imagePulling || imageRunning}
+            >
+              {IMAGE_GENERATION_MODEL_OPTIONS.map((option) => (
+                <option key={option.model} value={option.model}>
+                  {option.label} · {formatGb(option.sizeGb)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="advanced-lab-safeguards">
+            <span>{formatGb(imageOption.sizeGb)} pull</span>
+            <span>{ADVANCED_IMAGE_WIDTH}x{ADVANCED_IMAGE_HEIGHT}</span>
+            <span>{ADVANCED_IMAGE_STEPS} steps</span>
+            <span>{imageOption.license}</span>
+          </div>
+          <div className="advanced-lab-image-preview">
+            <span>Prompt</span>
+            <strong>{ADVANCED_IMAGE_GENERATION_PROMPT}</strong>
+            <em>{imageOption.note}</em>
+          </div>
+          <div className="advanced-lab-warning">
+            <ShieldCheck aria-hidden="true" />
+            <span>Extra beta safeguard: RigMatch will not auto-pull this. You must explicitly accept the size/platform warning before downloading.</span>
+          </div>
+          {!imagePlatformSupported && (
+            <label className="advanced-lab-consent warning">
+              <input
+                type="checkbox"
+                checked={imageTryAnyway}
+                onChange={(event) => setImageTryAnyway(event.target.checked)}
+                disabled={imagePulling || imageRunning}
+              />
+              <span>Ollama currently labels image generation as macOS-only. Let me try anyway on this platform.</span>
+            </label>
+          )}
+          {!imageInstalled && (
+            <label className="advanced-lab-consent">
+              <input
+                type="checkbox"
+                checked={imageConsent}
+                onChange={(event) => setImageConsent(event.target.checked)}
+                disabled={!imagePlatformAllowed || imagePulling || imageRunning}
+              />
+              <span>I understand this may download about {formatGb(imageOption.sizeGb)} and may be slow or unsupported.</span>
+            </label>
+          )}
+          <div className="advanced-lab-actions">
+            {!imageInstalled ? (
+              <button type="button" className="primary-button compact" onClick={() => void startImagePull()} disabled={!canPullImageModel}>
+                <Download aria-hidden="true" />
+                {imagePulling ? 'Downloading' : `Pull ${imageOption.label}`}
+              </button>
+            ) : (
+              <button type="button" className="primary-button compact" onClick={() => void startImageChallenge()} disabled={!canRunImageTest}>
+                <RefreshCw className={imageRunning ? 'spin' : ''} aria-hidden="true" />
+                {imageRunning ? 'Generating' : 'Run Image Test'}
+              </button>
+            )}
+            {imagePulling && (
+              <button type="button" className="mini-button outline" onClick={cancelImagePull}>
+                Stop Pull
+              </button>
+            )}
+          </div>
+          {imagePullState.message && (
+            <div className={`advanced-lab-download ${imagePullState.phase}`}>
+              <span>{imagePullState.message}</span>
+              <div className="popularity-track" aria-hidden="true">
+                <i style={{ width: `${imagePullState.percent ?? 12}%` }} />
+              </div>
+            </div>
+          )}
+          {imageRunState.message && (
+            <p className={`advanced-lab-message ${imageRunState.phase}`}>{imageRunState.message}</p>
+          )}
+          {visibleImageResult && (
+            <div className="advanced-lab-result">
+              {visibleImageResult.error ? (
+                <div className="utility-empty compact">
+                  <strong>{visibleImageResult.error}</strong>
+                  <span>Image Lab could not save a grade for this run.</span>
+                </div>
+              ) : (
+                <>
+                  {visibleImageResult.imageDataUrl ? (
+                    <img
+                      className="advanced-lab-generated-image"
+                      src={visibleImageResult.imageDataUrl}
+                      alt="Generated Image Lab output"
+                    />
+                  ) : (
+                    <div className="utility-empty compact">
+                      <strong>No image returned</strong>
+                      <span>Ollama completed, but RigMatch did not receive an image payload.</span>
+                    </div>
+                  )}
+                  <div className="advanced-lab-checks">
+                    {visibleImageResult.checks.map((check) => (
+                      <div key={check.label} className={check.passed ? 'passed' : 'failed'} title={check.detail}>
+                        <span>{check.passed ? 'Pass' : 'Miss'}</span>
+                        <strong>{check.label}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function getPopularityPercent(pulls: number | null | undefined): number {
+  if (pulls == null || !Number.isFinite(pulls) || pulls <= 0) return 0;
+  return Math.max(8, Math.min(100, Math.round((Math.log10(pulls + 1) / 7) * 100)));
+}
+
+function PopularityMeter({ pulls }: { pulls?: number | null }) {
+  const hasPulls = pulls != null && Number.isFinite(pulls) && pulls > 0;
+  const pullCount = hasPulls ? Number(pulls) : 0;
+  const percent = getPopularityPercent(pulls);
+  const label = hasPulls ? `${formatPullCount(pullCount)} pulls` : 'No pull data';
+
+  return (
+    <div
+      className={hasPulls ? 'popularity-meter' : 'popularity-meter empty'}
+      title={hasPulls ? `${pullCount.toLocaleString()} pulls from the Ollama library catalog` : 'Ollama local API does not expose public pull counts for this model'}
+    >
+      <span>{label}</span>
+      <div className="popularity-track" aria-hidden="true">
+        <i style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function UtilityPanel({
   panel,
   listTestResult,
@@ -4549,6 +5314,7 @@ function UtilityPanel({
             <div className="score-explainer-body">
               <p>RigMatch runs the same set of prompts across each model on <strong>your actual computer</strong> and combines three signals into a single Match score (0–100).</p>
               <p className="score-explainer-weight">Answer quality matters most. Speed and hardware fit help separate close matches.</p>
+              <p className="score-explainer-note">Scored benchmarks disable hidden thinking when Ollama supports it, so models are graded on visible answers instead of internal reasoning tokens. Chat mode is not affected.</p>
               <div className="score-explainer-grid">
                 <div>
                   <span>Answer Quality</span>
@@ -4645,7 +5411,7 @@ function UtilityPanel({
           <div className="utility-stat">
             <span>Best saved test</span>
             <strong>{topRankedScore ? topRankedScore.model : 'No saved score'}</strong>
-            <em>{topRankedScore ? `${topRankedScore.total} total · ${topRankedScore.grade}` : 'Run a test to save the next scorecard.'}</em>
+            <em>{topRankedScore ? `${formatMatchScore(topRankedScore)} total · ${topRankedScore.grade}` : 'Run a test to save the next scorecard.'}</em>
           </div>
           {taskPicks.length > 0 && (
             <div className="task-picks-section" aria-label="Category picks">
@@ -4656,7 +5422,7 @@ function UtilityPanel({
                     <em>{pick.label}</em>
                     <strong title={pick.model}>{pick.model}</strong>
                     <span className={`score-row-grade ${getScoreTone(pick.score.total)}`}>
-                      {pick.score.total} · {pick.score.grade}
+                      {formatMatchScore(pick.score)} · {pick.score.grade}
                     </span>
                     <span className="task-pick-response-time">{getResponseEstimate(pick.score.speed)}</span>
                   </div>
@@ -4682,12 +5448,15 @@ function UtilityPanel({
                   >
                     <b>{isTied ? '=' : index + 1}</b>
                     <div className="score-row-name">
-                      <span>{score.model}</span>
+                      <span>
+                        {score.model}
+                        {isLegacyScore(score) && <span className="legacy-score-badge">Retest recommended</span>}
+                      </span>
                       <em>{score.speed} spd · {score.sobriety} sobriety · {score.fit} fit · {getResponseEstimate(score.speed)}</em>
                     </div>
                     <strong className={`score-row-grade ${getScoreTone(score.total)}`}>
                       {isTied && <span className="tie-badge">TIED</span>}
-                      {score.total} · {score.grade}
+                      {formatMatchScore(score)} · {score.grade}
                     </strong>
                     {onSelectTopPick && <ChevronRight className="score-row-nav-arrow" aria-hidden="true" />}
                     <button
@@ -4736,7 +5505,7 @@ function UtilityPanel({
                 <li key={result.model} className={result.model === listTestResult.winner ? 'winner' : ''}>
                   <b>{index + 1}</b>
                   <span>{result.model}</span>
-                  <strong>{result.total}</strong>
+                  <strong>{formatMatchScore(result)}</strong>
                 </li>
               ))}
             </ol>
@@ -4848,6 +5617,11 @@ function UtilityPanel({
             onOpenPage={onOpenUpdatePage}
             onDownload={onDownloadUpdate}
             onInstall={onInstallUpdate}
+          />
+          <AdvancedCapabilityLab
+            selectedModel={selectedModel}
+            ollama={ollama}
+            system={system}
           />
           <section className={`ollama-update-card ${ollamaHasUpdate ? 'has-update' : ''}`} aria-label="Ollama version">
             <div className="ollama-update-head">
@@ -5395,8 +6169,8 @@ function ModelCabinet({
   const [taskFilter, setTaskFilter] = useState<ModelTaskFilterId | null>(null);
   const [sortKey, setSortKey] = useState<ModelSortKey>('status');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  // Column widths: Model, Size, Good For, Origin, Status, Match (Actions fills remainder)
-  const [colWidths, setColWidths] = useState([165, 68, 92, 100, 90, 72, 80]);
+  // Column widths: Model, Size, Good For, Origin, Status, Match, Popularity (Actions fills remainder)
+  const [colWidths, setColWidths] = useState([175, 68, 154, 100, 90, 72, 112]);
   const colWidthsRef = useRef(colWidths);
   colWidthsRef.current = colWidths;
   const handleColResizeStart = useCallback((colIndex: number, e: React.MouseEvent) => {
@@ -5591,7 +6365,7 @@ function ModelCabinet({
               <SortableModelHeader label="By" sortName="origin" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(3, e)} />
               <SortableModelHeader label="Status" sortName="status" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(4, e)} />
               <SortableModelHeader label="Match" sortName="score" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(5, e)} />
-              <SortableModelHeader label="Speed" sortName="speed" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(6, e)} />
+              <SortableModelHeader label="Popularity" sortName="pulls" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(6, e)} />
               <th>Actions</th>
             </tr>
           </thead>
@@ -5603,24 +6377,29 @@ function ModelCabinet({
               const rowPullProgress = pullProgressByModel[row.displayName];
               const isPullingRow = pullingModel === row.displayName;
               const shortlisted = shortlistIds.has(row.displayName);
-              const profile = getModelProfile(row.displayName);
               const origin = getModelOrigin(row.displayName);
               const sizeRisk = getSizeRisk(row.sizeGb);
               const statusLabel = getModelStatusLabel(row, queued);
               const score = getModelScore(row, modelScores);
               const rowBenchmark = benchmarkByModel[row.displayName];
+              const goodForTags = getModelGoodForTags(row);
               const hardwareFit = getHardwareFit(row, vramGb);
               const platformFit = getPlatformFit(row.displayName, platform);
               const speedDateLineupFullForRow = shortlistedCount >= 5;
-              const canChangeSpeedDateSlot = hardwareFit.recommend && (shortlisted || !speedDateLineupFullForRow);
+              const canJoinSpeedDate = platformFit.compatible && hardwareFit.recommend;
+              const canChangeSpeedDateSlot = canJoinSpeedDate && (shortlisted || !speedDateLineupFullForRow);
               const speedDateSlotLabel = shortlisted
                 ? 'Selected'
-                : !hardwareFit.recommend
+                : !platformFit.compatible
+                  ? 'OS Only'
+                  : !hardwareFit.recommend
                   ? 'Too Big'
                   : speedDateLineupFullForRow
                     ? '+ Speed Date'
                     : 'Add to Speed Dating';
-              const speedDateSlotTitle = !hardwareFit.recommend
+              const speedDateSlotTitle = !platformFit.compatible
+                ? platformFit.reason
+                : !hardwareFit.recommend
                 ? hardwareFit.detail
                 : shortlisted
                   ? installed
@@ -5633,9 +6412,11 @@ function ModelCabinet({
                       : `Add ${row.displayName} to lineup — download it before starting the test`;
               const speedDateSlotAriaLabel = shortlisted
                 ? `Remove ${row.displayName} from Speed Dating`
-                : hardwareFit.recommend
+                : canJoinSpeedDate
                   ? `Add ${row.displayName} to Speed Dating`
-                  : `${row.displayName} is too large for Speed Dating on this computer`;
+                  : !platformFit.compatible
+                    ? `${row.displayName} is not available for Speed Dating on this operating system`
+                    : `${row.displayName} is too large for Speed Dating on this computer`;
               const rowClassName = [
                 selected ? 'selected' : '',
                 hardwareFit.tone === 'out-of-league' ? 'out-of-league' : '',
@@ -5680,8 +6461,12 @@ function ModelCabinet({
                       }
                     </div>
                   </td>
-                  <td title={profile.specialties.join(', ')}>
-                    {profile.specialties[0]}
+                  <td className="good-for-cell" title={goodForTags.join(', ')}>
+                    <div className="good-for-tags">
+                      {goodForTags.map((tag) => (
+                        <span key={tag} className="good-for-chip">{tag}</span>
+                      ))}
+                    </div>
                     {isUncensoredModel(row.displayName) && (
                       <span className="uncensored-badge" title="Uncensored / unrestricted model">unrestricted</span>
                     )}
@@ -5696,12 +6481,12 @@ function ModelCabinet({
                     <ModelScorePill score={score} />
                   </td>
                   <td className="speed-cell">
-                    {rowBenchmark?.avgTokensPerSecond != null
-                      ? <span className="speed-pill tested">{Math.round(rowBenchmark.avgTokensPerSecond)} tok/s</span>
-                      : row.pulls != null
-                        ? <span className="speed-pill pulls">{formatPullCount(row.pulls)} pulls</span>
-                        : <span className="speed-pill empty">—</span>
-                    }
+                    <div className="speed-pop-cell">
+                      {rowBenchmark?.avgTokensPerSecond != null && (
+                        <span className="speed-pill tested">{Math.round(rowBenchmark.avgTokensPerSecond)} tok/s</span>
+                      )}
+                      <PopularityMeter pulls={row.pulls} />
+                    </div>
                   </td>
                   <td className={showDownloadProgress ? 'action-cell has-download-progress' : 'action-cell'}>
                     <div className="row-actions">
@@ -7520,7 +8305,7 @@ function SpeedDateContestantCard({
         </div>
       </div>
       <div className="speed-date-contestant-facts">
-        <span>{score ? `${score.total} Match · ${score.grade}` : 'Not tested yet'}</span>
+        <span>{score ? `${formatMatchScore(score)} Match · ${score.grade}` : 'Not tested yet'}</span>
         <span>{score ? getResponseEstimate(score.speed) : sizeLabel}</span>
         <span>{hardwareFit.label}</span>
       </div>
@@ -7658,6 +8443,9 @@ function SpeedDateTranscriptPanel({
               </div>
               <div className="speed-date-qa-block answered">
                 <span>{activeRow?.displayName} answered</span>
+                {getPromptDiagnosticText(prompt) && (
+                  <em className="prompt-diagnostic-note">{getPromptDiagnosticText(prompt)}</em>
+                )}
                 <p className="speed-date-answer-preview">{prompt.response.trim() || 'No answer returned.'}</p>
                 <pre>{prompt.response.trim() || 'No answer returned.'}</pre>
               </div>
@@ -7757,7 +8545,12 @@ function SpeedDateTranscriptPanel({
                         )}
                       </div>
                       {prompt ? (
-                        <p className="sbs-answer-text">{prompt.response.trim() || 'No answer returned.'}</p>
+                        <>
+                          {getPromptDiagnosticText(prompt) && (
+                            <p className="sbs-answer-missing">{getPromptDiagnosticText(prompt)}</p>
+                          )}
+                          <p className="sbs-answer-text">{prompt.response.trim() || 'No answer returned.'}</p>
+                        </>
                       ) : (
                         <p className="sbs-answer-missing">Not tested yet for this question.</p>
                       )}
@@ -7845,6 +8638,17 @@ function PromptStatusPill({ status }: { status?: BenchmarkPromptResult['status']
       : 'Failed';
 
   return <span className={`prompt-status-pill ${status}`}>{label}</span>;
+}
+
+function getPromptDiagnosticText(prompt: BenchmarkPromptResult) {
+  if (prompt.diagnostic) return prompt.diagnostic;
+  if (prompt.status === 'no-response' && /length/i.test(prompt.doneReason || '')) {
+    return 'No visible answer; Ollama hit the output limit before returning text.';
+  }
+  if (prompt.status === 'truncated') {
+    return `Answer may be incomplete; Ollama finished with ${prompt.doneReason || 'unknown reason'}.`;
+  }
+  return '';
 }
 
 const BENCHMARK_QUESTION_TYPES: BenchmarkQuestionType[] = ['assistant', 'json', 'truth', 'format', 'coding'];
@@ -8477,7 +9281,7 @@ function ProfileScoreDetails({
   const scoreCards = [
     {
       label: 'Match',
-      value: exactScores ? String(exactScores.total) : score ? String(score.total) : 'N/A',
+      value: exactScores ? formatMatchScore(exactScores) : score ? formatMatchScore(score) : 'N/A',
       note: exactScores?.grade ?? score?.grade ?? 'Run a test',
     },
     {
@@ -8513,7 +9317,7 @@ function ProfileScoreDetails({
         <div className="profile-scoreboard-title">
           <span>Judge Card</span>
           <strong>{model}</strong>
-          <em>{score ? `RigMatch scored this model ${score.total} with ${score.grade} chemistry.` : 'No scored compatibility test yet.'}</em>
+          <em>{score ? `RigMatch scored this model ${formatMatchScore(score)} with ${score.grade} chemistry.${isLegacyScore(score) ? ' Retest recommended for current scoring.' : ''}` : 'No scored compatibility test yet.'}</em>
         </div>
         <div className="profile-score-grid">
           {scoreCards.map((card) => (
@@ -8637,6 +9441,9 @@ function ProfileQuestionTranscript({
             </div>
             <div className="profile-qa-block answered">
               <span>{model} answered</span>
+              {getPromptDiagnosticText(prompt) && (
+                <em className="prompt-diagnostic-note">{getPromptDiagnosticText(prompt)}</em>
+              )}
               <pre>{prompt.response.trim() || 'No answer returned.'}</pre>
             </div>
           </li>
@@ -9652,6 +10459,20 @@ function DiskGuard({ guard }: { guard: ReturnType<typeof getDiskGuard> }) {
   );
 }
 
+function normalizeBenchmarkResultModel(result: BenchmarkResult, model: string): BenchmarkResult {
+  return result.model === model ? result : { ...result, model };
+}
+
+type MatchScoreLike = Pick<TestedModelScore, 'speed' | 'sobriety' | 'fit' | 'total'> & {
+  stability?: number;
+  preciseTotal?: number;
+};
+
+function calculatePreciseTotal(score: MatchScoreLike) {
+  const stability = typeof score.stability === 'number' ? score.stability : score.total;
+  return Number((score.sobriety * 0.34 + score.speed * 0.32 + stability * 0.18 + score.fit * 0.16).toFixed(1));
+}
+
 function toTestedModelScore(result: BenchmarkResult, suiteName?: string): TestedModelScore {
   return {
     model: result.model,
@@ -9659,9 +10480,12 @@ function toTestedModelScore(result: BenchmarkResult, suiteName?: string): Tested
     grade: result.scores.grade,
     speed: result.scores.speed,
     sobriety: result.scores.sobriety,
+    stability: result.scores.stability,
     fit: result.scores.fit,
     completedAt: result.completedAt,
     suiteName,
+    preciseTotal: calculatePreciseTotal(result.scores),
+    scoreSchemaVersion: CURRENT_SCORE_SCHEMA_VERSION,
   };
 }
 
@@ -9691,6 +10515,38 @@ function getRecentModelScores(modelScores: Record<string, TestedModelScore>) {
   return Object.values(modelScores)
     .filter(isTestedModelScore)
     .sort((left, right) => Date.parse(right.completedAt) - Date.parse(left.completedAt));
+}
+
+function isLegacyScore(score: TestedModelScore) {
+  return score.scoreSchemaVersion !== CURRENT_SCORE_SCHEMA_VERSION;
+}
+
+function getScoreSortTotal(score: MatchScoreLike) {
+  return typeof score.preciseTotal === 'number' ? score.preciseTotal : calculatePreciseTotal(score);
+}
+
+function formatMatchScore(score: MatchScoreLike) {
+  const precise = getScoreSortTotal(score);
+  return Math.abs(precise - score.total) >= 0.05 ? precise.toFixed(1) : String(score.total);
+}
+
+function compareTestedModelScores(left: TestedModelScore, right: TestedModelScore) {
+  const leftLegacy = isLegacyScore(left);
+  const rightLegacy = isLegacyScore(right);
+  if (leftLegacy !== rightLegacy) return leftLegacy ? 1 : -1;
+
+  const preciseDelta = getScoreSortTotal(right) - getScoreSortTotal(left);
+  if (Math.abs(preciseDelta) >= 0.05) return preciseDelta;
+  if (right.total !== left.total) return right.total - left.total;
+  if (right.sobriety !== left.sobriety) return right.sobriety - left.sobriety;
+  if ((right.stability ?? right.total) !== (left.stability ?? left.total)) return (right.stability ?? right.total) - (left.stability ?? left.total);
+  if (right.fit !== left.fit) return right.fit - left.fit;
+  if (right.speed !== left.speed) return right.speed - left.speed;
+  return left.model.localeCompare(right.model);
+}
+
+function compareBenchmarkResults(left: BenchmarkResult, right: BenchmarkResult) {
+  return compareTestedModelScores(toTestedModelScore(left), toTestedModelScore(right));
 }
 
 function scoreToToks(speed: number): string {
@@ -9752,14 +10608,7 @@ function buildShareableScorecard(
 function getRankedModelScores(modelScores: Record<string, TestedModelScore>) {
   return Object.values(modelScores)
     .filter((s) => isTestedModelScore(s) && !isCloudModel(s.model))
-    .sort((left, right) => {
-      if (right.total !== left.total) return right.total - left.total;
-      // Tiebreakers: trust (sobriety) → rig fit → speed → alphabetical
-      if (right.sobriety !== left.sobriety) return right.sobriety - left.sobriety;
-      if (right.fit !== left.fit) return right.fit - left.fit;
-      if (right.speed !== left.speed) return right.speed - left.speed;
-      return left.model.localeCompare(right.model);
-    });
+    .sort(compareTestedModelScores);
 }
 
 function getModelScore(row: ModelRow, modelScores: Record<string, TestedModelScore>) {
@@ -10042,13 +10891,7 @@ function getRigPick(
     .map((row) => ({ row, score: getModelScore(row, scores) }))
     .filter((item): item is { row: ModelRow; score: TestedModelScore } =>
       Boolean(item.score) && !isCloudModel(item.row.displayName))
-    .sort((left, right) => {
-      if (right.score.total !== left.score.total) return right.score.total - left.score.total;
-      if (right.score.sobriety !== left.score.sobriety) return right.score.sobriety - left.score.sobriety;
-      if (right.score.fit !== left.score.fit) return right.score.fit - left.score.fit;
-      if (right.score.speed !== left.score.speed) return right.score.speed - left.score.speed;
-      return left.row.displayName.localeCompare(right.row.displayName);
-    })[0];
+    .sort((left, right) => compareTestedModelScores(left.score, right.score))[0];
 
   if (scoredPick) {
     return {
@@ -10158,7 +11001,7 @@ function getModelSortValue(
     case 'params':
       return getParamSortValue(row.params);
     case 'skill':
-      return getModelProfile(row.displayName).specialties[0] ?? '';
+      return getModelGoodForTags(row).join(' ');
     case 'origin':
       return getModelOrigin(row.displayName).country;
     case 'source':
@@ -10179,6 +11022,7 @@ function getModelSortValue(
 
 function getModelSearchText(row: ModelRow, queued: boolean, score?: TestedModelScore) {
   const profile = getModelProfile(row.displayName);
+  const goodForTags = getModelGoodForTags(row);
   return [
     row.displayName,
     row.name,
@@ -10195,6 +11039,7 @@ function getModelSearchText(row: ModelRow, queued: boolean, score?: TestedModelS
     profile.agentName,
     profile.archetype,
     ...profile.specialties,
+    ...goodForTags,
   ]
     .join(' ')
     .toLowerCase();
@@ -10745,6 +11590,8 @@ const TASK_CATEGORIES = [
   { id: 'assistant', label: 'Best assistant',     keywords: ['assistant', 'daily chat', 'general help', 'chat', 'utility'] },
   { id: 'reasoning', label: 'Best for reasoning', keywords: ['reasoning', 'hard prompts', 'logic'] },
   { id: 'tiny',      label: 'Best tiny model',    keywords: ['low memory', 'small rigs', 'quick chat'] },
+  { id: 'vision',    label: 'Best for image/OCR', keywords: ['image analysis', 'ocr', 'vision'] },
+  { id: 'search',    label: 'Best for search',    keywords: ['embeddings', 'search', 'similarity'] },
   { id: 'speed',     label: 'Fastest on this rig', keywords: [] },
 ] as const;
 
@@ -10757,6 +11604,8 @@ const TASK_FILTER_CHIPS: Array<{ id: ModelTaskFilterId; label: string }> = [
   { id: 'writing',    label: 'Writing' },
   { id: 'reasoning',  label: 'Reasoning' },
   { id: 'tiny',       label: 'Tiny' },
+  { id: 'vision',     label: 'Image/OCR' },
+  { id: 'search',     label: 'Search' },
   { id: 'uncensored', label: 'Uncensored' },
 ];
 
@@ -10768,11 +11617,38 @@ function isUncensoredModel(name: string): boolean {
     lower.includes('hermes-2');
 }
 
+function getModelGoodForTags(row: ModelRow): string[] {
+  const profile = getModelProfile(row.displayName);
+  const tags = [
+    ...profile.specialties,
+    row.pack,
+    row.sizeGb != null && row.sizeGb <= 2.5 ? 'low memory' : '',
+    row.pulls != null && row.pulls >= 500000 ? 'popular' : '',
+    isUncensoredModel(row.displayName) ? 'unrestricted' : '',
+  ];
+  const seen = new Set<string>();
+
+  return tags
+    .map((tag) => tag.trim().toLowerCase())
+    .filter(Boolean)
+    .map((tag) => tag
+      .replace(/^balanced$/, 'balanced')
+      .replace(/^lightweight$/, 'low memory')
+      .replace(/^quality$/, 'quality')
+      .replace(/^reasoning$/, 'reasoning'))
+    .filter((tag) => {
+      if (seen.has(tag)) return false;
+      seen.add(tag);
+      return true;
+    })
+    .slice(0, 5);
+}
+
 function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolean {
   if (task === 'uncensored') return isUncensoredModel(row.displayName);
   const category = TASK_CATEGORIES.find((c) => c.id === task);
   if (!category || category.keywords.length === 0) return true;
-  const specialties = getModelProfile(row.displayName).specialties.map((s) => s.toLowerCase());
+  const specialties = getModelGoodForTags(row).map((s) => s.toLowerCase());
   return category.keywords.some((kw) => specialties.some((sp) => sp.includes(kw)));
 }
 
@@ -10784,7 +11660,7 @@ type TaskPick = {
 };
 
 function getTaskTopPicks(modelScores: Record<string, TestedModelScore>): TaskPick[] {
-  const scored = Object.values(modelScores).filter((s) => !isCloudModel(s.model));
+  const scored = Object.values(modelScores).filter((s) => !isCloudModel(s.model) && !isLegacyScore(s));
   if (scored.length === 0) return [];
 
   const picks: TaskPick[] = [];
@@ -10793,13 +11669,13 @@ function getTaskTopPicks(modelScores: Record<string, TestedModelScore>): TaskPic
     let best: TestedModelScore | null = null;
 
     if (category.id === 'speed') {
-      best = [...scored].sort((a, b) => b.speed - a.speed)[0] ?? null;
+      best = [...scored].sort((a, b) => b.speed - a.speed || compareTestedModelScores(a, b))[0] ?? null;
     } else {
       const matching = scored.filter((s) => {
         const specialties = getModelProfile(s.model).specialties.map((x) => x.toLowerCase());
         return category.keywords.some((kw) => specialties.some((sp) => sp.includes(kw)));
       });
-      best = matching.length > 0 ? [...matching].sort((a, b) => b.total - a.total)[0] : null;
+      best = matching.length > 0 ? [...matching].sort(compareTestedModelScores)[0] : null;
     }
 
     if (best) {

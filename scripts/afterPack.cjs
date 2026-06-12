@@ -1,7 +1,6 @@
 // Runs after electron-builder packs the main app, before creating the DMG.
 // On Mac: copies RigMatch Chat.app into the DMG staging area so users can
 // drag both apps to Applications from a single disk image.
-const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -19,6 +18,7 @@ module.exports = async function afterPack(context) {
   }
 
   const dest = path.join(context.appOutDir, 'RigMatch Chat.app');
-  execSync(`cp -r "${chatApp}" "${dest}"`);
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.cpSync(chatApp, dest, { recursive: true });
   console.log('[afterPack] Bundled RigMatch Chat.app into DMG staging area');
 };

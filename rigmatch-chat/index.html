@@ -3,12 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Project: Caroline — Companion</title>
+    <title>RigMatch Chat</title>
     <!-- Apply dark mode before first paint to prevent flash -->
     <script>
       window.onerror = function(msg, src, line, col, err) {
         document.body.style.cssText = 'background:#1a0000;color:#ff6060;font-family:monospace;padding:2rem;margin:0;';
-        document.body.innerHTML = '<h2>Startup error</h2><pre>' + msg + '\n\n' + (err && err.stack || '') + '</pre>';
+        document.body.replaceChildren();
+        const title = document.createElement('h2');
+        title.textContent = 'Startup error';
+        const detail = document.createElement('pre');
+        detail.textContent = String(msg || '') + '\n\n' + ((err && err.stack) || '');
+        document.body.append(title, detail);
         return true;
       };
     </script>

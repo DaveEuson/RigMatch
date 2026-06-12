@@ -132,6 +132,10 @@ export type BenchmarkPromptResult = {
   response: string;
   doneReason: string;
   status?: 'ok' | 'no-response' | 'truncated' | 'failed';
+  diagnostic?: string;
+  evalCount?: number;
+  evalDurationMs?: number;
+  thinkingDisabled?: boolean;
 };
 
 export type BenchmarkResult = {
@@ -188,6 +192,26 @@ export type ChatResponse = {
   model: string;
   message: string;
   completedAt: string;
+};
+
+export type AdvancedGenerateRequest = {
+  model: string;
+  baseUrl?: string;
+  prompt: string;
+  keep_alive?: string;
+  timeoutMs?: number;
+  options?: Record<string, unknown>;
+  width?: number;
+  height?: number;
+  steps?: number;
+};
+
+export type AdvancedGenerateResponse = {
+  response?: string;
+  image?: string;
+  images?: string[];
+  done_reason?: string;
+  error?: string;
 };
 
 export type PullModelResponse = {
@@ -259,8 +283,9 @@ export type AgentArcadeApi = {
   scanLan: () => Promise<ScanResponse>;
   addHostByAddress: (address: string) => Promise<NetworkHost>;
   pullModel: (request: { model: string; baseUrl?: string; progressId?: string }) => Promise<PullModelResponse>;
-  abortPull: () => Promise<void>;
+  abortPull: (progressId?: string) => Promise<void>;
   deleteModel: (request: { model: string; baseUrl?: string }) => Promise<DeleteModelResponse>;
+  runAdvancedGenerate: (request: AdvancedGenerateRequest) => Promise<AdvancedGenerateResponse>;
   runBenchmark: (request: {
     model: string;
     baseUrl?: string;

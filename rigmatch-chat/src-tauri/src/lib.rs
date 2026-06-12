@@ -18,9 +18,32 @@ pub struct ChatMessage {
 fn validate_localhost(base_url: &str) -> Result<(), String> {
     let parsed = url::Url::parse(base_url)
         .map_err(|_| format!("Invalid Ollama URL: {base_url}"))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("Ollama URL must use http(s)".to_string());
+    }
     let host = parsed.host_str().unwrap_or("");
     if !matches!(host, "localhost" | "127.0.0.1" | "::1") {
         return Err("Ollama URL must point to localhost".to_string());
+    }
+    Ok(())
+}
+
+fn validate_model_name(model: &str) -> Result<(), String> {
+    let trimmed = model.trim();
+    if trimmed.is_empty() || trimmed.len() > 200 {
+        return Err("Invalid model name".to_string());
+    }
+    if trimmed.contains("..") || trimmed.contains("//") || trimmed.contains('\\') {
+        return Err("Invalid model name".to_string());
+    }
+    if trimmed.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err("Invalid model name".to_string());
+    }
+    if !trimmed
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '/' | ':'))
+    {
+        return Err("Invalid model name".to_string());
     }
     Ok(())
 }
@@ -71,6 +94,7 @@ async fn stream_chat(
     on_token: Channel<String>,
 ) -> Result<(), String> {
     validate_localhost(&base_url)?;
+    validate_model_name(&model)?;
     let url = format!("{}/api/chat", base_url.trim_end_matches('/'));
     let body = serde_json::json!({
         "model": model,
@@ -203,5 +227,5 @@ pub fn run() {
             get_ollama_vram,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Caroline Companion");
+        .expect("error while running RigMatch Chat");
 }

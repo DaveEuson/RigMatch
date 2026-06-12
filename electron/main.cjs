@@ -11,6 +11,23 @@ const fsSync = require('node:fs');
 const { promisify } = require('node:util');
 const si = require('systeminformation');
 const { buildBenchmarkPromptPlan, normalizeBenchmarkQuestionCount } = require('./benchmarkSuite.cjs');
+const {
+  BENCHMARK_THINK_DISABLED,
+  buildBenchmarkGenerateBody,
+  buildPromptDiagnostic,
+  summarizePromptDiagnostics,
+  scoreSobriety,
+  getBenchmarkPromptStatus,
+  summarizeDoneReasons,
+  summarizePromptStatuses,
+  isStableBenchmarkRun,
+  normalizePositiveNumber,
+  durationNsToMs,
+  estimateTokens,
+  average,
+  clamp,
+} = require('./benchmarkScoring.cjs');
+const security = require('./security.cjs');
 
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const OLLAMA_LIBRARY_URL = 'https://ollama.com/library';
@@ -35,8 +52,11 @@ const ALLOWED_EXTERNAL_HOSTS = new Set([
   'github.com',
   'www.github.com',
   'api.github.com',
+  'ai.google.dev',
   'buymeacoffee.com',
   'www.buymeacoffee.com',
+  'amazon.com',
+  'www.amazon.com',
   'developer.nvidia.com',
   'www.developer.nvidia.com',
 ]);
@@ -76,6 +96,7 @@ const OLLAMA_LIBRARY_DETAIL_LIMIT = 56;
 const OLLAMA_LIBRARY_MODEL_LIMIT = 260;
 const OLLAMA_FAMILY_TAG_LIMIT = 18;
 const OLLAMA_DETAIL_CONCURRENCY = 8;
+const JSON_RESPONSE_MAX_BYTES = 8 * 1024 * 1024;
 const CPU_LOAD_SAMPLE_MS = 750;
 let ollamaCatalogCache = null;
 let ollamaCatalogCacheAt = 0;
@@ -189,9 +210,10 @@ const BRIDGE_ALLOWED_ORIGINS = new Set([
 const SCORES_MAX_ENTRIES = 500;   // N-07: reject oversized payloads from renderer
 let benchmarkRunning = false;     // N-06: single-benchmark mutex
 let lastLogClearAt = 0;           // N-03: rate-limit log clearing
-let activePullController = null;  // abortable by ollama:abortPull IPC
+const activePullControllers = new Map(); // keyed by progressId for safe per-download cancellation
 let catalogFetchPromise = null;   // dedup concurrent catalog fetches
 let ollamaInstallController = null;
+let lastDownloadedOllamaInstallerPath = null;
 const closeApprovedWindowIds = new Set();
 const closePromptPendingWindowIds = new Set();
 
@@ -248,8 +270,16 @@ function registerHandlers() {
   handleLogged('ollama:getCatalog', 'catalog', (_event, options) => getOllamaCatalog(options));
   handleLogged('ollama:openDownload', 'ollama', () => openOllamaDownload());
   handleLogged('ollama:pullModel', 'ollama', (event, request) => pullModel(request, event.sender));
-  ipcMain.handle('ollama:abortPull', () => { activePullController?.abort(); });
+  ipcMain.handle('ollama:abortPull', (event, progressId) => {
+    assertTrustedIpcSender(event);
+    if (typeof progressId === 'string' && progressId) {
+      activePullControllers.get(progressId)?.abort();
+      return;
+    }
+    activePullControllers.forEach((controller) => controller.abort());
+  });
   handleLogged('ollama:deleteModel', 'ollama', (_event, request) => deleteModel(request));
+  handleLogged('ollama:advancedGenerate', 'ollama', (_event, request) => runAdvancedGenerate(request));
   handleLogged('network:scanLan', 'network', () => scanLanForOllama());
   handleLogged('network:addHostByAddress', 'network', (_event, address) => addHostByAddress(address));
   handleLogged('benchmark:run', 'benchmark', (event, request) => runBenchmark(request, event.sender));
@@ -261,6 +291,7 @@ function registerHandlers() {
   handleLogged('app:checkForUpdates', 'updates', (_event, channel) => checkForRigmatchUpdates(channel));
   handleLogged('app:openUpdatePage', 'updates', (_event, channel) => openRigmatchUpdatePage(channel));
   ipcMain.handle('app:closeReady', (event) => {
+    assertTrustedIpcSender(event);
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || win.isDestroyed()) return { ok: false };
 
@@ -269,20 +300,36 @@ function registerHandlers() {
     win.close();
     return { ok: true };
   });
-  ipcMain.handle('app:checkAutoUpdate', async () => {
+  ipcMain.handle('app:checkAutoUpdate', async (event) => {
+    assertTrustedIpcSender(event);
     if (!app.isPackaged) return { phase: 'not-available' };
     try { await autoUpdater.checkForUpdates(); } catch (err) { return { phase: 'error', error: err.message }; }
   });
-  ipcMain.handle('app:downloadUpdate', async () => {
+  ipcMain.handle('app:downloadUpdate', async (event) => {
+    assertTrustedIpcSender(event);
     try { await autoUpdater.downloadUpdate(); } catch (err) { return { phase: 'error', error: err.message }; }
   });
-  ipcMain.handle('app:installUpdate', () => { autoUpdater.quitAndInstall(); });
-  ipcMain.handle('ollama:startInstall', (event) => startOllamaInstall(event.sender));
-  ipcMain.handle('ollama:launchInstaller', (_event, installerPath) => {
-    if (typeof installerPath !== 'string' || !installerPath) return;
+  ipcMain.handle('app:installUpdate', (event) => {
+    assertTrustedIpcSender(event);
+    autoUpdater.quitAndInstall();
+  });
+  ipcMain.handle('ollama:startInstall', (event) => {
+    assertTrustedIpcSender(event);
+    return startOllamaInstall(event.sender);
+  });
+  ipcMain.handle('ollama:launchInstaller', (event, installerPath) => {
+    assertTrustedIpcSender(event);
+    if (!security.isExpectedInstallerPath(installerPath, {
+      expectedPath: lastDownloadedOllamaInstallerPath,
+      tempDir: app.getPath('temp'),
+      platform: process.platform,
+    }) || !fsSync.existsSync(installerPath)) {
+      throw new Error('Installer path was not created by this RigMatch session');
+    }
     return shell.openPath(installerPath);
   });
   ipcMain.handle('scores:sync', (_event, data) => {
+    assertTrustedIpcSender(_event);
     if (!data || typeof data !== 'object' || Array.isArray(data)) return;
 
     const rawScores = 'scores' in data ? (data.scores ?? {}) : data;
@@ -306,7 +353,8 @@ function registerHandlers() {
     latestScores = validated;
     latestChosen = typeof chosen === 'string' && chosen.length <= 200 ? chosen : null;
   });
-  ipcMain.handle('app:openChatApp', async () => {
+  ipcMain.handle('app:openChatApp', async (event) => {
+    assertTrustedIpcSender(event);
     const platform = process.platform;
     const isWin = platform === 'win32';
     const isMac = platform === 'darwin';
@@ -315,8 +363,10 @@ function registerHandlers() {
     // Check if already running (skip second launch — shared data dir causes blank window)
     try {
       if (isWin) {
-        const { stdout } = await execFileAsync('tasklist', ['/FI', 'IMAGENAME eq rigmatch-chat.exe', '/NH'], { timeout: 2000 });
-        if (stdout.toLowerCase().includes('rigmatch-chat.exe')) return { ok: true, reason: 'already running' };
+        for (const processName of ['rigmatch-chat.exe', 'RigMatch Chat.exe']) {
+          const { stdout } = await execFileAsync('tasklist', ['/FI', `IMAGENAME eq ${processName}`, '/NH'], { timeout: 2000 });
+          if (stdout.toLowerCase().includes(processName.toLowerCase())) return { ok: true, reason: 'already running' };
+        }
       } else {
         const { stdout } = await execFileAsync('pgrep', ['-x', 'rigmatch-chat'], { timeout: 2000 });
         if (stdout.trim()) return { ok: true, reason: 'already running' };
@@ -326,16 +376,31 @@ function registerHandlers() {
     const candidates = isWin ? [
       // Packaged: extraFiles land next to the .exe in the install dir
       path.join(execDir, 'companions', 'rigmatch-chat.exe'),
+      path.join(execDir, 'resources', 'companions', 'rigmatch-chat.exe'),
+      path.join(process.resourcesPath || '', 'companions', 'rigmatch-chat.exe'),
+      // Dev/source checkout: copied companion binary
+      path.join(__dirname, '..', 'companions', 'rigmatch-chat.exe'),
       // Dev
       path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'release', 'rigmatch-chat.exe'),
       path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'debug', 'rigmatch-chat.exe'),
       path.join(process.env.LOCALAPPDATA || '', 'Programs', 'RigMatch Chat', 'RigMatch Chat.exe'),
+      path.join(process.env.LOCALAPPDATA || '', 'Programs', 'RigMatch Chat', 'rigmatch-chat.exe'),
+      path.join(process.env.LOCALAPPDATA || '', 'RigMatch Chat', 'RigMatch Chat.exe'),
+      path.join(process.env.LOCALAPPDATA || '', 'RigMatch Chat', 'rigmatch-chat.exe'),
+      path.join(process.env.PROGRAMFILES || '', 'RigMatch Chat', 'RigMatch Chat.exe'),
+      path.join(process.env.PROGRAMFILES || '', 'RigMatch Chat', 'rigmatch-chat.exe'),
+      path.join(process.env['ProgramFiles(x86)'] || '', 'RigMatch Chat', 'RigMatch Chat.exe'),
+      path.join(process.env['ProgramFiles(x86)'] || '', 'RigMatch Chat', 'rigmatch-chat.exe'),
+      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'RigMatch Chat', 'RigMatch Chat.exe'),
+      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'RigMatch Chat', 'rigmatch-chat.exe'),
     ] : isMac ? [
       // Installed standalone: user dragged Chat.app from DMG to Applications
       '/Applications/RigMatch Chat.app/Contents/MacOS/rigmatch-chat',
       path.join(os.homedir(), 'Applications', 'RigMatch Chat.app', 'Contents', 'MacOS', 'rigmatch-chat'),
       // Packaged fallback: extraFiles land at Contents/companions/ inside the .app bundle
       path.join(execDir, '..', 'companions', 'rigmatch-chat'),
+      path.join(process.resourcesPath || '', 'companions', 'rigmatch-chat'),
+      path.join(__dirname, '..', 'companions', 'rigmatch-chat'),
       // Dev
       path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'release', 'rigmatch-chat'),
       path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'debug', 'rigmatch-chat'),
@@ -345,6 +410,8 @@ function registerHandlers() {
       path.join(os.homedir(), 'Applications', 'rigmatch-chat.AppImage'),
       // Packaged fallback: extraFiles land next to the binary
       path.join(execDir, 'companions', 'rigmatch-chat'),
+      path.join(process.resourcesPath || '', 'companions', 'rigmatch-chat'),
+      path.join(__dirname, '..', 'companions', 'rigmatch-chat'),
       // Dev
       path.join(__dirname, '..', 'rigmatch-chat', 'src-tauri', 'target', 'release', 'rigmatch-chat'),
     ];
@@ -364,8 +431,9 @@ function registerHandlers() {
       if (!fsSync.existsSync(candidate)) continue;
       try {
         const stat = fsSync.statSync(candidate);
-        // Reject if world-writable (mode & 0o002) — prevents binary replacement attacks
-        if (stat.mode & 0o002) continue;
+        // Reject world-writable companion binaries on POSIX systems. Windows ACLs do not
+        // map cleanly to POSIX mode bits, so applying this there can reject valid installs.
+        if (platform !== 'win32' && (stat.mode & 0o002)) continue;
       } catch {
         continue;
       }
@@ -385,10 +453,7 @@ function registerHandlers() {
 
 function handleLogged(channel, source, handler) {
   ipcMain.handle(channel, async (event, ...args) => {
-    // U-02: reject IPC from any frame that isn't one of our BrowserWindows
-    if (!BrowserWindow.fromWebContents(event.sender)) {
-      throw new Error('Unauthorized IPC sender');
-    }
+    assertTrustedIpcSender(event);
     try {
       return await handler(event, ...args);
     } catch (error) {
@@ -405,6 +470,25 @@ function handleLogged(channel, source, handler) {
       throw error;
     }
   });
+}
+
+function assertTrustedIpcSender(event) {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) {
+    throw new Error('Unauthorized IPC sender');
+  }
+
+  const senderUrl = event.senderFrame?.url || event.sender.getURL();
+  const trusted = security.isTrustedRendererUrl(senderUrl, {
+    isDev: isDev(),
+    packagedIndexPath: path.join(__dirname, '..', 'dist', 'index.html'),
+  });
+
+  if (!trusted) {
+    throw new Error('Unauthorized IPC origin');
+  }
+
+  return win;
 }
 
 function getLogFilePath() {
@@ -585,6 +669,7 @@ async function startOllamaInstall(sender) {
       send({ phase: 'downloading', percent: total ? Math.round((received / total) * 100) : 0, receivedBytes: received, totalBytes: total });
     }
     await new Promise((resolve, reject) => fileStream.end((err) => (err ? reject(err) : resolve())));
+    lastDownloadedOllamaInstallerPath = dest;
     send({ phase: 'ready', installerPath: dest });
   } catch (err) {
     if (err.name !== 'AbortError') send({ phase: 'error', error: err.message || 'Download failed' });
@@ -674,7 +759,7 @@ async function openRigmatchUpdatePage(channel = 'release') {
   return { url };
 }
 
-async function fetchJson(url, options = {}, timeoutMs = 2500) {
+async function fetchJson(url, options = {}, timeoutMs = 2500, maxBytes = JSON_RESPONSE_MAX_BYTES) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -694,6 +779,9 @@ async function fetchJson(url, options = {}, timeoutMs = 2500) {
     }
 
     const text = await response.text();
+    if (text.length > maxBytes) {
+      throw new Error(`Response from ${getUrlLabel(url)} was too large`);
+    }
     return text ? JSON.parse(text) : {};
   } catch (error) {
     if (error?.name === 'AbortError') {
@@ -1242,11 +1330,11 @@ function isPrivateIp(ip) {
 
 // ID-03: Validate that a baseUrl is localhost-only before using it in fetch calls.
 function assertLocalhostUrl(url) {
-  let parsed;
-  try { parsed = new URL(url); } catch { throw new Error(`Invalid Ollama URL: ${url}`); }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('Ollama URL must use http(s)');
-  const host = parsed.hostname.toLowerCase();
-  if (host !== 'localhost' && host !== '127.0.0.1' && host !== '::1') throw new Error('Ollama URL must point to localhost');
+  security.assertLocalhostUrl(url);
+}
+
+function assertValidModelName(model) {
+  return security.assertValidModelName(model);
 }
 
 async function getOllamaStatus(baseUrl = OLLAMA_LOCAL_URL) {
@@ -1737,14 +1825,12 @@ function sortDiscoveredHosts(a, b) {
 }
 
 async function pullModel(request = {}, sender) {
-  const model = request.model;
+  const model = assertValidModelName(request.model);
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
   assertLocalhostUrl(baseUrl);
-  const progressId = request.progressId || `pull-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-  if (!model) {
-    throw new Error('No model selected to pull');
-  }
+  const progressId = typeof request.progressId === 'string' && request.progressId.length <= 120
+    ? request.progressId
+    : `pull-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   const emit = createPullProgressEmitter(sender, {
     id: progressId,
@@ -1752,7 +1838,7 @@ async function pullModel(request = {}, sender) {
     baseUrl,
   });
   const controller = new AbortController();
-  activePullController = controller;
+  activePullControllers.set(progressId, controller);
   const timeoutMs = 1000 * 60 * 45;
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let lastStatus = 'Pulled';
@@ -1875,7 +1961,7 @@ async function pullModel(request = {}, sender) {
     throw error;
   } finally {
     clearTimeout(timer);
-    if (activePullController === controller) activePullController = null;
+    if (activePullControllers.get(progressId) === controller) activePullControllers.delete(progressId);
   }
 
   return {
@@ -1991,12 +2077,9 @@ function normalizeByteCount(value) {
 }
 
 async function deleteModel(request = {}) {
-  const model = request.model;
+  const model = assertValidModelName(request.model);
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
   assertLocalhostUrl(baseUrl);
-  if (!model) {
-    throw new Error('No model selected to delete');
-  }
 
   await fetchJson(
     `${baseUrl}/api/delete`,
@@ -2040,7 +2123,7 @@ async function runBenchmark(request = {}, sender) {
 }
 
 async function runBenchmarkInner(request = {}, sender) {
-  const model = request.model;
+  const model = assertValidModelName(request.model);
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
   assertLocalhostUrl(baseUrl);
   const questionCount = normalizeBenchmarkQuestionCount(request.questionCount);
@@ -2073,6 +2156,7 @@ async function runBenchmarkInner(request = {}, sender) {
       baseUrl,
       questionCount,
       benchmarkMode: 'ollama-parity',
+      thinkingDisabled: BENCHMARK_THINK_DISABLED,
       warmup: {
         enabled: true,
         scored: false,
@@ -2119,6 +2203,10 @@ async function runBenchmarkInner(request = {}, sender) {
       let evalDurationSeconds = 0;
       let firstTokenMs = null;
       let doneReason = null;
+      let totalDurationMs = null;
+      let promptEvalDurationMs = null;
+      let loadDurationMs = null;
+      let thinkingDisabled = BENCHMARK_THINK_DISABLED;
 
       try {
         const generateResult = await runBenchmarkPromptParity(baseUrl, model, prompt.prompt);
@@ -2126,6 +2214,10 @@ async function runBenchmarkInner(request = {}, sender) {
         evalCount = generateResult.evalCount;
         evalDurationSeconds = generateResult.evalDurationSeconds;
         doneReason = generateResult.doneReason;
+        totalDurationMs = generateResult.totalDurationMs;
+        promptEvalDurationMs = generateResult.promptEvalDurationMs;
+        loadDurationMs = generateResult.loadDurationMs;
+        thinkingDisabled = generateResult.thinkingDisabled;
       } catch (error) {
         await appendAppLog({
           level: 'error',
@@ -2159,6 +2251,15 @@ async function runBenchmarkInner(request = {}, sender) {
       const tokensPerSecond = evalDurationSeconds > 0 ? evalCount / evalDurationSeconds : 0;
       const sobrietyScore = scoreSobriety(prompt, responseText);
       const promptStatus = getBenchmarkPromptStatus(responseText, doneReason);
+      const diagnostic = buildPromptDiagnostic({
+        responseText,
+        doneReason,
+        evalCount,
+        evalDurationSeconds,
+        elapsedMs,
+        status: promptStatus,
+        thinkingDisabled,
+      });
 
       runs.push({
         elapsedMs,
@@ -2168,8 +2269,42 @@ async function runBenchmarkInner(request = {}, sender) {
         response: responseText,
         doneReason: doneReason || 'complete',
         status: promptStatus,
+        diagnostic,
+        evalCount,
+        evalDurationMs: Math.round(evalDurationSeconds * 1000),
+        totalDurationMs,
+        promptEvalDurationMs,
+        loadDurationMs,
+        thinkingDisabled,
       });
       rawRuns.push({ prompt, ...runs[runs.length - 1] });
+
+      if (promptStatus !== 'ok') {
+        await appendAppLog({
+          level: 'warn',
+          source: 'benchmark',
+          message: `Benchmark prompt returned ${promptStatus}: ${model} / ${prompt.label}`,
+          details: {
+            model,
+            baseUrl,
+            questionCount,
+            promptId: prompt.id,
+            promptLabel: prompt.label,
+            promptType: prompt.type,
+            runIndex: runIndex + 1,
+            status: promptStatus,
+            doneReason,
+            evalCount,
+            evalDurationMs: Math.round(evalDurationSeconds * 1000),
+            totalDurationMs,
+            promptEvalDurationMs,
+            loadDurationMs,
+            responseLength: responseText.length,
+            thinkingDisabled,
+            diagnostic,
+          },
+        });
+      }
     }
 
     promptResults.push({
@@ -2182,6 +2317,10 @@ async function runBenchmarkInner(request = {}, sender) {
       response: runs[runs.length - 1]?.response || '',
       doneReason: summarizeDoneReasons(runs.map((run) => run.doneReason)),
       status: summarizePromptStatuses(runs.map((run) => run.status)),
+      diagnostic: summarizePromptDiagnostics(runs.map((run) => run.diagnostic)),
+      evalCount: Math.round(average(runs.map((run) => run.evalCount))),
+      evalDurationMs: Math.round(average(runs.map((run) => run.evalDurationMs))),
+      thinkingDisabled: runs.every((run) => run.thinkingDisabled),
     });
     const completedPrompt = promptResults[promptResults.length - 1];
     sendProgress({
@@ -2194,7 +2333,7 @@ async function runBenchmarkInner(request = {}, sender) {
       tokensPerSecond: completedPrompt.tokensPerSecond,
       sobrietyScore: completedPrompt.sobrietyScore,
       message: completedPrompt.status === 'no-response'
-        ? `${prompt.label} returned no response.`
+        ? `${prompt.label} returned no visible answer. ${completedPrompt.diagnostic}`
         : `${prompt.label} scored ${completedPrompt.sobrietyScore}.`,
     });
   }
@@ -2243,6 +2382,15 @@ async function runBenchmarkInner(request = {}, sender) {
       questionCount,
       scores: result.scores,
       promptCount: promptResults.length,
+      unstablePrompts: promptResults
+        .filter((prompt) => prompt.status && prompt.status !== 'ok')
+        .map((prompt) => ({
+          id: prompt.id,
+          label: prompt.label,
+          status: prompt.status,
+          doneReason: prompt.doneReason,
+          diagnostic: prompt.diagnostic,
+        })),
     },
   });
 
@@ -2256,37 +2404,95 @@ async function runBenchmarkInner(request = {}, sender) {
 }
 
 async function warmBenchmarkModel(baseUrl, model) {
-  await fetchJson(
-    `${baseUrl}/api/generate`,
-    {
-      method: 'POST',
-      body: JSON.stringify({
+  const requestUrl = `${baseUrl}/api/generate`;
+  try {
+    await fetchJson(
+      requestUrl,
+      {
+        method: 'POST',
+        body: JSON.stringify(buildBenchmarkGenerateBody({
+          model,
+          prompt: 'Reply READY only.',
+          keepAlive: BENCHMARK_KEEP_ALIVE,
+          options: BENCHMARK_WARMUP_OPTIONS,
+        })),
+      },
+      BENCHMARK_TIMEOUT_MS,
+    );
+  } catch (error) {
+    if (!isUnsupportedThinkError(error)) throw error;
+    await appendAppLog({
+      level: 'warn',
+      source: 'benchmark',
+      message: `Ollama thinking control not supported during warm-up; retrying without think:false for ${model}.`,
+      details: {
         model,
-        prompt: 'Reply READY only.',
-        stream: false,
-        keep_alive: BENCHMARK_KEEP_ALIVE,
-        options: BENCHMARK_WARMUP_OPTIONS,
-      }),
-    },
-    BENCHMARK_TIMEOUT_MS,
-  );
+        error: serializeError(error),
+      },
+    });
+    await fetchJson(
+      requestUrl,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          model,
+          prompt: 'Reply READY only.',
+          stream: false,
+          keep_alive: BENCHMARK_KEEP_ALIVE,
+          options: BENCHMARK_WARMUP_OPTIONS,
+        }),
+      },
+      BENCHMARK_TIMEOUT_MS,
+    );
+  }
 }
 
 async function runBenchmarkPromptParity(baseUrl, model, prompt) {
-  const response = await fetchJson(
-    `${baseUrl}/api/generate`,
-    {
-      method: 'POST',
-      body: JSON.stringify({
+  const requestUrl = `${baseUrl}/api/generate`;
+  let thinkingDisabled = BENCHMARK_THINK_DISABLED;
+  let response;
+
+  try {
+    response = await fetchJson(
+      requestUrl,
+      {
+        method: 'POST',
+        body: JSON.stringify(buildBenchmarkGenerateBody({
+          model,
+          prompt,
+          keepAlive: BENCHMARK_KEEP_ALIVE,
+          options: BENCHMARK_GENERATE_OPTIONS,
+        })),
+      },
+      BENCHMARK_TIMEOUT_MS,
+    );
+  } catch (error) {
+    if (!isUnsupportedThinkError(error)) throw error;
+    thinkingDisabled = false;
+    await appendAppLog({
+      level: 'warn',
+      source: 'benchmark',
+      message: `Ollama thinking control not supported; retrying without think:false for ${model}.`,
+      details: {
         model,
-        prompt,
-        stream: false,
-        keep_alive: BENCHMARK_KEEP_ALIVE,
-        options: BENCHMARK_GENERATE_OPTIONS,
-      }),
-    },
-    BENCHMARK_TIMEOUT_MS,
-  );
+        error: serializeError(error),
+      },
+    });
+    response = await fetchJson(
+      requestUrl,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          model,
+          prompt,
+          stream: false,
+          keep_alive: BENCHMARK_KEEP_ALIVE,
+          options: BENCHMARK_GENERATE_OPTIONS,
+        }),
+      },
+      BENCHMARK_TIMEOUT_MS,
+    );
+  }
 
   const responseText = String(response.response || '');
   const evalCount = normalizePositiveNumber(response.eval_count) || estimateTokens(responseText);
@@ -2299,16 +2505,31 @@ async function runBenchmarkPromptParity(baseUrl, model, prompt) {
     evalCount,
     evalDurationSeconds,
     doneReason: response.done_reason || (response.done ? 'stop' : 'unknown'),
+    totalDurationMs: durationNsToMs(response.total_duration),
+    promptEvalDurationMs: durationNsToMs(response.prompt_eval_duration),
+    loadDurationMs: durationNsToMs(response.load_duration),
+    thinkingDisabled,
   };
 }
 
+function isUnsupportedThinkError(error) {
+  const message = getLogErrorMessage(error).toLowerCase();
+  return message.includes('think')
+    && (
+      message.includes('unknown')
+      || message.includes('unsupported')
+      || message.includes('invalid')
+      || message.includes('unrecognized')
+    );
+}
+
 async function sendChat(request = {}) {
-  const model = request.model;
+  const model = assertValidModelName(request.model);
   const message = request.message;
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
   assertLocalhostUrl(baseUrl);
-  if (!model || !message) {
-    throw new Error('Model and message are required');
+  if (!message) {
+    throw new Error('Message is required');
   }
 
   // U-01: strip control chars so user input cannot inject additional "Assistant:" turns
@@ -2339,53 +2560,46 @@ async function sendChat(request = {}) {
   };
 }
 
-function scoreSobriety(prompt, response) {
-  const text = response.trim();
-  if (!text) return 0;
+async function runAdvancedGenerate(request = {}) {
+  const model = assertValidModelName(request.model);
+  const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
+  assertLocalhostUrl(baseUrl);
 
-  if (prompt.type === 'json') {
-    // Strip markdown code fences if model wrapped the JSON
-    const jsonText = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-    try {
-      const parsed = JSON.parse(jsonText);
-      const keys = Object.keys(parsed).length;
-      if (keys >= 4) return 92;
-      if (keys >= 3) return 82;
-      if (keys >= 2) return 70;
-      return 52;
-    } catch {
-      return jsonText.includes('{') && jsonText.includes('}') ? 42 : 22;
-    }
+  const prompt = String(request.prompt || '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/g, ' ').slice(0, 20000).trim();
+  if (!prompt) throw new Error('Prompt is required');
+
+  const timeoutMs = Math.max(5000, Math.min(240000, Number(request.timeoutMs) || 120000));
+  const body = {
+    model,
+    prompt,
+    stream: false,
+  };
+
+  if (typeof request.keep_alive === 'string' && request.keep_alive.length <= 20) body.keep_alive = request.keep_alive;
+  if (request.options && typeof request.options === 'object' && !Array.isArray(request.options)) {
+    body.options = Object.fromEntries(Object.entries(request.options).slice(0, 24));
   }
+  if (Number.isInteger(request.width)) body.width = Math.max(1, Math.min(1024, request.width));
+  if (Number.isInteger(request.height)) body.height = Math.max(1, Math.min(1024, request.height));
+  if (Number.isInteger(request.steps)) body.steps = Math.max(1, Math.min(64, request.steps));
 
-  if (prompt.type === 'truth') {
-    // Model should admit it doesn't know — catch all common refusal/uncertainty phrasings
-    const admits = /cannot|can't|can not|not provided|not enough|don't know|do not know|unknown|unable|not able|no information|not aware|no way to|outside my|beyond my|do not have|i have no|don't have access|do not have access|not available|isn't available|is not available|lack(?:s)? (?:the )?(?:access|ability|information|context)|without (?:access|knowing|that information)|not (?:been )?(?:given|provided|told)/i.test(text);
-    return admits ? 96 : 38;
-  }
+  const response = await fetchJson(
+    `${baseUrl}/api/generate`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+    timeoutMs,
+    JSON_RESPONSE_MAX_BYTES,
+  );
 
-  if (prompt.type === 'format') {
-    // Count both bullet lines (-, *, •) and numbered lines (1. 1) a. etc.)
-    const lines = text.split('\n');
-    const bulletLines = lines.filter((line) => /^\s*[-*•]\s/.test(line)).length;
-    const numberedLines = lines.filter((line) => /^\s*(?:\d+|[a-z])[.)]\s/i.test(line)).length;
-    const listLines = bulletLines + numberedLines;
-    if (listLines >= 2 && listLines <= 5) return 92;
-    if (listLines === 1) return 65;
-    if (listLines > 5) return 75; // gave too many but tried
-    return 48;
-  }
-
-  if (prompt.type === 'coding') {
-    const hasFunction = /function\s+clampScore|const\s+clampScore|clampScore\s*[=(]|=>/.test(text);
-    const hasClamping = /Math\.min|Math\.max/.test(text);
-    if (hasFunction && hasClamping) return 92;
-    if (hasClamping) return 72;
-    if (/function|const|=>/.test(text)) return 58;
-    return 38;
-  }
-
-  return clamp(78 + Math.min(14, Math.floor(text.length / 80)));
+  return {
+    response: typeof response.response === 'string' ? response.response : '',
+    image: typeof response.image === 'string' ? response.image : undefined,
+    images: Array.isArray(response.images) ? response.images.filter((item) => typeof item === 'string').slice(0, 1) : undefined,
+    done_reason: response.done_reason || (response.done ? 'stop' : 'unknown'),
+    error: typeof response.error === 'string' ? response.error : undefined,
+  };
 }
 
 function scoreRigFit(model) {
@@ -2396,63 +2610,6 @@ function scoreRigFit(model) {
   if (/(22b|24b|27b|30b|32b|34b)/.test(lower)) return 58;
   if (/(70b|72b|90b|110b|123b|235b|405b)/.test(lower)) return 38;
   return 82;
-}
-
-function average(values) {
-  const valid = values.filter((value) => Number.isFinite(value));
-  if (!valid.length) return 0;
-  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
-}
-
-function normalizePositiveNumber(value) {
-  const numberValue = Number(value);
-  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
-}
-
-function summarizeDoneReasons(reasons) {
-  const counts = reasons.reduce((summary, reason) => {
-    const key = reason || 'unknown';
-    summary[key] = (summary[key] || 0) + 1;
-    return summary;
-  }, {});
-
-  return Object.entries(counts)
-    .map(([reason, count]) => count === 1 ? reason : `${reason} x${count}`)
-    .join(', ');
-}
-
-function getBenchmarkPromptStatus(response, doneReason) {
-  if (!String(response || '').trim()) return 'no-response';
-
-  const reason = String(doneReason || '').toLowerCase();
-  if (/(?:length|timeout|error|cancel|abort|fail)/.test(reason)) return 'truncated';
-
-  return 'ok';
-}
-
-function summarizePromptStatuses(statuses) {
-  if (statuses.some((status) => status === 'no-response')) return 'no-response';
-  if (statuses.some((status) => status === 'failed')) return 'failed';
-  if (statuses.some((status) => status === 'truncated')) return 'truncated';
-  return 'ok';
-}
-
-function isStableBenchmarkRun(result) {
-  if (result.status === 'no-response' || result.status === 'failed' || result.status === 'truncated') return false;
-  if (!result.response.trim()) return false;
-
-  const reason = String(result.doneReason || '').toLowerCase();
-  if (!reason || reason === 'complete' || reason === 'stop') return true;
-
-  return !/(?:length|timeout|error|cancel|abort|fail)/.test(reason);
-}
-
-function estimateTokens(text) {
-  return Math.max(1, Math.round(text.split(/\s+/).length * 1.3));
-}
-
-function clamp(value) {
-  return Math.min(100, Math.max(0, value));
 }
 
 function gradeFor(score) {

@@ -51,8 +51,13 @@
 !macro customInstall
   ; --- RigMatch Chat shortcuts ---
   ${If} $InstallChat == ${BST_CHECKED}
-    CreateShortCut "$DESKTOP\RigMatch Chat.lnk" "$INSTDIR\companions\rigmatch-chat.exe"
-    CreateShortCut "$SMPROGRAMS\RigMatch.AI\RigMatch Chat.lnk" "$INSTDIR\companions\rigmatch-chat.exe"
+    ${If} ${FileExists} "$INSTDIR\companions\rigmatch-chat.exe"
+      CreateDirectory "$SMPROGRAMS\RigMatch.AI"
+      Delete "$DESKTOP\RigMatch Chat.lnk"
+      Delete "$SMPROGRAMS\RigMatch.AI\RigMatch Chat.lnk"
+      CreateShortCut "$DESKTOP\RigChat.lnk" "$INSTDIR\companions\rigmatch-chat.exe" "" "$INSTDIR\companions\rigmatch-chat.exe" 0
+      CreateShortCut "$SMPROGRAMS\RigMatch.AI\RigChat.lnk" "$INSTDIR\companions\rigmatch-chat.exe" "" "$INSTDIR\companions\rigmatch-chat.exe" 0
+    ${EndIf}
   ${EndIf}
 
   ; --- If user deselected RigMatch.AI, remove its shortcuts ---
@@ -63,6 +68,8 @@
 !macroend
 
 !macro customUnInstall
+  Delete "$DESKTOP\RigChat.lnk"
+  Delete "$SMPROGRAMS\RigMatch.AI\RigChat.lnk"
   Delete "$DESKTOP\RigMatch Chat.lnk"
   Delete "$SMPROGRAMS\RigMatch.AI\RigMatch Chat.lnk"
 !macroend

@@ -277,6 +277,13 @@ export default function App() {
 
   const activeMessages = activeBuddy ? (messagesByModel[activeBuddy] ?? []) : [];
   const activeBuddyObj = visibleBuddies.find((b) => b.modelName === activeBuddy) ?? null;
+  const normalizeHiddenModels = useCallback(
+    (hiddenModels: string[]) => {
+      const knownModels = new Set(buddies.map((b) => b.modelName));
+      return Array.from(new Set(hiddenModels)).filter((model) => knownModels.has(model));
+    },
+    [buddies],
+  );
 
   // ── Apply theme ───────────────────────────────────────────────────────────
 
@@ -482,17 +489,21 @@ export default function App() {
       alert(`Invalid Ollama URL: ${(err as Error).message}`);
       return;
     }
+    const hiddenModels = normalizeHiddenModels(draftSettings.hiddenModels);
     const next: AppSettings = {
       ollamaUrl: rawUrl,
       userName: draftSettings.userName.trim() || "You",
       systemPrompt: draftSettings.systemPrompt,
       theme: draftSettings.theme,
       muted: draftSettings.muted,
-      hiddenModels: draftSettings.hiddenModels,
+      hiddenModels,
       showSystemMonitor: draftSettings.showSystemMonitor,
     };
     saveSettings(next);
     setSettings(next);
+    if (activeBuddy && hiddenModels.includes(activeBuddy)) {
+      setActiveBuddy(buddies.find((b) => !hiddenModels.includes(b.modelName))?.modelName ?? null);
+    }
     setSettingsOpen(false);
     void refresh();
   };
@@ -502,8 +513,12 @@ export default function App() {
       ...s,
       hiddenModels: s.hiddenModels.includes(modelName)
         ? s.hiddenModels.filter((m) => m !== modelName)
-        : [...s.hiddenModels, modelName],
+        : Array.from(new Set([...s.hiddenModels, modelName])),
     }));
+  };
+
+  const showAllModels = () => {
+    setDraftSettings((s) => ({ ...s, hiddenModels: [] }));
   };
 
   const clearAllHistory = () => {
@@ -513,7 +528,7 @@ export default function App() {
 
   // Hide a model immediately (outside settings flow — from profile popup)
   const hideModelNow = (modelName: string) => {
-    const next = { ...settings, hiddenModels: [...settings.hiddenModels, modelName] };
+    const next = { ...settings, hiddenModels: normalizeHiddenModels([...settings.hiddenModels, modelName]) };
     saveSettings(next);
     setSettings(next);
     setDraftSettings(next);
@@ -986,6 +1001,13 @@ export default function App() {
               {buddies.length > 0 && (
                 <>
                   <div className="rm-settings-section-label">Visible Models</div>
+                  <div className="rm-visible-models-tools">
+                    <span>{buddies.length - normalizeHiddenModels(draftSettings.hiddenModels).length} of {buddies.length} shown</span>
+                    <button type="button" className="rm-settings-mini-btn" onClick={showAllModels} disabled={draftSettings.hiddenModels.length === 0}>
+                      Show all
+                    </button>
+                  </div>
+                  <p className="rm-settings-help">Click a buddy to show or hide it. Save applies the visible roster immediately.</p>
                   <div className="rm-hide-model-list">
                     {buddies.map((b) => {
                       const isVisible = !draftSettings.hiddenModels.includes(b.modelName);
@@ -993,6 +1015,8 @@ export default function App() {
                       return (
                         <div
                           key={b.modelName}
+                          role="switch"
+                          aria-checked={isVisible}
                           className={`rm-hide-model-item${isVisible ? " rm-model-visible" : " rm-model-hidden"}`}
                           onClick={() => toggleHideModel(b.modelName)}
                           onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") toggleHideModel(b.modelName); }}

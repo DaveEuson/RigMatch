@@ -1,7 +1,8 @@
 {
   "name": "rigmatch-ai",
   "private": true,
-  "version": "0.1.6",
+  "version": "0.1.7",
+  "packageManager": "npm@10.9.3",
   "description": "AI model matchmaking for your computer",
   "author": "Dave Euson <daveeuson@gmail.com>",
   "type": "module",
@@ -10,16 +11,21 @@
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && node electron/launch.cjs\"",
     "dev:web": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
+    "build:chat": "npm --prefix rigmatch-chat run tauri:build",
+    "prepare:companions": "node scripts/prepare-companions.cjs",
     "start": "node electron/launch.cjs",
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win",
-    "dist:mac": "npm run build && electron-builder --mac",
-    "dist:linux": "npm run build && electron-builder --linux",
-    "pack:win": "npm run build && electron-builder --dir --win",
-    "pack:mac": "npm run build && electron-builder --dir --mac",
-    "pack:linux": "npm run build && electron-builder --dir --linux",
+    "dist": "npm run build && npm run build:chat && npm run prepare:companions && electron-builder",
+    "dist:win": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& npm run build && npm run build:chat && npm run prepare:companions && electron-builder --win",
+    "dist:mac": "npm run build && npm run build:chat && npm run prepare:companions && electron-builder --mac",
+    "dist:linux": "npm run build && npm run build:chat && npm run prepare:companions && electron-builder --linux",
+    "pack:win": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& npm run build && npm run build:chat && npm run prepare:companions && electron-builder --dir --win",
+    "pack:mac": "npm run build && npm run build:chat && npm run prepare:companions && electron-builder --dir --mac",
+    "pack:linux": "npm run build && npm run build:chat && npm run prepare:companions && electron-builder --dir --linux",
     "benchmark:ollama": "node scripts/benchmark-ollama.mjs",
     "compare:ollama-speed": "node scripts/compare-ollama-speed.mjs",
+    "smoke:bench": "node scripts/smoke-benchmark.mjs",
+    "smoke:bench:strict": "node scripts/smoke-benchmark.mjs --strict",
+    "test": "node --test tests/*.test.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -44,9 +50,13 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "RigMatch.AI",
       "include": "build/installer.nsh"
     },
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "nsis",
         "zip"
@@ -55,6 +65,7 @@
     "afterPack": "./scripts/afterPack.cjs",
     "mac": {
       "category": "public.app-category.developer-tools",
+      "icon": "build/icon.png",
       "target": [
         "dmg",
         "zip"

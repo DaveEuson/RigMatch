@@ -13,6 +13,7 @@ dist
 dist-ssr
 release
 release-*
+/RigMatch.AI-main/
 *.local
 
 # Rust / Tauri build artifacts (can be several GB — never commit)

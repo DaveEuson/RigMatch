@@ -6,24 +6,20 @@ This is a candid list of issues we know about going into the beta. If you hit so
 
 ## Data & Scoring
 
-**Speed scores on existing results show 100 for most models**
-The speed scoring formula was recalibrated in this build (now anchored to tok/s: 5 tok/s = 0, 100 tok/s = 100). Results saved before this version will still show the old inflated speed scores. Re-running a test on any model will give it the corrected score.
+**Legacy scorecards need a fresh retest**
+Scorecards saved before the current scoring schema are now labeled **Retest recommended** and are excluded from category picks so old speed calibration does not crown misleading winners. Re-running a test updates that model to the current scoring schema.
 
-**Five-way ties in Scorecards**
-The Match score is an integer 0–100. With 10 questions, several models often land on the same number (e.g. 89·A). Tiebreakers exist (sobriety → fit → speed → alphabetical) but the underlying score doesn't have enough resolution to separate close results. A future build will add decimal precision internally and round only for display.
+**Close matches now use decimal/tiebreak sorting in Scorecards**
+Scorecards still show familiar grades, but rankings now use a one-decimal internal Match value plus the same answer-quality, finish-rate, fit, speed, and alphabetical tiebreakers. This reduces the old "five models at 89·A" pileup.
 
-**Stale "Not tested yet" state after Speed Dating**
-In some cases, a model that was just tested in Speed Dating will still show "Not tested yet" in its individual profile panel until the app is refreshed. The score is saved correctly — it's a UI refresh issue, not data loss.
-
-**Category picks may show unexpected winners on old saved scores**
-The "Best for Reasoning" and similar category cards filter by model specialties. If you have saved scores from before this build, some category winners may not reflect the updated specialty tags. Re-testing will correct them.
+**Speed Dating profile refresh**
+Speed Dating now saves each result under the exact model name selected in the lineup, so the contestant card and individual profile panel should update immediately after a run.
 
 ---
 
 ## Chat Companion (RigMatch Chat)
 
-**"Visible Models" control has no effect**
-The Visible Models bar in Chat Settings is present but not yet functional. It's intended as the way to un-hide a hidden buddy. Workaround: clear all chat data to reset hidden model state.
+No known chat-companion blockers at this time. The Visible Models control can now restore hidden buddies without clearing chat data.
 
 ---
 
@@ -46,3 +42,24 @@ The Visible Models bar in Chat Settings is present but not yet functional. It's 
 If you find something not on this list, please open an issue or drop it in the beta feedback channel. Screenshots and your hardware spec (VRAM, OS) help narrow things down fast.
 
 *Last updated: v0.1 beta — June 2026*
+
+## Upcoming Features
+
+### Optional Advanced Capability Tests
+
+RigMatch should grow beyond the core quick-question benchmark with optional lab-style tests that produce separate grades instead of changing the main Match score.
+
+Planned test ideas:
+
+- **App Builder**: ask a model to create a complete single-file app or game, such as a Tetris-style HTML game, then grade structure, controls, scoring, game loop, collision logic, line clearing, restart/game-over handling, and truncation risk.
+- **Image Generation**: first extra-beta Ollama Image Lab is in progress for 0.1.7 with explicit platform/model-size warnings, opt-in pulls, and separate image grades. Future hardening should add better image-model discovery, richer quality checks, and optional ComfyUI/Stable Diffusion backend support.
+- **Video Generation**: keep as a later research item. It needs stronger hardware checks, backend selection, longer runtimes, and much larger storage/VRAM safeguards.
+
+Safeguards required before expanding these tests:
+
+- Do not auto-download huge models for advanced tests.
+- Show estimated model size, disk impact, RAM/VRAM risk, and backend requirements before any pull.
+- Keep advanced grades separate from the core RigMatch 0-100 score.
+- Use installed models only unless the user explicitly opts into a download.
+- Add timeouts and clear failure states for slow or unsupported models.
+- Do not execute generated code automatically inside RigMatch; show/copy the output first.

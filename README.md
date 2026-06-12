@@ -8,7 +8,7 @@ Find the best local AI model for your computer. RigMatch benchmarks your install
 
 ## Download
 
-**Beta v0.1.1** — [All platforms →](../../releases/latest)
+**Beta v0.1.7** — [All platforms →](../../releases/latest)
 
 | Platform | Installer |
 |---|---|
@@ -80,7 +80,7 @@ Everything runs locally. No cloud, no account, no subscription. Your prompts and
 ## Build from Source
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -101,6 +101,63 @@ cd rigmatch-chat
 npx tauri build
 cp src-tauri/target/release/rigmatch-chat ../companions/
 ```
+
+## Release Verification
+
+Before publishing a beta build, run the release checklist in [RELEASE.md](./RELEASE.md). At minimum:
+
+- Build with `npm ci`, `npm run build`, and `npm --prefix rigmatch-chat run build`
+- Run benchmark trust checks with `npm test` and `npm run smoke:bench -- --model <installed-model>`
+- For qwen/thinking-model issues, run `npm run smoke:bench -- --model qwen3:1.7b --strict`
+- Compare raw Ollama speed with RigMatch parity mode using `npm run compare:ollama-speed -- --model <installed-model>`
+- Benchmark scoring disables hidden thinking when Ollama supports `think: false`; older Ollama builds fall back and log the compatibility note
+- Windows beta packaging uses `CSC_IDENTITY_AUTO_DISCOVERY=false` to avoid accidental local code-signing attempts; real signing should be configured deliberately for a signed release
+- Smoke-test a fresh install and an upgrade install on the target OS
+- Confirm **RigMatch Chat** launches from the main app
+- Confirm **Check Local**, model download, Speed Dating, and cleanup-on-close flows work
+- Publish `SHA256SUMS.txt` with release artifacts
+
+## Logs and Rollback
+
+RigMatch stores app logs in the Electron `userData` folder and exposes **Open logs folder** in the app. For beta bug reports, include the app version, OS, Ollama version, model name, and relevant log lines.
+
+If a release needs rollback, uninstall the new build, reinstall the previous release from GitHub, and keep the user data folder intact unless the tester explicitly wants a clean reset.
+
+## How We Test RigMatch
+
+RigMatch's benchmark score is only useful if it matches what Ollama actually returned. Before each beta release, test the scoring path from three angles:
+
+```powershell
+npm test
+npm run smoke:bench -- --model qwen3:1.7b --strict
+npm run compare:ollama-speed -- --model qwen3:1.7b
+npm run build
+```
+
+- `npm test` runs fast unit/security checks for URL validation, model-name validation, installer guards, benchmark diagnostics, and scoring edge cases.
+- `npm run smoke:bench -- --model <model> --strict` runs the real RigMatch benchmark prompt suite directly against local Ollama and fails if RigMatch-mode prompts return empty, truncated, or failed answers.
+- The smoke test compares Ollama default mode with RigMatch mode. This catches thinking-model failures where Ollama spends all output tokens internally and returns no visible answer.
+- RigMatch scored benchmarks send `think: false` when Ollama supports it, so models are graded on visible answers. If an older Ollama build rejects that field, RigMatch retries without it and logs the fallback.
+- `npm run compare:ollama-speed -- --model <model>` checks raw Ollama generation timing against RigMatch parity timing.
+- `npm run build` confirms the TypeScript and Vite production build works before packaging.
+
+Recommended beta smoke models:
+
+| Model | Why |
+|---|---|
+| `qwen3:1.7b` | Thinking-model regression check; previously exposed empty visible responses. |
+| `gemma3:1b` | Tiny fast model sanity check. |
+| One 7B-class local model | More realistic daily-driver benchmark behavior. |
+
+After packaging, install the generated build and manually smoke:
+
+- Launch RigMatch.AI from the installed shortcut.
+- Run **Check Local** and confirm Ollama/system info appears.
+- Run a single model test and confirm the scorecard transcript saves answers.
+- Run `qwen3:1.7b` and confirm repeated **NO RESPONSE** results do not return.
+- Open **RigMatch Chat** from the main app.
+- Start and cancel a model download.
+- Close the app and confirm the model cleanup warning appears.
 
 ## Project Structure
 

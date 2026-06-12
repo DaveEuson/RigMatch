@@ -47,7 +47,7 @@ function parseArgs(argv) {
     json: false,
     temperature: 0,
     seed: 1,
-    numPredict: 512,
+    numPredict: 300,
     keepAlive: DEFAULT_KEEP_ALIVE,
     warmup: true,
   };
@@ -72,7 +72,7 @@ function parseArgs(argv) {
       args.seed = Number(next);
       i += 1;
     } else if (arg === '--num-predict' && next) {
-      args.numPredict = Number(next) || 512;
+      args.numPredict = Number(next) || 300;
       i += 1;
     } else if (arg === '--keep-alive' && next) {
       args.keepAlive = next;
@@ -101,7 +101,7 @@ Options:
   --timeout-ms <number>    Per-prompt timeout. Default: ${DEFAULT_TIMEOUT_MS}
   --temperature <number>   Ollama temperature. Default: 0
   --seed <number>          Ollama seed. Default: 1
-  --num-predict <number>   Ollama num_predict. Default: 512
+  --num-predict <number>   Ollama num_predict. Default: 300
   --keep-alive <value>     Ollama keep_alive. Default: ${DEFAULT_KEEP_ALIVE}
   --no-warmup              Skip the unscored Warm-up Period request.
   --json                   Print machine-readable JSON only.
@@ -185,10 +185,12 @@ async function runPrompt({ baseUrl, model, benchmark, timeoutMs, temperature, se
       prompt: benchmark.prompt,
       stream: false,
       keep_alive: keepAlive,
+      think: false,
       options: {
         temperature,
         seed,
         num_predict: numPredict,
+        num_ctx: 2048,
       },
     }),
     signal: AbortSignal.timeout(timeoutMs),

@@ -15,7 +15,10 @@ export type ChatMessage = {
 const VALID_MODEL_NAME = /^[a-z0-9][a-z0-9._:/-]{0,199}$/i;
 
 export function isValidModelName(name: string): boolean {
-  return VALID_MODEL_NAME.test(name) && !name.includes("..");
+  return VALID_MODEL_NAME.test(name) &&
+    !name.includes("..") &&
+    !name.includes("//") &&
+    !/^[a-z][a-z0-9+.-]*:\/\//i.test(name);
 }
 
 export function assertLocalhostUrl(url: string): void {
@@ -57,6 +60,9 @@ export async function streamChat(
   onToken: (token: string) => void,
   signal?: AbortSignal,
 ): Promise<void> {
+  assertLocalhostUrl(baseUrl);
+  if (!isValidModelName(model)) throw new Error("Invalid model name");
+
   const channel = new Channel<string>();
   let active = true;
   signal?.addEventListener("abort", () => {

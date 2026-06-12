@@ -930,6 +930,45 @@ textarea:focus {
   background: var(--bg-card);
 }
 
+.rm-visible-models-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -4px 0 8px;
+}
+
+.rm-visible-models-tools span,
+.rm-settings-help {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.rm-settings-help {
+  margin: -2px 0 8px;
+}
+
+.rm-settings-mini-btn {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--text);
+  background: var(--bg-card);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.rm-settings-mini-btn:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.rm-settings-mini-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
 .rm-hide-model-item {
   display: flex;
   flex-direction: row;

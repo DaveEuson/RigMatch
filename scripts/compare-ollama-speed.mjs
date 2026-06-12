@@ -138,6 +138,7 @@ async function runParityRequest({ baseUrl, model, prompt, timeoutMs, numPredict,
       prompt,
       stream: false,
       keep_alive: keepAlive,
+      think: false,
       options: {
         temperature,
         seed,
@@ -191,6 +192,7 @@ function toRow(label, run) {
     first_token_ms: run.firstTokenMs ?? '',
     eval_count: run.evalCount,
     done_reason: run.doneReason || '',
+    think: false,
   };
 }
 

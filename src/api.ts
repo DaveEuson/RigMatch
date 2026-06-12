@@ -11,7 +11,7 @@ import type { AgentArcadeApi, BenchmarkProgressUpdate, PullProgressUpdate, Updat
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
 const RIGMATCH_RELEASES_URL = 'https://github.com/daveeuson/RigMatch.AI/releases';
-const APP_VERSION = '0.1.6';
+const APP_VERSION = '0.1.7';
 const benchmarkProgressListeners = new Set<(update: BenchmarkProgressUpdate) => void>();
 const pullProgressListeners = new Set<(update: PullProgressUpdate) => void>();
 
@@ -105,6 +105,15 @@ const fallbackApi: AgentArcadeApi = {
       status: 'Preview delete complete',
       baseUrl: request.baseUrl || demoOllama.baseUrl,
       completedAt: new Date().toISOString(),
+    };
+  },
+  async runAdvancedGenerate(request) {
+    await delay(650);
+    return {
+      response: request.prompt.toLowerCase().includes('single-file')
+        ? '<!doctype html><html><body><canvas id="game"></canvas><script>function loop(){requestAnimationFrame(loop)}loop()</script></body></html>'
+        : '',
+      done_reason: 'preview',
     };
   },
   async runBenchmark(request) {
