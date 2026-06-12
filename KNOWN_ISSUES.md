@@ -25,8 +25,8 @@ No known chat-companion blockers at this time. The Visible Models control can no
 
 ## Linux / Jetson
 
-**Linux beta artifacts are x64-only**
-The current Linux `.deb` and `.AppImage` are built for x64 Debian/Ubuntu systems. NVIDIA Jetson devices are ARM64/aarch64, so installing the current Linux package on Jetson can show confusing "dependencies are not installable" errors. Jetson support needs dedicated ARM64 builds for both RigMatch.AI and RigMatch Chat.
+**Linux ARM64 / Jetson support is experimental**
+RigMatch now builds separate Linux x64 and Linux ARM64 artifacts. NVIDIA Jetson users should install the ARM64/aarch64 package only; installing the x64 package can show confusing "dependencies are not installable" errors. Jetson testing should be treated as beta-within-beta until we have more hardware coverage.
 
 ---
 

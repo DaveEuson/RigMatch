@@ -21,14 +21,22 @@ jobs:
             platform: win
             artifact: win
             companion: rigmatch-chat.exe
+            builderArgs: --win
           - os: macos-latest
             platform: mac
             artifact: mac
             companion: rigmatch-chat
+            builderArgs: --mac
           - os: ubuntu-latest
             platform: linux
-            artifact: linux
+            artifact: linux-x64
             companion: rigmatch-chat
+            builderArgs: --linux --x64
+          - os: ubuntu-24.04-arm
+            platform: linux
+            artifact: linux-arm64
+            companion: rigmatch-chat
+            builderArgs: --linux --arm64
 
     runs-on: ${{ matrix.os }}
     env:
@@ -53,7 +61,7 @@ jobs:
           workspaces: rigmatch-chat/src-tauri
 
       - name: Install Linux system dependencies
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
@@ -97,16 +105,25 @@ jobs:
           mkdir -p release
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             cp rigmatch-chat/src-tauri/target/release/bundle/nsis/*-setup.exe release/ 2>/dev/null || true
-          elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+          elif [[ "${{ matrix.platform }}" == "linux" ]]; then
             cp rigmatch-chat/src-tauri/target/release/bundle/appimage/*.AppImage release/ 2>/dev/null || true
             cp rigmatch-chat/src-tauri/target/release/bundle/deb/*.deb release/ 2>/dev/null || true
           fi
           # Mac: handled by afterPack hook — Chat.app is bundled into the DMG
 
       - name: Build RigMatch.AI
-        run: npm run build && npm exec -- electron-builder --${{ matrix.platform }} --publish never
+        run: npm run build && npm exec -- electron-builder ${{ matrix.builderArgs }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Make Linux metadata architecture-specific
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for file in release/latest*.yml; do
+            mv "$file" "${file%.yml}-${{ matrix.artifact }}.yml"
+          done
 
       - name: Upload artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -8,7 +8,7 @@ Use this before tagging or publishing a beta release.
 - Rust stable toolchain for RigMatch Chat
 - Ollama installed locally for smoke tests
 - Platform-specific build host for each installer target
-- Linux release artifacts are x64 unless an ARM64 build host/workflow is explicitly added
+- Linux release artifacts include x64 and ARM64 builds; Jetson/ARM64 is experimental until smoke-tested on real hardware
 
 ## Required commands
 
@@ -42,7 +42,7 @@ npm run dist:linux
 ## Artifact checks
 
 - Release output contains the expected platform installers/packages.
-- Linux artifacts are labeled x64-only; do not advertise Jetson/ARM64 support until dedicated ARM64 Electron and RigMatch Chat builds exist.
+- Linux artifacts are labeled by architecture; confirm x64 and ARM64 files are both present before advertising Jetson support.
 - `SHA256SUMS.txt` is generated and uploaded with the release.
 - The nested `RigMatch.AI-main/` scratch folder is not committed or included.
 - Build artifacts are draft releases until smoke-tested.

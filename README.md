@@ -15,19 +15,20 @@ Find the best local AI model for your computer. RigMatch benchmarks your install
 | Windows | `.exe` installer or `.zip` portable — [Releases page](../../releases/latest) |
 | macOS | `.dmg` — unsigned beta, right-click → Open on first launch — [Releases page](../../releases/latest) |
 | Linux x64 | `.AppImage` or `.deb` for x64 Debian/Ubuntu systems — [Releases page](../../releases/latest) |
+| Linux ARM64 / Jetson | Experimental `.AppImage` or `.deb` for ARM64/aarch64 Ubuntu systems — [Releases page](../../releases/latest) |
 
 ### Linux and Jetson note
 
-The current Linux beta artifacts are **x64 only**. NVIDIA Jetson devices are usually **ARM64/aarch64**, so the x64 `.deb` or `.AppImage` may fail with confusing dependency errors in the Ubuntu installer. Jetson/ARM64 builds are not supported yet.
+NVIDIA Jetson devices are usually **ARM64/aarch64**. Use the Linux ARM64 artifact, not the x64/amd64 package. Installing the wrong architecture can show confusing dependency errors in the Ubuntu installer.
 
-For x64 Ubuntu/Debian systems, install the `.deb` through `apt` so dependencies can be resolved:
+For Ubuntu/Debian systems, install the matching `.deb` through `apt` so dependencies can be resolved:
 
 ```bash
 sudo apt update
-sudo apt install ./RigMatch.AI-*-linux-amd64.deb
+sudo apt install ./RigMatch.AI-*-linux-*.deb
 ```
 
-If apt still reports missing desktop libraries on x64 Ubuntu, install the common Electron runtime dependencies:
+If apt still reports missing desktop libraries, install the common Electron runtime dependencies:
 
 ```bash
 sudo apt install libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 xdg-utils libatspi2.0-0 libuuid1 libsecret-1-0
