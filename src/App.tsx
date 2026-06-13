@@ -295,7 +295,7 @@ const navItems: NavItem[] = [
 
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
 const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
-const APP_VERSION = '0.1.8';
+const APP_VERSION = '0.1.9';
 const CURRENT_SCORE_SCHEMA_VERSION = 3;
 const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
 const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
@@ -343,15 +343,29 @@ const releaseNotes: Array<{
   notes: string[];
 }> = [
   {
+    version: '0.1.9',
+    label: 'Smoke Test & Release Gate Hardening',
+    date: 'Current build',
+    notes: [
+      'ESLint now ignores generated bundles, nested worktree copies, release output, and Tauri target artifacts so lint checks report real source issues.',
+      'RigMatch Chat now uses the updated Vite/esbuild toolchain to clear the companion npm audit warnings.',
+      'Added a local Windows packaging script that skips executable signing edits for smoke tests on machines without symlink privileges.',
+      'macOS close confirmation now quits RigMatch instead of leaving the app running in the Dock.',
+      'Release smoke guidance now favors qwen3:1.7b and mistral:7b as the thinking-model and normal-model canaries.',
+      'Removed unused RigMatch Chat prototype GIF assets left over from an earlier project.',
+    ],
+  },
+  {
     version: '0.1.8',
     label: 'Platform Reliability & Catalog Fixes',
-    date: 'Current build',
+    date: 'Beta build',
     notes: [
       'Bundled a larger offline model catalog so macOS, Linux, and Windows keep a healthy model pool even when the live Ollama library scan fails.',
       'Added Linux ARM64 / Jetson release packaging so ARM testers get native beta artifacts.',
       'Linux RigMatch Chat packaging now builds the dependable .deb companion and avoids flaky upstream AppImage runtime downloads.',
       'Release workflow hardening keeps security tests portable in CI and updates Rust dependency auditing for newer advisories.',
       'Mac model counts should no longer collapse to a tiny 14-model fallback when the full live catalog is unavailable.',
+      'macOS close confirmation now quits RigMatch instead of leaving the app running in the Dock.',
     ],
   },
   {
@@ -6365,7 +6379,6 @@ function ModelCabinet({
       <div className="table-wrap model-table">
         <table>
           <colgroup>
-            {/* eslint-disable-next-line react/forbid-dom-props */}
             {colWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
             <col />
           </colgroup>

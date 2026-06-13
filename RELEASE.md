@@ -16,8 +16,14 @@ Use this before tagging or publishing a beta release.
 npm ci
 npm --prefix rigmatch-chat ci
 npm test
+npm run lint
+npm audit --audit-level=critical
+npm --prefix rigmatch-chat audit --audit-level=high
 npm run build
 npm --prefix rigmatch-chat run build
+npm run smoke:bench:strict -- --model qwen3:1.7b
+npm run smoke:bench:strict -- --model mistral:7b
+npm run compare:ollama-speed -- --model qwen3:1.7b
 ```
 
 For installers, build on the matching OS:
@@ -27,6 +33,14 @@ npm run dist:win
 npm run dist:mac
 npm run dist:linux
 ```
+
+For local Windows smoke packaging without executable signing edits:
+
+```bash
+npm run pack:win:local
+```
+
+For the Rust companion audit, run `cargo audit` from `rigmatch-chat/src-tauri`.
 
 ## Manual smoke tests
 

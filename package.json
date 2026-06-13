@@ -1,7 +1,7 @@
 {
   "name": "rigmatch-ai",
   "private": true,
-  "version": "0.1.8",
+  "version": "0.1.9",
   "packageManager": "npm@10.9.3",
   "description": "AI model matchmaking for your computer",
   "author": "Dave Euson <daveeuson@gmail.com>",
@@ -27,7 +27,8 @@
     "smoke:bench:strict": "node scripts/smoke-benchmark.mjs --strict",
     "test": "node scripts/run-tests.mjs",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "pack:win:local": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& npm run build && npm run build:chat && npm run prepare:companions && electron-builder --dir --win --config.win.signAndEditExecutable=false"
   },
   "build": {
     "appId": "ai.rigmatch.app",
@@ -73,9 +74,23 @@
     },
     "dmg": {
       "contents": [
-        { "x": 180, "y": 240, "type": "file" },
-        { "x": 480, "y": 240, "type": "link", "path": "/Applications" },
-        { "x": 180, "y": 430, "type": "file", "name": "RigMatch Chat.app" }
+        {
+          "x": 180,
+          "y": 240,
+          "type": "file"
+        },
+        {
+          "x": 480,
+          "y": 240,
+          "type": "link",
+          "path": "/Applications"
+        },
+        {
+          "x": 180,
+          "y": 430,
+          "type": "file",
+          "name": "RigMatch Chat.app"
+        }
       ]
     },
     "linux": {

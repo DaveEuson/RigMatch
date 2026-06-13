@@ -8,7 +8,7 @@ Find the best local AI model for your computer. RigMatch benchmarks your install
 
 ## Download
 
-**Beta v0.1.8** — [Downloads →](../../releases/latest)
+**Beta v0.1.9** — [Downloads →](../../releases/latest)
 
 | Platform | Installer |
 |---|---|
@@ -124,12 +124,12 @@ cp src-tauri/target/release/rigmatch-chat ../companions/
 
 Before publishing a beta build, run the release checklist in [RELEASE.md](./RELEASE.md). At minimum:
 
-- Build with `npm ci`, `npm run build`, and `npm --prefix rigmatch-chat run build`
-- Run benchmark trust checks with `npm test` and `npm run smoke:bench -- --model <installed-model>`
-- For qwen/thinking-model issues, run `npm run smoke:bench -- --model qwen3:1.7b --strict`
+- Build with `npm ci`, `npm run lint`, `npm run build`, and `npm --prefix rigmatch-chat run build`
+- Run benchmark trust checks with `npm test` and `npm run smoke:bench:strict -- --model <installed-model>`
+- For qwen/thinking-model issues, run `npm run smoke:bench:strict -- --model qwen3:1.7b`
 - Compare raw Ollama speed with RigMatch parity mode using `npm run compare:ollama-speed -- --model <installed-model>`
 - Benchmark scoring disables hidden thinking when Ollama supports `think: false`; older Ollama builds fall back and log the compatibility note
-- Windows beta packaging uses `CSC_IDENTITY_AUTO_DISCOVERY=false` to avoid accidental local code-signing attempts; real signing should be configured deliberately for a signed release
+- Windows local smoke packaging can use `npm run pack:win:local`; real signed release builds should still use the GitHub Actions release workflow
 - Smoke-test a fresh install and an upgrade install on the target OS
 - Confirm **RigMatch Chat** launches from the main app
 - Confirm **Check Local**, model download, Speed Dating, and cleanup-on-close flows work
@@ -147,25 +147,30 @@ RigMatch's benchmark score is only useful if it matches what Ollama actually ret
 
 ```powershell
 npm test
-npm run smoke:bench -- --model qwen3:1.7b --strict
+npm run lint
+npm audit --audit-level=critical
+npm --prefix rigmatch-chat audit --audit-level=high
+npm run smoke:bench:strict -- --model qwen3:1.7b
+npm run smoke:bench:strict -- --model mistral:7b
 npm run compare:ollama-speed -- --model qwen3:1.7b
 npm run build
 ```
 
 - `npm test` runs fast unit/security checks for URL validation, model-name validation, installer guards, benchmark diagnostics, and scoring edge cases.
-- `npm run smoke:bench -- --model <model> --strict` runs the real RigMatch benchmark prompt suite directly against local Ollama and fails if RigMatch-mode prompts return empty, truncated, or failed answers.
+- `npm run lint` is a release gate; warnings should be reviewed, but generated bundles and Tauri target artifacts are intentionally ignored.
+- `npm run smoke:bench:strict -- --model <model>` runs the real RigMatch benchmark prompt suite directly against local Ollama and fails if RigMatch-mode prompts return empty, truncated, or failed answers.
 - The smoke test compares Ollama default mode with RigMatch mode. This catches thinking-model failures where Ollama spends all output tokens internally and returns no visible answer.
 - RigMatch scored benchmarks send `think: false` when Ollama supports it, so models are graded on visible answers. If an older Ollama build rejects that field, RigMatch retries without it and logs the fallback.
 - `npm run compare:ollama-speed -- --model <model>` checks raw Ollama generation timing against RigMatch parity timing.
-- `npm run build` confirms the TypeScript and Vite production build works before packaging.
+- `npm run pack:win:local` creates a local Windows unpacked smoke build without trying to edit/sign the executable on machines without symlink privileges.
 
 Recommended beta smoke models:
 
 | Model | Why |
 |---|---|
 | `qwen3:1.7b` | Thinking-model regression check; previously exposed empty visible responses. |
-| `gemma3:1b` | Tiny fast model sanity check. |
-| One 7B-class local model | More realistic daily-driver benchmark behavior. |
+| `mistral:7b` | Non-thinking 7B daily-driver canary with realistic answer length and speed. |
+| One tiny local model | Optional quick sanity check; tiny models may legitimately truncate or score low. |
 
 After packaging, install the generated build and manually smoke:
 

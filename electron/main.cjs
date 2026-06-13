@@ -405,6 +405,10 @@ function registerHandlers() {
 
     closeApprovedWindowIds.add(win.id);
     closePromptPendingWindowIds.delete(win.id);
+    if (process.platform === 'darwin') {
+      app.quit();
+      return { ok: true };
+    }
     win.close();
     return { ok: true };
   });
