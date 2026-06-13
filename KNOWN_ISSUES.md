@@ -59,7 +59,7 @@ RigMatch should grow beyond the core quick-question benchmark with optional lab-
 Planned test ideas:
 
 - **App Builder**: ask a model to create a complete single-file app or game, such as a Tetris-style HTML game, then grade structure, controls, scoring, game loop, collision logic, line clearing, restart/game-over handling, and truncation risk.
-- **Image Generation**: first extra-beta Ollama Image Lab is in progress for 0.1.7 with explicit platform/model-size warnings, opt-in pulls, and separate image grades. Future hardening should add better image-model discovery, richer quality checks, and optional ComfyUI/Stable Diffusion backend support.
+- **Image Generation**: extra-beta Ollama Image Lab is available with explicit platform/model-size warnings, opt-in pulls, and separate image grades. Future hardening should add better image-model discovery, richer quality checks, and optional ComfyUI/Stable Diffusion backend support.
 - **Video Generation**: keep as a later research item. It needs stronger hardware checks, backend selection, longer runtimes, and much larger storage/VRAM safeguards.
 
 Safeguards required before expanding these tests:

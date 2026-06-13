@@ -295,7 +295,7 @@ const navItems: NavItem[] = [
 
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
 const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
-const APP_VERSION = '0.1.7';
+const APP_VERSION = '0.1.8';
 const CURRENT_SCORE_SCHEMA_VERSION = 3;
 const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
 const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
@@ -343,9 +343,21 @@ const releaseNotes: Array<{
   notes: string[];
 }> = [
   {
+    version: '0.1.8',
+    label: 'Platform Reliability & Catalog Fixes',
+    date: 'Current build',
+    notes: [
+      'Bundled a larger offline model catalog so macOS, Linux, and Windows keep a healthy model pool even when the live Ollama library scan fails.',
+      'Added Linux ARM64 / Jetson release packaging so ARM testers get native beta artifacts.',
+      'Linux RigMatch Chat packaging now builds the dependable .deb companion and avoids flaky upstream AppImage runtime downloads.',
+      'Release workflow hardening keeps security tests portable in CI and updates Rust dependency auditing for newer advisories.',
+      'Mac model counts should no longer collapse to a tiny 14-model fallback when the full live catalog is unavailable.',
+    ],
+  },
+  {
     version: '0.1.7',
     label: 'Advanced Capability Lab',
-    date: 'Current build',
+    date: 'Beta build',
     notes: [
       'Added an optional Advanced Lab for larger capability checks that do not affect the core Match score.',
       'App Builder challenge asks an installed Ollama model to create a complete single-file Tetris-style HTML game.',

@@ -8,7 +8,7 @@ Find the best local AI model for your computer. RigMatch benchmarks your install
 
 ## Download
 
-**Beta v0.1.7** — [Downloads →](../../releases/latest)
+**Beta v0.1.8** — [Downloads →](../../releases/latest)
 
 | Platform | Installer |
 |---|---|
