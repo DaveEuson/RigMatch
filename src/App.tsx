@@ -304,6 +304,7 @@ const THEME_STORAGE_KEY = 'agentArcadeTheme';
 const TUTORIAL_STORAGE_KEY = 'rigmatch:first-run-tutorial:v1';
 const UI_MODE_STORAGE_KEY = 'rigmatch:ui-mode:v1';
 const ADVANCED_LAB_STORAGE_KEY = 'rigmatch:advanced-lab:v1';
+const CLEARED_TOP_MATCHES_STORAGE_KEY = 'rigmatch:cleared-top-matches:v1';
 
 const ADVANCED_APP_BUILDER_PROMPT = `Create a complete single-file HTML Tetris-style falling block game.
 
@@ -612,6 +613,7 @@ function App() {
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [pendingThirdPartyDownloadRows, setPendingThirdPartyDownloadRows] = useState<ModelRow[] | null>(null);
   const [chosenModel, setChosenModel] = useState<string | null>(null);
+  const [clearedTopMatches, setClearedTopMatches] = useState<Set<string>>(() => getSavedClearedTopMatches());
   const [setupGuideOpen, setSetupGuideOpen] = useState(false);
   const [clearDataOpen, setClearDataOpen] = useState(false);
   const [pendingScoreClear, setPendingScoreClear] = useState<PendingScoreClear | null>(null);
@@ -692,8 +694,8 @@ function App() {
     [modelRows, queuedRows, system.storage.availableGb],
   );
   const topRigPick = useMemo(
-    () => getRigPick(modelRows, modelScores, system.gpu.vramGb),
-    [modelRows, modelScores, system.gpu.vramGb],
+    () => getRigPick(modelRows, modelScores, system.gpu.vramGb, clearedTopMatches),
+    [clearedTopMatches, modelRows, modelScores, system.gpu.vramGb],
   );
 
   const refreshRig = useCallback(async () => {
@@ -904,6 +906,23 @@ function App() {
     setPendingScoreClear({ mode: 'all' });
   }, []);
 
+  const clearTopMatch = useCallback(() => {
+    if (!topRigPick) return;
+
+    const model = topRigPick.row.displayName;
+    const aliases = getModelAliases(topRigPick.row);
+    setClearedTopMatches((current) => addSetValues(current, aliases));
+    if (aliases.includes(selectedModel)) {
+      setChosenModel(null);
+    }
+    setActivity(`${model} was cleared as Top Match for now. Its scorecard is still saved.`);
+  }, [selectedModel, topRigPick]);
+
+  const restoreClearedTopMatches = useCallback(() => {
+    setClearedTopMatches(new Set<string>());
+    setActivity('Cleared Top Match candidates were restored. Saved scorecards are eligible again.');
+  }, []);
+
   const cancelClearScores = useCallback(() => {
     setPendingScoreClear(null);
   }, []);
@@ -915,6 +934,7 @@ function App() {
       setModelScores({});
       setBenchmarkByModel({});
       setListTestResult(null);
+      setClearedTopMatches(new Set<string>());
       setBenchmark(createEmptyBenchmark(selectedModel, ollama.baseUrl));
       setRunProgress(null);
       setPendingScoreClear(null);
@@ -932,6 +952,7 @@ function App() {
     setModelScores((current) => removeModelScores(current, aliases));
     setBenchmarkByModel((current) => removeBenchmarkResults(current, aliases));
     setListTestResult((current) => removeListTestScores(current, aliases));
+    setClearedTopMatches((current) => removeSetValues(current, aliases));
     setBenchmark((current) =>
       isBenchmarkForAliases(current, aliases)
         ? createEmptyBenchmark(selectedModel, ollama.baseUrl)
@@ -957,6 +978,7 @@ function App() {
       window.localStorage.removeItem(THEME_STORAGE_KEY);
       window.localStorage.removeItem(TUTORIAL_STORAGE_KEY);
       window.localStorage.removeItem(UI_MODE_STORAGE_KEY);
+      window.localStorage.removeItem(CLEARED_TOP_MATCHES_STORAGE_KEY);
 
       setAppLogs(result.entries);
       setLogPath(result.logPath);
@@ -976,6 +998,7 @@ function App() {
       setChatInput('');
       setChatMessagesByModel({});
       setChosenModel(null);
+      setClearedTopMatches(new Set<string>());
       setSuiteEditorOpen(false);
       setTutorialStep(0);
       setTutorialOpen(true);
@@ -1013,6 +1036,7 @@ function App() {
     setBenchmarkByModel((current) => removeBenchmarkResults(current, aliases));
     setShortlistIds((current) => removeSetValues(current, aliases));
     setQueuedModelIds((current) => removeSetValues(current, aliases));
+    setClearedTopMatches((current) => removeSetValues(current, aliases));
 
     if (aliases.includes(selectedModel)) {
       const nextModel = modelRows.find((candidate) => !aliases.includes(candidate.displayName) && candidate.installed)?.displayName
@@ -1125,7 +1149,7 @@ function App() {
   const selectUiMode = useCallback((nextMode: UiMode) => {
     setUiMode(nextMode);
     setActivity(nextMode === 'beginner'
-      ? 'Beginner mode selected. RigMatch will keep the interface focused on the next useful step.'
+      ? 'Simple mode selected. RigMatch will keep the interface focused on the next useful step.'
       : 'Advanced mode selected. RigMatch will show more setup details, commands, and diagnostics.');
   }, []);
 
@@ -1225,6 +1249,7 @@ function App() {
       setBenchmark(result);
       setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
       setModelScores((current) => upsertModelScores(current, [result], currentSuiteName));
+      setClearedTopMatches((current) => removeSetValues(current, [result.model, modelToTest]));
       setScoreTrend((current) => {
         const prev = current[result.model] ?? [];
         return { ...current, [result.model]: [...prev.slice(-9), result.scores.total] };
@@ -1283,7 +1308,7 @@ function App() {
     } finally {
       setIsBenchmarking(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, loadLogs, ollama, selectedHost, selectedModel, system.hostname]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, selectedHost, selectedModel, system.hostname]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
     void startBenchmark(row.displayName, QUICK_CHECK_QUESTIONS);
@@ -1335,7 +1360,7 @@ function App() {
       }
       return next;
     });
-  }, [modelRows, ollama.baseUrl, system.gpu.vramGb, system.storage.availableGb]);
+  }, [modelRows, ollama.baseUrl, system.gpu.vramGb, system.platform, system.storage.availableGb]);
 
   const cancelDownloadQueue = useCallback(() => {
     if (isPullingModels) {
@@ -1735,6 +1760,7 @@ function App() {
         results.push(result);
         setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
         setModelScores((current) => upsertModelScores(current, [result], currentSuiteName));
+        setClearedTopMatches((current) => removeSetValues(current, [result.model, row.displayName]));
         const isStopped = stopRunRef.current;
         setRunProgress({
           progressId: !isStopped && runnableRows[index + 1] ? `${listRunId}-${index + 1}` : progressId,
@@ -1828,7 +1854,7 @@ function App() {
     } finally {
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, loadLogs, ollama, selectedHost, shortlistedRows, system.hostname, system.platform]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, selectedHost, shortlistedRows, system.hostname, system.platform]);
 
   const confirmPendingRun = useCallback(() => {
     const mode = pendingRunMode;
@@ -1920,6 +1946,10 @@ function App() {
   }, [uiMode]);
 
   useEffect(() => {
+    window.localStorage.setItem(CLEARED_TOP_MATCHES_STORAGE_KEY, JSON.stringify([...clearedTopMatches]));
+  }, [clearedTopMatches]);
+
+  useEffect(() => {
     const history: PersistedHistory = {
       benchmark,
       benchmarkByModel,
@@ -1973,7 +2003,7 @@ function App() {
         };
       });
     });
-  }, []);
+  }, [benchmarkPromptPlan.length]);
 
   useEffect(() => {
     if (!agentArcadeApi.onPullProgress) return undefined;
@@ -2017,11 +2047,16 @@ function App() {
       <TopDeck isScanning={isScanningRig} onScan={refreshRig}
         system={system}
         ollama={ollama}
+        uiMode={uiMode}
+        onUiModeChange={selectUiMode}
         topPick={topRigPick}
         onUseTopPick={(model) => {
           setSelectedModel(model);
           setChosenModel(model);
         }}
+        onClearTopPick={clearTopMatch}
+        onRestoreClearedTopPicks={restoreClearedTopMatches}
+        clearedTopPickCount={clearedTopMatches.size}
       />
 
       <SideMenu
@@ -2033,6 +2068,7 @@ function App() {
         activeId={activeNavId}
         scoredCount={scoredModelCount}
         topPick={topRigPick}
+        uiMode={uiMode}
         onSelect={selectNav}
         onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
         onOpenSupport={() => setSupportModalOpen(true)}
@@ -2095,6 +2131,7 @@ function App() {
             onOpenSpeedDate={() => selectNav('speedDate')}
             onOpenTopPick={() => selectNav('agent')}
             onRefresh={refreshRig}
+            onChooseModel={(model) => { setSelectedModel(model); setChosenModel(model); }}
             onOpenModelChat={(model) => { setSelectedModel(model); setChatOpen(true); }}
             modelNotes={modelNotes}
             onSaveModelNote={saveModelNote}
@@ -2164,6 +2201,11 @@ function App() {
             onRunTest={() => { void startBenchmark(); }}
             onEditQuestions={() => setSuiteEditorOpen(true)}
             onTalkWithPrompt={(prompt) => { setChatInput(prompt); setChatOpen(true); }}
+            topPick={topRigPick}
+            onClearTopMatch={clearTopMatch}
+            onClearScore={requestClearScore}
+            onRestoreClearedTopMatches={restoreClearedTopMatches}
+            clearedTopMatchCount={clearedTopMatches.size}
           />
         )}
         {(activeNavId === 'history' || activeNavId === 'settings' || activeNavId === 'about') && (
@@ -2382,17 +2424,27 @@ function App() {
 function TopDeck({
   system,
   ollama,
+  uiMode,
+  onUiModeChange,
   isScanning,
   onScan,
   topPick,
   onUseTopPick,
+  onClearTopPick,
+  onRestoreClearedTopPicks,
+  clearedTopPickCount,
 }: {
   system: SystemProfile;
   ollama: OllamaStatus;
+  uiMode: UiMode;
+  onUiModeChange: (mode: UiMode) => void;
   isScanning: boolean;
   onScan: () => void;
   topPick?: RigPick | null;
   onUseTopPick: (model: string) => void;
+  onClearTopPick: () => void;
+  onRestoreClearedTopPicks: () => void;
+  clearedTopPickCount: number;
 }) {
   const gpuLabel = system.gpu.isUnifiedMemory
     ? `${system.gpu.model} · Unified Memory`
@@ -2408,12 +2460,35 @@ function TopDeck({
   };
 
   return (
-    <header className="top-deck">
+    <header className={uiMode === 'advanced' ? 'top-deck mode-advanced' : 'top-deck mode-simple'}>
       <div className="brand-block" aria-label="RigMatch.AI">
         <BrandMark />
         <div>
           <h1>RigMatch.AI</h1>
           <p>AI model matchmaking for your computer</p>
+          <div className="global-mode-switch" role="group" aria-label="Current interface mode">
+            <span>Mode</span>
+            <button
+              type="button"
+              className={uiMode === 'beginner' ? 'active' : ''}
+              onClick={() => onUiModeChange('beginner')}
+              aria-pressed={uiMode === 'beginner'}
+              aria-label="Simple Mode"
+              title="Simple Mode keeps RigMatch focused on the main flow"
+            >
+              Simple
+            </button>
+            <button
+              type="button"
+              className={uiMode === 'advanced' ? 'active' : ''}
+              onClick={() => onUiModeChange('advanced')}
+              aria-pressed={uiMode === 'advanced'}
+              aria-label="Advanced Mode"
+              title="Advanced Mode shows deeper tools and diagnostics"
+            >
+              Advanced
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2428,30 +2503,46 @@ function TopDeck({
         </div>
       </section>
 
-      <section className="monitor-grid" aria-label="System monitor">
-        <MetricTile label="CPU" value={`${system.cpu.loadPercent}%`} level={system.cpu.loadPercent} />
-        <MetricTile label="RAM" value={`${system.memory.usedGb} / ${system.memory.totalGb} GB`} level={(system.memory.usedGb / Math.max(1, system.memory.totalGb)) * 100} />
-        <MetricTile
-          label={system.gpu.isUnifiedMemory ? 'Memory' : 'VRAM'}
-          value={
-            system.gpu.isUnifiedMemory
-              ? `${system.memory.totalGb} GB unified`
-              : system.gpu.vramUsedGb != null && system.gpu.vramGb
-                ? `${system.gpu.vramUsedGb} / ${system.gpu.vramGb} GB`
-                : system.gpu.vramGb
-                  ? `${system.gpu.vramGb} GB`
-                  : '? GB'
-          }
-          level={
-            system.gpu.vramUsedGb != null && system.gpu.vramGb
-              ? (system.gpu.vramUsedGb / system.gpu.vramGb) * 100
-              : 0
-          }
-        />
-        {system.gpu.gpuLoadPercent != null && (
-          <MetricTile label="GPU" value={`${system.gpu.gpuLoadPercent}%`} level={system.gpu.gpuLoadPercent} />
-        )}
-      </section>
+      {uiMode === 'beginner' ? (
+        <section className="mode-focus-card simple" aria-label="Simple Mode focus">
+          <div>
+            <span>Simple Mode</span>
+            <strong>Guided local AI setup</strong>
+            <em>Check this computer, pick models, compare them, then use the winner.</em>
+          </div>
+          <ol aria-label="Simple Mode steps">
+            <li><ScanLine aria-hidden="true" /><span>Check</span></li>
+            <li><Boxes aria-hidden="true" /><span>Pick</span></li>
+            <li><Trophy aria-hidden="true" /><span>Compare</span></li>
+            <li><Bot aria-hidden="true" /><span>Use</span></li>
+          </ol>
+        </section>
+      ) : (
+        <section className="monitor-grid" aria-label="Advanced system monitor">
+          <MetricTile label="CPU" value={`${system.cpu.loadPercent}%`} level={system.cpu.loadPercent} />
+          <MetricTile label="RAM" value={`${system.memory.usedGb} / ${system.memory.totalGb} GB`} level={(system.memory.usedGb / Math.max(1, system.memory.totalGb)) * 100} />
+          <MetricTile
+            label={system.gpu.isUnifiedMemory ? 'Memory' : 'VRAM'}
+            value={
+              system.gpu.isUnifiedMemory
+                ? `${system.memory.totalGb} GB unified`
+                : system.gpu.vramUsedGb != null && system.gpu.vramGb
+                  ? `${system.gpu.vramUsedGb} / ${system.gpu.vramGb} GB`
+                  : system.gpu.vramGb
+                    ? `${system.gpu.vramGb} GB`
+                    : '? GB'
+            }
+            level={
+              system.gpu.vramUsedGb != null && system.gpu.vramGb
+                ? (system.gpu.vramUsedGb / system.gpu.vramGb) * 100
+                : 0
+            }
+          />
+          {system.gpu.gpuLoadPercent != null && (
+            <MetricTile label="GPU" value={`${system.gpu.gpuLoadPercent}%`} level={system.gpu.gpuLoadPercent} />
+          )}
+        </section>
+      )}
 
       <section className="local-status-card" aria-label="Local AI status">
         <div className={ollama.ready ? 'local-status-icon ready' : 'local-status-icon needs-setup'} aria-hidden="true">
@@ -2474,14 +2565,35 @@ function TopDeck({
           <div className="top-deck-winner-copy">
             <div className="top-deck-winner-head">
               <span>{topPickLabel(topPick.score?.grade)}</span>
-              <button
-                type="button"
-                className="top-deck-use-model-btn"
-                onClick={() => onUseTopPick(topPick.row.displayName)}
-                title="Set this as your active model"
-              >
-                Use this model
-              </button>
+              <div className="top-deck-winner-actions">
+                <button
+                  type="button"
+                  className="top-deck-use-model-btn"
+                  onClick={() => onUseTopPick(topPick.row.displayName)}
+                  title="Set this as your active model"
+                >
+                  Use this model
+                </button>
+                <button
+                  type="button"
+                  className="top-deck-clear-btn"
+                  onClick={onClearTopPick}
+                  title={`Clear ${topPick.row.displayName} as Top Match for now`}
+                  aria-label={`Clear ${topPick.row.displayName} as Top Match`}
+                >
+                  <X aria-hidden="true" />
+                </button>
+                {clearedTopPickCount > 0 && (
+                  <button
+                    type="button"
+                    className="top-deck-restore-btn"
+                    onClick={onRestoreClearedTopPicks}
+                    title="Restore cleared Top Match candidates"
+                  >
+                    Restore
+                  </button>
+                )}
+              </div>
             </div>
             <strong>{topPick.row.displayName}</strong>
             <em>{topPick.score ? `${topPick.score.total} Match · ${topPick.score.grade}` : topPick.fitLabel}</em>
@@ -2493,7 +2605,16 @@ function TopDeck({
           <div>
             <span>Best Match</span>
             <strong>No tests yet</strong>
-            <em>Test a model to crown the winner.</em>
+            <em>{clearedTopPickCount > 0 ? `${clearedTopPickCount} cleared. Restore when needed.` : 'Test a model to crown the winner.'}</em>
+            {clearedTopPickCount > 0 && (
+              <button
+                type="button"
+                className="top-deck-restore-btn"
+                onClick={onRestoreClearedTopPicks}
+              >
+                Restore
+              </button>
+            )}
           </div>
         </section>
       )}
@@ -2510,6 +2631,7 @@ function SideMenu({
   scoredCount,
   isRunning,
   topPick,
+  uiMode,
   onSelect,
   onOpenTutorial,
   onOpenSupport,
@@ -2523,6 +2645,7 @@ function SideMenu({
   scoredCount: number;
   isRunning: boolean;
   topPick: RigPick | null;
+  uiMode: UiMode;
   onSelect: (id: NavId) => void;
   onOpenTutorial: () => void;
   onOpenSupport: () => void;
@@ -2542,8 +2665,9 @@ function SideMenu({
   return (
     <aside className="side-menu" aria-label="RigMatch.AI menu">
       <button type="button" className="side-menu-title" onClick={onOpenTutorial} title="Re-open the getting started guide" aria-label="Open getting started guide">
-        <span>Matchmaker Hub</span>
-        <strong>Start with Models</strong>
+        <span>{uiMode === 'advanced' ? 'Advanced Mode' : 'Simple Mode'}</span>
+        <strong>{uiMode === 'advanced' ? 'Power tools visible' : 'Start with Models'}</strong>
+        <small>{uiMode === 'advanced' ? 'Diagnostics, logs, custom tests' : 'Guided path, fewer controls'}</small>
       </button>
       <nav className="side-menu-nav" aria-label="Primary navigation">
         {items.map((item, index) => {
@@ -3660,7 +3784,7 @@ function RunWarningModal({
                   {questionsExpanded ? 'Hide questions' : 'Preview questions'}
                 </button>
                 {onEditQuestions && (
-                  <button type="button" className="run-question-edit-link" onClick={onEditQuestions}>
+                  <button type="button" className="run-question-edit-link advanced-only" onClick={onEditQuestions}>
                     Edit suite ↗
                   </button>
                 )}
@@ -4376,15 +4500,15 @@ function UiModePicker({
   onUiModeChange: (mode: UiMode) => void;
 }) {
   const modes: Array<{ id: UiMode; label: string; description: string }> = [
-    { id: 'beginner', label: 'Beginner', description: 'Guided steps, simpler wording, fewer diagnostics.' },
-    { id: 'advanced', label: 'Advanced', description: 'Setup commands, ports, logs, and deeper details.' },
+    { id: 'beginner', label: 'Simple', description: 'Free guided path: check, pick, compare, use the winner.' },
+    { id: 'advanced', label: 'Advanced', description: 'Power tools for deeper testing, diagnostics, and supporter experiments.' },
   ];
 
   return (
     <section className="ui-mode-picker" aria-label="Interface mode">
       <div>
         <span>Interface Mode</span>
-        <strong>{uiMode === 'beginner' ? 'Beginner-friendly' : 'Advanced diagnostics'}</strong>
+        <strong>{uiMode === 'beginner' ? 'Simple Mode is on' : 'Advanced Mode is on'}</strong>
       </div>
       <div className="mode-toggle" role="group" aria-label="Choose interface mode">
         {modes.map((mode) => (
@@ -4399,6 +4523,18 @@ function UiModePicker({
             <span>{mode.description}</span>
           </button>
         ))}
+      </div>
+      <div className="mode-roadmap" aria-label="Mode roadmap">
+        <div>
+          <span>Simple</span>
+          <strong>Free core flow</strong>
+          <em>Find the best local model for this computer, then chat with it.</em>
+        </div>
+        <div>
+          <span>Advanced</span>
+          <strong>Supporter-ready tools</strong>
+          <em>Custom tests, raw logs, deeper diagnostics, and future lab experiments.</em>
+        </div>
       </div>
     </section>
   );
@@ -4839,10 +4975,6 @@ function AdvancedCapabilityLab({
   }>({ phase: 'idle', percent: null, message: '' });
   const imagePullAbortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    if (!labModel && defaultModel) setLabModel(defaultModel);
-  }, [defaultModel, labModel]);
-
   const activeModel = installedModels.includes(labModel) ? labModel : defaultModel;
   const activeModelInfo = ollama.models.find((model) => model.name === activeModel || model.model === activeModel);
   const savedResult = activeModel ? savedResults[activeModel] ?? null : null;
@@ -4889,7 +5021,7 @@ function AdvancedCapabilityLab({
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2200);
     });
-  }, [visibleResult?.response]);
+  }, [visibleResult]);
 
   const startImagePull = useCallback(async () => {
     if (!canPullImageModel) return;
@@ -5493,6 +5625,7 @@ function UtilityPanel({
                       aria-label={`Clear ${score.model} score`}
                     >
                       <Trash2 aria-hidden="true" />
+                      <span>Remove</span>
                     </button>
                   </li>
                 );
@@ -5585,6 +5718,16 @@ function UtilityPanel({
           <UiModePicker uiMode={uiMode} onUiModeChange={onUiModeChange} />
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
           <div className="utility-stat">
+            <span>Simple flow</span>
+            <strong>Check → Pick → Compare → Use Winner</strong>
+            <em>Simple Mode keeps the main path visible and leaves deeper tools behind the Advanced switch.</em>
+          </div>
+          <div className="utility-stat advanced-only">
+            <span>Advanced lane</span>
+            <strong>Supporter-ready power tools</strong>
+            <em>Advanced mode is free in this beta, but it is the natural home for future donationware extras.</em>
+          </div>
+          <div className="utility-stat advanced-only">
             <span>Runtime</span>
             <strong>{isDesktopRuntime ? 'Desktop' : 'Preview mode'}</strong>
             <em>{system.os.distro} · {system.arch}</em>
@@ -5594,7 +5737,7 @@ function UtilityPanel({
             <strong>{ollama.ready ? 'Ready' : 'Offline'}</strong>
             <em>{ollama.baseUrl}</em>
           </div>
-          <div className="utility-stat">
+          <div className="utility-stat advanced-only">
             <span>CUDA</span>
             <strong>{getCudaSummary(system.cuda)}</strong>
             <em>{getCudaDetail(system.cuda)}</em>
@@ -5610,9 +5753,11 @@ function UtilityPanel({
             <ExternalLink aria-hidden="true" />
             Setup Guide
           </button>
-          <HowWeScoreSection />
+          <div className="advanced-only">
+            <HowWeScoreSection />
+          </div>
 
-          <section className="danger-zone" aria-label="Data reset">
+          <section className="danger-zone advanced-only" aria-label="Data reset">
             <div>
               <span>Danger Zone</span>
               <strong>Clear App Data</strong>
@@ -5633,22 +5778,26 @@ function UtilityPanel({
             <strong>RigMatch.AI</strong>
             <em>v{APP_VERSION}</em>
           </div>
-          <UpdateCenter
-            channel={updateChannel}
-            result={updateCheck}
-            isChecking={isCheckingUpdates}
-            autoUpdateStatus={autoUpdateStatus}
-            onChannelChange={onUpdateChannelChange}
-            onCheck={onCheckForUpdates}
-            onOpenPage={onOpenUpdatePage}
-            onDownload={onDownloadUpdate}
-            onInstall={onInstallUpdate}
-          />
-          <AdvancedCapabilityLab
-            selectedModel={selectedModel}
-            ollama={ollama}
-            system={system}
-          />
+          <div className="advanced-only">
+            <UpdateCenter
+              channel={updateChannel}
+              result={updateCheck}
+              isChecking={isCheckingUpdates}
+              autoUpdateStatus={autoUpdateStatus}
+              onChannelChange={onUpdateChannelChange}
+              onCheck={onCheckForUpdates}
+              onOpenPage={onOpenUpdatePage}
+              onDownload={onDownloadUpdate}
+              onInstall={onInstallUpdate}
+            />
+          </div>
+          <div className="advanced-only">
+            <AdvancedCapabilityLab
+              selectedModel={selectedModel}
+              ollama={ollama}
+              system={system}
+            />
+          </div>
           <section className={`ollama-update-card ${ollamaHasUpdate ? 'has-update' : ''}`} aria-label="Ollama version">
             <div className="ollama-update-head">
               <div>
@@ -5690,7 +5839,7 @@ function UtilityPanel({
           <div className="utility-stat">
             <span>Mode</span>
             <strong>Donationware</strong>
-            <em>Free to use. If RigMatch saved you time, a coffee helps keep it going.</em>
+            <em>Simple Mode stays free. Advanced is the natural home for future supporter tools, but this beta keeps everything open while the flow gets polished.</em>
             <a
               className="donation-link donation-link-prominent"
               href={BUY_ME_A_COFFEE_URL}
@@ -6144,6 +6293,7 @@ function ModelCabinet({
   onOpenSpeedDate,
   onOpenTopPick,
   onRefresh,
+  onChooseModel,
   onOpenModelChat,
   modelNotes,
   onSaveModelNote,
@@ -6184,6 +6334,7 @@ function ModelCabinet({
   onOpenSpeedDate: () => void;
   onOpenTopPick: () => void;
   onRefresh: () => void;
+  onChooseModel: (model: string) => void;
   onOpenModelChat: (model: string) => void;
   modelNotes: Record<string, string>;
   onSaveModelNote: (model: string, note: string) => void;
@@ -6198,7 +6349,9 @@ function ModelCabinet({
   // Column widths: Model, Size, Good For, Origin, Status, Match, Popularity (Actions fills remainder)
   const [colWidths, setColWidths] = useState([175, 68, 154, 100, 90, 72, 112]);
   const colWidthsRef = useRef(colWidths);
-  colWidthsRef.current = colWidths;
+  useEffect(() => {
+    colWidthsRef.current = colWidths;
+  }, [colWidths]);
   const handleColResizeStart = useCallback((colIndex: number, e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
@@ -6231,11 +6384,6 @@ function ModelCabinet({
   const taskFilterCounts = useMemo(
     () => Object.fromEntries(TASK_FILTER_CHIPS.map((chip) => [chip.id, rows.filter((row) => modelMatchesTask(row, chip.id)).length])),
     [rows],
-  );
-  // @ts-ignore
-  const _rigPick = useMemo(
-    () => getRigPick(rows, modelScores, vramGb),
-    [modelScores, rows, vramGb],
   );
   const shortlistedRows = useMemo(
     () => rows.filter((row) => shortlistIds.has(row.displayName)).slice(0, 5),
@@ -6331,7 +6479,7 @@ function ModelCabinet({
             </button>
           )}
         </label>
-        <span className="model-sort-status">
+        <span className="model-sort-status advanced-only">
           Sort: {getModelSortLabel(sortKey)} / {sortDirection === 'asc' ? 'Asc' : 'Desc'}
         </span>
         <div className="model-quick-filters" aria-label="Model quick filters">
@@ -6348,7 +6496,7 @@ function ModelCabinet({
             </button>
           ))}
         </div>
-        <div className="model-task-filters" aria-label="Filter by use case">
+        <div className="model-task-filters advanced-only" aria-label="Filter by use case">
           <span className="model-task-filters-label">For:</span>
           {TASK_FILTER_CHIPS.map((chip) => (
             <button
@@ -6527,6 +6675,16 @@ function ModelCabinet({
                       </button>
                       {installed ? (
                         <>
+                          <button
+                            type="button"
+                            className={selected ? 'mini-button pick-me-row-button active' : 'mini-button pick-me-row-button'}
+                            onClick={() => onChooseModel(row.displayName)}
+                            title={`Pick ${row.displayName} as your top model`}
+                            aria-label={`Pick ${row.displayName} as your top model`}
+                          >
+                            <Heart aria-hidden="true" />
+                            Pick Me
+                          </button>
                           <button
                             type="button"
                             className={`mini-button score-row-button${!hardwareFit.recommend ? ' warn' : ''}`}
@@ -6741,7 +6899,7 @@ function DownloadProgressInline({
   );
 }
 
-// @ts-ignore
+// @ts-expect-error Retained prototype command deck is intentionally not mounted in the 0.1.x UI.
 function _ContestantsCommandDeck({
   selectedRow,
   selectedScore,
@@ -6899,7 +7057,7 @@ function _ContestantsCommandDeck({
             <Trophy aria-hidden="true" />
             Open Speed Dating
           </button>
-          <button type="button" className="mini-button outline" onClick={onOpenSuiteEditor} disabled={isListTesting}>
+          <button type="button" className="mini-button outline advanced-only" onClick={onOpenSuiteEditor} disabled={isListTesting}>
             <Settings aria-hidden="true" />
             Questions
           </button>
@@ -7226,12 +7384,6 @@ function SelectedContestantCard({
   scoreTrend: Record<string, number[]>;
   onQuickCheck: (row: ModelRow) => void;
 }) {
-  const [noteValue, setNoteValue] = useState('');
-
-  useEffect(() => {
-    setNoteValue(row ? (modelNotes[row.displayName] ?? '') : '');
-  }, [row?.displayName]);
-
   if (!row) {
     return (
       <section className="contestant-spotlight empty" aria-label="Selected contestant">
@@ -7245,6 +7397,7 @@ function SelectedContestantCard({
   }
 
   const hardwareFit = getHardwareFit(row, vramGb);
+  const noteValue = modelNotes[row.displayName] ?? '';
   const sizeLabel = row.sizeGb ? formatGb(row.sizeGb) : 'Size unknown';
   const matchLabel = score ? `${score.total} Match · ${score.grade}` : 'No score yet';
   const statusLabel = installed
@@ -7397,8 +7550,7 @@ function SelectedContestantCard({
           className="contestant-notes-area"
           placeholder="Add private notes about this model..."
           value={noteValue}
-          onChange={(e) => setNoteValue(e.target.value)}
-          onBlur={() => onSaveModelNote(row.displayName, noteValue)}
+          onChange={(e) => onSaveModelNote(row.displayName, e.target.value)}
           rows={2}
         />
       </div>
@@ -7406,7 +7558,7 @@ function SelectedContestantCard({
   );
 }
 
-// @ts-ignore
+// @ts-expect-error Retained prototype winner card is intentionally not mounted in the 0.1.x UI.
 function _CurrentWinnerCard({
   pick,
   onSelect,
@@ -7443,7 +7595,7 @@ function _CurrentWinnerCard({
   );
 }
 
-// @ts-ignore
+// @ts-expect-error Retained prototype profile mini-card is intentionally not mounted in the 0.1.x UI.
 function _ModelProfileMini({
   row,
   profile,
@@ -7635,7 +7787,7 @@ function BenchmarkRun({
           <span>Test Questions</span>
           <strong>{questionCount} questions</strong>
         </div>
-        <button type="button" className="mini-button outline" onClick={onOpenSuiteEditor}>
+        <button type="button" className="mini-button outline advanced-only" onClick={onOpenSuiteEditor}>
           <Settings aria-hidden="true" />
           Edit Questions
         </button>
@@ -7729,7 +7881,7 @@ function CompatibilityIntroCard({
             <Gauge aria-hidden="true" />
             {actionLabel}
           </button>
-          <button type="button" className="mini-button outline" onClick={onOpenSuiteEditor} disabled={isRunning}>
+          <button type="button" className="mini-button outline advanced-only" onClick={onOpenSuiteEditor} disabled={isRunning}>
             <Settings aria-hidden="true" />
             Edit Questions
           </button>
@@ -8045,7 +8197,7 @@ function SpeedDatePanel({
             )}
             <button
               type="button"
-              className="mini-button outline"
+              className="mini-button outline advanced-only"
               onClick={onOpenSuiteEditor}
               disabled={isListTesting}
             >
@@ -8633,7 +8785,7 @@ function QuestionSuitePreview({
             </button>
           ))}
         </div>
-        <button type="button" className="mini-button outline suite-edit-button" onClick={onOpenSuiteEditor}>
+        <button type="button" className="mini-button outline suite-edit-button advanced-only" onClick={onOpenSuiteEditor}>
           <Settings aria-hidden="true" />
           Edit Suite
         </button>
@@ -8885,6 +9037,11 @@ function AgentReveal({
   onRunTest,
   onEditQuestions,
   onTalkWithPrompt,
+  topPick,
+  onClearTopMatch,
+  onClearScore,
+  onRestoreClearedTopMatches,
+  clearedTopMatchCount,
 }: {
   active: boolean;
   agentName: string;
@@ -8902,6 +9059,11 @@ function AgentReveal({
   onRunTest: () => void;
   onEditQuestions: () => void;
   onTalkWithPrompt: (prompt: string) => void;
+  topPick?: RigPick | null;
+  onClearTopMatch: () => void;
+  onClearScore: (model: string) => void;
+  onRestoreClearedTopMatches: () => void;
+  clearedTopMatchCount: number;
 }) {
   const activeProfile = getModelProfile(model);
   const matchNotes = getMatchNotes(activeProfile, selectedScore, host);
@@ -8922,6 +9084,7 @@ function AgentReveal({
   });
   const topModel = sortedByScore[0]?.displayName;
   const isTopPick = Boolean(selectedScore && model === topModel);
+  const isCurrentTopMatch = Boolean(topPick?.row.displayName === model);
   const top6 = sortedByScore.filter((r) => !dismissedModels.has(r.displayName) || r.displayName === selectedModel || r.id === selectedModel).slice(0, 6);
   const inStrip = top6.some((r) => r.displayName === selectedModel || r.id === selectedModel);
   if (!inStrip && top6.length > 0) {
@@ -8969,11 +9132,32 @@ function AgentReveal({
               <button type="button" className="pick-this-one-btn" onClick={onChoose} title="Set as your active model">
                 🌹 Use This Model
               </button>
+              {isCurrentTopMatch && (
+                <button type="button" className="test-again-btn" onClick={onClearTopMatch} title="Clear this Top Match without deleting its scorecard">
+                  <X aria-hidden="true" />
+                  Clear Top Match
+                </button>
+              )}
               <button type="button" className="test-again-btn" onClick={onRunTest}>
                 <RefreshCw aria-hidden="true" />
                 Test Again
               </button>
+              <button
+                type="button"
+                className="test-again-btn remove-score-btn"
+                onClick={() => onClearScore(model)}
+                title="Remove this saved scorecard and transcript"
+              >
+                <Trash2 aria-hidden="true" />
+                Remove Score
+              </button>
             </div>
+          )}
+          {!isCurrentTopMatch && clearedTopMatchCount > 0 && (
+            <button type="button" className="test-again-btn top-pick-restore-action" onClick={onRestoreClearedTopMatches}>
+              <RefreshCw aria-hidden="true" />
+              Restore cleared Top Matches
+            </button>
           )}
         </div>
       </div>
@@ -8990,11 +9174,9 @@ function AgentReveal({
           const isActive = row.displayName === selectedModel;
 
           return (
-            <button
+            <div
               key={row.displayName}
-              type="button"
               className={isActive ? 'roster-card active' : 'roster-card'}
-              onClick={() => onSelect(row.displayName)}
               title={title}
             >
               <button
@@ -9006,12 +9188,19 @@ function AgentReveal({
               >
                 <X aria-hidden="true" />
               </button>
-              <AvatarBust model={row.displayName} size="tiny" />
-              <span className="roster-name">{getShortModelName(row.displayName)}</span>
-              <span className={rowScore ? `roster-score ${getScoreTone(rowScore.total)}` : 'roster-score empty'}>
-                {scoreLabel}
-              </span>
-            </button>
+              <button
+                type="button"
+                className="roster-select-btn"
+                onClick={() => onSelect(row.displayName)}
+                aria-label={`View ${row.displayName}`}
+              >
+                <AvatarBust model={row.displayName} size="tiny" />
+                <span className="roster-name">{getShortModelName(row.displayName)}</span>
+                <span className={rowScore ? `roster-score ${getScoreTone(rowScore.total)}` : 'roster-score empty'}>
+                  {scoreLabel}
+                </span>
+              </button>
+            </div>
           );
         })}
       </div>
@@ -9413,7 +9602,7 @@ function ProfileQuestionTranscript({
         <strong>No test transcript yet</strong>
         <span>Use Test in Contestants or run Speed Dating. RigMatch will save each question, answer, score, and timing here.</span>
         <em>Questions can still be changed from the test popup or Edit Suite in Speed Dating.</em>
-        <button type="button" className="mini-button outline" onClick={onEditQuestions}>
+        <button type="button" className="mini-button outline advanced-only" onClick={onEditQuestions}>
           <Settings aria-hidden="true" />
           Edit Questions
         </button>
@@ -9439,7 +9628,7 @@ function ProfileQuestionTranscript({
           <span>Question Suite</span>
           <strong>Editable</strong>
           <em>Changes apply to the next single test or Speed Dating run.</em>
-          <button type="button" className="mini-button outline" onClick={onEditQuestions}>
+          <button type="button" className="mini-button outline advanced-only" onClick={onEditQuestions}>
             <Settings aria-hidden="true" />
             Edit Questions
           </button>
@@ -9755,6 +9944,18 @@ function getSavedHistory(): PersistedHistory | null {
   }
 }
 
+function getSavedClearedTopMatches(): Set<string> {
+  try {
+    const saved = window.localStorage.getItem(CLEARED_TOP_MATCHES_STORAGE_KEY);
+    if (!saved) return new Set<string>();
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed)) return new Set<string>();
+    return new Set(parsed.filter((item): item is string => typeof item === 'string'));
+  } catch {
+    return new Set<string>();
+  }
+}
+
 function normalizeSavedChatMessages(value: unknown): ChatMessage[] {
   if (!Array.isArray(value)) return [welcomeChatMessage];
 
@@ -9886,10 +10087,13 @@ function Ticker({
 
   useEffect(() => {
     if (!activity) return;
-    setShowActivity(true);
+    const showTimer = setTimeout(() => setShowActivity(true), 0);
     if (activityTimerRef.current) clearTimeout(activityTimerRef.current);
     activityTimerRef.current = setTimeout(() => setShowActivity(false), 5000);
-    return () => { if (activityTimerRef.current) clearTimeout(activityTimerRef.current); };
+    return () => {
+      clearTimeout(showTimer);
+      if (activityTimerRef.current) clearTimeout(activityTimerRef.current);
+    };
   }, [activity]);
 
   useEffect(() => {
@@ -10761,12 +10965,17 @@ function createEmptyBenchmark(model: string, baseUrl: string): BenchmarkResult {
   };
 }
 
-function removeSetValues(current: Set<string>, aliases: string[]) {
+function addSetValues(current: Set<string>, aliases: string[]) {
   const next = new Set(current);
-  aliases.forEach((alias) => {
-    next.delete(alias);
-  });
+  aliases.forEach((alias) => next.add(alias));
   return next;
+}
+
+function removeSetValues(current: Set<string>, aliases: string[]) {
+  const normalizedAliases = aliases.map(normalizeModelKey);
+  return new Set([...current].filter((value) =>
+    !aliases.includes(value) && !normalizedAliases.includes(normalizeModelKey(value)),
+  ));
 }
 
 function isBenchmarkForModel(
@@ -10908,8 +11117,9 @@ function getRigPick(
   rows: ModelRow[],
   scores: Record<string, TestedModelScore>,
   vramGb: number,
+  clearedMatches = new Set<string>(),
 ): RigPick | null {
-  const fittingRows = rows.filter((row) => modelFitsVram(row, vramGb));
+  const fittingRows = rows.filter((row) => modelFitsVram(row, vramGb) && !isClearedTopMatch(row, clearedMatches));
   if (fittingRows.length === 0) return null;
 
   const scoredPick = fittingRows
@@ -10956,6 +11166,12 @@ function getRigPick(
     fitLabel: getRigPickFitLabel(downloadPick, vramGb),
     reason: `${downloadPick.displayName} looks like the best download candidate for this hardware. Bigger models can wait for a stronger rig.`,
   };
+}
+
+function isClearedTopMatch(row: ModelRow, clearedMatches: Set<string>) {
+  if (clearedMatches.size === 0) return false;
+  const clearedKeys = new Set([...clearedMatches].map(normalizeModelKey));
+  return getModelAliases(row).some((alias) => clearedMatches.has(alias) || clearedKeys.has(normalizeModelKey(alias)));
 }
 
 function getHardwareRecommendationScore(row: ModelRow, vramGb: number) {
