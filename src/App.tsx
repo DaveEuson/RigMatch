@@ -295,7 +295,7 @@ const navItems: NavItem[] = [
 
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
 const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
-const APP_VERSION = '0.1.9';
+const APP_VERSION = '0.2.0';
 const CURRENT_SCORE_SCHEMA_VERSION = 3;
 const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
 const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
@@ -344,9 +344,22 @@ const releaseNotes: Array<{
   notes: string[];
 }> = [
   {
+    version: '0.2.0',
+    label: 'Simple Mode & Release Polish',
+    date: 'Current build',
+    notes: [
+      'Simple and Advanced modes now look and read clearly different, with a guided Simple Mode path and full hardware monitors in Advanced Mode.',
+      'Top Match can now be cleared or restored, so the best pick can change with the job you want the model to do.',
+      'Saved model scores can be removed from Top Pick and Scorecards when old tests no longer represent what you want.',
+      'Model rows now include a direct Pick Me action for choosing a model without hunting through another panel.',
+      'Mobile and narrow-window layouts now keep the Models cabinet readable instead of squeezing the table into a tiny column.',
+      'Cleaned up the Top Pick roster markup to avoid nested-button warnings during release QA.',
+    ],
+  },
+  {
     version: '0.1.9',
     label: 'Smoke Test & Release Gate Hardening',
-    date: 'Current build',
+    date: 'Beta build',
     notes: [
       'ESLint now ignores generated bundles, nested worktree copies, release output, and Tauri target artifacts so lint checks report real source issues.',
       'RigMatch Chat now uses the updated Vite/esbuild toolchain to clear the companion npm audit warnings.',

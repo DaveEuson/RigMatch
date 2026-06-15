@@ -25,9 +25,15 @@ jobs:
             chatBuilderArgs: ''
           - os: macos-latest
             platform: mac
-            artifact: mac
+            artifact: mac-arm64
             companion: rigmatch-chat
-            builderArgs: --mac
+            builderArgs: --mac --arm64
+            chatBuilderArgs: ''
+          - os: macos-15-intel
+            platform: mac
+            artifact: mac-x64
+            companion: rigmatch-chat
+            builderArgs: --mac --x64
             chatBuilderArgs: ''
           - os: ubuntu-latest
             platform: linux

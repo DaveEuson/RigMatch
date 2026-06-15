@@ -8,12 +8,13 @@ Find the best local AI model for your computer. RigMatch benchmarks your install
 
 ## Download
 
-**Beta v0.1.9** — [Downloads →](../../releases/latest)
+**Beta v0.2.0** — [Downloads →](../../releases/latest)
 
 | Platform | Installer |
 |---|---|
 | Windows | `.exe` installer or `.zip` portable — [Releases page](../../releases/latest) |
-| macOS | `.dmg` — unsigned beta, right-click → Open on first launch — [Releases page](../../releases/latest) |
+| macOS Apple Silicon | `.dmg` — unsigned beta, right-click → Open on first launch — [Releases page](../../releases/latest) |
+| macOS Intel | `.dmg` — unsigned beta, right-click → Open on first launch — [Releases page](../../releases/latest) |
 | Linux x64 | `.AppImage` or `.deb` for x64 Debian/Ubuntu systems — [Releases page](../../releases/latest) |
 | Linux ARM64 / Jetson | Experimental `.AppImage` or `.deb` for ARM64/aarch64 Ubuntu systems — [Releases page](../../releases/latest) |
 
