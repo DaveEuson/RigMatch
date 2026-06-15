@@ -57,6 +57,7 @@ For the Rust companion audit, run `cargo audit` from `rigmatch-chat/src-tauri`.
 
 - Release output contains the expected platform installers/packages.
 - Linux artifacts are labeled by architecture; confirm x64 and ARM64 files are both present before advertising Jetson support.
+- The draft release body includes the macOS unsigned beta first-launch note before publishing.
 - `SHA256SUMS.txt` is generated and uploaded with the release.
 - The nested `RigMatch.AI-main/` scratch folder is not committed or included.
 - Build artifacts are draft releases until smoke-tested.

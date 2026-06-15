@@ -159,19 +159,49 @@ jobs:
       - name: Generate SHA-256 checksums
         run: |
           cd release
-          find . -maxdepth 2 -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.zip" \) -print0 | xargs -0 sha256sum > SHA256SUMS.txt
+          find . -maxdepth 2 -type f \( -name "RigMatch.AI-*.exe" -o -name "RigMatch.AI-*.dmg" -o -name "RigMatch.AI-*.AppImage" -o -name "RigMatch.AI-*.deb" -o -name "RigMatch.AI-*.zip" \) -print0 | xargs -0 sha256sum > SHA256SUMS.txt
           cat SHA256SUMS.txt
+
+      - name: Write release download notes
+        run: |
+          cat > RELEASE_NOTES.md <<'EOF'
+          ## macOS first launch
+
+          RigMatch.AI for macOS is currently an unsigned beta distributed outside the App Store. On first launch, macOS may say the developer cannot be verified or that the app was downloaded from the internet.
+
+          1. Download **RigMatch.AI-*-mac-arm64.dmg** for Apple Silicon/M-series Macs, or **RigMatch.AI-*-mac-x64.dmg** for Intel Macs.
+          2. Open the `.dmg` and drag **RigMatch.AI** to **Applications**.
+          3. First launch only: right-click or Control-click **RigMatch.AI.app**, choose **Open**, then choose **Open** again.
+          4. If macOS still blocks it, open **System Settings > Privacy & Security**, scroll to **Security**, and choose **Open Anyway** for RigMatch.AI.
+
+          After that first approval, RigMatch opens normally by double-clicking. If macOS says the app is damaged after copying it to Applications, run this Terminal command once:
+
+          ```bash
+          xattr -cr /Applications/RigMatch.AI.app
+          ```
+
+          Apple reference: https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac
+
+          ## Downloads
+
+          - **Windows**: `RigMatch.AI-*-win-x64.exe`
+          - **macOS Apple Silicon**: `RigMatch.AI-*-mac-arm64.dmg`
+          - **macOS Intel**: `RigMatch.AI-*-mac-x64.dmg`
+          - **Linux x64**: `RigMatch.AI-*-linux-x86_64.AppImage` or `RigMatch.AI-*-linux-amd64.deb`
+          - **Linux ARM64 / Jetson**: `RigMatch.AI-*-linux-arm64.AppImage` or `RigMatch.AI-*-linux-arm64.deb`
+          EOF
 
       - name: Create draft release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           draft: true
           generate_release_notes: true
+          body_path: RELEASE_NOTES.md
           files: |
-            release/**/*.exe
-            release/**/*.dmg
-            release/**/*.AppImage
-            release/**/*.deb
-            release/**/*.zip
-            release/**/latest*.yml
+            release/RigMatch.AI-*.exe
+            release/RigMatch.AI-*.dmg
+            release/RigMatch.AI-*.AppImage
+            release/RigMatch.AI-*.deb
+            release/RigMatch.AI-*.zip
+            release/latest*.yml
             release/SHA256SUMS.txt

@@ -13,10 +13,25 @@ Find the best local AI model for your computer. RigMatch benchmarks your install
 | Platform | Installer |
 |---|---|
 | Windows | `.exe` installer or `.zip` portable — [Releases page](../../releases/latest) |
-| macOS Apple Silicon | `.dmg` — unsigned beta, right-click → Open on first launch — [Releases page](../../releases/latest) |
-| macOS Intel | `.dmg` — unsigned beta, right-click → Open on first launch — [Releases page](../../releases/latest) |
+| macOS Apple Silicon | `.dmg` for M-series Macs — see first launch note below — [Releases page](../../releases/latest) |
+| macOS Intel | `.dmg` for Intel Macs — see first launch note below — [Releases page](../../releases/latest) |
 | Linux x64 | `.AppImage` or `.deb` for x64 Debian/Ubuntu systems — [Releases page](../../releases/latest) |
 | Linux ARM64 / Jetson | Experimental `.AppImage` or `.deb` for ARM64/aarch64 Ubuntu systems — [Releases page](../../releases/latest) |
+
+### macOS first launch note
+
+RigMatch.AI macOS downloads are unsigned beta builds distributed outside the App Store. On first launch, macOS may say the developer cannot be verified or that the app was downloaded from the internet.
+
+1. Download the correct `.dmg`: **mac-arm64** for Apple Silicon/M-series Macs, **mac-x64** for Intel Macs.
+2. Open the `.dmg` and drag **RigMatch.AI** to **Applications**.
+3. First launch only: right-click or Control-click **RigMatch.AI.app**, choose **Open**, then choose **Open** again.
+4. If macOS still blocks it, open **System Settings > Privacy & Security**, scroll to **Security**, and choose **Open Anyway** for RigMatch.AI.
+
+After that first approval, RigMatch opens normally by double-clicking. If macOS says the app is damaged after copying it to Applications, run this Terminal command once:
+
+```bash
+xattr -cr /Applications/RigMatch.AI.app
+```
 
 ### Linux and Jetson note
 
@@ -93,7 +108,7 @@ Everything runs locally. No cloud, no account, no subscription. Your prompts and
 ## Platform Notes
 
 - **Windows**: Full NSIS installer with optional component selection (RigMatch.AI and/or RigMatch Chat)
-- **macOS**: Unsigned beta builds — right-click → Open on first launch, or run `xattr -cr /Applications/RigMatch.AI.app` in Terminal
+- **macOS**: Unsigned beta builds outside the App Store. Use right-click/Control-click > Open on first launch, or approve RigMatch in System Settings > Privacy & Security.
 - **Linux**: AppImage (run anywhere) and .deb (Debian/Ubuntu)
 
 ## Build from Source
