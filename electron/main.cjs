@@ -398,7 +398,7 @@ function registerHandlers() {
   handleLogged('logs:clear', 'logs', () => clearAppLogs());
   handleLogged('logs:openFolder', 'logs', () => openAppLogsFolder());
   handleLogged('app:checkForUpdates', 'updates', (_event, channel) => checkForRigmatchUpdates(channel));
-  handleLogged('app:openUpdatePage', 'updates', (_event, channel) => openRigmatchUpdatePage(channel));
+  handleLogged('app:openUpdatePage', 'updates', (_event, channel, url) => openRigmatchUpdatePage(channel, url));
   ipcMain.handle('app:closeReady', (event) => {
     assertTrustedIpcSender(event);
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -818,6 +818,8 @@ async function checkForRigmatchUpdates(channel = 'release') {
         latestDate: null,
         releaseUrl: RIGMATCH_RELEASES_URL,
         downloadUrl: RIGMATCH_RELEASES_URL,
+        downloadName: null,
+        downloadKind: 'release-page',
         releaseNotes: null,
         hasUpdate: false,
         status: 'unknown',
@@ -837,7 +839,8 @@ async function checkForRigmatchUpdates(channel = 'release') {
       isPrerelease: Boolean(latest.prerelease),
     });
     const releaseUrl = latest.html_url || RIGMATCH_RELEASES_URL;
-    const downloadUrl = pickRigmatchDownloadUrl(latest) || releaseUrl;
+    const downloadAsset = pickRigmatchDownloadAsset(latest);
+    const downloadUrl = downloadAsset?.browser_download_url || releaseUrl;
 
     return {
       channel: normalizedChannel,
@@ -848,6 +851,8 @@ async function checkForRigmatchUpdates(channel = 'release') {
       latestDate: latest.published_at || latest.created_at || null,
       releaseUrl,
       downloadUrl,
+      downloadName: downloadAsset?.name || null,
+      downloadKind: downloadAsset ? 'installer' : 'release-page',
       releaseNotes: summarizeReleaseNotes(latest.body),
       hasUpdate,
       status: hasUpdate ? 'available' : 'current',
@@ -863,6 +868,8 @@ async function checkForRigmatchUpdates(channel = 'release') {
       latestDate: null,
       releaseUrl: RIGMATCH_RELEASES_URL,
       downloadUrl: RIGMATCH_RELEASES_URL,
+      downloadName: null,
+      downloadKind: 'release-page',
       releaseNotes: null,
       hasUpdate: false,
       status: 'unknown',
@@ -871,11 +878,14 @@ async function checkForRigmatchUpdates(channel = 'release') {
   }
 }
 
-async function openRigmatchUpdatePage(channel = 'release') {
+async function openRigmatchUpdatePage(channel = 'release', preferredUrl = null) {
   const normalizedChannel = normalizeUpdateChannel(channel);
-  const url = normalizedChannel === 'nightly'
+  const fallbackUrl = normalizedChannel === 'nightly'
     ? `${RIGMATCH_RELEASES_URL}?channel=nightly`
     : RIGMATCH_RELEASES_URL;
+  const url = isRigmatchReleaseDownloadUrl(preferredUrl) || isRigmatchReleasePageUrl(preferredUrl)
+    ? preferredUrl
+    : fallbackUrl;
   openExternalSafe(url);
   return { url };
 }
@@ -1348,42 +1358,80 @@ function hasNewerRigmatchRelease({ currentVersion, latestVersion, currentTag, la
   return false;
 }
 
-function pickRigmatchDownloadUrl(release) {
+function pickRigmatchDownloadAsset(release) {
   const assets = release?.assets || [];
   if (!assets.length) return null;
 
   const platformTerms = getReleaseAssetTerms();
   const rankedAssets = assets
+    .filter((asset) => isRigmatchInstallerAsset(asset?.name || ''))
     .map((asset) => ({
       asset,
       score: scoreReleaseAsset(asset?.name || '', platformTerms),
     }))
+    .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  return rankedAssets[0]?.asset?.browser_download_url || null;
+  return rankedAssets[0]?.asset || null;
 }
 
 function getReleaseAssetTerms() {
-  const arch = process.arch === 'x64' ? ['x64', 'amd64'] : [process.arch];
-
   if (process.platform === 'linux') {
-    return ['linux', 'appimage', 'deb', ...arch];
+    return process.arch === 'arm64'
+      ? ['linux', 'arm64', 'aarch64', 'appimage', 'deb']
+      : ['linux', 'x64', 'x86_64', 'amd64', 'appimage', 'deb'];
   }
 
   if (process.platform === 'win32') {
-    return ['win', 'windows', 'exe', 'nsis', 'zip', ...arch];
+    return ['win', 'windows', 'x64', 'exe', 'nsis', 'zip'];
   }
 
   if (process.platform === 'darwin') {
     return ['mac', 'macos', 'darwin', 'dmg', 'zip', process.arch === 'arm64' ? 'arm64' : 'x64'];
   }
 
-  return arch;
+  return [process.arch];
 }
 
 function scoreReleaseAsset(name, terms) {
   const lower = String(name).toLowerCase();
-  return terms.reduce((score, term) => score + (lower.includes(term) ? 1 : 0), 0);
+  let score = terms.reduce((total, term) => total + (lower.includes(term) ? 1 : 0), 0);
+
+  if (process.platform === 'win32') {
+    if (/\.exe$/i.test(name)) score += 6;
+    if (/\.zip$/i.test(name)) score += 1;
+  } else if (process.platform === 'darwin') {
+    if (/\.dmg$/i.test(name)) score += 6;
+    if (/\.zip$/i.test(name)) score += 1;
+  } else if (process.platform === 'linux') {
+    if (/\.appimage$/i.test(name)) score += 5;
+    if (/\.deb$/i.test(name)) score += 3;
+  }
+
+  if (lower.includes('blockmap') || lower.startsWith('latest') || lower.includes('sha256')) score -= 20;
+  if (process.arch === 'arm64' && /(x64|x86_64|amd64)/i.test(name)) score -= 10;
+  if (process.arch === 'x64' && /arm64|aarch64/i.test(name)) score -= 10;
+
+  return score;
+}
+
+function isRigmatchInstallerAsset(name) {
+  return /^RigMatch\.AI-/i.test(name) && /\.(exe|dmg|appimage|deb|zip)$/i.test(name);
+}
+
+function isRigmatchReleaseDownloadUrl(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch { return false; }
+  if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com') return false;
+  return /^\/DaveEuson\/RigMatch\.AI\/releases\/download\//i.test(parsed.pathname)
+    && /\/RigMatch\.AI-[^/]+\.(exe|dmg|AppImage|deb|zip)$/i.test(parsed.pathname);
+}
+
+function isRigmatchReleasePageUrl(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch { return false; }
+  if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com') return false;
+  return /^\/DaveEuson\/RigMatch\.AI\/releases(\/tag\/[^/]+)?\/?$/i.test(parsed.pathname);
 }
 
 function summarizeReleaseNotes(body) {
@@ -1393,11 +1441,17 @@ function summarizeReleaseNotes(body) {
     .replace(/!\[[^\]]*]\([^)]*\)/g, '')
     .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
     .replace(/^#+\s*/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/^\s*[-*]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '')
     .replace(/\r/g, '')
+    .replace(/\n{2,}/g, '\n')
+    .replace(/\s+/g, ' ')
     .trim();
 
   if (!text) return null;
-  return text.length > 1400 ? `${text.slice(0, 1400).trim()}...` : text;
+  return text.length > 420 ? `${text.slice(0, 420).trim()}...` : text;
 }
 
 function getPrivateNetworkAddresses() {

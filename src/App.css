@@ -10432,6 +10432,20 @@ tbody tr.computer-row.selected {
   line-height: 1.35;
 }
 
+.update-download-link {
+  width: fit-content;
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid rgba(149, 180, 106, 0.44);
+  border-radius: 7px;
+  color: var(--green);
+  background: rgba(149, 180, 106, 0.09);
+  font-size: 11px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
 .update-result .update-error {
   color: var(--gold);
 }

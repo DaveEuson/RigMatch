@@ -263,6 +263,8 @@ const fallbackApi: AgentArcadeApi = {
       latestDate: new Date().toISOString(),
       releaseUrl: RIGMATCH_RELEASES_URL,
       downloadUrl: RIGMATCH_RELEASES_URL,
+      downloadName: null,
+      downloadKind: 'release-page',
       releaseNotes:
         channel === 'nightly'
           ? 'Preview mode can show the Nightly channel. Desktop builds will check GitHub prereleases and nightly-tagged releases.'
@@ -272,10 +274,10 @@ const fallbackApi: AgentArcadeApi = {
       error: null,
     };
   },
-  async openUpdatePage(channel: UpdateChannel = 'release') {
-    const url = channel === 'nightly'
+  async openUpdatePage(channel: UpdateChannel = 'release', preferredUrl?: string | null) {
+    const url = preferredUrl || (channel === 'nightly'
       ? `${RIGMATCH_RELEASES_URL}?channel=nightly`
-      : RIGMATCH_RELEASES_URL;
+      : RIGMATCH_RELEASES_URL);
     window.open(url, '_blank', 'noopener,noreferrer');
     return { url };
   },

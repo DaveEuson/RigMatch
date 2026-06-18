@@ -262,6 +262,8 @@ export type UpdateCheckResponse = {
   latestDate: string | null;
   releaseUrl: string | null;
   downloadUrl: string | null;
+  downloadName: string | null;
+  downloadKind: 'installer' | 'release-page';
   releaseNotes: string | null;
   hasUpdate: boolean;
   status: 'current' | 'available' | 'unknown';
@@ -301,7 +303,7 @@ export type AgentArcadeApi = {
   clearLogs: () => Promise<AppLogResponse>;
   openLogsFolder: () => Promise<{ logPath: string }>;
   checkForUpdates: (channel?: UpdateChannel) => Promise<UpdateCheckResponse>;
-  openUpdatePage: (channel?: UpdateChannel) => Promise<{ url: string }>;
+  openUpdatePage: (channel?: UpdateChannel, url?: string | null) => Promise<{ url: string }>;
   closeApp: () => Promise<{ ok: boolean }>;
   cancelCloseApp: () => Promise<{ ok: boolean }>;
   onAppCloseRequest?: (callback: () => void) => () => void;

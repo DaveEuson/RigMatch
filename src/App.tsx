@@ -916,12 +916,18 @@ function App() {
 
   const openUpdatePage = useCallback(async () => {
     try {
-      await agentArcadeApi.openUpdatePage(updateChannel);
-      setActivity(`Opened RigMatch.AI ${getUpdateChannelLabel(updateChannel).toLowerCase()} downloads.`);
+      const preferredUrl = updateCheck?.downloadKind === 'installer' ? updateCheck.downloadUrl : updateCheck?.releaseUrl;
+      const opened = await agentArcadeApi.openUpdatePage(updateChannel, preferredUrl);
+      const openedDirectInstaller = updateCheck?.downloadKind === 'installer' && opened.url === updateCheck.downloadUrl;
+      setActivity(
+        openedDirectInstaller
+          ? `Opened ${updateCheck.downloadName ?? 'the matching RigMatch.AI installer'} for download.`
+          : `Opened RigMatch.AI ${getUpdateChannelLabel(updateChannel).toLowerCase()} downloads.`,
+      );
     } catch (error) {
       setActivity(`Could not open RigMatch.AI downloads: ${getErrorMessage(error)}`);
     }
-  }, [updateChannel]);
+  }, [updateChannel, updateCheck]);
 
   const requestClearData = useCallback(() => {
     setClearDataOpen(true);
@@ -6021,6 +6027,7 @@ function UpdateCenter({
   const status = result?.status ?? 'unknown';
   const statusLabel = getUpdateStatusLabel(result, isChecking);
   const channelLabel = getUpdateChannelLabel(channel);
+  const directDownloadLabel = getDirectUpdateDownloadLabel(result, channel);
   const au = autoUpdateStatus;
 
   return (
@@ -6054,7 +6061,7 @@ function UpdateCenter({
           ) : (
             <button type="button" className="primary-button compact" onClick={onOpenPage}>
               <Download aria-hidden="true" />
-              View Downloads
+              {directDownloadLabel}
             </button>
           )}
         </div>
@@ -6087,6 +6094,9 @@ function UpdateCenter({
         <span>{channelLabel} channel</span>
         <strong>{result?.latestName ?? 'No check yet'}</strong>
         <em>{getUpdateResultDetail(result, channel)}</em>
+        {result?.downloadKind === 'installer' && result.downloadName && (
+          <span className="update-download-link">Direct download ready: {result.downloadName}</span>
+        )}
         {result?.releaseNotes && <p>{result.releaseNotes}</p>}
         {result?.error && <p className="update-error">{result.error}</p>}
       </div>
@@ -11665,6 +11675,17 @@ function getUpdateStatusLabel(result: UpdateCheckResponse | null, isChecking: bo
   return 'Update status unknown';
 }
 
+function getDirectUpdateDownloadLabel(result: UpdateCheckResponse | null, channel: UpdateChannel) {
+  if (result?.downloadKind !== 'installer' || !result.downloadUrl) return 'View Downloads';
+  const channelLabel = getUpdateChannelLabel(channel);
+
+  if (result.downloadName?.endsWith('.exe')) return `Download ${channelLabel} EXE`;
+  if (result.downloadName?.endsWith('.dmg')) return `Download ${channelLabel} DMG`;
+  if (result.downloadName?.endsWith('.AppImage')) return `Download ${channelLabel} AppImage`;
+  if (result.downloadName?.endsWith('.deb')) return `Download ${channelLabel} DEB`;
+  return `Download ${channelLabel}`;
+}
+
 function getUpdateResultDetail(result: UpdateCheckResponse | null, channel: UpdateChannel) {
   if (!result) {
     return channel === 'nightly'
@@ -11680,7 +11701,11 @@ function getUpdateResultDetail(result: UpdateCheckResponse | null, channel: Upda
     return `Current v${result.currentVersion}; ${checked}. Downloads still open manually.`;
   }
 
-  return `Current v${result.currentVersion}; ${latest}; ${date}.`;
+  const download = result.downloadKind === 'installer' && result.downloadName
+    ? `Direct installer: ${result.downloadName}.`
+    : 'Open the release page to choose a download.';
+
+  return `Current v${result.currentVersion}; ${latest}; ${date}. ${download}`;
 }
 
 function formatReleaseDate(timestamp: string) {
