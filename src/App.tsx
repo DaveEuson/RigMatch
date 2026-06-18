@@ -27,6 +27,7 @@ import {
   Network,
   Pause,
   PenLine,
+  Play,
   Plus,
   RefreshCw,
   Search,
@@ -2384,6 +2385,7 @@ function App() {
         isPullCancelRequested={isPullCancelRequested}
         isPullPauseRequested={isPullPauseRequested}
         isPullPaused={isPullPaused}
+        onResumeQueue={pullQueuedModels}
         onPauseQueue={pauseDownloadQueue}
         onCancelQueue={cancelDownloadQueue}
         onOpenDownloads={() => selectNav('models')}
@@ -10212,6 +10214,7 @@ function Ticker({
   isPullCancelRequested,
   isPullPauseRequested,
   isPullPaused,
+  onResumeQueue,
   onPauseQueue,
   onCancelQueue,
   onOpenDownloads,
@@ -10227,6 +10230,7 @@ function Ticker({
   isPullCancelRequested: boolean;
   isPullPauseRequested: boolean;
   isPullPaused: boolean;
+  onResumeQueue: () => void;
   onPauseQueue: () => void;
   onCancelQueue: () => void;
   onOpenDownloads: () => void;
@@ -10292,6 +10296,7 @@ function Ticker({
           isPullCancelRequested={isPullCancelRequested}
           isPullPauseRequested={isPullPauseRequested}
           isPullPaused={isPullPaused}
+          onResumeQueue={onResumeQueue}
           onPauseQueue={onPauseQueue}
           onCancelQueue={onCancelQueue}
           onOpenDownloads={onOpenDownloads}
@@ -10322,6 +10327,7 @@ function DownloadTickerDock({
   isPullCancelRequested,
   isPullPauseRequested,
   isPullPaused,
+  onResumeQueue,
   onPauseQueue,
   onCancelQueue,
   onOpenDownloads,
@@ -10333,6 +10339,7 @@ function DownloadTickerDock({
   isPullCancelRequested: boolean;
   isPullPauseRequested: boolean;
   isPullPaused: boolean;
+  onResumeQueue: () => void;
   onPauseQueue: () => void;
   onCancelQueue: () => void;
   onOpenDownloads: () => void;
@@ -10341,20 +10348,26 @@ function DownloadTickerDock({
   const activeProgress = pullingModel ? pullProgressByModel[pullingModel] : visibleProgress[0];
   const activeModel = pullingModel ?? activeProgress?.model ?? queuedRows[0]?.displayName ?? null;
   const phase = activeProgress?.phase ?? (activeModel ? 'queued' : 'queued');
+  const isPaused = phase === 'paused' || isPullPaused;
+  const dockPhase = isPaused ? 'paused' : phase;
   const queuedBehindCount = queuedRows.filter((row) => row.displayName !== activeModel).length;
-  const queued = phase === 'queued' || (!isPulling && queuedRows.some((row) => row.displayName === activeModel));
+  const queued = phase === 'queued' || (!isPulling && !isPaused && queuedRows.some((row) => row.displayName === activeModel));
   const percent = getPullProgressPercent(activeProgress, queued);
   const hasMeasuredPercent = typeof activeProgress?.percent === 'number';
   const trackPercent = hasMeasuredPercent || phase === 'complete'
     ? Math.max(3, Math.min(100, percent))
-    : queued
+    : isPaused
+      ? 12
+      : queued
       ? 6
       : 28;
-  const percentLabel = hasMeasuredPercent || phase === 'complete'
-    ? `${Math.round(percent)}%`
-    : queued
-      ? 'Queued'
-      : '--%';
+  const percentLabel = isPaused
+    ? hasMeasuredPercent ? `${Math.round(percent)}%` : 'Paused'
+    : hasMeasuredPercent || phase === 'complete'
+      ? `${Math.round(percent)}%`
+      : queued
+        ? 'Queued'
+        : '--%';
   const detailLabel = activeProgress
     ? getPullProgressDetailLabel(phase, queued, activeProgress)
     : queuedRows.length > 0
@@ -10364,7 +10377,7 @@ function DownloadTickerDock({
     ? 'Download failed'
     : phase === 'complete'
       ? 'Download complete'
-      : phase === 'paused' || isPullPaused
+      : isPaused
         ? 'Download paused'
       : isPullCancelRequested
         ? 'Stopping download'
@@ -10377,7 +10390,7 @@ function DownloadTickerDock({
             : 'Download status';
 
   return (
-    <section className={`ticker-download-dock ${phase}`} aria-label="Download status">
+    <section className={`ticker-download-dock ${dockPhase}`} aria-label="Download status">
       <button type="button" className="ticker-download-main" onClick={onOpenDownloads} title="Open model downloads">
         <Download aria-hidden="true" />
         <div className="ticker-download-copy">
@@ -10395,7 +10408,18 @@ function DownloadTickerDock({
       <div className="ticker-download-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
         <i style={{ width: `${trackPercent}%` }} />
       </div>
-      {isPulling && (
+      {isPaused ? (
+        <button
+          type="button"
+          className="ticker-download-resume"
+          onClick={onResumeQueue}
+          disabled={isPullCancelRequested || isPulling}
+          title="Resume the paused Ollama download through cached layers"
+        >
+          <Play aria-hidden="true" />
+          Resume
+        </button>
+      ) : isPulling && (
         <button
           type="button"
           className="ticker-download-pause"
@@ -12417,7 +12441,7 @@ function getPullProgressDetailLabel(
       : progress?.completedBytes
         ? formatBytes(progress.completedBytes)
         : '';
-    return sizeLabel ? `${sizeLabel} · paused. Start Download resumes.` : 'Paused. Start Download resumes through Ollama.';
+    return sizeLabel ? `${sizeLabel} · paused. Resume Download continues.` : 'Paused. Resume Download continues through Ollama.';
   }
   if (phase === 'queued') return '0% · waiting for Start Download.';
 

@@ -8226,6 +8226,7 @@ tbody tr.computer-row.selected {
   background: linear-gradient(90deg, var(--gold), rgba(239, 188, 90, 0.42));
 }
 
+.ticker-download-resume,
 .ticker-download-pause,
 .ticker-download-stop {
   position: absolute;
@@ -8245,6 +8246,7 @@ tbody tr.computer-row.selected {
   cursor: pointer;
 }
 
+.ticker-download-resume,
 .ticker-download-pause {
   right: 72px;
   border-color: rgba(239, 188, 90, 0.34);
@@ -8256,12 +8258,14 @@ tbody tr.computer-row.selected {
   right: 7px;
 }
 
+.ticker-download-resume:disabled,
 .ticker-download-pause:disabled,
 .ticker-download-stop:disabled {
   opacity: 0.48;
   cursor: wait;
 }
 
+.ticker-download-resume svg,
 .ticker-download-pause svg,
 .ticker-download-stop svg {
   width: 11px;
