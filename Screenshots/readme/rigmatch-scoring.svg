@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="460" viewBox="0 0 1200 460" role="img" aria-labelledby="title desc">
+  <title id="title">RigMatch.AI scoring signals</title>
+  <desc id="desc">RigMatch scores local models using answer quality, speed, and hardware fit while keeping prompts and results on the user's machine.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#09151a"/>
+      <stop offset="1" stop-color="#111018"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe083"/>
+      <stop offset="1" stop-color="#ffc957"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="460" fill="url(#bg)"/>
+  <g font-family="Inter, Segoe UI, sans-serif">
+    <text x="60" y="72" fill="#f7f0df" font-weight="900" font-size="42">Match Score is personal to your machine</text>
+    <text x="60" y="108" fill="#b9b1a3" font-size="20">A model that wins on one rig might not win on another. That is the point.</text>
+
+    <g transform="translate(60 156)">
+      <rect x="0" y="0" width="315" height="186" rx="9" fill="#121924" stroke="#2d3d4f"/>
+      <text x="26" y="45" fill="#69d1c8" font-weight="900" font-size="24">Answer quality</text>
+      <text x="26" y="82" fill="#d7cfc1" font-size="18">Did the model follow the prompt,</text>
+      <text x="26" y="109" fill="#d7cfc1" font-size="18">complete the task, and stay useful?</text>
+      <g transform="translate(26 140)">
+        <rect x="0" y="0" width="36" height="18" rx="4" fill="#ffc957"/>
+        <rect x="44" y="0" width="36" height="18" rx="4" fill="#ffc957"/>
+        <rect x="88" y="0" width="36" height="18" rx="4" fill="#ffc957"/>
+        <rect x="132" y="0" width="36" height="18" rx="4" fill="#ff8b70"/>
+        <rect x="176" y="0" width="36" height="18" rx="4" fill="#303846"/>
+      </g>
+    </g>
+
+    <g transform="translate(405 156)">
+      <rect x="0" y="0" width="315" height="186" rx="9" fill="#121924" stroke="#2d3d4f"/>
+      <text x="26" y="45" fill="#ffc957" font-weight="900" font-size="24">Speed</text>
+      <text x="26" y="82" fill="#d7cfc1" font-size="18">How quickly did it generate tokens</text>
+      <text x="26" y="109" fill="#d7cfc1" font-size="18">during the same local test suite?</text>
+      <g transform="translate(26 140)">
+        <rect x="0" y="9" width="36" height="9" rx="4" fill="#ffc957"/>
+        <rect x="44" y="5" width="36" height="13" rx="4" fill="#ffc957"/>
+        <rect x="88" y="0" width="36" height="18" rx="4" fill="#ffc957"/>
+        <rect x="132" y="3" width="36" height="15" rx="4" fill="#ff8b70"/>
+        <rect x="176" y="11" width="36" height="7" rx="4" fill="#303846"/>
+      </g>
+    </g>
+
+    <g transform="translate(750 156)">
+      <rect x="0" y="0" width="315" height="186" rx="9" fill="#121924" stroke="#2d3d4f"/>
+      <text x="26" y="45" fill="#9bc278" font-weight="900" font-size="24">Hardware fit</text>
+      <text x="26" y="82" fill="#d7cfc1" font-size="18">Does it run comfortably inside</text>
+      <text x="26" y="109" fill="#d7cfc1" font-size="18">your RAM, VRAM, and patience?</text>
+      <g transform="translate(26 138)">
+        <rect x="0" y="0" width="210" height="24" rx="12" fill="#293340"/>
+        <rect x="0" y="0" width="146" height="24" rx="12" fill="url(#gold)"/>
+        <text x="230" y="18" fill="#f7f0df" font-weight="900" font-size="17">Fit: A-</text>
+      </g>
+    </g>
+
+    <g transform="translate(60 404)">
+      <rect x="0" y="-34" width="1080" height="54" rx="8" fill="#102820" stroke="#2d735f"/>
+      <text x="22" y="0" fill="#69d1c8" font-weight="900" font-size="20">Local-first privacy:</text>
+      <text x="212" y="0" fill="#f7f0df" font-size="20">prompts, answers, scorecards, and top picks stay on your machine.</text>
+    </g>
+  </g>
+</svg>

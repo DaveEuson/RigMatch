@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="470" viewBox="0 0 1200 470" role="img" aria-labelledby="title desc">
+  <title id="title">RigMatch.AI beta downloads</title>
+  <desc id="desc">Installer options for Windows, macOS Apple Silicon, macOS Intel, Linux x64, and Linux ARM64 with a macOS first launch note.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1119"/>
+      <stop offset="1" stop-color="#17101a"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe083"/>
+      <stop offset="1" stop-color="#ffc957"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="470" fill="url(#bg)"/>
+  <g font-family="Inter, Segoe UI, sans-serif">
+    <text x="60" y="72" fill="#f7f0df" font-weight="900" font-size="42">Pick the right installer</text>
+    <text x="60" y="108" fill="#b9b1a3" font-size="20">RigMatch ships as a desktop app because the browser cannot safely manage your local Ollama models on its own.</text>
+
+    <g transform="translate(60 150)">
+      <g>
+        <rect x="0" y="0" width="200" height="156" rx="9" fill="#121924" stroke="#8e6a2a"/>
+        <rect x="20" y="20" width="44" height="44" rx="8" fill="#132b31" stroke="#69d1c8"/>
+        <text x="42" y="50" text-anchor="middle" fill="#69d1c8" font-size="24">W</text>
+        <text x="20" y="96" fill="#f7f0df" font-weight="900" font-size="24">Windows</text>
+        <text x="20" y="123" fill="#b9b1a3" font-size="16">Full x64 installer</text>
+        <text x="20" y="145" fill="#ffc957" font-weight="900" font-size="15">.exe or .zip</text>
+      </g>
+
+      <g transform="translate(220 0)">
+        <rect x="0" y="0" width="200" height="156" rx="9" fill="#121924" stroke="#2d3d4f"/>
+        <rect x="20" y="20" width="44" height="44" rx="8" fill="#132b31" stroke="#69d1c8"/>
+        <text x="42" y="50" text-anchor="middle" fill="#69d1c8" font-size="24">M</text>
+        <text x="20" y="96" fill="#f7f0df" font-weight="900" font-size="22">macOS</text>
+        <text x="20" y="123" fill="#b9b1a3" font-size="16">Apple Silicon</text>
+        <text x="20" y="145" fill="#ffc957" font-weight="900" font-size="15">mac-arm64.dmg</text>
+      </g>
+
+      <g transform="translate(440 0)">
+        <rect x="0" y="0" width="200" height="156" rx="9" fill="#121924" stroke="#2d3d4f"/>
+        <rect x="20" y="20" width="44" height="44" rx="8" fill="#132b31" stroke="#69d1c8"/>
+        <text x="42" y="50" text-anchor="middle" fill="#69d1c8" font-size="24">M</text>
+        <text x="20" y="96" fill="#f7f0df" font-weight="900" font-size="22">macOS</text>
+        <text x="20" y="123" fill="#b9b1a3" font-size="16">Intel Macs</text>
+        <text x="20" y="145" fill="#ffc957" font-weight="900" font-size="15">mac-x64.dmg</text>
+      </g>
+
+      <g transform="translate(660 0)">
+        <rect x="0" y="0" width="200" height="156" rx="9" fill="#121924" stroke="#2d3d4f"/>
+        <rect x="20" y="20" width="44" height="44" rx="8" fill="#132b31" stroke="#69d1c8"/>
+        <text x="42" y="50" text-anchor="middle" fill="#69d1c8" font-size="24">L</text>
+        <text x="20" y="96" fill="#f7f0df" font-weight="900" font-size="24">Linux x64</text>
+        <text x="20" y="123" fill="#b9b1a3" font-size="16">Intel / AMD</text>
+        <text x="20" y="145" fill="#ffc957" font-weight="900" font-size="15">AppImage or deb</text>
+      </g>
+
+      <g transform="translate(880 0)">
+        <rect x="0" y="0" width="200" height="156" rx="9" fill="#121924" stroke="#2d3d4f"/>
+        <rect x="20" y="20" width="44" height="44" rx="8" fill="#132b31" stroke="#69d1c8"/>
+        <text x="42" y="50" text-anchor="middle" fill="#69d1c8" font-size="24">A</text>
+        <text x="20" y="96" fill="#f7f0df" font-weight="900" font-size="22">Linux ARM64</text>
+        <text x="20" y="123" fill="#b9b1a3" font-size="16">Jetson / aarch64</text>
+        <text x="20" y="145" fill="#ffc957" font-weight="900" font-size="15">Experimental</text>
+      </g>
+    </g>
+
+    <g transform="translate(60 386)">
+      <rect x="0" y="-42" width="1080" height="78" rx="9" fill="#2a1720" stroke="#7d3b4b"/>
+      <text x="24" y="-8" fill="#ff8fa0" font-weight="900" font-size="21">macOS first launch:</text>
+      <text x="252" y="-8" fill="#f7f0df" font-size="20">RigMatch is an unsigned beta outside the App Store.</text>
+      <text x="24" y="22" fill="#d7cfc1" font-size="18">Use right-click or Control-click &gt; Open once, or approve it in System Settings &gt; Privacy &amp; Security &gt; Open Anyway.</text>
+    </g>
+  </g>
+</svg>

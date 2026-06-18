@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">RigMatch.AI local model matchmaking overview</title>
+  <desc id="desc">A README hero graphic showing RigMatch.AI matching local Ollama models to a user's hardware.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#09151a"/>
+      <stop offset="0.55" stop-color="#080b0f"/>
+      <stop offset="1" stop-color="#1a0e17"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe083"/>
+      <stop offset="1" stop-color="#ffc957"/>
+    </linearGradient>
+    <linearGradient id="show" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#503923"/>
+      <stop offset="1" stop-color="#502335"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#000000" flood-opacity="0.42"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" rx="0" fill="url(#bg)"/>
+  <circle cx="170" cy="86" r="210" fill="#69d1c8" opacity="0.10"/>
+  <circle cx="1010" cy="160" r="240" fill="#ff6f86" opacity="0.10"/>
+
+  <g transform="translate(70 62)">
+    <rect x="0" y="0" width="54" height="54" rx="12" fill="#111823" stroke="#ffc957"/>
+    <rect x="12" y="11" width="30" height="24" rx="7" fill="#233443" stroke="#ff6f86" stroke-width="3"/>
+    <path d="M19 22c0-7 9-8 11-2 3-6 12-5 12 2 0 8-12 14-12 14s-11-6-11-14z" fill="#ffc957"/>
+    <rect x="23" y="37" width="8" height="8" fill="#69d1c8"/>
+    <rect x="18" y="45" width="18" height="4" rx="2" fill="#69d1c8"/>
+    <text x="70" y="21" fill="#f7f0df" font-family="Inter, Segoe UI, sans-serif" font-weight="800" font-size="23">RigMatch.AI</text>
+    <text x="70" y="45" fill="#ff6f86" font-family="Inter, Segoe UI, sans-serif" font-weight="800" font-size="15">AI model matchmaking for your computer</text>
+  </g>
+
+  <g transform="translate(70 178)">
+    <text x="0" y="0" fill="#f7f0df" font-family="Inter, Segoe UI, sans-serif" font-weight="900" font-size="74">Find your</text>
+    <text x="0" y="78" fill="#f7f0df" font-family="Inter, Segoe UI, sans-serif" font-weight="900" font-size="74">local AI match.</text>
+    <text x="0" y="128" fill="#d7cfc1" font-family="Inter, Segoe UI, sans-serif" font-size="25">Benchmark Ollama models on your actual hardware.</text>
+    <text x="0" y="164" fill="#d7cfc1" font-family="Inter, Segoe UI, sans-serif" font-size="25">Compare speed, answer quality, and hardware fit.</text>
+
+    <g transform="translate(0 214)">
+      <rect x="0" y="0" width="198" height="54" rx="8" fill="url(#gold)"/>
+      <text x="99" y="35" text-anchor="middle" fill="#201407" font-family="Inter, Segoe UI, sans-serif" font-weight="900" font-size="15">DOWNLOAD BETA</text>
+      <rect x="215" y="0" width="182" height="54" rx="8" fill="#111821" stroke="#314253"/>
+      <text x="306" y="35" text-anchor="middle" fill="#f7f0df" font-family="Inter, Segoe UI, sans-serif" font-weight="900" font-size="15">VIEW ON GITHUB</text>
+    </g>
+
+    <g transform="translate(0 318)" font-family="Inter, Segoe UI, sans-serif">
+      <rect x="0" y="0" width="162" height="86" rx="8" fill="#111821" stroke="#2b3a4b"/>
+      <text x="16" y="29" fill="#69d1c8" font-weight="850" font-size="16">Local-first</text>
+      <text x="16" y="55" fill="#d7cfc1" font-size="14">No account, no</text>
+      <text x="16" y="74" fill="#d7cfc1" font-size="14">cloud scoring.</text>
+
+      <rect x="178" y="0" width="162" height="86" rx="8" fill="#111821" stroke="#2b3a4b"/>
+      <text x="194" y="29" fill="#69d1c8" font-weight="850" font-size="16">Same tests</text>
+      <text x="194" y="55" fill="#d7cfc1" font-size="14">One prompt set</text>
+      <text x="194" y="74" fill="#d7cfc1" font-size="14">for each model.</text>
+
+      <rect x="356" y="0" width="162" height="86" rx="8" fill="#111821" stroke="#2b3a4b"/>
+      <text x="372" y="29" fill="#69d1c8" font-weight="850" font-size="16">Top Match</text>
+      <text x="372" y="55" fill="#d7cfc1" font-size="14">Pick the winner</text>
+      <text x="372" y="74" fill="#d7cfc1" font-size="14">for your rig.</text>
+    </g>
+  </g>
+
+  <g transform="translate(664 134)" filter="url(#shadow)">
+    <rect x="0" y="0" width="466" height="370" rx="9" fill="#101620" stroke="#2c7881"/>
+    <rect x="0" y="0" width="466" height="42" rx="9" fill="#174c5d"/>
+    <rect x="0" y="33" width="466" height="9" fill="#174c5d"/>
+    <rect x="20" y="12" width="20" height="20" rx="5" fill="#111823" stroke="#ffc957"/>
+    <path d="M26 22c0-5 6-5 8-1 2-4 8-4 8 1 0 5-8 9-8 9s-8-4-8-9z" fill="#ff6f86"/>
+    <text x="52" y="28" fill="#f7f0df" font-family="Inter, Segoe UI, sans-serif" font-weight="800" font-size="15">RigMatch.AI</text>
+    <circle cx="421" cy="21" r="5" fill="#9ba8b6"/>
+    <circle cx="438" cy="21" r="5" fill="#9ba8b6"/>
+    <circle cx="455" cy="21" r="5" fill="#9ba8b6"/>
+
+    <g font-family="Inter, Segoe UI, sans-serif">
+      <rect x="20" y="62" width="203" height="82" rx="8" fill="#0b1018" stroke="#2b3a4b"/>
+      <text x="34" y="91" fill="#9fb4c9" font-weight="850" font-size="12">YOUR RIG</text>
+      <text x="34" y="119" fill="#fff3d6" font-weight="900" font-size="23">12 GB VRAM</text>
+      <g transform="translate(34 129)">
+        <rect x="0" y="0" width="6" height="16" rx="2" fill="#ffc957"/>
+        <rect x="10" y="0" width="6" height="16" rx="2" fill="#ffc957"/>
+        <rect x="20" y="0" width="6" height="16" rx="2" fill="#ff8b70"/>
+        <rect x="30" y="0" width="6" height="16" rx="2" fill="#ff6f86"/>
+        <rect x="40" y="0" width="6" height="16" rx="2" fill="#ff6f86"/>
+        <rect x="50" y="0" width="6" height="16" rx="2" fill="#303846"/>
+        <rect x="60" y="0" width="6" height="16" rx="2" fill="#303846"/>
+      </g>
+
+      <rect x="243" y="62" width="203" height="82" rx="8" fill="#0b1018" stroke="#2b3a4b"/>
+      <text x="257" y="91" fill="#9fb4c9" font-weight="850" font-size="12">TOP MATCH</text>
+      <text x="257" y="119" fill="#fff3d6" font-weight="900" font-size="23">gemma4:2b</text>
+      <g transform="translate(257 129)">
+        <rect x="0" y="0" width="6" height="16" rx="2" fill="#ffc957"/>
+        <rect x="10" y="0" width="6" height="16" rx="2" fill="#ffc957"/>
+        <rect x="20" y="0" width="6" height="16" rx="2" fill="#ff8b70"/>
+        <rect x="30" y="0" width="6" height="16" rx="2" fill="#ff6f86"/>
+        <rect x="40" y="0" width="6" height="16" rx="2" fill="#ff6f86"/>
+        <rect x="50" y="0" width="6" height="16" rx="2" fill="#303846"/>
+      </g>
+
+      <rect x="20" y="164" width="426" height="102" rx="8" fill="url(#show)" stroke="#9c7443"/>
+      <text x="34" y="200" fill="#fff3d6" font-weight="850" font-size="16">Speed Dating</text>
+      <text x="34" y="232" fill="#fff3d6" font-weight="900" font-size="29">Five models.</text>
+      <text x="226" y="232" fill="#fff3d6" font-weight="900" font-size="29">Same tests.</text>
+
+      <g transform="translate(20 286)">
+        <rect x="0" y="0" width="130" height="64" rx="8" fill="#0b1018" stroke="#2b3a4b"/>
+        <text x="14" y="19" fill="#9fb4c9" font-weight="850" font-size="11">CONTESTANT 1</text>
+        <text x="14" y="40" fill="#fff3d6" font-weight="900" font-size="15">qwen2.5:14b</text>
+        <text x="90" y="57" fill="#9bc278" font-weight="900" font-size="14">88 A</text>
+
+        <rect x="148" y="0" width="130" height="64" rx="8" fill="#0b1018" stroke="#2b3a4b"/>
+        <text x="162" y="19" fill="#9fb4c9" font-weight="850" font-size="11">CONTESTANT 2</text>
+        <text x="162" y="40" fill="#fff3d6" font-weight="900" font-size="15">mistral:7b</text>
+        <text x="238" y="57" fill="#9bc278" font-weight="900" font-size="14">91 A-</text>
+
+        <rect x="296" y="0" width="130" height="64" rx="8" fill="#0b1018" stroke="#2b3a4b"/>
+        <text x="310" y="19" fill="#9fb4c9" font-weight="850" font-size="11">CONTESTANT 3</text>
+        <text x="310" y="40" fill="#fff3d6" font-weight="900" font-size="15">phi4:14b</text>
+        <text x="386" y="57" fill="#9bc278" font-weight="900" font-size="14">84 B+</text>
+      </g>
+    </g>
+  </g>
+</svg>

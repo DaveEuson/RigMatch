@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RigMatch.AI Downloads</title>
+    <link rel="icon" type="image/png" href="../rigmatch-brand-icon.png" />
+    <meta
+      name="description"
+      content="Download RigMatch.AI, a local AI model matchmaking app for Ollama models on your own hardware."
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #080b0f;
+        --bg-soft: #101722;
+        --panel: #151c28;
+        --panel-strong: #1d2533;
+        --line: #2c3b4d;
+        --line-hot: #4d3f28;
+        --text: #f7f0df;
+        --muted: #b9b1a3;
+        --quiet: #7d8793;
+        --gold: #ffc957;
+        --gold-dark: #c28a22;
+        --teal: #69d1c8;
+        --coral: #ff6f86;
+        --green: #9bc278;
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.46);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        overflow-x: hidden;
+        background:
+          radial-gradient(circle at 18% 8%, rgba(105, 209, 200, 0.16), transparent 30rem),
+          radial-gradient(circle at 78% 14%, rgba(255, 111, 134, 0.12), transparent 28rem),
+          linear-gradient(180deg, #0a0e14 0%, #080b0f 42%, #0d1016 100%);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .page-shell {
+        width: min(1180px, calc(100% - 36px));
+        margin: 0 auto;
+      }
+
+      .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(8, 11, 15, 0.86);
+        backdrop-filter: blur(18px);
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 74px;
+        gap: 18px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .brand img {
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
+        box-shadow: 0 0 0 1px rgba(255, 201, 87, 0.28);
+      }
+
+      .brand-name {
+        display: grid;
+        gap: 1px;
+      }
+
+      .brand-name strong {
+        font-size: 17px;
+        line-height: 1.1;
+      }
+
+      .brand-name span {
+        color: var(--coral);
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .nav-links a {
+        border: 1px solid rgba(255, 255, 255, 0.11);
+        border-radius: 8px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 760;
+        padding: 10px 13px;
+      }
+
+      .nav-links a:hover,
+      .nav-links a:focus-visible {
+        border-color: rgba(105, 209, 200, 0.58);
+        color: var(--text);
+        outline: none;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 0.9fr) minmax(460px, 1.1fr);
+        gap: 46px;
+        align-items: center;
+        min-height: min(760px, calc(100svh - 74px));
+        padding: 64px 0 48px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        max-width: 620px;
+        font-size: clamp(46px, 6.2vw, 86px);
+        line-height: 0.92;
+        letter-spacing: 0;
+      }
+
+      .hero-copy {
+        color: var(--muted);
+        font-size: clamp(18px, 1.7vw, 22px);
+        line-height: 1.55;
+        margin-top: 24px;
+        max-width: 640px;
+      }
+
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 32px;
+      }
+
+      .button {
+        align-items: center;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        display: inline-flex;
+        font-size: 14px;
+        font-weight: 850;
+        gap: 10px;
+        justify-content: center;
+        min-height: 48px;
+        padding: 0 18px;
+        text-transform: uppercase;
+      }
+
+      .button.primary {
+        background: linear-gradient(180deg, #ffe083 0%, var(--gold) 72%, #e4a836 100%);
+        box-shadow: 0 14px 42px rgba(255, 201, 87, 0.24);
+        color: #201407;
+      }
+
+      .button.secondary {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.14);
+        color: var(--text);
+      }
+
+      .button:hover,
+      .button:focus-visible {
+        transform: translateY(-1px);
+        outline: none;
+      }
+
+      .trust-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 38px;
+        max-width: 680px;
+      }
+
+      .trust-row div {
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.035);
+        padding: 14px;
+      }
+
+      .trust-row strong {
+        display: block;
+        color: var(--teal);
+        font-size: 13px;
+        margin-bottom: 6px;
+      }
+
+      .trust-row span {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.35;
+      }
+
+      .app-preview {
+        border: 1px solid rgba(105, 209, 200, 0.24);
+        border-radius: 8px;
+        background:
+          linear-gradient(145deg, rgba(255, 201, 87, 0.12), transparent 28%),
+          linear-gradient(180deg, #171c26, #0b0f16);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        min-width: 0;
+      }
+
+      .window-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        background: #173f51;
+        padding: 12px 16px;
+      }
+
+      .window-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+        font-weight: 850;
+      }
+
+      .window-dots {
+        display: flex;
+        gap: 8px;
+      }
+
+      .window-dots span {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.42);
+      }
+
+      .preview-body {
+        padding: 18px;
+      }
+
+      .rig-strip,
+      .top-match {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .rig-card,
+      .top-match,
+      .model-card,
+      .test-strip {
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        background: rgba(12, 15, 22, 0.72);
+      }
+
+      .rig-card {
+        padding: 14px;
+      }
+
+      .rig-card small,
+      .model-card small {
+        color: var(--quiet);
+        display: block;
+        font-size: 11px;
+        font-weight: 850;
+        text-transform: uppercase;
+      }
+
+      .rig-card strong {
+        display: block;
+        font-size: 18px;
+        margin-top: 6px;
+      }
+
+      .meter {
+        display: flex;
+        gap: 3px;
+        margin-top: 12px;
+      }
+
+      .meter i {
+        background: rgba(255, 255, 255, 0.13);
+        border-radius: 2px;
+        height: 18px;
+        width: 6px;
+      }
+
+      .meter i.on {
+        background: linear-gradient(180deg, var(--gold), var(--coral));
+      }
+
+      .show-banner {
+        display: grid;
+        gap: 8px;
+        margin: 16px 0;
+        min-height: 144px;
+        place-items: end start;
+        border: 1px solid rgba(255, 201, 87, 0.28);
+        border-radius: 8px;
+        background:
+          linear-gradient(90deg, rgba(255, 201, 87, 0.14), rgba(255, 111, 134, 0.18)),
+          repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 70px),
+          #251822;
+        padding: 18px;
+      }
+
+      .show-banner h2 {
+        font-size: clamp(24px, 3vw, 38px);
+        line-height: 1;
+        max-width: 540px;
+      }
+
+      .show-banner p {
+        color: #ffe5b5;
+        font-weight: 750;
+      }
+
+      .model-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .model-card {
+        padding: 13px;
+      }
+
+      .model-card strong {
+        display: block;
+        margin-top: 6px;
+      }
+
+      .score {
+        align-items: center;
+        color: var(--green);
+        display: flex;
+        font-size: 13px;
+        font-weight: 850;
+        justify-content: space-between;
+        margin-top: 12px;
+      }
+
+      .test-strip {
+        align-items: center;
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        margin-top: 10px;
+        padding: 13px;
+      }
+
+      .test-strip span {
+        color: var(--quiet);
+        font-size: 12px;
+      }
+
+      .downloads {
+        padding: 38px 0 74px;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 28px;
+        margin-bottom: 22px;
+      }
+
+      .section-head h2 {
+        font-size: clamp(32px, 4vw, 54px);
+        line-height: 1;
+      }
+
+      .section-head p {
+        color: var(--muted);
+        line-height: 1.5;
+        max-width: 460px;
+      }
+
+      .download-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .download-card {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.025));
+        border: 1px solid rgba(255, 255, 255, 0.11);
+        border-radius: 8px;
+        display: grid;
+        gap: 16px;
+        min-height: 235px;
+        padding: 18px;
+      }
+
+      .download-card.recommended {
+        border-color: rgba(255, 201, 87, 0.42);
+        box-shadow: inset 0 0 0 1px rgba(255, 201, 87, 0.12);
+      }
+
+      .platform-icon {
+        align-items: center;
+        background: rgba(105, 209, 200, 0.1);
+        border: 1px solid rgba(105, 209, 200, 0.28);
+        border-radius: 8px;
+        color: var(--teal);
+        display: inline-flex;
+        font-size: 20px;
+        height: 42px;
+        justify-content: center;
+        width: 42px;
+      }
+
+      .download-card h3 {
+        font-size: 19px;
+        line-height: 1.1;
+      }
+
+      .download-card p {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .download-card .button {
+        min-height: 42px;
+        padding: 0 12px;
+        width: 100%;
+      }
+
+      .alt-link {
+        color: var(--teal);
+        font-size: 13px;
+        font-weight: 780;
+        text-align: center;
+      }
+
+      .notes {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 16px;
+        padding-bottom: 82px;
+      }
+
+      .note {
+        border: 1px solid rgba(255, 255, 255, 0.11);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.035);
+        padding: 22px;
+      }
+
+      .note.mac {
+        border-color: rgba(255, 111, 134, 0.34);
+        background: rgba(255, 111, 134, 0.07);
+      }
+
+      .note h2 {
+        font-size: 24px;
+        margin-bottom: 12px;
+      }
+
+      .note p,
+      .note li {
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .note ol {
+        display: grid;
+        gap: 8px;
+        margin: 12px 0 0;
+        padding-left: 20px;
+      }
+
+      code {
+        background: rgba(0, 0, 0, 0.34);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        color: var(--gold);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.92em;
+        padding: 2px 6px;
+      }
+
+      .footer {
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        color: var(--quiet);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: space-between;
+        padding: 26px 0 36px;
+      }
+
+      .footer a {
+        color: var(--muted);
+        font-weight: 760;
+      }
+
+      @media (max-width: 1020px) {
+        .hero,
+        .notes {
+          grid-template-columns: 1fr;
+        }
+
+        .hero {
+          min-height: 0;
+        }
+
+        .download-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 680px) {
+        .page-shell {
+          width: min(100% - 24px, 1180px);
+        }
+
+        .nav {
+          align-items: flex-start;
+          flex-direction: column;
+          padding: 14px 0;
+        }
+
+        .nav-links {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+          width: 100%;
+        }
+
+        .nav-links a {
+          flex: 1;
+          font-size: 12px;
+          min-width: 0;
+          padding: 10px 8px;
+          text-align: center;
+        }
+
+        .hero {
+          padding: 44px 0 32px;
+        }
+
+        .hero-actions {
+          display: grid;
+          grid-template-columns: 1fr;
+        }
+
+        .button {
+          width: 100%;
+        }
+
+        .trust-row div,
+        .download-card,
+        .note {
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+
+        .trust-row,
+        .rig-strip,
+        .model-grid,
+        .download-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .section-head {
+          align-items: start;
+          flex-direction: column;
+        }
+
+        .download-card {
+          min-height: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="page-shell nav" aria-label="Main navigation">
+        <a class="brand" href="#">
+          <img src="../rigmatch-brand-icon.png" alt="" />
+          <span class="brand-name">
+            <strong>RigMatch.AI</strong>
+            <span>AI model matchmaking</span>
+          </span>
+        </a>
+        <div class="nav-links">
+          <a href="#downloads">Downloads</a>
+          <a href="https://github.com/DaveEuson/RigMatch.AI/releases/latest">Releases</a>
+          <a href="https://github.com/DaveEuson/RigMatch.AI">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="page-shell hero">
+        <div>
+          <h1>RigMatch.AI</h1>
+          <p class="hero-copy">
+            Find the best local AI model for your computer. RigMatch benchmarks Ollama models on your
+            actual hardware, compares speed and answer quality, then helps you pick a top match without
+            sending prompts to a cloud service.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="https://github.com/DaveEuson/RigMatch.AI/releases/latest/download/RigMatch.AI-0.2.0-win-x64.exe">
+              Download for Windows
+            </a>
+            <a class="button secondary" href="#downloads">See all downloads</a>
+          </div>
+          <div class="trust-row" aria-label="RigMatch highlights">
+            <div>
+              <strong>Local-first</strong>
+              <span>Runs against your Ollama setup and your real CPU, RAM, and VRAM.</span>
+            </div>
+            <div>
+              <strong>Same questions</strong>
+              <span>Compare picked models with one shared test set instead of vibes alone.</span>
+            </div>
+            <div>
+              <strong>Beginner friendly</strong>
+              <span>Simple mode keeps the useful path clear; advanced tools stay available.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="app-preview" aria-label="RigMatch.AI product preview">
+          <div class="window-bar">
+            <div class="window-title">
+              <img src="../rigmatch-brand-icon.png" alt="" width="24" height="24" />
+              RigMatch.AI
+            </div>
+            <div class="window-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+          </div>
+          <div class="preview-body">
+            <div class="rig-strip">
+              <div class="rig-card">
+                <small>Your rig</small>
+                <strong>12 GB VRAM</strong>
+                <div class="meter" aria-hidden="true">
+                  <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i>
+                </div>
+              </div>
+              <div class="rig-card">
+                <small>Top match</small>
+                <strong>gemma4:2b</strong>
+                <div class="meter" aria-hidden="true">
+                  <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i>
+                </div>
+              </div>
+            </div>
+            <div class="show-banner">
+              <div>
+                <p>Speed Dating</p>
+                <h2>Five contestants, one rig, same questions.</h2>
+              </div>
+            </div>
+            <div class="model-grid">
+              <div class="model-card">
+                <small>Contestant 1</small>
+                <strong>qwen2.5:14b</strong>
+                <div class="score"><span>Quality</span><span>88 A</span></div>
+              </div>
+              <div class="model-card">
+                <small>Contestant 2</small>
+                <strong>mistral-small:22b</strong>
+                <div class="score"><span>Speed</span><span>91 A-</span></div>
+              </div>
+              <div class="model-card">
+                <small>Contestant 3</small>
+                <strong>phi4:14b</strong>
+                <div class="score"><span>Fit</span><span>84 B+</span></div>
+              </div>
+            </div>
+            <div class="test-strip">
+              <strong>Desktop bridge online</strong>
+              <span>Local Ollama ready</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-shell downloads" id="downloads">
+        <div class="section-head">
+          <h2>Download the beta</h2>
+          <p>
+            Choose the installer for your machine. If a direct button ever misses the newest file, use
+            the Releases page fallback for the full asset list.
+          </p>
+        </div>
+
+        <div class="download-grid">
+          <article class="download-card recommended">
+            <span class="platform-icon">W</span>
+            <div>
+              <h3>Windows</h3>
+              <p>Full installer for Windows x64 desktops and laptops.</p>
+            </div>
+            <a class="button primary" href="https://github.com/DaveEuson/RigMatch.AI/releases/latest/download/RigMatch.AI-0.2.0-win-x64.exe">Download .exe</a>
+            <a class="alt-link" href="https://github.com/DaveEuson/RigMatch.AI/releases/latest">Portable zip on Releases</a>
+          </article>
+
+          <article class="download-card">
+            <span class="platform-icon">M</span>
+            <div>
+              <h3>macOS Apple Silicon</h3>
+              <p>For M1, M2, M3, and newer Apple Silicon Macs.</p>
+            </div>
+            <a class="button primary" href="https://github.com/DaveEuson/RigMatch.AI/releases/latest/download/RigMatch.AI-0.2.0-mac-arm64.dmg">Download .dmg</a>
+            <a class="alt-link" href="#mac-note">Read first-launch note</a>
+          </article>
+
+          <article class="download-card">
+            <span class="platform-icon">M</span>
+            <div>
+              <h3>macOS Intel</h3>
+              <p>For older Intel-based Macs that do not use Apple Silicon.</p>
+            </div>
+            <a class="button primary" href="https://github.com/DaveEuson/RigMatch.AI/releases/latest/download/RigMatch.AI-0.2.0-mac-x64.dmg">Download .dmg</a>
+            <a class="alt-link" href="#mac-note">Read first-launch note</a>
+          </article>
+
+          <article class="download-card">
+            <span class="platform-icon">L</span>
+            <div>
+              <h3>Linux x64</h3>
+              <p>For most Intel/AMD Linux machines. AppImage is the easiest first try.</p>
+            </div>
+            <a class="button primary" href="https://github.com/DaveEuson/RigMatch.AI/releases/latest/download/RigMatch.AI-0.2.0-linux-x86_64.AppImage">Download AppImage</a>
+            <a class="alt-link" href="https://github.com/DaveEuson/RigMatch.AI/releases/latest/download/RigMatch.AI-0.2.0-linux-amd64.deb">Download .deb instead</a>
+          </article>
+
+          <article class="download-card">
+            <span class="platform-icon">A</span>
+            <div>
+              <h3>Linux ARM64 / Jetson</h3>
+              <p>Experimental ARM64 build for Jetson and aarch64 Ubuntu systems.</p>
+            </div>
+            <a class="button primary" href="https://github.com/DaveEuson/RigMatch.AI/releases/latest/download/RigMatch.AI-0.2.0-linux-arm64.AppImage">Download AppImage</a>
+            <a class="alt-link" href="https://github.com/DaveEuson/RigMatch.AI/releases/latest/download/RigMatch.AI-0.2.0-linux-arm64.deb">Download .deb instead</a>
+          </article>
+        </div>
+      </section>
+
+      <section class="page-shell notes" aria-label="Install notes">
+        <article class="note mac" id="mac-note">
+          <h2>macOS first launch</h2>
+          <p>
+            RigMatch.AI is an unsigned beta distributed outside the App Store. macOS may block the
+            first launch, even when the download is fine.
+          </p>
+          <ol>
+            <li>Download <strong>mac-arm64</strong> for Apple Silicon or <strong>mac-x64</strong> for Intel.</li>
+            <li>Open the dmg and drag <strong>RigMatch.AI</strong> into <strong>Applications</strong>.</li>
+            <li>First launch only: right-click or Control-click the app, choose <strong>Open</strong>, then choose <strong>Open</strong> again.</li>
+            <li>If macOS still blocks it, go to <strong>System Settings &gt; Privacy &amp; Security</strong> and choose <strong>Open Anyway</strong>.</li>
+          </ol>
+        </article>
+
+        <article class="note">
+          <h2>What stays local</h2>
+          <p>
+            RigMatch talks to Ollama on your machine. The benchmark prompts, model answers, scores,
+            and top-pick history stay local unless you choose to share a bug report.
+          </p>
+          <p style="margin-top: 14px">
+            Need Ollama first? Install it from <a class="alt-link" href="https://ollama.com">ollama.com</a>,
+            then come back and run <code>Check Local</code> in RigMatch.
+          </p>
+        </article>
+      </section>
+    </main>
+
+    <footer class="page-shell footer">
+      <span>RigMatch.AI beta. Built for local AI model testing.</span>
+      <span>
+        <a href="https://github.com/DaveEuson/RigMatch.AI">GitHub</a>
+        &nbsp;|&nbsp;
+        <a href="https://buymeacoffee.com/daveeuson">Support the build</a>
+      </span>
+    </footer>
+  </body>
+</html>

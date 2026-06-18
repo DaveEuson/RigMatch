@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">RigMatch.AI workflow</title>
+  <desc id="desc">The RigMatch workflow: check local, pick models, run speed dating, review scorecards, and chat with the winner.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1119"/>
+      <stop offset="1" stop-color="#17101a"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#171f2b"/>
+      <stop offset="1" stop-color="#101620"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="360" rx="0" fill="url(#bg)"/>
+  <text x="60" y="72" fill="#f7f0df" font-family="Inter, Segoe UI, sans-serif" font-weight="900" font-size="40">One clear path from models to match</text>
+  <text x="60" y="108" fill="#b9b1a3" font-family="Inter, Segoe UI, sans-serif" font-size="19">RigMatch keeps the benchmark loop simple enough for new local-AI users, while still making the results useful.</text>
+
+  <g transform="translate(58 154)" font-family="Inter, Segoe UI, sans-serif">
+    <g>
+      <rect x="0" y="0" width="188" height="136" rx="9" fill="url(#card)" stroke="#2d3d4f"/>
+      <circle cx="35" cy="36" r="16" fill="#122d33" stroke="#69d1c8"/>
+      <text x="35" y="42" text-anchor="middle" fill="#69d1c8" font-weight="900" font-size="20">1</text>
+      <text x="24" y="75" fill="#f7f0df" font-weight="900" font-size="21">Check Local</text>
+      <text x="24" y="101" fill="#b9b1a3" font-size="15">Detect Ollama, CPU,</text>
+      <text x="24" y="121" fill="#b9b1a3" font-size="15">RAM, VRAM, and models.</text>
+    </g>
+    <path d="M204 68h34" stroke="#ffc957" stroke-width="4" stroke-linecap="round"/>
+    <path d="M238 68l-13-9v18z" fill="#ffc957"/>
+
+    <g transform="translate(256 0)">
+      <rect x="0" y="0" width="188" height="136" rx="9" fill="url(#card)" stroke="#2d3d4f"/>
+      <circle cx="35" cy="36" r="16" fill="#322017" stroke="#ffc957"/>
+      <text x="35" y="42" text-anchor="middle" fill="#ffc957" font-weight="900" font-size="20">2</text>
+      <text x="24" y="75" fill="#f7f0df" font-weight="900" font-size="21">Pick Models</text>
+      <text x="24" y="101" fill="#b9b1a3" font-size="15">Choose up to five</text>
+      <text x="24" y="121" fill="#b9b1a3" font-size="15">contestants to compare.</text>
+    </g>
+    <path d="M460 68h34" stroke="#ffc957" stroke-width="4" stroke-linecap="round"/>
+    <path d="M494 68l-13-9v18z" fill="#ffc957"/>
+
+    <g transform="translate(512 0)">
+      <rect x="0" y="0" width="188" height="136" rx="9" fill="url(#card)" stroke="#2d3d4f"/>
+      <circle cx="35" cy="36" r="16" fill="#321b26" stroke="#ff6f86"/>
+      <text x="35" y="42" text-anchor="middle" fill="#ff6f86" font-weight="900" font-size="20">3</text>
+      <text x="24" y="75" fill="#f7f0df" font-weight="900" font-size="21">Speed Dating</text>
+      <text x="24" y="101" fill="#b9b1a3" font-size="15">Ask every model the</text>
+      <text x="24" y="121" fill="#b9b1a3" font-size="15">same benchmark set.</text>
+    </g>
+    <path d="M716 68h34" stroke="#ffc957" stroke-width="4" stroke-linecap="round"/>
+    <path d="M750 68l-13-9v18z" fill="#ffc957"/>
+
+    <g transform="translate(768 0)">
+      <rect x="0" y="0" width="188" height="136" rx="9" fill="url(#card)" stroke="#2d3d4f"/>
+      <circle cx="35" cy="36" r="16" fill="#122d33" stroke="#69d1c8"/>
+      <text x="35" y="42" text-anchor="middle" fill="#69d1c8" font-weight="900" font-size="20">4</text>
+      <text x="24" y="75" fill="#f7f0df" font-weight="900" font-size="21">Scorecards</text>
+      <text x="24" y="101" fill="#b9b1a3" font-size="15">Review speed, quality,</text>
+      <text x="24" y="121" fill="#b9b1a3" font-size="15">and hardware fit.</text>
+    </g>
+    <path d="M972 68h34" stroke="#ffc957" stroke-width="4" stroke-linecap="round"/>
+    <path d="M1006 68l-13-9v18z" fill="#ffc957"/>
+
+    <g transform="translate(1024 0)">
+      <rect x="0" y="0" width="118" height="136" rx="9" fill="#203718" stroke="#5b7b43"/>
+      <text x="20" y="44" fill="#ffc957" font-weight="900" font-size="28">Top</text>
+      <text x="20" y="76" fill="#ffc957" font-weight="900" font-size="28">Match</text>
+      <text x="20" y="107" fill="#d7cfc1" font-size="15">Chat with</text>
+      <text x="20" y="127" fill="#d7cfc1" font-size="15">the winner.</text>
+    </g>
+  </g>
+</svg>

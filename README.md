@@ -3,12 +3,22 @@
 Find the best local AI model for your computer. RigMatch benchmarks your installed Ollama models on your actual hardware — scored for speed, answer quality, and hardware fit — wrapped in a dating game show theme to make testing less boring.
 
 <p align="center">
+  <img src="Screenshots/readme/rigmatch-readme-hero.svg" alt="RigMatch.AI matches local Ollama models to your actual hardware" width="100%">
+</p>
+
+<p align="center">
   <img src="Screenshots/0.1/Rigmatch1.gif" alt="RigMatch.AI demo" width="100%">
 </p>
 
 ## Download
 
 **Beta v0.2.0** — [Downloads →](../../releases/latest)
+
+Want the quick overview first? Open the [RigMatch.AI demo/download page](https://daveeuson.github.io/RigMatch.AI/demo/).
+
+<p align="center">
+  <img src="Screenshots/readme/rigmatch-downloads.svg" alt="RigMatch.AI installer choices for Windows, macOS, Linux, and Jetson" width="100%">
+</p>
 
 | Platform | Installer |
 |---|---|
@@ -60,6 +70,10 @@ sudo apt install libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 xdg-utils libats
 6. Review the Scorecards and lock in your **Top Match**.
 7. Open **RigMatch Chat** to talk to your winner.
 
+<p align="center">
+  <img src="Screenshots/readme/rigmatch-flow.svg" alt="RigMatch workflow from checking local Ollama to chatting with the top match" width="100%">
+</p>
+
 ## What It Does
 
 - Scans your machine (CPU, RAM, VRAM) and detects installed Ollama models
@@ -80,6 +94,10 @@ The **Match Score** combines three signals:
 - **Hardware fit** — whether it runs comfortably within your RAM and VRAM
 
 Scores are meant to compare models on *your* computer, not to claim a universal benchmark ranking. A model that scores 91 here might score differently on different hardware.
+
+<p align="center">
+  <img src="Screenshots/readme/rigmatch-scoring.svg" alt="RigMatch scores answer quality, speed, and hardware fit while keeping prompts local" width="100%">
+</p>
 
 ## Privacy
 
