@@ -165,6 +165,14 @@ jobs:
       - name: Write release download notes
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
+          ## Downloads
+
+          - **Windows**: `RigMatch.AI-*-win-x64.exe`
+          - **macOS Apple Silicon**: `RigMatch.AI-*-mac-arm64.dmg`
+          - **macOS Intel**: `RigMatch.AI-*-mac-x64.dmg`
+          - **Linux x64**: `RigMatch.AI-*-linux-x86_64.AppImage` or `RigMatch.AI-*-linux-amd64.deb`
+          - **Linux ARM64 / Jetson**: `RigMatch.AI-*-linux-arm64.AppImage` or `RigMatch.AI-*-linux-arm64.deb`
+
           ## macOS first launch
 
           RigMatch.AI for macOS is currently an unsigned beta distributed outside the App Store. On first launch, macOS may say the developer cannot be verified or that the app was downloaded from the internet.
@@ -181,20 +189,26 @@ jobs:
           ```
 
           Apple reference: https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac
-
-          ## Downloads
-
-          - **Windows**: `RigMatch.AI-*-win-x64.exe`
-          - **macOS Apple Silicon**: `RigMatch.AI-*-mac-arm64.dmg`
-          - **macOS Intel**: `RigMatch.AI-*-mac-x64.dmg`
-          - **Linux x64**: `RigMatch.AI-*-linux-x86_64.AppImage` or `RigMatch.AI-*-linux-amd64.deb`
-          - **Linux ARM64 / Jetson**: `RigMatch.AI-*-linux-arm64.AppImage` or `RigMatch.AI-*-linux-arm64.deb`
           EOF
 
-      - name: Create draft release
+      - name: Classify release tag
+        id: release_meta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_NAME}" =~ (nightly|alpha|beta|canary|preview) ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "make_latest=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "make_latest=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          draft: true
+          draft: false
+          prerelease: ${{ steps.release_meta.outputs.prerelease }}
+          make_latest: ${{ steps.release_meta.outputs.make_latest }}
           generate_release_notes: true
           body_path: RELEASE_NOTES.md
           files: |
