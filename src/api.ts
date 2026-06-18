@@ -11,9 +11,10 @@ import type { AgentArcadeApi, BenchmarkProgressUpdate, PullProgressUpdate, Updat
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
 const RIGMATCH_RELEASES_URL = 'https://github.com/daveeuson/RigMatch.AI/releases';
-const APP_VERSION = '0.1.7';
+const APP_VERSION = '0.2.1';
 const benchmarkProgressListeners = new Set<(update: BenchmarkProgressUpdate) => void>();
 const pullProgressListeners = new Set<(update: PullProgressUpdate) => void>();
+const previewPullControllers = new Map<string, AbortController>();
 
 function emitBenchmarkProgress(update: BenchmarkProgressUpdate) {
   benchmarkProgressListeners.forEach((listener) => listener(update));
@@ -59,44 +60,51 @@ const fallbackApi: AgentArcadeApi = {
     const baseUrl = request.baseUrl || demoOllama.baseUrl;
     const totalBytes = 3.4 * 1024 * 1024 * 1024;
     const startedAt = Date.now();
+    const controller = new AbortController();
+    previewPullControllers.set(progressId, controller);
 
-    emitPullProgress({
-      id: progressId,
-      model: request.model,
-      baseUrl,
-      phase: 'started',
-      status: 'Starting preview download',
-      percent: 0,
-      completedBytes: 0,
-      totalBytes,
-      speedBps: 0,
-      updatedAt: new Date().toISOString(),
-    });
-
-    for (let step = 1; step <= 10; step += 1) {
-      await delay(180);
-      const completedBytes = Math.round((totalBytes * step) / 10);
-      const elapsedSeconds = Math.max(0.1, (Date.now() - startedAt) / 1000);
+    try {
       emitPullProgress({
         id: progressId,
         model: request.model,
         baseUrl,
-        phase: step === 10 ? 'complete' : 'pulling',
-        status: step === 10 ? 'Preview download complete' : 'Pulling preview layer',
-        percent: step * 10,
-        completedBytes,
+        phase: 'started',
+        status: 'Starting preview download',
+        percent: 0,
+        completedBytes: 0,
         totalBytes,
-        speedBps: step === 10 ? 0 : completedBytes / elapsedSeconds,
+        speedBps: 0,
         updatedAt: new Date().toISOString(),
       });
-    }
 
-    return {
-      model: request.model,
-      status: 'Preview pull complete',
-      baseUrl,
-      completedAt: new Date().toISOString(),
-    };
+      for (let step = 1; step <= 10; step += 1) {
+        await delay(180);
+        if (controller.signal.aborted) throw new Error('Preview download paused');
+        const completedBytes = Math.round((totalBytes * step) / 10);
+        const elapsedSeconds = Math.max(0.1, (Date.now() - startedAt) / 1000);
+        emitPullProgress({
+          id: progressId,
+          model: request.model,
+          baseUrl,
+          phase: step === 10 ? 'complete' : 'pulling',
+          status: step === 10 ? 'Preview download complete' : 'Pulling preview layer',
+          percent: step * 10,
+          completedBytes,
+          totalBytes,
+          speedBps: step === 10 ? 0 : completedBytes / elapsedSeconds,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      return {
+        model: request.model,
+        status: 'Preview pull complete',
+        baseUrl,
+        completedAt: new Date().toISOString(),
+      };
+    } finally {
+      previewPullControllers.delete(progressId);
+    }
   },
   async deleteModel(request) {
     await delay(650);
@@ -275,6 +283,9 @@ const fallbackApi: AgentArcadeApi = {
     window.close();
     return { ok: false };
   },
+  async cancelCloseApp() {
+    return { ok: true };
+  },
   onAppCloseRequest() {
     return () => undefined;
   },
@@ -287,7 +298,13 @@ const fallbackApi: AgentArcadeApi = {
   async checkAutoUpdate() { /* no-op in preview */ },
   async downloadUpdate() { /* no-op in preview */ },
   async installUpdate() { /* no-op in preview */ },
-  async abortPull() { /* no-op in preview */ },
+  async abortPull(progressId?: string) {
+    if (progressId) {
+      previewPullControllers.get(progressId)?.abort();
+      return;
+    }
+    previewPullControllers.forEach((controller) => controller.abort());
+  },
   async startOllamaInstall() { /* no-op in preview */ },
   async launchOllamaInstaller() { /* no-op in preview */ },
 };

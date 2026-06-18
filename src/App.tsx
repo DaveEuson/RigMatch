@@ -25,6 +25,7 @@ import {
   Lightbulb,
   MessageSquare,
   Network,
+  Pause,
   PenLine,
   Plus,
   RefreshCw,
@@ -295,7 +296,7 @@ const navItems: NavItem[] = [
 
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
 const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
-const APP_VERSION = '0.2.0';
+const APP_VERSION = '0.2.1';
 const CURRENT_SCORE_SCHEMA_VERSION = 3;
 const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
 const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
@@ -344,9 +345,20 @@ const releaseNotes: Array<{
   notes: string[];
 }> = [
   {
+    version: '0.2.1',
+    label: 'Download Pause & Resume',
+    date: 'Current build',
+    notes: [
+      'Model downloads now have a Pause control that keeps the active model queued instead of throwing away the whole download queue.',
+      'Paused downloads show their last known progress and switch the main queue action to Resume Download.',
+      'Cancel Queue is now separate from Pause and clearly clears queued downloads.',
+      'Canceling the close cleanup prompt no longer traps the window; the next quit attempt opens the prompt again.',
+    ],
+  },
+  {
     version: '0.2.0',
     label: 'Simple Mode & Release Polish',
-    date: 'Current build',
+    date: 'Beta build',
     notes: [
       'Simple and Advanced modes now look and read clearly different, with a guided Simple Mode path and full hardware monitors in Advanced Mode.',
       'Top Match can now be cleared or restored, so the best pick can change with the job you want the model to do.',
@@ -586,10 +598,14 @@ function App() {
   const [isListTesting, setIsListTesting] = useState(false);
   const [isPullingModels, setIsPullingModels] = useState(false);
   const [isPullCancelRequested, setIsPullCancelRequested] = useState(false);
+  const [isPullPauseRequested, setIsPullPauseRequested] = useState(false);
+  const [isPullPaused, setIsPullPaused] = useState(false);
   const [isDeletingModel, setIsDeletingModel] = useState(false);
   const [pullingModel, setPullingModel] = useState<string | null>(null);
   const [pullProgressByModel, setPullProgressByModel] = useState<Record<string, PullProgressUpdate>>({});
   const pullQueueCancelRef = useRef(false);
+  const pullQueuePauseRef = useRef(false);
+  const activePullProgressIdRef = useRef<string | null>(null);
   const stopRunRef = useRef(false);
   const [pendingDeleteModel, setPendingDeleteModel] = useState<ModelRow | null>(null);
   const [listTestResult, setListTestResult] = useState<ListTestResult | null>(savedHistory?.listTestResult ?? null);
@@ -1093,6 +1109,7 @@ function App() {
   const cancelCloseCleanup = useCallback(() => {
     setCloseCleanupOpen(false);
     setCloseCleanupMessage(null);
+    void agentArcadeApi.cancelCloseApp().catch(() => undefined);
   }, []);
 
   const deleteRowsThenClose = useCallback(async (rows: ModelRow[], label: string) => {
@@ -1383,8 +1400,11 @@ function App() {
       }
 
       pullQueueCancelRef.current = true;
+      pullQueuePauseRef.current = false;
       setIsPullCancelRequested(true);
-      void agentArcadeApi.abortPull();
+      setIsPullPauseRequested(false);
+      setIsPullPaused(false);
+      void agentArcadeApi.abortPull(activePullProgressIdRef.current ?? undefined, 'cancel');
       setQueuedModelIds(new Set<string>());
       setPullProgressByModel((current) => {
         if (!pullingModel) return {};
@@ -1400,8 +1420,8 @@ function App() {
       });
       setActivity(
         pullingModel
-          ? `Stopping the download queue after ${pullingModel}. Ollama may finish this pull, but no more queued models will start.`
-          : 'Stopping the download queue. No more queued models will start.',
+          ? `Canceling the download queue and stopping ${pullingModel}.`
+          : 'Canceling the download queue.',
       );
       return;
     }
@@ -1417,6 +1437,37 @@ function App() {
     setActivity(`Download queue canceled. Removed ${formatGb(queuedGb)} of planned downloads.`);
   }, [isPullCancelRequested, isPullingModels, modelRows, ollama.baseUrl, pullingModel, queuedModelIds]);
 
+  const pauseDownloadQueue = useCallback(() => {
+    if (!isPullingModels || !pullingModel) {
+      setActivity('No active download to pause.');
+      return;
+    }
+
+    if (isPullPauseRequested || isPullCancelRequested) {
+      setActivity('Download pause/stop is already requested.');
+      return;
+    }
+
+    pullQueuePauseRef.current = true;
+    pullQueueCancelRef.current = false;
+    setIsPullPauseRequested(true);
+    void agentArcadeApi.abortPull(activePullProgressIdRef.current ?? undefined, 'pause');
+    setPullProgressByModel((current) => {
+      const activeProgress = current[pullingModel] ?? createQueuedPullProgress(pullingModel, ollama.baseUrl);
+      return {
+        ...current,
+        [pullingModel]: {
+          ...activeProgress,
+          phase: 'paused',
+          status: 'Pausing download',
+          speedBps: 0,
+          updatedAt: new Date().toISOString(),
+        },
+      };
+    });
+    setActivity(`Pausing ${pullingModel}. Start Download will resume through Ollama instead of dropping the queue.`);
+  }, [isPullCancelRequested, isPullPauseRequested, isPullingModels, ollama.baseUrl, pullingModel]);
+
   const pullQueuedModels = useCallback(async () => {
     if (queuedRows.length === 0) {
       setActivity('Pick a model to download before starting the queue.');
@@ -1429,7 +1480,10 @@ function App() {
     }
 
     pullQueueCancelRef.current = false;
+    pullQueuePauseRef.current = false;
     setIsPullCancelRequested(false);
+    setIsPullPauseRequested(false);
+    setIsPullPaused(false);
     setIsPullingModels(true);
     let completedCount = 0;
     let wasCancelled = false;
@@ -1445,6 +1499,7 @@ function App() {
 
         const progressId = createRunProgressId('pull');
         activePullModel = row.displayName;
+        activePullProgressIdRef.current = progressId;
         setPullingModel(row.displayName);
         setPullProgressByModel((current) => ({
           ...current,
@@ -1454,13 +1509,13 @@ function App() {
             model: row.displayName,
             baseUrl: ollama.baseUrl,
             phase: 'started',
-            status: 'Starting download',
-            percent: 0,
+            status: current[row.displayName]?.phase === 'paused' ? 'Resuming download' : 'Starting download',
+            percent: current[row.displayName]?.percent ?? 0,
             speedBps: 0,
             updatedAt: new Date().toISOString(),
           },
         }));
-        setActivity(`Downloading ${row.displayName} into ${selectedHost?.hostname ?? 'this computer'}... This can take a while.`);
+        setActivity(`${pullProgressByModel[row.displayName]?.phase === 'paused' ? 'Resuming' : 'Downloading'} ${row.displayName} into ${selectedHost?.hostname ?? 'this computer'}... This can take a while.`);
         await agentArcadeApi.pullModel({
           model: row.displayName,
           baseUrl: ollama.baseUrl,
@@ -1525,6 +1580,38 @@ function App() {
       setActivity(`${completedCount} model${completedCount === 1 ? '' : 's'} downloaded. Refreshing the model list...`);
       await refreshRig();
     } catch (error) {
+      if (pullQueuePauseRef.current && activePullModel) {
+        const pausedModel = activePullModel;
+        setIsPullPaused(true);
+        setQueuedModelIds((current) => {
+          const next = new Set(current);
+          next.add(pausedModel);
+          return next;
+        });
+        setPullProgressByModel((current) => ({
+          ...current,
+          [pausedModel]: {
+            ...(current[pausedModel] ?? createQueuedPullProgress(pausedModel, ollama.baseUrl)),
+            model: pausedModel,
+            baseUrl: ollama.baseUrl,
+            phase: 'paused',
+            status: 'Paused',
+            percent: current[pausedModel]?.percent ?? null,
+            speedBps: 0,
+            error: null,
+            updatedAt: new Date().toISOString(),
+          },
+        }));
+        setActivity(`Paused ${pausedModel}. Start Download will resume through Ollama's cached layers when possible.`);
+        return;
+      }
+
+      if (pullQueueCancelRef.current) {
+        setPullProgressByModel({});
+        setActivity('Download queue canceled. No more queued models will start.');
+        return;
+      }
+
       if (activePullModel) {
         const failedModel = activePullModel;
         setPullProgressByModel((current) => ({
@@ -1544,12 +1631,15 @@ function App() {
       }
       setActivity(`Model download failed: ${getErrorMessage(error)}`);
     } finally {
+      activePullProgressIdRef.current = null;
       setPullingModel(null);
       setIsPullingModels(false);
       setIsPullCancelRequested(false);
+      setIsPullPauseRequested(false);
       pullQueueCancelRef.current = false;
+      pullQueuePauseRef.current = false;
     }
-  }, [ollama.baseUrl, ollama.ready, queuedRows, refreshRig, selectedHost?.hostname]);
+  }, [ollama.baseUrl, ollama.ready, pullProgressByModel, queuedRows, refreshRig, selectedHost?.hostname]);
 
   const queueMissingSpeedDateModels = useCallback((rows: ModelRow[]) => {
     const missingRows = rows.filter((row) => !row.installed && !queuedModelIds.has(row.displayName));
@@ -2033,10 +2123,10 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (queuedRows.length > 0 && !isPullingModels && ollama.ready) {
+    if (queuedRows.length > 0 && !isPullingModels && !isPullPaused && ollama.ready) {
       void pullQueuedModels();
     }
-  }, [isPullingModels, ollama.ready, pullQueuedModels, queuedRows.length]);
+  }, [isPullPaused, isPullingModels, ollama.ready, pullQueuedModels, queuedRows.length]);
 
   const prevTopScoreRef = useRef<number | null>(null);
   useEffect(() => {
@@ -2127,6 +2217,8 @@ function App() {
             isListTesting={isListTesting}
             isPulling={isPullingModels}
             isPullCancelRequested={isPullCancelRequested}
+            isPullPauseRequested={isPullPauseRequested}
+            isPullPaused={isPullPaused}
             isDeletingModel={isDeletingModel}
             pullingModel={pullingModel}
             listTestResult={listTestResult}
@@ -2138,6 +2230,7 @@ function App() {
             onDeleteModel={requestDeleteModel}
             onQueueModel={queueModel}
             onPullQueued={pullQueuedModels}
+            onPauseQueue={pauseDownloadQueue}
             onCancelQueue={cancelDownloadQueue}
             onToggleShortlist={toggleShortlist}
             onOpenSuiteEditor={() => setSuiteEditorOpen(true)}
@@ -2283,6 +2376,9 @@ function App() {
         isPulling={isPullingModels}
         pullingModel={pullingModel}
         isPullCancelRequested={isPullCancelRequested}
+        isPullPauseRequested={isPullPauseRequested}
+        isPullPaused={isPullPaused}
+        onPauseQueue={pauseDownloadQueue}
         onCancelQueue={cancelDownloadQueue}
         onOpenDownloads={() => selectNav('models')}
         onOpenChat={async () => {
@@ -6293,6 +6389,8 @@ function ModelCabinet({
   isBenchmarking,
   isPulling,
   isPullCancelRequested,
+  isPullPauseRequested,
+  isPullPaused,
   isDeletingModel,
   pullingModel,
   shortlistedCount,
@@ -6301,6 +6399,7 @@ function ModelCabinet({
   onDeleteModel,
   onQueueModel,
   onPullQueued,
+  onPauseQueue,
   onCancelQueue,
   onToggleShortlist,
   onOpenSpeedDate,
@@ -6330,6 +6429,8 @@ function ModelCabinet({
   isListTesting: boolean;
   isPulling: boolean;
   isPullCancelRequested: boolean;
+  isPullPauseRequested: boolean;
+  isPullPaused: boolean;
   isDeletingModel: boolean;
   pullingModel: string | null;
   listTestResult: ListTestResult | null;
@@ -6341,6 +6442,7 @@ function ModelCabinet({
   onDeleteModel: (row: ModelRow) => void;
   onQueueModel: (row: ModelRow) => void;
   onPullQueued: () => void;
+  onPauseQueue: () => void;
   onCancelQueue: () => void;
   onToggleShortlist: (row: ModelRow) => void;
   onOpenSuiteEditor: () => void;
@@ -6412,20 +6514,28 @@ function ModelCabinet({
   const visibleQueuePreview = queuedPreviewRows.slice(0, queuePreviewLimit);
   const hiddenQueueCount = Math.max(0, queuedPreviewRows.length - visibleQueuePreview.length);
   const queueStatusLabel = isPullCancelRequested
-    ? 'Stopping after current'
-    : isPulling
-      ? 'Downloading now'
-      : queuedCount > 0
-        ? `${queuedCount} queued · ${formatGb(diskGuard.queuedGb)}`
-        : 'No downloads queued';
+    ? 'Canceling download'
+    : isPullPauseRequested
+      ? 'Pausing download'
+      : isPullPaused
+        ? 'Paused'
+        : isPulling
+          ? 'Downloading now'
+          : queuedCount > 0
+            ? `${queuedCount} queued · ${formatGb(diskGuard.queuedGb)}`
+            : 'No downloads queued';
   const queuePreviewText = visibleQueuePreview.map((row) => row.displayName).join(', ');
   const queueHelperText = isPullCancelRequested
-    ? `Finishing ${pullingModel ?? 'the current Ollama pull'}, then stopping the queue.`
-    : isPulling
-      ? `Pulling ${pullingModel ?? 'the current model'} through Ollama. Stop Queue skips anything not started yet.`
-      : queuedCount > 0
-        ? `Ready to download ${queuePreviewText || 'queued models'}${hiddenQueueCount > 0 ? ` and ${hiddenQueueCount} more` : ''}.`
-        : 'Use Get Model on a contestant to stage a download.';
+    ? `Stopping ${pullingModel ?? 'the current Ollama pull'} and clearing the queue.`
+    : isPullPauseRequested
+      ? `Pausing ${pullingModel ?? 'the current model'} and keeping it queued.`
+      : isPullPaused
+        ? 'Paused downloads stay queued. Start Download resumes through Ollama cached layers when possible.'
+        : isPulling
+          ? `Pulling ${pullingModel ?? 'the current model'} through Ollama. Pause keeps it queued; Cancel clears the queue.`
+          : queuedCount > 0
+            ? `Ready to download ${queuePreviewText || 'queued models'}${hiddenQueueCount > 0 ? ` and ${hiddenQueueCount} more` : ''}.`
+            : 'Use Get Model on a contestant to stage a download.';
   const visibleRows = useMemo(() => {
     const filteredRows = rows.filter((row) => {
       const score = getModelScore(row, modelScores);
@@ -6788,7 +6898,7 @@ function ModelCabinet({
           <div className="queue-chip-list" aria-label="Queued downloads">
             {isPulling && pullingModel && (
               <span
-                className={isPullCancelRequested ? 'queue-chip stopping' : 'queue-chip active'}
+                className={isPullCancelRequested ? 'queue-chip stopping' : isPullPauseRequested ? 'queue-chip paused' : 'queue-chip active'}
                 title={pullingModel}
               >
                 <RefreshCw aria-hidden="true" />
@@ -6815,18 +6925,30 @@ function ModelCabinet({
               disabled={queuedCount === 0 || isPulling}
             >
               <Download aria-hidden="true" />
-              {isPulling ? 'Downloading' : queuedCount > 0 ? 'Start Download' : 'Download'}
+              {isPulling ? 'Downloading' : isPullPaused ? 'Resume Download' : queuedCount > 0 ? 'Start Download' : 'Download'}
             </button>
+            {isPulling && (
+              <button
+                type="button"
+                className="mini-button outline queue-pause-button"
+                onClick={onPauseQueue}
+                disabled={isPullPauseRequested || isPullCancelRequested}
+                title="Pause the active Ollama pull and keep it in the queue"
+              >
+                <Pause aria-hidden="true" />
+                {isPullPauseRequested ? 'Pausing' : 'Pause'}
+              </button>
+            )}
             {(queuedCount > 0 || isPulling) && (
               <button
                 type="button"
                 className="mini-button outline queue-cancel-button"
                 onClick={onCancelQueue}
                 disabled={isPullCancelRequested}
-                title={isPulling ? 'Stop after the current Ollama pull finishes' : 'Cancel all queued downloads'}
+                title={isPulling ? 'Cancel the active Ollama pull and clear queued downloads' : 'Cancel all queued downloads'}
               >
                 <X aria-hidden="true" />
-                {isPullCancelRequested ? 'Stopping' : isPulling ? 'Stop Queue' : 'Cancel Queue'}
+                {isPullCancelRequested ? 'Canceling' : isPulling ? 'Cancel Queue' : 'Cancel Queue'}
               </button>
             )}
           </div>
@@ -10078,6 +10200,9 @@ function Ticker({
   isPulling,
   pullingModel,
   isPullCancelRequested,
+  isPullPauseRequested,
+  isPullPaused,
+  onPauseQueue,
   onCancelQueue,
   onOpenDownloads,
   onOpenChat,
@@ -10090,6 +10215,9 @@ function Ticker({
   isPulling: boolean;
   pullingModel: string | null;
   isPullCancelRequested: boolean;
+  isPullPauseRequested: boolean;
+  isPullPaused: boolean;
+  onPauseQueue: () => void;
   onCancelQueue: () => void;
   onOpenDownloads: () => void;
   onOpenChat: () => void;
@@ -10152,6 +10280,9 @@ function Ticker({
           isPulling={isPulling}
           pullingModel={pullingModel}
           isPullCancelRequested={isPullCancelRequested}
+          isPullPauseRequested={isPullPauseRequested}
+          isPullPaused={isPullPaused}
+          onPauseQueue={onPauseQueue}
           onCancelQueue={onCancelQueue}
           onOpenDownloads={onOpenDownloads}
         />
@@ -10179,6 +10310,9 @@ function DownloadTickerDock({
   isPulling,
   pullingModel,
   isPullCancelRequested,
+  isPullPauseRequested,
+  isPullPaused,
+  onPauseQueue,
   onCancelQueue,
   onOpenDownloads,
 }: {
@@ -10187,6 +10321,9 @@ function DownloadTickerDock({
   isPulling: boolean;
   pullingModel: string | null;
   isPullCancelRequested: boolean;
+  isPullPauseRequested: boolean;
+  isPullPaused: boolean;
+  onPauseQueue: () => void;
   onCancelQueue: () => void;
   onOpenDownloads: () => void;
 }) {
@@ -10217,8 +10354,12 @@ function DownloadTickerDock({
     ? 'Download failed'
     : phase === 'complete'
       ? 'Download complete'
+      : phase === 'paused' || isPullPaused
+        ? 'Download paused'
       : isPullCancelRequested
         ? 'Stopping download'
+        : isPullPauseRequested
+          ? 'Pausing download'
         : isPulling
           ? 'Downloading'
           : queuedRows.length > 0
@@ -10244,16 +10385,28 @@ function DownloadTickerDock({
       <div className="ticker-download-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
         <i style={{ width: `${trackPercent}%` }} />
       </div>
+      {isPulling && (
+        <button
+          type="button"
+          className="ticker-download-pause"
+          onClick={onPauseQueue}
+          disabled={isPullPauseRequested || isPullCancelRequested}
+          title="Pause the active Ollama pull and keep it queued"
+        >
+          <Pause aria-hidden="true" />
+          {isPullPauseRequested ? 'Pausing' : 'Pause'}
+        </button>
+      )}
       {(queuedRows.length > 0 || isPulling) && (
         <button
           type="button"
           className="ticker-download-stop"
           onClick={onCancelQueue}
           disabled={isPullCancelRequested}
-          title={isPulling ? 'Stop after the current Ollama pull finishes' : 'Cancel all queued downloads'}
+          title={isPulling ? 'Cancel the active Ollama pull and clear queued downloads' : 'Cancel all queued downloads'}
         >
           <X aria-hidden="true" />
-          {isPullCancelRequested ? 'Stopping' : isPulling ? 'Stop' : 'Cancel'}
+          {isPullCancelRequested ? 'Canceling' : 'Cancel'}
         </button>
       )}
     </section>
@@ -12219,6 +12372,7 @@ function getPullProgressStatusLabel(
 ) {
   if (phase === 'failed') return 'Download failed';
   if (phase === 'complete') return 'Download complete';
+  if (phase === 'paused') return 'Download paused';
   if (isStopping) return 'Stopping after current pull';
   if (isActive) return progress?.status || `Downloading ${getQueueChipModelName(model)}`;
   if (queued) return 'Queued for download';
@@ -12232,6 +12386,14 @@ function getPullProgressDetailLabel(
 ) {
   if (phase === 'failed') return progress?.error || 'Ollama reported an error.';
   if (phase === 'complete') return '100% complete.';
+  if (phase === 'paused') {
+    const sizeLabel = progress?.completedBytes && progress?.totalBytes
+      ? `${formatBytes(progress.completedBytes)} / ${formatBytes(progress.totalBytes)}`
+      : progress?.completedBytes
+        ? formatBytes(progress.completedBytes)
+        : '';
+    return sizeLabel ? `${sizeLabel} · paused. Start Download resumes.` : 'Paused. Start Download resumes through Ollama.';
+  }
   if (phase === 'queued') return '0% · waiting for Start Download.';
 
   const percent = typeof progress?.percent === 'number' ? `${Math.round(progress.percent)}%` : '--%';

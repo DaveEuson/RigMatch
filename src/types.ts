@@ -177,7 +177,7 @@ export type PullProgressUpdate = {
   id: string;
   model: string;
   baseUrl?: string;
-  phase: 'queued' | 'started' | 'pulling' | 'complete' | 'failed';
+  phase: 'queued' | 'started' | 'pulling' | 'paused' | 'complete' | 'failed';
   status: string;
   percent: number | null;
   completedBytes?: number | null;
@@ -283,7 +283,7 @@ export type AgentArcadeApi = {
   scanLan: () => Promise<ScanResponse>;
   addHostByAddress: (address: string) => Promise<NetworkHost>;
   pullModel: (request: { model: string; baseUrl?: string; progressId?: string }) => Promise<PullModelResponse>;
-  abortPull: (progressId?: string) => Promise<void>;
+  abortPull: (progressId?: string, reason?: 'pause' | 'cancel') => Promise<void>;
   deleteModel: (request: { model: string; baseUrl?: string }) => Promise<DeleteModelResponse>;
   runAdvancedGenerate: (request: AdvancedGenerateRequest) => Promise<AdvancedGenerateResponse>;
   runBenchmark: (request: {
@@ -303,6 +303,7 @@ export type AgentArcadeApi = {
   checkForUpdates: (channel?: UpdateChannel) => Promise<UpdateCheckResponse>;
   openUpdatePage: (channel?: UpdateChannel) => Promise<{ url: string }>;
   closeApp: () => Promise<{ ok: boolean }>;
+  cancelCloseApp: () => Promise<{ ok: boolean }>;
   onAppCloseRequest?: (callback: () => void) => () => void;
   syncScores: (scores: Record<string, unknown>) => Promise<void>;
   openChatApp: () => Promise<{ ok: boolean; reason?: string }>;

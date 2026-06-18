@@ -3328,6 +3328,12 @@ button.model-pool-empty-slot.interactive:disabled {
   background: rgba(255, 128, 110, 0.12);
 }
 
+.queue-chip.paused {
+  color: #ffe2a8;
+  border-color: rgba(239, 188, 90, 0.74);
+  background: rgba(239, 188, 90, 0.12);
+}
+
 .queue-chip.muted {
   color: var(--muted);
   border-style: dashed;
@@ -3348,6 +3354,11 @@ button.model-pool-empty-slot.interactive:disabled {
 .queue-cancel-button:not(:disabled) {
   color: #ffd2c9;
   border-color: rgba(255, 128, 110, 0.7);
+}
+
+.queue-pause-button:not(:disabled) {
+  color: #ffe2a8;
+  border-color: rgba(239, 188, 90, 0.68);
 }
 
 .disk-guard em {
@@ -4206,6 +4217,19 @@ tbody tr.computer-row.selected {
 
 .download-progress-inline.complete .download-progress-track i {
   background: var(--green);
+}
+
+.download-progress-inline.paused {
+  border-color: rgba(239, 188, 90, 0.5);
+}
+
+.download-progress-inline.paused .download-progress-copy strong,
+.download-progress-inline.paused .download-progress-copy span {
+  color: var(--gold);
+}
+
+.download-progress-inline.paused .download-progress-track i {
+  background: linear-gradient(90deg, var(--gold), rgba(239, 188, 90, 0.42));
 }
 
 .download-progress-inline.failed {
@@ -8083,7 +8107,7 @@ tbody tr.computer-row.selected {
   position: relative;
   min-width: 0;
   margin: 6px 8px;
-  padding: 7px 76px 7px 8px;
+  padding: 7px 142px 7px 8px;
   border: 1px solid rgba(105, 167, 183, 0.38);
   border-radius: 12px;
   background:
@@ -8098,6 +8122,10 @@ tbody tr.computer-row.selected {
 
 .ticker-download-dock.failed {
   border-color: rgba(255, 90, 90, 0.5);
+}
+
+.ticker-download-dock.paused {
+  border-color: rgba(239, 188, 90, 0.46);
 }
 
 .ticker-download-main {
@@ -8169,7 +8197,7 @@ tbody tr.computer-row.selected {
 .ticker-download-track {
   position: absolute;
   left: 31px;
-  right: 76px;
+  right: 142px;
   bottom: 5px;
   height: 4px;
   overflow: hidden;
@@ -8194,10 +8222,14 @@ tbody tr.computer-row.selected {
   background: linear-gradient(90deg, #ff5a5a, #ff9b6f);
 }
 
+.ticker-download-dock.paused .ticker-download-track i {
+  background: linear-gradient(90deg, var(--gold), rgba(239, 188, 90, 0.42));
+}
+
+.ticker-download-pause,
 .ticker-download-stop {
   position: absolute;
   top: 50%;
-  right: 7px;
   transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
@@ -8213,11 +8245,24 @@ tbody tr.computer-row.selected {
   cursor: pointer;
 }
 
+.ticker-download-pause {
+  right: 72px;
+  border-color: rgba(239, 188, 90, 0.34);
+  color: var(--gold);
+  background: rgba(239, 188, 90, 0.08);
+}
+
+.ticker-download-stop {
+  right: 7px;
+}
+
+.ticker-download-pause:disabled,
 .ticker-download-stop:disabled {
   opacity: 0.48;
   cursor: wait;
 }
 
+.ticker-download-pause svg,
 .ticker-download-stop svg {
   width: 11px;
   height: 11px;

@@ -8,7 +8,7 @@ const api = {
   scanLan: () => ipcRenderer.invoke('network:scanLan'),
   addHostByAddress: (address) => ipcRenderer.invoke('network:addHostByAddress', address),
   pullModel: (request) => ipcRenderer.invoke('ollama:pullModel', request),
-  abortPull: (progressId) => ipcRenderer.invoke('ollama:abortPull', progressId),
+  abortPull: (progressId, reason) => ipcRenderer.invoke('ollama:abortPull', progressId, reason),
   deleteModel: (request) => ipcRenderer.invoke('ollama:deleteModel', request),
   runAdvancedGenerate: (request) => ipcRenderer.invoke('ollama:advancedGenerate', request),
   runBenchmark: (request) => ipcRenderer.invoke('benchmark:run', request),
@@ -30,6 +30,7 @@ const api = {
   checkForUpdates: (channel) => ipcRenderer.invoke('app:checkForUpdates', channel),
   openUpdatePage: (channel) => ipcRenderer.invoke('app:openUpdatePage', channel),
   closeApp: () => ipcRenderer.invoke('app:closeReady'),
+  cancelCloseApp: () => ipcRenderer.invoke('app:closeCanceled'),
   onAppCloseRequest: (callback) => {
     const listener = () => callback();
     ipcRenderer.on('app:closeRequested', listener);

@@ -378,13 +378,14 @@ function registerHandlers() {
   handleLogged('ollama:getCatalog', 'catalog', (_event, options) => getOllamaCatalog(options));
   handleLogged('ollama:openDownload', 'ollama', () => openOllamaDownload());
   handleLogged('ollama:pullModel', 'ollama', (event, request) => pullModel(request, event.sender));
-  ipcMain.handle('ollama:abortPull', (event, progressId) => {
+  ipcMain.handle('ollama:abortPull', (event, progressId, reason) => {
     assertTrustedIpcSender(event);
+    const abortReason = reason === 'pause' ? 'pause' : 'cancel';
     if (typeof progressId === 'string' && progressId) {
-      activePullControllers.get(progressId)?.abort();
+      activePullControllers.get(progressId)?.abort(abortReason);
       return;
     }
-    activePullControllers.forEach((controller) => controller.abort());
+    activePullControllers.forEach((entry) => entry.abort(abortReason));
   });
   handleLogged('ollama:deleteModel', 'ollama', (_event, request) => deleteModel(request));
   handleLogged('ollama:advancedGenerate', 'ollama', (_event, request) => runAdvancedGenerate(request));
@@ -410,6 +411,14 @@ function registerHandlers() {
       return { ok: true };
     }
     win.close();
+    return { ok: true };
+  });
+  ipcMain.handle('app:closeCanceled', (event) => {
+    assertTrustedIpcSender(event);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) return { ok: false };
+
+    closePromptPendingWindowIds.delete(win.id);
     return { ok: true };
   });
   ipcMain.handle('app:checkAutoUpdate', async (event) => {
@@ -1950,7 +1959,14 @@ async function pullModel(request = {}, sender) {
     baseUrl,
   });
   const controller = new AbortController();
-  activePullControllers.set(progressId, controller);
+  let abortReason = null;
+  activePullControllers.set(progressId, {
+    controller,
+    abort(reason = 'cancel') {
+      abortReason = reason;
+      controller.abort();
+    },
+  });
   const timeoutMs = 1000 * 60 * 45;
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let lastStatus = 'Pulled';
@@ -2050,11 +2066,15 @@ async function pullModel(request = {}, sender) {
     }, true);
   } catch (error) {
     const message = error?.name === 'AbortError'
-      ? `Timed out downloading ${model} from ${getUrlOrigin(baseUrl)} after ${timeoutMs} ms.`
+      ? abortReason === 'pause'
+        ? `Paused ${model}. Start Download will resume through Ollama.`
+        : abortReason === 'cancel'
+          ? `Canceled ${model}.`
+          : `Timed out downloading ${model} from ${getUrlOrigin(baseUrl)} after ${timeoutMs} ms.`
       : getLogErrorMessage(error);
     emit({
       phase: 'failed',
-      status: 'Download failed',
+      status: abortReason === 'pause' ? 'Download paused' : abortReason === 'cancel' ? 'Download canceled' : 'Download failed',
       percent: null,
       completedBytes: null,
       totalBytes: null,
@@ -2073,7 +2093,7 @@ async function pullModel(request = {}, sender) {
     throw error;
   } finally {
     clearTimeout(timer);
-    if (activePullControllers.get(progressId) === controller) activePullControllers.delete(progressId);
+    if (activePullControllers.get(progressId)?.controller === controller) activePullControllers.delete(progressId);
   }
 
   return {
