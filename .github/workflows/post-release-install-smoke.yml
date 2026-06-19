@@ -1,0 +1,151 @@
+name: Post-release install smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to verify
+        required: true
+        default: v0.2.2
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux install smoke (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: x64
+            appimage_suffix: linux-x86_64.AppImage
+            deb_suffix: linux-amd64.deb
+          - os: ubuntu-24.04-arm
+            label: arm64
+            appimage_suffix: linux-arm64.AppImage
+            deb_suffix: linux-arm64.deb
+
+    steps:
+      - name: Download Linux release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          APPIMAGE_SUFFIX: ${{ matrix.appimage_suffix }}
+          DEB_SUFFIX: ${{ matrix.deb_suffix }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          appimage="RigMatch.AI-${version}-${APPIMAGE_SUFFIX}"
+          deb="RigMatch.AI-${version}-${DEB_SUFFIX}"
+
+          mkdir -p assets
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$appimage" \
+            --pattern "$deb" \
+            --dir assets
+
+          test -s "assets/$appimage"
+          test -s "assets/$deb"
+          sha256sum "assets/$appimage" "assets/$deb"
+
+      - name: Verify AppImage can be extracted
+        env:
+          TAG: ${{ inputs.tag }}
+          APPIMAGE_SUFFIX: ${{ matrix.appimage_suffix }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          appimage="assets/RigMatch.AI-${version}-${APPIMAGE_SUFFIX}"
+
+          chmod +x "$appimage"
+          "$appimage" --appimage-extract >/tmp/rigmatch-appimage-extract.log 2>&1
+          test -x squashfs-root/AppRun
+          find squashfs-root -maxdepth 2 -type f \( -name "*.desktop" -o -name "RigMatch.AI" -o -name "rigmatch-ai" \) -print
+
+      - name: Install Debian package
+        env:
+          TAG: ${{ inputs.tag }}
+          DEB_SUFFIX: ${{ matrix.deb_suffix }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          deb="assets/RigMatch.AI-${version}-${DEB_SUFFIX}"
+
+          sudo apt-get update
+          sudo apt-get install -y "./$deb"
+          dpkg -s rigmatch-ai
+          dpkg -L rigmatch-ai | sed -n '1,80p'
+          test -e /usr/bin/rigmatch-ai
+
+  macos:
+    name: macOS DMG smoke (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: Apple Silicon
+            dmg_suffix: mac-arm64.dmg
+          - os: macos-15-intel
+            label: Intel
+            dmg_suffix: mac-x64.dmg
+
+    steps:
+      - name: Download macOS release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          DMG_SUFFIX: ${{ matrix.dmg_suffix }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          dmg="RigMatch.AI-${version}-${DMG_SUFFIX}"
+
+          mkdir -p assets
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$dmg" \
+            --dir assets
+
+          test -s "assets/$dmg"
+          shasum -a 256 "assets/$dmg"
+
+      - name: Mount DMG and inspect apps
+        env:
+          TAG: ${{ inputs.tag }}
+          DMG_SUFFIX: ${{ matrix.dmg_suffix }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          dmg="assets/RigMatch.AI-${version}-${DMG_SUFFIX}"
+          mountpoint="$RUNNER_TEMP/rigmatch-dmg"
+          install_dir="$RUNNER_TEMP/RigMatchInstallSmoke"
+
+          mkdir -p "$mountpoint" "$install_dir"
+          hdiutil attach "$dmg" -nobrowse -quiet -mountpoint "$mountpoint"
+          trap 'hdiutil detach "$mountpoint" -quiet || true' EXIT
+
+          find "$mountpoint" -maxdepth 2 -name "*.app" -print
+          test -d "$mountpoint/RigMatch.AI.app"
+          test -d "$mountpoint/RigMatch Chat.app"
+
+          app_version="$(plutil -extract CFBundleShortVersionString raw -o - "$mountpoint/RigMatch.AI.app/Contents/Info.plist")"
+          test "$app_version" = "$version"
+          test -x "$mountpoint/RigMatch.AI.app/Contents/MacOS/RigMatch.AI"
+
+          ditto "$mountpoint/RigMatch.AI.app" "$install_dir/RigMatch.AI.app"
+          ditto "$mountpoint/RigMatch Chat.app" "$install_dir/RigMatch Chat.app"
+          xattr -cr "$install_dir/RigMatch.AI.app" "$install_dir/RigMatch Chat.app"
+
+          test -x "$install_dir/RigMatch.AI.app/Contents/MacOS/RigMatch.AI"
+          find "$install_dir/RigMatch Chat.app/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print -quit | grep .
