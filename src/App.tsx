@@ -313,7 +313,7 @@ const navItems: NavItem[] = [
 
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
 const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
-const APP_VERSION = '0.2.1';
+const APP_VERSION = '0.2.2';
 const CURRENT_SCORE_SCHEMA_VERSION = 3;
 const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
 const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
@@ -362,9 +362,20 @@ const releaseNotes: Array<{
   notes: string[];
 }> = [
   {
+    version: '0.2.2',
+    label: 'Model Radar & Provider Clarity',
+    date: 'Nightly build',
+    notes: [
+      'Models can now be filtered by developer, making it easier to compare families from Google, Meta, Microsoft, Mistral AI, Qwen, and others.',
+      "What's New now watches the live Ollama catalog for newly seen models and can send a local desktop notification when new entries appear.",
+      'Provider copy is clearer: RigMatch 0.2.x is Ollama-first, with LM Studio and OpenAI-compatible local server support planned after the current flow is stable.',
+      'The first App.tsx cleanup pass moved sidebar, model-news, and origin-mapping code into focused modules.',
+    ],
+  },
+  {
     version: '0.2.1',
     label: 'Download Pause & Resume',
-    date: 'Current build',
+    date: 'Beta build',
     notes: [
       'Model downloads now have a Pause control that keeps the active model queued instead of throwing away the whole download queue.',
       'Paused downloads show their last known progress and switch the main queue action to Resume Download.',
