@@ -1,0 +1,87 @@
+import type { ModelRow } from '../types';
+
+export type ModelFamilyId = 'deepseek' | 'llama' | 'qwen' | 'mistral' | 'gemma' | 'phi' | 'generic';
+
+export type ModelOrigin = {
+  family: ModelFamilyId;
+  country: string;
+  organization: string;
+};
+
+export function getModelFamily(model: string): ModelFamilyId {
+  const lower = String(model || '').toLowerCase();
+  if (lower.includes('deepseek')) return 'deepseek';
+  if (lower.includes('llama')) return 'llama';
+  if (lower.includes('qwen')) return 'qwen';
+  if (lower.includes('mistral')) return 'mistral';
+  if (lower.includes('gemma')) return 'gemma';
+  if (lower.includes('phi')) return 'phi';
+  return 'generic';
+}
+
+export function getModelOrigin(model: string): ModelOrigin {
+  const family = getModelFamily(model);
+  const lower = String(model || '').toLowerCase();
+
+  switch (family) {
+    case 'deepseek':
+      return { family, country: 'China', organization: 'DeepSeek' };
+    case 'qwen':
+      return { family, country: 'China', organization: 'Alibaba Cloud' };
+    case 'mistral':
+      return { family, country: 'France', organization: 'Mistral AI' };
+    case 'llama':
+      return { family, country: 'United States', organization: 'Meta' };
+    case 'gemma':
+      return { family, country: 'United States', organization: 'Google' };
+    case 'phi':
+      return { family, country: 'United States', organization: 'Microsoft' };
+    case 'generic':
+    default:
+      if (lower.includes('granite')) return { family, country: 'United States', organization: 'IBM' };
+      if (lower.includes('starcoder')) return { family, country: 'International', organization: 'BigCode' };
+      if (lower.includes('command-r') || lower.includes('aya')) return { family, country: 'Canada', organization: 'Cohere' };
+      if (lower.includes('yi')) return { family, country: 'China', organization: '01.AI' };
+      if (lower.includes('smollm') || lower.includes('zephyr')) return { family, country: 'United States', organization: 'Hugging Face' };
+      if (lower.includes('falcon')) return { family, country: 'United Arab Emirates', organization: 'TII' };
+      if (lower.includes('solar')) return { family, country: 'South Korea', organization: 'Upstage' };
+      if (lower.includes('neural-chat')) return { family, country: 'United States', organization: 'Intel' };
+      if (lower.includes('wizardlm')) return { family, country: 'United States', organization: 'Microsoft' };
+      if (lower.includes('openhermes') || lower.includes('nous')) return { family, country: 'United States', organization: 'Nous Research' };
+      if (lower.includes('dolphin')) return { family, country: 'United States', organization: 'Cognitive Computations' };
+      if (lower.includes('llava') || lower.includes('bakllava')) return { family, country: 'United States', organization: 'LLaVA' };
+      if (lower.includes('moondream')) return { family, country: 'United States', organization: 'Moondream' };
+      if (lower.includes('minicpm')) return { family, country: 'China', organization: 'OpenBMB' };
+      if (lower.includes('tinyllama')) return { family, country: 'Singapore', organization: 'TinyLlama' };
+      if (lower.includes('orca-mini')) return { family, country: 'Unknown', organization: 'Community' };
+      if (lower.includes('vicuna')) return { family, country: 'United States', organization: 'LMSYS' };
+      return { family, country: 'Unknown', organization: 'Unknown model family' };
+  }
+}
+
+export function getModelDeveloperKey(model: string) {
+  return normalizeDeveloperId(getModelOrigin(model).organization);
+}
+
+export function getDeveloperFilterOptions(rows: ModelRow[]) {
+  const counts = new Map<string, { id: string; label: string; count: number }>();
+
+  rows.forEach((row) => {
+    const origin = getModelOrigin(row.displayName);
+    const id = normalizeDeveloperId(origin.organization);
+    const current = counts.get(id);
+    counts.set(id, {
+      id,
+      label: origin.organization,
+      count: (current?.count ?? 0) + 1,
+    });
+  });
+
+  return Array.from(counts.values())
+    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
+    .slice(0, 10);
+}
+
+function normalizeDeveloperId(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'unknown';
+}

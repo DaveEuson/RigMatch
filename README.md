@@ -1,6 +1,6 @@
 # RigMatch.AI
 
-Find the best local AI model for your computer. RigMatch benchmarks your installed Ollama models on your actual hardware — scored for speed, answer quality, and hardware fit — wrapped in a dating game show theme to make testing less boring.
+Find the best local AI model for your computer. RigMatch 0.2.x benchmarks through Ollama on your actual hardware — scored for speed, answer quality, and hardware fit — wrapped in a dating game show theme to make testing less boring.
 
 <p align="center">
   <img src="Screenshots/readme/rigmatch-readme-hero.svg" alt="RigMatch.AI matches local Ollama models to your actual hardware" width="100%">
@@ -62,7 +62,7 @@ sudo apt install libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 xdg-utils libats
 
 ## Quick Start
 
-1. Install and start [Ollama](https://ollama.com).
+1. Install and start [Ollama](https://ollama.com), the current RigMatch test engine.
 2. Download RigMatch.AI from the [Releases](../../releases) page and install it.
 3. Open RigMatch and click **Check Local** — it will detect your Ollama setup.
 4. Pick up to five models from the Models hub.
@@ -82,6 +82,22 @@ sudo apt install libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 xdg-utils libats
 - Scores each model on answer quality, speed, and hardware fit
 - Picks a **Top Match** for your specific rig
 - Opens **RigMatch Chat** so you can talk to your top model right away
+
+## Provider Support
+
+RigMatch is **Ollama-first in 0.2.x**.
+
+| Provider | Status | Notes |
+|---|---|---|
+| Ollama | Supported now | RigMatch detects installed Ollama models, downloads from the Ollama library, and runs benchmarks through the local Ollama API. |
+| LM Studio | Planned | RigMatch does not currently run against LM Studio's model library or OpenAI-compatible local server. |
+| OpenAI-compatible local servers | Planned | Future provider layer target after the Ollama flow is stable. |
+
+### Can RigMatch use models I already downloaded in LM Studio?
+
+Not directly yet. LM Studio downloads are usually local GGUF files managed by LM Studio. RigMatch 0.2.x talks to Ollama, so it can use models already installed in Ollama, but it will not automatically see models that only exist inside LM Studio.
+
+If you already have the same model installed in Ollama, RigMatch should detect it after Ollama is running and **Check Local** is clicked. If the model only exists in LM Studio, you may need an Ollama copy or a manual GGUF import with an Ollama `Modelfile` until native LM Studio support lands.
 
 ## How Scoring Works
 
@@ -114,7 +130,7 @@ Everything runs locally. No cloud, no account, no subscription. Your prompts and
 
 ### To use RigMatch
 
-- [Ollama](https://ollama.com) installed and running locally
+- [Ollama](https://ollama.com) installed and running locally; RigMatch 0.2.x uses Ollama as its test engine
 - At least one Ollama model installed — or use RigMatch to download one
 - Windows, macOS, or Linux
 

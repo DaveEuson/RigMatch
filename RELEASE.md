@@ -48,6 +48,7 @@ For the Rust companion audit, run `cargo audit` from `rigmatch-chat/src-tauri`.
 - Upgrade install over the previous beta keeps existing scorecards/settings.
 - RigMatch Chat launches from the main app without a "not found" error.
 - Check Local detects Ollama, installed models, CPU, RAM, VRAM, and storage.
+- Provider Support copy clearly says RigMatch 0.2.x uses Ollama now and LM Studio support is planned.
 - A five-model Speed Dating lineup completes and writes scorecards.
 - Missing selected models open setup/download instead of disabling the flow.
 - Close cleanup modal supports Cancel, I understand, delete not scored, and delete low scored.
@@ -69,6 +70,7 @@ Ask testers for:
 - RigMatch.AI version
 - OS and hardware summary
 - Ollama version
+- Current provider/test engine shown in the app
 - Model name/tag
 - Repro steps
 - Relevant app log lines from **Open logs folder**

@@ -3,6 +3,7 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowUpDown,
+  Bell,
   BookOpen,
   Bot,
   Boxes,
@@ -35,6 +36,7 @@ import {
   Settings,
   ShieldCheck,
   ShoppingCart,
+  Sparkles,
   Terminal,
   Trash2,
   Trophy,
@@ -78,6 +80,29 @@ import type {
   UpdateChannel,
   UpdateCheckResponse,
 } from './types';
+import {
+  getDeveloperFilterOptions,
+  getModelDeveloperKey,
+  getModelFamily,
+  getModelOrigin,
+  type ModelFamilyId,
+} from './lib/modelOrigins';
+import {
+  getEmptyModelNewsState,
+  getModelNewsId,
+  getNotificationPermission,
+  getSavedModelNewsNotificationsEnabled,
+  getSavedModelNewsState,
+  MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY,
+  MODEL_NEWS_STORAGE_KEY,
+  notifyNewModelDrops,
+  reconcileModelNews,
+  saveModelNewsState,
+  type ModelNewsState,
+  type ModelNotificationPermission,
+} from './lib/modelNews';
+import { WhatsNewPanel } from './components/WhatsNewPanel';
+import { SideMenu, type NavId, type NavItem } from './components/SideMenu';
 import machineAvatarLocal from './assets/machine-avatar-local.png';
 import modelAvatarDeepSeek from './assets/model-avatar-deepseek.png';
 import modelAvatarGemma from './assets/model-avatar-gemma.png';
@@ -101,15 +126,6 @@ type ChatMessage = {
   content: string;
 };
 
-type NavItem = {
-  id: NavId;
-  label: string;
-  description: string;
-  icon: LucideIcon;
-};
-
-type NavId = 'lan' | 'models' | 'speedDate' | 'bench' | 'agent' | 'history' | 'settings' | 'about';
-
 type UtilityPanelId = Extract<NavId, 'history' | 'settings' | 'about'>;
 
 type ThemeId = 'orange' | 'avocado' | 'mustard' | 'teal' | 'chocolate';
@@ -119,7 +135,6 @@ type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
 type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'origin' | 'source' | 'status' | 'score' | 'speed' | 'pulls';
 type SortDirection = 'asc' | 'desc';
 type ModelQuickFilterId = 'all' | 'installed' | 'fits-vram' | 'scored' | 'unscored' | 'huge';
-type ModelFamilyId = 'deepseek' | 'llama' | 'qwen' | 'mistral' | 'gemma' | 'phi' | 'generic';
 
 const MODEL_AVATAR_ASSETS: Record<ModelFamilyId, string> = {
   deepseek: modelAvatarDeepSeek,
@@ -287,6 +302,7 @@ function playJingle(type: 'speed-date-complete' | 'new-winner' | 'its-a-match') 
 
 const navItems: NavItem[] = [
   { id: 'models', label: 'Models', description: 'Browse, test, compare', icon: Boxes },
+  { id: 'whatsNew', label: "What's New", description: 'New model drops', icon: Bell },
   { id: 'speedDate', label: 'Comparison', description: 'Ranked results & details', icon: Trophy },
   { id: 'history', label: 'Scorecards', description: 'Test rankings', icon: History },
   { id: 'agent', label: 'Top Pick', description: 'Best match profile', icon: Bot },
@@ -583,6 +599,11 @@ function App() {
   const [system, setSystem] = useState<SystemProfile>(demoSystem);
   const [ollama, setOllama] = useState<OllamaStatus>(demoOllama);
   const [catalog, setCatalog] = useState<CatalogModel[]>(demoCatalog.models);
+  const [catalogMeta, setCatalogMeta] = useState({
+    syncedAt: demoCatalog.syncedAt,
+    source: demoCatalog.source,
+    error: demoCatalog.error,
+  });
   const [hosts, setHosts] = useState<NetworkHost[]>(initialHosts);
   const [selectedHostId, setSelectedHostId] = useState(initialSelectedHostId);
   const [selectedModel, setSelectedModel] = useState(savedHistory?.selectedModel ?? 'qwen2.5:7b');
@@ -629,6 +650,9 @@ function App() {
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null);
   const [activity, setActivity] = useState('Contestants is your hub: browse models, run tests, manage downloads, and start Speed Dating.');
   const [activeNavId, setActiveNavId] = useState<NavId>('models');
+  const [modelNews, setModelNews] = useState<ModelNewsState>(() => getSavedModelNewsState());
+  const [modelNewsNotificationsEnabled, setModelNewsNotificationsEnabled] = useState(() => getSavedModelNewsNotificationsEnabled());
+  const [notificationPermission, setNotificationPermission] = useState<ModelNotificationPermission>(() => getNotificationPermission());
   const [appLogs, setAppLogs] = useState<AppLogEntry[]>([]);
   const [logPath, setLogPath] = useState('');
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
@@ -654,6 +678,8 @@ function App() {
     savedHistory?.chatMessagesByModel ?? {},
   );
   const chatMessages = chatMessagesByModel[selectedModel] ?? [welcomeChatMessage];
+  const modelNewsRef = useRef(modelNews);
+  const modelNewsNotificationsEnabledRef = useRef(modelNewsNotificationsEnabled);
 
   const selectedHost = hosts.find((host) => host.id === selectedHostId) ?? hosts[0];
 
@@ -682,6 +708,14 @@ function App() {
       setSelectedModel('qwen2.5:7b');
     }
   }, [modelRows, selectedRow]);
+
+  useEffect(() => {
+    modelNewsRef.current = modelNews;
+  }, [modelNews]);
+
+  useEffect(() => {
+    modelNewsNotificationsEnabledRef.current = modelNewsNotificationsEnabled;
+  }, [modelNewsNotificationsEnabled]);
 
   const canBenchmark = Boolean(selectedRow?.installed && selectedHostCanBenchmark);
   const agentName = getAgentName(selectedModel);
@@ -742,6 +776,26 @@ function App() {
       setSystem(profile);
       setOllama(ollamaStatus);
       setCatalog(catalogResponse.models);
+      setCatalogMeta({
+        syncedAt: catalogResponse.syncedAt,
+        source: catalogResponse.source,
+        error: catalogResponse.error,
+      });
+
+      const newsUpdate = reconcileModelNews(catalogResponse.models, modelNewsRef.current);
+      const shouldNotifyAboutModels = newsUpdate.state.latestNewModelIds.length > 0
+        && modelNewsNotificationsEnabledRef.current
+        && getNotificationPermission() === 'granted';
+      const nextNewsState = shouldNotifyAboutModels
+        ? { ...newsUpdate.state, lastNotifiedAt: new Date().toISOString() }
+        : newsUpdate.state;
+      modelNewsRef.current = nextNewsState;
+      setModelNews(nextNewsState);
+      saveModelNewsState(nextNewsState);
+
+      if (shouldNotifyAboutModels) {
+        notifyNewModelDrops(catalogResponse.models, nextNewsState.latestNewModelIds);
+      }
 
       const localHost: NetworkHost = {
         id: 'localhost',
@@ -772,10 +826,13 @@ function App() {
       const catalogSyncNote = !catalogResponse.error && catalogResponse.models.length > 0
         ? ` Model catalog synced from ${catalogResponse.source}.`
         : '';
+      const modelNewsNote = newsUpdate.state.latestNewModelIds.length > 0
+        ? ` ${newsUpdate.state.latestNewModelIds.length} new model${newsUpdate.state.latestNewModelIds.length === 1 ? '' : 's'} found.`
+        : '';
       setActivity(
         isDesktopRuntime
-          ? `Computer check complete via ${mode}.${catalogNote}${catalogSyncNote}`
-          : `Preview sample data loaded via ${mode}.${catalogNote}${catalogSyncNote}`,
+          ? `Computer check complete via ${mode}.${catalogNote}${catalogSyncNote}${modelNewsNote}`
+          : `Preview sample data loaded via ${mode}.${catalogNote}${catalogSyncNote}${modelNewsNote}`,
       );
     } catch (error) {
       setActivity(`Computer check failed: ${getErrorMessage(error)}`);
@@ -784,12 +841,46 @@ function App() {
     }
   }, []);
 
+  const toggleModelNewsNotifications = useCallback(async () => {
+    const permission = getNotificationPermission();
+    setNotificationPermission(permission);
+
+    if (modelNewsNotificationsEnabled) {
+      setModelNewsNotificationsEnabled(false);
+      modelNewsNotificationsEnabledRef.current = false;
+      window.localStorage.setItem(MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY, 'false');
+      setActivity('Model drop notifications are off. What\'s New will still update when RigMatch scans.');
+      return;
+    }
+
+    if (permission === 'unsupported') {
+      setActivity('This runtime does not support desktop notifications, but What\'s New will still track model drops.');
+      return;
+    }
+
+    let nextPermission = permission;
+    if (permission === 'default') {
+      nextPermission = await Notification.requestPermission();
+      setNotificationPermission(nextPermission);
+    }
+
+    if (nextPermission !== 'granted') {
+      setActivity('Notifications were not enabled. You can still check What\'s New inside RigMatch.');
+      return;
+    }
+
+    setModelNewsNotificationsEnabled(true);
+    modelNewsNotificationsEnabledRef.current = true;
+    window.localStorage.setItem(MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY, 'true');
+    setActivity('Model drop notifications are on. RigMatch will alert you when a scan finds new Ollama models.');
+  }, [modelNewsNotificationsEnabled]);
+
   const openOllamaDownload = useCallback(async () => {
     setActivity('Opening Ollama official download page...');
 
     try {
       await agentArcadeApi.openOllamaDownload();
-      setActivity('Ollama download page opened. Install it, then check this computer again.');
+      setActivity('Ollama download page opened. RigMatch 0.2.x tests through Ollama; LM Studio support is planned.');
     } catch (error) {
       setActivity(`Could not open Ollama download page: ${getErrorMessage(error)}`);
     }
@@ -1015,6 +1106,8 @@ function App() {
       window.localStorage.removeItem(TUTORIAL_STORAGE_KEY);
       window.localStorage.removeItem(UI_MODE_STORAGE_KEY);
       window.localStorage.removeItem(CLEARED_TOP_MATCHES_STORAGE_KEY);
+      window.localStorage.removeItem(MODEL_NEWS_STORAGE_KEY);
+      window.localStorage.removeItem(MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY);
 
       setAppLogs(result.entries);
       setLogPath(result.logPath);
@@ -1035,6 +1128,11 @@ function App() {
       setChatMessagesByModel({});
       setChosenModel(null);
       setClearedTopMatches(new Set<string>());
+      const nextModelNews = getEmptyModelNewsState();
+      modelNewsRef.current = nextModelNews;
+      setModelNews(nextModelNews);
+      modelNewsNotificationsEnabledRef.current = false;
+      setModelNewsNotificationsEnabled(false);
       setSuiteEditorOpen(false);
       setTutorialStep(0);
       setTutorialOpen(true);
@@ -2174,10 +2272,11 @@ function App() {
         ollamaReady={ollama.ready}
         modelCount={modelRows.length}
         shortlistCount={shortlistedRows.length}
+        newModelDropCount={modelNews.latestNewModelIds.length}
         isRunning={isBenchmarking || isListTesting}
         activeId={activeNavId}
         scoredCount={scoredModelCount}
-        topPick={topRigPick}
+        topPickMeta={topRigPick?.score ? getResponseEstimate(topRigPick.score.speed) : (scoredModelCount > 0 ? 'Ready' : 'Wait')}
         uiMode={uiMode}
         onSelect={selectNav}
         onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
@@ -2249,7 +2348,37 @@ function App() {
             modelNotes={modelNotes}
             onSaveModelNote={saveModelNote}
             scoreTrend={scoreTrend}
+            newModelIds={new Set(modelNews.latestNewModelIds)}
             onQuickCheck={requestQuickCheckRow}
+          />
+        )}
+        {activeNavId === 'whatsNew' && (
+          <WhatsNewPanel
+            active={true}
+            catalog={catalog}
+            catalogMeta={catalogMeta}
+            rows={modelRows}
+            modelNews={modelNews}
+            notificationsEnabled={modelNewsNotificationsEnabled}
+            notificationPermission={notificationPermission}
+            isScanning={isScanningRig}
+            renderHeader={(meta) => (
+              <PanelHeader
+                icon={Sparkles}
+                title="What's New"
+                actionLabel={isScanningRig ? 'Checking' : 'Check Now'}
+                onAction={refreshRig}
+                meta={meta}
+              />
+            )}
+            renderAvatar={(model) => <AvatarBust model={model} size="tiny" />}
+            getModelSpecialties={(model) => getModelProfile(model).specialties}
+            formatHistoryTime={formatHistoryTime}
+            formatGb={formatGb}
+            formatPullCount={formatPullCount}
+            onRefresh={refreshRig}
+            onToggleNotifications={toggleModelNewsNotifications}
+            onOpenModel={(model) => { setSelectedModel(model); selectNav('models'); }}
           />
         )}
         {activeNavId === 'speedDate' && (
@@ -2739,99 +2868,6 @@ function TopDeck({
   );
 }
 
-function SideMenu({
-  items,
-  activeId,
-  ollamaReady,
-  modelCount,
-  shortlistCount,
-  scoredCount,
-  isRunning,
-  topPick,
-  uiMode,
-  onSelect,
-  onOpenTutorial,
-  onOpenSupport,
-  bugReportUrl,
-}: {
-  items: NavItem[];
-  activeId: NavId;
-  ollamaReady: boolean;
-  modelCount: number;
-  shortlistCount: number;
-  scoredCount: number;
-  isRunning: boolean;
-  topPick: RigPick | null;
-  uiMode: UiMode;
-  onSelect: (id: NavId) => void;
-  onOpenTutorial: () => void;
-  onOpenSupport: () => void;
-  bugReportUrl: string;
-}) {
-  const navMeta: Record<NavId, string> = {
-    lan: ollamaReady ? 'Ready' : 'Setup',
-    models: `${modelCount}`,
-    speedDate: `${shortlistCount}/5`,
-    bench: isRunning ? 'Live' : '1 model',
-    agent: topPick?.score ? getResponseEstimate(topPick.score.speed) : (scoredCount > 0 ? 'Ready' : 'Wait'),
-    history: scoredCount > 0 ? `${scoredCount}` : 'New',
-    settings: 'Prefs',
-    about: 'Info',
-  };
-
-  return (
-    <aside className="side-menu" aria-label="RigMatch.AI menu">
-      <button type="button" className="side-menu-title" onClick={onOpenTutorial} title="Re-open the getting started guide" aria-label="Open getting started guide">
-        <span>{uiMode === 'advanced' ? 'Advanced Mode' : 'Simple Mode'}</span>
-        <strong>{uiMode === 'advanced' ? 'Power tools visible' : 'Start with Models'}</strong>
-        <small>{uiMode === 'advanced' ? 'Diagnostics, logs, custom tests' : 'Guided path, fewer controls'}</small>
-      </button>
-      <nav className="side-menu-nav" aria-label="Primary navigation">
-        {items.map((item, index) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className={item.id === activeId ? 'side-menu-item active' : 'side-menu-item'}
-              onClick={() => onSelect(item.id)}
-              aria-pressed={item.id === activeId}
-              aria-label={item.label}
-              title={`${item.label}: ${item.description}`}
-            >
-              <b>{index + 1}</b>
-              <Icon aria-hidden="true" />
-              <span className="side-menu-copy">
-                <strong>{item.label}</strong>
-                <small>{item.description}</small>
-              </span>
-              <em>{navMeta[item.id]}</em>
-            </button>
-          );
-        })}
-      </nav>
-      <button
-        type="button"
-        className="side-menu-donate"
-        title="Support RigMatch development"
-        onClick={onOpenSupport}
-      >
-        ☕ Support + upgrade links
-      </button>
-      <a
-        className="side-menu-bug-report"
-        href={bugReportUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        <Bug aria-hidden="true" />
-        Report a bug
-      </a>
-    </aside>
-  );
-}
-
-
 function FirstRunTutorial({
   stepIndex,
   installedCount,
@@ -2858,13 +2894,13 @@ function FirstRunTutorial({
       body: (
         <div className="tutorial-welcome-screen">
           <p className="tutorial-intro-lead">
-            RigMatch tests your installed Ollama models on the same questions, measures speed and answer quality, then recommends the best fit for your hardware.
+            RigMatch 0.2.x tests through Ollama, measures speed and answer quality on this computer, then recommends the best fit for your hardware.
           </p>
           <div className={`tutorial-status-strip ${ollamaReady ? 'ready' : 'offline'}`}>
             {ollamaReady ? (
               <><CheckCircle aria-hidden="true" /> Ollama ready{ollamaVersion ? ` · v${ollamaVersion}` : ''}{installedCount > 0 ? ` · ${installedCount} installed` : ''}{modelCount > installedCount ? ` · ${modelCount} in library` : ''}</>
             ) : (
-              <><AlertCircle aria-hidden="true" /> Ollama not detected — <button type="button" className="inline-link" onClick={() => window.open('https://ollama.ai', '_blank', 'noopener,noreferrer')}>install it free at ollama.ai</button></>
+              <><AlertCircle aria-hidden="true" /> Ollama test engine not detected — <button type="button" className="inline-link" onClick={() => window.open('https://ollama.ai', '_blank', 'noopener,noreferrer')}>install it free at ollama.ai</button></>
             )}
           </div>
           <div className="tutorial-how-it-works">
@@ -2891,14 +2927,14 @@ function FirstRunTutorial({
     },
     {
       round: '🔧 Setup',
-      title: ollamaReady ? 'Ollama is running — you\'re set up!' : 'Install Ollama to get started',
+      title: ollamaReady ? 'Ollama is running — you\'re set up!' : 'Connect Ollama to test models',
       body: ollamaReady ? (
         <div className="tutorial-intro-body">
           <div className="tutorial-ollama-status ready">
             <CheckCircle aria-hidden="true" />
             Ollama detected{ollamaVersion ? ` — v${ollamaVersion}` : ''}
           </div>
-          <p className="tutorial-intro-lead">Ollama is your local AI engine — <strong>100% free</strong>, no account, no subscription. It runs AI models directly on this computer without any cloud. RigMatch.AI uses it to benchmark and rank models against your specific hardware.</p>
+          <p className="tutorial-intro-lead">Ollama is the current RigMatch test engine — <strong>100% free</strong>, no account, no subscription. RigMatch uses the local Ollama API to benchmark and rank models against your specific hardware.</p>
           <p>You're all set. Hit <strong>Next</strong> to see how the show works.</p>
         </div>
       ) : (
@@ -2907,8 +2943,8 @@ function FirstRunTutorial({
             <AlertCircle aria-hidden="true" />
             Ollama not detected
           </div>
-          <p className="tutorial-intro-lead">Think of Ollama like a mini version of ChatGPT that runs entirely on your own computer — <strong>totally free</strong>, no account, no subscription, no data leaving your machine.</p>
-          <p>It downloads AI models and runs them locally. RigMatch.AI uses it to test each model against your hardware and score how well they actually work on your rig.</p>
+          <p className="tutorial-intro-lead">RigMatch 0.2.x currently tests through Ollama. LM Studio support is planned, but RigMatch cannot directly use models that only exist in LM Studio yet.</p>
+          <p>If you already have models installed in Ollama, RigMatch should detect them after Ollama is running. If your models are only LM Studio GGUF downloads, they may need a separate Ollama import or download for now.</p>
           <div className="tutorial-install-steps">
             <button
               type="button"
@@ -2922,7 +2958,7 @@ function FirstRunTutorial({
           </div>
         </div>
       ),
-      prize: ollamaReady ? 'Engine ready — let\'s meet the contestants.' : 'Install Ollama, start it, then relaunch RigMatch.AI.',
+      prize: ollamaReady ? 'Engine ready — let\'s meet the contestants.' : 'Connect Ollama, start it, then relaunch RigMatch.AI.',
       navId: 'lan' as NavId,
     },
     {
@@ -3604,7 +3640,7 @@ function OllamaPrep({
   if (ready || !isDesktopRuntime) {
     const prepTitle = isDesktopRuntime ? `${platformName} ready` : 'Preview sample data';
     const prepMessage = isDesktopRuntime
-      ? 'This computer is ready. RigMatch tests local Ollama models on this machine.'
+      ? 'This computer is ready. RigMatch 0.2.x tests through local Ollama on this machine.'
       : 'Preview sample data is local-only. The desktop app checks your real Ollama install.';
     return (
       <div className="ollama-prep ready">
@@ -3637,13 +3673,13 @@ function OllamaPrep({
       <div className="install-hero-top">
         <div className="install-hero-icon" aria-hidden="true"><Download /></div>
         <div className="install-hero-copy">
-          <span>One-time setup</span>
-          <strong>Install Ollama to get started</strong>
+          <span>Current test engine</span>
+          <strong>Connect Ollama to test models</strong>
           <p>
-            Ollama is a <strong>free, open-source</strong> program that runs AI models locally.
+            RigMatch 0.2.x currently benchmarks through <strong>Ollama</strong>. LM Studio support is planned, but LM Studio-only downloads are not used directly yet.
             {isLinux
-              ? ' Run the one-line install command below — it sets everything up automatically.'
-              : ' Click below to download and run the installer — it starts Ollama automatically in the background.'}
+              ? ' If Ollama is not installed, run the one-line install command below.'
+              : ' If Ollama is not installed, download and run the installer below.'}
           </p>
         </div>
       </div>
@@ -4712,7 +4748,7 @@ function ThirdPartyModelNotice({ compact = false }: { compact?: boolean }) {
         <span>Third-party model notice</span>
         <strong>Models have their own terms</strong>
         <em>
-          RigMatch benchmarks models through the user's Ollama setup. It does not bundle model weights, sell model access,
+          RigMatch benchmarks models through the user's configured local provider. In 0.2.x, that provider is Ollama. It does not bundle model weights, sell model access,
           or claim endorsement from model providers.
         </em>
       </div>
@@ -5854,6 +5890,11 @@ function UtilityPanel({
             <strong>{ollama.ready ? 'Ready' : 'Offline'}</strong>
             <em>{ollama.baseUrl}</em>
           </div>
+          <div className="utility-stat">
+            <span>Provider Support</span>
+            <strong>Ollama now; LM Studio planned</strong>
+            <em>RigMatch 0.2.x tests through Ollama. Models downloaded only inside LM Studio are not used directly yet.</em>
+          </div>
           <div className="utility-stat advanced-only">
             <span>CUDA</span>
             <strong>{getCudaSummary(system.cuda)}</strong>
@@ -6422,6 +6463,7 @@ function ModelCabinet({
   modelNotes,
   onSaveModelNote,
   scoreTrend,
+  newModelIds,
   onQuickCheck,
 }: {
   active: boolean;
@@ -6466,11 +6508,13 @@ function ModelCabinet({
   modelNotes: Record<string, string>;
   onSaveModelNote: (model: string, note: string) => void;
   scoreTrend: Record<string, number[]>;
+  newModelIds: Set<string>;
   onQuickCheck: (row: ModelRow) => void;
 }) {
   const [modelQuery, setModelQuery] = useState('');
   const [quickFilter, setQuickFilter] = useState<ModelQuickFilterId>('fits-vram');
   const [taskFilter, setTaskFilter] = useState<ModelTaskFilterId | null>(null);
+  const [developerFilter, setDeveloperFilter] = useState('all');
   const [sortKey, setSortKey] = useState<ModelSortKey>('status');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   // Column widths: Model, Size, Good For, Origin, Status, Match, Popularity (Actions fills remainder)
@@ -6512,6 +6556,8 @@ function ModelCabinet({
     () => Object.fromEntries(TASK_FILTER_CHIPS.map((chip) => [chip.id, rows.filter((row) => modelMatchesTask(row, chip.id)).length])),
     [rows],
   );
+  const developerFilterOptions = useMemo(() => getDeveloperFilterOptions(rows), [rows]);
+  const activeDeveloperFilter = developerFilterOptions.some((option) => option.id === developerFilter) ? developerFilter : 'all';
   const shortlistedRows = useMemo(
     () => rows.filter((row) => shortlistIds.has(row.displayName)).slice(0, 5),
     [rows, shortlistIds],
@@ -6553,14 +6599,16 @@ function ModelCabinet({
       const score = getModelScore(row, modelScores);
       const queued = queuedModelIds.has(row.displayName);
       const matchesQuery = !query || getModelSearchText(row, queued, score).includes(query);
+      const matchesDeveloper = activeDeveloperFilter === 'all' || getModelDeveloperKey(row.displayName) === activeDeveloperFilter;
       return matchesQuery
+        && matchesDeveloper
         && modelMatchesQuickFilter(row, quickFilter, score, vramGb)
         && (!taskFilter || modelMatchesTask(row, taskFilter));
     });
 
     return sortModelRows(filteredRows, sortKey, sortDirection, queuedModelIds, modelScores, benchmarkByModel);
-  }, [benchmarkByModel, modelScores, query, quickFilter, taskFilter, queuedModelIds, rows, sortDirection, sortKey, vramGb]);
-  const modelCountLabel = query || quickFilter !== 'all' || taskFilter ? `${visibleRows.length}/${rows.length} models` : `${rows.length} models`;
+  }, [activeDeveloperFilter, benchmarkByModel, modelScores, query, quickFilter, taskFilter, queuedModelIds, rows, sortDirection, sortKey, vramGb]);
+  const modelCountLabel = query || quickFilter !== 'all' || taskFilter || activeDeveloperFilter !== 'all' ? `${visibleRows.length}/${rows.length} models` : `${rows.length} models`;
   const vramLabel = vramGb > 0 ? `${formatGb(vramGb)} VRAM` : 'detected VRAM';
 
   const changeSort = (nextKey: ModelSortKey) => {
@@ -6631,6 +6679,31 @@ function ModelCabinet({
             </button>
           ))}
         </div>
+        <div className="model-task-filters model-developer-filters" aria-label="Filter by developer">
+          <span className="model-task-filters-label">By:</span>
+          <button
+            type="button"
+            className={activeDeveloperFilter === 'all' ? 'active' : ''}
+            onClick={() => setDeveloperFilter('all')}
+            aria-pressed={activeDeveloperFilter === 'all' ? 'true' : 'false'}
+          >
+            All
+            <em>{rows.length}</em>
+          </button>
+          {developerFilterOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className={activeDeveloperFilter === option.id ? 'active' : ''}
+              onClick={() => setDeveloperFilter(activeDeveloperFilter === option.id ? 'all' : option.id)}
+              aria-pressed={activeDeveloperFilter === option.id ? 'true' : 'false'}
+              title={`Show models by ${option.label}`}
+            >
+              {option.label}
+              <em>{option.count}</em>
+            </button>
+          ))}
+        </div>
         <div className="model-task-filters advanced-only" aria-label="Filter by use case">
           <span className="model-task-filters-label">For:</span>
           {TASK_FILTER_CHIPS.map((chip) => (
@@ -6690,6 +6763,7 @@ function ModelCabinet({
               const statusLabel = getModelStatusLabel(row, queued);
               const score = getModelScore(row, modelScores);
               const rowBenchmark = benchmarkByModel[row.displayName];
+              const isNewModel = newModelIds.has(getModelNewsId(row));
               const goodForTags = getModelGoodForTags(row);
               const hardwareFit = getHardwareFit(row, vramGb);
               const platformFit = getPlatformFit(row.displayName, platform);
@@ -6742,6 +6816,7 @@ function ModelCabinet({
                       <AvatarBust model={row.displayName} size="tiny" />
                       <span>
                         {row.displayName}
+                        {isNewModel && <em className="model-new-sub">New</em>}
                         {row.params && <em className="model-params-sub">{row.params}</em>}
                         {row.pulls != null && (
                           <em className="model-pulls-sub" title={`${row.pulls.toLocaleString()} pulls on Ollama`}>{formatPullCount(row.pulls)} pulls</em>
@@ -11900,39 +11975,6 @@ function getSavedTutorialSeen() {
 
 function isThemeId(value: string | null): value is ThemeId {
   return themeOptions.some((theme) => theme.id === value);
-}
-
-function getModelFamily(model: string): ModelFamilyId {
-  const lower = String(model || '').toLowerCase();
-  if (lower.includes('deepseek')) return 'deepseek';
-  if (lower.includes('llama')) return 'llama';
-  if (lower.includes('qwen')) return 'qwen';
-  if (lower.includes('mistral')) return 'mistral';
-  if (lower.includes('gemma')) return 'gemma';
-  if (lower.includes('phi')) return 'phi';
-  return 'generic';
-}
-
-function getModelOrigin(model: string) {
-  const family = getModelFamily(model);
-
-  switch (family) {
-    case 'deepseek':
-      return { family, country: 'China', organization: 'DeepSeek' };
-    case 'qwen':
-      return { family, country: 'China', organization: 'Alibaba Cloud' };
-    case 'mistral':
-      return { family, country: 'France', organization: 'Mistral AI' };
-    case 'llama':
-      return { family, country: 'United States', organization: 'Meta' };
-    case 'gemma':
-      return { family, country: 'United States', organization: 'Google' };
-    case 'phi':
-      return { family, country: 'United States', organization: 'Microsoft' };
-    case 'generic':
-    default:
-      return { family, country: 'Unknown', organization: 'Unknown model family' };
-  }
 }
 
 function getModelProfile(model: string): ModelProfile {
