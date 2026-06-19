@@ -364,7 +364,7 @@ const releaseNotes: Array<{
   {
     version: '0.2.2',
     label: 'Model Radar & Provider Clarity',
-    date: 'Nightly build',
+    date: 'Current build',
     notes: [
       'Models can now be filtered by developer, making it easier to compare families from Google, Meta, Microsoft, Mistral AI, Qwen, and others.',
       "What's New now watches the live Ollama catalog for newly seen models and can send a local desktop notification when new entries appear.",

@@ -12,7 +12,7 @@ Find the best local AI model for your computer. RigMatch 0.2.x benchmarks throug
 
 ## Download
 
-**Beta v0.2.1** — [Downloads →](../../releases/latest)
+**Beta v0.2.2** — [Downloads →](../../releases/latest)
 
 Nightly builds for upcoming fixes and previews are listed under [pre-releases](../../releases).
 
