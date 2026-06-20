@@ -523,6 +523,66 @@ textarea:focus {
   flex-shrink: 0;
 }
 
+.rm-personality-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.18);
+  flex-shrink: 0;
+}
+
+.rm-personality-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.rm-personality-select-wrap span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+.rm-personality-select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 700;
+  outline: none;
+}
+
+.rm-personality-select:focus {
+  border-color: var(--border-gold);
+}
+
+.rm-profile-tool-btn {
+  padding: 6px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.rm-profile-tool-btn:hover {
+  border-color: var(--border-gold);
+  color: var(--gold);
+}
+
 /* ── Transcript ──────────────────────────────────────────────────── */
 
 .rm-transcript {
@@ -805,6 +865,10 @@ textarea:focus {
 }
 
 .rm-btn-secondary:hover { background: var(--bg-hover); }
+.rm-btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 .rm-btn-primary {
   padding: 7px 16px;
@@ -1047,6 +1111,88 @@ textarea:focus {
 }
 
 .rm-btn-danger:hover { background: rgba(227,103,117,0.22); }
+
+/* ── Personality Modal ─────────────────────────────────────────── */
+
+.rm-personality-modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-gold);
+  border-radius: 12px;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.6);
+  width: 460px;
+  max-width: 94vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.rm-personality-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.rm-personality-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.rm-personality-preview strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.rm-personality-preview span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.rm-personality-preview b {
+  color: var(--gold);
+  font-family: "Courier New", monospace;
+  font-weight: 800;
+}
+
+.rm-avatar-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rm-model-truth-card {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(149, 180, 106, 0.28);
+  background: rgba(149, 180, 106, 0.08);
+}
+
+.rm-model-truth-card strong {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.rm-model-truth-card span {
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.5;
+}
 
 /* ── Rank medals & chosen badge ─────────────────────────────────── */
 

@@ -4,7 +4,13 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { listModels, streamChat, getVersion, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
-import { loadSettings, saveSettings, type AppSettings } from "./lib/settings";
+import {
+  DEFAULT_PERSONALITY_ID,
+  loadSettings,
+  saveSettings,
+  type AppSettings,
+  type PersonalityProfile,
+} from "./lib/settings";
 
 marked.use({ breaks: true, gfm: true });
 
@@ -40,6 +46,13 @@ type AppMessage = {
 type ConnectionStatus = "connected" | "disconnected" | "checking";
 type ModelScore = { speed: number; sobriety: number; stability: number; fit: number; total: number; grade: string };
 type SystemStats = { cpuPercent: number; ramUsedGb: number; ramTotalGb: number };
+type PersonalityDraft = {
+  id: string | null;
+  name: string;
+  instructions: string;
+  avatarDataUrl?: string;
+  builtIn?: boolean;
+};
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
@@ -198,10 +211,14 @@ const FAMILY_AVATAR: Record<AvatarFamily, string> = {
 
 function BuddyAvatar({
   family,
+  customSrc,
+  alt,
   size = "normal",
   isTyping = false,
 }: {
   family: AvatarFamily;
+  customSrc?: string;
+  alt?: string;
   size?: "sm" | "normal" | "lg";
   isTyping?: boolean;
 }) {
@@ -209,8 +226,8 @@ function BuddyAvatar({
     size === "lg" ? "rm-avatar rm-avatar-lg" : size === "sm" ? "rm-avatar rm-avatar-sm" : "rm-avatar";
   return (
     <img
-      src={FAMILY_AVATAR[family]}
-      alt={family}
+      src={customSrc || FAMILY_AVATAR[family]}
+      alt={alt || family}
       className={`${sizeClass}${isTyping ? " rm-avatar-typing" : ""}`}
     />
   );
@@ -232,10 +249,12 @@ export default function App() {
   const [rigScores, setRigScores] = useState<Record<string, ModelScore>>(() => loadCachedBridge().scores);
   const [chosenModel, setChosenModel] = useState<string | null>(() => loadCachedBridge().chosen);
   const [profileModal, setProfileModal] = useState<Buddy | null>(null);
+  const [personalityEditor, setPersonalityEditor] = useState<PersonalityDraft | null>(null);
   const [sysStats, setSysStats] = useState<SystemStats | null>(null);
   const [vramUsedGb, setVramUsedGb] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const avatarFileRef = useRef<HTMLInputElement>(null);
   const prevTypingRef = useRef<string | null>(null);
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -275,8 +294,27 @@ export default function App() {
     });
   }, [buddies, settings.hiddenModels, modelRankings, chosenModel]);
 
-  const activeMessages = activeBuddy ? (messagesByModel[activeBuddy] ?? []) : [];
   const activeBuddyObj = visibleBuddies.find((b) => b.modelName === activeBuddy) ?? null;
+  const activePersonality = useMemo(
+    () =>
+      settings.personalityProfiles.find((profile) => profile.id === settings.activePersonalityId)
+      ?? settings.personalityProfiles.find((profile) => profile.id === DEFAULT_PERSONALITY_ID)
+      ?? settings.personalityProfiles[0],
+    [settings.activePersonalityId, settings.personalityProfiles],
+  );
+  const activeConversationKey = activeBuddy
+    ? `${activeBuddy}::${activePersonality?.id ?? DEFAULT_PERSONALITY_ID}`
+    : null;
+  const activeMessages = useMemo(() => {
+    if (!activeConversationKey) return [];
+    if (messagesByModel[activeConversationKey]) return messagesByModel[activeConversationKey];
+    if (activePersonality?.id === DEFAULT_PERSONALITY_ID && activeBuddy) {
+      return messagesByModel[activeBuddy] ?? [];
+    }
+    return [];
+  }, [activeBuddy, activeConversationKey, activePersonality?.id, messagesByModel]);
+  const assistantDisplayName = activePersonality?.name || activeBuddyObj?.displayName || "RigMatch Buddy";
+  const assistantAvatarSrc = activePersonality?.avatarDataUrl;
   const normalizeHiddenModels = useCallback(
     (hiddenModels: string[]) => {
       const knownModels = new Set(buddies.map((b) => b.modelName));
@@ -400,19 +438,27 @@ export default function App() {
   // ── Send message ──────────────────────────────────────────────────────────
 
   const sendMessage = useCallback(async () => {
-    if (!activeBuddy || !draft.trim() || typingModel) return;
+    if (!activeBuddy || !activeConversationKey || !draft.trim() || typingModel) return;
 
     const userMsg: AppMessage = { id: genId(), role: "user", content: draft.trim(), ts: Date.now() };
-    const history = messagesByModel[activeBuddy] ?? [];
+    const history = messagesByModel[activeConversationKey]
+      ?? (activePersonality?.id === DEFAULT_PERSONALITY_ID ? (messagesByModel[activeBuddy] ?? []) : []);
     const updatedHistory = [...history, userMsg];
 
-    setMessagesByModel((prev) => ({ ...prev, [activeBuddy]: updatedHistory }));
+    setMessagesByModel((prev) => ({ ...prev, [activeConversationKey]: updatedHistory }));
     setDraft("");
     setTypingModel(activeBuddy);
 
+    const profilePrompt = [
+      settings.systemPrompt.trim(),
+      activePersonality?.instructions.trim()
+        ? `Personality profile: ${activePersonality.name}\n${activePersonality.instructions.trim()}`
+        : "",
+      `You are currently powered by the local Ollama model "${activeBuddy}". Do not claim to be a different model.`,
+    ].filter(Boolean).join("\n\n");
     const ollamaHistory: ChatMessage[] = [
-      ...(settings.systemPrompt.trim()
-        ? [{ role: "system" as const, content: settings.systemPrompt.trim() }]
+      ...(profilePrompt
+        ? [{ role: "system" as const, content: profilePrompt }]
         : []),
       ...updatedHistory.map((m) => ({ role: m.role, content: m.content })),
     ];
@@ -431,14 +477,14 @@ export default function App() {
         (token) => {
           accumulated += token;
           setMessagesByModel((prev) => {
-            const msgs = prev[activeBuddy] ?? [];
+            const msgs = prev[activeConversationKey] ?? [];
             const last = msgs[msgs.length - 1];
             if (last?.id === assistantId) {
-              return { ...prev, [activeBuddy]: [...msgs.slice(0, -1), { ...last, content: accumulated }] };
+              return { ...prev, [activeConversationKey]: [...msgs.slice(0, -1), { ...last, content: accumulated }] };
             }
             return {
               ...prev,
-              [activeBuddy]: [
+              [activeConversationKey]: [
                 ...msgs,
                 { id: assistantId, role: "assistant", content: accumulated, ts: Date.now() },
               ],
@@ -451,12 +497,12 @@ export default function App() {
       if ((err as Error)?.name !== "AbortError") {
         setMessagesByModel((prev) => ({
           ...prev,
-          [activeBuddy]: [
-            ...(prev[activeBuddy] ?? []),
+          [activeConversationKey]: [
+            ...(prev[activeConversationKey] ?? []),
             {
               id: genId(),
               role: "assistant",
-              content: "⚠️ Something went wrong. Is Ollama still running?",
+              content: "Something went wrong. Is Ollama still running?",
               ts: Date.now(),
             },
           ],
@@ -465,7 +511,16 @@ export default function App() {
     } finally {
       setTypingModel(null);
     }
-  }, [activeBuddy, draft, messagesByModel, settings.ollamaUrl, settings.systemPrompt, typingModel]);
+  }, [
+    activeBuddy,
+    activeConversationKey,
+    activePersonality,
+    draft,
+    messagesByModel,
+    settings.ollamaUrl,
+    settings.systemPrompt,
+    typingModel,
+  ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -494,6 +549,8 @@ export default function App() {
       ollamaUrl: rawUrl,
       userName: draftSettings.userName.trim() || "You",
       systemPrompt: draftSettings.systemPrompt,
+      activePersonalityId: draftSettings.activePersonalityId,
+      personalityProfiles: draftSettings.personalityProfiles,
       theme: draftSettings.theme,
       muted: draftSettings.muted,
       hiddenModels,
@@ -534,6 +591,90 @@ export default function App() {
     setDraftSettings(next);
     if (activeBuddy === modelName) setActiveBuddy(null);
     setProfileModal(null);
+  };
+
+  const applyPersonalitySettings = (nextSettings: AppSettings) => {
+    saveSettings(nextSettings);
+    setSettings(nextSettings);
+    setDraftSettings(nextSettings);
+  };
+
+  const selectPersonality = (id: string) => {
+    const next = { ...settings, activePersonalityId: id };
+    applyPersonalitySettings(next);
+  };
+
+  const openNewPersonality = () => {
+    setPersonalityEditor({
+      id: null,
+      name: "Custom Buddy",
+      instructions: "Answer in a helpful, clear style.",
+    });
+  };
+
+  const openEditPersonality = (profile: PersonalityProfile) => {
+    setPersonalityEditor({
+      id: profile.id,
+      name: profile.name,
+      instructions: profile.instructions,
+      avatarDataUrl: profile.avatarDataUrl,
+      builtIn: profile.builtIn,
+    });
+  };
+
+  const savePersonality = () => {
+    if (!personalityEditor) return;
+    const name = personalityEditor.name.trim() || "Custom Buddy";
+    const id = personalityEditor.id ?? `custom-${Date.now().toString(36)}`;
+    const nextProfile: PersonalityProfile = {
+      id,
+      name: name.slice(0, 40),
+      instructions: personalityEditor.instructions.trim(),
+      avatarDataUrl: personalityEditor.avatarDataUrl,
+      builtIn: personalityEditor.builtIn,
+    };
+    const profiles = settings.personalityProfiles.some((profile) => profile.id === id)
+      ? settings.personalityProfiles.map((profile) => (profile.id === id ? nextProfile : profile))
+      : [...settings.personalityProfiles, nextProfile];
+    const next = {
+      ...settings,
+      activePersonalityId: id,
+      personalityProfiles: profiles,
+    };
+    applyPersonalitySettings(next);
+    setPersonalityEditor(null);
+  };
+
+  const deletePersonality = (id: string) => {
+    const profile = settings.personalityProfiles.find((item) => item.id === id);
+    if (!profile || profile.builtIn) return;
+    if (!window.confirm(`Delete personality profile "${profile.name}"?`)) return;
+    const profiles = settings.personalityProfiles.filter((item) => item.id !== id);
+    const next = {
+      ...settings,
+      activePersonalityId: settings.activePersonalityId === id ? DEFAULT_PERSONALITY_ID : settings.activePersonalityId,
+      personalityProfiles: profiles,
+    };
+    applyPersonalitySettings(next);
+    setPersonalityEditor(null);
+  };
+
+  const handleAvatarUpload = (file: File | undefined) => {
+    if (!file || !file.type.startsWith("image/")) return;
+    if (file.size > 700_000) {
+      alert("Avatar image is too large. Use an image under 700 KB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : undefined;
+      if (result) {
+        setPersonalityEditor((draftProfile) =>
+          draftProfile ? { ...draftProfile, avatarDataUrl: result } : draftProfile,
+        );
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -625,7 +766,9 @@ export default function App() {
             </div>
           )}
           {visibleBuddies.map((buddy) => {
-            const msgs = messagesByModel[buddy.modelName] ?? [];
+            const buddyConversationKey = `${buddy.modelName}::${activePersonality?.id ?? DEFAULT_PERSONALITY_ID}`;
+            const msgs = messagesByModel[buddyConversationKey]
+              ?? (activePersonality?.id === DEFAULT_PERSONALITY_ID ? (messagesByModel[buddy.modelName] ?? []) : []);
             const lastMsg = msgs[msgs.length - 1];
             const isActive = buddy.modelName === activeBuddy;
             const isTyping = typingModel === buddy.modelName;
@@ -710,45 +853,90 @@ export default function App() {
         {activeBuddyObj ? (
           <>
             <div className="rm-chat-header">
-              <BuddyAvatar family={activeBuddyObj.avatarFamily} isTyping={typingModel === activeBuddy} size="sm" />
+              <BuddyAvatar
+                family={activeBuddyObj.avatarFamily}
+                customSrc={assistantAvatarSrc}
+                alt={assistantDisplayName}
+                isTyping={typingModel === activeBuddy}
+                size="sm"
+              />
               <div className="rm-chat-header-info">
                 <strong>
                   {activeBuddy && modelRankings.has(activeBuddy) && (
                     <span className="rm-rank-medal" title={`Ranked #${modelRankings.get(activeBuddy)} by RigMatch score`}>{RANK_MEDALS[modelRankings.get(activeBuddy)!]}</span>
                   )}
-                  {activeBuddyObj.displayName}
+                  {assistantDisplayName}
                 </strong>
                 <em>
                   {typingModel === activeBuddy
                     ? "typing…"
                     : connectionStatus === "connected"
-                      ? "Online · via Ollama"
+                      ? `using ${activeBuddyObj.displayName} through Ollama`
                       : "Offline"}
                 </em>
               </div>
-              <span className="rm-chat-header-model">{activeBuddyObj.modelName}</span>
+              <span className="rm-chat-header-model" title="Actual local Ollama model">
+                MODEL {activeBuddyObj.modelName}
+              </span>
+            </div>
+
+            <div className="rm-personality-bar">
+              <div className="rm-personality-select-wrap">
+                <span>Personality</span>
+                <select
+                  className="rm-personality-select"
+                  value={settings.activePersonalityId}
+                  onChange={(event) => selectPersonality(event.target.value)}
+                >
+                  {settings.personalityProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>{profile.name}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                className="rm-profile-tool-btn"
+                onClick={() => activePersonality && openEditPersonality(activePersonality)}
+              >
+                Edit
+              </button>
+              <button type="button" className="rm-profile-tool-btn" onClick={openNewPersonality}>
+                New
+              </button>
             </div>
 
             <div className="rm-transcript" ref={transcriptRef}>
               {activeMessages.length === 0 && (
                 <div className="rm-transcript-empty">
-                  <BuddyAvatar family={activeBuddyObj.avatarFamily} size="lg" />
+                  <BuddyAvatar
+                    family={activeBuddyObj.avatarFamily}
+                    customSrc={assistantAvatarSrc}
+                    alt={assistantDisplayName}
+                    size="lg"
+                  />
                   <p>
-                    Start a conversation with <strong>{activeBuddyObj.displayName}</strong>.
+                    Start a conversation with <strong>{assistantDisplayName}</strong>.
                   </p>
-                  <p className="rm-transcript-hint">Running locally · No data leaves your computer</p>
+                  <p className="rm-transcript-hint">
+                    Personality profile on top of {activeBuddyObj.modelName} · No data leaves your computer
+                  </p>
                 </div>
               )}
               {activeMessages.map((msg) => (
                 <div key={msg.id} className={`rm-message rm-message-${msg.role}`}>
                   {msg.role === "assistant" && (
                     <div className="rm-message-avatar">
-                      <BuddyAvatar family={activeBuddyObj.avatarFamily} size="sm" />
+                      <BuddyAvatar
+                        family={activeBuddyObj.avatarFamily}
+                        customSrc={assistantAvatarSrc}
+                        alt={assistantDisplayName}
+                        size="sm"
+                      />
                     </div>
                   )}
                   <div className="rm-message-bubble">
                     <div className="rm-message-sender">
-                      {msg.role === "user" ? settings.userName : activeBuddyObj.displayName}
+                      {msg.role === "user" ? settings.userName : assistantDisplayName}
                     </div>
                     {msg.role === "assistant" ? (
                       <div
@@ -767,7 +955,13 @@ export default function App() {
               {typingModel === activeBuddy && (
                 <div className="rm-message rm-message-assistant">
                   <div className="rm-message-avatar">
-                    <BuddyAvatar family={activeBuddyObj.avatarFamily} isTyping size="sm" />
+                    <BuddyAvatar
+                      family={activeBuddyObj.avatarFamily}
+                      customSrc={assistantAvatarSrc}
+                      alt={assistantDisplayName}
+                      isTyping
+                      size="sm"
+                    />
                   </div>
                   <div className="rm-message-bubble">
                     <div className="rm-typing-dots">
@@ -783,7 +977,7 @@ export default function App() {
             <div className="rm-compose">
               <textarea
                 className="rm-compose-input"
-                placeholder={`Message ${activeBuddyObj.displayName}…`}
+                placeholder={`Message ${assistantDisplayName} using ${activeBuddyObj.modelName}...`}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -901,6 +1095,125 @@ export default function App() {
           </div>
         );
       })()}
+
+      {/* ── Personality Editor Modal ──────────────────────────────── */}
+      {personalityEditor && (
+        <div className="rm-modal-backdrop" onClick={() => setPersonalityEditor(null)}>
+          <div className="rm-personality-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="rm-settings-header">
+              <strong>{personalityEditor.id ? "Edit Personality" : "New Personality"}</strong>
+              <button type="button" className="rm-settings-close" onClick={() => setPersonalityEditor(null)}>
+                x
+              </button>
+            </div>
+
+            <div className="rm-personality-body">
+              <div className="rm-personality-preview">
+                <BuddyAvatar
+                  family={activeBuddyObj?.avatarFamily ?? "generic"}
+                  customSrc={personalityEditor.avatarDataUrl}
+                  alt={personalityEditor.name}
+                  size="lg"
+                />
+                <div>
+                  <strong>{personalityEditor.name || "Custom Buddy"}</strong>
+                  <span>
+                    Uses actual model: <b>{activeBuddyObj?.modelName ?? "selected Ollama model"}</b>
+                  </span>
+                </div>
+              </div>
+
+              <label className="rm-settings-field">
+                <span>Profile name</span>
+                <input
+                  type="text"
+                  value={personalityEditor.name}
+                  onChange={(event) =>
+                    setPersonalityEditor((profile) =>
+                      profile ? { ...profile, name: event.target.value } : profile,
+                    )
+                  }
+                  placeholder="Helpful Coder"
+                />
+              </label>
+
+              <label className="rm-settings-field">
+                <span>Personality instructions</span>
+                <textarea
+                  className="rm-settings-textarea"
+                  value={personalityEditor.instructions}
+                  onChange={(event) =>
+                    setPersonalityEditor((profile) =>
+                      profile ? { ...profile, instructions: event.target.value } : profile,
+                    )
+                  }
+                  placeholder="Describe tone, role, formatting preferences, and boundaries for this chat personality."
+                  rows={5}
+                />
+                <em>These instructions are sent as a system message before the chat history.</em>
+              </label>
+
+              <div className="rm-avatar-tools">
+                <input
+                  ref={avatarFileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  hidden
+                  onChange={(event) => {
+                    handleAvatarUpload(event.target.files?.[0]);
+                    event.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  className="rm-btn-secondary"
+                  onClick={() => avatarFileRef.current?.click()}
+                >
+                  Upload avatar
+                </button>
+                <button
+                  type="button"
+                  className="rm-btn-secondary"
+                  disabled={!personalityEditor.avatarDataUrl}
+                  onClick={() =>
+                    setPersonalityEditor((profile) =>
+                      profile ? { ...profile, avatarDataUrl: undefined } : profile,
+                    )
+                  }
+                >
+                  Clear avatar
+                </button>
+              </div>
+
+              <div className="rm-model-truth-card">
+                <strong>Model stays visible</strong>
+                <span>
+                  This profile changes name, avatar, and behavior only. Responses still come from the selected
+                  local Ollama model shown in the chat header.
+                </span>
+              </div>
+            </div>
+
+            <div className="rm-settings-footer">
+              {personalityEditor.id && !personalityEditor.builtIn && (
+                <button
+                  type="button"
+                  className="rm-btn-danger"
+                  onClick={() => personalityEditor.id && deletePersonality(personalityEditor.id)}
+                >
+                  Delete
+                </button>
+              )}
+              <button type="button" className="rm-btn-secondary" onClick={() => setPersonalityEditor(null)}>
+                Cancel
+              </button>
+              <button type="button" className="rm-btn-primary" onClick={savePersonality}>
+                Save Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Settings Modal ──────────────────────────────────────────── */}
       {settingsOpen && (

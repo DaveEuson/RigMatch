@@ -313,7 +313,7 @@ const navItems: NavItem[] = [
 
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
 const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
-const APP_VERSION = '0.2.2';
+const APP_VERSION = '0.2.3';
 const CURRENT_SCORE_SCHEMA_VERSION = 3;
 const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
 const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
@@ -362,9 +362,19 @@ const releaseNotes: Array<{
   notes: string[];
 }> = [
   {
+    version: '0.2.3',
+    label: 'Personality Profiles',
+    date: 'Nightly build',
+    notes: [
+      'RigMatch Chat now supports personality profiles with custom names, behavior instructions, and optional local avatar uploads.',
+      'The selected local Ollama model stays visible in the chat header, so personality never hides which model is actually responding.',
+      'Chat history is separated by model and personality profile, making it easier to test the same model with different assistant styles.',
+    ],
+  },
+  {
     version: '0.2.2',
     label: 'Model Radar & Provider Clarity',
-    date: 'Current build',
+    date: 'Beta build',
     notes: [
       'Models can now be filtered by developer, making it easier to compare families from Google, Meta, Microsoft, Mistral AI, Qwen, and others.',
       "What's New now watches the live Ollama catalog for newly seen models and can send a local desktop notification when new entries appear.",
