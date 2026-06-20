@@ -12174,14 +12174,23 @@ td {
 
 .top-deck {
   grid-area: top;
-  min-height: 54px;
-  grid-template-columns: minmax(220px, 0.85fr) minmax(210px, 1fr) minmax(320px, 1.35fr) minmax(220px, 0.9fr) minmax(200px, 0.8fr);
+  min-height: 0;
+  grid-template-columns: minmax(230px, 0.85fr) minmax(210px, 0.74fr) minmax(360px, 1.22fr) minmax(230px, 0.82fr) minmax(250px, 0.9fr);
   gap: 6px;
   padding: 6px 10px;
   border: 1px solid rgba(239, 188, 90, 0.32);
   border-radius: 14px;
   background: rgba(33, 27, 43, 0.88);
   box-shadow: var(--shadow);
+  align-items: stretch;
+}
+
+.top-deck > .brand-block,
+.top-deck > .rig-card,
+.top-deck > .mode-focus-card,
+.top-deck > .local-status-card,
+.top-deck > .top-deck-winner {
+  height: 100%;
 }
 
 .top-deck.mode-simple {
@@ -12199,6 +12208,7 @@ td {
 }
 
 .top-deck .brand-block {
+  min-height: 68px;
   padding: 6px 8px;
   gap: 5px 8px;
   grid-template-columns: 28px minmax(0, 1fr);
@@ -12220,6 +12230,7 @@ td {
 }
 
 .top-deck .rig-card {
+  min-height: 68px;
   padding: 6px 8px;
   gap: 7px;
 }
@@ -12246,6 +12257,7 @@ td {
 }
 
 .top-deck .monitor-grid {
+  min-height: 68px;
   gap: 4px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: stretch;
@@ -12280,6 +12292,7 @@ td {
 }
 
 .top-deck .local-status-card {
+  min-height: 68px;
   padding: 6px 8px;
   gap: 7px;
 }
@@ -12312,6 +12325,10 @@ td {
 }
 
 .top-deck-winner {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  min-height: 68px;
   padding: 6px 8px;
   gap: 6px;
   border-radius: 10px;
@@ -12323,8 +12340,35 @@ td {
   flex: 0 0 15px;
 }
 
+.top-deck .top-deck-winner-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  align-items: center;
+  column-gap: 8px;
+  min-width: 0;
+}
+
+.top-deck .top-deck-winner-head {
+  display: contents;
+}
+
 .top-deck-winner span {
   font-size: 8px;
+}
+
+.top-deck .top-deck-winner span,
+.top-deck .top-deck-winner strong,
+.top-deck .top-deck-winner em {
+  grid-column: 1;
+  justify-self: center;
+  text-align: center;
+}
+
+.top-deck .top-deck-winner-actions {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  align-self: center;
 }
 
 .top-deck-winner strong {
@@ -12426,6 +12470,7 @@ td {
   box-shadow: var(--shadow);
   overflow: hidden;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .stage-content > .panel {
@@ -12434,6 +12479,217 @@ td {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.stage-content > :not(.game-show-guide):not(.advanced-host-bar) {
+  min-height: 0;
+}
+
+.stage-content > .game-show-guide {
+  margin: 0;
+  min-height: 98px;
+  border-bottom: 1px solid rgba(239, 188, 90, 0.22);
+  border-radius: 0;
+  background:
+    linear-gradient(90deg, rgba(239, 188, 90, 0.11), rgba(227, 113, 133, 0.08) 48%, rgba(105, 167, 183, 0.09)),
+    rgba(23, 20, 31, 0.9);
+  box-shadow: none;
+  grid-template-columns: minmax(380px, 1.25fr) minmax(320px, 0.86fr) minmax(280px, 0.72fr);
+  align-items: center;
+}
+
+.stage-content > .advanced-host-bar {
+  min-height: 48px;
+  border-bottom: 1px solid rgba(105, 167, 183, 0.26);
+  background:
+    linear-gradient(90deg, rgba(105, 167, 183, 0.11), rgba(107, 90, 168, 0.08)),
+    rgba(16, 20, 30, 0.92);
+}
+
+.stage-content > .advanced-host-bar > svg {
+  width: 18px;
+  height: 18px;
+  color: var(--blue);
+  flex: 0 0 18px;
+}
+
+.stage-content > .advanced-host-bar .mini-button {
+  min-width: 104px;
+  min-height: 30px;
+}
+
+.stage-content .host-card,
+.stage-content .host-actions {
+  border: 1px solid rgba(255, 249, 239, 0.1);
+  background: rgba(9, 12, 18, 0.46);
+}
+
+.stage-content .host-card {
+  min-height: 82px;
+  padding: 10px 12px;
+}
+
+.stage-content .host-badge {
+  border-radius: 12px;
+  box-shadow: 0 0 22px rgba(239, 188, 90, 0.14);
+}
+
+.stage-content .wizard-rounds button {
+  border: 1px solid rgba(255, 249, 239, 0.11);
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: center;
+  align-items: center;
+  gap: 2px 6px;
+  min-height: 62px;
+  padding: 7px 6px;
+}
+
+.stage-content .wizard-rounds button svg {
+  grid-row: 1 / 3;
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+  align-self: center;
+}
+
+.stage-content .wizard-rounds li.active button {
+  border-color: rgba(239, 188, 90, 0.7);
+  background:
+    linear-gradient(135deg, rgba(239, 188, 90, 0.2), rgba(105, 167, 183, 0.08)),
+    rgba(11, 15, 20, 0.76);
+}
+
+.stage-content .wizard-rounds li.active svg,
+.stage-content .wizard-rounds li.active span {
+  color: var(--gold);
+}
+
+.stage-content .wizard-rounds li.done button {
+  border-color: rgba(149, 180, 106, 0.62);
+  background: rgba(149, 180, 106, 0.1);
+}
+
+.stage-content .wizard-rounds li.done svg,
+.stage-content .wizard-rounds li.done span {
+  color: var(--green);
+}
+
+.stage-content .wizard-rounds li.locked button {
+  opacity: 0.72;
+}
+
+.stage-content .wizard-rounds span {
+  margin: 0;
+  font-size: 8px;
+}
+
+.stage-content .wizard-rounds strong {
+  margin-top: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.1;
+  font-size: 11px;
+}
+
+.stage-content .host-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: center;
+  gap: 6px;
+  min-height: 82px;
+  padding: 9px 10px;
+}
+
+.stage-content .host-actions span {
+  grid-column: 1 / -1;
+  font-size: 11px;
+}
+
+.stage-content .host-actions .primary-button,
+.stage-content .host-actions .mini-button {
+  width: 100%;
+  min-height: 34px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.stage-content .host-actions .primary-button svg,
+.stage-content .host-actions .mini-button svg {
+  position: static;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+}
+
+.stage-content .host-actions .primary-button {
+  grid-column: 1 / -1;
+  min-height: 34px;
+}
+
+.stage-content .host-actions .mini-button {
+  min-height: 32px;
+}
+
+@media (max-width: 1180px) {
+  .stage-content > .game-show-guide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stage-content .wizard-rounds {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .stage-content .host-actions {
+    grid-template-columns: repeat(3, minmax(82px, 1fr));
+  }
+
+  .stage-content .host-actions span {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .stage-content {
+    grid-template-rows: auto auto;
+  }
+
+  .stage-content > .game-show-guide {
+    min-height: 0;
+  }
+
+  .stage-content .host-card {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .stage-content .host-badge {
+    width: 38px;
+    height: 38px;
+  }
+
+  .stage-content .wizard-rounds {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stage-content .host-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stage-content .host-actions span {
+    grid-column: auto;
+  }
+
+  .stage-content > .advanced-host-bar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .stage-content > .advanced-host-bar span {
+    flex-basis: 100%;
+    white-space: normal;
+  }
 }
 
 .ticker {

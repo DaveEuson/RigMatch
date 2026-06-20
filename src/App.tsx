@@ -2306,6 +2306,20 @@ function App() {
       />
 
       <main className="stage-content">
+        <GameShowHost
+          uiMode={uiMode}
+          activeNavId={activeNavId}
+          ollamaReady={ollama.ready}
+          installedCount={ollama.models.length}
+          modelCount={modelRows.length}
+          shortlistedCount={shortlistedRows.length}
+          scoredCount={scoredModelCount}
+          topPick={topRigPick}
+          isBusy={isScanningRig || isBenchmarking || isListTesting}
+          onSelectNav={selectNav}
+          onCheckRig={refreshRig}
+          onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
+        />
         {activeNavId === 'lan' && (
           <LanBrowser
             active={true}
@@ -2660,7 +2674,7 @@ function App() {
         />
       )}
 
-      {!tutorialOpen && (
+      {!tutorialOpen && uiMode === 'advanced' && (
         <button
           type="button"
           className="help-float-btn"
@@ -2685,6 +2699,160 @@ function App() {
         />
       )}
     </div>
+  );
+}
+
+function GameShowHost({
+  uiMode,
+  activeNavId,
+  ollamaReady,
+  installedCount,
+  modelCount,
+  shortlistedCount,
+  scoredCount,
+  topPick,
+  isBusy,
+  onSelectNav,
+  onCheckRig,
+  onOpenTutorial,
+}: {
+  uiMode: UiMode;
+  activeNavId: NavId;
+  ollamaReady: boolean;
+  installedCount: number;
+  modelCount: number;
+  shortlistedCount: number;
+  scoredCount: number;
+  topPick?: RigPick | null;
+  isBusy: boolean;
+  onSelectNav: (id: NavId) => void;
+  onCheckRig: () => void;
+  onOpenTutorial: () => void;
+}) {
+  const hasWinner = Boolean(topPick);
+  const rounds = [
+    { id: 'setup', label: 'Setup', detail: ollamaReady ? 'Ollama ready' : 'Connect Ollama', icon: ScanLine, done: ollamaReady },
+    { id: 'pick', label: 'Pick', detail: shortlistedCount > 0 ? `${shortlistedCount}/5 picked` : 'Choose models', icon: Boxes, done: shortlistedCount >= 2 || scoredCount > 0 },
+    { id: 'test', label: 'Test', detail: scoredCount > 0 ? `${scoredCount} scored` : 'Run same prompts', icon: Gauge, done: scoredCount > 0 },
+    { id: 'winner', label: 'Winner', detail: topPick?.row.displayName ?? 'Crown a match', icon: Trophy, done: hasWinner },
+  ];
+  const activeRound = rounds.find((round) => !round.done)?.id ?? 'winner';
+
+  let title = 'I will guide the show';
+  let message = 'Start at Models. Pick a few contestants, run the same test, then RigMatch will crown the best fit for this computer.';
+  let primaryLabel = 'Browse models';
+  let primaryIcon: LucideIcon = Boxes;
+  let primaryAction = () => onSelectNav('models' as NavId);
+
+  if (!ollamaReady) {
+    title = 'First, connect the local test engine';
+    message = 'RigMatch needs Ollama running before it can test models on this computer. I will keep the path simple: check local status, then move to models.';
+    primaryLabel = isBusy ? 'Checking local' : 'Check local';
+    primaryIcon = ScanLine;
+    primaryAction = () => {
+      onSelectNav('lan' as NavId);
+      onCheckRig();
+    };
+  } else if (hasWinner) {
+    title = `${topPick?.row.displayName} is leading the show`;
+    message = 'You have a Top Match. Open the winner card, use it in chat, or clear it if you are testing for a different job.';
+    primaryLabel = 'Meet top pick';
+    primaryIcon = Trophy;
+    primaryAction = () => onSelectNav('agent' as NavId);
+  } else if (scoredCount > 0) {
+    title = 'Scorecards are coming in';
+    message = 'You have tested at least one model. Open Scorecards to compare results, or add more contestants before crowning a Top Match.';
+    primaryLabel = 'View scorecards';
+    primaryIcon = History;
+    primaryAction = () => onSelectNav('history' as NavId);
+  } else if (shortlistedCount >= 2) {
+    title = 'Contestants are ready';
+    message = 'You have enough models picked for a fair comparison. Open Comparison and run the same questions across the lineup.';
+    primaryLabel = 'Open comparison';
+    primaryIcon = Trophy;
+    primaryAction = () => onSelectNav('speedDate' as NavId);
+  } else if (installedCount > 0 || modelCount > 0) {
+    title = 'Pick contestants for the lineup';
+    message = 'Choose models that fit your computer. Use Pick Me for the models you want in the comparison round.';
+    primaryLabel = 'Pick models';
+    primaryIcon = Boxes;
+    primaryAction = () => onSelectNav('models' as NavId);
+  }
+
+  if (uiMode === 'advanced') {
+    return (
+      <section className="advanced-host-bar" aria-label="Advanced Mode control booth">
+        <Trophy aria-hidden="true" />
+        <span>
+          Advanced Mode control booth: {getNavLabel(activeNavId)} open. {ollamaReady ? `${installedCount} installed models` : 'Ollama needs attention'} · {shortlistedCount}/5 picked · {scoredCount} scored.
+        </span>
+        <button type="button" className="mini-button outline" onClick={() => onSelectNav('models' as NavId)}>
+          <Boxes aria-hidden="true" />
+          Models
+        </button>
+        <button type="button" className="mini-button outline" onClick={() => onSelectNav('settings' as NavId)}>
+          <Settings aria-hidden="true" />
+          Settings
+        </button>
+      </section>
+    );
+  }
+
+  const PrimaryIcon = primaryIcon;
+
+  return (
+    <section className="game-show-guide" aria-label="Simple Mode host guide">
+      <div className="host-card">
+        <div className="host-badge" aria-hidden="true">
+          <Bot />
+        </div>
+        <div>
+          <span>Simple Mode host</span>
+          <strong>{title}</strong>
+          <em>{message}</em>
+        </div>
+      </div>
+
+      <ol className="wizard-rounds" aria-label="RigMatch guided rounds">
+        {rounds.map((round) => {
+          const Icon = round.icon;
+          const className = round.done ? 'done' : round.id === activeRound ? 'active' : 'locked';
+          return (
+            <li key={round.id} className={className}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (round.id === 'setup') onSelectNav('lan' as NavId);
+                  if (round.id === 'pick') onSelectNav('models' as NavId);
+                  if (round.id === 'test') onSelectNav('speedDate' as NavId);
+                  if (round.id === 'winner') onSelectNav('agent' as NavId);
+                }}
+              >
+                <Icon aria-hidden="true" />
+                <span>{round.label}</span>
+                <strong>{round.detail}</strong>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+
+      <div className="host-actions">
+        <span>{getNavLabel(activeNavId)} is on stage. The yellow button is my recommended next move.</span>
+        <button type="button" className="primary-button compact" onClick={primaryAction} disabled={isBusy && !ollamaReady}>
+          <PrimaryIcon aria-hidden="true" />
+          {primaryLabel}
+        </button>
+        <button type="button" className="mini-button outline" onClick={onOpenTutorial}>
+          <HelpCircle aria-hidden="true" />
+          Tour
+        </button>
+        <button type="button" className="mini-button outline" onClick={() => onSelectNav('settings' as NavId)}>
+          <Settings aria-hidden="true" />
+          Modes
+        </button>
+      </div>
+    </section>
   );
 }
 
