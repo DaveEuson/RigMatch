@@ -28,13 +28,13 @@ jobs:
             artifact: mac-arm64
             companion: rigmatch-chat
             builderArgs: --mac --arm64
-            chatBuilderArgs: ''
+            chatBuilderArgs: --bundles app
           - os: macos-15-intel
             platform: mac
             artifact: mac-x64
             companion: rigmatch-chat
             builderArgs: --mac --x64
-            chatBuilderArgs: ''
+            chatBuilderArgs: --bundles app
           - os: ubuntu-latest
             platform: linux
             artifact: linux-x64
