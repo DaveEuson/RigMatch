@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
-    "@tauri-apps/plugin-opener": "^2.5.4",
     "dompurify": "^3.4.9",
     "marked": "^18.0.5",
     "react": "^19.0.0",

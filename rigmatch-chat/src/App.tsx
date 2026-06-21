@@ -14,6 +14,8 @@ import {
 
 marked.use({ breaks: true, gfm: true });
 
+const AVATAR_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
 function renderMarkdown(content: string): string {
   return DOMPurify.sanitize(marked.parse(content) as string, { USE_PROFILES: { html: true } });
 }
@@ -272,15 +274,6 @@ export default function App() {
     return map;
   }, [rigScores]);
 
-  const topPickModel = useMemo(() => {
-    const entries = Object.entries(rigScores);
-    if (entries.length === 0) return null;
-    return entries.reduce(
-      (best, [model, score]) => (score.total > (rigScores[best]?.total ?? 0) ? model : best),
-      entries[0][0],
-    );
-  }, [rigScores]);
-
   // Sort: chosen model first, then top-3 by rank, then the rest alphabetically
   const visibleBuddies = useMemo(() => {
     const filtered = buddies.filter((b) => !settings.hiddenModels.includes(b.modelName));
@@ -365,7 +358,8 @@ export default function App() {
   }, [settings.ollamaUrl, activeBuddy]);
 
   useEffect(() => {
-    void refresh();
+    const id = window.setTimeout(() => void refresh(), 0);
+    return () => window.clearTimeout(id);
   }, [refresh]);
 
   useEffect(() => {
@@ -396,7 +390,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!settings.showSystemMonitor) { setSysStats(null); setVramUsedGb(null); return; }
+    if (!settings.showSystemMonitor) {
+      const id = window.setTimeout(() => {
+        setSysStats(null);
+        setVramUsedGb(null);
+      }, 0);
+      return () => window.clearTimeout(id);
+    }
     const poll = async () => {
       try {
         const stats = await invoke<SystemStats>("get_system_stats");
@@ -660,7 +660,11 @@ export default function App() {
   };
 
   const handleAvatarUpload = (file: File | undefined) => {
-    if (!file || !file.type.startsWith("image/")) return;
+    if (!file) return;
+    if (!AVATAR_IMAGE_TYPES.has(file.type)) {
+      alert("Use a PNG, JPEG, WebP, or GIF avatar image.");
+      return;
+    }
     if (file.size > 700_000) {
       alert("Avatar image is too large. Use an image under 700 KB.");
       return;

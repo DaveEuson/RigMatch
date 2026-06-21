@@ -11812,6 +11812,7 @@ tr:focus-visible {
 
   .side-menu {
     grid-template-rows: auto auto;
+    overflow: hidden;
   }
 
   .side-menu-title {
@@ -11819,8 +11820,10 @@ tr:focus-visible {
   }
 
   .side-menu-nav {
+    width: 100%;
+    max-width: 100%;
     grid-auto-flow: column;
-    grid-auto-columns: minmax(138px, 1fr);
+    grid-auto-columns: minmax(138px, 148px);
     grid-template-columns: none;
     overflow-x: auto;
     overflow-y: hidden;
@@ -12684,11 +12687,20 @@ td {
   .stage-content > .advanced-host-bar {
     align-items: stretch;
     flex-wrap: wrap;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .stage-content > .advanced-host-bar span {
+    min-width: 0;
     flex-basis: 100%;
     white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .stage-content > .advanced-host-bar .mini-button {
+    flex: 1 1 96px;
+    min-width: 0;
   }
 }
 
@@ -14478,7 +14490,7 @@ tbody tr.selected {
   }
 
   .side-menu-nav {
-    grid-auto-columns: minmax(148px, 1fr);
+    grid-auto-columns: minmax(138px, 148px);
   }
 
   .rig-pick-card,

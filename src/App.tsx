@@ -313,7 +313,7 @@ const navItems: NavItem[] = [
 
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
 const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
-const APP_VERSION = '0.2.3';
+const APP_VERSION = '0.2.4';
 const CURRENT_SCORE_SCHEMA_VERSION = 3;
 const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
 const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
@@ -361,6 +361,16 @@ const releaseNotes: Array<{
   date: string;
   notes: string[];
 }> = [
+  {
+    version: '0.2.4',
+    label: 'Beta Polish & Release QA',
+    date: 'Beta build',
+    notes: [
+      'Simple Mode now uses a clearer game-show host path with consistent top-deck cards and more obvious next-step guidance.',
+      'The top header layout has been tightened so mode, rig, setup, local Ollama, and Top Match areas use space more evenly.',
+      'Release validation now includes refreshed build, lint, unit/security guard, dependency audit, secret-pattern sweep, and rendered UI smoke checks.',
+    ],
+  },
   {
     version: '0.2.3',
     label: 'Personality Profiles',

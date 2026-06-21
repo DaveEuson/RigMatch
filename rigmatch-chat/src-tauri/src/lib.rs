@@ -216,7 +216,6 @@ fn open_rigmatch_ai() -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .manage(SysInfoState(std::sync::Mutex::new(System::new())))
-        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_ollama_version,
             list_ollama_models,
