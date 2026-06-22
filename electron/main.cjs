@@ -30,6 +30,7 @@ const {
 const security = require('./security.cjs');
 
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
+const LM_STUDIO_LOCAL_URL = 'http://127.0.0.1:1234/v1';
 const OLLAMA_LIBRARY_URL = 'https://ollama.com/library';
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
 const RIGMATCH_REPOSITORY_URL = app.isPackaged
@@ -375,6 +376,7 @@ app.on('window-all-closed', () => {
 function registerHandlers() {
   handleLogged('system:getProfile', 'system', () => getSystemProfile());
   handleLogged('ollama:getStatus', 'ollama', (_event, baseUrl) => getOllamaStatus(baseUrl || OLLAMA_LOCAL_URL));
+  handleLogged('lmstudio:getStatus', 'lmstudio', (_event, baseUrl) => getLmStudioStatus(baseUrl || LM_STUDIO_LOCAL_URL));
   handleLogged('ollama:getCatalog', 'catalog', (_event, options) => getOllamaCatalog(options));
   handleLogged('ollama:openDownload', 'ollama', () => openOllamaDownload());
   handleLogged('ollama:pullModel', 'ollama', (event, request) => pullModel(request, event.sender));
@@ -916,11 +918,11 @@ async function fetchJson(url, options = {}, timeoutMs = 2500, maxBytes = JSON_RE
     return text ? JSON.parse(text) : {};
   } catch (error) {
     if (error?.name === 'AbortError') {
-      throw new Error(`Timed out reaching Ollama at ${getUrlOrigin(url)} after ${timeoutMs} ms.`);
+      throw new Error(`Timed out reaching local AI service at ${getUrlOrigin(url)} after ${timeoutMs} ms.`);
     }
 
     if (error?.message === 'fetch failed' || error?.name === 'TypeError') {
-      throw new Error(`Cannot reach local Ollama at ${getUrlOrigin(url)}. Make sure the Ollama app is installed and running on this computer.`);
+      throw new Error(`Cannot reach local AI service at ${getUrlOrigin(url)}. Make sure Ollama or LM Studio is installed, running, and serving a local API.`);
     }
 
     throw error;
@@ -1344,7 +1346,7 @@ function pickLatestRigmatchRelease(releases, channel) {
 }
 
 function isNightlyRelease(release) {
-  return /nightly|alpha|beta|canary|preview/i.test(`${release?.tag_name || ''} ${release?.name || ''}`);
+  return /nightly|alpha|canary|preview/i.test(`${release?.tag_name || ''} ${release?.name || ''}`);
 }
 
 function normalizeReleaseVersion(value) {
@@ -1547,6 +1549,48 @@ async function getOllamaStatus(baseUrl = OLLAMA_LOCAL_URL) {
       pingMs: null,
       models: [],
       error: error.message || 'Ollama is not reachable',
+    };
+  }
+}
+
+async function getLmStudioStatus(baseUrl = LM_STUDIO_LOCAL_URL) {
+  assertLocalhostUrl(baseUrl);
+  try {
+    const startedAt = Date.now();
+    const modelsResponse = await fetchJson(`${baseUrl.replace(/\/$/, '')}/models`, {}, 2500);
+    const models = (Array.isArray(modelsResponse.data) ? modelsResponse.data : [])
+      .map((model) => {
+        const id = String(model.id || model.model || model.name || '').trim();
+        if (!id) return null;
+        return {
+          name: id,
+          model: id,
+          sizeGb: 0,
+          modifiedAt: typeof model.created === 'number' ? new Date(model.created * 1000).toISOString() : undefined,
+          parameterSize: inferParamsFromModelName(id) || 'Local',
+          provider: 'lm-studio',
+          providerLabel: 'LM Studio',
+          baseUrl,
+        };
+      })
+      .filter(Boolean);
+
+    return {
+      ready: true,
+      baseUrl,
+      version: 'OpenAI-compatible local server',
+      pingMs: Date.now() - startedAt,
+      models,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      ready: false,
+      baseUrl,
+      version: null,
+      pingMs: null,
+      models: [],
+      error: error.message || 'LM Studio is not reachable',
     };
   }
 }
@@ -1802,6 +1846,12 @@ function parseSizeToGb(detail) {
 function inferParamsFromTag(tag) {
   const match = String(tag || '').match(/(\d+(?:\.\d+)?)(m|b)/i);
   if (!match) return tag === 'latest' ? 'Latest' : 'Unknown';
+  return `${match[1]}${match[2].toUpperCase()}`;
+}
+
+function inferParamsFromModelName(model) {
+  const match = String(model || '').match(/(?:^|[-_:])(\d+(?:\.\d+)?)(m|b)(?:[-_:]|$)/i);
+  if (!match) return null;
   return `${match[1]}${match[2].toUpperCase()}`;
 }
 
@@ -2312,6 +2362,8 @@ async function runBenchmarkInner(request = {}, sender) {
   const model = assertValidModelName(request.model);
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
   assertLocalhostUrl(baseUrl);
+  const provider = normalizeLocalProvider(request.provider, baseUrl);
+  const providerLabel = getLocalProviderLabel(provider);
   const questionCount = normalizeBenchmarkQuestionCount(request.questionCount);
   const benchmarkPrompts = buildBenchmarkPromptPlan(questionCount, request.questions);
   const progressId = typeof request.progressId === 'string' ? request.progressId : null;
@@ -2341,8 +2393,9 @@ async function runBenchmarkInner(request = {}, sender) {
       model,
       baseUrl,
       questionCount,
-      benchmarkMode: 'ollama-parity',
-      thinkingDisabled: BENCHMARK_THINK_DISABLED,
+      benchmarkMode: provider === 'lm-studio' ? 'openai-compatible' : 'ollama-parity',
+      provider,
+      thinkingDisabled: provider === 'ollama' ? BENCHMARK_THINK_DISABLED : false,
       warmup: {
         enabled: true,
         scored: false,
@@ -2360,15 +2413,19 @@ async function runBenchmarkInner(request = {}, sender) {
   sendProgress({
     phase: 'started',
     promptIndex: 0,
-    message: `Warm-up period: loading ${model} before scoring. This prompt is not scored.`,
+    message: `Warm-up period: loading ${model} through ${providerLabel} before scoring. This prompt is not scored.`,
   });
 
-  await warmBenchmarkModel(baseUrl, model);
+  if (provider === 'lm-studio') {
+    await warmLmStudioBenchmarkModel(baseUrl, model);
+  } else {
+    await warmBenchmarkModel(baseUrl, model);
+  }
 
   sendProgress({
     phase: 'started',
     promptIndex: 0,
-    message: `${model} is entering the compatibility round with Ollama parity timing.`,
+    message: `${model} is entering the compatibility round through ${providerLabel}.`,
   });
 
   for (const [promptIndex, prompt] of benchmarkPrompts.entries()) {
@@ -2395,7 +2452,9 @@ async function runBenchmarkInner(request = {}, sender) {
       let thinkingDisabled = BENCHMARK_THINK_DISABLED;
 
       try {
-        const generateResult = await runBenchmarkPromptParity(baseUrl, model, prompt.prompt);
+        const generateResult = provider === 'lm-studio'
+          ? await runLmStudioBenchmarkPrompt(baseUrl, model, prompt.prompt)
+          : await runBenchmarkPromptParity(baseUrl, model, prompt.prompt);
         responseText = generateResult.responseText;
         evalCount = generateResult.evalCount;
         evalDurationSeconds = generateResult.evalDurationSeconds;
@@ -2633,6 +2692,26 @@ async function warmBenchmarkModel(baseUrl, model) {
   }
 }
 
+async function warmLmStudioBenchmarkModel(baseUrl, model) {
+  await fetchJson(
+    `${baseUrl.replace(/\/$/, '')}/chat/completions`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: 'You are a local model warm-up check.' },
+          { role: 'user', content: 'Reply READY only.' },
+        ],
+        temperature: 0,
+        max_tokens: 8,
+        stream: false,
+      }),
+    },
+    BENCHMARK_TIMEOUT_MS,
+  );
+}
+
 async function runBenchmarkPromptParity(baseUrl, model, prompt) {
   const requestUrl = `${baseUrl}/api/generate`;
   let thinkingDisabled = BENCHMARK_THINK_DISABLED;
@@ -2698,6 +2777,46 @@ async function runBenchmarkPromptParity(baseUrl, model, prompt) {
   };
 }
 
+async function runLmStudioBenchmarkPrompt(baseUrl, model, prompt) {
+  const startedAt = Date.now();
+  const response = await fetchJson(
+    `${baseUrl.replace(/\/$/, '')}/chat/completions`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are taking a RigMatch local model compatibility test. Answer the user directly and concisely.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0,
+        max_tokens: 300,
+        stream: false,
+      }),
+    },
+    BENCHMARK_TIMEOUT_MS,
+  );
+  const elapsedMs = Math.max(1, Date.now() - startedAt);
+  const responseText = extractOpenAiChatContent(response);
+  const evalCount = normalizePositiveNumber(response?.usage?.completion_tokens) || estimateTokens(responseText);
+  const evalDurationSeconds = elapsedMs / 1000;
+  const doneReason = response?.choices?.[0]?.finish_reason || 'stop';
+
+  return {
+    responseText,
+    evalCount,
+    evalDurationSeconds,
+    doneReason,
+    totalDurationMs: elapsedMs,
+    promptEvalDurationMs: null,
+    loadDurationMs: null,
+    thinkingDisabled: false,
+  };
+}
+
 function isUnsupportedThinkError(error) {
   const message = getLogErrorMessage(error).toLowerCase();
   return message.includes('think')
@@ -2709,11 +2828,40 @@ function isUnsupportedThinkError(error) {
     );
 }
 
+function normalizeLocalProvider(provider, baseUrl = '') {
+  if (provider === 'lm-studio' || provider === 'lmstudio') return 'lm-studio';
+  if (provider === 'ollama') return 'ollama';
+  const normalizedUrl = String(baseUrl || '').toLowerCase();
+  return normalizedUrl.includes(':1234') || normalizedUrl.includes('/v1') ? 'lm-studio' : 'ollama';
+}
+
+function getLocalProviderLabel(provider) {
+  return provider === 'lm-studio' ? 'LM Studio' : 'Ollama';
+}
+
+function extractOpenAiChatContent(response) {
+  const content = response?.choices?.[0]?.message?.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (typeof part?.text === 'string') return part.text;
+        if (typeof part?.content === 'string') return part.content;
+        return '';
+      })
+      .join('')
+      .trim();
+  }
+  return '';
+}
+
 async function sendChat(request = {}) {
   const model = assertValidModelName(request.model);
   const message = request.message;
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
   assertLocalhostUrl(baseUrl);
+  const provider = normalizeLocalProvider(request.provider, baseUrl);
   if (!message) {
     throw new Error('Message is required');
   }
@@ -2721,6 +2869,35 @@ async function sendChat(request = {}) {
   // U-01: strip control chars so user input cannot inject additional "Assistant:" turns
   const safeMessage = String(message).replace(/[\x00-\x1F\x7F]+/g, ' ').slice(0, 4000).trim();
   if (!safeMessage) throw new Error('Message is empty after sanitization');
+
+  if (provider === 'lm-studio') {
+    const response = await fetchJson(
+      `${baseUrl.replace(/\/$/, '')}/chat/completions`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'system',
+              content: 'You are the selected local RigMatch.AI assistant. Be warm, concise, and honest about limits.',
+            },
+            { role: 'user', content: safeMessage },
+          ],
+          temperature: 0.5,
+          max_tokens: 220,
+          stream: false,
+        }),
+      },
+      120000,
+    );
+
+    return {
+      model,
+      message: extractOpenAiChatContent(response),
+      completedAt: new Date().toISOString(),
+    };
+  }
 
   const response = await fetchJson(
     `${baseUrl}/api/generate`,

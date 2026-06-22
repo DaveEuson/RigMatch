@@ -3,8 +3,6 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowUpDown,
-  Bell,
-  BookOpen,
   Bot,
   Boxes,
   Bug,
@@ -22,12 +20,10 @@ import {
   Heart,
   HelpCircle,
   History,
-  Info,
   Lightbulb,
   MessageSquare,
   Network,
   Pause,
-  PenLine,
   Play,
   Plus,
   RefreshCw,
@@ -36,13 +32,13 @@ import {
   Settings,
   ShieldCheck,
   ShoppingCart,
+  SlidersHorizontal,
   Sparkles,
   Terminal,
   Trash2,
   Trophy,
   X,
   Zap,
-  type LucideIcon,
 } from 'lucide-react';
 import { agentArcadeApi, isDesktopRuntime } from './api';
 import {
@@ -60,6 +56,7 @@ import {
   demoBenchmark,
   demoCatalog,
   demoHosts,
+  demoLmStudio,
   demoOllama,
   demoSystem,
 } from './sampleData';
@@ -69,6 +66,7 @@ import type {
   BenchmarkProgressUpdate,
   BenchmarkPromptResult,
   CatalogModel,
+  LocalModelProvider,
   ModelRow,
   NetworkHost,
   OllamaModel,
@@ -103,6 +101,32 @@ import {
 } from './lib/modelNews';
 import { WhatsNewPanel } from './components/WhatsNewPanel';
 import { SideMenu, type NavId, type NavItem } from './components/SideMenu';
+import { GameShowHost } from './components/GameShowHost';
+import { BrandMark, MetricTile, PanelHeader } from './components/CommonChrome';
+import { ReleaseNotes, UpdateCenter, type ReleaseNoteEntry } from './components/UpdateCenter';
+import {
+  ADVANCED_LAB_STORAGE_KEY,
+  AMAZON_AFFILIATE_TAG,
+  APP_VERSION,
+  BUY_ME_A_COFFEE_URL,
+  CLEARED_TOP_MATCHES_STORAGE_KEY,
+  CURRENT_SCORE_SCHEMA_VERSION,
+  DEFAULT_SHORTLIST_IDS,
+  GITHUB_ISSUES_URL,
+  HISTORY_STORAGE_KEY,
+  NAV_ITEM_BY_ID,
+  SIMPLE_NAV_ORDER,
+  TEST_SUITE_STORAGE_KEY,
+  THEME_STORAGE_KEY,
+  TUTORIAL_STORAGE_KEY,
+  UI_MODE_STORAGE_KEY,
+  USE_CASE_CARDS,
+  navItems,
+  themeOptions,
+  type ThemeId,
+  type UiMode,
+} from './lib/appConfig';
+import { getUpdateChannelLabel } from './lib/updateLabels';
 import machineAvatarLocal from './assets/machine-avatar-local.png';
 import modelAvatarDeepSeek from './assets/model-avatar-deepseek.png';
 import modelAvatarGemma from './assets/model-avatar-gemma.png';
@@ -111,7 +135,6 @@ import modelAvatarLlama from './assets/model-avatar-llama.png';
 import modelAvatarMistral from './assets/model-avatar-mistral.png';
 import modelAvatarPhi from './assets/model-avatar-phi.png';
 import modelAvatarQwen from './assets/model-avatar-qwen.png';
-import rigmatchBrandIcon from './assets/rigmatch-brand-icon.svg';
 import robotContestantWall from './assets/robot-contestant-wall.png';
 import robotModelTest from './assets/robot-model-test.png';
 import robotRigGreenroom from './assets/robot-rig-greenroom.png';
@@ -126,10 +149,8 @@ type ChatMessage = {
   content: string;
 };
 
-type UtilityPanelId = Extract<NavId, 'history' | 'settings' | 'about'>;
+type UtilityPanelId = Extract<NavId, 'history' | 'settings'>;
 
-type ThemeId = 'orange' | 'avocado' | 'mustard' | 'teal' | 'chocolate';
-type UiMode = 'beginner' | 'advanced';
 type PendingRunMode = 'single' | 'speed-date';
 type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
 type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'origin' | 'source' | 'status' | 'score' | 'speed' | 'pulls';
@@ -300,30 +321,6 @@ function playJingle(type: 'speed-date-complete' | 'new-winner' | 'its-a-match') 
   }
 }
 
-const navItems: NavItem[] = [
-  { id: 'models', label: 'Models', description: 'Browse, test, compare', icon: Boxes },
-  { id: 'whatsNew', label: "What's New", description: 'New model drops', icon: Bell },
-  { id: 'speedDate', label: 'Comparison', description: 'Ranked results & details', icon: Trophy },
-  { id: 'history', label: 'Scorecards', description: 'Test rankings', icon: History },
-  { id: 'agent', label: 'Top Pick', description: 'Best match profile', icon: Bot },
-  { id: 'lan', label: 'Your Rig', description: 'Hardware & Ollama', icon: Network },
-  { id: 'settings', label: 'Settings', description: 'Theme and app prefs', icon: Settings },
-  { id: 'about', label: 'About', description: 'Version and support', icon: Info },
-];
-
-const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
-const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
-const APP_VERSION = '0.2.4';
-const CURRENT_SCORE_SCHEMA_VERSION = 3;
-const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
-const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
-const HISTORY_STORAGE_KEY = 'rigmatch:history:v1';
-const THEME_STORAGE_KEY = 'agentArcadeTheme';
-const TUTORIAL_STORAGE_KEY = 'rigmatch:first-run-tutorial:v1';
-const UI_MODE_STORAGE_KEY = 'rigmatch:ui-mode:v1';
-const ADVANCED_LAB_STORAGE_KEY = 'rigmatch:advanced-lab:v1';
-const CLEARED_TOP_MATCHES_STORAGE_KEY = 'rigmatch:cleared-top-matches:v1';
-
 const ADVANCED_APP_BUILDER_PROMPT = `Create a complete single-file HTML Tetris-style falling block game.
 
 Requirements:
@@ -355,19 +352,24 @@ const IMAGE_GENERATION_MODEL_OPTIONS: ImageGenerationModelOption[] = [
   },
 ];
 
-const releaseNotes: Array<{
-  version: string;
-  label: string;
-  date: string;
-  notes: string[];
-}> = [
+const releaseNotes: ReleaseNoteEntry[] = [
+  {
+    version: '0.2.5',
+    label: 'Local Provider Nightly',
+    date: 'Next nightly',
+    notes: [
+      'RigMatch can detect LM Studio\'s local OpenAI-compatible server and list already-downloaded LM Studio models.',
+      'Installed LM Studio models can be tested and opened in chat without forcing a second Ollama download.',
+      'The next feature path now keeps Simple Mode Wizard as item 6 after the provider, download, catalog, and chat-profile work.',
+    ],
+  },
   {
     version: '0.2.4',
     label: 'Beta Polish & Release QA',
     date: 'Beta build',
     notes: [
       'Simple Mode now uses a clearer game-show host path with consistent top-deck cards and more obvious next-step guidance.',
-      'The top header layout has been tightened so mode, rig, setup, local Ollama, and Top Match areas use space more evenly.',
+      'The top header layout has been tightened so mode, rig, setup, local AI status, and Top Match areas use space more evenly.',
       'Release validation now includes refreshed build, lint, unit/security guard, dependency audit, secret-pattern sweep, and rendered UI smoke checks.',
     ],
   },
@@ -377,7 +379,7 @@ const releaseNotes: Array<{
     date: 'Nightly build',
     notes: [
       'RigMatch Chat now supports personality profiles with custom names, behavior instructions, and optional local avatar uploads.',
-      'The selected local Ollama model stays visible in the chat header, so personality never hides which model is actually responding.',
+      'The selected local model stays visible in the chat header, so personality never hides which model is actually responding.',
       'Chat history is separated by model and personality profile, making it easier to test the same model with different assistant styles.',
     ],
   },
@@ -462,7 +464,7 @@ const releaseNotes: Array<{
     label: 'Release Safety & Download Consent',
     date: 'June 2026',
     notes: [
-      'Added third-party model notices in Settings and About for Ollama/Gemma model terms.',
+      'Added third-party model notices in Settings for Ollama/Gemma model terms.',
       'Bulk Download All now requires an explicit third-party model terms acknowledgement before queueing pulls.',
       'Added a bottom download status window for active Ollama pulls and queued model downloads.',
       'Top Match now includes a Use this model action in the top deck.',
@@ -505,7 +507,7 @@ const releaseNotes: Array<{
       'Fixed answer-quality scoring to catch more natural refusal phrasing.',
       'ScoreBars now shows real Avg Response Time and First Token latency in ms/s.',
       'Bottleneck explainer: Judge Card now flags CPU-only mode, VRAM overflow, slow drive, GPU not active.',
-      'Out-of-league models now show amber warning instead of being blocked — test anyway at your own risk.',
+      'Models that are too big now show amber warning instead of being blocked — test anyway at your own risk.',
       'Section flow: View Scorecards → after Speed Dating; Top Pick → in Scorecards header.',
       'Stop Run button in single test panel now actually stops the run.',
       'Fixed model size scoring for 12b, 27b, 9b and other missing sizes.',
@@ -544,8 +546,8 @@ const releaseNotes: Array<{
     notes: [
       'Local-only v1 flow focused on this computer and local Ollama.',
       'Dating profile, Top Pick, Speed Dating, scorecards, and editable test questions.',
-      'Hardware-aware model filters so out-of-league models stay out of the default lineup.',
-      'About now includes release notes and Release/Nightly upgrade checks.',
+      'Hardware-aware model filters keep models that are too big for your VRAM out of the default lineup.',
+      'Settings now includes release notes and Release/Nightly upgrade checks.',
     ],
   },
   {
@@ -558,22 +560,8 @@ const releaseNotes: Array<{
   },
 ];
 
-const themeOptions: Array<{
-  id: ThemeId;
-  label: string;
-  description: string;
-  swatches: [string, string, string];
-}> = [
-  { id: 'orange', label: 'Studio Orange', description: 'Classic burnt orange', swatches: ['#d95a27', '#e8a838', '#5b7c53'] },
-  { id: 'avocado', label: 'Avocado Green', description: 'Earthy 70s green', swatches: ['#5b7c53', '#e8a838', '#386377'] },
-  { id: 'mustard', label: 'Mustard Yellow', description: 'Warm studio yellow', swatches: ['#e8a838', '#d95a27', '#4a3f35'] },
-  { id: 'teal', label: 'Retro Teal', description: 'Groovy cool teal', swatches: ['#386377', '#d95a27', '#e8a838'] },
-  { id: 'chocolate', label: 'Velvet Chocolate', description: 'Deep rich brown', swatches: ['#4a3f35', '#e8a838', '#d95a27'] },
-];
-
 const initialHosts = isDesktopRuntime ? [] : demoHosts.filter((host) => host.isLocal);
 const initialSelectedHostId = initialHosts[0]?.id ?? 'localhost';
-const DEFAULT_SHORTLIST_IDS = ['qwen2.5:7b', 'llama3.2:3b', 'mistral:7b', 'gemma3:4b', 'phi3:mini'];
 const welcomeChatMessage: ChatMessage = {
   id: 'welcome',
   role: 'agent',
@@ -591,44 +579,12 @@ type PersistedHistory = {
   savedAt: string;
 };
 
-const USE_CASE_CARDS: Array<{ icon: LucideIcon; title: string; description: string; prompt: string }> = [
-  {
-    icon: PenLine,
-    title: 'Writing',
-    description: 'Draft emails, letters, summaries, and blog posts',
-    prompt: 'Help me write a short professional email to a client explaining that their project delivery will be delayed by one week.',
-  },
-  {
-    icon: Code2,
-    title: 'Coding',
-    description: 'Explain code, fix bugs, write functions',
-    prompt: 'Explain what this Python function does, then suggest how to make it faster:\n\ndef find_dupes(items):\n    seen = []\n    dupes = []\n    for item in items:\n        if item in seen:\n            dupes.append(item)\n        else:\n            seen.append(item)\n    return dupes',
-  },
-  {
-    icon: BookOpen,
-    title: 'Research',
-    description: 'Summarize topics, explain concepts, answer questions',
-    prompt: "Explain how large language models work in plain English, as if you're talking to someone who has never studied AI.",
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Privacy',
-    description: "Ask anything you wouldn't want searched online",
-    prompt: "I'd like to understand my options for dealing with a difficult situation at work where my manager takes credit for my ideas. What are some approaches I could consider?",
-  },
-  {
-    icon: Lightbulb,
-    title: 'Brainstorm',
-    description: 'Generate ideas, names, plans, and creative options',
-    prompt: "I'm starting a small side project and need a name. It's a tool that helps people track their daily habits and reflect on their progress. Give me 10 name ideas, from professional to playful.",
-  },
-];
-
 function App() {
   const savedHistory = useMemo(() => getSavedHistory(), []);
   const initialBenchmark = savedHistory?.benchmark ?? demoBenchmark;
   const [system, setSystem] = useState<SystemProfile>(demoSystem);
   const [ollama, setOllama] = useState<OllamaStatus>(demoOllama);
+  const [lmStudio, setLmStudio] = useState<OllamaStatus>(demoLmStudio);
   const [catalog, setCatalog] = useState<CatalogModel[]>(demoCatalog.models);
   const [catalogMeta, setCatalogMeta] = useState({
     syncedAt: demoCatalog.syncedAt,
@@ -714,9 +670,27 @@ function App() {
 
   const selectedHost = hosts.find((host) => host.id === selectedHostId) ?? hosts[0];
 
+  const localModels = useMemo(
+    () => [
+      ...ollama.models.map((model) => ({
+        ...model,
+        provider: model.provider ?? ('ollama' as LocalModelProvider),
+        providerLabel: model.providerLabel ?? 'Ollama',
+        baseUrl: model.baseUrl ?? ollama.baseUrl,
+      })),
+      ...lmStudio.models.map((model) => ({
+        ...model,
+        provider: model.provider ?? ('lm-studio' as LocalModelProvider),
+        providerLabel: model.providerLabel ?? 'LM Studio',
+        baseUrl: model.baseUrl ?? lmStudio.baseUrl,
+      })),
+    ],
+    [lmStudio.baseUrl, lmStudio.models, ollama.baseUrl, ollama.models],
+  );
+
   const modelRows = useMemo(
-    () => mergeModelRows(catalog, ollama.models),
-    [catalog, ollama.models],
+    () => mergeModelRows(catalog, localModels),
+    [catalog, localModels],
   );
 
   const selectedRow = modelRows.find(
@@ -727,11 +701,11 @@ function App() {
     : modelScores[selectedModel];
   const selectedBenchmark = getBenchmarkForModel(benchmarkByModel, selectedModel, selectedRow)
     ?? (isBenchmarkForModel(benchmark, selectedModel, selectedRow) ? benchmark : null);
-  const selectedHostCanBenchmark = isHostBenchmarkReady(selectedHost, ollama);
+  const selectedHostCanBenchmark = Boolean(selectedRow?.localProvider === 'lm-studio' || isHostBenchmarkReady(selectedHost, ollama));
 
   const installedModelNames = useMemo(
-    () => new Set(ollama.models.map((model) => model.model || model.name)),
-    [ollama.models],
+    () => new Set(localModels.map((model) => model.model || model.name)),
+    [localModels],
   );
 
   useEffect(() => {
@@ -754,8 +728,12 @@ function App() {
     () => modelRows.filter((row) => shortlistIds.has(row.displayName)).slice(0, 5),
     [modelRows, shortlistIds],
   );
+  const uninstalledShortlistedCount = useMemo(
+    () => shortlistedRows.filter((row) => !row.installed).length,
+    [shortlistedRows],
+  );
   const installedRowsForCleanup = useMemo(
-    () => modelRows.filter((row) => row.installed),
+    () => modelRows.filter((row) => row.installed && row.localProvider !== 'lm-studio'),
     [modelRows],
   );
   const unscoredRowsForCleanup = useMemo(
@@ -798,14 +776,16 @@ function App() {
     setActivity('Checking this computer, Ollama, and available models...');
 
     try {
-      const [profile, ollamaStatus, catalogResponse] = await Promise.all([
+      const [profile, ollamaStatus, lmStudioStatus, catalogResponse] = await Promise.all([
         agentArcadeApi.getSystemProfile(),
         agentArcadeApi.getOllamaStatus(),
+        agentArcadeApi.getLmStudioStatus(),
         agentArcadeApi.getOllamaCatalog({ force: true }),
       ]);
 
       setSystem(profile);
       setOllama(ollamaStatus);
+      setLmStudio(lmStudioStatus);
       setCatalog(catalogResponse.models);
       setCatalogMeta({
         syncedAt: catalogResponse.syncedAt,
@@ -842,13 +822,28 @@ function App() {
         isLocal: true,
         isDemo: !isDesktopRuntime,
       };
+      const lmStudioHost: NetworkHost | null = lmStudioStatus.ready ? {
+        id: 'lm-studio-localhost',
+        hostname: `${profile.hostname} (LM Studio)`,
+        ip: '127.0.0.1',
+        provider: 'LM Studio',
+        discovery: 'lm-studio',
+        version: lmStudioStatus.version ?? undefined,
+        models: lmStudioStatus.models.length,
+        status: 'Ready',
+        pingMs: lmStudioStatus.pingMs,
+        baseUrl: lmStudioStatus.baseUrl,
+        isLocal: true,
+        isDemo: !isDesktopRuntime,
+      } : null;
 
-      setHosts([localHost]);
-      setSelectedHostId(localHost.id);
+      setHosts(lmStudioHost ? [localHost, lmStudioHost] : [localHost]);
+      setSelectedHostId(ollamaStatus.ready ? localHost.id : lmStudioHost?.id ?? localHost.id);
 
-      if (ollamaStatus.models.length > 0) {
+      if (ollamaStatus.models.length > 0 || lmStudioStatus.models.length > 0) {
+        const availableModels = [...ollamaStatus.models, ...lmStudioStatus.models];
         setSelectedModel((current) =>
-          ollamaStatus.models.some((model) => model.model === current) ? current : ollamaStatus.models[0].model,
+          availableModels.some((model) => model.model === current) ? current : availableModels[0].model,
         );
       }
 
@@ -857,13 +852,16 @@ function App() {
       const catalogSyncNote = !catalogResponse.error && catalogResponse.models.length > 0
         ? ` Model catalog synced from ${catalogResponse.source}.`
         : '';
+      const lmStudioNote = lmStudioStatus.ready
+        ? ` LM Studio found ${lmStudioStatus.models.length} local model${lmStudioStatus.models.length === 1 ? '' : 's'} for testing/chat.`
+        : '';
       const modelNewsNote = newsUpdate.state.latestNewModelIds.length > 0
         ? ` ${newsUpdate.state.latestNewModelIds.length} new model${newsUpdate.state.latestNewModelIds.length === 1 ? '' : 's'} found.`
         : '';
       setActivity(
         isDesktopRuntime
-          ? `Computer check complete via ${mode}.${catalogNote}${catalogSyncNote}${modelNewsNote}`
-          : `Preview sample data loaded via ${mode}.${catalogNote}${catalogSyncNote}${modelNewsNote}`,
+          ? `Computer check complete via ${mode}.${catalogNote}${catalogSyncNote}${lmStudioNote}${modelNewsNote}`
+          : `Preview sample data loaded via ${mode}.${catalogNote}${catalogSyncNote}${lmStudioNote}${modelNewsNote}`,
       );
     } catch (error) {
       setActivity(`Computer check failed: ${getErrorMessage(error)}`);
@@ -911,7 +909,7 @@ function App() {
 
     try {
       await agentArcadeApi.openOllamaDownload();
-      setActivity('Ollama download page opened. RigMatch 0.2.x tests through Ollama; LM Studio support is planned.');
+      setActivity('Ollama download page opened. RigMatch downloads through Ollama; LM Studio models can be tested when the LM Studio local server is running.');
     } catch (error) {
       setActivity(`Could not open Ollama download page: ${getErrorMessage(error)}`);
     }
@@ -1176,6 +1174,10 @@ function App() {
   }, []);
 
   const requestDeleteModel = useCallback((row: ModelRow) => {
+    if (row.localProvider === 'lm-studio') {
+      setActivity(`${row.displayName} is managed by LM Studio. Delete it from LM Studio if you want to free disk space.`);
+      return;
+    }
     setSelectedModel(row.displayName);
     setPendingDeleteModel(row);
   }, []);
@@ -1322,10 +1324,10 @@ function App() {
   const requestBenchmarkForModel = useCallback((model: string) => {
     const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
     const installed = Boolean(row?.installed || installedModelNames.has(model));
-    const hostBlocker = getHostBenchmarkBlocker(selectedHost, ollama);
+    const hostBlocker = getModelBenchmarkBlocker(row, selectedHost, ollama);
 
     if (!installed) {
-      setActivity('Pick an installed Ollama model before starting the compatibility test.');
+      setActivity('Pick an installed local model before starting the compatibility test.');
       return;
     }
 
@@ -1342,12 +1344,12 @@ function App() {
 
   const requestBenchmark = useCallback(() => {
     if (!canBenchmark) {
-      setActivity(getHostBenchmarkBlocker(selectedHost, ollama) ?? 'Pick an installed Ollama model before starting the compatibility test.');
+      setActivity(getModelBenchmarkBlocker(selectedRow, selectedHost, ollama) ?? 'Pick an installed local model before starting the compatibility test.');
       return;
     }
 
     requestBenchmarkForModel(selectedModel);
-  }, [canBenchmark, ollama, requestBenchmarkForModel, selectedHost, selectedModel]);
+  }, [canBenchmark, ollama, requestBenchmarkForModel, selectedHost, selectedModel, selectedRow]);
 
   const requestBenchmarkRow = useCallback((row: ModelRow) => {
     requestBenchmarkForModel(row.displayName);
@@ -1363,7 +1365,9 @@ function App() {
 
   const startBenchmark = useCallback(async (modelOverride?: string | null, questionsOverride?: BenchmarkQuestion[]) => {
     const modelToTest = modelOverride ?? selectedModel;
-    const hostBlocker = getHostBenchmarkBlocker(selectedHost, ollama);
+    const rowToTest = modelRows.find((row) => row.displayName === modelToTest || row.id === modelToTest);
+    const runtime = getModelRuntime(rowToTest, ollama);
+    const hostBlocker = getModelBenchmarkBlocker(rowToTest, selectedHost, ollama);
     const progressId = createRunProgressId('single');
     const questions = questionsOverride ?? benchmarkPromptPlan;
     const count = questionsOverride ? questionsOverride.length : benchmarkQuestionCount;
@@ -1407,7 +1411,8 @@ function App() {
     try {
       const result = normalizeBenchmarkResultModel(await agentArcadeApi.runBenchmark({
         model: modelToTest,
-        baseUrl: ollama.baseUrl,
+        baseUrl: runtime.baseUrl,
+        provider: runtime.provider,
         questionCount: count,
         questions,
         progressId,
@@ -1453,7 +1458,8 @@ function App() {
         details: {
           model: modelToTest,
           computer: selectedHost?.hostname ?? system.hostname,
-          baseUrl: ollama.baseUrl,
+          baseUrl: runtime.baseUrl,
+          provider: runtime.provider,
           questionCount: benchmarkQuestionCount,
           error: errorMessage,
         },
@@ -1474,13 +1480,17 @@ function App() {
     } finally {
       setIsBenchmarking(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, selectedHost, selectedModel, system.hostname]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, selectedHost, selectedModel, system.hostname]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
     void startBenchmark(row.displayName, QUICK_CHECK_QUESTIONS);
   }, [startBenchmark]);
 
   const queueModel = useCallback((row: ModelRow) => {
+    if (row.localProvider === 'lm-studio' || row.canDownload === false) {
+      setActivity(`${row.displayName} is already available through ${row.localProviderLabel ?? 'a local provider'}; no Ollama download needed.`);
+      return;
+    }
     setSelectedModel(row.displayName);
     setQueuedModelIds((current) => {
       const next = new Set(current);
@@ -1901,7 +1911,7 @@ function App() {
 
     const runnableRows = shortlistedRows.filter((row) => row.installed).slice(0, 5);
     const missingDownloadCount = shortlistedRows.filter((row) => !row.installed).length;
-    const hostBlocker = getHostBenchmarkBlocker(selectedHost, ollama);
+    const hostBlocker = getLineupBenchmarkBlocker(runnableRows, selectedHost, ollama);
 
     if (missingDownloadCount > 0) {
       setActivity(`${missingDownloadCount} Speed Dating contestant${missingDownloadCount === 1 ? '' : 's'} need downloads first. Open setup and use Download All.`);
@@ -1925,7 +1935,7 @@ function App() {
 
   const runListTest = useCallback(async () => {
     const runnableRows = shortlistedRows.filter((row) => row.installed && getPlatformFit(row.displayName, system.platform).compatible).slice(0, 5);
-    const hostBlocker = getHostBenchmarkBlocker(selectedHost, ollama);
+    const hostBlocker = getLineupBenchmarkBlocker(runnableRows, selectedHost, ollama);
     const listRunId = createRunProgressId('speed-date');
     const firstProgressId = `${listRunId}-0`;
 
@@ -1989,9 +1999,11 @@ function App() {
           lastResult: current?.lastResult,
         }));
         setActivity(`Speed Dating: testing compatibility with ${row.displayName}...`);
+        const runtime = getModelRuntime(row, ollama);
         const result = normalizeBenchmarkResultModel(await agentArcadeApi.runBenchmark({
           model: row.displayName,
-          baseUrl: ollama.baseUrl,
+          baseUrl: runtime.baseUrl,
+          provider: runtime.provider,
           questionCount: benchmarkQuestionCount,
           questions: benchmarkPromptPlan,
           progressId,
@@ -2134,10 +2146,12 @@ function App() {
     setChatInput('');
 
     try {
+      const runtime = getModelRuntime(selectedRow, ollama);
       const response = await agentArcadeApi.sendChat({
         model: chatModel,
         message,
-        baseUrl: ollama.baseUrl,
+        baseUrl: runtime.baseUrl,
+        provider: runtime.provider,
       });
       setChatMessagesByModel((prev) => ({
         ...prev,
@@ -2157,7 +2171,7 @@ function App() {
         ],
       }));
     }
-  }, [chatInput, ollama.baseUrl, selectedModel]);
+  }, [chatInput, ollama, selectedModel, selectedRow]);
 
   useEffect(() => {
     void refreshRig();
@@ -2276,16 +2290,34 @@ function App() {
     }
   }, [topRigPick?.score?.total]);
 
-  const visibleNavItems = useMemo(
-    () => navItems.filter((item) => item.id !== 'agent' || scoredModelCount > 0),
-    [scoredModelCount],
-  );
+  const visibleNavItems = useMemo(() => {
+    const hasScores = scoredModelCount > 0;
+    if (uiMode === 'advanced') {
+      return navItems.filter((item) => item.id !== 'agent' || hasScores);
+    }
+    return SIMPLE_NAV_ORDER
+      .map((id) => NAV_ITEM_BY_ID.get(id))
+      .filter((item): item is NavItem => Boolean(item))
+      .filter((item) => item.id !== 'history' || hasScores)
+      .filter((item) => item.id !== 'agent' || hasScores);
+  }, [scoredModelCount, uiMode]);
+  const showGlobalLineup = uiMode === 'advanced' && activeNavId !== 'speedDate';
+
+  useEffect(() => {
+    if (visibleNavItems.some((item) => item.id === activeNavId)) return;
+    setActiveNavId(uiMode === 'advanced' ? 'models' : 'lan');
+  }, [activeNavId, uiMode, visibleNavItems]);
 
   return (
-    <div className="app-shell" data-theme={themeId} data-ui-mode={uiMode}>
+    <div
+      className={`app-shell ${showGlobalLineup ? 'has-global-lineup' : 'no-global-lineup'}`}
+      data-theme={themeId}
+      data-ui-mode={uiMode}
+    >
       <TopDeck isScanning={isScanningRig} onScan={refreshRig}
         system={system}
         ollama={ollama}
+        lmStudio={lmStudio}
         uiMode={uiMode}
         onUiModeChange={selectUiMode}
         topPick={topRigPick}
@@ -2300,7 +2332,7 @@ function App() {
 
       <SideMenu
         items={visibleNavItems}
-        ollamaReady={ollama.ready}
+        ollamaReady={ollama.ready || lmStudio.ready}
         modelCount={modelRows.length}
         shortlistCount={shortlistedRows.length}
         newModelDropCount={modelNews.latestNewModelIds.length}
@@ -2318,11 +2350,13 @@ function App() {
       <main className="stage-content">
         <GameShowHost
           uiMode={uiMode}
-          activeNavId={activeNavId}
-          ollamaReady={ollama.ready}
-          installedCount={ollama.models.length}
+          activeNavLabel={getNavLabel(activeNavId)}
+          ollamaReady={ollama.ready || lmStudio.ready}
+          installedCount={localModels.length}
           modelCount={modelRows.length}
           shortlistedCount={shortlistedRows.length}
+          uninstalledShortlistedCount={uninstalledShortlistedCount}
+          queuedCount={queuedRows.length}
           scoredCount={scoredModelCount}
           topPick={topRigPick}
           isBusy={isScanningRig || isBenchmarking || isListTesting}
@@ -2335,6 +2369,7 @@ function App() {
             active={true}
             system={system}
             ollama={ollama}
+            lmStudio={lmStudio}
             hosts={hosts}
             modelCount={modelRows.length}
             selectedHostId={selectedHostId}
@@ -2495,7 +2530,7 @@ function App() {
             clearedTopMatchCount={clearedTopMatches.size}
           />
         )}
-        {(activeNavId === 'history' || activeNavId === 'settings' || activeNavId === 'about') && (
+        {(activeNavId === 'history' || activeNavId === 'settings') && (
           <UtilityPanel
             panel={activeNavId}
             listTestResult={listTestResult}
@@ -2534,19 +2569,21 @@ function App() {
         )}
       </main>
 
-      <ModelPoolLineupStrip
-        className="speed-date-lineup-builder global-lineup-strip"
-        rows={shortlistedRows}
-        installedRows={modelRows.filter((row) => row.installed && !shortlistIds.has(row.displayName))}
-        modelScores={modelScores}
-        disabled={isBenchmarking || isListTesting}
-        isListTesting={isListTesting}
-        canRunSpeedDate={shortlistedRows.length >= 2 && shortlistedRows.every((row) => row.installed) && !isBenchmarking && !isListTesting}
-        onRemove={toggleShortlist}
-        onAdd={toggleShortlist}
-        onRunListTest={requestListTest}
-        onOpenSpeedDate={() => selectNav('speedDate')}
-      />
+      {showGlobalLineup && (
+        <ModelPoolLineupStrip
+          className="speed-date-lineup-builder global-lineup-strip"
+          rows={shortlistedRows}
+          installedRows={modelRows.filter((row) => row.installed && !shortlistIds.has(row.displayName))}
+          modelScores={modelScores}
+          disabled={isBenchmarking || isListTesting}
+          isListTesting={isListTesting}
+          canRunSpeedDate={shortlistedRows.length >= 2 && shortlistedRows.every((row) => row.installed) && !isBenchmarking && !isListTesting}
+          onRemove={toggleShortlist}
+          onAdd={toggleShortlist}
+          onRunListTest={requestListTest}
+          onOpenSpeedDate={() => selectNav('speedDate')}
+        />
+      )}
 
       <Ticker
         activity={activity}
@@ -2594,7 +2631,15 @@ function App() {
       )}
 
       {runProgress?.phase === 'running' && (
-        <LiveFlirtSpotlight progress={runProgress} host={selectedHost} onStop={() => { stopRunRef.current = true; }} />
+        <LiveFlirtSpotlight
+          progress={runProgress}
+          host={selectedHost}
+          rows={runProgress.mode === 'speed-date'
+            ? shortlistedRows
+            : modelRows.filter((row) => row.displayName === runProgress.currentModel)}
+          questionPlan={benchmarkQuestions.slice(0, benchmarkQuestionCount)}
+          onStop={() => { stopRunRef.current = true; }}
+        />
       )}
 
       {suiteEditorOpen && (
@@ -2703,6 +2748,8 @@ function App() {
           modelCount={modelRows.length}
           ollamaReady={ollama.ready}
           ollamaVersion={ollama.version}
+          lmStudioReady={lmStudio.ready}
+          lmStudioCount={lmStudio.models.length}
           onStepChange={setTutorialStep}
           onClose={closeTutorial}
           onSelectNav={selectNav}
@@ -2712,163 +2759,10 @@ function App() {
   );
 }
 
-function GameShowHost({
-  uiMode,
-  activeNavId,
-  ollamaReady,
-  installedCount,
-  modelCount,
-  shortlistedCount,
-  scoredCount,
-  topPick,
-  isBusy,
-  onSelectNav,
-  onCheckRig,
-  onOpenTutorial,
-}: {
-  uiMode: UiMode;
-  activeNavId: NavId;
-  ollamaReady: boolean;
-  installedCount: number;
-  modelCount: number;
-  shortlistedCount: number;
-  scoredCount: number;
-  topPick?: RigPick | null;
-  isBusy: boolean;
-  onSelectNav: (id: NavId) => void;
-  onCheckRig: () => void;
-  onOpenTutorial: () => void;
-}) {
-  const hasWinner = Boolean(topPick);
-  const rounds = [
-    { id: 'setup', label: 'Setup', detail: ollamaReady ? 'Ollama ready' : 'Connect Ollama', icon: ScanLine, done: ollamaReady },
-    { id: 'pick', label: 'Pick', detail: shortlistedCount > 0 ? `${shortlistedCount}/5 picked` : 'Choose models', icon: Boxes, done: shortlistedCount >= 2 || scoredCount > 0 },
-    { id: 'test', label: 'Test', detail: scoredCount > 0 ? `${scoredCount} scored` : 'Run same prompts', icon: Gauge, done: scoredCount > 0 },
-    { id: 'winner', label: 'Winner', detail: topPick?.row.displayName ?? 'Crown a match', icon: Trophy, done: hasWinner },
-  ];
-  const activeRound = rounds.find((round) => !round.done)?.id ?? 'winner';
-
-  let title = 'I will guide the show';
-  let message = 'Start at Models. Pick a few contestants, run the same test, then RigMatch will crown the best fit for this computer.';
-  let primaryLabel = 'Browse models';
-  let primaryIcon: LucideIcon = Boxes;
-  let primaryAction = () => onSelectNav('models' as NavId);
-
-  if (!ollamaReady) {
-    title = 'First, connect the local test engine';
-    message = 'RigMatch needs Ollama running before it can test models on this computer. I will keep the path simple: check local status, then move to models.';
-    primaryLabel = isBusy ? 'Checking local' : 'Check local';
-    primaryIcon = ScanLine;
-    primaryAction = () => {
-      onSelectNav('lan' as NavId);
-      onCheckRig();
-    };
-  } else if (hasWinner) {
-    title = `${topPick?.row.displayName} is leading the show`;
-    message = 'You have a Top Match. Open the winner card, use it in chat, or clear it if you are testing for a different job.';
-    primaryLabel = 'Meet top pick';
-    primaryIcon = Trophy;
-    primaryAction = () => onSelectNav('agent' as NavId);
-  } else if (scoredCount > 0) {
-    title = 'Scorecards are coming in';
-    message = 'You have tested at least one model. Open Scorecards to compare results, or add more contestants before crowning a Top Match.';
-    primaryLabel = 'View scorecards';
-    primaryIcon = History;
-    primaryAction = () => onSelectNav('history' as NavId);
-  } else if (shortlistedCount >= 2) {
-    title = 'Contestants are ready';
-    message = 'You have enough models picked for a fair comparison. Open Comparison and run the same questions across the lineup.';
-    primaryLabel = 'Open comparison';
-    primaryIcon = Trophy;
-    primaryAction = () => onSelectNav('speedDate' as NavId);
-  } else if (installedCount > 0 || modelCount > 0) {
-    title = 'Pick contestants for the lineup';
-    message = 'Choose models that fit your computer. Use Pick Me for the models you want in the comparison round.';
-    primaryLabel = 'Pick models';
-    primaryIcon = Boxes;
-    primaryAction = () => onSelectNav('models' as NavId);
-  }
-
-  if (uiMode === 'advanced') {
-    return (
-      <section className="advanced-host-bar" aria-label="Advanced Mode control booth">
-        <Trophy aria-hidden="true" />
-        <span>
-          Advanced Mode control booth: {getNavLabel(activeNavId)} open. {ollamaReady ? `${installedCount} installed models` : 'Ollama needs attention'} · {shortlistedCount}/5 picked · {scoredCount} scored.
-        </span>
-        <button type="button" className="mini-button outline" onClick={() => onSelectNav('models' as NavId)}>
-          <Boxes aria-hidden="true" />
-          Models
-        </button>
-        <button type="button" className="mini-button outline" onClick={() => onSelectNav('settings' as NavId)}>
-          <Settings aria-hidden="true" />
-          Settings
-        </button>
-      </section>
-    );
-  }
-
-  const PrimaryIcon = primaryIcon;
-
-  return (
-    <section className="game-show-guide" aria-label="Simple Mode host guide">
-      <div className="host-card">
-        <div className="host-badge" aria-hidden="true">
-          <Bot />
-        </div>
-        <div>
-          <span>Simple Mode host</span>
-          <strong>{title}</strong>
-          <em>{message}</em>
-        </div>
-      </div>
-
-      <ol className="wizard-rounds" aria-label="RigMatch guided rounds">
-        {rounds.map((round) => {
-          const Icon = round.icon;
-          const className = round.done ? 'done' : round.id === activeRound ? 'active' : 'locked';
-          return (
-            <li key={round.id} className={className}>
-              <button
-                type="button"
-                onClick={() => {
-                  if (round.id === 'setup') onSelectNav('lan' as NavId);
-                  if (round.id === 'pick') onSelectNav('models' as NavId);
-                  if (round.id === 'test') onSelectNav('speedDate' as NavId);
-                  if (round.id === 'winner') onSelectNav('agent' as NavId);
-                }}
-              >
-                <Icon aria-hidden="true" />
-                <span>{round.label}</span>
-                <strong>{round.detail}</strong>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-
-      <div className="host-actions">
-        <span>{getNavLabel(activeNavId)} is on stage. The yellow button is my recommended next move.</span>
-        <button type="button" className="primary-button compact" onClick={primaryAction} disabled={isBusy && !ollamaReady}>
-          <PrimaryIcon aria-hidden="true" />
-          {primaryLabel}
-        </button>
-        <button type="button" className="mini-button outline" onClick={onOpenTutorial}>
-          <HelpCircle aria-hidden="true" />
-          Tour
-        </button>
-        <button type="button" className="mini-button outline" onClick={() => onSelectNav('settings' as NavId)}>
-          <Settings aria-hidden="true" />
-          Modes
-        </button>
-      </div>
-    </section>
-  );
-}
-
 function TopDeck({
   system,
   ollama,
+  lmStudio,
   uiMode,
   onUiModeChange,
   isScanning,
@@ -2881,6 +2775,7 @@ function TopDeck({
 }: {
   system: SystemProfile;
   ollama: OllamaStatus;
+  lmStudio: OllamaStatus;
   uiMode: UiMode;
   onUiModeChange: (mode: UiMode) => void;
   isScanning: boolean;
@@ -2894,10 +2789,18 @@ function TopDeck({
   const gpuLabel = system.gpu.isUnifiedMemory
     ? `${system.gpu.model} · Unified Memory`
     : `${system.gpu.model}${system.gpu.vramGb ? ` ${system.gpu.vramGb}GB` : ''}`;
-  const statusTitle = ollama.ready ? 'Local Ollama Ready' : 'Ollama Not Found';
-  const statusDetail = ollama.ready
-    ? `${ollama.models.length} installed model${ollama.models.length === 1 ? '' : 's'} visible.`
-    : 'Install or start Ollama, then check this computer again.';
+  const localModelCount = ollama.models.length + lmStudio.models.length;
+  const localProviderReady = ollama.ready || lmStudio.ready;
+  const statusTitle = ollama.ready && lmStudio.ready
+    ? 'Local AI Ready'
+    : lmStudio.ready
+      ? 'LM Studio Ready'
+      : ollama.ready
+        ? 'Local AI Ready'
+        : 'Local AI Not Found';
+  const statusDetail = localModelCount > 0
+    ? `${localModelCount} local model${localModelCount === 1 ? '' : 's'} visible across ${ollama.ready && lmStudio.ready ? 'Ollama + LM Studio' : lmStudio.ready ? 'LM Studio' : 'Ollama'}. Prompts stay on this computer.`
+    : 'Start Ollama or LM Studio, then check this computer again. Nothing is uploaded.';
   const localMachine = {
     hostname: system.hostname,
     ip: system.networks[0]?.address ?? '127.0.0.1',
@@ -2910,7 +2813,7 @@ function TopDeck({
         <BrandMark />
         <div>
           <h1>RigMatch.AI</h1>
-          <p>AI model matchmaking for your computer</p>
+          <p>Find the best AI your PC can run. Nothing leaves this computer.</p>
           <div className="global-mode-switch" role="group" aria-label="Current interface mode">
             <span>Mode</span>
             <button
@@ -2941,8 +2844,8 @@ function TopDeck({
         <MachineAvatar host={localMachine} size="medium" />
         <div>
           <strong>{system.hostname}</strong>
-          <span className={ollama.ready ? 'status-good' : 'status-bad'}>
-            {ollama.ready ? 'Ollama Ready' : 'Ollama Offline'}
+          <span className={localProviderReady ? 'status-good' : 'status-bad'}>
+            {ollama.ready && lmStudio.ready ? 'Ollama + LM Studio' : lmStudio.ready ? 'LM Studio Ready' : ollama.ready ? 'Ollama Ready' : 'Local AI Offline'}
           </span>
           <span>{gpuLabel}</span>
         </div>
@@ -2953,11 +2856,12 @@ function TopDeck({
           <div>
             <span>Simple Mode</span>
             <strong>Guided local AI setup</strong>
-            <em>Check this computer, pick models, compare them, then use the winner.</em>
+            <em>Check this PC, pick models, download what is missing, compare, then use the winner.</em>
           </div>
           <ol aria-label="Simple Mode steps">
             <li><ScanLine aria-hidden="true" /><span>Check</span></li>
             <li><Boxes aria-hidden="true" /><span>Pick</span></li>
+            <li><Download aria-hidden="true" /><span>Download</span></li>
             <li><Trophy aria-hidden="true" /><span>Compare</span></li>
             <li><Bot aria-hidden="true" /><span>Use</span></li>
           </ol>
@@ -2990,12 +2894,12 @@ function TopDeck({
       )}
 
       <section className="local-status-card" aria-label="Local AI status">
-        <div className={ollama.ready ? 'local-status-icon ready' : 'local-status-icon needs-setup'} aria-hidden="true">
-          {isScanning ? <RefreshCw className="spin" /> : ollama.ready ? <ShieldCheck /> : <AlertTriangle />}
+        <div className={localProviderReady ? 'local-status-icon ready' : 'local-status-icon needs-setup'} aria-hidden="true">
+          {isScanning ? <RefreshCw className="spin" /> : localProviderReady ? <ShieldCheck /> : <AlertTriangle />}
         </div>
         <div>
-          <span>Local AI Status</span>
-          <strong className={ollama.ready ? 'status-good' : 'status-bad'}>{statusTitle}</strong>
+          <span>100% local check</span>
+          <strong className={localProviderReady ? 'status-good' : 'status-bad'}>{statusTitle}</strong>
           <em>{statusDetail}</em>
           <button type="button" className="primary-button compact" onClick={onScan}>
             <ScanLine aria-hidden="true" />
@@ -3073,6 +2977,8 @@ function FirstRunTutorial({
   modelCount,
   ollamaReady,
   ollamaVersion,
+  lmStudioReady,
+  lmStudioCount,
   onStepChange,
   onClose,
   onSelectNav,
@@ -3082,10 +2988,20 @@ function FirstRunTutorial({
   modelCount: number;
   ollamaReady: boolean;
   ollamaVersion: string | null;
+  lmStudioReady: boolean;
+  lmStudioCount: number;
   onStepChange: (stepIndex: number) => void;
   onClose: () => void;
   onSelectNav: (id: NavId) => void;
 }) {
+  const localProviderReady = ollamaReady || lmStudioReady;
+  const providerSummary = ollamaReady && lmStudioReady
+    ? `Ollama + LM Studio ready · ${installedCount} local models`
+    : lmStudioReady
+      ? `LM Studio ready · ${lmStudioCount} local model${lmStudioCount === 1 ? '' : 's'}`
+      : ollamaReady
+        ? `Ollama ready${ollamaVersion ? ` · v${ollamaVersion}` : ''}${installedCount > 0 ? ` · ${installedCount} installed` : ''}`
+        : 'No local AI provider detected yet';
   const steps: Array<{ round: string; title: string; body: ReactNode; prize: string; navId: NavId }> = [
     {
       round: '👋 Welcome',
@@ -3093,13 +3009,13 @@ function FirstRunTutorial({
       body: (
         <div className="tutorial-welcome-screen">
           <p className="tutorial-intro-lead">
-            RigMatch 0.2.x tests through Ollama, measures speed and answer quality on this computer, then recommends the best fit for your hardware.
+            RigMatch tests local models through Ollama or LM Studio, measures speed and answer quality on this computer, then recommends the best fit for your hardware.
           </p>
-          <div className={`tutorial-status-strip ${ollamaReady ? 'ready' : 'offline'}`}>
-            {ollamaReady ? (
-              <><CheckCircle aria-hidden="true" /> Ollama ready{ollamaVersion ? ` · v${ollamaVersion}` : ''}{installedCount > 0 ? ` · ${installedCount} installed` : ''}{modelCount > installedCount ? ` · ${modelCount} in library` : ''}</>
+          <div className={`tutorial-status-strip ${localProviderReady ? 'ready' : 'offline'}`}>
+            {localProviderReady ? (
+              <><CheckCircle aria-hidden="true" /> {providerSummary}{modelCount > 0 ? ` · ${modelCount} in catalog` : ''}</>
             ) : (
-              <><AlertCircle aria-hidden="true" /> Ollama test engine not detected — <button type="button" className="inline-link" onClick={() => window.open('https://ollama.ai', '_blank', 'noopener,noreferrer')}>install it free at ollama.ai</button></>
+              <><AlertCircle aria-hidden="true" /> No local test engine detected — start Ollama or LM Studio local server.</>
             )}
           </div>
           <div className="tutorial-how-it-works">
@@ -3126,14 +3042,14 @@ function FirstRunTutorial({
     },
     {
       round: '🔧 Setup',
-      title: ollamaReady ? 'Ollama is running — you\'re set up!' : 'Connect Ollama to test models',
-      body: ollamaReady ? (
+      title: localProviderReady ? 'Local AI is running — you\'re set up!' : 'Connect a local AI provider to test models',
+      body: localProviderReady ? (
         <div className="tutorial-intro-body">
           <div className="tutorial-ollama-status ready">
             <CheckCircle aria-hidden="true" />
-            Ollama detected{ollamaVersion ? ` — v${ollamaVersion}` : ''}
+            {providerSummary}
           </div>
-          <p className="tutorial-intro-lead">Ollama is the current RigMatch test engine — <strong>100% free</strong>, no account, no subscription. RigMatch uses the local Ollama API to benchmark and rank models against your specific hardware.</p>
+          <p className="tutorial-intro-lead">RigMatch can benchmark through the local Ollama API or LM Studio's OpenAI-compatible local server. Everything stays on this computer.</p>
           <p>You're all set. Hit <strong>Next</strong> to see how the show works.</p>
         </div>
       ) : (
@@ -3142,8 +3058,8 @@ function FirstRunTutorial({
             <AlertCircle aria-hidden="true" />
             Ollama not detected
           </div>
-          <p className="tutorial-intro-lead">RigMatch 0.2.x currently tests through Ollama. LM Studio support is planned, but RigMatch cannot directly use models that only exist in LM Studio yet.</p>
-          <p>If you already have models installed in Ollama, RigMatch should detect them after Ollama is running. If your models are only LM Studio GGUF downloads, they may need a separate Ollama import or download for now.</p>
+          <p className="tutorial-intro-lead">RigMatch can test through Ollama or LM Studio's local server. Ollama is still required for one-click catalog downloads.</p>
+          <p>If your models are only in LM Studio, start LM Studio's local server and click <strong>Check Local</strong>. RigMatch will list those local models for testing and chat.</p>
           <div className="tutorial-install-steps">
             <button
               type="button"
@@ -3157,7 +3073,7 @@ function FirstRunTutorial({
           </div>
         </div>
       ),
-      prize: ollamaReady ? 'Engine ready — let\'s meet the contestants.' : 'Connect Ollama, start it, then relaunch RigMatch.AI.',
+      prize: localProviderReady ? 'Engine ready — let\'s meet the contestants.' : 'Connect Ollama or start LM Studio local server, then check again.',
       navId: 'lan' as NavId,
     },
     {
@@ -3536,6 +3452,7 @@ function LanBrowser({
   active,
   system,
   ollama,
+  lmStudio,
   hosts,
   modelCount,
   selectedHostId,
@@ -3552,6 +3469,7 @@ function LanBrowser({
   active: boolean;
   system: SystemProfile;
   ollama: OllamaStatus;
+  lmStudio: OllamaStatus;
   hosts: NetworkHost[];
   modelCount: number;
   selectedHostId: string;
@@ -3565,7 +3483,7 @@ function LanBrowser({
   onScanRig: () => void;
   onOpenSetupGuide: () => void;
 }) {
-  const hostMeta = ollama.ready ? 'Local Ollama ready' : 'Local Ollama offline';
+  const hostMeta = ollama.ready || lmStudio.ready ? 'Local AI ready' : 'Local AI offline';
   const localFallbackHost: NetworkHost = {
     id: 'localhost-preview',
     hostname: `${system.hostname} (This Machine)`,
@@ -3873,9 +3791,9 @@ function OllamaPrep({
         <div className="install-hero-icon" aria-hidden="true"><Download /></div>
         <div className="install-hero-copy">
           <span>Current test engine</span>
-          <strong>Connect Ollama to test models</strong>
+          <strong>Connect a local engine to test models</strong>
           <p>
-            RigMatch 0.2.x currently benchmarks through <strong>Ollama</strong>. LM Studio support is planned, but LM Studio-only downloads are not used directly yet.
+            RigMatch can benchmark through <strong>Ollama</strong> or <strong>LM Studio</strong> when its local server is running. Ollama is still the download path for catalog models.
             {isLinux
               ? ' If Ollama is not installed, run the one-line install command below.'
               : ' If Ollama is not installed, download and run the installer below.'}
@@ -4258,7 +4176,7 @@ function DeleteModelModal({
             <div>
               <span>Target Computer</span>
               <strong>{hostName}</strong>
-              <em>{host?.baseUrl ?? 'Local Ollama API'}</em>
+              <em>{host?.baseUrl ?? 'Local provider API'}</em>
             </div>
             <div>
               <span>Model Size</span>
@@ -4876,16 +4794,36 @@ function UiModePicker({
           </button>
         ))}
       </div>
-      <div className="mode-roadmap" aria-label="Mode roadmap">
+      <div className="mode-roadmap advanced-only" aria-label="Mode roadmap">
         <div>
-          <span>Simple</span>
-          <strong>Free core flow</strong>
-          <em>Find the best local model for this computer, then chat with it.</em>
+          <span>1 · LM Studio</span>
+          <strong>Use models people already have</strong>
+          <em>Detect the LM Studio local server for test and chat.</em>
         </div>
         <div>
-          <span>Advanced</span>
-          <strong>Supporter-ready tools</strong>
-          <em>Custom tests, raw logs, deeper diagnostics, and future lab experiments.</em>
+          <span>2 · Downloads</span>
+          <strong>Pause and resume big pulls</strong>
+          <em>Keep giant Ollama downloads recoverable.</em>
+        </div>
+        <div>
+          <span>3 · Model radar</span>
+          <strong>Fresh catalog and developer filters</strong>
+          <em>Surface new models without manual upkeep.</em>
+        </div>
+        <div>
+          <span>4 · Chat profiles</span>
+          <strong>Personalities with model truth</strong>
+          <em>Custom avatars and profile names without hiding the model.</em>
+        </div>
+        <div>
+          <span>5 · First run</span>
+          <strong>Cleaner onboarding</strong>
+          <em>Show the shortest path before advanced controls.</em>
+        </div>
+        <div>
+          <span>6 · Simple Wizard</span>
+          <strong>Few choices, guided steps</strong>
+          <em>Make Simple Mode feel like a true wizard for beginners.</em>
         </div>
       </div>
     </section>
@@ -4947,8 +4885,8 @@ function ThirdPartyModelNotice({ compact = false }: { compact?: boolean }) {
         <span>Third-party model notice</span>
         <strong>Models have their own terms</strong>
         <em>
-          RigMatch benchmarks models through the user's configured local provider. In 0.2.x, that provider is Ollama. It does not bundle model weights, sell model access,
-          or claim endorsement from model providers.
+          RigMatch benchmarks models through the user's configured local provider. Ollama handles catalog downloads, and LM Studio models can be tested when its local server is running.
+          RigMatch does not bundle model weights, sell model access, or claim endorsement from model providers.
         </em>
       </div>
       {!compact && (
@@ -5755,7 +5693,7 @@ function UtilityPanel({
   onInstallUpdate: () => void;
   onSelectTopPick?: (model: string) => void;
 }) {
-  const Icon = panel === 'history' ? History : panel === 'settings' ? Settings : Info;
+  const Icon = panel === 'history' ? History : Settings;
   const recentModelScores = useMemo(() => getRecentModelScores(modelScores), [modelScores]);
   const rankedModelScores = useMemo(() => getRankedModelScores(modelScores), [modelScores]);
   const taskPicks = useMemo(() => getTaskTopPicks(modelScores), [modelScores]);
@@ -5962,7 +5900,7 @@ function UtilityPanel({
                         {score.model}
                         {isLegacyScore(score) && <span className="legacy-score-badge">Retest recommended</span>}
                       </span>
-                      <em>{score.speed} spd · {score.sobriety} sobriety · {score.fit} fit · {getResponseEstimate(score.speed)}</em>
+                      <em>{score.speed} speed · {score.sobriety} accuracy · {score.fit} fit · {getResponseEstimate(score.speed)}</em>
                     </div>
                     <strong className={`score-row-grade ${getScoreTone(score.total)}`}>
                       {isTied && <span className="tie-badge">TIED</span>}
@@ -6067,9 +6005,15 @@ function UtilityPanel({
 
       {panel === 'settings' && (
         <div className="utility-body">
+          <div className="utility-logo">
+            <BrandMark />
+            <strong>RigMatch.AI</strong>
+            <em>v{APP_VERSION}</em>
+          </div>
+          <SettingsSection eyebrow="Interface" title="Preferences" summary="Mode, theme, and the Simple Mode path." defaultOpen>
           <UiModePicker uiMode={uiMode} onUiModeChange={onUiModeChange} />
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
-          <div className="utility-stat">
+          <div className="utility-stat donationware-stat">
             <span>Simple flow</span>
             <strong>Check → Pick → Compare → Use Winner</strong>
             <em>Simple Mode keeps the main path visible and leaves deeper tools behind the Advanced switch.</em>
@@ -6079,6 +6023,8 @@ function UtilityPanel({
             <strong>Supporter-ready power tools</strong>
             <em>Advanced mode is free in this beta, but it is the natural home for future donationware extras.</em>
           </div>
+          </SettingsSection>
+          <SettingsSection eyebrow="Local AI" title="Computer & Providers" summary="Runtime, Ollama, LM Studio, and local-only scope.">
           <div className="utility-stat advanced-only">
             <span>Runtime</span>
             <strong>{isDesktopRuntime ? 'Desktop' : 'Preview mode'}</strong>
@@ -6091,8 +6037,8 @@ function UtilityPanel({
           </div>
           <div className="utility-stat">
             <span>Provider Support</span>
-            <strong>Ollama now; LM Studio planned</strong>
-            <em>RigMatch 0.2.x tests through Ollama. Models downloaded only inside LM Studio are not used directly yet.</em>
+            <strong>Ollama downloads; LM Studio tests</strong>
+            <em>RigMatch detects LM Studio's local server for testing and chat. Catalog downloads still go through Ollama.</em>
           </div>
           <div className="utility-stat advanced-only">
             <span>CUDA</span>
@@ -6110,51 +6056,20 @@ function UtilityPanel({
             <ExternalLink aria-hidden="true" />
             Setup Guide
           </button>
-          <div className="advanced-only">
-            <HowWeScoreSection />
-          </div>
+          </SettingsSection>
 
-          <section className="danger-zone advanced-only" aria-label="Data reset">
-            <div>
-              <span>Danger Zone</span>
-              <strong>Clear App Data</strong>
-              <em>Clears RigMatch logs, scores, comparison results, chat, saved theme, and custom question suite. Installed Ollama models stay put.</em>
-            </div>
-            <button type="button" className="danger-button compact" onClick={onClearAllData}>
-              <Trash2 aria-hidden="true" />
-              Clear All Data
-            </button>
-          </section>
-        </div>
-      )}
-
-      {panel === 'about' && (
-        <div className="utility-body">
-          <div className="utility-logo">
-            <BrandMark />
-            <strong>RigMatch.AI</strong>
-            <em>v{APP_VERSION}</em>
-          </div>
-          <div className="advanced-only">
-            <UpdateCenter
-              channel={updateChannel}
-              result={updateCheck}
-              isChecking={isCheckingUpdates}
-              autoUpdateStatus={autoUpdateStatus}
-              onChannelChange={onUpdateChannelChange}
-              onCheck={onCheckForUpdates}
-              onOpenPage={onOpenUpdatePage}
-              onDownload={onDownloadUpdate}
-              onInstall={onInstallUpdate}
-            />
-          </div>
-          <div className="advanced-only">
-            <AdvancedCapabilityLab
-              selectedModel={selectedModel}
-              ollama={ollama}
-              system={system}
-            />
-          </div>
+          <SettingsSection eyebrow="Updates" title="Versions & Release Notes" summary="RigMatch app updates, Ollama updates, and recent changes.">
+          <UpdateCenter
+            channel={updateChannel}
+            result={updateCheck}
+            isChecking={isCheckingUpdates}
+            autoUpdateStatus={autoUpdateStatus}
+            onChannelChange={onUpdateChannelChange}
+            onCheck={onCheckForUpdates}
+            onOpenPage={onOpenUpdatePage}
+            onDownload={onDownloadUpdate}
+            onInstall={onInstallUpdate}
+          />
           <section className={`ollama-update-card ${ollamaHasUpdate ? 'has-update' : ''}`} aria-label="Ollama version">
             <div className="ollama-update-head">
               <div>
@@ -6190,9 +6105,10 @@ function UtilityPanel({
               </a>
             )}
           </section>
-          <ThirdPartyModelNotice />
-          <ReleaseNotes />
+          <ReleaseNotes releases={releaseNotes} />
+          </SettingsSection>
 
+          <SettingsSection eyebrow="Support" title="Feedback & Support" summary="Donationware link, bug reports, and diagnostics.">
           <div className="utility-stat">
             <span>Mode</span>
             <strong>Donationware</strong>
@@ -6239,136 +6155,66 @@ function UtilityPanel({
             <strong>{selectedHost?.hostname ?? 'Local machine'}</strong>
             <em>{selectedModel}</em>
           </div>
+          </SettingsSection>
+
+          <SettingsSection eyebrow="Advanced" title="Testing Tools & Reset" summary="Scoring explanation, labs, and destructive cleanup." advancedOnly>
+          <HowWeScoreSection />
+          <AdvancedCapabilityLab
+            selectedModel={selectedModel}
+            ollama={ollama}
+            system={system}
+          />
+          <section className="danger-zone" aria-label="Data reset">
+            <div>
+              <span>Danger Zone</span>
+              <strong>Clear App Data</strong>
+              <em>Clears RigMatch logs, scores, comparison results, chat, saved theme, and custom question suite. Installed Ollama models stay put.</em>
+            </div>
+            <button type="button" className="danger-button compact" onClick={onClearAllData}>
+              <Trash2 aria-hidden="true" />
+              Clear All Data
+            </button>
+          </section>
+          </SettingsSection>
         </div>
       )}
     </section>
   );
 }
 
-function UpdateCenter({
-  channel,
-  result,
-  isChecking,
-  autoUpdateStatus,
-  onChannelChange,
-  onCheck,
-  onOpenPage,
-  onDownload,
-  onInstall,
+function SettingsSection({
+  eyebrow,
+  title,
+  summary,
+  defaultOpen = false,
+  advancedOnly = false,
+  children,
 }: {
-  channel: UpdateChannel;
-  result: UpdateCheckResponse | null;
-  isChecking: boolean;
-  autoUpdateStatus: AutoUpdateStatus;
-  onChannelChange: (channel: UpdateChannel) => void;
-  onCheck: () => void;
-  onOpenPage: () => void;
-  onDownload: () => void;
-  onInstall: () => void;
+  eyebrow: string;
+  title: string;
+  summary: string;
+  defaultOpen?: boolean;
+  advancedOnly?: boolean;
+  children: ReactNode;
 }) {
-  const status = result?.status ?? 'unknown';
-  const statusLabel = getUpdateStatusLabel(result, isChecking);
-  const channelLabel = getUpdateChannelLabel(channel);
-  const directDownloadLabel = getDirectUpdateDownloadLabel(result, channel);
-  const au = autoUpdateStatus;
+  const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
-    <section className={`update-center ${status}`} aria-label="RigMatch update center">
-      <div className="update-center-head">
+    <section className={`settings-section${isOpen ? ' open' : ''}${advancedOnly ? ' advanced-only' : ''}`}>
+      <button
+        type="button"
+        className="settings-section-toggle"
+        onClick={() => setIsOpen((value) => !value)}
+        aria-expanded={isOpen}
+      >
         <div>
-          <span>Upgrade Center</span>
-          <strong>{statusLabel}</strong>
-          <em>Choose stable releases or nightly builds, then check what RigMatch can download.</em>
+          <span>{eyebrow}</span>
+          <strong>{title}</strong>
+          <em>{summary}</em>
         </div>
-        <div className="update-actions">
-          <button type="button" className="mini-button outline" onClick={onCheck} disabled={isChecking || au.phase === 'downloading'}>
-            <RefreshCw className={isChecking ? 'spin' : ''} aria-hidden="true" />
-            {isChecking ? 'Checking' : 'Check'}
-          </button>
-          {au.phase === 'downloaded' ? (
-            <button type="button" className="primary-button compact" onClick={onInstall}>
-              <Download aria-hidden="true" />
-              Install &amp; Restart
-            </button>
-          ) : au.phase === 'available' ? (
-            <button type="button" className="primary-button compact" onClick={onDownload}>
-              <Download aria-hidden="true" />
-              Download v{au.version}
-            </button>
-          ) : au.phase === 'downloading' ? (
-            <button type="button" className="primary-button compact" disabled>
-              <RefreshCw className="spin" aria-hidden="true" />
-              {au.percent ?? 0}%
-            </button>
-          ) : (
-            <button type="button" className="primary-button compact" onClick={onOpenPage}>
-              <Download aria-hidden="true" />
-              {directDownloadLabel}
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="update-channel-toggle" aria-label="Update channel">
-        <button
-          type="button"
-          className={channel === 'release' ? 'active' : ''}
-          onClick={() => onChannelChange('release')}
-          aria-pressed={channel === 'release'}
-        >
-          <strong>Release</strong>
-          <span>Stable build</span>
-          <em>Best for normal users.</em>
-        </button>
-        <button
-          type="button"
-          className={channel === 'nightly' ? 'active' : ''}
-          onClick={() => onChannelChange('nightly')}
-          aria-pressed={channel === 'nightly'}
-        >
-          <strong>Nightly</strong>
-          <span>Experimental build</span>
-          <em>Newest experiments, more risk.</em>
-        </button>
-      </div>
-
-      <div className="update-result">
-        <span>{channelLabel} channel</span>
-        <strong>{result?.latestName ?? 'No check yet'}</strong>
-        <em>{getUpdateResultDetail(result, channel)}</em>
-        {result?.downloadKind === 'installer' && result.downloadName && (
-          <span className="update-download-link">Direct download ready: {result.downloadName}</span>
-        )}
-        {result?.releaseNotes && <p>{result.releaseNotes}</p>}
-        {result?.error && <p className="update-error">{result.error}</p>}
-      </div>
-    </section>
-  );
-}
-
-function ReleaseNotes() {
-  return (
-    <section className="release-notes" aria-label="Release notes">
-      <div className="release-notes-head">
-        <span>Release Notes</span>
-        <strong>What changed in this build</strong>
-      </div>
-      <ol>
-        {releaseNotes.map((release) => (
-          <li key={release.version}>
-            <div>
-              <span>v{release.version}</span>
-              <strong>{release.label}</strong>
-              <em>{release.date}</em>
-            </div>
-            <ul>
-              {release.notes.map((note) => (
-                <li key={note}>{note}</li>
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ol>
+        <ChevronDown aria-hidden="true" />
+      </button>
+      {isOpen && <div className="settings-section-body">{children}</div>}
     </section>
   );
 }
@@ -6438,14 +6284,6 @@ function LogEntry({ entry }: { entry: AppLogEntry }) {
         </details>
       )}
     </article>
-  );
-}
-
-function BrandMark() {
-  return (
-    <div className="brand-mark" aria-hidden="true">
-      <img src={rigmatchBrandIcon} alt="" draggable={false} />
-    </div>
   );
 }
 
@@ -6809,6 +6647,21 @@ function ModelCabinet({
   }, [activeDeveloperFilter, benchmarkByModel, modelScores, query, quickFilter, taskFilter, queuedModelIds, rows, sortDirection, sortKey, vramGb]);
   const modelCountLabel = query || quickFilter !== 'all' || taskFilter || activeDeveloperFilter !== 'all' ? `${visibleRows.length}/${rows.length} models` : `${rows.length} models`;
   const vramLabel = vramGb > 0 ? `${formatGb(vramGb)} VRAM` : 'detected VRAM';
+  const activeQuickFilter = quickFilters.find((filter) => filter.id === quickFilter);
+  const activeDeveloperLabel = activeDeveloperFilter === 'all'
+    ? null
+    : developerFilterOptions.find((option) => option.id === activeDeveloperFilter)?.label ?? activeDeveloperFilter;
+  const activeTaskLabel = taskFilter ? TASK_FILTER_CHIPS.find((chip) => chip.id === taskFilter)?.label ?? taskFilter : null;
+  const activeFilterSummary = [
+    quickFilter !== 'all' ? activeQuickFilter?.label : null,
+    activeDeveloperLabel,
+    activeTaskLabel,
+  ].filter(Boolean).join(' · ');
+  const activeFilterCount = [
+    quickFilter !== 'all',
+    activeDeveloperFilter !== 'all',
+    Boolean(taskFilter),
+  ].filter(Boolean).length;
 
   const changeSort = (nextKey: ModelSortKey) => {
     if (nextKey === sortKey) {
@@ -6864,68 +6717,94 @@ function ModelCabinet({
         <span className="model-sort-status advanced-only">
           Sort: {getModelSortLabel(sortKey)} / {sortDirection === 'asc' ? 'Asc' : 'Desc'}
         </span>
-        <div className="model-quick-filters" aria-label="Model quick filters">
-          {quickFilters.map((filter) => (
-            <button
-              key={filter.id}
-              type="button"
-              className={quickFilter === filter.id ? 'active' : ''}
-              onClick={() => setQuickFilter(filter.id)}
-              aria-pressed={quickFilter === filter.id}
-            >
-              <span>{filter.label}</span>
-              <em>{filter.count}</em>
-            </button>
-          ))}
-        </div>
-        <div className="model-task-filters model-developer-filters" aria-label="Filter by developer">
-          <span className="model-task-filters-label">By:</span>
-          <button
-            type="button"
-            className={activeDeveloperFilter === 'all' ? 'active' : ''}
-            onClick={() => setDeveloperFilter('all')}
-            aria-pressed={activeDeveloperFilter === 'all' ? 'true' : 'false'}
-          >
-            All
-            <em>{rows.length}</em>
-          </button>
-          {developerFilterOptions.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className={activeDeveloperFilter === option.id ? 'active' : ''}
-              onClick={() => setDeveloperFilter(activeDeveloperFilter === option.id ? 'all' : option.id)}
-              aria-pressed={activeDeveloperFilter === option.id ? 'true' : 'false'}
-              title={`Show models by ${option.label}`}
-            >
-              {option.label}
-              <em>{option.count}</em>
-            </button>
-          ))}
-        </div>
-        <div className="model-task-filters advanced-only" aria-label="Filter by use case">
-          <span className="model-task-filters-label">For:</span>
-          {TASK_FILTER_CHIPS.map((chip) => (
-            <button
-              key={chip.id}
-              type="button"
-              className={taskFilter === chip.id ? 'active' : ''}
-              onClick={() => setTaskFilter(taskFilter === chip.id ? null : chip.id)}
-              aria-pressed={taskFilter === chip.id ? 'true' : 'false'}
-            >
-              {chip.label}
-              <em>{taskFilterCounts[chip.id] ?? 0}</em>
-            </button>
-          ))}
-        </div>
-        {quickFilter === 'fits-vram' && (
-          <div className="model-filter-note">
-            <ShieldCheck aria-hidden="true" />
-            <span>Showing {vramSafeCount} rig picks for {vramLabel}, including close fits. Out-of-league models stay offstage unless you show all.</span>
-            <button type="button" onClick={() => setQuickFilter('all')}>Show all</button>
+        <details className="model-filter-menu">
+          <summary aria-label="Open model filters">
+            <SlidersHorizontal aria-hidden="true" />
+            <span>Filters</span>
+            <em>{activeFilterCount > 0 ? `${activeFilterCount} active` : 'Default'}</em>
+            <ChevronDown aria-hidden="true" />
+          </summary>
+          <div className="model-filter-tray">
+            <div className="model-filter-tray-head">
+              <span>{activeFilterSummary || 'All model filters are available here.'}</span>
+              <button
+                type="button"
+                className="model-filter-reset"
+                onClick={() => {
+                  setQuickFilter('all');
+                  setDeveloperFilter('all');
+                  setTaskFilter(null);
+                }}
+                disabled={activeFilterCount === 0}
+              >
+                Reset
+              </button>
+            </div>
+            <div className="model-quick-filters" aria-label="Model quick filters">
+              {quickFilters.map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  className={quickFilter === filter.id ? 'active' : ''}
+                  onClick={() => setQuickFilter(filter.id)}
+                  aria-pressed={quickFilter === filter.id}
+                >
+                  <span>{filter.label}</span>
+                  <em>{filter.count}</em>
+                </button>
+              ))}
+            </div>
+            <div className="model-task-filters model-developer-filters" aria-label="Filter by developer">
+              <span className="model-task-filters-label">By:</span>
+              <button
+                type="button"
+                className={activeDeveloperFilter === 'all' ? 'active' : ''}
+                onClick={() => setDeveloperFilter('all')}
+                aria-pressed={activeDeveloperFilter === 'all' ? 'true' : 'false'}
+              >
+                All
+                <em>{rows.length}</em>
+              </button>
+              {developerFilterOptions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={activeDeveloperFilter === option.id ? 'active' : ''}
+                  onClick={() => setDeveloperFilter(activeDeveloperFilter === option.id ? 'all' : option.id)}
+                  aria-pressed={activeDeveloperFilter === option.id ? 'true' : 'false'}
+                  title={`Show models by ${option.label}`}
+                >
+                  {option.label}
+                  <em>{option.count}</em>
+                </button>
+              ))}
+            </div>
+            <div className="model-task-filters advanced-only" aria-label="Filter by use case">
+              <span className="model-task-filters-label">For:</span>
+              {TASK_FILTER_CHIPS.map((chip) => (
+                <button
+                  key={chip.id}
+                  type="button"
+                  className={taskFilter === chip.id ? 'active' : ''}
+                  onClick={() => setTaskFilter(taskFilter === chip.id ? null : chip.id)}
+                  aria-pressed={taskFilter === chip.id ? 'true' : 'false'}
+                >
+                  {chip.label}
+                  <em>{taskFilterCounts[chip.id] ?? 0}</em>
+                </button>
+              ))}
+            </div>
+            {quickFilter === 'fits-vram' && (
+              <div className="model-filter-note">
+                <ShieldCheck aria-hidden="true" />
+                <span>Showing {vramSafeCount} rig picks for {vramLabel}, including close fits. Models too big for your VRAM stay hidden unless you show all.</span>
+                <button type="button" onClick={() => setQuickFilter('all')}>Show all</button>
+              </div>
+            )}
           </div>
-        )}
+        </details>
       </div>
+      <ScoreLegend />
       {shortlistedCount >= 5 && (
         <div className="lineup-full-banner" role="status">
           <span>⚡ Speed Dating lineup is full — 5/5 contestants selected. Remove one to swap in another.</span>
@@ -7017,6 +6896,7 @@ function ModelCabinet({
                         {row.displayName}
                         {isNewModel && <em className="model-new-sub">New</em>}
                         {row.params && <em className="model-params-sub">{row.params}</em>}
+                        {row.localProviderLabel && <em className="model-provider-sub">{row.localProviderLabel}</em>}
                         {row.pulls != null && (
                           <em className="model-pulls-sub" title={`${row.pulls.toLocaleString()} pulls on Ollama`}>{formatPullCount(row.pulls)} pulls</em>
                         )}
@@ -7117,9 +6997,9 @@ function ModelCabinet({
                             type="button"
                             className="icon-action delete-model-button"
                             onClick={() => onDeleteModel(row)}
-                            disabled={isBenchmarking || isDeletingModel}
-                            title={`Delete ${row.displayName} from Ollama`}
-                            aria-label={`Delete ${row.displayName} from Ollama`}
+                            disabled={isBenchmarking || isDeletingModel || row.localProvider === 'lm-studio'}
+                            title={row.localProvider === 'lm-studio' ? 'Manage LM Studio models in LM Studio' : `Delete ${row.displayName} from Ollama`}
+                            aria-label={row.localProvider === 'lm-studio' ? `${row.displayName} is managed in LM Studio` : `Delete ${row.displayName} from Ollama`}
                           >
                             <Trash2 aria-hidden="true" />
                           </button>
@@ -7722,7 +7602,7 @@ function ScoreRadar({ speed, sobriety, fit }: { speed: number; sobriety: number;
   const r = size * 0.36;
   const axes = [
     { label: 'Speed', angle: -90, value: speed },
-    { label: 'Sobriety', angle: 30, value: sobriety },
+    { label: 'Accuracy', angle: 30, value: sobriety },
     { label: 'Fit', angle: 150, value: fit },
   ];
   const toXY = (angle: number, scale: number) => ({
@@ -7881,7 +7761,7 @@ function SelectedContestantCard({
           <ScoreRadar speed={score.speed} sobriety={score.sobriety} fit={score.fit} />
           <div className="contestant-radar-scores">
             <div><span>Speed</span><strong>{score.speed}</strong></div>
-            <div><span>Sobriety</span><strong>{score.sobriety}</strong></div>
+            <div><span>Accuracy</span><strong>{score.sobriety}</strong></div>
             <div><span>Fit</span><strong>{score.fit}</strong></div>
             {trend.length >= 2 && (
               <div className="contestant-sparkline-cell">
@@ -7929,7 +7809,7 @@ function SelectedContestantCard({
               className={`mini-button outline${!hardwareFit.recommend ? ' warn' : ''}`}
               onClick={() => onQuickCheck(row)}
               disabled={isBenchmarking}
-              title={!hardwareFit.recommend ? '⚠ Too big for your VRAM — quick check anyway?' : 'Run a 3-question sanity check (coding, sobriety, format)'}
+              title={!hardwareFit.recommend ? '⚠ Too big for your VRAM — quick check anyway?' : 'Run a 3-question sanity check (coding, accuracy, format)'}
             >
               <Zap aria-hidden="true" />
               Quick Check
@@ -8095,11 +7975,21 @@ function ModelScorePill({ score }: { score?: TestedModelScore }) {
   return (
     <span
       className={`score-pill ${getScoreTone(score.total)}`}
-      title={`Match ${score.total} · ${score.grade}; speed ${score.speed}, reliability ${score.sobriety}`}
+      title={`Match ${score.total} · ${score.grade}; speed ${score.speed}, accuracy ${score.sobriety}`}
     >
       <strong>{score.total}</strong>
       <em>{score.grade}</em>
     </span>
+  );
+}
+
+function ScoreLegend() {
+  return (
+    <div className="score-legend-strip" aria-label="Match score legend">
+      <span>Match score</span>
+      <strong>Speed + accuracy + finish rate + hardware fit.</strong>
+      <em>S is best, then A/B/C. Scores are local to this computer.</em>
+    </div>
   );
 }
 
@@ -8771,7 +8661,7 @@ function SpeedDatePanel({
                 <li key={result.model} className={result.model === listTestResult.winner ? 'winner' : ''}>
                   <b>{index + 1}</b>
                   <span>{result.model}</span>
-                  <em>{result.speed} spd · {result.sobriety} sobriety · {getResponseEstimate(result.speed)}</em>
+                  <em>{result.speed} speed · {result.sobriety} accuracy · {getResponseEstimate(result.speed)}</em>
                   <strong>{result.total}</strong>
                 </li>
               ))}
@@ -9111,7 +9001,7 @@ function SpeedDateTranscriptPanel({
             {/* Contestant answers */}
             <div className="sbs-answers">
               {(() => {
-                // Find the best sobriety score for this question across all contestants
+                // Find the best answer-quality score for this question across all contestants
                 const answersForQ = answeredRows.map(({ row, result }) => ({
                   row,
                   prompt: result.prompts[safeQuestionIndex] ?? null,
@@ -9543,7 +9433,7 @@ function AgentReveal({
           <span className="avatar-frame-name">{getShortModelName(model)}</span>
         </div>
         <div className="top-pick-hero-right">
-          <span>{selectedScore ? `Compatibility result · ${selectedScore.grade}` : 'Awaiting a first test'}</span>
+          <span>{selectedScore ? `Compatibility result · ${selectedScore.grade}` : 'No saved test for this model'}</span>
           <strong style={{ color: 'var(--text-strong)', fontSize: '20px', lineHeight: 1.1 }}>{agentName}</strong>
           <em style={{ color: 'var(--text)', fontSize: '12px', fontStyle: 'normal' }}>
             {selectedScore ? `${selectedScore.total} Match · ${selectedScore.grade} · ${getResponseEstimate(selectedScore.speed)}` : 'Run a compatibility test to crown the winner.'}
@@ -10155,7 +10045,7 @@ function getAgentDatingProfileSections(
   const hostName = getCleanHostName(host?.hostname ?? system.hostname);
   const sizeGb = row?.sizeGb ?? row?.installedModel?.sizeGb ?? null;
   const scoreSummary = score
-    ? `${score.total} overall, ${score.sobriety}% trust, ${score.speed}% pace, and ${score.fit}% computer fit`
+    ? `${score.total} overall, ${score.sobriety}% answer quality, ${score.speed}% pace, and ${score.fit}% computer fit`
     : `untested chemistry with ${hostName}`;
   const specialtyList = profile.specialties.join(', ');
   const fitSummary = getFootprintFit(sizeGb, system).toLowerCase();
@@ -10470,7 +10360,7 @@ const LEARNING_TIPS: { term: string; tip: string }[] = [
   { term: 'Tokens/s', tip: 'Roughly how many words a model produces per second. Higher = faster responses.' },
   { term: 'Parameters (3B, 7B…)', tip: 'Billions of values the model learned. Bigger = more capable but slower and heavier.' },
   { term: 'Quantization (Q4/Q8)', tip: 'Compression that shrinks model size. Q4 = smaller and faster, Q8 = more accurate.' },
-  { term: 'Sobriety', tip: 'Whether a model follows instructions and avoids making things up (hallucinating).' },
+  { term: 'Accuracy', tip: 'Whether a model follows instructions and avoids making things up (hallucinating).' },
   { term: 'Grade (S/A/B/C)', tip: 'Overall rating: S is exceptional, A is great, B is solid, C needs improvement.' },
   { term: 'Embedding model', tip: 'Converts text into search vectors — not for chat or generation, so filtered out here.' },
   { term: 'Contestants', tip: 'Your shortlist of up to 5 models competing in Speed Dating. Add them from the model table.' },
@@ -10721,50 +10611,6 @@ function DownloadTickerDock({
   );
 }
 
-function PanelHeader({
-  icon: Icon,
-  title,
-  actionLabel,
-  onAction,
-  busy = false,
-  meta,
-}: {
-  icon: LucideIcon;
-  title: string;
-  actionLabel: string;
-  onAction: () => void;
-  busy?: boolean;
-  meta?: string;
-}) {
-  return (
-    <div className="panel-header">
-      <div>
-        <Icon aria-hidden="true" />
-        <h2>{title}</h2>
-      </div>
-      <span>{meta}</span>
-      <button type="button" className="mini-button" onClick={onAction} disabled={busy}>
-        <RefreshCw className={busy ? 'spin' : ''} aria-hidden="true" />
-        {actionLabel}
-      </button>
-    </div>
-  );
-}
-
-function MetricTile({ label, value, level }: { label: string; value: string; level: number }) {
-  return (
-    <div className="metric-tile">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <div className="mini-bars" aria-hidden="true">
-        {Array.from({ length: 18 }).map((_, index) => (
-          <i key={index} className={index < Math.round((level / 100) * 18) ? 'lit' : ''} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function QuestionStatusBar({
   progress,
   questions,
@@ -10895,12 +10741,20 @@ function RunProgressPanel({
 function LiveFlirtSpotlight({
   progress,
   host,
+  rows,
+  questionPlan,
   onStop,
 }: {
   progress: RunProgress;
   host?: NetworkHost;
+  rows?: ModelRow[];
+  questionPlan?: BenchmarkQuestion[];
   onStop?: () => void;
 }) {
+  const stageRows = rows?.length
+    ? rows
+    : [{ displayName: progress.currentModel } as ModelRow];
+  const activeModel = progress.currentModel;
   const modelCounter = progress.total > 1
     ? `model ${progress.completed + 1}/${progress.total}`
     : null;
@@ -10908,25 +10762,131 @@ function LiveFlirtSpotlight({
     ? `q ${(progress.questionIndex ?? 0) + 1}/${progress.questionTotal}`
     : null;
   const counterLabel = [modelCounter, questionCounter].filter(Boolean).join(' · ');
+  const currentQuestionIndex = Math.max(0, progress.questionIndex ?? 0);
+  const currentQuestion = questionPlan?.[currentQuestionIndex];
+  const currentLabel = progress.questionLabel ?? currentQuestion?.label ?? 'Question';
+  const currentPrompt = progress.questionPrompt ?? currentQuestion?.prompt ?? 'The host is about to ask the next prompt.';
+  const phaseLabel = progress.questionPhase === 'prompt-token'
+    ? 'Answering live'
+    : progress.questionPhase === 'prompt-start'
+      ? 'Host is asking'
+      : progress.questionPhase === 'prompt-complete'
+        ? 'Answer scored'
+        : progress.questionPhase === 'failed'
+          ? 'Needs attention'
+          : 'Warming up';
+  const hostLine = progress.mode === 'speed-date'
+    ? 'Same prompt, five stools, no favoritism.'
+    : 'One contestant gets the spotlight.';
+  const activeShortName = getShortModelName(activeModel);
+  const totalQuestions = progress.questionTotal ?? questionPlan?.length ?? 0;
+  const completedQuestions = progress.completedQuestions ?? 0;
+  const stageSlots = Array.from({ length: Math.max(5, stageRows.length) }, (_item, index) => stageRows[index]);
 
   return (
-    <aside className="live-flirt-spotlight" aria-label="Live model test animation">
-      <div className="live-flirt-head">
-        <span>{progress.mode === 'speed-date' ? 'Live Speed Dating' : 'Live Model Test'}</span>
-        <strong>{progress.currentModel}</strong>
-        {counterLabel && <em>{counterLabel}</em>}
-        {onStop && (
-          <button type="button" className="mini-button outline stop-run-btn" onClick={onStop} title="Stop after current model finishes">
-            Stop
-          </button>
-        )}
+    <aside className="live-flirt-spotlight live-game-show" aria-label="Live Speed Dating game show stage">
+      <div className="live-show-bg" style={{ backgroundImage: `url(${robotSpeedDateShow})` }} aria-hidden="true" />
+      <div className="live-show-marquee" aria-hidden="true">
+        {Array.from({ length: 22 }).map((_item, index) => <i key={index} />)}
       </div>
-      <FlirtTestAnimation
-        model={progress.currentModel}
-        host={host}
-        mode={progress.mode}
-        questionLabel={progress.questionLabel}
-      />
+
+      <div className="live-show-shell">
+        <header className="live-show-header">
+          <div>
+            <span>{progress.mode === 'speed-date' ? 'Live Speed Dating' : 'Live Model Test'}</span>
+            <strong>{activeShortName} is on stage</strong>
+          </div>
+          <div className="live-show-counters">
+            {counterLabel && <em>{counterLabel}</em>}
+            <b>{phaseLabel}</b>
+          </div>
+          {onStop && (
+            <button type="button" className="live-show-stop" onClick={onStop} title="Stop after the current question finishes">
+              <X aria-hidden="true" />
+              Stop
+            </button>
+          )}
+        </header>
+
+        <section className="live-show-main">
+          <div className="live-show-host-card">
+            <div className="live-show-host-spotlight" aria-hidden="true" />
+            <MachineAvatar host={host} size="medium" />
+            <div>
+              <span>RigMatch host</span>
+              <strong>{host?.hostname ?? 'This computer'}</strong>
+              <p>{hostLine}</p>
+            </div>
+            <div className="live-show-mic" aria-hidden="true">
+              <MessageSquare />
+            </div>
+          </div>
+
+          <div className="live-show-stage">
+            <div className="live-show-sign" aria-hidden="true">
+              <span>The</span>
+              <strong>Dating Game</strong>
+              <em>for local AI</em>
+            </div>
+            <ol className="live-show-contestants" aria-label="Contestants sitting on stage">
+              {stageSlots.map((row, index) => {
+                const displayName = row?.displayName ?? '';
+                const isActive = displayName === activeModel;
+                const score = displayName ? progress.questionScores?.[displayName] : undefined;
+                return (
+                  <li
+                    key={displayName || `empty-live-stool-${index}`}
+                    className={[isActive ? 'active' : '', row ? 'filled' : 'empty'].filter(Boolean).join(' ')}
+                  >
+                    <span className="live-show-seat-number">{index + 1}</span>
+                    <div className="live-show-stool">
+                      {row ? <AvatarBust model={displayName} size="large" /> : <Plus aria-hidden="true" />}
+                    </div>
+                    <div className="live-show-nameplate">
+                      <span>{row ? `Contestant ${index + 1}` : 'Open stool'}</span>
+                      <strong>{row ? getShortModelName(displayName) : 'Waiting'}</strong>
+                      <em>{isActive ? 'Answering now' : score ? `${score} scored` : row ? 'On deck' : 'Empty'}</em>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        </section>
+
+        <section className="live-show-question-card" aria-label="Current question">
+          <div>
+            <span>Host question</span>
+            <strong>
+              {totalQuestions
+                ? `Question ${Math.min(totalQuestions, currentQuestionIndex + 1)} of ${totalQuestions}: ${currentLabel}`
+                : currentLabel}
+            </strong>
+            <p>{currentPrompt}</p>
+          </div>
+          <div className="live-show-progress">
+            <span>{progress.percent}%</span>
+            <div aria-label={`${progress.percent}% complete`}>
+              <i style={{ width: `${progress.percent}%` }} />
+            </div>
+            <em>{completedQuestions} answered · {progress.message}</em>
+            <a
+              className="live-show-upgrade-link"
+              href={amazonUrl('NVIDIA RTX 4060 Ti 16GB graphics card DDR5 RAM upgrade')}
+              target="_blank"
+              rel="noreferrer"
+              title="Shop local AI hardware upgrades on Amazon"
+            >
+              <ShoppingCart aria-hidden="true" />
+              <span>
+                <b>Upgrade your system</b>
+                <em>GPU, RAM, local AI gear</em>
+              </span>
+              <ExternalLink aria-hidden="true" />
+            </a>
+          </div>
+        </section>
+      </div>
     </aside>
   );
 }
@@ -10949,7 +10909,7 @@ function FlirtTestAnimation({
     ? 'Same questions, no favorites.'
     : 'Show me your best answer.';
   const modelLine = questionLabel
-    ? 'I dressed for this prompt.'
+    ? 'Answering this prompt live.'
     : mode === 'speed-date'
     ? 'I love a fair contest.'
     : 'You had me at prompt.';
@@ -11560,7 +11520,7 @@ function getModelProfileHighlights(
   const sizeGb = row?.sizeGb ?? row?.installedModel?.sizeGb ?? null;
   const origin = getModelOrigin(row?.displayName ?? '');
   const redFlag = sizeGb && vramGb > 0 && sizeGb > vramGb
-    ? sizeGb <= vramGb * 1.15 ? 'RAM assist' : 'Out of league'
+    ? sizeGb <= vramGb * 1.15 ? 'RAM assist' : 'Too big for VRAM'
     : sizeGb && sizeGb >= 12
       ? 'Large download'
       : score && score.sobriety < 75
@@ -11827,6 +11787,10 @@ function mergeModelRows(catalog: CatalogModel[], installedModels: OllamaModel[])
       ready: Boolean(installed),
       installedModel: installed,
       installLabel: installed ? 'Installed' : 'Queue',
+      localProvider: installed?.provider,
+      localProviderLabel: installed?.providerLabel,
+      localBaseUrl: installed?.baseUrl,
+      canDownload: !installed || installed.provider !== 'lm-studio',
       params: installed?.parameterSize || entry.params,
       sizeGb: installed?.sizeGb || entry.sizeGb,
     };
@@ -11852,12 +11816,16 @@ function mergeModelRows(catalog: CatalogModel[], installedModels: OllamaModel[])
       params: model.parameterSize || 'Installed',
       sizeGb: model.sizeGb || null,
       pack: 'Installed',
-      source: 'Ollama local',
+      source: model.provider === 'lm-studio' ? 'LM Studio local' : 'Ollama local',
       live: false,
       installed: true,
       ready: true,
       installedModel: model,
       installLabel: 'Installed',
+      localProvider: model.provider ?? 'ollama',
+      localProviderLabel: model.providerLabel ?? (model.provider === 'lm-studio' ? 'LM Studio' : 'Ollama'),
+      localBaseUrl: model.baseUrl,
+      canDownload: model.provider !== 'lm-studio',
     }));
 
   return [...extras, ...dedupedRows.values()].slice(0, 500);
@@ -11959,62 +11927,6 @@ function getSelectedContestantBlurb(
   }
 
   return `${row.displayName} is listed in the model pool, but RigMatch is cautious here: ${hardwareFit.detail}`;
-}
-
-function getUpdateChannelLabel(channel: UpdateChannel) {
-  return channel === 'nightly' ? 'Nightly' : 'Release';
-}
-
-function getUpdateStatusLabel(result: UpdateCheckResponse | null, isChecking: boolean) {
-  if (isChecking) return 'Checking for upgrades';
-  if (!result) return 'Ready to check for upgrades';
-  if (result.hasUpdate) return 'New build available';
-  if (result.status === 'current') return 'You are up to date';
-  return 'Update status unknown';
-}
-
-function getDirectUpdateDownloadLabel(result: UpdateCheckResponse | null, channel: UpdateChannel) {
-  if (result?.downloadKind !== 'installer' || !result.downloadUrl) return 'View Downloads';
-  const channelLabel = getUpdateChannelLabel(channel);
-
-  if (result.downloadName?.endsWith('.exe')) return `Download ${channelLabel} EXE`;
-  if (result.downloadName?.endsWith('.dmg')) return `Download ${channelLabel} DMG`;
-  if (result.downloadName?.endsWith('.AppImage')) return `Download ${channelLabel} AppImage`;
-  if (result.downloadName?.endsWith('.deb')) return `Download ${channelLabel} DEB`;
-  return `Download ${channelLabel}`;
-}
-
-function getUpdateResultDetail(result: UpdateCheckResponse | null, channel: UpdateChannel) {
-  if (!result) {
-    return channel === 'nightly'
-      ? 'Nightly checks look for prerelease or nightly-tagged builds.'
-      : 'Release checks look for the newest stable build.';
-  }
-
-  const latest = result.latestVersion ? `latest v${result.latestVersion}` : 'latest version unknown';
-  const checked = result.checkedAt ? `checked ${formatReleaseDate(result.checkedAt)}` : 'not checked';
-  const date = result.latestDate ? `published ${formatReleaseDate(result.latestDate)}` : 'publish date unknown';
-
-  if (result.error) {
-    return `Current v${result.currentVersion}; ${checked}. Downloads still open manually.`;
-  }
-
-  const download = result.downloadKind === 'installer' && result.downloadName
-    ? `Direct installer: ${result.downloadName}.`
-    : 'Open the release page to choose a download.';
-
-  return `Current v${result.currentVersion}; ${latest}; ${date}. ${download}`;
-}
-
-function formatReleaseDate(timestamp: string) {
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return timestamp;
-
-  return date.toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
 }
 
 function getLocalRigDetailCards(host: NetworkHost, system: SystemProfile, ollama: OllamaStatus) {
@@ -12125,13 +12037,31 @@ function getFootprintFit(sizeGb: number | null, system: SystemProfile) {
   if (vramGb > 0 && sizeGb <= vramGb * 0.8) return 'Good VRAM fit';
   if (vramGb > 0 && sizeGb <= vramGb) return 'Tight VRAM fit';
   if (vramGb > 0 && sizeGb <= vramGb * 1.15) return 'RAM-assisted trial';
-  if (vramGb > 0 && sizeGb > vramGb * 1.15) return "Out of this rig's league";
+  if (vramGb > 0 && sizeGb > vramGb * 1.15) return 'Too big for this rig';
   if (sizeGb <= system.memory.availableGb * 0.45) return 'Likely RAM-assisted';
   return 'Memory-heavy candidate';
 }
 
 function isHostBenchmarkReady(host: NetworkHost | undefined, ollama: OllamaStatus) {
   return !getHostBenchmarkBlocker(host, ollama);
+}
+
+function getModelRuntime(row: ModelRow | undefined, ollama: OllamaStatus): { provider: LocalModelProvider; providerLabel: string; baseUrl: string } {
+  const provider = row?.localProvider ?? 'ollama';
+  return {
+    provider,
+    providerLabel: row?.localProviderLabel ?? (provider === 'lm-studio' ? 'LM Studio' : 'Ollama'),
+    baseUrl: row?.localBaseUrl ?? row?.installedModel?.baseUrl ?? ollama.baseUrl,
+  };
+}
+
+function getModelBenchmarkBlocker(row: ModelRow | undefined, host: NetworkHost | undefined, ollama: OllamaStatus) {
+  if (row?.localProvider === 'lm-studio') return null;
+  return getHostBenchmarkBlocker(host, ollama);
+}
+
+function getLineupBenchmarkBlocker(rows: ModelRow[], host: NetworkHost | undefined, ollama: OllamaStatus) {
+  return rows.some((row) => row.localProvider !== 'lm-studio') ? getHostBenchmarkBlocker(host, ollama) : null;
 }
 
 function getHostBenchmarkBlocker(host: NetworkHost | undefined, ollama: OllamaStatus) {
@@ -12426,7 +12356,7 @@ function getModelQuickFilters(
     { id: 'fits-vram', label: 'Rig Picks', count: rows.filter((row) => modelFitsVram(row, vramGb)).length },
     { id: 'scored', label: 'Scored', count: rows.filter((row) => Boolean(getModelScore(row, scores))).length },
     { id: 'unscored', label: 'Unscored', count: rows.filter((row) => row.installed && !getModelScore(row, scores)).length },
-    { id: 'huge', label: 'Out of League', count: rows.filter((row) => getHardwareFit(row, vramGb).tone === 'out-of-league').length },
+    { id: 'huge', label: 'Too Big', count: rows.filter((row) => getHardwareFit(row, vramGb).tone === 'out-of-league').length },
   ];
 }
 
@@ -12470,8 +12400,8 @@ function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb'>, vramGb: number
     return looksHuge
       ? {
         tone: 'out-of-league',
-        label: 'Out of league',
-        detail: `${row.params} models are too ambitious for ${vramLabel} without a much larger rig.`,
+        label: 'Too big',
+        detail: `${row.params} models are too large for ${vramLabel} without a much larger GPU.`,
         recommend: false,
       }
       : {
@@ -12501,8 +12431,8 @@ function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb'>, vramGb: number
   if (paramsB >= 64 && vramGb < 48) {
     return {
       tone: 'out-of-league',
-      label: 'Out of league',
-      detail: `${row.params} is out of this rig's league. ${vramLabel} VRAM should stay with smaller contestants.`,
+      label: 'Too big',
+      detail: `${row.params} is too large for this computer. ${vramLabel} VRAM should stay with smaller models.`,
       recommend: false,
     };
   }
@@ -12510,8 +12440,8 @@ function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb'>, vramGb: number
   if (paramsB >= 32 && vramGb < 24) {
     return {
       tone: 'out-of-league',
-      label: 'Out of league',
-      detail: `${row.params} is a heavyweight model for ${vramLabel}. Try a 3B-14B contestant first.`,
+      label: 'Too big',
+      detail: `${row.params} is a heavyweight model for ${vramLabel}. Try a 3B-14B model first.`,
       recommend: false,
     };
   }
@@ -12552,8 +12482,8 @@ function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb'>, vramGb: number
 
   return {
     tone: 'out-of-league',
-    label: `Out of league · ${formatGb(sizeGb)}`,
-    detail: `${formatGb(sizeGb)} is too much model for ${vramLabel}. Pick a smaller contestant for this rig.`,
+    label: `Too big · ${formatGb(sizeGb)}`,
+    detail: `${formatGb(sizeGb)} is too much model for ${vramLabel}. Pick a smaller model for this computer.`,
     recommend: false,
   };
 }

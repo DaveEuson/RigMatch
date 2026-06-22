@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const api = {
   getSystemProfile: () => ipcRenderer.invoke('system:getProfile'),
   getOllamaStatus: (baseUrl) => ipcRenderer.invoke('ollama:getStatus', baseUrl),
+  getLmStudioStatus: (baseUrl) => ipcRenderer.invoke('lmstudio:getStatus', baseUrl),
   getOllamaCatalog: (options) => ipcRenderer.invoke('ollama:getCatalog', options),
   openOllamaDownload: () => ipcRenderer.invoke('ollama:openDownload'),
   scanLan: () => ipcRenderer.invoke('network:scanLan'),

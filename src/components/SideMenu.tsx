@@ -1,6 +1,6 @@
 import { Bug, type LucideIcon } from 'lucide-react';
 
-export type NavId = 'lan' | 'models' | 'whatsNew' | 'speedDate' | 'bench' | 'agent' | 'history' | 'settings' | 'about';
+export type NavId = 'lan' | 'models' | 'whatsNew' | 'speedDate' | 'bench' | 'agent' | 'history' | 'settings';
 
 export type NavItem = {
   id: NavId;
@@ -50,15 +50,14 @@ export function SideMenu({
     bench: isRunning ? 'Live' : '1 model',
     agent: topPickMeta,
     history: scoredCount > 0 ? `${scoredCount}` : 'New',
-    settings: 'Prefs',
-    about: 'Info',
+    settings: 'App',
   };
 
   return (
     <aside className="side-menu" aria-label="RigMatch.AI menu">
       <button type="button" className="side-menu-title" onClick={onOpenTutorial} title="Re-open the getting started guide" aria-label="Open getting started guide">
         <span>{uiMode === 'advanced' ? 'Advanced Mode' : 'Simple Mode'}</span>
-        <strong>{uiMode === 'advanced' ? 'Power tools visible' : 'Start with Models'}</strong>
+        <strong>{uiMode === 'advanced' ? 'Power tools visible' : 'Guided setup'}</strong>
         <small>{uiMode === 'advanced' ? 'Diagnostics, logs, custom tests' : 'Guided path, fewer controls'}</small>
       </button>
       <nav className="side-menu-nav" aria-label="Primary navigation">

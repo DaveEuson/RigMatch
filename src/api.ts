@@ -2,6 +2,7 @@ import {
   demoBenchmark,
   demoCatalog,
   demoHosts,
+  demoLmStudio,
   demoOllama,
   demoSystem,
 } from './sampleData';
@@ -32,6 +33,10 @@ const fallbackApi: AgentArcadeApi = {
   async getOllamaStatus() {
     await delay(300);
     return demoOllama;
+  },
+  async getLmStudioStatus() {
+    await delay(260);
+    return demoLmStudio;
   },
   async getOllamaCatalog() {
     await delay(450);

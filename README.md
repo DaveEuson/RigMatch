@@ -1,6 +1,6 @@
 # RigMatch.AI
 
-Find the best local AI model for your computer. RigMatch 0.2.x benchmarks through Ollama on your actual hardware — scored for speed, answer quality, and hardware fit — wrapped in a dating game show theme to make testing less boring.
+Find the best AI model your computer can run, 100% locally. RigMatch 0.2.x benchmarks through Ollama on your actual hardware — scored for speed, answer quality, and hardware fit — wrapped in a dating game show theme to make testing less boring.
 
 <p align="center">
   <img src="Screenshots/readme/rigmatch-readme-hero.svg" alt="RigMatch.AI matches local Ollama models to your actual hardware" width="100%">
@@ -12,7 +12,7 @@ Find the best local AI model for your computer. RigMatch 0.2.x benchmarks throug
 
 ## Download
 
-**Beta v0.2.2** — [Downloads →](../../releases/latest)
+**Beta v0.2.4** — [Downloads ->](../../releases/latest)
 
 Nightly builds for upcoming fixes and previews are listed under [pre-releases](../../releases).
 
@@ -87,19 +87,19 @@ sudo apt install libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 xdg-utils libats
 
 ## Provider Support
 
-RigMatch is **Ollama-first in 0.2.x**.
+RigMatch is **Ollama-first for downloads** and now detects **LM Studio** for models you already have locally.
 
 | Provider | Status | Notes |
 |---|---|---|
 | Ollama | Supported now | RigMatch detects installed Ollama models, downloads from the Ollama library, and runs benchmarks through the local Ollama API. |
-| LM Studio | Planned | RigMatch does not currently run against LM Studio's model library or OpenAI-compatible local server. |
-| OpenAI-compatible local servers | Planned | Future provider layer target after the Ollama flow is stable. |
+| LM Studio | Supported for local test/chat | Start LM Studio's local server, then click **Check Local**. RigMatch lists those models for testing and chat through the OpenAI-compatible local API. |
+| OpenAI-compatible local servers | Partial | LM Studio's local OpenAI-compatible server is supported first. Broader provider configuration is still planned. |
 
 ### Can RigMatch use models I already downloaded in LM Studio?
 
-Not directly yet. LM Studio downloads are usually local GGUF files managed by LM Studio. RigMatch 0.2.x talks to Ollama, so it can use models already installed in Ollama, but it will not automatically see models that only exist inside LM Studio.
+Yes for testing and chat, as long as LM Studio's local server is running. LM Studio downloads are still managed by LM Studio; RigMatch does not delete, pause, or download LM Studio models.
 
-If you already have the same model installed in Ollama, RigMatch should detect it after Ollama is running and **Check Local** is clicked. If the model only exists in LM Studio, you may need an Ollama copy or a manual GGUF import with an Ollama `Modelfile` until native LM Studio support lands.
+If you want RigMatch's one-click catalog downloads, use Ollama. If you already have the model in LM Studio, start the LM Studio local server and click **Check Local**.
 
 ## How Scoring Works
 

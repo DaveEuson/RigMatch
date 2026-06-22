@@ -66,7 +66,12 @@ export type OllamaModel = {
   family?: string;
   parameterSize?: string;
   quantization?: string;
+  provider?: LocalModelProvider;
+  providerLabel?: string;
+  baseUrl?: string;
 };
+
+export type LocalModelProvider = 'ollama' | 'lm-studio';
 
 export type OllamaStatus = {
   ready: boolean;
@@ -101,7 +106,7 @@ export type NetworkHost = {
   hostname: string;
   ip: string;
   provider: string;
-  discovery?: 'ollama' | 'computer';
+  discovery?: 'ollama' | 'lm-studio' | 'computer';
   version?: string;
   models: number;
   status: string;
@@ -280,6 +285,7 @@ export type OllamaInstallProgress =
 export type AgentArcadeApi = {
   getSystemProfile: () => Promise<SystemProfile>;
   getOllamaStatus: (baseUrl?: string) => Promise<OllamaStatus>;
+  getLmStudioStatus: (baseUrl?: string) => Promise<OllamaStatus>;
   getOllamaCatalog: (options?: { force?: boolean }) => Promise<CatalogResponse>;
   openOllamaDownload: () => Promise<void>;
   scanLan: () => Promise<ScanResponse>;
@@ -291,13 +297,14 @@ export type AgentArcadeApi = {
   runBenchmark: (request: {
     model: string;
     baseUrl?: string;
+    provider?: LocalModelProvider;
     questionCount?: number;
     questions?: Array<{ id: string; label: string; type: string; prompt: string }>;
     progressId?: string;
   }) => Promise<BenchmarkResult>;
   onBenchmarkProgress?: (callback: (update: BenchmarkProgressUpdate) => void) => () => void;
   onPullProgress?: (callback: (update: PullProgressUpdate) => void) => () => void;
-  sendChat: (request: { model: string; message: string; baseUrl?: string }) => Promise<ChatResponse>;
+  sendChat: (request: { model: string; message: string; baseUrl?: string; provider?: LocalModelProvider }) => Promise<ChatResponse>;
   getLogs: (limit?: number) => Promise<AppLogResponse>;
   appendLog: (entry: Partial<AppLogEntry>) => Promise<AppLogEntry>;
   clearLogs: () => Promise<AppLogResponse>;
@@ -324,4 +331,8 @@ export type ModelRow = CatalogModel & {
   ready: boolean;
   installedModel?: OllamaModel;
   installLabel: string;
+  localProvider?: LocalModelProvider;
+  localProviderLabel?: string;
+  localBaseUrl?: string;
+  canDownload?: boolean;
 };

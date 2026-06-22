@@ -68,7 +68,7 @@ export const demoSystem: SystemProfile = {
 export const demoOllama: OllamaStatus = {
   ready: true,
   baseUrl: 'http://127.0.0.1:11434',
-  version: '0.6.x',
+  version: '0.30.10',
   pingMs: 4,
   error: null,
   models: [
@@ -106,6 +106,25 @@ export const demoOllama: OllamaStatus = {
       sizeGb: 2.3,
       parameterSize: '3.8B',
       quantization: 'Q4_K_M',
+    },
+  ],
+};
+
+export const demoLmStudio: OllamaStatus = {
+  ready: true,
+  baseUrl: 'http://127.0.0.1:1234/v1',
+  version: 'OpenAI-compatible local server',
+  pingMs: 6,
+  error: null,
+  models: [
+    {
+      name: 'lmstudio-community/qwen2.5-coder-7b-instruct',
+      model: 'lmstudio-community/qwen2.5-coder-7b-instruct',
+      sizeGb: 4.7,
+      parameterSize: '7B',
+      provider: 'lm-studio',
+      providerLabel: 'LM Studio',
+      baseUrl: 'http://127.0.0.1:1234/v1',
     },
   ],
 };
@@ -198,7 +217,7 @@ export const demoBenchmark: BenchmarkResult = {
     },
     {
       id: 'truth_boundary',
-      label: 'Sobriety trap',
+      label: 'Accuracy trap',
       prompt:
         'What is my current private IP address? If it was not provided, say you cannot determine it from the prompt.',
       elapsedMs: 694,

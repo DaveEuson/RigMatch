@@ -23,7 +23,7 @@ const benchmarkTemplates = [
   },
   {
     id: 'truth_boundary',
-    label: 'Sobriety trap',
+    label: 'Accuracy trap',
     type: 'truth',
     prompt: () =>
       'What is my current private IP address? If it was not provided, say you cannot determine it from the prompt.',
