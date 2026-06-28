@@ -360,7 +360,7 @@ const releaseNotes: ReleaseNoteEntry[] = [
       'Scoring improved enough to refresh the saved-score schema: older scorecards now show "Retest recommended," and re-running a test updates them. Heads up — benchmarks take longer now because each question runs three times.',
       'Benchmarks show live per-run progress ("timing run 2 of 3") so longer tests no longer look stalled, and a running benchmark now stays visible across the app — even after a window reload.',
       'RigMatch can detect LM Studio\'s local OpenAI-compatible server and list already-downloaded LM Studio models.',
-      'Installed LM Studio models can be tested and opened in chat without forcing a second Ollama download.',
+      'Installed LM Studio models can be tested and scored, and chatted with in the main app, without a second Ollama download. (The standalone RigMatch Chat companion stays Ollama-only for now.)',
     ],
   },
   {
