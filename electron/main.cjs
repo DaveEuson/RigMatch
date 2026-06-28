@@ -2324,10 +2324,23 @@ async function runBenchmarkInner(request = {}, sender) {
       promptId: prompt.id,
       promptLabel: prompt.label,
       prompt: prompt.prompt,
+      runTotal: BENCHMARK_REPEATS,
       message: `Asking ${prompt.label}.`,
     });
 
     for (let runIndex = 0; runIndex < BENCHMARK_REPEATS; runIndex += 1) {
+      sendProgress({
+        phase: 'prompt-run',
+        promptIndex,
+        promptId: prompt.id,
+        promptLabel: prompt.label,
+        prompt: prompt.prompt,
+        runIndex,
+        runTotal: BENCHMARK_REPEATS,
+        message: BENCHMARK_REPEATS > 1
+          ? `Asking ${prompt.label} — timing run ${runIndex + 1} of ${BENCHMARK_REPEATS}.`
+          : `Asking ${prompt.label}.`,
+      });
       const promptStart = Date.now();
       let responseText = '';
       let evalCount = 0;

@@ -180,9 +180,11 @@ export type TestedModelScore = {
 export type BenchmarkProgressUpdate = {
   id: string;
   model: string;
-  phase: 'started' | 'prompt-start' | 'prompt-token' | 'prompt-complete' | 'complete' | 'failed';
+  phase: 'started' | 'prompt-start' | 'prompt-run' | 'prompt-token' | 'prompt-complete' | 'complete' | 'failed';
   promptIndex: number;
   promptTotal: number;
+  runIndex?: number;
+  runTotal?: number;
   promptId?: string;
   promptLabel?: string;
   prompt?: string;

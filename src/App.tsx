@@ -235,6 +235,8 @@ type RunProgress = {
   questionLabel?: string;
   questionPrompt?: string;
   questionPhase?: BenchmarkProgressUpdate['phase'];
+  questionRunIndex?: number;
+  questionRunTotal?: number;
   completedQuestions?: number;
   questionScores?: Record<string, number>;
 };
@@ -2225,7 +2227,15 @@ function App() {
         const completedQuestions = update.phase === 'prompt-complete'
           ? Math.min(promptTotal, update.promptIndex + 1)
           : current.completedQuestions ?? 0;
-        const promptFraction = update.phase === 'prompt-complete' ? 1 : update.phase === 'prompt-start' ? 0.35 : 0;
+        const runTotal = update.runTotal ?? current.questionRunTotal ?? 1;
+        const runIndex = update.runIndex ?? 0;
+        const promptFraction = update.phase === 'prompt-complete'
+          ? 1
+          : update.phase === 'prompt-run'
+            ? Math.min(0.9, 0.15 + (runIndex / Math.max(1, runTotal)) * 0.75)
+            : update.phase === 'prompt-start'
+              ? 0.1
+              : 0;
         const currentPromptProgress = promptTotal > 0
           ? Math.min(1, (update.promptIndex + promptFraction) / promptTotal)
           : 0;
@@ -2242,6 +2252,8 @@ function App() {
           questionLabel: update.promptLabel ?? current.questionLabel,
           questionPrompt: update.prompt ?? current.questionPrompt,
           questionPhase: update.phase,
+          questionRunIndex: typeof update.runIndex === 'number' ? update.runIndex : current.questionRunIndex,
+          questionRunTotal: update.runTotal ?? current.questionRunTotal,
           completedQuestions,
           message: update.message ?? current.message,
           questionScores: typeof update.sobrietyScore === 'number'
@@ -10626,17 +10638,22 @@ function QuestionStatusBar({
   const currentQuestion = questions[currentIndex];
   const currentLabel = progress.questionLabel ?? currentQuestion?.label ?? 'Waiting for question';
   const currentPrompt = progress.questionPrompt ?? currentQuestion?.prompt ?? 'The next judging question will appear here.';
+  const runLabel = progress.questionRunTotal && progress.questionRunTotal > 1
+    ? `Run ${Math.min(progress.questionRunTotal, (progress.questionRunIndex ?? 0) + 1)}/${progress.questionRunTotal}`
+    : null;
   const phaseLabel = progress.phase === 'complete'
     ? 'Crowned'
     : progress.questionPhase === 'prompt-complete'
       ? 'Scored'
-      : progress.questionPhase === 'prompt-token'
-        ? 'Responding…'
-        : progress.questionPhase === 'prompt-start'
-          ? 'Asking now'
-          : progress.questionPhase === 'failed'
-            ? 'Needs attention'
-            : 'Warming up';
+      : progress.questionPhase === 'prompt-run'
+        ? (runLabel ?? 'Timing run')
+        : progress.questionPhase === 'prompt-token'
+          ? 'Responding…'
+          : progress.questionPhase === 'prompt-start'
+            ? 'Asking now'
+            : progress.questionPhase === 'failed'
+              ? 'Needs attention'
+              : 'Warming up';
 
   return (
     <section className="question-status-bar" aria-label="Live question status">
@@ -10765,15 +10782,20 @@ function LiveFlirtSpotlight({
   const currentQuestion = questionPlan?.[currentQuestionIndex];
   const currentLabel = progress.questionLabel ?? currentQuestion?.label ?? 'Question';
   const currentPrompt = progress.questionPrompt ?? currentQuestion?.prompt ?? 'The host is about to ask the next prompt.';
-  const phaseLabel = progress.questionPhase === 'prompt-token'
-    ? 'Answering live'
-    : progress.questionPhase === 'prompt-start'
-      ? 'Host is asking'
-      : progress.questionPhase === 'prompt-complete'
-        ? 'Answer scored'
-        : progress.questionPhase === 'failed'
-          ? 'Needs attention'
-          : 'Warming up';
+  const runLabel = progress.questionRunTotal && progress.questionRunTotal > 1
+    ? `Run ${Math.min(progress.questionRunTotal, (progress.questionRunIndex ?? 0) + 1)}/${progress.questionRunTotal}`
+    : null;
+  const phaseLabel = progress.questionPhase === 'prompt-run'
+    ? (runLabel ?? 'Timing run')
+    : progress.questionPhase === 'prompt-token'
+      ? 'Answering live'
+      : progress.questionPhase === 'prompt-start'
+        ? 'Host is asking'
+        : progress.questionPhase === 'prompt-complete'
+          ? 'Answer scored'
+          : progress.questionPhase === 'failed'
+            ? 'Needs attention'
+            : 'Warming up';
   const hostLine = progress.mode === 'speed-date'
     ? 'Same prompt, five stools, no favoritism.'
     : 'One contestant gets the spotlight.';
