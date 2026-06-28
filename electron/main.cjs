@@ -72,7 +72,7 @@ function openExternalSafe(url) {
 }
 let latestCudaCache = null;
 let latestCudaCacheAt = 0;
-const APP_USER_AGENT = 'RigMatchAI/0.1';
+const APP_USER_AGENT = `RigMatchAI/${app.getVersion()}`;
 const SCORES_SERVER_PORT = 11435;
 const BENCHMARK_REPEATS = 1;
 const BENCHMARK_TIMEOUT_MS = 120000;

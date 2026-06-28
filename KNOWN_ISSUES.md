@@ -1,12 +1,12 @@
-# Known Issues — RigMatch.AI v0.1.9 Beta
+# Known Issues — RigMatch.AI v0.2.4 Beta
 
 This is a candid list of issues we know about going into the beta. If you hit something not listed here, that's a genuine bug report — please share it.
 
 ---
 
-## 0.1.9 Release Readiness
+## 0.2.4 Release Readiness
 
-0.1.9 is a release-gate hardening build. It focuses on RigMatch Chat dependency cleanup, local Windows smoke packaging, macOS close behavior, stricter benchmark smoke guidance, and removing unused prototype assets from the tracked project.
+0.2.4 is a beta polish and release-QA build. It focuses on a clearer Simple Mode game-show host path, a tightened top header layout, and expanded release validation (build, lint, unit/security guards, dependency audit, secret-pattern sweep, and rendered UI smoke checks).
 
 ---
 
@@ -54,7 +54,7 @@ RigMatch now builds separate Linux x64 and Linux ARM64 artifacts. NVIDIA Jetson 
 
 If you find something not on this list, please open an issue or drop it in the beta feedback channel. Screenshots and your hardware spec (VRAM, OS) help narrow things down fast.
 
-*Last updated: v0.1.9 beta — June 2026*
+*Last updated: v0.2.4 beta — June 2026*
 
 ## Upcoming Features
 
