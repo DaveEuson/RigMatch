@@ -4750,6 +4750,11 @@ function HowWeScoreSection() {
             Scores are <em>relative to your rig</em>. A model that scores 88 on a 12 GB GPU will score differently
             on a Mac Studio with 64 GB unified memory.
           </p>
+          <p className="how-we-score-footer">
+            <strong>Answer quality is a heuristic proxy, not a verdict.</strong> The rule-based checks catch obvious
+            wins and failures, but they can misjudge a good answer written in an unexpected way. When a quality score
+            looks off, open the scorecard and read the saved answer transcript — that is the source of truth.
+          </p>
         </div>
       )}
     </section>
