@@ -2,8 +2,6 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const os = require('node:os');
-const dns = require('node:dns').promises;
-const net = require('node:net');
 const fs = require('node:fs/promises');
 const http = require('node:http');
 const { execFile, spawn } = require('node:child_process');
@@ -89,7 +87,6 @@ const BENCHMARK_WARMUP_OPTIONS = Object.freeze({
   num_predict: 8,
   num_ctx: 2048,
 });
-const COMPUTER_PROBE_PORTS = [11434, 22, 445, 3389, 80, 443];
 const LOG_LIMIT = 250;
 const OLLAMA_CATALOG_CACHE_MS = 1000 * 60 * 10;
 const OLLAMA_LIBRARY_FAMILY_LIMIT = 96;
@@ -1937,116 +1934,6 @@ async function scanLanForOllama() {
 
 async function addHostByAddress() {
   throw new Error('Remote Ollama hosts are disabled for v1. Remote runners are planned for RigMatch 2.0.');
-}
-
-function normalizeOllamaAddress(address) {
-  const raw = String(address || '').trim();
-  if (!raw) throw new Error('Enter an IP address or Ollama URL');
-
-  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
-  const url = new URL(withProtocol);
-
-  if (!url.port) {
-    url.port = '11434';
-  }
-
-  url.pathname = '';
-  url.search = '';
-  url.hash = '';
-
-  return url.toString().replace(/\/$/, '');
-}
-
-async function probeOllamaHost(ip, isLocal, explicitBaseUrl) {
-  const baseUrl = explicitBaseUrl || `http://${ip}:11434`;
-  const startedAt = Date.now();
-
-  try {
-    const version = await fetchJson(`${baseUrl}/api/version`, {}, 1100);
-    const tags = await fetchJson(`${baseUrl}/api/tags`, {}, 3500).catch(() => ({ models: null }));
-    const modelCount = Array.isArray(tags.models) ? tags.models.length : 0;
-
-    return {
-      id: ip,
-      hostname: isLocal ? `${os.hostname()} (This Machine)` : ip,
-      ip,
-      provider: 'Ollama',
-      discovery: 'ollama',
-      version: version.version || 'Unknown',
-      models: modelCount,
-      status: Array.isArray(tags.models) ? 'Ready' : 'API Ready',
-      pingMs: Date.now() - startedAt,
-      baseUrl,
-      isLocal,
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function probeComputerHost(ip, isLocal) {
-  if (isLocal) return null;
-
-  const startedAt = Date.now();
-  const probes = await Promise.all(COMPUTER_PROBE_PORTS.map((port) => probeTcpPort(ip, port)));
-  const openPorts = probes.filter((probe) => probe.state === 'open').map((probe) => probe.port);
-  const ollamaProbe = probes.find((probe) => probe.port === 11434);
-  const ollamaRefused = ollamaProbe?.state === 'refused';
-
-  if (openPorts.length === 0 && !ollamaRefused) return null;
-
-  return {
-    id: `computer-${ip}`,
-    hostname: await resolveHostName(ip),
-    ip,
-    provider: openPorts.includes(22) ? 'Computer / SSH' : 'Computer',
-    discovery: 'computer',
-    models: 0,
-    status: ollamaRefused ? 'Remote disabled for v1' : 'Computer found',
-    pingMs: Date.now() - startedAt,
-    baseUrl: `http://${ip}:11434`,
-    isLocal: false,
-    openPorts,
-    setupHint: 'Remote systems are disabled for RigMatch v1. Use local Ollama on this computer.',
-  };
-}
-
-function probeTcpPort(ip, port, timeoutMs = 650) {
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    let settled = false;
-
-    function done(state) {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve({ port, state });
-    }
-
-    socket.setTimeout(timeoutMs);
-    socket.once('connect', () => done('open'));
-    socket.once('timeout', () => done('timeout'));
-    socket.once('error', (error) => {
-      done(error.code === 'ECONNREFUSED' ? 'refused' : 'closed');
-    });
-    socket.connect(port, ip);
-  });
-}
-
-async function resolveHostName(ip) {
-  try {
-    const names = await dns.reverse(ip);
-    return names[0] || ip;
-  } catch {
-    return ip;
-  }
-}
-
-function sortDiscoveredHosts(a, b) {
-  const aRank = a.discovery === 'computer' ? 1 : 0;
-  const bRank = b.discovery === 'computer' ? 1 : 0;
-  if (aRank !== bRank) return aRank - bRank;
-  return (a.pingMs || 9999) - (b.pingMs || 9999);
 }
 
 async function pullModel(request = {}, sender) {
