@@ -195,7 +195,8 @@ jobs:
         id: release_meta
         shell: bash
         run: |
-          if [[ "${GITHUB_REF_NAME}" =~ (nightly|alpha|beta|canary|preview) ]]; then
+          # -beta is the stable/Latest channel; only nightly/alpha/canary/preview are pre-releases.
+          if [[ "${GITHUB_REF_NAME}" =~ (nightly|alpha|canary|preview) ]]; then
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
             echo "make_latest=false" >> "$GITHUB_OUTPUT"
           else
