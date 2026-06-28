@@ -57,7 +57,9 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
+          # Node 24: the scoring unit tests import a .ts module directly and rely on
+          # built-in TypeScript type-stripping (default in Node >= 23.6 / 24).
+          node-version: '24'
           cache: 'npm'
 
       - name: Install Rust
