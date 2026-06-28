@@ -23,6 +23,7 @@ const {
   durationNsToMs,
   estimateTokens,
   average,
+  median,
   clamp,
 } = require('./benchmarkScoring.cjs');
 const security = require('./security.cjs');
@@ -72,7 +73,7 @@ let latestCudaCache = null;
 let latestCudaCacheAt = 0;
 const APP_USER_AGENT = `RigMatchAI/${app.getVersion()}`;
 const SCORES_SERVER_PORT = 11435;
-const BENCHMARK_REPEATS = 1;
+const BENCHMARK_REPEATS = 3; // median of 3 timed runs per prompt for a steadier speed score
 const BENCHMARK_TIMEOUT_MS = 120000;
 const BENCHMARK_KEEP_ALIVE = '10m';
 const BENCHMARK_GENERATE_OPTIONS = Object.freeze({
@@ -2443,15 +2444,15 @@ async function runBenchmarkInner(request = {}, sender) {
       id: prompt.id,
       label: prompt.label,
       prompt: prompt.prompt,
-      elapsedMs: Math.round(average(runs.map((run) => run.elapsedMs))),
-      tokensPerSecond: Math.round(average(runs.map((run) => run.tokensPerSecond)) * 10) / 10,
+      elapsedMs: Math.round(median(runs.map((run) => run.elapsedMs))),
+      tokensPerSecond: Math.round(median(runs.map((run) => run.tokensPerSecond)) * 10) / 10,
       sobrietyScore: Math.round(average(runs.map((run) => run.sobrietyScore))),
       response: runs[runs.length - 1]?.response || '',
       doneReason: summarizeDoneReasons(runs.map((run) => run.doneReason)),
       status: summarizePromptStatuses(runs.map((run) => run.status)),
       diagnostic: summarizePromptDiagnostics(runs.map((run) => run.diagnostic)),
       evalCount: Math.round(average(runs.map((run) => run.evalCount))),
-      evalDurationMs: Math.round(average(runs.map((run) => run.evalDurationMs))),
+      evalDurationMs: Math.round(median(runs.map((run) => run.evalDurationMs))),
       thinkingDisabled: runs.every((run) => run.thinkingDisabled),
     });
     const completedPrompt = promptResults[promptResults.length - 1];

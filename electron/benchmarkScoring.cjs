@@ -46,11 +46,17 @@ function scoreSobriety(prompt, response) {
   }
 
   if (prompt.type === 'coding') {
-    const hasFunction = /function\s+clampScore|const\s+clampScore|clampScore\s*[=(]|=>/.test(text);
-    const hasClamping = /Math\.min|Math\.max/.test(text);
-    if (hasFunction && hasClamping) return 92;
-    if (hasClamping) return 72;
-    if (/function|const|=>/.test(text)) return 58;
+    // Recognize a function definition without hard-coding the requested name,
+    // so a correct answer that names things differently is not penalized.
+    const definesFunction = /\bfunction\b/.test(text) || /=>/.test(text) || /\bconst\s+\w+\s*=/.test(text);
+    // Accept clamping via Math.min/Math.max OR an equivalent ternary/comparison
+    // against the 0 and 100 bounds — both are valid, idiomatic solutions.
+    const usesMathClamp = /Math\.min\b/.test(text) && /Math\.max\b/.test(text);
+    const usesConditionalClamp = /\b0\b/.test(text) && /\b100\b/.test(text) && /(\?|[<>]=?)/.test(text);
+    const clamps = usesMathClamp || usesConditionalClamp;
+    if (definesFunction && clamps) return 92;
+    if (clamps) return 72;
+    if (definesFunction) return 58;
     return 38;
   }
 
@@ -165,6 +171,15 @@ function average(values) {
   return valid.reduce((sum, value) => sum + value, 0) / valid.length;
 }
 
+// Median is more robust than the mean for timing samples, where a single
+// background-load spike on one run would otherwise drag the average.
+function median(values) {
+  const valid = values.filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+  if (!valid.length) return 0;
+  const mid = Math.floor(valid.length / 2);
+  return valid.length % 2 === 0 ? (valid[mid - 1] + valid[mid]) / 2 : valid[mid];
+}
+
 function clamp(value) {
   return Math.min(100, Math.max(0, value));
 }
@@ -183,5 +198,6 @@ module.exports = {
   durationNsToMs,
   estimateTokens,
   average,
+  median,
   clamp,
 };

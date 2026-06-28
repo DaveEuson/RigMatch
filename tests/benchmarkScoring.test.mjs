@@ -64,3 +64,52 @@ test('status detects truncated non-empty responses', () => {
   assert.equal(scoring.getBenchmarkPromptStatus('partial answer', 'length'), 'truncated');
   assert.equal(scoring.getBenchmarkPromptStatus('complete answer', 'stop'), 'ok');
 });
+
+test('coding score rewards a correct ternary clamp, not just Math.min/Math.max', () => {
+  // Canonical Math-based answer.
+  assert.equal(
+    scoring.scoreSobriety(
+      { type: 'coding' },
+      'function clampScore1(n) { return Math.min(100, Math.max(0, n)); }',
+    ),
+    92,
+  );
+  // Equally correct ternary/comparison answer — previously scored only 58.
+  assert.equal(
+    scoring.scoreSobriety(
+      { type: 'coding' },
+      'const clampScore1 = (n) => n < 0 ? 0 : n > 100 ? 100 : n;',
+    ),
+    92,
+  );
+});
+
+test('coding score does not depend on the exact requested function name', () => {
+  const requestedName = scoring.scoreSobriety(
+    { type: 'coding' },
+    'function clampScore1(n) { return Math.min(100, Math.max(0, n)); }',
+  );
+  const otherName = scoring.scoreSobriety(
+    { type: 'coding' },
+    'function clamp(n) { return Math.min(100, Math.max(0, n)); }',
+  );
+  assert.equal(requestedName, otherName);
+  assert.equal(otherName, 92);
+});
+
+test('coding score still distinguishes partial and non-answers', () => {
+  assert.equal(scoring.scoreSobriety({ type: 'coding' }, 'Math.min(100, Math.max(0, n))'), 72); // clamps, no fn
+  assert.equal(scoring.scoreSobriety({ type: 'coding' }, 'function doThing() { return 42; }'), 58); // fn, no clamp
+  assert.equal(scoring.scoreSobriety({ type: 'coding' }, 'I cannot help with that.'), 38); // not code
+});
+
+test('median returns the middle value and averages the middle pair', () => {
+  assert.equal(scoring.median([5, 1, 3]), 3);
+  assert.equal(scoring.median([10, 2, 8, 4]), 6); // (4 + 8) / 2
+  assert.equal(scoring.median([42]), 42);
+  assert.equal(scoring.median([]), 0);
+});
+
+test('median ignores non-finite samples', () => {
+  assert.equal(scoring.median([NaN, 7, 3, Infinity, 5]), 5);
+});

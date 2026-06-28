@@ -5,7 +5,7 @@ import type { BenchmarkResult, TestedModelScore } from '../types';
  * Scores tagged with an older version are flagged "Retest recommended" and are
  * excluded from category picks so stale calibration cannot crown a winner.
  */
-export const CURRENT_SCORE_SCHEMA_VERSION = 3;
+export const CURRENT_SCORE_SCHEMA_VERSION = 4;
 
 /**
  * Relative weights that make up the 0–100 Match Score. They sum to 1.0.
