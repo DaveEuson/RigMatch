@@ -298,6 +298,13 @@ export type OllamaInstallProgress =
   | { phase: 'script'; command: string }
   | { phase: 'error'; error: string };
 
+export type BenchmarkStatus = {
+  running: boolean;
+  progressId?: string | null;
+  model?: string;
+  snapshot?: BenchmarkProgressUpdate | null;
+};
+
 export type AgentArcadeApi = {
   getSystemProfile: () => Promise<SystemProfile>;
   getOllamaStatus: (baseUrl?: string) => Promise<OllamaStatus>;
@@ -319,6 +326,8 @@ export type AgentArcadeApi = {
     progressId?: string;
   }) => Promise<BenchmarkResult>;
   onBenchmarkProgress?: (callback: (update: BenchmarkProgressUpdate) => void) => () => void;
+  getActiveBenchmark: () => Promise<BenchmarkStatus>;
+  onBenchmarkStatus?: (callback: (status: BenchmarkStatus) => void) => () => void;
   onPullProgress?: (callback: (update: PullProgressUpdate) => void) => () => void;
   sendChat: (request: { model: string; message: string; baseUrl?: string; provider?: LocalModelProvider }) => Promise<ChatResponse>;
   getLogs: (limit?: number) => Promise<AppLogResponse>;

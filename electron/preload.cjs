@@ -18,6 +18,12 @@ const api = {
     ipcRenderer.on('benchmark:progress', listener);
     return () => ipcRenderer.removeListener('benchmark:progress', listener);
   },
+  getActiveBenchmark: () => ipcRenderer.invoke('benchmark:getActive'),
+  onBenchmarkStatus: (callback) => {
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on('benchmark:status', listener);
+    return () => ipcRenderer.removeListener('benchmark:status', listener);
+  },
   onPullProgress: (callback) => {
     const listener = (_event, update) => callback(update);
     ipcRenderer.on('ollama:pullProgress', listener);

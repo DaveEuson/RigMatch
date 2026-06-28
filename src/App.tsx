@@ -65,6 +65,7 @@ import type {
   BenchmarkResult,
   BenchmarkProgressUpdate,
   BenchmarkPromptResult,
+  BenchmarkStatus,
   CatalogModel,
   LocalModelProvider,
   ModelRow,
@@ -600,6 +601,7 @@ function App() {
   );
   const [isScanningRig, setIsScanningRig] = useState(false);
   const [isBenchmarking, setIsBenchmarking] = useState(false);
+  const [externalBenchmark, setExternalBenchmark] = useState<BenchmarkStatus | null>(null);
   const [isListTesting, setIsListTesting] = useState(false);
   const [isPullingModels, setIsPullingModels] = useState(false);
   const [isPullCancelRequested, setIsPullCancelRequested] = useState(false);
@@ -2264,6 +2266,19 @@ function App() {
     });
   }, [benchmarkPromptPlan.length]);
 
+  // Mirror the main process's authoritative benchmark state so a run is always
+  // visible in the UI — even after a renderer reload or a non-UI trigger.
+  useEffect(() => {
+    if (!agentArcadeApi.getActiveBenchmark) return undefined;
+    let cancelled = false;
+    const apply = (status: BenchmarkStatus | undefined) => {
+      if (!cancelled) setExternalBenchmark(status?.running ? status : null);
+    };
+    agentArcadeApi.getActiveBenchmark().then(apply).catch(() => {});
+    const off = agentArcadeApi.onBenchmarkStatus?.(apply);
+    return () => { cancelled = true; off?.(); };
+  }, []);
+
   useEffect(() => {
     if (!agentArcadeApi.onPullProgress) return undefined;
 
@@ -2634,6 +2649,13 @@ function App() {
           onClose={() => setSetupGuideOpen(false)}
           onInstallOllama={openOllamaDownload}
         />
+      )}
+
+      {externalBenchmark?.running && runProgress?.phase !== 'running' && (
+        <div className="benchmark-running-banner" role="status" aria-live="polite">
+          <span className="benchmark-running-dot" aria-hidden="true" />
+          <span>{formatBenchmarkBanner(externalBenchmark)}</span>
+        </div>
       )}
 
       {runProgress?.phase === 'running' && (
@@ -11386,6 +11408,21 @@ function getScoreTone(total: number) {
   if (total >= 80) return 'good';
   if (total >= 70) return 'ok';
   return 'low';
+}
+
+function formatBenchmarkBanner(status: BenchmarkStatus): string {
+  const model = status.model ?? 'a model';
+  const snap = status.snapshot;
+  const parts: string[] = [`Benchmark running — ${model}`];
+  if (snap) {
+    if (typeof snap.promptIndex === 'number' && typeof snap.promptTotal === 'number' && snap.promptTotal > 0) {
+      parts.push(`question ${Math.min(snap.promptTotal, snap.promptIndex + 1)}/${snap.promptTotal}`);
+    }
+    if (typeof snap.runIndex === 'number' && typeof snap.runTotal === 'number' && snap.runTotal > 1) {
+      parts.push(`run ${snap.runIndex + 1}/${snap.runTotal}`);
+    }
+  }
+  return parts.join(' · ');
 }
 
 function getResponseEstimate(speedScore: number): string {

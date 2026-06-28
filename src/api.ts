@@ -38,6 +38,9 @@ const fallbackApi: AgentArcadeApi = {
     await delay(260);
     return demoLmStudio;
   },
+  async getActiveBenchmark() {
+    return { running: false };
+  },
   async getOllamaCatalog() {
     await delay(450);
     return demoCatalog;

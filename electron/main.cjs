@@ -316,6 +316,7 @@ const BRIDGE_ALLOWED_ORIGINS = new Set([
 
 const SCORES_MAX_ENTRIES = 500;   // N-07: reject oversized payloads from renderer
 let benchmarkRunning = false;     // N-06: single-benchmark mutex
+let activeBenchmark = null;       // authoritative running state mirrored to the renderer
 let lastLogClearAt = 0;           // N-03: rate-limit log clearing
 const activePullControllers = new Map(); // keyed by progressId for safe per-download cancellation
 let catalogFetchPromise = null;   // dedup concurrent catalog fetches
@@ -392,6 +393,7 @@ function registerHandlers() {
   handleLogged('network:scanLan', 'network', () => scanLanForOllama());
   handleLogged('network:addHostByAddress', 'network', (_event, address) => addHostByAddress(address));
   handleLogged('benchmark:run', 'benchmark', (event, request) => runBenchmark(request, event.sender));
+  ipcMain.handle('benchmark:getActive', () => benchmarkStatusPayload());
   handleLogged('chat:send', 'chat', (_event, request) => sendChat(request));
   handleLogged('logs:list', 'logs', (_event, limit) => readAppLogs(limit));
   handleLogged('logs:append', 'logs', (_event, entry) => appendAppLog(entry));
@@ -2234,15 +2236,42 @@ async function deleteModel(request = {}) {
   };
 }
 
+function benchmarkStatusPayload() {
+  return activeBenchmark
+    ? {
+      running: true,
+      progressId: activeBenchmark.progressId,
+      model: activeBenchmark.model,
+      snapshot: activeBenchmark.snapshot,
+    }
+    : { running: false };
+}
+
+function broadcastBenchmarkStatus() {
+  const payload = benchmarkStatusPayload();
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send('benchmark:status', payload);
+  }
+}
+
 async function runBenchmark(request = {}, sender) {
   if (benchmarkRunning) {
     throw new Error('A benchmark is already running. Please wait for it to complete.');
   }
   benchmarkRunning = true;
+  activeBenchmark = {
+    progressId: typeof request.progressId === 'string' ? request.progressId : null,
+    model: request.model,
+    startedAt: Date.now(),
+    snapshot: null,
+  };
+  broadcastBenchmarkStatus();
   try {
     return await runBenchmarkInner(request, sender);
   } finally {
     benchmarkRunning = false;
+    activeBenchmark = null;
+    broadcastBenchmarkStatus();
   }
 }
 
@@ -2256,13 +2285,18 @@ async function runBenchmarkInner(request = {}, sender) {
   const benchmarkPrompts = buildBenchmarkPromptPlan(questionCount, request.questions);
   const progressId = typeof request.progressId === 'string' ? request.progressId : null;
   const sendProgress = (update) => {
-    if (!progressId || !sender || sender.isDestroyed()) return;
-    sender.send('benchmark:progress', {
+    const payload = {
       id: progressId,
       model,
       promptTotal: benchmarkPrompts.length,
       ...update,
-    });
+    };
+    // Mirror the latest progress so a reloaded/late renderer can re-attach.
+    if (activeBenchmark && activeBenchmark.progressId === progressId) {
+      activeBenchmark.snapshot = payload;
+    }
+    if (!progressId || !sender || sender.isDestroyed()) return;
+    sender.send('benchmark:progress', payload);
   };
 
   if (!model) {
