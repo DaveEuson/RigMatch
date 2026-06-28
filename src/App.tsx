@@ -352,12 +352,15 @@ const IMAGE_GENERATION_MODEL_OPTIONS: ImageGenerationModelOption[] = [
 const releaseNotes: ReleaseNoteEntry[] = [
   {
     version: '0.2.5',
-    label: 'Local Provider Nightly',
-    date: 'Next nightly',
+    label: 'Steadier Scoring & Live Progress',
+    date: 'Beta build',
     notes: [
+      'Speed is now the median of three timed runs per question, so a single background spike no longer skews a model\'s pace score.',
+      'Answer-quality grading is more robust — a correct coding answer written with a ternary or a different function name is no longer marked down.',
+      'Scoring improved enough to refresh the saved-score schema: older scorecards now show "Retest recommended," and re-running a test updates them. Heads up — benchmarks take longer now because each question runs three times.',
+      'Benchmarks show live per-run progress ("timing run 2 of 3") so longer tests no longer look stalled, and a running benchmark now stays visible across the app — even after a window reload.',
       'RigMatch can detect LM Studio\'s local OpenAI-compatible server and list already-downloaded LM Studio models.',
       'Installed LM Studio models can be tested and opened in chat without forcing a second Ollama download.',
-      'The next feature path now keeps Simple Mode Wizard as item 6 after the provider, download, catalog, and chat-profile work.',
     ],
   },
   {

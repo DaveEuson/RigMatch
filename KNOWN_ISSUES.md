@@ -1,12 +1,14 @@
-# Known Issues — RigMatch.AI v0.2.4 Beta
+# Known Issues — RigMatch.AI v0.2.5 Beta
 
 This is a candid list of issues we know about going into the beta. If you hit something not listed here, that's a genuine bug report — please share it.
 
 ---
 
-## 0.2.4 Release Readiness
+## 0.2.5 Release Readiness
 
-0.2.4 is a beta polish and release-QA build. It focuses on a clearer Simple Mode game-show host path, a tightened top header layout, and expanded release validation (build, lint, unit/security guards, dependency audit, secret-pattern sweep, and rendered UI smoke checks).
+0.2.5 focuses on more trustworthy scoring and clearer progress. Speed is now the median of three timed runs per question, and the answer-quality heuristics are more robust. Benchmarks show live per-run progress, and a running benchmark stays visible across the app even after a window reload.
+
+**Two things returning users will notice:** because scoring changed, saved scorecards are flagged **Retest recommended** (re-running updates them), and **benchmarks take roughly 3× longer** now since each question runs three times for a steadier speed score.
 
 ---
 
@@ -54,7 +56,7 @@ RigMatch now builds separate Linux x64 and Linux ARM64 artifacts. NVIDIA Jetson 
 
 If you find something not on this list, please open an issue or drop it in the beta feedback channel. Screenshots and your hardware spec (VRAM, OS) help narrow things down fast.
 
-*Last updated: v0.2.4 beta — June 2026*
+*Last updated: v0.2.5 beta — June 2026*
 
 ## Upcoming Features
 
