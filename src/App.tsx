@@ -75,9 +75,18 @@ import type {
   SystemProfile,
   AutoUpdateStatus,
   OllamaInstallProgress,
+  TestedModelScore,
   UpdateChannel,
   UpdateCheckResponse,
 } from './types';
+import {
+  compareBenchmarkResults,
+  compareTestedModelScores,
+  formatMatchScore,
+  isLegacyScore,
+  toTestedModelScore,
+  upsertModelScores,
+} from './lib/scoring';
 import {
   getDeveloperFilterOptions,
   getModelDeveloperKey,
@@ -110,7 +119,6 @@ import {
   APP_VERSION,
   BUY_ME_A_COFFEE_URL,
   CLEARED_TOP_MATCHES_STORAGE_KEY,
-  CURRENT_SCORE_SCHEMA_VERSION,
   DEFAULT_SHORTLIST_IDS,
   GITHUB_ISSUES_URL,
   HISTORY_STORAGE_KEY,
@@ -165,20 +173,6 @@ const MODEL_AVATAR_ASSETS: Record<ModelFamilyId, string> = {
   gemma: modelAvatarGemma,
   phi: modelAvatarPhi,
   generic: modelAvatarGeneric,
-};
-
-type TestedModelScore = {
-  model: string;
-  total: number;
-  grade: string;
-  speed: number;
-  sobriety: number;
-  stability?: number;
-  fit: number;
-  completedAt: string;
-  suiteName?: string;
-  preciseTotal?: number;
-  scoreSchemaVersion?: number;
 };
 
 type ListTestResult = {
@@ -11126,44 +11120,6 @@ function normalizeBenchmarkResultModel(result: BenchmarkResult, model: string): 
   return result.model === model ? result : { ...result, model };
 }
 
-type MatchScoreLike = Pick<TestedModelScore, 'speed' | 'sobriety' | 'fit' | 'total'> & {
-  stability?: number;
-  preciseTotal?: number;
-};
-
-function calculatePreciseTotal(score: MatchScoreLike) {
-  const stability = typeof score.stability === 'number' ? score.stability : score.total;
-  return Number((score.sobriety * 0.34 + score.speed * 0.32 + stability * 0.18 + score.fit * 0.16).toFixed(1));
-}
-
-function toTestedModelScore(result: BenchmarkResult, suiteName?: string): TestedModelScore {
-  return {
-    model: result.model,
-    total: result.scores.total,
-    grade: result.scores.grade,
-    speed: result.scores.speed,
-    sobriety: result.scores.sobriety,
-    stability: result.scores.stability,
-    fit: result.scores.fit,
-    completedAt: result.completedAt,
-    suiteName,
-    preciseTotal: calculatePreciseTotal(result.scores),
-    scoreSchemaVersion: CURRENT_SCORE_SCHEMA_VERSION,
-  };
-}
-
-function upsertModelScores(
-  current: Record<string, TestedModelScore>,
-  results: BenchmarkResult[],
-  suiteName?: string,
-) {
-  return results.reduce<Record<string, TestedModelScore>>((next, result) => {
-    const score = toTestedModelScore(result, suiteName);
-    next[score.model] = score;
-    return next;
-  }, { ...current });
-}
-
 function upsertBenchmarkResults(
   current: Record<string, BenchmarkResult>,
   results: BenchmarkResult[],
@@ -11178,38 +11134,6 @@ function getRecentModelScores(modelScores: Record<string, TestedModelScore>) {
   return Object.values(modelScores)
     .filter(isTestedModelScore)
     .sort((left, right) => Date.parse(right.completedAt) - Date.parse(left.completedAt));
-}
-
-function isLegacyScore(score: TestedModelScore) {
-  return score.scoreSchemaVersion !== CURRENT_SCORE_SCHEMA_VERSION;
-}
-
-function getScoreSortTotal(score: MatchScoreLike) {
-  return typeof score.preciseTotal === 'number' ? score.preciseTotal : calculatePreciseTotal(score);
-}
-
-function formatMatchScore(score: MatchScoreLike) {
-  const precise = getScoreSortTotal(score);
-  return Math.abs(precise - score.total) >= 0.05 ? precise.toFixed(1) : String(score.total);
-}
-
-function compareTestedModelScores(left: TestedModelScore, right: TestedModelScore) {
-  const leftLegacy = isLegacyScore(left);
-  const rightLegacy = isLegacyScore(right);
-  if (leftLegacy !== rightLegacy) return leftLegacy ? 1 : -1;
-
-  const preciseDelta = getScoreSortTotal(right) - getScoreSortTotal(left);
-  if (Math.abs(preciseDelta) >= 0.05) return preciseDelta;
-  if (right.total !== left.total) return right.total - left.total;
-  if (right.sobriety !== left.sobriety) return right.sobriety - left.sobriety;
-  if ((right.stability ?? right.total) !== (left.stability ?? left.total)) return (right.stability ?? right.total) - (left.stability ?? left.total);
-  if (right.fit !== left.fit) return right.fit - left.fit;
-  if (right.speed !== left.speed) return right.speed - left.speed;
-  return left.model.localeCompare(right.model);
-}
-
-function compareBenchmarkResults(left: BenchmarkResult, right: BenchmarkResult) {
-  return compareTestedModelScores(toTestedModelScore(left), toTestedModelScore(right));
 }
 
 function scoreToToks(speed: number): string {

@@ -34,7 +34,7 @@ export const NAV_ITEM_BY_ID = new Map<NavId, NavItem>(navItems.map((item) => [it
 export const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';
 export const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
 export const APP_VERSION = '0.2.4';
-export const CURRENT_SCORE_SCHEMA_VERSION = 3;
+export { CURRENT_SCORE_SCHEMA_VERSION } from './scoring';
 export const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
 export const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
 export const HISTORY_STORAGE_KEY = 'rigmatch:history:v1';

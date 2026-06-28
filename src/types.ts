@@ -163,6 +163,20 @@ export type BenchmarkResult = {
   };
 };
 
+export type TestedModelScore = {
+  model: string;
+  total: number;
+  grade: string;
+  speed: number;
+  sobriety: number;
+  stability?: number;
+  fit: number;
+  completedAt: string;
+  suiteName?: string;
+  preciseTotal?: number;
+  scoreSchemaVersion?: number;
+};
+
 export type BenchmarkProgressUpdate = {
   id: string;
   model: string;
