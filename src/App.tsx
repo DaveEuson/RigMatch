@@ -91,9 +91,7 @@ import {
 import {
   getDeveloperFilterOptions,
   getModelDeveloperKey,
-  getModelFamily,
   getModelOrigin,
-  type ModelFamilyId,
 } from './lib/modelOrigins';
 import {
   getEmptyModelNewsState,
@@ -136,20 +134,41 @@ import {
   type UiMode,
 } from './lib/appConfig';
 import { getUpdateChannelLabel } from './lib/updateLabels';
-import machineAvatarLocal from './assets/machine-avatar-local.png';
-import modelAvatarDeepSeek from './assets/model-avatar-deepseek.png';
-import modelAvatarGemma from './assets/model-avatar-gemma.png';
-import modelAvatarGeneric from './assets/model-avatar-generic.png';
-import modelAvatarLlama from './assets/model-avatar-llama.png';
-import modelAvatarMistral from './assets/model-avatar-mistral.png';
-import modelAvatarPhi from './assets/model-avatar-phi.png';
-import modelAvatarQwen from './assets/model-avatar-qwen.png';
-import robotContestantWall from './assets/robot-contestant-wall.png';
-import robotModelTest from './assets/robot-model-test.png';
-import robotRigGreenroom from './assets/robot-rig-greenroom.png';
-import robotRomanceHero from './assets/robot-romance-hero.png';
-import robotScorecardCeremony from './assets/robot-scorecard-ceremony.png';
-import robotSpeedDateShow from './assets/robot-speed-date-show.png';
+import { AvatarBust, MachineAvatar } from './components/Avatars';
+import {
+  ModelScorePill,
+  ModelStatusPill,
+  PopularityMeter,
+  PromptStatusPill,
+  RomanceArtBanner,
+  ScoreBars,
+  ScoreLegend,
+  ScoreRadar,
+  ScoreSparkline,
+  ScoreTile,
+} from './components/ScoreVisuals';
+import {
+  compareVersionStrings,
+  formatBytes,
+  formatBytesPerSecond,
+  formatGb,
+  formatMs,
+  formatPullCount,
+  getErrorMessage,
+  getResponseEstimate,
+  getScoreTone,
+  getScoreTooltip,
+  gradeFor,
+  hashString,
+  scoreToToks,
+  topPickLabel,
+} from './lib/format';
+import robotContestantWall from './assets/robot-contestant-wall.webp';
+import robotModelTest from './assets/robot-model-test.webp';
+import robotRigGreenroom from './assets/robot-rig-greenroom.webp';
+import robotRomanceHero from './assets/robot-romance-hero.webp';
+import robotScorecardCeremony from './assets/robot-scorecard-ceremony.webp';
+import robotSpeedDateShow from './assets/robot-speed-date-show.webp';
 import './App.css';
 
 type ChatMessage = {
@@ -166,15 +185,6 @@ type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'origin' | 'source' |
 type SortDirection = 'asc' | 'desc';
 type ModelQuickFilterId = 'all' | 'installed' | 'fits-vram' | 'scored' | 'unscored' | 'huge';
 
-const MODEL_AVATAR_ASSETS: Record<ModelFamilyId, string> = {
-  deepseek: modelAvatarDeepSeek,
-  llama: modelAvatarLlama,
-  qwen: modelAvatarQwen,
-  mistral: modelAvatarMistral,
-  gemma: modelAvatarGemma,
-  phi: modelAvatarPhi,
-  generic: modelAvatarGeneric,
-};
 
 type ListTestResult = {
   winner: string;
@@ -5636,29 +5646,7 @@ function AdvancedCapabilityLab({
   );
 }
 
-function getPopularityPercent(pulls: number | null | undefined): number {
-  if (pulls == null || !Number.isFinite(pulls) || pulls <= 0) return 0;
-  return Math.max(8, Math.min(100, Math.round((Math.log10(pulls + 1) / 7) * 100)));
-}
 
-function PopularityMeter({ pulls }: { pulls?: number | null }) {
-  const hasPulls = pulls != null && Number.isFinite(pulls) && pulls > 0;
-  const pullCount = hasPulls ? Number(pulls) : 0;
-  const percent = getPopularityPercent(pulls);
-  const label = hasPulls ? `${formatPullCount(pullCount)} pulls` : 'No pull data';
-
-  return (
-    <div
-      className={hasPulls ? 'popularity-meter' : 'popularity-meter empty'}
-      title={hasPulls ? `${pullCount.toLocaleString()} pulls from the Ollama library catalog` : 'Ollama local API does not expose public pull counts for this model'}
-    >
-      <span>{label}</span>
-      <div className="popularity-track" aria-hidden="true">
-        <i style={{ width: `${percent}%` }} />
-      </div>
-    </div>
-  );
-}
 
 function UtilityPanel({
   panel,
@@ -7604,79 +7592,6 @@ function ModelPoolLineupStrip({
   );
 }
 
-function RomanceArtBanner({
-  image,
-  className = '',
-  kicker,
-  title,
-  body,
-}: {
-  image: string;
-  className?: string;
-  kicker: string;
-  title: string;
-  body: string;
-}) {
-  return (
-    <section
-      className={`romance-art-banner ${className}`}
-      style={{ backgroundImage: `url(${image})` }}
-      aria-label={title}
-    >
-      <div>
-        <span>{kicker}</span>
-        <strong>{title}</strong>
-        <em>{body}</em>
-      </div>
-    </section>
-  );
-}
-
-function ScoreRadar({ speed, sobriety, fit }: { speed: number; sobriety: number; fit: number }) {
-  const size = 84;
-  const cx = size / 2, cy = size / 2;
-  const r = size * 0.36;
-  const axes = [
-    { label: 'Speed', angle: -90, value: speed },
-    { label: 'Accuracy', angle: 30, value: sobriety },
-    { label: 'Fit', angle: 150, value: fit },
-  ];
-  const toXY = (angle: number, scale: number) => ({
-    x: cx + r * scale * Math.cos((angle * Math.PI) / 180),
-    y: cy + r * scale * Math.sin((angle * Math.PI) / 180),
-  });
-  const polygon = axes.map((a) => { const p = toXY(a.angle, a.value / 100); return `${p.x},${p.y}`; }).join(' ');
-  const gridPoly = (s: number) => axes.map((a) => { const p = toXY(a.angle, s); return `${p.x},${p.y}`; }).join(' ');
-  return (
-    <svg className="score-radar" viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-      {[0.33, 0.66, 1.0].map((s) => <polygon key={s} points={gridPoly(s)} className="radar-grid" />)}
-      {axes.map((a) => { const p = toXY(a.angle, 1); return <line key={a.label} x1={cx} y1={cy} x2={p.x} y2={p.y} className="radar-axis" />; })}
-      <polygon points={polygon} className="radar-fill" />
-      {axes.map((a) => {
-        const p = toXY(a.angle, 1.28);
-        return <text key={a.label} x={p.x} y={p.y} className="radar-label" textAnchor="middle" dominantBaseline="middle">{a.label}</text>;
-      })}
-    </svg>
-  );
-}
-
-function ScoreSparkline({ values }: { values: number[] }) {
-  if (values.length < 2) return null;
-  const w = 72, h = 24;
-  const min = Math.min(...values), max = Math.max(...values);
-  const range = max - min || 1;
-  const pts = values.map((v, i) => {
-    const x = (i / (values.length - 1)) * w;
-    const y = h - ((v - min) / range) * (h - 4) - 2;
-    return `${x},${y}`;
-  }).join(' ');
-  return (
-    <svg className="score-sparkline" viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
-      <polyline points={pts} className="sparkline-line" fill="none" />
-      {(() => { const last = values[values.length - 1]; const lx = w; const ly = h - ((last - min) / range) * (h - 4) - 2; return <circle cx={lx} cy={ly} r="2.5" className="sparkline-dot" />; })()}
-    </svg>
-  );
-}
 
 function SelectedContestantCard({
   row,
@@ -7998,56 +7913,6 @@ function SortableModelHeader({
   );
 }
 
-function ModelScorePill({ score }: { score?: TestedModelScore }) {
-  if (!score) {
-    return (
-      <span className="score-pill empty" title="Not tested yet. Run a test to score this model on this computer.">
-        <strong>--</strong>
-        <em>Test</em>
-      </span>
-    );
-  }
-
-  return (
-    <span
-      className={`score-pill ${getScoreTone(score.total)}`}
-      title={`Match ${score.total} · ${score.grade}; speed ${score.speed}, accuracy ${score.sobriety}`}
-    >
-      <strong>{score.total}</strong>
-      <em>{score.grade}</em>
-    </span>
-  );
-}
-
-function ScoreLegend() {
-  return (
-    <div className="score-legend-strip" aria-label="Match score legend">
-      <span>Match score</span>
-      <strong>Speed + accuracy + finish rate + hardware fit.</strong>
-      <em>S is best, then A/B/C. Scores are local to this computer.</em>
-    </div>
-  );
-}
-
-function ModelStatusPill({
-  installed,
-  queued,
-  label,
-}: {
-  installed: boolean;
-  queued: boolean;
-  label: string;
-}) {
-  const Icon = installed ? ShieldCheck : queued ? Download : Download;
-  const tone = installed ? 'installed' : queued ? 'queued' : 'available';
-
-  return (
-    <span className={`model-status-pill ${tone}`}>
-      <Icon aria-hidden="true" />
-      {label}
-    </span>
-  );
-}
 
 function BenchmarkRun({
   active,
@@ -9152,17 +9017,6 @@ function QuestionSuitePreview({
   );
 }
 
-function PromptStatusPill({ status }: { status?: BenchmarkPromptResult['status'] }) {
-  if (!status || status === 'ok') return null;
-
-  const label = status === 'no-response'
-    ? 'No response'
-    : status === 'truncated'
-      ? 'Truncated'
-      : 'Failed';
-
-  return <span className={`prompt-status-pill ${status}`}>{label}</span>;
-}
 
 function getPromptDiagnosticText(prompt: BenchmarkPromptResult) {
   if (prompt.diagnostic) return prompt.diagnostic;
@@ -10987,64 +10841,6 @@ function FlirtTestAnimation({
   );
 }
 
-function ScoreBars({
-  benchmark,
-  score,
-  active,
-}: {
-  benchmark: BenchmarkResult | null;
-  score?: TestedModelScore;
-  active: boolean;
-}) {
-  const avgTps = benchmark?.avgTokensPerSecond ?? benchmark?.prompts[0]?.tokensPerSecond;
-  const firstTokenMs = benchmark?.avgFirstTokenMs ?? benchmark?.prompts[0]?.elapsedMs;
-  const avgResponseMs = benchmark?.avgLatencyMs;
-  const rows = [
-    { label: 'Speed (tok/s)', value: avgTps, max: 140, unit: ' tok/s', raw: avgTps },
-    { label: 'Generation Speed', value: score?.speed ?? benchmark?.scores.speed, max: 100, unit: '%' },
-    {
-      label: 'Avg Response Time',
-      value: avgResponseMs,
-      max: 30000,
-      unit: 'ms',
-      display: avgResponseMs != null ? (avgResponseMs >= 1000 ? `${(avgResponseMs / 1000).toFixed(1)}s` : `${avgResponseMs}ms`) : undefined,
-    },
-    {
-      label: 'First Token',
-      value: firstTokenMs,
-      max: 10000,
-      unit: 'ms',
-      display: firstTokenMs != null ? (firstTokenMs >= 1000 ? `${(firstTokenMs / 1000).toFixed(1)}s` : `${firstTokenMs}ms`) : undefined,
-      invertBar: true,
-    },
-    { label: 'Answer Quality', value: score?.sobriety ?? benchmark?.scores.sobriety, max: 100, unit: '%' },
-  ];
-  const hasScore = Boolean(score || benchmark);
-
-  return (
-    <div className="score-bars">
-      <div className="overall-progress">
-        <span>Overall Progress</span>
-        <strong>{active ? '42%' : hasScore ? '100%' : 'N/A'}</strong>
-        <i style={{ width: active ? '42%' : hasScore ? '100%' : '0%' }} />
-      </div>
-      {rows.map((row) => {
-        const pct = Number.isFinite(row.value) ? Math.min(100, ((row.value ?? 0) / row.max) * 100) : 0;
-        const barPct = row.invertBar ? Math.max(0, 100 - pct) : pct;
-        const displayVal = row.display ?? (Number.isFinite(row.value) ? `${Math.round(row.value ?? 0)}${row.unit}` : 'N/A');
-        return (
-          <div className={Number.isFinite(row.value) ? 'bar-row' : 'bar-row empty'} key={row.label}>
-            <span>{row.label}</span>
-            <div>
-              <i style={{ width: `${barPct}%` }} />
-            </div>
-            <strong>{displayVal}</strong>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 function ResultExplanationCard({
   model,
@@ -11078,80 +10874,6 @@ function ResultExplanationCard({
   );
 }
 
-function ScoreTile({
-  label,
-  value,
-  grade,
-  tone,
-}: {
-  label: string;
-  value?: number;
-  grade?: string;
-  tone: 'pink' | 'gold' | 'green';
-}) {
-  const tooltip = getScoreTooltip(label);
-  const hasValue = Number.isFinite(value);
-
-  return (
-    <div
-      className={`score-tile ${tone}${hasValue ? '' : ' empty'}`}
-      title={hasValue ? tooltip : `No ${label.toLowerCase()} score yet. Run a test for this model.`}
-      aria-label={hasValue ? `${label}: ${value}, ${grade}. ${tooltip}` : `${label}: not scored yet.`}
-    >
-      <span>{label}</span>
-      <strong>{hasValue ? value : 'N/A'}</strong>
-      <em>{grade ?? 'N/A'}</em>
-    </div>
-  );
-}
-
-function getScoreTooltip(label: string) {
-  const key = label.toLowerCase();
-  if (key.includes('sobriety') || key.includes('reliability') || key.includes('quality')) {
-    return 'How well the model follows prompts — instruction discipline, completeness, and avoiding hallucinations.';
-  }
-
-  if (key.includes('speed')) {
-    return 'How quickly this model responds on the selected computer, including throughput and latency.';
-  }
-
-  if (key.includes('compatibility') || key.includes('match')) {
-    return 'Overall match score combining speed, reliability, stability, and hardware fit.';
-  }
-
-  return 'Score from the latest model test.';
-}
-
-function AvatarBust({ model, size, extraClass }: { model: string; size: 'tiny' | 'small' | 'large'; extraClass?: string }) {
-  const family = getModelFamily(model);
-  const avatarSrc = MODEL_AVATAR_ASSETS[family] ?? modelAvatarGeneric;
-
-  return (
-    <span
-      className={['avatar-bust', size, `family-${family}`, extraClass].filter(Boolean).join(' ')}
-      aria-hidden="true"
-    >
-      <img src={avatarSrc} alt="" draggable={false} />
-    </span>
-  );
-}
-
-function MachineAvatar({
-  host,
-  size,
-}: {
-  host?: Pick<NetworkHost, 'hostname' | 'ip' | 'isLocal'>;
-  size: 'tiny' | 'small' | 'medium';
-}) {
-  return (
-    <span
-      className={`machine-avatar ${size} ${host?.isLocal ? 'local' : 'remote'}`}
-      aria-hidden="true"
-    >
-      <img src={machineAvatarLocal} alt="" draggable={false} />
-    </span>
-  );
-}
 
 function DiskGuard({ guard }: { guard: ReturnType<typeof getDiskGuard> }) {
   return (
@@ -11188,13 +10910,6 @@ function getRecentModelScores(modelScores: Record<string, TestedModelScore>) {
     .sort((left, right) => Date.parse(right.completedAt) - Date.parse(left.completedAt));
 }
 
-function scoreToToks(speed: number): string {
-  if (speed >= 90) return '~20 tok/s';
-  if (speed >= 75) return '~10 tok/s';
-  if (speed >= 55) return '~5 tok/s';
-  if (speed >= 35) return '~2 tok/s';
-  return '<2 tok/s';
-}
 
 function buildShareableScorecard(
   ranked: TestedModelScore[],
@@ -11406,13 +11121,6 @@ function isBenchmarkForModel(
     .some((key) => normalizeModelKey(key) === benchmarkKey);
 }
 
-function getScoreTone(total: number) {
-  if (total >= 90) return 'elite';
-  if (total >= 80) return 'good';
-  if (total >= 70) return 'ok';
-  return 'low';
-}
-
 function formatBenchmarkBanner(status: BenchmarkStatus): string {
   const model = status.model ?? 'a model';
   const snap = status.snapshot;
@@ -11428,13 +11136,6 @@ function formatBenchmarkBanner(status: BenchmarkStatus): string {
   return parts.join(' · ');
 }
 
-function getResponseEstimate(speedScore: number): string {
-  if (speedScore >= 90) return '~1s';
-  if (speedScore >= 75) return '~3s';
-  if (speedScore >= 55) return '~8s';
-  if (speedScore >= 35) return '~20s';
-  return '30s+';
-}
 
 function getResultExplanation(
   model: string,
@@ -12620,33 +12321,6 @@ function getPullProgressDetailLabel(
   return `${percent} · ${speed} · ${size}`;
 }
 
-function formatPullCount(n: number | null | undefined): string {
-  if (n == null) return '';
-  if (n >= 1_000_000_000) return `${+(n / 1_000_000_000).toFixed(1)}B`;
-  if (n >= 1_000_000) return `${+(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${+(n / 1_000).toFixed(1)}K`;
-  return String(n);
-}
-
-function formatBytesPerSecond(value?: number | null) {
-  if (!Number.isFinite(value) || !value || value <= 0) return '-- MB/s';
-  return `${formatBytes(value)}/s`;
-}
-
-function formatBytes(value?: number | null) {
-  if (!Number.isFinite(value) || value === null || value === undefined || value < 0) return '--';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let normalized = value;
-  let unitIndex = 0;
-
-  while (normalized >= 1024 && unitIndex < units.length - 1) {
-    normalized /= 1024;
-    unitIndex += 1;
-  }
-
-  const precision = normalized >= 100 || unitIndex === 0 ? 0 : normalized >= 10 ? 1 : 2;
-  return `${normalized.toFixed(precision)} ${units[unitIndex]}`;
-}
 
 function buildDiagnosticsText(system: SystemProfile, ollama: OllamaStatus, logPath: string): string {
   const lines = [
@@ -12687,45 +12361,11 @@ function buildBugReportUrl(system: SystemProfile, ollama: OllamaStatus, logPath:
   return `${GITHUB_ISSUES_URL}?${params.toString()}`;
 }
 
-function formatGb(value: number) {
-  if (!Number.isFinite(value)) return '? GB';
-  return `${Math.round(value * 10) / 10} GB`;
-}
 
 function sumModelRowGb(rows: ModelRow[]) {
   return rows.reduce((sum, row) => sum + (row.sizeGb ?? row.installedModel?.sizeGb ?? 0), 0);
 }
 
-function formatMs(value: number) {
-  if (!Number.isFinite(value)) return '? ms';
-  if (value >= 1000) return `${Math.round((value / 1000) * 10) / 10}s`;
-  return `${Math.round(value)} ms`;
-}
-
-function hashString(value: string) {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  }
-  return hash;
-}
-
-function gradeFor(score: number) {
-  if (score >= 95) return 'S';
-  if (score >= 88) return 'A';
-  if (score >= 80) return 'B+';
-  if (score >= 72) return 'B';
-  if (score >= 64) return 'C';
-  return 'D';
-}
-
-function topPickLabel(grade: string | undefined): string {
-  if (!grade) return 'Best Tested';
-  if (grade.startsWith('S') || grade.startsWith('A')) return 'Top Match';
-  if (grade.startsWith('B')) return 'Strong Contender';
-  if (grade.startsWith('C')) return 'Best So Far';
-  return 'Best Tested';
-}
 
 function formatLogTime(timestamp: string) {
   const date = new Date(timestamp);
@@ -12789,20 +12429,6 @@ function formatLogsForClipboard(logs: AppLogEntry[]) {
     .join('\n\n');
 }
 
-function getErrorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.replace(/^Error invoking remote method '[^']+':\s*/i, '');
-}
-
-function compareVersionStrings(a: string, b: string): number {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
-    if (diff !== 0) return diff;
-  }
-  return 0;
-}
 
 function playDoneJingle() {
   try {
