@@ -10917,6 +10917,145 @@ tbody tr.computer-row.selected {
   border-style: dashed;
 }
 
+.run-skill-tests {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(114, 181, 202, 0.28);
+  border-radius: 10px;
+}
+
+.run-skill-tests-head span {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.run-skill-tests-head em {
+  display: block;
+  font-size: 11px;
+  color: var(--muted, rgba(255, 255, 255, 0.6));
+}
+
+.run-skill-test-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.run-skill-test-option.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.run-skill-test-option span strong {
+  display: block;
+}
+
+.run-skill-test-option span em {
+  font-size: 11px;
+  color: var(--muted, rgba(255, 255, 255, 0.6));
+}
+
+.run-skill-image-prompt {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(114, 181, 202, 0.35);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.activity-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
+.activity-panel-head span {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.activity-panel-head strong {
+  display: block;
+  font-size: 18px;
+}
+
+.activity-panel-head em {
+  font-size: 12px;
+  color: var(--muted, rgba(255, 255, 255, 0.6));
+}
+
+.activity-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid rgba(114, 181, 202, 0.24);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.activity-card p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.activity-card em {
+  font-size: 12px;
+  color: var(--muted, rgba(255, 255, 255, 0.6));
+}
+
+.activity-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-card-head svg {
+  width: 16px;
+  height: 16px;
+}
+
+.activity-card-head b {
+  margin-left: auto;
+}
+
+.activity-state {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.activity-state.running {
+  color: var(--green);
+  background: rgba(143, 192, 103, 0.16);
+}
+
+.activity-state.idle {
+  color: var(--muted, rgba(255, 255, 255, 0.55));
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.activity-download-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.activity-panel .mini-button {
+  align-self: flex-start;
+}
+
 .advanced-lab-preview-modal {
   width: min(960px, calc(100vw - 32px));
   display: flex;
@@ -15877,6 +16016,74 @@ tbody tr.selected {
 
 .model-pool-art-banner {
   min-height: 80px;
+}
+
+/* Combined Models header: title, count, refresh, and fit summary share one
+   slim art strip instead of stacking three rows above the table. */
+.model-hub-header {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 58px;
+  margin: 10px 16px 8px;
+  padding: 10px 14px;
+  border: 1px solid rgba(239, 188, 90, 0.42);
+  border-radius: 14px;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: 24% center;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.model-hub-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, rgba(21, 20, 30, 0.5), rgba(21, 20, 30, 0.72) 45%, rgba(21, 20, 30, 0.92) 100%),
+    linear-gradient(0deg, rgba(10, 7, 13, 0.4), rgba(10, 7, 13, 0.08));
+}
+
+.model-hub-header-copy {
+  display: grid;
+  gap: 2px;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+.model-hub-header-copy span {
+  color: var(--gold);
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.model-hub-header-copy h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.model-hub-header-copy em {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.model-hub-header-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.model-hub-header-side span {
+  font-size: 11px;
+  color: var(--pink, #e88bb5);
+  white-space: nowrap;
 }
 
 .speed-date-art-banner {

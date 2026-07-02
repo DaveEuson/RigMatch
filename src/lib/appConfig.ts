@@ -1,4 +1,5 @@
 import {
+  Activity,
   Bell,
   BookOpen,
   Bot,
@@ -25,10 +26,11 @@ export const navItems: NavItem[] = [
   { id: 'history', label: 'Scorecards', description: 'Test rankings', icon: History },
   { id: 'agent', label: 'Top Pick', description: 'Best match profile', icon: Bot },
   { id: 'lan', label: 'Your Rig', description: 'Hardware & Local AI', icon: Network },
+  { id: 'activity', label: 'Activity', description: 'Running tests & downloads', icon: Activity },
   { id: 'settings', label: 'Settings', description: 'Prefs, updates, support', icon: Settings },
 ];
 
-export const SIMPLE_NAV_ORDER: NavId[] = ['lan', 'models', 'speedDate', 'history', 'agent', 'settings'];
+export const SIMPLE_NAV_ORDER: NavId[] = ['lan', 'models', 'speedDate', 'history', 'agent', 'activity', 'settings'];
 export const NAV_ITEM_BY_ID = new Map<NavId, NavItem>(navItems.map((item) => [item.id, item]));
 
 export const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/daveeuson';

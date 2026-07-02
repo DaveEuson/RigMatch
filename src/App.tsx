@@ -183,6 +183,13 @@ type ChatMessage = {
 type UtilityPanelId = Extract<NavId, 'history' | 'settings'>;
 
 type PendingRunMode = 'single' | 'speed-date';
+type SkillTestSelection = { appBuilder: boolean; image: boolean; imagePrompt: string };
+type SkillRunStatus = {
+  phase: 'idle' | 'running' | 'complete' | 'failed';
+  label: string;
+  completed: number;
+  total: number;
+};
 type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
 type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'origin' | 'source' | 'status' | 'score' | 'speed' | 'pulls';
 type SortDirection = 'asc' | 'desc';
@@ -654,6 +661,12 @@ function App() {
   const [scoreTrend, setScoreTrend] = useState<Record<string, number[]>>({});
   const [pendingRunMode, setPendingRunMode] = useState<PendingRunMode | null>(null);
   const [pendingSingleModel, setPendingSingleModel] = useState<string | null>(null);
+  const [skillTestSelection, setSkillTestSelection] = useState<SkillTestSelection>({
+    appBuilder: false,
+    image: false,
+    imagePrompt: ADVANCED_IMAGE_GENERATION_PROMPT,
+  });
+  const [skillRunStatus, setSkillRunStatus] = useState<SkillRunStatus>({ phase: 'idle', label: '', completed: 0, total: 0 });
   const [closeCleanupOpen, setCloseCleanupOpen] = useState(false);
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
@@ -2133,21 +2146,53 @@ function App() {
     }
   }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, selectedHost, shortlistedRows, system.hostname, system.platform]);
 
+  const runSkillTestsAfterRun = useCallback(async (models: string[]) => {
+    const selection = skillTestSelection;
+    const jobs: Array<{ model: string; kind: 'app-builder' | 'image' }> = [];
+    for (const model of models) {
+      if (selection.appBuilder && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
+        jobs.push({ model, kind: 'app-builder' });
+      }
+      if (selection.image && isLikelyImageGenerationModel(model)) {
+        jobs.push({ model, kind: 'image' });
+      }
+    }
+    if (!jobs.length) return;
+
+    for (const [index, job] of jobs.entries()) {
+      const label = job.kind === 'app-builder' ? `App Builder skill test — ${job.model}` : `Image skill test — ${job.model}`;
+      setSkillRunStatus({ phase: 'running', label, completed: index, total: jobs.length });
+      setActivity(`Skill test ${index + 1}/${jobs.length}: ${label}. This can take a few minutes per model.`);
+      const result = job.kind === 'app-builder'
+        ? await runAdvancedAppBuilderChallenge(job.model, ollama.baseUrl)
+        : await runAdvancedImageGenerationChallenge(job.model, ollama.baseUrl, selection.imagePrompt);
+      if (!result.error) {
+        const key = job.kind === 'image' ? `image:${job.model}` : job.model;
+        writeAdvancedLabResults({ ...readAdvancedLabResults(), [key]: result });
+      }
+    }
+    setSkillRunStatus({ phase: 'complete', label: 'Skill tests finished', completed: jobs.length, total: jobs.length });
+    setActivity(`Skill tests finished (${jobs.length} run${jobs.length === 1 ? '' : 's'}). Lab Grades are saved in Settings → Advanced Lab.`);
+  }, [ollama.baseUrl, skillTestSelection]);
+
   const confirmPendingRun = useCallback(() => {
     const mode = pendingRunMode;
     const model = pendingSingleModel;
+    const skillModels = mode === 'single'
+      ? [model ?? selectedModel].filter(Boolean)
+      : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName);
     setPendingRunMode(null);
     setPendingSingleModel(null);
 
     if (mode === 'single') {
-      void startBenchmark(model);
+      void startBenchmark(model).then(() => runSkillTestsAfterRun(skillModels));
       return;
     }
 
     if (mode === 'speed-date') {
-      void runListTest();
+      void runListTest().then(() => runSkillTestsAfterRun(skillModels));
     }
-  }, [pendingRunMode, pendingSingleModel, runListTest, startBenchmark]);
+  }, [pendingRunMode, pendingSingleModel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, startBenchmark]);
 
   const cancelPendingRun = useCallback(() => {
     setPendingRunMode(null);
@@ -2579,6 +2624,15 @@ function App() {
             clearedTopMatchCount={clearedTopMatches.size}
           />
         )}
+        {activeNavId === 'activity' && (
+          <ActivityPanel
+            runProgress={runProgress}
+            skillRunStatus={skillRunStatus}
+            pullProgressByModel={pullProgressByModel}
+            isListTesting={isListTesting}
+            onOpenModels={() => selectNav('models')}
+          />
+        )}
         {(activeNavId === 'history' || activeNavId === 'settings') && (
           <UtilityPanel
             panel={activeNavId}
@@ -2725,6 +2779,11 @@ function App() {
           onChangeQuestionCount={setBenchmarkQuestionCount}
           onLoadPreset={setBenchmarkQuestions}
           onEditQuestions={() => { cancelPendingRun(); setSuiteEditorOpen(true); }}
+          lineupModels={pendingRunMode === 'single'
+            ? [pendingSingleModel ?? selectedModel].filter(Boolean)
+            : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName)}
+          skillSelection={skillTestSelection}
+          onSkillSelectionChange={setSkillTestSelection}
         />
       )}
 
@@ -4014,6 +4073,9 @@ function RunWarningModal({
   onChangeQuestionCount,
   onLoadPreset,
   onEditQuestions,
+  lineupModels,
+  skillSelection,
+  onSkillSelectionChange,
 }: {
   mode: PendingRunMode;
   selectedModel: string;
@@ -4028,6 +4090,9 @@ function RunWarningModal({
   onChangeQuestionCount: (count: BenchmarkQuestionCount) => void;
   onLoadPreset?: (questions: BenchmarkQuestion[]) => void;
   onEditQuestions?: () => void;
+  lineupModels: string[];
+  skillSelection: SkillTestSelection;
+  onSkillSelectionChange: (selection: SkillTestSelection) => void;
 }) {
   const [questionsExpanded, setQuestionsExpanded] = useState(false);
   const activePreset = BENCHMARK_PRESETS.find(
@@ -4139,6 +4204,66 @@ function RunWarningModal({
                 ))}
               </ol>
             )}
+          </div>
+
+          <div className="run-skill-tests">
+            <div className="run-skill-tests-head">
+              <span>Skill Tests (optional)</span>
+              <em>Extra Lab Grades after the normal questions. Models that cannot do a skill are grayed out.</em>
+            </div>
+            {(() => {
+              const appBuilderCapable = lineupModels.some((m) => !isLikelyImageGenerationModel(m) && !isEmbeddingModel(m));
+              const imageCapable = lineupModels.some((m) => isLikelyImageGenerationModel(m));
+              return (
+                <>
+                  <label className={`run-skill-test-option${appBuilderCapable ? '' : ' disabled'}`}>
+                    <input
+                      type="checkbox"
+                      checked={skillSelection.appBuilder && appBuilderCapable}
+                      disabled={!appBuilderCapable}
+                      onChange={(event) => onSkillSelectionChange({ ...skillSelection, appBuilder: event.target.checked })}
+                    />
+                    <span>
+                      <strong>Build an app (tiny Tetris)</strong>
+                      <em>{appBuilderCapable
+                        ? `Adds roughly 1–3 minutes per model after the questions finish.`
+                        : 'No model in this run can write code — image and embedding models sit this one out.'}</em>
+                    </span>
+                  </label>
+                  <label className={`run-skill-test-option${imageCapable ? '' : ' disabled'}`}>
+                    <input
+                      type="checkbox"
+                      checked={skillSelection.image && imageCapable}
+                      disabled={!imageCapable}
+                      onChange={(event) => onSkillSelectionChange({ ...skillSelection, image: event.target.checked })}
+                    />
+                    <span>
+                      <strong>Create an image</strong>
+                      <em>{imageCapable
+                        ? 'Adds roughly 1–4 minutes per image model. Uses the prompt below.'
+                        : 'No image-generation model in this run. Install one (like x/flux2-klein) to unlock.'}</em>
+                    </span>
+                  </label>
+                  {imageCapable && skillSelection.image && (
+                    <input
+                      type="text"
+                      className="run-skill-image-prompt"
+                      value={skillSelection.imagePrompt}
+                      onChange={(event) => onSkillSelectionChange({ ...skillSelection, imagePrompt: event.target.value })}
+                      placeholder="Describe the image to generate"
+                      aria-label="Image generation prompt"
+                    />
+                  )}
+                  <label className="run-skill-test-option disabled">
+                    <input type="checkbox" checked={false} disabled />
+                    <span>
+                      <strong>Create a video</strong>
+                      <em>No local backend can generate video yet — this unlocks when one ships.</em>
+                    </span>
+                  </label>
+                </>
+              );
+            })()}
           </div>
 
           <div className="modal-warning-grid">
@@ -5240,14 +5365,18 @@ function scoreAdvancedImageResponse(imageDataUrl: string, doneReason: string): P
   return { score, grade: getAdvancedLabGrade(score), checks };
 }
 
-async function runAdvancedImageGenerationChallenge(model: string, baseUrl: string): Promise<AdvancedLabResult> {
+async function runAdvancedImageGenerationChallenge(
+  model: string,
+  baseUrl: string,
+  prompt: string = ADVANCED_IMAGE_GENERATION_PROMPT,
+): Promise<AdvancedLabResult> {
   const startedAt = performance.now();
 
   try {
     const data = await agentArcadeApi.runAdvancedGenerate({
       model,
       baseUrl,
-      prompt: ADVANCED_IMAGE_GENERATION_PROMPT,
+      prompt,
       timeoutMs: 240000,
       width: ADVANCED_IMAGE_WIDTH,
       height: ADVANCED_IMAGE_HEIGHT,
@@ -6803,20 +6932,24 @@ function ModelCabinet({
 
   return (
     <section className={active ? 'panel model-panel panel-focused' : 'panel model-panel'}>
-      <PanelHeader
-        icon={Boxes}
-        title="Models"
-        actionLabel="Refresh"
-        onAction={onRefresh}
-        meta={modelCountLabel}
-      />
-      <RomanceArtBanner
-        image={robotContestantWall}
-        className="model-pool-art-banner"
-        kicker="Command menu"
-        title="Browse, test, and compare AI models"
-        body={`${vramSafeCount} models look realistic for ${vramLabel}. Test one model or run Speed Dating from here.`}
-      />
+      <header
+        className="model-hub-header"
+        style={{ backgroundImage: `url(${robotContestantWall})` }}
+        aria-label="Models"
+      >
+        <div className="model-hub-header-copy">
+          <span>Command menu</span>
+          <h2>Models</h2>
+          <em>{vramSafeCount} models look realistic for {vramLabel}. Test one model or run Speed Dating from here.</em>
+        </div>
+        <div className="model-hub-header-side">
+          <span>{modelCountLabel}</span>
+          <button type="button" className="mini-button" onClick={onRefresh}>
+            <RefreshCw aria-hidden="true" />
+            Refresh
+          </button>
+        </div>
+      </header>
       <div className="cabinet-body">
       <div className="cabinet-main">
       {installedModelNames.size === 0 && isDesktopRuntime && (
@@ -10343,6 +10476,113 @@ function isTestedModelScore(value: unknown): value is TestedModelScore {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function ActivityPanel({
+  runProgress,
+  skillRunStatus,
+  pullProgressByModel,
+  isListTesting,
+  onOpenModels,
+}: {
+  runProgress: RunProgress | null;
+  skillRunStatus: SkillRunStatus;
+  pullProgressByModel: Record<string, PullProgressUpdate>;
+  isListTesting: boolean;
+  onOpenModels: () => void;
+}) {
+  const activePulls = Object.values(pullProgressByModel)
+    .filter((update) => update && !['complete', 'failed', 'cancelled'].includes(update.phase));
+  const benchmarkActive = runProgress?.phase === 'running';
+  const skillActive = skillRunStatus.phase === 'running';
+  const anythingRunning = benchmarkActive || skillActive || activePulls.length > 0 || isListTesting;
+
+  return (
+    <section className="activity-panel" aria-label="Running tests and downloads">
+      <div className="activity-panel-head">
+        <div>
+          <span>Activity</span>
+          <strong>{anythingRunning ? 'Work in progress on this computer' : 'Nothing running right now'}</strong>
+          <em>Benchmarks, skill tests, and downloads all report here while they run.</em>
+        </div>
+      </div>
+
+      <article className="activity-card">
+        <div className="activity-card-head">
+          <Gauge aria-hidden="true" />
+          <strong>Benchmark</strong>
+          <b className={benchmarkActive ? 'activity-state running' : 'activity-state idle'}>
+            {benchmarkActive ? 'Running' : runProgress?.phase === 'failed' ? 'Failed' : runProgress?.phase === 'complete' ? 'Finished' : 'Idle'}
+          </b>
+        </div>
+        {runProgress ? (
+          <>
+            <p>
+              <strong>{runProgress.label}</strong> — {runProgress.currentModel}
+              {runProgress.questionLabel ? ` · ${runProgress.questionLabel}` : ''}
+              {typeof runProgress.questionRunIndex === 'number' && typeof runProgress.questionRunTotal === 'number' && runProgress.questionRunTotal > 1
+                ? ` · run ${runProgress.questionRunIndex + 1}/${runProgress.questionRunTotal}`
+                : ''}
+            </p>
+            <div className="popularity-track" aria-hidden="true">
+              <i style={{ width: `${Math.max(2, Math.min(100, runProgress.percent))}%` }} />
+            </div>
+            <em>{runProgress.message}</em>
+          </>
+        ) : (
+          <em>No benchmark has run in this session yet.</em>
+        )}
+      </article>
+
+      <article className="activity-card">
+        <div className="activity-card-head">
+          <Code2 aria-hidden="true" />
+          <strong>Skill Tests</strong>
+          <b className={skillActive ? 'activity-state running' : 'activity-state idle'}>
+            {skillActive ? `Running ${skillRunStatus.completed + 1}/${skillRunStatus.total}` : skillRunStatus.phase === 'complete' ? 'Finished' : 'Idle'}
+          </b>
+        </div>
+        {skillRunStatus.phase === 'idle' ? (
+          <em>Optional App Builder and image runs appear here when you include them in a test.</em>
+        ) : (
+          <>
+            <p><strong>{skillRunStatus.label}</strong></p>
+            {skillRunStatus.total > 0 && (
+              <div className="popularity-track" aria-hidden="true">
+                <i style={{ width: `${Math.max(4, Math.round(((skillRunStatus.completed + (skillActive ? 0.5 : 0)) / skillRunStatus.total) * 100))}%` }} />
+              </div>
+            )}
+          </>
+        )}
+      </article>
+
+      <article className="activity-card">
+        <div className="activity-card-head">
+          <Download aria-hidden="true" />
+          <strong>Downloads</strong>
+          <b className={activePulls.length ? 'activity-state running' : 'activity-state idle'}>
+            {activePulls.length ? `${activePulls.length} active` : 'Idle'}
+          </b>
+        </div>
+        {activePulls.length ? (
+          activePulls.map((update) => (
+            <div key={update.id ?? update.model} className="activity-download-row">
+              <span>{update.model}</span>
+              <div className="popularity-track" aria-hidden="true">
+                <i style={{ width: `${Math.max(2, Math.min(100, update.percent ?? 5))}%` }} />
+              </div>
+              <em>{update.status || 'Downloading...'}</em>
+            </div>
+          ))
+        ) : (
+          <em>No model downloads in flight. Queue one from the Models hub.</em>
+        )}
+        <button type="button" className="mini-button outline" onClick={onOpenModels}>
+          Open Models
+        </button>
+      </article>
+    </section>
+  );
 }
 
 const LEARNING_TIPS: { term: string; tip: string }[] = [

@@ -27,6 +27,15 @@ const {
   clamp,
 } = require('./benchmarkScoring.cjs');
 const security = require('./security.cjs');
+const {
+  normalizeUpdateChannel,
+  isNightlyRelease,
+  normalizeReleaseVersion,
+  compareVersions,
+  pickLatestRigmatchRelease,
+  hasNewerRigmatchRelease,
+  summarizeReleaseNotes,
+} = require('./updates.cjs');
 
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const LM_STUDIO_LOCAL_URL = 'http://127.0.0.1:1234/v1';
@@ -1308,56 +1317,12 @@ function getHighestVersion(versions) {
   return Array.from(new Set(versions)).sort(compareVersions).pop() || null;
 }
 
-function compareVersions(a, b) {
-  const left = String(a || '').split('.').map((part) => Number.parseInt(part, 10) || 0);
-  const right = String(b || '').split('.').map((part) => Number.parseInt(part, 10) || 0);
-  const length = Math.max(left.length, right.length);
-
-  for (let index = 0; index < length; index += 1) {
-    const delta = (left[index] || 0) - (right[index] || 0);
-    if (delta !== 0) return delta;
-  }
-
-  return 0;
-}
-
 function getAppVersion() {
   try {
     return app.getVersion();
   } catch {
     return '0.1.0';
   }
-}
-
-function normalizeUpdateChannel(channel) {
-  return channel === 'nightly' ? 'nightly' : 'release';
-}
-
-function pickLatestRigmatchRelease(releases, channel) {
-  const published = releases
-    .filter((release) => release && !release.draft)
-    .sort((a, b) => new Date(b.published_at || b.created_at || 0) - new Date(a.published_at || a.created_at || 0));
-
-  if (channel === 'nightly') {
-    return published.find(isNightlyRelease) || published.find((release) => release.prerelease) || published[0] || null;
-  }
-
-  return published.find((release) => !release.prerelease && !isNightlyRelease(release)) || null;
-}
-
-function isNightlyRelease(release) {
-  return /nightly|alpha|canary|preview/i.test(`${release?.tag_name || ''} ${release?.name || ''}`);
-}
-
-function normalizeReleaseVersion(value) {
-  const match = String(value || '').match(/v?(\d+(?:\.\d+){1,3})/i);
-  return match ? match[1] : null;
-}
-
-function hasNewerRigmatchRelease({ currentVersion, latestVersion, currentTag, latestTag, channel, isPrerelease }) {
-  if (latestVersion && compareVersions(latestVersion, currentVersion) > 0) return true;
-  if (channel === 'nightly' && isPrerelease && latestTag && latestTag !== currentTag) return true;
-  return false;
 }
 
 function pickRigmatchDownloadAsset(release) {
@@ -1434,26 +1399,6 @@ function isRigmatchReleasePageUrl(url) {
   try { parsed = new URL(url); } catch { return false; }
   if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com') return false;
   return /^\/DaveEuson\/RigMatch\.AI\/releases(\/tag\/[^/]+)?\/?$/i.test(parsed.pathname);
-}
-
-function summarizeReleaseNotes(body) {
-  const text = String(body || '')
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/!\[[^\]]*]\([^)]*\)/g, '')
-    .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
-    .replace(/^#+\s*/gm, '')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/^\s*[-*]\s+/gm, '')
-    .replace(/^\s*\d+\.\s+/gm, '')
-    .replace(/\r/g, '')
-    .replace(/\n{2,}/g, '\n')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  if (!text) return null;
-  return text.length > 420 ? `${text.slice(0, 420).trim()}...` : text;
 }
 
 function getPrivateNetworkAddresses() {
