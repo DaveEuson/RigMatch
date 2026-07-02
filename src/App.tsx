@@ -379,7 +379,9 @@ const releaseNotes: ReleaseNoteEntry[] = [
       'App Builder results now have a Play It button: the generated game runs in a locked-down sandbox with network, storage, and file access blocked. RigMatch still never runs model code automatically.',
       'The Image Lab now detects image-generation models already in your local Ollama library (like x/flux2 tags) and lists them with no new download.',
       'A Video Generation research card explains honestly why video is still locked: no local backend RigMatch supports can generate video yet.',
-      'Internal code reorganization and release-tooling fixes; no scoring changes, so existing scorecards stay valid — no retest needed this time.',
+      'Internal code reorganization and release-tooling fixes. Score weights are unchanged and existing scorecards stay valid — no retest needed this time.',
+      'Accuracy-trap grading now recognizes more valid refusal phrasings (like "don\'t have the ability"), so honest models are no longer marked down for wording. Retesting may raise a model\'s accuracy score slightly.',
+      'Coming from 0.2.4? Download this build manually once — the 0.2.4 updater has a bug that hides newer releases and wrongly reports "up to date." From 0.2.5 onward, update checks work normally.',
     ],
   },
   {
@@ -5953,6 +5955,7 @@ function UtilityPanel({
   const Icon = panel === 'history' ? History : Settings;
   const recentModelScores = useMemo(() => getRecentModelScores(modelScores), [modelScores]);
   const rankedModelScores = useMemo(() => getRankedModelScores(modelScores), [modelScores]);
+  const advancedLabResults = useMemo(() => readAdvancedLabResults(), []);
   const taskPicks = useMemo(() => getTaskTopPicks(modelScores), [modelScores]);
   const topRankedScore = rankedModelScores[0];
   const savedChatMessageCount = Math.max(0, chatMessages.length - 1);
@@ -6156,6 +6159,30 @@ function UtilityPanel({
                       <span>
                         {score.model}
                         {isLegacyScore(score) && <span className="legacy-score-badge">Retest recommended</span>}
+                        {(() => {
+                          const appLab = advancedLabResults[score.model];
+                          const imageLab = advancedLabResults[`image:${score.model}`];
+                          return (
+                            <>
+                              {appLab && !appLab.error && (
+                                <span
+                                  className="lab-grade-badge"
+                                  title={`App Builder Lab Grade: ${appLab.score} · ${appLab.grade}. Details in Settings → Advanced Lab.`}
+                                >
+                                  App Lab {appLab.grade}
+                                </span>
+                              )}
+                              {imageLab && !imageLab.error && (
+                                <span
+                                  className="lab-grade-badge"
+                                  title={`Image Lab Grade: ${imageLab.score} · ${imageLab.grade}. Details in Settings → Advanced Lab.`}
+                                >
+                                  Image Lab {imageLab.grade}
+                                </span>
+                              )}
+                            </>
+                          );
+                        })()}
                       </span>
                       <em>{score.speed} speed · {score.sobriety} accuracy · {score.fit} fit · {getResponseEstimate(score.speed)}</em>
                     </div>

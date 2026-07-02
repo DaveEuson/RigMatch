@@ -7616,6 +7616,21 @@ tbody tr.computer-row.selected {
   white-space: nowrap;
 }
 
+.lab-grade-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 2px 5px;
+  border: 1px solid rgba(114, 181, 202, 0.4);
+  border-radius: 999px;
+  color: var(--blue);
+  background: rgba(114, 181, 202, 0.1);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .legacy-score-badge {
   display: inline-flex;
   align-items: center;
