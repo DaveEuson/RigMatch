@@ -66,6 +66,10 @@ async function runBrowserChecks(url) {
   const title = await page.title();
   const simpleText = await page.locator('body').innerText();
   const simpleGuideVisible = await page.locator('.game-show-guide').isVisible();
+  // Simple Mode is a wizard: the side menu must be hidden and the guided
+  // rounds must be present as the navigation.
+  const simpleMenuHidden = !(await page.locator('.side-menu').isVisible().catch(() => false));
+  const wizardRoundCount = await page.locator('.wizard-rounds li').count();
   const desktopOverflowX = await hasHorizontalOverflow(page);
   const overlayCount = await page.locator('.vite-error-overlay, vite-error-overlay').count();
   await page.screenshot({ path: screenshots.simple, fullPage: false });
@@ -74,6 +78,7 @@ async function runBrowserChecks(url) {
   await page.waitForSelector('.advanced-host-bar', { timeout: 10000 });
   const advancedText = await page.locator('.advanced-host-bar').innerText();
   const advancedGuideStillVisible = await page.locator('.game-show-guide').isVisible().catch(() => false);
+  const advancedMenuVisible = await page.locator('.side-menu').isVisible();
   await page.screenshot({ path: screenshots.advanced, fullPage: false });
 
   const mobile = await browser.newContext({ viewport: { width: 390, height: 900 }, isMobile: true });
@@ -84,7 +89,7 @@ async function runBrowserChecks(url) {
   await mobilePage.waitForSelector('.game-show-guide', { timeout: 10000 });
   const mobileText = await mobilePage.locator('body').innerText();
   const mobileOverflowX = await hasHorizontalOverflow(mobilePage);
-  const mobileMenuCopyWidth = await mobilePage.locator('.side-menu-item .side-menu-copy').first().evaluate((el) => el.getBoundingClientRect().width);
+  const mobileWizardVisible = await mobilePage.locator('.wizard-rounds').isVisible();
   await mobilePage.screenshot({ path: screenshots.mobile, fullPage: false });
 
   await browser.close();
@@ -97,9 +102,12 @@ async function runBrowserChecks(url) {
     simpleHasLocalTrustCopy: simpleText.includes('100% local') || simpleText.includes('Nothing leaves this computer'),
     advancedControlRoom: advancedText.includes('Advanced Control Room'),
     advancedGuideHidden: !advancedGuideStillVisible,
+    advancedMenuVisible,
+    simpleMenuHidden,
+    simpleWizardRounds: wizardRoundCount >= 4,
     desktopNoOverflow: !desktopOverflowX,
     mobileNoOverflow: !mobileOverflowX,
-    mobileMenuReadable: mobileMenuCopyWidth >= 160,
+    mobileWizardVisible,
     noFrameworkOverlay: overlayCount === 0,
     noConsoleIssues: issues.length === 0,
     noOldSobrietyCopy: !simpleText.includes('Sobriety') && !mobileText.includes('Sobriety'),

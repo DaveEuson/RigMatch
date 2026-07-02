@@ -1350,6 +1350,20 @@ function App() {
     setActivity(`${getNavLabel(id)} selected.`);
   }, [loadLogs]);
 
+  // Simple Mode runs as a wizard: when the rig check passes while the user is
+  // on the setup round, move them to the pick round instead of waiting for a
+  // manual navigation. (The comparison round advances on run completion.)
+  const prevOllamaReadyRef = useRef(ollama.ready);
+  useEffect(() => {
+    const wasReady = prevOllamaReadyRef.current;
+    prevOllamaReadyRef.current = ollama.ready;
+    if (uiMode !== 'beginner' || wasReady || !ollama.ready) return;
+    if (activeNavId === 'lan') {
+      selectNav('models');
+      setActivity('Local AI is ready. Next round: pick up to 5 contestants for the lineup.');
+    }
+  }, [activeNavId, ollama.ready, selectNav, uiMode]);
+
   const selectTheme = useCallback((nextThemeId: ThemeId) => {
     setThemeId(nextThemeId);
     setActivity(`${getThemeLabel(nextThemeId)} theme selected.`);
@@ -2116,6 +2130,7 @@ function App() {
       });
       setActivity(`Best match: ${winner.model} scored ${winner.scores.total} for this setup.`);
       playJingle('speed-date-complete');
+      if (uiMode === 'beginner') selectNav('history');
     } catch (error) {
       const errorMessage = getErrorMessage(error);
       await agentArcadeApi.appendLog({
@@ -2146,7 +2161,7 @@ function App() {
     } finally {
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, selectedHost, shortlistedRows, system.hostname, system.platform]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode]);
 
   const runSkillTestsAfterRun = useCallback(async (models: string[]) => {
     const selection = skillTestSelection;

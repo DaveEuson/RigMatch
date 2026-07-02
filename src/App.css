@@ -13382,6 +13382,29 @@ td {
     "ticker ticker";
 }
 
+/* Simple Mode runs as a wizard: the side menu disappears and the guided
+   rounds in the host bar are the navigation. Settings and the tour stay
+   reachable from the host bar's own buttons. */
+.app-shell[data-ui-mode='beginner'] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "top"
+    "stage"
+    "lineup"
+    "ticker";
+}
+
+.app-shell[data-ui-mode='beginner'].no-global-lineup {
+  grid-template-areas:
+    "top"
+    "stage"
+    "ticker";
+}
+
+.app-shell[data-ui-mode='beginner'] .side-menu {
+  display: none;
+}
+
 .top-deck {
   grid-area: top;
   min-height: 0;
