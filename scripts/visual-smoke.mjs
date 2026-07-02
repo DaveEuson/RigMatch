@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -17,6 +17,19 @@ mkdirSync(outDir, { recursive: true });
 
 let devServer = null;
 
+// On Windows the dev server is spawned through a shell, so child.kill() only
+// reaches the shell wrapper and the Vite process keeps the port (and this
+// script's stdio) alive forever. Kill the whole process tree instead.
+function stopDevServer() {
+  if (!devServer || devServer.killed) return;
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/pid', String(devServer.pid), '/T', '/F'], { stdio: 'ignore' });
+  } else {
+    devServer.kill();
+  }
+  devServer = null;
+}
+
 async function main() {
   const serverWasRunning = await isReachable(targetUrl);
   if (!serverWasRunning) {
@@ -28,7 +41,7 @@ async function main() {
   }
 
   const result = await runBrowserChecks(targetUrl);
-  if (devServer) devServer.kill();
+  stopDevServer();
 
   process.stdout.write(`${JSON.stringify({
     ...result,
@@ -148,11 +161,11 @@ async function waitForUrl(url, timeoutMs) {
 }
 
 process.on('exit', () => {
-  if (devServer) devServer.kill();
+  stopDevServer();
 });
 
 main().catch((error) => {
-  if (devServer) devServer.kill();
+  stopDevServer();
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });
