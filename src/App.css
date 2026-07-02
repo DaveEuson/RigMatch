@@ -10912,6 +10912,43 @@ tbody tr.computer-row.selected {
   background: rgba(114, 181, 202, 0.13);
 }
 
+.advanced-lab-card.video-locked {
+  opacity: 0.86;
+  border-style: dashed;
+}
+
+.advanced-lab-preview-modal {
+  width: min(960px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
+
+.advanced-lab-preview-modal .modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.advanced-lab-preview-modal .modal-title button {
+  margin-left: auto;
+}
+
+.advanced-lab-preview-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted, rgba(255, 255, 255, 0.6));
+}
+
+.advanced-lab-preview-frame {
+  width: 100%;
+  height: min(640px, calc(100vh - 220px));
+  border: 1px solid rgba(114, 181, 202, 0.4);
+  border-radius: 10px;
+  background: #fff;
+}
+
 .advanced-lab-safeguards {
   display: flex;
   flex-wrap: wrap;

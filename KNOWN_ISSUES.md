@@ -64,11 +64,11 @@ If you find something not on this list, please open an issue or drop it in the b
 
 RigMatch should grow beyond the core quick-question benchmark with optional lab-style tests that produce separate grades instead of changing the main Match score.
 
-Planned test ideas:
+Status as of 0.2.6:
 
-- **App Builder**: ask a model to create a complete single-file app or game, such as a Tetris-style HTML game, then grade structure, controls, scoring, game loop, collision logic, line clearing, restart/game-over handling, and truncation risk.
-- **Image Generation**: extra-beta Ollama Image Lab is available with explicit platform/model-size warnings, opt-in pulls, and separate image grades. Future hardening should add better image-model discovery, richer quality checks, and optional ComfyUI/Stable Diffusion backend support.
-- **Video Generation**: keep as a later research item. It needs stronger hardware checks, backend selection, longer runtimes, and much larger storage/VRAM safeguards.
+- **App Builder** (shipped): asks a model to create a complete single-file Tetris-style HTML game and grades structure, controls, scoring, game loop, collision logic, line clearing, restart/game-over handling, and truncation risk. As of 0.2.6 the output is also playable through an explicit **Play It** sandboxed preview (isolated iframe, network/storage/file access blocked); RigMatch never runs generated code automatically.
+- **Image Generation** (shipped, extra-beta): Ollama Image Lab with explicit platform/model-size warnings, opt-in pulls, and separate image grades. As of 0.2.6 it also detects image-generation models already installed in the local Ollama library. Future hardening should add richer quality checks and optional ComfyUI/Stable Diffusion backend support.
+- **Video Generation** (still a later research item): no local backend RigMatch supports can generate video yet, so 0.2.6 shows an honest locked research card with the unlock requirements. It needs a real backend, stronger hardware checks, longer runtimes, and much larger storage/VRAM safeguards before it can be a test.
 
 Safeguards required before expanding these tests:
 

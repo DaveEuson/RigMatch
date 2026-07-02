@@ -15,6 +15,7 @@ import {
   Copy,
   Download,
   ExternalLink,
+  Film,
   FolderOpen,
   Gauge,
   Heart,
@@ -135,6 +136,8 @@ import {
 } from './lib/appConfig';
 import { getUpdateChannelLabel } from './lib/updateLabels';
 import { AvatarBust, MachineAvatar } from './components/Avatars';
+import { AppBuilderPreviewModal } from './components/AppBuilderPreview';
+import { extractHtmlDocument } from './lib/labPreview';
 import {
   ModelScorePill,
   ModelStatusPill,
@@ -360,6 +363,18 @@ const IMAGE_GENERATION_MODEL_OPTIONS: ImageGenerationModelOption[] = [
 ];
 
 const releaseNotes: ReleaseNoteEntry[] = [
+  {
+    version: '0.2.6',
+    label: 'Smaller Installers & a Playable Lab',
+    date: 'Beta build',
+    notes: [
+      'Installers are roughly 15 MB smaller — the contestant art and show banners were re-encoded with no visible quality change.',
+      'App Builder results now have a Play It button: the generated game runs in a locked-down sandbox with network, storage, and file access blocked. RigMatch still never runs model code automatically.',
+      'The Image Lab now detects image-generation models already in your local Ollama library (like x/flux2 tags) and lists them with no new download.',
+      'A Video Generation research card explains honestly why video is still locked: no local backend RigMatch supports can generate video yet.',
+      'Internal code reorganization and release-tooling fixes; no scoring changes, so existing scorecards stay valid — no retest needed this time.',
+    ],
+  },
   {
     version: '0.2.5',
     label: 'Steadier Scoring & Live Progress',
@@ -5179,6 +5194,18 @@ function getInstalledImageModelName(installedModels: string[], requestedModel: s
   return installedModels.find((model) => imageModelMatches(model, requestedModel)) ?? '';
 }
 
+/**
+ * Heuristic for image-generation models already in the local library, so the
+ * Image Lab can offer them without a new pull. Ollama publishes image models
+ * under the x/ namespace; keyword fallbacks catch community tags. Vision/OCR
+ * models read images rather than make them, so they are excluded.
+ */
+function isLikelyImageGenerationModel(model: string): boolean {
+  const name = model.toLowerCase();
+  if (/ocr|vision|\bvl\b|embed/.test(name)) return false;
+  return name.startsWith('x/') || /flux|z-image|stable-?diffusion|sdxl/.test(name);
+}
+
 function buildImageDataUrl(image: string) {
   const trimmed = image.trim();
   if (!trimmed) return '';
@@ -5299,6 +5326,7 @@ function AdvancedCapabilityLab({
   const [savedResults, setSavedResults] = useState<Record<string, AdvancedLabResult>>(() => readAdvancedLabResults());
   const [runState, setRunState] = useState<AdvancedLabRunState>({ phase: 'idle', result: null, message: '' });
   const [copied, setCopied] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [imageModel, setImageModel] = useState(IMAGE_GENERATION_MODEL_OPTIONS[0].model);
   const [imageConsent, setImageConsent] = useState(false);
   const [imageTryAnyway, setImageTryAnyway] = useState(false);
@@ -5311,14 +5339,32 @@ function AdvancedCapabilityLab({
   }>({ phase: 'idle', percent: null, message: '' });
   const imagePullAbortRef = useRef<AbortController | null>(null);
 
+  const imageModelOptions = useMemo<ImageGenerationModelOption[]>(() => {
+    const detected = ollama.models
+      .filter((model) => isLikelyImageGenerationModel(model.name || model.model || ''))
+      .filter((model) => !IMAGE_GENERATION_MODEL_OPTIONS.some((option) => imageModelMatches(model.name || model.model || '', option.model)))
+      .map((model) => ({
+        model: model.name || model.model || '',
+        label: `${model.name || model.model} · installed`,
+        sizeGb: model.sizeGb ?? 0,
+        license: 'Already in your library',
+        note: 'Detected in your local Ollama library — no new download needed.',
+      }));
+    return [...IMAGE_GENERATION_MODEL_OPTIONS, ...detected];
+  }, [ollama.models]);
+
   const activeModel = installedModels.includes(labModel) ? labModel : defaultModel;
   const activeModelInfo = ollama.models.find((model) => model.name === activeModel || model.model === activeModel);
   const savedResult = activeModel ? savedResults[activeModel] ?? null : null;
   const visibleResult = runState.result?.model === activeModel ? runState.result : savedResult;
+  const previewHtml = useMemo(
+    () => (visibleResult && !visibleResult.error ? extractHtmlDocument(visibleResult.response) : null),
+    [visibleResult],
+  );
   const isRunning = runState.phase === 'running';
   const isLargeModel = (activeModelInfo?.sizeGb ?? 0) >= Math.max(8, system.gpu.vramGb || 0);
   const canRun = ollama.ready && Boolean(activeModel) && !isRunning;
-  const imageOption = IMAGE_GENERATION_MODEL_OPTIONS.find((option) => option.model === imageModel) ?? IMAGE_GENERATION_MODEL_OPTIONS[0];
+  const imageOption = imageModelOptions.find((option) => option.model === imageModel) ?? imageModelOptions[0];
   const installedImageModel = getInstalledImageModelName(installedModels, imageOption.model);
   const pulledImageModel = pulledImageModels.has(imageOption.model) ? imageOption.model : '';
   const activeImageModel = installedImageModel || pulledImageModel || imageOption.model;
@@ -5335,6 +5381,7 @@ function AdvancedCapabilityLab({
   const startChallenge = useCallback(async () => {
     if (!activeModel || !ollama.ready) return;
     setCopied(false);
+    setPreviewOpen(false);
     setRunState({ phase: 'running', result: null, message: `Asking ${activeModel} to build a tiny app...` });
     const result = await runAdvancedAppBuilderChallenge(activeModel, ollama.baseUrl);
     setRunState({
@@ -5471,7 +5518,24 @@ function AdvancedCapabilityLab({
               {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
               {copied ? 'Copied' : 'Copy Output'}
             </button>
+            <button
+              type="button"
+              className="mini-button outline"
+              onClick={() => setPreviewOpen(true)}
+              disabled={!previewHtml}
+              title={previewHtml
+                ? 'Run the generated game in an isolated sandbox with network and file access blocked.'
+                : 'Run the App Builder first — the preview unlocks when the answer contains a runnable single-file app.'}
+            >
+              <Play aria-hidden="true" />
+              Play It
+            </button>
           </div>
+          {visibleResult && !visibleResult.error && !previewHtml && (
+            <p className="advanced-lab-message failed">
+              This answer did not contain a runnable single-file app, so the sandboxed preview stays locked.
+            </p>
+          )}
           {!ollama.ready && (
             <div className="utility-empty compact">
               <strong>Ollama is offline</strong>
@@ -5534,7 +5598,7 @@ function AdvancedCapabilityLab({
               }}
               disabled={imagePulling || imageRunning}
             >
-              {IMAGE_GENERATION_MODEL_OPTIONS.map((option) => (
+              {imageModelOptions.map((option) => (
                 <option key={option.model} value={option.model}>
                   {option.label} · {formatGb(option.sizeGb)}
                 </option>
@@ -5641,7 +5705,47 @@ function AdvancedCapabilityLab({
             </div>
           )}
         </article>
+
+        <article className="advanced-lab-card video-locked">
+          <div className="advanced-lab-card-head">
+            <Film aria-hidden="true" />
+            <div>
+              <span>Research preview</span>
+              <strong>Video Generation</strong>
+            </div>
+            <b className="advanced-lab-grade locked">Locked</b>
+          </div>
+          <p>
+            No local backend RigMatch supports can generate video yet — Ollama has no video models today, so there
+            is honestly nothing to test. This card unlocks when that changes instead of pretending.
+          </p>
+          <div className="advanced-lab-checks">
+            <div className="failed" title="Ollama and LM Studio expose no video-generation endpoint today.">
+              <span>Miss</span>
+              <strong>Local video backend available</strong>
+            </div>
+            <div
+              className={(system.gpu.vramGb || 0) >= 16 ? 'passed' : 'failed'}
+              title={`Early local video models are expected to want roughly 16 GB+ of VRAM. This computer reports ${system.gpu.vramGb || 0} GB.`}
+            >
+              <span>{(system.gpu.vramGb || 0) >= 16 ? 'Pass' : 'Miss'}</span>
+              <strong>VRAM headroom (~16 GB+)</strong>
+            </div>
+          </div>
+          <div className="advanced-lab-safeguards">
+            <span>No auto-downloads</span>
+            <span>Separate Lab Grade</span>
+            <span>Backend + size warnings first</span>
+          </div>
+        </article>
       </div>
+      {previewOpen && previewHtml && visibleResult && (
+        <AppBuilderPreviewModal
+          html={previewHtml}
+          model={visibleResult.model}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
     </section>
   );
 }

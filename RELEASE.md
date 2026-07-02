@@ -26,6 +26,9 @@ npm run smoke:bench:strict -- --model mistral:7b
 npm run compare:ollama-speed -- --model qwen3:1.7b
 ```
 
+If `qwen3:1.7b` is not installed, any small installed thinking model (for example `qwen3.5:0.8b`) covers the same
+thinking-mode regression check — the smoke must show default-mode empty answers being rescued in RigMatch mode.
+
 For installers, build on the matching OS:
 
 ```bash
