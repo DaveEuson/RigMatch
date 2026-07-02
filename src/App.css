@@ -428,11 +428,13 @@
   height: 16px;
 }
 
+/* Dead selector: no .app-body element is rendered anymore (the shell grid on
+   .app-shell owns the menu/stage columns). Kept only until the dead-CSS sweep. */
 .app-body {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: 244px minmax(0, 1fr);
+  grid-template-columns: 196px minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -447,7 +449,7 @@
 .side-menu {
   min-width: 0;
   min-height: 0;
-  padding: 20px; border-radius: 16px; background: var(--panel);
+  padding: 12px; border-radius: 16px; background: var(--panel);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 10px;
@@ -502,16 +504,16 @@
 
 .side-menu-item {
   min-width: 0;
-  min-height: 62px;
+  min-height: 46px;
   border: none;
   border-radius: 12px;
   background: #10161a;
   color: var(--text);
   display: grid;
-  grid-template-columns: 22px 24px minmax(0, 1fr) auto;
+  grid-template-columns: 16px 20px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: 7px;
+  padding: 7px;
   text-align: left;
   cursor: pointer;
   margin-bottom: 4px;
@@ -549,15 +551,10 @@
   white-space: nowrap;
 }
 
+/* Nav descriptions are hidden to keep the rail slim; each item's title
+   attribute still surfaces the description on hover. */
 .side-menu-copy small {
-  min-width: 0;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 750;
-  line-height: 1.15;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: none;
 }
 
 .side-menu-item em {
@@ -3485,7 +3482,7 @@ tbody tr.computer-row.selected {
 
 .cabinet-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 292px;
+  grid-template-columns: minmax(0, 1fr) 268px;
   align-items: stretch;
   flex: 1;
   min-width: 0;
@@ -3501,7 +3498,7 @@ tbody tr.computer-row.selected {
 }
 
 .cabinet-sidebar {
-  width: 292px;
+  width: 268px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -4113,7 +4110,7 @@ tbody tr.computer-row.selected {
 .model-table table {
   table-layout: fixed;
   width: 100%;
-  min-width: 940px;
+  min-width: 800px;
 }
 
 .model-table th,
@@ -4192,33 +4189,34 @@ tbody tr.computer-row.selected {
 
 .model-table th:nth-child(1),
 .model-table td:nth-child(1) {
-  width: 165px;
+  width: 156px;
 }
 
 .model-table th:nth-child(2),
 .model-table td:nth-child(2) {
-  width: 68px;
+  width: 62px;
 }
 
 .model-table th:nth-child(3),
 .model-table td:nth-child(3) {
-  width: 154px;
+  width: 126px;
 }
 
 .model-table th:nth-child(4),
 .model-table td:nth-child(4) {
-  width: 100px;
+  width: 86px;
 }
 
 .model-table th:nth-child(5),
 .model-table td:nth-child(5) {
-  width: 90px;
+  width: 80px;
 }
 
 .model-table th:nth-child(6),
 .model-table td:nth-child(6) {
-  width: 72px;
+  width: 66px;
 }
+
 
 .model-table td.good-for-cell {
   overflow: visible;
@@ -4606,6 +4604,7 @@ tbody tr.computer-row.selected {
 
 .row-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 5px;
 }
@@ -13363,7 +13362,7 @@ td {
   min-height: 0;
   padding: 18px;
   gap: 16px;
-  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  grid-template-columns: minmax(172px, 196px) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   grid-template-areas:
     "top top"

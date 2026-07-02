@@ -6839,7 +6839,23 @@ function ModelCabinet({
   const [sortKey, setSortKey] = useState<ModelSortKey>('status');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   // Column widths: Model, Size, Good For, Origin, Status, Match, Popularity (Actions fills remainder)
-  const [colWidths, setColWidths] = useState([175, 68, 154, 100, 90, 72, 112]);
+  const [colWidths, setColWidths] = useState([156, 62, 126, 86, 80, 66, 96]);
+  // Popularity is the least essential column (the local Ollama API exposes no
+  // pull counts), so it yields first on narrower windows instead of forcing
+  // horizontal scrolling. Handled in JS because the <col> track would keep
+  // its width even if the cells were hidden with CSS.
+  const [hidePopularity, setHidePopularity] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 1600px)').matches);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1600px)');
+    const update = () => setHidePopularity(media.matches);
+    media.addEventListener('change', update);
+    window.addEventListener('resize', update);
+    return () => {
+      media.removeEventListener('change', update);
+      window.removeEventListener('resize', update);
+    };
+  }, []);
   const colWidthsRef = useRef(colWidths);
   useEffect(() => {
     colWidthsRef.current = colWidths;
@@ -7101,7 +7117,7 @@ function ModelCabinet({
       <div className="table-wrap model-table">
         <table>
           <colgroup>
-            {colWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
+            {colWidths.map((w, i) => (hidePopularity && i === 6 ? null : <col key={i} style={{ width: w }} />))}
             <col />
           </colgroup>
           <thead>
@@ -7112,7 +7128,9 @@ function ModelCabinet({
               <SortableModelHeader label="By" sortName="origin" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(3, e)} />
               <SortableModelHeader label="Status" sortName="status" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(4, e)} />
               <SortableModelHeader label="Match" sortName="score" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(5, e)} />
-              <SortableModelHeader label="Popularity" sortName="pulls" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(6, e)} />
+              {!hidePopularity && (
+                <SortableModelHeader label="Popularity" sortName="pulls" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(6, e)} />
+              )}
               <th>Actions</th>
             </tr>
           </thead>
@@ -7230,14 +7248,16 @@ function ModelCabinet({
                   <td>
                     <ModelScorePill score={score} />
                   </td>
-                  <td className="speed-cell">
-                    <div className="speed-pop-cell">
-                      {rowBenchmark?.avgTokensPerSecond != null && (
-                        <span className="speed-pill tested">{Math.round(rowBenchmark.avgTokensPerSecond)} tok/s</span>
-                      )}
-                      <PopularityMeter pulls={row.pulls} />
-                    </div>
-                  </td>
+                  {!hidePopularity && (
+                    <td className="speed-cell">
+                      <div className="speed-pop-cell">
+                        {rowBenchmark?.avgTokensPerSecond != null && (
+                          <span className="speed-pill tested">{Math.round(rowBenchmark.avgTokensPerSecond)} tok/s</span>
+                        )}
+                        <PopularityMeter pulls={row.pulls} />
+                      </div>
+                    </td>
+                  )}
                   <td className={showDownloadProgress ? 'action-cell has-download-progress' : 'action-cell'}>
                     <div className="row-actions">
                       <button
@@ -7320,7 +7340,7 @@ function ModelCabinet({
             })}
             {visibleRows.length === 0 && (
               <tr className="empty-row">
-                <td colSpan={7}>
+                <td colSpan={hidePopularity ? 7 : 8}>
                   <div className="table-empty-state">
                     <strong>No contestants match these filters</strong>
                     <span>Clear the search or show the full model pool.</span>
