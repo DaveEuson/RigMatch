@@ -12686,7 +12686,7 @@ const TASK_CATEGORIES = [
 ] as const;
 
 type TaskCategoryId = typeof TASK_CATEGORIES[number]['id'];
-type ModelTaskFilterId = TaskCategoryId | 'uncensored';
+type ModelTaskFilterId = TaskCategoryId | 'uncensored' | 'imagegen' | 'videogen';
 
 const TASK_FILTER_CHIPS: Array<{ id: ModelTaskFilterId; label: string }> = [
   { id: 'coding',     label: 'Coding' },
@@ -12694,10 +12694,21 @@ const TASK_FILTER_CHIPS: Array<{ id: ModelTaskFilterId; label: string }> = [
   { id: 'writing',    label: 'Writing' },
   { id: 'reasoning',  label: 'Reasoning' },
   { id: 'tiny',       label: 'Tiny' },
-  { id: 'vision',     label: 'Image/OCR' },
+  { id: 'imagegen',   label: 'Makes images' },
+  { id: 'videogen',   label: 'Makes video' },
+  { id: 'vision',     label: 'Reads images/OCR' },
   { id: 'search',     label: 'Search' },
   { id: 'uncensored', label: 'Uncensored' },
 ];
+
+/** Models that generate video. No local backend runs these yet, so the filter
+   is usually empty — it exists so such models are recognizable when they exist. */
+function isLikelyVideoGenerationModel(name: string): boolean {
+  const lower = (name || '').toLowerCase();
+  if (/ocr|embed/.test(lower)) return false;
+  return /\bwan\b|wan2|ltx|ltxv|cogvideo|mochi|hunyuan-?video|stable-?video|\bsvd\b|animatediff|\bveo\b|\bsora\b/.test(lower)
+    || (lower.startsWith('x/') && lower.includes('video'));
+}
 
 function isUncensoredModel(name: string): boolean {
   const lower = (name || '').toLowerCase();
@@ -12710,6 +12721,8 @@ function isUncensoredModel(name: string): boolean {
 function getModelGoodForTags(row: ModelRow): string[] {
   const profile = getModelProfile(row.displayName);
   const tags = [
+    isLikelyImageGenerationModel(row.displayName) ? 'makes images' : '',
+    isLikelyVideoGenerationModel(row.displayName) ? 'makes video' : '',
     ...profile.specialties,
     row.pack,
     row.sizeGb != null && row.sizeGb <= 2.5 ? 'low memory' : '',
@@ -12736,6 +12749,8 @@ function getModelGoodForTags(row: ModelRow): string[] {
 
 function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolean {
   if (task === 'uncensored') return isUncensoredModel(row.displayName);
+  if (task === 'imagegen') return isLikelyImageGenerationModel(row.displayName);
+  if (task === 'videogen') return isLikelyVideoGenerationModel(row.displayName);
   const category = TASK_CATEGORIES.find((c) => c.id === task);
   if (!category || category.keywords.length === 0) return true;
   const specialties = getModelGoodForTags(row).map((s) => s.toLowerCase());
