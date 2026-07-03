@@ -3997,10 +3997,12 @@ function RunWarningModal({
             {(() => {
               const appBuilderCapable = lineupModels.some((m) => !isLikelyImageGenerationModel(m) && !isEmbeddingModel(m));
               const hasImageModel = lineupModels.some((m) => isLikelyImageGenerationModel(m));
-              // Ollama image models run on Apple's MLX framework — macOS/Apple
-              // Silicon only. On Windows/Linux they die with an MLX load error.
-              const imageOnThisOS = system.platform === 'darwin';
-              const imageCapable = hasImageModel && imageOnThisOS;
+              const isMac = system.platform === 'darwin';
+              // Let users attempt image generation on any platform (mirrors the
+              // Image Lab's "try anyway"). Some models are MLX-format — macOS
+              // only — and will fail with a clear MLX message, but flux/CUDA
+              // setups may work on Windows/Linux, so we no longer hard-block.
+              const imageCapable = hasImageModel;
               return (
                 <>
                   <label className={`run-skill-test-option${appBuilderCapable ? '' : ' disabled'}`}>
@@ -4051,11 +4053,11 @@ function RunWarningModal({
                     />
                     <span>
                       <strong>Create an image</strong>
-                      <em>{imageCapable
-                        ? 'Adds roughly 1–4 minutes per image model. Uses the prompt below.'
-                        : hasImageModel && !imageOnThisOS
-                          ? 'Image generation needs macOS (Apple Silicon). Ollama runs image models on Apple\'s MLX framework, which isn\'t available on Windows or Linux yet.'
-                          : 'No image-generation model in this run. Install one (like x/flux2-klein) to unlock.'}</em>
+                      <em>{!hasImageModel
+                        ? 'No image-generation model in this run. Install one (like x/flux2-klein) to unlock.'
+                        : isMac
+                          ? 'Adds roughly 1–4 minutes per image model. Uses the prompt below.'
+                          : 'Adds roughly 1–4 minutes. RigMatch will try on this PC — some image models are macOS-only (MLX) and will report why if they can\'t load.'}</em>
                     </span>
                   </label>
                   {imageCapable && skillSelection.image && (
