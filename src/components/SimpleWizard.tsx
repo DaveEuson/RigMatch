@@ -45,6 +45,9 @@ type SimpleRunProgress = {
   phase: 'running' | 'complete' | 'failed';
   currentModel: string;
   percent: number;
+  /** Number of lineup models fully tested so far — used for per-model podium state. */
+  completed?: number;
+  lastResult?: { model: string; total: number; grade: string };
   questionIndex?: number;
   questionTotal?: number;
   questionLabel?: string;
@@ -221,7 +224,11 @@ export function SimpleWizard(props: SimpleWizardProps) {
       <footer className="sw-footer">
         <div className="sw-footer-left">
           {step !== 'setup' && (
-            <button type="button" className="sw-ghost-pill" onClick={goBack}>
+            <button
+              type="button"
+              className="sw-ghost-pill"
+              onClick={step === 'compare' ? props.onStopShow : goBack}
+            >
               <ArrowLeft aria-hidden="true" />
               {step === 'compare' ? 'Stop the show' : 'Back'}
             </button>
@@ -276,6 +283,10 @@ function SetupScreen({ system, ollamaReady, isScanning, onCheckComputer, onGetOl
   const checked = ollamaReady; // a successful check makes Ollama ready
   const gpu = system.gpu.model || 'your graphics card';
   const freeGb = Math.round(system.storage.availableGb || 0);
+  // Only surface the "couldn't find Ollama" card after the user actually ran a
+  // check that came back not-ready — never on first load before they've clicked.
+  const [attempted, setAttempted] = useState(false);
+  const runCheck = () => { setAttempted(true); onCheckComputer(); };
 
   return (
     <div className="sw-setup">
@@ -284,7 +295,7 @@ function SetupScreen({ system, ollamaReady, isScanning, onCheckComputer, onGetOl
       <p className="sw-muted">
         RigMatch looks at your graphics card and memory to find AI models that fit. Everything stays on your PC — no account, no cloud.
       </p>
-      <button type="button" className="sw-gold-pill sw-cta" onClick={onCheckComputer} disabled={isScanning}>
+      <button type="button" className="sw-gold-pill sw-cta" onClick={runCheck} disabled={isScanning}>
         {isScanning ? <RefreshCw className="sw-spin" aria-hidden="true" /> : <ScanLine aria-hidden="true" />}
         {isScanning ? 'Checking your computer…' : 'Check my computer'}
       </button>
@@ -302,7 +313,7 @@ function SetupScreen({ system, ollamaReady, isScanning, onCheckComputer, onGetOl
         </div>
       )}
 
-      {!checked && !isScanning && hasBeenChecked(system, ollamaReady) && (
+      {attempted && !checked && !isScanning && (
         <div className="sw-setup-result error">
           <div className="sw-setup-result-head">
             <span className="sw-check-circle error" aria-hidden="true"><X /></span>
@@ -313,18 +324,12 @@ function SetupScreen({ system, ollamaReady, isScanning, onCheckComputer, onGetOl
           </p>
           <div className="sw-setup-error-actions">
             <button type="button" className="sw-gold-pill" onClick={onGetOllama}><ExternalLink aria-hidden="true" />Get Ollama</button>
-            <button type="button" className="sw-ghost-pill" onClick={onCheckComputer}>Try again</button>
+            <button type="button" className="sw-ghost-pill" onClick={runCheck}>Try again</button>
           </div>
         </div>
       )}
     </div>
   );
-}
-
-function hasBeenChecked(_system: SystemProfile, _ready: boolean): boolean {
-  // In the desktop app a completed-but-not-ready check should show the error
-  // card; we surface it whenever Ollama isn't ready after a manual check.
-  return true;
 }
 
 function ResultRow({ label, detail }: { label: string; detail: string }) {
@@ -558,6 +563,7 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
   const question = runProgress?.questionPrompt ?? 'The host is lining up the next question…';
   const label = (runProgress?.questionLabel ?? 'Getting started').toUpperCase();
   const percent = runProgress?.percent ?? 0;
+  const completed = runProgress?.completed ?? 0;
 
   return (
     <div className="sw-compare" style={{ backgroundImage: `url(${speedDateShow})` }}>
@@ -567,10 +573,14 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
           <p>&ldquo;{question}&rdquo;</p>
         </div>
         <div className="sw-podiums">
-          {shortlistedRows.map((row) => {
+          {shortlistedRows.map((row, index) => {
             const isActive = row.displayName === activeModel;
-            const score = runProgress?.questionScores?.[row.displayName];
-            const state = isActive ? 'answering' : score != null ? 'done' : 'waiting';
+            // A model is "done" once the run has moved past its index. Per-model
+            // scores aren't tracked in progress, so only the just-finished model
+            // (lastResult) shows a number; earlier ones read "Answered".
+            const isDone = !isActive && index < completed;
+            const state = isActive ? 'answering' : isDone ? 'done' : 'waiting';
+            const rowScore = runProgress?.lastResult?.model === row.displayName ? runProgress?.lastResult?.total : undefined;
             return (
               <div key={row.displayName} className={`sw-podium ${state}`}>
                 <img src={getModelAvatarSrc(row.displayName)} alt="" />
@@ -578,7 +588,7 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
                 <span className={`sw-podium-pill ${state}`}>
                   {state === 'answering' ? <><i /><i /><i /> Answering</> : state === 'done' ? '✓ Done' : 'Waiting'}
                 </span>
-                <em>{state === 'answering' ? 'Thinking it over…' : state === 'done' ? `Scored ${score}` : 'Up next'}</em>
+                <em>{state === 'answering' ? 'Thinking it over…' : state === 'done' ? (rowScore != null ? `Scored ${rowScore}` : 'Answered') : 'Up next'}</em>
               </div>
             );
           })}
