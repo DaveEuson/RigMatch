@@ -3509,6 +3509,12 @@ tbody tr.computer-row.selected {
   overflow-y: auto;
 }
 
+/* Your Rig has tall content (setup doctor, host table, upgrade paths); let it
+   scroll instead of clipping at the panel edge, matching the Models panel. */
+.lan-panel {
+  overflow-y: auto;
+}
+
 .model-panel .model-footer,
 .model-panel .contestants-command-deck,
 .model-panel .model-table {
@@ -11139,6 +11145,51 @@ tbody tr.computer-row.selected {
   flex-direction: column;
   gap: 12px;
   padding: 14px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.activity-results-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.activity-results-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.activity-result-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.activity-result-info strong {
+  font-size: 12px;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-result-info em {
+  font-size: 11px;
+  color: var(--muted, rgba(255, 255, 255, 0.6));
+}
+
+.activity-results-list .score-row-grade {
+  flex: 0 0 auto;
+}
+
+.activity-results-list .mini-button {
+  flex: 0 0 auto;
 }
 
 .activity-panel-head span {

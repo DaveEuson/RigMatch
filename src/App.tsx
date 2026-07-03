@@ -2650,7 +2650,9 @@ function App() {
             skillRunStatus={skillRunStatus}
             pullProgressByModel={pullProgressByModel}
             isListTesting={isListTesting}
+            modelScores={modelScores}
             onOpenModels={() => selectNav('models')}
+            onOpenScorecards={() => selectNav('history')}
           />
         )}
         {(activeNavId === 'history' || activeNavId === 'settings') && (
@@ -10555,32 +10557,75 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+type ActivityJob = {
+  key: string;
+  model: string;
+  kind: 'benchmark' | 'app' | 'image';
+  label: string;
+  grade: string;
+  score: number;
+  completedAt: string;
+  html?: string | null;
+  imageDataUrl?: string;
+};
+
 function ActivityPanel({
   runProgress,
   skillRunStatus,
   pullProgressByModel,
   isListTesting,
+  modelScores,
   onOpenModels,
+  onOpenScorecards,
 }: {
   runProgress: RunProgress | null;
   skillRunStatus: SkillRunStatus;
   pullProgressByModel: Record<string, PullProgressUpdate>;
   isListTesting: boolean;
+  modelScores: Record<string, TestedModelScore>;
   onOpenModels: () => void;
+  onOpenScorecards: () => void;
 }) {
+  const [previewApp, setPreviewApp] = useState<{ html: string; model: string } | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ src: string; model: string } | null>(null);
   const activePulls = Object.values(pullProgressByModel)
     .filter((update) => update && !['complete', 'failed', 'cancelled'].includes(update.phase));
   const benchmarkActive = runProgress?.phase === 'running';
   const skillActive = skillRunStatus.phase === 'running';
   const anythingRunning = benchmarkActive || skillActive || activePulls.length > 0 || isListTesting;
 
+  // Re-read saved lab results whenever a skill run advances so freshly
+  // finished App Builder / image jobs appear in the monitor.
+  const labResults = useMemo(
+    () => readAdvancedLabResults(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [skillRunStatus.phase, skillRunStatus.completed],
+  );
+
+  const recentJobs = useMemo<ActivityJob[]>(() => {
+    const jobs: ActivityJob[] = [];
+    for (const score of Object.values(modelScores)) {
+      if (!score?.completedAt) continue;
+      jobs.push({ key: `bench:${score.model}`, model: score.model, kind: 'benchmark', label: 'Compatibility test', grade: score.grade, score: score.total, completedAt: score.completedAt });
+    }
+    for (const result of Object.values(labResults)) {
+      if (!result || result.error || !result.completedAt) continue;
+      if (result.challenge === 'app-builder') {
+        jobs.push({ key: `app:${result.model}`, model: result.model, kind: 'app', label: 'App Builder', grade: result.grade, score: result.score, completedAt: result.completedAt, html: extractHtmlDocument(result.response) });
+      } else if (result.challenge === 'image-generation') {
+        jobs.push({ key: `img:${result.model}`, model: result.model, kind: 'image', label: 'Image Lab', grade: result.grade, score: result.score, completedAt: result.completedAt, imageDataUrl: result.imageDataUrl });
+      }
+    }
+    return jobs.sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt)).slice(0, 10);
+  }, [modelScores, labResults]);
+
   return (
     <section className="activity-panel" aria-label="Running tests and downloads">
       <div className="activity-panel-head">
         <div>
           <span>Activity</span>
-          <strong>{anythingRunning ? 'Work in progress on this computer' : 'Nothing running right now'}</strong>
-          <em>Benchmarks, skill tests, and downloads all report here while they run.</em>
+          <strong>{anythingRunning ? 'Work in progress on this computer' : 'Job monitor'}</strong>
+          <em>Live jobs report here as they run, and recent results stay below — open the app or image a test produced.</em>
         </div>
       </div>
 
@@ -10658,6 +10703,87 @@ function ActivityPanel({
           Open Models
         </button>
       </article>
+
+      <article className="activity-card">
+        <div className="activity-card-head">
+          <History aria-hidden="true" />
+          <strong>Recent results</strong>
+          <b className="activity-state idle">{recentJobs.length}</b>
+        </div>
+        {recentJobs.length === 0 ? (
+          <em>Run a test and its result lands here — with a viewer for the app or image it produced.</em>
+        ) : (
+          <ul className="activity-results-list">
+            {recentJobs.map((job) => (
+              <li key={job.key}>
+                <AvatarBust model={job.model} size="tiny" />
+                <div className="activity-result-info">
+                  <strong>{job.model}</strong>
+                  <em>{job.label} · {formatHistoryTime(job.completedAt)}</em>
+                </div>
+                <span className={`score-row-grade ${getScoreTone(job.score)}`}>{job.score} · {job.grade}</span>
+                {job.kind === 'app' && (
+                  <button
+                    type="button"
+                    className="mini-button"
+                    onClick={() => job.html && setPreviewApp({ html: job.html, model: job.model })}
+                    disabled={!job.html}
+                    title={job.html ? 'Play the generated app in a sandbox' : 'This answer had no runnable app to preview'}
+                  >
+                    <Play aria-hidden="true" />
+                    Play It
+                  </button>
+                )}
+                {job.kind === 'image' && (
+                  <button
+                    type="button"
+                    className="mini-button"
+                    onClick={() => job.imageDataUrl && setPreviewImage({ src: job.imageDataUrl, model: job.model })}
+                    disabled={!job.imageDataUrl}
+                    title={job.imageDataUrl ? 'View the generated image' : 'No image was saved for this run'}
+                  >
+                    <Lightbulb aria-hidden="true" />
+                    View
+                  </button>
+                )}
+                {job.kind === 'benchmark' && (
+                  <button type="button" className="mini-button outline" onClick={onOpenScorecards}>
+                    Scorecard
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </article>
+
+      {previewApp && (
+        <AppBuilderPreviewModal html={previewApp.html} model={previewApp.model} onClose={() => setPreviewApp(null)} />
+      )}
+      {previewImage && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setPreviewImage(null)}>
+          <section
+            className="run-warning-modal advanced-lab-preview-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Image generated by ${previewImage.model}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-title">
+              <Lightbulb aria-hidden="true" />
+              <div>
+                <span>Image Lab result</span>
+                <strong>{previewImage.model}</strong>
+              </div>
+              <button type="button" className="mini-button outline" onClick={() => setPreviewImage(null)}>
+                <X aria-hidden="true" />
+                Close
+              </button>
+            </div>
+            <img className="advanced-lab-generated-image" src={previewImage.src} alt={`Generated by ${previewImage.model}`} />
+          </section>
+        </div>
+      )}
     </section>
   );
 }
