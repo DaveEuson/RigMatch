@@ -2438,6 +2438,7 @@ function App() {
           setSelectedModel(model);
           setChosenModel(model);
         }}
+        onTestAgain={requestBenchmarkForModel}
         onClearTopPick={clearTopMatch}
         onRestoreClearedTopPicks={restoreClearedTopMatches}
         clearedTopPickCount={clearedTopMatches.size}
@@ -2903,6 +2904,7 @@ function TopDeck({
   onScan,
   topPick,
   onUseTopPick,
+  onTestAgain,
   onClearTopPick,
   onRestoreClearedTopPicks,
   clearedTopPickCount,
@@ -2916,6 +2918,7 @@ function TopDeck({
   onScan: () => void;
   topPick?: RigPick | null;
   onUseTopPick: (model: string) => void;
+  onTestAgain: (model: string) => void;
   onClearTopPick: () => void;
   onRestoreClearedTopPicks: () => void;
   clearedTopPickCount: number;
@@ -3044,7 +3047,7 @@ function TopDeck({
 
       {topPick ? (
         <section className="top-deck-winner" aria-label="Current best model">
-          <Trophy aria-hidden="true" />
+          <AvatarBust model={topPick.row.displayName} size="small" extraClass="top-deck-winner-avatar" />
           <div className="top-deck-winner-copy">
             <div className="top-deck-winner-head">
               <span>{topPickLabel(topPick.score?.grade)}</span>
@@ -3056,6 +3059,16 @@ function TopDeck({
                   title="Set this as your active model"
                 >
                   Use this model
+                </button>
+                <button
+                  type="button"
+                  className="top-deck-test-again-btn"
+                  onClick={() => onTestAgain(topPick.row.displayName)}
+                  title={`Run the compatibility test on ${topPick.row.displayName} again`}
+                  aria-label={`Test ${topPick.row.displayName} again`}
+                >
+                  <RefreshCw aria-hidden="true" />
+                  Test again
                 </button>
                 <button
                   type="button"

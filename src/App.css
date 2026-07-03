@@ -93,6 +93,41 @@
   color: var(--gold);
 }
 
+/* Show the model's contestant avatar (not a generic trophy) for the Top Match.
+   The :has() rule outranks the plain .top-deck-winner grid defs at every
+   breakpoint, so the first column widens to fit the avatar. */
+.top-deck-winner:has(.top-deck-winner-avatar) {
+  grid-template-columns: 42px minmax(0, 1fr);
+}
+
+.top-deck-winner-avatar {
+  border-radius: 10px;
+}
+
+.top-deck-test-again-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid rgba(239, 188, 90, 0.45);
+  border-radius: 999px;
+  background: rgba(13, 21, 20, 0.7);
+  color: var(--gold);
+  font-size: 8px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.top-deck-test-again-btn svg {
+  width: 11px;
+  height: 11px;
+}
+
 .top-deck-winner-copy {
   min-width: 0;
   flex: 1;
@@ -5766,12 +5801,21 @@ tbody tr.computer-row.selected {
   border: 1px solid rgba(255, 249, 239, 0.08);
 }
 
+/* The "THE DATING GAME" sign is stage backdrop: pinned to the upper band,
+   dimmed, and behind the contestants (z-index 0 vs their z-index 2) so its
+   large text no longer collides with the avatar faces sitting at the bottom. */
 .live-show-sign {
-  position: relative;
-  z-index: 1;
-  max-width: 360px;
+  position: absolute;
+  top: clamp(14px, 3vh, 32px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 0;
+  width: min(560px, 82%);
+  text-align: center;
   color: #ffd66f;
+  opacity: 0.5;
   text-shadow: 0 5px 18px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
 }
 
 .live-show-sign span,
@@ -5787,7 +5831,7 @@ tbody tr.computer-row.selected {
 .live-show-sign strong {
   display: block;
   color: #ffd66f;
-  font-size: clamp(34px, 5vw, 68px);
+  font-size: clamp(30px, 4.2vw, 54px);
   line-height: 0.9;
 }
 
