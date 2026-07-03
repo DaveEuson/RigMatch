@@ -139,7 +139,7 @@ import {
 import { getUpdateChannelLabel } from './lib/updateLabels';
 import { AvatarBust, MachineAvatar } from './components/Avatars';
 import { AppBuilderPreviewModal } from './components/AppBuilderPreview';
-import { extractHtmlDocument } from './lib/labPreview';
+import { extractHtmlDocument, buildSandboxedPreviewHtml } from './lib/labPreview';
 import {
   ModelScorePill,
   ModelStatusPill,
@@ -185,7 +185,8 @@ type ChatMessage = {
 type UtilityPanelId = Extract<NavId, 'history' | 'settings'>;
 
 type PendingRunMode = 'single' | 'speed-date';
-type SkillTestSelection = { appBuilder: boolean; image: boolean; imagePrompt: string };
+type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string };
+type DemoArtifact = { model: string; kind: 'app' | 'image'; html?: string | null; imageDataUrl?: string; grade: string; score: number };
 type SkillRunStatus = {
   phase: 'idle' | 'running' | 'complete' | 'failed';
   label: string;
@@ -340,15 +341,75 @@ function playJingle(type: 'speed-date-complete' | 'new-winner' | 'its-a-match') 
   }
 }
 
-const ADVANCED_APP_BUILDER_PROMPT = `Create a complete single-file HTML Tetris-style falling block game.
+type AppBuilderPreset = { id: string; label: string; prompt: string };
 
-Requirements:
+const APP_BUILDER_BASE_RULES = `
 - Return only the code for one HTML file.
 - Include HTML, CSS, and JavaScript in the same file.
-- Include keyboard controls for left, right, rotate, soft drop, and restart.
-- Include a visible score display.
-- Include collision detection, line clearing, and game-over handling.
 - Do not use external libraries, CDNs, or network calls.`;
+
+const APP_BUILDER_PRESETS: AppBuilderPreset[] = [
+  {
+    id: 'tetris',
+    label: 'Tetris-style game',
+    prompt: `Create a complete single-file HTML Tetris-style falling block game.
+
+Requirements:
+- Keyboard controls for left, right, rotate, soft drop, and restart.
+- A visible score display.
+- Collision detection, line clearing, and game-over handling.${APP_BUILDER_BASE_RULES}`,
+  },
+  {
+    id: 'snake',
+    label: 'Snake game',
+    prompt: `Create a complete single-file HTML Snake game.
+
+Requirements:
+- Arrow-key controls, a growing snake, food, and collision/game-over handling.
+- A visible score display and a restart option.${APP_BUILDER_BASE_RULES}`,
+  },
+  {
+    id: 'calculator',
+    label: 'Calculator',
+    prompt: `Create a complete single-file HTML calculator.
+
+Requirements:
+- Clickable number and operator buttons plus keyboard input.
+- A display that updates as you type, with clear and equals.
+- Handle addition, subtraction, multiplication, and division.${APP_BUILDER_BASE_RULES}`,
+  },
+  {
+    id: 'clock',
+    label: 'Digital clock',
+    prompt: `Create a complete single-file HTML digital clock.
+
+Requirements:
+- Show the current time, updating every second.
+- Include a 12/24-hour toggle and today's date.${APP_BUILDER_BASE_RULES}`,
+  },
+  {
+    id: 'paint',
+    label: 'Paint canvas',
+    prompt: `Create a complete single-file HTML paint / drawing app on a canvas.
+
+Requirements:
+- Draw with the mouse, pick a color and brush size, and a clear button.${APP_BUILDER_BASE_RULES}`,
+  },
+];
+
+const DEFAULT_APP_BUILDER_PRESET_ID = 'tetris';
+const ADVANCED_APP_BUILDER_PROMPT = APP_BUILDER_PRESETS[0].prompt;
+
+/** Resolve the effective App Builder prompt from a preset id or a custom request. */
+function resolveAppBuilderPrompt(promptId: string, customPrompt: string): string {
+  if (promptId === 'custom') {
+    const custom = customPrompt.trim();
+    return custom
+      ? `Create a complete single-file HTML app for this request: ${custom}${APP_BUILDER_BASE_RULES}`
+      : ADVANCED_APP_BUILDER_PROMPT;
+  }
+  return APP_BUILDER_PRESETS.find((preset) => preset.id === promptId)?.prompt ?? ADVANCED_APP_BUILDER_PROMPT;
+}
 
 const ADVANCED_IMAGE_GENERATION_PROMPT = 'A cheerful robot dog sitting beside a retro computer, warm studio lighting, playful but realistic, detailed fur-like metal texture, cozy workshop background';
 const ADVANCED_IMAGE_WIDTH = 512;
@@ -667,10 +728,13 @@ function App() {
   const [pendingSingleModel, setPendingSingleModel] = useState<string | null>(null);
   const [skillTestSelection, setSkillTestSelection] = useState<SkillTestSelection>({
     appBuilder: false,
+    appPromptId: DEFAULT_APP_BUILDER_PRESET_ID,
+    appCustomPrompt: '',
     image: false,
     imagePrompt: ADVANCED_IMAGE_GENERATION_PROMPT,
   });
   const [skillRunStatus, setSkillRunStatus] = useState<SkillRunStatus>({ phase: 'idle', label: '', completed: 0, total: 0 });
+  const [demoPopup, setDemoPopup] = useState<DemoArtifact[] | null>(null);
   const [closeCleanupOpen, setCloseCleanupOpen] = useState(false);
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
@@ -2167,6 +2231,7 @@ function App() {
 
   const runSkillTestsAfterRun = useCallback(async (models: string[]) => {
     const selection = skillTestSelection;
+    const appPrompt = resolveAppBuilderPrompt(selection.appPromptId, selection.appCustomPrompt);
     const jobs: Array<{ model: string; kind: 'app-builder' | 'image' }> = [];
     for (const model of models) {
       if (selection.appBuilder && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
@@ -2178,20 +2243,34 @@ function App() {
     }
     if (!jobs.length) return;
 
+    const demos: DemoArtifact[] = [];
     for (const [index, job] of jobs.entries()) {
       const label = job.kind === 'app-builder' ? `App Builder skill test — ${job.model}` : `Image skill test — ${job.model}`;
       setSkillRunStatus({ phase: 'running', label, completed: index, total: jobs.length });
       setActivity(`Skill test ${index + 1}/${jobs.length}: ${label}. This can take a few minutes per model.`);
       const result = job.kind === 'app-builder'
-        ? await runAdvancedAppBuilderChallenge(job.model, ollama.baseUrl)
+        ? await runAdvancedAppBuilderChallenge(job.model, ollama.baseUrl, appPrompt)
         : await runAdvancedImageGenerationChallenge(job.model, ollama.baseUrl, selection.imagePrompt);
       if (!result.error) {
         const key = job.kind === 'image' ? `image:${job.model}` : job.model;
         writeAdvancedLabResults({ ...readAdvancedLabResults(), [key]: result });
+        if (job.kind === 'app-builder') {
+          const html = extractHtmlDocument(result.response);
+          if (html) demos.push({ model: job.model, kind: 'app', html, grade: result.grade, score: result.score });
+        } else if (result.imageDataUrl) {
+          demos.push({ model: job.model, kind: 'image', imageDataUrl: result.imageDataUrl, grade: result.grade, score: result.score });
+        }
       }
     }
     setSkillRunStatus({ phase: 'complete', label: 'Skill tests finished', completed: jobs.length, total: jobs.length });
-    setActivity(`Skill tests finished (${jobs.length} run${jobs.length === 1 ? '' : 's'}). Lab Grades are saved in Settings → Advanced Lab.`);
+    // Auto-open a viewer for whatever the models produced, per the "pop up to
+    // view this when a demo completes" flow.
+    if (demos.length) {
+      setDemoPopup(demos);
+      setActivity(`Demo ready — ${demos.length} result${demos.length === 1 ? '' : 's'} to view. Lab Grades saved in Settings → Advanced Lab.`);
+    } else {
+      setActivity(`Skill tests finished (${jobs.length} run${jobs.length === 1 ? '' : 's'}). Lab Grades are saved in Settings → Advanced Lab.`);
+    }
   }, [ollama.baseUrl, skillTestSelection]);
 
   const confirmPendingRun = useCallback(() => {
@@ -2807,6 +2886,10 @@ function App() {
           skillSelection={skillTestSelection}
           onSkillSelectionChange={setSkillTestSelection}
         />
+      )}
+
+      {demoPopup && demoPopup.length > 0 && (
+        <DemoResultModal demos={demoPopup} onClose={() => setDemoPopup(null)} />
       )}
 
       {pendingThirdPartyDownloadRows && (
@@ -4258,12 +4341,37 @@ function RunWarningModal({
                       onChange={(event) => onSkillSelectionChange({ ...skillSelection, appBuilder: event.target.checked })}
                     />
                     <span>
-                      <strong>Build an app (tiny Tetris)</strong>
+                      <strong>Build an app</strong>
                       <em>{appBuilderCapable
-                        ? `Adds roughly 1–3 minutes per model after the questions finish.`
+                        ? `Adds roughly 1–3 minutes per model. The finished app pops up to play when it's done.`
                         : 'No model in this run can write code — image and embedding models sit this one out.'}</em>
                     </span>
                   </label>
+                  {appBuilderCapable && skillSelection.appBuilder && (
+                    <div className="run-skill-app-picker">
+                      <select
+                        className="run-skill-app-select"
+                        value={skillSelection.appPromptId}
+                        onChange={(event) => onSkillSelectionChange({ ...skillSelection, appPromptId: event.target.value })}
+                        aria-label="App to build"
+                      >
+                        {APP_BUILDER_PRESETS.map((preset) => (
+                          <option key={preset.id} value={preset.id}>{preset.label}</option>
+                        ))}
+                        <option value="custom">Custom prompt…</option>
+                      </select>
+                      {skillSelection.appPromptId === 'custom' && (
+                        <input
+                          type="text"
+                          className="run-skill-image-prompt"
+                          value={skillSelection.appCustomPrompt}
+                          onChange={(event) => onSkillSelectionChange({ ...skillSelection, appCustomPrompt: event.target.value })}
+                          placeholder="Describe the app to build (e.g. a memory card game)"
+                          aria-label="Custom app prompt"
+                        />
+                      )}
+                    </div>
+                  )}
                   <label className={`run-skill-test-option${imageCapable ? '' : ' disabled'}`}>
                     <input
                       type="checkbox"
@@ -5241,6 +5349,8 @@ function scoreAdvancedAppBuilderResponse(response: string, doneReason: string): 
   const text = response.trim();
   const lower = text.toLowerCase();
   const has = (pattern: RegExp) => pattern.test(text);
+  // Generic checks that apply to any single-file interactive app (game,
+  // calculator, clock, paint, or a custom request) — not just Tetris.
   const checks: AdvancedLabCheck[] = [
     {
       label: 'Single-file HTML',
@@ -5248,63 +5358,52 @@ function scoreAdvancedAppBuilderResponse(response: string, doneReason: string): 
       detail: 'Includes document structure, script, and styling in one answer.',
     },
     {
-      label: 'Keyboard controls',
-      passed: has(/keydown|keyboardevent|onkeydown/i) && has(/arrowleft|arrowright|arrowdown|space|keyup|rotate/i),
-      detail: 'Handles movement, dropping, rotation, and restart-style input.',
+      label: 'Interactive',
+      passed: has(/addeventlistener|onclick|onkeydown|oninput|onmousedown|keydown|\bclick\b/i),
+      detail: 'Responds to keyboard, mouse, or input events.',
     },
     {
-      label: 'Visible score',
-      passed: has(/score/i) && has(/innertext|textcontent|queryselector|getelementbyid/i),
-      detail: 'Tracks score and updates something visible in the page.',
+      label: 'Has real logic',
+      passed: has(/function\b|=>|const\s+\w+\s*=|let\s+\w+\s*=/i),
+      detail: 'Contains actual JavaScript logic, not just static markup.',
     },
     {
-      label: 'Game loop',
-      passed: has(/requestanimationframe|setinterval|settimeout|dropinterval|gameloop/i),
-      detail: 'Contains a timed loop so pieces keep falling without extra prompts.',
+      label: 'Updates the page',
+      passed: has(/getelementbyid|queryselector|innerhtml|textcontent|createelement|getcontext|<canvas/i),
+      detail: 'Renders or updates something visible while it runs.',
     },
     {
-      label: 'Board and pieces',
-      passed: has(/tetromino|piece|shape|matrix|board|grid|arena/i),
-      detail: 'Represents falling pieces and a playfield/grid.',
-    },
-    {
-      label: 'Collision logic',
-      passed: has(/collid|validmove|canmove|intersect|occupied|bounds/i),
-      detail: 'Checks whether pieces can move before committing state.',
-    },
-    {
-      label: 'Line clearing',
-      passed: has(/line|row/i) && has(/clear|splice|filter|every|full/i),
-      detail: 'Looks for completed rows and removes them.',
-    },
-    {
-      label: 'Game over/restart',
-      passed: has(/game over|gameover|restart|resetgame|newgame/i),
-      detail: 'Handles losing and restarting instead of running forever silently.',
-    },
-    {
-      label: 'No network dependencies',
+      label: 'Self-contained',
       passed: !has(/https?:\/\/|<script[^>]+src=|<link[^>]+href=|cdn/i),
       detail: 'Avoids external libraries, CDNs, and network calls.',
     },
     {
-      label: 'Not obviously truncated',
-      passed: text.length >= 1200 && doneReason !== 'length' && !lower.includes('truncated'),
-      detail: 'Large enough to be plausible and did not report a length cutoff.',
+      label: 'Substantial',
+      passed: text.length >= 800,
+      detail: 'Long enough to be a plausible working app.',
+    },
+    {
+      label: 'Not truncated',
+      passed: doneReason !== 'length' && !lower.includes('truncated'),
+      detail: 'Did not report a length cutoff mid-answer.',
     },
   ];
   const score = Math.round((checks.filter((check) => check.passed).length / checks.length) * 100);
   return { score, grade: getAdvancedLabGrade(score), checks };
 }
 
-async function runAdvancedAppBuilderChallenge(model: string, baseUrl: string): Promise<AdvancedLabResult> {
+async function runAdvancedAppBuilderChallenge(
+  model: string,
+  baseUrl: string,
+  prompt: string = ADVANCED_APP_BUILDER_PROMPT,
+): Promise<AdvancedLabResult> {
   const startedAt = performance.now();
 
   try {
     const data = await agentArcadeApi.runAdvancedGenerate({
       model,
       baseUrl,
-      prompt: ADVANCED_APP_BUILDER_PROMPT,
+      prompt,
       keep_alive: '10m',
       timeoutMs: 180000,
       options: {
@@ -5490,6 +5589,8 @@ function AdvancedCapabilityLab({
   const [runState, setRunState] = useState<AdvancedLabRunState>({ phase: 'idle', result: null, message: '' });
   const [copied, setCopied] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [appPromptId, setAppPromptId] = useState(DEFAULT_APP_BUILDER_PRESET_ID);
+  const [appCustomPrompt, setAppCustomPrompt] = useState('');
   const [imageModel, setImageModel] = useState(IMAGE_GENERATION_MODEL_OPTIONS[0].model);
   const [imageConsent, setImageConsent] = useState(false);
   const [imageTryAnyway, setImageTryAnyway] = useState(false);
@@ -5545,8 +5646,9 @@ function AdvancedCapabilityLab({
     if (!activeModel || !ollama.ready) return;
     setCopied(false);
     setPreviewOpen(false);
-    setRunState({ phase: 'running', result: null, message: `Asking ${activeModel} to build a tiny app...` });
-    const result = await runAdvancedAppBuilderChallenge(activeModel, ollama.baseUrl);
+    setRunState({ phase: 'running', result: null, message: `Asking ${activeModel} to build an app...` });
+    const prompt = resolveAppBuilderPrompt(appPromptId, appCustomPrompt);
+    const result = await runAdvancedAppBuilderChallenge(activeModel, ollama.baseUrl, prompt);
     setRunState({
       phase: result.error ? 'failed' : 'complete',
       result,
@@ -5558,8 +5660,10 @@ function AdvancedCapabilityLab({
         writeAdvancedLabResults(next);
         return next;
       });
+      // Pop the finished app straight into the sandbox when it's runnable.
+      if (extractHtmlDocument(result.response)) setPreviewOpen(true);
     }
-  }, [activeModel, ollama.baseUrl, ollama.ready]);
+  }, [activeModel, appPromptId, appCustomPrompt, ollama.baseUrl, ollama.ready]);
 
   const copyResult = useCallback(() => {
     if (!visibleResult?.response) return;
@@ -5650,7 +5754,7 @@ function AdvancedCapabilityLab({
             <Code2 aria-hidden="true" />
             <div>
               <span>Text model challenge</span>
-              <strong>App Builder: tiny Tetris</strong>
+              <strong>App Builder</strong>
             </div>
             {visibleResult && (
               <b className={`advanced-lab-grade ${getScoreTone(visibleResult.score)}`}>
@@ -5659,8 +5763,33 @@ function AdvancedCapabilityLab({
             )}
           </div>
           <p>
-            Runs one larger local Ollama prompt and grades whether the answer looks like a complete single-file HTML game.
+            Asks the model to write a complete single-file HTML app, grades the result, then pops it into a sandbox to run.
           </p>
+          <div className="advanced-lab-image-controls">
+            <label htmlFor="advanced-app-prompt">App to build</label>
+            <select
+              id="advanced-app-prompt"
+              value={appPromptId}
+              onChange={(event) => setAppPromptId(event.target.value)}
+              disabled={isRunning}
+            >
+              {APP_BUILDER_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>{preset.label}</option>
+              ))}
+              <option value="custom">Custom prompt…</option>
+            </select>
+          </div>
+          {appPromptId === 'custom' && (
+            <input
+              type="text"
+              className="run-skill-image-prompt"
+              value={appCustomPrompt}
+              onChange={(event) => setAppCustomPrompt(event.target.value)}
+              placeholder="Describe the app to build (e.g. a memory card game)"
+              aria-label="Custom app prompt"
+              disabled={isRunning}
+            />
+          )}
           <div className="advanced-lab-safeguards">
             <span>No auto-downloads</span>
             <span>3 minute timeout</span>
@@ -10785,6 +10914,69 @@ function ActivityPanel({
         </div>
       )}
     </section>
+  );
+}
+
+function DemoResultModal({ demos, onClose }: { demos: DemoArtifact[]; onClose: () => void }) {
+  const [index, setIndex] = useState(0);
+  const demo = demos[Math.min(index, demos.length - 1)];
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section
+        className="run-warning-modal advanced-lab-preview-modal demo-result-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Demo results"
+      >
+        <div className="modal-title">
+          <Sparkles aria-hidden="true" />
+          <div>
+            <span>{demos.length > 1 ? `${demos.length} demos ready to view` : 'Demo ready'}</span>
+            <strong>{demo.model} · {demo.kind === 'app' ? 'App Builder' : 'Image Lab'} · {demo.score} · {demo.grade}</strong>
+          </div>
+          <button type="button" className="mini-button outline" onClick={onClose}>
+            <X aria-hidden="true" />
+            Close
+          </button>
+        </div>
+        {demos.length > 1 && (
+          <div className="demo-result-tabs" role="tablist">
+            {demos.map((entry, entryIndex) => (
+              <button
+                key={`${entry.kind}:${entry.model}`}
+                type="button"
+                role="tab"
+                aria-selected={entryIndex === index}
+                className={entryIndex === index ? 'active' : ''}
+                onClick={() => setIndex(entryIndex)}
+              >
+                <AvatarBust model={entry.model} size="tiny" />
+                <span>{getShortModelName(entry.model)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {demo.kind === 'app' && demo.html ? (
+          <iframe
+            className="advanced-lab-preview-frame"
+            title={`Demo app by ${demo.model}`}
+            sandbox="allow-scripts"
+            srcDoc={buildSandboxedPreviewHtml(demo.html)}
+          />
+        ) : demo.kind === 'image' && demo.imageDataUrl ? (
+          <img className="advanced-lab-generated-image" src={demo.imageDataUrl} alt={`Image generated by ${demo.model}`} />
+        ) : (
+          <div className="utility-empty compact"><strong>Nothing to preview for this result.</strong></div>
+        )}
+      </section>
+    </div>
   );
 }
 

@@ -11140,6 +11140,52 @@ tbody tr.computer-row.selected {
   font-size: 12px;
 }
 
+.run-skill-app-picker {
+  display: grid;
+  gap: 6px;
+}
+
+.run-skill-app-select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(114, 181, 202, 0.35);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.demo-result-modal .demo-result-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.demo-result-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid rgba(114, 181, 202, 0.3);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.demo-result-tabs button.active {
+  border-color: rgba(239, 188, 90, 0.7);
+  background: rgba(239, 188, 90, 0.12);
+  color: var(--gold);
+}
+
+.demo-result-modal .advanced-lab-generated-image {
+  max-height: min(560px, calc(100vh - 220px));
+  object-fit: contain;
+  align-self: center;
+}
+
 .activity-panel {
   display: flex;
   flex-direction: column;
