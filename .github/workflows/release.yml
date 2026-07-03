@@ -95,7 +95,12 @@ jobs:
         shell: bash
         run: |
           cargo install cargo-audit --version 0.22.2 --locked --quiet 2>/dev/null || true
-          cargo audit
+          # RUSTSEC-2026-0194/0195: XML-parse DoS advisories in quick-xml 0.39.x,
+          # reached only transitively via plist 1.9.0 -> tauri-utils (Apple
+          # property-list parsing in Tauri's bundler/config tooling — not runtime
+          # untrusted input). No upstream fix: plist 1.9.0 is latest and pins
+          # quick-xml ^0.39.2. Remove once plist/tauri ship a quick-xml >=0.41 chain.
+          cargo audit --ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195
         working-directory: rigmatch-chat/src-tauri
 
       - name: Build RigMatch Chat companion
