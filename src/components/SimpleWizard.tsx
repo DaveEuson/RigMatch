@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import type { ModelRow, PullProgressUpdate, SystemProfile } from '../types';
+import { formatBytes, formatBytesPerSecond } from '../lib/format';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 import rigGreenroom from '../assets/robot-rig-greenroom.webp';
 import speedDateShow from '../assets/robot-speed-date-show.webp';
@@ -93,6 +94,8 @@ type SimpleWizardProps = {
   pullProgressByModel: Record<string, PullProgressUpdate>;
   onStartDownloads: () => void;
   isListTesting: boolean;
+  /** True while any benchmark is running (renderer or main-process state). */
+  benchmarkActive: boolean;
   runProgress: SimpleRunProgress;
   onStartShow: () => void;
   onStopShow: () => void;
@@ -104,14 +107,16 @@ type SimpleWizardProps = {
 };
 
 export function SimpleWizard(props: SimpleWizardProps) {
-  const { system, ollamaReady, shortlistedRows, winner } = props;
+  const { system, ollamaReady, shortlistedRows, winner, benchmarkActive } = props;
 
   const setupDone = ollamaReady;
   const pickDone = shortlistedRows.length >= 1;
   const allInstalled = pickDone && shortlistedRows.every((row) => row.installed);
   const downloadDone = allInstalled;
-  const compareDone = Boolean(winner);
-  const winnerDone = Boolean(winner);
+  // A pre-existing Top Match must not mark Compare done while the show is
+  // still running, or the wizard skips the Compare stage straight to Winner.
+  const compareDone = Boolean(winner) && !benchmarkActive;
+  const winnerDone = compareDone;
 
   const stepState = useMemo(() => {
     const done: Record<StepId, boolean> = { setup: setupDone, pick: pickDone, download: downloadDone, compare: compareDone, winner: winnerDone };
@@ -500,12 +505,23 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel }: SimpleWizardPr
         const downloading = !installed && pull && !['complete', 'failed', 'cancelled', 'queued'].includes(pull.phase);
         const percent = pull?.percent ?? 0;
         const status: 'done' | 'downloading' | 'queued' = installed ? 'done' : downloading ? 'downloading' : 'queued';
+        const meta = status === 'done'
+          ? 'Ready to go'
+          : status === 'queued'
+            ? 'Waiting in line'
+            : [
+              pull?.completedBytes != null && pull?.totalBytes
+                ? `${formatBytes(pull.completedBytes)} of ${formatBytes(pull.totalBytes)}`
+                : (pull?.status || 'Downloading…'),
+              pull?.speedBps ? formatBytesPerSecond(pull.speedBps) : '',
+              getEtaLabel(pull),
+            ].filter(Boolean).join(' · ');
         return (
           <div key={row.displayName} className={`sw-dl-row ${status}`}>
             <img className="sw-dl-avatar" src={getModelAvatarSrc(row.displayName)} alt="" />
             <div className="sw-dl-info">
               <strong>{row.displayName}</strong>
-              <em>{status === 'done' ? 'Ready to go' : status === 'downloading' ? (pull?.status || 'Downloading…') : 'Waiting in line'}</em>
+              <em>{meta}</em>
               <div className="sw-dl-track" aria-hidden="true"><i style={{ width: `${status === 'done' ? 100 : status === 'downloading' ? Math.max(4, percent) : 0}%` }} /></div>
             </div>
             <span className="sw-dl-status">
@@ -520,6 +536,16 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel }: SimpleWizardPr
       </div>
     </div>
   );
+}
+
+/** Plain-language time-left estimate for a download row ("about 2 minutes left"). */
+function getEtaLabel(pull?: PullProgressUpdate): string {
+  if (!pull?.speedBps || !pull.totalBytes || pull.completedBytes == null) return '';
+  const secondsLeft = (pull.totalBytes - pull.completedBytes) / pull.speedBps;
+  if (!Number.isFinite(secondsLeft) || secondsLeft <= 0) return '';
+  if (secondsLeft < 60) return 'under a minute left';
+  const minutes = Math.round(secondsLeft / 60);
+  return `about ${minutes} minute${minutes === 1 ? '' : 's'} left`;
 }
 
 // ---------------------------------------------------------------------------

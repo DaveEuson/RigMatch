@@ -14,6 +14,7 @@ import {
   Coffee,
   Copy,
   Download,
+  Eraser,
   ExternalLink,
   Film,
   FolderOpen,
@@ -502,6 +503,7 @@ function App() {
   const pullQueuePauseRef = useRef(false);
   const activePullProgressIdRef = useRef<string | null>(null);
   const stopRunRef = useRef(false);
+  const stopSkillRef = useRef(false);
   const [pendingDeleteModel, setPendingDeleteModel] = useState<ModelRow | null>(null);
   const [listTestResult, setListTestResult] = useState<ListTestResult | null>(savedHistory?.listTestResult ?? null);
   const [modelScores, setModelScores] = useState<Record<string, TestedModelScore>>(() =>
@@ -2067,7 +2069,13 @@ function App() {
     if (!jobs.length) return;
 
     const demos: DemoArtifact[] = [];
+    stopSkillRef.current = false;
     for (const [index, job] of jobs.entries()) {
+      if (stopSkillRef.current) {
+        setSkillRunStatus({ phase: 'complete', label: 'Skill tests stopped', completed: index, total: jobs.length });
+        setActivity(`Skill tests stopped after ${index} of ${jobs.length} run${jobs.length === 1 ? '' : 's'}.`);
+        break;
+      }
       const label = job.kind === 'app-builder' ? `App Builder skill test — ${job.model}` : `Image skill test — ${job.model}`;
       setSkillRunStatus({ phase: 'running', label, completed: index, total: jobs.length });
       setActivity(`Skill test ${index + 1}/${jobs.length}: ${label}. This can take a few minutes per model.`);
@@ -2085,13 +2093,15 @@ function App() {
         }
       }
     }
-    setSkillRunStatus({ phase: 'complete', label: 'Skill tests finished', completed: jobs.length, total: jobs.length });
+    if (!stopSkillRef.current) {
+      setSkillRunStatus({ phase: 'complete', label: 'Skill tests finished', completed: jobs.length, total: jobs.length });
+    }
     // Auto-open a viewer for whatever the models produced, per the "pop up to
     // view this when a demo completes" flow.
     if (demos.length) {
       setDemoPopup(demos);
       setActivity(`Demo ready — ${demos.length} result${demos.length === 1 ? '' : 's'} to view. Lab Grades saved in Settings → Advanced Lab.`);
-    } else {
+    } else if (!stopSkillRef.current) {
       setActivity(`Skill tests finished (${jobs.length} run${jobs.length === 1 ? '' : 's'}). Lab Grades are saved in Settings → Advanced Lab.`);
     }
   }, [ollama.baseUrl, skillTestSelection]);
@@ -2344,6 +2354,7 @@ function App() {
           pullProgressByModel={pullProgressByModel}
           onStartDownloads={() => requestThirdPartyModelDownloads(shortlistedRows)}
           isListTesting={isListTesting}
+          benchmarkActive={isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running)}
           runProgress={runProgress}
           onStartShow={() => { void runListTest(); }}
           onStopShow={() => { stopRunRef.current = true; }}
@@ -2457,6 +2468,7 @@ function App() {
             onSelect={setSelectedModel}
             onScoreModel={requestBenchmarkRow}
             onDeleteModel={requestDeleteModel}
+            onClearScore={requestClearScore}
             onQueueModel={queueModel}
             onPullQueued={pullQueuedModels}
             onPauseQueue={pauseDownloadQueue}
@@ -2582,6 +2594,9 @@ function App() {
             modelScores={modelScores}
             onOpenModels={() => selectNav('models')}
             onOpenScorecards={() => selectNav('history')}
+            onRerunTest={requestBenchmarkForModel}
+            onStopBenchmark={() => { stopRunRef.current = true; }}
+            onStopSkillTests={() => { stopSkillRef.current = true; }}
           />
         )}
         {(activeNavId === 'history' || activeNavId === 'settings') && (
@@ -5413,6 +5428,18 @@ function UtilityPanel({
                   <HelpCircle aria-hidden="true" />
                   How we score
                 </button>
+                {rankedModelScores.length > 0 && (
+                  <button
+                    type="button"
+                    className="how-we-score-trigger clear-all-scores-trigger"
+                    onClick={onClearAllScores}
+                    title="Clear every saved score and transcript (asks first)"
+                    aria-label="Clear all saved scores"
+                  >
+                    <Trash2 aria-hidden="true" />
+                    Clear all
+                  </button>
+                )}
               </div>
             </div>
             <strong>{rankedModelScores.length} tested model{rankedModelScores.length === 1 ? '' : 's'}</strong>
@@ -6077,6 +6104,7 @@ function ModelCabinet({
   onSelect,
   onScoreModel,
   onDeleteModel,
+  onClearScore,
   onQueueModel,
   onPullQueued,
   onPauseQueue,
@@ -6121,6 +6149,7 @@ function ModelCabinet({
   onSelect: (model: string) => void;
   onScoreModel: (row: ModelRow) => void;
   onDeleteModel: (row: ModelRow) => void;
+  onClearScore: (model: string) => void;
   onQueueModel: (row: ModelRow) => void;
   onPullQueued: () => void;
   onPauseQueue: () => void;
@@ -6617,6 +6646,17 @@ function ModelCabinet({
                           >
                             <Trash2 aria-hidden="true" />
                           </button>
+                          {score && (
+                            <button
+                              type="button"
+                              className="icon-action score-clear-button"
+                              onClick={() => onClearScore(row.displayName)}
+                              title={`Clear ${row.displayName}'s saved score — the model stays installed`}
+                              aria-label={`Clear ${row.displayName}'s saved score`}
+                            >
+                              <Eraser aria-hidden="true" />
+                            </button>
+                          )}
                         </>
                       ) : (
                         <button
@@ -9804,6 +9844,9 @@ function ActivityPanel({
   modelScores,
   onOpenModels,
   onOpenScorecards,
+  onRerunTest,
+  onStopBenchmark,
+  onStopSkillTests,
 }: {
   runProgress: RunProgress | null;
   skillRunStatus: SkillRunStatus;
@@ -9812,6 +9855,9 @@ function ActivityPanel({
   modelScores: Record<string, TestedModelScore>;
   onOpenModels: () => void;
   onOpenScorecards: () => void;
+  onRerunTest: (model: string) => void;
+  onStopBenchmark: () => void;
+  onStopSkillTests: () => void;
 }) {
   const [previewApp, setPreviewApp] = useState<{ html: string; model: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; model: string } | null>(null);
@@ -9877,6 +9923,12 @@ function ActivityPanel({
               <i style={{ width: `${Math.max(2, Math.min(100, runProgress.percent))}%` }} />
             </div>
             <em>{runProgress.message}</em>
+            {benchmarkActive && (
+              <button type="button" className="mini-button outline activity-stop-btn" onClick={onStopBenchmark} title="Stop after the current question finishes">
+                <X aria-hidden="true" />
+                Stop after current question
+              </button>
+            )}
           </>
         ) : (
           <em>No benchmark has run in this session yet.</em>
@@ -9900,6 +9952,12 @@ function ActivityPanel({
               <div className="popularity-track" aria-hidden="true">
                 <i style={{ width: `${Math.max(4, Math.round(((skillRunStatus.completed + (skillActive ? 0.5 : 0)) / skillRunStatus.total) * 100))}%` }} />
               </div>
+            )}
+            {skillActive && (
+              <button type="button" className="mini-button outline activity-stop-btn" onClick={onStopSkillTests} title="The current skill test finishes; remaining ones are skipped">
+                <X aria-hidden="true" />
+                Stop after current test
+              </button>
             )}
           </>
         )}
@@ -9974,9 +10032,20 @@ function ActivityPanel({
                   </button>
                 )}
                 {job.kind === 'benchmark' && (
-                  <button type="button" className="mini-button outline" onClick={onOpenScorecards}>
-                    Scorecard
-                  </button>
+                  <>
+                    <button type="button" className="mini-button outline" onClick={onOpenScorecards}>
+                      Scorecard
+                    </button>
+                    <button
+                      type="button"
+                      className="mini-button"
+                      onClick={() => onRerunTest(job.model)}
+                      title={`Run the compatibility test on ${job.model} again`}
+                    >
+                      <RefreshCw aria-hidden="true" />
+                      Rerun
+                    </button>
+                  </>
                 )}
               </li>
             ))}
