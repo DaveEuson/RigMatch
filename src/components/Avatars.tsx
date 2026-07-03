@@ -1,28 +1,10 @@
 import type { NetworkHost } from '../types';
-import { getModelFamily, type ModelFamilyId } from '../lib/modelOrigins';
-import machineAvatarLocal from '../assets/machine-avatar-local.webp';
-import modelAvatarDeepSeek from '../assets/model-avatar-deepseek.webp';
-import modelAvatarGemma from '../assets/model-avatar-gemma.webp';
-import modelAvatarGeneric from '../assets/model-avatar-generic.webp';
-import modelAvatarLlama from '../assets/model-avatar-llama.webp';
-import modelAvatarMistral from '../assets/model-avatar-mistral.webp';
-import modelAvatarPhi from '../assets/model-avatar-phi.webp';
-import modelAvatarQwen from '../assets/model-avatar-qwen.webp';
-
-/** Contestant portrait art per model family, with a generic fallback. */
-const MODEL_AVATAR_ASSETS: Record<ModelFamilyId, string> = {
-  deepseek: modelAvatarDeepSeek,
-  llama: modelAvatarLlama,
-  qwen: modelAvatarQwen,
-  mistral: modelAvatarMistral,
-  gemma: modelAvatarGemma,
-  phi: modelAvatarPhi,
-  generic: modelAvatarGeneric,
-};
+import { getModelFamily } from '../lib/modelOrigins';
+import { MODEL_AVATAR_ASSETS, GENERIC_MODEL_AVATAR, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 
 export function AvatarBust({ model, size, extraClass }: { model: string; size: 'tiny' | 'small' | 'large'; extraClass?: string }) {
   const family = getModelFamily(model);
-  const avatarSrc = MODEL_AVATAR_ASSETS[family] ?? modelAvatarGeneric;
+  const avatarSrc = MODEL_AVATAR_ASSETS[family] ?? GENERIC_MODEL_AVATAR;
 
   return (
     <span
@@ -46,7 +28,7 @@ export function MachineAvatar({
       className={`machine-avatar ${size} ${host?.isLocal ? 'local' : 'remote'}`}
       aria-hidden="true"
     >
-      <img src={machineAvatarLocal} alt="" draggable={false} />
+      <img src={HOST_AVATAR_SRC} alt="" draggable={false} />
     </span>
   );
 }

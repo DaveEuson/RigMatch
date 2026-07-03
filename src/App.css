@@ -13628,27 +13628,13 @@ td {
     "ticker ticker";
 }
 
-/* Simple Mode runs as a wizard: the side menu disappears and the guided
-   rounds in the host bar are the navigation. Settings and the tour stay
-   reachable from the host bar's own buttons. */
+/* Simple Mode is the five-step wizard (SimpleWizard) filling the whole shell;
+   it carries its own header, host strip, and footer, so the Advanced chrome
+   (top deck, side menu, ticker) is not rendered in this mode. */
 .app-shell[data-ui-mode='beginner'] {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    "top"
-    "stage"
-    "lineup"
-    "ticker";
-}
-
-.app-shell[data-ui-mode='beginner'].no-global-lineup {
-  grid-template-areas:
-    "top"
-    "stage"
-    "ticker";
-}
-
-.app-shell[data-ui-mode='beginner'] .side-menu {
-  display: none;
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "stage";
 }
 
 .top-deck {

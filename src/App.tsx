@@ -94,6 +94,7 @@ import {
 import {
   getDeveloperFilterOptions,
   getModelDeveloperKey,
+  getModelFamily,
   getModelOrigin,
 } from './lib/modelOrigins';
 import {
@@ -139,6 +140,7 @@ import {
 import { getUpdateChannelLabel } from './lib/updateLabels';
 import { AvatarBust, MachineAvatar } from './components/Avatars';
 import { AppBuilderPreviewModal } from './components/AppBuilderPreview';
+import { SimpleWizard, type WizardModel } from './components/SimpleWizard';
 import { extractHtmlDocument, buildSandboxedPreviewHtml } from './lib/labPreview';
 import {
   ModelScorePill,
@@ -877,6 +879,41 @@ function App() {
     () => getRigPick(modelRows, modelScores, system.gpu.vramGb, clearedTopMatches),
     [clearedTopMatches, modelRows, modelScores, system.gpu.vramGb],
   );
+
+  const wizardModels = useMemo<WizardModel[]>(() => {
+    const vramGb = system.gpu.vramGb;
+    const fitRank: Record<string, number> = { 'sweet-spot': 0, good: 1, tight: 2 };
+    return modelRows
+      .filter((row) => getPlatformFit(row.displayName, system.platform).compatible)
+      .map((row) => ({ row, fit: getHardwareFit(row, vramGb) }))
+      .filter((entry) => entry.fit.recommend && entry.fit.tone !== 'unknown')
+      .sort((a, b) => (fitRank[a.fit.tone] ?? 9) - (fitRank[b.fit.tone] ?? 9) || (a.row.sizeGb ?? 99) - (b.row.sizeGb ?? 99))
+      .map(({ row, fit }): WizardModel => ({
+        row,
+        name: row.displayName,
+        epithet: getModelEpithet(row),
+        goodForLine: getModelGoodForLine(row),
+        fitTier: fit.tone === 'sweet-spot' ? 'great' : fit.tone === 'good' ? 'well' : 'slower',
+        dreamTags: getModelDreamTags(row),
+      }));
+  }, [modelRows, system.gpu.vramGb, system.platform]);
+
+  const wizardWinner = useMemo(
+    () => (topRigPick?.score ? { model: topRigPick.row.displayName, score: topRigPick.score.total, grade: topRigPick.score.grade } : null),
+    [topRigPick],
+  );
+
+  const openChatWithWinner = useCallback(() => {
+    const model = topRigPick?.row.displayName;
+    if (!model) return;
+    setSelectedModel(model);
+    setChosenModel(model);
+    if (isDesktopRuntime) {
+      void agentArcadeApi.openChatApp().then((result) => { if (!result?.ok) setChatOpen(true); });
+    } else {
+      setChatOpen(true);
+    }
+  }, [topRigPick]);
 
   const refreshRig = useCallback(async () => {
     setIsScanningRig(true);
@@ -2506,6 +2543,33 @@ function App() {
       data-theme={themeId}
       data-ui-mode={uiMode}
     >
+      {uiMode === 'beginner' && (
+        <SimpleWizard
+          system={system}
+          ollamaReady={ollama.ready || lmStudio.ready}
+          isScanning={isScanningRig}
+          onCheckComputer={refreshRig}
+          onGetOllama={openOllamaDownload}
+          wizardModels={wizardModels}
+          modelsLoading={modelRows.length === 0}
+          shortlistIds={shortlistIds}
+          shortlistedRows={shortlistedRows}
+          onTogglePick={toggleShortlist}
+          pullProgressByModel={pullProgressByModel}
+          onStartDownloads={() => requestThirdPartyModelDownloads(shortlistedRows)}
+          isListTesting={isListTesting}
+          runProgress={runProgress}
+          onStartShow={() => { void runListTest(); }}
+          onStopShow={() => { stopRunRef.current = true; }}
+          winner={wizardWinner}
+          onChatWithWinner={openChatWithWinner}
+          onOpenScorecard={() => { selectUiMode('advanced'); selectNav('history'); }}
+          onRunAgain={() => undefined}
+          onSwitchToAdvanced={() => selectUiMode('advanced')}
+        />
+      )}
+      {uiMode === 'advanced' && (
+      <>
       <TopDeck isScanning={isScanningRig} onScan={refreshRig}
         system={system}
         ollama={ollama}
@@ -2788,7 +2852,10 @@ function App() {
           onOpenSpeedDate={() => selectNav('speedDate')}
         />
       )}
+      </>
+      )}
 
+      {uiMode === 'advanced' && (
       <Ticker
         activity={activity}
         isDesktopRuntime={isDesktopRuntime}
@@ -2813,6 +2880,7 @@ function App() {
           }
         }}
       />
+      )}
 
       {chatOpen && (
         <ChatDock
@@ -2841,7 +2909,7 @@ function App() {
         </div>
       )}
 
-      {runProgress?.phase === 'running' && (
+      {uiMode === 'advanced' && runProgress?.phase === 'running' && (
         <LiveFlirtSpotlight
           progress={runProgress}
           host={selectedHost}
@@ -12745,6 +12813,47 @@ function getModelGoodForTags(row: ModelRow): string[] {
       return true;
     })
     .slice(0, 5);
+}
+
+/** Plain-language epithet for a model card in Simple Mode (no jargon). */
+function getModelEpithet(row: ModelRow): string {
+  const family = getModelFamily(row.displayName);
+  if (row.sizeGb != null && row.sizeGb <= 2.5) return 'small & speedy';
+  switch (family) {
+    case 'qwen': return 'friendly all-rounder';
+    case 'mistral': return 'wordsmith';
+    case 'llama': return 'quick thinker';
+    case 'gemma': return 'polyglot';
+    case 'phi': return 'quick thinker';
+    case 'deepseek': return 'deep thinker';
+    default: return 'friendly all-rounder';
+  }
+}
+
+/** One plain-language "good for" line for a Simple Mode card (never specs). */
+function getModelGoodForLine(row: ModelRow): string {
+  if (isLikelyImageGenerationModel(row.displayName)) return 'Turning your words into pictures';
+  const family = getModelFamily(row.displayName);
+  switch (family) {
+    case 'qwen': return 'Everyday questions and quick writing';
+    case 'mistral': return 'Creative writing and summaries';
+    case 'llama': return 'Fast everyday help and chat';
+    case 'gemma': return 'Chatting and light writing';
+    case 'phi': return 'Quick answers on a modest PC';
+    case 'deepseek': return 'Working through tricky problems';
+    default: return 'Everyday questions and chat';
+  }
+}
+
+/** Which Simple Mode "dream" filters a model matches. */
+function getModelDreamTags(row: ModelRow): Array<'talk' | 'write' | 'code' | 'image' | 'video'> {
+  const tags: Array<'talk' | 'write' | 'code' | 'image' | 'video'> = [];
+  if (modelMatchesTask(row, 'assistant')) tags.push('talk');
+  if (modelMatchesTask(row, 'writing')) tags.push('write');
+  if (modelMatchesTask(row, 'coding')) tags.push('code');
+  if (isLikelyImageGenerationModel(row.displayName)) tags.push('image');
+  if (isLikelyVideoGenerationModel(row.displayName)) tags.push('video');
+  return tags;
 }
 
 function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolean {

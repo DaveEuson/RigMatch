@@ -1,0 +1,618 @@
+import { useMemo, useState } from 'react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Code2,
+  ExternalLink,
+  Heart,
+  Image as ImageIcon,
+  Info,
+  Lock,
+  MessageSquare,
+  PenLine,
+  Plus,
+  RefreshCw,
+  ScanLine,
+  Sparkles,
+  Trophy,
+  Video,
+  X,
+} from 'lucide-react';
+import type { ModelRow, PullProgressUpdate, SystemProfile } from '../types';
+import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
+import rigGreenroom from '../assets/robot-rig-greenroom.webp';
+import speedDateShow from '../assets/robot-speed-date-show.webp';
+import romanceHero from '../assets/robot-romance-hero.webp';
+import modelTestArt from '../assets/robot-model-test.webp';
+import brandIcon from '../assets/rigmatch-brand-icon.svg';
+import './SimpleWizard.css';
+
+export type DreamFilterId = 'talk' | 'write' | 'code' | 'image' | 'video' | 'all';
+
+/** A model prepared for the wizard's Pick grid (App computes fit/copy). */
+export type WizardModel = {
+  row: ModelRow;
+  name: string;
+  epithet: string;
+  goodForLine: string;
+  fitTier: 'great' | 'well' | 'slower';
+  dreamTags: Array<Exclude<DreamFilterId, 'all'>>;
+};
+
+type SimpleRunProgress = {
+  phase: 'running' | 'complete' | 'failed';
+  currentModel: string;
+  percent: number;
+  questionIndex?: number;
+  questionTotal?: number;
+  questionLabel?: string;
+  questionPrompt?: string;
+  completedQuestions?: number;
+  questionScores?: Record<string, number>;
+} | null;
+
+type StepId = 'setup' | 'pick' | 'download' | 'compare' | 'winner';
+const STEPS: StepId[] = ['setup', 'pick', 'download', 'compare', 'winner'];
+const STEP_LABELS: Record<StepId, string> = {
+  setup: 'Setup',
+  pick: 'Pick',
+  download: 'Download',
+  compare: 'Compare',
+  winner: 'Winner',
+};
+
+const HOST_COPY: Record<StepId, string> = {
+  setup: "Welcome to RigMatch! First, let's take a quick peek at your computer. One click — I'll handle the rest.",
+  pick: "So… who's your dream model? Tell me what you're looking for, and I'll bring out the right contestants.",
+  download: "Great picks! I'm bringing your contestants to the studio. This takes a few minutes — feel free to do something else, I'll let you know when we're ready.",
+  compare: "It's Speed Dating time! Everyone gets the same questions — no favorites, I promise. Sit back and enjoy the show.",
+  winner: "We have a match! Now — go get to know each other. And when you're ready for the control room, Advanced Mode is all yours.",
+};
+
+const DREAM_CHIPS: Array<{ id: DreamFilterId; label: string; icon: typeof MessageSquare }> = [
+  { id: 'talk', label: 'Someone to talk with', icon: MessageSquare },
+  { id: 'write', label: 'A writing partner', icon: PenLine },
+  { id: 'code', label: 'A coding buddy', icon: Code2 },
+  { id: 'image', label: 'An image maker', icon: ImageIcon },
+  { id: 'video', label: 'A video maker', icon: Video },
+  { id: 'all', label: 'Surprise me — show everyone', icon: Sparkles },
+];
+
+type SimpleWizardProps = {
+  system: SystemProfile;
+  ollamaReady: boolean;
+  isScanning: boolean;
+  onCheckComputer: () => void;
+  onGetOllama: () => void;
+  wizardModels: WizardModel[];
+  modelsLoading: boolean;
+  shortlistIds: Set<string>;
+  shortlistedRows: ModelRow[];
+  onTogglePick: (row: ModelRow) => void;
+  pullProgressByModel: Record<string, PullProgressUpdate>;
+  onStartDownloads: () => void;
+  isListTesting: boolean;
+  runProgress: SimpleRunProgress;
+  onStartShow: () => void;
+  onStopShow: () => void;
+  winner: { model: string; score: number; grade: string } | null;
+  onChatWithWinner: () => void;
+  onOpenScorecard: () => void;
+  onRunAgain: () => void;
+  onSwitchToAdvanced: () => void;
+};
+
+export function SimpleWizard(props: SimpleWizardProps) {
+  const { system, ollamaReady, shortlistedRows, winner } = props;
+
+  const setupDone = ollamaReady;
+  const pickDone = shortlistedRows.length >= 1;
+  const allInstalled = pickDone && shortlistedRows.every((row) => row.installed);
+  const downloadDone = allInstalled;
+  const compareDone = Boolean(winner);
+  const winnerDone = Boolean(winner);
+
+  const stepState = useMemo(() => {
+    const done: Record<StepId, boolean> = { setup: setupDone, pick: pickDone, download: downloadDone, compare: compareDone, winner: winnerDone };
+    const unlocked: Record<StepId, boolean> = {
+      setup: true,
+      pick: setupDone,
+      download: pickDone,
+      compare: downloadDone,
+      winner: compareDone,
+    };
+    return { done, unlocked };
+  }, [setupDone, pickDone, downloadDone, compareDone, winnerDone]);
+
+  const furthestStep: StepId = !setupDone ? 'setup' : !pickDone ? 'pick' : !downloadDone ? 'download' : !compareDone ? 'compare' : 'winner';
+  const [chosenStep, setChosenStep] = useState<StepId>(furthestStep);
+
+  // Derive the visible step: honor the user's choice, but clamp to the furthest
+  // unlocked step if a prerequisite was lost, and auto-advance Compare -> Winner
+  // once the show crowns a match. Deriving avoids setState-in-effect churn.
+  const step: StepId = compareDone && chosenStep === 'compare'
+    ? 'winner'
+    : stepState.unlocked[chosenStep] ? chosenStep : furthestStep;
+  const setStep = setChosenStep;
+
+  const stepIndex = STEPS.indexOf(step);
+  const stepComplete: Record<StepId, boolean> = { setup: setupDone, pick: pickDone, download: downloadDone, compare: compareDone, winner: true };
+
+  const goNext = () => {
+    if (step === 'pick') props.onStartDownloads();
+    if (step === 'download') props.onStartShow();
+    if (stepIndex < STEPS.length - 1) setStep(STEPS[stepIndex + 1]);
+  };
+  const goBack = () => {
+    if (stepIndex > 0) setStep(STEPS[stepIndex - 1]);
+  };
+
+  const nextLabel: Partial<Record<StepId, string>> = {
+    setup: 'Next · Meet the contestants',
+    pick: `Next · Download ${shortlistedRows.length} model${shortlistedRows.length === 1 ? '' : 's'}`,
+    download: 'Next · Start the show',
+    compare: 'Next · Meet the winner',
+  };
+
+  return (
+    <div className="sw-shell">
+      <header className="sw-header">
+        <div className="sw-brand">
+          <img src={brandIcon} alt="" />
+          <div>
+            <strong>RigMatch.AI</strong>
+            <span>AI matchmaking for your PC</span>
+          </div>
+        </div>
+        <nav className="sw-steps" aria-label="Wizard steps">
+          {STEPS.map((id, index) => {
+            const isActive = id === step;
+            const isDone = stepState.done[id] && !isActive;
+            const isLocked = !stepState.unlocked[id] && !isActive;
+            const cls = isActive ? 'active' : isDone ? 'done' : 'locked';
+            const clickable = isDone;
+            return (
+              <div className="sw-step-wrap" key={id}>
+                {index > 0 && <i className="sw-step-dash" aria-hidden="true" />}
+                <button
+                  type="button"
+                  className={`sw-step ${cls}`}
+                  onClick={() => clickable && setStep(id)}
+                  disabled={!clickable && !isActive}
+                  aria-current={isActive ? 'step' : undefined}
+                >
+                  <span className="sw-step-mark" aria-hidden="true">
+                    {isDone ? <Check /> : isLocked ? <Lock /> : id === 'winner' && isActive ? <Trophy /> : index + 1}
+                  </span>
+                  <span className="sw-step-label">{STEP_LABELS[id]}</span>
+                </button>
+              </div>
+            );
+          })}
+        </nav>
+        <div className="sw-mode-toggle" role="group" aria-label="Interface mode">
+          <button type="button" className="active" aria-label="Simple Mode" aria-pressed="true">Simple</button>
+          <button type="button" onClick={props.onSwitchToAdvanced} aria-label="Advanced Mode" aria-pressed="false">Advanced</button>
+        </div>
+      </header>
+
+      <div className="sw-content">
+        <div className="sw-host-strip">
+          <img className="sw-host-avatar" src={HOST_AVATAR_SRC} alt="" />
+          <div className="sw-host-bubble">
+            <span>The host</span>
+            <p>{HOST_COPY[step]}</p>
+          </div>
+        </div>
+
+        {step === 'setup' && <SetupScreen {...props} />}
+        {step === 'pick' && <PickScreen {...props} />}
+        {step === 'download' && <DownloadScreen {...props} />}
+        {step === 'compare' && <CompareScreen {...props} />}
+        {step === 'winner' && <WinnerScreen {...props} onRunAgain={() => setStep('pick')} />}
+      </div>
+
+      <footer className="sw-footer">
+        <div className="sw-footer-left">
+          {step !== 'setup' && (
+            <button type="button" className="sw-ghost-pill" onClick={goBack}>
+              <ArrowLeft aria-hidden="true" />
+              {step === 'compare' ? 'Stop the show' : 'Back'}
+            </button>
+          )}
+        </div>
+        {step === 'pick'
+          ? <LineupTray shortlistedRows={shortlistedRows} />
+          : <span className="sw-footer-hint">{footerHint(step, system, shortlistedRows.length)}</span>}
+        <div className="sw-footer-right">
+          {step !== 'winner' && (
+            <button
+              type="button"
+              className="sw-gold-pill"
+              onClick={goNext}
+              disabled={!stepComplete[step]}
+              title={stepComplete[step] ? undefined : nextBlockedHint(step)}
+            >
+              {nextLabel[step]}
+              <ArrowRight aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function footerHint(step: StepId, _system: SystemProfile, pickCount: number): string {
+  switch (step) {
+    case 'setup': return 'Your computer is ready for the show';
+    case 'download': return 'The show starts as soon as everyone arrives';
+    case 'compare': return 'Scores appear live — the winner is crowned after the last round';
+    case 'winner': return 'RigMatch remembers your Top Match — find it any time in the header';
+    default: return pickCount ? '' : 'Pick at least 1 to continue';
+  }
+}
+
+function nextBlockedHint(step: StepId): string {
+  switch (step) {
+    case 'setup': return 'Check your computer first';
+    case 'pick': return 'Pick at least 1 to continue';
+    case 'download': return 'Waiting for downloads to finish';
+    case 'compare': return 'The show is still running';
+    default: return '';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Setup
+
+function SetupScreen({ system, ollamaReady, isScanning, onCheckComputer, onGetOllama }: SimpleWizardProps) {
+  const checked = ollamaReady; // a successful check makes Ollama ready
+  const gpu = system.gpu.model || 'your graphics card';
+  const freeGb = Math.round(system.storage.availableGb || 0);
+
+  return (
+    <div className="sw-setup">
+      <div className="sw-setup-hero" style={{ backgroundImage: `url(${rigGreenroom})` }} aria-hidden="true" />
+      <h2>Let's check your computer</h2>
+      <p className="sw-muted">
+        RigMatch looks at your graphics card and memory to find AI models that fit. Everything stays on your PC — no account, no cloud.
+      </p>
+      <button type="button" className="sw-gold-pill sw-cta" onClick={onCheckComputer} disabled={isScanning}>
+        {isScanning ? <RefreshCw className="sw-spin" aria-hidden="true" /> : <ScanLine aria-hidden="true" />}
+        {isScanning ? 'Checking your computer…' : 'Check my computer'}
+      </button>
+
+      {checked && !isScanning && (
+        <div className="sw-setup-result ok">
+          <div className="sw-setup-result-head">
+            <span className="sw-check-circle" aria-hidden="true"><Check /></span>
+            <strong>You're all set!</strong>
+            <button type="button" className="sw-link" onClick={onCheckComputer}>Check again</button>
+          </div>
+          <ResultRow label="Local AI found" detail="Ollama is installed and running" />
+          <ResultRow label="Strong graphics card" detail={`${gpu} — great for local AI`} />
+          <ResultRow label="Plenty of space" detail={`${freeGb} GB free for models`} />
+        </div>
+      )}
+
+      {!checked && !isScanning && hasBeenChecked(system, ollamaReady) && (
+        <div className="sw-setup-result error">
+          <div className="sw-setup-result-head">
+            <span className="sw-check-circle error" aria-hidden="true"><X /></span>
+            <strong>We couldn't find Ollama</strong>
+          </div>
+          <p className="sw-muted sw-setup-error-copy">
+            RigMatch needs Ollama — the free local AI engine — running on your PC. Grab it, then try again.
+          </p>
+          <div className="sw-setup-error-actions">
+            <button type="button" className="sw-gold-pill" onClick={onGetOllama}><ExternalLink aria-hidden="true" />Get Ollama</button>
+            <button type="button" className="sw-ghost-pill" onClick={onCheckComputer}>Try again</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function hasBeenChecked(_system: SystemProfile, _ready: boolean): boolean {
+  // In the desktop app a completed-but-not-ready check should show the error
+  // card; we surface it whenever Ollama isn't ready after a manual check.
+  return true;
+}
+
+function ResultRow({ label, detail }: { label: string; detail: string }) {
+  return (
+    <div className="sw-result-row">
+      <strong>{label}</strong>
+      <span>{detail}</span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pick
+
+function PickScreen({ wizardModels, modelsLoading, shortlistIds, shortlistedRows, onTogglePick }: SimpleWizardProps) {
+  const [dream, setDream] = useState<DreamFilterId>('all');
+  const [showAll, setShowAll] = useState(false);
+  const lineupFull = shortlistedRows.length >= 5;
+
+  const filtered = useMemo(() => {
+    if (dream === 'all') return wizardModels;
+    return wizardModels.filter((m) => m.dreamTags.includes(dream as Exclude<DreamFilterId, 'all'>));
+  }, [wizardModels, dream]);
+
+  const visible = showAll ? filtered : filtered.slice(0, 9);
+  const dreamNoun: Record<Exclude<DreamFilterId, 'all'>, string> = {
+    talk: 'love a good conversation',
+    write: 'are great writing partners',
+    code: 'are handy coding buddies',
+    image: 'can make images',
+    video: 'can make video',
+  };
+  const countLine = dream === 'all'
+    ? `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} fit your PC`
+    : `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} ${dreamNoun[dream]} · all of them fit your PC`;
+
+  return (
+    <div className="sw-pick">
+      <div className="sw-dream">
+        <span className="sw-eyebrow">Who's your dream model?</span>
+        <div className="sw-dream-chips">
+          {DREAM_CHIPS.map((chip) => {
+            const Icon = chip.icon;
+            return (
+              <button
+                key={chip.id}
+                type="button"
+                className={`sw-chip ${dream === chip.id ? 'active' : ''}`}
+                onClick={() => { setDream(chip.id); setShowAll(false); }}
+              >
+                <Icon aria-hidden="true" />
+                {chip.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="sw-pick-count">
+        <span>{modelsLoading ? 'Bringing out the contestants…' : countLine}</span>
+        {dream !== 'all' && <button type="button" className="sw-link" onClick={() => setDream('all')}>Show everyone instead</button>}
+      </div>
+
+      {modelsLoading ? (
+        <div className="sw-card-grid">
+          {Array.from({ length: 6 }).map((_, i) => <div key={i} className="sw-card sw-card-skeleton" aria-hidden="true" />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="sw-pick-empty">
+          <p>Hmm, nobody fits that bill on this PC — try another type or show everyone.</p>
+          <button type="button" className="sw-chip active" onClick={() => setDream('all')}><Sparkles aria-hidden="true" />Surprise me — show everyone</button>
+        </div>
+      ) : (
+        <>
+          <div className="sw-card-grid">
+            {visible.map((model) => {
+              const picked = shortlistIds.has(model.row.displayName);
+              const pickIndex = picked ? shortlistedRows.findIndex((r) => r.displayName === model.row.displayName) + 1 : 0;
+              const disabled = !picked && lineupFull;
+              return (
+                <ContestantCard
+                  key={model.row.displayName}
+                  model={model}
+                  picked={picked}
+                  pickIndex={pickIndex}
+                  disabled={disabled}
+                  onToggle={() => onTogglePick(model.row)}
+                />
+              );
+            })}
+          </div>
+          {!showAll && filtered.length > visible.length && (
+            <button type="button" className="sw-link sw-show-more" onClick={() => setShowAll(true)}>Show more contestants that fit your PC</button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
+  model: WizardModel;
+  picked: boolean;
+  pickIndex: number;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  const fitLabel = model.fitTier === 'great' ? 'Runs great on your PC' : model.fitTier === 'well' ? 'Runs well on your PC' : 'Good fit — a little slower';
+  return (
+    <article className={`sw-card${picked ? ' picked' : ''}`}>
+      {picked && <span className="sw-card-pick-badge"><Heart aria-hidden="true" />Pick {pickIndex}</span>}
+      <img className="sw-card-avatar" src={getModelAvatarSrc(model.row.displayName)} alt="" />
+      <div className="sw-card-name">
+        <strong>{model.name}</strong>
+        <em>{model.epithet}</em>
+      </div>
+      <div className="sw-card-goodfor">
+        <span className="sw-eyebrow">Good for</span>
+        <p>{model.goodForLine}</p>
+      </div>
+      <span className={`sw-fit-badge ${model.fitTier === 'slower' ? 'gold' : 'green'}`}>
+        <Heart aria-hidden="true" />{fitLabel}
+      </span>
+      <button
+        type="button"
+        className={picked ? 'sw-card-btn picked' : 'sw-card-btn'}
+        onClick={onToggle}
+        disabled={disabled}
+      >
+        {picked ? 'Picked ✓ · Tap to remove' : disabled ? 'Lineup full' : '♥ Pick'}
+      </button>
+    </article>
+  );
+}
+
+function LineupTray({ shortlistedRows }: { shortlistedRows: ModelRow[] }) {
+  return (
+    <div className="sw-lineup-tray">
+      <span className="sw-eyebrow">Your lineup · {shortlistedRows.length} of 5</span>
+      <div className="sw-lineup-slots">
+        {Array.from({ length: 5 }).map((_, index) => {
+          const row = shortlistedRows[index];
+          return row ? (
+            <span key={row.displayName} className="sw-lineup-slot filled" title={row.displayName}>
+              <img src={getModelAvatarSrc(row.displayName)} alt="" />
+            </span>
+          ) : (
+            <span key={`empty-${index}`} className="sw-lineup-slot empty" aria-hidden="true"><Plus /></span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Download
+
+function DownloadScreen({ shortlistedRows, pullProgressByModel }: SimpleWizardProps) {
+  const readyCount = shortlistedRows.filter((row) => row.installed).length;
+  return (
+    <div className="sw-download">
+      <div className="sw-download-head">
+        <h2>Getting your lineup ready</h2>
+        <span>{readyCount} of {shortlistedRows.length} ready</span>
+      </div>
+      {shortlistedRows.map((row) => {
+        const pull = pullProgressByModel[row.displayName];
+        const installed = row.installed;
+        const downloading = !installed && pull && !['complete', 'failed', 'cancelled', 'queued'].includes(pull.phase);
+        const percent = pull?.percent ?? 0;
+        const status: 'done' | 'downloading' | 'queued' = installed ? 'done' : downloading ? 'downloading' : 'queued';
+        return (
+          <div key={row.displayName} className={`sw-dl-row ${status}`}>
+            <img className="sw-dl-avatar" src={getModelAvatarSrc(row.displayName)} alt="" />
+            <div className="sw-dl-info">
+              <strong>{row.displayName}</strong>
+              <em>{status === 'done' ? 'Ready to go' : status === 'downloading' ? (pull?.status || 'Downloading…') : 'Waiting in line'}</em>
+              <div className="sw-dl-track" aria-hidden="true"><i style={{ width: `${status === 'done' ? 100 : status === 'downloading' ? Math.max(4, percent) : 0}%` }} /></div>
+            </div>
+            <span className="sw-dl-status">
+              {status === 'done' ? '✓ On your PC' : status === 'downloading' ? `${Math.round(percent)}%` : 'Up next'}
+            </span>
+          </div>
+        );
+      })}
+      <div className="sw-info-note">
+        <Info aria-hidden="true" />
+        <span>Downloads pick up where they left off if you close RigMatch. Your other apps won't slow down.</span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Compare
+
+function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
+  const activeModel = runProgress?.currentModel ?? '';
+  const round = (runProgress?.questionIndex ?? 0) + 1;
+  const totalRounds = runProgress?.questionTotal ?? shortlistedRows.length;
+  const question = runProgress?.questionPrompt ?? 'The host is lining up the next question…';
+  const label = (runProgress?.questionLabel ?? 'Getting started').toUpperCase();
+  const percent = runProgress?.percent ?? 0;
+
+  return (
+    <div className="sw-compare" style={{ backgroundImage: `url(${speedDateShow})` }}>
+      <div className="sw-compare-inner">
+        <div className="sw-compare-question">
+          <span className="sw-eyebrow">Round {round} of {totalRounds} · {label}</span>
+          <p>&ldquo;{question}&rdquo;</p>
+        </div>
+        <div className="sw-podiums">
+          {shortlistedRows.map((row) => {
+            const isActive = row.displayName === activeModel;
+            const score = runProgress?.questionScores?.[row.displayName];
+            const state = isActive ? 'answering' : score != null ? 'done' : 'waiting';
+            return (
+              <div key={row.displayName} className={`sw-podium ${state}`}>
+                <img src={getModelAvatarSrc(row.displayName)} alt="" />
+                <strong>{row.displayName}</strong>
+                <span className={`sw-podium-pill ${state}`}>
+                  {state === 'answering' ? <><i /><i /><i /> Answering</> : state === 'done' ? '✓ Done' : 'Waiting'}
+                </span>
+                <em>{state === 'answering' ? 'Thinking it over…' : state === 'done' ? `Scored ${score}` : 'Up next'}</em>
+              </div>
+            );
+          })}
+        </div>
+        <div className="sw-show-progress">
+          <div className="sw-show-progress-head">
+            <span>Show progress</span>
+            <span>Round {round} of {totalRounds}</span>
+          </div>
+          <div className="sw-show-progress-track" aria-hidden="true"><i style={{ width: `${Math.max(2, percent)}%` }} /></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Winner
+
+function WinnerScreen({ winner, onChatWithWinner, onOpenScorecard, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
+  if (!winner) {
+    return <div className="sw-winner"><p className="sw-muted">Run the show to crown your Top Match.</p></div>;
+  }
+  const shortName = winner.model.split(':')[0];
+  const capName = shortName.charAt(0).toUpperCase() + shortName.slice(1);
+  return (
+    <div className="sw-winner">
+      <div className="sw-confetti" aria-hidden="true">
+        {['gold', 'pink', 'green', 'blue', 'gold', 'pink'].map((c, i) => (
+          <i key={i} className={`sw-confetti-piece ${c}`} style={{ left: `${12 + i * 15}%`, animationDelay: `${i * 90}ms` }} />
+        ))}
+      </div>
+      <div className="sw-winner-reveal">
+        <div className="sw-winner-avatar-wrap">
+          <img src={getModelAvatarSrc(winner.model)} alt="" />
+          <span className="sw-winner-trophy" aria-hidden="true"><Trophy /></span>
+        </div>
+        <div className="sw-winner-copy">
+          <span className="sw-eyebrow gold">Your top match</span>
+          <strong>{winner.model}</strong>
+          <span className="sw-winner-grade">
+            <b>{winner.score}</b>
+            <em>Match · Grade {winner.grade}</em>
+          </span>
+        </div>
+      </div>
+
+      <div className="sw-doors">
+        <div className="sw-door chat">
+          <div className="sw-door-img" style={{ backgroundImage: `url(${romanceHero})` }} aria-hidden="true" />
+          <span className="sw-eyebrow gold">The happy ending</span>
+          <strong>Start chatting with {capName}</strong>
+          <p>Open RigMatch Chat and talk to your new match right away — it's already on your PC.</p>
+          <button type="button" className="sw-door-btn gold" onClick={onChatWithWinner}><MessageSquare aria-hidden="true" />Chat with {capName}</button>
+        </div>
+        <div className="sw-door advanced">
+          <div className="sw-door-img" style={{ backgroundImage: `url(${modelTestArt})` }} aria-hidden="true" />
+          <span className="sw-eyebrow blue">You've graduated</span>
+          <strong>Step into Advanced Mode</strong>
+          <p>The full control room — every model, every score, custom tests. Your Top Match comes with you.</p>
+          <button type="button" className="sw-door-btn blue" onClick={onSwitchToAdvanced}><ExternalLink aria-hidden="true" />Switch to Advanced</button>
+        </div>
+      </div>
+
+      <div className="sw-winner-links">
+        <button type="button" className="sw-link" onClick={onOpenScorecard}>See the full scorecard</button>
+        <button type="button" className="sw-link" onClick={onRunAgain}>Run the show again</button>
+      </div>
+    </div>
+  );
+}
