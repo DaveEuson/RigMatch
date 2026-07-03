@@ -171,6 +171,29 @@ export function SimpleWizard(props: SimpleWizardProps) {
           <div>
             <strong>RigMatch.AI</strong>
             <span>AI matchmaking for your PC</span>
+            {/* Mode switch lives under the brand in both Simple and Advanced so it
+                never moves when you toggle. Shares .global-mode-switch styling. */}
+            <div className="global-mode-switch" role="group" aria-label="Current interface mode">
+              <span>Mode</span>
+              <button
+                type="button"
+                className="active"
+                aria-pressed="true"
+                aria-label="Simple Mode"
+                title="Simple Mode keeps RigMatch focused on the main flow"
+              >
+                Simple
+              </button>
+              <button
+                type="button"
+                onClick={props.onSwitchToAdvanced}
+                aria-pressed="false"
+                aria-label="Advanced Mode"
+                title="Advanced Mode shows deeper tools and diagnostics"
+              >
+                Advanced
+              </button>
+            </div>
           </div>
         </div>
         <nav className="sw-steps" aria-label="Wizard steps">
@@ -199,10 +222,6 @@ export function SimpleWizard(props: SimpleWizardProps) {
             );
           })}
         </nav>
-        <div className="sw-mode-toggle" role="group" aria-label="Interface mode">
-          <button type="button" className="active" aria-label="Simple Mode" aria-pressed="true">Simple</button>
-          <button type="button" onClick={props.onSwitchToAdvanced} aria-label="Advanced Mode" aria-pressed="false">Advanced</button>
-        </div>
       </header>
 
       <div className="sw-content">

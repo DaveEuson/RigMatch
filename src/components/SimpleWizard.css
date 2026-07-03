@@ -17,7 +17,7 @@
 /* Header ------------------------------------------------------------------ */
 .sw-header {
   display: grid;
-  grid-template-columns: minmax(190px, auto) minmax(0, 1fr) minmax(150px, auto);
+  grid-template-columns: minmax(190px, auto) minmax(0, 1fr);
   align-items: center;
   gap: 16px;
   padding: 14px 20px;
@@ -52,6 +52,22 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--pink);
+}
+
+/* Mode switch under the brand — mirrors Advanced Mode's .global-mode-switch
+   (styled in App.css) so the control sits in the same spot in both modes. */
+.sw-brand .global-mode-switch {
+  width: 168px;
+  margin-top: 7px;
+}
+
+.sw-brand .global-mode-switch span {
+  grid-column: 1 / -1;
+  color: var(--gold);
+  font-size: 8px;
+  letter-spacing: normal;
+  text-align: left;
+  padding-left: 3px;
 }
 
 .sw-steps {
@@ -129,33 +145,6 @@
 
 .sw-step.locked .sw-step-mark { background: color-mix(in srgb, var(--text-strong) 6%, transparent); }
 .sw-step.done:hover, .sw-step.active:hover { transform: translateY(-1px); filter: brightness(1.04); }
-
-.sw-mode-toggle {
-  justify-self: end;
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--text-strong) 14%, transparent);
-  background: color-mix(in srgb, var(--bg) 58%, transparent);
-}
-
-.sw-mode-toggle button {
-  padding: 6px 12px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 900;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-
-.sw-mode-toggle button.active {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 78%, white), var(--gold));
-  color: #27190a;
-}
 
 /* Content + host strip ---------------------------------------------------- */
 .sw-content {
@@ -777,7 +766,7 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   .sw-step { padding: 8px 12px; }
   .sw-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sw-doors { grid-template-columns: minmax(0, 1fr); }
-  .sw-header { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; }
+  .sw-header { grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
 }
 
 @media (max-width: 900px) {
