@@ -121,7 +121,19 @@ export function hashString(value: string) {
 /** Strip Electron IPC wrapper noise from error messages before display. */
 export function getErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return message.replace(/^Error invoking remote method '[^']+':\s*/i, '');
+  return describeRunError(message.replace(/^Error invoking remote method '[^']+':\s*/i, ''));
+}
+
+/**
+ * Turn a few common raw Ollama runner failures into plain-language guidance
+ * instead of a 500/stack-trace wall. Falls through to the original message.
+ */
+export function describeRunError(message: string): string {
+  const lower = message.toLowerCase();
+  if (lower.includes('mlx')) {
+    return 'This looks like an Apple Silicon (macOS) model — it runs on Apple\'s MLX framework, which Ollama can\'t load on Windows or Linux. Image models like x/flux2 are macOS-only for now.';
+  }
+  return message;
 }
 
 export function compareVersionStrings(a: string, b: string): number {

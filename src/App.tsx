@@ -257,6 +257,7 @@ import {
   formatGb,
   formatMs,
   formatPullCount,
+  describeRunError,
   getErrorMessage,
   getResponseEstimate,
   getScoreTone,
@@ -3971,7 +3972,11 @@ function RunWarningModal({
             </div>
             {(() => {
               const appBuilderCapable = lineupModels.some((m) => !isLikelyImageGenerationModel(m) && !isEmbeddingModel(m));
-              const imageCapable = lineupModels.some((m) => isLikelyImageGenerationModel(m));
+              const hasImageModel = lineupModels.some((m) => isLikelyImageGenerationModel(m));
+              // Ollama image models run on Apple's MLX framework — macOS/Apple
+              // Silicon only. On Windows/Linux they die with an MLX load error.
+              const imageOnThisOS = system.platform === 'darwin';
+              const imageCapable = hasImageModel && imageOnThisOS;
               return (
                 <>
                   <label className={`run-skill-test-option${appBuilderCapable ? '' : ' disabled'}`}>
@@ -4024,7 +4029,9 @@ function RunWarningModal({
                       <strong>Create an image</strong>
                       <em>{imageCapable
                         ? 'Adds roughly 1–4 minutes per image model. Uses the prompt below.'
-                        : 'No image-generation model in this run. Install one (like x/flux2-klein) to unlock.'}</em>
+                        : hasImageModel && !imageOnThisOS
+                          ? 'Image generation needs macOS (Apple Silicon). Ollama runs image models on Apple\'s MLX framework, which isn\'t available on Windows or Linux yet.'
+                          : 'No image-generation model in this run. Install one (like x/flux2-klein) to unlock.'}</em>
                     </span>
                   </label>
                   {imageCapable && skillSelection.image && (
@@ -4591,7 +4598,7 @@ async function runAdvancedAppBuilderChallenge(
       completedAt: new Date().toISOString(),
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Advanced test failed.';
+    const message = describeRunError(error instanceof Error ? error.message : 'Advanced test failed.');
     return {
       model,
       challenge: 'app-builder',
@@ -4692,7 +4699,7 @@ async function runAdvancedImageGenerationChallenge(
       completedAt: new Date().toISOString(),
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Image generation failed.';
+    const message = describeRunError(error instanceof Error ? error.message : 'Image generation failed.');
     return {
       model,
       challenge: 'image-generation',
