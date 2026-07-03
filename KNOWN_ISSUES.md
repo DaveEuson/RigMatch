@@ -1,4 +1,4 @@
-# Known Issues — RigMatch.AI v0.2.5 Beta
+# Known Issues — RigMatch.AI v0.3.0 Beta
 
 This is a candid list of issues we know about going into the beta. If you hit something not listed here, that's a genuine bug report — please share it.
 
@@ -56,7 +56,7 @@ RigMatch now builds separate Linux x64 and Linux ARM64 artifacts. NVIDIA Jetson 
 
 If you find something not on this list, please open an issue or drop it in the beta feedback channel. Screenshots and your hardware spec (VRAM, OS) help narrow things down fast.
 
-*Last updated: v0.2.5 beta — June 2026*
+*Last updated: v0.3.0 beta — July 2026*
 
 ## Upcoming Features
 

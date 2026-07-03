@@ -1,6 +1,6 @@
 # RigMatch.AI
 
-Find the best AI model your computer can run, 100% locally. RigMatch 0.2.x benchmarks through Ollama on your actual hardware — scored for speed, answer quality, and hardware fit — wrapped in a dating game show theme to make testing less boring.
+Find the best AI model your computer can run, 100% locally. RigMatch 0.3.x benchmarks through Ollama on your actual hardware — scored for speed, answer quality, and hardware fit — wrapped in a dating game show theme to make testing less boring.
 
 <p align="center">
   <img src="Screenshots/readme/rigmatch-readme-hero.svg" alt="RigMatch.AI matches local Ollama models to your actual hardware" width="100%">
@@ -12,7 +12,7 @@ Find the best AI model your computer can run, 100% locally. RigMatch 0.2.x bench
 
 ## Download
 
-**Beta v0.2.5** — [Downloads ->](../../releases/latest)
+**Beta v0.3.0** — [Downloads ->](../../releases/latest)
 
 Nightly builds for upcoming fixes and previews are listed under [pre-releases](../../releases).
 
@@ -132,7 +132,7 @@ Everything runs locally. No cloud, no account, no subscription. Your prompts and
 
 ### To use RigMatch
 
-- [Ollama](https://ollama.com) installed and running locally; RigMatch 0.2.x uses Ollama as its test engine
+- [Ollama](https://ollama.com) installed and running locally; RigMatch 0.3.x uses Ollama as its test engine
 - At least one Ollama model installed — or use RigMatch to download one
 - Windows, macOS, or Linux
 

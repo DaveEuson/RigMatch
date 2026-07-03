@@ -436,16 +436,17 @@ const IMAGE_GENERATION_MODEL_OPTIONS: ImageGenerationModelOption[] = [
 
 const releaseNotes: ReleaseNoteEntry[] = [
   {
-    version: '0.2.6',
-    label: 'Smaller Installers & a Playable Lab',
+    version: '0.3.0',
+    label: 'The Guided Wizard Update',
     date: 'Beta build',
     notes: [
-      'Installers are roughly 15 MB smaller — the contestant art and show banners were re-encoded with no visible quality change.',
-      'App Builder results now have a Play It button: the generated game runs in a locked-down sandbox with network, storage, and file access blocked. RigMatch still never runs model code automatically.',
-      'The Image Lab now detects image-generation models already in your local Ollama library (like x/flux2 tags) and lists them with no new download.',
-      'A Video Generation research card explains honestly why video is still locked: no local backend RigMatch supports can generate video yet.',
-      'Internal code reorganization and release-tooling fixes. Score weights are unchanged and existing scorecards stay valid — no retest needed this time.',
-      'Accuracy-trap grading now recognizes more valid refusal phrasings (like "don\'t have the ability"), so honest models are no longer marked down for wording. Retesting may raise a model\'s accuracy score slightly.',
+      'Simple Mode is now a real five-step wizard — Setup, Pick, Download, Compare, Winner — instead of the advanced screens with a step bar on top. Pick shows friendly contestant cards of models that fit your PC, with no jargon. Advanced Mode is unchanged and one click away.',
+      'The live Speed Dating stage can now be minimized to a small "now playing" bar so you can keep using RigMatch while a long run finishes — you are no longer stuck on that screen.',
+      'New Activity tab: a job monitor for running benchmarks, skill tests, and downloads, plus recent results. Apps and images a test produced can be viewed right there.',
+      'Optional Skill Tests during a run: ask models to build a small app (Tetris, Snake, Calculator, Clock, Paint, or your own prompt) or generate an image. Finished apps and images pop up in a locked-down viewer, and grades appear on the scorecard.',
+      'New "Makes images" and "Makes video" model filters, separate from the vision/OCR (reads-images) filter.',
+      'Installers are roughly 15 MB smaller (re-encoded art, no visible quality change), and the app opens faster.',
+      'Fixes: the update checker now correctly finds the newest release; accuracy-trap grading no longer marks down honest refusals for wording. Score weights are unchanged — existing scorecards stay valid.',
       'Coming from 0.2.4? Download this build manually once — the 0.2.4 updater has a bug that hides newer releases and wrongly reports "up to date." From 0.2.5 onward, update checks work normally.',
     ],
   },

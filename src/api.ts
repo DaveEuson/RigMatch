@@ -12,7 +12,7 @@ import type { AgentArcadeApi, BenchmarkProgressUpdate, PullProgressUpdate, Updat
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
 const RIGMATCH_RELEASES_URL = 'https://github.com/daveeuson/RigMatch.AI/releases';
-const APP_VERSION = '0.2.6';
+const APP_VERSION = '0.3.0';
 const benchmarkProgressListeners = new Set<(update: BenchmarkProgressUpdate) => void>();
 const pullProgressListeners = new Set<(update: PullProgressUpdate) => void>();
 const previewPullControllers = new Map<string, AbortController>();
