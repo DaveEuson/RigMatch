@@ -223,7 +223,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
           )}
         </div>
         {step === 'pick'
-          ? <LineupTray shortlistedRows={shortlistedRows} />
+          ? <LineupTray shortlistedRows={shortlistedRows} onRemove={props.onTogglePick} />
           : <span className="sw-footer-hint">{footerHint(step, system, shortlistedRows.length)}</span>}
         <div className="sw-footer-right">
           {step !== 'winner' && (
@@ -455,17 +455,25 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
   );
 }
 
-function LineupTray({ shortlistedRows }: { shortlistedRows: ModelRow[] }) {
+function LineupTray({ shortlistedRows, onRemove }: { shortlistedRows: ModelRow[]; onRemove: (row: ModelRow) => void }) {
   return (
     <div className="sw-lineup-tray">
-      <span className="sw-eyebrow">Your lineup · {shortlistedRows.length} of 5</span>
+      <span className="sw-eyebrow">Your lineup · {shortlistedRows.length} of 5{shortlistedRows.length ? ' · tap to remove' : ''}</span>
       <div className="sw-lineup-slots">
         {Array.from({ length: 5 }).map((_, index) => {
           const row = shortlistedRows[index];
           return row ? (
-            <span key={row.displayName} className="sw-lineup-slot filled" title={row.displayName}>
+            <button
+              key={row.displayName}
+              type="button"
+              className="sw-lineup-slot filled"
+              title={`Remove ${row.displayName} from your lineup`}
+              aria-label={`Remove ${row.displayName} from your lineup`}
+              onClick={() => onRemove(row)}
+            >
               <img src={getModelAvatarSrc(row.displayName)} alt="" />
-            </span>
+              <span className="sw-lineup-remove" aria-hidden="true"><X /></span>
+            </button>
           ) : (
             <span key={`empty-${index}`} className="sw-lineup-slot empty" aria-hidden="true"><Plus /></span>
           );

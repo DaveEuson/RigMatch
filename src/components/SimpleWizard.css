@@ -495,6 +495,7 @@
 .sw-lineup-slots { display: flex; gap: 6px; }
 
 .sw-lineup-slot {
+  position: relative;
   width: 34px;
   height: 34px;
   border-radius: 9px;
@@ -502,12 +503,30 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  padding: 0;
 }
 
-.sw-lineup-slot.filled { border: 2px solid var(--pink); }
+button.sw-lineup-slot.filled { border: 2px solid var(--pink); cursor: pointer; background: none; }
 .sw-lineup-slot.filled img { width: 100%; height: 100%; object-fit: cover; }
 .sw-lineup-slot.empty { border: 1px dashed var(--line); color: var(--muted); }
 .sw-lineup-slot.empty svg { width: 14px; height: 14px; }
+
+/* Remove badge on a picked lineup slot — always hinted, solid on hover. */
+.sw-lineup-remove {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: color-mix(in srgb, var(--red) 55%, transparent);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+button.sw-lineup-slot.filled:hover .sw-lineup-remove,
+button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
+.sw-lineup-remove svg { width: 15px; height: 15px; }
 
 /* Download ---------------------------------------------------------------- */
 .sw-download { width: min(680px, 100%); margin: 0 auto; padding: 0 28px; display: flex; flex-direction: column; gap: 12px; }
