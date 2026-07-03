@@ -2736,21 +2736,48 @@ function extractOpenAiChatContent(response) {
   return '';
 }
 
+// Accept up to a few images as data URLs or bare base64 for multimodal chat.
+function normalizeChatImages(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item) => typeof item === 'string' && item.length > 0)
+    .slice(0, 4)
+    .map((item) => item.trim())
+    .filter((item) => item.length <= 12_000_000); // ~9 MB decoded cap
+}
+function toBareBase64(value) {
+  const s = String(value);
+  const comma = s.indexOf(',');
+  return s.startsWith('data:') && comma !== -1 ? s.slice(comma + 1) : s;
+}
+function toImageDataUrl(value) {
+  const s = String(value);
+  return s.startsWith('data:') ? s : `data:image/png;base64,${s}`;
+}
+
 async function sendChat(request = {}) {
   const model = assertValidModelName(request.model);
   const message = request.message;
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
   assertLocalhostUrl(baseUrl);
   const provider = normalizeLocalProvider(request.provider, baseUrl);
-  if (!message) {
+  const images = normalizeChatImages(request.images);
+  if (!message && images.length === 0) {
     throw new Error('Message is required');
   }
 
   // U-01: strip control chars so user input cannot inject additional "Assistant:" turns
-  const safeMessage = String(message).replace(/[\x00-\x1F\x7F]+/g, ' ').slice(0, 4000).trim();
-  if (!safeMessage) throw new Error('Message is empty after sanitization');
+  const safeMessage = String(message || '').replace(/[\x00-\x1F\x7F]+/g, ' ').slice(0, 4000).trim();
+  if (!safeMessage && images.length === 0) throw new Error('Message is empty after sanitization');
 
   if (provider === 'lm-studio') {
+    // OpenAI-style vision payload: content becomes an array when images ride along.
+    const userContent = images.length > 0
+      ? [
+          { type: 'text', text: safeMessage || 'What is in this image?' },
+          ...images.map((img) => ({ type: 'image_url', image_url: { url: toImageDataUrl(img) } })),
+        ]
+      : safeMessage;
     const response = await fetchJson(
       `${baseUrl.replace(/\/$/, '')}/chat/completions`,
       {
@@ -2762,7 +2789,7 @@ async function sendChat(request = {}) {
               role: 'system',
               content: 'You are the selected local RigMatch.AI assistant. Be warm, concise, and honest about limits.',
             },
-            { role: 'user', content: safeMessage },
+            { role: 'user', content: userContent },
           ],
           temperature: 0.5,
           max_tokens: 220,
@@ -2779,19 +2806,23 @@ async function sendChat(request = {}) {
     };
   }
 
+  const generateBody = {
+    model,
+    prompt: `You are the selected local RigMatch.AI assistant. Be warm, concise, and honest about limits.\n\nUser: ${safeMessage || 'What is in this image?'}\nAssistant:`,
+    stream: false,
+    options: {
+      temperature: 0.5,
+      num_predict: 220,
+    },
+  };
+  // Ollama's /api/generate accepts an images array (bare base64) for vision models.
+  if (images.length > 0) generateBody.images = images.map(toBareBase64);
+
   const response = await fetchJson(
     `${baseUrl}/api/generate`,
     {
       method: 'POST',
-      body: JSON.stringify({
-        model,
-        prompt: `You are the selected local RigMatch.AI assistant. Be warm, concise, and honest about limits.\n\nUser: ${safeMessage}\nAssistant:`,
-        stream: false,
-        options: {
-          temperature: 0.5,
-          num_predict: 220,
-        },
-      }),
+      body: JSON.stringify(generateBody),
     },
     120000,
   );

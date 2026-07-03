@@ -222,10 +222,12 @@ const fallbackApi: AgentArcadeApi = {
   },
   async sendChat(request) {
     await delay(650);
+    const sawImage = Array.isArray(request.images) && request.images.length > 0;
     return {
       model: request.model,
-      message:
-        "I'm running in preview mode, but the desktop build will send this directly to your selected local Ollama model.",
+      message: sawImage
+        ? "I received your image (preview mode). In the desktop build I'd send it straight to your local vision model to read."
+        : "I'm running in preview mode, but the desktop build will send this directly to your selected local Ollama model.",
       completedAt: new Date().toISOString(),
     };
   },

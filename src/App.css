@@ -12814,6 +12814,13 @@ tbody tr.computer-row.selected {
   grid-template-rows: auto 1fr auto;
 }
 
+/* When the live Speed Dating mini-bar is showing it sits at the same bottom-right
+   corner (z-index 80). Lift the chat dock above it so the input isn't covered. */
+.chat-dock.has-live-bar {
+  bottom: 150px;
+  height: min(560px, calc(100vh - 210px));
+}
+
 .chat-title {
   min-height: 58px;
   padding: 10px;
@@ -12858,6 +12865,18 @@ tbody tr.computer-row.selected {
   background: #151b20;
   color: var(--text-strong);
   line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-message-image {
+  max-width: 220px;
+  max-height: 220px;
+  width: auto;
+  height: auto;
+  border-radius: 8px;
+  object-fit: cover;
 }
 
 .chat-message.user {
@@ -12874,13 +12893,15 @@ tbody tr.computer-row.selected {
 .chat-form {
   padding: 10px;
   border-top: none;
-  display: grid;
-  grid-template-columns: 1fr auto;
+  display: flex;
+  align-items: stretch;
   gap: 8px;
 }
 
 .chat-form input {
+  flex: 1;
   min-width: 0;
+  min-height: 40px;
   border: none; border-radius: 12px;
   background: #0f1316;
   color: var(--text-strong);
@@ -12890,6 +12911,72 @@ tbody tr.computer-row.selected {
 
 .chat-form input::placeholder {
   color: var(--muted);
+}
+
+/* Hidden native file picker; triggered by the attach button. */
+.chat-file-input {
+  display: none;
+}
+
+.chat-attach-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  min-height: 40px;
+  border: 1px solid var(--line-bright);
+  border-radius: 12px;
+  background: #0f1316;
+  color: var(--gold);
+  cursor: pointer;
+}
+
+.chat-attach-btn:hover {
+  background: color-mix(in srgb, var(--gold) 16%, #0f1316);
+  color: var(--text-strong);
+}
+
+.chat-attach-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Pending-attachment preview strip above the input row. */
+.chat-attachment {
+  position: relative;
+  align-self: flex-start;
+  margin: 0 10px;
+  width: fit-content;
+}
+
+.chat-attachment img {
+  max-width: 96px;
+  max-height: 96px;
+  border-radius: 8px;
+  border: 1px solid var(--line-bright);
+  display: block;
+}
+
+.chat-attachment-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--pink);
+  color: #fff;
+  cursor: pointer;
+}
+
+.chat-attachment-remove svg {
+  width: 13px;
+  height: 13px;
 }
 
 button:focus-visible,

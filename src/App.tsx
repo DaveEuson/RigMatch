@@ -22,6 +22,7 @@ import {
   Heart,
   HelpCircle,
   History,
+  ImagePlus,
   Lightbulb,
   Maximize2,
   MessageSquare,
@@ -183,6 +184,7 @@ import {
   isEmbeddingModel,
   isHostBenchmarkReady,
   isLikelyImageGenerationModel,
+  isVisionModel,
   isListTestResult,
   isModelScores,
   isRecord,
@@ -276,6 +278,7 @@ type ChatMessage = {
   id: string;
   role: 'user' | 'agent';
   content: string;
+  images?: string[];
 };
 
 type UtilityPanelId = Extract<NavId, 'history' | 'settings'>;
@@ -559,10 +562,13 @@ function App() {
   const [tutorialOpen, setTutorialOpen] = useState(() => !getSavedTutorialSeen());
   const [tutorialStep, setTutorialStep] = useState(0);
   const [chatInput, setChatInput] = useState('');
+  // Pending image (data URL) the user attached for the next vision-model message.
+  const [chatImage, setChatImage] = useState<string | null>(null);
   const [chatMessagesByModel, setChatMessagesByModel] = useState<Record<string, ChatMessage[]>>(
     savedHistory?.chatMessagesByModel ?? {},
   );
   const chatMessages = chatMessagesByModel[selectedModel] ?? [welcomeChatMessage];
+  const chatSupportsImages = isVisionModel(selectedModel);
   const modelNewsRef = useRef(modelNews);
   const modelNewsNotificationsEnabledRef = useRef(modelNewsNotificationsEnabled);
 
@@ -2134,12 +2140,16 @@ function App() {
 
   const sendChat = useCallback(async () => {
     const message = chatInput.trim();
-    if (!message) return;
+    const image = chatImage;
+    // Allow an image-only send (e.g. "read this") but keep a default prompt so
+    // the model always gets some text to act on.
+    if (!message && !image) return;
 
     const userMessage: ChatMessage = {
       id: `${Date.now()}-user`,
       role: 'user',
-      content: message,
+      content: message || (image ? 'What is in this image?' : ''),
+      ...(image ? { images: [image] } : {}),
     };
     const chatModel = selectedModel;
     setChatMessagesByModel((prev) => ({
@@ -2147,14 +2157,16 @@ function App() {
       [chatModel]: [...(prev[chatModel] ?? [welcomeChatMessage]), userMessage],
     }));
     setChatInput('');
+    setChatImage(null);
 
     try {
       const runtime = getModelRuntime(selectedRow, ollama);
       const response = await agentArcadeApi.sendChat({
         model: chatModel,
-        message,
+        message: userMessage.content,
         baseUrl: runtime.baseUrl,
         provider: runtime.provider,
+        ...(image ? { images: [image] } : {}),
       });
       setChatMessagesByModel((prev) => ({
         ...prev,
@@ -2174,7 +2186,7 @@ function App() {
         ],
       }));
     }
-  }, [chatInput, ollama, selectedModel, selectedRow]);
+  }, [chatImage, chatInput, ollama, selectedModel, selectedRow]);
 
   useEffect(() => {
     void refreshRig();
@@ -2206,12 +2218,20 @@ function App() {
   }, [clearedTopMatches]);
 
   useEffect(() => {
+    // Drop attached image data URLs before persisting — they can be large and
+    // would quickly blow the localStorage quota. Transcript text still saves.
+    const chatForSave: Record<string, ChatMessage[]> = {};
+    for (const [model, msgs] of Object.entries(chatMessagesByModel)) {
+      chatForSave[model] = msgs.some((m) => m.images?.length)
+        ? msgs.map((m) => (m.images?.length ? { ...m, images: undefined } : m))
+        : msgs;
+    }
     const history: PersistedHistory = {
       benchmark,
       benchmarkByModel,
       listTestResult,
       modelScores,
-      chatMessagesByModel,
+      chatMessagesByModel: chatForSave,
       selectedModel,
       savedAt: new Date().toISOString(),
     };
@@ -2693,6 +2713,10 @@ function App() {
           onChange={setChatInput}
           onClose={() => setChatOpen(false)}
           onSend={sendChat}
+          liveShowActive={uiMode === 'advanced' && runProgress?.phase === 'running'}
+          canSendImages={chatSupportsImages}
+          pendingImage={chatImage}
+          onAttachImage={setChatImage}
         />
       )}
 
@@ -9513,6 +9537,10 @@ function ChatDock({
   onChange,
   onClose,
   onSend,
+  liveShowActive,
+  canSendImages,
+  pendingImage,
+  onAttachImage,
 }: {
   agentName: string;
   model: string;
@@ -9521,9 +9549,28 @@ function ChatDock({
   onChange: (value: string) => void;
   onClose: () => void;
   onSend: () => void;
+  liveShowActive?: boolean;
+  canSendImages?: boolean;
+  pendingImage?: string | null;
+  onAttachImage?: (dataUrl: string | null) => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (file: File | null | undefined) => {
+    if (!file || !onAttachImage) return;
+    if (!file.type.startsWith('image/')) return;
+    // Guard against huge files: Ollama vision models choke on very large inputs,
+    // and the base64 lives in memory until sent. Cap at ~8 MB.
+    if (file.size > 8 * 1024 * 1024) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') onAttachImage(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
-    <aside className="chat-dock" aria-label={`Chat with ${agentName}`}>
+    <aside className={`chat-dock${liveShowActive ? ' has-live-bar' : ''}`} aria-label={`Chat with ${agentName}`}>
       <div className="chat-title">
         <div>
           <strong>{agentName}</strong>
@@ -9536,10 +9583,21 @@ function ChatDock({
       <div className="chat-stream">
         {messages.map((message) => (
           <div key={message.id} className={`chat-message ${message.role}`}>
-            {message.content}
+            {message.images?.map((src, index) => (
+              <img key={index} src={src} alt="Attached" className="chat-message-image" />
+            ))}
+            {message.content && <span>{message.content}</span>}
           </div>
         ))}
       </div>
+      {pendingImage && (
+        <div className="chat-attachment" aria-label="Attached image">
+          <img src={pendingImage} alt="Attachment preview" />
+          <button type="button" className="chat-attachment-remove" onClick={() => onAttachImage?.(null)} aria-label="Remove image">
+            <X aria-hidden="true" />
+          </button>
+        </div>
+      )}
       <form
         className="chat-form"
         onSubmit={(event) => {
@@ -9547,10 +9605,33 @@ function ChatDock({
           void onSend();
         }}
       >
+        {canSendImages && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="chat-file-input"
+              onChange={(event) => {
+                handleFile(event.target.files?.[0]);
+                event.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              className="chat-attach-btn"
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach an image for this vision model to read"
+              aria-label="Attach an image"
+            >
+              <ImagePlus aria-hidden="true" />
+            </button>
+          </>
+        )}
         <input
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="Ask the matched local agent..."
+          placeholder={canSendImages ? 'Ask about an image, or just chat...' : 'Ask the matched local agent...'}
           aria-label="Message"
         />
         <button type="submit" className="primary-button">

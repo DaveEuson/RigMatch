@@ -63,6 +63,13 @@ export function isLikelyImageGenerationModel(model: string): boolean {
   if (/ocr|vision|\bvl\b|embed/.test(name)) return false;
   return name.startsWith('x/') || /flux|z-image|stable-?diffusion|sdxl/.test(name);
 }
+/** Multimodal models that can READ an image the user sends (vision/OCR), as
+   opposed to models that GENERATE images. Used to offer image upload in chat. */
+export function isVisionModel(model: string): boolean {
+  const name = (model || '').toLowerCase();
+  if (isLikelyImageGenerationModel(name)) return false; // generators, not readers
+  return /vision|llava|bakllava|moondream|minicpm-?v|\bvl\b|-vl\b|\bvl[:-]|qwen2\.?5?-?vl|granite[\w.-]*vision|\bocr\b|smolvlm|pixtral|gemma3|llama3\.2-vision|internvl|cogvlm|florence/.test(name);
+}
 export function isBenchmarkResult(value: unknown): value is BenchmarkResult {
   if (!isRecord(value) || !isRecord(value.scores)) return false;
   return (

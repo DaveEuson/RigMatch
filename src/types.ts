@@ -329,7 +329,7 @@ export type AgentArcadeApi = {
   getActiveBenchmark: () => Promise<BenchmarkStatus>;
   onBenchmarkStatus?: (callback: (status: BenchmarkStatus) => void) => () => void;
   onPullProgress?: (callback: (update: PullProgressUpdate) => void) => () => void;
-  sendChat: (request: { model: string; message: string; baseUrl?: string; provider?: LocalModelProvider }) => Promise<ChatResponse>;
+  sendChat: (request: { model: string; message: string; baseUrl?: string; provider?: LocalModelProvider; images?: string[] }) => Promise<ChatResponse>;
   getLogs: (limit?: number) => Promise<AppLogResponse>;
   appendLog: (entry: Partial<AppLogEntry>) => Promise<AppLogEntry>;
   clearLogs: () => Promise<AppLogResponse>;
