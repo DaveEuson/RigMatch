@@ -22,7 +22,9 @@ import {
   HelpCircle,
   History,
   Lightbulb,
+  Maximize2,
   MessageSquare,
+  Minimize2,
   Network,
   Pause,
   Play,
@@ -11052,6 +11054,7 @@ function LiveFlirtSpotlight({
   questionPlan?: BenchmarkQuestion[];
   onStop?: () => void;
 }) {
+  const [minimized, setMinimized] = useState(false);
   const stageRows = rows?.length
     ? rows
     : [{ displayName: progress.currentModel } as ModelRow];
@@ -11089,6 +11092,31 @@ function LiveFlirtSpotlight({
   const completedQuestions = progress.completedQuestions ?? 0;
   const stageSlots = Array.from({ length: Math.max(5, stageRows.length) }, (_item, index) => stageRows[index]);
 
+  if (minimized) {
+    const miniStatus = [counterLabel, phaseLabel].filter(Boolean).join(' · ');
+    return (
+      <aside className="live-mini-bar" role="status" aria-live="polite" aria-label="Speed Dating running (minimized)">
+        <span className="live-mini-dot" aria-hidden="true" />
+        <div className="live-mini-info">
+          <strong>{activeShortName} on stage</strong>
+          <em>{miniStatus || 'Warming up'}</em>
+          <div className="live-mini-track" aria-hidden="true"><i style={{ width: `${progress.percent}%` }} /></div>
+        </div>
+        <span className="live-mini-percent">{progress.percent}%</span>
+        <button type="button" className="mini-button" onClick={() => setMinimized(false)} title="Expand the live show">
+          <Maximize2 aria-hidden="true" />
+          Expand
+        </button>
+        {onStop && (
+          <button type="button" className="live-show-stop compact" onClick={onStop} title="Stop after the current question finishes">
+            <X aria-hidden="true" />
+            Stop
+          </button>
+        )}
+      </aside>
+    );
+  }
+
   return (
     <aside className="live-flirt-spotlight live-game-show" aria-label="Live Speed Dating game show stage">
       <div className="live-show-bg" style={{ backgroundImage: `url(${robotSpeedDateShow})` }} aria-hidden="true" />
@@ -11106,12 +11134,18 @@ function LiveFlirtSpotlight({
             {counterLabel && <em>{counterLabel}</em>}
             <b>{phaseLabel}</b>
           </div>
-          {onStop && (
-            <button type="button" className="live-show-stop" onClick={onStop} title="Stop after the current question finishes">
-              <X aria-hidden="true" />
-              Stop
+          <div className="live-show-header-actions">
+            <button type="button" className="live-show-minimize" onClick={() => setMinimized(true)} title="Minimize — keep the run going and use the rest of RigMatch">
+              <Minimize2 aria-hidden="true" />
+              Minimize
             </button>
-          )}
+            {onStop && (
+              <button type="button" className="live-show-stop" onClick={onStop} title="Stop after the current question finishes">
+                <X aria-hidden="true" />
+                Stop
+              </button>
+            )}
+          </div>
         </header>
 
         <section className="live-show-main">

@@ -5527,6 +5527,111 @@ tbody tr.computer-row.selected {
   color: var(--gold);
 }
 
+.live-show-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-show-minimize {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid rgba(239, 188, 90, 0.5);
+  border-radius: 999px;
+  background: rgba(13, 21, 20, 0.78);
+  color: var(--gold);
+  font: 950 12px/1 var(--ui);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+/* Minimized "now playing" bar: keeps a Speed Dating run visible and
+   stoppable while the full-screen stage is collapsed, so the rest of the
+   app stays usable during long runs. */
+.live-mini-bar {
+  position: fixed;
+  right: 16px;
+  bottom: 74px;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 10px 14px;
+  border: 1px solid rgba(239, 188, 90, 0.5);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(46, 31, 42, 0.96), rgba(18, 22, 25, 0.97));
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.5), 0 0 26px rgba(239, 188, 90, 0.18);
+}
+
+.live-mini-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: live-mini-pulse 1.6s ease-out infinite;
+}
+
+@keyframes live-mini-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(143, 192, 103, 0.55); }
+  70% { box-shadow: 0 0 0 8px rgba(143, 192, 103, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(143, 192, 103, 0); }
+}
+
+.live-mini-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.live-mini-info strong {
+  font-size: 13px;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-mini-info em {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-mini-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.live-mini-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gold);
+  transition: width 0.3s ease;
+}
+
+.live-mini-percent {
+  flex: 0 0 auto;
+  font: 950 14px/1 var(--ui);
+  color: var(--gold);
+}
+
+.live-show-stop.compact {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
 .live-show-stop {
   display: inline-flex;
   align-items: center;
