@@ -225,6 +225,8 @@ export type AdvancedGenerateRequest = {
   width?: number;
   height?: number;
   steps?: number;
+  /** Image(s) for a vision/OCR model to read (data URLs or bare base64). */
+  images?: string[];
   /** When true (with a streamId), tokens are emitted via onAdvancedGenerateProgress. */
   stream?: boolean;
   streamId?: string;

@@ -57,6 +57,9 @@ const PREVIEW_APP_BUILDER_SAMPLE = `Let me plan this out. I'll write a single-fi
 \`\`\`
 
 That gives a self-contained interactive canvas app that runs entirely offline.`;
+
+// Sample vision/OCR "reading" used to simulate streaming in preview mode.
+const PREVIEW_VISION_SAMPLE = `Looking at the image, I can see a stylized retro robot character rendered in a warm, illustrated style. It has a boxy head with two round eyes and an antenna, set against a soft gradient background. The color palette leans on oranges and greens, giving it a friendly game-show feel. There's no readable text in the image, so this is a picture-description task rather than OCR. Overall: a single cartoon robot mascot, centered, with no other objects present.`;
 const benchmarkProgressListeners = new Set<(update: BenchmarkProgressUpdate) => void>();
 const pullProgressListeners = new Set<(update: PullProgressUpdate) => void>();
 const advancedGenerateProgressListeners = new Set<(payload: AdvancedGenerateProgress) => void>();
@@ -169,12 +172,14 @@ const fallbackApi: AgentArcadeApi = {
     };
   },
   async runAdvancedGenerate(request) {
-    const sample = request.prompt.toLowerCase().includes('single-file')
-      ? PREVIEW_APP_BUILDER_SAMPLE
-      : '';
+    const sample = (request.images && request.images.length > 0)
+      ? PREVIEW_VISION_SAMPLE
+      : request.prompt.toLowerCase().includes('single-file')
+        ? PREVIEW_APP_BUILDER_SAMPLE
+        : '';
 
-    // Simulate token streaming so the live "watch it build" UI can be exercised
-    // in preview mode. Emits accumulating text to onAdvancedGenerateProgress.
+    // Simulate token streaming so the live "watch it build/read" UI can be
+    // exercised in preview mode. Emits accumulating text to listeners.
     if (request.stream && request.streamId && sample) {
       const streamId = request.streamId;
       const model = request.model;

@@ -2859,6 +2859,11 @@ async function runAdvancedGenerate(request = {}, sender = null) {
   if (Number.isInteger(request.width)) body.width = Math.max(1, Math.min(1024, request.width));
   if (Number.isInteger(request.height)) body.height = Math.max(1, Math.min(1024, request.height));
   if (Number.isInteger(request.steps)) body.steps = Math.max(1, Math.min(64, request.steps));
+  // Vision/OCR recognition: pass the image(s) the model should read.
+  if (Array.isArray(request.images)) {
+    const imgs = normalizeChatImages(request.images).map(toBareBase64);
+    if (imgs.length) body.images = imgs;
+  }
 
   if (wantStream) {
     return streamAdvancedGenerate(`${baseUrl}/api/generate`, body, timeoutMs, sender, streamId, model);

@@ -287,8 +287,8 @@ type ChatMessage = {
 type UtilityPanelId = Extract<NavId, 'history' | 'settings'>;
 
 type PendingRunMode = 'single' | 'speed-date';
-type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; skipQuestions: boolean };
-type DemoArtifact = { model: string; kind: 'app' | 'image'; html?: string | null; imageDataUrl?: string; grade: string; score: number };
+type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; recognize: boolean; skipQuestions: boolean };
+type DemoArtifact = { model: string; kind: 'app' | 'image' | 'vision'; html?: string | null; imageDataUrl?: string; description?: string; grade: string; score: number };
 type SkillRunStatus = {
   phase: 'idle' | 'running' | 'complete' | 'failed';
   label: string;
@@ -307,7 +307,7 @@ type AdvancedLabCheck = {
 
 type AdvancedLabResult = {
   model: string;
-  challenge: 'app-builder' | 'image-generation';
+  challenge: 'app-builder' | 'image-generation' | 'image-recognition';
   score: number;
   grade: string;
   elapsedMs: number;
@@ -529,12 +529,13 @@ function App() {
     appCustomPrompt: '',
     image: false,
     imagePrompt: ADVANCED_IMAGE_GENERATION_PROMPT,
+    recognize: false,
     skipQuestions: false,
   });
   const [skillRunStatus, setSkillRunStatus] = useState<SkillRunStatus>({ phase: 'idle', label: '', completed: 0, total: 0 });
   const [demoPopup, setDemoPopup] = useState<DemoArtifact[] | null>(null);
-  // Live "watch it build" stream for an in-flight App Builder skill test.
-  const [liveBuild, setLiveBuild] = useState<{ model: string; text: string; done: boolean; error?: string } | null>(null);
+  // Live "watch it work" stream for an in-flight skill test (build / recognize).
+  const [liveBuild, setLiveBuild] = useState<{ model: string; kind: 'app' | 'image' | 'vision'; text: string; done: boolean; error?: string } | null>(null);
   const [closeCleanupOpen, setCloseCleanupOpen] = useState(false);
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
@@ -2081,7 +2082,7 @@ function App() {
   const runSkillTestsAfterRun = useCallback(async (models: string[]) => {
     const selection = skillTestSelection;
     const appPrompt = resolveAppBuilderPrompt(selection.appPromptId, selection.appCustomPrompt);
-    const jobs: Array<{ model: string; kind: 'app-builder' | 'image' }> = [];
+    const jobs: Array<{ model: string; kind: 'app-builder' | 'image' | 'vision' }> = [];
     for (const model of models) {
       if (selection.appBuilder && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
         jobs.push({ model, kind: 'app-builder' });
@@ -2089,8 +2090,15 @@ function App() {
       if (selection.image && isLikelyImageGenerationModel(model)) {
         jobs.push({ model, kind: 'image' });
       }
+      if (selection.recognize && isVisionModel(model)) {
+        jobs.push({ model, kind: 'vision' });
+      }
     }
     if (!jobs.length) return;
+
+    // A vision recognition job needs a picture to read; load the bundled test
+    // image once up front.
+    const visionImage = jobs.some((job) => job.kind === 'vision') ? await getVisionTestImageDataUrl() : '';
 
     const demos: DemoArtifact[] = [];
     stopSkillRef.current = false;
@@ -2100,34 +2108,54 @@ function App() {
         setActivity(`Skill tests stopped after ${index} of ${jobs.length} run${jobs.length === 1 ? '' : 's'}.`);
         break;
       }
-      const label = job.kind === 'app-builder' ? `App Builder skill test — ${job.model}` : `Image skill test — ${job.model}`;
+      const label = job.kind === 'app-builder' ? `App Builder skill test — ${job.model}`
+        : job.kind === 'image' ? `Image skill test — ${job.model}`
+        : `Image recognition skill test — ${job.model}`;
       setSkillRunStatus({ phase: 'running', label, completed: index, total: jobs.length });
       setActivity(`Skill test ${index + 1}/${jobs.length}: ${label}. This can take a few minutes per model.`);
       let result: AdvancedLabResult;
       if (job.kind === 'app-builder') {
         // Stream the model reasoning + code live into the "watch it build" modal.
         const streamId = `build-${Date.now()}-${index}`;
-        setLiveBuild({ model: job.model, text: '', done: false });
+        setLiveBuild({ model: job.model, kind: 'app', text: '', done: false });
         const unsubscribe = agentArcadeApi.onAdvancedGenerateProgress?.((payload) => {
           if (payload.streamId !== streamId) return;
-          setLiveBuild({ model: payload.model ?? job.model, text: payload.text, done: payload.done, error: payload.error });
+          setLiveBuild({ model: payload.model ?? job.model, kind: 'app', text: payload.text, done: payload.done, error: payload.error });
         });
         try {
           result = await runAdvancedAppBuilderChallenge(job.model, ollama.baseUrl, appPrompt, streamId);
         } finally {
           unsubscribe?.();
         }
+      } else if (job.kind === 'vision') {
+        // Stream the model's live description of the test image.
+        const streamId = `recognize-${Date.now()}-${index}`;
+        setLiveBuild({ model: job.model, kind: 'vision', text: '', done: false });
+        const unsubscribe = agentArcadeApi.onAdvancedGenerateProgress?.((payload) => {
+          if (payload.streamId !== streamId) return;
+          setLiveBuild({ model: payload.model ?? job.model, kind: 'vision', text: payload.text, done: payload.done, error: payload.error });
+        });
+        try {
+          result = await runAdvancedVisionChallenge(job.model, ollama.baseUrl, visionImage, streamId);
+        } finally {
+          unsubscribe?.();
+        }
       } else {
+        // Image generation can't stream tokens — show a "generating" state.
+        setLiveBuild({ model: job.model, kind: 'image', text: '', done: false });
         result = await runAdvancedImageGenerationChallenge(job.model, ollama.baseUrl, selection.imagePrompt);
+        setLiveBuild({ model: job.model, kind: 'image', text: '', done: true, error: result.error });
       }
       if (!result.error) {
-        const key = job.kind === 'image' ? `image:${job.model}` : job.model;
+        const key = job.kind === 'image' ? `image:${job.model}` : job.kind === 'vision' ? `vision:${job.model}` : job.model;
         writeAdvancedLabResults({ ...readAdvancedLabResults(), [key]: result });
         if (job.kind === 'app-builder') {
           const html = extractHtmlDocument(result.response);
           if (html) demos.push({ model: job.model, kind: 'app', html, grade: result.grade, score: result.score });
-        } else if (result.imageDataUrl) {
+        } else if (job.kind === 'image' && result.imageDataUrl) {
           demos.push({ model: job.model, kind: 'image', imageDataUrl: result.imageDataUrl, grade: result.grade, score: result.score });
+        } else if (job.kind === 'vision') {
+          demos.push({ model: job.model, kind: 'vision', imageDataUrl: result.imageDataUrl, description: result.response, grade: result.grade, score: result.score });
         }
       }
     }
@@ -3942,11 +3970,12 @@ function RunWarningModal({
   // and skill sections (and the footer) can react to it.
   const appBuilderCapable = lineupModels.some((m) => !isLikelyImageGenerationModel(m) && !isEmbeddingModel(m));
   const hasImageModel = lineupModels.some((m) => isLikelyImageGenerationModel(m));
+  const visionCapable = lineupModels.some((m) => isVisionModel(m));
   const isMac = system.platform === 'darwin';
   const imageCapable = hasImageModel;
   // Every model in the lineup is image-only → the Q&A round can't run at all.
   const imageOnlyLineup = lineupModels.length > 0 && lineupModels.every(isLikelyImageGenerationModel);
-  const anySkillSelected = (skillSelection.appBuilder && appBuilderCapable) || (skillSelection.image && imageCapable);
+  const anySkillSelected = (skillSelection.appBuilder && appBuilderCapable) || (skillSelection.image && imageCapable) || (skillSelection.recognize && visionCapable);
   const skipQuestions = anySkillSelected && (skillSelection.skipQuestions || imageOnlyLineup);
   // Block the doomed case: an image-only model with no skill selected would just
   // fail the questions. Require a skill (the image one) first.
@@ -4136,6 +4165,20 @@ function RunWarningModal({
                       aria-label="Image generation prompt"
                     />
                   )}
+                  <label className={`run-skill-test-option${visionCapable ? '' : ' disabled'}`}>
+                    <input
+                      type="checkbox"
+                      checked={skillSelection.recognize && visionCapable}
+                      disabled={!visionCapable}
+                      onChange={(event) => onSkillSelectionChange({ ...skillSelection, recognize: event.target.checked })}
+                    />
+                    <span>
+                      <strong>Recognize an image</strong>
+                      <em>{visionCapable
+                        ? 'Shows a vision model a test picture and streams its live description. Adds about a minute per model.'
+                        : 'No vision/OCR model in this run. Add one (like llava or a -vl model) to unlock.'}</em>
+                    </span>
+                  </label>
                   {/* Run only the skills, skipping the Q&A round. Placed right
                       under the skill choices (before the coming-soon video row)
                       so a "coding job, no questions" run is easy to find. Forced
@@ -4644,6 +4687,8 @@ function getModelDemoArtifacts(model: string): DemoArtifact[] {
       if (html) out.push({ model, kind: 'app', html, grade: result.grade, score: result.score });
     } else if (result.challenge === 'image-generation' && result.imageDataUrl) {
       out.push({ model, kind: 'image', imageDataUrl: result.imageDataUrl, grade: result.grade, score: result.score });
+    } else if (result.challenge === 'image-recognition' && result.response) {
+      out.push({ model, kind: 'vision', imageDataUrl: result.imageDataUrl, description: result.response, grade: result.grade, score: result.score });
     }
   }
   return out;
@@ -4745,6 +4790,110 @@ async function runAdvancedAppBuilderChallenge(
     return {
       model,
       challenge: 'app-builder',
+      score: 0,
+      grade: 'F',
+      elapsedMs: Math.round(performance.now() - startedAt),
+      response: '',
+      checks: [],
+      completedAt: new Date().toISOString(),
+      error: message,
+    };
+  }
+}
+
+const ADVANCED_VISION_PROMPT = 'Look at this image and describe exactly what you see in a few clear sentences. If there is any readable text, transcribe it. Be specific about objects, colors, and layout.';
+
+// Convert the bundled test image to a PNG data URL (cached) so vision models
+// have a picture to read during the recognition skill test.
+let visionTestImageCache: string | null = null;
+async function getVisionTestImageDataUrl(): Promise<string> {
+  if (visionTestImageCache) return visionTestImageCache;
+  try {
+    const img = new Image();
+    img.src = robotModelTest;
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || 512;
+    canvas.height = img.naturalHeight || 512;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    visionTestImageCache = canvas.toDataURL('image/png');
+    return visionTestImageCache;
+  } catch {
+    return '';
+  }
+}
+
+function scoreAdvancedVisionResponse(response: string, doneReason: string): Pick<AdvancedLabResult, 'score' | 'grade' | 'checks'> {
+  const text = response.trim();
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
+  const checks: AdvancedLabCheck[] = [
+    {
+      label: 'Described the image',
+      passed: wordCount >= 12,
+      detail: 'Returned a substantive description, not a one-liner or refusal.',
+    },
+    {
+      label: 'Concrete visual detail',
+      passed: /\b(color|colour|robot|text|background|left|right|top|bottom|blue|green|orange|red|yellow|character|shape|screen|button|face|eye|logo)\b/i.test(text),
+      detail: 'Names specific objects, colors, or layout instead of staying vague.',
+    },
+    {
+      label: 'Engaged with the picture',
+      passed: !/\b(can'?t|cannot|unable to|no image|don'?t see)\b/i.test(text),
+      detail: 'Actually read the image rather than declining or claiming no image.',
+    },
+    {
+      label: 'Completed cleanly',
+      passed: doneReason !== 'length' && doneReason !== 'error',
+      detail: 'Did not truncate or error mid-answer.',
+    },
+  ];
+  const score = Math.round((checks.filter((check) => check.passed).length / checks.length) * 100);
+  return { score, grade: getAdvancedLabGrade(score), checks };
+}
+
+async function runAdvancedVisionChallenge(
+  model: string,
+  baseUrl: string,
+  imageDataUrl: string,
+  streamId?: string,
+): Promise<AdvancedLabResult> {
+  const startedAt = performance.now();
+  try {
+    if (!imageDataUrl) throw new Error('No test image was available to show the model.');
+    const data = await agentArcadeApi.runAdvancedGenerate({
+      model,
+      baseUrl,
+      prompt: ADVANCED_VISION_PROMPT,
+      images: [imageDataUrl],
+      keep_alive: '10m',
+      timeoutMs: 180000,
+      options: {
+        temperature: 0.2,
+        num_ctx: 4096,
+        num_predict: 600,
+      },
+      ...(streamId ? { stream: true, streamId } : {}),
+    });
+    if (data.error) throw new Error(data.error);
+    const raw = data.response ?? '';
+    const scored = scoreAdvancedVisionResponse(raw, data.done_reason ?? '');
+    return {
+      model,
+      challenge: 'image-recognition',
+      ...scored,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      response: raw,
+      imageDataUrl,
+      completedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    const message = describeRunError(error instanceof Error ? error.message : 'Vision test failed.');
+    return {
+      model,
+      challenge: 'image-recognition',
       score: 0,
       grade: 'F',
       elapsedMs: Math.round(performance.now() - startedAt),
@@ -10306,21 +10455,30 @@ function ActivityPanel({
  * real time while an App Builder skill test runs, before the finished app is
  * rendered in DemoResultModal.
  */
-function LiveBuildModal({ build, onClose }: { build: { model: string; text: string; done: boolean; error?: string }; onClose: () => void }) {
+function LiveBuildModal({ build, onClose }: { build: { model: string; kind: 'app' | 'image' | 'vision'; text: string; done: boolean; error?: string }; onClose: () => void }) {
   const scrollRef = useRef<HTMLPreElement>(null);
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [build.text]);
-  const heading = build.error ? 'Build failed' : build.done ? 'Finished — opening the app…' : 'Watching it build…';
+  const kindLabel = build.kind === 'app' ? 'App Builder' : build.kind === 'vision' ? 'Image Reading' : 'Image Lab';
+  const activeVerb = build.kind === 'app' ? 'building' : build.kind === 'vision' ? 'reading the image' : 'generating the image';
+  const doneVerb = build.kind === 'image' ? 'Finished — opening the image…' : build.kind === 'vision' ? 'Finished — opening the reading…' : 'Finished — opening the app…';
+  const heading = build.error ? 'Skill test failed' : build.done ? doneVerb : `Watching it — ${activeVerb}…`;
+  const streamable = build.kind !== 'image'; // image generation has no token stream
+  const metaText = build.kind === 'app'
+    ? 'reasoning and code stream in as the model writes them'
+    : build.kind === 'vision'
+      ? 'the model describes the picture in real time'
+      : 'image models render all at once — no live tokens to show';
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal live-build-modal" role="dialog" aria-modal="true" aria-label={`${build.model} is building an app`}>
+      <section className="run-warning-modal live-build-modal" role="dialog" aria-modal="true" aria-label={`${build.model} skill test in progress`}>
         <div className="modal-title">
           <Sparkles aria-hidden="true" className={build.done || build.error ? undefined : 'live-build-pulse'} />
           <div>
             <span>{heading}</span>
-            <strong>{build.model} · App Builder</strong>
+            <strong>{build.model} · {kindLabel}</strong>
           </div>
           <button type="button" className="mini-button outline" onClick={onClose}>
             <X aria-hidden="true" />
@@ -10330,12 +10488,19 @@ function LiveBuildModal({ build, onClose }: { build: { model: string; text: stri
         <div className="live-build-meta">
           {build.error
             ? <em className="live-build-error">{build.error}</em>
-            : <em>{build.text.length.toLocaleString()} characters · reasoning and code stream in as the model writes them</em>}
+            : <em>{streamable ? `${build.text.length.toLocaleString()} characters · ` : ''}{metaText}</em>}
         </div>
-        <pre ref={scrollRef} className="live-build-stream">
-          {build.text || 'Waking the model up…'}
-          {!build.done && !build.error && <span className="live-build-caret" aria-hidden="true" />}
-        </pre>
+        {streamable ? (
+          <pre ref={scrollRef} className="live-build-stream">
+            {build.text || 'Waking the model up…'}
+            {!build.done && !build.error && <span className="live-build-caret" aria-hidden="true" />}
+          </pre>
+        ) : (
+          <div className="live-build-generating">
+            {!build.done && !build.error && <RefreshCw className="spin" aria-hidden="true" />}
+            <span>{build.error ? 'The image run reported an error.' : build.done ? 'Image ready.' : 'Rendering the image on your hardware…'}</span>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -10363,7 +10528,7 @@ function DemoResultModal({ demos, onClose }: { demos: DemoArtifact[]; onClose: (
           <Sparkles aria-hidden="true" />
           <div>
             <span>{demos.length > 1 ? `${demos.length} demos ready to view` : 'Demo ready'}</span>
-            <strong>{demo.model} · {demo.kind === 'app' ? 'App Builder' : 'Image Lab'} · {demo.score} · {demo.grade}</strong>
+            <strong>{demo.model} · {demo.kind === 'app' ? 'App Builder' : demo.kind === 'vision' ? 'Image Reading' : 'Image Lab'} · {demo.score} · {demo.grade}</strong>
           </div>
           <button type="button" className="mini-button outline" onClick={onClose}>
             <X aria-hidden="true" />
@@ -10396,6 +10561,14 @@ function DemoResultModal({ demos, onClose }: { demos: DemoArtifact[]; onClose: (
           />
         ) : demo.kind === 'image' && demo.imageDataUrl ? (
           <img className="advanced-lab-generated-image" src={demo.imageDataUrl} alt={`Image generated by ${demo.model}`} />
+        ) : demo.kind === 'vision' ? (
+          <div className="demo-vision-result">
+            {demo.imageDataUrl && <img className="demo-vision-image" src={demo.imageDataUrl} alt="Image the model was asked to read" />}
+            <div className="demo-vision-reading">
+              <span>What {getShortModelName(demo.model)} saw</span>
+              <p>{demo.description || 'No description returned.'}</p>
+            </div>
+          </div>
         ) : (
           <div className="utility-empty compact"><strong>Nothing to preview for this result.</strong></div>
         )}
@@ -10423,10 +10596,10 @@ function ModelDemoChips({ model, label = 'Made by this model', className }: { mo
           type="button"
           className={`model-demo-chip ${artifact.kind}`}
           onClick={(event) => { event.stopPropagation(); setOpenDemos([artifact]); }}
-          title={`View the ${artifact.kind === 'app' ? 'app' : 'image'} ${getShortModelName(model)} made (grade ${artifact.grade})`}
+          title={`View the ${artifact.kind === 'app' ? 'app' : artifact.kind === 'vision' ? 'image reading' : 'image'} ${getShortModelName(model)} produced (grade ${artifact.grade})`}
         >
           {artifact.kind === 'app' ? <Play aria-hidden="true" /> : <ImageIcon aria-hidden="true" />}
-          <span>{artifact.kind === 'app' ? 'View app' : 'View image'}</span>
+          <span>{artifact.kind === 'app' ? 'View app' : artifact.kind === 'vision' ? 'View reading' : 'View image'}</span>
           <em>{artifact.grade}</em>
         </button>
       ))}
