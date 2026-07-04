@@ -11399,6 +11399,65 @@ tbody tr.computer-row.selected {
   align-self: center;
 }
 
+/* Live "watch it build" streaming modal --------------------------------------- */
+.live-build-modal {
+  width: min(820px, calc(100vw - 40px));
+}
+
+.live-build-pulse {
+  animation: live-build-pulse 1.2s ease-in-out infinite;
+  color: var(--gold);
+}
+
+@keyframes live-build-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.94); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+.live-build-meta {
+  padding: 0 4px 8px;
+}
+
+.live-build-meta em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.live-build-error {
+  color: var(--pink) !important;
+}
+
+.live-build-stream {
+  margin: 0;
+  padding: 14px;
+  max-height: min(520px, calc(100vh - 260px));
+  overflow-y: auto;
+  border-radius: 10px;
+  border: 1px solid var(--line-bright);
+  background: #0c1013;
+  color: color-mix(in srgb, var(--green) 88%, white);
+  font-family: var(--mono, ui-monospace, "Cascadia Code", "Fira Code", monospace);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.live-build-caret {
+  display: inline-block;
+  width: 8px;
+  height: 15px;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--gold);
+  animation: live-build-blink 1s steps(2, start) infinite;
+}
+
+@keyframes live-build-blink {
+  50% { opacity: 0; }
+}
+
 .activity-panel {
   display: flex;
   flex-direction: column;

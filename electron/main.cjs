@@ -398,7 +398,7 @@ function registerHandlers() {
     activePullControllers.forEach((entry) => entry.abort(abortReason));
   });
   handleLogged('ollama:deleteModel', 'ollama', (_event, request) => deleteModel(request));
-  handleLogged('ollama:advancedGenerate', 'ollama', (_event, request) => runAdvancedGenerate(request));
+  handleLogged('ollama:advancedGenerate', 'ollama', (event, request) => runAdvancedGenerate(request, event.sender));
   handleLogged('network:scanLan', 'network', () => scanLanForOllama());
   handleLogged('network:addHostByAddress', 'network', (_event, address) => addHostByAddress(address));
   handleLogged('benchmark:run', 'benchmark', (event, request) => runBenchmark(request, event.sender));
@@ -2834,7 +2834,7 @@ async function sendChat(request = {}) {
   };
 }
 
-async function runAdvancedGenerate(request = {}) {
+async function runAdvancedGenerate(request = {}, sender = null) {
   const model = assertValidModelName(request.model);
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
   assertLocalhostUrl(baseUrl);
@@ -2843,10 +2843,13 @@ async function runAdvancedGenerate(request = {}) {
   if (!prompt) throw new Error('Prompt is required');
 
   const timeoutMs = Math.max(5000, Math.min(240000, Number(request.timeoutMs) || 120000));
+  const streamId = typeof request.streamId === 'string' && request.streamId ? request.streamId : null;
+  const wantStream = request.stream === true && streamId && sender && !sender.isDestroyed();
+
   const body = {
     model,
     prompt,
-    stream: false,
+    stream: Boolean(wantStream),
   };
 
   if (typeof request.keep_alive === 'string' && request.keep_alive.length <= 20) body.keep_alive = request.keep_alive;
@@ -2856,6 +2859,10 @@ async function runAdvancedGenerate(request = {}) {
   if (Number.isInteger(request.width)) body.width = Math.max(1, Math.min(1024, request.width));
   if (Number.isInteger(request.height)) body.height = Math.max(1, Math.min(1024, request.height));
   if (Number.isInteger(request.steps)) body.steps = Math.max(1, Math.min(64, request.steps));
+
+  if (wantStream) {
+    return streamAdvancedGenerate(`${baseUrl}/api/generate`, body, timeoutMs, sender, streamId, model);
+  }
 
   const response = await fetchJson(
     `${baseUrl}/api/generate`,
@@ -2874,6 +2881,72 @@ async function runAdvancedGenerate(request = {}) {
     done_reason: response.done_reason || (response.done ? 'stop' : 'unknown'),
     error: typeof response.error === 'string' ? response.error : undefined,
   };
+}
+
+/**
+ * Streaming variant of the advanced generate call: reads Ollama's NDJSON token
+ * stream and forwards each chunk to the renderer as an 'advanced-generate:progress'
+ * event so the UI can show the model reasoning + writing code in real time.
+ */
+async function streamAdvancedGenerate(url, body, timeoutMs, sender, streamId, model) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const emit = (payload) => {
+    if (sender && !sender.isDestroyed()) sender.send('advanced-generate:progress', { streamId, model, ...payload });
+  };
+  let full = '';
+  let doneReason = 'unknown';
+  let errorMsg;
+  let image;
+  let images;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!response.ok || !response.body) {
+      const detail = extractResponseDetail(await response.text().catch(() => ''));
+      throw new Error(`${response.status} ${response.statusText}${detail ? `: ${detail}` : ''}`);
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let bytes = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.length;
+      if (bytes > JSON_RESPONSE_MAX_BYTES) throw new Error('Streamed response was too large');
+      buffer += decoder.decode(value, { stream: true });
+      let newlineIndex;
+      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, newlineIndex).trim();
+        buffer = buffer.slice(newlineIndex + 1);
+        if (!line) continue;
+        let obj;
+        try { obj = JSON.parse(line); } catch { continue; }
+        if (typeof obj.response === 'string' && obj.response) {
+          full += obj.response;
+          emit({ delta: obj.response, text: full, done: false });
+        }
+        if (typeof obj.image === 'string') image = obj.image;
+        if (Array.isArray(obj.images)) images = obj.images.filter((item) => typeof item === 'string').slice(0, 1);
+        if (typeof obj.error === 'string') errorMsg = obj.error;
+        if (obj.done) doneReason = obj.done_reason || 'stop';
+      }
+    }
+    emit({ text: full, done: true, error: errorMsg });
+  } catch (error) {
+    errorMsg = errorMsg || (error?.name === 'AbortError'
+      ? `Timed out after ${timeoutMs} ms.`
+      : (error?.message || 'Advanced generate failed.'));
+    emit({ text: full, done: true, error: errorMsg });
+  } finally {
+    clearTimeout(timer);
+  }
+  return { response: full, image, images, done_reason: doneReason, error: errorMsg };
 }
 
 function scoreRigFit(model) {

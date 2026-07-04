@@ -7,14 +7,59 @@ import {
   demoSystem,
 } from './sampleData';
 import { buildBenchmarkPromptPlan, normalizeBenchmarkQuestionCount } from './benchmarkSuite';
-import type { AgentArcadeApi, BenchmarkProgressUpdate, PullProgressUpdate, UpdateChannel } from './types';
+import type { AdvancedGenerateProgress, AgentArcadeApi, BenchmarkProgressUpdate, PullProgressUpdate, UpdateChannel } from './types';
 
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
 const RIGMATCH_RELEASES_URL = 'https://github.com/daveeuson/RigMatch.AI/releases';
 const APP_VERSION = '0.3.0';
+
+// Sample App Builder output used to simulate token streaming in preview mode —
+// prose "reasoning" followed by a real single-file interactive canvas app.
+const PREVIEW_APP_BUILDER_SAMPLE = `Let me plan this out. I'll write a single-file HTML page with a canvas, a game loop using requestAnimationFrame, and keyboard controls. Structure first, then styling, then the game logic.
+
+\`\`\`html
+<!doctype html>
+<html>
+<head>
+<style>
+  body { margin: 0; background: #111; color: #eee; font-family: sans-serif; display: grid; place-items: center; height: 100vh; }
+  canvas { background: #000; border: 2px solid #efbc5a; }
+  h1 { font-size: 20px; }
+</style>
+</head>
+<body>
+<h1>Bouncing Box</h1>
+<canvas id="c" width="240" height="240"></canvas>
+<p>Arrow keys nudge the box.</p>
+<script>
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  let x = 110, y = 110, vx = 2, vy = 2;
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') vx -= 1;
+    if (e.key === 'ArrowRight') vx += 1;
+    if (e.key === 'ArrowUp') vy -= 1;
+    if (e.key === 'ArrowDown') vy += 1;
+  });
+  function loop() {
+    x += vx; y += vy;
+    if (x < 0 || x > 220) vx = -vx;
+    if (y < 0 || y > 220) vy = -vy;
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 240, 240);
+    ctx.fillStyle = '#95b46a'; ctx.fillRect(x, y, 20, 20);
+    requestAnimationFrame(loop);
+  }
+  loop();
+</script>
+</body>
+</html>
+\`\`\`
+
+That gives a self-contained interactive canvas app that runs entirely offline.`;
 const benchmarkProgressListeners = new Set<(update: BenchmarkProgressUpdate) => void>();
 const pullProgressListeners = new Set<(update: PullProgressUpdate) => void>();
+const advancedGenerateProgressListeners = new Set<(payload: AdvancedGenerateProgress) => void>();
 const previewPullControllers = new Map<string, AbortController>();
 
 function emitBenchmarkProgress(update: BenchmarkProgressUpdate) {
@@ -124,12 +169,35 @@ const fallbackApi: AgentArcadeApi = {
     };
   },
   async runAdvancedGenerate(request) {
+    const sample = request.prompt.toLowerCase().includes('single-file')
+      ? PREVIEW_APP_BUILDER_SAMPLE
+      : '';
+
+    // Simulate token streaming so the live "watch it build" UI can be exercised
+    // in preview mode. Emits accumulating text to onAdvancedGenerateProgress.
+    if (request.stream && request.streamId && sample) {
+      const streamId = request.streamId;
+      const model = request.model;
+      const chunks = sample.match(/[\s\S]{1,24}/g) ?? [sample];
+      let text = '';
+      for (const chunk of chunks) {
+        await delay(28);
+        text += chunk;
+        advancedGenerateProgressListeners.forEach((listener) =>
+          listener({ streamId, model, delta: chunk, text, done: false }));
+      }
+      advancedGenerateProgressListeners.forEach((listener) =>
+        listener({ streamId, model, text, done: true }));
+      return { response: sample, done_reason: 'preview' };
+    }
+
     await delay(650);
-    return {
-      response: request.prompt.toLowerCase().includes('single-file')
-        ? '<!doctype html><html><body><canvas id="game"></canvas><script>function loop(){requestAnimationFrame(loop)}loop()</script></body></html>'
-        : '',
-      done_reason: 'preview',
+    return { response: sample, done_reason: 'preview' };
+  },
+  onAdvancedGenerateProgress(callback) {
+    advancedGenerateProgressListeners.add(callback);
+    return () => {
+      advancedGenerateProgressListeners.delete(callback);
     };
   },
   async runBenchmark(request) {

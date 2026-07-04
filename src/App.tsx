@@ -533,6 +533,8 @@ function App() {
   });
   const [skillRunStatus, setSkillRunStatus] = useState<SkillRunStatus>({ phase: 'idle', label: '', completed: 0, total: 0 });
   const [demoPopup, setDemoPopup] = useState<DemoArtifact[] | null>(null);
+  // Live "watch it build" stream for an in-flight App Builder skill test.
+  const [liveBuild, setLiveBuild] = useState<{ model: string; text: string; done: boolean; error?: string } | null>(null);
   const [closeCleanupOpen, setCloseCleanupOpen] = useState(false);
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
@@ -2101,9 +2103,23 @@ function App() {
       const label = job.kind === 'app-builder' ? `App Builder skill test — ${job.model}` : `Image skill test — ${job.model}`;
       setSkillRunStatus({ phase: 'running', label, completed: index, total: jobs.length });
       setActivity(`Skill test ${index + 1}/${jobs.length}: ${label}. This can take a few minutes per model.`);
-      const result = job.kind === 'app-builder'
-        ? await runAdvancedAppBuilderChallenge(job.model, ollama.baseUrl, appPrompt)
-        : await runAdvancedImageGenerationChallenge(job.model, ollama.baseUrl, selection.imagePrompt);
+      let result: AdvancedLabResult;
+      if (job.kind === 'app-builder') {
+        // Stream the model reasoning + code live into the "watch it build" modal.
+        const streamId = `build-${Date.now()}-${index}`;
+        setLiveBuild({ model: job.model, text: '', done: false });
+        const unsubscribe = agentArcadeApi.onAdvancedGenerateProgress?.((payload) => {
+          if (payload.streamId !== streamId) return;
+          setLiveBuild({ model: payload.model ?? job.model, text: payload.text, done: payload.done, error: payload.error });
+        });
+        try {
+          result = await runAdvancedAppBuilderChallenge(job.model, ollama.baseUrl, appPrompt, streamId);
+        } finally {
+          unsubscribe?.();
+        }
+      } else {
+        result = await runAdvancedImageGenerationChallenge(job.model, ollama.baseUrl, selection.imagePrompt);
+      }
       if (!result.error) {
         const key = job.kind === 'image' ? `image:${job.model}` : job.model;
         writeAdvancedLabResults({ ...readAdvancedLabResults(), [key]: result });
@@ -2118,6 +2134,8 @@ function App() {
     if (!stopSkillRef.current) {
       setSkillRunStatus({ phase: 'complete', label: 'Skill tests finished', completed: jobs.length, total: jobs.length });
     }
+    // The live build view hands off to the rendered-app viewer below.
+    setLiveBuild(null);
     // Auto-open a viewer for whatever the models produced, per the "pop up to
     // view this when a demo completes" flow.
     if (demos.length) {
@@ -2807,6 +2825,10 @@ function App() {
           skillSelection={skillTestSelection}
           onSkillSelectionChange={setSkillTestSelection}
         />
+      )}
+
+      {liveBuild && (
+        <LiveBuildModal build={liveBuild} onClose={() => setLiveBuild(null)} />
       )}
 
       {demoPopup && demoPopup.length > 0 && (
@@ -4687,6 +4709,7 @@ async function runAdvancedAppBuilderChallenge(
   model: string,
   baseUrl: string,
   prompt: string = ADVANCED_APP_BUILDER_PROMPT,
+  streamId?: string,
 ): Promise<AdvancedLabResult> {
   const startedAt = performance.now();
 
@@ -4703,6 +4726,7 @@ async function runAdvancedAppBuilderChallenge(
         num_ctx: 4096,
         num_predict: 1600,
       },
+      ...(streamId ? { stream: true, streamId } : {}),
     });
     if (data.error) throw new Error(data.error);
 
@@ -10274,6 +10298,46 @@ function ActivityPanel({
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * Live "watch it build" view: shows the model's reasoning and code streaming in
+ * real time while an App Builder skill test runs, before the finished app is
+ * rendered in DemoResultModal.
+ */
+function LiveBuildModal({ build, onClose }: { build: { model: string; text: string; done: boolean; error?: string }; onClose: () => void }) {
+  const scrollRef = useRef<HTMLPreElement>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [build.text]);
+  const heading = build.error ? 'Build failed' : build.done ? 'Finished — opening the app…' : 'Watching it build…';
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section className="run-warning-modal live-build-modal" role="dialog" aria-modal="true" aria-label={`${build.model} is building an app`}>
+        <div className="modal-title">
+          <Sparkles aria-hidden="true" className={build.done || build.error ? undefined : 'live-build-pulse'} />
+          <div>
+            <span>{heading}</span>
+            <strong>{build.model} · App Builder</strong>
+          </div>
+          <button type="button" className="mini-button outline" onClick={onClose}>
+            <X aria-hidden="true" />
+            Close
+          </button>
+        </div>
+        <div className="live-build-meta">
+          {build.error
+            ? <em className="live-build-error">{build.error}</em>
+            : <em>{build.text.length.toLocaleString()} characters · reasoning and code stream in as the model writes them</em>}
+        </div>
+        <pre ref={scrollRef} className="live-build-stream">
+          {build.text || 'Waking the model up…'}
+          {!build.done && !build.error && <span className="live-build-caret" aria-hidden="true" />}
+        </pre>
+      </section>
+    </div>
   );
 }
 

@@ -225,6 +225,18 @@ export type AdvancedGenerateRequest = {
   width?: number;
   height?: number;
   steps?: number;
+  /** When true (with a streamId), tokens are emitted via onAdvancedGenerateProgress. */
+  stream?: boolean;
+  streamId?: string;
+};
+
+export type AdvancedGenerateProgress = {
+  streamId: string;
+  model?: string;
+  text: string;
+  delta?: string;
+  done: boolean;
+  error?: string;
 };
 
 export type AdvancedGenerateResponse = {
@@ -317,6 +329,7 @@ export type AgentArcadeApi = {
   abortPull: (progressId?: string, reason?: 'pause' | 'cancel') => Promise<void>;
   deleteModel: (request: { model: string; baseUrl?: string }) => Promise<DeleteModelResponse>;
   runAdvancedGenerate: (request: AdvancedGenerateRequest) => Promise<AdvancedGenerateResponse>;
+  onAdvancedGenerateProgress?: (callback: (payload: AdvancedGenerateProgress) => void) => () => void;
   runBenchmark: (request: {
     model: string;
     baseUrl?: string;
