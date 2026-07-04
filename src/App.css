@@ -7908,6 +7908,65 @@ tbody tr.computer-row.selected {
   text-transform: uppercase;
 }
 
+/* "View what this model made" chips — usable anywhere a model appears. */
+.model-demo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.model-demo-chips.inline {
+  display: inline-flex;
+  margin-left: 6px;
+}
+
+.model-demo-chips-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+.model-demo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid rgba(114, 181, 202, 0.45);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.model-demo-chip.app {
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+  color: var(--gold);
+}
+
+.model-demo-chip:hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+
+.model-demo-chip svg {
+  width: 13px;
+  height: 13px;
+}
+
+.model-demo-chip em {
+  font-style: normal;
+  font-weight: 950;
+  padding-left: 3px;
+  opacity: 0.85;
+}
+
 .legacy-score-badge {
   display: inline-flex;
   align-items: center;

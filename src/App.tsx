@@ -22,6 +22,7 @@ import {
   Heart,
   HelpCircle,
   History,
+  Image as ImageIcon,
   ImagePlus,
   Lightbulb,
   Maximize2,
@@ -4603,6 +4604,27 @@ function writeAdvancedLabResults(results: Record<string, AdvancedLabResult>) {
   }
 }
 
+/**
+ * Saved skill-test artifacts (built app, generated image, …) for one model, so
+ * "what this model made" can be surfaced anywhere the model appears — Top Pick,
+ * Scorecards, the models table, etc. Matches on result.model so it works
+ * regardless of how each result was keyed in storage.
+ */
+function getModelDemoArtifacts(model: string): DemoArtifact[] {
+  if (!model) return [];
+  const out: DemoArtifact[] = [];
+  for (const result of Object.values(readAdvancedLabResults())) {
+    if (!result || result.error || result.model !== model) continue;
+    if (result.challenge === 'app-builder') {
+      const html = extractHtmlDocument(result.response);
+      if (html) out.push({ model, kind: 'app', html, grade: result.grade, score: result.score });
+    } else if (result.challenge === 'image-generation' && result.imageDataUrl) {
+      out.push({ model, kind: 'image', imageDataUrl: result.imageDataUrl, grade: result.grade, score: result.score });
+    }
+  }
+  return out;
+}
+
 function getAdvancedLabGrade(score: number) {
   if (score >= 92) return 'S';
   if (score >= 82) return 'A';
@@ -5378,7 +5400,6 @@ function UtilityPanel({
   const Icon = panel === 'history' ? History : Settings;
   const recentModelScores = useMemo(() => getRecentModelScores(modelScores), [modelScores]);
   const rankedModelScores = useMemo(() => getRankedModelScores(modelScores), [modelScores]);
-  const advancedLabResults = useMemo(() => readAdvancedLabResults(), []);
   const taskPicks = useMemo(() => getTaskTopPicks(modelScores), [modelScores]);
   const topRankedScore = rankedModelScores[0];
   const savedChatMessageCount = Math.max(0, chatMessages.length - 1);
@@ -5594,30 +5615,7 @@ function UtilityPanel({
                       <span>
                         {score.model}
                         {isLegacyScore(score) && <span className="legacy-score-badge">Retest recommended</span>}
-                        {(() => {
-                          const appLab = advancedLabResults[score.model];
-                          const imageLab = advancedLabResults[`image:${score.model}`];
-                          return (
-                            <>
-                              {appLab && !appLab.error && (
-                                <span
-                                  className="lab-grade-badge"
-                                  title={`App Builder Lab Grade: ${appLab.score} · ${appLab.grade}. Details in Settings → Advanced Lab.`}
-                                >
-                                  App Lab {appLab.grade}
-                                </span>
-                              )}
-                              {imageLab && !imageLab.error && (
-                                <span
-                                  className="lab-grade-badge"
-                                  title={`Image Lab Grade: ${imageLab.score} · ${imageLab.grade}. Details in Settings → Advanced Lab.`}
-                                >
-                                  Image Lab {imageLab.grade}
-                                </span>
-                              )}
-                            </>
-                          );
-                        })()}
+                        <ModelDemoChips model={score.model} label="" className="inline" />
                       </span>
                       <em>{score.speed} speed · {score.sobriety} accuracy · {score.fit} fit · {getResponseEstimate(score.speed)}</em>
                     </div>
@@ -9092,6 +9090,7 @@ function AgentReveal({
               Restore cleared Top Matches
             </button>
           )}
+          <ModelDemoChips model={model} label="Made by this model" />
         </div>
       </div>
 
@@ -10334,6 +10333,37 @@ function DemoResultModal({ demos, onClose }: { demos: DemoArtifact[]; onClose: (
           <div className="utility-empty compact"><strong>Nothing to preview for this result.</strong></div>
         )}
       </section>
+    </div>
+  );
+}
+
+/**
+ * Self-contained "view what this model made" chips. Drop `<ModelDemoChips
+ * model={name} />` anywhere a model appears — it reads saved skill-test
+ * artifacts itself and opens them in the shared DemoResultModal, so no prop
+ * threading is needed. Renders nothing when the model has no artifacts.
+ */
+function ModelDemoChips({ model, label = 'Made by this model', className }: { model: string; label?: string; className?: string }) {
+  const [openDemos, setOpenDemos] = useState<DemoArtifact[] | null>(null);
+  const artifacts = useMemo(() => getModelDemoArtifacts(model), [model]);
+  if (artifacts.length === 0) return null;
+  return (
+    <div className={`model-demo-chips${className ? ` ${className}` : ''}`}>
+      {label && <span className="model-demo-chips-label">{label}</span>}
+      {artifacts.map((artifact) => (
+        <button
+          key={artifact.kind}
+          type="button"
+          className={`model-demo-chip ${artifact.kind}`}
+          onClick={(event) => { event.stopPropagation(); setOpenDemos([artifact]); }}
+          title={`View the ${artifact.kind === 'app' ? 'app' : 'image'} ${getShortModelName(model)} made (grade ${artifact.grade})`}
+        >
+          {artifact.kind === 'app' ? <Play aria-hidden="true" /> : <ImageIcon aria-hidden="true" />}
+          <span>{artifact.kind === 'app' ? 'View app' : 'View image'}</span>
+          <em>{artifact.grade}</em>
+        </button>
+      ))}
+      {openDemos && <DemoResultModal demos={openDemos} onClose={() => setOpenDemos(null)} />}
     </div>
   );
 }
