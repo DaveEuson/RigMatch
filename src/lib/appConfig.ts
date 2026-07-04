@@ -48,6 +48,10 @@ export const HISTORY_STORAGE_KEY = 'rigmatch:history:v1';
 export const THEME_STORAGE_KEY = 'agentArcadeTheme';
 export const TUTORIAL_STORAGE_KEY = 'rigmatch:first-run-tutorial:v1';
 export const UI_MODE_STORAGE_KEY = 'rigmatch:ui-mode:v1';
+// Set once the user has picked Simple/Advanced on the first-launch splash. Kept
+// separate from UI_MODE_STORAGE_KEY (which is auto-written with the default) so
+// the splash shows exactly once, even for users upgrading from older builds.
+export const MODE_SPLASH_STORAGE_KEY = 'rigmatch:mode-splash:v1';
 export const ADVANCED_LAB_STORAGE_KEY = 'rigmatch:advanced-lab:v1';
 export const CLEARED_TOP_MATCHES_STORAGE_KEY = 'rigmatch:cleared-top-matches:v1';
 

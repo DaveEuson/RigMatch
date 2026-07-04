@@ -170,6 +170,7 @@ import {
   getSavedThemeId,
   getSavedTutorialSeen,
   getSavedUiMode,
+  hasChosenInterfaceMode,
   getScoreTimelineNote,
   getSelectedContestantBlurb,
   getShortModelName,
@@ -230,6 +231,7 @@ import {
   THEME_STORAGE_KEY,
   TUTORIAL_STORAGE_KEY,
   UI_MODE_STORAGE_KEY,
+  MODE_SPLASH_STORAGE_KEY,
   USE_CASE_CARDS,
   navItems,
   themeOptions,
@@ -551,6 +553,8 @@ function App() {
   const [ollamaInstallProgress, setOllamaInstallProgress] = useState<OllamaInstallProgress>({ phase: 'idle' });
   const [themeId, setThemeId] = useState<ThemeId>(() => getSavedThemeId());
   const [uiMode, setUiMode] = useState<UiMode>(() => getSavedUiMode());
+  // First-launch splash: ask Simple vs Advanced before showing the app.
+  const [showModeSplash, setShowModeSplash] = useState(() => !hasChosenInterfaceMode());
   const [chatOpen, setChatOpen] = useState(false);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [pendingThirdPartyDownloadRows, setPendingThirdPartyDownloadRows] = useState<ModelRow[] | null>(null);
@@ -1273,6 +1277,15 @@ function App() {
       ? 'Simple mode selected. RigMatch will keep the interface focused on the next useful step.'
       : 'Advanced mode selected. RigMatch will show more setup details, commands, and diagnostics.');
   }, []);
+
+  const chooseInterfaceMode = useCallback((nextMode: UiMode) => {
+    selectUiMode(nextMode);
+    // Persist immediately and record that the splash choice was made so it
+    // won't reappear next launch. The Simple wizard opens itself at Setup.
+    window.localStorage.setItem(UI_MODE_STORAGE_KEY, nextMode);
+    window.localStorage.setItem(MODE_SPLASH_STORAGE_KEY, 'chosen');
+    setShowModeSplash(false);
+  }, [selectUiMode]);
 
   const requestBenchmarkForModel = useCallback((model: string) => {
     const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
@@ -2360,6 +2373,7 @@ function App() {
       data-theme={themeId}
       data-ui-mode={uiMode}
     >
+      {showModeSplash && <ModeSplash onPick={chooseInterfaceMode} />}
       {uiMode === 'beginner' && (
         <SimpleWizard
           system={system}
@@ -9527,6 +9541,38 @@ function ProfileQuestionTranscript({
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+function ModeSplash({ onPick }: { onPick: (mode: UiMode) => void }) {
+  return (
+    <div className="mode-splash" role="dialog" aria-modal="true" aria-label="Choose how to use RigMatch.AI">
+      <div className="mode-splash-card">
+        <div className="mode-splash-brand">
+          <BrandMark />
+          <div>
+            <strong>RigMatch.AI</strong>
+            <span>Find the best AI your PC can run — nothing leaves this computer.</span>
+          </div>
+        </div>
+        <h2 className="mode-splash-title">How would you like to start?</h2>
+        <p className="mode-splash-sub">You can switch anytime from the header.</p>
+        <div className="mode-splash-options">
+          <button type="button" className="mode-splash-option simple" onClick={() => onPick('beginner')}>
+            <Sparkles aria-hidden="true" />
+            <strong>Simple Mode</strong>
+            <em>A guided path: check your PC, pick models, download what's missing, compare, and use the winner.</em>
+            <span className="mode-splash-cta">Start guided setup</span>
+          </button>
+          <button type="button" className="mode-splash-option advanced" onClick={() => onPick('advanced')}>
+            <SlidersHorizontal aria-hidden="true" />
+            <strong>Advanced Mode</strong>
+            <em>The full control room: every model, custom test suites, skill tests, diagnostics, and logs.</em>
+            <span className="mode-splash-cta">Open the control room</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

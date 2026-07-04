@@ -19,6 +19,7 @@ import { formatBytes, formatBytesPerSecond, formatGb, hashString, scoreToToks } 
 import {
   APP_VERSION,
   GITHUB_ISSUES_URL,
+  MODE_SPLASH_STORAGE_KEY,
   TUTORIAL_STORAGE_KEY,
   UI_MODE_STORAGE_KEY,
   navItems,
@@ -1015,6 +1016,12 @@ export function getSavedThemeId(): ThemeId {
 export function getSavedUiMode(): UiMode {
   const savedMode = window.localStorage.getItem(UI_MODE_STORAGE_KEY);
   return savedMode === 'advanced' ? 'advanced' : 'beginner';
+}
+
+/** True once the user has made an explicit Simple/Advanced choice on the
+   first-launch splash. Controls whether that splash is shown. */
+export function hasChosenInterfaceMode(): boolean {
+  return window.localStorage.getItem(MODE_SPLASH_STORAGE_KEY) != null;
 }
 
 export function getSavedTutorialSeen() {

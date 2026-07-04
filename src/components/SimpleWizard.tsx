@@ -134,7 +134,10 @@ export function SimpleWizard(props: SimpleWizardProps) {
   }, [setupDone, pickDone, downloadDone, compareDone, winnerDone]);
 
   const furthestStep: StepId = !setupDone ? 'setup' : !pickDone ? 'pick' : !downloadDone ? 'download' : !compareDone ? 'compare' : 'winner';
-  const [chosenStep, setChosenStep] = useState<StepId>(furthestStep);
+  // Simple Mode always opens at Setup — it's a guided wizard, so launch at step
+  // one rather than jumping ahead to the furthest unlocked step. The step nav
+  // still lets returning users click straight to a completed step.
+  const [chosenStep, setChosenStep] = useState<StepId>('setup');
 
   // Derive the visible step: honor the user's choice, but clamp to the furthest
   // unlocked step if a prerequisite was lost, and auto-advance Compare -> Winner
