@@ -6759,6 +6759,7 @@ function ModelCabinet({
                               <Eraser aria-hidden="true" />
                             </button>
                           )}
+                          <ModelDemoChips model={row.displayName} label="" className="inline" />
                         </>
                       ) : (
                         <button
