@@ -8,7 +8,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 export default defineConfig([
   globalIgnores([
     'dist/**',
-    'release/**',
+    'release*/**',
     'companions/**',
     'RigMatch.AI-main/**',
     'rigmatch-chat/dist/**',

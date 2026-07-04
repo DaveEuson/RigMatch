@@ -10545,8 +10545,15 @@ tbody tr.computer-row.selected {
 /* Divider above the skill-only toggle to set it apart from skill choices. */
 .run-skill-test-option.skip-questions {
   margin-top: 6px;
-  padding-top: 12px;
+  padding: 10px;
   border-top: 1px solid rgba(255, 249, 239, 0.1);
+  border-radius: 8px;
+}
+
+/* Highlight it once a skill is picked so a "skills only" run is easy to spot. */
+.run-skill-test-option.skip-questions.is-active {
+  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
+  background: color-mix(in srgb, var(--gold) 9%, transparent);
 }
 
 .run-question-options button {

@@ -2623,7 +2623,7 @@ function App() {
             onSelect={setSelectedModel}
             onTalk={() => setChatOpen(true)}
             onChoose={() => setChosenModel(selectedModel)}
-            onRunTest={() => { void startBenchmark(); }}
+            onRunTest={requestBenchmark}
             onEditQuestions={() => setSuiteEditorOpen(true)}
             onTalkWithPrompt={(prompt) => { setChatInput(prompt); setChatOpen(true); }}
             topPick={topRigPick}
@@ -4114,17 +4114,11 @@ function RunWarningModal({
                       aria-label="Image generation prompt"
                     />
                   )}
-                  <label className="run-skill-test-option disabled">
-                    <input type="checkbox" checked={false} disabled />
-                    <span>
-                      <strong>Create a video</strong>
-                      <em>No local backend can generate video yet — this unlocks when one ships.</em>
-                    </span>
-                  </label>
-
-                  {/* Run only the skills, skipping the Q&A round. Forced on for
-                      image-only lineups, which can't answer questions at all. */}
-                  <label className={`run-skill-test-option skip-questions${anySkillSelected ? '' : ' disabled'}`}>
+                  {/* Run only the skills, skipping the Q&A round. Placed right
+                      under the skill choices (before the coming-soon video row)
+                      so a "coding job, no questions" run is easy to find. Forced
+                      on for image-only lineups, which can't answer questions. */}
+                  <label className={`run-skill-test-option skip-questions${anySkillSelected ? ' is-active' : ' disabled'}`}>
                     <input
                       type="checkbox"
                       checked={skipQuestions}
@@ -4132,12 +4126,20 @@ function RunWarningModal({
                       onChange={(event) => onSkillSelectionChange({ ...skillSelection, skipQuestions: event.target.checked })}
                     />
                     <span>
-                      <strong>Skip the questions — run skill tests only</strong>
+                      <strong>Skip the questions — run the skill test only</strong>
                       <em>{imageOnlyLineup
                         ? 'This is an image model — it can\'t answer text questions, so RigMatch runs only the image skill.'
                         : anySkillSelected
-                          ? 'Jump straight to the selected skill tests. No Match score is produced from questions.'
-                          : 'Pick a skill test above to enable a skill-only run.'}</em>
+                          ? 'Jump straight to the selected skill test (e.g. a coding job) — no question round, no Match score.'
+                          : 'Tick a skill test above to enable a skill-only run.'}</em>
+                    </span>
+                  </label>
+
+                  <label className="run-skill-test-option disabled">
+                    <input type="checkbox" checked={false} disabled />
+                    <span>
+                      <strong>Create a video</strong>
+                      <em>No local backend can generate video yet — this unlocks when one ships.</em>
                     </span>
                   </label>
                 </>
