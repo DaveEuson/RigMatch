@@ -1740,17 +1740,26 @@ function parseOllamaFamilyRows(name, html) {
   const seen = new Set();
   const source = String(html || '');
   const rowPattern = new RegExp(`href=["']/library/${escapeRegExp(name)}:([^"'#?/<>\\s]+)["']`, 'gi');
+  const matches = [...source.matchAll(rowPattern)];
 
-  for (const match of source.matchAll(rowPattern)) {
+  for (let i = 0; i < matches.length; i += 1) {
+    const match = matches[i];
     const tag = decodeURIComponentSafe(decodeHtml(match[1]));
     if (!isValidOllamaTag(tag)) continue;
-    const start = Math.max(0, (match.index || 0) - 220);
-    const end = Math.min(source.length, (match.index || 0) + 1400);
-    const detail = getPlainText(source.slice(start, end));
-    const sizeGb = parseSizeToGb(detail);
     const key = `${name}:${tag}`;
     if (seen.has(key)) continue;
     seen.add(key);
+
+    // Scope the size lookup to THIS tag's own row: from just after its link to
+    // the start of the next tag's link. The previous ±window bled into
+    // neighbouring rows, so a large tag could pick up a smaller tag's size
+    // (e.g. a 30b tag reported as 2.8 GB — issue #6). Cap the window so a final
+    // row with no following link doesn't scan the rest of the page.
+    const rowStart = (match.index || 0) + match[0].length;
+    const nextStart = i + 1 < matches.length ? (matches[i + 1].index ?? source.length) : source.length;
+    const rowEnd = Math.min(nextStart, rowStart + 1400);
+    const detail = getPlainText(source.slice(rowStart, rowEnd));
+    const sizeGb = parseSizeToGb(detail);
 
     rows.push({
       id: key,
