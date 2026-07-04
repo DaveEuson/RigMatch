@@ -215,6 +215,14 @@ export type ChatResponse = {
   completedAt: string;
 };
 
+/** A single message in a local-model chat transcript. */
+export type ChatMessage = {
+  id: string;
+  role: 'user' | 'agent';
+  content: string;
+  images?: string[];
+};
+
 export type AdvancedGenerateRequest = {
   model: string;
   baseUrl?: string;
