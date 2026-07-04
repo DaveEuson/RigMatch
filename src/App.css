@@ -10466,6 +10466,30 @@ tbody tr.computer-row.selected {
   gap: 6px;
 }
 
+/* Muted question picker when the run is skill-tests-only. */
+.run-question-options.is-muted {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.run-question-skipped-note {
+  margin-bottom: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px dashed rgba(239, 188, 90, 0.4);
+  background: color-mix(in srgb, var(--gold) 8%, transparent);
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Divider above the skill-only toggle to set it apart from skill choices. */
+.run-skill-test-option.skip-questions {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 249, 239, 0.1);
+}
+
 .run-question-options button {
   min-height: 40px;
   font-size: 12px;

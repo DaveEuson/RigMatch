@@ -286,7 +286,7 @@ type ChatMessage = {
 type UtilityPanelId = Extract<NavId, 'history' | 'settings'>;
 
 type PendingRunMode = 'single' | 'speed-date';
-type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string };
+type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; skipQuestions: boolean };
 type DemoArtifact = { model: string; kind: 'app' | 'image'; html?: string | null; imageDataUrl?: string; grade: string; score: number };
 type SkillRunStatus = {
   phase: 'idle' | 'running' | 'complete' | 'failed';
@@ -528,6 +528,7 @@ function App() {
     appCustomPrompt: '',
     image: false,
     imagePrompt: ADVANCED_IMAGE_GENERATION_PROMPT,
+    skipQuestions: false,
   });
   const [skillRunStatus, setSkillRunStatus] = useState<SkillRunStatus>({ phase: 'idle', label: '', completed: 0, total: 0 });
   const [demoPopup, setDemoPopup] = useState<DemoArtifact[] | null>(null);
@@ -2135,6 +2136,17 @@ function App() {
     setPendingRunMode(null);
     setPendingSingleModel(null);
 
+    // Skill-tests-only: skip the Q&A benchmark and run just the selected skills.
+    // Forced on for image-only lineups, since image models can't answer questions.
+    const selection = skillTestSelection;
+    const anySkill = selection.appBuilder || selection.image;
+    const imageOnly = skillModels.length > 0 && skillModels.every(isLikelyImageGenerationModel);
+    if (anySkill && (selection.skipQuestions || imageOnly)) {
+      setActivity('Running skill tests only — the question round was skipped.');
+      void runSkillTestsAfterRun(skillModels);
+      return;
+    }
+
     if (mode === 'single') {
       void startBenchmark(model).then(() => runSkillTestsAfterRun(skillModels));
       return;
@@ -2143,7 +2155,7 @@ function App() {
     if (mode === 'speed-date') {
       void runListTest().then(() => runSkillTestsAfterRun(skillModels));
     }
-  }, [pendingRunMode, pendingSingleModel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, startBenchmark]);
+  }, [pendingRunMode, pendingSingleModel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, skillTestSelection, startBenchmark]);
 
   const cancelPendingRun = useCallback(() => {
     setPendingRunMode(null);
@@ -3903,6 +3915,20 @@ function RunWarningModal({
     ? 'This tests only the model you selected in Contestants. Use Speed Dating when you want to compare a full lineup.'
     : 'This compares every picked model with the same questions and ranks the final Match scores.';
 
+  // Skill-test capability + skip-questions state, hoisted so both the question
+  // and skill sections (and the footer) can react to it.
+  const appBuilderCapable = lineupModels.some((m) => !isLikelyImageGenerationModel(m) && !isEmbeddingModel(m));
+  const hasImageModel = lineupModels.some((m) => isLikelyImageGenerationModel(m));
+  const isMac = system.platform === 'darwin';
+  const imageCapable = hasImageModel;
+  // Every model in the lineup is image-only → the Q&A round can't run at all.
+  const imageOnlyLineup = lineupModels.length > 0 && lineupModels.every(isLikelyImageGenerationModel);
+  const anySkillSelected = (skillSelection.appBuilder && appBuilderCapable) || (skillSelection.image && imageCapable);
+  const skipQuestions = anySkillSelected && (skillSelection.skipQuestions || imageOnlyLineup);
+  // Block the doomed case: an image-only model with no skill selected would just
+  // fail the questions. Require a skill (the image one) first.
+  const startBlocked = imageOnlyLineup && !anySkillSelected;
+
   const questionLabels: Record<BenchmarkQuestionCount, string> = {
     10:  '10 — Quick (2–3 min)',
     20:  '20 — Standard (5 min)',
@@ -3922,8 +3948,11 @@ function RunWarningModal({
         </div>
         <div className="modal-body">
           <p>
-            RigMatch.AI will test <strong>{subject}</strong> with <strong>{totalQuestions}</strong> total question
-            {totalQuestions === 1 ? '' : 's'}. This can heavily use CPU, GPU, VRAM, RAM,
+            {skipQuestions ? (
+              <>RigMatch.AI will run the selected <strong>skill test{skillSelection.appBuilder && skillSelection.image ? 's' : ''}</strong> on <strong>{subject}</strong> and skip the question round.</>
+            ) : (
+              <>RigMatch.AI will test <strong>{subject}</strong> with <strong>{totalQuestions}</strong> total question{totalQuestions === 1 ? '' : 's'}.</>
+            )} This can heavily use CPU, GPU, VRAM, RAM,
             storage bandwidth, fans, and battery until the run finishes.
           </p>
           <p>{runScope}</p>
@@ -3978,7 +4007,12 @@ function RunWarningModal({
                 )}
               </div>
             </div>
-            <div className="run-question-options" role="group" aria-label="Questions per model">
+            {skipQuestions && (
+              <div className="run-question-skipped-note">
+                Questions are skipped — this run does the selected skill test{anySkillSelected && (skillSelection.appBuilder && skillSelection.image) ? 's' : ''} only.
+              </div>
+            )}
+            <div className={`run-question-options${skipQuestions ? ' is-muted' : ''}`} role="group" aria-label="Questions per model">
               {([10, 20, 50, 100] as BenchmarkQuestionCount[]).map((count) => (
                 <button
                   key={count}
@@ -4006,17 +4040,12 @@ function RunWarningModal({
           <div className="run-skill-tests">
             <div className="run-skill-tests-head">
               <span>Skill Tests (optional)</span>
-              <em>Extra Lab Grades after the normal questions. Models that cannot do a skill are grayed out.</em>
+              <em>Extra Lab Grades — run them after the questions, or on their own. Models that cannot do a skill are grayed out.</em>
             </div>
             {(() => {
-              const appBuilderCapable = lineupModels.some((m) => !isLikelyImageGenerationModel(m) && !isEmbeddingModel(m));
-              const hasImageModel = lineupModels.some((m) => isLikelyImageGenerationModel(m));
-              const isMac = system.platform === 'darwin';
-              // Let users attempt image generation on any platform (mirrors the
-              // Image Lab's "try anyway"). Some models are MLX-format — macOS
-              // only — and will fail with a clear MLX message, but flux/CUDA
-              // setups may work on Windows/Linux, so we no longer hard-block.
-              const imageCapable = hasImageModel;
+              // Capability flags are hoisted to the component body above. Image
+              // generation is allowed on any platform (mirrors the Image Lab's
+              // "try anyway"); MLX-only models fail with a clear message.
               return (
                 <>
                   <label className={`run-skill-test-option${appBuilderCapable ? '' : ' disabled'}`}>
@@ -4091,10 +4120,36 @@ function RunWarningModal({
                       <em>No local backend can generate video yet — this unlocks when one ships.</em>
                     </span>
                   </label>
+
+                  {/* Run only the skills, skipping the Q&A round. Forced on for
+                      image-only lineups, which can't answer questions at all. */}
+                  <label className={`run-skill-test-option skip-questions${anySkillSelected ? '' : ' disabled'}`}>
+                    <input
+                      type="checkbox"
+                      checked={skipQuestions}
+                      disabled={!anySkillSelected || imageOnlyLineup}
+                      onChange={(event) => onSkillSelectionChange({ ...skillSelection, skipQuestions: event.target.checked })}
+                    />
+                    <span>
+                      <strong>Skip the questions — run skill tests only</strong>
+                      <em>{imageOnlyLineup
+                        ? 'This is an image model — it can\'t answer text questions, so RigMatch runs only the image skill.'
+                        : anySkillSelected
+                          ? 'Jump straight to the selected skill tests. No Match score is produced from questions.'
+                          : 'Pick a skill test above to enable a skill-only run.'}</em>
+                    </span>
+                  </label>
                 </>
               );
             })()}
           </div>
+
+          {startBlocked && (
+            <div className="run-download-warning">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>This is an image model and can't answer the questions. Tick <strong>Create an image</strong> above to test it.</span>
+            </div>
+          )}
 
           <div className="modal-warning-grid">
             <div>
@@ -4140,10 +4195,10 @@ function RunWarningModal({
             type="button"
             className="primary-button compact"
             onClick={onConfirm}
-            disabled={uninstalledContestantCount > 0 && mode === 'speed-date'}
+            disabled={(uninstalledContestantCount > 0 && mode === 'speed-date') || startBlocked}
           >
             <Zap aria-hidden="true" />
-            {mode === 'single' ? 'Start Test' : 'Start Speed Dating'}
+            {skipQuestions ? 'Run Skill Test' : mode === 'single' ? 'Start Test' : 'Start Speed Dating'}
           </button>
         </div>
       </section>
