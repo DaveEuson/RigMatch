@@ -536,6 +536,8 @@ function App() {
   const [demoPopup, setDemoPopup] = useState<DemoArtifact[] | null>(null);
   // Live "watch it work" stream for an in-flight skill test (build / recognize).
   const [liveBuild, setLiveBuild] = useState<{ model: string; kind: 'app' | 'image' | 'vision'; text: string; done: boolean; error?: string } | null>(null);
+  // Whether the live view is expanded (true) or minimized to the mini-bar (false).
+  const [liveBuildOpen, setLiveBuildOpen] = useState(true);
   const [closeCleanupOpen, setCloseCleanupOpen] = useState(false);
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
@@ -2113,6 +2115,7 @@ function App() {
         : `Image recognition skill test — ${job.model}`;
       setSkillRunStatus({ phase: 'running', label, completed: index, total: jobs.length });
       setActivity(`Skill test ${index + 1}/${jobs.length}: ${label}. This can take a few minutes per model.`);
+      setLiveBuildOpen(true);
       let result: AdvancedLabResult;
       if (job.kind === 'app-builder') {
         // Stream the model reasoning + code live into the "watch it build" modal.
@@ -2855,8 +2858,17 @@ function App() {
         />
       )}
 
-      {liveBuild && (
-        <LiveBuildModal build={liveBuild} onClose={() => setLiveBuild(null)} />
+      {liveBuild && liveBuildOpen && (
+        <LiveBuildModal build={liveBuild} onClose={() => setLiveBuildOpen(false)} />
+      )}
+
+      {skillRunStatus.phase === 'running' && (!liveBuild || !liveBuildOpen) && (
+        <SkillRunMiniBar
+          status={skillRunStatus}
+          canShowLive={Boolean(liveBuild)}
+          onShow={() => { if (liveBuild) setLiveBuildOpen(true); else selectNav('activity'); }}
+          onStop={() => { stopSkillRef.current = true; }}
+        />
       )}
 
       {demoPopup && demoPopup.length > 0 && (
@@ -10447,6 +10459,37 @@ function ActivityPanel({
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * Ambient indicator that a skill test is running, visible on any tab so you
+ * don't have to sit on the Activity screen. Shown whenever the live view is
+ * minimized or absent.
+ */
+function SkillRunMiniBar({ status, canShowLive, onShow, onStop }: {
+  status: SkillRunStatus;
+  canShowLive: boolean;
+  onShow: () => void;
+  onStop: () => void;
+}) {
+  const stepLabel = status.total > 0 ? `${Math.min(status.completed + 1, status.total)}/${status.total}` : '';
+  return (
+    <aside className="live-mini-bar skill-run-mini-bar" role="status" aria-live="polite" aria-label="Skill test running">
+      <span className="live-mini-dot" aria-hidden="true" />
+      <div className="live-mini-info">
+        <strong>Skill test running{stepLabel ? ` · ${stepLabel}` : ''}</strong>
+        <em>{status.label}</em>
+      </div>
+      <button type="button" className="mini-button" onClick={onShow} title={canShowLive ? 'Watch it live' : 'Open the Activity monitor'}>
+        <Maximize2 aria-hidden="true" />
+        {canShowLive ? 'Watch' : 'Activity'}
+      </button>
+      <button type="button" className="live-show-stop compact" onClick={onStop} title="Stop after the current test finishes">
+        <X aria-hidden="true" />
+        Stop
+      </button>
+    </aside>
   );
 }
 
