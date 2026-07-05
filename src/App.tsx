@@ -4696,12 +4696,16 @@ async function runAdvancedAppBuilderChallenge(
       baseUrl,
       prompt,
       keep_alive: '10m',
-      timeoutMs: 180000,
+      // Full single-file apps (Tetris especially) often run 2k–4k tokens of
+      // code; the old 1600 cap truncated capable models mid-game. Raise the
+      // output budget and the context window to fit it (num_ctx must hold the
+      // prompt + all generated tokens), and give slow rigs the max timeout.
+      timeoutMs: 240000,
       options: {
         temperature: 0.2,
         seed: 7,
-        num_ctx: 4096,
-        num_predict: 1600,
+        num_ctx: 8192,
+        num_predict: 4500,
       },
       ...(streamId ? { stream: true, streamId } : {}),
     });
