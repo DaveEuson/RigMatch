@@ -10562,6 +10562,54 @@ tbody tr.computer-row.selected {
   background: color-mix(in srgb, var(--gold) 9%, transparent);
 }
 
+/* Image picker for the "Recognize an image" skill test. */
+.run-recognize-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 0 8px 26px;
+}
+
+.run-recognize-thumb {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 2px solid var(--line-bright);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #10161a;
+  cursor: pointer;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.run-recognize-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.run-recognize-thumb svg {
+  width: 18px;
+  height: 18px;
+}
+
+.run-recognize-thumb:hover {
+  border-color: color-mix(in srgb, var(--gold) 60%, var(--line-bright));
+}
+
+.run-recognize-thumb.active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 35%, transparent);
+}
+
 .run-question-options button {
   min-height: 40px;
   font-size: 12px;

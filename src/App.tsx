@@ -21,6 +21,7 @@ import {
   Heart,
   HelpCircle,
   History,
+  ImagePlus,
   Lightbulb,
   Maximize2,
   MessageSquare,
@@ -261,6 +262,8 @@ import {
   runAdvancedAppBuilderChallenge,
   runAdvancedVisionChallenge,
   runAdvancedImageGenerationChallenge,
+  VISION_TEST_IMAGES,
+  DEFAULT_VISION_TEST_IMAGE,
 } from './lib/labChallenges';
 import {
   ModelScorePill,
@@ -297,7 +300,7 @@ import './App.css';
 type UtilityPanelId = Extract<NavId, 'history' | 'settings'>;
 
 type PendingRunMode = 'single' | 'speed-date';
-type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; recognize: boolean; skipQuestions: boolean };
+type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; recognize: boolean; recognizeImage: string; skipQuestions: boolean };
 type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
 
 type RunProgress = {
@@ -404,6 +407,7 @@ function App() {
     image: false,
     imagePrompt: ADVANCED_IMAGE_GENERATION_PROMPT,
     recognize: false,
+    recognizeImage: DEFAULT_VISION_TEST_IMAGE,
     skipQuestions: false,
   });
   const [skillRunStatus, setSkillRunStatus] = useState<SkillRunStatus>({ phase: 'idle', label: '', completed: 0, total: 0 });
@@ -1974,7 +1978,7 @@ function App() {
 
     // A vision recognition job needs a picture to read; load the bundled test
     // image once up front.
-    const visionImage = jobs.some((job) => job.kind === 'vision') ? await getVisionTestImageDataUrl() : '';
+    const visionImage = jobs.some((job) => job.kind === 'vision') ? await getVisionTestImageDataUrl(selection.recognizeImage) : '';
 
     const demos: DemoArtifact[] = [];
     stopSkillRef.current = false;
@@ -3841,6 +3845,7 @@ function RunWarningModal({
   onSkillSelectionChange: (selection: SkillTestSelection) => void;
 }) {
   const [questionsExpanded, setQuestionsExpanded] = useState(false);
+  const recognizeUploadRef = useRef<HTMLInputElement>(null);
   const activePreset = BENCHMARK_PRESETS.find(
     (p) => p.questions.length === benchmarkQuestions.length &&
       p.questions.every((q, i) => q.id === benchmarkQuestions[i]?.id),
@@ -4061,10 +4066,54 @@ function RunWarningModal({
                     <span>
                       <strong>Recognize an image</strong>
                       <em>{visionCapable
-                        ? 'Shows a vision model a test picture and streams its live description. Adds about a minute per model.'
+                        ? 'Shows a vision model a picture and streams its live description. Pick one below or upload your own. Adds about a minute per model.'
                         : 'No vision/OCR model in this run. Add one (like llava or a -vl model) to unlock.'}</em>
                     </span>
                   </label>
+                  {visionCapable && skillSelection.recognize && (
+                    <div className="run-recognize-picker" role="group" aria-label="Choose the image the model should read">
+                      {VISION_TEST_IMAGES.map((img) => (
+                        <button
+                          key={img.id}
+                          type="button"
+                          className={`run-recognize-thumb${skillSelection.recognizeImage === img.src ? ' active' : ''}`}
+                          onClick={() => onSkillSelectionChange({ ...skillSelection, recognizeImage: img.src })}
+                          title={img.label}
+                          aria-label={img.label}
+                          aria-pressed={skillSelection.recognizeImage === img.src}
+                        >
+                          <img src={img.src} alt={img.label} />
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className={`run-recognize-thumb upload${skillSelection.recognizeImage.startsWith('data:') ? ' active' : ''}`}
+                        onClick={() => recognizeUploadRef.current?.click()}
+                        title="Upload your own image"
+                        aria-label="Upload your own image"
+                      >
+                        {skillSelection.recognizeImage.startsWith('data:')
+                          ? <img src={skillSelection.recognizeImage} alt="Uploaded" />
+                          : <><ImagePlus aria-hidden="true" /><span>Upload</span></>}
+                      </button>
+                      <input
+                        ref={recognizeUploadRef}
+                        type="file"
+                        accept="image/*"
+                        className="chat-file-input"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = '';
+                          if (!file || !file.type.startsWith('image/') || file.size > 8 * 1024 * 1024) return;
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            if (typeof reader.result === 'string') onSkillSelectionChange({ ...skillSelection, recognizeImage: reader.result });
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </div>
+                  )}
                   {/* Run only the skills, skipping the Q&A round. Placed right
                       under the skill choices (before the coming-soon video row)
                       so a "coding job, no questions" run is easy to find. Forced

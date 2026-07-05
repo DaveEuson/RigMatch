@@ -7,9 +7,23 @@
  */
 
 import robotModelTest from '../assets/robot-model-test.webp';
+import robotContestantWall from '../assets/robot-contestant-wall.webp';
+import robotRigGreenroom from '../assets/robot-rig-greenroom.webp';
+import robotScorecardCeremony from '../assets/robot-scorecard-ceremony.webp';
 import { agentArcadeApi } from '../api';
 import { describeRunError } from './format';
 import { getAdvancedLabGrade, type AdvancedLabCheck, type AdvancedLabResult } from './labResults';
+
+export type VisionTestImage = { id: string; label: string; src: string };
+
+/** Bundled pictures the user can pick from for the image-recognition test. */
+export const VISION_TEST_IMAGES: VisionTestImage[] = [
+  { id: 'robot', label: 'Robot host', src: robotModelTest },
+  { id: 'lineup', label: 'Contestant wall', src: robotContestantWall },
+  { id: 'greenroom', label: 'Green room', src: robotRigGreenroom },
+  { id: 'ceremony', label: 'Scorecards', src: robotScorecardCeremony },
+];
+export const DEFAULT_VISION_TEST_IMAGE = VISION_TEST_IMAGES[0].src;
 
 export type AppBuilderPreset = { id: string; label: string; prompt: string };
 
@@ -136,14 +150,18 @@ function buildImageDataUrl(image: string) {
   return `data:image/png;base64,${trimmed}`;
 }
 
-// Convert the bundled test image to a PNG data URL (cached) so vision models
-// have a picture to read during the recognition skill test.
-let visionTestImageCache: string | null = null;
-export async function getVisionTestImageDataUrl(): Promise<string> {
-  if (visionTestImageCache) return visionTestImageCache;
+// Resolve a chosen picture (a bundled asset URL or an uploaded data URL) to a
+// PNG data URL the vision model can read. Uploaded data URLs pass through;
+// bundled assets are drawn to a canvas and cached per source.
+const visionImageCache = new Map<string, string>();
+export async function getVisionTestImageDataUrl(src: string = DEFAULT_VISION_TEST_IMAGE): Promise<string> {
+  const source = src || DEFAULT_VISION_TEST_IMAGE;
+  if (source.startsWith('data:')) return source;
+  const cached = visionImageCache.get(source);
+  if (cached) return cached;
   try {
     const img = new Image();
-    img.src = robotModelTest;
+    img.src = source;
     await img.decode();
     const canvas = document.createElement('canvas');
     canvas.width = img.naturalWidth || 512;
@@ -151,8 +169,9 @@ export async function getVisionTestImageDataUrl(): Promise<string> {
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    visionTestImageCache = canvas.toDataURL('image/png');
-    return visionTestImageCache;
+    const url = canvas.toDataURL('image/png');
+    visionImageCache.set(source, url);
+    return url;
   } catch {
     return '';
   }
