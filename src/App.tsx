@@ -114,7 +114,7 @@ import {
 import { WhatsNewPanel } from './components/WhatsNewPanel';
 import { SideMenu, type NavId, type NavItem } from './components/SideMenu';
 import { GameShowHost } from './components/GameShowHost';
-import { BrandMark, PanelHeader } from './components/CommonChrome';
+import { BrandMark, PanelHeader, MetricTile } from './components/CommonChrome';
 import { ReleaseNotes, UpdateCenter } from './components/UpdateCenter';
 import { releaseNotes } from './data/releaseNotes';
 import { playJingle } from './lib/sound';
@@ -2154,6 +2154,21 @@ function App() {
     return () => clearInterval(id);
   }, [ollama.ready, refreshRig]);
 
+  // While a test is running, poll just the (cheap) system profile every ~1.6s so
+  // the live-stage meters actually move. refreshRig is too heavy to poll — it
+  // also re-scrapes the Ollama catalog.
+  useEffect(() => {
+    if (!isDesktopRuntime) return;
+    if (runProgress?.phase !== 'running') return;
+    let cancelled = false;
+    const id = setInterval(() => {
+      void agentArcadeApi.getSystemProfile()
+        .then((profile) => { if (!cancelled) setSystem(profile); })
+        .catch(() => { /* ignore transient poll errors */ });
+    }, 1600);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [runProgress?.phase]);
+
   useEffect(() => {
     window.localStorage.setItem(TEST_SUITE_STORAGE_KEY, JSON.stringify(benchmarkQuestions));
   }, [benchmarkQuestions]);
@@ -2693,6 +2708,7 @@ function App() {
         <LiveFlirtSpotlight
           progress={runProgress}
           host={selectedHost}
+          system={system}
           rows={runProgress.mode === 'speed-date'
             ? shortlistedRows
             : modelRows.filter((row) => row.displayName === runProgress.currentModel)}
@@ -9815,17 +9831,42 @@ function RunProgressPanel({
 function LiveFlirtSpotlight({
   progress,
   host,
+  system,
   rows,
   questionPlan,
   onStop,
 }: {
   progress: RunProgress;
   host?: NetworkHost;
+  system?: SystemProfile;
   rows?: ModelRow[];
   questionPlan?: BenchmarkQuestion[];
   onStop?: () => void;
 }) {
   const [minimized, setMinimized] = useState(false);
+  // Live rig meters while the model works the hardware. Unified-memory Macs
+  // report one shared pool instead of separate VRAM.
+  const liveMeters = system ? (() => {
+    const gpu = system.gpu;
+    const memPct = system.memory.totalGb ? (system.memory.usedGb / system.memory.totalGb) * 100 : 0;
+    const meters: Array<{ label: string; value: string; level: number }> = [
+      { label: 'CPU', value: `${system.cpu.loadPercent}%`, level: system.cpu.loadPercent },
+      { label: 'RAM', value: `${system.memory.usedGb} / ${system.memory.totalGb} GB`, level: memPct },
+    ];
+    if (gpu.isUnifiedMemory) {
+      meters.push({ label: 'Memory', value: `${system.memory.totalGb} GB unified`, level: memPct });
+    } else if (gpu.vramGb) {
+      meters.push({
+        label: 'VRAM',
+        value: gpu.vramUsedGb != null ? `${gpu.vramUsedGb} / ${gpu.vramGb} GB` : `${gpu.vramGb} GB`,
+        level: gpu.vramUsedGb != null ? (gpu.vramUsedGb / gpu.vramGb) * 100 : 0,
+      });
+    }
+    if (gpu.gpuLoadPercent != null) {
+      meters.push({ label: 'GPU', value: `${gpu.gpuLoadPercent}%`, level: gpu.gpuLoadPercent });
+    }
+    return meters;
+  })() : [];
   const stageRows = rows?.length
     ? rows
     : [{ displayName: progress.currentModel } as ModelRow];
@@ -9905,6 +9946,13 @@ function LiveFlirtSpotlight({
             {counterLabel && <em>{counterLabel}</em>}
             <b>{phaseLabel}</b>
           </div>
+          {liveMeters.length > 0 && (
+            <div className="live-show-meters" aria-label="Live system load">
+              {liveMeters.map((meter) => (
+                <MetricTile key={meter.label} label={meter.label} value={meter.value} level={meter.level} />
+              ))}
+            </div>
+          )}
           <div className="live-show-header-actions">
             <button type="button" className="live-show-minimize" onClick={() => setMinimized(true)} title="Minimize — keep the run going and use the rest of RigMatch">
               <Minimize2 aria-hidden="true" />

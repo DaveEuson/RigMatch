@@ -5639,9 +5639,53 @@ tbody tr.computer-row.selected {
 .live-show-header {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 12px;
+}
+
+/* Live rig meters on the stage while the model works the hardware. */
+.live-show-meters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.live-show-meters .metric-tile {
+  min-width: 76px;
+  padding: 5px 7px;
+  border-radius: 8px;
+  background: rgba(6, 9, 11, 0.55);
+  border: 1px solid rgba(255, 249, 239, 0.12);
+}
+
+.live-show-meters .metric-tile span {
+  color: var(--gold);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+}
+
+.live-show-meters .metric-tile strong {
+  margin: 3px 0 4px;
+  font-size: 11px;
+  min-height: 0;
+  line-height: 1.1;
+  text-transform: none;
+}
+
+.live-show-meters .mini-bars {
+  gap: 2px;
+}
+
+.live-show-meters .mini-bars i {
+  width: 3px;
+  height: 10px;
+}
+
+@media (max-width: 1100px) {
+  .live-show-meters { display: none; }
+  .live-show-header { grid-template-columns: minmax(0, 1fr) auto auto; }
 }
 
 .live-show-header span,
