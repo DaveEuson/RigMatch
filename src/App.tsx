@@ -249,11 +249,26 @@ import { extractHtmlDocument } from './lib/labPreview';
 import {
   readAdvancedLabResults,
   writeAdvancedLabResults,
-  getAdvancedLabGrade,
   type DemoArtifact,
-  type AdvancedLabCheck,
   type AdvancedLabResult,
 } from './lib/labResults';
+import {
+  APP_BUILDER_PRESETS,
+  DEFAULT_APP_BUILDER_PRESET_ID,
+  resolveAppBuilderPrompt,
+  ADVANCED_IMAGE_GENERATION_PROMPT,
+  ADVANCED_IMAGE_WIDTH,
+  ADVANCED_IMAGE_HEIGHT,
+  ADVANCED_IMAGE_STEPS,
+  IMAGE_GENERATION_MODEL_OPTIONS,
+  imageModelMatches,
+  getInstalledImageModelName,
+  getVisionTestImageDataUrl,
+  runAdvancedAppBuilderChallenge,
+  runAdvancedVisionChallenge,
+  runAdvancedImageGenerationChallenge,
+  type ImageGenerationModelOption,
+} from './lib/labChallenges';
 import {
   ModelScorePill,
   ModelStatusPill,
@@ -271,7 +286,6 @@ import {
   formatGb,
   formatMs,
   formatPullCount,
-  describeRunError,
   getErrorMessage,
   getResponseEstimate,
   getScoreTone,
@@ -299,14 +313,6 @@ type AdvancedLabRunState = {
   message: string;
 };
 
-type ImageGenerationModelOption = {
-  model: string;
-  label: string;
-  sizeGb: number;
-  license: string;
-  note: string;
-};
-
 type RunProgress = {
   progressId?: string;
   mode: PendingRunMode;
@@ -332,98 +338,6 @@ type RunProgress = {
   completedQuestions?: number;
   questionScores?: Record<string, number>;
 };
-
-
-type AppBuilderPreset = { id: string; label: string; prompt: string };
-
-const APP_BUILDER_BASE_RULES = `
-- Return only the code for one HTML file.
-- Include HTML, CSS, and JavaScript in the same file.
-- Do not use external libraries, CDNs, or network calls.`;
-
-const APP_BUILDER_PRESETS: AppBuilderPreset[] = [
-  {
-    id: 'tetris',
-    label: 'Tetris-style game',
-    prompt: `Create a complete single-file HTML Tetris-style falling block game.
-
-Requirements:
-- Keyboard controls for left, right, rotate, soft drop, and restart.
-- A visible score display.
-- Collision detection, line clearing, and game-over handling.${APP_BUILDER_BASE_RULES}`,
-  },
-  {
-    id: 'snake',
-    label: 'Snake game',
-    prompt: `Create a complete single-file HTML Snake game.
-
-Requirements:
-- Arrow-key controls, a growing snake, food, and collision/game-over handling.
-- A visible score display and a restart option.${APP_BUILDER_BASE_RULES}`,
-  },
-  {
-    id: 'calculator',
-    label: 'Calculator',
-    prompt: `Create a complete single-file HTML calculator.
-
-Requirements:
-- Clickable number and operator buttons plus keyboard input.
-- A display that updates as you type, with clear and equals.
-- Handle addition, subtraction, multiplication, and division.${APP_BUILDER_BASE_RULES}`,
-  },
-  {
-    id: 'clock',
-    label: 'Digital clock',
-    prompt: `Create a complete single-file HTML digital clock.
-
-Requirements:
-- Show the current time, updating every second.
-- Include a 12/24-hour toggle and today's date.${APP_BUILDER_BASE_RULES}`,
-  },
-  {
-    id: 'paint',
-    label: 'Paint canvas',
-    prompt: `Create a complete single-file HTML paint / drawing app on a canvas.
-
-Requirements:
-- Draw with the mouse, pick a color and brush size, and a clear button.${APP_BUILDER_BASE_RULES}`,
-  },
-];
-
-const DEFAULT_APP_BUILDER_PRESET_ID = 'tetris';
-const ADVANCED_APP_BUILDER_PROMPT = APP_BUILDER_PRESETS[0].prompt;
-
-/** Resolve the effective App Builder prompt from a preset id or a custom request. */
-function resolveAppBuilderPrompt(promptId: string, customPrompt: string): string {
-  if (promptId === 'custom') {
-    const custom = customPrompt.trim();
-    return custom
-      ? `Create a complete single-file HTML app for this request: ${custom}${APP_BUILDER_BASE_RULES}`
-      : ADVANCED_APP_BUILDER_PROMPT;
-  }
-  return APP_BUILDER_PRESETS.find((preset) => preset.id === promptId)?.prompt ?? ADVANCED_APP_BUILDER_PROMPT;
-}
-
-const ADVANCED_IMAGE_GENERATION_PROMPT = 'A cheerful robot dog sitting beside a retro computer, warm studio lighting, playful but realistic, detailed fur-like metal texture, cozy workshop background';
-const ADVANCED_IMAGE_WIDTH = 512;
-const ADVANCED_IMAGE_HEIGHT = 512;
-const ADVANCED_IMAGE_STEPS = 12;
-const IMAGE_GENERATION_MODEL_OPTIONS: ImageGenerationModelOption[] = [
-  {
-    model: 'x/flux2-klein:4b',
-    label: 'FLUX.2 Klein 4B',
-    sizeGb: 5.7,
-    license: 'Apache 2.0 weights',
-    note: 'Smallest current Ollama image option; still a large pull.',
-  },
-  {
-    model: 'x/z-image-turbo',
-    label: 'Z-Image Turbo fp8',
-    sizeGb: 13,
-    license: 'Apache 2.0 weights',
-    note: 'Photorealistic image model; much bigger download.',
-  },
-];
 
 
 const initialHosts = isDesktopRuntime ? [] : demoHosts.filter((host) => host.isLocal);
@@ -4633,313 +4547,6 @@ function ThirdPartyDownloadConsentModal({
       </section>
     </div>
   );
-}
-
-function scoreAdvancedAppBuilderResponse(response: string, doneReason: string): Pick<AdvancedLabResult, 'score' | 'grade' | 'checks'> {
-  const text = response.trim();
-  const lower = text.toLowerCase();
-  const has = (pattern: RegExp) => pattern.test(text);
-  // Generic checks that apply to any single-file interactive app (game,
-  // calculator, clock, paint, or a custom request) — not just Tetris.
-  const checks: AdvancedLabCheck[] = [
-    {
-      label: 'Single-file HTML',
-      passed: has(/<!doctype|<html|<body|<script/i) && has(/<style|style=/i),
-      detail: 'Includes document structure, script, and styling in one answer.',
-    },
-    {
-      label: 'Interactive',
-      passed: has(/addeventlistener|onclick|onkeydown|oninput|onmousedown|keydown|\bclick\b/i),
-      detail: 'Responds to keyboard, mouse, or input events.',
-    },
-    {
-      label: 'Has real logic',
-      passed: has(/function\b|=>|const\s+\w+\s*=|let\s+\w+\s*=/i),
-      detail: 'Contains actual JavaScript logic, not just static markup.',
-    },
-    {
-      label: 'Updates the page',
-      passed: has(/getelementbyid|queryselector|innerhtml|textcontent|createelement|getcontext|<canvas/i),
-      detail: 'Renders or updates something visible while it runs.',
-    },
-    {
-      label: 'Self-contained',
-      passed: !has(/https?:\/\/|<script[^>]+src=|<link[^>]+href=|cdn/i),
-      detail: 'Avoids external libraries, CDNs, and network calls.',
-    },
-    {
-      label: 'Substantial',
-      passed: text.length >= 800,
-      detail: 'Long enough to be a plausible working app.',
-    },
-    {
-      label: 'Not truncated',
-      passed: doneReason !== 'length' && !lower.includes('truncated'),
-      detail: 'Did not report a length cutoff mid-answer.',
-    },
-  ];
-  const score = Math.round((checks.filter((check) => check.passed).length / checks.length) * 100);
-  return { score, grade: getAdvancedLabGrade(score), checks };
-}
-
-async function runAdvancedAppBuilderChallenge(
-  model: string,
-  baseUrl: string,
-  prompt: string = ADVANCED_APP_BUILDER_PROMPT,
-  streamId?: string,
-): Promise<AdvancedLabResult> {
-  const startedAt = performance.now();
-
-  try {
-    const data = await agentArcadeApi.runAdvancedGenerate({
-      model,
-      baseUrl,
-      prompt,
-      keep_alive: '10m',
-      // Full single-file apps (Tetris especially) often run 2k–4k tokens of
-      // code; the old 1600 cap truncated capable models mid-game. Raise the
-      // output budget and the context window to fit it (num_ctx must hold the
-      // prompt + all generated tokens), and give slow rigs the max timeout.
-      timeoutMs: 240000,
-      options: {
-        temperature: 0.2,
-        seed: 7,
-        num_ctx: 8192,
-        num_predict: 4500,
-      },
-      ...(streamId ? { stream: true, streamId } : {}),
-    });
-    if (data.error) throw new Error(data.error);
-
-    const raw = data.response ?? '';
-    const scored = scoreAdvancedAppBuilderResponse(raw, data.done_reason ?? '');
-    return {
-      model,
-      challenge: 'app-builder',
-      ...scored,
-      elapsedMs: Math.round(performance.now() - startedAt),
-      response: raw,
-      completedAt: new Date().toISOString(),
-    };
-  } catch (error) {
-    const message = describeRunError(error instanceof Error ? error.message : 'Advanced test failed.');
-    return {
-      model,
-      challenge: 'app-builder',
-      score: 0,
-      grade: 'F',
-      elapsedMs: Math.round(performance.now() - startedAt),
-      response: '',
-      checks: [],
-      completedAt: new Date().toISOString(),
-      error: message,
-    };
-  }
-}
-
-const ADVANCED_VISION_PROMPT = 'Look at this image and describe exactly what you see in a few clear sentences. If there is any readable text, transcribe it. Be specific about objects, colors, and layout.';
-
-// Convert the bundled test image to a PNG data URL (cached) so vision models
-// have a picture to read during the recognition skill test.
-let visionTestImageCache: string | null = null;
-async function getVisionTestImageDataUrl(): Promise<string> {
-  if (visionTestImageCache) return visionTestImageCache;
-  try {
-    const img = new Image();
-    img.src = robotModelTest;
-    await img.decode();
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth || 512;
-    canvas.height = img.naturalHeight || 512;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return '';
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    visionTestImageCache = canvas.toDataURL('image/png');
-    return visionTestImageCache;
-  } catch {
-    return '';
-  }
-}
-
-function scoreAdvancedVisionResponse(response: string, doneReason: string): Pick<AdvancedLabResult, 'score' | 'grade' | 'checks'> {
-  const text = response.trim();
-  const wordCount = text.split(/\s+/).filter(Boolean).length;
-  const checks: AdvancedLabCheck[] = [
-    {
-      label: 'Described the image',
-      passed: wordCount >= 12,
-      detail: 'Returned a substantive description, not a one-liner or refusal.',
-    },
-    {
-      label: 'Concrete visual detail',
-      passed: /\b(color|colour|robot|text|background|left|right|top|bottom|blue|green|orange|red|yellow|character|shape|screen|button|face|eye|logo)\b/i.test(text),
-      detail: 'Names specific objects, colors, or layout instead of staying vague.',
-    },
-    {
-      label: 'Engaged with the picture',
-      passed: !/\b(can'?t|cannot|unable to|no image|don'?t see)\b/i.test(text),
-      detail: 'Actually read the image rather than declining or claiming no image.',
-    },
-    {
-      label: 'Completed cleanly',
-      passed: doneReason !== 'length' && doneReason !== 'error',
-      detail: 'Did not truncate or error mid-answer.',
-    },
-  ];
-  const score = Math.round((checks.filter((check) => check.passed).length / checks.length) * 100);
-  return { score, grade: getAdvancedLabGrade(score), checks };
-}
-
-async function runAdvancedVisionChallenge(
-  model: string,
-  baseUrl: string,
-  imageDataUrl: string,
-  streamId?: string,
-): Promise<AdvancedLabResult> {
-  const startedAt = performance.now();
-  try {
-    if (!imageDataUrl) throw new Error('No test image was available to show the model.');
-    const data = await agentArcadeApi.runAdvancedGenerate({
-      model,
-      baseUrl,
-      prompt: ADVANCED_VISION_PROMPT,
-      images: [imageDataUrl],
-      keep_alive: '10m',
-      timeoutMs: 180000,
-      options: {
-        temperature: 0.2,
-        num_ctx: 4096,
-        num_predict: 600,
-      },
-      ...(streamId ? { stream: true, streamId } : {}),
-    });
-    if (data.error) throw new Error(data.error);
-    const raw = data.response ?? '';
-    const scored = scoreAdvancedVisionResponse(raw, data.done_reason ?? '');
-    return {
-      model,
-      challenge: 'image-recognition',
-      ...scored,
-      elapsedMs: Math.round(performance.now() - startedAt),
-      response: raw,
-      imageDataUrl,
-      completedAt: new Date().toISOString(),
-    };
-  } catch (error) {
-    const message = describeRunError(error instanceof Error ? error.message : 'Vision test failed.');
-    return {
-      model,
-      challenge: 'image-recognition',
-      score: 0,
-      grade: 'F',
-      elapsedMs: Math.round(performance.now() - startedAt),
-      response: '',
-      checks: [],
-      completedAt: new Date().toISOString(),
-      error: message,
-    };
-  }
-}
-
-function imageModelMatches(installedModel: string, requestedModel: string) {
-  const installed = installedModel.toLowerCase();
-  const requested = requestedModel.toLowerCase();
-  const requestedBase = requested.replace(/:latest$/, '');
-  return installed === requested || installed === `${requested}:latest` || installed === requestedBase || installed.startsWith(`${requestedBase}:`);
-}
-
-function getInstalledImageModelName(installedModels: string[], requestedModel: string) {
-  return installedModels.find((model) => imageModelMatches(model, requestedModel)) ?? '';
-}
-
-/**
- * Heuristic for image-generation models already in the local library, so the
- * Image Lab can offer them without a new pull. Ollama publishes image models
- * under the x/ namespace; keyword fallbacks catch community tags. Vision/OCR
- * models read images rather than make them, so they are excluded.
- */
-
-function buildImageDataUrl(image: string) {
-  const trimmed = image.trim();
-  if (!trimmed) return '';
-  if (trimmed.startsWith('data:image/')) return trimmed;
-  return `data:image/png;base64,${trimmed}`;
-}
-
-function scoreAdvancedImageResponse(imageDataUrl: string, doneReason: string): Pick<AdvancedLabResult, 'score' | 'grade' | 'checks'> {
-  const checks: AdvancedLabCheck[] = [
-    {
-      label: 'Image returned',
-      passed: imageDataUrl.startsWith('data:image/'),
-      detail: 'Ollama returned an image payload instead of a text-only answer.',
-    },
-    {
-      label: 'PNG/base64 payload',
-      passed: /^data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+/.test(imageDataUrl),
-      detail: 'The image payload looks like a browser-renderable base64 image.',
-    },
-    {
-      label: 'Completed cleanly',
-      passed: doneReason !== 'length' && doneReason !== 'error',
-      detail: 'The image run did not report an obvious truncation or error stop.',
-    },
-    {
-      label: 'Small beta size',
-      passed: ADVANCED_IMAGE_WIDTH <= 512 && ADVANCED_IMAGE_HEIGHT <= 512,
-      detail: 'The beta test keeps image size small to reduce VRAM and time pressure.',
-    },
-  ];
-  const score = Math.round((checks.filter((check) => check.passed).length / checks.length) * 100);
-  return { score, grade: getAdvancedLabGrade(score), checks };
-}
-
-async function runAdvancedImageGenerationChallenge(
-  model: string,
-  baseUrl: string,
-  prompt: string = ADVANCED_IMAGE_GENERATION_PROMPT,
-): Promise<AdvancedLabResult> {
-  const startedAt = performance.now();
-
-  try {
-    const data = await agentArcadeApi.runAdvancedGenerate({
-      model,
-      baseUrl,
-      prompt,
-      timeoutMs: 240000,
-      width: ADVANCED_IMAGE_WIDTH,
-      height: ADVANCED_IMAGE_HEIGHT,
-      steps: ADVANCED_IMAGE_STEPS,
-      keep_alive: '5m',
-    });
-    if (data.error) throw new Error(data.error);
-
-    const imageDataUrl = buildImageDataUrl(data.image ?? data.images?.[0] ?? '');
-    const scored = scoreAdvancedImageResponse(imageDataUrl, data.done_reason ?? '');
-    return {
-      model,
-      challenge: 'image-generation',
-      ...scored,
-      elapsedMs: Math.round(performance.now() - startedAt),
-      response: data.response ?? '',
-      imageDataUrl,
-      width: ADVANCED_IMAGE_WIDTH,
-      height: ADVANCED_IMAGE_HEIGHT,
-      completedAt: new Date().toISOString(),
-    };
-  } catch (error) {
-    const message = describeRunError(error instanceof Error ? error.message : 'Image generation failed.');
-    return {
-      model,
-      challenge: 'image-generation',
-      score: 0,
-      grade: 'F',
-      elapsedMs: Math.round(performance.now() - startedAt),
-      response: '',
-      checks: [],
-      completedAt: new Date().toISOString(),
-      error: message,
-    };
-  }
 }
 
 async function pullOllamaModelWithProgress(
