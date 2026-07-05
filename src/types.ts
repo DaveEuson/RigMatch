@@ -223,6 +223,14 @@ export type ChatMessage = {
   images?: string[];
 };
 
+/** Progress of a background skill-test run (App Builder / image / recognition). */
+export type SkillRunStatus = {
+  phase: 'idle' | 'running' | 'complete' | 'failed';
+  label: string;
+  completed: number;
+  total: number;
+};
+
 export type AdvancedGenerateRequest = {
   model: string;
   baseUrl?: string;
