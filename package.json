@@ -1,7 +1,7 @@
 {
   "name": "rigmatch-ai",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "packageManager": "npm@10.9.3",
   "description": "Find the best AI model your computer can run, 100% locally",
   "author": "Dave Euson <daveeuson@gmail.com>",

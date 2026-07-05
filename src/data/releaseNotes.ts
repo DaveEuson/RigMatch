@@ -2,6 +2,18 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.3.1',
+    label: 'Live Rig & Skill-Test Fixes',
+    date: 'Beta build',
+    notes: [
+      'The live test stage now shows CPU, RAM, VRAM, and GPU meters while a model runs, so you can watch it work your hardware in real time.',
+      'Model sizes are read correctly again: a multi-tag model no longer borrows a neighbouring tag\'s size (e.g. nemotron-3-nano:30b showed 2.8 GB instead of its real ~22 GB), which also fixes Rig Picks recommending an oversized tag.',
+      'The App Builder skill test no longer truncates: capable models get a much larger output budget, so full single-file apps like Tetris can finish instead of getting cut off mid-code.',
+      'The "Recognize an image" skill test now lets you pick from a few built-in pictures or upload your own, instead of always using one fixed image.',
+      'Under the hood: a large internal cleanup split the app into focused modules with no change in behaviour, plus a regression test that locks in the model-size fix.',
+    ],
+  },
+  {
     version: '0.3.0',
     label: 'The Guided Wizard Update',
     date: 'Beta build',
