@@ -6053,6 +6053,7 @@ function ModelCabinet({
                         isActive={isPullingRow}
                         isStopping={isPullCancelRequested && isPullingRow}
                         progress={rowPullProgress}
+                        onCancel={() => (isPullingRow ? onCancelQueue() : onQueueModel(row))}
                       />
                     )}
                   </td>
@@ -6166,6 +6167,7 @@ function ModelCabinet({
           isBenchmarking={isBenchmarking}
           onScoreModel={onScoreModel}
           onQueueModel={onQueueModel}
+          onCancelQueue={onCancelQueue}
           onToggleShortlist={onToggleShortlist}
           onOpenSpeedDate={onOpenSpeedDate}
           modelNotes={modelNotes}
@@ -6185,12 +6187,14 @@ function DownloadProgressInline({
   isActive,
   isStopping,
   progress,
+  onCancel,
 }: {
   model: string;
   queued: boolean;
   isActive: boolean;
   isStopping: boolean;
   progress?: PullProgressUpdate;
+  onCancel?: () => void;
 }) {
   const phase = progress?.phase ?? (queued ? 'queued' : 'started');
   const percent = getPullProgressPercent(progress, queued);
@@ -6219,7 +6223,21 @@ function DownloadProgressInline({
     <div className={className} aria-label={`${model} download status`}>
       <div className="download-progress-copy">
         <span>{statusLabel}</span>
-        <strong>{percentLabel}</strong>
+        <div className="download-progress-copy-end">
+          <strong>{percentLabel}</strong>
+          {onCancel && phase !== 'complete' && (
+            <button
+              type="button"
+              className="icon-action download-progress-cancel-button"
+              onClick={onCancel}
+              disabled={isStopping}
+              title={isActive ? `Cancel the ${model} download and clear the queue` : `Remove ${model} from the download queue`}
+              aria-label={isActive ? `Cancel the ${model} download` : `Remove ${model} from the download queue`}
+            >
+              <X aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </div>
       <div className="download-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
         <i style={{ width: `${trackPercent}%` }} />
@@ -6613,6 +6631,7 @@ function SelectedContestantCard({
   isBenchmarking,
   onScoreModel,
   onQueueModel,
+  onCancelQueue,
   onToggleShortlist,
   onOpenSpeedDate,
   modelNotes,
@@ -6634,6 +6653,7 @@ function SelectedContestantCard({
   isBenchmarking: boolean;
   onScoreModel: (row: ModelRow) => void;
   onQueueModel: (row: ModelRow) => void;
+  onCancelQueue: () => void;
   onToggleShortlist: (row: ModelRow) => void;
   onOpenSpeedDate: () => void;
   modelNotes: Record<string, string>;
@@ -6795,6 +6815,7 @@ function SelectedContestantCard({
             isActive={isPulling}
             isStopping={isPullStopping}
             progress={pullProgress}
+            onCancel={() => (isPulling ? onCancelQueue() : onQueueModel(row))}
           />
         )}
       </div>

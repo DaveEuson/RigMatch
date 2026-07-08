@@ -4478,6 +4478,24 @@ tbody tr.computer-row.selected {
   white-space: nowrap;
 }
 
+.download-progress-copy-end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.download-progress-cancel-button {
+  width: 18px;
+  min-width: 18px;
+  min-height: 18px;
+}
+
+.download-progress-cancel-button svg {
+  width: 11px;
+  height: 11px;
+}
+
 .download-progress-track {
   height: 7px;
   border: 1px solid rgba(105, 167, 183, 0.24);

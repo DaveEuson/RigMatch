@@ -51,6 +51,7 @@ const {
   sortOllamaFamilyRows,
   parseOllamaFamilyRows,
 } = require('./ollamaCatalog.cjs');
+const { summarizeMemory } = require('./systemProfile.cjs');
 
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const LM_STUDIO_LOCAL_URL = 'http://127.0.0.1:1234/v1';
@@ -1134,11 +1135,7 @@ async function getSystemProfile() {
       cores: cpu.cores,
       loadPercent: cpuLoadPercent,
     },
-    memory: {
-      totalGb: bytesToGb(mem.total),
-      availableGb: bytesToGb(mem.available),
-      usedGb: bytesToGb(mem.used),
-    },
+    memory: summarizeMemory(mem),
     gpu: {
       vendor: primaryGpu.vendor || (isMac ? 'Apple' : 'Unknown'),
       model: primaryGpu.model || (isAppleSilicon ? 'Apple Silicon GPU' : 'Unknown GPU'),
