@@ -35,8 +35,11 @@ function getPlainText(html) {
     .replace(/\s+/g, ' '));
 }
 
+// Ollama's "x/" namespace hosts a handful of non-chat models (image/video
+// generation) that live outside the regular /library catalog. Allow that one
+// namespace prefix through; nothing else needs a slash.
 function isValidOllamaName(name) {
-  return /^[a-z0-9][a-z0-9._-]*$/i.test(String(name || ''));
+  return /^(?:x\/)?[a-z0-9][a-z0-9._-]*$/i.test(String(name || ''));
 }
 
 function isValidOllamaTag(tag) {
@@ -80,7 +83,9 @@ function parseOllamaFamilyRows(name, html) {
   const rows = [];
   const seen = new Set();
   const source = String(html || '');
-  const rowPattern = new RegExp(`href=["']/library/${escapeRegExp(name)}:([^"'#?/<>\\s]+)["']`, 'gi');
+  // "x/" namespace models are served from /x/<name>, not /library/<name>.
+  const pathPrefix = /^x\//i.test(name) ? name : `library/${name}`;
+  const rowPattern = new RegExp(`href=["']/${escapeRegExp(pathPrefix)}:([^"'#?/<>\\s]+)["']`, 'gi');
   const matches = [...source.matchAll(rowPattern)];
 
   for (let i = 0; i < matches.length; i += 1) {

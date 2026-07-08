@@ -10,6 +10,7 @@ const {
   inferParamsFromModelName,
   sortOllamaFamilyRows,
   isValidOllamaTag,
+  isValidOllamaName,
 } = require('../electron/ollamaCatalog.cjs');
 
 // A trimmed-down shape of the Ollama library tags page: each tag row is an
@@ -101,4 +102,29 @@ test('isValidOllamaTag rejects path-traversal / injection shapes', () => {
   assert.equal(isValidOllamaTag('../etc'), false);
   assert.equal(isValidOllamaTag('a b'), false);
   assert.equal(isValidOllamaTag(''), false);
+});
+
+test('isValidOllamaName allows the "x/" namespace but no other slash shapes', () => {
+  assert.equal(isValidOllamaName('llama3.2'), true);
+  assert.equal(isValidOllamaName('x/flux2-klein'), true);
+  assert.equal(isValidOllamaName('x/z-image-turbo'), true);
+  assert.equal(isValidOllamaName('y/flux2-klein'), false, 'only the x/ namespace is allowed');
+  assert.equal(isValidOllamaName('x/../etc'), false);
+  assert.equal(isValidOllamaName('a/b/c'), false, 'only one namespace level is allowed');
+});
+
+test('parseOllamaFamilyRows: "x/" namespace models parse from /x/<name>:<tag>, not /library/', () => {
+  const html = [
+    '<div class="row"><a href="/x/flux2-klein:latest">latest</a><span>5.7GB · - context window</span></div>',
+    '<div class="row"><a href="/x/flux2-klein:9b">9b</a><span>12GB · - context window</span></div>',
+    // A same-named /library/ link should not be picked up for the namespaced family.
+    '<div class="row"><a href="/library/flux2-klein:decoy">decoy</a><span>1GB</span></div>',
+  ].join('\n');
+  const rows = parseOllamaFamilyRows('x/flux2-klein', html);
+  const byTag = Object.fromEntries(rows.map((r) => [r.tag, r.sizeGb]));
+
+  assert.equal(rows.length, 2);
+  assert.equal(byTag['latest'], 5.7);
+  assert.equal(byTag['9b'], 12);
+  assert.ok(rows.every((r) => r.name === 'x/flux2-klein'));
 });

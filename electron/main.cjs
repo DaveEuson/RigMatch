@@ -54,6 +54,7 @@ const {
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const LM_STUDIO_LOCAL_URL = 'http://127.0.0.1:1234/v1';
 const OLLAMA_LIBRARY_URL = 'https://ollama.com/library';
+const OLLAMA_NAMESPACE_URL = 'https://ollama.com/x';
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
 const RIGMATCH_REPOSITORY_URL = app.isPackaged
   ? 'https://github.com/daveeuson/RigMatch.AI'
@@ -237,6 +238,10 @@ const curatedCatalog = [
   catalogEntry('wizardlm2', '8x22b', 80, '141B', 'MoE'),
   catalogEntry('mistral-openorca', 'latest', 4.1, '7B', 'Chat'),
   catalogEntry('stablelm2', 'latest', 1.6, '1.6B', 'Lightweight'),
+  // Ollama's "x/" namespace: image-generation models, kept as a static
+  // fallback since they live outside /library and a live scrape can fail.
+  catalogEntry('x/flux2-klein', 'latest', 5.7, '4B', 'Image Gen'),
+  catalogEntry('x/z-image-turbo', 'latest', 13, '6B', 'Image Gen'),
 ];
 
 function catalogEntry(name, tag, sizeGb, params, pack) {
@@ -1575,9 +1580,17 @@ async function getOllamaCatalog(options = {}) {
   try {
     const libraryPages = await getOllamaLibraryPages();
     const libraryModels = libraryPages.flatMap((html) => extractOllamaLibraryModels(html));
+    // Best-effort: the "x/" namespace (image/video models) isn't part of the
+    // regular library listing and lives on its own page. A failure here just
+    // means we fall back to the curated x/ entries, not the whole catalog.
+    const namespaceModels = await fetchOllamaHtml(OLLAMA_NAMESPACE_URL, 7000)
+      .then(extractOllamaNamespaceModels)
+      .catch(() => []);
     const pullsMap = new Map();
     const seenNames = new Set();
-    for (const { name, pulls } of libraryModels) {
+    // Namespace models go first so they always survive the family/detail
+    // limit slices below, however many regular library models come back.
+    for (const { name, pulls } of [...namespaceModels, ...libraryModels]) {
       if (!seenNames.has(name)) {
         seenNames.add(name);
         pullsMap.set(name, pulls);
@@ -1728,8 +1741,29 @@ function extractOllamaLibraryNames(html) {
   return extractOllamaLibraryModels(html).map((m) => m.name);
 }
 
+// Ollama's "x/" namespace (e.g. ollama.com/x/flux2-klein) hosts image/video
+// generation models outside the regular /library listing, so they need their
+// own scrape. Trailing-slash paths like /x/<name>/tags are excluded because
+// the character class stops at the closing quote.
+function extractOllamaNamespaceModels(html) {
+  const source = String(html || '');
+  const results = [];
+  const seen = new Set();
+  const pattern = /href=["']\/x\/([a-zA-Z0-9._-]+)["']/gi;
+  let match;
+  while ((match = pattern.exec(source))) {
+    const name = `x/${decodeURIComponentSafe(match[1])}`;
+    if (!isValidOllamaName(name) || seen.has(name)) continue;
+    seen.add(name);
+    results.push({ name, pulls: null });
+  }
+  return results;
+}
+
 async function getOllamaFamilyCatalog(name) {
-  const html = await fetchOllamaHtml(`${OLLAMA_LIBRARY_URL}/${name}`, 6500);
+  // "x/" namespace models live at ollama.com/x/<name>, not /library/<name>.
+  const url = /^x\//i.test(name) ? `https://ollama.com/${name}` : `${OLLAMA_LIBRARY_URL}/${name}`;
+  const html = await fetchOllamaHtml(url, 6500);
   const rows = parseOllamaFamilyRows(name, html);
 
   if (rows.length === 0) {

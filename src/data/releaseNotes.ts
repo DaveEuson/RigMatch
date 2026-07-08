@@ -2,6 +2,15 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.3.2',
+    label: 'Image Model Catalog Fix',
+    date: 'Beta build',
+    notes: [
+      'Fixed "Makes images" showing 0 models: Ollama publishes its image-generation models (x/flux2-klein, x/z-image-turbo) in a separate namespace that the catalog scraper never read, so they never appeared no matter how much VRAM you had.',
+      'The catalog now includes both models by default and live-scrapes that namespace going forward, so new image (and eventually video) models Ollama adds there show up automatically.',
+    ],
+  },
+  {
     version: '0.3.1',
     label: 'Live Rig & Skill-Test Fixes',
     date: 'Beta build',
