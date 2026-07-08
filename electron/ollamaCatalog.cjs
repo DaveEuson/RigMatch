@@ -42,6 +42,25 @@ function isValidOllamaName(name) {
   return /^(?:x\/)?[a-z0-9][a-z0-9._-]*$/i.test(String(name || ''));
 }
 
+// Ollama's "x/" namespace (e.g. ollama.com/x/flux2-klein) hosts image/video
+// generation models outside the regular /library listing, so they need their
+// own scrape. Trailing-slash paths like /x/<name>/tags are excluded because
+// the character class stops at the closing quote.
+function extractOllamaNamespaceModels(html) {
+  const source = String(html || '');
+  const results = [];
+  const seen = new Set();
+  const pattern = /href=["']\/x\/([a-zA-Z0-9._-]+)["']/gi;
+  let match;
+  while ((match = pattern.exec(source))) {
+    const name = `x/${decodeURIComponentSafe(match[1])}`;
+    if (!isValidOllamaName(name) || seen.has(name)) continue;
+    seen.add(name);
+    results.push({ name, pulls: null });
+  }
+  return results;
+}
+
 function isValidOllamaTag(tag) {
   return /^[a-z0-9][a-z0-9._-]*$/i.test(String(tag || ''));
 }
@@ -130,6 +149,7 @@ module.exports = {
   getPlainText,
   isValidOllamaName,
   isValidOllamaTag,
+  extractOllamaNamespaceModels,
   parseSizeToGb,
   inferParamsFromTag,
   inferParamsFromModelName,

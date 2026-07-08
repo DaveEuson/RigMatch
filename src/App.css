@@ -14302,63 +14302,6 @@ td {
   height: 11px;
 }
 
-.top-deck-winner {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  align-items: center;
-  min-height: 68px;
-  padding: 6px 8px;
-  gap: 6px;
-  border-radius: 10px;
-}
-
-.top-deck-winner > svg {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 15px;
-}
-
-.top-deck .top-deck-winner-copy {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto auto;
-  align-items: center;
-  column-gap: 8px;
-  min-width: 0;
-}
-
-.top-deck .top-deck-winner-head {
-  display: contents;
-}
-
-.top-deck-winner span {
-  font-size: 8px;
-}
-
-.top-deck .top-deck-winner span,
-.top-deck .top-deck-winner strong,
-.top-deck .top-deck-winner em {
-  grid-column: 1;
-  justify-self: center;
-  text-align: center;
-}
-
-.top-deck .top-deck-winner-actions {
-  grid-column: 2;
-  grid-row: 1 / 4;
-  align-self: center;
-}
-
-.top-deck-winner strong {
-  font-size: 11px;
-  margin-top: 1px;
-}
-
-.top-deck-winner em {
-  font-size: 9px;
-  margin-top: 0;
-}
-
 .global-lineup-strip {
   grid-area: lineup;
   border: 1px solid rgba(239, 188, 90, 0.28);

@@ -7,7 +7,8 @@ export const releaseNotes: ReleaseNoteEntry[] = [
     date: 'Beta build',
     notes: [
       'Fixed "Makes images" showing 0 models: Ollama publishes its image-generation models (x/flux2-klein, x/z-image-turbo) in a separate namespace that the catalog scraper never read, so they never appeared no matter how much VRAM you had.',
-      'The catalog now includes both models by default and live-scrapes that namespace going forward, so new image (and eventually video) models Ollama adds there show up automatically.',
+      'The catalog now includes both models by default and live-scrapes that namespace going forward, so new models Ollama adds there show up automatically.',
+      'Fixed overlapping text and buttons on the Top Match card in the header at narrower window widths (stale, conflicting CSS from an old layout was winning over the current one).',
     ],
   },
   {

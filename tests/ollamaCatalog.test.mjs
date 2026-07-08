@@ -11,6 +11,7 @@ const {
   sortOllamaFamilyRows,
   isValidOllamaTag,
   isValidOllamaName,
+  extractOllamaNamespaceModels,
 } = require('../electron/ollamaCatalog.cjs');
 
 // A trimmed-down shape of the Ollama library tags page: each tag row is an
@@ -127,4 +128,18 @@ test('parseOllamaFamilyRows: "x/" namespace models parse from /x/<name>:<tag>, n
   assert.equal(byTag['latest'], 5.7);
   assert.equal(byTag['9b'], 12);
   assert.ok(rows.every((r) => r.name === 'x/flux2-klein'));
+});
+
+test('extractOllamaNamespaceModels: finds /x/<name> links, skips /tags sub-paths and dupes', () => {
+  const html = [
+    '<a href="/x/flux2-klein">flux2-klein</a>',
+    '<a href="/x/flux2-klein/tags">tags</a>', // must not be picked up as a model named "flux2-klein/tags"
+    '<a href="/x/flux2-klein">flux2-klein</a>', // duplicate link — should collapse
+    '<a href="/x/z-image-turbo">z-image-turbo</a>',
+    '<a href="/library/llama3.2">llama3.2</a>', // regular library link — not this namespace
+  ].join('\n');
+  const models = extractOllamaNamespaceModels(html);
+
+  assert.deepEqual(models.map((m) => m.name).sort(), ['x/flux2-klein', 'x/z-image-turbo']);
+  assert.ok(models.every((m) => m.pulls === null));
 });
