@@ -26,6 +26,7 @@ const {
   median,
   clamp,
 } = require('./benchmarkScoring.cjs');
+const { scoreQualityWithJudge } = require('./judgeScoring.cjs');
 const security = require('./security.cjs');
 const {
   normalizeUpdateChannel,
@@ -419,9 +420,26 @@ function registerHandlers() {
   });
   handleLogged('ollama:deleteModel', 'ollama', (_event, request) => deleteModel(request));
   handleLogged('ollama:advancedGenerate', 'ollama', (event, request) => runAdvancedGenerate(request, event.sender));
+  // Stop button support: abort an in-flight streamed generation (App Builder /
+  // vision) immediately instead of letting it run out its multi-minute budget.
+  ipcMain.handle('ollama:abortAdvancedGenerate', (event, streamId) => {
+    assertTrustedIpcSender(event);
+    if (typeof streamId !== 'string' || !streamId) return;
+    const entry = activeAdvancedStreams.get(streamId);
+    if (entry) {
+      entry.stoppedByUser = true;
+      entry.controller.abort();
+    }
+  });
   handleLogged('network:scanLan', 'network', () => scanLanForOllama());
   handleLogged('network:addHostByAddress', 'network', (_event, address) => addHostByAddress(address));
   handleLogged('benchmark:run', 'benchmark', (event, request) => runBenchmark(request, event.sender));
+  // Stop button support: flag a running benchmark so its main-process loop stops
+  // at the next question/run boundary instead of finishing the whole model.
+  ipcMain.handle('benchmark:cancel', (event, progressId) => {
+    assertTrustedIpcSender(event);
+    if (typeof progressId === 'string' && progressId) canceledBenchmarkIds.add(progressId);
+  });
   ipcMain.handle('benchmark:getActive', () => benchmarkStatusPayload());
   handleLogged('chat:send', 'chat', (_event, request) => sendChat(request));
   handleLogged('logs:list', 'logs', (_event, limit) => readAppLogs(limit));
@@ -505,6 +523,26 @@ function registerHandlers() {
     latestScores = validated;
     latestChosen = typeof chosen === 'string' && chosen.length <= 200 ? chosen : null;
   });
+  // Cloud judge bridge for the renderer (App Builder judging). Kept in the main
+  // process so the renderer never needs a remote-fetch exception; strictly
+  // opt-in and only ever called with the user's own OpenRouter key.
+  ipcMain.handle('judge:openRouterGenerate', async (event, request) => {
+    assertTrustedIpcSender(event);
+    const apiKey = typeof request?.apiKey === 'string' ? request.apiKey.trim() : '';
+    const model = typeof request?.model === 'string' ? request.model.trim() : '';
+    const prompt = typeof request?.prompt === 'string' ? request.prompt : '';
+    const maxTokens = Math.max(50, Math.min(2000, Number(request?.maxTokens) || 400));
+    try {
+      assertValidModelName(model);
+      if (!apiKey) throw new Error('OpenRouter API key is missing');
+      if (!prompt.trim() || prompt.length > 200000) throw new Error('Judge prompt is missing or too large');
+      const text = await openRouterGenerateText(apiKey, model, prompt, maxTokens);
+      return { response: text, error: null };
+    } catch (error) {
+      return { response: '', error: getLogErrorMessage(error) };
+    }
+  });
+
   ipcMain.handle('app:openChatApp', async (event) => {
     assertTrustedIpcSender(event);
     const platform = process.platform;
@@ -578,6 +616,14 @@ function registerHandlers() {
         k !== 'NODE_PATH'
       )
     );
+
+    // The chat app is WebKitGTK on Linux, which segfaults in libnvidia-eglcore
+    // during GL context teardown on NVIDIA drivers (esp. Wayland). Disable the
+    // DMABUF renderer for the child unless the user has set it explicitly. The
+    // chat app also sets this itself; this covers older chat binaries too.
+    if (!isWin && !isMac && cleanEnv.WEBKIT_DISABLE_DMABUF_RENDERER === undefined) {
+      cleanEnv.WEBKIT_DISABLE_DMABUF_RENDERER = '1';
+    }
 
     for (const candidate of candidates) {
       if (!fsSync.existsSync(candidate)) continue;
@@ -1109,11 +1155,19 @@ async function getSystemProfile() {
 
   // On Apple Silicon, GPU memory is unified with RAM — no separate VRAM pool.
   // systeminformation returns 0/null for vram on macOS; use total RAM as the pool size.
-  const vramGb = primaryGpu.vram
+  let vramGb = primaryGpu.vram
     ? mbToGb(primaryGpu.vram)
     : isAppleSilicon
       ? bytesToGb(mem.total)
       : 0;
+
+  // If systeminformation couldn't read VRAM on a non-Apple rig, fall back to
+  // nvidia-smi. Without this, an NVIDIA GPU that reports 0 VRAM makes RigMatch
+  // recommend only tiny models (e.g. phi3:mini on a 4090).
+  if (vramGb <= 0 && !isAppleSilicon) {
+    const nvidiaVramMb = await getNvidiaVramMb();
+    if (nvidiaVramMb > 0) vramGb = mbToGb(nvidiaVramMb);
+  }
 
   // macOS uses Metal; Windows exposes actual driver version strings.
   const driverVersion = primaryGpu.driverVersion ||
@@ -1274,6 +1328,24 @@ async function getLatestCudaToolkitVersion() {
 
   latestCudaCacheAt = now;
   return latestCudaCache;
+}
+
+// systeminformation frequently reports 0 VRAM for NVIDIA GPUs on Linux (and some
+// Windows laptop/hybrid setups). Ask nvidia-smi directly so a 16 GB 4090 isn't
+// mistaken for a VRAM-less rig — which otherwise collapses model picks to tiny
+// models. Returns VRAM in MB (MiB), or 0 if nvidia-smi is absent/unparseable.
+async function getNvidiaVramMb() {
+  const { output, error } = await runCommand(
+    'nvidia-smi',
+    ['--query-gpu=memory.total', '--format=csv,noheader,nounits'],
+    3500,
+  );
+  if (error) return 0;
+  const values = output
+    .split('\n')
+    .map((line) => parseInt(line.trim(), 10))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  return values.length ? Math.max(...values) : 0;
 }
 
 async function runCommand(command, args = [], timeoutMs = 2500) {
@@ -2144,10 +2216,16 @@ async function runBenchmark(request = {}, sender) {
     return await runBenchmarkInner(request, sender);
   } finally {
     benchmarkRunning = false;
+    if (activeBenchmark?.progressId) canceledBenchmarkIds.delete(activeBenchmark.progressId);
     activeBenchmark = null;
     broadcastBenchmarkStatus();
   }
 }
+
+// Benchmark progressIds the user has asked to stop (via benchmark:cancel). The
+// run loop checks this between question runs so Stop takes effect within one
+// generation instead of after the whole model finishes.
+const canceledBenchmarkIds = new Set();
 
 async function runBenchmarkInner(request = {}, sender) {
   const model = assertValidModelName(request.model);
@@ -2158,6 +2236,21 @@ async function runBenchmarkInner(request = {}, sender) {
   const questionCount = normalizeBenchmarkQuestionCount(request.questionCount);
   const benchmarkPrompts = buildBenchmarkPromptPlan(questionCount, request.questions);
   const progressId = typeof request.progressId === 'string' ? request.progressId : null;
+
+  // LLM-as-judge quality scoring (opt-in). Local judging runs through the same
+  // Ollama /api/generate as the contestants; cloud judging (strictly opt-in —
+  // sends graded content to OpenRouter and costs credits) needs a model id and an
+  // API key. Anything malformed or missing quietly falls back to the heuristic.
+  const rawJudgeModel = typeof request.judgeModel === 'string' ? request.judgeModel.trim() : '';
+  let judgeModel = '';
+  try {
+    if (rawJudgeModel) judgeModel = assertValidModelName(rawJudgeModel);
+  } catch { judgeModel = ''; }
+  const judgeProvider = request.judgeProvider === 'openrouter' ? 'openrouter' : 'local';
+  const judgeApiKey = typeof request.judgeApiKey === 'string' ? request.judgeApiKey.trim() : '';
+  const useJudge = request.qualityMode === 'judge' && Boolean(judgeModel) && (
+    judgeProvider === 'openrouter' ? Boolean(judgeApiKey) : provider === 'ollama'
+  );
   const sendProgress = (update) => {
     const payload = {
       id: progressId,
@@ -2191,6 +2284,9 @@ async function runBenchmarkInner(request = {}, sender) {
       questionCount,
       benchmarkMode: provider === 'lm-studio' ? 'openai-compatible' : 'ollama-parity',
       provider,
+      qualityScoring: useJudge ? 'judge' : 'heuristic',
+      judgeModel: useJudge ? judgeModel : null,
+      judgeProvider: useJudge ? judgeProvider : null,
       thinkingDisabled: provider === 'ollama' ? BENCHMARK_THINK_DISABLED : false,
       warmup: {
         enabled: true,
@@ -2224,8 +2320,21 @@ async function runBenchmarkInner(request = {}, sender) {
     message: `${model} is entering the compatibility round through ${providerLabel}.`,
   });
 
+  // Stop-button support: bail out at question/run boundaries when the renderer
+  // has canceled this progressId. Throwing unwinds to runBenchmark's cleanup.
+  const throwIfCanceled = () => {
+    if (progressId && canceledBenchmarkIds.has(progressId)) {
+      throw new Error('Benchmark stopped by user');
+    }
+  };
+
   for (const [promptIndex, prompt] of benchmarkPrompts.entries()) {
+    throwIfCanceled();
     const runs = [];
+    // With judge scoring on, grade this prompt once (on the first run's answer)
+    // and reuse it across the repeated timing runs — one judge call per question
+    // instead of one per run keeps cost and time in check.
+    let promptJudgeScore = null;
     sendProgress({
       phase: 'prompt-start',
       promptIndex,
@@ -2237,6 +2346,7 @@ async function runBenchmarkInner(request = {}, sender) {
     });
 
     for (let runIndex = 0; runIndex < BENCHMARK_REPEATS; runIndex += 1) {
+      throwIfCanceled();
       sendProgress({
         phase: 'prompt-run',
         promptIndex,
@@ -2303,7 +2413,22 @@ async function runBenchmarkInner(request = {}, sender) {
       if (!evalCount) evalCount = estimateTokens(responseText);
       if (!evalDurationSeconds) evalDurationSeconds = elapsedMs / 1000;
       const tokensPerSecond = evalDurationSeconds > 0 ? evalCount / evalDurationSeconds : 0;
-      const sobrietyScore = scoreSobriety(prompt, responseText);
+
+      // Judge grades the representative (first-run) answer; later runs reuse it.
+      // On any judge failure, promptJudgeScore stays null and we use the heuristic.
+      if (useJudge && runIndex === 0) {
+        const verdict = await scoreQualityWithJudge({
+          prompt,
+          response: responseText,
+          generate: (judgePrompt) => (judgeProvider === 'openrouter'
+            ? openRouterGenerateText(judgeApiKey, judgeModel, judgePrompt, 200)
+            : runJudgeGenerate(baseUrl, judgeModel, judgePrompt)),
+        });
+        promptJudgeScore = verdict ? verdict.score : null;
+      }
+      const sobrietyScore = promptJudgeScore != null
+        ? promptJudgeScore
+        : scoreSobriety(prompt, responseText);
       const promptStatus = getBenchmarkPromptStatus(responseText, doneReason);
       const diagnostic = buildPromptDiagnostic({
         responseText,
@@ -2519,6 +2644,64 @@ async function warmLmStudioBenchmarkModel(baseUrl, model) {
     },
     BENCHMARK_TIMEOUT_MS,
   );
+}
+
+// Cloud judge: one deterministic OpenRouter chat completion. This is the ONLY
+// place RigMatch sends user content to a non-local service, and it is strictly
+// opt-in (judge source = Cloud, with the user's own API key). The key is passed
+// per-call and never logged — sanitizeLogValue redacts *key fields by name.
+async function openRouterGenerateText(apiKey, model, prompt, maxTokens = 400) {
+  if (!apiKey || typeof apiKey !== 'string' || apiKey.length > 300) {
+    throw new Error('OpenRouter API key is missing or invalid');
+  }
+  const response = await fetchJson(
+    'https://openrouter.ai/api/v1/chat/completions',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://github.com/DaveEuson/RigMatch.AI',
+        'X-Title': 'RigMatch.AI',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0,
+        max_tokens: maxTokens,
+      }),
+    },
+    60000,
+  );
+  if (response?.error) {
+    throw new Error(response.error.message || 'OpenRouter returned an error');
+  }
+  const text = response?.choices?.[0]?.message?.content;
+  if (typeof text !== 'string' || !text.trim()) {
+    throw new Error('OpenRouter returned an empty response');
+  }
+  return text;
+}
+
+// Runs the judge model deterministically to grade one answer. Kept short and
+// low-temperature so the verdict is stable and cheap. Any failure bubbles up so
+// scoreQualityWithJudge returns null and the caller falls back to the heuristic.
+async function runJudgeGenerate(baseUrl, judgeModel, judgePrompt) {
+  const response = await fetchJson(
+    `${baseUrl}/api/generate`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        model: judgeModel,
+        prompt: judgePrompt,
+        stream: false,
+        think: false,
+        keep_alive: BENCHMARK_KEEP_ALIVE,
+        options: { temperature: 0, top_p: 1, num_predict: 200 },
+      }),
+    },
+    BENCHMARK_TIMEOUT_MS,
+  );
+  return String(response.response || '');
 }
 
 async function runBenchmarkPromptParity(baseUrl, model, prompt) {
@@ -2822,8 +3005,16 @@ async function runAdvancedGenerate(request = {}, sender = null) {
  * stream and forwards each chunk to the renderer as an 'advanced-generate:progress'
  * event so the UI can show the model reasoning + writing code in real time.
  */
+// Active streamed generations, keyed by streamId, so the renderer's Stop button
+// can abort an in-flight App Builder / vision generation instead of waiting out
+// a run that can last minutes. Entries mark whether the user stopped them so the
+// error message says "stopped" rather than "timed out".
+const activeAdvancedStreams = new Map();
+
 async function streamAdvancedGenerate(url, body, timeoutMs, sender, streamId, model) {
   const controller = new AbortController();
+  const streamEntry = { controller, stoppedByUser: false };
+  if (streamId) activeAdvancedStreams.set(streamId, streamEntry);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const emit = (payload) => {
     if (sender && !sender.isDestroyed()) sender.send('advanced-generate:progress', { streamId, model, ...payload });
@@ -2874,11 +3065,12 @@ async function streamAdvancedGenerate(url, body, timeoutMs, sender, streamId, mo
     emit({ text: full, done: true, error: errorMsg });
   } catch (error) {
     errorMsg = errorMsg || (error?.name === 'AbortError'
-      ? `Timed out after ${timeoutMs} ms.`
+      ? (streamEntry.stoppedByUser ? 'Stopped by user.' : `Timed out after ${timeoutMs} ms.`)
       : (error?.message || 'Advanced generate failed.'));
     emit({ text: full, done: true, error: errorMsg });
   } finally {
     clearTimeout(timer);
+    if (streamId) activeAdvancedStreams.delete(streamId);
   }
   return { response: full, image, images, done_reason: doneReason, error: errorMsg };
 }

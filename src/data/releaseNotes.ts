@@ -2,6 +2,20 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.3.3',
+    label: 'Judge Grading, App Builder 2.0 & GPU Fixes',
+    date: 'Beta build',
+    notes: [
+      'New opt-in Judge grading: instead of the built-in keyword checks, a model you pick grades every answer — and reads any app built in a skill test to judge whether it actually works. Choose a local model (everything stays on this computer) or, strictly opt-in, a cloud model through OpenRouter with your own API key.',
+      'App Builder results now show their source: a View code toggle with one-click copy, alongside the running app.',
+      'App Builder second chances: Improve hands the model its own attempt to fix, Improve with a hint lets you tell it what\'s wrong, and Auto-improve runs several passes back to back and keeps the best attempt. A "Not what you expected?" note explains honestly why small models struggle to build apps.',
+      'Apps with code that can\'t even run (syntax errors) no longer score well — they\'re capped at an F with the reason shown on the scorecard. Previously a blank, broken app could score a perfect S.',
+      'Powerful GPUs no longer get tiny models recommended: the Pick step now leads with the largest model that comfortably fits your VRAM instead of the smallest, so a 16 GB card is steered toward a capable 7B–14B model rather than a 2 GB one.',
+      'Fixed VRAM reading as 0 on some Linux/NVIDIA systems: when the system scan can\'t see your graphics memory, RigMatch now asks nvidia-smi directly, so a 4090 is no longer mistaken for a VRAM-less rig (which had collapsed model picks down to only the smallest models).',
+      'Fixed the RigMatch Chat companion crashing on launch on Linux with NVIDIA graphics (a WebKitGTK/driver crash during startup, most common on Wayland).',
+    ],
+  },
+  {
     version: '0.3.2',
     label: 'Image Model Catalog Fix',
     date: 'Beta build',

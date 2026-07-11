@@ -223,6 +223,13 @@ import {
   APP_VERSION,
   BUY_ME_A_COFFEE_URL,
   CLEARED_TOP_MATCHES_STORAGE_KEY,
+  QUALITY_MODE_STORAGE_KEY,
+  JUDGE_MODEL_STORAGE_KEY,
+  JUDGE_SOURCE_STORAGE_KEY,
+  CLOUD_JUDGE_MODEL_STORAGE_KEY,
+  CLOUD_JUDGE_PRESETS,
+  OPENROUTER_KEY_STORAGE_KEY,
+  DEFAULT_CLOUD_JUDGE_MODEL,
   DEFAULT_SHORTLIST_IDS,
   HISTORY_STORAGE_KEY,
   NAV_ITEM_BY_ID,
@@ -257,6 +264,8 @@ import {
   APP_BUILDER_PRESETS,
   DEFAULT_APP_BUILDER_PRESET_ID,
   resolveAppBuilderPrompt,
+  buildAppBuilderRetryPrompt,
+  extractJudgedProblem,
   ADVANCED_IMAGE_GENERATION_PROMPT,
   getVisionTestImageDataUrl,
   runAdvancedAppBuilderChallenge,
@@ -387,6 +396,21 @@ function App() {
   const pullQueuePauseRef = useRef(false);
   const activePullProgressIdRef = useRef<string | null>(null);
   const stopRunRef = useRef(false);
+  // The benchmark progressId / skill-test streamId currently in flight, so Stop
+  // can actually cancel the running generation instead of only being noticed at
+  // the next model boundary (which made Stop feel dead for minutes).
+  const activeBenchmarkProgressIdRef = useRef<string | null>(null);
+  const activeSkillStreamIdRef = useRef<string | null>(null);
+  const requestStopRun = useCallback(() => {
+    stopRunRef.current = true;
+    const progressId = activeBenchmarkProgressIdRef.current;
+    if (progressId) void agentArcadeApi.cancelBenchmark?.(progressId);
+  }, []);
+  const requestStopSkills = useCallback(() => {
+    stopSkillRef.current = true;
+    const streamId = activeSkillStreamIdRef.current;
+    if (streamId) void agentArcadeApi.abortAdvancedGenerate?.(streamId);
+  }, []);
   const stopSkillRef = useRef(false);
   const [pendingDeleteModel, setPendingDeleteModel] = useState<ModelRow | null>(null);
   const [listTestResult, setListTestResult] = useState<ListTestResult | null>(savedHistory?.listTestResult ?? null);
@@ -420,6 +444,33 @@ function App() {
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
   const [benchmarkQuestionCount, setBenchmarkQuestionCount] = useState<BenchmarkQuestionCount>(10);
+  // Answer-grading mode: 'heuristic' (built-in, fast, offline) or 'judge' (grade
+  // answers with a local model). Off by default so existing scores don't move.
+  const [qualityMode, setQualityMode] = useState<'heuristic' | 'judge'>(() => {
+    try { return localStorage.getItem(QUALITY_MODE_STORAGE_KEY) === 'judge' ? 'judge' : 'heuristic'; }
+    catch { return 'heuristic'; }
+  });
+  const [judgeModel, setJudgeModel] = useState<string>(() => {
+    try { return localStorage.getItem(JUDGE_MODEL_STORAGE_KEY) ?? ''; }
+    catch { return ''; }
+  });
+  // Judge source: 'local' grades with an installed Ollama model (default, 100% on-
+  // device); 'openrouter' grades with a cloud model — strictly opt-in because it
+  // sends graded content off this computer and costs API credits.
+  const [judgeSource, setJudgeSource] = useState<'local' | 'openrouter'>(() => {
+    try { return localStorage.getItem(JUDGE_SOURCE_STORAGE_KEY) === 'openrouter' ? 'openrouter' : 'local'; }
+    catch { return 'local'; }
+  });
+  const [cloudJudgeModel, setCloudJudgeModel] = useState<string>(() => {
+    try { return localStorage.getItem(CLOUD_JUDGE_MODEL_STORAGE_KEY) ?? DEFAULT_CLOUD_JUDGE_MODEL; }
+    catch { return DEFAULT_CLOUD_JUDGE_MODEL; }
+  });
+  const [openRouterKey, setOpenRouterKey] = useState<string>(() => {
+    try { return localStorage.getItem(OPENROUTER_KEY_STORAGE_KEY) ?? ''; }
+    catch { return ''; }
+  });
+  // How many improve passes each model has had this session (App Builder retries).
+  const [improveCounts, setImproveCounts] = useState<Record<string, number>>({});
   const [benchmarkQuestions, setBenchmarkQuestions] = useState<BenchmarkQuestion[]>(() => getSavedBenchmarkQuestions());
   const [suiteEditorOpen, setSuiteEditorOpen] = useState(false);
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null);
@@ -529,6 +580,49 @@ function App() {
     () => modelRows.filter((row) => row.installed && row.localProvider !== 'lm-studio'),
     [modelRows],
   );
+  // Installed local (Ollama) models eligible to act as the judge, largest first —
+  // a bigger model is the better grader, so it makes the best default.
+  const judgeModelOptions = useMemo(
+    () => [...installedRowsForCleanup]
+      .sort((a, b) => (b.sizeGb ?? 0) - (a.sizeGb ?? 0))
+      .map((row) => row.displayName),
+    [installedRowsForCleanup],
+  );
+  // The judge model actually sent with a run: the user's pick if it's still
+  // installed, otherwise the largest installed model. Empty when judging is off
+  // or nothing is installed (backend then falls back to the heuristic).
+  const effectiveJudgeModel = useMemo(() => {
+    if (qualityMode !== 'judge') return '';
+    if (judgeModel && judgeModelOptions.includes(judgeModel)) return judgeModel;
+    return judgeModelOptions[0] ?? '';
+  }, [qualityMode, judgeModel, judgeModelOptions]);
+  // The judge configuration a run actually uses, or null when judging is off /
+  // not usable (cloud without a key falls back to heuristic — never silently to
+  // a different judge the user didn't pick).
+  const effectiveJudge = useMemo<{ provider: 'local' | 'openrouter'; model: string; apiKey?: string } | null>(() => {
+    if (qualityMode !== 'judge') return null;
+    if (judgeSource === 'openrouter') {
+      const model = cloudJudgeModel.trim();
+      const apiKey = openRouterKey.trim();
+      return model && apiKey ? { provider: 'openrouter', model, apiKey } : null;
+    }
+    return effectiveJudgeModel ? { provider: 'local', model: effectiveJudgeModel } : null;
+  }, [qualityMode, judgeSource, cloudJudgeModel, openRouterKey, effectiveJudgeModel]);
+  useEffect(() => {
+    try { localStorage.setItem(QUALITY_MODE_STORAGE_KEY, qualityMode); } catch { /* ignore */ }
+  }, [qualityMode]);
+  useEffect(() => {
+    try { localStorage.setItem(JUDGE_MODEL_STORAGE_KEY, judgeModel); } catch { /* ignore */ }
+  }, [judgeModel]);
+  useEffect(() => {
+    try { localStorage.setItem(JUDGE_SOURCE_STORAGE_KEY, judgeSource); } catch { /* ignore */ }
+  }, [judgeSource]);
+  useEffect(() => {
+    try { localStorage.setItem(CLOUD_JUDGE_MODEL_STORAGE_KEY, cloudJudgeModel); } catch { /* ignore */ }
+  }, [cloudJudgeModel]);
+  useEffect(() => {
+    try { localStorage.setItem(OPENROUTER_KEY_STORAGE_KEY, openRouterKey); } catch { /* ignore */ }
+  }, [openRouterKey]);
   const unscoredRowsForCleanup = useMemo(
     () => installedRowsForCleanup.filter((row) => !getModelScore(row, modelScores)),
     [installedRowsForCleanup, modelScores],
@@ -571,7 +665,11 @@ function App() {
       .filter((row) => getPlatformFit(row.displayName, system.platform).compatible)
       .map((row) => ({ row, fit: getHardwareFit(row, vramGb) }))
       .filter((entry) => entry.fit.recommend && entry.fit.tone !== 'unknown')
-      .sort((a, b) => (fitRank[a.fit.tone] ?? 9) - (fitRank[b.fit.tone] ?? 9) || (a.row.sizeGb ?? 99) - (b.row.sizeGb ?? 99))
+      // Prefer the best fit tone first, then the LARGEST model that still fits —
+      // a capable GPU should be steered toward more model, not the smallest one.
+      // (Sorting by ascending size here surfaced tiny models like phi3:mini as the
+      // top pick on high-VRAM rigs.)
+      .sort((a, b) => (fitRank[a.fit.tone] ?? 9) - (fitRank[b.fit.tone] ?? 9) || (b.row.sizeGb ?? 0) - (a.row.sizeGb ?? 0))
       .map(({ row, fit }): WizardModel => ({
         row,
         name: row.displayName,
@@ -1220,6 +1318,7 @@ function App() {
     const runtime = getModelRuntime(rowToTest, ollama);
     const hostBlocker = getModelBenchmarkBlocker(rowToTest, selectedHost, ollama);
     const progressId = createRunProgressId('single');
+    activeBenchmarkProgressIdRef.current = progressId;
     const questions = questionsOverride ?? benchmarkPromptPlan;
     const count = questionsOverride ? questionsOverride.length : benchmarkQuestionCount;
 
@@ -1267,6 +1366,10 @@ function App() {
         questionCount: count,
         questions,
         progressId,
+        qualityMode: effectiveJudge ? 'judge' : 'heuristic',
+        judgeModel: effectiveJudge?.model,
+        judgeProvider: effectiveJudge?.provider,
+        judgeApiKey: effectiveJudge?.apiKey,
       }), modelToTest);
       setBenchmark(result);
       setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
@@ -1329,9 +1432,10 @@ function App() {
       });
       setActivity(`Benchmark failed: ${errorMessage}`);
     } finally {
+      activeBenchmarkProgressIdRef.current = null;
       setIsBenchmarking(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, selectedHost, selectedModel, system.hostname]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, selectedHost, selectedModel, system.hostname, effectiveJudge]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
     void startBenchmark(row.displayName, QUICK_CHECK_QUESTIONS);
@@ -1831,6 +1935,7 @@ function App() {
       const results: BenchmarkResult[] = [];
       for (const [index, row] of runnableRows.entries()) {
         const progressId = `${listRunId}-${index}`;
+        activeBenchmarkProgressIdRef.current = progressId;
         setRunProgress((current) => ({
           progressId,
           mode: 'speed-date',
@@ -1858,6 +1963,10 @@ function App() {
           questionCount: benchmarkQuestionCount,
           questions: benchmarkPromptPlan,
           progressId,
+          qualityMode: effectiveJudge ? 'judge' : 'heuristic',
+          judgeModel: effectiveJudge?.model,
+          judgeProvider: effectiveJudge?.provider,
+          judgeApiKey: effectiveJudge?.apiKey,
         }), row.displayName);
         results.push(result);
         setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
@@ -1955,9 +2064,10 @@ function App() {
       }));
       setActivity(`Speed Dating failed: ${errorMessage}`);
     } finally {
+      activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge]);
 
   const runSkillTestsAfterRun = useCallback(async (models: string[]) => {
     const selection = skillTestSelection;
@@ -1998,19 +2108,24 @@ function App() {
       if (job.kind === 'app-builder') {
         // Stream the model reasoning + code live into the "watch it build" modal.
         const streamId = `build-${Date.now()}-${index}`;
+        activeSkillStreamIdRef.current = streamId;
         setLiveBuild({ model: job.model, kind: 'app', text: '', done: false });
         const unsubscribe = agentArcadeApi.onAdvancedGenerateProgress?.((payload) => {
           if (payload.streamId !== streamId) return;
           setLiveBuild({ model: payload.model ?? job.model, kind: 'app', text: payload.text, done: payload.done, error: payload.error });
         });
         try {
-          result = await runAdvancedAppBuilderChallenge(job.model, ollama.baseUrl, appPrompt, streamId);
+          result = await runAdvancedAppBuilderChallenge(
+            job.model, ollama.baseUrl, appPrompt, streamId, undefined,
+            effectiveJudge ? { ...effectiveJudge, taskDescription: appPrompt } : undefined,
+          );
         } finally {
           unsubscribe?.();
         }
       } else if (job.kind === 'vision') {
         // Stream the model's live description of the test image.
         const streamId = `recognize-${Date.now()}-${index}`;
+        activeSkillStreamIdRef.current = streamId;
         setLiveBuild({ model: job.model, kind: 'vision', text: '', done: false });
         const unsubscribe = agentArcadeApi.onAdvancedGenerateProgress?.((payload) => {
           if (payload.streamId !== streamId) return;
@@ -2044,6 +2159,7 @@ function App() {
       setSkillRunStatus({ phase: 'complete', label: 'Skill tests finished', completed: jobs.length, total: jobs.length });
     }
     // The live build view hands off to the rendered-app viewer below.
+    activeSkillStreamIdRef.current = null;
     setLiveBuild(null);
     // Auto-open a viewer for whatever the models produced, per the "pop up to
     // view this when a demo completes" flow.
@@ -2053,7 +2169,125 @@ function App() {
     } else if (!stopSkillRef.current) {
       setActivity(`Skill tests finished (${jobs.length} run${jobs.length === 1 ? '' : 's'}). Lab Grades are saved in Settings → Advanced Lab.`);
     }
-  }, [ollama.baseUrl, skillTestSelection]);
+  }, [ollama.baseUrl, skillTestSelection, effectiveJudge]);
+
+  // One improve pass: hand the model its previous attempt (plus an optional user
+  // hint), stream the rebuild into the live view, and return the new result — or
+  // null if the pass errored or produced no usable app. Shared by the single
+  // "Try again" retry and the auto-improve loop.
+  const runImprovePass = useCallback(async (
+    model: string,
+    previousHtml: string,
+    hint: string | undefined,
+    label: string,
+    reviewNote?: string,
+  ): Promise<{ result: AdvancedLabResult; html: string } | null> => {
+    const retryPrompt = buildAppBuilderRetryPrompt(previousHtml, hint, reviewNote);
+    const streamId = `retry-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    activeSkillStreamIdRef.current = streamId;
+    setSkillRunStatus({ phase: 'running', label, completed: 0, total: 1 });
+    setLiveBuildOpen(true);
+    setLiveBuild({ model, kind: 'app', text: '', done: false });
+    const unsubscribe = agentArcadeApi.onAdvancedGenerateProgress?.((payload) => {
+      if (payload.streamId !== streamId) return;
+      setLiveBuild({ model: payload.model ?? model, kind: 'app', text: payload.text, done: payload.done, error: payload.error });
+    });
+    setImproveCounts((current) => ({ ...current, [model]: (current[model] ?? 0) + 1 }));
+    let result: AdvancedLabResult;
+    try {
+      // Break out of the fixed benchmark seed so a pass never regenerates the
+      // exact same output, but keep temperature moderate — improve passes refine
+      // the existing code, they shouldn't re-roll it wildly.
+      const retryOptions = { seed: Math.floor(Math.random() * 1_000_000_000), temperature: 0.4 };
+      const retryJudge = effectiveJudge ? { ...effectiveJudge } : undefined;
+      result = await runAdvancedAppBuilderChallenge(model, ollama.baseUrl, retryPrompt, streamId, retryOptions, retryJudge);
+    } catch (error) {
+      setActivity(`Improve pass failed: ${getErrorMessage(error)}.`);
+      return null;
+    } finally {
+      unsubscribe?.();
+      activeSkillStreamIdRef.current = null;
+    }
+    if (result.error) {
+      setActivity(`Improve pass failed: ${result.error}.`);
+      return null;
+    }
+    const html = extractHtmlDocument(result.response);
+    if (!html) {
+      setActivity(`${model}'s new attempt didn't return a usable app.`);
+      return null;
+    }
+    return { result, html };
+  }, [ollama.baseUrl, effectiveJudge]);
+
+  // "Second chance" for an App Builder result: one improve pass, optionally
+  // steered by a user hint. Restores the previous result if the pass fails, so
+  // the user is never left staring at an empty screen.
+  const retryAppBuilder = useCallback(async (previousDemo: DemoArtifact, hint?: string) => {
+    const { model, html: previousHtml } = previousDemo;
+    if (!previousHtml) return;
+    setDemoPopup(null);
+    setActivity(`Giving ${model} a second chance at the app${hint ? ' with your hint' : ''}...`);
+    // If a judge already diagnosed this attempt, hand its finding to the model
+    // alongside any user hint — targeted feedback beats "something is wrong".
+    const storedReview = extractJudgedProblem(readAdvancedLabResults()[model]?.checks);
+    const pass = await runImprovePass(model, previousHtml, hint, `Second chance — ${model}`, storedReview);
+    setLiveBuild(null);
+    setSkillRunStatus({ phase: 'complete', label: 'Second chance finished', completed: 1, total: 1 });
+    if (!pass) {
+      setDemoPopup([previousDemo]);
+      return;
+    }
+    writeAdvancedLabResults({ ...readAdvancedLabResults(), [model]: pass.result });
+    setDemoPopup([{ model, kind: 'app', html: pass.html, grade: pass.result.grade, score: pass.result.score }]);
+    setActivity(`${model}'s new attempt scored ${pass.result.score} (${pass.result.grade}).`);
+  }, [runImprovePass]);
+
+  // Auto-improve: run up to N improve passes back to back, each feeding the
+  // latest code forward, and keep the BEST-scoring attempt (with judge grading on,
+  // "best" genuinely means "most working"). Stops early on a strong score or when
+  // the user hits Stop. Always ends showing something — the best attempt so far.
+  const autoImproveAppBuilder = useCallback(async (previousDemo: DemoArtifact, times: number) => {
+    const { model, html: startHtml } = previousDemo;
+    if (!startHtml) return;
+    const total = Math.max(1, Math.min(10, Math.round(times)));
+    // Without a judge, the structural score can read 100 for a broken app — it
+    // must never trigger the "good enough, stop" shortcut (that made ×3 quit
+    // after one pass). Only a judge-graded score can end the loop early.
+    const judged = Boolean(effectiveJudge);
+    setDemoPopup(null);
+    stopSkillRef.current = false;
+    let best = previousDemo;
+    let latestHtml = startHtml;
+    let completed = 0;
+    // Each pass refines the latest code, steered by what the judge found wrong
+    // with it — a build → review → fix loop, not independent re-rolls. Seed the
+    // first pass with the stored diagnosis of the attempt being improved.
+    let reviewNote = extractJudgedProblem(readAdvancedLabResults()[model]?.checks);
+    for (let pass = 1; pass <= total; pass += 1) {
+      if (stopSkillRef.current) break;
+      setActivity(`Auto-improve pass ${pass} of ${total} for ${model}...`);
+      const attempt = await runImprovePass(model, latestHtml, undefined, `Auto-improve ${pass}/${total} — ${model}`, reviewNote);
+      if (!attempt) break;
+      completed += 1;
+      latestHtml = attempt.html;
+      reviewNote = extractJudgedProblem(attempt.result.checks);
+      if ((attempt.result.score ?? 0) >= (best.score ?? 0)) {
+        best = { model, kind: 'app', html: attempt.html, grade: attempt.result.grade, score: attempt.result.score };
+        writeAdvancedLabResults({ ...readAdvancedLabResults(), [model]: attempt.result });
+      }
+      // A strong JUDGE-verified score means it works — no need to keep burning
+      // passes. Structural scores never stop the loop; they can read 100 for a
+      // broken app, which made auto-improve quit after a single pass.
+      if (judged && (attempt.result.score ?? 0) >= 85) break;
+    }
+    setLiveBuild(null);
+    setSkillRunStatus({ phase: 'complete', label: 'Auto-improve finished', completed: 1, total: 1 });
+    setDemoPopup([best]);
+    setActivity(completed > 0
+      ? `Auto-improve finished after ${completed} pass${completed === 1 ? '' : 'es'} — best attempt scored ${best.score} (${best.grade}).${judged ? '' : ' Tip: turn on Judge grading so auto-improve can tell which attempt actually works.'}`
+      : 'Auto-improve could not complete a pass — showing the previous attempt.');
+  }, [runImprovePass, effectiveJudge]);
 
   const confirmPendingRun = useCallback(() => {
     const mode = pendingRunMode;
@@ -2347,7 +2581,7 @@ function App() {
           benchmarkActive={isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running)}
           runProgress={runProgress}
           onStartShow={() => { void runListTest(); }}
-          onStopShow={() => { stopRunRef.current = true; }}
+          onStopShow={requestStopRun}
           winner={wizardWinner}
           onChatWithWinner={openChatWithWinner}
           onOpenScorecard={() => { selectUiMode('advanced'); selectNav('history'); }}
@@ -2547,7 +2781,7 @@ function App() {
             onOpenSuiteEditor={() => setSuiteEditorOpen(true)}
             onOpenLogs={openLogsPanel}
             onStart={requestBenchmark}
-            onStop={() => { stopRunRef.current = true; }}
+            onStop={requestStopRun}
           />
         )}
         {activeNavId === 'agent' && (
@@ -2585,8 +2819,8 @@ function App() {
             onOpenModels={() => selectNav('models')}
             onOpenScorecards={() => selectNav('history')}
             onRerunTest={requestBenchmarkForModel}
-            onStopBenchmark={() => { stopRunRef.current = true; }}
-            onStopSkillTests={() => { stopSkillRef.current = true; }}
+            onStopBenchmark={requestStopRun}
+            onStopSkillTests={requestStopSkills}
           />
         )}
         {(activeNavId === 'history' || activeNavId === 'settings') && (
@@ -2713,7 +2947,7 @@ function App() {
             ? shortlistedRows
             : modelRows.filter((row) => row.displayName === runProgress.currentModel)}
           questionPlan={benchmarkQuestions.slice(0, benchmarkQuestionCount)}
-          onStop={() => { stopRunRef.current = true; }}
+          onStop={requestStopRun}
         />
       )}
 
@@ -2744,6 +2978,17 @@ function App() {
           onChangeQuestionCount={setBenchmarkQuestionCount}
           onLoadPreset={setBenchmarkQuestions}
           onEditQuestions={() => { cancelPendingRun(); setSuiteEditorOpen(true); }}
+          qualityMode={qualityMode}
+          judgeModel={effectiveJudgeModel}
+          judgeModelOptions={judgeModelOptions}
+          onChangeQualityMode={setQualityMode}
+          onChangeJudgeModel={setJudgeModel}
+          judgeSource={judgeSource}
+          onChangeJudgeSource={setJudgeSource}
+          cloudJudgeModel={cloudJudgeModel}
+          onChangeCloudJudgeModel={setCloudJudgeModel}
+          openRouterKey={openRouterKey}
+          onChangeOpenRouterKey={setOpenRouterKey}
           lineupModels={pendingRunMode === 'single'
             ? [pendingSingleModel ?? selectedModel].filter(Boolean)
             : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName)}
@@ -2761,12 +3006,19 @@ function App() {
           status={skillRunStatus}
           canShowLive={Boolean(liveBuild)}
           onShow={() => { if (liveBuild) setLiveBuildOpen(true); else selectNav('activity'); }}
-          onStop={() => { stopSkillRef.current = true; }}
+          onStop={requestStopSkills}
         />
       )}
 
       {demoPopup && demoPopup.length > 0 && (
-        <DemoResultModal demos={demoPopup} onClose={() => setDemoPopup(null)} />
+        <DemoResultModal
+          demos={demoPopup}
+          onClose={() => setDemoPopup(null)}
+          onRetry={(demo, hint) => { if (demo.html) void retryAppBuilder(demo, hint); }}
+          onAutoImprove={(demo, times) => { if (demo.html) void autoImproveAppBuilder(demo, times); }}
+          improveCounts={improveCounts}
+          judgeActive={Boolean(effectiveJudge)}
+        />
       )}
 
       {pendingThirdPartyDownloadRows && (
@@ -3842,6 +4094,17 @@ function RunWarningModal({
   lineupModels,
   skillSelection,
   onSkillSelectionChange,
+  qualityMode,
+  judgeModel,
+  judgeModelOptions,
+  onChangeQualityMode,
+  onChangeJudgeModel,
+  judgeSource,
+  onChangeJudgeSource,
+  cloudJudgeModel,
+  onChangeCloudJudgeModel,
+  openRouterKey,
+  onChangeOpenRouterKey,
 }: {
   mode: PendingRunMode;
   selectedModel: string;
@@ -3859,6 +4122,17 @@ function RunWarningModal({
   lineupModels: string[];
   skillSelection: SkillTestSelection;
   onSkillSelectionChange: (selection: SkillTestSelection) => void;
+  qualityMode: 'heuristic' | 'judge';
+  judgeModel: string;
+  judgeModelOptions: string[];
+  onChangeQualityMode: (mode: 'heuristic' | 'judge') => void;
+  onChangeJudgeModel: (model: string) => void;
+  judgeSource: 'local' | 'openrouter';
+  onChangeJudgeSource: (source: 'local' | 'openrouter') => void;
+  cloudJudgeModel: string;
+  onChangeCloudJudgeModel: (model: string) => void;
+  openRouterKey: string;
+  onChangeOpenRouterKey: (key: string) => void;
 }) {
   const [questionsExpanded, setQuestionsExpanded] = useState(false);
   const recognizeUploadRef = useRef<HTMLInputElement>(null);
@@ -3993,6 +4267,127 @@ function RunWarningModal({
                   </li>
                 ))}
               </ol>
+            )}
+          </div>
+
+          <div className="run-question-picker">
+            <div className="run-question-picker-head">
+              <span>Answer grading</span>
+              <em>How answer quality — and whether a built app actually works — is scored.</em>
+            </div>
+            <div className="run-question-options" role="group" aria-label="Answer grading mode">
+              <button
+                type="button"
+                className={qualityMode === 'heuristic' ? 'active' : ''}
+                onClick={() => onChangeQualityMode('heuristic')}
+                aria-pressed={qualityMode === 'heuristic'}
+              >
+                Fast (built-in)
+              </button>
+              <button
+                type="button"
+                className={qualityMode === 'judge' ? 'active' : ''}
+                onClick={() => onChangeQualityMode('judge')}
+                aria-pressed={qualityMode === 'judge'}
+              >
+                Judge model
+              </button>
+            </div>
+            {qualityMode === 'judge' && (
+              <>
+                <div className="run-question-options run-judge-source" role="group" aria-label="Judge source">
+                  <button
+                    type="button"
+                    className={judgeSource === 'local' ? 'active' : ''}
+                    onClick={() => onChangeJudgeSource('local')}
+                    aria-pressed={judgeSource === 'local'}
+                  >
+                    Local model
+                  </button>
+                  <button
+                    type="button"
+                    className={judgeSource === 'openrouter' ? 'active' : ''}
+                    onClick={() => onChangeJudgeSource('openrouter')}
+                    aria-pressed={judgeSource === 'openrouter'}
+                  >
+                    Cloud (OpenRouter)
+                  </button>
+                </div>
+                {judgeSource === 'local' ? (
+                  judgeModelOptions.length === 0 ? (
+                    <div className="run-question-skipped-note">
+                      No local models installed to grade with — install one first, use the cloud judge, or use Fast grading.
+                    </div>
+                  ) : (
+                    <>
+                      <label className="run-judge-model">
+                        <span>Graded by</span>
+                        <select value={judgeModel} onChange={(e) => onChangeJudgeModel(e.target.value)}>
+                          {judgeModelOptions.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {lineupModels.includes(judgeModel) ? (
+                        <div className="run-question-skipped-note">
+                          Heads up: {judgeModel} is also being tested. A model grading itself can inflate its own score — pick a different judge if you can.
+                        </div>
+                      ) : (
+                        <div className="run-question-skipped-note">
+                          {judgeModel} grades every answer — and reads any app built in a skill test to judge whether it actually runs. Slower, but far more accurate than the built-in checks. Everything stays on this computer.
+                        </div>
+                      )}
+                    </>
+                  )
+                ) : (
+                  <>
+                    <label className="run-judge-model">
+                      <span>Guest judge</span>
+                      <select
+                        value={CLOUD_JUDGE_PRESETS.some((preset) => preset.id === cloudJudgeModel) ? cloudJudgeModel : '__custom__'}
+                        onChange={(e) => onChangeCloudJudgeModel(e.target.value === '__custom__' ? '' : e.target.value)}
+                      >
+                        {CLOUD_JUDGE_PRESETS.map((preset) => (
+                          <option key={preset.id} value={preset.id}>{preset.label}</option>
+                        ))}
+                        <option value="__custom__">Custom OpenRouter model…</option>
+                      </select>
+                    </label>
+                    {!CLOUD_JUDGE_PRESETS.some((preset) => preset.id === cloudJudgeModel) && (
+                      <label className="run-judge-model">
+                        <span>Model id</span>
+                        <input
+                          type="text"
+                          value={cloudJudgeModel}
+                          onChange={(e) => onChangeCloudJudgeModel(e.target.value)}
+                          placeholder="vendor/model — any OpenRouter id"
+                          spellCheck={false}
+                        />
+                      </label>
+                    )}
+                    <label className="run-judge-model">
+                      <span>API key</span>
+                      <input
+                        type="password"
+                        value={openRouterKey}
+                        onChange={(e) => onChangeOpenRouterKey(e.target.value)}
+                        placeholder="sk-or-…"
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                    </label>
+                    {openRouterKey.trim() ? (
+                      <div className="run-question-skipped-note">
+                        Cloud judging sends each question, the model's answer, and any built-app code to OpenRouter for grading, and uses your OpenRouter credits. Your key stays on this computer. If the cloud judge fails, scoring falls back to the built-in checks.
+                      </div>
+                    ) : (
+                      <div className="run-question-skipped-note">
+                        Enter your OpenRouter API key to enable cloud grading — without it, this run uses the built-in checks. Cloud judging is never on by default: it sends graded content to OpenRouter and costs credits.
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
             )}
           </div>
 

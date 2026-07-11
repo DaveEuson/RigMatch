@@ -13,6 +13,13 @@ import robotScorecardCeremony from '../assets/robot-scorecard-ceremony.webp';
 import { agentArcadeApi } from '../api';
 import { describeRunError } from './format';
 import { getAdvancedLabGrade, type AdvancedLabCheck, type AdvancedLabResult } from './labResults';
+import { extractHtmlDocument } from './labPreview';
+import { checkAppParses } from './appRunnability';
+import { judgeAppBuilder } from './appBuilderJudge';
+
+// Code that doesn't even parse can't run — a blank screen must never outscore a
+// working app. Cap it here regardless of how good the structure looks. 25 is F.
+const BROKEN_APP_SCORE_CAP = 25;
 
 export type VisionTestImage = { id: string; label: string; src: string };
 
@@ -95,6 +102,46 @@ export const DEFAULT_APP_BUILDER_PRESET_ID = 'tetris';
 export const ADVANCED_APP_BUILDER_PROMPT = APP_BUILDER_PRESETS[0].prompt;
 
 /** Resolve the effective App Builder prompt from a preset id or a custom request. */
+// Pulls the judge's diagnosis of the latest attempt out of a result's checks, so
+// the next improve pass can be told exactly what a reviewer found wrong. Returns
+// '' when there is no failed "Judged working" check to learn from.
+export function extractJudgedProblem(checks: AdvancedLabCheck[] | undefined): string {
+  const judged = (checks ?? []).find((check) => check.label === 'Judged working');
+  if (!judged || judged.passed) return '';
+  return (judged.detail ?? '').trim();
+}
+
+// Builds an improve-pass prompt: refine the existing code in place — keep what
+// works, fix what's broken — so progress accumulates across passes instead of
+// each pass re-rolling the app from scratch. Weak models tend to "refine" by
+// adding "fixed typo" comments and leaving `/* ... */` stubs where real logic
+// belongs, so those are explicitly banned and completeness is demanded. The
+// user's hint and the judge's diagnosis of the previous attempt lead the prompt,
+// where they carry the most weight.
+export function buildAppBuilderRetryPrompt(previousCode: string, hint?: string, reviewNote?: string): string {
+  const trimmedHint = (hint ?? '').trim();
+  const trimmedReview = (reviewNote ?? '').trim();
+  const priorities: string[] = [];
+  if (trimmedHint) priorities.push(`The user reports: ${trimmedHint} — fixing this is the top priority.`);
+  if (trimmedReview) priorities.push(`A code review of this exact code found: ${trimmedReview} — fix that problem.`);
+  if (!priorities.length) priorities.push('The app below does not fully work yet. Find what is broken or missing and fix it.');
+  return [
+    'Improve the HTML app below. Keep its overall structure and everything that already works — change what is broken, finish what is incomplete. Do not start over from scratch.',
+    '',
+    ...priorities,
+    '',
+    '```html',
+    previousCode.trim(),
+    '```',
+    '',
+    'Return the complete improved file. Strict requirements:',
+    '- Every function must be fully implemented. NO placeholder comments, NO "TODO", NO stubs like `/* check ... */` standing in for real logic.',
+    '- Do NOT add comments explaining what you changed — just clean, working code.',
+    '- The app MUST run with no JavaScript errors and actually do what it claims.',
+    `- Return only the code for one HTML file.${APP_BUILDER_BASE_RULES}`,
+  ].join('\n');
+}
+
 export function resolveAppBuilderPrompt(promptId: string, customPrompt: string): string {
   if (promptId === 'custom') {
     const custom = customPrompt.trim();
@@ -284,11 +331,54 @@ function scoreAdvancedImageResponse(imageDataUrl: string, doneReason: string): P
 
 // ── Challenge runners ────────────────────────────────────────────────────────
 
+// The judge configuration for grading a generated app: a local Ollama model, or an
+// OpenRouter model (strictly opt-in — sends the app code to the cloud) with a key.
+export type AppBuilderJudgeConfig = {
+  model: string;
+  provider?: 'local' | 'openrouter';
+  apiKey?: string;
+  taskDescription?: string;
+};
+
+// Runs the judge model deterministically to grade a generated app. Short output
+// (a JSON verdict), low temperature. Errors bubble up so judgeAppBuilder returns
+// null and the caller falls back to the structural score.
+async function runAppJudgeGenerate(baseUrl: string, judge: AppBuilderJudgeConfig, judgePrompt: string): Promise<string> {
+  if (judge.provider === 'openrouter') {
+    if (!agentArcadeApi.openRouterGenerate) throw new Error('Cloud judging is not available in this build.');
+    const data = await agentArcadeApi.openRouterGenerate({
+      apiKey: judge.apiKey ?? '',
+      model: judge.model,
+      prompt: judgePrompt,
+      maxTokens: 400,
+    });
+    if (data.error) throw new Error(data.error);
+    return data.response ?? '';
+  }
+  const data = await agentArcadeApi.runAdvancedGenerate({
+    model: judge.model,
+    baseUrl,
+    prompt: judgePrompt,
+    keep_alive: '10m',
+    timeoutMs: 120000,
+    options: { temperature: 0, top_p: 1, num_ctx: 8192, num_predict: 400 },
+  });
+  if (data.error) throw new Error(data.error);
+  return data.response ?? '';
+}
+
 export async function runAdvancedAppBuilderChallenge(
   model: string,
   baseUrl: string,
   prompt: string = ADVANCED_APP_BUILDER_PROMPT,
   streamId?: string,
+  // Retries pass an override to escape the fixed benchmark seed: reproducibility
+  // is right for the scored first attempt, but a "second chance" needs a *different*
+  // seed and a bit more temperature or it just regenerates the same broken output.
+  optionsOverride?: Record<string, unknown>,
+  // When set, an LLM judge grades whether the app actually works (opt-in, via the
+  // run dialog's judge toggle). taskDescription gives the judge the intended app.
+  judge?: AppBuilderJudgeConfig,
 ): Promise<AdvancedLabResult> {
   const startedAt = performance.now();
 
@@ -308,6 +398,7 @@ export async function runAdvancedAppBuilderChallenge(
         seed: 7,
         num_ctx: 8192,
         num_predict: 4500,
+        ...optionsOverride,
       },
       ...(streamId ? { stream: true, streamId } : {}),
     });
@@ -315,10 +406,55 @@ export async function runAdvancedAppBuilderChallenge(
 
     const raw = data.response ?? '';
     const scored = scoreAdvancedAppBuilderResponse(raw, data.done_reason ?? '');
+
+    // Does the code even parse? Structure checks can't tell a working app from a
+    // blank screen; a syntax error means the script never runs at all. If it
+    // doesn't parse, cap the score to an F and record why. (Runtime/logic
+    // correctness — code that parses but crashes when run — is the judge's job.)
+    const html = extractHtmlDocument(raw);
+    const parsed = html
+      ? checkAppParses(html)
+      : { parses: false, error: 'No usable HTML document was returned.' };
+    const parsesCheck: AdvancedLabCheck = {
+      label: 'Free of syntax errors',
+      passed: parsed.parses,
+      detail: parsed.parses
+        ? 'The code parses, so the script will actually execute (not a parse-time blank screen).'
+        : `Will not run — ${parsed.error}`,
+    };
+    let finalScore = parsed.parses ? scored.score : Math.min(scored.score, BROKEN_APP_SCORE_CAP);
+    let checks: AdvancedLabCheck[] = [parsesCheck, ...scored.checks];
+
+    // Optional LLM judge: reads the code and grades whether it actually works,
+    // catching runtime/logic bugs that structure + syntax can't see (a valid-syntax
+    // Tetris that crashes on the first tick). Only when the code parses — a syntax
+    // error is already an F — and a judge model is set. The judge score becomes the
+    // grade; if the judge errors or returns nothing, we keep the structural score.
+    if (parsed.parses && html && judge?.model) {
+      const verdict = await judgeAppBuilder({
+        code: html,
+        taskDescription: judge.taskDescription,
+        generate: (judgePrompt) => runAppJudgeGenerate(baseUrl, judge, judgePrompt),
+      });
+      if (verdict) {
+        finalScore = verdict.score;
+        checks = [
+          {
+            label: 'Judged working',
+            passed: verdict.score >= 60,
+            detail: verdict.reason || `The ${judge.model} judge scored this ${verdict.score}/100.`,
+          },
+          ...checks,
+        ];
+      }
+    }
+
     return {
       model,
       challenge: 'app-builder',
-      ...scored,
+      score: finalScore,
+      grade: getAdvancedLabGrade(finalScore),
+      checks,
       elapsedMs: Math.round(performance.now() - startedAt),
       response: raw,
       completedAt: new Date().toISOString(),

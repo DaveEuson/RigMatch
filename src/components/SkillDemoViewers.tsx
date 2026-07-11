@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Image as ImageIcon, Maximize2, Play, RefreshCw, Sparkles, X } from 'lucide-react';
+import { Code2, Image as ImageIcon, Maximize2, Play, RefreshCw, Sparkles, X } from 'lucide-react';
 import type { SkillRunStatus } from '../types';
 import { getModelDemoArtifacts, type DemoArtifact } from '../lib/labResults';
 import { buildSandboxedPreviewHtml } from '../lib/labPreview';
@@ -93,15 +93,53 @@ export function LiveBuildModal({ build, onClose }: { build: { model: string; kin
   );
 }
 
-export function DemoResultModal({ demos, onClose }: { demos: DemoArtifact[]; onClose: () => void }) {
+export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improveCounts, judgeActive }: {
+  demos: DemoArtifact[];
+  onClose: () => void;
+  onRetry?: (demo: DemoArtifact, hint?: string) => void;
+  onAutoImprove?: (demo: DemoArtifact, times: number) => void;
+  improveCounts?: Record<string, number>;
+  // Whether an LLM judge graded this result. When false, the score only reflects
+  // structure/syntax checks — which can read 100 for an app that doesn't work.
+  judgeActive?: boolean;
+}) {
   const [index, setIndex] = useState(0);
+  const [showCode, setShowCode] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [hintOpen, setHintOpen] = useState(false);
+  const [hint, setHint] = useState('');
+  const [autoTimes, setAutoTimes] = useState(3);
+  const [whyOpen, setWhyOpen] = useState(false);
   const demo = demos[Math.min(index, demos.length - 1)];
+  const improveCount = improveCounts?.[demo.model] ?? 0;
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // Reset transient view state when switching between demos. Done during render
+  // (the React-recommended pattern) rather than in an effect, to avoid a
+  // cascading re-render.
+  const [prevIndex, setPrevIndex] = useState(index);
+  if (index !== prevIndex) {
+    setPrevIndex(index);
+    setShowCode(false);
+    setCopied(false);
+    setHintOpen(false);
+    setHint('');
+    setWhyOpen(false);
+  }
+
+  const canShowCode = demo.kind === 'app' && Boolean(demo.html);
+  const copyCode = () => {
+    if (!demo.html) return;
+    void navigator.clipboard?.writeText(demo.html).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    }).catch(() => undefined);
+  };
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -117,11 +155,100 @@ export function DemoResultModal({ demos, onClose }: { demos: DemoArtifact[]; onC
             <span>{demos.length > 1 ? `${demos.length} demos ready to view` : 'Demo ready'}</span>
             <strong>{demo.model} · {demo.kind === 'app' ? 'App Builder' : demo.kind === 'vision' ? 'Image Reading' : 'Image Lab'} · {demo.score} · {demo.grade}</strong>
           </div>
+          {canShowCode && (
+            <button
+              type="button"
+              className="mini-button outline"
+              onClick={() => setShowCode((v) => !v)}
+              aria-pressed={showCode}
+            >
+              {showCode ? <Play aria-hidden="true" /> : <Code2 aria-hidden="true" />}
+              {showCode ? 'View app' : 'View code'}
+            </button>
+          )}
           <button type="button" className="mini-button outline" onClick={onClose}>
             <X aria-hidden="true" />
             Close
           </button>
         </div>
+        {demo.kind === 'app' && demo.html && onRetry && (
+          <div className="demo-retry-bar">
+            <span className="demo-retry-copy">
+              Not quite working? Let it keep working on it:
+              {improveCount > 0 && <em className="demo-retry-count"> {improveCount} improve pass{improveCount === 1 ? '' : 'es'} so far</em>}
+            </span>
+            <button
+              type="button"
+              className="mini-button"
+              onClick={() => onRetry(demo)}
+              title="Hand the model its attempt and ask it to fix and complete it"
+            >
+              <RefreshCw aria-hidden="true" />
+              Improve
+            </button>
+            <button
+              type="button"
+              className="mini-button outline"
+              onClick={() => setHintOpen((v) => !v)}
+              aria-pressed={hintOpen}
+            >
+              Improve with a hint
+            </button>
+            {onAutoImprove && (
+              <span className="demo-auto-improve">
+                <button
+                  type="button"
+                  className="mini-button outline"
+                  onClick={() => onAutoImprove(demo, autoTimes)}
+                  title={`Run up to ${autoTimes} improve passes back to back and keep the best attempt`}
+                >
+                  Auto-improve
+                </button>
+                <select
+                  value={autoTimes}
+                  onChange={(event) => setAutoTimes(Number(event.target.value))}
+                  aria-label="Number of auto-improve passes"
+                >
+                  {[2, 3, 5].map((n) => <option key={n} value={n}>×{n}</option>)}
+                </select>
+              </span>
+            )}
+            <button
+              type="button"
+              className="mini-button outline demo-why-button"
+              onClick={() => setWhyOpen((v) => !v)}
+              aria-pressed={whyOpen}
+            >
+              Not what you expected?
+            </button>
+            {hintOpen && (
+              <form
+                className="demo-retry-hint"
+                onSubmit={(event) => { event.preventDefault(); if (hint.trim()) { onRetry(demo, hint.trim()); } }}
+              >
+                <input
+                  type="text"
+                  value={hint}
+                  onChange={(event) => setHint(event.target.value)}
+                  placeholder="What should it fix? e.g. the pieces don't rotate"
+                  aria-label="Retry hint"
+                  autoFocus
+                />
+                <button type="submit" className="mini-button" disabled={!hint.trim()}>Send</button>
+              </form>
+            )}
+            {whyOpen && (
+              <div className="demo-why-note">
+                Building a complete app in one shot is one of the hardest things you can ask a local model to do — and the smaller models that fit on most GPUs (3B–8B) often can't manage a complex game like Tetris at all, no matter how many passes they get. A broken first attempt is normal and is the test doing its job. What helps: try a <strong>coding-specialized model</strong> sized to your VRAM (like qwen2.5-coder), start with a <strong>simpler preset</strong> (Calculator or Digital clock), use <strong>Improve passes</strong> to let it iterate, and turn on <strong>Judge grading</strong> so a broken app can't sneak a top score.
+              </div>
+            )}
+            {judgeActive === false && (
+              <div className="demo-why-note demo-structure-note">
+                This grade only checks structure and syntax — it can read {demo.grade ?? 'S'} even when the app doesn't actually work. Turn on <strong>Judge grading</strong> in the run dialog for a grade that tests whether it runs, and so Auto-improve can tell which attempt is genuinely best.
+              </div>
+            )}
+          </div>
+        )}
         {demos.length > 1 && (
           <div className="demo-result-tabs" role="tablist">
             {demos.map((entry, entryIndex) => (
@@ -139,7 +266,15 @@ export function DemoResultModal({ demos, onClose }: { demos: DemoArtifact[]; onC
             ))}
           </div>
         )}
-        {demo.kind === 'app' && demo.html ? (
+        {demo.kind === 'app' && demo.html && showCode ? (
+          <div className="demo-code-wrap">
+            <button type="button" className="mini-button outline demo-code-copy" onClick={copyCode}>
+              <Code2 aria-hidden="true" />
+              {copied ? 'Copied' : 'Copy code'}
+            </button>
+            <pre className="live-build-stream demo-code-view">{demo.html}</pre>
+          </div>
+        ) : demo.kind === 'app' && demo.html ? (
           <iframe
             className="advanced-lab-preview-frame"
             title={`Demo app by ${demo.model}`}

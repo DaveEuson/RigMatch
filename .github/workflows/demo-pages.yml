@@ -1,11 +1,22 @@
 name: Publish Demo Page
 
+# Deploys the full RigMatch.AI web build to GitHub Pages as an interactive demo.
+# In a browser there is no Electron bridge (window.agentArcade), so the app runs
+# in preview mode automatically — the whole game-show UI with sample data, no
+# local Ollama required. The static downloads page in public/demo/ is copied
+# into the build by Vite, so it stays available at /RigMatch.AI/demo/.
+
 on:
   push:
     branches:
       - main
     paths:
+      - src/**
       - public/**
+      - index.html
+      - package.json
+      - package-lock.json
+      - vite.config.ts
       - .github/workflows/demo-pages.yml
   workflow_dispatch:
 
@@ -28,13 +39,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+      - name: Set up Node
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web demo
+        # The desktop build uses base './' (vite.config.ts); GitHub Pages serves
+        # from /RigMatch.AI/, so override the base for this build only.
+        run: |
+          npx tsc -b
+          npx vite build --base=/RigMatch.AI/
+
       - name: Configure Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
 
-      - name: Upload public demo
+      - name: Upload web demo
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
-          path: public
+          path: dist
 
       - name: Deploy to GitHub Pages
         id: deployment

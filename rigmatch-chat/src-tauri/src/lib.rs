@@ -214,6 +214,18 @@ fn open_rigmatch_ai() -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // WebKitGTK (the Linux webview backing Tauri) segfaults inside
+    // libnvidia-eglcore during GL context teardown on NVIDIA proprietary
+    // drivers, especially on Wayland. Disabling the DMABUF renderer avoids the
+    // crash. Must be set before any webview is created, and only if the user
+    // hasn't already chosen a value.
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
+
     tauri::Builder::default()
         .manage(SysInfoState(std::sync::Mutex::new(System::new())))
         .invoke_handler(tauri::generate_handler![

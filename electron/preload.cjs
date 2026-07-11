@@ -12,6 +12,9 @@ const api = {
   abortPull: (progressId, reason) => ipcRenderer.invoke('ollama:abortPull', progressId, reason),
   deleteModel: (request) => ipcRenderer.invoke('ollama:deleteModel', request),
   runAdvancedGenerate: (request) => ipcRenderer.invoke('ollama:advancedGenerate', request),
+  openRouterGenerate: (request) => ipcRenderer.invoke('judge:openRouterGenerate', request),
+  abortAdvancedGenerate: (streamId) => ipcRenderer.invoke('ollama:abortAdvancedGenerate', streamId),
+  cancelBenchmark: (progressId) => ipcRenderer.invoke('benchmark:cancel', progressId),
   onAdvancedGenerateProgress: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('advanced-generate:progress', listener);

@@ -10610,6 +10610,38 @@ tbody tr.computer-row.selected {
   font-weight: 700;
 }
 
+/* Judge-model picker in the run dialog (shown when grading = Judge model). */
+.run-judge-model {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.run-judge-model > span {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+.run-judge-model select,
+.run-judge-model input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.16));
+  background: var(--panel, rgba(255, 255, 255, 0.04));
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Second row of the grading control: local vs cloud judge source. */
+.run-judge-source {
+  margin-top: 6px;
+}
+
 /* Divider above the skill-only toggle to set it apart from skill choices. */
 .run-skill-test-option.skip-questions {
   margin-top: 6px;
@@ -11790,6 +11822,101 @@ tbody tr.computer-row.selected {
   border: 1px solid rgba(114, 181, 202, 0.4);
   border-radius: 10px;
   background: #fff;
+}
+
+/* Source-code view of a generated app in the demo result modal. */
+.demo-code-wrap {
+  position: relative;
+}
+
+.demo-code-view {
+  width: 100%;
+  height: min(640px, calc(100vh - 220px));
+  margin: 0;
+  overflow: auto;
+  white-space: pre;
+  border: 1px solid rgba(114, 181, 202, 0.4);
+  border-radius: 10px;
+}
+
+.demo-code-copy {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+}
+
+/* "Second chance" retry bar in the demo result modal. */
+.demo-retry-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px dashed rgba(114, 181, 202, 0.4);
+  background: color-mix(in srgb, var(--primary, #72b5ca) 8%, transparent);
+}
+
+.demo-retry-copy {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.demo-retry-hint {
+  display: flex;
+  flex: 1 1 240px;
+  gap: 6px;
+}
+
+.demo-retry-hint input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.16));
+  background: var(--panel, rgba(255, 255, 255, 0.04));
+  color: inherit;
+  font-size: 13px;
+}
+
+.demo-retry-count {
+  margin-left: 6px;
+  font-style: normal;
+  font-weight: 600;
+  opacity: 0.65;
+}
+
+.demo-auto-improve {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.demo-auto-improve select {
+  padding: 5px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.16));
+  background: var(--panel, rgba(255, 255, 255, 0.04));
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.demo-why-button {
+  margin-left: auto;
+}
+
+.demo-why-note {
+  flex-basis: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px dashed rgba(239, 188, 90, 0.4);
+  background: color-mix(in srgb, var(--gold) 8%, transparent);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .advanced-lab-safeguards {

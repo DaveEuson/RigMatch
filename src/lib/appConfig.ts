@@ -40,7 +40,7 @@ export const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
 export function amazonUrl(query: string): string {
   return `https://www.amazon.com/s?k=${encodeURIComponent(query)}&tag=${AMAZON_AFFILIATE_TAG}`;
 }
-export const APP_VERSION = '0.3.2';
+export const APP_VERSION = '0.3.3';
 export { CURRENT_SCORE_SCHEMA_VERSION } from './scoring';
 export const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
 export const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
@@ -54,6 +54,27 @@ export const UI_MODE_STORAGE_KEY = 'rigmatch:ui-mode:v1';
 export const MODE_SPLASH_STORAGE_KEY = 'rigmatch:mode-splash:v1';
 export const ADVANCED_LAB_STORAGE_KEY = 'rigmatch:advanced-lab:v1';
 export const CLEARED_TOP_MATCHES_STORAGE_KEY = 'rigmatch:cleared-top-matches:v1';
+// Answer-grading preference: 'heuristic' (default) vs 'judge', plus the chosen
+// local judge model. See judgeScoring.cjs for how the judge grades answers.
+export const QUALITY_MODE_STORAGE_KEY = 'rigmatch:quality-mode:v1';
+export const JUDGE_MODEL_STORAGE_KEY = 'rigmatch:judge-model:v1';
+// Cloud judge (OpenRouter): strictly opt-in — sends graded content to the cloud
+// and costs API credits, so it is never a default. The key stays on this computer.
+export const JUDGE_SOURCE_STORAGE_KEY = 'rigmatch:judge-source:v1';
+export const CLOUD_JUDGE_MODEL_STORAGE_KEY = 'rigmatch:cloud-judge-model:v1';
+export const OPENROUTER_KEY_STORAGE_KEY = 'rigmatch:openrouter-key:v1';
+export const DEFAULT_CLOUD_JUDGE_MODEL = 'anthropic/claude-haiku-4.5';
+// Curated cloud judges: strong graders at low per-verdict cost. Judging sends a
+// short rubric + answer (or app code) and reads back ~50 tokens of JSON, so even
+// the pricier picks cost well under a cent per question. "Custom" stays available
+// for any other OpenRouter model id.
+export const CLOUD_JUDGE_PRESETS: Array<{ id: string; label: string }> = [
+  { id: 'anthropic/claude-haiku-4.5', label: 'Claude Haiku 4.5 — fast & cheap, great grader (recommended)' },
+  { id: 'anthropic/claude-sonnet-5', label: 'Claude Sonnet 5 — strongest judgment' },
+  { id: 'openai/gpt-4o-mini', label: 'GPT-4o mini — cheap all-rounder' },
+  { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash — fast & cheap' },
+  { id: 'deepseek/deepseek-chat', label: 'DeepSeek — budget pick' },
+];
 
 export const DEFAULT_SHORTLIST_IDS = ['qwen2.5:7b', 'llama3.2:3b', 'mistral:7b', 'gemma3:4b', 'phi3:mini'];
 

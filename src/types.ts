@@ -347,6 +347,13 @@ export type AgentArcadeApi = {
   abortPull: (progressId?: string, reason?: 'pause' | 'cancel') => Promise<void>;
   deleteModel: (request: { model: string; baseUrl?: string }) => Promise<DeleteModelResponse>;
   runAdvancedGenerate: (request: AdvancedGenerateRequest) => Promise<AdvancedGenerateResponse>;
+  // Cloud judge bridge (strictly opt-in): one OpenRouter completion using the
+  // user's own key, routed through the main process. Only used for judging.
+  openRouterGenerate?: (request: { apiKey: string; model: string; prompt: string; maxTokens?: number }) => Promise<{ response: string; error: string | null }>;
+  // Stop-button support: abort an in-flight streamed generation by streamId, and
+  // cancel a running benchmark at its next question/run boundary by progressId.
+  abortAdvancedGenerate?: (streamId: string) => Promise<void>;
+  cancelBenchmark?: (progressId: string) => Promise<void>;
   onAdvancedGenerateProgress?: (callback: (payload: AdvancedGenerateProgress) => void) => () => void;
   runBenchmark: (request: {
     model: string;
@@ -355,6 +362,13 @@ export type AgentArcadeApi = {
     questionCount?: number;
     questions?: Array<{ id: string; label: string; type: string; prompt: string }>;
     progressId?: string;
+    // Opt-in LLM-as-judge quality scoring. 'judge' grades answers with judgeModel —
+    // a local Ollama model, or an OpenRouter model when judgeProvider is
+    // 'openrouter' (requires judgeApiKey). Anything else uses the heuristic scorer.
+    qualityMode?: 'heuristic' | 'judge';
+    judgeModel?: string;
+    judgeProvider?: 'local' | 'openrouter';
+    judgeApiKey?: string;
   }) => Promise<BenchmarkResult>;
   onBenchmarkProgress?: (callback: (update: BenchmarkProgressUpdate) => void) => () => void;
   getActiveBenchmark: () => Promise<BenchmarkStatus>;

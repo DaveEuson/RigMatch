@@ -12,7 +12,7 @@ import type { AdvancedGenerateProgress, AgentArcadeApi, BenchmarkProgressUpdate,
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
 const RIGMATCH_RELEASES_URL = 'https://github.com/daveeuson/RigMatch.AI/releases';
-const APP_VERSION = '0.3.2';
+const APP_VERSION = '0.3.3';
 
 // Sample App Builder output used to simulate token streaming in preview mode —
 // prose "reasoning" followed by a real single-file interactive canvas app.
@@ -211,6 +211,12 @@ const fallbackApi: AgentArcadeApi = {
     await delay(650);
     return { response: sample, done_reason: 'preview' };
   },
+  async openRouterGenerate() {
+    await delay(200);
+    return { response: '', error: 'Cloud judging is unavailable in preview mode.' };
+  },
+  async abortAdvancedGenerate() { /* no-op in preview */ },
+  async cancelBenchmark() { /* no-op in preview */ },
   onAdvancedGenerateProgress(callback) {
     advancedGenerateProgressListeners.add(callback);
     return () => {
