@@ -13,6 +13,7 @@ export const releaseNotes: ReleaseNoteEntry[] = [
       'Powerful GPUs no longer get tiny models recommended: the Pick step now leads with the largest model that comfortably fits your VRAM instead of the smallest, so a 16 GB card is steered toward a capable 7B–14B model rather than a 2 GB one.',
       'Fixed VRAM reading as 0 on some Linux/NVIDIA systems: when the system scan can\'t see your graphics memory, RigMatch now asks nvidia-smi directly, so a 4090 is no longer mistaken for a VRAM-less rig (which had collapsed model picks down to only the smallest models).',
       'Fixed the RigMatch Chat companion crashing on launch on Linux with NVIDIA graphics (a WebKitGTK/driver crash during startup, most common on Wayland).',
+      'The RigMatch Chat companion now shares the app\'s version number (0.3.3) instead of its own separate line — one version to track from here on. This is a one-time alignment, not a rewrite; the only companion change this build is the Linux launch fix above.',
     ],
   },
   {
