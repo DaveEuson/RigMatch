@@ -10642,6 +10642,49 @@ tbody tr.computer-row.selected {
   margin-top: 6px;
 }
 
+/* Shareable scorecard modal. */
+.share-scorecard-modal {
+  max-width: 760px;
+}
+
+.share-scorecard-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 12px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+  margin: 6px 0 10px;
+}
+
+.share-scorecard-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.9;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+.share-scorecard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.share-scorecard-actions .share-target {
+  text-decoration: none;
+}
+
+.share-scorecard-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.7;
+}
+
 /* "What's OpenRouter?" explainer in the cloud judge section. */
 .run-judge-explainer {
   margin: 8px 0;

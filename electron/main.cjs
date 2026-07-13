@@ -89,6 +89,12 @@ const ALLOWED_EXTERNAL_HOSTS = new Set([
   // Cloud judge: "what's OpenRouter / get an API key" links in the run dialog.
   'openrouter.ai',
   'www.openrouter.ai',
+  // Scorecard sharing: the social compose intents opened from the share modal.
+  'twitter.com',
+  'x.com',
+  'reddit.com',
+  'www.reddit.com',
+  'bsky.app',
 ]);
 
 function openExternalSafe(url) {

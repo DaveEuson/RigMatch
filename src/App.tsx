@@ -31,6 +31,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Share2,
   Search,
   Settings,
   ShieldCheck,
@@ -248,6 +249,7 @@ import {
 import { getUpdateChannelLabel } from './lib/updateLabels';
 import { AvatarBust, MachineAvatar } from './components/Avatars';
 import { AppBuilderPreviewModal } from './components/AppBuilderPreview';
+import { ShareScorecard } from './components/ShareScorecard';
 import { SimpleWizard, type WizardModel } from './components/SimpleWizard';
 import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, ChoiceCruiseModal } from './components/dialogs';
 import { ChatDock } from './components/ChatDock';
@@ -8703,6 +8705,7 @@ function AgentReveal({
   const activeProfile = getModelProfile(model);
   const matchNotes = getMatchNotes(activeProfile, selectedScore, host);
   const [dismissedModels, setDismissedModels] = useState<Set<string>>(new Set());
+  const [shareOpen, setShareOpen] = useState(false);
 
   const dismissRosterModel = useCallback((name: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -8767,6 +8770,10 @@ function AgentReveal({
               <button type="button" className="pick-this-one-btn" onClick={onChoose} title="Set as your active model">
                 🌹 Use This Model
               </button>
+              <button type="button" className="test-again-btn" onClick={() => setShareOpen(true)} title="Share this result as an image">
+                <Share2 aria-hidden="true" />
+                Share
+              </button>
               {isCurrentTopMatch && (
                 <button type="button" className="test-again-btn" onClick={onClearTopMatch} title="Clear this Top Match without deleting its scorecard">
                   <X aria-hidden="true" />
@@ -8797,6 +8804,10 @@ function AgentReveal({
           <ModelDemoChips model={model} label="Made by this model" />
         </div>
       </div>
+
+      {shareOpen && selectedScore && (
+        <ShareScorecard model={model} score={selectedScore} system={system} onClose={() => setShareOpen(false)} />
+      )}
 
       <div className="character-roster" aria-label="Model shortlist">
         {rosterRows.map((row) => {
