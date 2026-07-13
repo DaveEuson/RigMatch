@@ -86,6 +86,9 @@ const ALLOWED_EXTERNAL_HOSTS = new Set([
   'www.amazon.com',
   'developer.nvidia.com',
   'www.developer.nvidia.com',
+  // Cloud judge: "what's OpenRouter / get an API key" links in the run dialog.
+  'openrouter.ai',
+  'www.openrouter.ai',
 ]);
 
 function openExternalSafe(url) {

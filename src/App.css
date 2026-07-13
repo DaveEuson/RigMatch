@@ -10642,6 +10642,31 @@ tbody tr.computer-row.selected {
   margin-top: 6px;
 }
 
+/* "What's OpenRouter?" explainer in the cloud judge section. */
+.run-judge-explainer {
+  margin: 8px 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px dashed var(--border, rgba(255, 255, 255, 0.16));
+  font-size: 12px;
+}
+
+.run-judge-explainer summary {
+  cursor: pointer;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.run-judge-explainer p {
+  margin: 8px 0 2px;
+  line-height: 1.55;
+}
+
+.run-judge-explainer a {
+  color: var(--gold, #ffc957);
+  font-weight: 700;
+}
+
 /* Divider above the skill-only toggle to set it apart from skill choices. */
 .run-skill-test-option.skip-questions {
   margin-top: 6px;

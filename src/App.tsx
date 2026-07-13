@@ -4341,6 +4341,19 @@ function RunWarningModal({
                   )
                 ) : (
                   <>
+                    <details className="run-judge-explainer">
+                      <summary>What's OpenRouter, and why would I want this?</summary>
+                      <p>
+                        Grading answers well is a <em>reading</em> task, and the frontier cloud models are far
+                        better graders than anything that fits on a home GPU — a small local judge can miss bugs
+                        or grade a broken app as working. <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer">OpenRouter</a> is
+                        one account and one API key that gives pay-per-use access to all of them (Claude, GPT,
+                        Gemini and more) — no subscription. Judging is tiny: each verdict reads a short rubric and
+                        writes a one-line score, so grading a whole run costs pennies. Sign up at openrouter.ai,
+                        add a few dollars of credit, create a key, and paste it below. Trade-off to know:
+                        graded content leaves this computer, which is why this is opt-in and never the default.
+                      </p>
+                    </details>
                     <label className="run-judge-model">
                       <span>Guest judge</span>
                       <select
