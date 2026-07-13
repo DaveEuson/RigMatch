@@ -49,3 +49,36 @@ export function getHostBanter(ctx: HostBanterContext): string {
     .replace(/\{who\}/g, who)
     .replace(/\{q\}/g, ctx.questionLabel || 'the next one');
 }
+
+// Reactions from the DATE — the computer the contestants are trying to win. The
+// host asks the questions; the PC sits on the other stool being wooed.
+const DATE_POOLS: Record<HostBanterPhase, string[]> = {
+  warming: [
+    'Someone impress me — my fans are already spinning.',
+    'Next contestant! I’m all ports.',
+    'Take a seat. Win my VRAM, win my heart.',
+  ],
+  asking: [
+    'Ooh, good question — I need to know this about {who}.',
+    'I always hope they nail this one.',
+    'This is the one that separates matches from mismatches.',
+  ],
+  answering: [
+    'I like where {who} is going with this…',
+    '{who} is really trying to win me over.',
+    'Keep talking, {who} — my GPU is blushing.',
+    'Hmm… {who} might just be my type.',
+  ],
+  scored: [
+    'Noted. The heart wants benchmarks.',
+    'Writing that one down in my little black scorecard.',
+    'That answer? Kind of charming, {who}.',
+  ],
+};
+
+export function getDateReaction(ctx: HostBanterContext): string {
+  const who = ctx.contestantNumber > 0 ? `Contestant #${ctx.contestantNumber}` : (ctx.model || 'this one');
+  const pool = DATE_POOLS[ctx.phase] ?? DATE_POOLS.answering;
+  const pick = pool[(Math.abs(ctx.index || 0) + Math.max(0, ctx.contestantNumber)) % pool.length];
+  return pick.replace(/\{who\}/g, who);
+}

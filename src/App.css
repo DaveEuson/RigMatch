@@ -5780,13 +5780,16 @@ tbody tr.computer-row.selected {
    app stays usable during long runs. */
 .live-mini-bar {
   position: fixed;
-  right: 16px;
+  /* Clear the floating "?" help button (fixed at right: 14px, width 34px, z-index
+     900) — it sat exactly on top of this bar's Stop button and swallowed the
+     clicks. Leave a comfortable gap so nothing touches. */
+  right: 62px;
   bottom: 74px;
   z-index: 80;
   display: flex;
   align-items: center;
   gap: 12px;
-  width: min(420px, calc(100vw - 32px));
+  width: min(420px, calc(100vw - 80px));
   padding: 10px 14px;
   border: 1px solid rgba(239, 188, 90, 0.5);
   border-radius: 14px;

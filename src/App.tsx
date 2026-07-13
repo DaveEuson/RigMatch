@@ -284,7 +284,7 @@ import {
   resolveCodeTask,
   extractCodeBlock,
 } from './lib/codeChallenge';
-import { getHostBanter, type HostBanterPhase } from './lib/hostBanter';
+import { getHostBanter, getDateReaction, type HostBanterPhase } from './lib/hostBanter';
 import {
   ModelScorePill,
   ModelStatusPill,
@@ -10445,13 +10445,17 @@ function LiveFlirtSpotlight({
       : (progress.questionPhase === 'prompt-run' || progress.questionPhase === 'prompt-token')
         ? 'answering'
         : 'warming';
-  const hostLine = getHostBanter({
+  const banterCtx = {
     contestantNumber: activeContestantNumber,
     model: activeShortName,
     questionLabel: currentLabel,
     phase: banterPhase,
     index: currentQuestionIndex,
-  });
+  };
+  // Two voices on stage: the HOST asks the questions (question card), while the
+  // computer is TONIGHT'S DATE — the one the contestants are trying to win.
+  const hostLine = getHostBanter(banterCtx);
+  const dateLine = getDateReaction(banterCtx);
   const totalQuestions = progress.questionTotal ?? questionPlan?.length ?? 0;
   const completedQuestions = progress.completedQuestions ?? 0;
   const stageSlots = Array.from({ length: Math.max(5, stageRows.length) }, (_item, index) => stageRows[index]);
@@ -10524,9 +10528,9 @@ function LiveFlirtSpotlight({
             <div className="live-show-host-spotlight" aria-hidden="true" />
             <MachineAvatar host={host} size="medium" />
             <div>
-              <span>RigMatch host</span>
+              <span>Tonight's date</span>
               <strong>{host?.hostname ?? 'This computer'}</strong>
-              <p>{hostLine}</p>
+              <p>{dateLine}</p>
             </div>
             <div className="live-show-mic" aria-hidden="true">
               <MessageSquare />
@@ -10567,12 +10571,11 @@ function LiveFlirtSpotlight({
 
         <section className="live-show-question-card" aria-label="Current question">
           <div>
-            <span>{activeContestantNumber > 0 ? `Host → Contestant #${activeContestantNumber}` : 'Host question'}</span>
-            <strong>
-              {totalQuestions
-                ? `Question ${Math.min(totalQuestions, currentQuestionIndex + 1)} of ${totalQuestions}: ${currentLabel}`
-                : currentLabel}
-            </strong>
+            <span>
+              {activeContestantNumber > 0 ? `Host → Contestant #${activeContestantNumber}` : 'Host'}
+              {totalQuestions ? ` · Question ${Math.min(totalQuestions, currentQuestionIndex + 1)} of ${totalQuestions}` : ''}
+            </span>
+            <strong>{hostLine}</strong>
             <p>{currentPrompt}</p>
           </div>
           <div className="live-show-progress">

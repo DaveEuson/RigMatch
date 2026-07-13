@@ -45,3 +45,29 @@ test('interpolates the question label into asking-phase lines', () => {
   const line = getHostBanter({ contestantNumber: 3, model: 'm', questionLabel: 'Accuracy trap', phase: 'asking', index: 2 });
   assert.match(line, /Accuracy trap/);
 });
+
+// Mirror of getDateReaction — the PC being wooed reacts; short "Contestant #N"
+// form (no model name) since the date card is narrow.
+const DATE_POOLS = {
+  warming: ['Impress me.', 'All ports.', 'Win my VRAM, win my heart.'],
+  asking: ['I need to know this about {who}.', 'Hope they nail it.', 'Matches vs mismatches.'],
+  answering: ['I like where {who} is going…', '{who} is winning me over.', 'GPU blushing, {who}.', '{who} might be my type.'],
+  scored: ['The heart wants benchmarks.', 'In my little black scorecard.', 'Charming, {who}.'],
+};
+function getDateReaction(ctx) {
+  const who = ctx.contestantNumber > 0 ? `Contestant #${ctx.contestantNumber}` : (ctx.model || 'this one');
+  const pool = DATE_POOLS[ctx.phase] ?? DATE_POOLS.answering;
+  const pick = pool[(Math.abs(ctx.index || 0) + Math.max(0, ctx.contestantNumber)) % pool.length];
+  return pick.replace(/\{who\}/g, who);
+}
+
+test('date reaction addresses the contestant by seat, without the model name', () => {
+  const line = getDateReaction({ contestantNumber: 2, model: 'qwen2.5:7b', phase: 'answering', index: 0 });
+  assert.match(line, /Contestant #2/);
+  assert.doesNotMatch(line, /qwen/);
+});
+
+test('date reaction is deterministic for the same context', () => {
+  const ctx = { contestantNumber: 1, model: 'm', phase: 'scored', index: 4 };
+  assert.equal(getDateReaction(ctx), getDateReaction(ctx));
+});
