@@ -318,15 +318,22 @@ function createWindow() {
     closePromptPendingWindowIds.delete(win.id);
   });
 
-  setupAutoUpdater(win);
+  setupAutoUpdater();
 }
 
-function setupAutoUpdater(win) {
-  if (!app.isPackaged) return;
+let autoUpdaterWired = false;
+function setupAutoUpdater() {
+  // autoUpdater is a module singleton — wire its listeners exactly once. Binding
+  // them per-window (createWindow re-runs on macOS `activate`) leaked a fresh set
+  // of 6 listeners each time, all pinned to stale windows. `send` resolves the
+  // current window at emit time instead of capturing one.
+  if (!app.isPackaged || autoUpdaterWired) return;
+  autoUpdaterWired = true;
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
   const send = (payload) => {
-    if (!win.isDestroyed()) win.webContents.send('updater:status', payload);
+    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
+    if (win) win.webContents.send('updater:status', payload);
   };
   autoUpdater.on('checking-for-update', () => send({ phase: 'checking' }));
   autoUpdater.on('update-available', (info) => send({ phase: 'available', version: info.version }));
@@ -443,13 +450,21 @@ function registerHandlers() {
   handleLogged('network:scanLan', 'network', () => scanLanForOllama());
   handleLogged('network:addHostByAddress', 'network', (_event, address) => addHostByAddress(address));
   handleLogged('benchmark:run', 'benchmark', (event, request) => runBenchmark(request, event.sender));
-  // Stop button support: flag a running benchmark so its main-process loop stops
-  // at the next question/run boundary instead of finishing the whole model.
+  // Stop button support: flag the running benchmark AND abort its in-flight
+  // generation so Stop takes effect mid-question, not just at the next boundary.
+  // Only record the id if it's the one actually running, so the set can't grow
+  // with ids from cancels that raced ahead of (or after) a run.
   ipcMain.handle('benchmark:cancel', (event, progressId) => {
     assertTrustedIpcSender(event);
-    if (typeof progressId === 'string' && progressId) canceledBenchmarkIds.add(progressId);
+    if (typeof progressId === 'string' && progressId && activeBenchmark?.progressId === progressId) {
+      canceledBenchmarkIds.add(progressId);
+      activeBenchmarkAbort?.abort();
+    }
   });
-  ipcMain.handle('benchmark:getActive', () => benchmarkStatusPayload());
+  ipcMain.handle('benchmark:getActive', (event) => {
+    assertTrustedIpcSender(event);
+    return benchmarkStatusPayload();
+  });
   handleLogged('chat:send', 'chat', (_event, request) => sendChat(request));
   handleLogged('logs:list', 'logs', (_event, limit) => readAppLogs(limit));
   handleLogged('logs:append', 'logs', (_event, entry) => appendAppLog(entry));
@@ -866,15 +881,32 @@ async function startOllamaInstall(sender) {
     const total = parseInt(response.headers.get('content-length') || '0', 10);
     let received = 0;
     const fileStream = fsSync.createWriteStream(dest);
+    // Without an 'error' listener, a stream error (disk full, permission lost) is
+    // thrown as an uncaught exception and crashes the main process — the outer
+    // try/catch only sees awaited rejections. Capture it and abort the fetch so
+    // the loop's next read rejects and we exit cleanly.
+    let streamError = null;
+    fileStream.on('error', (err) => { streamError = err; try { ollamaInstallController?.abort(); } catch { /* ignore */ } });
     const reader = response.body.getReader();
     for (;;) {
+      if (streamError) throw streamError;
       const { done, value } = await reader.read();
       if (done) break;
       if (received + value.length > OLLAMA_INSTALLER_MAX_BYTES) throw new Error('Installer download too large');
-      fileStream.write(Buffer.from(value));
+      // Respect backpressure: if the write buffer is full, wait for it to drain
+      // (or for an error) before pulling more from the network.
+      if (!fileStream.write(Buffer.from(value))) {
+        await new Promise((resolve, reject) => {
+          const onDrain = () => { fileStream.off('error', onErr); resolve(); };
+          const onErr = (err) => { fileStream.off('drain', onDrain); reject(err); };
+          fileStream.once('drain', onDrain);
+          fileStream.once('error', onErr);
+        });
+      }
       received += value.length;
       send({ phase: 'downloading', percent: total ? Math.round((received / total) * 100) : 0, receivedBytes: received, totalBytes: total });
     }
+    if (streamError) throw streamError;
     await new Promise((resolve, reject) => fileStream.end((err) => (err ? reject(err) : resolve())));
     lastDownloadedOllamaInstallerPath = dest;
     send({ phase: 'ready', installerPath: dest });
@@ -979,6 +1011,14 @@ async function openRigmatchUpdatePage(channel = 'release', preferredUrl = null) 
 async function fetchJson(url, options = {}, timeoutMs = 2500, maxBytes = JSON_RESPONSE_MAX_BYTES) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // Honor a caller-supplied signal (e.g. the benchmark Stop) alongside the
+  // timeout — aborting either aborts the request.
+  const externalSignal = options.signal;
+  const onExternalAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+  }
 
   try {
     const response = await fetch(url, {
@@ -1012,6 +1052,7 @@ async function fetchJson(url, options = {}, timeoutMs = 2500, maxBytes = JSON_RE
     throw error;
   } finally {
     clearTimeout(timer);
+    if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort);
   }
 }
 
@@ -2220,23 +2261,26 @@ async function runBenchmark(request = {}, sender) {
     startedAt: Date.now(),
     snapshot: null,
   };
+  activeBenchmarkAbort = new AbortController();
   broadcastBenchmarkStatus();
   try {
-    return await runBenchmarkInner(request, sender);
+    return await runBenchmarkInner(request, sender, activeBenchmarkAbort.signal);
   } finally {
     benchmarkRunning = false;
     if (activeBenchmark?.progressId) canceledBenchmarkIds.delete(activeBenchmark.progressId);
     activeBenchmark = null;
+    activeBenchmarkAbort = null;
     broadcastBenchmarkStatus();
   }
 }
 
 // Benchmark progressIds the user has asked to stop (via benchmark:cancel). The
-// run loop checks this between question runs so Stop takes effect within one
-// generation instead of after the whole model finishes.
+// run loop checks this between question runs; the AbortController additionally
+// aborts the in-flight generation so Stop takes effect mid-question.
 const canceledBenchmarkIds = new Set();
+let activeBenchmarkAbort = null;
 
-async function runBenchmarkInner(request = {}, sender) {
+async function runBenchmarkInner(request = {}, sender, signal) {
   const model = assertValidModelName(request.model);
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
   assertLocalhostUrl(baseUrl);
@@ -2381,8 +2425,8 @@ async function runBenchmarkInner(request = {}, sender) {
 
       try {
         const generateResult = provider === 'lm-studio'
-          ? await runLmStudioBenchmarkPrompt(baseUrl, model, prompt.prompt)
-          : await runBenchmarkPromptParity(baseUrl, model, prompt.prompt);
+          ? await runLmStudioBenchmarkPrompt(baseUrl, model, prompt.prompt, signal)
+          : await runBenchmarkPromptParity(baseUrl, model, prompt.prompt, signal);
         responseText = generateResult.responseText;
         evalCount = generateResult.evalCount;
         evalDurationSeconds = generateResult.evalDurationSeconds;
@@ -2392,6 +2436,9 @@ async function runBenchmarkInner(request = {}, sender) {
         loadDurationMs = generateResult.loadDurationMs;
         thinkingDisabled = generateResult.thinkingDisabled;
       } catch (error) {
+        // If the user hit Stop, the generation was aborted — report that cleanly
+        // instead of the low-level "timed out" the aborted fetch produces.
+        throwIfCanceled();
         await appendAppLog({
           level: 'error',
           source: 'benchmark',
@@ -2430,8 +2477,8 @@ async function runBenchmarkInner(request = {}, sender) {
           prompt,
           response: responseText,
           generate: (judgePrompt) => (judgeProvider === 'openrouter'
-            ? openRouterGenerateText(judgeApiKey, judgeModel, judgePrompt, 200)
-            : runJudgeGenerate(baseUrl, judgeModel, judgePrompt)),
+            ? openRouterGenerateText(judgeApiKey, judgeModel, judgePrompt, 200, signal)
+            : runJudgeGenerate(baseUrl, judgeModel, judgePrompt, signal)),
         });
         promptJudgeScore = verdict ? verdict.score : null;
       }
@@ -2659,7 +2706,7 @@ async function warmLmStudioBenchmarkModel(baseUrl, model) {
 // place RigMatch sends user content to a non-local service, and it is strictly
 // opt-in (judge source = Cloud, with the user's own API key). The key is passed
 // per-call and never logged — sanitizeLogValue redacts *key fields by name.
-async function openRouterGenerateText(apiKey, model, prompt, maxTokens = 400) {
+async function openRouterGenerateText(apiKey, model, prompt, maxTokens = 400, signal) {
   if (!apiKey || typeof apiKey !== 'string' || apiKey.length > 300) {
     throw new Error('OpenRouter API key is missing or invalid');
   }
@@ -2667,6 +2714,7 @@ async function openRouterGenerateText(apiKey, model, prompt, maxTokens = 400) {
     'https://openrouter.ai/api/v1/chat/completions',
     {
       method: 'POST',
+      signal,
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'HTTP-Referer': 'https://github.com/DaveEuson/RigMatch.AI',
@@ -2694,11 +2742,12 @@ async function openRouterGenerateText(apiKey, model, prompt, maxTokens = 400) {
 // Runs the judge model deterministically to grade one answer. Kept short and
 // low-temperature so the verdict is stable and cheap. Any failure bubbles up so
 // scoreQualityWithJudge returns null and the caller falls back to the heuristic.
-async function runJudgeGenerate(baseUrl, judgeModel, judgePrompt) {
+async function runJudgeGenerate(baseUrl, judgeModel, judgePrompt, signal) {
   const response = await fetchJson(
     `${baseUrl}/api/generate`,
     {
       method: 'POST',
+      signal,
       body: JSON.stringify({
         model: judgeModel,
         prompt: judgePrompt,
@@ -2713,7 +2762,7 @@ async function runJudgeGenerate(baseUrl, judgeModel, judgePrompt) {
   return String(response.response || '');
 }
 
-async function runBenchmarkPromptParity(baseUrl, model, prompt) {
+async function runBenchmarkPromptParity(baseUrl, model, prompt, signal) {
   const requestUrl = `${baseUrl}/api/generate`;
   let thinkingDisabled = BENCHMARK_THINK_DISABLED;
   let response;
@@ -2723,6 +2772,7 @@ async function runBenchmarkPromptParity(baseUrl, model, prompt) {
       requestUrl,
       {
         method: 'POST',
+        signal,
         body: JSON.stringify(buildBenchmarkGenerateBody({
           model,
           prompt,
@@ -2748,6 +2798,7 @@ async function runBenchmarkPromptParity(baseUrl, model, prompt) {
       requestUrl,
       {
         method: 'POST',
+        signal,
         body: JSON.stringify({
           model,
           prompt,
@@ -2778,12 +2829,13 @@ async function runBenchmarkPromptParity(baseUrl, model, prompt) {
   };
 }
 
-async function runLmStudioBenchmarkPrompt(baseUrl, model, prompt) {
+async function runLmStudioBenchmarkPrompt(baseUrl, model, prompt, signal) {
   const startedAt = Date.now();
   const response = await fetchJson(
     `${baseUrl.replace(/\/$/, '')}/chat/completions`,
     {
       method: 'POST',
+      signal,
       body: JSON.stringify({
         model,
         messages: [

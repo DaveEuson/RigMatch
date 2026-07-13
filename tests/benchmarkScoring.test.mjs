@@ -60,6 +60,15 @@ test('scoring accepts fenced JSON with required keys', () => {
   assert.equal(score, 92);
 });
 
+test('non-object JSON is not scored by element/char count', () => {
+  // A bare string parses fine; Object.keys("hello") would have counted 5 "keys"
+  // and awarded 92 for a non-answer. It must land in the low bucket instead.
+  assert.equal(scoring.scoreSobriety({ type: 'json' }, '"hello"'), 52);
+  // A JSON array answer to a "use keys X,Y,Z" prompt is the wrong shape, not a
+  // 3-key object — must not score 82.
+  assert.equal(scoring.scoreSobriety({ type: 'json' }, '[{"a":1},{"b":2},{"c":3}]'), 52);
+});
+
 test('status detects truncated non-empty responses', () => {
   assert.equal(scoring.getBenchmarkPromptStatus('partial answer', 'length'), 'truncated');
   assert.equal(scoring.getBenchmarkPromptStatus('complete answer', 'stop'), 'ok');

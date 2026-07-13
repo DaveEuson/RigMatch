@@ -19,7 +19,10 @@ function scoreSobriety(prompt, response) {
     const jsonText = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
     try {
       const parsed = JSON.parse(jsonText);
-      const keys = Object.keys(parsed).length;
+      // Count keys only for a plain object. A JSON array or bare string parses
+      // fine but Object.keys would count elements/characters — scoring a non-answer
+      // like "hello" (5 "keys") a top 92. Wrong shape => low score.
+      const keys = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? Object.keys(parsed).length : 0;
       if (keys >= 4) return 92;
       if (keys >= 3) return 82;
       if (keys >= 2) return 70;

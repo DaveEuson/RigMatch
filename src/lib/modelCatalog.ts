@@ -155,7 +155,10 @@ export function buildShareableScorecard(
   const divider = '|---|-------|-------|-------|-------|---------|-----|';
   const tableRows = ranked.map((score, i) => {
     const prev = ranked[i - 1];
-    const tied = prev !== undefined && prev.total === score.total;
+    // Ranking is by the one-decimal preciseTotal, so the "=" tie marker must use
+    // it too — comparing integer totals marks 85.4 and 84.6 as tied (both "85").
+    const tied = prev !== undefined
+      && Math.abs((prev.preciseTotal ?? prev.total) - (score.preciseTotal ?? score.total)) < 0.05;
     const rank = tied ? '=' : `${i + 1}`;
     const toks = scoreToToks(score.speed);
     return `| ${rank} | ${score.model} | ${score.total} | **${score.grade}** | ${toks} | ${score.sobriety} | ${score.fit} |`;
