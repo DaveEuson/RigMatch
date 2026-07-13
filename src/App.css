@@ -10647,6 +10647,10 @@ tbody tr.computer-row.selected {
   max-width: 760px;
 }
 
+.share-style-tabs {
+  margin-bottom: 10px;
+}
+
 .share-scorecard-canvas {
   width: 100%;
   height: auto;

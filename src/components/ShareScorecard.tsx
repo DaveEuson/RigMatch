@@ -9,13 +9,18 @@ const SHARE_URL = 'https://daveeuson.github.io/RigMatch.AI/';
 const CARD_W = 1200;
 const CARD_H = 675;
 
+type CardStyle = 'datingshow' | 'scorecard';
+
 // Card palette (canvas can't read CSS vars). Mirrors the app's dark + gold look.
 const COLORS = {
   bgTop: '#0d1117',
   bgBottom: '#161b22',
+  datingBg: '#0e0b12',
   panel: '#1d2533',
+  panel2: '#151c28',
   line: '#2c3b4d',
   gold: '#ffc957',
+  coral: '#ff6f86',
   text: '#f7f0df',
   muted: '#b9b1a3',
   quiet: '#7d8793',
@@ -32,8 +37,18 @@ function gradeColor(grade: string): string {
   return COLORS.quiet;
 }
 
-// Draws the whole scorecard onto a 1200×675 canvas. Pure given its inputs, so the
-// preview and the exported PNG are byte-identical.
+function rigParts(system: SystemProfile, showHostname: boolean): string[] {
+  return [
+    system.gpu.model && system.gpu.model !== 'Unknown GPU' ? system.gpu.model : null,
+    system.gpu.vramGb > 0 ? `${Math.round(system.gpu.vramGb)} GB VRAM` : null,
+    system.memory.totalGb > 0 ? `${Math.round(system.memory.totalGb)} GB RAM` : null,
+    system.cpu.brand || null,
+    showHostname && system.hostname ? system.hostname : null,
+  ].filter(Boolean) as string[];
+}
+
+// Stats-forward card: grade badge, sub-score bars, rig strip. The "just the numbers"
+// look for people who want to show the measurement.
 function drawScorecard(
   ctx: CanvasRenderingContext2D,
   opts: { modelName: string; score: TestedModelScore; system: SystemProfile; showHostname: boolean },
@@ -44,11 +59,11 @@ function drawScorecard(
   bg.addColorStop(1, COLORS.bgBottom);
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
-
-  // Gold top rule + wordmark.
   ctx.fillStyle = COLORS.gold;
   ctx.fillRect(0, 0, CARD_W, 6);
+  ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
+
   ctx.font = '700 40px system-ui, sans-serif';
   ctx.fillStyle = COLORS.gold;
   ctx.fillText('RigMatch.AI', 60, 82);
@@ -62,7 +77,6 @@ function drawScorecard(
   ctx.lineTo(CARD_W - 60, 130);
   ctx.stroke();
 
-  // Grade badge.
   const bx = 60, by = 165, bs = 175;
   ctx.fillStyle = COLORS.panel;
   ctx.beginPath();
@@ -79,7 +93,6 @@ function drawScorecard(
   ctx.fillText(score.grade, bx + bs / 2, by + bs / 2 + 38);
   ctx.textAlign = 'left';
 
-  // Title block.
   const tx = bx + bs + 44;
   ctx.font = '700 22px system-ui, sans-serif';
   ctx.fillStyle = COLORS.gold;
@@ -91,7 +104,6 @@ function drawScorecard(
   ctx.fillStyle = COLORS.muted;
   ctx.fillText(`${score.total} / 100 Match Score`, tx, by + 142);
 
-  // Score bars.
   const bars: Array<{ label: string; value: number; color: string }> = [
     { label: 'Speed', value: score.speed, color: COLORS.speed },
     { label: 'Quality', value: score.sobriety, color: COLORS.quality },
@@ -119,30 +131,99 @@ function drawScorecard(
     ctx.textAlign = 'left';
   });
 
-  // Rig strip.
   const rigY = 580, rigH = 60;
   ctx.fillStyle = COLORS.panel;
   ctx.beginPath();
   ctx.roundRect(60, rigY, CARD_W - 120, rigH, 12);
   ctx.fill();
-  const rigParts = [
-    system.gpu.model && system.gpu.model !== 'Unknown GPU' ? system.gpu.model : null,
-    system.gpu.vramGb > 0 ? `${Math.round(system.gpu.vramGb)} GB VRAM` : null,
-    system.memory.totalGb > 0 ? `${Math.round(system.memory.totalGb)} GB RAM` : null,
-    system.cpu.brand || null,
-    showHostname && system.hostname ? system.hostname : null,
-  ].filter(Boolean);
   ctx.font = '500 21px system-ui, sans-serif';
   ctx.fillStyle = COLORS.muted;
-  ctx.fillText(rigParts.join('   ·   '), 82, rigY + 38);
+  ctx.fillText(rigParts(system, showHostname).join('   ·   '), 82, rigY + 38);
 
-  // Footer.
   ctx.font = '500 18px system-ui, sans-serif';
   ctx.fillStyle = COLORS.quiet;
   ctx.fillText('100% local · no cloud · no account', 60, CARD_H - 22);
   ctx.textAlign = 'right';
   ctx.fillStyle = COLORS.gold;
   ctx.fillText('daveeuson.github.io/RigMatch.AI', CARD_W - 60, CARD_H - 22);
+  ctx.textAlign = 'left';
+}
+
+// On-brand "It's a Match!" card: the dating-show reveal. Same real data, playful
+// framing — the model that won this PC's heart.
+function drawDatingCard(
+  ctx: CanvasRenderingContext2D,
+  opts: { modelName: string; score: TestedModelScore; system: SystemProfile; showHostname: boolean },
+) {
+  const { modelName, score, system, showHostname } = opts;
+  ctx.fillStyle = COLORS.datingBg;
+  ctx.fillRect(0, 0, CARD_W, CARD_H);
+  const glow = ctx.createRadialGradient(CARD_W / 2, -40, 60, CARD_W / 2, 300, 760);
+  glow.addColorStop(0, 'rgba(255, 111, 134, 0.20)');
+  glow.addColorStop(0.5, 'rgba(255, 201, 87, 0.08)');
+  glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, CARD_W, CARD_H);
+  ctx.fillStyle = COLORS.gold;
+  ctx.fillRect(0, 0, CARD_W, 6);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+
+  ctx.font = '800 38px system-ui, sans-serif';
+  ctx.fillStyle = COLORS.gold;
+  ctx.fillText('✨  IT’S A MATCH!  ✨', CARD_W / 2, 96);
+
+  ctx.font = '84px system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+  ctx.fillText('\u{1F49B}', CARD_W / 2, 210);
+
+  ctx.font = '800 62px system-ui, sans-serif';
+  ctx.fillStyle = COLORS.text;
+  ctx.fillText(modelName, CARD_W / 2, 300);
+
+  const whose = showHostname && system.hostname ? `${system.hostname}’s` : 'your PC’s';
+  ctx.font = '400 27px system-ui, sans-serif';
+  ctx.fillStyle = COLORS.muted;
+  ctx.fillText(`won ${whose} heart on RigMatch.AI`, CARD_W / 2, 344);
+
+  // Grade + score pill.
+  const pillText = `GRADE ${score.grade}    ·    ${score.total} / 100 MATCH`;
+  ctx.font = '800 26px system-ui, sans-serif';
+  const pw = ctx.measureText(pillText).width + 56;
+  const px = (CARD_W - pw) / 2, py = 388, ph = 56;
+  ctx.fillStyle = 'rgba(255, 201, 87, 0.12)';
+  ctx.beginPath();
+  ctx.roundRect(px, py, pw, ph, 28);
+  ctx.fill();
+  ctx.strokeStyle = COLORS.gold;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(px, py, pw, ph, 28);
+  ctx.stroke();
+  ctx.fillStyle = COLORS.gold;
+  ctx.fillText(pillText, CARD_W / 2, py + 37);
+
+  // Stat chips.
+  ctx.font = '600 24px system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+  ctx.fillStyle = COLORS.text;
+  ctx.fillText(
+    `⚡ Speed ${Math.round(score.speed)}      \u{1F3AF} Quality ${Math.round(score.sobriety)}      \u{1F9E9} Fit ${Math.round(score.fit)}`,
+    CARD_W / 2,
+    500,
+  );
+
+  // Rig line.
+  const rig = rigParts(system, showHostname).slice(0, 3).join('   ·   ');
+  if (rig) {
+    ctx.font = '500 21px system-ui, sans-serif';
+    ctx.fillStyle = COLORS.muted;
+    ctx.fillText(`on ${rig}`, CARD_W / 2, 556);
+  }
+
+  // Footer.
+  ctx.font = '600 20px system-ui, sans-serif';
+  ctx.fillStyle = COLORS.quiet;
+  ctx.fillText('RigMatch.AI · the AI dating game show for your PC · 100% local', CARD_W / 2, CARD_H - 34);
   ctx.textAlign = 'left';
 }
 
@@ -153,6 +234,7 @@ export function ShareScorecard({ model, score, system, onClose }: {
   onClose: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [style, setStyle] = useState<CardStyle>('datingshow');
   const [showHostname, setShowHostname] = useState(false);
   const [copied, setCopied] = useState(false);
   const modelName = useMemo(() => getShortModelName(model), [model]);
@@ -160,8 +242,11 @@ export function ShareScorecard({ model, score, system, onClose }: {
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
-    if (canvas && ctx) drawScorecard(ctx, { modelName, score, system, showHostname });
-  }, [modelName, score, system, showHostname]);
+    if (!canvas || !ctx) return;
+    const opts = { modelName, score, system, showHostname };
+    if (style === 'datingshow') drawDatingCard(ctx, opts);
+    else drawScorecard(ctx, opts);
+  }, [style, modelName, score, system, showHostname]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
@@ -169,7 +254,9 @@ export function ShareScorecard({ model, score, system, onClose }: {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const shareText = `My PC's top local AI match is ${modelName} — grade ${score.grade}, ${score.total}/100 Match Score. Found with RigMatch.AI, a 100% local model tester 🤖`;
+  const shareText = style === 'datingshow'
+    ? `It's a match! ${modelName} won my PC's heart on RigMatch.AI 💛 — grade ${score.grade}, ${score.total}/100. Which local AI is your top match?`
+    : `My PC's top local AI match is ${modelName} — grade ${score.grade}, ${score.total}/100 Match Score. Found with RigMatch.AI, a 100% local model tester 🤖`;
 
   const saveImage = useCallback(() => {
     const canvas = canvasRef.current;
@@ -179,13 +266,13 @@ export function ShareScorecard({ model, score, system, onClose }: {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `rigmatch-${modelName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`;
+      link.download = `rigmatch-${style}-${modelName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
     }, 'image/png');
-  }, [modelName]);
+  }, [modelName, style]);
 
   const shareTargets: Array<{ id: string; label: string; href: string }> = [
     { id: 'x', label: 'X', href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(SHARE_URL)}` },
@@ -214,12 +301,21 @@ export function ShareScorecard({ model, score, system, onClose }: {
           </button>
         </div>
 
+        <div className="share-style-tabs run-question-options" role="group" aria-label="Card style">
+          <button type="button" className={style === 'datingshow' ? 'active' : ''} onClick={() => setStyle('datingshow')} aria-pressed={style === 'datingshow'}>
+            💛 It's a Match!
+          </button>
+          <button type="button" className={style === 'scorecard' ? 'active' : ''} onClick={() => setStyle('scorecard')} aria-pressed={style === 'scorecard'}>
+            📊 Scorecard
+          </button>
+        </div>
+
         <canvas
           ref={canvasRef}
           width={CARD_W}
           height={CARD_H}
           className="share-scorecard-canvas"
-          aria-label={`Scorecard: ${modelName} scored ${score.total} Match, grade ${score.grade}`}
+          aria-label={`${style === 'datingshow' ? 'Dating-show' : 'Scorecard'} card: ${modelName} scored ${score.total} Match, grade ${score.grade}`}
         />
 
         <label className="share-scorecard-toggle">
@@ -243,7 +339,7 @@ export function ShareScorecard({ model, score, system, onClose }: {
           </button>
         </div>
         <p className="share-scorecard-hint">
-          Save the image, then attach it to your post — social sites can't pre-load the picture for you, so the buttons open a post with the text and link ready to go.
+          This card shows <strong>your</strong> real result. Save it, then attach it to your post — social sites can't pre-load the picture for you, so the buttons open a post with the text and link ready to go.
         </p>
       </section>
     </div>
