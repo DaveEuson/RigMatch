@@ -6,6 +6,14 @@ Ideas parked for later. Nothing here is committed; it's a candid backlog of dire
 
 ## Backburner
 
+### Code Challenge — multi-language, judge-graded coding test
+
+A skill test that asks a model to solve a coding task in a language you choose
+(Python, Go, Rust, SQL, …), graded by the LLM judge. The counterpart to App Builder
+for code that isn't a runnable web app — kept separate precisely because it can't be
+executed/previewed the way App Builder is. Reuses the judge, run flow, result viewer,
+and improve loop. Full design in [docs/code-challenge-spec.md](docs/code-challenge-spec.md).
+
 ### Web version — marketing site + embedded demo
 
 > **Shipped (July 2026):** GitHub Pages now serves a marketing landing page at the
