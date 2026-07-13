@@ -256,19 +256,34 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
         )}
         {demos.length > 1 && (
           <div className="demo-result-tabs" role="tablist">
-            {demos.map((entry, entryIndex) => (
-              <button
-                key={`${entry.kind}:${entry.model}`}
-                type="button"
-                role="tab"
-                aria-selected={entryIndex === index}
-                className={entryIndex === index ? 'active' : ''}
-                onClick={() => setIndex(entryIndex)}
-              >
-                <AvatarBust model={entry.model} size="tiny" />
-                <span>{getShortModelName(entry.model)}</span>
-              </button>
-            ))}
+            {demos.map((entry, entryIndex) => {
+              // A model can hold several results (e.g. a Code Challenge AND an
+              // image reading), so every tab names what it opens — otherwise two
+              // "gemma3:4b" tabs are indistinguishable until clicked.
+              const kindTag = entry.kind === 'app' ? 'app'
+                : entry.kind === 'code' ? 'code'
+                : entry.kind === 'vision' ? 'reading'
+                : 'image';
+              const KindIcon = entry.kind === 'app' ? Play : entry.kind === 'code' ? Code2 : ImageIcon;
+              return (
+                <button
+                  key={`${entry.kind}:${entry.model}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={entryIndex === index}
+                  className={entryIndex === index ? 'active' : ''}
+                  onClick={() => setIndex(entryIndex)}
+                  title={`${getShortModelName(entry.model)} — ${kindTag} result`}
+                >
+                  <AvatarBust model={entry.model} size="tiny" />
+                  <span>{getShortModelName(entry.model)}</span>
+                  <em className="demo-tab-kind">
+                    <KindIcon aria-hidden="true" />
+                    {kindTag}
+                  </em>
+                </button>
+              );
+            })}
           </div>
         )}
         {demo.kind === 'code' ? (
