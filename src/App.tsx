@@ -284,6 +284,7 @@ import {
   resolveCodeTask,
   extractCodeBlock,
 } from './lib/codeChallenge';
+import { getHostBanter, type HostBanterPhase } from './lib/hostBanter';
 import {
   ModelScorePill,
   ModelStatusPill,
@@ -10433,10 +10434,24 @@ function LiveFlirtSpotlight({
           : progress.questionPhase === 'failed'
             ? 'Needs attention'
             : 'Warming up';
-  const hostLine = progress.mode === 'speed-date'
-    ? 'Same prompt, five stools, no favoritism.'
-    : 'One contestant gets the spotlight.';
   const activeShortName = getShortModelName(activeModel);
+  // Which stool the model on stage is sitting in — so the host can address it by
+  // number, like "Contestant #1".
+  const activeContestantNumber = stageRows.findIndex((row) => row?.displayName === activeModel) + 1;
+  const banterPhase: HostBanterPhase = progress.questionPhase === 'prompt-start'
+    ? 'asking'
+    : progress.questionPhase === 'prompt-complete'
+      ? 'scored'
+      : (progress.questionPhase === 'prompt-run' || progress.questionPhase === 'prompt-token')
+        ? 'answering'
+        : 'warming';
+  const hostLine = getHostBanter({
+    contestantNumber: activeContestantNumber,
+    model: activeShortName,
+    questionLabel: currentLabel,
+    phase: banterPhase,
+    index: currentQuestionIndex,
+  });
   const totalQuestions = progress.questionTotal ?? questionPlan?.length ?? 0;
   const completedQuestions = progress.completedQuestions ?? 0;
   const stageSlots = Array.from({ length: Math.max(5, stageRows.length) }, (_item, index) => stageRows[index]);
@@ -10552,7 +10567,7 @@ function LiveFlirtSpotlight({
 
         <section className="live-show-question-card" aria-label="Current question">
           <div>
-            <span>Host question</span>
+            <span>{activeContestantNumber > 0 ? `Host → Contestant #${activeContestantNumber}` : 'Host question'}</span>
             <strong>
               {totalQuestions
                 ? `Question ${Math.min(totalQuestions, currentQuestionIndex + 1)} of ${totalQuestions}: ${currentLabel}`
