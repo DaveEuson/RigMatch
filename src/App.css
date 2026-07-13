@@ -11901,6 +11901,18 @@ tbody tr.computer-row.selected {
   position: relative;
 }
 
+/* The judge's verdict shown above a Code Challenge result. */
+.demo-judge-note {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px dashed rgba(114, 181, 202, 0.4);
+  background: color-mix(in srgb, var(--primary, #72b5ca) 8%, transparent);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
 .demo-code-view {
   width: 100%;
   height: min(640px, calc(100vh - 220px));

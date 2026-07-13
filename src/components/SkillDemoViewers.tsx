@@ -134,12 +134,17 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
 
   const canShowCode = demo.kind === 'app' && Boolean(demo.html);
   const copyCode = () => {
-    if (!demo.html) return;
-    void navigator.clipboard?.writeText(demo.html).then(() => {
+    const text = demo.kind === 'code' ? demo.code : demo.html;
+    if (!text) return;
+    void navigator.clipboard?.writeText(text).then(() => {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     }).catch(() => undefined);
   };
+  const kindLabel = demo.kind === 'app' ? 'App Builder'
+    : demo.kind === 'code' ? `Code Challenge${demo.language ? ` · ${demo.language}` : ''}`
+    : demo.kind === 'vision' ? 'Image Reading'
+    : 'Image Lab';
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -153,7 +158,7 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
           <Sparkles aria-hidden="true" />
           <div>
             <span>{demos.length > 1 ? `${demos.length} demos ready to view` : 'Demo ready'}</span>
-            <strong>{demo.model} · {demo.kind === 'app' ? 'App Builder' : demo.kind === 'vision' ? 'Image Reading' : 'Image Lab'} · {demo.score} · {demo.grade}</strong>
+            <strong>{demo.model} · {kindLabel} · {demo.score} · {demo.grade}</strong>
           </div>
           {canShowCode && (
             <button
@@ -266,7 +271,16 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
             ))}
           </div>
         )}
-        {demo.kind === 'app' && demo.html && showCode ? (
+        {demo.kind === 'code' ? (
+          <div className="demo-code-wrap">
+            {demo.note && <div className="demo-judge-note">🧑‍⚖️ {demo.note}</div>}
+            <button type="button" className="mini-button outline demo-code-copy" onClick={copyCode}>
+              <Code2 aria-hidden="true" />
+              {copied ? 'Copied' : 'Copy code'}
+            </button>
+            <pre className="live-build-stream demo-code-view">{demo.code || 'No code was returned.'}</pre>
+          </div>
+        ) : demo.kind === 'app' && demo.html && showCode ? (
           <div className="demo-code-wrap">
             <button type="button" className="mini-button outline demo-code-copy" onClick={copyCode}>
               <Code2 aria-hidden="true" />
@@ -318,10 +332,10 @@ export function ModelDemoChips({ model, label = 'Made by this model', className 
           type="button"
           className={`model-demo-chip ${artifact.kind}`}
           onClick={(event) => { event.stopPropagation(); setOpenDemos([artifact]); }}
-          title={`View the ${artifact.kind === 'app' ? 'app' : artifact.kind === 'vision' ? 'image reading' : 'image'} ${getShortModelName(model)} produced (grade ${artifact.grade})`}
+          title={`View the ${artifact.kind === 'app' ? 'app' : artifact.kind === 'code' ? 'code' : artifact.kind === 'vision' ? 'image reading' : 'image'} ${getShortModelName(model)} produced (grade ${artifact.grade})`}
         >
-          {artifact.kind === 'app' ? <Play aria-hidden="true" /> : <ImageIcon aria-hidden="true" />}
-          <span>{artifact.kind === 'app' ? 'View app' : artifact.kind === 'vision' ? 'View reading' : 'View image'}</span>
+          {artifact.kind === 'app' ? <Play aria-hidden="true" /> : artifact.kind === 'code' ? <Code2 aria-hidden="true" /> : <ImageIcon aria-hidden="true" />}
+          <span>{artifact.kind === 'app' ? 'View app' : artifact.kind === 'code' ? 'View code' : artifact.kind === 'vision' ? 'View reading' : 'View image'}</span>
           <em>{artifact.grade}</em>
         </button>
       ))}

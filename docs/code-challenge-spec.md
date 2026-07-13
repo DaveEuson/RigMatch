@@ -1,7 +1,10 @@
 # Code Challenge — feature spec
 
-Status: **proposed** · Depends on: the judge infrastructure shipped in 0.3.3
-(`judgeAppBuilder`, `appRunnability`, the skill-test run flow).
+Status: **v1 shipped (July 2026)** — judge-only, all languages, presets + custom,
+result viewer with the "View code" chip. Not yet built: the improve/auto-improve
+loop for code, the JS/TS test-case execution tier (v2), and an Activity-monitor
+entry (code results still surface via the post-run popup and the model's chips).
+Depends on: the judge infrastructure shipped in 0.3.3.
 
 ## One-liner
 

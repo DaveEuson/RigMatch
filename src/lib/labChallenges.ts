@@ -16,6 +16,7 @@ import { getAdvancedLabGrade, type AdvancedLabCheck, type AdvancedLabResult } fr
 import { extractHtmlDocument } from './labPreview';
 import { checkAppParses } from './appRunnability';
 import { judgeAppBuilder } from './appBuilderJudge';
+import { buildCodePrompt, extractCodeBlock, judgeCode } from './codeChallenge';
 
 // Code that doesn't even parse can't run — a blank screen must never outscore a
 // working app. Cap it here regardless of how good the structure looks. 25 is F.
@@ -471,6 +472,68 @@ export async function runAdvancedAppBuilderChallenge(
       checks: [],
       completedAt: new Date().toISOString(),
       error: message,
+    };
+  }
+}
+
+// Code Challenge: generate a solution in the chosen language, then grade it with
+// the judge. Judge-only by design (nothing to execute) — without a judge it returns
+// an error result so the run flow can surface "turn on Judge grading".
+export async function runCodeChallenge(
+  model: string,
+  baseUrl: string,
+  language: string,
+  task: string,
+  reference: string | undefined,
+  streamId?: string,
+  judge?: AppBuilderJudgeConfig,
+  optionsOverride?: Record<string, unknown>,
+): Promise<AdvancedLabResult> {
+  const startedAt = performance.now();
+  const elapsed = () => Math.round(performance.now() - startedAt);
+  try {
+    if (!judge?.model) {
+      return {
+        model, challenge: 'code', language, score: 0, grade: 'F', elapsedMs: elapsed(), response: '',
+        checks: [{ label: 'Judge required', passed: false, detail: 'Code Challenge can only be graded with Judge grading turned on.' }],
+        completedAt: new Date().toISOString(), error: 'Code Challenge requires Judge grading.',
+      };
+    }
+    const data = await agentArcadeApi.runAdvancedGenerate({
+      model,
+      baseUrl,
+      prompt: buildCodePrompt(language, task),
+      keep_alive: '10m',
+      timeoutMs: 240000,
+      options: { temperature: 0.2, seed: 7, num_ctx: 8192, num_predict: 3000, ...optionsOverride },
+      ...(streamId ? { stream: true, streamId } : {}),
+    });
+    if (data.error) throw new Error(data.error);
+    const raw = data.response ?? '';
+    const code = extractCodeBlock(raw);
+    const verdict = code
+      ? await judgeCode({ language, task, reference, code, generate: (jp) => runAppJudgeGenerate(baseUrl, judge, jp) })
+      : null;
+    const score = verdict ? verdict.score : 0;
+    const detail = verdict
+      ? (verdict.reason || `The judge scored this ${score}/100.`)
+      : (code ? 'The judge could not grade this answer.' : 'The model did not return any code.');
+    return {
+      model,
+      challenge: 'code',
+      language,
+      score,
+      grade: getAdvancedLabGrade(score),
+      checks: [{ label: 'Judged correct', passed: score >= 60, detail }],
+      elapsedMs: elapsed(),
+      response: raw,
+      completedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    return {
+      model, challenge: 'code', language, score: 0, grade: 'F', elapsedMs: elapsed(), response: '',
+      checks: [], completedAt: new Date().toISOString(),
+      error: describeRunError(error instanceof Error ? error.message : 'Code Challenge failed.'),
     };
   }
 }

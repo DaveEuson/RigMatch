@@ -271,11 +271,19 @@ import {
   ADVANCED_IMAGE_GENERATION_PROMPT,
   getVisionTestImageDataUrl,
   runAdvancedAppBuilderChallenge,
+  runCodeChallenge,
   runAdvancedVisionChallenge,
   runAdvancedImageGenerationChallenge,
   VISION_TEST_IMAGES,
   DEFAULT_VISION_TEST_IMAGE,
 } from './lib/labChallenges';
+import {
+  CODE_LANGUAGES,
+  CODE_TASK_PRESETS,
+  DEFAULT_CODE_LANGUAGE,
+  resolveCodeTask,
+  extractCodeBlock,
+} from './lib/codeChallenge';
 import {
   ModelScorePill,
   ModelStatusPill,
@@ -311,7 +319,7 @@ import './App.css';
 type UtilityPanelId = Extract<NavId, 'history' | 'settings'>;
 
 type PendingRunMode = 'single' | 'speed-date';
-type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; recognize: boolean; recognizeImage: string; skipQuestions: boolean };
+type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; recognize: boolean; recognizeImage: string; code: boolean; codeLanguage: string; codeTaskId: string; codeCustomTask: string; skipQuestions: boolean };
 type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
 
 type RunProgress = {
@@ -434,6 +442,10 @@ function App() {
     imagePrompt: ADVANCED_IMAGE_GENERATION_PROMPT,
     recognize: false,
     recognizeImage: DEFAULT_VISION_TEST_IMAGE,
+    code: false,
+    codeLanguage: DEFAULT_CODE_LANGUAGE,
+    codeTaskId: CODE_TASK_PRESETS[0].id,
+    codeCustomTask: '',
     skipQuestions: false,
   });
   const [skillRunStatus, setSkillRunStatus] = useState<SkillRunStatus>({ phase: 'idle', label: '', completed: 0, total: 0 });
@@ -2074,10 +2086,14 @@ function App() {
   const runSkillTestsAfterRun = useCallback(async (models: string[]) => {
     const selection = skillTestSelection;
     const appPrompt = resolveAppBuilderPrompt(selection.appPromptId, selection.appCustomPrompt);
-    const jobs: Array<{ model: string; kind: 'app-builder' | 'image' | 'vision' }> = [];
+    const codeTask = resolveCodeTask(selection.codeTaskId, selection.codeCustomTask);
+    const jobs: Array<{ model: string; kind: 'app-builder' | 'image' | 'vision' | 'code' }> = [];
     for (const model of models) {
       if (selection.appBuilder && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
         jobs.push({ model, kind: 'app-builder' });
+      }
+      if (selection.code && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
+        jobs.push({ model, kind: 'code' });
       }
       if (selection.image && isLikelyImageGenerationModel(model)) {
         jobs.push({ model, kind: 'image' });
@@ -2101,6 +2117,7 @@ function App() {
         break;
       }
       const label = job.kind === 'app-builder' ? `App Builder skill test — ${job.model}`
+        : job.kind === 'code' ? `Code Challenge — ${job.model}`
         : job.kind === 'image' ? `Image skill test — ${job.model}`
         : `Image recognition skill test — ${job.model}`;
       setSkillRunStatus({ phase: 'running', label, completed: index, total: jobs.length });
@@ -2120,6 +2137,23 @@ function App() {
           result = await runAdvancedAppBuilderChallenge(
             job.model, ollama.baseUrl, appPrompt, streamId, undefined,
             effectiveJudge ? { ...effectiveJudge, taskDescription: appPrompt } : undefined,
+          );
+        } finally {
+          unsubscribe?.();
+        }
+      } else if (job.kind === 'code') {
+        // Stream the model writing the solution, then judge it (judge-only).
+        const streamId = `code-${Date.now()}-${index}`;
+        activeSkillStreamIdRef.current = streamId;
+        setLiveBuild({ model: job.model, kind: 'app', text: '', done: false });
+        const unsubscribe = agentArcadeApi.onAdvancedGenerateProgress?.((payload) => {
+          if (payload.streamId !== streamId) return;
+          setLiveBuild({ model: payload.model ?? job.model, kind: 'app', text: payload.text, done: payload.done, error: payload.error });
+        });
+        try {
+          result = await runCodeChallenge(
+            job.model, ollama.baseUrl, selection.codeLanguage, codeTask.task, codeTask.reference, streamId,
+            effectiveJudge ? { ...effectiveJudge } : undefined,
           );
         } finally {
           unsubscribe?.();
@@ -2145,11 +2179,17 @@ function App() {
         setLiveBuild({ model: job.model, kind: 'image', text: '', done: true, error: result.error });
       }
       if (!result.error) {
-        const key = job.kind === 'image' ? `image:${job.model}` : job.kind === 'vision' ? `vision:${job.model}` : job.model;
+        const key = job.kind === 'image' ? `image:${job.model}`
+          : job.kind === 'vision' ? `vision:${job.model}`
+          : job.kind === 'code' ? `code:${job.model}`
+          : job.model;
         writeAdvancedLabResults({ ...readAdvancedLabResults(), [key]: result });
         if (job.kind === 'app-builder') {
           const html = extractHtmlDocument(result.response);
           if (html) demos.push({ model: job.model, kind: 'app', html, grade: result.grade, score: result.score });
+        } else if (job.kind === 'code') {
+          const code = extractCodeBlock(result.response);
+          if (code) demos.push({ model: job.model, kind: 'code', code, language: result.language, note: result.checks[0]?.detail, grade: result.grade, score: result.score });
         } else if (job.kind === 'image' && result.imageDataUrl) {
           demos.push({ model: job.model, kind: 'image', imageDataUrl: result.imageDataUrl, grade: result.grade, score: result.score });
         } else if (job.kind === 'vision') {
@@ -2991,6 +3031,7 @@ function App() {
           onChangeCloudJudgeModel={setCloudJudgeModel}
           openRouterKey={openRouterKey}
           onChangeOpenRouterKey={setOpenRouterKey}
+          judgeActive={Boolean(effectiveJudge)}
           lineupModels={pendingRunMode === 'single'
             ? [pendingSingleModel ?? selectedModel].filter(Boolean)
             : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName)}
@@ -4107,6 +4148,7 @@ function RunWarningModal({
   onChangeCloudJudgeModel,
   openRouterKey,
   onChangeOpenRouterKey,
+  judgeActive,
 }: {
   mode: PendingRunMode;
   selectedModel: string;
@@ -4135,6 +4177,7 @@ function RunWarningModal({
   onChangeCloudJudgeModel: (model: string) => void;
   openRouterKey: string;
   onChangeOpenRouterKey: (key: string) => void;
+  judgeActive: boolean;
 }) {
   const [questionsExpanded, setQuestionsExpanded] = useState(false);
   const recognizeUploadRef = useRef<HTMLInputElement>(null);
@@ -4156,9 +4199,12 @@ function RunWarningModal({
   const visionCapable = lineupModels.some((m) => isVisionModel(m));
   const isMac = system.platform === 'darwin';
   const imageCapable = hasImageModel;
+  // Code Challenge needs a code-capable model AND a judge — it's the only way to
+  // grade arbitrary-language code (nothing to run/preview).
+  const codeCapable = appBuilderCapable && judgeActive;
   // Every model in the lineup is image-only → the Q&A round can't run at all.
   const imageOnlyLineup = lineupModels.length > 0 && lineupModels.every(isLikelyImageGenerationModel);
-  const anySkillSelected = (skillSelection.appBuilder && appBuilderCapable) || (skillSelection.image && imageCapable) || (skillSelection.recognize && visionCapable);
+  const anySkillSelected = (skillSelection.appBuilder && appBuilderCapable) || (skillSelection.code && codeCapable) || (skillSelection.image && imageCapable) || (skillSelection.recognize && visionCapable);
   const skipQuestions = anySkillSelected && (skillSelection.skipQuestions || imageOnlyLineup);
   // Block the doomed case: an image-only model with no skill selected would just
   // fail the questions. Require a skill (the image one) first.
@@ -4452,6 +4498,57 @@ function RunWarningModal({
                           onChange={(event) => onSkillSelectionChange({ ...skillSelection, appCustomPrompt: event.target.value })}
                           placeholder="Describe the app to build (e.g. a memory card game)"
                           aria-label="Custom app prompt"
+                        />
+                      )}
+                    </div>
+                  )}
+                  <label className={`run-skill-test-option${codeCapable ? '' : ' disabled'}`}>
+                    <input
+                      type="checkbox"
+                      checked={skillSelection.code && codeCapable}
+                      disabled={!codeCapable}
+                      onChange={(event) => onSkillSelectionChange({ ...skillSelection, code: event.target.checked })}
+                    />
+                    <span>
+                      <strong>Code Challenge</strong>
+                      <em>{!appBuilderCapable
+                        ? 'No model in this run can write code — image and embedding models sit this one out.'
+                        : !judgeActive
+                          ? 'Turn on Judge grading above — code can only be graded by a model that reads it.'
+                          : 'Solve a coding task in a language you pick. Graded by the judge (no run/preview). Adds ~1–2 min per model.'}</em>
+                    </span>
+                  </label>
+                  {codeCapable && skillSelection.code && (
+                    <div className="run-skill-app-picker">
+                      <select
+                        className="run-skill-app-select"
+                        value={skillSelection.codeLanguage}
+                        onChange={(event) => onSkillSelectionChange({ ...skillSelection, codeLanguage: event.target.value })}
+                        aria-label="Programming language"
+                      >
+                        {CODE_LANGUAGES.map((lang) => (
+                          <option key={lang.id} value={lang.id}>{lang.label}</option>
+                        ))}
+                      </select>
+                      <select
+                        className="run-skill-app-select"
+                        value={skillSelection.codeTaskId}
+                        onChange={(event) => onSkillSelectionChange({ ...skillSelection, codeTaskId: event.target.value })}
+                        aria-label="Coding task"
+                      >
+                        {CODE_TASK_PRESETS.map((preset) => (
+                          <option key={preset.id} value={preset.id}>{preset.label}</option>
+                        ))}
+                        <option value="custom">Custom task…</option>
+                      </select>
+                      {skillSelection.codeTaskId === 'custom' && (
+                        <input
+                          type="text"
+                          className="run-skill-image-prompt"
+                          value={skillSelection.codeCustomTask}
+                          onChange={(event) => onSkillSelectionChange({ ...skillSelection, codeCustomTask: event.target.value })}
+                          placeholder="Describe the coding task (e.g. merge two sorted lists)"
+                          aria-label="Custom coding task"
                         />
                       )}
                     </div>

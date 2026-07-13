@@ -7,14 +7,18 @@
 
 import { ADVANCED_LAB_STORAGE_KEY } from './appConfig';
 import { extractHtmlDocument } from './labPreview';
+import { extractCodeBlock } from './codeChallenge';
 
 /** A viewable thing a model produced during a skill test. */
 export type DemoArtifact = {
   model: string;
-  kind: 'app' | 'image' | 'vision';
+  kind: 'app' | 'image' | 'vision' | 'code';
   html?: string | null;
   imageDataUrl?: string;
   description?: string;
+  code?: string;
+  language?: string;
+  note?: string;
   grade: string;
   score: number;
 };
@@ -29,7 +33,7 @@ export type AdvancedLabCheck = {
 /** A stored skill-test result for one model + challenge. */
 export type AdvancedLabResult = {
   model: string;
-  challenge: 'app-builder' | 'image-generation' | 'image-recognition';
+  challenge: 'app-builder' | 'image-generation' | 'image-recognition' | 'code';
   score: number;
   grade: string;
   elapsedMs: number;
@@ -39,6 +43,7 @@ export type AdvancedLabResult = {
   imageDataUrl?: string;
   width?: number;
   height?: number;
+  language?: string;
   error?: string;
 };
 
@@ -81,6 +86,9 @@ export function getModelDemoArtifacts(model: string): DemoArtifact[] {
       out.push({ model, kind: 'image', imageDataUrl: result.imageDataUrl, grade: result.grade, score: result.score });
     } else if (result.challenge === 'image-recognition' && result.response) {
       out.push({ model, kind: 'vision', imageDataUrl: result.imageDataUrl, description: result.response, grade: result.grade, score: result.score });
+    } else if (result.challenge === 'code') {
+      const code = extractCodeBlock(result.response);
+      if (code) out.push({ model, kind: 'code', code, language: result.language, note: result.checks[0]?.detail, grade: result.grade, score: result.score });
     }
   }
   return out;
