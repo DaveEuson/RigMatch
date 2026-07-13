@@ -8,10 +8,12 @@ Ideas parked for later. Nothing here is committed; it's a candid backlog of dire
 
 ### Web version — marketing site + embedded demo
 
-> **Shipped (first slice, July 2026):** the GitHub Pages workflow now deploys the
-> full app in preview mode as an interactive demo at the site root, with the
-> existing downloads page kept at `/demo/`. Remaining: a proper marketing landing
-> page around it (hero, screenshots, install CTA).
+> **Shipped (July 2026):** GitHub Pages now serves a marketing landing page at the
+> site root (`site/index.html`) with the interactive preview-mode demo one click
+> away at `/app/`. Shared scorecards link to the landing page, completing the
+> scorecard → landing → demo/download funnel. Remaining polish: real screenshots
+> on the landing page (currently a CSS scorecard mock), and repointing links if a
+> custom domain is added.
 
 Turn the current GitHub-README-as-homepage into a real `rigmatch.ai` marketing site, with the existing browser **preview mode** (`fallbackApi`, mock data) embedded as a one-click "try it" demo. The desktop app stays the real product; the site is top-of-funnel.
 

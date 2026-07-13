@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RigMatch.AI — find the best local AI your PC can actually run</title>
+    <meta
+      name="description"
+      content="RigMatch.AI benchmarks local AI models on your own hardware through Ollama, scores each on speed, answer quality, and hardware fit, and crowns your Top Match. 100% local — no account, no cloud."
+    />
+    <link rel="icon" type="image/png" href="./app/rigmatch-brand-icon.png" />
+    <meta property="og:title" content="RigMatch.AI — the AI dating game show for your PC" />
+    <meta property="og:description" content="Find the best local AI model your computer can actually run. 100% local." />
+    <meta property="og:type" content="website" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #080b0f;
+        --bg-soft: #0d1117;
+        --panel: #151c28;
+        --panel-strong: #1d2533;
+        --line: #2c3b4d;
+        --text: #f7f0df;
+        --muted: #b9b1a3;
+        --quiet: #7d8793;
+        --gold: #ffc957;
+        --gold-dark: #c28a22;
+        --teal: #69d1c8;
+        --coral: #ff6f86;
+        --green: #9bc278;
+        --radius: 16px;
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.46);
+        --wrap: 1080px;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(1200px 600px at 70% -10%, rgba(255, 201, 87, 0.10), transparent 60%),
+          radial-gradient(900px 500px at 0% 20%, rgba(105, 209, 200, 0.08), transparent 55%),
+          var(--bg);
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+      }
+      a { color: inherit; }
+      .wrap { width: 100%; max-width: var(--wrap); margin: 0 auto; padding: 0 22px; }
+
+      /* Nav */
+      header.nav {
+        position: sticky; top: 0; z-index: 20;
+        backdrop-filter: blur(10px);
+        background: rgba(8, 11, 15, 0.72);
+        border-bottom: 1px solid var(--line);
+      }
+      .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 62px; }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: 0.2px; }
+      .brand .dot { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, var(--gold), var(--gold-dark)); display: grid; place-items: center; color: #10131a; font-weight: 900; }
+      .nav-links { display: flex; align-items: center; gap: 22px; font-size: 14px; font-weight: 600; }
+      .nav-links a { color: var(--muted); text-decoration: none; }
+      .nav-links a:hover { color: var(--text); }
+      .nav-cta { background: var(--gold); color: #10131a; padding: 8px 14px; border-radius: 999px; font-weight: 800; }
+      @media (max-width: 640px) { .nav-links a.hide-sm { display: none; } }
+
+      /* Buttons */
+      .btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; border-radius: 999px; font-weight: 800; font-size: 15px; text-decoration: none; border: 1px solid transparent; cursor: pointer; transition: transform 0.08s ease; }
+      .btn:active { transform: translateY(1px); }
+      .btn-primary { background: linear-gradient(135deg, var(--gold), var(--gold-dark)); color: #10131a; box-shadow: 0 10px 30px rgba(255, 201, 87, 0.22); }
+      .btn-ghost { background: transparent; color: var(--text); border-color: var(--line); }
+      .btn-ghost:hover { border-color: var(--gold); }
+
+      /* Hero */
+      .hero { padding: 70px 0 40px; }
+      .hero-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 48px; align-items: center; }
+      .eyebrow { color: var(--gold); font-weight: 800; letter-spacing: 2px; font-size: 12px; text-transform: uppercase; }
+      h1 { font-size: clamp(34px, 5vw, 52px); line-height: 1.06; margin: 14px 0 16px; letter-spacing: -0.5px; }
+      h1 em { color: var(--gold); font-style: normal; }
+      .lede { color: var(--muted); font-size: 18px; max-width: 34ch; }
+      .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+      .cta-note { color: var(--quiet); font-size: 13px; margin-top: 12px; }
+      @media (max-width: 860px) { .hero-grid { grid-template-columns: 1fr; gap: 34px; } .hero-visual { order: -1; } }
+
+      /* Hero scorecard mock (echoes the shareable card) */
+      .card { background: linear-gradient(180deg, var(--bg-soft), #12161d); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; position: relative; overflow: hidden; }
+      .card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: linear-gradient(90deg, var(--gold), var(--teal)); }
+      .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+      .card-brand { font-weight: 800; color: var(--gold); font-size: 15px; }
+      .card-brand span { display: block; color: var(--quiet); font-weight: 500; font-size: 11px; }
+      .card-top { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+      .grade { width: 76px; height: 76px; border-radius: 16px; display: grid; place-items: center; font-size: 44px; font-weight: 900; color: var(--gold); border: 3px solid var(--gold); background: var(--panel); }
+      .card-title .label { color: var(--gold); font-weight: 800; font-size: 11px; letter-spacing: 1.5px; }
+      .card-title .model { font-size: 24px; font-weight: 800; }
+      .card-title .score { color: var(--muted); font-size: 13px; }
+      .bar-row { display: grid; grid-template-columns: 62px 1fr 34px; align-items: center; gap: 10px; margin: 9px 0; font-size: 13px; }
+      .bar-row .k { color: var(--muted); font-weight: 600; }
+      .bar-row .v { text-align: right; font-weight: 800; }
+      .track { height: 12px; background: var(--panel); border-radius: 8px; overflow: hidden; }
+      .fill { height: 100%; border-radius: 8px; }
+      .rig { margin-top: 16px; padding: 9px 12px; background: var(--panel); border-radius: 10px; color: var(--muted); font-size: 12px; }
+
+      /* Sections */
+      section { padding: 54px 0; }
+      .section-head { text-align: center; max-width: 640px; margin: 0 auto 34px; }
+      .section-head h2 { font-size: clamp(26px, 3.5vw, 34px); margin: 0 0 10px; }
+      .section-head p { color: var(--muted); margin: 0; }
+
+      .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+      .step { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
+      .step .n { width: 34px; height: 34px; border-radius: 10px; background: rgba(255, 201, 87, 0.14); color: var(--gold); font-weight: 900; display: grid; place-items: center; margin-bottom: 12px; }
+      .step h3 { margin: 0 0 8px; font-size: 18px; }
+      .step p { margin: 0; color: var(--muted); font-size: 14px; }
+      @media (max-width: 760px) { .steps { grid-template-columns: 1fr; } }
+
+      .pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 8px; }
+      .pillar { text-align: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px 18px; }
+      .pillar .emoji { font-size: 30px; }
+      .pillar h4 { margin: 10px 0 6px; font-size: 17px; }
+      .pillar p { margin: 0; color: var(--muted); font-size: 13px; }
+      @media (max-width: 760px) { .pillars { grid-template-columns: 1fr; } }
+
+      .trust { text-align: center; background: linear-gradient(180deg, rgba(105, 209, 200, 0.06), transparent); border: 1px solid var(--line); border-radius: var(--radius); padding: 40px 24px; }
+      .trust h2 { font-size: clamp(24px, 3vw, 30px); margin: 0 0 10px; }
+      .trust p { color: var(--muted); margin: 0 auto; max-width: 46ch; }
+      .trust .badges { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 18px; }
+      .trust .badges span { font-size: 13px; font-weight: 700; color: var(--green); border: 1px solid rgba(155, 194, 120, 0.3); border-radius: 999px; padding: 6px 14px; background: rgba(155, 194, 120, 0.06); }
+
+      .final { text-align: center; }
+      .final h2 { font-size: clamp(28px, 4vw, 40px); margin: 0 0 14px; }
+      .final .hero-cta { justify-content: center; }
+
+      footer { border-top: 1px solid var(--line); padding: 30px 0; color: var(--quiet); font-size: 13px; }
+      .foot-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+      .foot-inner a { color: var(--muted); text-decoration: none; margin-left: 18px; }
+      .foot-inner a:hover { color: var(--text); }
+    </style>
+  </head>
+  <body>
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <div class="brand"><span class="dot">R</span> RigMatch.AI</div>
+        <nav class="nav-links">
+          <a href="#how" class="hide-sm">How it works</a>
+          <a href="#score" class="hide-sm">Match Score</a>
+          <a href="https://github.com/DaveEuson/RigMatch.AI" class="hide-sm">GitHub</a>
+          <a href="./app/" class="nav-cta">Try the demo</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="wrap hero-grid">
+          <div class="hero-copy">
+            <div class="eyebrow">The AI dating game show for your PC</div>
+            <h1>Find the best local AI your computer can <em>actually</em> run.</h1>
+            <p class="lede">
+              RigMatch benchmarks AI models on <strong>your</strong> hardware through Ollama, scores each on
+              speed, answer quality, and hardware fit, and crowns a Top Match — one honest number, measured
+              on your machine, not a leaderboard's.
+            </p>
+            <div class="hero-cta">
+              <a class="btn btn-primary" href="./app/">▶ Try the live demo</a>
+              <a class="btn btn-ghost" href="https://github.com/DaveEuson/RigMatch.AI/releases/latest">⬇ Download for desktop</a>
+            </div>
+            <p class="cta-note">The browser demo runs on sample data. Download the app to score your real rig — 100% locally.</p>
+          </div>
+
+          <div class="hero-visual">
+            <div class="card" aria-hidden="true">
+              <div class="card-head">
+                <div class="card-brand">RigMatch.AI<span>The AI dating game show for your PC</span></div>
+              </div>
+              <div class="card-top">
+                <div class="grade">A</div>
+                <div class="card-title">
+                  <div class="label">TOP MATCH ON THIS PC</div>
+                  <div class="model">qwen2.5:7b</div>
+                  <div class="score">92 / 100 Match Score</div>
+                </div>
+              </div>
+              <div class="bar-row"><span class="k">Speed</span><span class="track"><span class="fill" style="width:94%;background:var(--teal)"></span></span><span class="v">94</span></div>
+              <div class="bar-row"><span class="k">Quality</span><span class="track"><span class="fill" style="width:91%;background:var(--gold)"></span></span><span class="v">91</span></div>
+              <div class="bar-row"><span class="k">Fit</span><span class="track"><span class="fill" style="width:88%;background:var(--green)"></span></span><span class="v">88</span></div>
+              <div class="rig">RTX 4070 &nbsp;·&nbsp; 12 GB VRAM &nbsp;·&nbsp; 32 GB RAM &nbsp;·&nbsp; 100% local</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="how">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Picking a local model shouldn't need a PhD in VRAM</h2>
+            <p>Parameter counts, quantization, context windows… RigMatch skips all of that and just tells you what runs well on <em>your</em> PC.</p>
+          </div>
+          <div class="steps">
+            <div class="step">
+              <div class="n">1</div>
+              <h3>Reads your real rig</h3>
+              <p>GPU, VRAM, RAM, and disk decide which contestants even qualify — no jargon, no guesswork.</p>
+            </div>
+            <div class="step">
+              <div class="n">2</div>
+              <h3>Speed-dating benchmarks</h3>
+              <p>Every model answers the same questions, live on stage, timed and scored fairly on your hardware.</p>
+            </div>
+            <div class="step">
+              <div class="n">3</div>
+              <h3>Crowns your Top Match</h3>
+              <p>One 0–100 Match Score and a letter grade — then chat with the winner right away.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="score">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>One honest number you can trust</h2>
+            <p>The Match Score blends three things, all measured on your machine.</p>
+          </div>
+          <div class="pillars">
+            <div class="pillar"><div class="emoji">⚡</div><h4>Speed</h4><p>Real tokens/sec and first-token latency on your rig.</p></div>
+            <div class="pillar"><div class="emoji">🎯</div><h4>Quality</h4><p>Answer accuracy across a test suite — optionally graded by a stronger judge model.</p></div>
+            <div class="pillar"><div class="emoji">🧩</div><h4>Fit</h4><p>How comfortably the model sits in your VRAM and RAM.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <div class="trust">
+            <h2>100% local. Nothing leaves your computer.</h2>
+            <p>Models run through Ollama on your own hardware. Nothing you type, test, or score is ever sent to a cloud — no account, no telemetry.</p>
+            <div class="badges"><span>No account</span><span>No cloud</span><span>No telemetry</span><span>Open source · MIT</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="final">
+        <div class="wrap">
+          <h2>Meet your PC's perfect match.</h2>
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="./app/">▶ Try the live demo</a>
+            <a class="btn btn-ghost" href="https://github.com/DaveEuson/RigMatch.AI/releases/latest">⬇ Download — Windows · macOS · Linux</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap foot-inner">
+        <div>Made with 💛 and a retro-computer host.</div>
+        <div>
+          <a href="./app/">Live demo</a>
+          <a href="https://github.com/DaveEuson/RigMatch.AI">GitHub</a>
+          <a href="https://github.com/DaveEuson/RigMatch.AI/releases/latest">Download</a>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

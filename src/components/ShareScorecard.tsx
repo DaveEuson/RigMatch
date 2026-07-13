@@ -3,9 +3,9 @@ import { Check, Copy, Download, X } from 'lucide-react';
 import type { SystemProfile, TestedModelScore } from '../types';
 import { getShortModelName } from '../lib/modelCatalog';
 
-// Where a shared scorecard points people. Swap for the marketing landing page
-// once it exists; until then the repo is the stable canonical link.
-const SHARE_URL = 'https://github.com/DaveEuson/RigMatch.AI';
+// Where a shared scorecard sends people — the marketing landing page, which then
+// funnels to the live demo or a download.
+const SHARE_URL = 'https://daveeuson.github.io/RigMatch.AI/';
 const CARD_W = 1200;
 const CARD_H = 675;
 
@@ -142,7 +142,7 @@ function drawScorecard(
   ctx.fillText('100% local · no cloud · no account', 60, CARD_H - 22);
   ctx.textAlign = 'right';
   ctx.fillStyle = COLORS.gold;
-  ctx.fillText('github.com/DaveEuson/RigMatch.AI', CARD_W - 60, CARD_H - 22);
+  ctx.fillText('daveeuson.github.io/RigMatch.AI', CARD_W - 60, CARD_H - 22);
   ctx.textAlign = 'left';
 }
 
