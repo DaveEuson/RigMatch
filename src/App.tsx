@@ -259,6 +259,7 @@ import { extractHtmlDocument } from './lib/labPreview';
 import {
   readAdvancedLabResults,
   writeAdvancedLabResults,
+  wasJudged,
   type DemoArtifact,
   type AdvancedLabResult,
 } from './lib/labResults';
@@ -2187,7 +2188,7 @@ function App() {
         writeAdvancedLabResults({ ...readAdvancedLabResults(), [key]: result });
         if (job.kind === 'app-builder') {
           const html = extractHtmlDocument(result.response);
-          if (html) demos.push({ model: job.model, kind: 'app', html, grade: result.grade, score: result.score });
+          if (html) demos.push({ model: job.model, kind: 'app', html, judged: wasJudged(result), grade: result.grade, score: result.score });
         } else if (job.kind === 'code') {
           const code = extractCodeBlock(result.response);
           if (code) demos.push({ model: job.model, kind: 'code', code, language: result.language, note: result.checks[0]?.detail, grade: result.grade, score: result.score });
@@ -2282,7 +2283,7 @@ function App() {
       return;
     }
     writeAdvancedLabResults({ ...readAdvancedLabResults(), [model]: pass.result });
-    setDemoPopup([{ model, kind: 'app', html: pass.html, grade: pass.result.grade, score: pass.result.score }]);
+    setDemoPopup([{ model, kind: 'app', html: pass.html, judged: wasJudged(pass.result), grade: pass.result.grade, score: pass.result.score }]);
     setActivity(`${model}'s new attempt scored ${pass.result.score} (${pass.result.grade}).`);
   }, [runImprovePass]);
 
@@ -2294,10 +2295,10 @@ function App() {
     const { model, html: startHtml } = previousDemo;
     if (!startHtml) return;
     const total = Math.max(1, Math.min(10, Math.round(times)));
-    // Without a judge, the structural score can read 100 for a broken app — it
-    // must never trigger the "good enough, stop" shortcut (that made ×3 quit
-    // after one pass). Only a judge-graded score can end the loop early.
-    const judged = Boolean(effectiveJudge);
+    // A judge is CONFIGURED — used only for the closing tip. The early-stop below
+    // checks whether each pass was ACTUALLY judged (a configured judge can still
+    // fail on a pass), so a structural 100 can never end the loop.
+    const judgeConfigured = Boolean(effectiveJudge);
     setDemoPopup(null);
     stopSkillRef.current = false;
     let best = previousDemo;
@@ -2315,20 +2316,21 @@ function App() {
       completed += 1;
       latestHtml = attempt.html;
       reviewNote = extractJudgedProblem(attempt.result.checks);
+      const passJudged = wasJudged(attempt.result);
       if ((attempt.result.score ?? 0) >= (best.score ?? 0)) {
-        best = { model, kind: 'app', html: attempt.html, grade: attempt.result.grade, score: attempt.result.score };
+        best = { model, kind: 'app', html: attempt.html, judged: passJudged, grade: attempt.result.grade, score: attempt.result.score };
         writeAdvancedLabResults({ ...readAdvancedLabResults(), [model]: attempt.result });
       }
-      // A strong JUDGE-verified score means it works — no need to keep burning
-      // passes. Structural scores never stop the loop; they can read 100 for a
-      // broken app, which made auto-improve quit after a single pass.
-      if (judged && (attempt.result.score ?? 0) >= 85) break;
+      // A strong score only ends the loop when the JUDGE actually verified this
+      // pass — a structural 100 (or a pass where the judge failed) can't. This is
+      // what made ×3 quit after one pass when the structural score read 100.
+      if (passJudged && (attempt.result.score ?? 0) >= 85) break;
     }
     setLiveBuild(null);
     setSkillRunStatus({ phase: 'complete', label: 'Auto-improve finished', completed: 1, total: 1 });
     setDemoPopup([best]);
     setActivity(completed > 0
-      ? `Auto-improve finished after ${completed} pass${completed === 1 ? '' : 'es'} — best attempt scored ${best.score} (${best.grade}).${judged ? '' : ' Tip: turn on Judge grading so auto-improve can tell which attempt actually works.'}`
+      ? `Auto-improve finished after ${completed} pass${completed === 1 ? '' : 'es'} — best attempt scored ${best.score} (${best.grade}).${judgeConfigured ? '' : ' Tip: turn on Judge grading so auto-improve can tell which attempt actually works.'}`
       : 'Auto-improve could not complete a pass — showing the previous attempt.');
   }, [runImprovePass, effectiveJudge]);
 

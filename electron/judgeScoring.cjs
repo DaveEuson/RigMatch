@@ -103,13 +103,9 @@ function parseJudgeScore(text) {
     if (n != null) return n;
   }
 
-  // 4) Last resort: the first standalone 0-100 integer in the text.
-  const bare = raw.match(/\b(\d{1,3})\b/);
-  if (bare) {
-    const n = inRange(Number(bare[1]));
-    if (n != null) return n;
-  }
-
+  // Deliberately no bare-integer fallback: the first number in a prose verdict
+  // (e.g. "the loop runs 10 times") is not the score. Return null so the caller
+  // falls back to the heuristic rather than trusting a stray count.
   return null;
 }
 

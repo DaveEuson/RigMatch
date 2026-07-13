@@ -20,7 +20,7 @@ function parseAppJudgeVerdict(text) {
   }
   if (score == null) { const m = raw.match(/score\s*["']?\s*[:=]\s*["']?\s*(\d{1,3})/i); if (m) score = inRange(Number(m[1])); }
   if (score == null) { const m = raw.match(/\b(\d{1,3})\s*(?:\/\s*100|%)/); if (m) score = inRange(Number(m[1])); }
-  if (score == null) { const m = raw.match(/\b(\d{1,3})\b/); if (m) score = inRange(Number(m[1])); }
+  // No bare-integer fallback — a stray number in prose must not become the score.
   return score == null ? null : { score, reason };
 }
 
@@ -35,10 +35,14 @@ test('tolerates code fences and prose around the JSON', () => {
   assert.equal(v.score, 92);
 });
 
-test('recovers a score from broken JSON / bare forms', () => {
+test('recovers a score from a score: key or an N/100 form', () => {
   assert.equal(parseAppJudgeVerdict('score: 40').score, 40);
   assert.equal(parseAppJudgeVerdict('I would give it 25/100.').score, 25);
-  assert.equal(parseAppJudgeVerdict('30').score, 30);
+});
+
+test('does NOT grade a bare number in prose (no false score)', () => {
+  assert.equal(parseAppJudgeVerdict('It has 2 bugs and would not run.'), null);
+  assert.equal(parseAppJudgeVerdict('30'), null);
 });
 
 test('rejects out-of-range and garbage as null (caller falls back to structural)', () => {

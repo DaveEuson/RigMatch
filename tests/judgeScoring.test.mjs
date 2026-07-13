@@ -33,8 +33,11 @@ test('parseJudgeScore reads "85/100" and "85%" forms', () => {
   assert.equal(parseJudgeScore('Roughly 90% correct.'), 90);
 });
 
-test('parseJudgeScore falls back to a bare integer', () => {
-  assert.equal(parseJudgeScore('78'), 78);
+test('parseJudgeScore does NOT grade a bare number in prose (no false score)', () => {
+  // A prose verdict with a stray number must return null, not treat the number
+  // as the score — the caller then falls back to the heuristic.
+  assert.equal(parseJudgeScore('This has 2 bugs and would not compile.'), null);
+  assert.equal(parseJudgeScore('78'), null);
 });
 
 test('parseJudgeScore clamps out-of-range and rejects garbage as null', () => {

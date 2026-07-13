@@ -247,9 +247,9 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
                 Building a complete app in one shot is one of the hardest things you can ask a local model to do — and the smaller models that fit on most GPUs (3B–8B) often can't manage a complex game like Tetris at all, no matter how many passes they get. A broken first attempt is normal and is the test doing its job. What helps: try a <strong>coding-specialized model</strong> sized to your VRAM (like qwen2.5-coder), start with a <strong>simpler preset</strong> (Calculator or Digital clock), use <strong>Improve passes</strong> to let it iterate, and turn on <strong>Judge grading</strong> so a broken app can't sneak a top score.
               </div>
             )}
-            {judgeActive === false && (
+            {demo.judged === false && (
               <div className="demo-why-note demo-structure-note">
-                This grade only checks structure and syntax — it can read {demo.grade ?? 'S'} even when the app doesn't actually work. Turn on <strong>Judge grading</strong> in the run dialog for a grade that tests whether it runs, and so Auto-improve can tell which attempt is genuinely best.
+                This grade only checks structure and syntax — it can read {demo.grade ?? 'S'} even when the app doesn't actually work{judgeActive ? ' (the judge didn\'t grade this one)' : ''}. {judgeActive ? 'Re-run, or ' : 'Turn on '}<strong>Judge grading</strong> for a grade that tests whether it runs, and so Auto-improve can tell which attempt is genuinely best.
               </div>
             )}
           </div>

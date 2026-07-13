@@ -74,10 +74,9 @@ export function parseAppJudgeVerdict(text: string | null | undefined): AppJudgeV
     const ratio = raw.match(/\b(\d{1,3})\s*(?:\/\s*100|%)/);
     if (ratio) score = inRange(Number(ratio[1]));
   }
-  if (score == null) {
-    const bare = raw.match(/\b(\d{1,3})\b/);
-    if (bare) score = inRange(Number(bare[1]));
-  }
+  // No bare-integer fallback: grabbing the first number in prose (e.g. "has 2
+  // bugs") would grade a stray count as the score. If nothing score-shaped is
+  // found, return null so the caller falls back rather than trusting a guess.
 
   return score == null ? null : { score, reason };
 }

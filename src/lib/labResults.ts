@@ -19,9 +19,17 @@ export type DemoArtifact = {
   code?: string;
   language?: string;
   note?: string;
+  // Whether an LLM judge actually graded this result (vs. only structural checks).
+  // Undefined for kinds that aren't judged (image). False = structure-only.
+  judged?: boolean;
   grade: string;
   score: number;
 };
+
+/** True when a result carries an actual judge verdict (the "Judged …" check). */
+export function wasJudged(result: AdvancedLabResult): boolean {
+  return (result.checks ?? []).some((check) => check.label.startsWith('Judged'));
+}
 
 /** One pass/fail line in a skill-test rubric. */
 export type AdvancedLabCheck = {
@@ -81,14 +89,14 @@ export function getModelDemoArtifacts(model: string): DemoArtifact[] {
     if (!result || result.error || result.model !== model) continue;
     if (result.challenge === 'app-builder') {
       const html = extractHtmlDocument(result.response);
-      if (html) out.push({ model, kind: 'app', html, grade: result.grade, score: result.score });
+      if (html) out.push({ model, kind: 'app', html, judged: wasJudged(result), grade: result.grade, score: result.score });
     } else if (result.challenge === 'image-generation' && result.imageDataUrl) {
       out.push({ model, kind: 'image', imageDataUrl: result.imageDataUrl, grade: result.grade, score: result.score });
     } else if (result.challenge === 'image-recognition' && result.response) {
       out.push({ model, kind: 'vision', imageDataUrl: result.imageDataUrl, description: result.response, grade: result.grade, score: result.score });
     } else if (result.challenge === 'code') {
       const code = extractCodeBlock(result.response);
-      if (code) out.push({ model, kind: 'code', code, language: result.language, note: result.checks[0]?.detail, grade: result.grade, score: result.score });
+      if (code) out.push({ model, kind: 'code', code, language: result.language, note: result.checks?.[0]?.detail, judged: true, grade: result.grade, score: result.score });
     }
   }
   return out;

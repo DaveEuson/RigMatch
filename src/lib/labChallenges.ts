@@ -514,10 +514,21 @@ export async function runCodeChallenge(
     const verdict = code
       ? await judgeCode({ language, task, reference, code, generate: (jp) => runAppJudgeGenerate(baseUrl, judge, jp) })
       : null;
+    // Code has no structural fallback — it's judge-only. If the model returned
+    // code but the JUDGE failed (outage/timeout/unparseable), that's a judge
+    // problem, not a failing contestant: surface it as an error so the run flow
+    // doesn't record a permanent F for the model.
+    if (code && !verdict) {
+      return {
+        model, challenge: 'code', language, score: 0, grade: 'F', elapsedMs: elapsed(), response: raw,
+        checks: [{ label: 'Judge unavailable', passed: false, detail: 'The judge could not grade this answer — try again.' }],
+        completedAt: new Date().toISOString(), error: 'The judge could not grade the code (judge unavailable).',
+      };
+    }
     const score = verdict ? verdict.score : 0;
     const detail = verdict
       ? (verdict.reason || `The judge scored this ${score}/100.`)
-      : (code ? 'The judge could not grade this answer.' : 'The model did not return any code.');
+      : 'The model did not return any code.';
     return {
       model,
       challenge: 'code',
