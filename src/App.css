@@ -12044,6 +12044,16 @@ tbody tr.computer-row.selected {
   line-height: 1.5;
 }
 
+/* "unverified" tag in the demo header — a muted amber, not a confident grade. */
+.demo-grade-unverified {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.82em;
+  font-weight: 700;
+  color: var(--gold);
+  opacity: 0.85;
+}
+
 .advanced-lab-safeguards {
   display: flex;
   flex-wrap: wrap;

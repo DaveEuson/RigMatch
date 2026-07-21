@@ -112,6 +112,10 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
   const [whyOpen, setWhyOpen] = useState(false);
   const demo = demos[Math.min(index, demos.length - 1)];
   const improveCount = improveCounts?.[demo.model] ?? 0;
+  // Heuristic-only results (structure/syntax) can read a top grade for an app
+  // that doesn't actually run, so the header must not present a confident letter
+  // grade — it frames the number as a structure check and flags it unverified.
+  const isUnverified = demo.judged === false;
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
@@ -158,7 +162,11 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
           <Sparkles aria-hidden="true" />
           <div>
             <span>{demos.length > 1 ? `${demos.length} demos ready to view` : 'Demo ready'}</span>
-            <strong>{demo.model} · {kindLabel} · {demo.score} · {demo.grade}</strong>
+            <strong>
+              {demo.model} · {kindLabel} · {isUnverified
+                ? <>Structure {demo.score} · <span className="demo-grade-unverified">unverified</span></>
+                : <>{demo.score} · {demo.grade}</>}
+            </strong>
           </div>
           {canShowCode && (
             <button
