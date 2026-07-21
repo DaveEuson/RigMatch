@@ -17832,6 +17832,30 @@ a.whats-next-support:hover {
   gap: 5px;
 }
 
+/* Placeholder when the column shows measured speed and this row has no test yet. */
+.speed-untested {
+  font-size: 10px;
+  color: var(--muted);
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+/* "Don't warn me again" row in the quick-test resource warning. */
+.quick-check-optout {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.quick-check-optout input {
+  accent-color: var(--accent);
+}
+
 .popularity-meter {
   min-width: 0;
   display: grid;

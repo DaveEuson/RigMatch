@@ -281,7 +281,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
 function footerHint(step: StepId, _system: SystemProfile, pickCount: number): string {
   switch (step) {
     case 'setup': return 'Your computer is ready for the show';
-    case 'download': return 'The show starts as soon as everyone arrives';
+    case 'download': return 'Heads up: the show works your GPU, CPU, and fans hard until a winner is crowned — close heavy apps first';
     case 'compare': return 'Scores appear live — the winner is crowned after the last round';
     case 'winner': return 'RigMatch remembers your Top Match — find it any time in the header';
     default: return pickCount ? '' : 'Pick at least 1 to continue';

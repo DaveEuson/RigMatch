@@ -23,6 +23,9 @@ Scorecards still show familiar grades, but rankings now use a one-decimal intern
 **Speed Dating profile refresh**
 Speed Dating now saves each result under the exact model name selected in the lineup, so the contestant card and individual profile panel should update immediately after a run.
 
+**Popularity (pull counts) no longer available — upstream removal**
+ollama.com removed public pull counts from its model library pages in mid-2026, so RigMatch's live catalog sync can no longer read them; there is no API or page that still exposes the numbers. The Models table now shows a measured **Speed** column (tok/s from your own tests) in that slot instead of an empty Popularity column. The popularity scraper is still in place — if Ollama restores the stats, the column switches back automatically.
+
 ---
 
 ## Chat Companion (RigMatch Chat)

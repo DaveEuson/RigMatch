@@ -321,6 +321,9 @@ import './App.css';
 type UtilityPanelId = Extract<NavId, 'history' | 'settings'>;
 
 type PendingRunMode = 'single' | 'speed-date';
+
+// Quick TEST resource warning opt-out ('off' = user chose "don't warn again").
+const QUICK_CHECK_WARNING_KEY = 'rigmatch:quick-test-warning:v1';
 type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; recognize: boolean; recognizeImage: string; code: boolean; codeLanguage: string; codeTaskId: string; codeCustomTask: string; skipQuestions: boolean };
 type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
 
@@ -436,6 +439,7 @@ function App() {
   const [scoreTrend, setScoreTrend] = useState<Record<string, number[]>>({});
   const [pendingRunMode, setPendingRunMode] = useState<PendingRunMode | null>(null);
   const [pendingSingleModel, setPendingSingleModel] = useState<string | null>(null);
+  const [pendingQuickCheck, setPendingQuickCheck] = useState<ModelRow | null>(null);
   const [skillTestSelection, setSkillTestSelection] = useState<SkillTestSelection>({
     appBuilder: false,
     appPromptId: DEFAULT_APP_BUILDER_PRESET_ID,
@@ -1454,8 +1458,26 @@ function App() {
   }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, selectedHost, selectedModel, system.hostname, effectiveJudge]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
-    void startBenchmark(row.displayName, QUICK_CHECK_QUESTIONS);
+    // The quick TEST button skips the full launch modal, but it still loads a
+    // multi-GB model into VRAM — warn once unless the user opted out.
+    let skipWarning = false;
+    try { skipWarning = localStorage.getItem(QUICK_CHECK_WARNING_KEY) === 'off'; } catch { /* storage unavailable */ }
+    if (skipWarning) {
+      void startBenchmark(row.displayName, QUICK_CHECK_QUESTIONS);
+      return;
+    }
+    setPendingQuickCheck(row);
   }, [startBenchmark]);
+
+  const confirmQuickCheck = useCallback((dontWarnAgain: boolean) => {
+    const row = pendingQuickCheck;
+    setPendingQuickCheck(null);
+    if (!row) return;
+    if (dontWarnAgain) {
+      try { localStorage.setItem(QUICK_CHECK_WARNING_KEY, 'off'); } catch { /* storage unavailable */ }
+    }
+    void startBenchmark(row.displayName, QUICK_CHECK_QUESTIONS);
+  }, [pendingQuickCheck, startBenchmark]);
 
   const queueModel = useCallback((row: ModelRow) => {
     if (row.localProvider === 'lm-studio' || row.canDownload === false) {
@@ -3040,6 +3062,15 @@ function App() {
             : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName)}
           skillSelection={skillTestSelection}
           onSkillSelectionChange={setSkillTestSelection}
+        />
+      )}
+
+      {pendingQuickCheck && (
+        <QuickCheckWarningModal
+          row={pendingQuickCheck}
+          questionCount={QUICK_CHECK_QUESTIONS.length}
+          onCancel={() => { setPendingQuickCheck(null); setActivity('Quick test cancelled before resources were engaged.'); }}
+          onConfirm={confirmQuickCheck}
         />
       )}
 
@@ -4735,6 +4766,61 @@ function RunWarningModal({
   );
 }
 
+function QuickCheckWarningModal({
+  row,
+  questionCount,
+  onCancel,
+  onConfirm,
+}: {
+  row: ModelRow;
+  questionCount: number;
+  onCancel: () => void;
+  onConfirm: (dontWarnAgain: boolean) => void;
+}) {
+  const [dontWarnAgain, setDontWarnAgain] = useState(false);
+  const sizeLabel = row.sizeGb ? `${formatGb(row.sizeGb)}` : 'its full weights';
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section className="run-warning-modal" role="dialog" aria-modal="true" aria-labelledby="quick-check-warning-title">
+        <div className="modal-title">
+          <AlertTriangle aria-hidden="true" />
+          <div>
+            <span>Resource Warning</span>
+            <strong id="quick-check-warning-title">Quick test {row.displayName}?</strong>
+          </div>
+        </div>
+        <div className="modal-body">
+          <p>
+            This loads <strong>{row.displayName}</strong> ({sizeLabel}) into VRAM and runs{' '}
+            <strong>{questionCount} quick question{questionCount === 1 ? '' : 's'}</strong>. While it runs,
+            your GPU, CPU, RAM, fans, and battery will work hard and other apps may slow down.
+          </p>
+          <p>A quick test takes about a minute. Use Speed Dating for the full comparison.</p>
+          <label className="quick-check-optout">
+            <input
+              type="checkbox"
+              checked={dontWarnAgain}
+              onChange={(event) => setDontWarnAgain(event.target.checked)}
+            />
+            <span>Don't warn me before quick tests again</span>
+          </label>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="mini-button outline" onClick={onCancel}>
+            <X aria-hidden="true" />
+            Cancel
+          </button>
+          <button type="button" className="primary-button compact" onClick={() => onConfirm(dontWarnAgain)}>
+            <Zap aria-hidden="true" />
+            Start Quick Test
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function ClearScoresModal({
   pending,
   scoreCount,
@@ -6058,7 +6144,10 @@ function ModelCabinet({
   const [sortKey, setSortKey] = useState<ModelSortKey>('status');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   // Column widths: Model, Size, Good For, Origin, Status, Match, Popularity (Actions fills remainder)
-  const [colWidths, setColWidths] = useState([156, 62, 126, 86, 80, 66, 96]);
+  // Size fits "Sweet spot", Status fits "Not Installed" (its pill needs ~81px +
+  // cell padding), Match fits its header — the previous 62/80/66 defaults
+  // ellipsized all three.
+  const [colWidths, setColWidths] = useState([156, 92, 126, 86, 110, 76, 96]);
   // Popularity is the least essential column (the local Ollama API exposes no
   // pull counts), so it yields first on narrower windows instead of forcing
   // horizontal scrolling. Handled in JS because the <col> track would keep
@@ -6075,6 +6164,12 @@ function ModelCabinet({
       window.removeEventListener('resize', update);
     };
   }, []);
+  // ollama.com removed public pull counts from its library pages (July 2026), so
+  // live scrapes now return pulls: null for every model. When no row has pull
+  // data, the Popularity column would be a wall of "No pull data" — repurpose it
+  // as a measured-speed column instead. If Ollama ever restores the stats, the
+  // column flips back to Popularity automatically.
+  const hasAnyPullData = useMemo(() => rows.some((row) => row.pulls != null), [rows]);
   const colWidthsRef = useRef(colWidths);
   useEffect(() => {
     colWidthsRef.current = colWidths;
@@ -6348,7 +6443,14 @@ function ModelCabinet({
               <SortableModelHeader label="Status" sortName="status" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(4, e)} />
               <SortableModelHeader label="Match" sortName="score" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(5, e)} />
               {!hidePopularity && (
-                <SortableModelHeader label="Popularity" sortName="pulls" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(6, e)} />
+                <SortableModelHeader
+                  label={hasAnyPullData ? 'Popularity' : 'Speed'}
+                  sortName={hasAnyPullData ? 'pulls' : 'speed'}
+                  sortKey={sortKey}
+                  direction={sortDirection}
+                  onSort={changeSort}
+                  onResizeStart={(e) => handleColResizeStart(6, e)}
+                />
               )}
               <th>Actions</th>
             </tr>
@@ -6443,7 +6545,9 @@ function ModelCabinet({
                         {row.sizeGb ? `${row.sizeGb} GB` : '?'}
                       </span>
                       {platformFit.compatible
-                        ? <span className={`fit-pill ${hardwareFit.tone}`}>{hardwareFit.label}</span>
+                        // Strip the "· X GB" suffix — the size pill above already
+                        // shows it, and the duplicate forced an ellipsis.
+                        ? <span className={`fit-pill ${hardwareFit.tone}`}>{hardwareFit.label.replace(/\s*·.*$/, '')}</span>
                         : <span className="fit-pill out-of-league">macOS Only</span>
                       }
                     </div>
@@ -6473,7 +6577,11 @@ function ModelCabinet({
                         {rowBenchmark?.avgTokensPerSecond != null && (
                           <span className="speed-pill tested">{Math.round(rowBenchmark.avgTokensPerSecond)} tok/s</span>
                         )}
-                        <PopularityMeter pulls={row.pulls} />
+                        {hasAnyPullData ? (
+                          <PopularityMeter pulls={row.pulls} />
+                        ) : rowBenchmark?.avgTokensPerSecond == null && (
+                          <span className="speed-untested" title="Run a test to measure this model's speed on this computer">Not tested</span>
+                        )}
                       </div>
                     </td>
                   )}
