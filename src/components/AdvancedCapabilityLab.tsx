@@ -149,10 +149,10 @@ export function AdvancedCapabilityLab({
 
   const copyResult = useCallback(() => {
     if (!visibleResult?.response) return;
-    void navigator.clipboard.writeText(visibleResult.response).then(() => {
+    void navigator.clipboard?.writeText(visibleResult.response).then(() => {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2200);
-    });
+    }).catch(() => undefined);
   }, [visibleResult]);
 
   const startImagePull = useCallback(async () => {

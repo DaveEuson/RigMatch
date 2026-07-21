@@ -2883,6 +2883,9 @@ function App() {
             pullProgressByModel={pullProgressByModel}
             isListTesting={isListTesting}
             modelScores={modelScores}
+            selectedModel={selectedModel}
+            ollama={ollama}
+            system={system}
             onOpenModels={() => selectNav('models')}
             onOpenScorecards={() => selectNav('history')}
             onRerunTest={requestBenchmarkForModel}
@@ -3801,6 +3804,12 @@ function LanBrowser({
         system={system}
         ollama={ollama}
       />
+      <div className="utility-stat">
+        <span>Provider support</span>
+        <strong>Ollama downloads; LM Studio tests</strong>
+        <em>RigMatch detects LM Studio's local server for testing and chat. Catalog downloads still go through Ollama.</em>
+      </div>
+      <ThirdPartyModelNotice compact />
       <UpgradeRig system={system} />
     </section>
   );
@@ -5004,38 +5013,6 @@ function UiModePicker({
           </button>
         ))}
       </div>
-      <div className="mode-roadmap advanced-only" aria-label="Mode roadmap">
-        <div>
-          <span>1 · LM Studio</span>
-          <strong>Use models people already have</strong>
-          <em>Detect the LM Studio local server for test and chat.</em>
-        </div>
-        <div>
-          <span>2 · Downloads</span>
-          <strong>Pause and resume big pulls</strong>
-          <em>Keep giant Ollama downloads recoverable.</em>
-        </div>
-        <div>
-          <span>3 · Model radar</span>
-          <strong>Fresh catalog and developer filters</strong>
-          <em>Surface new models without manual upkeep.</em>
-        </div>
-        <div>
-          <span>4 · Chat profiles</span>
-          <strong>Personalities with model truth</strong>
-          <em>Custom avatars and profile names without hiding the model.</em>
-        </div>
-        <div>
-          <span>5 · First run</span>
-          <strong>Cleaner onboarding</strong>
-          <em>Show the shortest path before advanced controls.</em>
-        </div>
-        <div>
-          <span>6 · Simple Wizard</span>
-          <strong>Few choices, guided steps</strong>
-          <em>Make Simple Mode feel like a true wizard for beginners.</em>
-        </div>
-      </div>
     </section>
   );
 }
@@ -5600,45 +5577,13 @@ function UtilityPanel({
           <SettingsSection eyebrow="Interface" title="Preferences" summary="Mode, theme, and the Simple Mode path." defaultOpen>
           <UiModePicker uiMode={uiMode} onUiModeChange={onUiModeChange} />
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
-          <div className="utility-stat donationware-stat">
-            <span>Simple flow</span>
-            <strong>Check → Pick → Compare → Use Winner</strong>
-            <em>Simple Mode keeps the main path visible and leaves deeper tools behind the Advanced switch.</em>
-          </div>
-          <div className="utility-stat advanced-only">
-            <span>Advanced lane</span>
-            <strong>Supporter-ready power tools</strong>
-            <em>Advanced mode is free in this beta, but it is the natural home for future donationware extras.</em>
-          </div>
           </SettingsSection>
           <SettingsSection eyebrow="Local AI" title="Computer & Providers" summary="Runtime, Ollama, LM Studio, and local-only scope.">
-          <div className="utility-stat advanced-only">
-            <span>Runtime</span>
-            <strong>{isDesktopRuntime ? 'Desktop' : 'Preview mode'}</strong>
-            <em>{system.os.distro} · {system.arch}</em>
-          </div>
           <div className="utility-stat">
-            <span>Ollama</span>
-            <strong>{ollama.ready ? 'Ready' : 'Offline'}</strong>
-            <em>{ollama.baseUrl}</em>
+            <span>Computer & providers</span>
+            <strong>Full details live in Your Rig</strong>
+            <em>Hardware, CUDA, Ollama and LM Studio status all live under Your Rig. Local models run entirely on this machine — nothing leaves your computer.</em>
           </div>
-          <div className="utility-stat">
-            <span>Provider Support</span>
-            <strong>Ollama downloads; LM Studio tests</strong>
-            <em>RigMatch detects LM Studio's local server for testing and chat. Catalog downloads still go through Ollama.</em>
-          </div>
-          <div className="utility-stat advanced-only">
-            <span>CUDA</span>
-            <strong>{getCudaSummary(system.cuda)}</strong>
-            <em>{getCudaDetail(system.cuda)}</em>
-          </div>
-          <div className="utility-stat">
-            <span>Scope</span>
-            <strong>Local computer only</strong>
-            <em>Local models run entirely on this machine — no data leaves. Models tagged ☁ Cloud run on remote servers.</em>
-          </div>
-          <ThirdPartyModelNotice compact />
-
           <button type="button" className="primary-button compact" onClick={onOpenSetupGuide}>
             <ExternalLink aria-hidden="true" />
             Setup Guide
@@ -5729,7 +5674,7 @@ function UtilityPanel({
               <button
                 type="button"
                 className="mini-button outline"
-                onClick={() => void navigator.clipboard.writeText(buildDiagnosticsText(system, ollama, logPath))}
+                onClick={() => void navigator.clipboard?.writeText(buildDiagnosticsText(system, ollama, logPath)).catch(() => undefined)}
                 title="Copy hardware + version info to clipboard"
               >
                 <Copy aria-hidden="true" />
@@ -5744,13 +5689,8 @@ function UtilityPanel({
           </div>
           </SettingsSection>
 
-          <SettingsSection eyebrow="Advanced" title="Testing Tools & Reset" summary="Scoring explanation, labs, and destructive cleanup." advancedOnly>
+          <SettingsSection eyebrow="Advanced" title="Scoring & Reset" summary="How scoring works and destructive cleanup." advancedOnly>
           <HowWeScoreSection />
-          <AdvancedCapabilityLab
-            selectedModel={selectedModel}
-            ollama={ollama}
-            system={system}
-          />
           <section className="danger-zone" aria-label="Data reset">
             <div>
               <span>Danger Zone</span>
@@ -9842,6 +9782,9 @@ function ActivityPanel({
   pullProgressByModel,
   isListTesting,
   modelScores,
+  selectedModel,
+  ollama,
+  system,
   onOpenModels,
   onOpenScorecards,
   onRerunTest,
@@ -9853,6 +9796,9 @@ function ActivityPanel({
   pullProgressByModel: Record<string, PullProgressUpdate>;
   isListTesting: boolean;
   modelScores: Record<string, TestedModelScore>;
+  selectedModel: string;
+  ollama: OllamaStatus;
+  system: SystemProfile;
   onOpenModels: () => void;
   onOpenScorecards: () => void;
   onRerunTest: (model: string) => void;
@@ -10052,6 +9998,12 @@ function ActivityPanel({
           </ul>
         )}
       </article>
+
+      <AdvancedCapabilityLab
+        selectedModel={selectedModel}
+        ollama={ollama}
+        system={system}
+      />
 
       {previewApp && (
         <AppBuilderPreviewModal html={previewApp.html} model={previewApp.model} onClose={() => setPreviewApp(null)} />
