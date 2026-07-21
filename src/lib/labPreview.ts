@@ -47,17 +47,12 @@ export function extractHtmlDocument(response: string): string | null {
 
 /** Wrap extracted HTML so the preview CSP is the first thing the frame parses. */
 export function buildSandboxedPreviewHtml(html: string): string {
-  const headMatch = html.match(/<head[^>]*>/i);
-  if (headMatch && typeof headMatch.index === 'number') {
-    const insertAt = headMatch.index + headMatch[0].length;
-    return html.slice(0, insertAt) + PREVIEW_CSP_META + html.slice(insertAt);
-  }
-
-  const htmlMatch = html.match(/<html[^>]*>/i);
-  if (htmlMatch && typeof htmlMatch.index === 'number') {
-    const insertAt = htmlMatch.index + htmlMatch[0].length;
-    return `${html.slice(0, insertAt)}<head>${PREVIEW_CSP_META}</head>${html.slice(insertAt)}`;
-  }
-
-  return `<!doctype html><html><head>${PREVIEW_CSP_META}</head><body>${html}</body></html>`;
+  // Always wrap the model's markup in our own shell so the CSP is the first meta
+  // the parser sees, inside a real <head>. Locating the model's own <head> was
+  // unsafe: a "<head" appearing in a comment or string literal shifted the CSP
+  // into an inert position, silently dropping the network-block guarantee. The
+  // model's document (even a full <!doctype> one) becomes body content — its
+  // scripts still run, but its markup can't place a CSP ahead of ours, and
+  // multiple CSP metas only ever combine more restrictively.
+  return `<!doctype html><html><head><meta charset="utf-8">${PREVIEW_CSP_META}</head><body>${html}</body></html>`;
 }

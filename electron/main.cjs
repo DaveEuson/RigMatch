@@ -867,9 +867,20 @@ async function startOllamaInstall(sender) {
     return;
   }
 
+  // One install download at a time. A second call would race on the same dest
+  // file (interleaved bytes in an executable we later launch) and overwrite the
+  // controller, disarming cancel for the first download.
+  if (ollamaInstallController) {
+    send({ phase: 'error', error: 'An Ollama download is already in progress.' });
+    return;
+  }
+
   const filename = platform === 'win32' ? 'OllamaSetup.exe' : 'Ollama-darwin.zip';
   const dest = path.join(app.getPath('temp'), filename);
 
+  // Hoisted so the catch can distinguish a real filesystem error (which aborts
+  // the fetch below) from a genuine user cancel.
+  let streamError = null;
   ollamaInstallController = new AbortController();
   try {
     send({ phase: 'downloading', percent: 0, receivedBytes: 0, totalBytes: 0 });
@@ -885,7 +896,6 @@ async function startOllamaInstall(sender) {
     // thrown as an uncaught exception and crashes the main process — the outer
     // try/catch only sees awaited rejections. Capture it and abort the fetch so
     // the loop's next read rejects and we exit cleanly.
-    let streamError = null;
     fileStream.on('error', (err) => { streamError = err; try { ollamaInstallController?.abort(); } catch { /* ignore */ } });
     const reader = response.body.getReader();
     for (;;) {
@@ -911,7 +921,10 @@ async function startOllamaInstall(sender) {
     lastDownloadedOllamaInstallerPath = dest;
     send({ phase: 'ready', installerPath: dest });
   } catch (err) {
-    if (err.name !== 'AbortError') send({ phase: 'error', error: err.message || 'Download failed' });
+    // A filesystem error aborts the fetch, so the read rejects with AbortError —
+    // report the underlying fs error instead of swallowing it as a silent cancel.
+    const cause = streamError || err;
+    if (cause.name !== 'AbortError') send({ phase: 'error', error: cause.message || 'Download failed' });
   } finally {
     ollamaInstallController = null;
   }
@@ -1096,6 +1109,34 @@ function extractResponseDetail(text) {
   }
 }
 
+const TEXT_RESPONSE_MAX_BYTES = 8 * 1024 * 1024; // 8 MB cap for remote text/HTML
+
+// Stream-read a response body as text with a running byte cap, so an oversized
+// (or malicious/hijacked-upstream) body is aborted mid-stream rather than fully
+// buffered into main-process memory and only then rejected.
+async function readTextCapped(response, maxBytes) {
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > maxBytes) throw new Error(`Response exceeded ${maxBytes} bytes`);
+    return new TextDecoder().decode(buffer);
+  }
+  const decoder = new TextDecoder();
+  let text = '';
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.length;
+    if (received > maxBytes) {
+      try { await reader.cancel(); } catch { /* ignore */ }
+      throw new Error(`Response exceeded ${maxBytes} bytes`);
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
+
 async function fetchText(url, options = {}, timeoutMs = 3500) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -1114,7 +1155,7 @@ async function fetchText(url, options = {}, timeoutMs = 3500) {
       throw new Error(`${response.status} ${response.statusText}`);
     }
 
-    return response.text();
+    return await readTextCapped(response, TEXT_RESPONSE_MAX_BYTES);
   } finally {
     clearTimeout(timer);
   }
@@ -1804,11 +1845,9 @@ async function fetchOllamaHtml(url, timeoutMs = 7000) {
     if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
       throw new Error(`Unexpected content-type from Ollama library: ${contentType}`);
     }
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength > OLLAMA_LIBRARY_MAX_BYTES) {
-      throw new Error(`Ollama library response too large: ${buffer.byteLength} bytes`);
-    }
-    return new TextDecoder().decode(buffer);
+    // Stream with a byte cap so an oversized page is aborted mid-download rather
+    // than fully buffered before the size check.
+    return await readTextCapped(response, OLLAMA_LIBRARY_MAX_BYTES);
   } finally {
     clearTimeout(timer);
   }
