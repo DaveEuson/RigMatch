@@ -2,6 +2,20 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.3.4',
+    label: 'Cleaner Settings, Fairer Fit Scores & Audit Fixes',
+    date: 'Beta build',
+    notes: [
+      'Settings is much simpler: it now holds just the things you actually change — mode, theme, updates, and support. The old feature roadmap and duplicate blurbs are gone, hardware and provider details moved to Your Rig, and the skill-test Lab moved to Activity, next to where its results already appear.',
+      'Fixed hardware "fit" scores for larger models: a size-detection bug read models like 22B, 32B, or 123B as if they were tiny, so big models looked like they fit any PC. Fit now reflects the real parameter size, which also corrects the overall Match score for those models.',
+      'The model table\'s Popularity column is now a measured Speed column. Ollama removed public pull counts from its library, so instead of an empty "No pull data" column, RigMatch shows each model\'s real tok/s from your own tests and sorts by it. If Ollama restores pull counts, the column switches back automatically.',
+      'Quick single-model tests now show the same resource warning as Speed Dating before they start, with a "don\'t warn me again" option.',
+      'A skill-test app that only passed the basic structure check no longer shows a confident letter grade — the header reads "Structure … · unverified" so a broken app can\'t wear an A. Turn on Judge grading for a grade that tests whether it actually runs.',
+      'Scorecard rankings are now stable for models with nearly identical scores (they could previously reorder depending on how the list was built), and a fresh install no longer shows a sample benchmark result as if you had already run a test.',
+      'Under the hood: out-of-range judge scores are rejected instead of being misread as a top score, remote responses are size-capped, the Ollama installer download is hardened against filesystem errors and double-starts, and the app-preview sandbox always applies its network-blocking policy. The RigMatch Chat companion stays in lockstep at 0.3.4.',
+    ],
+  },
+  {
     version: '0.3.3',
     label: 'Judge Grading, App Builder 2.0 & GPU Fixes',
     date: 'Beta build',
