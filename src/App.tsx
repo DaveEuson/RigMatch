@@ -363,7 +363,9 @@ const welcomeChatMessage: ChatMessage = {
 };
 
 type PersistedHistory = {
-  benchmark: BenchmarkResult;
+  // Null on a fresh desktop install that has scores/scorecards but no single
+  // "current" benchmark — restore derives fallbacks from benchmarkByModel.
+  benchmark: BenchmarkResult | null;
   benchmarkByModel?: Record<string, BenchmarkResult>;
   listTestResult: ListTestResult | null;
   modelScores: Record<string, TestedModelScore>;
@@ -375,7 +377,10 @@ type PersistedHistory = {
 
 function App() {
   const savedHistory = useMemo(() => getSavedHistory(), []);
-  const initialBenchmark = savedHistory?.benchmark ?? demoBenchmark;
+  // On desktop, start with no benchmark data — the demo transcript/scores are
+  // preview-only sample data and must not appear as if the user ran a real test.
+  // (modelScores is gated the same way below.)
+  const initialBenchmark = savedHistory?.benchmark ?? (isDesktopRuntime ? null : demoBenchmark);
   const [system, setSystem] = useState<SystemProfile>(demoSystem);
   const [ollama, setOllama] = useState<OllamaStatus>(demoOllama);
   const [lmStudio, setLmStudio] = useState<OllamaStatus>(demoLmStudio);
@@ -388,9 +393,9 @@ function App() {
   const [hosts, setHosts] = useState<NetworkHost[]>(initialHosts);
   const [selectedHostId, setSelectedHostId] = useState(initialSelectedHostId);
   const [selectedModel, setSelectedModel] = useState(savedHistory?.selectedModel ?? 'qwen2.5:7b');
-  const [benchmark, setBenchmark] = useState<BenchmarkResult>(initialBenchmark);
+  const [benchmark, setBenchmark] = useState<BenchmarkResult | null>(initialBenchmark);
   const [benchmarkByModel, setBenchmarkByModel] = useState<Record<string, BenchmarkResult>>(
-    () => savedHistory?.benchmarkByModel ?? upsertBenchmarkResults({}, [initialBenchmark]),
+    () => savedHistory?.benchmarkByModel ?? (initialBenchmark ? upsertBenchmarkResults({}, [initialBenchmark]) : {}),
   );
   const [queuedModelIds, setQueuedModelIds] = useState<Set<string>>(() => new Set());
   const [shortlistIds, setShortlistIds] = useState<Set<string>>(
@@ -564,7 +569,7 @@ function App() {
     ? getModelScore(selectedRow, modelScores)
     : modelScores[selectedModel];
   const selectedBenchmark = getBenchmarkForModel(benchmarkByModel, selectedModel, selectedRow)
-    ?? (isBenchmarkForModel(benchmark, selectedModel, selectedRow) ? benchmark : null);
+    ?? (benchmark && isBenchmarkForModel(benchmark, selectedModel, selectedRow) ? benchmark : null);
   const selectedHostCanBenchmark = Boolean(selectedRow?.localProvider === 'lm-studio' || isHostBenchmarkReady(selectedHost, ollama));
 
   const installedModelNames = useMemo(
@@ -1056,7 +1061,7 @@ function App() {
     setListTestResult((current) => removeListTestScores(current, aliases));
     setClearedTopMatches((current) => removeSetValues(current, aliases));
     setBenchmark((current) =>
-      isBenchmarkForAliases(current, aliases)
+      current && isBenchmarkForAliases(current, aliases)
         ? createEmptyBenchmark(selectedModel, ollama.baseUrl)
         : current,
     );
@@ -6407,7 +6412,9 @@ function ModelCabinet({
               const sizeRisk = getSizeRisk(row.sizeGb);
               const statusLabel = getModelStatusLabel(row, queued);
               const score = getModelScore(row, modelScores);
-              const rowBenchmark = benchmarkByModel[row.displayName];
+              // Look up with the normalized-key helper: benchmarkByModel is keyed
+              // by normalizeModelKey, so a raw displayName misses on any non-lowercase name.
+              const rowBenchmark = getBenchmarkForModel(benchmarkByModel, row.displayName, row);
               const isNewModel = newModelIds.has(getModelNewsId(row));
               const goodForTags = getModelGoodForTags(row);
               const hardwareFit = getHardwareFit(row, vramGb);
@@ -9691,24 +9698,31 @@ function getSavedHistory(): PersistedHistory | null {
     if (!saved) return null;
 
     const parsed = JSON.parse(saved) as Partial<PersistedHistory>;
-    if (!isBenchmarkResult(parsed.benchmark)) return null;
+    const benchmark = isBenchmarkResult(parsed.benchmark) ? parsed.benchmark : null;
+    const hasByModel = isBenchmarkByModel(parsed.benchmarkByModel);
+    const hasScores = isModelScores(parsed.modelScores);
+    // Nothing usable saved (no benchmark, no per-model results, no scores) — ignore.
+    if (!benchmark && !hasByModel && !hasScores) return null;
 
-    const benchmarkByModel = isBenchmarkByModel(parsed.benchmarkByModel)
-      ? upsertBenchmarkResults({}, Object.values(parsed.benchmarkByModel))
-      : upsertBenchmarkResults({}, [parsed.benchmark]);
-    const modelScores = isModelScores(parsed.modelScores)
-      ? parsed.modelScores
+    const benchmarkByModel = hasByModel
+      ? upsertBenchmarkResults({}, Object.values(parsed.benchmarkByModel as Record<string, BenchmarkResult>))
+      : benchmark ? upsertBenchmarkResults({}, [benchmark]) : {};
+    const modelScores = hasScores
+      ? (parsed.modelScores as Record<string, TestedModelScore>)
       : upsertModelScores({}, Object.values(benchmarkByModel));
 
-    const selectedModel = typeof parsed.selectedModel === 'string' ? parsed.selectedModel : parsed.benchmark.model;
+    const firstByModel = Object.values(benchmarkByModel)[0];
+    const selectedModel = typeof parsed.selectedModel === 'string'
+      ? parsed.selectedModel
+      : benchmark?.model ?? firstByModel?.model ?? 'qwen2.5:7b';
     return {
-      benchmark: parsed.benchmark,
+      benchmark,
       benchmarkByModel,
       listTestResult: isListTestResult(parsed.listTestResult) ? parsed.listTestResult : null,
       modelScores,
       chatMessagesByModel: normalizeSavedChatMessagesByModel(parsed.chatMessagesByModel, parsed.chatMessages, selectedModel),
       selectedModel,
-      savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : parsed.benchmark.completedAt,
+      savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : benchmark?.completedAt ?? firstByModel?.completedAt ?? '',
     };
   } catch {
     return null;

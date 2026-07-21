@@ -18,8 +18,8 @@ function parseAppJudgeVerdict(text) {
       if (parsed && typeof parsed.reason === 'string') reason = parsed.reason.slice(0, 200);
     } catch { /* fall through */ }
   }
-  if (score == null) { const m = raw.match(/score\s*["']?\s*[:=]\s*["']?\s*(\d{1,3})/i); if (m) score = inRange(Number(m[1])); }
-  if (score == null) { const m = raw.match(/\b(\d{1,3})\s*(?:\/\s*100|%)/); if (m) score = inRange(Number(m[1])); }
+  if (score == null) { const m = raw.match(/score\s*["']?\s*[:=]\s*["']?\s*(\d+)/i); if (m) score = inRange(Number(m[1])); }
+  if (score == null) { const m = raw.match(/\b(\d+)\s*(?:\/\s*100|%)/); if (m) score = inRange(Number(m[1])); }
   // No bare-integer fallback — a stray number in prose must not become the score.
   return score == null ? null : { score, reason };
 }
@@ -43,6 +43,13 @@ test('recovers a score from a score: key or an N/100 form', () => {
 test('does NOT grade a bare number in prose (no false score)', () => {
   assert.equal(parseAppJudgeVerdict('It has 2 bugs and would not run.'), null);
   assert.equal(parseAppJudgeVerdict('30'), null);
+});
+
+test('rejects a 4-digit out-of-range score instead of truncating it to 100', () => {
+  // Regression: a \d{1,3} capture grabbed the first 3 digits of 1000 -> "100".
+  assert.equal(parseAppJudgeVerdict('{"score": 1000}'), null);
+  assert.equal(parseAppJudgeVerdict('score: 1000'), null);
+  assert.equal(parseAppJudgeVerdict('I would give it 1000/100.'), null);
 });
 
 test('rejects out-of-range and garbage as null (caller falls back to structural)', () => {

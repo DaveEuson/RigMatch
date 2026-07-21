@@ -3138,12 +3138,20 @@ async function streamAdvancedGenerate(url, body, timeoutMs, sender, streamId, mo
 
 function scoreRigFit(model) {
   const lower = String(model || '').toLowerCase();
-  if (/(0\.5b|1b|1\.5b|2b|3b|mini|270m|nano)/.test(lower)) return 96;
-  if (/(4b|6b|7b|8b|9b)/.test(lower)) return 88;
-  if (/(10b|11b|12b|13b|14b)/.test(lower)) return 74;
-  if (/(22b|24b|27b|30b|32b|34b)/.test(lower)) return 58;
-  if (/(70b|72b|90b|110b|123b|235b|405b)/.test(lower)) return 38;
-  return 82;
+  // Tiny markers that carry no "NNb" parameter token (sub-1B / keyword sizes).
+  if (/\b(mini|nano)\b/.test(lower) || /(?<![\d.])\d+(?:\.\d+)?\s*m\b/.test(lower)) return 96;
+  // Read the parameter count from an anchored "NNb" token. A bare substring
+  // match (the old approach) let a small token match inside a larger one —
+  // "2b" inside "22b", "3b" inside "123b" — so a 123B model scored as tiny.
+  const tokens = [...lower.matchAll(/(?<![\d.])(\d+(?:\.\d+)?)\s*b\b/g)];
+  if (tokens.length === 0) return 82; // size unknown
+  const params = parseFloat(tokens[tokens.length - 1][1]);
+  if (!Number.isFinite(params)) return 82;
+  if (params <= 3) return 96;
+  if (params <= 9) return 88;
+  if (params <= 15) return 74;
+  if (params <= 34) return 58;
+  return 38;
 }
 
 function gradeFor(score) {

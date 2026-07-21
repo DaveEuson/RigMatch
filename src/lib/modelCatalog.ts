@@ -14,7 +14,7 @@ import type {
 } from '../types';
 import type { NavId } from '../components/SideMenu';
 import { getModelFamily, getModelOrigin } from './modelOrigins';
-import { compareTestedModelScores, isLegacyScore } from './scoring';
+import { compareTestedModelScores, getScoreSortTotal, isLegacyScore } from './scoring';
 import { formatBytes, formatBytesPerSecond, formatGb, hashString, scoreToToks } from './format';
 import {
   APP_VERSION,
@@ -606,10 +606,17 @@ export function getModelSortValue(
       return row.source;
     case 'status':
       return getModelStatusRank(row, queued);
-    case 'score':
-      return getModelScore(row, modelScores)?.total ?? -1;
+    case 'score': {
+      // Use the one-decimal precise total so near-ties order the same way the
+      // Scorecards ranking does, not alphabetically off a coarser integer total.
+      const score = getModelScore(row, modelScores);
+      return score ? getScoreSortTotal(score) : -1;
+    }
     case 'speed':
-      return benchmarkByModel[row.displayName]?.avgTokensPerSecond ?? getModelScore(row, modelScores)?.speed ?? -1;
+      // Rank strictly by measured tok/s (a single scale), looked up with the same
+      // normalized key benchmarkByModel is stored under. Untested rows sort last,
+      // matching the "Not tested" cell — no mixing in the 0-100 speed score.
+      return getBenchmarkForModel(benchmarkByModel, row.displayName, row)?.avgTokensPerSecond ?? -1;
     case 'pulls':
       return row.pulls ?? -1;
     case 'name':

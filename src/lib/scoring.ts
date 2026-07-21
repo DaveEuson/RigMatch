@@ -93,7 +93,7 @@ export function formatMatchScore(score: MatchScoreLike): string {
  *
  * Order of precedence:
  *  1. Current-schema scores rank ahead of legacy ones.
- *  2. One-decimal precise Match value (only when the gap is >= 0.05).
+ *  2. One-decimal precise Match value (compared directly, any non-zero gap).
  *  3. Integer total, then answer quality, stability, fit, speed.
  *  4. Model name (alphabetical) as a final deterministic tie-break.
  */
@@ -102,8 +102,12 @@ export function compareTestedModelScores(left: TestedModelScore, right: TestedMo
   const rightLegacy = isLegacyScore(right);
   if (leftLegacy !== rightLegacy) return leftLegacy ? 1 : -1;
 
+  // Compare the precise total directly. A previous ">= 0.05 band" here made the
+  // comparator intransitive (A~B and B~C tie, but A vs C flips), so sort order
+  // depended on input arrangement. preciseTotal is already rounded to 1dp, so a
+  // direct compare is stable; exact ties fall through to the chain below.
   const preciseDelta = getScoreSortTotal(right) - getScoreSortTotal(left);
-  if (Math.abs(preciseDelta) >= 0.05) return preciseDelta;
+  if (preciseDelta !== 0) return preciseDelta;
   if (right.total !== left.total) return right.total - left.total;
   if (right.sobriety !== left.sobriety) return right.sobriety - left.sobriety;
   if ((right.stability ?? right.total) !== (left.stability ?? left.total)) return (right.stability ?? right.total) - (left.stability ?? left.total);

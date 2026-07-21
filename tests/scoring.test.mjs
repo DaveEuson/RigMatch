@@ -152,6 +152,19 @@ test('tie breaks fall through to answer quality before speed', () => {
   assert.deepEqual(rankedModels([b, a]), ['a', 'b']);
 });
 
+test('ranking is transitive across precise totals within 0.05 of each other', () => {
+  // Regression: a ">= 0.05 band" comparator treated 80.00/80.03/80.06 as ties in
+  // pairs but not end-to-end, so sort order depended on input arrangement.
+  const a = score({ model: 'a', preciseTotal: 80.0, total: 80 });
+  const b = score({ model: 'b', preciseTotal: 80.03, total: 80 });
+  const c = score({ model: 'c', preciseTotal: 80.06, total: 80 });
+  const expected = ['c', 'b', 'a']; // strictly by precise total, highest first
+  assert.deepEqual(rankedModels([a, b, c]), expected);
+  assert.deepEqual(rankedModels([b, a, c]), expected);
+  assert.deepEqual(rankedModels([c, b, a]), expected);
+  assert.deepEqual(rankedModels([a, c, b]), expected);
+});
+
 test('fully tied scores break alphabetically by model name and are deterministic', () => {
   const beta = score({ model: 'beta', preciseTotal: 80, total: 80 });
   const alpha = score({ model: 'alpha', preciseTotal: 80, total: 80 });

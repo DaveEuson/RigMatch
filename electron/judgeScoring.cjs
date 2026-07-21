@@ -90,14 +90,16 @@ function parseJudgeScore(text) {
   }
 
   // 2) An explicit "score": 85 (or score = 85) even if the surrounding JSON was broken.
-  const scoreKey = raw.match(/score\s*["']?\s*[:=]\s*["']?\s*(\d{1,3})/i);
+  //    Capture the whole number (\d+, not \d{1,3}) so "1000" is range-checked and
+  //    rejected rather than truncated to a valid-looking "100".
+  const scoreKey = raw.match(/score\s*["']?\s*[:=]\s*["']?\s*(\d+)/i);
   if (scoreKey) {
     const n = inRange(Number(scoreKey[1]));
     if (n != null) return n;
   }
 
   // 3) "85/100" or "85%".
-  const ratio = raw.match(/\b(\d{1,3})\s*(?:\/\s*100|%)/);
+  const ratio = raw.match(/\b(\d+)\s*(?:\/\s*100|%)/);
   if (ratio) {
     const n = inRange(Number(ratio[1]));
     if (n != null) return n;

@@ -67,11 +67,13 @@ export function parseAppJudgeVerdict(text: string | null | undefined): AppJudgeV
     }
   }
   if (score == null) {
-    const scoreKey = raw.match(/score\s*["']?\s*[:=]\s*["']?\s*(\d{1,3})/i);
+    // \d+ (not \d{1,3}) so an out-of-range "1000" is captured whole and rejected
+    // by inRange rather than truncated to a valid-looking "100".
+    const scoreKey = raw.match(/score\s*["']?\s*[:=]\s*["']?\s*(\d+)/i);
     if (scoreKey) score = inRange(Number(scoreKey[1]));
   }
   if (score == null) {
-    const ratio = raw.match(/\b(\d{1,3})\s*(?:\/\s*100|%)/);
+    const ratio = raw.match(/\b(\d+)\s*(?:\/\s*100|%)/);
     if (ratio) score = inRange(Number(ratio[1]));
   }
   // No bare-integer fallback: grabbing the first number in prose (e.g. "has 2

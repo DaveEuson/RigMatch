@@ -47,6 +47,13 @@ test('parseJudgeScore clamps out-of-range and rejects garbage as null', () => {
   assert.equal(parseJudgeScore(null), null);
 });
 
+test('parseJudgeScore rejects a 4-digit score instead of truncating it to 100', () => {
+  // Regression: a \d{1,3} capture grabbed the first 3 digits of 1000 -> "100".
+  assert.equal(parseJudgeScore('{"score": 1000}'), null);
+  assert.equal(parseJudgeScore('score: 1000'), null);
+  assert.equal(parseJudgeScore('1000/100'), null);
+});
+
 test('parseJudgeScore accepts the boundaries 0 and 100', () => {
   assert.equal(parseJudgeScore('{"score": 0}'), 0);
   assert.equal(parseJudgeScore('{"score": 100}'), 100);
