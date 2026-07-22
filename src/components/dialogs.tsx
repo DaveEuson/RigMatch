@@ -1,12 +1,13 @@
-import { useEffect } from 'react';
-import { AlertTriangle, Check, Code2, Coffee, ExternalLink, Heart, MessageSquare, ShoppingCart, Terminal, Trash2, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, Check, Code2, Coffee, ExternalLink, Heart, MessageSquare, Share2, ShoppingCart, Terminal, Trash2, X } from 'lucide-react';
 import { agentArcadeApi } from '../api';
-import type { ModelRow, NetworkHost } from '../types';
+import type { ModelRow, NetworkHost, SystemProfile, TestedModelScore } from '../types';
 import { formatGb } from '../lib/format';
 import { sumModelRowGb, getShortModelName } from '../lib/modelCatalog';
 import { BUY_ME_A_COFFEE_URL, amazonUrl } from '../lib/appConfig';
 import { playJingle } from '../lib/sound';
 import { AvatarBust, MachineAvatar } from './Avatars';
+import { ShareScorecard } from './ShareScorecard';
 
 export function DeleteModelModal({
   row,
@@ -340,12 +341,17 @@ const CONFETTI_PIECES = [
 export function ChoiceCruiseModal({
   model,
   host,
+  score,
+  system,
   onClose,
 }: {
   model: string;
   host?: NetworkHost;
+  score?: TestedModelScore | null;
+  system: SystemProfile;
   onClose: () => void;
 }) {
+  const [shareOpen, setShareOpen] = useState(false);
   const hostName = host?.hostname ?? 'This computer';
   const shortModelName = getShortModelName(model);
 
@@ -380,6 +386,17 @@ export function ChoiceCruiseModal({
             <strong id="choice-cruise-title">{model}</strong>
             <em>Saved as your Top Match for {hostName}. Your Ollama setup is untouched.</em>
           </div>
+          {score && (
+            <button
+              type="button"
+              className="primary-button compact cruise-share-btn"
+              onClick={() => setShareOpen(true)}
+              title="Share your match as an image — GPU, model, and score"
+            >
+              <Share2 aria-hidden="true" />
+              Share match
+            </button>
+          )}
           <button type="button" className="mini-button outline" onClick={onClose}>
             <X aria-hidden="true" />
             Close
@@ -480,6 +497,10 @@ export function ChoiceCruiseModal({
           </div>
         </div>
       </section>
+
+      {shareOpen && score && (
+        <ShareScorecard model={model} score={score} system={system} onClose={() => setShareOpen(false)} />
+      )}
     </div>
   );
 }

@@ -3118,6 +3118,11 @@ function App() {
         <ChoiceCruiseModal
           model={chosenModel}
           host={selectedHost}
+          score={(() => {
+            const row = modelRows.find((r) => r.displayName === chosenModel);
+            return (row ? getModelScore(row, modelScores) : modelScores[chosenModel]) ?? null;
+          })()}
+          system={system}
           onClose={() => setChosenModel(null)}
         />
       )}
