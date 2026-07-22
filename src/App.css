@@ -10709,6 +10709,59 @@ tbody tr.computer-row.selected {
   opacity: 0.7;
 }
 
+/* Export for Hatch modal. */
+.export-hatch-modal {
+  max-width: 620px;
+}
+
+.export-hatch-intro {
+  margin: 4px 0 12px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.export-hatch-json {
+  margin: 0;
+  max-height: 280px;
+  overflow: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0d1117;
+  color: var(--text);
+  font: 13px/1.5 var(--mono);
+  white-space: pre;
+}
+
+.export-hatch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.export-hatch-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.7;
+}
+
+.export-hatch-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 4px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.export-hatch-empty svg {
+  flex-shrink: 0;
+  color: var(--gold);
+}
+
 /* "What's OpenRouter?" explainer in the cloud judge section. */
 .run-judge-explainer {
   margin: 8px 0;

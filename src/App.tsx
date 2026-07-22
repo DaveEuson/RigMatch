@@ -41,6 +41,7 @@ import {
   Terminal,
   Trash2,
   Trophy,
+  Upload,
   X,
   Zap,
 } from 'lucide-react';
@@ -250,6 +251,8 @@ import { getUpdateChannelLabel } from './lib/updateLabels';
 import { AvatarBust, MachineAvatar } from './components/Avatars';
 import { AppBuilderPreviewModal } from './components/AppBuilderPreview';
 import { ShareScorecard } from './components/ShareScorecard';
+import { ExportHatchModal } from './components/ExportHatchModal';
+import { buildHatchProfile } from './lib/hatchProfile';
 import { SimpleWizard, type WizardModel } from './components/SimpleWizard';
 import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, ChoiceCruiseModal } from './components/dialogs';
 import { ChatDock } from './components/ChatDock';
@@ -520,6 +523,7 @@ function App() {
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [pendingThirdPartyDownloadRows, setPendingThirdPartyDownloadRows] = useState<ModelRow[] | null>(null);
   const [chosenModel, setChosenModel] = useState<string | null>(null);
+  const [exportHatchOpen, setExportHatchOpen] = useState(false);
   const [clearedTopMatches, setClearedTopMatches] = useState<Set<string>>(() => getSavedClearedTopMatches());
   const [setupGuideOpen, setSetupGuideOpen] = useState(false);
   const [clearDataOpen, setClearDataOpen] = useState(false);
@@ -2879,6 +2883,7 @@ function App() {
             onClearScore={requestClearScore}
             onRestoreClearedTopMatches={restoreClearedTopMatches}
             clearedTopMatchCount={clearedTopMatches.size}
+            onExportForHatch={() => setExportHatchOpen(true)}
           />
         )}
         {activeNavId === 'activity' && (
@@ -3124,6 +3129,29 @@ function App() {
           })()}
           system={system}
           onClose={() => setChosenModel(null)}
+        />
+      )}
+
+      {exportHatchOpen && (
+        <ExportHatchModal
+          result={buildHatchProfile({
+            recommendedTag: topRigPick && topRigPick.row.localProvider !== 'lm-studio' ? topRigPick.row.displayName : null,
+            // Ollama-pullable chat models only — LM Studio / cloud / image / embedding can't be `ollama pull`-ed.
+            candidates: modelRows
+              .filter((row) => row.localProvider !== 'lm-studio'
+                && !isCloudModel(row.displayName)
+                && !isEmbeddingModel(row.displayName)
+                && !isLikelyImageGenerationModel(row.displayName))
+              .map((row) => ({ tag: row.displayName, sizeGb: row.sizeGb, score: getModelScore(row, modelScores) })),
+            device: system.gpu.model && system.gpu.model !== 'Unknown GPU'
+              ? [system.gpu.model, system.gpu.vramGb > 0 ? `${Math.round(system.gpu.vramGb)} GB` : null].filter(Boolean).join(' · ')
+              : (system.cpu.brand || 'This computer'),
+            gpuLabel: system.gpu.model && system.gpu.model !== 'Unknown GPU' ? system.gpu.model : 'this computer',
+            vramGb: system.gpu.vramGb,
+            ramGb: system.memory.totalGb,
+            reason: topRigPick?.reason ?? null,
+          })}
+          onClose={() => setExportHatchOpen(false)}
         />
       )}
 
@@ -8839,6 +8867,7 @@ function AgentReveal({
   onClearScore,
   onRestoreClearedTopMatches,
   clearedTopMatchCount,
+  onExportForHatch,
 }: {
   active: boolean;
   agentName: string;
@@ -8861,6 +8890,7 @@ function AgentReveal({
   onClearScore: (model: string) => void;
   onRestoreClearedTopMatches: () => void;
   clearedTopMatchCount: number;
+  onExportForHatch: () => void;
 }) {
   const activeProfile = getModelProfile(model);
   const matchNotes = getMatchNotes(activeProfile, selectedScore, host);
@@ -8955,6 +8985,17 @@ function AgentReveal({
               </button>
             </div>
           )}
+          <div className="top-pick-ribbon-actions" style={{ justifyContent: 'flex-start', marginTop: '8px' }}>
+            <button
+              type="button"
+              className="test-again-btn"
+              onClick={onExportForHatch}
+              title="Export a JSON profile you can paste into Hatch to set its local model — no typing model names"
+            >
+              <Upload aria-hidden="true" />
+              Export for Hatch
+            </button>
+          </div>
           {!isCurrentTopMatch && clearedTopMatchCount > 0 && (
             <button type="button" className="test-again-btn top-pick-restore-action" onClick={onRestoreClearedTopMatches}>
               <RefreshCw aria-hidden="true" />
