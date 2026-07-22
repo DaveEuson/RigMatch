@@ -37,6 +37,93 @@ function gradeColor(grade: string): string {
   return COLORS.quiet;
 }
 
+// Deterministic confetti (no Math.random, so the card renders identically every
+// time) scattered in the margins, clear of the center content.
+const CONFETTI: Array<{ x: number; y: number; s: number; r: number; c: keyof typeof COLORS }> = [
+  { x: 120, y: 40, s: 16, r: 0.3, c: 'gold' }, { x: 300, y: 26, s: 12, r: 0.8, c: 'coral' },
+  { x: 520, y: 46, s: 13, r: 0.5, c: 'speed' }, { x: 700, y: 24, s: 12, r: 1.1, c: 'fit' },
+  { x: 900, y: 42, s: 16, r: 0.2, c: 'coral' }, { x: 1064, y: 30, s: 12, r: 0.7, c: 'gold' },
+  { x: 66, y: 180, s: 14, r: 0.6, c: 'coral' }, { x: 128, y: 300, s: 12, r: 1.0, c: 'speed' },
+  { x: 58, y: 432, s: 16, r: 0.4, c: 'gold' }, { x: 150, y: 528, s: 12, r: 0.9, c: 'fit' },
+  { x: 1132, y: 190, s: 14, r: 0.5, c: 'fit' }, { x: 1078, y: 312, s: 12, r: 1.2, c: 'gold' },
+  { x: 1142, y: 442, s: 16, r: 0.3, c: 'coral' }, { x: 1052, y: 536, s: 12, r: 0.8, c: 'speed' },
+  { x: 210, y: 612, s: 12, r: 0.6, c: 'gold' }, { x: 992, y: 616, s: 14, r: 0.4, c: 'coral' },
+];
+
+function drawConfetti(ctx: CanvasRenderingContext2D) {
+  ctx.save();
+  ctx.globalAlpha = 0.85;
+  for (const p of CONFETTI) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.r);
+    ctx.fillStyle = COLORS[p.c];
+    ctx.beginPath();
+    ctx.roundRect(-p.s / 2, -p.s / 2, p.s, p.s * 0.62, 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// A filled heart centered at (cx, cy); `size` is roughly the half-width.
+function fillHeart(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, color: string, alpha = 1) {
+  const s = size;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + s * 0.35);
+  ctx.bezierCurveTo(cx, cy, cx - s, cy, cx - s, cy + s * 0.35);
+  ctx.bezierCurveTo(cx - s, cy + s * 0.7, cx, cy + s * 0.95, cx, cy + s * 1.15);
+  ctx.bezierCurveTo(cx, cy + s * 0.95, cx + s, cy + s * 0.7, cx + s, cy + s * 0.35);
+  ctx.bezierCurveTo(cx + s, cy, cx, cy, cx, cy + s * 0.35);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+// Rounded inner border for a "framed card" feel.
+function drawFrame(ctx: CanvasRenderingContext2D, color: string) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(18, 18, CARD_W - 36, CARD_H - 36, 20);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// A graphic stat chip: colored value + label in a bordered pill.
+function drawStatChip(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, w: number, h: number,
+  emoji: string, label: string, value: number, color: string,
+) {
+  const x = cx - w / 2, y = cy - h / 2;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.035)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 16);
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.6;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 16);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.textAlign = 'center';
+  ctx.font = '800 30px system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+  ctx.fillStyle = color;
+  ctx.fillText(`${emoji} ${Math.round(value)}`, cx, cy + 2);
+  ctx.font = '600 15px system-ui, sans-serif';
+  ctx.fillStyle = COLORS.muted;
+  ctx.fillText(label, cx, cy + 24);
+}
+
 function rigParts(system: SystemProfile, showHostname: boolean): string[] {
   return [
     system.gpu.model && system.gpu.model !== 'Unknown GPU' ? system.gpu.model : null,
@@ -59,6 +146,7 @@ function drawScorecard(
   bg.addColorStop(1, COLORS.bgBottom);
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
+  drawFrame(ctx, COLORS.line);
   ctx.fillStyle = COLORS.gold;
   ctx.fillRect(0, 0, CARD_W, 6);
   ctx.textAlign = 'left';
@@ -164,6 +252,15 @@ function drawDatingCard(
   glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
+
+  // Decorative layer (behind the content): confetti, floating hearts, frame.
+  drawConfetti(ctx);
+  fillHeart(ctx, 158, 156, 20, COLORS.coral, 0.5);
+  fillHeart(ctx, 1052, 150, 16, COLORS.gold, 0.45);
+  fillHeart(ctx, 1092, 470, 14, COLORS.coral, 0.4);
+  fillHeart(ctx, 96, 470, 13, COLORS.gold, 0.4);
+  drawFrame(ctx, COLORS.gold);
+
   ctx.fillStyle = COLORS.gold;
   ctx.fillRect(0, 0, CARD_W, 6);
 
@@ -203,14 +300,13 @@ function drawDatingCard(
   ctx.fillStyle = COLORS.gold;
   ctx.fillText(pillText, CARD_W / 2, py + 37);
 
-  // Stat chips.
-  ctx.font = '600 24px system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
-  ctx.fillStyle = COLORS.text;
-  ctx.fillText(
-    `⚡ Speed ${Math.round(score.speed)}      \u{1F3AF} Quality ${Math.round(score.sobriety)}      \u{1F9E9} Fit ${Math.round(score.fit)}`,
-    CARD_W / 2,
-    500,
-  );
+  // Graphic stat chips — Speed / Quality / Fit, three across and centered.
+  const chipW = 220, chipH = 66, chipGap = 26, chipY = 486;
+  const groupW = chipW * 3 + chipGap * 2;
+  const firstCx = (CARD_W - groupW) / 2 + chipW / 2;
+  drawStatChip(ctx, firstCx, chipY, chipW, chipH, '⚡', 'SPEED', score.speed, COLORS.speed);
+  drawStatChip(ctx, firstCx + chipW + chipGap, chipY, chipW, chipH, '\u{1F3AF}', 'QUALITY', score.sobriety, COLORS.quality);
+  drawStatChip(ctx, firstCx + (chipW + chipGap) * 2, chipY, chipW, chipH, '\u{1F9E9}', 'FIT', score.fit, COLORS.fit);
 
   // Rig line.
   const rig = rigParts(system, showHostname).slice(0, 3).join('   ·   ');
@@ -275,6 +371,9 @@ export function ShareScorecard({ model, score, system, onClose }: {
   }, [modelName, style]);
 
   const shareTargets: Array<{ id: string; label: string; href: string }> = [
+    // LinkedIn's feed composer opens pre-filled with the text + link; the user
+    // attaches the saved PNG (LinkedIn can't pre-load an image from a URL).
+    { id: 'linkedin', label: 'LinkedIn', href: `https://www.linkedin.com/feed/?shareActive=true&text=${encodeURIComponent(`${shareText} ${SHARE_URL}`)}` },
     { id: 'x', label: 'X', href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(SHARE_URL)}` },
     { id: 'reddit', label: 'Reddit', href: `https://www.reddit.com/submit?url=${encodeURIComponent(SHARE_URL)}&title=${encodeURIComponent(shareText)}` },
     { id: 'bluesky', label: 'Bluesky', href: `https://bsky.app/intent/compose?text=${encodeURIComponent(`${shareText} ${SHARE_URL}`)}` },
