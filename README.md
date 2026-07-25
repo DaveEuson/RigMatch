@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/images/hero-banner.png" alt="RigMatch.AI — the dating game show that finds the best local AI model your computer can actually run" width="100%">
+  <img src="docs/images/hero-banner.png" alt="Rigmatch — the dating game show that finds the best local AI model your computer can actually run" width="100%">
 </p>
 
-<h1 align="center">RigMatch.AI</h1>
+<h1 align="center">RigMatch</h1>
 
 <p align="center">
   <strong>Find the best local AI model your computer can <em>actually</em> run.</strong><br>
@@ -87,17 +87,17 @@ The full control room for power users: a dense sortable models table, custom tes
 <details>
 <summary><strong>macOS first-launch note</strong> (unsigned beta builds)</summary>
 
-RigMatch.AI macOS downloads are unsigned beta builds distributed outside the App Store. On first launch, macOS may say the developer cannot be verified.
+Rigmatch macOS downloads are unsigned beta builds distributed outside the App Store. On first launch, macOS may say the developer cannot be verified.
 
 1. Download the correct `.dmg`: **mac-arm64** for Apple Silicon, **mac-x64** for Intel.
-2. Open the `.dmg` and drag **RigMatch.AI** to **Applications**.
-3. First launch only: right-click **RigMatch.AI.app**, choose **Open**, then **Open** again.
+2. Open the `.dmg` and drag **Rigmatch** to **Applications**.
+3. First launch only: right-click **Rigmatch.app**, choose **Open**, then **Open** again.
 4. If macOS still blocks it, open **System Settings → Privacy & Security → Security** and choose **Open Anyway**.
 
 If macOS says the app is "damaged" after copying it to Applications, run once:
 
 ```bash
-xattr -cr /Applications/RigMatch.AI.app
+xattr -cr /Applications/Rigmatch.app
 ```
 </details>
 
@@ -108,7 +108,7 @@ NVIDIA Jetson devices are usually **ARM64/aarch64** — use the Linux ARM64 arti
 
 ```bash
 sudo apt update
-sudo apt install ./RigMatch.AI-*-linux-*.deb
+sudo apt install ./Rigmatch-*-linux-*.deb
 ```
 
 If apt reports missing desktop libraries, install the common Electron runtime dependencies:
@@ -121,8 +121,8 @@ sudo apt install libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 xdg-utils libats
 ### Build from source
 
 ```bash
-git clone https://github.com/DaveEuson/RigMatch.AI.git
-cd RigMatch.AI
+git clone https://github.com/DaveEuson/Rigmatch.git
+cd Rigmatch
 npm install
 npm run dev        # development
 npm run build      # production build
