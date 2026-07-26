@@ -1,4 +1,4 @@
-# RigMatch.AI — Roadmap
+# RigMatch — Roadmap
 
 Ideas parked for later. Nothing here is committed; it's a candid backlog of directions worth exploring.
 

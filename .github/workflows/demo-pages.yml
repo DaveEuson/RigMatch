@@ -1,8 +1,8 @@
 name: Publish Demo Page
 
-# Deploys the RigMatch.AI web presence to GitHub Pages:
-#   /RigMatch.AI/       → marketing landing page (site/index.html)
-#   /RigMatch.AI/app/   → the full app in preview mode (interactive demo)
+# Deploys the RigMatch web presence to GitHub Pages:
+#   /RigMatch/       → marketing landing page (site/index.html)
+#   /RigMatch/app/   → the full app in preview mode (interactive demo)
 # In a browser there is no Electron bridge (window.agentArcade), so the app runs
 # in preview mode automatically — the whole game-show UI with sample data, no
 # local Ollama required.
@@ -52,11 +52,11 @@ jobs:
 
       - name: Build web demo
         # Desktop build uses base './' (vite.config.ts). For Pages the app lives at
-        # /RigMatch.AI/app/, so build it there; the hand-authored landing page then
-        # sits at the site root (/RigMatch.AI/).
+        # /RigMatch/app/, so build it there; the hand-authored landing page then
+        # sits at the site root (/RigMatch/).
         run: |
           npx tsc -b
-          npx vite build --base=/RigMatch.AI/app/ --outDir dist/app --emptyOutDir
+          npx vite build --base=/RigMatch/app/ --outDir dist/app --emptyOutDir
           cp -r site/. dist/
 
       - name: Configure Pages

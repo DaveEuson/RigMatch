@@ -1,7 +1,7 @@
 # Third-Party Model Notice
 
-RigMatch.AI benchmarks local models through the user's Ollama installation.
-RigMatch.AI does not bundle third-party model weights, sell model access, or claim endorsement from model providers.
+RigMatch benchmarks local models through the user's Ollama installation.
+RigMatch does not bundle third-party model weights, sell model access, or claim endorsement from model providers.
 
 Model downloads, model weights, model outputs, and model names may be governed by separate provider licenses, terms, acceptable-use policies, or prohibited-use policies. Users should review the applicable terms before downloading, using, sharing, or redistributing any model.
 
@@ -17,6 +17,6 @@ Useful provider links:
 
 Release checklist:
 
-- Do not ship third-party model weights inside the RigMatch.AI installer unless the required license, notice, attribution, and use-restriction files are included.
+- Do not ship third-party model weights inside the RigMatch installer unless the required license, notice, attribution, and use-restriction files are included.
 - If a release adds bundled model weights, review that model's current license before publishing.
 - Keep third-party model notices visible in the app and in public project/release materials.

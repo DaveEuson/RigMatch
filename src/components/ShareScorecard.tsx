@@ -5,7 +5,7 @@ import { getShortModelName } from '../lib/modelCatalog';
 
 // Where a shared scorecard sends people — the marketing landing page, which then
 // funnels to the live demo or a download.
-const SHARE_URL = 'https://daveeuson.github.io/RigMatch.AI/';
+const SHARE_URL = 'https://daveeuson.github.io/RigMatch/';
 const CARD_W = 1200;
 const CARD_H = 675;
 
@@ -154,7 +154,7 @@ function drawScorecard(
 
   ctx.font = '700 40px system-ui, sans-serif';
   ctx.fillStyle = COLORS.gold;
-  ctx.fillText('RigMatch.AI', 60, 82);
+  ctx.fillText('RigMatch', 60, 82);
   ctx.font = '400 18px system-ui, sans-serif';
   ctx.fillStyle = COLORS.muted;
   ctx.fillText('The AI dating game show for your PC', 62, 108);
@@ -233,7 +233,7 @@ function drawScorecard(
   ctx.fillText('100% local · no cloud · no account', 60, CARD_H - 22);
   ctx.textAlign = 'right';
   ctx.fillStyle = COLORS.gold;
-  ctx.fillText('daveeuson.github.io/RigMatch.AI', CARD_W - 60, CARD_H - 22);
+  ctx.fillText('daveeuson.github.io/RigMatch', CARD_W - 60, CARD_H - 22);
   ctx.textAlign = 'left';
 }
 
@@ -281,7 +281,7 @@ function drawDatingCard(
   const whose = showHostname && system.hostname ? `${system.hostname}’s` : 'your PC’s';
   ctx.font = '400 27px system-ui, sans-serif';
   ctx.fillStyle = COLORS.muted;
-  ctx.fillText(`won ${whose} heart on RigMatch.AI`, CARD_W / 2, 344);
+  ctx.fillText(`won ${whose} heart on RigMatch`, CARD_W / 2, 344);
 
   // Grade + score pill.
   const pillText = `GRADE ${score.grade}    ·    ${score.total} / 100 MATCH`;
@@ -319,7 +319,7 @@ function drawDatingCard(
   // Footer.
   ctx.font = '600 20px system-ui, sans-serif';
   ctx.fillStyle = COLORS.quiet;
-  ctx.fillText('RigMatch.AI · the AI dating game show for your PC · 100% local', CARD_W / 2, CARD_H - 34);
+  ctx.fillText('RigMatch · the AI dating game show for your PC · 100% local', CARD_W / 2, CARD_H - 34);
   ctx.textAlign = 'left';
 }
 
@@ -351,8 +351,8 @@ export function ShareScorecard({ model, score, system, onClose }: {
   }, [onClose]);
 
   const shareText = style === 'datingshow'
-    ? `It's a match! ${modelName} won my PC's heart on RigMatch.AI 💛 — grade ${score.grade}, ${score.total}/100. Which local AI is your top match?`
-    : `My PC's top local AI match is ${modelName} — grade ${score.grade}, ${score.total}/100 Match Score. Found with RigMatch.AI, a 100% local model tester 🤖`;
+    ? `It's a match! ${modelName} won my PC's heart on RigMatch 💛 — grade ${score.grade}, ${score.total}/100. Which local AI is your top match?`
+    : `My PC's top local AI match is ${modelName} — grade ${score.grade}, ${score.total}/100 Match Score. Found with RigMatch, a 100% local model tester 🤖`;
 
   const saveImage = useCallback(() => {
     const canvas = canvasRef.current;

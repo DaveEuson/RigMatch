@@ -172,7 +172,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
         <div className="sw-brand">
           <img src={brandIcon} alt="" />
           <div>
-            <strong>RigMatch.AI</strong>
+            <strong>RigMatch</strong>
             <span>AI matchmaking for your PC</span>
             {/* Mode switch lives under the brand in both Simple and Advanced so it
                 never moves when you toggle. Shares .global-mode-switch styling. */}

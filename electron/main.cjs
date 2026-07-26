@@ -60,14 +60,14 @@ const OLLAMA_LIBRARY_URL = 'https://ollama.com/library';
 const OLLAMA_NAMESPACE_URL = 'https://ollama.com/x';
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
 const RIGMATCH_REPOSITORY_URL = app.isPackaged
-  ? 'https://github.com/daveeuson/RigMatch.AI'
-  : (process.env.RIGMATCH_REPOSITORY_URL || 'https://github.com/daveeuson/RigMatch.AI');
+  ? 'https://github.com/daveeuson/RigMatch'
+  : (process.env.RIGMATCH_REPOSITORY_URL || 'https://github.com/daveeuson/RigMatch');
 const RIGMATCH_RELEASES_URL = app.isPackaged
   ? `${RIGMATCH_REPOSITORY_URL}/releases`
   : (process.env.RIGMATCH_RELEASES_URL || `${RIGMATCH_REPOSITORY_URL}/releases`);
 const RIGMATCH_RELEASES_API_URL = app.isPackaged
-  ? 'https://api.github.com/repos/daveeuson/RigMatch.AI/releases'
-  : (process.env.RIGMATCH_RELEASES_API_URL || 'https://api.github.com/repos/daveeuson/RigMatch.AI/releases');
+  ? 'https://api.github.com/repos/daveeuson/RigMatch/releases'
+  : (process.env.RIGMATCH_RELEASES_API_URL || 'https://api.github.com/repos/daveeuson/RigMatch/releases');
 const CUDA_TOOLKIT_URL = 'https://developer.nvidia.com/cuda-toolkit';
 const CUDA_TOOLKIT_ARCHIVE_URL = 'https://developer.nvidia.com/cuda-toolkit-archive';
 const CUDA_REDIST_INDEX_URL = 'https://developer.download.nvidia.com/compute/cuda/redist/';
@@ -277,7 +277,7 @@ function createWindow() {
     minWidth: 1280,
     minHeight: 820,
     backgroundColor: '#080b0d',
-    title: 'RigMatch.AI',
+    title: 'RigMatch',
     icon: getWindowIconPath(),
     autoHideMenuBar: true,
     webPreferences: {
@@ -978,7 +978,7 @@ async function checkForRigmatchUpdates(channel = 'release') {
       currentVersion,
       checkedAt,
       latestVersion,
-      latestName: latest.name || latest.tag_name || 'RigMatch.AI release',
+      latestName: latest.name || latest.tag_name || 'RigMatch release',
       latestDate: latest.published_at || latest.created_at || null,
       releaseUrl,
       downloadUrl,
@@ -1004,7 +1004,7 @@ async function checkForRigmatchUpdates(channel = 'release') {
       releaseNotes: null,
       hasUpdate: false,
       status: 'unknown',
-      error: error.message || 'Could not check RigMatch.AI releases.',
+      error: error.message || 'Could not check RigMatch releases.',
     };
   }
 }
@@ -2756,8 +2756,8 @@ async function openRouterGenerateText(apiKey, model, prompt, maxTokens = 400, si
       signal,
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://github.com/DaveEuson/RigMatch.AI',
-        'X-Title': 'RigMatch.AI',
+        'HTTP-Referer': 'https://github.com/DaveEuson/RigMatch',
+        'X-Title': 'RigMatch',
       },
       body: JSON.stringify({
         model,
@@ -2999,7 +2999,7 @@ async function sendChat(request = {}) {
           messages: [
             {
               role: 'system',
-              content: 'You are the selected local RigMatch.AI assistant. Be warm, concise, and honest about limits.',
+              content: 'You are the selected local RigMatch assistant. Be warm, concise, and honest about limits.',
             },
             { role: 'user', content: userContent },
           ],
@@ -3020,7 +3020,7 @@ async function sendChat(request = {}) {
 
   const generateBody = {
     model,
-    prompt: `You are the selected local RigMatch.AI assistant. Be warm, concise, and honest about limits.\n\nUser: ${safeMessage || 'What is in this image?'}\nAssistant:`,
+    prompt: `You are the selected local RigMatch assistant. Be warm, concise, and honest about limits.\n\nUser: ${safeMessage || 'What is in this image?'}\nAssistant:`,
     stream: false,
     options: {
       temperature: 0.5,

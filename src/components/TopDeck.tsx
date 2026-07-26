@@ -58,10 +58,10 @@ export function TopDeck({
 
   return (
     <header className={uiMode === 'advanced' ? 'top-deck mode-advanced' : 'top-deck mode-simple'}>
-      <div className="brand-block" aria-label="RigMatch.AI">
+      <div className="brand-block" aria-label="RigMatch">
         <BrandMark />
         <div>
-          <h1>RigMatch.AI</h1>
+          <h1>RigMatch</h1>
           <p>Find the best AI your PC can run. Nothing leaves this computer.</p>
           <div className="global-mode-switch" role="group" aria-label="Current interface mode">
             <span>Mode</span>

@@ -11,7 +11,7 @@ import type { AdvancedGenerateProgress, AgentArcadeApi, BenchmarkProgressUpdate,
 
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
-const RIGMATCH_RELEASES_URL = 'https://github.com/daveeuson/RigMatch.AI/releases';
+const RIGMATCH_RELEASES_URL = 'https://github.com/daveeuson/RigMatch/releases';
 const APP_VERSION = '0.3.5';
 
 // Sample App Builder output used to simulate token streaming in preview mode —
@@ -360,7 +360,7 @@ const fallbackApi: AgentArcadeApi = {
       currentVersion: APP_VERSION,
       checkedAt: new Date().toISOString(),
       latestVersion: APP_VERSION,
-      latestName: channel === 'nightly' ? 'Preview nightly channel' : 'RigMatch.AI preview release',
+      latestName: channel === 'nightly' ? 'Preview nightly channel' : 'RigMatch preview release',
       latestDate: new Date().toISOString(),
       releaseUrl: RIGMATCH_RELEASES_URL,
       downloadUrl: RIGMATCH_RELEASES_URL,

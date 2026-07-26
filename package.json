@@ -54,7 +54,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "RigMatch.AI",
+      "shortcutName": "RigMatch",
       "include": "build/installer.nsh"
     },
     "win": {

@@ -55,7 +55,7 @@ export function SideMenu({
   };
 
   return (
-    <aside className="side-menu" aria-label="RigMatch.AI menu">
+    <aside className="side-menu" aria-label="RigMatch menu">
       <button type="button" className="side-menu-title" onClick={onOpenTutorial} title="Re-open the getting started guide" aria-label="Open getting started guide">
         <span>{uiMode === 'advanced' ? 'Advanced Mode' : 'Simple Mode'}</span>
         <strong>{uiMode === 'advanced' ? 'Power tools visible' : 'Guided setup'}</strong>

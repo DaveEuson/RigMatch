@@ -368,7 +368,7 @@ export default function App() {
     return () => clearInterval(id);
   }, [connectionStatus, refresh]);
 
-  // ── RigMatch.AI scores bridge ──────────────────────────────────────────────
+  // ── RigMatch scores bridge ──────────────────────────────────────────────
 
   useEffect(() => {
     const fetchScores = async () => {
@@ -381,7 +381,7 @@ export default function App() {
         setChosenModel(payload.chosen);
         saveCachedBridge(payload);
       } catch {
-        // RigMatch.AI not running — use cached scores from last session
+        // RigMatch not running — use cached scores from last session
       }
     };
     void fetchScores();
@@ -756,7 +756,7 @@ export default function App() {
         </div>
         {(chosenModel || modelRankings.size > 0) && (
           <div className="rm-badge-legend">
-            <span title="Your Top Pick from RigMatch.AI">⭐ Top Pick</span>
+            <span title="Your Top Pick from RigMatch">⭐ Top Pick</span>
             <span title="Ranked by RigMatch score">🥇 Rank 1–3</span>
             <span title="Low hardware fit — may be slow">⚠ Low fit</span>
           </div>
@@ -766,7 +766,7 @@ export default function App() {
           {visibleBuddies.length === 0 && connectionStatus === "connected" && (
             <div className="rm-buddy-empty">
               <p>No models visible.</p>
-              <p>Check Settings to unhide models, or open <strong>RigMatch.AI</strong> to download one.</p>
+              <p>Check Settings to unhide models, or open <strong>RigMatch</strong> to download one.</p>
             </div>
           )}
           {visibleBuddies.map((buddy) => {
@@ -793,7 +793,7 @@ export default function App() {
                 <div className="rm-buddy-info">
                   <span className="rm-buddy-name">
                     {isChosen && (
-                      <span className="rm-chosen-badge" title="Your Top Pick from RigMatch.AI">⭐</span>
+                      <span className="rm-chosen-badge" title="Your Top Pick from RigMatch">⭐</span>
                     )}
                     {modelRankings.has(buddy.modelName) && (
                       <span className="rm-rank-medal" title={`Ranked #${modelRankings.get(buddy.modelName)} by RigMatch score`}>
@@ -830,10 +830,10 @@ export default function App() {
           <button
             type="button"
             className="rm-open-rigmatch-btn"
-            title="Open RigMatch.AI — benchmark and rank your models"
+            title="Open RigMatch — benchmark and rank your models"
             onClick={() => void invoke("open_rigmatch_ai").catch(() => undefined)}
           >
-            ⚡ RigMatch.AI
+            ⚡ RigMatch
           </button>
           <div className="rm-buddy-panel-footer-row">
             <button type="button" className="rm-settings-btn" onClick={openSettings}>
@@ -1009,7 +1009,7 @@ export default function App() {
                 <p>Connecting to Ollama…</p>
               ) : buddies.length === 0 ? (
                 <p>
-                  No models installed. Open <strong>RigMatch.AI</strong> to download your first model.
+                  No models installed. Open <strong>RigMatch</strong> to download your first model.
                 </p>
               ) : (
                 <p>Select a buddy from the list to start chatting.</p>
@@ -1041,7 +1041,7 @@ export default function App() {
               <div className="rm-profile-body">
                 <BuddyAvatar family={pb.avatarFamily} size="lg" />
                 <div className="rm-profile-name-row">
-                  {isChosen && <span className="rm-chosen-badge" title="Your Top Pick from RigMatch.AI">⭐</span>}
+                  {isChosen && <span className="rm-chosen-badge" title="Your Top Pick from RigMatch">⭐</span>}
                   {rank !== undefined && <span className="rm-rank-medal" title={`Ranked #${rank} by RigMatch score`}>{RANK_MEDALS[rank]}</span>}
                   <strong className="rm-profile-name">{pb.displayName}</strong>
                 </div>
@@ -1067,7 +1067,7 @@ export default function App() {
                       </div>
                     </>
                   ) : (
-                    <div className="rm-profile-stat rm-profile-untested">Not tested yet in RigMatch.AI</div>
+                    <div className="rm-profile-stat rm-profile-untested">Not tested yet in RigMatch</div>
                   )}
                   <div className="rm-profile-stat">
                     <span>Response Time</span>

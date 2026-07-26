@@ -190,8 +190,8 @@ async fn get_rig_scores() -> Result<serde_json::Value, String> {
     res.json::<serde_json::Value>().await.map_err(|e| e.to_string())
 }
 
-// Launches RigMatch.AI from the bundled companions layout:
-//   <install-root>/companions/rigmatch-chat.exe  →  <install-root>/RigMatch.AI.exe
+// Launches RigMatch from the bundled companions layout:
+//   <install-root>/companions/rigmatch-chat.exe  →  <install-root>/RigMatch.exe
 #[tauri::command]
 fn open_rigmatch_ai() -> Result<(), String> {
     let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
@@ -199,7 +199,7 @@ fn open_rigmatch_ai() -> Result<(), String> {
         .parent()
         .and_then(|companions| companions.parent())
         .ok_or_else(|| "Cannot resolve install root".to_string())?;
-    let candidate = install_root.join("RigMatch.AI.exe");
+    let candidate = install_root.join("RigMatch.exe");
     if candidate.exists() {
         std::process::Command::new(&candidate)
             .spawn()
@@ -207,7 +207,7 @@ fn open_rigmatch_ai() -> Result<(), String> {
         return Ok(());
     }
     Err(format!(
-        "RigMatch.AI not found at {}",
+        "RigMatch not found at {}",
         candidate.display()
     ))
 }

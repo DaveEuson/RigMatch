@@ -257,7 +257,7 @@ export function SupportModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <p className="support-disclosure">
-          Affiliate links — purchases support RigMatch.AI at no extra cost to you.
+          Affiliate links — purchases support RigMatch at no extra cost to you.
         </p>
       </section>
     </div>

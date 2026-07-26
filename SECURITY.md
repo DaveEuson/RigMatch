@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Only the latest release of RigMatch.AI receives security fixes.
+Only the latest release of RigMatch receives security fixes.
 
 | Version | Supported |
 |---------|-----------|
@@ -25,7 +25,7 @@ You can expect an acknowledgement within 48 hours. If confirmed, a fix will be r
 
 ## Scope
 
-RigMatch.AI is a local-only desktop application. It:
+RigMatch is a local-only desktop application. It:
 - Makes no outbound connections except to `ollama.com` (model catalog), `github.com` (update checks), and the local Ollama instance at `127.0.0.1:11434`
 - Stores no user accounts, passwords, or cloud credentials
 - Logs system metadata (CPU, GPU, RAM, hostname) to a local file only — this data is never automatically transmitted

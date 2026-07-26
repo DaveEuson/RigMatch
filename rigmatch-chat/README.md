@@ -1,14 +1,14 @@
 # RigMatch Chat
 
-AIM-style chat companion for your top-ranked local AI model. Launched from RigMatch.AI's match screen, or run standalone.
+AIM-style chat companion for your top-ranked local AI model. Launched from RigMatch's match screen, or run standalone.
 
 ## What It Does
 
-- Lists your installed Ollama models as "buddies" with avatars and rankings from RigMatch.AI
+- Lists your installed Ollama models as "buddies" with avatars and rankings from RigMatch
 - Streams chat responses token-by-token
 - Shows CPU/RAM usage live
 - Remembers conversation history per model
-- Ships as a companion binary inside `companions/` alongside RigMatch.AI
+- Ships as a companion binary inside `companions/` alongside RigMatch
 
 ## Tech
 
@@ -33,4 +33,4 @@ Output: `src-tauri/target/release/rigmatch-chat.exe` (Windows) or `rigmatch-chat
 
 ## Standalone Use
 
-RigMatch Chat works without RigMatch.AI. It reads any Ollama instance on localhost and lets you chat with any installed model directly.
+RigMatch Chat works without RigMatch. It reads any Ollama instance on localhost and lets you chat with any installed model directly.

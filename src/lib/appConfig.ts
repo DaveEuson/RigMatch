@@ -42,7 +42,7 @@ export function amazonUrl(query: string): string {
 }
 export const APP_VERSION = '0.3.5';
 export { CURRENT_SCORE_SCHEMA_VERSION } from './scoring';
-export const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch.AI/issues/new';
+export const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch/issues/new';
 export const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
 export const HISTORY_STORAGE_KEY = 'rigmatch:history:v1';
 export const THEME_STORAGE_KEY = 'agentArcadeTheme';

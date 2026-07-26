@@ -165,7 +165,7 @@ export function buildShareableScorecard(
   });
 
   const sections: string[] = [
-    `## 🏆 My Local AI Results — RigMatch.AI`,
+    `## 🏆 My Local AI Results — RigMatch`,
     '',
     `**Rig:** ${rigLine}`,
     '',
@@ -184,7 +184,7 @@ export function buildShareableScorecard(
   sections.push(
     '',
     '---',
-    '_Scored with [RigMatch.AI](https://github.com/DaveEuson/RigMatch.AI) — benchmarks your installed Ollama models and finds your best local AI match._',
+    '_Scored with [RigMatch](https://github.com/DaveEuson/RigMatch) — benchmarks your installed Ollama models and finds your best local AI match._',
   );
 
   return sections.join('\n');
@@ -996,7 +996,7 @@ export function getLineupBenchmarkBlocker(rows: ModelRow[], host: NetworkHost | 
 
 export function getHostBenchmarkBlocker(host: NetworkHost | undefined, ollama: OllamaStatus) {
   if (!host || host.isLocal || host.isDemo) {
-    return ollama.ready ? null : 'Ollama must be running before RigMatch.AI can test a model.';
+    return ollama.ready ? null : 'Ollama must be running before RigMatch can test a model.';
   }
 
   if (host.discovery === 'computer') {
@@ -1624,7 +1624,7 @@ export function getPullProgressDetailLabel(
 
 export function buildDiagnosticsText(system: SystemProfile, ollama: OllamaStatus, logPath: string): string {
   const lines = [
-    `RigMatch.AI v${APP_VERSION}`,
+    `RigMatch v${APP_VERSION}`,
     `OS: ${system.os.distro} ${system.os.release} (${system.platform} ${system.arch})`,
     `CPU: ${system.cpu.brand} · ${system.cpu.physicalCores} cores`,
     `RAM: ${Math.round(system.memory.totalGb)} GB`,

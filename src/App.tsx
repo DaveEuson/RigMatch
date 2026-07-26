@@ -987,12 +987,12 @@ function App() {
       if (result.error) {
         setActivity(`Update check finished with a note: ${result.error}`);
       } else if (result.hasUpdate) {
-        setActivity(`${result.latestName ?? 'A newer RigMatch.AI build'} is available on the ${getUpdateChannelLabel(result.channel)} channel.`);
+        setActivity(`${result.latestName ?? 'A newer RigMatch build'} is available on the ${getUpdateChannelLabel(result.channel)} channel.`);
       } else {
         setActivity(`You are on the latest ${getUpdateChannelLabel(result.channel).toLowerCase()} build RigMatch found.`);
       }
     } catch (error) {
-      setActivity(`Could not check for RigMatch.AI upgrades: ${getErrorMessage(error)}`);
+      setActivity(`Could not check for RigMatch upgrades: ${getErrorMessage(error)}`);
     } finally {
       setIsCheckingUpdates(false);
     }
@@ -1005,11 +1005,11 @@ function App() {
       const openedDirectInstaller = updateCheck?.downloadKind === 'installer' && opened.url === updateCheck.downloadUrl;
       setActivity(
         openedDirectInstaller
-          ? `Opened ${updateCheck.downloadName ?? 'the matching RigMatch.AI installer'} for download.`
-          : `Opened RigMatch.AI ${getUpdateChannelLabel(updateChannel).toLowerCase()} downloads.`,
+          ? `Opened ${updateCheck.downloadName ?? 'the matching RigMatch installer'} for download.`
+          : `Opened RigMatch ${getUpdateChannelLabel(updateChannel).toLowerCase()} downloads.`,
       );
     } catch (error) {
-      setActivity(`Could not open RigMatch.AI downloads: ${getErrorMessage(error)}`);
+      setActivity(`Could not open RigMatch downloads: ${getErrorMessage(error)}`);
     }
   }, [updateChannel, updateCheck]);
 
@@ -1653,7 +1653,7 @@ function App() {
     }
 
     if (!ollama.ready) {
-      setActivity('Ollama must be running before RigMatch.AI can download models.');
+      setActivity('Ollama must be running before RigMatch can download models.');
       return;
     }
 
@@ -3362,7 +3362,7 @@ function FirstRunTutorial({
               <ExternalLink aria-hidden="true" />
               Download Ollama free at ollama.ai
             </button>
-            <p>After installing, <strong>start Ollama</strong>, then re-open RigMatch.AI. The status above will turn green.</p>
+            <p>After installing, <strong>start Ollama</strong>, then re-open RigMatch. The status above will turn green.</p>
           </div>
         </div>
       ),
@@ -3377,7 +3377,7 @@ function FirstRunTutorial({
           <div className="tutorial-welcome-hero">
             <p className="tutorial-intro-lead">
               There are hundreds of AI models out there — and the one that feels <em>magical</em> on someone else's computer might crawl on yours.<br /><br />
-              RigMatch.AI helps you find <strong>your</strong> perfect match. And it does it like a <strong>gameshow</strong>. 🎬
+              RigMatch helps you find <strong>your</strong> perfect match. And it does it like a <strong>gameshow</strong>. 🎬
             </p>
           </div>
           <div className="tutorial-show-format">
@@ -3731,7 +3731,7 @@ function UpgradeRig({ system }: { system: SystemProfile }) {
         </>
       )}
       <p className="upgrade-disclosure">
-        Affiliate links — purchases support RigMatch.AI at no extra cost to you.
+        Affiliate links — purchases support RigMatch at no extra cost to you.
       </p>
     </div>
   );
@@ -4191,7 +4191,7 @@ function SetupGuideDock({
           <div>
             <span>This machine</span>
             <strong>{getPlatformName(system.platform)} installer</strong>
-            <p>Open Ollama, install it, then use Check Again. RigMatch.AI looks for the local API on port 11434.</p>
+            <p>Open Ollama, install it, then use Check Again. RigMatch looks for the local API on port 11434.</p>
             <button type="button" className="primary-button compact" onClick={onInstallOllama}>
               Official Download
             </button>
@@ -4349,9 +4349,9 @@ function RunWarningModal({
         <div className="modal-body">
           <p>
             {skipQuestions ? (
-              <>RigMatch.AI will run the selected <strong>skill test{skillSelection.appBuilder && skillSelection.image ? 's' : ''}</strong> on <strong>{subject}</strong> and skip the question round.</>
+              <>RigMatch will run the selected <strong>skill test{skillSelection.appBuilder && skillSelection.image ? 's' : ''}</strong> on <strong>{subject}</strong> and skip the question round.</>
             ) : (
-              <>RigMatch.AI will test <strong>{subject}</strong> with <strong>{totalQuestions}</strong> total question{totalQuestions === 1 ? '' : 's'}.</>
+              <>RigMatch will test <strong>{subject}</strong> with <strong>{totalQuestions}</strong> total question{totalQuestions === 1 ? '' : 's'}.</>
             )} This can heavily use CPU, GPU, VRAM, RAM,
             storage bandwidth, fans, and battery until the run finishes.
           </p>
@@ -5647,7 +5647,7 @@ function UtilityPanel({
         <div className="utility-body">
           <div className="utility-logo">
             <BrandMark />
-            <strong>RigMatch.AI</strong>
+            <strong>RigMatch</strong>
             <em>v{APP_VERSION}</em>
           </div>
           <SettingsSection eyebrow="Interface" title="Preferences" summary="Mode, theme, and the Simple Mode path." defaultOpen>
@@ -9555,12 +9555,12 @@ function ProfileQuestionTranscript({
 
 function ModeSplash({ onPick }: { onPick: (mode: UiMode) => void }) {
   return (
-    <div className="mode-splash" role="dialog" aria-modal="true" aria-label="Choose how to use RigMatch.AI">
+    <div className="mode-splash" role="dialog" aria-modal="true" aria-label="Choose how to use RigMatch">
       <div className="mode-splash-card">
         <div className="mode-splash-brand">
           <BrandMark />
           <div>
-            <strong>RigMatch.AI</strong>
+            <strong>RigMatch</strong>
             <span>Find the best AI your PC can run — nothing leaves this computer.</span>
           </div>
         </div>

@@ -6,7 +6,7 @@ Graphics are in `social/`. Suggested captions below — tweak to taste.
 
 > Most people who'd love a private, local AI assistant never get past the first Google search — VRAM? Quantization? GGUF?
 >
-> So I built Simple Mode for RigMatch.AI: a five-step wizard that turns model benchmarking into a dating game show. Your PC checks itself, you pick contestants that actually fit your hardware, they speed-date through the same questions, and the winner gets a 0–100 Match Score — measured on YOUR machine, not a cloud leaderboard.
+> So I built Simple Mode for RigMatch: a five-step wizard that turns model benchmarking into a dating game show. Your PC checks itself, you pick contestants that actually fit your hardware, they speed-date through the same questions, and the winner gets a 0–100 Match Score — measured on YOUR machine, not a cloud leaderboard.
 >
 > No jargon. No account. 100% local, via Ollama.
 >
@@ -19,7 +19,7 @@ Graphics are in `social/`. Suggested captions below — tweak to taste.
 - Built a dating-game-show UI that benchmarks Ollama models on your actual hardware and crowns a "Top Match"
 
 **Body:**
-> RigMatch.AI benchmarks models through Ollama on your real hardware and scores speed, answer quality, and hardware fit into a 0–100 Match Score.
+> RigMatch benchmarks models through Ollama on your real hardware and scores speed, answer quality, and hardware fit into a 0–100 Match Score.
 >
 > The new Simple Mode is for the "I have no idea what VRAM is" crowd: check your PC → pick contestants that fit → they speed-date the same questions live → winner revealed with a grade, then chat with it right away or graduate to Advanced Mode (full sortable table, custom test suites, logs).
 >

@@ -13,12 +13,12 @@ export function UpdateAvailableToast({ update, onGetUpdate, onDismiss }: {
   const [showNotes, setShowNotes] = useState(false);
 
   return (
-    <div className="update-toast" role="dialog" aria-label={`RigMatch.AI ${update.latestVersion ?? ''} is available`}>
+    <div className="update-toast" role="dialog" aria-label={`RigMatch ${update.latestVersion ?? ''} is available`}>
       <div className="update-toast-head">
         <Sparkles aria-hidden="true" />
         <div>
           <span>Update available</span>
-          <strong>RigMatch.AI {update.latestVersion}</strong>
+          <strong>RigMatch {update.latestVersion}</strong>
         </div>
         <button type="button" className="update-toast-close" onClick={onDismiss} aria-label="Dismiss update notice">
           <X aria-hidden="true" />

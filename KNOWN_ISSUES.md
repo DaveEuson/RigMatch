@@ -1,4 +1,4 @@
-# Known Issues — RigMatch.AI v0.3.0 Beta
+# Known Issues — RigMatch v0.3.0 Beta
 
 This is a candid list of issues we know about going into the beta. If you hit something not listed here, that's a genuine bug report — please share it.
 
