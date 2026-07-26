@@ -10762,6 +10762,113 @@ tbody tr.computer-row.selected {
   color: var(--gold);
 }
 
+/* Gentle, non-blocking "update available" nudge, bottom-right. */
+.update-toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 60;
+  width: 340px;
+  max-width: calc(100vw - 40px);
+  padding: 14px 16px;
+  border: 1px solid var(--line-bright);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+  animation: update-toast-in 0.28s ease;
+}
+
+@keyframes update-toast-in {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.update-toast-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.update-toast-head svg {
+  color: var(--gold);
+  flex-shrink: 0;
+}
+
+.update-toast-head > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.update-toast-head span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.update-toast-head strong {
+  font-size: 15px;
+  color: var(--text-strong);
+}
+
+.update-toast-close {
+  display: inline-flex;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.update-toast-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.update-toast-body {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.update-toast-notes-wrap {
+  margin-top: 8px;
+}
+
+.update-toast-notes-toggle {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.update-toast-notes {
+  margin-top: 8px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0d1117;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.update-toast-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
 /* "What's OpenRouter?" explainer in the cloud judge section. */
 .run-judge-explainer {
   margin: 8px 0;

@@ -254,6 +254,7 @@ import { ShareScorecard } from './components/ShareScorecard';
 import { ExportHatchModal } from './components/ExportHatchModal';
 import { buildHatchProfile } from './lib/hatchProfile';
 import { getAgentDatingProfileSections, getAgentDatingProfileDetails, getMatchNotes } from './lib/datingProfile';
+import { UpdateAvailableToast } from './components/UpdateAvailableToast';
 import { SimpleWizard, type WizardModel } from './components/SimpleWizard';
 import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, ChoiceCruiseModal } from './components/dialogs';
 import { ChatDock } from './components/ChatDock';
@@ -328,6 +329,9 @@ type PendingRunMode = 'single' | 'speed-date';
 
 // Quick TEST resource warning opt-out ('off' = user chose "don't warn again").
 const QUICK_CHECK_WARNING_KEY = 'rigmatch:quick-test-warning:v1';
+// The app version whose update nudge the user dismissed — so the gentle popup
+// shows once per new release, never nags for a version they've already seen.
+const UPDATE_PROMPT_DISMISSED_KEY = 'rigmatch:update-prompt-dismissed:v1';
 type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; recognize: boolean; recognizeImage: string; code: boolean; codeLanguage: string; codeTaskId: string; codeCustomTask: string; skipQuestions: boolean };
 type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
 
@@ -515,6 +519,9 @@ function App() {
   const [updateCheck, setUpdateCheck] = useState<UpdateCheckResponse | null>(null);
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const [autoUpdateStatus, setAutoUpdateStatus] = useState<AutoUpdateStatus>({ phase: 'idle' });
+  const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | null>(() => {
+    try { return localStorage.getItem(UPDATE_PROMPT_DISMISSED_KEY); } catch { return null; }
+  });
   const [ollamaInstallProgress, setOllamaInstallProgress] = useState<OllamaInstallProgress>({ phase: 'idle' });
   const [themeId, setThemeId] = useState<ThemeId>(() => getSavedThemeId());
   const [uiMode, setUiMode] = useState<UiMode>(() => getSavedUiMode());
@@ -1005,6 +1012,28 @@ function App() {
       setActivity(`Could not open RigMatch.AI downloads: ${getErrorMessage(error)}`);
     }
   }, [updateChannel, updateCheck]);
+
+  // Quietly check for a newer release once on launch so the gentle update nudge
+  // can appear. Silent — no activity spam; if it fails, the popup just won't show.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await agentArcadeApi.checkForUpdates(updateChannel);
+        if (!cancelled) setUpdateCheck(result);
+      } catch { /* ignore — the popup just won't show */ }
+    })();
+    return () => { cancelled = true; };
+    // Once on mount; the default release channel is the right nudge at launch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const dismissUpdatePrompt = useCallback(() => {
+    const version = updateCheck?.latestVersion;
+    if (!version) return;
+    setDismissedUpdateVersion(version);
+    try { localStorage.setItem(UPDATE_PROMPT_DISMISSED_KEY, version); } catch { /* ignore */ }
+  }, [updateCheck]);
 
   const requestClearData = useCallback(() => {
     setClearDataOpen(true);
@@ -3153,6 +3182,14 @@ function App() {
             reason: topRigPick?.reason ?? null,
           })}
           onClose={() => setExportHatchOpen(false)}
+        />
+      )}
+
+      {updateCheck?.status === 'available' && updateCheck.latestVersion && updateCheck.latestVersion !== dismissedUpdateVersion && (
+        <UpdateAvailableToast
+          update={updateCheck}
+          onGetUpdate={() => { void openUpdatePage(); dismissUpdatePrompt(); }}
+          onDismiss={dismissUpdatePrompt}
         />
       )}
 
