@@ -2,6 +2,17 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.3.5',
+    label: 'Share Your Match, Export for Companions & Update Nudge',
+    date: 'Beta build',
+    notes: [
+      'Share your Top Match right from the winner screen: a new "Share match" button turns your result into an image — your GPU, the matched model, and its score — ready to post. The card got richer graphics (confetti, hearts, and Speed/Quality/Fit chips), and there\'s now a LinkedIn button alongside X, Reddit, and Bluesky.',
+      'New "Export for Hatch": from Top Pick you can export a small JSON profile of RigMatch\'s recommendation. Companion apps that accept it (like Hatch) can set your local Ollama model straight from the profile — no typing model names. Copy it to the clipboard or download the .json.',
+      'A gentle update nudge: when a newer RigMatch is available, a small, dismissible pop-up appears on launch with what\'s new and a link to upgrade. It never forces anything and won\'t nag you again for a version you\'ve already seen.',
+      'Under the hood: internal cleanup (splitting oversized code into focused modules with no change in behaviour) and small polish fixes to the share and export flows.',
+    ],
+  },
+  {
     version: '0.3.4',
     label: 'Cleaner Settings, Fairer Fit Scores & Audit Fixes',
     date: 'Beta build',
