@@ -1,0 +1,26 @@
+# Normalize all text files to LF in the repo (checked out as-is; core.autocrlf
+# is off). Prevents the CRLF/LF flip-flop that made a rebrand look like a
+# whole-file rewrite. Git auto-detects text vs binary; the explicit markers
+# below guard files git might otherwise misclassify.
+* text=auto eol=lf
+
+# Binary assets — never touch line endings.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.exe binary
+*.dll binary
+*.dmg binary
+*.zip binary
+*.node binary
+*.wasm binary
+*.pak binary
+*.bin binary
