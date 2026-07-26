@@ -366,7 +366,8 @@ export function ShareScorecard({ model, score, system, onClose }: {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(url);
+      // Defer the revoke so the browser finishes reading the blob before it's freed.
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
     }, 'image/png');
   }, [modelName, style]);
 

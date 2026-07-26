@@ -29,9 +29,10 @@ export type HatchCandidate = {
   score?: TestedModelScore | null;
 };
 
-// An `ollama pull <tag>` target: lowercase names, optional namespace segments,
-// and an optional `:tag`. Mirrors the main process MODEL_NAME_PATTERN that
-// guards real pulls, plus a hard length cap and a no-URL guard. Hatch runs
+// An `ollama pull <tag>` target: name segments, optional namespace segments,
+// and an optional `:tag`. Case-insensitive (the `/i` flag) since real quant tags
+// carry uppercase, e.g. `:Q4_K_M`. Mirrors the main process MODEL_NAME_PATTERN
+// that guards real pulls, plus a hard length cap and a no-URL guard. Hatch runs
 // `ollama pull` on this string, so it must be exactly what the CLI expects —
 // not a display name.
 const OLLAMA_PULL_TAG = /^(?:[a-z0-9][a-z0-9._-]*\/)*[a-z0-9][a-z0-9._-]*(?::[a-z0-9][a-z0-9._-]*)?$/i;
@@ -67,8 +68,8 @@ export function buildHatchProfile(opts: {
   const valid = opts.candidates.filter((candidate) => isValidOllamaPullTag(candidate.tag));
 
   // Prefer RigMatch's own pick when it's a valid Ollama candidate; otherwise the
-  // best candidate — highest Match total, else the largest that fits (most
-  // capable for the hardware).
+  // best candidate — highest Match total, else the largest overall (candidates
+  // are already the caller's fitting set, so largest ≈ most capable here).
   let recommended: HatchCandidate | null = null;
   if (recommendedTag && valid.some((c) => c.tag === recommendedTag)) {
     recommended = valid.find((c) => c.tag === recommendedTag) ?? null;

@@ -37,7 +37,9 @@ export function ExportHatchModal({ result, onClose }: {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
+    // Defer the revoke so the browser has finished reading the blob for the
+    // download before the object URL is freed.
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }, [json]);
 
   return (
