@@ -2,6 +2,16 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.3.6',
+    label: 'Now Just “RigMatch”',
+    date: 'Beta build',
+    notes: [
+      'RigMatch.AI is now simply RigMatch. The ".AI" led people to expect a website, but this is a desktop app that runs models on your own machine — the shorter name makes that clearer.',
+      'Fixed the share and download links, which pointed at the old address. Shared scorecards, the "get RigMatch" links, and the online demo now all go to the new home. If you shared a card recently, the link works again.',
+      'No feature changes in this build — same app, cleaner name.',
+    ],
+  },
+  {
     version: '0.3.5',
     label: 'Share Your Match, Export for Companions & Update Nudge',
     date: 'Beta build',
