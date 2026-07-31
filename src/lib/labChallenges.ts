@@ -102,14 +102,26 @@ Requirements:
 export const DEFAULT_APP_BUILDER_PRESET_ID = 'tetris';
 export const ADVANCED_APP_BUILDER_PROMPT = APP_BUILDER_PRESETS[0].prompt;
 
-/** Resolve the effective App Builder prompt from a preset id or a custom request. */
-// Pulls the judge's diagnosis of the latest attempt out of a result's checks, so
-// the next improve pass can be told exactly what a reviewer found wrong. Returns
-// '' when there is no failed "Judged working" check to learn from.
+// Pulls a concrete diagnosis of the latest attempt out of a result's checks, so
+// the next improve pass can be told exactly what is wrong instead of a vague
+// "something is broken, find it".
+//
+// Prefers the judge's review (it catches runtime and logic bugs), but falls back
+// to the syntax-check failure, which every run computes for free — no judge, no
+// API key, no cost. Without that fallback a model whose app has a parse error
+// was told only "the app does not fully work yet", when the exact token and line
+// were already known.
 export function extractJudgedProblem(checks: AdvancedLabCheck[] | undefined): string {
   const judged = (checks ?? []).find((check) => check.label === 'Judged working');
-  if (!judged || judged.passed) return '';
-  return (judged.detail ?? '').trim();
+  if (judged && !judged.passed) return (judged.detail ?? '').trim();
+
+  const parses = (checks ?? []).find((check) => check.label === 'Free of syntax errors');
+  if (parses && !parses.passed) {
+    // Detail reads "Will not run — <error>"; hand the model just the error.
+    return (parses.detail ?? '').replace(/^Will not run\s*[—-]\s*/, '').trim();
+  }
+
+  return '';
 }
 
 // Builds an improve-pass prompt: refine the existing code in place — keep what
@@ -124,7 +136,9 @@ export function buildAppBuilderRetryPrompt(previousCode: string, hint?: string, 
   const trimmedReview = (reviewNote ?? '').trim();
   const priorities: string[] = [];
   if (trimmedHint) priorities.push(`The user reports: ${trimmedHint} — fixing this is the top priority.`);
-  if (trimmedReview) priorities.push(`A code review of this exact code found: ${trimmedReview} — fix that problem.`);
+  // Wording stays neutral because the diagnosis may come from the LLM judge's
+  // review or from the free syntax check.
+  if (trimmedReview) priorities.push(`A check of this exact code found: ${trimmedReview} — fix that problem first.`);
   if (!priorities.length) priorities.push('The app below does not fully work yet. Find what is broken or missing and fix it.');
   return [
     'Improve the HTML app below. Keep its overall structure and everything that already works — change what is broken, finish what is incomplete. Do not start over from scratch.',
