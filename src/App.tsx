@@ -64,6 +64,8 @@ import {
   demoLmStudio,
   demoOllama,
   demoSystem,
+  unscannedSystem,
+  unscannedProviderStatus,
 } from './sampleData';
 import type {
   AppLogEntry,
@@ -389,9 +391,13 @@ function App() {
   // preview-only sample data and must not appear as if the user ran a real test.
   // (modelScores is gated the same way below.)
   const initialBenchmark = savedHistory?.benchmark ?? (isDesktopRuntime ? null : demoBenchmark);
-  const [system, setSystem] = useState<SystemProfile>(demoSystem);
-  const [ollama, setOllama] = useState<OllamaStatus>(demoOllama);
-  const [lmStudio, setLmStudio] = useState<OllamaStatus>(demoLmStudio);
+  // Desktop starts from a neutral "not scanned yet" profile so a failed launch
+  // scan can never present sample hardware as detected fact (and size real model
+  // recommendations against it). The browser demo keeps the sample data, which
+  // is now labeled by the demo banner.
+  const [system, setSystem] = useState<SystemProfile>(isDesktopRuntime ? unscannedSystem : demoSystem);
+  const [ollama, setOllama] = useState<OllamaStatus>(isDesktopRuntime ? unscannedProviderStatus : demoOllama);
+  const [lmStudio, setLmStudio] = useState<OllamaStatus>(isDesktopRuntime ? unscannedProviderStatus : demoLmStudio);
   const [catalog, setCatalog] = useState<CatalogModel[]>(demoCatalog.models);
   const [catalogMeta, setCatalogMeta] = useState({
     syncedAt: demoCatalog.syncedAt,

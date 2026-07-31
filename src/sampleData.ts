@@ -6,6 +6,54 @@ import type {
   SystemProfile,
 } from './types';
 
+// ── Pre-scan defaults (desktop) ──────────────────────────────────────────────
+// The demo* values below are sample data for the browser preview. On desktop
+// they must NOT be the starting state: if the launch scan fails, the app would
+// keep presenting fabricated hardware ("RTX 3060, 12 GB") as detected fact and
+// size real model recommendations against it. These neutral profiles degrade
+// honestly instead — getHardwareFit treats vramGb <= 0 as "Check VRAM" and
+// recommends nothing until a real scan lands.
+export const unscannedSystem: SystemProfile = {
+  hostname: 'This computer',
+  platform: '',
+  arch: '',
+  os: { distro: '', release: '' },
+  cpu: { manufacturer: '', brand: '', physicalCores: 0, cores: 0, loadPercent: 0 },
+  memory: { totalGb: 0, availableGb: 0, usedGb: 0 },
+  gpu: {
+    vendor: '',
+    model: '',
+    vramGb: 0,
+    vramUsedGb: null,
+    gpuLoadPercent: null,
+    driverVersion: '',
+    bus: '',
+  },
+  storage: { sizeGb: 0, availableGb: 0, mount: '' },
+  battery: { hasBattery: false, percent: null, isCharging: false, acConnected: null },
+  cuda: {
+    detected: false,
+    status: 'unknown',
+    driverVersion: null,
+    driverCudaVersion: null,
+    toolkitVersion: null,
+    latestToolkitVersion: null,
+    source: 'not scanned',
+    error: null,
+  },
+  networks: [],
+};
+
+/** Not-yet-checked provider status: never claims a runtime is ready. */
+export const unscannedProviderStatus: OllamaStatus = {
+  ready: false,
+  baseUrl: 'http://127.0.0.1:11434',
+  version: null,
+  pingMs: null,
+  error: null,
+  models: [],
+};
+
 export const demoSystem: SystemProfile = {
   hostname: 'Dave-PC',
   platform: 'win32',
