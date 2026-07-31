@@ -178,6 +178,7 @@ import {
   hasChosenInterfaceMode,
   getScoreTimelineNote,
   getSelectedContestantBlurb,
+  getFriendlyModelName,
   getShortModelName,
   getSizeRisk,
   getTaskTopPicks,
@@ -412,8 +413,13 @@ function App() {
     () => savedHistory?.benchmarkByModel ?? (initialBenchmark ? upsertBenchmarkResults({}, [initialBenchmark]) : {}),
   );
   const [queuedModelIds, setQueuedModelIds] = useState<Set<string>>(() => new Set());
+  // Start empty on desktop: pre-picking five models made the wizard tick "Pick"
+  // as done before the user chose anything, showed the alternatives greyed out
+  // as "Lineup full", and told people to pick while having already picked for
+  // them. Simple Mode offers an explicit "Choose for me" instead. The browser
+  // demo keeps a filled lineup so the flow can be explored without setup.
   const [shortlistIds, setShortlistIds] = useState<Set<string>>(
-    () => new Set(DEFAULT_SHORTLIST_IDS),
+    () => new Set(isDesktopRuntime ? [] : DEFAULT_SHORTLIST_IDS),
   );
   const [isScanningRig, setIsScanningRig] = useState(false);
   const [isBenchmarking, setIsBenchmarking] = useState(false);
@@ -715,7 +721,8 @@ function App() {
       .sort((a, b) => (fitRank[a.fit.tone] ?? 9) - (fitRank[b.fit.tone] ?? 9) || (b.row.sizeGb ?? 0) - (a.row.sizeGb ?? 0))
       .map(({ row, fit }): WizardModel => ({
         row,
-        name: row.displayName,
+        // Friendly name for beginners; the raw pull tag shows as subtext.
+        name: getFriendlyModelName(row.displayName),
         epithet: getModelEpithet(row),
         goodForLine: getModelGoodForLine(row),
         fitTier: fit.tone === 'sweet-spot' ? 'great' : fit.tone === 'good' ? 'well' : 'slower',
@@ -1905,6 +1912,31 @@ function App() {
     setPendingThirdPartyDownloadRows(null);
   }, [pendingThirdPartyDownloadRows, queueMissingSpeedDateModels]);
 
+  // "Choose for me": fill the lineup with the best-fitting models this PC can
+  // run, preferring ones already installed (nothing to download) and then the
+  // largest that still fits comfortably.
+  const chooseShortlistForMe = useCallback(() => {
+    const eligible = modelRows.filter((row) =>
+      getPlatformFit(row.displayName, system.platform).compatible
+      && getHardwareFit(row, system.gpu.vramGb).recommend
+      && !isCloudModel(row.displayName)
+      && !isEmbeddingModel(row.displayName)
+      && !isLikelyImageGenerationModel(row.displayName));
+
+    const ranked = [...eligible].sort((left, right) => {
+      if (left.installed !== right.installed) return left.installed ? -1 : 1;
+      return (right.sizeGb ?? 0) - (left.sizeGb ?? 0);
+    }).slice(0, 5);
+
+    if (ranked.length === 0) {
+      setActivity('No models fit this computer yet — check your computer first, or download one.');
+      return;
+    }
+
+    setShortlistIds(new Set(ranked.map((row) => row.displayName)));
+    setActivity(`Picked ${ranked.length} contestant${ranked.length === 1 ? '' : 's'} that fit this computer.`);
+  }, [modelRows, system.gpu.vramGb, system.platform]);
+
   const toggleShortlist = useCallback((row: ModelRow) => {
     const hardwareFit = getHardwareFit(row, system.gpu.vramGb);
     const platformFit = getPlatformFit(row.displayName, system.platform);
@@ -2702,11 +2734,15 @@ function App() {
           isScanning={isScanningRig}
           onCheckComputer={refreshRig}
           onGetOllama={openOllamaDownload}
+          ollamaInstallProgress={ollamaInstallProgress}
+          onStartOllamaInstall={startOllamaInstall}
+          onLaunchOllamaInstaller={launchOllamaInstaller}
           wizardModels={wizardModels}
           modelsLoading={modelRows.length === 0}
           shortlistIds={shortlistIds}
           shortlistedRows={shortlistedRows}
           onTogglePick={toggleShortlist}
+          onChooseForMe={chooseShortlistForMe}
           pullProgressByModel={pullProgressByModel}
           onStartDownloads={() => requestThirdPartyModelDownloads(shortlistedRows)}
           isListTesting={isListTesting}

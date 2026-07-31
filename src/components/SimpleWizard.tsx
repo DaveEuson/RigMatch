@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Check,
   Code2,
+  Download,
   ExternalLink,
   Heart,
   Image as ImageIcon,
@@ -19,9 +20,10 @@ import {
   Video,
   X,
 } from 'lucide-react';
-import type { ModelRow, PullProgressUpdate, SystemProfile } from '../types';
+import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, SystemProfile } from '../types';
 import { formatBytes, formatBytesPerSecond } from '../lib/format';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
+import { getFriendlyModelName } from '../lib/modelCatalog';
 import rigGreenroom from '../assets/robot-rig-greenroom.webp';
 import speedDateShow from '../assets/robot-speed-date-show.webp';
 import romanceHero from '../assets/robot-romance-hero.webp';
@@ -89,11 +91,18 @@ type SimpleWizardProps = {
   isScanning: boolean;
   onCheckComputer: () => void;
   onGetOllama: () => void;
+  // The same one-click installer Advanced Mode offers. Beginners need it more
+  // than power users do, so Simple Mode must not just link out to a website.
+  ollamaInstallProgress: OllamaInstallProgress;
+  onStartOllamaInstall: () => void;
+  onLaunchOllamaInstaller: (path: string) => void;
   wizardModels: WizardModel[];
   modelsLoading: boolean;
   shortlistIds: Set<string>;
   shortlistedRows: ModelRow[];
   onTogglePick: (row: ModelRow) => void;
+  /** Fills the lineup with the best-fitting models for people who can't choose. */
+  onChooseForMe: () => void;
   pullProgressByModel: Record<string, PullProgressUpdate>;
   onStartDownloads: () => void;
   isListTesting: boolean;
@@ -148,7 +157,15 @@ export function SimpleWizard(props: SimpleWizardProps) {
   const setStep = setChosenStep;
 
   const stepIndex = STEPS.indexOf(step);
-  const stepComplete: Record<StepId, boolean> = { setup: setupDone, pick: pickDone, download: downloadDone, compare: compareDone, winner: true };
+  // Compare is only "complete" once the show has actually finished — leaving it
+  // true mid-run let a beginner click through to a winner crowned on partial data.
+  const stepComplete: Record<StepId, boolean> = {
+    setup: setupDone,
+    pick: pickDone,
+    download: downloadDone,
+    compare: compareDone && !benchmarkActive,
+    winner: true,
+  };
 
   const goNext = () => {
     if (step === 'pick') props.onStartDownloads();
@@ -159,10 +176,18 @@ export function SimpleWizard(props: SimpleWizardProps) {
     if (stepIndex > 0) setStep(STEPS[stepIndex - 1]);
   };
 
+  // Size + time on the commitment buttons: "Download 5 models" with no GB and no
+  // ETA is the scariest unqualified ask in the flow, and the data is right here.
+  const pendingGb = shortlistedRows
+    .filter((row) => !row.installed)
+    .reduce((sum, row) => sum + (row.sizeGb ?? 0), 0);
+  const downloadSuffix = pendingGb > 0 ? ` · ${pendingGb.toFixed(1)} GB` : ' · already on your PC';
+  const showMinutes = Math.max(1, Math.round(shortlistedRows.length * 3));
+
   const nextLabel: Partial<Record<StepId, string>> = {
     setup: 'Next · Meet the contestants',
-    pick: `Next · Download ${shortlistedRows.length} model${shortlistedRows.length === 1 ? '' : 's'}`,
-    download: 'Next · Start the show',
+    pick: `Next · Download ${shortlistedRows.length} model${shortlistedRows.length === 1 ? '' : 's'}${downloadSuffix}`,
+    download: `Next · Start the show · ~${showMinutes} min`,
     compare: 'Next · Meet the winner',
   };
 
@@ -250,6 +275,9 @@ export function SimpleWizard(props: SimpleWizardProps) {
               type="button"
               className="sw-ghost-pill"
               onClick={step === 'compare' ? props.onStopShow : goBack}
+              title={step === 'compare'
+                ? 'Stops after the current question. Models already scored keep their results.'
+                : undefined}
             >
               <ArrowLeft aria-hidden="true" />
               {step === 'compare' ? 'Stop the show' : 'Back'}
@@ -301,7 +329,16 @@ function nextBlockedHint(step: StepId): string {
 // ---------------------------------------------------------------------------
 // Setup
 
-function SetupScreen({ system, ollamaReady, isScanning, onCheckComputer, onGetOllama }: SimpleWizardProps) {
+function SetupScreen({
+  system,
+  ollamaReady,
+  isScanning,
+  onCheckComputer,
+  onGetOllama,
+  ollamaInstallProgress,
+  onStartOllamaInstall,
+  onLaunchOllamaInstaller,
+}: SimpleWizardProps) {
   const checked = ollamaReady; // a successful check makes Ollama ready
   const gpu = system.gpu.model || 'your graphics card';
   const freeGb = Math.round(system.storage.availableGb || 0);
@@ -310,12 +347,26 @@ function SetupScreen({ system, ollamaReady, isScanning, onCheckComputer, onGetOl
   const [attempted, setAttempted] = useState(false);
   const runCheck = () => { setAttempted(true); onCheckComputer(); };
 
+  // Install-flow state. Linux gets a copyable one-liner (no installer binary);
+  // Windows/macOS get the in-app download → launch handoff.
+  const install = ollamaInstallProgress;
+  const isDesktop = typeof window !== 'undefined' && Boolean((window as { agentArcade?: unknown }).agentArcade);
+  const isLinux = system.platform === 'linux';
+  const isLinuxScript = install.phase === 'script' && 'command' in install;
+  const installerReady = install.phase === 'ready' && 'installerPath' in install;
+  const installDownloading = install.phase === 'downloading' && 'percent' in install;
+  const installFailed = install.phase === 'error' && 'error' in install;
+
   return (
     <div className="sw-setup">
       <div className="sw-setup-hero" style={{ backgroundImage: `url(${rigGreenroom})` }} aria-hidden="true" />
       <h2>Let's check your computer</h2>
       <p className="sw-muted">
         RigMatch looks at your graphics card and memory to find AI models that fit. Everything stays on your PC — no account, no cloud.
+      </p>
+      {/* Beginners' real fear is "will this break my computer." Name it once, here. */}
+      <p className="sw-muted sw-setup-safety">
+        Models download into a folder RigMatch manages — nothing is installed system-wide, and you can delete them any time.
       </p>
       <button type="button" className="sw-gold-pill sw-cta" onClick={runCheck} disabled={isScanning}>
         {isScanning ? <RefreshCw className="sw-spin" aria-hidden="true" /> : <ScanLine aria-hidden="true" />}
@@ -342,12 +393,55 @@ function SetupScreen({ system, ollamaReady, isScanning, onCheckComputer, onGetOl
             <strong>We couldn't find Ollama</strong>
           </div>
           <p className="sw-muted sw-setup-error-copy">
-            RigMatch needs Ollama — the free local AI engine — running on your PC. Grab it, then try again.
+            RigMatch needs Ollama — the free local AI engine that runs models on your PC.
+            {isLinux
+              ? ' Copy the one-line command below into a terminal, then check again.'
+              : " RigMatch can download and start the installer for you — you won't need to leave this window."}
           </p>
-          <div className="sw-setup-error-actions">
-            <button type="button" className="sw-gold-pill" onClick={onGetOllama}><ExternalLink aria-hidden="true" />Get Ollama</button>
-            <button type="button" className="sw-ghost-pill" onClick={runCheck}>Try again</button>
-          </div>
+
+          {isLinuxScript ? (
+            <div className="sw-install-script">
+              <code>{install.command}</code>
+              <button
+                type="button"
+                className="sw-ghost-pill"
+                onClick={() => void navigator.clipboard?.writeText(install.command).catch(() => undefined)}
+              >
+                Copy
+              </button>
+            </div>
+          ) : installerReady ? (
+            <div className="sw-setup-error-actions">
+              <button type="button" className="sw-gold-pill" onClick={() => onLaunchOllamaInstaller(install.installerPath)}>
+                <Download aria-hidden="true" />
+                Run the installer
+              </button>
+              <span className="sw-muted sw-install-hint">Follow Ollama's prompts, then come back and check again.</span>
+            </div>
+          ) : installDownloading ? (
+            <div className="sw-install-progress">
+              <div className="sw-install-progress-bar"><i style={{ width: `${install.percent}%` }} /></div>
+              <span className="sw-muted">Downloading Ollama… {install.percent}%</span>
+            </div>
+          ) : (
+            <div className="sw-setup-error-actions">
+              <button type="button" className="sw-gold-pill" onClick={isDesktop ? onStartOllamaInstall : onGetOllama}>
+                <Download aria-hidden="true" />
+                {installFailed ? 'Try the download again' : isLinux ? 'Show the install command' : 'Install Ollama for me'}
+              </button>
+              <button type="button" className="sw-ghost-pill" onClick={onGetOllama}>
+                <ExternalLink aria-hidden="true" />
+                Open ollama.com
+              </button>
+            </div>
+          )}
+
+          {installFailed && <p className="sw-muted sw-install-hint">{install.error}</p>}
+
+          <button type="button" className="sw-ghost-pill sw-install-recheck" onClick={runCheck}>
+            <RefreshCw aria-hidden="true" />
+            Check again
+          </button>
         </div>
       )}
     </div>
@@ -366,7 +460,7 @@ function ResultRow({ label, detail }: { label: string; detail: string }) {
 // ---------------------------------------------------------------------------
 // Pick
 
-function PickScreen({ wizardModels, modelsLoading, shortlistIds, shortlistedRows, onTogglePick }: SimpleWizardProps) {
+function PickScreen({ wizardModels, modelsLoading, shortlistIds, shortlistedRows, onTogglePick, onChooseForMe }: SimpleWizardProps) {
   const [dream, setDream] = useState<DreamFilterId>('all');
   const [showAll, setShowAll] = useState(false);
   const lineupFull = shortlistedRows.length >= 5;
@@ -414,6 +508,15 @@ function PickScreen({ wizardModels, modelsLoading, shortlistIds, shortlistedRows
         <span>{modelsLoading ? 'Bringing out the contestants…' : countLine}</span>
         {dream !== 'all' && <button type="button" className="sw-link" onClick={() => setDream('all')}>Show everyone instead</button>}
       </div>
+
+      {/* The escape hatch for "I don't know how to choose" — which is most of
+          this audience. Fills the lineup with the best-fitting models. */}
+      {!modelsLoading && filtered.length > 0 && shortlistedRows.length === 0 && (
+        <button type="button" className="sw-gold-pill sw-choose-for-me" onClick={onChooseForMe}>
+          <Sparkles aria-hidden="true" />
+          Not sure? Choose 5 for me
+        </button>
+      )}
 
       {modelsLoading ? (
         <div className="sw-card-grid">
@@ -467,6 +570,15 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
       <div className="sw-card-name">
         <strong>{model.name}</strong>
         <em>{model.epithet}</em>
+        {/* Size and whether it's already here — so "Download 5 models" is never a
+            blind commitment, and installed picks are visibly free. */}
+        <span className="sw-card-size">
+          {model.row.installed
+            ? '✓ Already on your PC'
+            : model.row.sizeGb
+              ? `${model.row.sizeGb} GB download`
+              : 'Size unknown'}
+        </span>
       </div>
       <div className="sw-card-goodfor">
         <span className="sw-eyebrow">Good for</span>
@@ -547,8 +659,8 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel }: SimpleWizardPr
           <div key={row.displayName} className={`sw-dl-row ${status}`}>
             <img className="sw-dl-avatar" src={getModelAvatarSrc(row.displayName)} alt="" />
             <div className="sw-dl-info">
-              <strong>{row.displayName}</strong>
-              <em>{meta}</em>
+              <strong>{getFriendlyModelName(row.displayName)}</strong>
+              <em>{[row.displayName, meta].filter(Boolean).join(' · ')}</em>
               <div className="sw-dl-track" aria-hidden="true"><i style={{ width: `${status === 'done' ? 100 : status === 'downloading' ? Math.max(4, percent) : 0}%` }} /></div>
             </div>
             <span className="sw-dl-status">
@@ -583,16 +695,39 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
   const round = (runProgress?.questionIndex ?? 0) + 1;
   const totalRounds = runProgress?.questionTotal ?? shortlistedRows.length;
   const question = runProgress?.questionPrompt ?? 'The host is lining up the next question…';
-  const label = (runProgress?.questionLabel ?? 'Getting started').toUpperCase();
   const percent = runProgress?.percent ?? 0;
   const completed = runProgress?.completed ?? 0;
+  const [showPrompt, setShowPrompt] = useState(false);
+
+  // Turn the suite's internal question label into something a beginner reads as
+  // a skill being tested, not a format spec.
+  const rawLabel = (runProgress?.questionLabel ?? '').toLowerCase();
+  const plainRoundLabel = !rawLabel
+    ? 'Warming up…'
+    : /json|tool/.test(rawLabel) ? 'Following a precise format'
+    : /accuracy|trap|truth/.test(rawLabel) ? 'Admitting what it doesn’t know'
+    : /instruction/.test(rawLabel) ? 'Following instructions exactly'
+    : /coding|code/.test(rawLabel) ? 'Writing a bit of code'
+    : /summar/.test(rawLabel) ? 'Summarising clearly'
+    : /reason/.test(rawLabel) ? 'Thinking a problem through'
+    : /safety|boundary/.test(rawLabel) ? 'Handling a tricky request'
+    : /format|structure/.test(rawLabel) ? 'Keeping answers well-organised'
+    : 'Everyday questions';
 
   return (
     <div className="sw-compare" style={{ backgroundImage: `url(${speedDateShow})` }}>
       <div className="sw-compare-inner">
+        {/* The raw benchmark prompt is dense jargon ("Return only valid JSON…
+            use keys intent, action, target") and was the hero text on a beginner
+            screen. Lead with a plain-English round label; keep the exact prompt
+            one click away for anyone who wants to check the methodology. */}
         <div className="sw-compare-question">
-          <span className="sw-eyebrow">Round {round} of {totalRounds} · {label}</span>
-          <p>&ldquo;{question}&rdquo;</p>
+          <span className="sw-eyebrow">Round {round} of {totalRounds}</span>
+          <p>{plainRoundLabel}</p>
+          <button type="button" className="sw-link" onClick={() => setShowPrompt((v) => !v)}>
+            {showPrompt ? 'Hide the exact question' : 'See the exact question'}
+          </button>
+          {showPrompt && <p className="sw-compare-raw">&ldquo;{question}&rdquo;</p>}
         </div>
         <div className="sw-podiums">
           {shortlistedRows.map((row, index) => {
@@ -630,7 +765,7 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
 // ---------------------------------------------------------------------------
 // Winner
 
-function WinnerScreen({ winner, onChatWithWinner, onOpenScorecard, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
+function WinnerScreen({ winner, shortlistedRows, onChatWithWinner, onOpenScorecard, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
   if (!winner) {
     return <div className="sw-winner"><p className="sw-muted">Run the show to crown your Top Match.</p></div>;
   }
@@ -650,11 +785,16 @@ function WinnerScreen({ winner, onChatWithWinner, onOpenScorecard, onRunAgain, o
         </div>
         <div className="sw-winner-copy">
           <span className="sw-eyebrow gold">Your top match</span>
-          <strong>{winner.model}</strong>
+          <strong>{getFriendlyModelName(winner.model)}</strong>
+          <em className="sw-winner-tag">{winner.model}</em>
           <span className="sw-winner-grade">
             <b>{winner.score}</b>
             <em>Match · Grade {winner.grade}</em>
           </span>
+          {/* Say what the number means — a beginner has never seen either scale. */}
+          <p className="sw-winner-why">
+            Best combination of speed, answer quality, and fit for your PC out of the {shortlistedRows.length} you tested — scored out of 100.
+          </p>
         </div>
       </div>
 

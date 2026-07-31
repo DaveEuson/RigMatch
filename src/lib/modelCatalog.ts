@@ -1525,6 +1525,22 @@ export function getShortModelName(model: string) {
   return model.replace(':latest', '').replace(/-instruct/gi, '').slice(0, 12);
 }
 
+/**
+ * A human-friendly display name for beginner surfaces: drops the namespace and
+ * size tag and capitalizes. "lmstudio-community/qwen2.5-coder-7b-instruct" and
+ * "qwen2.5:7b" both become "Qwen2.5". Raw tags stay available as subtext — a
+ * newcomer can't pronounce, remember, or choose between `ollama pull` strings.
+ */
+export function getFriendlyModelName(model: string): string {
+  const base = String(model || '')
+    .split('/').pop()!            // drop provider namespace
+    .split(':')[0]                // drop the size/quant tag
+    .replace(/-instruct$/i, '')
+    .replace(/-\d+(\.\d+)?b$/i, ''); // trailing "-7b" style size
+  if (!base) return model;
+  return base.charAt(0).toUpperCase() + base.slice(1);
+}
+
 export function getQueueChipModelName(model: string) {
   return model.replace(':latest', '').replace(/-instruct/gi, '');
 }
