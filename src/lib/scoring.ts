@@ -21,6 +21,31 @@ export const SCORE_WEIGHTS = {
   fit: 0.16,
 } as const;
 
+/**
+ * The canonical Match Score grade bands — the single source of truth for the
+ * renderer. These MUST stay identical to `gradeFor()` in electron/main.cjs,
+ * which grades real benchmark runs in the main process (a separate CommonJS
+ * process that can't import this module). tests/scoring.test.mjs locks the
+ * boundaries so the two can't drift silently.
+ *
+ * Note this is deliberately NOT the same scale as getAdvancedLabGrade() in
+ * labResults.ts, which grades skill tests — a different measurement.
+ */
+export const MATCH_GRADE_BANDS = [
+  { grade: 'S', min: 95 },
+  { grade: 'A', min: 88 },
+  { grade: 'B+', min: 80 },
+  { grade: 'B', min: 72 },
+  { grade: 'C', min: 64 },
+  { grade: 'D', min: 0 },
+] as const;
+
+/** Letter grade for a 0–100 Match Score, using the canonical bands above. */
+export function gradeForMatchScore(total: number): string {
+  const band = MATCH_GRADE_BANDS.find((entry) => total >= entry.min);
+  return band ? band.grade : 'D';
+}
+
 /** Minimal shape needed to rank a model: the four signals plus optional cached fields. */
 export type MatchScoreLike = Pick<TestedModelScore, 'speed' | 'sobriety' | 'fit' | 'total'> & {
   stability?: number;

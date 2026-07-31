@@ -89,6 +89,7 @@ import type {
   SkillRunStatus,
 } from './types';
 import {
+  MATCH_GRADE_BANDS,
   compareBenchmarkResults,
   compareTestedModelScores,
   formatMatchScore,
@@ -3387,7 +3388,7 @@ function FirstRunTutorial({
             <div className="tutorial-how-card">
               <Trophy aria-hidden="true" />
               <strong>Get your top match</strong>
-              <em>Scorecards rank each model by speed, quality, and fit.</em>
+              <em>Scorecards rank each model by answer quality, speed, finish rate, and computer fit.</em>
             </div>
           </div>
         </div>
@@ -3453,7 +3454,7 @@ function FirstRunTutorial({
             </div>
             <div className="show-format-step">
               <span>🏆</span>
-              <div><strong>The Final Rose</strong><em>Scorecards rank every model by speed, quality, and fit — one walks away as your Top Match.</em></div>
+              <div><strong>The Final Rose</strong><em>Scorecards rank every model by answer quality, speed, finish rate, and computer fit — one walks away as your Top Match.</em></div>
             </div>
           </div>
           <div className="tutorial-intro-callout">
@@ -3726,6 +3727,13 @@ function UpgradeRig({ system }: { system: SystemProfile }) {
           <strong>Unlock more models</strong>
         </div>
       </div>
+      {/* Disclosure sits ABOVE the offers, not after them — a reader should know
+          these are affiliate links before they read the recommendations, not
+          after. Especially here, where the app has just scored their hardware. */}
+      <p className="upgrade-disclosure">
+        Affiliate links — purchases support RigMatch at no extra cost to you. Your hardware
+        score is calculated from your specs alone and is not affected by these.
+      </p>
       {cards.length > 0 && (
         <>
           <p className="upgrade-rig-intro">
@@ -3792,9 +3800,6 @@ function UpgradeRig({ system }: { system: SystemProfile }) {
           </div>
         </>
       )}
-      <p className="upgrade-disclosure">
-        Affiliate links — purchases support RigMatch at no extra cost to you.
-      </p>
     </div>
   );
 }
@@ -5058,14 +5063,20 @@ const SCORE_WEIGHTS = [
   { label: 'Computer Fit', pct: 16, detail: 'How well the model size matches a typical home rig. Tiny 1–3B models score highest (96); 70B+ models score lowest (38) unless you have 48 GB+ VRAM.' },
 ];
 
-const GRADE_ROWS = [
-  { grade: 'S', range: '95–100' },
-  { grade: 'A', range: '88–94' },
-  { grade: 'B+', range: '80–87' },
-  { grade: 'B', range: '72–79' },
-  { grade: 'C', range: '64–71' },
-  { grade: 'D', range: '0–63' },
-];
+// Grade rows derived from the single canonical band list, so every table in the
+// UI shows exactly the grades the engine assigns. Two hand-written tables used
+// to disagree with each other and with gradeFor(), which let the app display a
+// grade ("A-") that appeared in neither.
+const GRADE_TONES: Record<string, string> = { S: 'elite', A: 'good', 'B+': 'good', B: 'good', C: 'ok', D: 'low' };
+const MATCH_GRADE_BAND_ROWS = MATCH_GRADE_BANDS.map((band, index) => {
+  const upper = index === 0 ? 100 : MATCH_GRADE_BANDS[index - 1].min - 1;
+  return {
+    grade: band.grade,
+    range: `${band.min}–${upper}`,
+    tone: GRADE_TONES[band.grade] ?? 'ok',
+  };
+});
+const GRADE_ROWS = MATCH_GRADE_BAND_ROWS;
 
 function HowWeScoreSection() {
   const [open, setOpen] = useState(false);
@@ -5460,7 +5471,9 @@ function UtilityPanel({
               </button>
             </div>
             <div className="score-explainer-body">
-              <p>RigMatch runs the same set of prompts across each model on <strong>your actual computer</strong> and combines three signals into a single Match score (0–100).</p>
+              {/* Four components, always — this said "three signals", silently
+                  dropping Finish Rate and 18% of the score. */}
+              <p>RigMatch runs the same set of prompts across each model on <strong>your actual computer</strong> and combines four signals into a single Match score (0–100): <strong>34% answer quality, 32% speed, 18% finish rate, 16% computer fit</strong>.</p>
               <p className="score-explainer-weight">Answer quality matters most. Speed and hardware fit help separate close matches.</p>
               <p className="score-explainer-note">Scored benchmarks disable hidden thinking when Ollama supports it, so models are graded on visible answers instead of internal reasoning tokens. Chat mode is not affected.</p>
               <div className="score-explainer-grid">
@@ -5483,7 +5496,11 @@ function UtilityPanel({
               <div className="score-explainer-grades">
                 <span>Grade bands</span>
                 <div>
-                  {([['S', 'elite', '95–100'], ['A', 'good', '80–94'], ['B', 'good', '65–79'], ['C', 'ok', '50–64'], ['D', 'low', '0–49']] as const).map(([grade, tone, range]) => (
+                  {/* Rendered from MATCH_GRADE_BANDS so this can't drift from the
+                      grades the app actually assigns. It previously published
+                      A 80–94 / B 65–79 while the engine used A 88–94 / B+ 80–87,
+                      so a displayed grade could match neither table. */}
+                  {MATCH_GRADE_BAND_ROWS.map(({ grade, range, tone }) => (
                     <div key={grade} className={`grade-chip ${tone}`}>
                       <strong>{grade}</strong>
                       <em>{range}</em>
@@ -7962,7 +7979,7 @@ function MatchDetails({
     {
       label: 'Chemistry',
       value: score ? String(score.total) : 'N/A',
-      detail: 'Overall match score combining speed, reliability, stability, and hardware fit.',
+      detail: 'Overall Match score: 34% answer quality, 32% speed, 18% finish rate, 16% computer fit.',
     },
     {
       label: 'Best Proof',
@@ -10653,20 +10670,10 @@ function LiveFlirtSpotlight({
               <i style={{ width: `${progress.percent}%` }} />
             </div>
             <em>{completedQuestions} answered · {progress.message}</em>
-            <a
-              className="live-show-upgrade-link"
-              href={amazonUrl('NVIDIA RTX 4060 Ti 16GB graphics card DDR5 RAM upgrade')}
-              target="_blank"
-              rel="noreferrer"
-              title="Shop local AI hardware upgrades on Amazon"
-            >
-              <ShoppingCart aria-hidden="true" />
-              <span>
-                <b>Upgrade your system</b>
-                <em>GPU, RAM, local AI gear</em>
-              </span>
-              <ExternalLink aria-hidden="true" />
-            </a>
+            {/* No affiliate CTA here. This overlay is the surface actively
+                measuring the user's hardware; selling them a GPU beside the
+                progress bar makes a low fit score look like a sales pitch.
+                Hardware upgrade links live in Your Rig only. */}
           </div>
         </section>
       </div>

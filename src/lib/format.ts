@@ -41,7 +41,7 @@ export function getScoreTooltip(label: string) {
   }
 
   if (key.includes('compatibility') || key.includes('match')) {
-    return 'Overall match score combining speed, reliability, stability, and hardware fit.';
+    return 'Overall Match score: 34% answer quality, 32% speed, 18% finish rate, 16% computer fit.';
   }
 
   return 'Score from the latest model test.';

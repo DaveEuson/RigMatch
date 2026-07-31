@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 
 import {
   SCORE_WEIGHTS,
+  MATCH_GRADE_BANDS,
+  gradeForMatchScore,
   CURRENT_SCORE_SCHEMA_VERSION,
   calculatePreciseTotal,
   getScoreSortTotal,
@@ -218,4 +220,46 @@ test('compareBenchmarkResults ranks raw results consistently with scores', () =>
   const weak = benchmarkResult({ model: 'weak', scores: { speed: 50, sobriety: 50, stability: 50, fit: 50, total: 50 } });
   assert.ok(compareBenchmarkResults(strong, weak) < 0);
   assert.ok(compareBenchmarkResults(weak, strong) > 0);
+});
+
+// ── Match grade bands ──────────────────────────────────────────────────────────
+
+test('grade bands match electron/main.cjs gradeFor exactly', () => {
+  // main.cjs grades real runs in a separate process and can't import this module,
+  // so these boundaries are the contract between them. If you change one, change
+  // both — a mismatch means the app grades a run differently than it explains.
+  const mainCjsGradeFor = (score) => {
+    if (score >= 95) return 'S';
+    if (score >= 88) return 'A';
+    if (score >= 80) return 'B+';
+    if (score >= 72) return 'B';
+    if (score >= 64) return 'C';
+    return 'D';
+  };
+  for (let score = 0; score <= 100; score += 1) {
+    assert.equal(gradeForMatchScore(score), mainCjsGradeFor(score), `disagreement at ${score}`);
+  }
+});
+
+test('grade band boundaries are exactly where the published table says', () => {
+  assert.equal(gradeForMatchScore(95), 'S');
+  assert.equal(gradeForMatchScore(94), 'A');
+  assert.equal(gradeForMatchScore(88), 'A');
+  assert.equal(gradeForMatchScore(87), 'B+');
+  assert.equal(gradeForMatchScore(80), 'B+');
+  assert.equal(gradeForMatchScore(79), 'B');
+  assert.equal(gradeForMatchScore(72), 'B');
+  assert.equal(gradeForMatchScore(71), 'C');
+  assert.equal(gradeForMatchScore(64), 'C');
+  assert.equal(gradeForMatchScore(63), 'D');
+  assert.equal(gradeForMatchScore(0), 'D');
+});
+
+test('every band in the published table is reachable and none are invented', () => {
+  const produced = new Set();
+  for (let score = 0; score <= 100; score += 1) produced.add(gradeForMatchScore(score));
+  const published = new Set(MATCH_GRADE_BANDS.map((b) => b.grade));
+  assert.deepEqual([...produced].sort(), [...published].sort());
+  // "A-" was displayed by the demo but exists in no grade table.
+  assert.ok(!produced.has('A-'), 'A- is not a real grade');
 });

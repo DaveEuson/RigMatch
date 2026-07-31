@@ -122,7 +122,7 @@ export function ScoreLegend() {
   return (
     <div className="score-legend-strip" aria-label="Match score legend">
       <span>Match score</span>
-      <strong>Speed + accuracy + finish rate + hardware fit.</strong>
+      <strong>Answer quality + speed + finish rate + computer fit.</strong>
       <em>S is best, then A/B/C. Scores are local to this computer.</em>
     </div>
   );

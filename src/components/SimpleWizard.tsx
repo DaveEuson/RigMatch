@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -125,9 +125,26 @@ export function SimpleWizard(props: SimpleWizardProps) {
   const pickDone = shortlistedRows.length >= 1;
   const allInstalled = pickDone && shortlistedRows.every((row) => row.installed);
   const downloadDone = allInstalled;
-  // A pre-existing Top Match must not mark Compare done while the show is
-  // still running, or the wizard skips the Compare stage straight to Winner.
-  const compareDone = Boolean(winner) && !benchmarkActive;
+  // Once the user starts a show, Compare stays incomplete until that run
+  // actually finishes. Inferring from `winner && !benchmarkActive` alone was
+  // racy: at the moment the step advances the run hasn't flipped to active yet,
+  // so a pre-existing Top Match made Compare instantly "done" — the wizard
+  // skipped the whole Compare stage and crowned the OLD winner, and mid-run the
+  // "Meet the winner" button stayed enabled and would declare a result from
+  // partial data.
+  const [awaitingRun, setAwaitingRun] = useState(false);
+  const sawRunActive = useRef(false);
+  useEffect(() => {
+    if (!awaitingRun) { sawRunActive.current = false; return; }
+    if (benchmarkActive) { sawRunActive.current = true; return; }
+    // Released once the run we started goes inactive again — whether it finished,
+    // failed, or the user stopped it. Waiting only for phase 'complete' would
+    // strand the user on Compare with a disabled Next if the run ended any other way.
+    const phase = props.runProgress?.phase;
+    if (sawRunActive.current || phase === 'complete' || phase === 'failed') setAwaitingRun(false);
+  }, [awaitingRun, benchmarkActive, props.runProgress?.phase]);
+
+  const compareDone = !awaitingRun && Boolean(winner) && !benchmarkActive;
   const winnerDone = compareDone;
 
   const stepState = useMemo(() => {
@@ -169,7 +186,12 @@ export function SimpleWizard(props: SimpleWizardProps) {
 
   const goNext = () => {
     if (step === 'pick') props.onStartDownloads();
-    if (step === 'download') props.onStartShow();
+    if (step === 'download') {
+      props.onStartShow();
+      // Set synchronously so the derived step can't promote Compare -> Winner in
+      // the gap before the run reports itself as active.
+      setAwaitingRun(true);
+    }
     if (stepIndex < STEPS.length - 1) setStep(STEPS[stepIndex + 1]);
   };
   const goBack = () => {

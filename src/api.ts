@@ -8,6 +8,7 @@ import {
 } from './sampleData';
 import { buildBenchmarkPromptPlan, normalizeBenchmarkQuestionCount } from './benchmarkSuite';
 import type { AdvancedGenerateProgress, AgentArcadeApi, BenchmarkProgressUpdate, PullProgressUpdate, UpdateChannel } from './types';
+import { calculatePreciseTotal, gradeForMatchScore } from './lib/scoring';
 
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
@@ -415,32 +416,28 @@ const fallbackApi: AgentArcadeApi = {
 export const agentArcadeApi: AgentArcadeApi = window.agentArcade ?? fallbackApi;
 export const isDesktopRuntime = Boolean(window.agentArcade);
 
+/**
+ * Sample sub-scores per model family for the browser demo.
+ *
+ * The total and grade are COMPUTED from the same weights and bands the real
+ * benchmark uses — never hand-written. Previously they were typed by hand and
+ * drifted up to 3.6 points from what the published weights produce (phi3:mini
+ * showed 84 in the header while its own breakdown reproduced 87.6), and one
+ * entry carried an "A-" that exists in no grade table. That made the demo look
+ * like the app disagreed with itself about its own headline number.
+ */
 function demoScoresForModel(model: string) {
   const lower = model.toLowerCase();
 
-  if (lower.includes('qwen')) {
-    return { speed: 92, sobriety: 94, stability: 96, fit: 90, total: 93, grade: 'A' };
-  }
+  const signals =
+    lower.includes('qwen') ? { speed: 92, sobriety: 94, stability: 96, fit: 90 }
+    : lower.includes('llama') ? { speed: 97, sobriety: 84, stability: 94, fit: 95 }
+    : lower.includes('mistral') ? { speed: 84, sobriety: 90, stability: 91, fit: 84 }
+    : lower.includes('gemma') ? { speed: 91, sobriety: 78, stability: 90, fit: 98 }
+    : lower.includes('phi') ? { speed: 99, sobriety: 72, stability: 86, fit: 100 }
+    : lower.includes('deepseek') ? { speed: 66, sobriety: 96, stability: 82, fit: 72 }
+    : { speed: 78, sobriety: 78, stability: 84, fit: 82 };
 
-  if (lower.includes('llama')) {
-    return { speed: 97, sobriety: 84, stability: 94, fit: 95, total: 90, grade: 'A' };
-  }
-
-  if (lower.includes('mistral')) {
-    return { speed: 84, sobriety: 90, stability: 91, fit: 84, total: 88, grade: 'A' };
-  }
-
-  if (lower.includes('gemma')) {
-    return { speed: 91, sobriety: 78, stability: 90, fit: 98, total: 86, grade: 'A-' };
-  }
-
-  if (lower.includes('phi')) {
-    return { speed: 99, sobriety: 72, stability: 86, fit: 100, total: 84, grade: 'B+' };
-  }
-
-  if (lower.includes('deepseek')) {
-    return { speed: 66, sobriety: 96, stability: 82, fit: 72, total: 83, grade: 'B+' };
-  }
-
-  return { speed: 78, sobriety: 78, stability: 84, fit: 82, total: 80, grade: 'B+' };
+  const total = Math.round(calculatePreciseTotal({ ...signals, total: 0 }));
+  return { ...signals, total, grade: gradeForMatchScore(total) };
 }
