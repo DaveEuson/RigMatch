@@ -189,7 +189,13 @@ jobs:
       # Update Center shows) followed by the download and macOS-first-launch
       # sections. Validated early in the build job, so this cannot fail here.
       - name: Write release notes
-        run: node scripts/build-release-notes.mjs --version "${GITHUB_REF_NAME}"
+        id: notes
+        shell: bash
+        run: |
+          node scripts/build-release-notes.mjs --version "${GITHUB_REF_NAME}"
+          TITLE="$(node scripts/build-release-notes.mjs --print-title --version "${GITHUB_REF_NAME}")"
+          echo "title=${TITLE}" >> "$GITHUB_OUTPUT"
+          echo "Release title: ${TITLE}"
 
       - name: Classify release tag
         id: release_meta
@@ -207,6 +213,7 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
+          name: ${{ steps.notes.outputs.title }}
           draft: false
           prerelease: ${{ steps.release_meta.outputs.prerelease }}
           make_latest: ${{ steps.release_meta.outputs.make_latest }}

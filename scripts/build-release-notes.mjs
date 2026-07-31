@@ -19,10 +19,17 @@ import { releaseNotes } from '../src/data/releaseNotes.ts';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function parseArgs(argv) {
-  const args = { check: false, version: '', githubOut: 'RELEASE_NOTES.md', changelogOut: 'CHANGELOG.md' };
+  const args = {
+    check: false,
+    printTitle: false,
+    version: '',
+    githubOut: 'RELEASE_NOTES.md',
+    changelogOut: 'CHANGELOG.md',
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--check') args.check = true;
+    else if (arg === '--print-title') args.printTitle = true;
     else if (arg === '--version') args.version = argv[i += 1] ?? '';
     else if (arg === '--github-out') args.githubOut = argv[i += 1] ?? '';
     else if (arg === '--changelog-out') args.changelogOut = argv[i += 1] ?? '';
@@ -31,12 +38,25 @@ function parseArgs(argv) {
   return args;
 }
 
+// "v0.3.7-beta" + "One Score, One Grade Table" -> "v0.3.7-beta — One Score, One Grade Table".
+// A bare tag in the releases feed tells a reader nothing about why to upgrade.
+export function renderReleaseTitle(tag, entry) {
+  const label = entry?.label?.trim();
+  return label ? `${tag} — ${label}` : tag;
+}
+
 // Accepts the raw tag (v0.3.7-beta), a bare version, or nothing (use package.json).
 export function normalizeVersion(input) {
   const trimmed = (input ?? '').trim();
   if (!trimmed) return '';
   const match = trimmed.match(/(\d+\.\d+\.\d+)/);
   return match ? match[1] : trimmed.replace(/^v/, '');
+}
+
+// "refs/tags/v0.3.7-beta" -> "v0.3.7-beta"; anything without a tag shape -> ''.
+export function normalizeTag(input) {
+  const trimmed = (input ?? '').trim().replace(/^refs\/tags\//, '');
+  return /^v\d/.test(trimmed) ? trimmed : '';
 }
 
 export function findEntry(entries, version) {
@@ -123,6 +143,12 @@ async function main() {
   if (!entry.notes.length) {
     console.error(`Release notes for ${version} exist but list no changes.`);
     process.exit(1);
+  }
+
+  if (args.printTitle) {
+    // Bare stdout: the workflow captures this into a step output.
+    process.stdout.write(renderReleaseTitle(normalizeTag(args.version) || `v${version}`, entry));
+    return;
   }
 
   if (args.check) {

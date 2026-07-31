@@ -5,9 +5,11 @@ import { readFile } from 'node:fs/promises';
 import { releaseNotes } from '../src/data/releaseNotes.ts';
 import {
   findEntry,
+  normalizeTag,
   normalizeVersion,
   renderChangelog,
   renderGithubBody,
+  renderReleaseTitle,
   renderWhatsNew,
 } from '../scripts/build-release-notes.mjs';
 
@@ -70,6 +72,21 @@ test('renderWhatsNew bullets each note exactly once', () => {
   const entry = { version: '9.9.9', label: 'Test', date: 'Beta build', notes: ['First thing.', 'Second thing.'] };
   const rendered = renderWhatsNew(entry);
   assert.equal(rendered, "## What's new in 9.9.9 — Test\n\n- First thing.\n- Second thing.");
+});
+
+test('the release title carries the label, not just the tag', () => {
+  const entry = findEntry(releaseNotes, '0.3.7');
+  assert.equal(renderReleaseTitle('v0.3.7-beta', entry), 'v0.3.7-beta — One Score, One Grade Table');
+  // A version with no label must still produce a usable title rather than "undefined".
+  assert.equal(renderReleaseTitle('v9.9.9-beta', { version: '9.9.9', label: '', notes: [] }), 'v9.9.9-beta');
+  assert.equal(renderReleaseTitle('v9.9.9-beta', undefined), 'v9.9.9-beta');
+});
+
+test('normalizeTag keeps the full tag but rejects non-tags', () => {
+  assert.equal(normalizeTag('refs/tags/v0.3.7-beta'), 'v0.3.7-beta');
+  assert.equal(normalizeTag('v0.3.7-beta'), 'v0.3.7-beta');
+  assert.equal(normalizeTag('0.3.7'), '');
+  assert.equal(normalizeTag(''), '');
 });
 
 test('the changelog covers every version in the same order', () => {
