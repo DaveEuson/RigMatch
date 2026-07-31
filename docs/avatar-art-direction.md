@@ -23,31 +23,79 @@ siblings, not strangers.
   rim lighting from the marquee bulbs, gentle bloom, shallow depth of field.
 - **Mood:** charming, warm, a little retro-futuristic. Cute, not menacing.
 
-## What varies per family
+## The naming rule — what varies per family
 
-Each avatar riffs on the vendor's identity through **body color** and **one
-character motif** — the way DeepSeek's is a whale (their logo) and Qwen's is a
-mint-green bot with a heart on its chest panel.
+**Every robot literally embodies its model's name, logo, or etymology.** That's
+the joke, and it's what makes the set feel designed rather than decorated:
 
-| Family | Motif direction | Palette |
-|---|---|---|
-| `granite` (IBM) | Robot carved from polished granite/stone, subtle mineral speckle, solid and dependable | Slate grey, blue-steel accents |
-| `cohere` (Command-R, Aya) | Multilingual/global feel — a small globe or constellation of language glyphs orbiting the head | Coral-to-violet gradient |
-| `vision` (LLaVA, moondream, MiniCPM-V) | Camera-eye robot: a prominent lens iris in place of one eye, small aperture blades | Teal and brass |
-| `yi` (01.AI) | Minimal, precise robot; a subtle "01" motif etched on the chest panel | Deep indigo, silver |
-| `solar` (Upstage) | Sun motif — a small radiant corona or solar-panel wing behind the shoulders | Amber, warm gold |
-| `falcon` (TII) | Falcon-inspired: swept head crest suggesting a beak, wing-like shoulder plates | Desert sand, bronze |
-| `starcoder` (BigCode) | Code motif — brackets or a starfield of glyphs on the chest screen | Violet, cyan |
-| `smollm` (Hugging Face) | The smallest, roundest robot of the set — tiny, endearing | Soft yellow |
-| `stablelm` (Stability) | Calm, balanced robot; a subtle equilibrium/level motif | Muted green, pearl |
-| `imagegen` (FLUX, Z-Image) | Artist robot holding a small glowing palette or brush | Rainbow-prism accents |
+| Existing | Why it looks like that |
+|---|---|
+| Llama | Ollama → an actual llama: fluffy wool coat, llama ears, snout-shaped smile |
+| DeepSeek | Their logo is a whale → a whale robot with a spout and tail fin |
+| Mistral | A *mistral* is a French wind → a swept, flowing wind-crest |
+| Phi | The Greek letter **Φ** → a ring-and-stem antenna forming the symbol |
+| Qwen | Mint-green bot with a glowing heart on its chest panel |
+| Generic | Unknown contestant → a **?** on its face screen |
+
+Keep that rule. When in doubt, ask "what is this model *named after*?" and build
+the robot from that.
+
+### Robots still to make
+
+**1 · `granite` — IBM Granite** (`granite3.2`, `granite3.3`, `granite-code`)
+Carved from polished speckled granite — a stone robot, solid and unhurried.
+IBM's logo is eight horizontal bars, so etch subtle horizontal striations into
+the stone. *Slate grey, mineral speckle, IBM-blue glow.*
+
+**2 · `cohere` — Cohere** (`command-r`, `command-r-plus`, `aya`)
+Aya speaks 100+ languages, so give it a halo of small glowing glyphs from
+different scripts (あ ع ñ д) orbiting its head; Command-R earns a small
+commander's epaulette on one shoulder. *Coral-to-violet gradient.*
+
+**3 · `vision` — the models that can see** (`llava`, `bakllava`, `moondream`, `minicpm-v`)
+One eye is a real camera lens with visible aperture blades; a small crescent
+moon floats at its temple for moondream. *Teal and brass.*
+
+**4 · `yi` — 01.AI** (`yi`)
+"Yi" is 一, the Chinese character for **one**, from a company called 01. A
+minimal, zen robot with a single glowing horizontal stroke on its chest and a
+faint 0/1 pattern in its plating. *Deep indigo and silver.*
+
+**5 · `solar` — Upstage** (`solar`)
+Solar → the sun. Give it a golden solar-panel collar that fans behind the
+shoulders and a small sun emblem on the chest. Warmest robot of the set.
+*Amber and burnished gold.*
+
+**6 · `falcon` — TII, UAE** (`falcon`, `falcon2`)
+A falcon robot: swept beak-like visor, feathered wing plates at the shoulders,
+and a nod to falconry with a small leather-and-brass hood detail. *Desert sand
+and bronze.*
+
+**7 · `starcoder` — BigCode** (`starcoder2`)
+Star + coder. A starfield glitters across its dark face screen, and glowing
+`{ }` brackets frame it like earmuffs. *Violet and cyan.*
+
+**8 · `smollm` — Hugging Face** (`smollm2`)
+"Smol" is the whole personality: the tiniest, roundest, most chibi robot in the
+set — noticeably smaller in frame than the others — with both little hands
+raised in a Hugging Face hug. *Soft HF yellow.*
+
+**9 · `stablelm` — Stability AI** (`stablelm2`)
+Stability → perfect balance. The robot balances serenely on a single rounded
+foot, with a spirit-level bubble glowing in its chest panel. *Muted sage and
+pearl.*
+
+**10 · `imagegen` — the image models** (`x/flux2-klein`, `x/z-image-turbo`)
+The artist of the troupe: holds a glowing paint palette, a brush tucked behind
+its antenna, and light refracting into a prism-rainbow across its chassis —
+"flux" as flowing light. *Rainbow-prism accents over warm neutral.*
 
 ## Prompt template
 
 Paste into an image generator, replacing the bracketed part:
 
 > A cute retro-futuristic robot portrait, chest-up, centered, facing forward.
-> [FAMILY MOTIF AND PALETTE FROM THE TABLE ABOVE]. The robot's face is a dark
+> [CHARACTER CONCEPT AND PALETTE FROM THE LIST ABOVE]. The robot's face is a dark
 > rounded rectangular screen showing simple glowing dot-matrix eyes (curved,
 > happy) and a small smile. Behind it: deep magenta velvet stage curtains, and a
 > large heart outline made of glowing round marquee light bulbs framing the
