@@ -1,6 +1,13 @@
 import type { ModelRow } from '../types';
 
-export type ModelFamilyId = 'deepseek' | 'llama' | 'qwen' | 'mistral' | 'gemma' | 'phi' | 'generic';
+// Families with (or awaiting) their own contestant portrait. New families map to
+// the generic robot in MODEL_AVATAR_ASSETS until their art lands — see
+// docs/avatar-art-direction.md for the house style.
+export type ModelFamilyId =
+  | 'deepseek' | 'llama' | 'qwen' | 'mistral' | 'gemma' | 'phi'
+  | 'granite' | 'cohere' | 'vision' | 'yi' | 'solar' | 'falcon'
+  | 'starcoder' | 'smollm' | 'stablelm' | 'imagegen'
+  | 'generic';
 
 export type ModelOrigin = {
   family: ModelFamilyId;
@@ -19,6 +26,21 @@ export function getModelFamily(model: string): ModelFamilyId {
   if (lower.includes('mistral') || lower.includes('mixtral') || lower.includes('devstral') || lower.includes('codestral')) return 'mistral';
   if (lower.includes('gemma')) return 'gemma';
   if (lower.includes('phi')) return 'phi';
+
+  // Families awaiting their own portrait. Checked after the six above so
+  // variants like codegemma keep their parent's art. Short names use word
+  // boundaries so "yi" and "aya" can't match inside unrelated model names.
+  if (lower.includes('granite')) return 'granite';
+  if (lower.includes('command-r') || /(^|[^a-z])aya([^a-z]|$)/.test(lower)) return 'cohere';
+  if (lower.includes('llava') || lower.includes('moondream') || lower.includes('minicpm')) return 'vision';
+  if (/(^|[^a-z])yi([^a-z]|$)/.test(lower)) return 'yi';
+  if (lower.includes('solar')) return 'solar';
+  if (lower.includes('falcon')) return 'falcon';
+  if (lower.includes('starcoder')) return 'starcoder';
+  if (lower.includes('smollm')) return 'smollm';
+  if (lower.includes('stablelm')) return 'stablelm';
+  if (lower.includes('flux') || lower.includes('z-image') || lower.includes('image-turbo')) return 'imagegen';
+
   return 'generic';
 }
 

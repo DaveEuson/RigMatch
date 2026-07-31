@@ -16,6 +16,21 @@ export const MODEL_AVATAR_ASSETS: Record<ModelFamilyId, string> = {
   mistral: modelAvatarMistral,
   gemma: modelAvatarGemma,
   phi: modelAvatarPhi,
+
+  // Awaiting their own portrait — see docs/avatar-art-direction.md. To wire one
+  // up: drop `model-avatar-<family>.webp` into src/assets, import it above, and
+  // swap it in here. Nothing else needs to change.
+  granite: modelAvatarGeneric,
+  cohere: modelAvatarGeneric,
+  vision: modelAvatarGeneric,
+  yi: modelAvatarGeneric,
+  solar: modelAvatarGeneric,
+  falcon: modelAvatarGeneric,
+  starcoder: modelAvatarGeneric,
+  smollm: modelAvatarGeneric,
+  stablelm: modelAvatarGeneric,
+  imagegen: modelAvatarGeneric,
+
   generic: modelAvatarGeneric,
 };
 
