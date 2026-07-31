@@ -81,14 +81,32 @@ set — noticeably smaller in frame than the others — with both little hands
 raised in a Hugging Face hug. *Soft HF yellow.*
 
 **9 · `stablelm` — Stability AI** (`stablelm2`)
-Stability → perfect balance. The robot balances serenely on a single rounded
-foot, with a spirit-level bubble glowing in its chest panel. *Muted sage and
-pearl.*
+Stability → perfect balance. The composition is flawlessly symmetrical and the
+robot sits utterly serene, with a glowing spirit-level bubble centered in its
+chest panel and small balance-scale pans on its shoulders. (Don't reach for a
+one-footed balancing pose — these are chest-up portraits, so feet never show.)
+*Muted sage and pearl.*
 
 **10 · `imagegen` — the image models** (`x/flux2-klein`, `x/z-image-turbo`)
 The artist of the troupe: holds a glowing paint palette, a brush tucked behind
 its antenna, and light refracting into a prism-rainbow across its chassis —
 "flux" as flowing light. *Rainbow-prism accents over warm neutral.*
+
+## Lessons from the first batch
+
+Three things went wrong generating granite/cohere/vision. Guard against them:
+
+1. **Demand a pure black background, explicitly.** Gemini returned Cohere on
+   white with a wide margin — which reads as a glowing white box in the dark UI.
+   It had to be auto-trimmed, masked and flattened onto black to be usable.
+2. **Forbid readable text.** The first Cohere's "many scripts" halo spelled out
+   the word DREAM. Ask for *decorative, unreadable* glyphs, and add a negative
+   (`--no text, letters, words`) if the tool supports one.
+3. **Name the bezel warm.** Say "warm gold and copper"; left unspecified, tools
+   drift to cool silver, which reads as foreign beside the others.
+
+Also remember these are **chest-up portraits** — anything below the ribcage
+(feet, stance, legs) will be cropped out, so don't build a concept on it.
 
 ## Prompt template
 
@@ -101,8 +119,10 @@ Paste into an image generator, replacing the bracketed part:
 > large heart outline made of glowing round marquee light bulbs framing the
 > robot's head. Warm rim lighting from the bulbs, soft bloom, shallow depth of
 > field. Polished glossy 3D render, painterly, charming and friendly. Framed in
-> a thick rounded-square metallic bezel like an app icon, pure black outside the
-> rounded corners. Square 1:1 composition.
+> a thick rounded-square **warm gold and copper** metallic bezel like an app
+> icon. The area outside the rounded corners is **pure black, edge to edge — no
+> white background, no margin, no drop shadow.** No readable text, letters or
+> words anywhere. Square 1:1 composition.
 
 ## Wiring a finished avatar
 
