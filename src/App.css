@@ -36,6 +36,67 @@
   overflow: hidden;
 }
 
+/* Browser-demo notice. A fixed overlay (not a grid child) so it can't disturb
+   the shell's grid-template-areas; the shell reserves space via .has-demo-banner. */
+.demo-data-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid rgba(239, 188, 90, 0.45);
+  background: linear-gradient(180deg, #3a2c12, #2a2110);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.demo-data-banner svg {
+  flex-shrink: 0;
+  color: var(--gold);
+}
+
+.demo-data-banner strong {
+  color: var(--gold);
+}
+
+.demo-data-banner .mini-button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Reserve room for the fixed banner without touching the grid rows. */
+.app-shell.has-demo-banner {
+  padding-top: 62px;
+}
+
+@media (max-width: 900px) {
+  .demo-data-banner {
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+  .app-shell.has-demo-banner {
+    padding-top: 78px;
+  }
+}
+
+/* Duration estimate inside the run-confirm button. */
+.run-estimate {
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(0, 0, 0, 0.25);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

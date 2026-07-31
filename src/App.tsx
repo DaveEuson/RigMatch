@@ -2664,10 +2664,30 @@ function App() {
 
   return (
     <div
-      className={`app-shell ${showGlobalLineup ? 'has-global-lineup' : 'no-global-lineup'}`}
+      className={`app-shell ${showGlobalLineup ? 'has-global-lineup' : 'no-global-lineup'}${!isDesktopRuntime ? ' has-demo-banner' : ''}`}
       data-theme={themeId}
       data-ui-mode={uiMode}
     >
+      {/* Browser demo only: sample scores are pre-filled so the UI can be explored
+          without Ollama. Say so loudly — a visitor who mistakes sample numbers for
+          real measurements has every reason to distrust the whole tool. */}
+      {!isDesktopRuntime && (
+        <div className="demo-data-banner" role="status">
+          <Lightbulb aria-hidden="true" />
+          <span>
+            <strong>Interactive demo — these scores are sample data.</strong>{' '}
+            Nothing is being benchmarked here. Download the app to test your own models on your own hardware.
+          </span>
+          <a
+            className="mini-button"
+            href="https://github.com/DaveEuson/RigMatch/releases/latest"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Get RigMatch
+          </a>
+        </div>
+      )}
       {showModeSplash && <ModeSplash onPick={chooseInterfaceMode} />}
       {uiMode === 'beginner' && (
         <SimpleWizard
@@ -4336,6 +4356,16 @@ function RunWarningModal({
     100: '100 — Full suite (30+ min)',
   };
 
+  // Rough minutes per model at each suite size (matches the labels above), scaled
+  // by lineup size. Not knowing how long a run takes is the biggest hesitation
+  // before the app's main action, so state it up front on the button.
+  const minutesPerModel: Record<BenchmarkQuestionCount, number> = { 10: 3, 20: 5, 50: 15, 100: 30 };
+  const runModelCount = mode === 'single' ? 1 : Math.max(1, shortlistedCount);
+  const estimatedMinutes = skipQuestions ? 0 : minutesPerModel[questionCount] * runModelCount;
+  const estimateLabel = estimatedMinutes > 0
+    ? `~${estimatedMinutes} min${runModelCount > 1 ? ` · ${runModelCount} models` : ''}`
+    : null;
+
   return (
     <div className="modal-backdrop" role="presentation">
       <section className="run-warning-modal" role="dialog" aria-modal="true" aria-labelledby="run-warning-title">
@@ -4844,6 +4874,7 @@ function RunWarningModal({
           >
             <Zap aria-hidden="true" />
             {skipQuestions ? 'Run Skill Test' : mode === 'single' ? 'Start Test' : 'Start Speed Dating'}
+            {estimateLabel && <em className="run-estimate">{estimateLabel}</em>}
           </button>
         </div>
       </section>
@@ -6275,7 +6306,12 @@ function ModelCabinet({
 
     return sortModelRows(filteredRows, sortKey, sortDirection, queuedModelIds, modelScores, benchmarkByModel);
   }, [activeDeveloperFilter, benchmarkByModel, modelScores, query, quickFilter, taskFilter, queuedModelIds, rows, sortDirection, sortKey, vramGb]);
-  const modelCountLabel = query || quickFilter !== 'all' || taskFilter || activeDeveloperFilter !== 'all' ? `${visibleRows.length}/${rows.length} models` : `${rows.length} models`;
+  // Say what each number counts — the catalog total, the installed count, and the
+  // VRAM-fit count are different measures and read as contradictory when all three
+  // are just "N models".
+  const modelCountLabel = query || quickFilter !== 'all' || taskFilter || activeDeveloperFilter !== 'all'
+    ? `${visibleRows.length} of ${rows.length} shown`
+    : `${rows.length} in catalog`;
   const vramLabel = vramGb > 0 ? `${formatGb(vramGb)} VRAM` : 'detected VRAM';
   const activeQuickFilter = quickFilters.find((filter) => filter.id === quickFilter);
   const activeDeveloperLabel = activeDeveloperFilter === 'all'
@@ -6619,16 +6655,9 @@ function ModelCabinet({
                       </button>
                       {installed ? (
                         <>
-                          <button
-                            type="button"
-                            className={selected ? 'mini-button pick-me-row-button active' : 'mini-button pick-me-row-button'}
-                            onClick={() => onChooseModel(row.displayName)}
-                            title={`Pick ${row.displayName} as your top model`}
-                            aria-label={`Pick ${row.displayName} as your top model`}
-                          >
-                            <Heart aria-hidden="true" />
-                            Pick Me
-                          </button>
+                          {/* "Pick as top model" lives in the detail panel, not on every
+                              row — seven repeated bright buttons out-shouted the actual
+                              primary actions while being the least-used one. */}
                           <button
                             type="button"
                             className={`mini-button score-row-button${!hardwareFit.recommend ? ' warn' : ''}`}
@@ -6803,6 +6832,7 @@ function ModelCabinet({
           isPulling={selectedPulling}
           isPullStopping={Boolean(isPullCancelRequested && selectedPulling)}
           isBenchmarking={isBenchmarking}
+          onChooseModel={onChooseModel}
           onScoreModel={onScoreModel}
           onQueueModel={onQueueModel}
           onCancelQueue={onCancelQueue}
@@ -7276,6 +7306,7 @@ function SelectedContestantCard({
   onSaveModelNote,
   scoreTrend,
   onQuickCheck,
+  onChooseModel,
 }: {
   row?: ModelRow;
   profile: ModelProfile;
@@ -7289,6 +7320,7 @@ function SelectedContestantCard({
   isPulling: boolean;
   isPullStopping: boolean;
   isBenchmarking: boolean;
+  onChooseModel: (model: string) => void;
   onScoreModel: (row: ModelRow) => void;
   onQueueModel: (row: ModelRow) => void;
   onCancelQueue: () => void;
@@ -7374,9 +7406,11 @@ function SelectedContestantCard({
         <div className="contestant-radar-row">
           <ScoreRadar speed={score.speed} sobriety={score.sobriety} fit={score.fit} />
           <div className="contestant-radar-scores">
-            <div><span>Speed</span><strong>{score.speed}</strong></div>
-            <div><span>Accuracy</span><strong>{score.sobriety}</strong></div>
-            <div><span>Fit</span><strong>{score.fit}</strong></div>
+            {/* These are 0–100 sub-scores, not measurements. "Speed score" keeps it
+                from being read as the tokens/sec figure shown in the models table. */}
+            <div title="0–100 speed sub-score (not tokens/sec)"><span>Speed score</span><strong>{score.speed}</strong></div>
+            <div title="0–100 answer-quality sub-score"><span>Accuracy</span><strong>{score.sobriety}</strong></div>
+            <div title="0–100 hardware-fit sub-score"><span>Fit</span><strong>{score.fit}</strong></div>
             {trend.length >= 2 && (
               <div className="contestant-sparkline-cell">
                 <span>Trend</span>
@@ -7445,6 +7479,17 @@ function SelectedContestantCard({
             <Trophy aria-hidden="true" />
             Lineup
           </button>
+          {installed && (
+            <button
+              type="button"
+              className="mini-button outline"
+              onClick={() => onChooseModel(row.displayName)}
+              title={`Set ${row.displayName} as your Top Match`}
+            >
+              <Heart aria-hidden="true" />
+              Set as Top Match
+            </button>
+          )}
         </div>
         {showDownloadProgress && (
           <DownloadProgressInline

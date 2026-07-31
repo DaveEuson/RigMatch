@@ -138,7 +138,7 @@ export function GameShowHost({
       <section className="advanced-host-bar" aria-label="Advanced Mode control booth">
         <Trophy aria-hidden="true" />
         <span>
-          Advanced Control Room: {activeNavLabel} open. Power tools are visible; Simple Mode remains the guided path. {ollamaReady ? `${installedCount} local models` : 'Local AI needs attention'} · {shortlistedCount}/5 picked · {scoredCount} scored.
+          Advanced Control Room: {activeNavLabel} open. Power tools are visible; Simple Mode remains the guided path. {ollamaReady ? `${installedCount} installed` : 'Local AI needs attention'} · {shortlistedCount}/5 picked · {scoredCount} scored.
         </span>
         <button type="button" className="mini-button outline" onClick={() => onSelectNav('models')}>
           <Boxes aria-hidden="true" />
