@@ -6498,7 +6498,9 @@ function ModelCabinet({
                 : !platformFit.compatible
                   ? 'OS Only'
                   : !hardwareFit.recommend
-                  ? 'Too Big'
+                  // Unknown-size models aren't "too big" — we just can't verify the
+                  // footprint yet. Say so instead of falsely calling them too big.
+                  ? (hardwareFit.tone === 'unknown' ? 'Size unknown' : 'Too Big')
                   : speedDateLineupFullForRow
                     ? '+ Speed Date'
                     : 'Add to Speed Dating';
@@ -6632,7 +6634,7 @@ function ModelCabinet({
                             className={`mini-button score-row-button${!hardwareFit.recommend ? ' warn' : ''}`}
                             onClick={() => onScoreModel(row)}
                             disabled={isBenchmarking}
-                            title={hardwareFit.recommend ? `Test ${row.displayName} on this computer` : `⚠ Too big for your VRAM — will be slow, test anyway?`}
+                            title={hardwareFit.recommend ? `Test ${row.displayName} on this computer` : hardwareFit.tone === 'unknown' ? `⚠ Size unknown — RigMatch can't gauge fit yet, test anyway?` : `⚠ Too big for your VRAM — will be slow, test anyway?`}
                           >
                             <Gauge aria-hidden="true" />
                             Test
@@ -6675,7 +6677,7 @@ function ModelCabinet({
                           className={queued ? 'mini-button queued download-row-button' : `mini-button outline download-row-button${!hardwareFit.recommend ? ' warn' : ''}`}
                           onClick={() => onQueueModel(row)}
                           disabled={!queued && !platformFit.compatible}
-                          title={!platformFit.compatible ? platformFit.reason : !hardwareFit.recommend ? `⚠ Too big for your VRAM — download anyway?` : `${queued ? 'Remove from queue' : `Get ${row.displayName}`}: ${row.sizeGb ? formatGb(row.sizeGb) : 'unknown size'}`}
+                          title={!platformFit.compatible ? platformFit.reason : !hardwareFit.recommend ? (hardwareFit.tone === 'unknown' ? `Size unknown — download to find out the footprint?` : `⚠ Too big for your VRAM — download anyway?`) : `${queued ? 'Remove from queue' : `Get ${row.displayName}`}: ${row.sizeGb ? formatGb(row.sizeGb) : 'unknown size'}`}
                           aria-label={!platformFit.compatible ? platformFit.reason : queued ? `Remove ${row.displayName} from the download queue` : `Get ${row.displayName}`}
                         >
                           <span>{!platformFit.compatible ? 'macOS Only' : queued ? 'Remove' : `Get ${getQueueChipModelName(row.displayName)}`}</span>
@@ -7399,7 +7401,7 @@ function SelectedContestantCard({
               className={`primary-button compact${!hardwareFit.recommend ? ' warn' : ''}`}
               onClick={() => onScoreModel(row)}
               disabled={isBenchmarking}
-              title={!hardwareFit.recommend ? '⚠ Too big for your VRAM — will be slow, test anyway?' : undefined}
+              title={!hardwareFit.recommend ? (hardwareFit.tone === 'unknown' ? '⚠ Size unknown — RigMatch can\'t gauge fit yet, test anyway?' : '⚠ Too big for your VRAM — will be slow, test anyway?') : undefined}
             >
               <Gauge aria-hidden="true" />
               Test Model
@@ -7409,7 +7411,7 @@ function SelectedContestantCard({
               type="button"
               className={queued ? 'primary-button compact queued' : `primary-button compact${!hardwareFit.recommend ? ' warn' : ''}`}
               onClick={() => onQueueModel(row)}
-              title={!hardwareFit.recommend && !queued ? '⚠ Too big for your VRAM — download anyway?' : queued ? 'Remove this model from the download queue' : 'Add this model to the download queue'}
+              title={!hardwareFit.recommend && !queued ? (hardwareFit.tone === 'unknown' ? 'Size unknown — download to find out the footprint?' : '⚠ Too big for your VRAM — download anyway?') : queued ? 'Remove this model from the download queue' : 'Add this model to the download queue'}
             >
               {queued ? <X aria-hidden="true" /> : <Download aria-hidden="true" />}
               {queued ? 'Remove from Queue' : 'Get Model'}
@@ -7421,7 +7423,7 @@ function SelectedContestantCard({
               className={`mini-button outline${!hardwareFit.recommend ? ' warn' : ''}`}
               onClick={() => onQuickCheck(row)}
               disabled={isBenchmarking}
-              title={!hardwareFit.recommend ? '⚠ Too big for your VRAM — quick check anyway?' : 'Run a 3-question sanity check (coding, accuracy, format)'}
+              title={!hardwareFit.recommend ? (hardwareFit.tone === 'unknown' ? '⚠ Size unknown — quick check anyway?' : '⚠ Too big for your VRAM — quick check anyway?') : 'Run a 3-question sanity check (coding, accuracy, format)'}
             >
               <Zap aria-hidden="true" />
               Quick Check
