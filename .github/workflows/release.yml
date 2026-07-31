@@ -78,6 +78,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
 
+      # Fail in seconds rather than after five ~20-minute builds if the tag has no
+      # entry in src/data/releaseNotes.ts. No dependencies needed — plain Node.
+      - name: Check release notes exist for this tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: node scripts/build-release-notes.mjs --check --version "${GITHUB_REF_NAME}"
+
       - name: Audit npm dependencies
         run: npm audit --audit-level=critical
 
@@ -157,6 +164,15 @@ jobs:
       contents: write
 
     steps:
+      # Checkout first: it cleans untracked files, which would wipe release/.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          # Node 24: build-release-notes.mjs imports src/data/releaseNotes.ts
+          # directly and relies on built-in type-stripping (Node >= 23.6 / 24).
+          node-version: '24'
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: release-*
@@ -169,34 +185,11 @@ jobs:
           find . -maxdepth 2 -type f \( -name "RigMatch.AI-*.exe" -o -name "RigMatch.AI-*.dmg" -o -name "RigMatch.AI-*.AppImage" -o -name "RigMatch.AI-*.deb" -o -name "RigMatch.AI-*.zip" \) -print0 | xargs -0 sha256sum > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - name: Write release download notes
-        run: |
-          cat > RELEASE_NOTES.md <<'EOF'
-          ## Downloads
-
-          - **Windows**: `RigMatch.AI-*-win-x64.exe`
-          - **macOS Apple Silicon**: `RigMatch.AI-*-mac-arm64.dmg`
-          - **macOS Intel**: `RigMatch.AI-*-mac-x64.dmg`
-          - **Linux x64**: `RigMatch.AI-*-linux-x86_64.AppImage` or `RigMatch.AI-*-linux-amd64.deb`
-          - **Linux ARM64 / Jetson**: `RigMatch.AI-*-linux-arm64.AppImage` or `RigMatch.AI-*-linux-arm64.deb`
-
-          ## macOS first launch
-
-          RigMatch.AI for macOS is currently an unsigned beta distributed outside the App Store. On first launch, macOS may say the developer cannot be verified or that the app was downloaded from the internet.
-
-          1. Download **RigMatch.AI-*-mac-arm64.dmg** for Apple Silicon/M-series Macs, or **RigMatch.AI-*-mac-x64.dmg** for Intel Macs.
-          2. Open the `.dmg` and drag **RigMatch.AI** to **Applications**.
-          3. First launch only: right-click or Control-click **RigMatch.AI.app**, choose **Open**, then choose **Open** again.
-          4. If macOS still blocks it, open **System Settings > Privacy & Security**, scroll to **Security**, and choose **Open Anyway** for RigMatch.AI.
-
-          After that first approval, RigMatch opens normally by double-clicking. If macOS says the app is damaged after copying it to Applications, run this Terminal command once:
-
-          ```bash
-          xattr -cr /Applications/RigMatch.AI.app
-          ```
-
-          Apple reference: https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac
-          EOF
+      # Body = the tag's entry from src/data/releaseNotes.ts (same text the in-app
+      # Update Center shows) followed by the download and macOS-first-launch
+      # sections. Validated early in the build job, so this cannot fail here.
+      - name: Write release notes
+        run: node scripts/build-release-notes.mjs --version "${GITHUB_REF_NAME}"
 
       - name: Classify release tag
         id: release_meta

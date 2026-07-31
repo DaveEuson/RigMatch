@@ -34,6 +34,9 @@ rigmatch-chat/src-tauri/gen/
 # OS
 Thumbs.db
 
+# Generated at release time from src/data/releaseNotes.ts (CHANGELOG.md is committed).
+RELEASE_NOTES.md
+
 # Internal / not for publishing
 SESSION_NOTES.md
 review-ai-handoff/

@@ -26,6 +26,8 @@
     "smoke:bench": "node scripts/smoke-benchmark.mjs",
     "smoke:bench:strict": "node scripts/smoke-benchmark.mjs --strict",
     "smoke:ui": "node scripts/visual-smoke.mjs",
+    "release:notes": "node scripts/build-release-notes.mjs",
+    "release:notes:check": "node scripts/build-release-notes.mjs --check",
     "test": "node scripts/run-tests.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
