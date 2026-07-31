@@ -2,6 +2,18 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.3.7',
+    label: 'One Score, One Grade Table',
+    date: 'Beta build',
+    notes: [
+      'The Match score now means the same thing everywhere. It was described five different ways across the app — one place said it combined "three signals" and quietly left out answer quality\'s partner, finish rate, which is 18% of the total. Every screen now states the same four parts: 34% answer quality, 32% speed, 18% finish rate, 16% computer fit.',
+      'Fixed two different grade tables shipping side by side. One said an A was 80–94, the other said 88–94 — and the app could show a grade that matched neither. There is now a single grade table that the app itself is graded against, so what you read is what you get.',
+      'Fixed the guided wizard jumping straight to the Winner. Starting a show could skip the whole Compare stage and crown your previous Top Match, and "Meet the winner" stayed clickable mid-run, declaring a result from a fraction of the questions. The show now runs to the end before anyone gets the rose.',
+      'The interactive web demo now shows correct sample numbers. Its scores were typed by hand and drifted from what the weights actually produce, so the demo looked like it disagreed with itself. (Real test results were never affected.)',
+      'Removed the hardware-upgrade shopping link from the live test screen — an affiliate link has no business on the screen that is measuring your computer. Upgrade suggestions stay in Your Rig, with the disclosure now shown before the links and a note that your fit score is not affected by them.',
+    ],
+  },
+  {
     version: '0.3.6',
     label: 'Now Just “RigMatch”',
     date: 'Beta build',
