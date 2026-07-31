@@ -13,7 +13,10 @@ export function getModelFamily(model: string): ModelFamilyId {
   if (lower.includes('deepseek')) return 'deepseek';
   if (lower.includes('llama')) return 'llama';
   if (lower.includes('qwen')) return 'qwen';
-  if (lower.includes('mistral')) return 'mistral';
+  // Mistral AI's own models that don't contain the literal string "mistral" —
+  // without these, Mixtral (their flagship MoE) and Devstral fell through to the
+  // generic robot and an unknown vendor.
+  if (lower.includes('mistral') || lower.includes('mixtral') || lower.includes('devstral') || lower.includes('codestral')) return 'mistral';
   if (lower.includes('gemma')) return 'gemma';
   if (lower.includes('phi')) return 'phi';
   return 'generic';
