@@ -2,6 +2,18 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.3.9',
+    label: 'Updates That Actually Arrive',
+    date: 'Beta build',
+    notes: [
+      'Fixed automatic updates on Linux. RigMatch was looking for an update file under a name the build never published, so every check quietly failed and Linux users were simply never told a new version existed. Both the 64-bit and ARM builds were affected.',
+      'Fixed automatic updates on Intel Macs. Only the Apple Silicon build was listed in the update information, so Intel Macs had nothing valid to download and the check failed. Both Mac types are now listed together, and each machine picks the right one.',
+      'One important note if you are on Linux or an Intel Mac today: because the old builds are the ones doing the looking, this release cannot reach you automatically. Download 0.3.9 by hand once from the releases page, and updates will work normally from then on. Windows and Apple Silicon were never affected.',
+      'Added a safety check to the release process itself. Publishing now fails outright if the update information is missing a computer type, instead of shipping something that looks fine and only breaks later on somebody else’s machine — which is exactly how this went unnoticed for three releases.',
+      'No changes to testing or scoring in this build. Your saved results and score history from 0.3.8 carry over untouched.',
+    ],
+  },
+  {
     version: '0.3.8',
     label: 'It Remembers',
     date: 'Beta build',
