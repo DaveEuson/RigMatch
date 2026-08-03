@@ -615,7 +615,7 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
         onClick={onToggle}
         disabled={disabled}
       >
-        {picked ? 'Picked ✓ · Tap to remove' : disabled ? 'Lineup full' : '♥ Pick'}
+        {picked ? 'Picked ✓ · Click to remove' : disabled ? 'Lineup full' : '♥ Pick'}
       </button>
     </article>
   );
@@ -624,7 +624,7 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
 function LineupTray({ shortlistedRows, onRemove }: { shortlistedRows: ModelRow[]; onRemove: (row: ModelRow) => void }) {
   return (
     <div className="sw-lineup-tray">
-      <span className="sw-eyebrow">Your lineup · {shortlistedRows.length} of 5{shortlistedRows.length ? ' · tap to remove' : ''}</span>
+      <span className="sw-eyebrow">Your lineup · {shortlistedRows.length} of 5{shortlistedRows.length ? ' · click to remove' : ''}</span>
       <div className="sw-lineup-slots">
         {Array.from({ length: 5 }).map((_, index) => {
           const row = shortlistedRows[index];

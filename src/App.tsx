@@ -4464,10 +4464,10 @@ function RunWarningModal({
   const startBlocked = imageOnlyLineup && !anySkillSelected;
 
   const questionLabels: Record<BenchmarkQuestionCount, string> = {
-    10:  '10 — Quick (2–3 min)',
-    20:  '20 — Standard (5 min)',
-    50:  '50 — Deep (15 min)',
-    100: '100 — Full suite (30+ min)',
+    10:  '10 — Quick (~3 min per model)',
+    20:  '20 — Standard (~5 min per model)',
+    50:  '50 — Deep (~15 min per model)',
+    100: '100 — Full suite (30+ min per model)',
   };
 
   // Rough minutes per model at each suite size (matches the labels above), scaled
@@ -4477,7 +4477,7 @@ function RunWarningModal({
   const runModelCount = mode === 'single' ? 1 : Math.max(1, shortlistedCount);
   const estimatedMinutes = skipQuestions ? 0 : minutesPerModel[questionCount] * runModelCount;
   const estimateLabel = estimatedMinutes > 0
-    ? `~${estimatedMinutes} min${runModelCount > 1 ? ` · ${runModelCount} models` : ''}`
+    ? `~${estimatedMinutes} min${runModelCount > 1 ? ` total · ${runModelCount} models` : ''}`
     : null;
 
   return (
@@ -5289,7 +5289,7 @@ const THIRD_PARTY_MODEL_LINKS = [
   { label: 'Ollama terms', href: 'https://ollama.com/terms' },
   { label: 'Gemma terms', href: 'https://ai.google.dev/gemma/terms' },
   { label: 'Gemma prohibited use', href: 'https://ai.google.dev/gemma/prohibited_use_policy' },
-  { label: 'Gemma 4 license', href: 'https://ai.google.dev/gemma/apache_2' },
+  { label: 'Gemma 3 license', href: 'https://ai.google.dev/gemma/apache_2' },
 ] as const;
 
 function ThirdPartyModelNotice({ compact = false }: { compact?: boolean }) {
@@ -6475,7 +6475,6 @@ function ModelCabinet({
         aria-label="Models"
       >
         <div className="model-hub-header-copy">
-          <span>Command menu</span>
           <h2>Models</h2>
           <em>{vramSafeCount} models look realistic for {vramLabel}. Test one model or run Speed Dating from here.</em>
         </div>
@@ -9208,10 +9207,13 @@ function AgentReveal({
               type="button"
               className="test-again-btn"
               onClick={onExportForHatch}
-              title="Export a JSON profile you can paste into Hatch to set its local model — no typing model names"
+              // The label says what it does; "Hatch" is a third-party app most
+              // users have never heard of, so it belongs in the explanation
+              // rather than on the button itself.
+              title="Save a small JSON profile of this match. Companion apps that accept it — such as Hatch — can set their local model from it without you typing model names."
             >
               <Upload aria-hidden="true" />
-              Export for Hatch
+              Export model profile
             </button>
           </div>
           {!isCurrentTopMatch && clearedTopMatchCount > 0 && (
