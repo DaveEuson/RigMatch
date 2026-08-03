@@ -1,6 +1,7 @@
 import { ShieldCheck, Download } from 'lucide-react';
 import type { BenchmarkPromptResult, BenchmarkResult, TestedModelScore } from '../types';
 import { formatPullCount, getPopularityPercent, getScoreTone, getScoreTooltip } from '../lib/format';
+import { formatRunDelta, type RunDelta } from '../lib/runHistory';
 
 /** Small presentational score/status widgets shared across panels. Extracted from App.tsx. */
 
@@ -75,6 +76,37 @@ export function ScoreSparkline({ values }: { values: number[] }) {
       <polyline points={pts} className="sparkline-line" fill="none" />
       {(() => { const last = values[values.length - 1]; const lx = w; const ly = h - ((last - min) / range) * (h - 4) - 2; return <circle cx={lx} cy={ly} r="2.5" className="sparkline-dot" />; })()}
     </svg>
+  );
+}
+
+/**
+ * "+7 / vs. 3 weeks ago" — how this model's latest score compares with its
+ * previous one. Only rendered when the two runs are actually comparable
+ * (see getRunDelta), so the number always means what it appears to mean.
+ */
+export function ScoreDeltaCell({ delta }: { delta: RunDelta }) {
+  const label = formatRunDelta(delta);
+  const previous = new Date(delta.previous.completedAt);
+  const exact = Number.isNaN(previous.valueOf()) ? '' : previous.toLocaleString();
+  const title = [
+    `Previous run: ${delta.previous.total} Match${exact ? ` on ${exact}` : ''}`,
+    `Latest run: ${delta.latest.total} Match`,
+    label.hardwareNote,
+  ].filter(Boolean).join('\n');
+
+  return (
+    <div className={`contestant-delta-cell delta-${label.direction}`} title={title}>
+      <span>Since last test</span>
+      <strong>
+        {label.points}
+        {label.hardwareNote && (
+          <i className="delta-hardware-flag" title={label.hardwareNote} aria-label={label.hardwareNote}>
+            rig changed
+          </i>
+        )}
+      </strong>
+      <em>{label.detail}</em>
+    </div>
   );
 }
 

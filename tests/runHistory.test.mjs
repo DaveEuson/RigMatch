@@ -4,7 +4,10 @@ import assert from 'node:assert/strict';
 import {
   MAX_RUNS_PER_MODEL,
   appendRuns,
+  describeElapsed,
   emptyRunHistory,
+  formatRunDelta,
+  getAllRunDeltas,
   getModelRuns,
   getRunDelta,
   getScoreTrend,
@@ -221,6 +224,73 @@ test('a cleared model reports no delta on its next run', () => {
   history = removeRuns(history, ['m']);
   history = appendRuns(history, [entry('m', '2026-04-01T00:00:00Z', 90)]);
   assert.equal(getRunDelta(history, 'm'), null, 'must not compare against a score the user deleted');
+});
+
+test('elapsed time reads in plain language', () => {
+  const now = Date.parse('2026-06-01T12:00:00Z');
+  const ago = (days) => new Date(now - days * 86400000).toISOString();
+
+  assert.equal(describeElapsed(ago(0), now), 'earlier today');
+  assert.equal(describeElapsed(ago(1), now), 'yesterday');
+  assert.equal(describeElapsed(ago(3), now), '3 days ago');
+  assert.equal(describeElapsed(ago(9), now), 'a week ago');
+  assert.equal(describeElapsed(ago(21), now), '3 weeks ago');
+  assert.equal(describeElapsed(ago(40), now), 'a month ago');
+  assert.equal(describeElapsed(ago(200), now), '6 months ago');
+  assert.equal(describeElapsed(ago(400), now), 'a year ago');
+  assert.equal(describeElapsed('', now), 'earlier', 'a missing timestamp must not render "NaN"');
+  assert.equal(describeElapsed('not-a-date', now), 'earlier');
+});
+
+test('a delta label uses a real minus sign and never blames the hardware', () => {
+  const now = Date.parse('2026-06-01T12:00:00Z');
+  const older = new Date(now - 21 * 86400000).toISOString();
+
+  let history = emptyRunHistory();
+  history = appendRuns(history, [entry('m', older, 84, { hardware: HW })]);
+  history = appendRuns(history, [entry('m', '2026-06-01T00:00:00Z', 91, { hardware: HW })]);
+
+  const up = formatRunDelta(getRunDelta(history, 'm'), now);
+  assert.equal(up.direction, 'up');
+  assert.equal(up.points, '+7');
+  assert.equal(up.detail, 'vs. 3 weeks ago');
+  assert.equal(up.hardwareNote, undefined);
+
+  let down = emptyRunHistory();
+  down = appendRuns(down, [entry('m', older, 91)]);
+  down = appendRuns(down, [entry('m', '2026-06-01T00:00:00Z', 84)]);
+  const lower = formatRunDelta(getRunDelta(down, 'm'), now);
+  assert.equal(lower.direction, 'down');
+  assert.equal(lower.points, '−7', 'should read −7 with a true minus sign (U+2212)');
+  assert.ok(!lower.points.includes('-'), 'a hyphen renders badly next to a number');
+
+  let flat = emptyRunHistory();
+  flat = appendRuns(flat, [entry('m', older, 84)]);
+  flat = appendRuns(flat, [entry('m', '2026-06-01T00:00:00Z', 84)]);
+  assert.equal(formatRunDelta(getRunDelta(flat, 'm'), now).points, '0');
+  assert.equal(formatRunDelta(getRunDelta(flat, 'm'), now).direction, 'flat');
+});
+
+test('a hardware change is noted without claiming it caused the change', () => {
+  const now = Date.parse('2026-06-01T12:00:00Z');
+  let history = emptyRunHistory();
+  history = appendRuns(history, [entry('m', '2026-05-01T00:00:00Z', 70, { hardware: { ...HW, gpu: 'RTX 3070', vramGb: 8 } })]);
+  history = appendRuns(history, [entry('m', '2026-06-01T00:00:00Z', 88, { hardware: HW })]);
+
+  const label = formatRunDelta(getRunDelta(history, 'm'), now);
+  assert.equal(label.hardwareNote, 'Different hardware since that run');
+  assert.ok(!/because|caused|thanks to/i.test(label.hardwareNote), 'must not assert causation');
+});
+
+test('getAllRunDeltas only includes models with a comparable pair', () => {
+  let history = emptyRunHistory();
+  history = appendRuns(history, [entry('two-runs', '2026-03-01T00:00:00Z', 80)]);
+  history = appendRuns(history, [entry('two-runs', '2026-04-01T00:00:00Z', 85)]);
+  history = appendRuns(history, [entry('one-run', '2026-04-01T00:00:00Z', 90)]);
+
+  const deltas = getAllRunDeltas(history);
+  assert.deepEqual(Object.keys(deltas), ['two-runs']);
+  assert.equal(deltas['two-runs'].points, 5);
 });
 
 test('toRunHistoryEntry carries scores and drops transcripts', () => {

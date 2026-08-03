@@ -5,6 +5,8 @@ import type {
   OllamaStatus,
   SystemProfile,
 } from './types';
+import { appendRuns, emptyRunHistory, type RunHardware, type RunHistory, type RunHistoryEntry } from './lib/runHistory';
+import { gradeForMatchScore } from './lib/scoring';
 
 // ── Pre-scan defaults (desktop) ──────────────────────────────────────────────
 // The demo* values below are sample data for the browser preview. On desktop
@@ -295,3 +297,41 @@ export const demoBenchmark: BenchmarkResult = {
     grade: 'A',
   },
 };
+
+/**
+ * A sample benchmark timeline for the browser preview, so the trend and
+ * "since last test" delta are visible on the demo page. Desktop never uses
+ * this — App seeds real history from stored runs (see runHistory.ts) and
+ * gates this branch on isDesktopRuntime, exactly like demoBenchmark itself.
+ *
+ * Dates are relative to load so the demo never shows a stale "2 years ago",
+ * and the qwen entry deliberately spans a GPU change to show that state.
+ */
+export function demoRunHistory(now: number = Date.now()): RunHistory {
+  const daysAgo = (days: number) => new Date(now - days * 86_400_000).toISOString();
+  const oldRig: RunHardware = { gpu: 'GeForce RTX 3060', vramGb: 12, ramGb: 32, cpu: 'Ryzen 5 5600X', os: 'Windows 11' };
+  const newRig: RunHardware = { ...oldRig, gpu: 'GeForce RTX 4070', vramGb: 12 };
+
+  const run = (model: string, days: number, total: number, hardware: RunHardware): RunHistoryEntry => ({
+    model,
+    completedAt: daysAgo(days),
+    total,
+    grade: gradeForMatchScore(total),
+    speed: total,
+    sobriety: total,
+    stability: total,
+    fit: total,
+    questionCount: demoBenchmark.questionCount,
+    elapsedMs: 97_000,
+    suiteName: 'Default Suite v0.1',
+    hardware,
+  });
+
+  return appendRuns(emptyRunHistory(), [
+    run('qwen2.5:7b', 96, 83, oldRig),
+    run('qwen2.5:7b', 61, 85, oldRig),
+    run('qwen2.5:7b', 24, 92, newRig),
+    run('llama3.2:3b', 61, 88, oldRig),
+    run('llama3.2:3b', 24, 86, newRig),
+  ]);
+}

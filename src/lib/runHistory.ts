@@ -253,6 +253,63 @@ export function getRunDelta(history: RunHistory, model: string): RunDelta | null
   return null;
 }
 
+/** Every model that has a comparable delta, keyed by the model's own name. */
+export function getAllRunDeltas(history: RunHistory): Record<string, RunDelta> {
+  const deltas: Record<string, RunDelta> = {};
+  for (const entries of Object.values(history.runs)) {
+    const model = entries[entries.length - 1]?.model;
+    if (!model) continue;
+    const delta = getRunDelta(history, model);
+    if (delta) deltas[model] = delta;
+  }
+  return deltas;
+}
+
+const DAY_MS = 86_400_000;
+
+/** "5 weeks ago" — vague on purpose; the exact timestamp is in the tooltip. */
+export function describeElapsed(fromIso: string, now: number): string {
+  const then = Date.parse(fromIso || '');
+  if (!Number.isFinite(then)) return 'earlier';
+  const days = Math.floor((now - then) / DAY_MS);
+  if (days <= 0) return 'earlier today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return weeks === 1 ? 'a week ago' : `${weeks} weeks ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return months === 1 ? 'a month ago' : `${months} months ago`;
+  const years = Math.floor(days / 365);
+  return years === 1 ? 'a year ago' : `${years} years ago`;
+}
+
+export type RunDeltaLabel = {
+  direction: 'up' | 'down' | 'flat';
+  /** "+7", "−3", "0" — uses a real minus sign, not a hyphen. */
+  points: string;
+  /** "vs. 5 weeks ago" */
+  detail: string;
+  /** Set only when the two runs were measured on different hardware. */
+  hardwareNote?: string;
+};
+
+/**
+ * Turn a delta into display text. Deliberately does NOT claim the hardware
+ * caused the change — only that the rig differed, because a re-test also picks
+ * up driver, model, and Ollama version changes.
+ */
+export function formatRunDelta(delta: RunDelta, now = Date.now()): RunDeltaLabel {
+  const direction = delta.points > 0 ? 'up' : delta.points < 0 ? 'down' : 'flat';
+  const magnitude = Math.abs(delta.points);
+  const points = direction === 'flat' ? '0' : `${direction === 'up' ? '+' : '−'}${magnitude}`;
+  return {
+    direction,
+    points,
+    detail: `vs. ${describeElapsed(delta.previous.completedAt, now)}`,
+    ...(delta.hardwareChanged ? { hardwareNote: 'Different hardware since that run' } : {}),
+  };
+}
+
 export function readRunHistory(): RunHistory {
   if (typeof window === 'undefined') return emptyRunHistory();
   try {

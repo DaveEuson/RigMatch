@@ -15544,6 +15544,52 @@ td {
   fill: rgba(var(--primary-rgb), 1);
 }
 
+/* Score delta: how the latest run compares with the previous one. Sits in the
+   same grid as the sub-score cells, spanning the row like the sparkline. */
+.contestant-delta-cell {
+  grid-column: 1 / -1;
+}
+
+.contestant-delta-cell strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.contestant-delta-cell em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.contestant-delta-cell.delta-up strong {
+  color: var(--green);
+}
+
+.contestant-delta-cell.delta-down strong {
+  color: var(--red);
+}
+
+/* Flat deltas stay neutral — "no change" is information, not a problem. */
+.contestant-delta-cell.delta-flat strong {
+  color: var(--text-strong);
+}
+
+.delta-hardware-flag {
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gold);
+  border: 1px solid rgba(255, 200, 87, 0.4);
+  border-radius: 999px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
 /* VRAM unlock hint */
 .contestant-vram-hint {
   padding: 7px 9px;

@@ -59,6 +59,7 @@ import {
 } from './benchmarkSuite';
 import {
   demoBenchmark,
+  demoRunHistory,
   demoCatalog,
   demoHosts,
   demoLmStudio,
@@ -227,12 +228,14 @@ import type {
 import {
   appendRuns,
   emptyRunHistory,
+  getAllRunDeltas,
   getScoreTrend,
   readRunHistory,
   removeRuns,
   seedFromBenchmarkResults,
   toRunHistoryEntry,
   writeRunHistory,
+  type RunDelta,
   type RunHistory,
 } from './lib/runHistory';
 import {
@@ -315,6 +318,7 @@ import {
   ScoreBars,
   ScoreLegend,
   ScoreRadar,
+  ScoreDeltaCell,
   ScoreSparkline,
   ScoreTile,
 } from './components/ScoreVisuals';
@@ -476,7 +480,9 @@ function App() {
   // The benchmark timeline. Seeded once from the pre-0.3.8 single-slot store so
   // upgrading users keep their existing results as the first point in a trend.
   const [runHistory, setRunHistory] = useState<RunHistory>(() => {
-    if (!isDesktopRuntime) return emptyRunHistory();
+    // Preview mode gets a sample timeline so the trend and delta are visible on
+    // the demo page; it is never persisted and never reaches desktop.
+    if (!isDesktopRuntime) return demoRunHistory();
     const stored = readRunHistory();
     const seeded = seedFromBenchmarkResults(stored, savedHistory?.benchmarkByModel ?? {}, savedHistory?.modelScores ?? {});
     if (seeded !== stored) writeRunHistory(seeded);
@@ -485,6 +491,7 @@ function App() {
   // Derived, not tracked separately: before 0.3.8 this was its own useState that
   // was never persisted, so every trend reset on close.
   const scoreTrend = useMemo(() => getScoreTrend(runHistory), [runHistory]);
+  const scoreDeltas = useMemo(() => getAllRunDeltas(runHistory), [runHistory]);
   const [pendingRunMode, setPendingRunMode] = useState<PendingRunMode | null>(null);
   const [pendingSingleModel, setPendingSingleModel] = useState<string | null>(null);
   const [pendingQuickCheck, setPendingQuickCheck] = useState<ModelRow | null>(null);
@@ -2935,6 +2942,7 @@ function App() {
             modelNotes={modelNotes}
             onSaveModelNote={saveModelNote}
             scoreTrend={scoreTrend}
+            scoreDeltas={scoreDeltas}
             newModelIds={new Set(modelNews.latestNewModelIds)}
             onQuickCheck={requestQuickCheckRow}
           />
@@ -6253,6 +6261,7 @@ function ModelCabinet({
   modelNotes,
   onSaveModelNote,
   scoreTrend,
+  scoreDeltas,
   newModelIds,
   onQuickCheck,
 }: {
@@ -6299,6 +6308,7 @@ function ModelCabinet({
   modelNotes: Record<string, string>;
   onSaveModelNote: (model: string, note: string) => void;
   scoreTrend: Record<string, number[]>;
+  scoreDeltas: Record<string, RunDelta>;
   newModelIds: Set<string>;
   onQuickCheck: (row: ModelRow) => void;
 }) {
@@ -6959,6 +6969,7 @@ function ModelCabinet({
           modelNotes={modelNotes}
           onSaveModelNote={onSaveModelNote}
           scoreTrend={scoreTrend}
+          scoreDeltas={scoreDeltas}
           onQuickCheck={onQuickCheck}
         />
       </div>
@@ -7423,6 +7434,7 @@ function SelectedContestantCard({
   modelNotes,
   onSaveModelNote,
   scoreTrend,
+  scoreDeltas,
   onQuickCheck,
   onChooseModel,
 }: {
@@ -7447,6 +7459,7 @@ function SelectedContestantCard({
   modelNotes: Record<string, string>;
   onSaveModelNote: (model: string, note: string) => void;
   scoreTrend: Record<string, number[]>;
+  scoreDeltas: Record<string, RunDelta>;
   onQuickCheck: (row: ModelRow) => void;
 }) {
   if (!row) {
@@ -7477,6 +7490,7 @@ function SelectedContestantCard({
   const origin = getModelOrigin(row.displayName);
   const showDownloadProgress = !installed && (queued || isPulling || isVisiblePullProgress(pullProgress));
   const trend = scoreTrend[row.displayName] ?? [];
+  const delta = scoreDeltas[row.displayName] ?? null;
 
   const vramNeeded = row.sizeGb ?? 0;
   const vramHint = !hardwareFit.recommend && vramNeeded > 0
@@ -7535,6 +7549,7 @@ function SelectedContestantCard({
                 <ScoreSparkline values={trend} />
               </div>
             )}
+            {delta && <ScoreDeltaCell delta={delta} />}
           </div>
         </div>
       )}
