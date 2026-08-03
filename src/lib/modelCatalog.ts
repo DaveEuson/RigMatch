@@ -14,6 +14,7 @@ import type {
 } from '../types';
 import type { NavId } from '../components/SideMenu';
 import { getModelFamily, getModelOrigin } from './modelOrigins';
+import { normalizeModelKey } from './modelKey';
 import { compareTestedModelScores, getScoreSortTotal, isLegacyScore } from './scoring';
 import { formatBytes, formatBytesPerSecond, formatGb, hashString, scoreToToks } from './format';
 import {
@@ -761,9 +762,9 @@ export function mergeModelRows(catalog: CatalogModel[], installedModels: OllamaM
   return [...extras, ...dedupedRows.values()].slice(0, 500);
 }
 
-export function normalizeModelKey(model: string | null | undefined) {
-  return String(model || '').trim().toLowerCase();
-}
+// Re-exported from the leaf module so storage layers (runHistory) can key by
+// model without importing this file's React/asset graph.
+export { normalizeModelKey } from './modelKey';
 
 export function isCloudModel(model: string): boolean {
   const lower = (model || '').toLowerCase();
