@@ -140,14 +140,26 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Make Linux metadata architecture-specific
-        if: matrix.platform == 'linux'
+      # Linux needs no renaming: electron-builder already emits latest-linux.yml
+      # (x64) and latest-linux-arm64.yml, which is exactly what electron-updater
+      # asks for — Provider.getChannelFilePrefix() builds "-linux" plus "" for
+      # x64 or "-arm64" otherwise. An earlier rename step added a second arch
+      # suffix (latest-linux-linux-x64.yml), so every Linux update check 404'd
+      # with ERR_UPDATER_CHANNEL_FILE_NOT_FOUND.
+      #
+      # Mac is the real collision: both Mac runners emit latest-mac.yml and one
+      # overwrites the other when artifacts merge, leaving an arm64-only
+      # manifest that Intel Macs cannot update from. Stage them under
+      # arch-unique names; the release job merges them back into one
+      # latest-mac.yml listing both arches (MacUpdater filters by arch itself,
+      # so a single file is required — not one per arch).
+      - name: Stage Mac update metadata for merging
+        if: matrix.platform == 'mac'
         shell: bash
         run: |
-          shopt -s nullglob
-          for file in release/latest*.yml; do
-            mv "$file" "${file%.yml}-${{ matrix.artifact }}.yml"
-          done
+          if [[ -f release/latest-mac.yml ]]; then
+            mv release/latest-mac.yml "release/latest-mac-${{ matrix.artifact }}.yml"
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -178,6 +190,11 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: release/
+
+      # Fails the release if either Mac manifest is missing, rather than
+      # publishing one that silently breaks auto-update for an architecture.
+      - name: Merge Mac update metadata
+        run: node scripts/merge-mac-manifest.mjs release
 
       - name: Generate SHA-256 checksums
         run: |
