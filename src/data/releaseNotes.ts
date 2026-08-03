@@ -2,6 +2,18 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.3.8',
+    label: 'It Remembers',
+    date: 'Beta build',
+    notes: [
+      'RigMatch now keeps a history of every test instead of only the most recent one. Re-testing a model used to overwrite its previous result, which meant the comparison disappeared at exactly the moment it got interesting. Your past runs are kept, so you can see how a model has done over time on your machine.',
+      'New "since last test" reading on each model: re-run a model and RigMatch tells you what changed — "+7 vs. 3 weeks ago" — with the score trend line beside it. If your computer changed between the two tests, it says so, because a new graphics card is a fair reason for a different score.',
+      'RigMatch will not compare tests that were not run the same way. If you changed the number of questions, or the scoring itself changed in an update, the two numbers were not measured alike — so instead of reporting a made-up improvement, it looks further back for a test it can honestly compare against.',
+      'Score trends now survive closing the app. They were being tracked all along but thrown away on exit, so the trend line only ever appeared during a single sitting. If you already have results from an earlier version, they become the starting point of your history rather than disappearing.',
+      'Clearing your scores now clears the saved history too, so a fresh start is genuinely fresh. Uninstalling a model does not: freeing up disk space should not erase what you measured, and reinstalling picks the trend back up where it left off.',
+    ],
+  },
+  {
     version: '0.3.7',
     label: 'One Score, One Grade Table',
     date: 'Beta build',
