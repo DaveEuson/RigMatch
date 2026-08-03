@@ -225,6 +225,17 @@ import type {
   SortDirection,
 } from './lib/modelCatalog';
 import {
+  appendRuns,
+  emptyRunHistory,
+  getScoreTrend,
+  readRunHistory,
+  removeRuns,
+  seedFromBenchmarkResults,
+  toRunHistoryEntry,
+  writeRunHistory,
+  type RunHistory,
+} from './lib/runHistory';
+import {
   amazonUrl,
   APP_VERSION,
   BUY_ME_A_COFFEE_URL,
@@ -462,7 +473,18 @@ function App() {
     try { return JSON.parse(localStorage.getItem('rigmatch:model-notes:v1') ?? '{}') as Record<string, string>; }
     catch { return {}; }
   });
-  const [scoreTrend, setScoreTrend] = useState<Record<string, number[]>>({});
+  // The benchmark timeline. Seeded once from the pre-0.3.8 single-slot store so
+  // upgrading users keep their existing results as the first point in a trend.
+  const [runHistory, setRunHistory] = useState<RunHistory>(() => {
+    if (!isDesktopRuntime) return emptyRunHistory();
+    const stored = readRunHistory();
+    const seeded = seedFromBenchmarkResults(stored, savedHistory?.benchmarkByModel ?? {}, savedHistory?.modelScores ?? {});
+    if (seeded !== stored) writeRunHistory(seeded);
+    return seeded;
+  });
+  // Derived, not tracked separately: before 0.3.8 this was its own useState that
+  // was never persisted, so every trend reset on close.
+  const scoreTrend = useMemo(() => getScoreTrend(runHistory), [runHistory]);
   const [pendingRunMode, setPendingRunMode] = useState<PendingRunMode | null>(null);
   const [pendingSingleModel, setPendingSingleModel] = useState<string | null>(null);
   const [pendingQuickCheck, setPendingQuickCheck] = useState<ModelRow | null>(null);
@@ -695,6 +717,29 @@ function App() {
       : 'Custom Suite',
     [benchmarkQuestions],
   );
+  /**
+   * Append finished runs to the timeline. Called per model as each one
+   * completes, so stopping a Speed Dating run part-way still keeps whatever
+   * finished. appendRuns dedupes on (model, completedAt), so the batch call at
+   * the end of a run is a no-op rather than a double entry.
+   */
+  const recordRuns = useCallback((results: BenchmarkResult[]) => {
+    if (!isDesktopRuntime || !results.length) return;
+    const entries = results.map((result) => {
+      const score = toTestedModelScore(result, currentSuiteName);
+      return toRunHistoryEntry(result, {
+        system,
+        suiteName: currentSuiteName,
+        preciseTotal: score.preciseTotal,
+        scoreSchemaVersion: score.scoreSchemaVersion,
+      });
+    });
+    setRunHistory((current) => {
+      const next = appendRuns(current, entries);
+      if (next !== current) writeRunHistory(next);
+      return next;
+    });
+  }, [currentSuiteName, system]);
   const queuedRows = useMemo(
     () => modelRows.filter((row) => queuedModelIds.has(row.displayName)),
     [modelRows, queuedModelIds],
@@ -1093,7 +1138,14 @@ function App() {
       setBenchmark(createEmptyBenchmark(selectedModel, ollama.baseUrl));
       setRunProgress(null);
       setPendingScoreClear(null);
-      setActivity('All saved match scores and test transcripts were cleared. Ollama models stayed installed.');
+      // Clear the timeline too — otherwise "clear all" leaves trends behind and
+      // the next run reports a delta against a score the user thought was gone.
+      setRunHistory(() => {
+        const cleared = emptyRunHistory();
+        writeRunHistory(cleared);
+        return cleared;
+      });
+      setActivity('All saved match scores, test transcripts, and score history were cleared. Ollama models stayed installed.');
       return;
     }
 
@@ -1108,6 +1160,11 @@ function App() {
     setBenchmarkByModel((current) => removeBenchmarkResults(current, aliases));
     setListTestResult((current) => removeListTestScores(current, aliases));
     setClearedTopMatches((current) => removeSetValues(current, aliases));
+    setRunHistory((current) => {
+      const next = removeRuns(current, aliases);
+      if (next !== current) writeRunHistory(next);
+      return next;
+    });
     setBenchmark((current) =>
       current && isBenchmarkForAliases(current, aliases)
         ? createEmptyBenchmark(selectedModel, ollama.baseUrl)
@@ -1200,6 +1257,10 @@ function App() {
     ));
     setModelScores((current) => removeModelScores(current, aliases));
     setBenchmarkByModel((current) => removeBenchmarkResults(current, aliases));
+    // Run history deliberately survives an uninstall: deleting a model frees
+    // disk, it does not mean "forget what I measured". Reinstalling later picks
+    // the trend back up. Clearing scores (confirmClearScores) is the explicit
+    // way to erase measurements, and that path does drop the timeline.
     setShortlistIds((current) => removeSetValues(current, aliases));
     setQueuedModelIds((current) => removeSetValues(current, aliases));
     setClearedTopMatches((current) => removeSetValues(current, aliases));
@@ -1448,10 +1509,7 @@ function App() {
       setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
       setModelScores((current) => upsertModelScores(current, [result], currentSuiteName));
       setClearedTopMatches((current) => removeSetValues(current, [result.model, modelToTest]));
-      setScoreTrend((current) => {
-        const prev = current[result.model] ?? [];
-        return { ...current, [result.model]: [...prev.slice(-9), result.scores.total] };
-      });
+      recordRuns([result]);
       setRunProgress({
         progressId,
         mode: 'single',
@@ -1508,7 +1566,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsBenchmarking(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, selectedHost, selectedModel, system.hostname, effectiveJudge]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, selectedHost, selectedModel, system.hostname, effectiveJudge]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
     // The quick TEST button skips the full launch modal, but it still loads a
@@ -2088,6 +2146,7 @@ function App() {
         setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
         setModelScores((current) => upsertModelScores(current, [result], currentSuiteName));
         setClearedTopMatches((current) => removeSetValues(current, [result.model, row.displayName]));
+        recordRuns([result]);
         const isStopped = stopRunRef.current;
         setRunProgress({
           progressId: !isStopped && runnableRows[index + 1] ? `${listRunId}-${index + 1}` : progressId,
@@ -2183,7 +2242,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge]);
 
   const runSkillTestsAfterRun = useCallback(async (models: string[]) => {
     const selection = skillTestSelection;

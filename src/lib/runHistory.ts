@@ -185,6 +185,24 @@ export function pruneToTotal(history: RunHistory, max = MAX_RUNS_TOTAL): RunHist
   return { version: RUN_HISTORY_SCHEMA_VERSION, runs };
 }
 
+/**
+ * Drop every run for the given models. Used when a model's scores are cleared
+ * or the model is uninstalled — leaving the timeline behind would let a later
+ * run report a delta against a score the user believed was deleted.
+ * Takes aliases because one model can be referred to by several names.
+ */
+export function removeRuns(history: RunHistory, models: string[]): RunHistory {
+  const keys = new Set(models.map(normalizeModelKey).filter(Boolean));
+  if (!keys.size) return history;
+  const runs: Record<string, RunHistoryEntry[]> = {};
+  let changed = false;
+  for (const [key, entries] of Object.entries(history.runs)) {
+    if (keys.has(key)) { changed = true; continue; }
+    runs[key] = entries;
+  }
+  return changed ? { version: RUN_HISTORY_SCHEMA_VERSION, runs } : history;
+}
+
 export function getModelRuns(history: RunHistory, model: string): RunHistoryEntry[] {
   return history.runs[normalizeModelKey(model)] ?? [];
 }

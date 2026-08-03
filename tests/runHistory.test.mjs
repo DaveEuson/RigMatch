@@ -9,6 +9,7 @@ import {
   getRunDelta,
   getScoreTrend,
   pruneToTotal,
+  removeRuns,
   sameHardware,
   seedFromBenchmarkResults,
   toRunHardware,
@@ -197,6 +198,29 @@ test('upgrading users keep their existing results as the first data point', () =
   // Seeding twice (two launches before the next run) must not duplicate.
   const again = seedFromBenchmarkResults(seeded, benchmarkByModel, {});
   assert.equal(getModelRuns(again, 'qwen3:8b').length, 1);
+});
+
+test('clearing a model drops its runs and leaves others alone', () => {
+  let history = emptyRunHistory();
+  history = appendRuns(history, [entry('qwen3:8b', '2026-03-01T00:00:00Z', 84)]);
+  history = appendRuns(history, [entry('llama3.2:3b', '2026-03-01T00:00:00Z', 77)]);
+
+  // Aliases: the same model can be referred to by several names, in any casing.
+  const cleared = removeRuns(history, ['QWEN3:8B', 'qwen3']);
+  assert.equal(getModelRuns(cleared, 'qwen3:8b').length, 0);
+  assert.equal(getModelRuns(cleared, 'llama3.2:3b').length, 1);
+
+  // A no-op removal must not churn the object identity.
+  assert.equal(removeRuns(cleared, ['nothing-here']), cleared);
+  assert.equal(removeRuns(cleared, []), cleared);
+});
+
+test('a cleared model reports no delta on its next run', () => {
+  let history = emptyRunHistory();
+  history = appendRuns(history, [entry('m', '2026-03-01T00:00:00Z', 40)]);
+  history = removeRuns(history, ['m']);
+  history = appendRuns(history, [entry('m', '2026-04-01T00:00:00Z', 90)]);
+  assert.equal(getRunDelta(history, 'm'), null, 'must not compare against a score the user deleted');
 });
 
 test('toRunHistoryEntry carries scores and drops transcripts', () => {
