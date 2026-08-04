@@ -16,7 +16,7 @@ import type { NavId } from '../components/SideMenu';
 import { getModelFamily, getModelOrigin } from './modelOrigins';
 import { normalizeModelKey } from './modelKey';
 import { compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore } from './scoring';
-import { formatBytes, formatBytesPerSecond, formatGb, hashString, scoreToToks } from './format';
+import { formatBytes, formatBytesPerSecond, formatGb, hashString, formatThroughput } from './format';
 import {
   APP_VERSION,
   GITHUB_ISSUES_URL,
@@ -161,7 +161,7 @@ export function buildShareableScorecard(
     const tied = prev !== undefined
       && Math.abs((prev.preciseTotal ?? prev.total) - (score.preciseTotal ?? score.total)) < 0.05;
     const rank = tied ? '=' : `${i + 1}`;
-    const toks = scoreToToks(score.speed);
+    const toks = formatThroughput(score);
     return `| ${rank} | ${score.model} | ${formatMatchScore(score)} | **${score.grade}** | ${toks} | ${score.sobriety} | ${score.fit} |`;
   });
 
@@ -178,7 +178,7 @@ export function buildShareableScorecard(
   if (taskPicks.length > 0) {
     sections.push('', '**Category picks:**');
     for (const p of taskPicks) {
-      sections.push(`- **${p.label}:** ${p.model} (${p.score.total} · ${p.score.grade} · ${scoreToToks(p.score.speed)})`);
+      sections.push(`- **${p.label}:** ${p.model} (${p.score.total} · ${p.score.grade} · ${formatThroughput(p.score)})`);
     }
   }
 

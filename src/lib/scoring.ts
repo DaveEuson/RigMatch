@@ -80,6 +80,7 @@ export function toTestedModelScore(result: BenchmarkResult, suiteName?: string):
     suiteName,
     preciseTotal: calculatePreciseTotal(result.scores),
     scoreSchemaVersion: CURRENT_SCORE_SCHEMA_VERSION,
+    tokensPerSecond: result.avgTokensPerSecond,
   };
 }
 

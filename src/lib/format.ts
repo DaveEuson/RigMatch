@@ -56,13 +56,40 @@ export function getResponseEstimate(speedScore: number): string {
   return '30s+';
 }
 
-/** Rough tokens-per-second estimate from a 0-100 speed score. */
+/**
+ * Rough tokens-per-second estimate from a 0-100 speed score.
+ *
+ * Only correct as a lower bound at the top of the range. The speed sub-score
+ * maps 100 tok/s to 100 and clamps there, so every model at or above 100 tok/s
+ * scores 90+ and this returns "20+ tok/s" for all of them -- a 4070 running a 3B
+ * model measures ~365 tok/s and still lands in that bucket.
+ *
+ * Prefer `formatThroughput`, which uses the measured rate when one was saved.
+ * This remains only for scores recorded before throughput was persisted.
+ */
 export function scoreToToks(speed: number): string {
-  if (speed >= 90) return '~20 tok/s';
+  if (speed >= 90) return '20+ tok/s';
   if (speed >= 75) return '~10 tok/s';
   if (speed >= 55) return '~5 tok/s';
   if (speed >= 35) return '~2 tok/s';
   return '<2 tok/s';
+}
+
+/**
+ * Generation speed for display. Uses the rate actually measured during the run
+ * when it was saved, and only falls back to inferring one from the saturated
+ * sub-score for older scores that predate the persisted field.
+ */
+export function formatThroughput(score: { speed: number; tokensPerSecond?: number }): string {
+  const measured = score.tokensPerSecond;
+  if (typeof measured === 'number' && Number.isFinite(measured) && measured > 0) {
+    // Below ~20 tok/s the reader is waiting on the text, so a tenth is
+    // meaningful (10.7 vs 10.0 is a real difference). Above it the decimal is
+    // run-to-run noise.
+    const shown = measured >= 20 ? Math.round(measured) : Math.round(measured * 10) / 10;
+    return `${shown} tok/s`;
+  }
+  return scoreToToks(score.speed);
 }
 
 /** Log-scale 0-100 meter fill for Ollama library pull counts. */

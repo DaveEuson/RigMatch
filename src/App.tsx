@@ -333,6 +333,7 @@ import {
   formatMs,
   formatPullCount,
   getErrorMessage,
+  formatThroughput,
   getResponseEstimate,
   getScoreTone,
   getScoreTooltip,
@@ -7746,6 +7747,13 @@ function SelectedContestantCard({
             {/* These are 0–100 sub-scores, not measurements. "Speed score" keeps it
                 from being read as the tokens/sec figure shown in the models table. */}
             <div title="0–100 speed sub-score (not tokens/sec)"><span>Speed score</span><strong>{score.speed}</strong></div>
+            {/* The sub-score above tops out at 100 tok/s, so most models on capable
+                hardware tie at 100. Show the measured rate too, which keeps ranking. */}
+            {score.tokensPerSecond != null && (
+              <div title="Generation speed actually measured during the run">
+                <span>Measured</span><strong>{formatThroughput(score)}</strong>
+              </div>
+            )}
             <div title="0–100 answer-quality sub-score"><span>Accuracy</span><strong>{score.sobriety}</strong></div>
             <div title="0–100 hardware-fit sub-score"><span>Fit</span><strong>{score.fit}</strong></div>
             {trend.length >= 2 && (

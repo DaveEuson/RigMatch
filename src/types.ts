@@ -175,6 +175,14 @@ export type TestedModelScore = {
   suiteName?: string;
   preciseTotal?: number;
   scoreSchemaVersion?: number;
+  /**
+   * Measured generation throughput, carried over from the run's
+   * `avgTokensPerSecond`. Kept alongside the `speed` sub-score because `speed`
+   * saturates: it maps 100 tok/s to 100 and clamps, so on capable hardware most
+   * models tie at 100 and the sub-score can no longer be read back as a rate.
+   * Optional -- scores saved before this field existed will not have it.
+   */
+  tokensPerSecond?: number;
 };
 
 export type BenchmarkProgressUpdate = {
