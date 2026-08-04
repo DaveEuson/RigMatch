@@ -205,6 +205,60 @@ function parseRocmSmiQuery(output, vramTotalMb = null) {
 }
 
 /**
+ * Parse `ioreg -r -d 1 -w 0 -c AGXAccelerator` (Apple Silicon).
+ *
+ * systeminformation reports no GPU utilization at all on Apple Silicon — model
+ * and vendor come through, but `utilizationGpu` and `vram` are both null — so
+ * without this RigMatch would answer "could not check" on every Mac forever.
+ * IOKit exposes the real figures and, unlike `powermetrics`, needs no sudo.
+ *
+ * Real captured output (M4, idle):
+ *   "PerformanceStatistics" = {"In use system memory (driver)"=0,
+ *   "Alloc system memory"=2629632000,"Tiler Utilization %"=0,"recoveryCount"=0,
+ *   "lastRecoveryTime"=0,"Renderer Utilization %"=0,"TiledSceneBytes"=0,
+ *   "Device Utilization %"=0,"SplitSceneCount"=0,"Allocated PB Size"=75628544,
+ *   "In use system memory"=763723776}
+ *
+ * No total is reported — the pool is system RAM — so vramTotalMb stays null.
+ * That is fine: Apple Silicon is unified memory, where the memory criterion is
+ * skipped and utilization decides alone.
+ */
+function parseIoregGpuStats(output) {
+  const text = String(output ?? '');
+  if (!text.includes('PerformanceStatistics')) return null;
+
+  const num = (pattern) => {
+    const match = text.match(pattern);
+    if (!match) return null;
+    const value = Number(match[1]);
+    return Number.isFinite(value) ? value : null;
+  };
+
+  // "Device Utilization %" is the overall figure. Renderer and Tiler are the
+  // sub-units; take the highest of those only if the overall one is missing,
+  // since a busy tiler with an idle renderer is still a busy GPU.
+  const device = num(/"Device Utilization %"\s*=\s*(\d+)/);
+  const renderer = num(/"Renderer Utilization %"\s*=\s*(\d+)/);
+  const tiler = num(/"Tiler Utilization %"\s*=\s*(\d+)/);
+  const utilizationPercent = device ?? (renderer === null && tiler === null
+    ? null
+    : Math.max(renderer ?? 0, tiler ?? 0));
+  if (utilizationPercent === null || utilizationPercent < 0 || utilizationPercent > 100) return null;
+
+  // The trailing quote before "=" is what separates this from the neighbouring
+  // "In use system memory (driver)" key, which is a different (and usually zero)
+  // figure.
+  const inUseBytes = num(/"In use system memory"\s*=\s*(\d+)/);
+
+  return {
+    vramUsedMb: inUseBytes === null ? null : Math.round(inUseBytes / (1024 * 1024)),
+    vramTotalMb: null,
+    utilizationPercent,
+    source: 'ioreg',
+  };
+}
+
+/**
  * Match running process names against the known-heavy allowlist.
  *
  * Accepts a list of process names or full paths from any source (tasklist, ps,
@@ -373,6 +427,7 @@ module.exports = {
   HEAVY_VRAM_SHARE,
   parseNvidiaGpuQuery,
   parseRocmSmiQuery,
+  parseIoregGpuStats,
   matchKnownGpuApps,
   assessGpuContention,
   describeGpuContention,

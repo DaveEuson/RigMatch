@@ -1423,9 +1423,18 @@ async function readGpuLoad(profile) {
     if (reading) return reading;
   }
 
-  // Apple Silicon shares memory with the system and exposes no per-GPU busy
-  // figure without elevated powermetrics, which is not worth prompting for.
-  // Fall back to the systeminformation reading already collected by the scan.
+  // Apple Silicon: systeminformation reports utilizationGpu as null here —
+  // verified on an M4, where it returns the model and vendor but no load figure
+  // at all. IOKit has the real numbers and, unlike powermetrics, needs no sudo.
+  if (process.platform === 'darwin') {
+    const ioreg = await runCommand('ioreg', ['-r', '-d', '1', '-w', '0', '-c', 'AGXAccelerator'], 5000);
+    if (ioreg.output) {
+      const reading = gpuContention.parseIoregGpuStats(ioreg.output);
+      if (reading) return reading;
+    }
+  }
+
+  // Last resort: whatever the system scan already collected.
   const gpu = profile?.gpu;
   if (gpu && Number.isFinite(gpu.gpuLoadPercent)) {
     return {

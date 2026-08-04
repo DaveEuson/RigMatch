@@ -64,9 +64,15 @@ const nvidiaName = await tryRun('nvidia-smi', ['--query-gpu=name', '--format=csv
 const nvidiaQuery = await tryRun('nvidia-smi',
   ['--query-gpu=memory.used,memory.total,utilization.gpu', '--format=csv,noheader,nounits']);
 const rocm = await tryRun('rocm-smi', ['--showmemuse', '--showuse', '--csv']);
+// Apple Silicon: IOKit is the only sudo-free source of GPU load, and the only
+// one that works at all — systeminformation returns null utilization there.
+const ioreg = process.platform === 'darwin'
+  ? await tryRun('ioreg', ['-r', '-d', '1', '-w', '0', '-c', 'AGXAccelerator'])
+  : { ok: false, output: '' };
 
 report.tools['nvidia-smi'] = nvidiaName.ok;
 report.tools['rocm-smi'] = rocm.ok;
+report.tools.ioreg = ioreg.ok;
 report.tools.gpuName = nvidiaName.ok ? nvidiaName.output.split('\n')[0] : null;
 
 // Raw output is kept verbatim: if a parser fails, this is what is needed to fix it.
@@ -77,6 +83,10 @@ report.tools.rawRocm = rocm.ok ? rocm.output.slice(0, 400) : null;
 const nvidiaReading = gpu.parseNvidiaGpuQuery(nvidiaQuery.output);
 report.parsed.nvidia = nvidiaReading;
 report.parsed.rocm = rocm.ok ? gpu.parseRocmSmiQuery(rocm.output) : null;
+report.parsed.ioreg = ioreg.ok ? gpu.parseIoregGpuStats(ioreg.output) : null;
+if (ioreg.ok && !report.parsed.ioreg) {
+  report.verdict.push('FAIL: ioreg answered but RigMatch could not parse it. Capture the PerformanceStatistics line.');
+}
 
 // systeminformation is the app's only source on macOS, where neither vendor CLI
 // exists. If it reports no GPU utilization there, RigMatch can never assess
@@ -97,7 +107,7 @@ try {
     }
     : null;
 
-  if (!report.tools['nvidia-smi'] && !report.tools['rocm-smi']) {
+  if (!report.tools['nvidia-smi'] && !report.tools['rocm-smi'] && !report.parsed.ioreg) {
     if (report.parsed.systeminformation?.usableForContention) {
       report.verdict.push('OK: no vendor CLI here, but systeminformation reports GPU utilization, so contention can still be assessed.');
     } else {
@@ -148,12 +158,14 @@ if (nvidiaReading) {
 }
 
 // ── how would the thresholds behave here ─────────────────────────────────────
-if (nvidiaReading || report.parsed.rocm) {
+if (nvidiaReading || report.parsed.rocm || report.parsed.ioreg) {
   const readings = [];
   for (let i = 0; i < 5; i += 1) {
     const q = await tryRun('nvidia-smi',
       ['--query-gpu=memory.used,memory.total,utilization.gpu', '--format=csv,noheader,nounits']);
-    const r = gpu.parseNvidiaGpuQuery(q.output) ?? (rocm.ok ? gpu.parseRocmSmiQuery((await tryRun('rocm-smi', ['--showmemuse', '--showuse', '--csv'])).output) : null);
+    const r = gpu.parseNvidiaGpuQuery(q.output)
+      ?? (rocm.ok ? gpu.parseRocmSmiQuery((await tryRun('rocm-smi', ['--showmemuse', '--showuse', '--csv'])).output) : null)
+      ?? (ioreg.ok ? gpu.parseIoregGpuStats((await tryRun('ioreg', ['-r', '-d', '1', '-w', '0', '-c', 'AGXAccelerator'])).output) : null);
     if (r) { readings.push(r); report.samples.push({ util: r.utilizationPercent, usedMb: r.vramUsedMb }); }
     if (i < 4) await sleep(250);
   }
@@ -193,6 +205,7 @@ if (json) {
   console.log('\nGPU tooling');
   line('nvidia-smi', report.tools['nvidia-smi'] ? 'present' : 'absent');
   line('rocm-smi', report.tools['rocm-smi'] ? 'present' : 'absent');
+  if (process.platform === 'darwin') line('ioreg (Apple GPU)', report.tools.ioreg ? (report.parsed.ioreg ? 'present, parsed' : 'present, PARSE FAILED') : 'absent');
   line('gpu name', report.tools.gpuName ?? '(none reported)');
   console.log('\nRigMatch detection');
   line('parsed a reading', report.parsed.nvidia || report.parsed.rocm ? 'yes' : 'no vendor CLI');

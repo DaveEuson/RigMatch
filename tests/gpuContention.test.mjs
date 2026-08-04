@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const {
   parseNvidiaGpuQuery,
   parseRocmSmiQuery,
+  parseIoregGpuStats,
   matchKnownGpuApps,
   assessGpuContention,
   describeGpuContention,
@@ -316,4 +317,59 @@ test('a named app still warns on unified hardware', () => {
   const assessment = assessGpuContention(quiet, ['ComfyUI'], { unifiedMemory: true });
   assert.equal(assessment.level, 'busy');
   assert.deepEqual(assessment.apps, ['ComfyUI']);
+});
+
+// ── Apple Silicon via IOKit ─────────────────────────────────────────────────
+
+// Verbatim from `ioreg -r -d 1 -w 0 -c AGXAccelerator` on an idle Apple M4.
+// systeminformation reports utilizationGpu: null and vram: null on this machine,
+// so without IOKit every Mac would answer "could not check" forever.
+const M4_IDLE = '      "PerformanceStatistics" = {"In use system memory (driver)"=0,"Alloc system memory"=2629632000,"Tiler Utilization %"=0,"recoveryCount"=0,"lastRecoveryTime"=0,"Renderer Utilization %"=0,"TiledSceneBytes"=0,"Device Utilization %"=0,"SplitSceneCount"=0,"Allocated PB Size"=75628544,"In use system memory"=763723776}';
+
+test('real idle M4 output parses to a genuine zero, not to null', () => {
+  const reading = parseIoregGpuStats(M4_IDLE);
+  assert.equal(reading.utilizationPercent, 0, 'an idle Mac is 0% busy, which is a real answer');
+  assert.equal(reading.source, 'ioreg');
+  // 763723776 bytes = 728 MB of GPU memory in use.
+  assert.equal(reading.vramUsedMb, 728);
+  assert.equal(reading.vramTotalMb, null, 'the pool is system RAM; IOKit reports no total');
+});
+
+test('an idle Mac reads clear rather than unknown', () => {
+  // This is the whole point: "checked, and it is quiet" instead of "could not
+  // check", which would otherwise show a note before every run on every Mac.
+  const assessment = assessGpuContention(parseIoregGpuStats(M4_IDLE), [], { unifiedMemory: true });
+  assert.equal(assessment.level, 'clear');
+  assert.equal(describeGpuContention(assessment), '');
+});
+
+test('the driver memory key is not mistaken for the real one', () => {
+  // "In use system memory (driver)"=0 sits immediately before
+  // "In use system memory"=763723776 in the same dict.
+  assert.equal(parseIoregGpuStats(M4_IDLE).vramUsedMb, 728, 'must not read the (driver) zero');
+});
+
+test('a busy Apple GPU is detected', () => {
+  const busy = M4_IDLE.replace('"Device Utilization %"=0', '"Device Utilization %"=88');
+  const reading = parseIoregGpuStats(busy);
+  assert.equal(reading.utilizationPercent, 88);
+  assert.equal(assessGpuContention(reading, [], { unifiedMemory: true }).level, 'heavy');
+});
+
+test('the sub-unit figures are used only when the overall one is absent', () => {
+  // A busy tiler with an idle renderer is still a busy GPU, so take the max.
+  const noDevice = '"PerformanceStatistics" = {"Tiler Utilization %"=64,"Renderer Utilization %"=3}';
+  assert.equal(parseIoregGpuStats(noDevice).utilizationPercent, 64);
+
+  // But when the overall figure exists it wins, even if a sub-unit reads higher.
+  const both = '"PerformanceStatistics" = {"Device Utilization %"=12,"Tiler Utilization %"=90}';
+  assert.equal(parseIoregGpuStats(both).utilizationPercent, 12);
+});
+
+test('non-Apple or unexpected ioreg output yields null', () => {
+  for (const bad of ['', null, undefined, 'ioreg: command not found', '+-o AGXAccelerator  <class AGXAccelerator>', '"PerformanceStatistics" = {"recoveryCount"=0}']) {
+    assert.equal(parseIoregGpuStats(bad), null, `${JSON.stringify(bad)?.slice(0, 40)} must not parse`);
+  }
+  // Out-of-range values are rejected rather than clamped silently.
+  assert.equal(parseIoregGpuStats('"PerformanceStatistics" = {"Device Utilization %"=400}'), null);
 });
