@@ -12,7 +12,8 @@ import robotRigGreenroom from '../assets/robot-rig-greenroom.webp';
 import robotScorecardCeremony from '../assets/robot-scorecard-ceremony.webp';
 import { agentArcadeApi } from '../api';
 import { describeRunError } from './format';
-import { getAdvancedLabGrade, type AdvancedLabCheck, type AdvancedLabResult } from './labResults';
+import { type AdvancedLabCheck, type AdvancedLabResult } from './labResults';
+import { getAdvancedLabGrade, scoreAdvancedImageResponse, scoreAdvancedVisionResponse } from './labScoring';
 import { extractHtmlDocument } from './labPreview';
 import { checkAppParses } from './appRunnability';
 import { judgeAppBuilder } from './appBuilderJudge';
@@ -288,61 +289,7 @@ function scoreAdvancedAppBuilderResponse(response: string, doneReason: string): 
   return { score, grade: getAdvancedLabGrade(score), checks };
 }
 
-function scoreAdvancedVisionResponse(response: string, doneReason: string): Pick<AdvancedLabResult, 'score' | 'grade' | 'checks'> {
-  const text = response.trim();
-  const wordCount = text.split(/\s+/).filter(Boolean).length;
-  const checks: AdvancedLabCheck[] = [
-    {
-      label: 'Described the image',
-      passed: wordCount >= 12,
-      detail: 'Returned a substantive description, not a one-liner or refusal.',
-    },
-    {
-      label: 'Concrete visual detail',
-      passed: /\b(color|colour|robot|text|background|left|right|top|bottom|blue|green|orange|red|yellow|character|shape|screen|button|face|eye|logo)\b/i.test(text),
-      detail: 'Names specific objects, colors, or layout instead of staying vague.',
-    },
-    {
-      label: 'Engaged with the picture',
-      passed: !/\b(can'?t|cannot|unable to|no image|don'?t see)\b/i.test(text),
-      detail: 'Actually read the image rather than declining or claiming no image.',
-    },
-    {
-      label: 'Completed cleanly',
-      passed: doneReason !== 'length' && doneReason !== 'error',
-      detail: 'Did not truncate or error mid-answer.',
-    },
-  ];
-  const score = Math.round((checks.filter((check) => check.passed).length / checks.length) * 100);
-  return { score, grade: getAdvancedLabGrade(score), checks };
-}
 
-function scoreAdvancedImageResponse(imageDataUrl: string, doneReason: string): Pick<AdvancedLabResult, 'score' | 'grade' | 'checks'> {
-  const checks: AdvancedLabCheck[] = [
-    {
-      label: 'Image returned',
-      passed: imageDataUrl.startsWith('data:image/'),
-      detail: 'Ollama returned an image payload instead of a text-only answer.',
-    },
-    {
-      label: 'PNG/base64 payload',
-      passed: /^data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+/.test(imageDataUrl),
-      detail: 'The image payload looks like a browser-renderable base64 image.',
-    },
-    {
-      label: 'Completed cleanly',
-      passed: doneReason !== 'length' && doneReason !== 'error',
-      detail: 'The image run did not report an obvious truncation or error stop.',
-    },
-    {
-      label: 'Small beta size',
-      passed: ADVANCED_IMAGE_WIDTH <= 512 && ADVANCED_IMAGE_HEIGHT <= 512,
-      detail: 'The beta test keeps image size small to reduce VRAM and time pressure.',
-    },
-  ];
-  const score = Math.round((checks.filter((check) => check.passed).length / checks.length) * 100);
-  return { score, grade: getAdvancedLabGrade(score), checks };
-}
 
 // ── Challenge runners ────────────────────────────────────────────────────────
 

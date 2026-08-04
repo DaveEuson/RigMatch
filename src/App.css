@@ -18805,3 +18805,19 @@ a.whats-next-support:hover {
   font-family: var(--mono);
   font-size: 11px;
 }
+
+/* Skill-test failure explanation, shown where a result would be. A blank panel
+   under a confident grade tells the user nothing about what went wrong. */
+.demo-failure-note {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-bright);
+  border-left: 3px solid var(--red);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.demo-failure-note strong { color: var(--text-strong); font-size: 13px; }
+.demo-failure-note p { margin: 0; color: var(--text); font-size: 12px; line-height: 1.45; }
+.demo-failure-note em { color: var(--muted); font-size: 11px; font-style: normal; line-height: 1.4; }

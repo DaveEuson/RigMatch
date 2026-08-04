@@ -8,6 +8,7 @@
 import { ADVANCED_LAB_STORAGE_KEY } from './appConfig';
 import { extractHtmlDocument } from './labPreview';
 import { extractCodeBlock } from './codeChallenge';
+import { describeLabFailure } from './labScoring';
 
 /** A viewable thing a model produced during a skill test. */
 export type DemoArtifact = {
@@ -92,8 +93,10 @@ export function getModelDemoArtifacts(model: string): DemoArtifact[] {
       if (html) out.push({ model, kind: 'app', html, judged: wasJudged(result), grade: result.grade, score: result.score });
     } else if (result.challenge === 'image-generation' && result.imageDataUrl) {
       out.push({ model, kind: 'image', imageDataUrl: result.imageDataUrl, grade: result.grade, score: result.score });
-    } else if (result.challenge === 'image-recognition' && result.response) {
-      out.push({ model, kind: 'vision', imageDataUrl: result.imageDataUrl, description: result.response, grade: result.grade, score: result.score });
+    } else if (result.challenge === 'image-recognition') {
+      // Kept even with no description: a failed vision run is exactly what a
+      // user needs to inspect, and hiding it left the grade unexplained.
+      out.push({ model, kind: 'vision', imageDataUrl: result.imageDataUrl, description: result.response, note: describeLabFailure(result), grade: result.grade, score: result.score });
     } else if (result.challenge === 'code') {
       const code = extractCodeBlock(result.response);
       if (code) out.push({ model, kind: 'code', code, language: result.language, note: result.checks?.[0]?.detail, judged: true, grade: result.grade, score: result.score });
@@ -102,11 +105,7 @@ export function getModelDemoArtifacts(model: string): DemoArtifact[] {
   return out;
 }
 
-export function getAdvancedLabGrade(score: number) {
-  if (score >= 92) return 'S';
-  if (score >= 82) return 'A';
-  if (score >= 70) return 'B';
-  if (score >= 55) return 'C';
-  if (score >= 40) return 'D';
-  return 'F';
-}
+// Rubrics and grading live in labScoring.ts, a leaf module with no assets or
+// storage so the grading logic stays directly testable. Re-exported so existing
+// importers are unaffected.
+export { describeLabFailure, getAdvancedLabGrade } from './labScoring';

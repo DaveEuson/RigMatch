@@ -325,7 +325,18 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
             {demo.imageDataUrl && <img className="demo-vision-image" src={demo.imageDataUrl} alt="Image the model was asked to read" />}
             <div className="demo-vision-reading">
               <span>What {getShortModelName(demo.model)} saw</span>
-              <p>{demo.description || 'No description returned.'}</p>
+              {demo.description?.trim()
+                ? <p>{demo.description}</p>
+                : (
+                  // "No description returned." on its own left the user unable to
+                  // tell whether the model refused, timed out, or simply cannot
+                  // read images at all. Say which.
+                  <div className="demo-failure-note">
+                    <strong>This model returned nothing to read.</strong>
+                    {demo.note && <p>{demo.note}</p>}
+                    <em>Not every model tagged for images supports them through Ollama's vision API. Run Logs has the full record of this attempt.</em>
+                  </div>
+                )}
             </div>
           </div>
         ) : (

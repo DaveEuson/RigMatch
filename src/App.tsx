@@ -282,6 +282,7 @@ import { SkillRunMiniBar, LiveBuildModal, DemoResultModal, ModelDemoChips } from
 import { AdvancedCapabilityLab } from './components/AdvancedCapabilityLab';
 import { extractHtmlDocument } from './lib/labPreview';
 import {
+  describeLabFailure,
   readAdvancedLabResults,
   writeAdvancedLabResults,
   wasJudged,
@@ -2400,16 +2401,37 @@ function App() {
           : job.kind === 'code' ? `code:${job.model}`
           : job.model;
         writeAdvancedLabResults({ ...readAdvancedLabResults(), [key]: result });
+        // Every skill test lands in Run Logs, pass or fail, with the rubric that
+        // produced the grade. A model that returns nothing is the case most
+        // worth being able to look up afterwards.
+        void agentArcadeApi.appendLog({
+          level: result.error || result.score === 0 ? 'error' : 'info',
+          source: 'renderer',
+          message: `Skill test ${job.kind} · ${job.model}: ${result.score} (${result.grade})`,
+          details: {
+            model: job.model,
+            challenge: job.kind,
+            score: result.score,
+            grade: result.grade,
+            elapsedMs: result.elapsedMs,
+            responseChars: result.response?.length ?? 0,
+            producedImage: Boolean(result.imageDataUrl),
+            error: result.error ?? null,
+            failedChecks: (result.checks ?? []).filter((check) => !check.passed).map((check) => `${check.label}: ${check.detail}`),
+          },
+        });
         if (job.kind === 'app-builder') {
           const html = extractHtmlDocument(result.response);
           if (html) demos.push({ model: job.model, kind: 'app', html, judged: wasJudged(result), grade: result.grade, score: result.score });
         } else if (job.kind === 'code') {
           const code = extractCodeBlock(result.response);
           if (code) demos.push({ model: job.model, kind: 'code', code, language: result.language, note: result.checks[0]?.detail, grade: result.grade, score: result.score });
-        } else if (job.kind === 'image' && result.imageDataUrl) {
-          demos.push({ model: job.model, kind: 'image', imageDataUrl: result.imageDataUrl, grade: result.grade, score: result.score });
+        } else if (job.kind === 'image') {
+          // Carry the reason forward when nothing usable came back, so the viewer
+          // can say why instead of showing an empty panel next to a grade.
+          demos.push({ model: job.model, kind: 'image', imageDataUrl: result.imageDataUrl, note: describeLabFailure(result), grade: result.grade, score: result.score });
         } else if (job.kind === 'vision') {
-          demos.push({ model: job.model, kind: 'vision', imageDataUrl: result.imageDataUrl, description: result.response, grade: result.grade, score: result.score });
+          demos.push({ model: job.model, kind: 'vision', imageDataUrl: result.imageDataUrl, description: result.response, note: describeLabFailure(result), grade: result.grade, score: result.score });
         }
       }
     }
