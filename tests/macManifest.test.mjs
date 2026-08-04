@@ -131,3 +131,55 @@ test('rendered output is valid input (round trip is stable)', () => {
 test('empty input fails loudly', () => {
   assert.throws(() => mergeManifests([]), /No Mac manifests/);
 });
+
+// ── real local build output (Apple M4) ───────────────────────────────────────
+
+// Verbatim from `electron-builder --mac` on an M4 — the first latest-mac.yml
+// generated outside a GitHub runner. It confirms the root cause: electron-builder
+// emits a manifest for the arch it just built, so CI's two Mac runners each write
+// one under the same name and one overwrites the other.
+const M4_LOCAL_BUILD = `version: 0.3.10
+files:
+  - url: RigMatch.AI-0.3.10-mac-arm64.zip
+    sha512: XdCIHu2b64eNP1HBmYr98XIEdzPS7JO6TY00xzPe47wQqfJGrt2Kq7i82fFgmc6zRhuar6JPw6OlKCbEQiYOJg==
+    size: 131246374
+  - url: RigMatch.AI-0.3.10-mac-arm64.dmg
+    sha512: duQ8J7FtCTxfUfjZELNnN1jOhcHUIYICxS7dmn0xTdk+1JI3spcPvQ33bzS9QZywUNtB5JXCy+eZm3GagEFZjA==
+    size: 262937960
+path: RigMatch.AI-0.3.10-mac-arm64.zip
+sha512: XdCIHu2b64eNP1HBmYr98XIEdzPS7JO6TY00xzPe47wQqfJGrt2Kq7i82fFgmc6zRhuar6JPw6OlKCbEQiYOJg==
+releaseDate: '2026-08-04T18:18:46.318Z'
+`;
+
+test('a single-arch build produces exactly the manifest that broke Intel Macs', () => {
+  const parsed = parseManifest(M4_LOCAL_BUILD);
+  assert.equal(parsed.files.length, 2);
+  assert.ok(parsed.files.every((f) => f.url.includes('arm64')), 'arm64 only, as electron-builder intends');
+
+  // On its own this is the published-0.3.8 state: an Intel Mac filtering out
+  // arm64 files is left with nothing to download.
+  const forIntel = parsed.files.filter((f) => !f.url.includes('arm64'));
+  assert.equal(forIntel.length, 0, 'this is the bug, reproduced from a real build');
+
+  assert.throws(() => assertBothArches(mergeManifests([parsed])), /must list both architectures/);
+});
+
+test('merging the real arm64 build with an Intel one fixes it', () => {
+  const intel = parseManifest(M4_LOCAL_BUILD
+    .replace(/mac-arm64/g, 'mac-x64')
+    .replace(/XdCIHu2b/g, 'IntelZipA')
+    .replace(/duQ8J7Ft/g, 'IntelDmgB'));
+
+  const merged = mergeManifests([parseManifest(M4_LOCAL_BUILD), intel]);
+  assert.equal(assertBothArches(merged), true);
+  assert.equal(merged.files.length, 4);
+
+  // Both architectures now resolve, which is the whole point.
+  assert.equal(merged.files.filter((f) => f.url.includes('arm64')).length, 2);
+  assert.equal(merged.files.filter((f) => !f.url.includes('arm64')).length, 2);
+
+  // The real arm64 checksums survive the merge untouched.
+  const armZip = merged.files.find((f) => f.url === 'RigMatch.AI-0.3.10-mac-arm64.zip');
+  assert.equal(armZip.sha512, 'XdCIHu2b64eNP1HBmYr98XIEdzPS7JO6TY00xzPe47wQqfJGrt2Kq7i82fFgmc6zRhuar6JPw6OlKCbEQiYOJg==');
+  assert.equal(armZip.size, '131246374');
+});
