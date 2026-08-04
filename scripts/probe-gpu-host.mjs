@@ -78,6 +78,40 @@ const nvidiaReading = gpu.parseNvidiaGpuQuery(nvidiaQuery.output);
 report.parsed.nvidia = nvidiaReading;
 report.parsed.rocm = rocm.ok ? gpu.parseRocmSmiQuery(rocm.output) : null;
 
+// systeminformation is the app's only source on macOS, where neither vendor CLI
+// exists. If it reports no GPU utilization there, RigMatch can never assess
+// contention on a Mac and will say "could not check" on every run — worth
+// knowing explicitly rather than discovering from a user.
+try {
+  const si = require('systeminformation');
+  const graphics = await si.graphics();
+  const controller = graphics?.controllers?.[0] ?? null;
+  report.parsed.systeminformation = controller
+    ? {
+      model: controller.model ?? null,
+      vendor: controller.vendor ?? null,
+      vramMb: controller.vram ?? null,
+      vramUsedMb: controller.memoryUsed ?? null,
+      utilizationPercent: controller.utilizationGpu ?? null,
+      usableForContention: Number.isFinite(controller.utilizationGpu),
+    }
+    : null;
+
+  if (!report.tools['nvidia-smi'] && !report.tools['rocm-smi']) {
+    if (report.parsed.systeminformation?.usableForContention) {
+      report.verdict.push('OK: no vendor CLI here, but systeminformation reports GPU utilization, so contention can still be assessed.');
+    } else {
+      report.verdict.push(
+        'LIMITATION: no vendor CLI and systeminformation reports no GPU utilization on this host, so ' +
+        'RigMatch will report "could not check" for every run. That is the honest answer, but it means ' +
+        'the contention warning never fires here.',
+      );
+    }
+  }
+} catch (error) {
+  report.parsed.systeminformation = { error: String(error?.message || error).slice(0, 120) };
+}
+
 if (nvidiaQuery.ok && !nvidiaReading) {
   report.verdict.push('FAIL: nvidia-smi answered but RigMatch could not parse it. Raw output is in tools.rawNvidiaQuery.');
 }
@@ -154,7 +188,13 @@ if (json) {
   line('rocm-smi', report.tools['rocm-smi'] ? 'present' : 'absent');
   line('gpu name', report.tools.gpuName ?? '(none reported)');
   console.log('\nRigMatch detection');
-  line('parsed a reading', report.parsed.nvidia || report.parsed.rocm ? 'yes' : 'NO');
+  line('parsed a reading', report.parsed.nvidia || report.parsed.rocm ? 'yes' : 'no vendor CLI');
+  if (report.parsed.systeminformation) {
+    const si = report.parsed.systeminformation;
+    line('systeminformation gpu', si.model ?? si.error ?? '(none)');
+    line('  reports utilization', si.usableForContention ? `yes (${si.utilizationPercent}%)` : 'NO — contention cannot be assessed');
+    line('  reports vram', si.vramMb ? `${si.vramMb} MB` : 'no (expected on unified memory)');
+  }
   line('unified memory', report.detection.isUnifiedMemory);
   if (report.detection.gpuPoolGb) line('gpu pool', `${report.detection.gpuPoolGb} GB (${Math.round((report.detection.poolVsSystemRamRatio ?? 0) * 100)}% of system RAM)`);
   console.log('\nContention assessment (machine should be idle for this to mean anything)');
