@@ -2423,6 +2423,41 @@ function broadcastBenchmarkStatus() {
   }
 }
 
+/**
+ * Ask Ollama to drop a model from memory.
+ *
+ * Ollama keeps a model resident for keep_alive after its last request, and the
+ * benchmark asks for 10m so a model is not reloaded between its own questions.
+ * Nothing used to release it afterwards, so in a Speed Dating run every tested
+ * model stayed in VRAM and the next one loaded alongside it. On a 12GB card the
+ * later contestants ran out of room and spilled to the CPU — observed at
+ * 11.3/12GB committed with the GPU at 14% and the CPU pinned at 100%.
+ *
+ * That makes a score depend on test order: the first model gets the whole card,
+ * the fifth competes with four corpses. Unloading between models is what makes
+ * "everyone gets the same questions" also mean "everyone gets the same machine".
+ *
+ * keep_alive: 0 is Ollama's documented unload. Best-effort — a failure here must
+ * never fail the run, since the score is already collected by this point.
+ */
+async function unloadBenchmarkModel(baseUrl, model) {
+  if (!baseUrl || !model) return;
+  try {
+    await fetchJson(
+      `${baseUrl}/api/generate`,
+      { method: 'POST', body: JSON.stringify({ model, keep_alive: 0 }) },
+      8000,
+    );
+  } catch (error) {
+    await appendAppLog({
+      level: 'warn',
+      source: 'benchmark',
+      message: `Could not unload ${model} after its test; the next model may have less VRAM.`,
+      details: { model, error: serializeError(error) },
+    });
+  }
+}
+
 async function runBenchmark(request = {}, sender) {
   if (benchmarkRunning) {
     throw new Error('A benchmark is already running. Please wait for it to complete.');
@@ -2439,6 +2474,11 @@ async function runBenchmark(request = {}, sender) {
   try {
     return await runBenchmarkInner(request, sender, activeBenchmarkAbort.signal);
   } finally {
+    // Free the card before the next contestant loads, however this run ended.
+    await unloadBenchmarkModel(
+      typeof request.baseUrl === 'string' && request.baseUrl ? request.baseUrl : OLLAMA_LOCAL_URL,
+      request.model,
+    );
     benchmarkRunning = false;
     if (activeBenchmark?.progressId) canceledBenchmarkIds.delete(activeBenchmark.progressId);
     activeBenchmark = null;
