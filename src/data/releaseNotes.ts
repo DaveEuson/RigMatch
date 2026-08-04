@@ -2,6 +2,21 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.3.10',
+    label: 'Numbers That Mean Something',
+    date: 'Beta build',
+    notes: [
+      'Skill tests no longer give credit for doing nothing. A model that returned no answer at all was scored 50 out of 100 and shown a "D" — because two of the four checks were looking for signs of a bad answer, and an empty answer has none. Returning nothing now scores zero, and the result tells you what happened: whether the model refused, ran out of room, or simply cannot read images through Ollama. Image generation had the same flaw plus a check that was really testing RigMatch\'s own settings rather than the model, quietly adding a quarter of the score to every result.',
+      'Filter chips now count what you will actually get. Picking "Makes images 3" while another filter was on could show an empty table — the chip counted every model in the catalog while the table also applied your other filters. Each chip now counts only what matches everything else you have selected, and the table is built from the same rule, so the two cannot disagree again.',
+      'The window no longer breaks when you make it smaller. Below roughly 1100 pixels wide the side menu collapsed, the model list vanished, and there was no way to scroll to it. Narrow windows now scroll normally, and the menu shows all eight items instead of three in a cramped inner scrollbar.',
+      'Every Match score is now shown the same way, to one decimal. The same model could appear as 92, 92.7, 93 and 93.1 on different screens because the app switched formats depending on the number.',
+      'The guided path keeps your place. Switching between Simple and Advanced no longer sends you back to step one, and "See the full scorecard" — which quietly changed the whole interface — now explains the change and offers a way back. The download step is skipped entirely when your models are already installed, instead of showing progress bars for a download that is not happening.',
+      'Model cards show what you need to choose: the real model name, so a coding variant is no longer indistinguishable from the general one, and the actual space it needs against the memory you have.',
+      'Run Logs finally records your runs. It only ever logged failures, so it sat empty after a successful test — the one time you might want to check what happened.',
+      'Under the hood: the two honest notes about how scoring works now sit beside the score itself instead of three levels deep in Settings; running out of browser storage can no longer break the app; and all known security advisories in the app and its chat companion are cleared.',
+    ],
+  },
+  {
     version: '0.3.9',
     label: 'Updates That Actually Arrive',
     date: 'Beta build',
