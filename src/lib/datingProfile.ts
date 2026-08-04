@@ -166,16 +166,18 @@ export function getMatchNotes(
       reasons: [
         { label: 'Best For', value: bestSpecialty },
         { label: 'Computer Fit', value: 'N/A' },
-        { label: 'Chemistry', value: 'N/A' },
+        { label: 'Match score', value: 'N/A' },
       ],
     };
   }
 
-  const chemistry = Math.round((score.total + score.sobriety) / 2);
+  // Was `(total + sobriety) / 2` shown as "Chemistry %" — a second score competing
+  // with the Match score, under a label another panel used for score.total itself.
+  // The prose keeps the dating voice; the stat reports the one real number.
   const summary =
-    chemistry >= 90
+    score.total >= 90
       ? `${hostName} has strong chemistry with this ${profile.archetype.toLowerCase()}.`
-      : chemistry >= 80
+      : score.total >= 80
         ? `${hostName} looks like a practical match for this ${profile.archetype.toLowerCase()}.`
         : `${hostName} may need a better-fit candidate after another test.`;
 
@@ -184,7 +186,7 @@ export function getMatchNotes(
     reasons: [
       { label: 'Best For', value: bestSpecialty },
       { label: 'Computer Fit', value: `${score.fit}%` },
-      { label: 'Chemistry', value: `${chemistry}%` },
+      { label: 'Match score', value: String(score.total) },
     ],
   };
 }

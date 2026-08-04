@@ -569,7 +569,7 @@ function PickScreen({ wizardModels, modelsLoading, shortlistIds, shortlistedRows
             })}
           </div>
           {!showAll && filtered.length > visible.length && (
-            <button type="button" className="sw-link sw-show-more" onClick={() => setShowAll(true)}>Show more contestants that fit your PC</button>
+            <button type="button" className="sw-link sw-show-more" onClick={() => setShowAll(true)}>Show more models that fit your PC</button>
           )}
         </>
       )}

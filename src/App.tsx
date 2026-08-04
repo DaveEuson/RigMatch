@@ -7199,7 +7199,7 @@ function _ContestantsCommandDeck({
         <div className="command-card-actions">
           <button type="button" className="primary-button compact" onClick={onOpenSpeedDate}>
             <Trophy aria-hidden="true" />
-            Open Speed Dating
+            Open comparison
           </button>
           <button type="button" className="mini-button outline advanced-only" onClick={onOpenSuiteEditor} disabled={isListTesting}>
             <Settings aria-hidden="true" />
@@ -7352,7 +7352,7 @@ function ModelPoolLineupStrip({
                     />
                     <div className="model-picker-popover" role="listbox" aria-label="Choose a model">
                       <div className="picker-header">
-                        <span>Pick a contestant</span>
+                        <span>Pick a model</span>
                       </div>
                       {installedRows.length === 0 ? (
                         <p className="picker-empty">No installed models left. Download one from the list below.</p>
@@ -7506,7 +7506,7 @@ function SelectedContestantCard({
     <section className="contestant-spotlight" aria-label={`Selected contestant is ${row.displayName}`}>
       <AvatarBust model={row.displayName} size="small" />
       <div className="contestant-spotlight-copy">
-        <span>Selected Contestant</span>
+        <span>Selected model</span>
         <strong>{row.displayName}</strong>
         <em>{row.params} · {profile.archetype}</em>
         <p>{getSelectedContestantBlurb(row, profile, score, hardwareFit)}</p>
@@ -8050,7 +8050,10 @@ function MatchDetails({
       detail: 'How well this model fits the computer based on model size, VRAM, RAM, and the latest test.',
     },
     {
-      label: 'Chemistry',
+      // This row has always shown score.total. Labelling it "Chemistry" gave the
+      // Match score a second name — and a different panel used that same name for
+      // a different number. Theme words stay in headings and prose, not on metrics.
+      label: 'Match score',
       value: score ? String(score.total) : 'N/A',
       detail: 'Overall Match score: 34% answer quality, 32% speed, 18% finish rate, 16% computer fit.',
     },
