@@ -6442,16 +6442,51 @@ function ModelCabinet({
   const selectedPullProgress = selectedRow ? pullProgressByModel[selectedRow.displayName] : undefined;
   const selectedPulling = Boolean(selectedRow && pullingModel === selectedRow.displayName);
   const query = modelQuery.trim().toLowerCase();
+  /**
+   * Faceted counts: every chip counts the rows that pass the OTHER active
+   * filters, so its number is exactly what clicking it will show.
+   *
+   * These used to count across the whole catalog regardless of what else was
+   * on, which produced chips that promised results and delivered an empty
+   * table — "Makes images 3" while Rig Picks was active, when all three image
+   * models were in the too-big-for-this-VRAM bucket.
+   */
+  const passesQuery = useCallback(
+    (row: ModelRow) => !query
+      || getModelSearchText(row, queuedModelIds.has(row.displayName), getModelScore(row, modelScores)).includes(query),
+    [query, queuedModelIds, modelScores],
+  );
+  const passesDeveloper = useCallback(
+    (row: ModelRow) => developerFilter === 'all' || getModelDeveloperKey(row.displayName) === developerFilter,
+    [developerFilter],
+  );
+  const passesQuick = useCallback(
+    (row: ModelRow) => modelMatchesQuickFilter(row, quickFilter, getModelScore(row, modelScores), vramGb),
+    [quickFilter, modelScores, vramGb],
+  );
+  const passesTask = useCallback(
+    (row: ModelRow) => !taskFilter || modelMatchesTask(row, taskFilter),
+    [taskFilter],
+  );
+
   const quickFilters = useMemo(
-    () => getModelQuickFilters(rows, modelScores, vramGb),
-    [modelScores, rows, vramGb],
+    () => getModelQuickFilters(rows.filter((row) => passesQuery(row) && passesDeveloper(row) && passesTask(row)), modelScores, vramGb),
+    [rows, modelScores, vramGb, passesQuery, passesDeveloper, passesTask],
   );
-  const vramSafeCount = quickFilters.find((filter) => filter.id === 'fits-vram')?.count ?? 0;
-  const taskFilterCounts = useMemo(
-    () => Object.fromEntries(TASK_FILTER_CHIPS.map((chip) => [chip.id, rows.filter((row) => modelMatchesTask(row, chip.id)).length])),
-    [rows],
+  // Headline "N models look realistic for your VRAM" is about the rig, not the
+  // current filter selection, so it stays a whole-catalog figure.
+  const vramSafeCount = useMemo(
+    () => getModelQuickFilters(rows, modelScores, vramGb).find((filter) => filter.id === 'fits-vram')?.count ?? 0,
+    [rows, modelScores, vramGb],
   );
-  const developerFilterOptions = useMemo(() => getDeveloperFilterOptions(rows), [rows]);
+  const taskFilterCounts = useMemo(() => {
+    const base = rows.filter((row) => passesQuery(row) && passesDeveloper(row) && passesQuick(row));
+    return Object.fromEntries(TASK_FILTER_CHIPS.map((chip) => [chip.id, base.filter((row) => modelMatchesTask(row, chip.id)).length]));
+  }, [rows, passesQuery, passesDeveloper, passesQuick]);
+  const developerFilterOptions = useMemo(
+    () => getDeveloperFilterOptions(rows.filter((row) => passesQuery(row) && passesQuick(row) && passesTask(row))),
+    [rows, passesQuery, passesQuick, passesTask],
+  );
   const activeDeveloperFilter = developerFilterOptions.some((option) => option.id === developerFilter) ? developerFilter : 'all';
   const shortlistedRows = useMemo(
     () => rows.filter((row) => shortlistIds.has(row.displayName)).slice(0, 5),
@@ -6490,19 +6525,14 @@ function ModelCabinet({
             ? `Ready to download ${queuePreviewText || 'queued models'}${hiddenQueueCount > 0 ? ` and ${hiddenQueueCount} more` : ''}.`
             : 'Use Get Model on a contestant to stage a download.';
   const visibleRows = useMemo(() => {
-    const filteredRows = rows.filter((row) => {
-      const score = getModelScore(row, modelScores);
-      const queued = queuedModelIds.has(row.displayName);
-      const matchesQuery = !query || getModelSearchText(row, queued, score).includes(query);
-      const matchesDeveloper = activeDeveloperFilter === 'all' || getModelDeveloperKey(row.displayName) === activeDeveloperFilter;
-      return matchesQuery
-        && matchesDeveloper
-        && modelMatchesQuickFilter(row, quickFilter, score, vramGb)
-        && (!taskFilter || modelMatchesTask(row, taskFilter));
-    });
+    // Same predicates the chip counts use, so a chip can never promise rows the
+    // table does not then show.
+    const filteredRows = rows.filter(
+      (row) => passesQuery(row) && passesDeveloper(row) && passesQuick(row) && passesTask(row),
+    );
 
     return sortModelRows(filteredRows, sortKey, sortDirection, queuedModelIds, modelScores, benchmarkByModel);
-  }, [activeDeveloperFilter, benchmarkByModel, modelScores, query, quickFilter, taskFilter, queuedModelIds, rows, sortDirection, sortKey, vramGb]);
+  }, [benchmarkByModel, modelScores, passesQuery, passesDeveloper, passesQuick, passesTask, queuedModelIds, rows, sortDirection, sortKey]);
   // Say what each number counts — the catalog total, the installed count, and the
   // VRAM-fit count are different measures and read as contradictory when all three
   // are just "N models".
@@ -8498,8 +8528,12 @@ function SpeedDatePanel({
         ) : (
           <div className="speed-date-empty">
             <Trophy aria-hidden="true" />
-            <strong>No ranking yet</strong>
-            <span>Start Speed Dating to crown the best match for this rig.</span>
+            {/* "No ranking yet" read as a contradiction next to a crowned Top
+                Match in the header. A Top Match comes from any saved score; a
+                ranking only comes from a comparison run, so say which is
+                missing rather than implying nothing has been tested. */}
+            <strong>No head-to-head ranking yet</strong>
+            <span>Scores from single tests are saved in Scorecards. Run a comparison to rank models against each other on the same questions.</span>
           </div>
         )}
       </div>
