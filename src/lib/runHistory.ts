@@ -144,6 +144,9 @@ export function appendRuns(history: RunHistory, entries: RunHistoryEntry[]): Run
   const runs: Record<string, RunHistoryEntry[]> = { ...history.runs };
 
   for (const entry of entries) {
+    // Skip malformed entries rather than throwing: this runs inside a state
+    // updater during a benchmark, where an exception would lose the whole run.
+    if (!entry || typeof entry !== 'object') continue;
     const key = normalizeModelKey(entry.model);
     if (!key) continue;
     const existing = runs[key] ?? [];

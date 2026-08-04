@@ -117,7 +117,14 @@ export function getScoreSortTotal(score: MatchScoreLike): number {
  * the decimal is always shown, even when it is ".0".
  */
 export function formatMatchScore(score: MatchScoreLike): string {
-  return getScoreSortTotal(score).toFixed(1);
+  const precise = getScoreSortTotal(score);
+  // Defensive: a Match score is 0-100 by contract (main.cjs clamps it), but a
+  // corrupt or hand-edited saved score must never render as "NaN" or "320254.0"
+  // next to a confident letter grade. "--" is what the score pill already shows
+  // for an untested model, so an unreadable score reads as "no number", not as
+  // a number that happens to be wrong.
+  if (!Number.isFinite(precise)) return '--';
+  return Math.min(100, Math.max(0, precise)).toFixed(1);
 }
 
 /**

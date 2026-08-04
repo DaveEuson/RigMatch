@@ -121,6 +121,16 @@ test('formatMatchScore always renders exactly one decimal', () => {
   assert.equal(formatMatchScore(score({ preciseTotal: undefined, total: 88 })).split('.').length, 2);
 });
 
+test('a corrupt score never renders as NaN or an out-of-range number', () => {
+  // A Match score is 0-100 by contract. Rendering "NaN" or "320254.0" beside a
+  // confident letter grade is worse than admitting the number is unreadable.
+  assert.equal(formatMatchScore(score({ preciseTotal: NaN, total: NaN })), '--');
+  assert.equal(formatMatchScore(score({ preciseTotal: Infinity, total: 0 })), '--');
+  assert.equal(formatMatchScore(score({ preciseTotal: -Infinity, total: 0 })), '--');
+  assert.equal(formatMatchScore(score({ preciseTotal: 320254, total: 999 })), '100.0');
+  assert.equal(formatMatchScore(score({ preciseTotal: -35.6, total: -20 })), '0.0');
+});
+
 test('every formatted Match score has one decimal place', () => {
   for (const preciseTotal of [0, 12, 63.049, 78.4, 80, 92.75, 99.999, 100]) {
     const rendered = formatMatchScore(score({ preciseTotal, total: Math.round(preciseTotal) }));

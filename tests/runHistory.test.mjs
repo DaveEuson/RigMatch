@@ -47,6 +47,17 @@ test('runs append oldest-first and are keyed case-insensitively', () => {
   assert.deepEqual(runs.map((r) => r.total), [84, 91]);
 });
 
+test('malformed entries are skipped, not thrown on', () => {
+  // appendRuns runs inside a state updater mid-benchmark; throwing there would
+  // lose the entire run rather than one bad entry.
+  let history = emptyRunHistory();
+  assert.doesNotThrow(() => { history = appendRuns(history, [null, undefined, 0, 'nope', []]); });
+  assert.deepEqual(history.runs, {});
+
+  history = appendRuns(history, [null, entry('m', '2026-03-01T00:00:00Z', 84), undefined]);
+  assert.equal(getModelRuns(history, 'm').length, 1, 'a good entry alongside bad ones still lands');
+});
+
 test('re-appending the same run is a no-op', () => {
   let history = emptyRunHistory();
   const run = entry('qwen3:8b', '2026-03-01T00:00:00Z', 84);
