@@ -136,6 +136,36 @@ if (rocm.ok && !report.parsed.rocm) {
   report.verdict.push('FAIL: rocm-smi answered but RigMatch could not parse it. Raw output is in tools.rawRocm.');
 }
 
+// ── the pool a model must fit into ───────────────────────────────────────────
+// Mirrors getSystemProfile's resolution order. Reporting only systeminformation's
+// raw `vram` was misleading on Apple Silicon, where it is null but the app
+// correctly substitutes total RAM — the probe made that look like a gap when it
+// was already handled.
+{
+  const siVramMb = report.parsed.systeminformation?.vramMb ?? null;
+  const nvidiaTotalMb = nvidiaReading?.vramTotalMb ?? null;
+  const unifiedNow = gpu.isUnifiedMemoryGpu({
+    model: report.tools.gpuName ?? '',
+    platform: process.platform,
+    arch: os.arch(),
+  });
+
+  let poolGb = 0;
+  let via = 'none';
+  if (Number.isFinite(siVramMb) && siVramMb > 0) { poolGb = siVramMb / 1024; via = 'systeminformation'; }
+  else if (Number.isFinite(nvidiaTotalMb) && nvidiaTotalMb > 0) { poolGb = nvidiaTotalMb / 1024; via = 'nvidia-smi'; }
+  else if (unifiedNow) { poolGb = report.host.totalMemGb; via = 'system RAM (unified memory)'; }
+
+  report.detection.modelPoolGb = Math.round(poolGb * 10) / 10;
+  report.detection.modelPoolSource = via;
+  if (poolGb <= 0) {
+    report.verdict.push(
+      'FAIL: no usable memory pool figure, so RigMatch would size every model against 0 GB and ' +
+      'recommend only the smallest ones.',
+    );
+  }
+}
+
 // ── unified memory ───────────────────────────────────────────────────────────
 const gpuModel = report.tools.gpuName ?? '';
 const unified = gpu.isUnifiedMemoryGpu({ model: gpuModel, platform: process.platform, arch: os.arch() });
@@ -226,6 +256,7 @@ if (json) {
     }
   }
   line('unified memory', report.detection.isUnifiedMemory);
+  line('model fit pool', `${report.detection.modelPoolGb} GB via ${report.detection.modelPoolSource}`);
   if (report.detection.gpuPoolGb) line('gpu pool', `${report.detection.gpuPoolGb} GB (${Math.round((report.detection.poolVsSystemRamRatio ?? 0) * 100)}% of system RAM)`);
   console.log('\nContention assessment (machine should be idle for this to mean anything)');
   line('samples', report.samples.map((s) => `${s.util}%`).join(' ') || '(none)');

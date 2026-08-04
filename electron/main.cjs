@@ -1255,23 +1255,26 @@ async function getSystemProfile() {
     arch: os.arch(),
   });
 
-  // On Apple Silicon, GPU memory is unified with RAM — no separate VRAM pool.
-  // systeminformation returns 0/null for vram on macOS; use total RAM as the pool size.
-  let vramGb = primaryGpu.vram
-    ? mbToGb(primaryGpu.vram)
-    : isAppleSilicon
-      ? bytesToGb(mem.total)
-      : 0;
+  // The pool a model has to fit into, resolved in order of reliability.
+  let vramGb = primaryGpu.vram ? mbToGb(primaryGpu.vram) : 0;
 
-  // If systeminformation couldn't read VRAM on a non-Apple rig, fall back to
-  // nvidia-smi. Without this, an NVIDIA GPU that reports 0 VRAM makes RigMatch
-  // recommend only tiny models (e.g. phi3:mini on a 4090).
-  // Grace-based parts report the shared pool through nvidia-smi, which is the
-  // right number for "how big a model can this run" even though it is not VRAM
-  // in the discrete sense.
-  if (vramGb <= 0 && !isAppleSilicon) {
+  // nvidia-smi where systeminformation came up empty. Without this an NVIDIA GPU
+  // reporting 0 VRAM makes RigMatch recommend only tiny models (phi3:mini on a
+  // 4090). Grace-based parts report their shared pool here, which is the right
+  // number for "how big a model can this run" even though it is not discrete VRAM.
+  if (vramGb <= 0 && !isMac) {
     const nvidiaVramMb = await getNvidiaVramMb();
     if (nvidiaVramMb > 0) vramGb = mbToGb(nvidiaVramMb);
+  }
+
+  // Unified memory: the pool IS system RAM, by definition. This was gated on
+  // Apple Silicon alone, so a unified part whose vendor tool is missing — a
+  // Jetson exposing tegrastats but not nvidia-smi, say — fell through to 0 and
+  // RigMatch would have recommended only the smallest models on a machine with
+  // plenty of memory. Apple Silicon reaches this the same way it always did:
+  // systeminformation reports no vram there, and nvidia-smi does not exist.
+  if (vramGb <= 0 && hasUnifiedMemory) {
+    vramGb = bytesToGb(mem.total);
   }
 
   // macOS uses Metal; Windows exposes actual driver version strings.
