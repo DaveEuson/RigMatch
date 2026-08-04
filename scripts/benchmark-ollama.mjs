@@ -151,6 +151,13 @@ async function main() {
     results.push(run);
   }
 
+  // Release the model before reporting. Ollama honours keep_alive for 10 minutes
+  // by default, so back-to-back invocations against different models would leave
+  // the earlier one resident and force the later one to share (or spill out of)
+  // VRAM -- the measured speed would then partly reflect the previous run rather
+  // than this model. electron/main.cjs unloads for the same reason.
+  await unloadModel(args.baseUrl, model, args.timeoutMs);
+
   const summary = buildSummary({ model, baseUrl: args.baseUrl, warmup: args.warmup, results });
 
   if (args.json) {
@@ -159,6 +166,38 @@ async function main() {
   }
 
   printReport(summary);
+}
+
+/**
+ * Ask Ollama to evict `model` now, then wait until /api/ps confirms it is gone.
+ * Best-effort: a failure here costs accuracy on a later run, never this one, so
+ * it must not fail the benchmark.
+ */
+async function unloadModel(baseUrl, model, timeoutMs) {
+  try {
+    await fetch(`${baseUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, keep_alive: 0 }),
+      signal: AbortSignal.timeout(Math.min(timeoutMs, 8000)),
+    });
+  } catch {
+    return;
+  }
+
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${baseUrl}/api/ps`, { signal: AbortSignal.timeout(3000) });
+      const data = await response.json();
+      const resident = Array.isArray(data?.models)
+        && data.models.some((entry) => entry?.name === model || entry?.model === model);
+      if (!resident) return;
+    } catch {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 }
 
 async function pickFirstLocalModel(baseUrl, timeoutMs) {
