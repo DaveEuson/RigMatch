@@ -335,8 +335,36 @@ export type BenchmarkStatus = {
   snapshot?: BenchmarkProgressUpdate | null;
 };
 
+/**
+ * How busy the graphics card was just before a run.
+ *
+ * `unknown` means RigMatch could not check — deliberately distinct from `clear`,
+ * which means it checked and the GPU was quiet. Collapsing the two would state a
+ * fact the app does not have.
+ *
+ * `apps` only ever contains programs from a known-heavy allowlist; the GPU
+ * driver's own process list is unusable for this on Windows, where it reports
+ * the desktop shell as a GPU consumer with no per-process memory figures.
+ */
+export type GpuContentionLevel = 'clear' | 'busy' | 'heavy' | 'unknown';
+
+export type GpuContention = {
+  level: GpuContentionLevel;
+  /** Plain-language fragments, e.g. "the graphics card is 62% busy". */
+  reasons: string[];
+  /** Named programs worth closing. Never the shell, never Ollama or RigMatch. */
+  apps: string[];
+  utilizationPercent: number | null;
+  vramUsedPercent: number | null;
+  /** The full sentence to show the user. Empty when there is nothing to say. */
+  message: string;
+  /** Which tool produced the reading: nvidia-smi, rocm-smi, systeminformation. */
+  source: string | null;
+};
+
 export type AgentArcadeApi = {
   getSystemProfile: () => Promise<SystemProfile>;
+  getGpuContention: () => Promise<GpuContention>;
   getOllamaStatus: (baseUrl?: string) => Promise<OllamaStatus>;
   getLmStudioStatus: (baseUrl?: string) => Promise<OllamaStatus>;
   getOllamaCatalog: (options?: { force?: boolean }) => Promise<CatalogResponse>;

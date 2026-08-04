@@ -93,6 +93,7 @@ export function ScoreDeltaCell({ delta }: { delta: RunDelta }) {
     `Previous run: ${delta.previous.total} Match${exact ? ` on ${exact}` : ''}`,
     `Latest run: ${delta.latest.total} Match`,
     label.hardwareNote,
+    label.contentionNote,
   ].filter(Boolean).join('\n');
 
   return (
@@ -103,6 +104,13 @@ export function ScoreDeltaCell({ delta }: { delta: RunDelta }) {
         {label.hardwareNote && (
           <i className="delta-hardware-flag" title={label.hardwareNote} aria-label={label.hardwareNote}>
             rig changed
+          </i>
+        )}
+        {/* A run measured on a busy GPU reads low for reasons unrelated to the
+            model, so the delta is not a like-for-like comparison. */}
+        {label.contentionNote && (
+          <i className="delta-hardware-flag contention" title={label.contentionNote} aria-label={label.contentionNote}>
+            gpu was busy
           </i>
         )}
       </strong>

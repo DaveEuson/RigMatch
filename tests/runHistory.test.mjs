@@ -17,6 +17,7 @@ import {
   seedFromBenchmarkResults,
   toRunHardware,
   toRunHistoryEntry,
+  wasContended,
 } from '../src/lib/runHistory.ts';
 
 const HW = { gpu: 'GeForce RTX 4070', vramGb: 12, ramGb: 32, cpu: 'Ryzen 7', os: 'Windows 11' };
@@ -325,4 +326,79 @@ test('toRunHistoryEntry carries scores and drops transcripts', () => {
   assert.ok(!('prompts' in built), 'transcripts must not be duplicated into the timeline');
   assert.ok(!('baseUrl' in built));
   assert.equal(built.hardware, undefined, 'no system profile means no hardware claim');
+});
+
+// ── GPU contention provenance (0.4) ──────────────────────────────────────────
+
+test('a run measured on a busy GPU is marked, and the delta says so', () => {
+  let history = emptyRunHistory();
+  history = appendRuns(history, [entry('m', '2026-03-01T00:00:00Z', 91, { gpuContention: 'clear' })]);
+  history = appendRuns(history, [entry('m', '2026-04-01T00:00:00Z', 84, { gpuContention: 'heavy' })]);
+
+  const delta = getRunDelta(history, 'm');
+  assert.equal(delta.points, -7);
+  assert.equal(delta.contentionChanged, true);
+  assert.equal(delta.contendedRun, 'latest');
+
+  // Without this the drop reads as the model getting worse.
+  const label = formatRunDelta(delta, Date.parse('2026-04-02T00:00:00Z'));
+  assert.match(label.contentionNote, /This run was measured while the graphics card was busy/);
+});
+
+test('the note names which run was affected, since the correction differs', () => {
+  let history = emptyRunHistory();
+  history = appendRuns(history, [entry('m', '2026-03-01T00:00:00Z', 80, { gpuContention: 'busy' })]);
+  history = appendRuns(history, [entry('m', '2026-04-01T00:00:00Z', 90, { gpuContention: 'clear' })]);
+
+  const delta = getRunDelta(history, 'm');
+  assert.equal(delta.contendedRun, 'previous');
+  assert.match(formatRunDelta(delta).contentionNote, /earlier run was measured/);
+});
+
+test('two equally clean runs carry no contention note', () => {
+  let history = emptyRunHistory();
+  history = appendRuns(history, [entry('m', '2026-03-01T00:00:00Z', 84, { gpuContention: 'clear' })]);
+  history = appendRuns(history, [entry('m', '2026-04-01T00:00:00Z', 91, { gpuContention: 'clear' })]);
+
+  const delta = getRunDelta(history, 'm');
+  assert.equal(delta.contentionChanged, false);
+  assert.equal(formatRunDelta(delta).contentionNote, undefined);
+});
+
+test('two equally busy runs are comparable to each other', () => {
+  // Both measured under load: the comparison is still like-for-like.
+  let history = emptyRunHistory();
+  history = appendRuns(history, [entry('m', '2026-03-01T00:00:00Z', 70, { gpuContention: 'busy' })]);
+  history = appendRuns(history, [entry('m', '2026-04-01T00:00:00Z', 74, { gpuContention: 'heavy' })]);
+  assert.equal(getRunDelta(history, 'm').contentionChanged, false);
+});
+
+test('"unknown" is not treated as contended', () => {
+  // It means the check could not run — on Apple and AMD that may be every run.
+  // Treating it as contaminated would flag those users forever.
+  assert.equal(wasContended({ gpuContention: 'unknown' }), false);
+  assert.equal(wasContended({}), false, 'pre-0.4 runs have no stamp at all');
+  assert.equal(wasContended(undefined), false);
+  assert.equal(wasContended({ gpuContention: 'busy' }), true);
+  assert.equal(wasContended({ gpuContention: 'heavy' }), true);
+  assert.equal(wasContended({ gpuContention: 'clear' }), false);
+});
+
+test('runs recorded before 0.4 compare cleanly against new ones', () => {
+  // An old entry has no gpuContention field; it must not suddenly read as busy.
+  let history = emptyRunHistory();
+  history = appendRuns(history, [entry('m', '2026-03-01T00:00:00Z', 84)]);
+  history = appendRuns(history, [entry('m', '2026-04-01T00:00:00Z', 88, { gpuContention: 'clear' })]);
+  const delta = getRunDelta(history, 'm');
+  assert.equal(delta.contentionChanged, false);
+  assert.equal(delta.points, 4);
+});
+
+test('toRunHistoryEntry only stamps contention when there is one', () => {
+  const base = {
+    model: 'm', completedAt: '2026-04-01T00:00:00Z', questionCount: 8, elapsedMs: 1,
+    baseUrl: '', prompts: [], scores: { speed: 1, sobriety: 1, stability: 1, fit: 1, total: 1, grade: 'D' },
+  };
+  assert.equal('gpuContention' in toRunHistoryEntry(base, {}), false);
+  assert.equal(toRunHistoryEntry(base, { gpuContention: 'heavy' }).gpuContention, 'heavy');
 });

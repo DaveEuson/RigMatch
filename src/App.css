@@ -18821,3 +18821,37 @@ a.whats-next-support:hover {
 .demo-failure-note strong { color: var(--text-strong); font-size: 13px; }
 .demo-failure-note p { margin: 0; color: var(--text); font-size: 12px; line-height: 1.45; }
 .demo-failure-note em { color: var(--muted); font-size: 11px; font-style: normal; line-height: 1.4; }
+
+/* GPU contention note in the pre-flight modal. Informational, never a blocker —
+   the run button stays enabled behind it. */
+.gpu-contention-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-bright);
+  border-left: 3px solid var(--gold);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.gpu-contention-note svg { width: 18px; height: 18px; flex: none; color: var(--gold); margin-top: 1px; }
+.gpu-contention-note strong { display: block; color: var(--text-strong); font-size: 13px; }
+.gpu-contention-note p { margin: 3px 0 0; color: var(--text); font-size: 12px; line-height: 1.45; }
+
+/* Heavy contention is the case where a score will be visibly wrong. */
+.gpu-contention-note.level-heavy { border-left-color: var(--red); }
+.gpu-contention-note.level-heavy svg { color: var(--red); }
+
+/* "Could not check" is not a warning — it must not look like one. */
+.gpu-contention-note.level-unknown { border-left-color: var(--line-bright); }
+.gpu-contention-note.level-unknown svg { color: var(--muted); }
+.gpu-contention-note.level-unknown strong { color: var(--muted); }
+
+/* "gpu was busy" flag on a delta — distinct from the rig-changed flag, since
+   the two mean different things about whether the comparison is fair. */
+.delta-hardware-flag.contention {
+  color: var(--red);
+  border-color: rgba(217, 103, 79, 0.45);
+}

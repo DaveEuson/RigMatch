@@ -66,6 +66,16 @@ export type RunHistoryEntry = {
   suiteName?: string;
   scoreSchemaVersion?: number;
   hardware?: RunHardware;
+  /**
+   * How busy the graphics card was when this run started.
+   *
+   * A run measured while something else was using the GPU scores lower for
+   * reasons that have nothing to do with the model. Without this, such a run is
+   * indistinguishable from a clean one in the timeline and produces a false
+   * delta — "qwen dropped 7 points" when really a game was open. Undefined on
+   * runs recorded before 0.4, which must not be read as "the GPU was quiet".
+   */
+  gpuContention?: 'clear' | 'busy' | 'heavy' | 'unknown';
 };
 
 export type RunHistory = {
@@ -107,7 +117,13 @@ export function sameHardware(a: RunHardware | undefined, b: RunHardware | undefi
 
 export function toRunHistoryEntry(
   result: BenchmarkResult,
-  options: { system?: SystemProfile | null; suiteName?: string; preciseTotal?: number; scoreSchemaVersion?: number } = {},
+  options: {
+    system?: SystemProfile | null;
+    suiteName?: string;
+    preciseTotal?: number;
+    scoreSchemaVersion?: number;
+    gpuContention?: RunHistoryEntry['gpuContention'];
+  } = {},
 ): RunHistoryEntry {
   const hardware = toRunHardware(options.system);
   return {
@@ -126,7 +142,18 @@ export function toRunHistoryEntry(
     suiteName: options.suiteName,
     scoreSchemaVersion: options.scoreSchemaVersion,
     ...(hardware ? { hardware } : {}),
+    ...(options.gpuContention ? { gpuContention: options.gpuContention } : {}),
   };
+}
+
+/**
+ * True when a run was measured while the GPU was under load. `unknown` counts
+ * as not-contended: it means the check could not run, not that the GPU was busy,
+ * and treating an unchecked run as contaminated would flag most Apple and AMD
+ * users forever.
+ */
+export function wasContended(entry: RunHistoryEntry | undefined): boolean {
+  return entry?.gpuContention === 'busy' || entry?.gpuContention === 'heavy';
 }
 
 /** Oldest first, so a trend line reads left to right. */
@@ -229,6 +256,10 @@ export type RunDelta = {
   points: number;
   /** True when the two runs were measured on different hardware. */
   hardwareChanged: boolean;
+  /** True when exactly one of the two runs was measured on a busy GPU. */
+  contentionChanged: boolean;
+  /** Which run was the contended one, when only one of them was. */
+  contendedRun: 'latest' | 'previous' | null;
 };
 
 /**
@@ -251,7 +282,17 @@ export function getRunDelta(history: RunHistory, model: string): RunDelta | null
       ? Number(((latest.preciseTotal as number) - (previous.preciseTotal as number)).toFixed(1))
       : latest.total - previous.total;
 
-    return { model: latest.model, latest, previous, points, hardwareChanged: !sameHardware(previous.hardware, latest.hardware) };
+    return {
+      model: latest.model,
+      latest,
+      previous,
+      points,
+      hardwareChanged: !sameHardware(previous.hardware, latest.hardware),
+      // A score measured on a busy GPU is lower for reasons unrelated to the
+      // model, so a delta spanning one is not a like-for-like comparison.
+      contentionChanged: wasContended(previous) !== wasContended(latest),
+      contendedRun: wasContended(latest) ? 'latest' : wasContended(previous) ? 'previous' : null,
+    };
   }
   return null;
 }
@@ -294,6 +335,8 @@ export type RunDeltaLabel = {
   detail: string;
   /** Set only when the two runs were measured on different hardware. */
   hardwareNote?: string;
+  /** Set when one of the two runs was measured while the GPU was busy. */
+  contentionNote?: string;
 };
 
 /**
@@ -310,6 +353,15 @@ export function formatRunDelta(delta: RunDelta, now = Date.now()): RunDeltaLabel
     points,
     detail: `vs. ${describeElapsed(delta.previous.completedAt, now)}`,
     ...(delta.hardwareChanged ? { hardwareNote: 'Different hardware since that run' } : {}),
+    // Names which run was affected, because "the newer one was measured on a
+    // busy GPU" and "the older one was" imply opposite corrections.
+    ...(delta.contentionChanged && delta.contendedRun
+      ? {
+        contentionNote: delta.contendedRun === 'latest'
+          ? 'This run was measured while the graphics card was busy, so it reads low'
+          : 'The earlier run was measured while the graphics card was busy, so it read low',
+      }
+      : {}),
   };
 }
 

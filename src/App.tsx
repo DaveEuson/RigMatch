@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AlertCircle,
+  Activity,
   AlertTriangle,
   ArrowLeft,
   ArrowUpDown,
@@ -89,6 +90,7 @@ import type {
   UpdateCheckResponse,
   ChatMessage,
   SkillRunStatus,
+  GpuContention,
 } from './types';
 import {
   MATCH_GRADE_BANDS,
@@ -501,6 +503,14 @@ function App() {
   // Set when Simple Mode sends the user to an Advanced-only view, so we can offer
   // a way back instead of silently changing modes under them.
   const [cameFromSimple, setCameFromSimple] = useState(false);
+  // Contention measured when the run was confirmed, stamped onto every result
+  // from that run. A ref rather than state: it must not trigger a re-render, and
+  // it is read inside async run loops that would otherwise close over a stale value.
+  const runGpuContentionRef = useRef<GpuContention['level'] | undefined>(undefined);
+  // Re-measured every time the pre-flight modal opens: whether the GPU is busy
+  // is a right-now fact, and a reading from earlier in the session would be
+  // worse than none.
+  const [pendingGpuContention, setPendingGpuContention] = useState<GpuContention | null>(null);
   const [pendingRunMode, setPendingRunMode] = useState<PendingRunMode | null>(null);
   const [pendingSingleModel, setPendingSingleModel] = useState<string | null>(null);
   const [pendingQuickCheck, setPendingQuickCheck] = useState<ModelRow | null>(null);
@@ -748,6 +758,7 @@ function App() {
         suiteName: currentSuiteName,
         preciseTotal: score.preciseTotal,
         scoreSchemaVersion: score.scoreSchemaVersion,
+        gpuContention: runGpuContentionRef.current,
       });
     });
     setRunHistory((current) => {
@@ -2570,12 +2581,27 @@ function App() {
       : 'Auto-improve could not complete a pass — showing the previous attempt.');
   }, [runImprovePass, effectiveJudge]);
 
+  useEffect(() => {
+    if (!pendingRunMode) { setPendingGpuContention(null); return; }
+    let cancelled = false;
+    void agentArcadeApi.getGpuContention()
+      .then((result) => { if (!cancelled) setPendingGpuContention(result); })
+      // A failed probe means the same thing as "could not check", which the
+      // assessment already reports as `unknown` — so stay silent rather than
+      // surfacing an error the user cannot act on.
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [pendingRunMode]);
+
   const confirmPendingRun = useCallback(() => {
     const mode = pendingRunMode;
     const model = pendingSingleModel;
     const skillModels = mode === 'single'
       ? [model ?? selectedModel].filter(Boolean)
       : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName);
+    // Captured before the modal closes: every result from this run carries the
+    // contention that was measured when the user chose to start it.
+    runGpuContentionRef.current = pendingGpuContention?.level;
     setPendingRunMode(null);
     setPendingSingleModel(null);
 
@@ -2598,7 +2624,7 @@ function App() {
     if (mode === 'speed-date') {
       void runListTest().then(() => runSkillTestsAfterRun(skillModels));
     }
-  }, [pendingRunMode, pendingSingleModel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, skillTestSelection, startBenchmark]);
+  }, [pendingGpuContention, pendingRunMode, pendingSingleModel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, skillTestSelection, startBenchmark]);
 
   const cancelPendingRun = useCallback(() => {
     setPendingRunMode(null);
@@ -3320,6 +3346,7 @@ function App() {
           system={system}
           onCancel={cancelPendingRun}
           onConfirm={confirmPendingRun}
+          gpuContention={pendingGpuContention}
           onDownloadMissing={() => requestThirdPartyModelDownloads(shortlistedRows)}
           onChangeQuestionCount={setBenchmarkQuestionCount}
           onLoadPreset={setBenchmarkQuestions}
@@ -4508,6 +4535,7 @@ function RunWarningModal({
   openRouterKey,
   onChangeOpenRouterKey,
   judgeActive,
+  gpuContention,
 }: {
   mode: PendingRunMode;
   selectedModel: string;
@@ -4537,6 +4565,8 @@ function RunWarningModal({
   openRouterKey: string;
   onChangeOpenRouterKey: (key: string) => void;
   judgeActive: boolean;
+  /** Measured when this modal opened; null while the probe is still running. */
+  gpuContention: GpuContention | null;
 }) {
   const [questionsExpanded, setQuestionsExpanded] = useState(false);
   const recognizeUploadRef = useRef<HTMLInputElement>(null);
@@ -4606,6 +4636,24 @@ function RunWarningModal({
             storage bandwidth, fans, and battery until the run finishes.
           </p>
           <p>{runScope}</p>
+
+          {/* Something else using the graphics card is the most common reason a
+              score comes out below what a machine can really do — and since
+              0.3.8 a contaminated run also lands in the timeline and produces a
+              false delta against earlier results. Warn, never block. */}
+          {gpuContention && gpuContention.level !== 'clear' && (
+            <div className={`gpu-contention-note level-${gpuContention.level}`} role="status">
+              <Activity aria-hidden="true" />
+              <div>
+                <strong>
+                  {gpuContention.level === 'heavy' ? 'Your graphics card is busy'
+                    : gpuContention.level === 'busy' ? 'Something else is using your graphics card'
+                      : 'Graphics card not checked'}
+                </strong>
+                <p>{gpuContention.message}</p>
+              </div>
+            </div>
+          )}
 
           {onLoadPreset && (
             <div className="run-focus-picker">

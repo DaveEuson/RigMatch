@@ -84,6 +84,21 @@ const fallbackApi: AgentArcadeApi = {
     await delay(350);
     return demoSystem;
   },
+  async getGpuContention() {
+    await delay(200);
+    // The browser preview has no graphics card to read. "unknown" is the honest
+    // answer — reporting "clear" would be inventing a hardware measurement, the
+    // same mistake as the demo scores that once drifted from the real weights.
+    return {
+      level: 'unknown' as const,
+      reasons: [],
+      apps: [],
+      utilizationPercent: null,
+      vramUsedPercent: null,
+      message: 'RigMatch checks your graphics card for other running programs before a test. The browser preview has no graphics card to check.',
+      source: null,
+    };
+  },
   async getOllamaStatus() {
     await delay(300);
     return demoOllama;
