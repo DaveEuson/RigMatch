@@ -2655,7 +2655,7 @@ dependencies = [
 
 [[package]]
 name = "rigmatch-chat"
-version = "0.3.10"
+version = "0.4.0"
 dependencies = [
  "reqwest 0.12.28",
  "serde",

@@ -2,6 +2,20 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.4.0',
+    label: 'A Fair Fight',
+    date: 'Beta build',
+    notes: [
+      'Models no longer compete with each other for your graphics card. RigMatch kept each model loaded after its turn, so in a comparison the second model shared the card with the first, the third with both, and so on — until later models ran out of room and fell back to the much slower processor. That means a model\'s score partly depended on when it was tested rather than how good it is. Each model is now cleared out before the next one starts, so everyone gets the same questions AND the same machine. If you have run a comparison before, it is worth running it again: your existing rankings may have been unfair to whoever went last.',
+      'RigMatch now checks whether something else is using your graphics card before a test, and says so. A game, another AI app, or a video export will make every score come out lower than your computer can really do. It only ever names programs it is confident about, and it never blocks the test — it tells you, and you decide.',
+      'Results remember whether the graphics card was busy when they were measured. So if a score drops, RigMatch can tell you the run was made on a busy machine instead of quietly showing it as the model getting worse.',
+      'Fixed the progress counter going backwards during a comparison. It counted questions for the current model, so it reset to "Round 1 of 10" each time a new model started, while the bar beside it kept moving forward. It now names the model the round belongs to and counts every question the whole comparison will ask.',
+      '"Share your score" is now on the winner screen in Simple Mode, where the result is — instead of only in Advanced Mode.',
+      'Better support for Macs and other computers that share memory between the processor and the graphics card, including Apple Silicon and NVIDIA\'s newer desktop AI machines. RigMatch can now read graphics activity on Apple Silicon, which it previously could not do at all.',
+      'Also fixed: the sidebar menu overlapping the support button, and the winner\'s score on the Simple Mode finish screen showing a whole number when every other screen showed one decimal.',
+    ],
+  },
+  {
     version: '0.3.10',
     label: 'Numbers That Mean Something',
     date: 'Beta build',
