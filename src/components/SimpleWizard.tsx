@@ -61,7 +61,7 @@ type SimpleRunProgress = {
   questionScores?: Record<string, number>;
 } | null;
 
-type StepId = 'setup' | 'pick' | 'download' | 'compare' | 'winner';
+export type StepId = 'setup' | 'pick' | 'download' | 'compare' | 'winner';
 const STEPS: StepId[] = ['setup', 'pick', 'download', 'compare', 'winner'];
 const STEP_LABELS: Record<StepId, string> = {
   setup: 'Setup',
@@ -119,6 +119,10 @@ type SimpleWizardProps = {
   onOpenScorecard: () => void;
   onRunAgain: () => void;
   onSwitchToAdvanced: () => void;
+  /** Where the wizard was last time it was mounted. Switching to Advanced and
+   *  back used to unmount this component and drop the user at step 1. */
+  initialStep?: StepId;
+  onStepChange?: (step: StepId) => void;
 };
 
 export function SimpleWizard(props: SimpleWizardProps) {
@@ -163,10 +167,10 @@ export function SimpleWizard(props: SimpleWizardProps) {
   }, [setupDone, pickDone, downloadDone, compareDone, winnerDone]);
 
   const furthestStep: StepId = !setupDone ? 'setup' : !pickDone ? 'pick' : !downloadDone ? 'download' : !compareDone ? 'compare' : 'winner';
-  // Simple Mode always opens at Setup — it's a guided wizard, so launch at step
-  // one rather than jumping ahead to the furthest unlocked step. The step nav
-  // still lets returning users click straight to a completed step.
-  const [chosenStep, setChosenStep] = useState<StepId>('setup');
+  // Opens where the user left off. A first visit starts at Setup — it's a guided
+  // wizard, so it launches at step one rather than jumping to the furthest
+  // unlocked step — but toggling to Advanced and back must not reset progress.
+  const [chosenStep, setChosenStep] = useState<StepId>(props.initialStep ?? 'setup');
 
   // Derive the visible step: honor the user's choice, but clamp to the furthest
   // unlocked step if a prerequisite was lost, and auto-advance Compare -> Winner
@@ -174,7 +178,10 @@ export function SimpleWizard(props: SimpleWizardProps) {
   const step: StepId = compareDone && chosenStep === 'compare'
     ? 'winner'
     : stepState.unlocked[chosenStep] ? chosenStep : furthestStep;
-  const setStep = setChosenStep;
+  const setStep = (next: StepId) => {
+    setChosenStep(next);
+    props.onStepChange?.(next);
+  };
 
   const stepIndex = STEPS.indexOf(step);
   // Compare is only "complete" once the show has actually finished — leaving it

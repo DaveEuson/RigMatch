@@ -18692,3 +18692,23 @@ a.whats-next-support:hover {
   70% { box-shadow: 0 0 0 8px rgba(var(--primary-rgb, 217, 90, 39), 0); }
   100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 217, 90, 39), 0); }
 }
+
+/* Shown when Simple Mode sends the user into an Advanced-only view. The mode
+   used to change silently, which reads as the app breaking rather than
+   navigating. */
+.mode-jump-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--line-bright);
+  border-radius: 10px;
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.mode-jump-banner strong { color: var(--gold); }

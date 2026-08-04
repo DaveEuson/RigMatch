@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   AlertCircle,
   AlertTriangle,
+  ArrowLeft,
   ArrowUpDown,
   Bot,
   Boxes,
@@ -273,7 +274,7 @@ import { ExportHatchModal } from './components/ExportHatchModal';
 import { buildHatchProfile } from './lib/hatchProfile';
 import { getAgentDatingProfileSections, getAgentDatingProfileDetails, getMatchNotes } from './lib/datingProfile';
 import { UpdateAvailableToast } from './components/UpdateAvailableToast';
-import { SimpleWizard, type WizardModel } from './components/SimpleWizard';
+import { SimpleWizard, type StepId as WizardStepId, type WizardModel } from './components/SimpleWizard';
 import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, ChoiceCruiseModal } from './components/dialogs';
 import { ChatDock } from './components/ChatDock';
 import { SkillRunMiniBar, LiveBuildModal, DemoResultModal, ModelDemoChips } from './components/SkillDemoViewers';
@@ -492,6 +493,12 @@ function App() {
   // was never persisted, so every trend reset on close.
   const scoreTrend = useMemo(() => getScoreTrend(runHistory), [runHistory]);
   const scoreDeltas = useMemo(() => getAllRunDeltas(runHistory), [runHistory]);
+  // Held here, not inside SimpleWizard: switching to Advanced unmounts the wizard,
+  // and the user should come back to the step they left.
+  const [wizardStep, setWizardStep] = useState<WizardStepId>('setup');
+  // Set when Simple Mode sends the user to an Advanced-only view, so we can offer
+  // a way back instead of silently changing modes under them.
+  const [cameFromSimple, setCameFromSimple] = useState(false);
   const [pendingRunMode, setPendingRunMode] = useState<PendingRunMode | null>(null);
   const [pendingSingleModel, setPendingSingleModel] = useState<string | null>(null);
   const [pendingQuickCheck, setPendingQuickCheck] = useState<ModelRow | null>(null);
@@ -2826,13 +2833,33 @@ function App() {
           onStopShow={requestStopRun}
           winner={wizardWinner}
           onChatWithWinner={openChatWithWinner}
-          onOpenScorecard={() => { selectUiMode('advanced'); selectNav('history'); }}
+          onOpenScorecard={() => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('history'); }}
           onRunAgain={() => undefined}
-          onSwitchToAdvanced={() => selectUiMode('advanced')}
+          onSwitchToAdvanced={() => { setCameFromSimple(false); selectUiMode('advanced'); }}
+          initialStep={wizardStep}
+          onStepChange={setWizardStep}
         />
       )}
       {uiMode === 'advanced' && (
       <>
+      {/* "See the full scorecard" used to switch modes silently — the whole
+          interface changed with no explanation and no way back. Say what
+          happened and offer the return trip. */}
+      {cameFromSimple && (
+        <div className="mode-jump-banner" role="status">
+          <span>
+            The full scorecard lives in <strong>Advanced Mode</strong>, so RigMatch switched you over.
+          </span>
+          <button
+            type="button"
+            className="mini-button"
+            onClick={() => { setCameFromSimple(false); selectUiMode('beginner'); }}
+          >
+            <ArrowLeft aria-hidden="true" />
+            Back to the guided wizard
+          </button>
+        </div>
+      )}
       <TopDeck isScanning={isScanningRig} onScan={refreshRig}
         system={system}
         ollama={ollama}
