@@ -15382,6 +15382,16 @@ td {
   line-height: 1.35;
 }
 
+/* Caveats that qualify a score. Quieter than the score, but present on the same
+   surface — these used to live three levels deep in Settings. */
+.score-caveat {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+
 .contestant-spotlight.empty strong {
   color: var(--text-strong);
   font-size: 20px;

@@ -184,17 +184,28 @@ export function SimpleWizard(props: SimpleWizardProps) {
     winner: true,
   };
 
+  // Nothing to fetch means Download is a no-op: it rendered full green progress
+  // bars, claimed a download was happening, and quoted an ETA for work that had
+  // already been done. Skip it in both directions rather than showing theatre.
+  const skipDownload = allInstalled;
+
+  const startShow = () => {
+    props.onStartShow();
+    // Set synchronously so the derived step can't promote Compare -> Winner in
+    // the gap before the run reports itself as active.
+    setAwaitingRun(true);
+  };
+
   const goNext = () => {
-    if (step === 'pick') props.onStartDownloads();
-    if (step === 'download') {
-      props.onStartShow();
-      // Set synchronously so the derived step can't promote Compare -> Winner in
-      // the gap before the run reports itself as active.
-      setAwaitingRun(true);
+    if (step === 'pick') {
+      if (skipDownload) { startShow(); setStep('compare'); return; }
+      props.onStartDownloads();
     }
+    if (step === 'download') startShow();
     if (stepIndex < STEPS.length - 1) setStep(STEPS[stepIndex + 1]);
   };
   const goBack = () => {
+    if (step === 'compare' && skipDownload) { setStep('pick'); return; }
     if (stepIndex > 0) setStep(STEPS[stepIndex - 1]);
   };
 
@@ -207,10 +218,14 @@ export function SimpleWizard(props: SimpleWizardProps) {
   const showMinutes = Math.max(1, Math.round(shortlistedRows.length * 3));
 
   const nextLabel: Partial<Record<StepId, string>> = {
-    setup: 'Next · Meet the contestants',
-    pick: `Next · Download ${shortlistedRows.length} model${shortlistedRows.length === 1 ? '' : 's'}${downloadSuffix}`,
-    download: `Next · Start the show · ~${showMinutes} min`,
-    compare: 'Next · Meet the winner',
+    setup: 'Next · Choose your models',
+    // "Download 5 models · already on your PC" contradicted itself inside one
+    // label. When nothing needs downloading, this button starts the comparison.
+    pick: skipDownload
+      ? `Next · Start the comparison · ~${showMinutes} min`
+      : `Next · Download ${shortlistedRows.length} model${shortlistedRows.length === 1 ? '' : 's'}${downloadSuffix}`,
+    download: `Next · Start the comparison · ~${showMinutes} min`,
+    compare: 'Next · See the winner',
   };
 
   return (
@@ -247,7 +262,9 @@ export function SimpleWizard(props: SimpleWizardProps) {
           </div>
         </div>
         <nav className="sw-steps" aria-label="Wizard steps">
-          {STEPS.map((id, index) => {
+          {/* A skipped Download step is dropped from the stepper entirely rather
+              than left sitting there permanently incomplete. */}
+          {STEPS.filter((id) => !(id === 'download' && skipDownload)).map((id, index) => {
             const isActive = id === step;
             const isDone = stepState.done[id] && !isActive;
             const isLocked = !stepState.unlocked[id] && !isActive;

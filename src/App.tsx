@@ -7675,6 +7675,15 @@ function _CurrentWinnerCard({
         <em>{score ? `${score.total} Match · ${score.grade}` : pick.fitLabel}</em>
       </div>
       <p>{score ? `${row.displayName} has the highest saved score that still fits this computer.` : pick.reason}</p>
+      {/* The two most honest statements in the product were buried three levels
+          deep in Settings > Advanced > How We Score. They belong next to the
+          number they qualify, not behind it. */}
+      {score && (
+        <p className="score-caveat">
+          Measured on this computer, so scores are relative to your rig. Answer quality is a heuristic proxy, not a verdict —
+          open the scorecard to read the saved answers.
+        </p>
+      )}
       <div className="current-winner-actions">
         <button type="button" className="mini-button outline" onClick={() => onSelect(row.displayName)}>
           View Here
@@ -9405,7 +9414,7 @@ function AgentDatingProfile({
   const [activeProfileTab, setActiveProfileTab] = useState<'about' | 'scores' | 'questions' | 'try-it'>('about');
   const locationLabel = host?.hostname ?? system.hostname;
   const matchLine = score
-    ? `${score.total} Match score · ${score.grade} chemistry · ${getResponseEstimate(score.speed)}`
+    ? `${score.total} Match score · ${score.grade} grade · ${getResponseEstimate(score.speed)}`
     : 'Waiting for a first compatibility test';
   const questionCount = benchmark?.prompts.length ?? 0;
   const profileTabs: Array<{ id: typeof activeProfileTab; label: string; badge: string; title: string }> = [
