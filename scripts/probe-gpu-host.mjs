@@ -208,14 +208,20 @@ if (json) {
   if (process.platform === 'darwin') line('ioreg (Apple GPU)', report.tools.ioreg ? (report.parsed.ioreg ? 'present, parsed' : 'present, PARSE FAILED') : 'absent');
   line('gpu name', report.tools.gpuName ?? '(none reported)');
   console.log('\nRigMatch detection');
-  line('parsed a reading', report.parsed.nvidia || report.parsed.rocm ? 'yes' : 'no vendor CLI');
+  const reading = report.parsed.nvidia || report.parsed.rocm || report.parsed.ioreg;
+  line('parsed a reading', reading ? `yes (via ${reading.source})` : 'NO — no usable source');
   if (report.parsed.systeminformation) {
     const si = report.parsed.systeminformation;
     if (si.notInstalled) {
       line('systeminformation', 'not installed — run npm install to test this path');
     } else {
       line('systeminformation gpu', si.model ?? si.error ?? '(none)');
-      line('  reports utilization', si.usableForContention ? `yes (${si.utilizationPercent}%)` : 'NO — contention cannot be assessed');
+      line('  reports utilization', si.usableForContention
+        ? `yes (${si.utilizationPercent}%)`
+        : reading
+          // Expected on Apple Silicon, and harmless because IOKit covers it.
+          ? 'no — not needed, another source answered'
+          : 'NO — and nothing else answered either');
       line('  reports vram', si.vramMb ? `${si.vramMb} MB` : 'no (expected on unified memory)');
     }
   }
