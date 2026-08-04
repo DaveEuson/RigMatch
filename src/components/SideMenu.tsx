@@ -45,7 +45,7 @@ export function SideMenu({
   const navMeta: Record<NavId, string> = {
     lan: ollamaReady ? 'Ready' : 'Setup',
     models: `${modelCount}`,
-    whatsNew: newModelDropCount > 0 ? `${newModelDropCount} new` : 'Live',
+    whatsNew: newModelDropCount > 0 ? `${newModelDropCount} new` : 'None',
     speedDate: `${shortlistCount}/5`,
     bench: isRunning ? 'Live' : '1 model',
     agent: topPickMeta,

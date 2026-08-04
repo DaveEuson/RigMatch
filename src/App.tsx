@@ -2886,7 +2886,7 @@ function App() {
         isRunning={isBenchmarking || isListTesting}
         activeId={activeNavId}
         scoredCount={scoredModelCount}
-        topPickMeta={topRigPick?.score ? getResponseEstimate(topRigPick.score.speed) : (scoredModelCount > 0 ? 'Ready' : 'Wait')}
+        topPickMeta={topRigPick?.score ? topRigPick.score.grade : (scoredModelCount > 0 ? 'Ready' : 'Wait')}
         uiMode={uiMode}
         onSelect={selectNav}
         onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
