@@ -109,7 +109,14 @@ try {
     }
   }
 } catch (error) {
-  report.parsed.systeminformation = { error: String(error?.message || error).slice(0, 120) };
+  // Almost always "not installed" — the probe is designed to run before or
+  // without `npm install`. Say that, rather than letting an absent dependency
+  // masquerade as a finding about the hardware.
+  report.parsed.systeminformation = { error: String(error?.message || error).slice(0, 120), notInstalled: true };
+  report.verdict.push(
+    'INCOMPLETE: systeminformation is not installed, so the macOS/fallback reading path was not tested. ' +
+    'Everything else below is still valid. Run `npm install` and re-run to check that path.',
+  );
 }
 
 if (nvidiaQuery.ok && !nvidiaReading) {
@@ -191,9 +198,13 @@ if (json) {
   line('parsed a reading', report.parsed.nvidia || report.parsed.rocm ? 'yes' : 'no vendor CLI');
   if (report.parsed.systeminformation) {
     const si = report.parsed.systeminformation;
-    line('systeminformation gpu', si.model ?? si.error ?? '(none)');
-    line('  reports utilization', si.usableForContention ? `yes (${si.utilizationPercent}%)` : 'NO — contention cannot be assessed');
-    line('  reports vram', si.vramMb ? `${si.vramMb} MB` : 'no (expected on unified memory)');
+    if (si.notInstalled) {
+      line('systeminformation', 'not installed — run npm install to test this path');
+    } else {
+      line('systeminformation gpu', si.model ?? si.error ?? '(none)');
+      line('  reports utilization', si.usableForContention ? `yes (${si.utilizationPercent}%)` : 'NO — contention cannot be assessed');
+      line('  reports vram', si.vramMb ? `${si.vramMb} MB` : 'no (expected on unified memory)');
+    }
   }
   line('unified memory', report.detection.isUnifiedMemory);
   if (report.detection.gpuPoolGb) line('gpu pool', `${report.detection.gpuPoolGb} GB (${Math.round((report.detection.poolVsSystemRamRatio ?? 0) * 100)}% of system RAM)`);
