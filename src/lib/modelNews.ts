@@ -1,4 +1,5 @@
 import type { CatalogModel } from '../types';
+import { writeLocalJson } from './safeStorage';
 
 export const MODEL_NEWS_STORAGE_KEY = 'rigmatch:model-news:v1';
 export const MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY = 'rigmatch:model-news-notifications:v1';
@@ -50,7 +51,7 @@ export function getSavedModelNewsState(): ModelNewsState {
 }
 
 export function saveModelNewsState(state: ModelNewsState) {
-  window.localStorage.setItem(MODEL_NEWS_STORAGE_KEY, JSON.stringify(state));
+  writeLocalJson(MODEL_NEWS_STORAGE_KEY, state);
 }
 
 export function reconcileModelNews(models: CatalogModel[], current: ModelNewsState) {

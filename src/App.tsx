@@ -226,6 +226,7 @@ import type {
   RigPick,
   SortDirection,
 } from './lib/modelCatalog';
+import { dropChat, dropTranscripts, writeLocal, writeLocalJson, writeLocalJsonWithFallback } from './lib/safeStorage';
 import {
   appendRuns,
   emptyRunHistory,
@@ -920,7 +921,7 @@ function App() {
     if (modelNewsNotificationsEnabled) {
       setModelNewsNotificationsEnabled(false);
       modelNewsNotificationsEnabledRef.current = false;
-      window.localStorage.setItem(MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY, 'false');
+      writeLocal(MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY, 'false');
       setActivity('Model drop notifications are off. What\'s New will still update when RigMatch scans.');
       return;
     }
@@ -943,7 +944,7 @@ function App() {
 
     setModelNewsNotificationsEnabled(true);
     modelNewsNotificationsEnabledRef.current = true;
-    window.localStorage.setItem(MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY, 'true');
+    writeLocal(MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY, 'true');
     setActivity('Model drop notifications are on. RigMatch will alert you when a scan finds new Ollama models.');
   }, [modelNewsNotificationsEnabled]);
 
@@ -1198,7 +1199,7 @@ function App() {
 
 
   const closeTutorial = useCallback(() => {
-    window.localStorage.setItem(TUTORIAL_STORAGE_KEY, 'seen');
+    writeLocal(TUTORIAL_STORAGE_KEY, 'seen');
     setTutorialOpen(false);
     setActivity('Quick guide closed. Use the Matchmaker Menu to move through the app.');
   }, []);
@@ -1420,8 +1421,8 @@ function App() {
     selectUiMode(nextMode);
     // Persist immediately and record that the splash choice was made so it
     // won't reappear next launch. The Simple wizard opens itself at Setup.
-    window.localStorage.setItem(UI_MODE_STORAGE_KEY, nextMode);
-    window.localStorage.setItem(MODE_SPLASH_STORAGE_KEY, 'chosen');
+    writeLocal(UI_MODE_STORAGE_KEY, nextMode);
+    writeLocal(MODE_SPLASH_STORAGE_KEY, 'chosen');
     setShowModeSplash(false);
   }, [selectUiMode]);
 
@@ -1462,7 +1463,7 @@ function App() {
   const saveModelNote = useCallback((model: string, note: string) => {
     setModelNotes((current) => {
       const next = { ...current, [model]: note };
-      localStorage.setItem('rigmatch:model-notes:v1', JSON.stringify(next));
+      writeLocalJson('rigmatch:model-notes:v1', next);
       return next;
     });
   }, []);
@@ -2662,19 +2663,19 @@ function App() {
   }, [runProgress?.phase]);
 
   useEffect(() => {
-    window.localStorage.setItem(TEST_SUITE_STORAGE_KEY, JSON.stringify(benchmarkQuestions));
+    writeLocalJson(TEST_SUITE_STORAGE_KEY, benchmarkQuestions);
   }, [benchmarkQuestions]);
 
   useEffect(() => {
-    window.localStorage.setItem(THEME_STORAGE_KEY, themeId);
+    writeLocal(THEME_STORAGE_KEY, themeId);
   }, [themeId]);
 
   useEffect(() => {
-    window.localStorage.setItem(UI_MODE_STORAGE_KEY, uiMode);
+    writeLocal(UI_MODE_STORAGE_KEY, uiMode);
   }, [uiMode]);
 
   useEffect(() => {
-    window.localStorage.setItem(CLEARED_TOP_MATCHES_STORAGE_KEY, JSON.stringify([...clearedTopMatches]));
+    writeLocalJson(CLEARED_TOP_MATCHES_STORAGE_KEY, [...clearedTopMatches]);
   }, [clearedTopMatches]);
 
   useEffect(() => {
@@ -2695,7 +2696,21 @@ function App() {
       selectedModel,
       savedAt: new Date().toISOString(),
     };
-    window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+    // This is the write that fills the quota — it carries every prompt and full
+    // response for every tested model. An uncaught throw here kills the render,
+    // and once the quota is full every other write fails too. Degrade instead:
+    // shed chat, then answer text, keeping scores to the last.
+    const written = writeLocalJsonWithFallback(HISTORY_STORAGE_KEY, [
+      () => history,
+      () => dropChat(history),
+      () => dropTranscripts(dropChat(history)),
+      () => ({ ...dropChat(history), benchmarkByModel: {}, benchmark: null }),
+    ]);
+    if (written > 0) {
+      setActivity(written >= 3
+        ? 'Saved scores, but there was not enough browser storage left for the answer transcripts.'
+        : 'Storage is nearly full, so some saved answer text was dropped. Scores were kept.');
+    }
   }, [benchmark, benchmarkByModel, chatMessagesByModel, listTestResult, modelScores, selectedModel]);
 
   useEffect(() => {
