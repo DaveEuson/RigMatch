@@ -597,7 +597,11 @@
 }
 
 .side-menu-nav {
-  min-height: 0;
+  /* min-content, not 0: an `auto` grid row still compresses below its content
+     when the container is height-constrained, which clipped items off the end of
+     the rail. Holding the row at content height makes the RAIL overflow and
+     scroll instead — one scroll for the whole sidebar, which was the point. */
+  min-height: min-content;
   display: grid;
   align-content: start;
   gap: 7px;
@@ -14819,7 +14823,13 @@ td {
 
 .side-menu {
   grid-area: menu;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  /* max-content on the nav row, not auto. The rail sits in a definite-height
+     grid area, and an `auto` row compresses inside one — the row stayed at
+     239px against 417px of items, so the nav overflowed it and painted over the
+     donate button below. max-content refuses to compress, so the RAIL overflows
+     and scrolls instead, which is the behaviour this layout wants. */
+  grid-template-rows: auto max-content auto auto;
+  align-content: start;
   border: 1px solid rgba(239, 188, 90, 0.3);
   border-radius: 18px;
   background:
