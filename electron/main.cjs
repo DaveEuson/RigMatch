@@ -113,6 +113,9 @@ const SCORES_SERVER_PORT = 11435;
 const BENCHMARK_REPEATS = 3; // median of 3 timed runs per prompt for a steadier speed score
 const BENCHMARK_TIMEOUT_MS = 120000;
 const BENCHMARK_KEEP_ALIVE = '10m';
+// Measured: an unload request returns in ~107ms but the card is not free until
+// ~485ms. 3s leaves generous headroom for a larger model on a slower card.
+const UNLOAD_SETTLE_TIMEOUT_MS = 3000;
 const BENCHMARK_GENERATE_OPTIONS = Object.freeze({
   temperature: 0,
   seed: 1,
@@ -2448,6 +2451,26 @@ async function unloadBenchmarkModel(baseUrl, model) {
       { method: 'POST', body: JSON.stringify({ model, keep_alive: 0 }) },
       8000,
     );
+
+    // The request returns before the memory is actually released — measured at
+    // 107ms to return and 485ms until /api/ps showed the card free. Without
+    // waiting, the next contestant starts loading while the previous one is
+    // still releasing, which is a smaller version of the same unfairness.
+    // Bounded so a wedged unload delays a run by a second rather than stalling it.
+    const deadline = Date.now() + UNLOAD_SETTLE_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const ps = await fetchJson(`${baseUrl}/api/ps`, {}, 3000).catch(() => null);
+      const stillLoaded = Array.isArray(ps?.models)
+        && ps.models.some((entry) => entry?.name === model || entry?.model === model);
+      if (!stillLoaded) return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    await appendAppLog({
+      level: 'warn',
+      source: 'benchmark',
+      message: `${model} was still resident ${UNLOAD_SETTLE_TIMEOUT_MS}ms after unload; the next model may have less VRAM.`,
+      details: { model },
+    });
   } catch (error) {
     await appendAppLog({
       level: 'warn',
