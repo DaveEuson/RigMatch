@@ -91,7 +91,11 @@ const ALLOWED_EXTERNAL_HOSTS = new Set([
   'openrouter.ai',
   'www.openrouter.ai',
   // Scorecard sharing: the social compose intents opened from the share modal.
+  // Every host used by ShareScorecard.tsx must be listed here or the button is
+  // silently dead. tests/shareLinks.test.mjs cross-checks the two.
   'twitter.com',
+  'linkedin.com',
+  'www.linkedin.com',
   'x.com',
   'reddit.com',
   'www.reddit.com',
@@ -100,10 +104,23 @@ const ALLOWED_EXTERNAL_HOSTS = new Set([
 
 function openExternalSafe(url) {
   let parsed;
-  try { parsed = new URL(url); } catch { return; }
-  if (parsed.protocol !== 'https:') return;
+  try {
+    parsed = new URL(url);
+  } catch {
+    console.warn('[external] refused unparseable url');
+    return;
+  }
+  if (parsed.protocol !== 'https:') {
+    console.warn(`[external] refused non-https url (${parsed.protocol})`);
+    return;
+  }
   const host = parsed.hostname.toLowerCase();
-  if (!ALLOWED_EXTERNAL_HOSTS.has(host)) return;
+  if (!ALLOWED_EXTERNAL_HOSTS.has(host)) {
+    // Refusing is correct; refusing without a word is not. The LinkedIn share
+    // button was dead and left nothing in the log to explain why.
+    console.warn(`[external] refused ${host}: not in ALLOWED_EXTERNAL_HOSTS`);
+    return;
+  }
   shell.openExternal(url);
 }
 let latestCudaCache = null;
