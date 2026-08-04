@@ -18782,3 +18782,26 @@ a.whats-next-support:hover {
       "ticker";
   }
 }
+
+/* Question id on transcript entries: the audit screen must let you tie an answer
+   to the exact question, since labels alone repeat across a suite. */
+.profile-question-id {
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: none;
+}
+
+/* Model switcher in the chat drawer header. */
+.chat-model-switch select {
+  max-width: 190px;
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+}

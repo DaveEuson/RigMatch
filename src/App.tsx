@@ -1554,6 +1554,25 @@ function App() {
         },
       });
       setActivity(`${result.model} finished with ${result.scores.grade} grade and ${result.scores.total} match score.`);
+      // Run Logs previously only recorded failures — both appendLog calls lived in
+      // catch blocks — so a panel whose whole purpose is showing what ran was
+      // empty after every successful run.
+      await agentArcadeApi.appendLog({
+        level: 'info',
+        source: 'renderer',
+        message: `Tested ${result.model}: ${result.scores.total} Match (${result.scores.grade})`,
+        details: {
+          model: result.model,
+          computer: selectedHost?.hostname ?? system.hostname,
+          questions: result.questionCount,
+          elapsedMs: result.elapsedMs,
+          speed: result.scores.speed,
+          answerQuality: result.scores.sobriety,
+          finishRate: result.scores.stability,
+          computerFit: result.scores.fit,
+          suite: currentSuiteName,
+        },
+      });
       playDoneJingle();
     } catch (error) {
       const errorMessage = getErrorMessage(error);
@@ -2230,6 +2249,20 @@ function App() {
           .sort(compareTestedModelScores),
       });
       setActivity(`Best match: ${winner.model} scored ${winner.scores.total} for this setup.`);
+      await agentArcadeApi.appendLog({
+        level: 'info',
+        source: 'renderer',
+        message: `Speed Dating finished: ${winner.model} won with ${winner.scores.total} Match (${winner.scores.grade})`,
+        details: {
+          computer: selectedHost?.hostname ?? system.hostname,
+          modelsTested: results.length,
+          questionsEach: winner.questionCount,
+          suite: currentSuiteName,
+          ranking: results
+            .map((entry) => `${entry.model}: ${entry.scores.total} ${entry.scores.grade}`)
+            .join(', '),
+        },
+      });
       playJingle('speed-date-complete');
       if (uiMode === 'beginner') selectNav('history');
     } catch (error) {
@@ -3194,6 +3227,8 @@ function App() {
           canSendImages={chatSupportsImages}
           pendingImage={chatImage}
           onAttachImage={setChatImage}
+          availableModels={modelRows.filter((row) => row.installed).map((row) => row.displayName)}
+          onModelChange={setSelectedModel}
         />
       )}
 
@@ -9736,7 +9771,7 @@ function ProfileQuestionTranscript({
         <div>
           <span>Test Transcript</span>
           <strong>{prompts.length} questions asked</strong>
-          <em>{formatHistoryTime(benchmark.completedAt)} · {benchmark.scores.total} Match · {benchmark.scores.grade}</em>
+          <em>{formatHistoryTime(benchmark.completedAt)} · {formatMatchScore(benchmark.scores)} Match · {benchmark.scores.grade}</em>
         </div>
         <div>
           <span>Question Suite</span>
@@ -9755,7 +9790,12 @@ function ProfileQuestionTranscript({
             <div className="profile-question-head">
               <b>{String(index + 1).padStart(2, '0')}</b>
               <div>
-                <span>{prompt.label}</span>
+                <span>
+                  {prompt.label}
+                  {/* The suite contains more than one JSON question, so a label
+                      alone cannot tell you which entry an answer came from. */}
+                  <code className="profile-question-id">{prompt.id}</code>
+                </span>
                 <strong>
                   {prompt.sobrietyScore} answer quality
                   <PromptStatusPill status={prompt.status} />

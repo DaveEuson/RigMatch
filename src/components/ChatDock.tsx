@@ -20,6 +20,8 @@ export function ChatDock({
   canSendImages,
   pendingImage,
   onAttachImage,
+  availableModels,
+  onModelChange,
 }: {
   agentName: string;
   model: string;
@@ -32,6 +34,9 @@ export function ChatDock({
   canSendImages?: boolean;
   pendingImage?: string | null;
   onAttachImage?: (dataUrl: string | null) => void;
+  /** Installed models the user can switch to without leaving the drawer. */
+  availableModels?: string[];
+  onModelChange?: (model: string) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -53,7 +58,20 @@ export function ChatDock({
       <div className="chat-title">
         <div>
           <strong>{agentName}</strong>
-          <span>{model === agentName ? 'Local model chat' : model}</span>
+          {/* The drawer opened on whichever model happened to be selected, with
+              no way to change it and no indication of who you were talking to. */}
+          {availableModels && availableModels.length > 1 && onModelChange ? (
+            <label className="chat-model-switch">
+              <span className="sr-only">Model to chat with</span>
+              <select value={model} onChange={(event) => onModelChange(event.target.value)}>
+                {availableModels.map((id) => (
+                  <option key={id} value={id}>{id}</option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <span>{model === agentName ? 'Local model chat' : model}</span>
+          )}
         </div>
         <button type="button" className="mini-button" onClick={onClose}>
           Close
