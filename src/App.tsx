@@ -6043,7 +6043,7 @@ function HistoryTimeline({
               <strong>{score.model}</strong>
               <span>{getScoreTimelineNote(score)}</span>
             </div>
-            <em>{score.total} · {score.grade}</em>
+            <em>{formatMatchScore(score)} · {score.grade}</em>
             <button
               type="button"
               className="icon-action score-clear-button"
@@ -7149,7 +7149,7 @@ function _ContestantsCommandDeck({
   const selectedStatus = selectedRow
     ? selectedInstalled
       ? selectedScore
-        ? `${selectedScore.total} Match · ${selectedScore.grade}. Retest when you want fresh proof.`
+        ? `${formatMatchScore(selectedScore)} Match · ${selectedScore.grade}. Retest when you want fresh proof.`
         : 'Installed and ready for a one-model test.'
       : selectedQueued
         ? 'Queued for download. Remove it here or clear the queue.'
@@ -7425,7 +7425,7 @@ function ModelPoolLineupStrip({
               <div>
                 <span>Contestant {index + 1}</span>
                 <strong>{row.displayName}</strong>
-                <em>{score ? `${score.total} Match · ${score.grade}` : 'Not tested yet'}</em>
+                <em>{score ? `${formatMatchScore(score)} Match · ${score.grade}` : 'Not tested yet'}</em>
               </div>
               <button
                 type="button"

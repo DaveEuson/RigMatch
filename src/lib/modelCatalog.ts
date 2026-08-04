@@ -15,7 +15,7 @@ import type {
 import type { NavId } from '../components/SideMenu';
 import { getModelFamily, getModelOrigin } from './modelOrigins';
 import { normalizeModelKey } from './modelKey';
-import { compareTestedModelScores, getScoreSortTotal, isLegacyScore } from './scoring';
+import { compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore } from './scoring';
 import { formatBytes, formatBytesPerSecond, formatGb, hashString, scoreToToks } from './format';
 import {
   APP_VERSION,
@@ -162,7 +162,7 @@ export function buildShareableScorecard(
       && Math.abs((prev.preciseTotal ?? prev.total) - (score.preciseTotal ?? score.total)) < 0.05;
     const rank = tied ? '=' : `${i + 1}`;
     const toks = scoreToToks(score.speed);
-    return `| ${rank} | ${score.model} | ${score.total} | **${score.grade}** | ${toks} | ${score.sobriety} | ${score.fit} |`;
+    return `| ${rank} | ${score.model} | ${formatMatchScore(score)} | **${score.grade}** | ${toks} | ${score.sobriety} | ${score.fit} |`;
   });
 
   const sections: string[] = [
@@ -429,7 +429,7 @@ export function getResultExplanation(
   }
 
   return {
-    title: `${profile.agentName} scored ${score.total} (${score.grade})`,
+    title: `${profile.agentName} scored ${formatMatchScore(score)} (${score.grade})`,
     body: `${model} is a ${score.grade} match because ${strongestTrait}, scored ${score.speed}% speed, ${score.sobriety}% answer quality, and ${score.fit}% computer fit on ${host?.hostname ?? 'this computer'}. ${caution}`,
     bottleneck,
   };

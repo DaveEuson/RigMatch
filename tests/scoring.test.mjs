@@ -110,13 +110,22 @@ test('getScoreSortTotal computes when preciseTotal is absent', () => {
 
 // ── formatMatchScore ────────────────────────────────────────────────────────────
 
-test('formatMatchScore shows the decimal only when it differs from the integer total', () => {
-  // precise 78.4 vs total 78 -> show decimal
+test('formatMatchScore always renders exactly one decimal', () => {
   assert.equal(formatMatchScore(score({ preciseTotal: 78.4, total: 78 })), '78.4');
-  // precise equals total -> show integer
-  assert.equal(formatMatchScore(score({ preciseTotal: 80, total: 80 })), '80');
-  // sub-threshold difference -> show integer
-  assert.equal(formatMatchScore(score({ preciseTotal: 80.02, total: 80 })), '80');
+  // Previously returned the bare integer here, so the same surface showed both
+  // "80" and "78.4" and the score looked like it changed format at random.
+  assert.equal(formatMatchScore(score({ preciseTotal: 80, total: 80 })), '80.0');
+  assert.equal(formatMatchScore(score({ preciseTotal: 80.02, total: 80 })), '80.0');
+  assert.equal(formatMatchScore(score({ preciseTotal: 92.75, total: 93 })), '92.8');
+  // Legacy scores with no cached precise value still get one decimal.
+  assert.equal(formatMatchScore(score({ preciseTotal: undefined, total: 88 })).split('.').length, 2);
+});
+
+test('every formatted Match score has one decimal place', () => {
+  for (const preciseTotal of [0, 12, 63.049, 78.4, 80, 92.75, 99.999, 100]) {
+    const rendered = formatMatchScore(score({ preciseTotal, total: Math.round(preciseTotal) }));
+    assert.match(rendered, /^\d+\.\d$/, `${preciseTotal} rendered as ${rendered}`);
+  }
 });
 
 // ── isLegacyScore ───────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import type { ModelRow, NetworkHost, SystemProfile, TestedModelScore } from '../
 import { getFootprintFit, formatHistoryTime, type ModelProfile } from './modelCatalog';
 import { getModelOrigin } from './modelOrigins';
 import { formatGb } from './format';
+import { formatMatchScore } from './scoring';
 
 // The dating-show "OkCupid profile" copy for a model: pure content generators
 // that turn a model profile + score + rig into the playful sections and detail
@@ -23,7 +24,7 @@ export function getAgentDatingProfileSections(
   const hostName = getCleanHostName(host?.hostname ?? system.hostname);
   const sizeGb = row?.sizeGb ?? row?.installedModel?.sizeGb ?? null;
   const scoreSummary = score
-    ? `${score.total} overall, ${score.sobriety}% answer quality, ${score.speed}% pace, and ${score.fit}% computer fit`
+    ? `${formatMatchScore(score)} overall, ${score.sobriety}% answer quality, ${score.speed}% pace, and ${score.fit}% computer fit`
     : `untested chemistry with ${hostName}`;
   const specialtyList = profile.specialties.join(', ');
   const fitSummary = getFootprintFit(sizeGb, system).toLowerCase();
@@ -80,7 +81,7 @@ export function getAgentDatingProfileDetails(
     { label: 'Size', value: sizeLabel },
     { label: 'VRAM Fit', value: getFootprintFit(sizeGb, system) },
     { label: 'Best At', value: profile.specialties.join(', ') },
-    { label: 'Match Score', value: score ? `${score.total} (${score.grade})` : 'Run a test' },
+    { label: 'Match Score', value: score ? `${formatMatchScore(score)} (${score.grade})` : 'Run a test' },
     { label: 'Answer Quality', value: score ? `${score.sobriety}%` : 'Unknown' },
     { label: 'Test Suite', value: score?.suiteName ?? (score ? 'Default Suite v0.1' : 'Not tested yet') },
     { label: 'Dealbreaker', value: getDatingDealbreaker(sizeGb, score, system) },
@@ -186,7 +187,7 @@ export function getMatchNotes(
     reasons: [
       { label: 'Best For', value: bestSpecialty },
       { label: 'Computer Fit', value: `${score.fit}%` },
-      { label: 'Match score', value: String(score.total) },
+      { label: 'Match score', value: formatMatchScore(score) },
     ],
   };
 }

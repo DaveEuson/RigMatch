@@ -106,10 +106,18 @@ export function getScoreSortTotal(score: MatchScoreLike): number {
   return typeof score.preciseTotal === 'number' ? score.preciseTotal : calculatePreciseTotal(score);
 }
 
-/** Display the precise (one-decimal) value only when it meaningfully differs from the integer total. */
+/**
+ * The one way to render a Match score: always one decimal.
+ *
+ * This used to switch formats — one decimal when the precise value differed from
+ * the integer by >= 0.05, the bare integer otherwise — so a single function
+ * produced "92" and "92.7" depending on the model, and the same score appeared
+ * as 92, 92.7, 93 and 93.1 across the lineup card, header, table and Scorecards.
+ * A benchmarking tool that rounds away its own tie-breaker reads as careless, so
+ * the decimal is always shown, even when it is ".0".
+ */
 export function formatMatchScore(score: MatchScoreLike): string {
-  const precise = getScoreSortTotal(score);
-  return Math.abs(precise - score.total) >= 0.05 ? precise.toFixed(1) : String(score.total);
+  return getScoreSortTotal(score).toFixed(1);
 }
 
 /**

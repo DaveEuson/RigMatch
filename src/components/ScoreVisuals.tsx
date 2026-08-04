@@ -1,6 +1,7 @@
 import { ShieldCheck, Download } from 'lucide-react';
 import type { BenchmarkPromptResult, BenchmarkResult, TestedModelScore } from '../types';
 import { formatPullCount, getPopularityPercent, getScoreTone, getScoreTooltip } from '../lib/format';
+import { formatMatchScore } from '../lib/scoring';
 import { formatRunDelta, type RunDelta } from '../lib/runHistory';
 
 /** Small presentational score/status widgets shared across panels. Extracted from App.tsx. */
@@ -142,9 +143,9 @@ export function ModelScorePill({ score }: { score?: TestedModelScore }) {
   return (
     <span
       className={`score-pill ${getScoreTone(score.total)}`}
-      title={`Match ${score.total} · ${score.grade}; speed ${score.speed}, accuracy ${score.sobriety}`}
+      title={`Match ${formatMatchScore(score)} · ${score.grade}; speed ${score.speed}, accuracy ${score.sobriety}`}
     >
-      <strong>{score.total}</strong>
+      <strong>{formatMatchScore(score)}</strong>
       <em>{score.grade}</em>
     </span>
   );
