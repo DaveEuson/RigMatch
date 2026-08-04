@@ -66,6 +66,45 @@ const KNOWN_GPU_HEAVY_APPS = [
 ];
 
 /**
+ * GPUs that share one memory pool with the CPU rather than having their own.
+ *
+ * This matters for contention because on a unified system "GPU memory in use"
+ * includes ordinary system RAM. A machine with 70 GB of its 128 GB committed to
+ * normal work is not a busy GPU, but a VRAM-share threshold tuned on a discrete
+ * card reads it as one. On unified hardware the memory criterion is skipped and
+ * only utilization is used.
+ *
+ * Detection is by known part name plus Apple Silicon. It is a heuristic and
+ * will not name every unified part; an unrecognised one simply keeps the
+ * discrete behaviour, which is the pre-existing state rather than a regression.
+ */
+const UNIFIED_MEMORY_GPU_PATTERNS = [
+  /apple\s+m\d/i,          // Apple M1/M2/M3/M4…
+  /apple\s+silicon/i,
+  /\bgb10\b/i,             // NVIDIA GB10 Grace-Blackwell — DGX Spark
+  /\bgh200\b/i,            // Grace Hopper
+  /\bgb200\b/i,            // Grace Blackwell
+  /\bgrace\b/i,            // Grace superchips generally
+  /\bthor\b/i,             // Jetson Thor
+  /\borin\b/i,             // Jetson Orin
+  /\bxavier\b/i,           // Jetson Xavier
+  /\btegra\b/i,
+];
+
+/**
+ * Whether this GPU shares memory with the CPU.
+ *
+ * `platform`/`arch` cover Apple Silicon, where the GPU model string is often
+ * empty; the patterns cover NVIDIA's Grace-based and Jetson parts, which run
+ * Linux on aarch64 and were previously treated as having discrete VRAM.
+ */
+function isUnifiedMemoryGpu({ model = '', platform = '', arch = '' } = {}) {
+  if (platform === 'darwin' && arch === 'arm64') return true;
+  const name = String(model || '');
+  return UNIFIED_MEMORY_GPU_PATTERNS.some((pattern) => pattern.test(name));
+}
+
+/**
  * Utilization thresholds, set from measurement rather than intuition.
  *
  * Ten samples of an ordinary Windows desktop (browser and editor open, nothing
@@ -203,7 +242,7 @@ function matchKnownGpuApps(processNames, ownProcessNames = []) {
  * Returns `unknown` when there is no usable reading — never `clear`. The two
  * mean different things to a user deciding whether to trust a score.
  */
-function assessGpuContention(reading, knownApps = []) {
+function assessGpuContention(reading, knownApps = [], options = {}) {
   if (!reading || typeof reading !== 'object') {
     return { level: 'unknown', reasons: [], apps: [], utilizationPercent: null, vramUsedPercent: null };
   }
@@ -236,7 +275,11 @@ function assessGpuContention(reading, knownApps = []) {
     }
   }
 
-  if (vramShare !== null) {
+  // On unified-memory hardware — Apple Silicon, NVIDIA Grace/GB10, Jetson — the
+  // "GPU memory" figure is the pool the CPU also uses, so ordinary RAM pressure
+  // would read as GPU contention. Utilization still means what it says, so that
+  // criterion stands alone there.
+  if (vramShare !== null && !options.unifiedMemory) {
     const percent = Math.round(vramShare * 100);
     if (vramShare >= HEAVY_VRAM_SHARE) {
       raise('heavy');
@@ -320,6 +363,8 @@ function medianReading(readings) {
 
 module.exports = {
   KNOWN_GPU_HEAVY_APPS,
+  UNIFIED_MEMORY_GPU_PATTERNS,
+  isUnifiedMemoryGpu,
   medianOf,
   medianReading,
   BUSY_UTILIZATION_PERCENT,

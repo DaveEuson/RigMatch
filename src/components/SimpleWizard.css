@@ -845,3 +845,29 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 .sw-winner-tag { display: block; font-size: 11px; color: var(--muted); font-style: normal; }
 .sw-winner-why { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--muted); max-width: 46ch; }
 .sw-compare-raw { margin-top: 8px; font-size: 13px; opacity: 0.85; }
+
+/* Share sits with the result, where the impulse to share actually happens —
+   not three clicks away in Advanced Mode. */
+.sw-winner-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 8px 16px;
+  border: 1px solid var(--line-bright);
+  border-radius: 999px;
+  background: rgba(255, 249, 239, 0.06);
+  color: var(--text-strong);
+  font-family: var(--ui);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.sw-winner-share:hover {
+  border-color: var(--gold);
+  background: rgba(239, 188, 90, 0.14);
+}
+
+.sw-winner-share svg { width: 15px; height: 15px; }

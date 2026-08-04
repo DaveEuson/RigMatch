@@ -12,6 +12,7 @@ const {
   describeGpuContention,
   medianOf,
   medianReading,
+  isUnifiedMemoryGpu,
 } = require(path.join(process.cwd(), 'electron', 'gpuContention.cjs'));
 
 // ── nvidia-smi parsing ───────────────────────────────────────────────────────
@@ -250,4 +251,69 @@ test('medianOf handles the basics', () => {
   // drag the median down and under-report a busy GPU.
   assert.equal(medianOf([null, 'x', 5]), 5, 'non-numbers are dropped, not coerced to zero');
   assert.equal(medianOf([null, undefined, '', 80]), 80);
+});
+
+// ── unified memory (Apple Silicon, NVIDIA Grace / DGX Spark, Jetson) ─────────
+
+test('unified-memory hardware is recognised', () => {
+  // Apple Silicon often reports no GPU model string at all, so platform+arch
+  // carries it there.
+  assert.equal(isUnifiedMemoryGpu({ platform: 'darwin', arch: 'arm64' }), true);
+  assert.equal(isUnifiedMemoryGpu({ model: 'Apple M3 Max' }), true);
+
+  // NVIDIA Grace-based parts run Linux on aarch64 and were previously treated
+  // as having discrete VRAM.
+  assert.equal(isUnifiedMemoryGpu({ model: 'NVIDIA GB10' }), true, 'DGX Spark');
+  assert.equal(isUnifiedMemoryGpu({ model: 'NVIDIA GH200 120GB' }), true);
+  assert.equal(isUnifiedMemoryGpu({ model: 'NVIDIA Grace Hopper Superchip' }), true);
+  assert.equal(isUnifiedMemoryGpu({ model: 'Orin' }), true, 'Jetson');
+});
+
+test('discrete cards are not mistaken for unified', () => {
+  for (const model of [
+    'NVIDIA GeForce RTX 4070',
+    'NVIDIA RTX A6000',
+    'NVIDIA H100 PCIe',
+    'AMD Radeon RX 7900 XTX',
+    'Intel Arc A770',
+  ]) {
+    assert.equal(isUnifiedMemoryGpu({ model }), false, `${model} has its own VRAM`);
+  }
+  assert.equal(isUnifiedMemoryGpu({ platform: 'win32', arch: 'x64' }), false);
+  assert.equal(isUnifiedMemoryGpu({}), false, 'no information means assume discrete');
+  assert.equal(isUnifiedMemoryGpu(), false);
+});
+
+test('an Intel Mac is not unified', () => {
+  // Only Apple Silicon shares memory; Intel Macs had discrete or Intel GPUs.
+  assert.equal(isUnifiedMemoryGpu({ platform: 'darwin', arch: 'x64' }), false);
+});
+
+test('memory pressure alone never flags contention on unified hardware', () => {
+  // A DGX Spark with 90GB of its 128GB committed, or an M-series Mac deep into
+  // its RAM, is not a busy GPU — on unified hardware that figure includes
+  // ordinary system memory. Thresholds tuned on a discrete 12GB card would call
+  // this "heavy" and warn on every run.
+  const loadedPool = { vramUsedMb: 92000, vramTotalMb: 131072, utilizationPercent: 8 };
+
+  assert.equal(assessGpuContention(loadedPool, [], { unifiedMemory: true }).level, 'clear');
+  // The same numbers on a discrete card genuinely are heavy contention.
+  assert.equal(assessGpuContention(loadedPool).level, 'heavy');
+});
+
+test('utilization still counts on unified hardware', () => {
+  // Only the memory criterion is unreliable there; busy is still busy.
+  const busy = { vramUsedMb: 20000, vramTotalMb: 131072, utilizationPercent: 90 };
+  const assessment = assessGpuContention(busy, [], { unifiedMemory: true });
+  assert.equal(assessment.level, 'heavy');
+  assert.match(describeGpuContention(assessment), /90% busy/);
+  // And the message must not cite memory, which was not used to decide.
+  assert.ok(!/memory/i.test(describeGpuContention(assessment)));
+});
+
+test('a named app still warns on unified hardware', () => {
+  const quiet = { vramUsedMb: 90000, vramTotalMb: 131072, utilizationPercent: 5 };
+  const assessment = assessGpuContention(quiet, ['ComfyUI'], { unifiedMemory: true });
+  assert.equal(assessment.level, 'busy');
+  assert.deepEqual(assessment.apps, ['ComfyUI']);
 });

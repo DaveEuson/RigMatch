@@ -811,9 +811,22 @@ function App() {
   }, [modelRows, system.gpu.vramGb, system.platform]);
 
   const wizardWinner = useMemo(
-    () => (topRigPick?.score ? { model: topRigPick.row.displayName, score: topRigPick.score.total, grade: topRigPick.score.grade } : null),
+    () => (topRigPick?.score
+      ? {
+        model: topRigPick.row.displayName,
+        score: topRigPick.score.total,
+        // The winner screen was printing the raw integer, so the app's most-seen
+        // score was the one surface still disagreeing with the decimal policy.
+        scoreLabel: formatMatchScore(topRigPick.score),
+        grade: topRigPick.score.grade,
+      }
+      : null),
     [topRigPick],
   );
+
+  // Simple Mode needs its own share state: Advanced's lives inside the profile
+  // panel, which is not mounted in the guided path.
+  const [shareWinnerOpen, setShareWinnerOpen] = useState(false);
 
   const openChatWithWinner = useCallback(() => {
     const model = topRigPick?.row.displayName;
@@ -2934,6 +2947,15 @@ function App() {
           onSwitchToAdvanced={() => { setCameFromSimple(false); selectUiMode('advanced'); }}
           initialStep={wizardStep}
           onStepChange={setWizardStep}
+          onShareScore={() => setShareWinnerOpen(true)}
+        />
+      )}
+      {shareWinnerOpen && topRigPick?.score && (
+        <ShareScorecard
+          model={topRigPick.row.displayName}
+          score={topRigPick.score}
+          system={system}
+          onClose={() => setShareWinnerOpen(false)}
         />
       )}
       {uiMode === 'advanced' && (

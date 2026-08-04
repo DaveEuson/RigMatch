@@ -15,6 +15,7 @@ import {
   Plus,
   RefreshCw,
   ScanLine,
+  Share2,
   Sparkles,
   Trophy,
   Video,
@@ -114,9 +115,11 @@ type SimpleWizardProps = {
   runProgress: SimpleRunProgress;
   onStartShow: () => void;
   onStopShow: () => void;
-  winner: { model: string; score: number; grade: string } | null;
+  winner: { model: string; score: number; scoreLabel: string; grade: string } | null;
   onChatWithWinner: () => void;
   onOpenScorecard: () => void;
+  /** Opens the shareable scorecard image for the winning model. */
+  onShareScore: () => void;
   onRunAgain: () => void;
   onSwitchToAdvanced: () => void;
   /** Where the wizard was last time it was mounted. Switching to Advanced and
@@ -859,7 +862,7 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
 // ---------------------------------------------------------------------------
 // Winner
 
-function WinnerScreen({ winner, shortlistedRows, onChatWithWinner, onOpenScorecard, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
+function WinnerScreen({ winner, shortlistedRows, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
   if (!winner) {
     return <div className="sw-winner"><p className="sw-muted">Run the show to crown your Top Match.</p></div>;
   }
@@ -882,13 +885,19 @@ function WinnerScreen({ winner, shortlistedRows, onChatWithWinner, onOpenScoreca
           <strong>{getFriendlyModelName(winner.model)}</strong>
           <em className="sw-winner-tag">{winner.model}</em>
           <span className="sw-winner-grade">
-            <b>{winner.score}</b>
+            <b>{winner.scoreLabel}</b>
             <em>Match · Grade {winner.grade}</em>
           </span>
           {/* Say what the number means — a beginner has never seen either scale. */}
           <p className="sw-winner-why">
             Best combination of speed, answer quality, and fit for your PC out of the {shortlistedRows.length} you tested — scored out of 100.
           </p>
+          {/* Sharing belongs at the moment of the result, not three clicks away
+              in Advanced Mode where a Simple Mode user will never find it. */}
+          <button type="button" className="sw-winner-share" onClick={onShareScore}>
+            <Share2 aria-hidden="true" />
+            Share your score
+          </button>
         </div>
       </div>
 

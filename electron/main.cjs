@@ -1245,6 +1245,15 @@ async function getSystemProfile() {
 
   const isMac = process.platform === 'darwin';
   const isAppleSilicon = isMac && os.arch() === 'arm64';
+  // Apple Silicon is not the only unified-memory hardware: NVIDIA's Grace-based
+  // parts (GB10 in the DGX Spark, GH200) and the Jetson line share one pool with
+  // the CPU while running Linux on aarch64, and were being treated as if they
+  // had discrete VRAM.
+  const hasUnifiedMemory = gpuContention.isUnifiedMemoryGpu({
+    model: primaryGpu.model,
+    platform: process.platform,
+    arch: os.arch(),
+  });
 
   // On Apple Silicon, GPU memory is unified with RAM — no separate VRAM pool.
   // systeminformation returns 0/null for vram on macOS; use total RAM as the pool size.
@@ -1257,6 +1266,9 @@ async function getSystemProfile() {
   // If systeminformation couldn't read VRAM on a non-Apple rig, fall back to
   // nvidia-smi. Without this, an NVIDIA GPU that reports 0 VRAM makes RigMatch
   // recommend only tiny models (e.g. phi3:mini on a 4090).
+  // Grace-based parts report the shared pool through nvidia-smi, which is the
+  // right number for "how big a model can this run" even though it is not VRAM
+  // in the discrete sense.
   if (vramGb <= 0 && !isAppleSilicon) {
     const nvidiaVramMb = await getNvidiaVramMb();
     if (nvidiaVramMb > 0) vramGb = mbToGb(nvidiaVramMb);
@@ -1291,7 +1303,7 @@ async function getSystemProfile() {
       gpuLoadPercent: primaryGpu.utilizationGpu ?? null,
       driverVersion,
       bus: primaryGpu.bus || (isMac ? 'Built-in' : 'Unknown'),
-      isUnifiedMemory: isAppleSilicon,
+      isUnifiedMemory: hasUnifiedMemory,
     },
     storage: {
       sizeGb: bytesToGb(primaryFs.size),
@@ -1451,7 +1463,11 @@ async function getGpuContention() {
   const profile = await getSystemProfile().catch(() => null);
   const [reading, processNames] = await Promise.all([sampleGpuLoad(profile), listRunningProcessNames()]);
   const apps = gpuContention.matchKnownGpuApps(processNames);
-  const assessment = gpuContention.assessGpuContention(reading, apps);
+  const assessment = gpuContention.assessGpuContention(reading, apps, {
+    // On a shared pool, "memory in use" includes ordinary RAM, so that criterion
+    // would warn on a machine that is merely busy rather than GPU-busy.
+    unifiedMemory: Boolean(profile?.gpu?.isUnifiedMemory),
+  });
   return {
     ...assessment,
     message: gpuContention.describeGpuContention(assessment),
