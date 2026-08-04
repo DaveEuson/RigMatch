@@ -211,9 +211,13 @@ if (nvidiaReading || report.parsed.rocm || report.parsed.ioreg) {
   // An idle rented box should read clear. If it does not, the thresholds are
   // wrong for this hardware and would warn on every run.
   if (assessment.level !== 'clear' && assessment.level !== 'unknown') {
+    // The probe cannot know whether the machine is actually idle, so it must not
+    // assert the thresholds are wrong — a busy machine reading "heavy" is the
+    // feature working. State the reading and let the operator judge.
     report.verdict.push(
-      `SUSPECT: an otherwise idle machine assessed as "${assessment.level}". If nothing else is ` +
-      'running, the thresholds are mistuned for this hardware and the warning would fire constantly.',
+      `BUSY: assessed as "${assessment.level}". If something graphics-heavy is open (a browser with ` +
+      'many tabs is usually the culprit) this is correct and the warning is doing its job. If the ' +
+      'machine really is idle, the thresholds are mistuned for this hardware.',
     );
   }
 } else {
