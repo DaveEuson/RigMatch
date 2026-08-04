@@ -298,6 +298,15 @@ const fallbackApi: AgentArcadeApi = {
       });
     }
 
+    const demoPrompts = promptPlan.map((prompt, index) => ({
+      ...prompt,
+      tokensPerSecond: Math.max(22, scores.speed + 12 - index * 7),
+      sobrietyScore: Math.max(40, scores.sobriety - index * 2),
+      elapsedMs: 650 + index * 35,
+      response: demoBenchmark.prompts[index % demoBenchmark.prompts.length]?.response ?? '',
+      doneReason: 'preview',
+    }));
+
     return {
       ...demoBenchmark,
       model: request.model,
@@ -305,14 +314,13 @@ const fallbackApi: AgentArcadeApi = {
       questionCount,
       completedAt: new Date().toISOString(),
       scores,
-      prompts: promptPlan.map((prompt, index) => ({
-        ...prompt,
-        tokensPerSecond: Math.max(22, scores.speed + 12 - index * 7),
-        sobrietyScore: Math.max(40, scores.sobriety - index * 2),
-        elapsedMs: 650 + index * 35,
-        response: demoBenchmark.prompts[index % demoBenchmark.prompts.length]?.response ?? '',
-        doneReason: 'preview',
-      })),
+      // Averaged from the per-prompt rates above, the same way the real engine
+      // derives it -- otherwise the preview has no throughput to show and every
+      // demo scorecard falls back to the vague "20+ tok/s" estimate.
+      avgTokensPerSecond: Math.round(
+        (demoPrompts.reduce((sum, p) => sum + p.tokensPerSecond, 0) / demoPrompts.length) * 10,
+      ) / 10,
+      prompts: demoPrompts,
     };
   },
   onBenchmarkProgress(callback) {

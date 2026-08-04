@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, Download, X } from 'lucide-react';
 import type { SystemProfile, TestedModelScore } from '../types';
 import { getShortModelName } from '../lib/modelCatalog';
+import { formatThroughputValue } from '../lib/format';
 
 // Where a shared scorecard sends people — the marketing landing page, which then
 // funnels to the live demo or a download.
@@ -99,7 +100,7 @@ function drawFrame(ctx: CanvasRenderingContext2D, color: string) {
 function drawStatChip(
   ctx: CanvasRenderingContext2D,
   cx: number, cy: number, w: number, h: number,
-  emoji: string, label: string, value: number, color: string,
+  emoji: string, label: string, value: string, color: string,
 ) {
   const x = cx - w / 2, y = cy - h / 2;
   ctx.save();
@@ -118,7 +119,7 @@ function drawStatChip(
   ctx.textAlign = 'center';
   ctx.font = '800 30px system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
   ctx.fillStyle = color;
-  ctx.fillText(`${emoji} ${Math.round(value)}`, cx, cy + 2);
+  ctx.fillText(`${emoji} ${value}`, cx, cy + 2);
   ctx.font = '600 15px system-ui, sans-serif';
   ctx.fillStyle = COLORS.muted;
   ctx.fillText(label, cx, cy + 24);
@@ -192,10 +193,14 @@ function drawScorecard(
   ctx.fillStyle = COLORS.muted;
   ctx.fillText(`${score.total} / 100 Match Score`, tx, by + 142);
 
-  const bars: Array<{ label: string; value: number; color: string }> = [
-    { label: 'Speed', value: score.speed, color: COLORS.speed },
-    { label: 'Quality', value: score.sobriety, color: COLORS.quality },
-    { label: 'Fit', value: score.fit, color: COLORS.fit },
+  // The bar length has to stay on the 0-100 sub-score -- a rate has no upper
+  // bound to fill against. The figure beside it can be the real measurement,
+  // which is the part worth reading once every fast model's bar is full.
+  const speedRate = formatThroughputValue(score.tokensPerSecond);
+  const bars: Array<{ label: string; value: number; shown: string; color: string }> = [
+    { label: 'Speed', value: score.speed, shown: speedRate === null ? String(Math.round(score.speed)) : `${speedRate} tok/s`, color: COLORS.speed },
+    { label: 'Quality', value: score.sobriety, shown: String(Math.round(score.sobriety)), color: COLORS.quality },
+    { label: 'Fit', value: score.fit, shown: String(Math.round(score.fit)), color: COLORS.fit },
   ];
   const barX = 200, barW = 820, barTop = 400, barGap = 54, barH = 20;
   bars.forEach((bar, i) => {
@@ -215,7 +220,7 @@ function drawScorecard(
     ctx.font = '700 22px system-ui, sans-serif';
     ctx.fillStyle = COLORS.text;
     ctx.textAlign = 'right';
-    ctx.fillText(String(Math.round(bar.value)), CARD_W - 60, y + barH - 2);
+    ctx.fillText(bar.shown, CARD_W - 60, y + barH - 2);
     ctx.textAlign = 'left';
   });
 
@@ -304,9 +309,16 @@ function drawDatingCard(
   const chipW = 220, chipH = 66, chipGap = 26, chipY = 486;
   const groupW = chipW * 3 + chipGap * 2;
   const firstCx = (CARD_W - groupW) / 2 + chipW / 2;
-  drawStatChip(ctx, firstCx, chipY, chipW, chipH, '⚡', 'SPEED', score.speed, COLORS.speed);
-  drawStatChip(ctx, firstCx + chipW + chipGap, chipY, chipW, chipH, '\u{1F3AF}', 'QUALITY', score.sobriety, COLORS.quality);
-  drawStatChip(ctx, firstCx + (chipW + chipGap) * 2, chipY, chipW, chipH, '\u{1F9E9}', 'FIT', score.fit, COLORS.fit);
+  // The speed sub-score tops out at 100 tok/s, so on a capable machine almost
+  // every model shows "100" and the chip says nothing. Show the rate actually
+  // measured instead -- "109 TOK/S" is a real number a reader can compare.
+  // Scores saved before the rate was persisted fall back to the sub-score.
+  const rate = formatThroughputValue(score.tokensPerSecond);
+  drawStatChip(ctx, firstCx, chipY, chipW, chipH, '⚡',
+    rate === null ? 'SPEED' : 'TOK/S',
+    rate ?? String(Math.round(score.speed)), COLORS.speed);
+  drawStatChip(ctx, firstCx + chipW + chipGap, chipY, chipW, chipH, '\u{1F3AF}', 'QUALITY', String(Math.round(score.sobriety)), COLORS.quality);
+  drawStatChip(ctx, firstCx + (chipW + chipGap) * 2, chipY, chipW, chipH, '\u{1F9E9}', 'FIT', String(Math.round(score.fit)), COLORS.fit);
 
   // Rig line.
   const rig = rigParts(system, showHostname).slice(0, 3).join('   ·   ');

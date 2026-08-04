@@ -81,15 +81,22 @@ export function scoreToToks(speed: number): string {
  * sub-score for older scores that predate the persisted field.
  */
 export function formatThroughput(score: { speed: number; tokensPerSecond?: number }): string {
-  const measured = score.tokensPerSecond;
-  if (typeof measured === 'number' && Number.isFinite(measured) && measured > 0) {
-    // Below ~20 tok/s the reader is waiting on the text, so a tenth is
-    // meaningful (10.7 vs 10.0 is a real difference). Above it the decimal is
-    // run-to-run noise.
-    const shown = measured >= 20 ? Math.round(measured) : Math.round(measured * 10) / 10;
-    return `${shown} tok/s`;
-  }
-  return scoreToToks(score.speed);
+  const value = formatThroughputValue(score.tokensPerSecond);
+  return value === null ? scoreToToks(score.speed) : `${value} tok/s`;
+}
+
+/**
+ * The bare number for a measured throughput, without the unit -- for places that
+ * supply their own label, such as the share card's stat chips. Returns null when
+ * there is no usable measurement, so callers can choose their own fallback.
+ *
+ * Shared with `formatThroughput` so the rounding rule exists in exactly one place.
+ */
+export function formatThroughputValue(measured: number | undefined): string | null {
+  if (typeof measured !== 'number' || !Number.isFinite(measured) || measured <= 0) return null;
+  // Below ~20 tok/s the reader is waiting on the text, so a tenth is meaningful
+  // (10.7 vs 10.0 is a real difference). Above it the decimal is run-to-run noise.
+  return String(measured >= 20 ? Math.round(measured) : Math.round(measured * 10) / 10);
 }
 
 /** Log-scale 0-100 meter fill for Ollama library pull counts. */
