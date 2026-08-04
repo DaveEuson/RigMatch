@@ -746,11 +746,29 @@ function getEtaLabel(pull?: PullProgressUpdate): string {
 function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
   const activeModel = runProgress?.currentModel ?? '';
   const round = (runProgress?.questionIndex ?? 0) + 1;
-  const totalRounds = runProgress?.questionTotal ?? shortlistedRows.length;
+  // questionTotal is the questions asked of EACH model. Falling back to the
+  // model count was meaningless — those are different quantities.
+  const totalRounds = runProgress?.questionTotal ?? 0;
   const question = runProgress?.questionPrompt ?? 'The host is lining up the next question…';
-  const percent = runProgress?.percent ?? 0;
   const completed = runProgress?.completed ?? 0;
   const [showPrompt, setShowPrompt] = useState(false);
+
+  // Models run one at a time, each answering every question, so "Round 4 of 10"
+  // is the CURRENT model's progress — it resets to 1 each time a new model
+  // starts. Shown on its own next to a bar that only ever advanced, it read as
+  // the run going backwards four times in a five-model lineup.
+  //
+  // Both now describe the same thing: which model we are on, and how far
+  // through the whole set of questions the run actually is.
+  const modelCount = shortlistedRows.length;
+  const modelNumber = Math.min(completed + 1, Math.max(1, modelCount));
+  const totalQuestions = modelCount * totalRounds;
+  const questionsDone = completed * totalRounds + (round - 1);
+  const overallPercent = totalQuestions > 0
+    ? Math.round((questionsDone / totalQuestions) * 100)
+    // No question counts yet (the run has not reported one): fall back to the
+    // model-level figure rather than showing a made-up number.
+    : (runProgress?.percent ?? 0);
 
   // Turn the suite's internal question label into something a beginner reads as
   // a skill being tested, not a format spec.
@@ -775,7 +793,15 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
             screen. Lead with a plain-English round label; keep the exact prompt
             one click away for anyone who wants to check the methodology. */}
         <div className="sw-compare-question">
-          <span className="sw-eyebrow">Round {round} of {totalRounds}</span>
+          {/* Naming the model makes the per-model round count read as intended
+              rather than as the run resetting. */}
+          <span className="sw-eyebrow">
+            {totalRounds > 0 && modelCount > 1
+              ? `Model ${modelNumber} of ${modelCount} · Round ${round} of ${totalRounds}`
+              : totalRounds > 0
+                ? `Round ${round} of ${totalRounds}`
+                : 'Getting started'}
+          </span>
           <p>{plainRoundLabel}</p>
           <button type="button" className="sw-link" onClick={() => setShowPrompt((v) => !v)}>
             {showPrompt ? 'Hide the exact question' : 'See the exact question'}
@@ -806,9 +832,24 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
         <div className="sw-show-progress">
           <div className="sw-show-progress-head">
             <span>Show progress</span>
-            <span>Round {round} of {totalRounds}</span>
+            {/* Counts every question the whole run will ask, so the label and the
+                bar move together and neither ever goes backwards. */}
+            <span>
+              {totalQuestions > 0
+                ? `${questionsDone} of ${totalQuestions} questions`
+                : `${overallPercent}%`}
+            </span>
           </div>
-          <div className="sw-show-progress-track" aria-hidden="true"><i style={{ width: `${Math.max(2, percent)}%` }} /></div>
+          <div
+            className="sw-show-progress-track"
+            role="progressbar"
+            aria-valuenow={overallPercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Show progress"
+          >
+            <i style={{ width: `${Math.max(2, overallPercent)}%` }} />
+          </div>
         </div>
       </div>
     </div>
