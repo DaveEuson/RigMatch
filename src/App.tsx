@@ -779,6 +779,13 @@ function App() {
         epithet: getModelEpithet(row),
         goodForLine: getModelGoodForLine(row),
         fitTier: fit.tone === 'sweet-spot' ? 'great' : fit.tone === 'good' ? 'well' : 'slower',
+        // The grid only ever shows models that fit, so every tier label reads the
+        // same. State the numbers a beginner actually needs to judge it.
+        fitDetail: row.sizeGb && vramGb > 0
+          ? `${formatGb(row.sizeGb)} of your ${formatGb(vramGb)} VRAM`
+          : row.sizeGb
+            ? `${formatGb(row.sizeGb)} on disk`
+            : '',
         dreamTags: getModelDreamTags(row),
       }));
   }, [modelRows, system.gpu.vramGb, system.platform]);

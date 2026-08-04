@@ -40,6 +40,9 @@ export type WizardModel = {
   epithet: string;
   goodForLine: string;
   fitTier: 'great' | 'well' | 'slower';
+  /** Concrete fit, e.g. "4.7 GB of your 12 GB VRAM" — the grid is pre-filtered to
+   *  models that fit, so the tier alone reads identically on every card. */
+  fitDetail: string;
   dreamTags: Array<Exclude<DreamFilterId, 'all'>>;
 };
 
@@ -608,6 +611,9 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
       <img className="sw-card-avatar" src={getModelAvatarSrc(model.row.displayName)} alt="" />
       <div className="sw-card-name">
         <strong>{model.name}</strong>
+        {/* The real pull tag: friendly names strip the variant, so Qwen2.5-coder
+            and Qwen2.5 were identical cards down to the avatar and persona. */}
+        <code className="sw-card-id">{model.row.displayName}</code>
         <em>{model.epithet}</em>
         {/* Size and whether it's already here — so "Download 5 models" is never a
             blind commitment, and installed picks are visibly free. */}
@@ -623,8 +629,9 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
         <span className="sw-eyebrow">Good for</span>
         <p>{model.goodForLine}</p>
       </div>
-      <span className={`sw-fit-badge ${model.fitTier === 'slower' ? 'gold' : 'green'}`}>
+      <span className={`sw-fit-badge ${model.fitTier === 'slower' ? 'gold' : 'green'}`} title={model.fitDetail}>
         <Heart aria-hidden="true" />{fitLabel}
+        {model.fitDetail && <i className="sw-fit-detail">{model.fitDetail}</i>}
       </span>
       <button
         type="button"

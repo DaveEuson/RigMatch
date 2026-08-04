@@ -825,6 +825,23 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
    and the collapsible raw benchmark prompt on Compare. */
 .sw-setup-safety { font-size: 12px; margin-top: -10px; }
 .sw-card-size { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
+/* The real pull tag. Monospace so a variant like "-coder" is scannable against
+   the friendly name above it. */
+.sw-card-id {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+/* Concrete fit numbers, carried inside the badge so they cannot drift from it. */
+.sw-fit-detail {
+  font-style: normal;
+  font-weight: 600;
+  opacity: 0.8;
+}
+.sw-fit-detail::before { content: '· '; }
 .sw-winner-tag { display: block; font-size: 11px; color: var(--muted); font-style: normal; }
 .sw-winner-why { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--muted); max-width: 46ch; }
 .sw-compare-raw { margin-top: 8px; font-size: 13px; opacity: 0.85; }
