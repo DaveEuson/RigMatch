@@ -229,6 +229,7 @@ import type {
   SortDirection,
 } from './lib/modelCatalog';
 import { dropChat, dropTranscripts, writeLocal, writeLocalJson, writeLocalJsonWithFallback } from './lib/safeStorage';
+import { collapseModelVariants } from './lib/wizardVariants';
 import {
   appendRuns,
   emptyRunHistory,
@@ -784,7 +785,7 @@ function App() {
   const wizardModels = useMemo<WizardModel[]>(() => {
     const vramGb = system.gpu.vramGb;
     const fitRank: Record<string, number> = { 'sweet-spot': 0, good: 1, tight: 2 };
-    return modelRows
+    const mapped = modelRows
       .filter((row) => getPlatformFit(row.displayName, system.platform).compatible)
       .map((row) => ({ row, fit: getHardwareFit(row, vramGb) }))
       .filter((entry) => entry.fit.recommend && entry.fit.tone !== 'unknown')
@@ -809,7 +810,11 @@ function App() {
             : '',
         dreamTags: getModelDreamTags(row),
       }));
-  }, [modelRows, system.gpu.vramGb, system.platform]);
+
+    // One card per model name — see collapseModelVariants for the reasoning
+    // (first outside review: "many versions of Gemma 4").
+    return collapseModelVariants(mapped, shortlistIds);
+  }, [modelRows, shortlistIds, system.gpu.vramGb, system.platform]);
 
   const wizardWinner = useMemo(
     () => (topRigPick?.score
@@ -2049,9 +2054,18 @@ function App() {
       && !isEmbeddingModel(row.displayName)
       && !isLikelyImageGenerationModel(row.displayName));
 
+    // One entry per model name: an auto-picked lineup of five Gemma sizes would
+    // be a rigged show — five near-identical contestants answering the same
+    // questions. The point of "Choose for me" is a varied field.
+    const seenNames = new Set<string>();
     const ranked = [...eligible].sort((left, right) => {
       if (left.installed !== right.installed) return left.installed ? -1 : 1;
       return (right.sizeGb ?? 0) - (left.sizeGb ?? 0);
+    }).filter((row) => {
+      const name = getFriendlyModelName(row.displayName);
+      if (seenNames.has(name)) return false;
+      seenNames.add(name);
+      return true;
     }).slice(0, 5);
 
     if (ranked.length === 0) {
@@ -2936,6 +2950,7 @@ function App() {
           onChooseForMe={chooseShortlistForMe}
           pullProgressByModel={pullProgressByModel}
           onStartDownloads={() => requestThirdPartyModelDownloads(shortlistedRows)}
+          onCancelDownloads={cancelDownloadQueue}
           isListTesting={isListTesting}
           benchmarkActive={isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running)}
           runProgress={runProgress}
@@ -3581,7 +3596,7 @@ function FirstRunTutorial({
       : ollamaReady
         ? `Ollama ready${ollamaVersion ? ` · v${ollamaVersion}` : ''}${installedCount > 0 ? ` · ${installedCount} installed` : ''}`
         : 'No local AI provider detected yet';
-  const steps: Array<{ round: string; title: string; body: ReactNode; prize: string; navId: NavId }> = [
+  const steps: Array<{ round: string; title: string; body: ReactNode; prize: string; navId: NavId; hidden?: boolean }> = [
     {
       round: '👋 Welcome',
       title: 'Find the best local AI for this computer',
@@ -3597,23 +3612,9 @@ function FirstRunTutorial({
               <><AlertCircle aria-hidden="true" /> No local test engine detected — start Ollama or LM Studio local server.</>
             )}
           </div>
-          <div className="tutorial-how-it-works">
-            <div className="tutorial-how-card">
-              <Boxes aria-hidden="true" />
-              <strong>Pick models</strong>
-              <em>We flag which ones your PC can handle based on VRAM.</em>
-            </div>
-            <div className="tutorial-how-card">
-              <Gauge aria-hidden="true" />
-              <strong>Same test, every model</strong>
-              <em>Same questions, timed and scored fairly on this hardware.</em>
-            </div>
-            <div className="tutorial-how-card">
-              <Trophy aria-hidden="true" />
-              <strong>Get your top match</strong>
-              <em>Scorecards rank each model by answer quality, speed, finish rate, and computer fit.</em>
-            </div>
-          </div>
+          {/* No how-it-works cards here: "The Show" panel explains the same
+              three beats in the show's own voice. Saying it twice in one
+              tutorial was reviewer feedback #1 — every panel earns its text. */}
         </div>
       ),
       prize: 'Everything runs on this computer. No cloud, no account, no subscription.',
@@ -3621,17 +3622,13 @@ function FirstRunTutorial({
     },
     {
       round: '🔧 Setup',
-      title: localProviderReady ? 'Local AI is running — you\'re set up!' : 'Connect a local AI provider to test models',
-      body: localProviderReady ? (
-        <div className="tutorial-intro-body">
-          <div className="tutorial-ollama-status ready">
-            <CheckCircle aria-hidden="true" />
-            {providerSummary}
-          </div>
-          <p className="tutorial-intro-lead">RigMatch can benchmark through the local Ollama API or LM Studio's OpenAI-compatible local server. Everything stays on this computer.</p>
-          <p>You're all set. Hit <strong>Next</strong> to see how the show works.</p>
-        </div>
-      ) : (
+      // When a provider is already running there is nothing to set up: the panel
+      // only repeated the readiness strip from Welcome in a second layout
+      // (reviewer feedback — "saying Ollama is ready, repeated on multiple
+      // tabs"). It now only exists when there is actual setup to do.
+      hidden: localProviderReady,
+      title: 'Connect a local AI provider to test models',
+      body: (
         <div className="tutorial-intro-body">
           <div className="tutorial-ollama-status offline">
             <AlertCircle aria-hidden="true" />
@@ -3652,7 +3649,7 @@ function FirstRunTutorial({
           </div>
         </div>
       ),
-      prize: localProviderReady ? 'Engine ready — let\'s meet the contestants.' : 'Connect Ollama or start LM Studio local server, then check again.',
+      prize: 'Connect Ollama or start LM Studio local server, then check again.',
       navId: 'lan' as NavId,
     },
     {
@@ -3704,14 +3701,17 @@ function FirstRunTutorial({
       navId: 'models' as NavId,
     },
   ];
-  const currentIndex = Math.min(Math.max(stepIndex, 0), steps.length - 1);
-  const step = steps[currentIndex];
-  const isLastStep = currentIndex === steps.length - 1;
+  // Drop panels with nothing to say (e.g. Setup when a provider is already
+  // running) instead of rendering them as filler. The rail renumbers itself.
+  const visibleSteps = steps.filter((entry) => !entry.hidden);
+  const currentIndex = Math.min(Math.max(stepIndex, 0), visibleSteps.length - 1);
+  const step = visibleSteps[currentIndex];
+  const isLastStep = currentIndex === visibleSteps.length - 1;
 
   const goToStep = (nextIndex: number) => {
-    const boundedIndex = Math.min(Math.max(nextIndex, 0), steps.length - 1);
+    const boundedIndex = Math.min(Math.max(nextIndex, 0), visibleSteps.length - 1);
     onStepChange(boundedIndex);
-    onSelectNav(steps[boundedIndex].navId);
+    onSelectNav(visibleSteps[boundedIndex].navId);
   };
 
   return (
@@ -3738,7 +3738,7 @@ function FirstRunTutorial({
             <strong>{step.prize}</strong>
           </div>
           <ol className="tutorial-steps" aria-label="Tutorial progress">
-            {steps.map((tutorialStep, index) => (
+            {visibleSteps.map((tutorialStep, index) => (
               <li key={tutorialStep.round} className={index === currentIndex ? 'active' : index < currentIndex ? 'done' : ''}>
                 <button type="button" onClick={() => goToStep(index)}>
                   <span>{index + 1}</span>
@@ -4342,7 +4342,7 @@ function OllamaPrep({
   if (ready || !isDesktopRuntime) {
     const prepTitle = isDesktopRuntime ? `${platformName} ready` : 'Preview sample data';
     const prepMessage = isDesktopRuntime
-      ? 'This computer is ready. RigMatch 0.2.x tests through local Ollama on this machine.'
+      ? 'This computer is ready. Tests run through local Ollama on this machine.'
       : 'Preview sample data is local-only. The desktop app checks your real Ollama install.';
     return (
       <div className="ollama-prep ready">

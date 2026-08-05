@@ -45,6 +45,11 @@ export type WizardModel = {
    *  models that fit, so the tier alone reads identically on every card. */
   fitDetail: string;
   dreamTags: Array<Exclude<DreamFilterId, 'all'>>;
+  /** How many size/quant variants this card is standing in for (> 1 only when
+   *  siblings were collapsed). Beginners were shown every variant as its own
+   *  near-identical card — "many versions of Gemma 4... I don't know how these
+   *  parameters/differences work" was the first outside review's top confusion. */
+  variantCount?: number;
 };
 
 type SimpleRunProgress = {
@@ -109,6 +114,11 @@ type SimpleWizardProps = {
   onChooseForMe: () => void;
   pullProgressByModel: Record<string, PullProgressUpdate>;
   onStartDownloads: () => void;
+  /** Cancels the whole download queue. Advanced Mode has always had this; the
+   *  beginners' mode was the one place a multi-GB download couldn't be stopped
+   *  (first outside review: "would be nice to have a stop/cancel button …
+   *  oh its on advanced"). */
+  onCancelDownloads: () => void;
   isListTesting: boolean;
   /** True while any benchmark is running (renderer or main-process state). */
   benchmarkActive: boolean;
@@ -129,7 +139,7 @@ type SimpleWizardProps = {
 };
 
 export function SimpleWizard(props: SimpleWizardProps) {
-  const { system, ollamaReady, shortlistedRows, winner, benchmarkActive } = props;
+  const { ollamaReady, shortlistedRows, winner, benchmarkActive } = props;
 
   const setupDone = ollamaReady;
   const pickDone = shortlistedRows.length >= 1;
@@ -221,6 +231,12 @@ export function SimpleWizard(props: SimpleWizardProps) {
     if (step === 'compare' && skipDownload) { setStep('pick'); return; }
     if (stepIndex > 0) setStep(STEPS[stepIndex - 1]);
   };
+
+  // While anything is queued or pulling, the footer's Back slot becomes "Stop
+  // downloads": mid-download, stopping is worth more than navigating — and Back
+  // alone would leave a multi-GB queue running invisibly behind the Pick screen.
+  const downloadsActive = step === 'download' && Object.values(props.pullProgressByModel)
+    .some((p) => p.phase === 'queued' || p.phase === 'started' || p.phase === 'pulling' || p.phase === 'paused');
 
   // Size + time on the commitment buttons: "Download 5 models" with no GB and no
   // ETA is the scariest unqualified ask in the flow, and the data is right here.
@@ -326,19 +342,21 @@ export function SimpleWizard(props: SimpleWizardProps) {
             <button
               type="button"
               className="sw-ghost-pill"
-              onClick={step === 'compare' ? props.onStopShow : goBack}
+              onClick={step === 'compare' ? props.onStopShow : downloadsActive ? props.onCancelDownloads : goBack}
               title={step === 'compare'
                 ? 'Stops after the current question. Models already scored keep their results.'
-                : undefined}
+                : downloadsActive
+                  ? 'Stops after the current file. Anything already downloaded stays on your PC.'
+                  : undefined}
             >
               <ArrowLeft aria-hidden="true" />
-              {step === 'compare' ? 'Stop the show' : 'Back'}
+              {step === 'compare' ? 'Stop the show' : downloadsActive ? 'Stop downloads' : 'Back'}
             </button>
           )}
         </div>
         {step === 'pick'
           ? <LineupTray shortlistedRows={shortlistedRows} onRemove={props.onTogglePick} />
-          : <span className="sw-footer-hint">{footerHint(step, system, shortlistedRows.length)}</span>}
+          : <span className="sw-footer-hint">{footerHint(step, ollamaReady, shortlistedRows.length)}</span>}
         <div className="sw-footer-right">
           {step !== 'winner' && (
             <button
@@ -358,9 +376,12 @@ export function SimpleWizard(props: SimpleWizardProps) {
   );
 }
 
-function footerHint(step: StepId, _system: SystemProfile, pickCount: number): string {
+function footerHint(step: StepId, ready: boolean, pickCount: number): string {
   switch (step) {
-    case 'setup': return 'Your computer is ready for the show';
+    // Only claim readiness once the check has actually passed. Before that this
+    // line congratulated the user for a scan that hadn't run — and once it has,
+    // the Setup screen already says so, so the footer stays quiet either way.
+    case 'setup': return ready ? '' : 'One click checks Ollama and your hardware — nothing is installed or changed';
     case 'download': return 'Heads up: the show works your GPU, CPU, and fans hard until a winner is crowned — close heavy apps first';
     case 'compare': return 'Scores appear live — the winner is crowned after the last round';
     case 'winner': return 'RigMatch remembers your Top Match — find it any time in the header';
@@ -634,6 +655,12 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
               ? `${model.row.sizeGb} GB download`
               : 'Size unknown'}
         </span>
+        {/* Collapsed siblings get one honest line instead of N clone cards. */}
+        {(model.variantCount ?? 0) > 1 && (
+          <span className="sw-card-variants">
+            Best of {model.variantCount} sizes for your PC · all sizes in Advanced
+          </span>
+        )}
       </div>
       <div className="sw-card-goodfor">
         <span className="sw-eyebrow">Good for</span>
