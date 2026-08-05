@@ -36,7 +36,7 @@
   },
   "build": {
     "appId": "ai.rigmatch.app",
-    "productName": "RigMatch.AI",
+    "productName": "RigMatch",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "dist/**",

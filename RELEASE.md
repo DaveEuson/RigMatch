@@ -1,4 +1,4 @@
-# RigMatch.AI Release Checklist
+# RigMatch Release Checklist
 
 Use this before tagging or publishing a beta release.
 
@@ -47,7 +47,7 @@ For the Rust companion audit, run `cargo audit` from `rigmatch-chat/src-tauri`.
 
 ## Manual smoke tests
 
-- Fresh install opens RigMatch.AI and shows the expected version.
+- Fresh install opens RigMatch and shows the expected version.
 - Upgrade install over the previous beta keeps existing scorecards/settings.
 - RigMatch Chat launches from the main app without a "not found" error.
 - Check Local detects Ollama, installed models, CPU, RAM, VRAM, and storage.
@@ -70,7 +70,7 @@ For the Rust companion audit, run `cargo audit` from `rigmatch-chat/src-tauri`.
 
 Ask testers for:
 
-- RigMatch.AI version
+- RigMatch version
 - OS and hardware summary
 - Ollama version
 - Current provider/test engine shown in the app
@@ -84,7 +84,7 @@ Do not ask testers to share private prompts unless they are comfortable doing so
 
 To roll back:
 
-1. Close RigMatch.AI and RigMatch Chat.
+1. Close RigMatch and RigMatch Chat.
 2. Uninstall the current build.
 3. Install the previous GitHub release.
 4. Keep the app user-data folder intact unless a clean reset is required.

@@ -1,4 +1,8 @@
 ; RigMatch dual-app installer — component selection + Chat shortcuts
+;
+; Shortcut cleanup covers BOTH name eras: installs that predate the rename used
+; a "RigMatch.AI" Start Menu folder and desktop link. Upgrades and uninstalls
+; must clear those too, or renamed installs show the app twice.
 
 !macro customHeader
   !include nsDialogs.nsh
@@ -25,7 +29,7 @@
     ${NSD_CreateLabel} 0 0 100% 28u "Choose which apps to install:"
     Pop $0
 
-    ${NSD_CreateCheckbox} 8u 34u 100% 14u "RigMatch.AI  —  benchmark and rank AI models on your hardware"
+    ${NSD_CreateCheckbox} 8u 34u 100% 14u "RigMatch  —  benchmark and rank AI models on your hardware"
     Pop $HwndCheckRigMatch
     ${NSD_Check} $HwndCheckRigMatch
 
@@ -52,24 +56,36 @@
   ; --- RigMatch Chat shortcuts ---
   ${If} $InstallChat == ${BST_CHECKED}
     ${If} ${FileExists} "$INSTDIR\companions\rigmatch-chat.exe"
-      CreateDirectory "$SMPROGRAMS\RigMatch.AI"
+      CreateDirectory "$SMPROGRAMS\RigMatch"
       Delete "$DESKTOP\RigMatch Chat.lnk"
-      Delete "$SMPROGRAMS\RigMatch.AI\RigMatch Chat.lnk"
+      Delete "$SMPROGRAMS\RigMatch\RigMatch Chat.lnk"
       CreateShortCut "$DESKTOP\RigChat.lnk" "$INSTDIR\companions\rigmatch-chat.exe" "" "$INSTDIR\companions\rigmatch-chat.exe" 0
-      CreateShortCut "$SMPROGRAMS\RigMatch.AI\RigChat.lnk" "$INSTDIR\companions\rigmatch-chat.exe" "" "$INSTDIR\companions\rigmatch-chat.exe" 0
+      CreateShortCut "$SMPROGRAMS\RigMatch\RigChat.lnk" "$INSTDIR\companions\rigmatch-chat.exe" "" "$INSTDIR\companions\rigmatch-chat.exe" 0
     ${EndIf}
   ${EndIf}
 
-  ; --- If user deselected RigMatch.AI, remove its shortcuts ---
+  ; --- Old-name leftovers: upgrading from a RigMatch.AI-branded install ---
+  Delete "$SMPROGRAMS\RigMatch.AI\RigChat.lnk"
+  Delete "$SMPROGRAMS\RigMatch.AI\RigMatch Chat.lnk"
+  Delete "$SMPROGRAMS\RigMatch.AI\RigMatch.AI.lnk"
+  RMDir "$SMPROGRAMS\RigMatch.AI"
+  Delete "$DESKTOP\RigMatch.AI.lnk"
+
+  ; --- If user deselected RigMatch, remove its shortcuts ---
   ${If} $InstallRigMatch <> ${BST_CHECKED}
-    Delete "$DESKTOP\RigMatch.AI.lnk"
-    Delete "$SMPROGRAMS\RigMatch.AI\RigMatch.AI.lnk"
+    Delete "$DESKTOP\RigMatch.lnk"
+    Delete "$SMPROGRAMS\RigMatch\RigMatch.lnk"
   ${EndIf}
 !macroend
 
 !macro customUnInstall
   Delete "$DESKTOP\RigChat.lnk"
-  Delete "$SMPROGRAMS\RigMatch.AI\RigChat.lnk"
+  Delete "$SMPROGRAMS\RigMatch\RigChat.lnk"
   Delete "$DESKTOP\RigMatch Chat.lnk"
+  Delete "$SMPROGRAMS\RigMatch\RigMatch Chat.lnk"
+  RMDir "$SMPROGRAMS\RigMatch"
+  ; Old-name leftovers from installs that predate the rename.
+  Delete "$SMPROGRAMS\RigMatch.AI\RigChat.lnk"
   Delete "$SMPROGRAMS\RigMatch.AI\RigMatch Chat.lnk"
+  RMDir "$SMPROGRAMS\RigMatch.AI"
 !macroend

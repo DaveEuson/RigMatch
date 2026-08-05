@@ -97,7 +97,7 @@ async function runBrowserChecks(url) {
 
   const issues = [...consoleIssues, ...mobileConsoleIssues].filter((line) => !line.includes('frame-ancestors'));
   const checks = {
-    title: title === 'RigMatch.AI',
+    title: title === 'RigMatch',
     simpleWizardVisible,
     simpleStepPills: simpleStepCount === 5,
     simpleMenuHidden,

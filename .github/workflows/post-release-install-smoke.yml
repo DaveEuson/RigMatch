@@ -40,8 +40,8 @@ jobs:
           set -euo pipefail
           version="${TAG#v}"
           version="${version%%-*}"
-          appimage="RigMatch.AI-${version}-${APPIMAGE_SUFFIX}"
-          deb="RigMatch.AI-${version}-${DEB_SUFFIX}"
+          appimage="RigMatch-${version}-${APPIMAGE_SUFFIX}"
+          deb="RigMatch-${version}-${DEB_SUFFIX}"
 
           mkdir -p assets
           gh release download "$TAG" \
@@ -63,12 +63,12 @@ jobs:
           set -euo pipefail
           version="${TAG#v}"
           version="${version%%-*}"
-          appimage="assets/RigMatch.AI-${version}-${APPIMAGE_SUFFIX}"
+          appimage="assets/RigMatch-${version}-${APPIMAGE_SUFFIX}"
 
           chmod +x "$appimage"
           "$appimage" --appimage-extract >/tmp/rigmatch-appimage-extract.log 2>&1
           test -x squashfs-root/AppRun
-          find squashfs-root -maxdepth 2 -type f \( -name "*.desktop" -o -name "RigMatch.AI" -o -name "rigmatch-ai" \) -print
+          find squashfs-root -maxdepth 2 -type f \( -name "*.desktop" -o -name "RigMatch" -o -name "rigmatch-ai" \) -print
 
       - name: Install Debian package
         env:
@@ -79,7 +79,7 @@ jobs:
           set -euo pipefail
           version="${TAG#v}"
           version="${version%%-*}"
-          deb="assets/RigMatch.AI-${version}-${DEB_SUFFIX}"
+          deb="assets/RigMatch-${version}-${DEB_SUFFIX}"
 
           sudo apt-get update
           sudo apt-get install -y "./$deb"
@@ -112,7 +112,7 @@ jobs:
           set -euo pipefail
           version="${TAG#v}"
           version="${version%%-*}"
-          dmg="RigMatch.AI-${version}-${DMG_SUFFIX}"
+          dmg="RigMatch-${version}-${DMG_SUFFIX}"
 
           mkdir -p assets
           gh release download "$TAG" \
@@ -132,7 +132,7 @@ jobs:
           set -euo pipefail
           version="${TAG#v}"
           version="${version%%-*}"
-          dmg="assets/RigMatch.AI-${version}-${DMG_SUFFIX}"
+          dmg="assets/RigMatch-${version}-${DMG_SUFFIX}"
           mountpoint="$RUNNER_TEMP/rigmatch-dmg"
           install_dir="$RUNNER_TEMP/RigMatchInstallSmoke"
 
@@ -141,16 +141,16 @@ jobs:
           trap 'hdiutil detach "$mountpoint" -quiet || true' EXIT
 
           find "$mountpoint" -maxdepth 2 -name "*.app" -print
-          test -d "$mountpoint/RigMatch.AI.app"
+          test -d "$mountpoint/RigMatch.app"
           test -d "$mountpoint/RigMatch Chat.app"
 
-          app_version="$(plutil -extract CFBundleShortVersionString raw -o - "$mountpoint/RigMatch.AI.app/Contents/Info.plist")"
+          app_version="$(plutil -extract CFBundleShortVersionString raw -o - "$mountpoint/RigMatch.app/Contents/Info.plist")"
           test "$app_version" = "$version"
-          test -x "$mountpoint/RigMatch.AI.app/Contents/MacOS/RigMatch.AI"
+          test -x "$mountpoint/RigMatch.app/Contents/MacOS/RigMatch"
 
-          ditto "$mountpoint/RigMatch.AI.app" "$install_dir/RigMatch.AI.app"
+          ditto "$mountpoint/RigMatch.app" "$install_dir/RigMatch.app"
           ditto "$mountpoint/RigMatch Chat.app" "$install_dir/RigMatch Chat.app"
-          xattr -cr "$install_dir/RigMatch.AI.app" "$install_dir/RigMatch Chat.app"
+          xattr -cr "$install_dir/RigMatch.app" "$install_dir/RigMatch Chat.app"
 
-          test -x "$install_dir/RigMatch.AI.app/Contents/MacOS/RigMatch.AI"
+          test -x "$install_dir/RigMatch.app/Contents/MacOS/RigMatch"
           find "$install_dir/RigMatch Chat.app/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print -quit | grep .

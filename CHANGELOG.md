@@ -4,6 +4,47 @@ Every RigMatch release, newest first. These are the same notes the app shows in
 Update Center — this file and the GitHub release pages are generated from
 `src/data/releaseNotes.ts`, so there is only one place to write them.
 
+## 0.4.0 — A Fair Fight
+_Beta build_
+
+- Models no longer compete with each other for your graphics card. RigMatch kept each model loaded after its turn, so in a comparison the second model shared the card with the first, the third with both, and so on — until later models ran out of room and fell back to the much slower processor. That means a model's score partly depended on when it was tested rather than how good it is. Each model is now cleared out before the next one starts, so everyone gets the same questions AND the same machine. If you have run a comparison before, it is worth running it again: your existing rankings may have been unfair to whoever went last.
+- RigMatch now checks whether something else is using your graphics card before a test, and says so. A game, another AI app, or a video export will make every score come out lower than your computer can really do. It only ever names programs it is confident about, and it never blocks the test — it tells you, and you decide.
+- Results remember whether the graphics card was busy when they were measured. So if a score drops, RigMatch can tell you the run was made on a busy machine instead of quietly showing it as the model getting worse.
+- Fixed the progress counter going backwards during a comparison. It counted questions for the current model, so it reset to "Round 1 of 10" each time a new model started, while the bar beside it kept moving forward. It now names the model the round belongs to and counts every question the whole comparison will ask.
+- "Share your score" is now on the winner screen in Simple Mode, where the result is — instead of only in Advanced Mode.
+- Better support for Macs and other computers that share memory between the processor and the graphics card, including Apple Silicon and NVIDIA's newer desktop AI machines. RigMatch can now read graphics activity on Apple Silicon, which it previously could not do at all.
+- Also fixed: the sidebar menu overlapping the support button, and the winner's score on the Simple Mode finish screen showing a whole number when every other screen showed one decimal.
+
+## 0.3.10 — Numbers That Mean Something
+_Beta build_
+
+- Skill tests no longer give credit for doing nothing. A model that returned no answer at all was scored 50 out of 100 and shown a "D" — because two of the four checks were looking for signs of a bad answer, and an empty answer has none. Returning nothing now scores zero, and the result tells you what happened: whether the model refused, ran out of room, or simply cannot read images through Ollama. Image generation had the same flaw plus a check that was really testing RigMatch's own settings rather than the model, quietly adding a quarter of the score to every result.
+- Filter chips now count what you will actually get. Picking "Makes images 3" while another filter was on could show an empty table — the chip counted every model in the catalog while the table also applied your other filters. Each chip now counts only what matches everything else you have selected, and the table is built from the same rule, so the two cannot disagree again.
+- The window no longer breaks when you make it smaller. Below roughly 1100 pixels wide the side menu collapsed, the model list vanished, and there was no way to scroll to it. Narrow windows now scroll normally, and the menu shows all eight items instead of three in a cramped inner scrollbar.
+- Every Match score is now shown the same way, to one decimal. The same model could appear as 92, 92.7, 93 and 93.1 on different screens because the app switched formats depending on the number.
+- The guided path keeps your place. Switching between Simple and Advanced no longer sends you back to step one, and "See the full scorecard" — which quietly changed the whole interface — now explains the change and offers a way back. The download step is skipped entirely when your models are already installed, instead of showing progress bars for a download that is not happening.
+- Model cards show what you need to choose: the real model name, so a coding variant is no longer indistinguishable from the general one, and the actual space it needs against the memory you have.
+- Run Logs finally records your runs. It only ever logged failures, so it sat empty after a successful test — the one time you might want to check what happened.
+- Under the hood: the two honest notes about how scoring works now sit beside the score itself instead of three levels deep in Settings; running out of browser storage can no longer break the app; and all known security advisories in the app and its chat companion are cleared.
+
+## 0.3.9 — Updates That Actually Arrive
+_Beta build_
+
+- Fixed automatic updates on Linux. RigMatch was looking for an update file under a name the build never published, so every check quietly failed and Linux users were simply never told a new version existed. Both the 64-bit and ARM builds were affected.
+- Fixed automatic updates on Intel Macs. Only the Apple Silicon build was listed in the update information, so Intel Macs had nothing valid to download and the check failed. Both Mac types are now listed together, and each machine picks the right one.
+- One important note if you are on Linux or an Intel Mac today: because the old builds are the ones doing the looking, this release cannot reach you automatically. Download 0.3.9 by hand once from the releases page, and updates will work normally from then on. Windows and Apple Silicon were never affected.
+- Added a safety check to the release process itself. Publishing now fails outright if the update information is missing a computer type, instead of shipping something that looks fine and only breaks later on somebody else’s machine — which is exactly how this went unnoticed for three releases.
+- No changes to testing or scoring in this build. Your saved results and score history from 0.3.8 carry over untouched.
+
+## 0.3.8 — It Remembers
+_Beta build_
+
+- RigMatch now keeps a history of every test instead of only the most recent one. Re-testing a model used to overwrite its previous result, which meant the comparison disappeared at exactly the moment it got interesting. Your past runs are kept, so you can see how a model has done over time on your machine.
+- New "since last test" reading on each model: re-run a model and RigMatch tells you what changed — "+7 vs. 3 weeks ago" — with the score trend line beside it. If your computer changed between the two tests, it says so, because a new graphics card is a fair reason for a different score.
+- RigMatch will not compare tests that were not run the same way. If you changed the number of questions, or the scoring itself changed in an update, the two numbers were not measured alike — so instead of reporting a made-up improvement, it looks further back for a test it can honestly compare against.
+- Score trends now survive closing the app. They were being tracked all along but thrown away on exit, so the trend line only ever appeared during a single sitting. If you already have results from an earlier version, they become the starting point of your history rather than disappearing.
+- Clearing your scores now clears the saved history too, so a fresh start is genuinely fresh. Uninstalling a model does not: freeing up disk space should not erase what you measured, and reinstalling picks the trend back up where it left off.
+
 ## 0.3.7 — One Score, One Grade Table
 _Beta build_
 

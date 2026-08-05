@@ -70,27 +70,27 @@ export function renderWhatsNew(entry) {
 
 const DOWNLOAD_SECTIONS = `## Downloads
 
-- **Windows**: \`RigMatch.AI-*-win-x64.exe\`
-- **macOS Apple Silicon**: \`RigMatch.AI-*-mac-arm64.dmg\`
-- **macOS Intel**: \`RigMatch.AI-*-mac-x64.dmg\`
-- **Linux x64**: \`RigMatch.AI-*-linux-x86_64.AppImage\` or \`RigMatch.AI-*-linux-amd64.deb\`
-- **Linux ARM64 / Jetson**: \`RigMatch.AI-*-linux-arm64.AppImage\` or \`RigMatch.AI-*-linux-arm64.deb\`
+- **Windows**: \`RigMatch-*-win-x64.exe\`
+- **macOS Apple Silicon**: \`RigMatch-*-mac-arm64.dmg\`
+- **macOS Intel**: \`RigMatch-*-mac-x64.dmg\`
+- **Linux x64**: \`RigMatch-*-linux-x86_64.AppImage\` or \`RigMatch-*-linux-amd64.deb\`
+- **Linux ARM64 / Jetson**: \`RigMatch-*-linux-arm64.AppImage\` or \`RigMatch-*-linux-arm64.deb\`
 
-Downloads still carry the \`RigMatch.AI\` filename so existing installs keep updating cleanly. The app is just called RigMatch.
+Already running an older install? It updates itself to this version automatically — nothing to re-download.
 
 ## macOS first launch
 
 RigMatch for macOS is currently an unsigned beta distributed outside the App Store. On first launch, macOS may say the developer cannot be verified or that the app was downloaded from the internet.
 
-1. Download **RigMatch.AI-*-mac-arm64.dmg** for Apple Silicon/M-series Macs, or **RigMatch.AI-*-mac-x64.dmg** for Intel Macs.
-2. Open the \`.dmg\` and drag **RigMatch.AI** to **Applications**.
-3. First launch only: right-click or Control-click **RigMatch.AI.app**, choose **Open**, then choose **Open** again.
+1. Download **RigMatch-*-mac-arm64.dmg** for Apple Silicon/M-series Macs, or **RigMatch-*-mac-x64.dmg** for Intel Macs.
+2. Open the \`.dmg\` and drag **RigMatch** to **Applications**.
+3. First launch only: right-click or Control-click **RigMatch.app**, choose **Open**, then choose **Open** again.
 4. If macOS still blocks it, open **System Settings > Privacy & Security**, scroll to **Security**, and choose **Open Anyway** for RigMatch.
 
 After that first approval, RigMatch opens normally by double-clicking. If macOS says the app is damaged after copying it to Applications, run this Terminal command once:
 
 \`\`\`bash
-xattr -cr /Applications/RigMatch.AI.app
+xattr -cr /Applications/RigMatch.app
 \`\`\`
 
 Apple reference: https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac`;

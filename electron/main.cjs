@@ -125,7 +125,7 @@ function openExternalSafe(url) {
 }
 let latestCudaCache = null;
 let latestCudaCacheAt = 0;
-const APP_USER_AGENT = `RigMatchAI/${app.getVersion()}`;
+const APP_USER_AGENT = `RigMatch/${app.getVersion()}`;
 const SCORES_SERVER_PORT = 11435;
 const BENCHMARK_REPEATS = 3; // median of 3 timed runs per prompt for a steadier speed score
 const BENCHMARK_TIMEOUT_MS = 120000;

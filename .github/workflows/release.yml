@@ -135,7 +135,7 @@ jobs:
           fi
           # Mac: handled by afterPack hook — Chat.app is bundled into the DMG
 
-      - name: Build RigMatch.AI
+      - name: Build RigMatch
         run: npm run build && npm exec -- electron-builder ${{ matrix.builderArgs }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
@@ -199,7 +199,7 @@ jobs:
       - name: Generate SHA-256 checksums
         run: |
           cd release
-          find . -maxdepth 2 -type f \( -name "RigMatch.AI-*.exe" -o -name "RigMatch.AI-*.dmg" -o -name "RigMatch.AI-*.AppImage" -o -name "RigMatch.AI-*.deb" -o -name "RigMatch.AI-*.zip" \) -print0 | xargs -0 sha256sum > SHA256SUMS.txt
+          find . -maxdepth 2 -type f \( -name "RigMatch-*.exe" -o -name "RigMatch-*.dmg" -o -name "RigMatch-*.AppImage" -o -name "RigMatch-*.deb" -o -name "RigMatch-*.zip" \) -print0 | xargs -0 sha256sum > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       # Body = the tag's entry from src/data/releaseNotes.ts (same text the in-app
@@ -237,10 +237,10 @@ jobs:
           generate_release_notes: true
           body_path: RELEASE_NOTES.md
           files: |
-            release/RigMatch.AI-*.exe
-            release/RigMatch.AI-*.dmg
-            release/RigMatch.AI-*.AppImage
-            release/RigMatch.AI-*.deb
-            release/RigMatch.AI-*.zip
+            release/RigMatch-*.exe
+            release/RigMatch-*.dmg
+            release/RigMatch-*.AppImage
+            release/RigMatch-*.deb
+            release/RigMatch-*.zip
             release/latest*.yml
             release/SHA256SUMS.txt
