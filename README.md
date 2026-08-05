@@ -33,23 +33,27 @@ Everything runs on your machine. No account, no cloud, no telemetry.
 
 ## Simple Mode — local AI for everyone
 
-New in this release: a five-step guided wizard for people who have never heard of VRAM and just want "the best AI for my PC." A game-show host walks you through the whole thing.
+A five-step guided wizard for people who have never heard of VRAM and just want "the best AI for my PC." A game-show host walks you through the whole thing.
 
 ### 1 · Setup — check your computer
 
 One click detects Ollama and reads your hardware — no jargon, just "you're all set."
 
-<p align="center"><img src="docs/images/01-setup.png" alt="Setup step — check your computer" width="100%"></p>
+<p align="center"><img src="docs/images/01-setup.png" alt="Setup step — the full RigMatch window with the five-step rail" width="100%"></p>
+
+<!-- Screenshots 2–5 are cropped to each step's stage: the header rail and
+     footer repeat identically on every step, and a walkthrough that re-shows
+     them makes the reader hunt for what changed (first outside review). -->
 
 ### 2 · Pick — meet the contestants
 
-Tell the host who your dream model is — someone to talk with, a coding buddy, an image maker — and pick up to five contestants that fit your PC. Fit first, specs never.
+Tell the host who your dream model is — someone to talk with, a coding buddy, an image maker — and pick up to five contestants that fit your PC. One card per model; RigMatch picks the right size for your hardware.
 
 <p align="center"><img src="docs/images/02-pick.png" alt="Pick step — contestant cards with dream-model filters" width="100%"></p>
 
 ### 3 · Download — the contestants arrive
 
-Reassuring progress while your lineup installs. Downloads resume if you close the app.
+Live progress while your lineup installs. Stop anytime; downloads resume if you close the app.
 
 <p align="center"><img src="docs/images/03-download.png" alt="Download step — lineup install progress" width="100%"></p>
 
