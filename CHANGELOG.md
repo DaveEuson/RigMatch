@@ -4,6 +4,18 @@ Every RigMatch release, newest first. These are the same notes the app shows in
 Update Center — this file and the GitHub release pages are generated from
 `src/data/releaseNotes.ts`, so there is only one place to write them.
 
+## 0.4.1 — The Reviewer's Cut
+_Beta build_
+
+- RigMatch got its first outside review, and this release ships every fix it asked for. Thank you, Miodrag — this is what one honest hour of feedback does.
+- Picking models is no longer a wall of near-identical cards. The same model used to appear once per size — "many versions of Gemma 4, and I don't know how these differences work" — which is exactly the decision a beginner cannot make. Simple Mode now shows one card per model and picks the right size for your computer itself, saying so on the card. Every size is still there in Advanced Mode. "Choose 5 for me" follows the same rule, so it can no longer fill your lineup with five sizes of the same model and call it a comparison.
+- Downloads can now be stopped from Simple Mode. While models are downloading, the Back button becomes "Stop downloads" — anything already finished stays on your PC. The stop button always existed in Advanced Mode; the mode built for beginners was the one place a multi-gigabyte download could not be cancelled.
+- The welcome tour stopped repeating itself. It said "Ollama is ready" on two of its four pages and explained how the show works twice in different words, so reading it meant skipping things you had just read. Each page now says its thing once, and the setup page only appears when there is actually something to set up.
+- Shared scores now show your model's real speed. The share card printed a speed estimated backwards from a 0-100 score that tops out — so a model measured at 365 tokens per second was shared as "~20 tok/s", wrong by a factor of eighteen, on the one image built to be posted publicly. The card, the scorecard text, and the detail panel now all show the speed that was actually measured during your test.
+- The LinkedIn share button now works. It was quietly blocked by the app's own link-safety allowlist — the app refuses to open unrecognized links, which is right, but it refused this one silently, which made a dead button nobody could explain. LinkedIn is now recognized, and any refused link says so in the log instead of vanishing.
+- The app is now called RigMatch everywhere you can see: the installer, the download filenames, the Start Menu, and your applications list. Existing installs update normally — nothing to re-download.
+- Under the hood: the command-line benchmark now releases each model when it finishes (the same fairness fix 0.4.0 made in the app), and the GPU-check tool no longer assumes your machine is idle when judging its own thresholds.
+
 ## 0.4.0 — A Fair Fight
 _Beta build_
 
