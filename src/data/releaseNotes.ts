@@ -2,6 +2,20 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.4.2',
+    label: 'The Parts You Could Not See',
+    date: 'Beta build',
+    notes: [
+      'Around twenty places in the app were drawing nothing at all. They asked for a colour by a name the app had never actually defined, and when that happens a background comes out see-through and text quietly takes the colour of ordinary body copy. You would have met this as the activity strip along the bottom with no label on it, the "How we score" panel showing blank bars and a blank grade scale, the Uncensored tag on a model looking like plain text, and the selected preset in the custom test editor looking no different from the unselected ones. All of it paints now. The names were left over from an older colour scheme that got replaced without everything being moved across — and four of them happened to have a backup colour that did still work, which is exactly why nobody noticed the rest.',
+      'The colour swatches in Settings were showing colours that none of the themes use. Every square in the theme picker came from a second, hand-kept list that had drifted away from the real thing, so you were choosing a theme from a preview that was not what you got. The swatches are now read from the theme itself and cannot drift again. The default theme is also renamed from "Studio Orange" to "Stage Plum", because it has been a deep plum with a coral-pink accent for a long time and the old name described a colour scheme the app no longer had. Your saved choice is untouched and nothing changes appearance.',
+      'You can now see where you are when using the keyboard, and buttons respond to being pressed. The model search box in Advanced Mode gave no sign whatsoever that it was focused, and dropdowns, text boxes and links fell back to whatever outline your system happened to draw. Nothing anywhere reacted to a click until the app had finished the work behind it — in nineteen thousand lines of styling there were three press states in total. Buttons that lift when you hover now settle back down under your finger, and flat ones press in.',
+      'If you have asked your computer to reduce motion, RigMatch now listens properly. Two thirds of its animations ignored the setting, including the twenty-two chase lights around the game-show stage, which simply never stopped, and both of the confetti bursts. Anything that was telling you something still tells you — a running test keeps its marker, a download in progress keeps its bar, the host\'s typing dots stay visible. They just hold still now.',
+      'The guided path\'s header no longer collapses on top of itself in a narrow window. Below roughly 500 pixels wide the step buttons slid across the Simple/Advanced switch, covering it and taking the clicks meant for it, and the final step was pushed past the edge where it could not be seen or reached at all.',
+      'Two buttons that mean "this is the next thing to do" — the one that appears once Ollama is ready, and the link on to the next step — are now the same gold as every other main action, rather than borrowing the theme\'s accent colour. And the selected preset in the custom test editor, once it started drawing at all, turned out to be white text on a pink fill; it is now dark text, which is roughly twice as easy to read.',
+      'Under the hood: the app\'s colours now come from a single set of twenty names, with the fifteen undefined leftovers removed rather than papered over; a test now fails the build if a new animation is added without a reduce-motion rule to go with it; and the visual check that screenshots every screen can complete a run again — it had been stopped dead by the first-run mode dialog, and its step check now matches the wizard\'s real behaviour of skipping the download step when your models are already installed.',
+    ],
+  },
+  {
     version: '0.4.1',
     label: 'The Reviewer\'s Cut',
     date: 'Beta build',

@@ -440,7 +440,9 @@ app.on('window-all-closed', () => {
 });
 
 function registerHandlers() {
-  handleLogged('system:getProfile', 'system', () => getSystemProfile());
+  handleLogged('system:getProfile', 'system', (_event, options) => getSystemProfile({
+    checkForUpdates: options?.checkForUpdates === true,
+  }));
   handleLogged('system:getGpuContention', 'system', () => getGpuContention());
   handleLogged('ollama:getStatus', 'ollama', (_event, baseUrl) => getOllamaStatus(baseUrl || OLLAMA_LOCAL_URL));
   handleLogged('lmstudio:getStatus', 'lmstudio', (_event, baseUrl) => getLmStudioStatus(baseUrl || LM_STUDIO_LOCAL_URL));
@@ -1243,7 +1245,7 @@ async function getCpuLoadPercent() {
   }
 }
 
-async function getSystemProfile() {
+async function getSystemProfile({ checkForUpdates = false } = {}) {
   const [cpu, mem, graphics, osInfo, fsSize, battery] = await Promise.all([
     si.cpu(),
     si.mem(),
@@ -1260,7 +1262,7 @@ async function getSystemProfile() {
   const primaryGpu = gpus[0] || {};
   const primaryFs = (fsSize || []).sort((a, b) => (b.size || 0) - (a.size || 0))[0] || {};
   const networks = getPrivateNetworkAddresses();
-  const cuda = await getCudaStatus(primaryGpu);
+  const cuda = await getCudaStatus(primaryGpu, { checkForUpdates });
   const cpuLoadPercent = await getCpuLoadPercent();
 
   const isMac = process.platform === 'darwin';
@@ -1344,7 +1346,12 @@ async function getSystemProfile() {
   };
 }
 
-async function getCudaStatus(primaryGpu = {}) {
+// `checkForUpdates` gates the only outbound call on this path. Reading the
+// machine's own CUDA state (driver, toolkit) is local and always runs; asking
+// NVIDIA what the newest toolkit is reaches developer.nvidia.com, so it happens
+// only when the user explicitly asks for a rig check — never on launch and never
+// on the background reconnect poll.
+async function getCudaStatus(primaryGpu = {}, { checkForUpdates = false } = {}) {
   const gpuLabel = `${primaryGpu.vendor || ''} ${primaryGpu.model || ''}`;
   if (!/nvidia/i.test(gpuLabel)) {
     return {
@@ -1362,7 +1369,9 @@ async function getCudaStatus(primaryGpu = {}) {
   const [smi, nvcc, latest] = await Promise.all([
     getNvidiaSmiInfo(),
     getNvccInfo(),
-    getLatestCudaToolkitVersion(),
+    // Never fetch on an automatic refresh. A warm cache from an earlier explicit
+    // check is still fine to reuse — it costs nothing and keeps the reading.
+    checkForUpdates ? getLatestCudaToolkitVersion() : Promise.resolve(latestCudaCache ?? { version: null }),
   ]);
   const latestToolkitVersion = latest.version;
   const detected = Boolean(smi.driverVersion || smi.driverCudaVersion || nvcc.toolkitVersion);

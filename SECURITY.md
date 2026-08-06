@@ -26,8 +26,14 @@ You can expect an acknowledgement within 48 hours. If confirmed, a fix will be r
 ## Scope
 
 RigMatch is a local-only desktop application. It:
-- Makes no outbound connections except to `ollama.com` (model catalog), `github.com` (update checks), and the local Ollama instance at `127.0.0.1:11434`
-- Stores no user accounts, passwords, or cloud credentials
+- Sends no telemetry, analytics, or usage data anywhere, ever. Nothing about what you test, score, or run leaves the machine.
+- Makes outbound connections only to these hosts, and only for the stated purpose:
+  - `ollama.com` — the model catalog, and the Ollama installer if you choose to download it
+  - `github.com` / `api.github.com` — update checks
+  - `developer.nvidia.com` — the newest CUDA toolkit version, **only when you press a "check my computer" control**. Automatic refreshes (launch, and the background poll that waits for Ollama to appear) never contact it.
+  - `openrouter.ai` — only if you opt in to cloud-model judging and supply your own key
+  - the local Ollama instance at `127.0.0.1:11434`
+- Stores no user accounts or passwords. If you opt in to cloud judging, your OpenRouter API key is stored locally in the app's own storage — it is never transmitted anywhere except to OpenRouter itself.
 - Logs system metadata (CPU, GPU, RAM, hostname) to a local file only — this data is never automatically transmitted
 
 Out of scope: vulnerabilities requiring physical access to the machine, issues in Ollama itself, or theoretical attacks that require the attacker to already control the local machine.
