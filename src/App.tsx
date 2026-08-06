@@ -847,16 +847,22 @@ function App() {
     }
   }, [topRigPick]);
 
-  const refreshRig = useCallback(async () => {
+  // `userInitiated` decides whether this refresh is allowed to reach the network
+  // beyond the local machine. A user pressing "Check again" gets a live catalog
+  // sync and a CUDA-version lookup; anything automatic — launch, the reconnect
+  // poll — reads the machine and reuses the cached catalog instead. Forcing on
+  // every call is what turned the 15s offline poll into a continuous scrape of
+  // ollama.com.
+  const runRigRefresh = useCallback(async ({ userInitiated }: { userInitiated: boolean }) => {
     setIsScanningRig(true);
     setActivity('Checking this computer, Ollama, and available models...');
 
     try {
       const [profile, ollamaStatus, lmStudioStatus, catalogResponse] = await Promise.all([
-        agentArcadeApi.getSystemProfile(),
+        agentArcadeApi.getSystemProfile({ checkForUpdates: userInitiated }),
         agentArcadeApi.getOllamaStatus(),
         agentArcadeApi.getLmStudioStatus(),
-        agentArcadeApi.getOllamaCatalog({ force: true }),
+        agentArcadeApi.getOllamaCatalog({ force: userInitiated }),
       ]);
 
       setSystem(profile);
@@ -945,6 +951,11 @@ function App() {
       setIsScanningRig(false);
     }
   }, []);
+
+  // Every control that says "check my computer" is the user asking for it, so
+  // these may sync. Takes no arguments so wiring it straight to onClick cannot
+  // smuggle a MouseEvent in as options.
+  const refreshRig = useCallback(() => runRigRefresh({ userInitiated: true }), [runRigRefresh]);
 
   const toggleModelNewsNotifications = useCallback(async () => {
     const permission = getNotificationPermission();
@@ -1250,8 +1261,14 @@ function App() {
 
       setAppLogs(result.entries);
       setLogPath(result.logPath);
-      setBenchmark(demoBenchmark);
-      setBenchmarkByModel(upsertBenchmarkResults({}, [demoBenchmark]));
+      // Same invariant as initialBenchmark above: on desktop the demo transcript
+      // and scores must never appear as if the user ran a real test. Clearing
+      // everything and then seeding sample data is the worst place to break it —
+      // the save effect writes it straight back, so it survives restart and reads
+      // as a genuine saved run. Preview keeps the demo so the browser still has
+      // something to show after a reset.
+      setBenchmark(isDesktopRuntime ? createEmptyBenchmark(selectedModel, ollama.baseUrl) : demoBenchmark);
+      setBenchmarkByModel(isDesktopRuntime ? {} : upsertBenchmarkResults({}, [demoBenchmark]));
       setModelScores({});
       setListTestResult(null);
       setQueuedModelIds(new Set<string>());
@@ -1281,7 +1298,7 @@ function App() {
     } catch (error) {
       setActivity(`Could not clear all data: ${getErrorMessage(error)}`);
     }
-  }, []);
+  }, [ollama.baseUrl, selectedModel]);
 
   const requestDeleteModel = useCallback((row: ModelRow) => {
     if (row.localProvider === 'lm-studio') {
@@ -2711,18 +2728,35 @@ function App() {
     }
   }, [chatImage, chatInput, ollama, selectedModel, selectedRow]);
 
+  // Launch scan: reads this machine, reuses the cached catalog. Not user-initiated,
+  // so it performs no version lookups.
   useEffect(() => {
-    void refreshRig();
-  }, [refreshRig]);
+    void runRigRefresh({ userInitiated: false });
+  }, [runRigRefresh]);
 
   // Auto-reconnect: poll every 15s while Ollama is offline so the app self-heals
   // once the user installs or starts Ollama without needing to click "Check Local".
+  //
+  // This polls ONLY the local provider status. It used to call the full rig
+  // refresh, which forced a live ollama.com catalog sync — roughly sixty requests
+  // every fifteen seconds, indefinitely, in the exact state a brand-new user
+  // starts in. Once Ollama appears, one full refresh runs and the poll stops.
   useEffect(() => {
     if (!isDesktopRuntime) return;
     if (ollama.ready) return;
-    const id = setInterval(() => { void refreshRig(); }, 15_000);
+    const id = setInterval(() => {
+      void (async () => {
+        try {
+          const status = await agentArcadeApi.getOllamaStatus();
+          setOllama(status);
+          if (status.ready) void runRigRefresh({ userInitiated: false });
+        } catch {
+          // Offline is the expected case on this path — keep polling quietly.
+        }
+      })();
+    }, 15_000);
     return () => clearInterval(id);
-  }, [ollama.ready, refreshRig]);
+  }, [ollama.ready, runRigRefresh]);
 
   // While a test is running, poll just the (cheap) system profile every ~1.6s so
   // the live-stage meters actually move. refreshRig is too heavy to poll — it

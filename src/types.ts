@@ -371,7 +371,12 @@ export type GpuContention = {
 };
 
 export type AgentArcadeApi = {
-  getSystemProfile: () => Promise<SystemProfile>;
+  /**
+   * `checkForUpdates` permits the one outbound call on this path — asking NVIDIA
+   * for the newest CUDA toolkit version. Pass it only for a user-initiated rig
+   * check; automatic refreshes must stay local.
+   */
+  getSystemProfile: (options?: { checkForUpdates?: boolean }) => Promise<SystemProfile>;
   getGpuContention: () => Promise<GpuContention>;
   getOllamaStatus: (baseUrl?: string) => Promise<OllamaStatus>;
   getLmStudioStatus: (baseUrl?: string) => Promise<OllamaStatus>;
