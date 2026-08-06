@@ -108,7 +108,7 @@
     "publish": {
       "provider": "github",
       "owner": "DaveEuson",
-      "repo": "RigMatch.AI"
+      "repo": "RigMatch"
     }
   },
   "dependencies": {
