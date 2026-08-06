@@ -87,14 +87,63 @@ export const themeOptions: Array<{
   id: ThemeId;
   label: string;
   description: string;
-  swatches: [string, string, string];
 }> = [
-  { id: 'orange', label: 'Studio Orange', description: 'Classic burnt orange', swatches: ['#d95a27', '#e8a838', '#5b7c53'] },
-  { id: 'avocado', label: 'Avocado Green', description: 'Earthy 70s green', swatches: ['#5b7c53', '#e8a838', '#386377'] },
-  { id: 'mustard', label: 'Mustard Yellow', description: 'Warm studio yellow', swatches: ['#e8a838', '#d95a27', '#4a3f35'] },
-  { id: 'teal', label: 'Retro Teal', description: 'Groovy cool teal', swatches: ['#386377', '#d95a27', '#e8a838'] },
-  { id: 'chocolate', label: 'Velvet Chocolate', description: 'Deep rich brown', swatches: ['#4a3f35', '#e8a838', '#d95a27'] },
+  // id stays 'orange' so saved preferences survive; the palette itself is the
+  // plum/pink :root block, which is what the label now describes.
+  { id: 'orange', label: 'Stage Plum', description: 'Deep plum, heartbeat pink' },
+  { id: 'avocado', label: 'Avocado Green', description: 'Earthy 70s green' },
+  { id: 'mustard', label: 'Mustard Yellow', description: 'Warm studio yellow' },
+  { id: 'teal', label: 'Retro Teal', description: 'Groovy cool teal' },
+  { id: 'chocolate', label: 'Velvet Chocolate', description: 'Deep rich brown' },
 ];
+
+export type ThemeSwatches = [string, string, string];
+
+/**
+ * The three tokens that actually differ between themes: the accent, the raised
+ * surface, and the lit seam. `--gold` is deliberately absent — it is identical
+ * in every theme, so it tells you nothing about the one you are picking.
+ */
+const THEME_SWATCH_TOKENS = ['--primary-rgb', '--panel-2', '--line-bright'] as const;
+
+let themeSwatchCache: Map<ThemeId, ThemeSwatches> | null = null;
+
+/**
+ * Swatches are read from the custom properties each theme really applies rather
+ * than kept as a second copy in this file. The copy drifted: it advertised
+ * colors (#d95a27 and friends) that no theme in index.css has ever painted.
+ */
+function readThemeSwatches(): Map<ThemeId, ThemeSwatches> {
+  const swatches = new Map<ThemeId, ThemeSwatches>();
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:absolute;width:0;height:0;visibility:hidden;pointer-events:none';
+  document.body.appendChild(probe);
+  try {
+    for (const theme of themeOptions) {
+      probe.dataset.theme = theme.id;
+      const style = getComputedStyle(probe);
+      swatches.set(
+        theme.id,
+        THEME_SWATCH_TOKENS.map((token) => {
+          const value = style.getPropertyValue(token).trim();
+          if (!value) return 'transparent';
+          // --primary-rgb is a bare "r, g, b" triplet so themes can composite it at any alpha.
+          return token === '--primary-rgb' ? `rgb(${value})` : value;
+        }) as ThemeSwatches,
+      );
+    }
+  } finally {
+    probe.remove();
+  }
+  return swatches;
+}
+
+export function getThemeSwatches(id: ThemeId): ThemeSwatches {
+  if (!themeSwatchCache) {
+    themeSwatchCache = readThemeSwatches();
+  }
+  return themeSwatchCache.get(id) ?? ['transparent', 'transparent', 'transparent'];
+}
 
 export const USE_CASE_CARDS: Array<{ icon: LucideIcon; title: string; description: string; prompt: string }> = [
   {
