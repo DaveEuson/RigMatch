@@ -16,6 +16,10 @@
     "jsx": "react-jsx",
 
     /* Linting */
+    /* The codebase already compiled clean under strict before this was turned
+       on — zero `any`, zero non-null assertions, every JSON.parse behind a type
+       guard. This costs nothing today and stops that from quietly eroding. */
+    "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,

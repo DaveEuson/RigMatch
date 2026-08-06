@@ -170,6 +170,7 @@ import {
   getPlatformName,
   getPullProgressDetailLabel,
   getPullProgressPercent,
+  getPullTrackPercent,
   getPullProgressStatusLabel,
   getQueueChipModelName,
   getRankedModelScores,
@@ -7237,11 +7238,7 @@ function DownloadProgressInline({
   const phase = progress?.phase ?? (queued ? 'queued' : 'started');
   const percent = getPullProgressPercent(progress, queued);
   const hasMeasuredPercent = typeof progress?.percent === 'number';
-  const trackPercent = hasMeasuredPercent
-    ? Math.max(3, Math.min(100, percent))
-    : queued
-      ? 6
-      : 28;
+  const trackPercent = getPullTrackPercent(progress, { queued, paused: phase === 'paused' });
   const percentLabel = hasMeasuredPercent || phase === 'complete'
     ? `${Math.round(percent)}%`
     : queued
@@ -10480,6 +10477,8 @@ function Ticker({
   const pickScore = topPick?.score?.total ?? 0;
   const pickGrade = topPick?.score?.grade;
   const pickName = topPick?.row.displayName ?? null;
+  // One decimal, same as every other Match score in the app.
+  const pickScoreLabel = topPick?.score ? formatMatchScore(topPick.score) : null;
   const showDownloadDock = Boolean(
     queuedRows.length > 0 ||
     pullingModel ||
@@ -10524,8 +10523,13 @@ function Ticker({
       <div className="ticker-right">
         <span>{isDesktopRuntime ? 'Desktop bridge online' : 'Preview mode'}</span>
         <strong>
+          {/* A top pick can exist before it has ever been scored, in which case
+              there is no grade — this used to print the literal word
+              "undefined" next to "0 Match". Say what is true instead. */}
           {pickName
-            ? `${pickName} · ${pickScore} Match · ${pickGrade}`
+            ? pickGrade && pickScoreLabel
+              ? `${pickName} · ${pickScoreLabel} Match · ${pickGrade}`
+              : `${pickName} · not tested yet`
             : 'No model tested yet'}
         </strong>
       </div>
@@ -10573,13 +10577,7 @@ function DownloadTickerDock({
   const queued = phase === 'queued' || (!isPulling && !isPaused && queuedRows.some((row) => row.displayName === activeModel));
   const percent = getPullProgressPercent(activeProgress, queued);
   const hasMeasuredPercent = typeof activeProgress?.percent === 'number';
-  const trackPercent = hasMeasuredPercent || phase === 'complete'
-    ? Math.max(3, Math.min(100, percent))
-    : isPaused
-      ? 12
-      : queued
-      ? 6
-      : 28;
+  const trackPercent = getPullTrackPercent(activeProgress, { queued, paused: isPaused });
   const percentLabel = isPaused
     ? hasMeasuredPercent ? `${Math.round(percent)}%` : 'Paused'
     : hasMeasuredPercent || phase === 'complete'

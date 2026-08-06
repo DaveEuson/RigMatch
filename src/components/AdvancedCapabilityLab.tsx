@@ -137,11 +137,12 @@ export function AdvancedCapabilityLab({
       message: result.error ? result.error : `${activeModel} finished the App Builder challenge.`,
     });
     if (!result.error) {
-      setSavedResults((current) => {
-        const next = { ...current, [activeModel]: result };
-        writeAdvancedLabResults(next);
-        return next;
-      });
+      // Read-modify-write against live storage, matching App.tsx. Writing a
+      // mount-time snapshot back would erase any lab result the skill-test
+      // runner saved for another model while this panel was open.
+      const merged = { ...readAdvancedLabResults(), [activeModel]: result };
+      writeAdvancedLabResults(merged);
+      setSavedResults(merged);
       // Pop the finished app straight into the sandbox when it's runnable.
       if (extractHtmlDocument(result.response)) setPreviewOpen(true);
     }
@@ -197,11 +198,9 @@ export function AdvancedCapabilityLab({
       message: result.error ? result.error : `${activeImageModel} generated an image in ${(result.elapsedMs / 1000).toFixed(1)}s.`,
     });
     if (!result.error) {
-      setSavedResults((current) => {
-        const next = { ...current, [imageResultKey]: result };
-        writeAdvancedLabResults(next);
-        return next;
-      });
+      const merged = { ...readAdvancedLabResults(), [imageResultKey]: result };
+      writeAdvancedLabResults(merged);
+      setSavedResults(merged);
     }
   }, [activeImageModel, canRunImageTest, imageResultKey, ollama.baseUrl]);
 
