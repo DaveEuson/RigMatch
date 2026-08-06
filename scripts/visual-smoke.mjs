@@ -65,10 +65,14 @@ async function runBrowserChecks(url) {
 
   const title = await page.title();
   const simpleText = await page.locator('body').innerText();
-  // Simple Mode is the five-step wizard: its shell is present, the step pills
-  // are the navigation, and none of the Advanced chrome renders.
+  // Simple Mode is the guided wizard: its shell is present, the step pills are
+  // the navigation, and none of the Advanced chrome renders.
   const simpleWizardVisible = await page.locator('.sw-shell').isVisible();
-  const simpleStepCount = await page.locator('.sw-steps .sw-step').count();
+  // textContent, not innerText: the labels are display:none below 1280px, and
+  // innerText would come back empty there.
+  const simpleStepLabels = (await page.locator('.sw-steps .sw-step-label').allTextContents())
+    .map((label) => label.trim().toLowerCase())
+    .filter(Boolean);
   const simpleMenuHidden = !(await page.locator('.side-menu').isVisible().catch(() => false));
   const simpleNoAdvancedChrome = (await page.locator('.top-deck, .advanced-host-bar, .ticker').count()) === 0;
   const desktopOverflowX = await hasHorizontalOverflow(page);
@@ -99,7 +103,7 @@ async function runBrowserChecks(url) {
   const checks = {
     title: title === 'RigMatch',
     simpleWizardVisible,
-    simpleStepPills: simpleStepCount === 5,
+    simpleStepPills: stepRailIsValid(simpleStepLabels),
     simpleMenuHidden,
     simpleNoAdvancedChrome,
     advancedControlRoom: advancedText.includes('Advanced Control Room'),
@@ -115,12 +119,16 @@ async function runBrowserChecks(url) {
   const failed = Object.entries(checks).filter(([, value]) => !value).map(([key]) => key);
 
   if (failed.length > 0) {
-    throw new Error(`Visual smoke failed: ${failed.join(', ')}${issues.length ? `; console: ${issues.join(' | ')}` : ''}`);
+    const railDetail = failed.includes('simpleStepPills')
+      ? `; step rail: [${simpleStepLabels.join(', ') || 'none'}]`
+      : '';
+    throw new Error(`Visual smoke failed: ${failed.join(', ')}${railDetail}${issues.length ? `; console: ${issues.join(' | ')}` : ''}`);
   }
 
   return {
     url,
     checks,
+    stepRail: simpleStepLabels,
     consoleIssues: issues,
   };
 }
@@ -142,8 +150,37 @@ async function forceSimpleMode(page) {
   await page.evaluate(() => {
     localStorage.setItem('rigmatch:ui-mode:v1', 'beginner');
     localStorage.setItem('rigmatch:first-run-tutorial:v1', 'seen');
+    // The mode splash is a modal dialog that intercepts pointer events, so
+    // without this the Advanced Mode click below never lands.
+    localStorage.setItem('rigmatch:mode-splash:v1', 'chosen');
   });
   await page.reload({ waitUntil: 'networkidle' });
+}
+
+// The wizard's canonical rail, from SimpleWizard.tsx's STEPS. It renders these
+// in order and can drop exactly one: `download` is filtered out when every
+// picked model is already installed, which is always true of the sample-data
+// demo this smoke runs against. So assert the rail's shape rather than a fixed
+// count — a bare `length >= 4` would pass on four wrong pills in any order.
+const WIZARD_STEPS = ['setup', 'pick', 'download', 'compare', 'winner'];
+const SKIPPABLE_STEPS = new Set(['download']);
+
+function stepRailIsValid(labels) {
+  if (labels.length === 0) return false;
+
+  // Every step that cannot be skipped must be present.
+  const required = WIZARD_STEPS.filter((step) => !SKIPPABLE_STEPS.has(step));
+  if (!required.every((step) => labels.includes(step))) return false;
+
+  // What rendered must be a subsequence of the canonical order: this rejects
+  // unknown labels, duplicates, and any reordering.
+  let cursor = 0;
+  for (const label of labels) {
+    const index = WIZARD_STEPS.indexOf(label, cursor);
+    if (index === -1) return false;
+    cursor = index + 1;
+  }
+  return true;
 }
 
 async function hasHorizontalOverflow(page) {
