@@ -84,6 +84,12 @@ const fallbackApi: AgentArcadeApi = {
     await delay(350);
     return demoSystem;
   },
+  async publishAppPreview() {
+    // No main process in the browser preview, so there is no scheme to serve
+    // from. App Builder needs Ollama anyway, so this path is unreachable in
+    // practice; null makes the caller fall back rather than guess.
+    return null;
+  },
   async getGpuContention() {
     await delay(200);
     // The browser preview has no graphics card to read. "unknown" is the honest
