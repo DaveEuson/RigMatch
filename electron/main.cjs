@@ -2579,10 +2579,24 @@ async function runBenchmark(request = {}, sender) {
     return await runBenchmarkInner(request, sender, activeBenchmarkAbort.signal);
   } finally {
     // Free the card before the next contestant loads, however this run ended.
-    await unloadBenchmarkModel(
-      typeof request.baseUrl === 'string' && request.baseUrl ? request.baseUrl : OLLAMA_LOCAL_URL,
-      request.model,
-    );
+    //
+    // Guarded, because this used to be able to strand the app. Both exit paths
+    // of unloadBenchmarkModel end in an unguarded appendAppLog, which does a
+    // bare fs.mkdir + fs.appendFile — so one failed log write (full disk,
+    // permissions, a roaming profile) threw out of this finally block *before*
+    // the line below, leaving benchmarkRunning true for the life of the
+    // process. Every later run then died with "A benchmark is already
+    // running." until the app was restarted, and a full disk is exactly the
+    // condition that causes it.
+    try {
+      await unloadBenchmarkModel(
+        typeof request.baseUrl === 'string' && request.baseUrl ? request.baseUrl : OLLAMA_LOCAL_URL,
+        request.model,
+      );
+    } catch {
+      // Best effort: the unload is an optimisation, not a correctness
+      // requirement. Ollama releases the model on its own keep-alive timer.
+    }
     benchmarkRunning = false;
     if (activeBenchmark?.progressId) canceledBenchmarkIds.delete(activeBenchmark.progressId);
     activeBenchmark = null;
