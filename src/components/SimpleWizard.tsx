@@ -25,6 +25,7 @@ import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, SystemProfile
 import { formatBytes, formatBytesPerSecond } from '../lib/format';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 import { getFriendlyModelName } from '../lib/modelCatalog';
+import { getDownloadRowStatus, summarizeDownloadStep } from '../lib/downloadStatus';
 import rigGreenroom from '../assets/robot-rig-greenroom.webp';
 import speedDateShow from '../assets/robot-speed-date-show.webp';
 import romanceHero from '../assets/robot-romance-hero.webp';
@@ -143,8 +144,14 @@ export function SimpleWizard(props: SimpleWizardProps) {
 
   const setupDone = ollamaReady;
   const pickDone = shortlistedRows.length >= 1;
-  const allInstalled = pickDone && shortlistedRows.every((row) => row.installed);
-  const downloadDone = allInstalled;
+  const {
+    canContinue: downloadCanContinue,
+    allInstalled: downloadAllInstalled,
+    blockedReason: downloadBlockedReason,
+  } = summarizeDownloadStep(
+    shortlistedRows.map((row) => getDownloadRowStatus(row.installed, props.pullProgressByModel[row.displayName])),
+  );
+  const downloadDone = pickDone && downloadCanContinue;
   // Once the user starts a show, Compare stays incomplete until that run
   // actually finishes. Inferring from `winner && !benchmarkActive` alone was
   // racy: at the moment the step advances the run hasn't flipped to active yet,
@@ -167,7 +174,12 @@ export function SimpleWizard(props: SimpleWizardProps) {
   const compareDone = !awaitingRun && Boolean(winner) && !benchmarkActive;
   const winnerDone = compareDone;
 
-  const stepState = useMemo(() => {
+  // Not manually memoized: React Compiler handles this, and a hand-written
+  // useMemo here made it bail on the whole component ("existing memoization
+  // could not be preserved") once downloadDone started deriving from the
+  // download-progress map. Five booleans into two small objects is exactly what
+  // the compiler is for.
+  const stepState = (() => {
     const done: Record<StepId, boolean> = { setup: setupDone, pick: pickDone, download: downloadDone, compare: compareDone, winner: winnerDone };
     const unlocked: Record<StepId, boolean> = {
       setup: true,
@@ -177,7 +189,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
       winner: compareDone,
     };
     return { done, unlocked };
-  }, [setupDone, pickDone, downloadDone, compareDone, winnerDone]);
+  })();
 
   const furthestStep: StepId = !setupDone ? 'setup' : !pickDone ? 'pick' : !downloadDone ? 'download' : !compareDone ? 'compare' : 'winner';
   // Opens where the user left off. A first visit starts at Setup — it's a guided
@@ -210,7 +222,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
   // Nothing to fetch means Download is a no-op: it rendered full green progress
   // bars, claimed a download was happening, and quoted an ETA for work that had
   // already been done. Skip it in both directions rather than showing theatre.
-  const skipDownload = allInstalled;
+  const skipDownload = downloadAllInstalled;
 
   const startShow = () => {
     props.onStartShow();
@@ -364,7 +376,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
               className="sw-gold-pill"
               onClick={goNext}
               disabled={!stepComplete[step]}
-              title={stepComplete[step] ? undefined : nextBlockedHint(step)}
+              title={stepComplete[step] ? undefined : nextBlockedHint(step, downloadBlockedReason)}
             >
               {nextLabel[step]}
               <ArrowRight aria-hidden="true" />
@@ -389,11 +401,13 @@ function footerHint(step: StepId, ready: boolean, pickCount: number): string {
   }
 }
 
-function nextBlockedHint(step: StepId): string {
+function nextBlockedHint(step: StepId, downloadReason?: string): string {
   switch (step) {
     case 'setup': return 'Check your computer first';
     case 'pick': return 'Pick at least 1 to continue';
-    case 'download': return 'Waiting for downloads to finish';
+    // "Waiting for downloads to finish" was shown even when every download had
+    // already stopped and one had failed, which was simply untrue.
+    case 'download': return downloadReason || 'Waiting for downloads to finish';
     case 'compare': return 'The show is still running';
     default: return '';
   }
@@ -724,14 +738,22 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel }: SimpleWizardPr
       {shortlistedRows.map((row) => {
         const pull = pullProgressByModel[row.displayName];
         const installed = row.installed;
-        const downloading = !installed && pull && !['complete', 'failed', 'cancelled', 'queued'].includes(pull.phase);
+        // 'failed' and 'paused' both used to fall through to 'queued', so a
+        // download that had died was announced as "Up next / Waiting in line"
+        // with its error discarded, and a paused one showed a live byte counter
+        // and an ETA for a transfer that was stopped.
         const percent = pull?.percent ?? 0;
-        const status: 'done' | 'downloading' | 'queued' = installed ? 'done' : downloading ? 'downloading' : 'queued';
+        const status = getDownloadRowStatus(installed, pull);
         const meta = status === 'done'
           ? 'Ready to go'
-          : status === 'queued'
-            ? 'Waiting in line'
-            : [
+          // The main process reports why it failed; say so instead of dropping it.
+          : status === 'failed'
+            ? (pull?.error || pull?.status || 'Download failed')
+            : status === 'paused'
+              ? 'Paused'
+              : status === 'queued'
+                ? 'Waiting in line'
+                : [
               pull?.completedBytes != null && pull?.totalBytes
                 ? `${formatBytes(pull.completedBytes)} of ${formatBytes(pull.totalBytes)}`
                 : (pull?.status || 'Downloading…'),
@@ -744,10 +766,14 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel }: SimpleWizardPr
             <div className="sw-dl-info">
               <strong>{getFriendlyModelName(row.displayName)}</strong>
               <em>{[row.displayName, meta].filter(Boolean).join(' · ')}</em>
-              <div className="sw-dl-track" aria-hidden="true"><i style={{ width: `${status === 'done' ? 100 : status === 'downloading' ? Math.max(4, percent) : 0}%` }} /></div>
+              <div className="sw-dl-track" aria-hidden="true"><i style={{ width: `${status === 'done' ? 100 : status === 'downloading' || status === 'paused' ? Math.max(4, percent) : 0}%` }} /></div>
             </div>
             <span className="sw-dl-status">
-              {status === 'done' ? '✓ On your PC' : status === 'downloading' ? `${Math.round(percent)}%` : 'Up next'}
+              {status === 'done' ? '✓ On your PC'
+                : status === 'failed' ? "Didn't download"
+                : status === 'paused' ? 'Paused'
+                : status === 'downloading' ? `${Math.round(percent)}%`
+                : 'Up next'}
             </span>
           </div>
         );

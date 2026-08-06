@@ -848,6 +848,25 @@ function App() {
     }
   }, [topRigPick]);
 
+  /**
+   * Cheap provider-only re-check: no hardware scan, no catalog sync. Used on
+   * failure paths where the interesting question is just "is Ollama still
+   * there", and where a full rig refresh would be far too heavy.
+   */
+  const refreshProviderStatus = useCallback(async () => {
+    try {
+      const [ollamaStatus, lmStudioStatus] = await Promise.all([
+        agentArcadeApi.getOllamaStatus(),
+        agentArcadeApi.getLmStudioStatus(),
+      ]);
+      setOllama(ollamaStatus);
+      setLmStudio(lmStudioStatus);
+    } catch {
+      // Unreachable is itself the answer here, and the reconnect poll will keep
+      // trying. Nothing to report that the failure message hasn't already said.
+    }
+  }, []);
+
   // `userInitiated` decides whether this refresh is allowed to reach the network
   // beyond the local machine. A user pressing "Check again" gets a live catalog
   // sync and a CUDA-version lookup; anything automatic — launch, the reconnect
@@ -1653,11 +1672,18 @@ function App() {
         message: errorMessage,
       });
       setActivity(`Benchmark failed: ${errorMessage}`);
+      // Re-read the provider. The commonest reason a run dies is that Ollama
+      // went away mid-test, and nothing here updated ollama.ready — so the app
+      // kept showing "Ollama ready" and "Desktop bridge online" for a provider
+      // that was gone. Worse, the 15s auto-reconnect poll is gated on
+      // !ollama.ready, so a stale true meant it never engaged and the app could
+      // not self-heal until the user manually pressed Check Local.
+      void refreshProviderStatus();
     } finally {
       activeBenchmarkProgressIdRef.current = null;
       setIsBenchmarking(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, selectedHost, selectedModel, system.hostname, effectiveJudge]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
     // The quick TEST button skips the full launch modal, but it still loads a
@@ -1955,6 +1981,19 @@ function App() {
 
       if (activePullModel) {
         const failedModel = activePullModel;
+        // Take it out of the queue. The queue was only ever emptied on success
+        // or an explicit cancel, so a failed model stayed queued — and the
+        // auto-start effect below restarts the queue the moment isPullingModels
+        // goes false. A bad tag, a 404, or a full disk therefore produced a
+        // tight retry loop against Ollama with the ticker flickering the same
+        // error forever, and no way out but cancelling the whole queue. The
+        // failed entry stays in pullProgressByModel so the UI can show what
+        // happened and offer a retry.
+        setQueuedModelIds((current) => {
+          const next = new Set(current);
+          next.delete(failedModel);
+          return next;
+        });
         setPullProgressByModel((current) => ({
           ...current,
           [failedModel]: {
@@ -2352,11 +2391,14 @@ function App() {
         lastResult: current?.lastResult,
       }));
       setActivity(`Speed Dating failed: ${errorMessage}`);
+      // See the note in startBenchmark's catch: without this, ollama.ready
+      // stays stale-true and the reconnect poll never starts.
+      void refreshProviderStatus();
     } finally {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge]);
 
   const runSkillTestsAfterRun = useCallback(async (models: string[]) => {
     const selection = skillTestSelection;
