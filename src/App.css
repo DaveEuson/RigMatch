@@ -4938,10 +4938,13 @@ tbody tr.computer-row.selected {
   opacity: 0.55;
 }
 
+/* The near-black text and gold border only make sense over a gold fill. On
+   var(--panel) this measured 1.13-1.25:1 in all five themes — the queued
+   download button was unreadable. */
 .mini-button.queued {
   color: #171006;
   border-color: var(--gold);
-  background: var(--panel);
+  background: var(--gold);
 }
 
 .status-dot {

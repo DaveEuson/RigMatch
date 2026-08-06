@@ -1591,6 +1591,31 @@ export function getPullProgressPercent(progress: PullProgressUpdate | undefined,
   return queued ? 0 : 0;
 }
 
+/**
+ * How wide to draw a download's progress bar.
+ *
+ * The models-table row and the ticker dock both render a bar for the same
+ * download, side by side, and used to compute this separately — so a finished
+ * pull with no numeric percent drew 100% in one and 28% in the other, and a
+ * paused one drew 12% and 28%. One function, one answer.
+ *
+ * The non-numeric values are deliberate placeholders, not measurements: a
+ * sliver for queued, a little more for paused, and enough to look underway
+ * while Ollama is still reporting layer-level progress.
+ */
+export function getPullTrackPercent(
+  progress: PullProgressUpdate | undefined,
+  { queued, paused }: { queued: boolean; paused: boolean },
+) {
+  const hasMeasuredPercent = typeof progress?.percent === 'number';
+  if (hasMeasuredPercent || progress?.phase === 'complete') {
+    return Math.max(3, Math.min(100, getPullProgressPercent(progress, queued)));
+  }
+  if (paused) return 12;
+  if (queued) return 6;
+  return 28;
+}
+
 export function getPullProgressStatusLabel(
   model: string,
   phase: PullProgressUpdate['phase'],
