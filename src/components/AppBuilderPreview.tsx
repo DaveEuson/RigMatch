@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { ShieldCheck, X } from 'lucide-react';
-import { buildSandboxedPreviewHtml } from '../lib/labPreview';
+import { useSandboxedPreview } from '../lib/useSandboxedPreview';
 
 /**
  * Sandboxed player for App Builder output. Scripts run in an isolated,
@@ -16,6 +16,7 @@ export function AppBuilderPreviewModal({
   onClose: () => void;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const previewUrl = useSandboxedPreview(html);
 
   useEffect(() => {
     iframeRef.current?.focus();
@@ -49,13 +50,17 @@ export function AppBuilderPreviewModal({
           This runs the generated code in an isolated frame with network, storage, and RigMatch access blocked.
           Click inside the game area first so it can hear your keyboard.
         </p>
-        <iframe
-          ref={iframeRef}
-          className="advanced-lab-preview-frame"
-          title={`Sandboxed preview of ${model} App Builder output`}
-          sandbox="allow-scripts"
-          srcDoc={buildSandboxedPreviewHtml(html)}
-        />
+        {previewUrl ? (
+          <iframe
+            ref={iframeRef}
+            className="advanced-lab-preview-frame"
+            title={`Sandboxed preview of ${model} App Builder output`}
+            sandbox="allow-scripts"
+            src={previewUrl}
+          />
+        ) : (
+          <p className="advanced-lab-preview-note">Preparing the sandbox…</p>
+        )}
       </section>
     </div>
   );

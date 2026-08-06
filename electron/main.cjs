@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, protocol, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const os = require('node:os');
@@ -426,7 +426,61 @@ scoresServer.on('error', () => {
   // Port in use — scores bridging unavailable, non-fatal
 });
 
+// ── App Builder preview scheme ───────────────────────────────────────────────
+// The preview used to be an <iframe srcdoc>. srcdoc is a "local scheme", and
+// local schemes inherit the embedding page's CSP — RigMatch's own
+// `script-src 'self'`. So the frame's permissive CSP was irrelevant: every
+// inline script in a model-generated app was blocked outright, and "Play It"
+// rendered markup that could never run. Serving the document from a real
+// scheme stops that inheritance, and the response carries the same
+// network-blocking CSP the frame used to declare for itself.
+//
+// This does not widen what the preview can do. The iframe keeps
+// sandbox="allow-scripts" with no allow-same-origin, so the document is still a
+// unique opaque origin with no access to RigMatch, and the CSP below still
+// blocks every network and navigation path.
+const PREVIEW_SCHEME = 'rigmatch-preview';
+const PREVIEW_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:; form-action 'none'; base-uri 'none';";
+const PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
+const PREVIEW_MAX_ENTRIES = 8;
+/** id -> html. Bounded and in-memory only; previews never touch disk. */
+const previewDocuments = new Map();
+let previewCounter = 0;
+
+protocol.registerSchemesAsPrivileged([
+  { scheme: PREVIEW_SCHEME, privileges: { standard: true, secure: true } },
+]);
+
+function publishPreviewDocument(html) {
+  if (typeof html !== 'string' || !html) throw new Error('Preview document must be a non-empty string.');
+  if (Buffer.byteLength(html, 'utf8') > PREVIEW_MAX_BYTES) throw new Error('Preview document is too large to display.');
+  previewCounter += 1;
+  const id = `p${previewCounter}`;
+  previewDocuments.set(id, html);
+  // Drop the oldest so a long session cannot accumulate megabytes of previews.
+  while (previewDocuments.size > PREVIEW_MAX_ENTRIES) {
+    previewDocuments.delete(previewDocuments.keys().next().value);
+  }
+  return `${PREVIEW_SCHEME}://app/${id}`;
+}
+
 app.whenReady().then(() => {
+  protocol.handle(`${PREVIEW_SCHEME}`, (request) => {
+    // Only ever serve what this process put in the map. There is no filesystem
+    // path here, so a crafted URL can return nothing but 404.
+    const id = new URL(request.url).pathname.replace(/^\/+/, '');
+    const html = previewDocuments.get(id);
+    if (!html) return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } });
+    return new Response(html, {
+      status: 200,
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        'content-security-policy': PREVIEW_CSP,
+        'cache-control': 'no-store',
+      },
+    });
+  });
+
   registerHandlers();
   createWindow();
 
@@ -443,6 +497,7 @@ function registerHandlers() {
   handleLogged('system:getProfile', 'system', (_event, options) => getSystemProfile({
     checkForUpdates: options?.checkForUpdates === true,
   }));
+  handleLogged('preview:publish', 'lab', (_event, html) => publishPreviewDocument(html));
   handleLogged('system:getGpuContention', 'system', () => getGpuContention());
   handleLogged('ollama:getStatus', 'ollama', (_event, baseUrl) => getOllamaStatus(baseUrl || OLLAMA_LOCAL_URL));
   handleLogged('lmstudio:getStatus', 'lmstudio', (_event, baseUrl) => getLmStudioStatus(baseUrl || LM_STUDIO_LOCAL_URL));

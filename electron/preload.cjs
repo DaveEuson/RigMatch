@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const api = {
   getSystemProfile: (options) => ipcRenderer.invoke('system:getProfile', options),
+  publishAppPreview: (html) => ipcRenderer.invoke('preview:publish', html),
   getGpuContention: () => ipcRenderer.invoke('system:getGpuContention'),
   getOllamaStatus: (baseUrl) => ipcRenderer.invoke('ollama:getStatus', baseUrl),
   getLmStudioStatus: (baseUrl) => ipcRenderer.invoke('lmstudio:getStatus', baseUrl),

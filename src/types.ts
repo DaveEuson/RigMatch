@@ -377,6 +377,13 @@ export type AgentArcadeApi = {
    * check; automatic refreshes must stay local.
    */
   getSystemProfile: (options?: { checkForUpdates?: boolean }) => Promise<SystemProfile>;
+  /**
+   * Hand a built preview document to the main process and get back a URL on a
+   * scheme that does not inherit the app's CSP. Returns null in the browser
+   * preview, which has no main process and therefore cannot run App Builder
+   * output at all.
+   */
+  publishAppPreview: (html: string) => Promise<string | null>;
   getGpuContention: () => Promise<GpuContention>;
   getOllamaStatus: (baseUrl?: string) => Promise<OllamaStatus>;
   getLmStudioStatus: (baseUrl?: string) => Promise<OllamaStatus>;
