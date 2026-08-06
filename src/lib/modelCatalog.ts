@@ -1016,7 +1016,7 @@ export function getNavLabel(id: NavId) {
 }
 
 export function getThemeLabel(id: ThemeId) {
-  return themeOptions.find((theme) => theme.id === id)?.label ?? 'Studio Orange';
+  return themeOptions.find((theme) => theme.id === id)?.label ?? 'Stage Plum';
 }
 
 export function getSavedThemeId(): ThemeId {

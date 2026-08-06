@@ -265,6 +265,7 @@ import {
   UI_MODE_STORAGE_KEY,
   MODE_SPLASH_STORAGE_KEY,
   USE_CASE_CARDS,
+  getThemeSwatches,
   navItems,
   themeOptions,
   type ThemeId,
@@ -5447,8 +5448,8 @@ function ThemePicker({
               aria-pressed={selected}
             >
               <span className="theme-swatches" aria-hidden="true">
-                {theme.swatches.map((swatch) => (
-                  <i key={swatch} style={{ background: swatch }} />
+                {getThemeSwatches(theme.id).map((swatch, index) => (
+                  <i key={index} style={{ background: swatch, color: swatch }} />
                 ))}
               </span>
               <strong>{theme.label}</strong>
