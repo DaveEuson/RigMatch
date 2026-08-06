@@ -351,7 +351,7 @@
   gap: 10px;
   margin: 10px 0;
   padding: 10px 12px;
-  border: 1px solid var(--sw-line, rgba(255, 255, 255, 0.14));
+  border: 1px solid var(--line);
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.28);
 }
@@ -378,7 +378,7 @@
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: var(--sw-gold, #efbc5a);
+  background: var(--gold);
   transition: width 0.2s ease;
 }
 
@@ -815,6 +815,23 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   .sw-card-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* Below roughly 500px the brand column's 168px mode switch leaves the step rail
+   too little room. The rail centres its pills, so they overflowed their track
+   in both directions: the first pill landed on top of the mode switch and stole
+   its clicks, and the last was clipped away entirely by .sw-shell's
+   overflow: hidden — invisible rather than scrollable. Give the rail its own
+   row and tighten the pills so five of them still fit at 320px. */
+@media (max-width: 640px) {
+  .sw-header {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .sw-step { padding: 8px 10px; }
+  .sw-step-dash { width: 10px; margin: 0 1px; }
+}
+
 /* "Choose for me" escape hatch on the Pick step. */
 .sw-choose-for-me {
   align-self: flex-start;
@@ -873,3 +890,61 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 }
 
 .sw-winner-share svg { width: 15px; height: 15px; }
+
+/* Press states. The wizard is the mode built for people least sure they clicked
+   the right thing, and it had no :active feedback anywhere. Kept at the end of
+   the file so these beat the :hover rules, which sit at equal specificity.
+   .sw-gold-pill and .sw-step already transition transform and filter, so those
+   two ease; the rest are instant, which is correct for a press. */
+
+/* Lifts on hover — press returns it to rest. */
+.sw-gold-pill:active:not(:disabled),
+.sw-step.done:active,
+.sw-step.active:active {
+  transform: translateY(0);
+  filter: brightness(0.97);
+}
+
+/* Flat at rest — press pushes it down. */
+.sw-ghost-pill:active:not(:disabled),
+.sw-chip:active,
+.sw-card-btn:active:not(:disabled),
+.sw-link:active,
+.sw-winner-share:active {
+  transform: translateY(1px);
+  filter: brightness(0.95);
+}
+
+/* Reduced motion.
+   This file had no such block, so every wizard animation ran regardless of the
+   OS setting — in the mode built for the least technical users. State-carrying
+   motion is replaced with a static equivalent; decoration is removed. */
+@media (prefers-reduced-motion: reduce) {
+  /* The skeleton keeps its dimmed placeholder look without breathing. */
+  .sw-card-skeleton {
+    animation: none;
+    opacity: 0.5;
+  }
+
+  /* "Answering" dots: still the indicator, just no longer blinking. */
+  .sw-podium-pill.answering i {
+    animation: none;
+    opacity: 1;
+  }
+
+  /* The winner still arrives, just without the drop. */
+  .sw-winner-avatar-wrap {
+    animation: none;
+  }
+
+  /* Confetti falls once and fades; held still it would sit frozen mid-air at
+     70% opacity, so remove it from the layout entirely. */
+  .sw-confetti-piece {
+    animation: none;
+    display: none;
+  }
+
+  /* The 1px hover lift and press settle are deliberately left alone. They are
+     an order of magnitude below anything that triggers motion sensitivity, and
+     removing them would cost real feedback for no accessibility gain. */
+}
