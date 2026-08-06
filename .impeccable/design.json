@@ -1,0 +1,251 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-05T00:00:00.000Z",
+  "title": "Design System: RigMatch",
+  "extensions": {
+    "colorMeta": {
+      "bg": {
+        "role": "neutral",
+        "displayName": "Stage Plum",
+        "canonical": "oklch(20.5% 0.028 290.3)",
+        "tonalRamp": ["#0b0916", "#242231", "#3f3d4e", "#5d5b6d", "#7d7b8d", "#9e9caf", "#c7c5d9", "#eeecff"]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Curtain Plum",
+        "canonical": "oklch(23.7% 0.031 301.3)",
+        "tonalRamp": ["#0d0816", "#272031", "#423c4e", "#605a6d", "#80798d", "#a19aaf", "#cac3d9", "#f2eaff"]
+      },
+      "panel-2": {
+        "role": "neutral",
+        "displayName": "Riser Plum",
+        "canonical": "oklch(28.4% 0.034 302.1)",
+        "tonalRamp": ["#0e0717", "#272032", "#433c4f", "#61596e", "#81798e", "#a29ab0", "#cbc3da", "#f2eaff"]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Seam",
+        "canonical": "oklch(44.4% 0.036 313.8)",
+        "tonalRamp": ["#110616", "#2a1f30", "#473a4d", "#65586c", "#85778d", "#a798af", "#d0c1d8", "#f7e8ff"]
+      },
+      "line-bright": {
+        "role": "neutral",
+        "displayName": "Seam Lit",
+        "canonical": "oklch(58.9% 0.039 330.6)",
+        "tonalRamp": ["#140513", "#2f1d2d", "#4c3849", "#6b5668", "#8b7588", "#ad96aa", "#d7bfd3", "#ffe6fb"]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Cream",
+        "canonical": "oklch(92.7% 0.016 64.7)",
+        "tonalRamp": ["#100a05", "#2a221c", "#463e37", "#645c54", "#847b73", "#a69d94", "#cfc5bd", "#f7ece3"]
+      },
+      "text-strong": {
+        "role": "neutral",
+        "displayName": "Cream Bright",
+        "canonical": "oklch(98.4% 0.015 80.7)",
+        "tonalRamp": ["#0e0b05", "#28231c", "#443f37", "#625d54", "#827c74", "#a39e94", "#ccc6bd", "#f4eee4"]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Dust",
+        "canonical": "oklch(74.8% 0.021 50.1)",
+        "tonalRamp": ["#120904", "#2d211b", "#493d36", "#685a53", "#887a72", "#aa9b93", "#d3c4bc", "#fbebe2"]
+      },
+      "pink": {
+        "role": "primary",
+        "displayName": "Heartbeat Pink",
+        "canonical": "oklch(68.6% 0.142 10.5)",
+        "tonalRamp": ["#310001", "#540013", "#78072d", "#9d314a", "#c25369", "#e87589", "#ff9eb1", "#ffc5d8"]
+      },
+      "gold": {
+        "role": "secondary",
+        "displayName": "Studio Gold",
+        "canonical": "oklch(82.3% 0.129 81.6)",
+        "tonalRamp": ["#230000", "#411600", "#613400", "#815300", "#a37400", "#c7952d", "#f1be5d", "#ffe685"]
+      },
+      "green": {
+        "role": "tertiary",
+        "displayName": "Avocado",
+        "canonical": "oklch(72.9% 0.106 127.4)",
+        "tonalRamp": ["#011000", "#152c00", "#304900", "#4d681e", "#6c8940", "#8cab61", "#b4d589", "#dbfcaf"]
+      },
+      "blue": {
+        "role": "tertiary",
+        "displayName": "Broadcast Blue",
+        "canonical": "oklch(69.2% 0.068 216.0)",
+        "tonalRamp": ["#00101d", "#002b39", "#004857", "#286776", "#4a8897", "#6ba9b9", "#94d3e4", "#bbfbff"]
+      },
+      "red": {
+        "role": "tertiary",
+        "displayName": "Signal Red",
+        "canonical": "oklch(64.6% 0.149 33.3)",
+        "tonalRamp": ["#340000", "#570000", "#7b0700", "#a0331d", "#c6553e", "#ec785f", "#ffa187", "#ffc8ad"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The stage. Show sign, round question, winner name. Fluid, sized to the stage rather than the reading column. Often uppercase." },
+      "headline": { "displayName": "Headline", "purpose": "Panel and modal titles, the setup heading, the brand block. The strongest thing inside a container." },
+      "title": { "displayName": "Title", "purpose": "Contestant card names, door labels, the question being asked. Where the wizard talks." },
+      "body": { "displayName": "Body", "purpose": "Running text and table cells. 12px in Advanced Mode, 13px in the wizard. Measure capped at 46-72ch." },
+      "label": { "displayName": "Label", "purpose": "Eyebrows, badges, chips, step names. Uppercase with 0.08em tracking. The workhorse of the visual voice." },
+      "metric": { "displayName": "Metric", "purpose": "Score pills, question IDs, model IDs, host addresses. Monospace is how numerals align, since no tabular-figure setting is defined." }
+    },
+    "shadows": [
+      { "name": "dock", "value": "0 18px 42px rgba(7, 5, 12, 0.42)", "purpose": "The only genuinely ambient shadow. Top-level floating containers only: chat dock, top deck, stage content, wizard shell. Exposed as the --shadow token." },
+      { "name": "lift", "value": "0 4px 8px rgba(0, 0, 0, 0.4)", "purpose": "Hard, spread-less drop on lit and active elements: filled meter segments, primary button, top-tier badges, emissive dots. Structural, not ambient." },
+      { "name": "pill-lift", "value": "0 5px 12px rgba(0, 0, 0, 0.25)", "purpose": "The wizard's softer lift, on the active step pill and the gold CTA." },
+      { "name": "modal", "value": "0 28px 90px rgba(0, 0, 0, 0.62)", "purpose": "The overlay tier. Very large blur, near-black, always paired with a 0 0 0 1px ring in gold or hairline cream." },
+      { "name": "hairline", "value": "inset 0 0 0 1px rgba(255, 249, 239, 0.06)", "purpose": "Inner 1px rim in Cream Bright at low alpha. Defines a material edge without a border. Always the second half of a stack, never alone." },
+      { "name": "stage-bloom", "value": "0 0 70px rgba(239, 188, 90, 0.2)", "purpose": "Gold light spilling off the stage. Confined to the stage, the winner halo, and the marquee. Never on a data surface." },
+      { "name": "winner-halo", "value": "0 0 0 3px rgba(239, 188, 90, 0.45), 0 0 28px rgba(239, 188, 90, 0.4), 0 0 60px rgba(239, 188, 90, 0.18)", "purpose": "The triple gold halo on the Top Match portrait. The single most emphatic treatment in the system; exactly one element per screen may wear it." },
+      { "name": "focus-ring", "value": "outline: 2px solid var(--green); outline-offset: 2px", "purpose": "The global keyboard focus treatment for every interactive element." }
+    ],
+    "motion": [
+      { "name": "interaction-fast", "value": "0.12s ease", "purpose": "Transform and filter on tactile controls — the 1px button lift and brightness bump." },
+      { "name": "interaction", "value": "0.15s ease", "purpose": "The default. Background, border-color, and color transitions on every interactive surface." },
+      { "name": "ambient-loop", "value": "1200ms ease-in-out infinite alternate", "purpose": "Things alive on the set: marquee bulbs, contestant bobs, typing dots, the running-benchmark pulse. 0.9-1.6s range." },
+      { "name": "reveal", "value": "600ms ease-out", "purpose": "One-shot entrances — the winner portrait dropping in, the confetti burst, toast entry." },
+      { "name": "press", "value": "instant (no transition)", "purpose": "Controls that lift on hover return to rest when pressed (translateY(0), brightness(0.97)); flat controls push down (translateY(1px), brightness(0.95)). Never transitioned — feedback the user is still holding should not lag." }
+    ],
+    "breakpoints": [
+      { "name": "wide", "value": "1280px" },
+      { "name": "stack", "value": "920px" },
+      { "name": "narrow", "value": "640px" },
+      { "name": "short", "value": "780px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The confirm/run call to action in Advanced Mode. Gold gradient, near-black label, lifts 1px on hover.",
+      "html": "<button class=\"ds-btn-primary\">Run comparison</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 34px; padding: 0 14px; border: 1px solid rgba(239, 188, 90, 0.72); border-radius: 10px; color: #24170f; background: linear-gradient(180deg, #f8d681, #efbc5a); font: 800 12px/1 var(--ui, Inter, system-ui, sans-serif); text-transform: uppercase; cursor: pointer; transition: transform 0.12s ease, filter 0.12s ease; } .ds-btn-primary:hover { transform: translateY(-1px); filter: brightness(1.04); } .ds-btn-primary:focus-visible { outline: 2px solid var(--green, #95b46a); outline-offset: 2px; } .ds-btn-primary:active { transform: translateY(0); filter: brightness(0.97); } .ds-btn-primary:disabled { opacity: 0.48; cursor: not-allowed; transform: none; }"
+    },
+    {
+      "name": "Gold Pill",
+      "kind": "button",
+      "refersTo": "button-primary-pill",
+      "description": "The wizard's Next / Let's go control. Same gold as the primary button, fully pilled for the Simple Mode register.",
+      "html": "<button class=\"ds-pill-gold\">Let's go<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14M12 5l7 7-7 7\"/></svg></button>",
+      "css": ".ds-pill-gold { display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--gold, #efbc5a) 55%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--gold, #efbc5a) 78%, white), var(--gold, #efbc5a)); color: #27190a; font: 900 12px/1 var(--ui, Inter, system-ui, sans-serif); text-transform: uppercase; cursor: pointer; box-shadow: 0 5px 12px rgba(0, 0, 0, 0.25); transition: transform 0.12s ease, filter 0.12s ease; } .ds-pill-gold:hover { transform: translateY(-1px); filter: brightness(1.04); } .ds-pill-gold:focus-visible { outline: 2px solid var(--green, #95b46a); outline-offset: 2px; } .ds-pill-gold:active { transform: translateY(0); filter: brightness(0.97); } .ds-pill-gold:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Every row action and toolbar control in Advanced Mode — Download, Test, Delete, Retry.",
+      "html": "<button class=\"ds-btn-secondary\">Download</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; padding: 0 10px; border: 1px solid rgba(255, 249, 239, 0.28); border-radius: 9px; color: var(--text-strong, #fff9ef); background: rgba(255, 249, 239, 0.07); font: 700 12px/1 var(--ui, Inter, system-ui, sans-serif); text-transform: uppercase; cursor: pointer; transition: transform 0.12s ease, background 0.15s, border-color 0.15s; } .ds-btn-secondary:hover { transform: translateY(-1px); border-color: var(--line-bright, #8b7588); background: rgba(255, 249, 239, 0.11); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--green, #95b46a); outline-offset: 2px; } .ds-btn-secondary:active { transform: translateY(0); } .ds-btn-secondary:disabled { opacity: 0.48; cursor: not-allowed; }"
+    },
+    {
+      "name": "Choice Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "The wizard's dream-use filters. Pilled because it is a choice; active state takes the same gold as a committed action.",
+      "html": "<div style=\"display:flex;gap:8px;flex-wrap:wrap\"><button class=\"ds-chip\">Someone to talk with</button><button class=\"ds-chip active\">Coding buddy</button><button class=\"ds-chip\">Image maker</button></div>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--text-strong, #fff9ef) 16%, transparent); background: color-mix(in srgb, var(--text-strong, #fff9ef) 5%, transparent); color: var(--text, #efe5dc); font: 700 12px/1 var(--ui, Inter, system-ui, sans-serif); cursor: pointer; transition: border-color 0.15s, color 0.15s, transform 0.12s ease; } .ds-chip:hover { border-color: color-mix(in srgb, var(--gold, #efbc5a) 50%, transparent); color: var(--text-strong, #fff9ef); } .ds-chip:focus-visible { outline: 2px solid var(--green, #95b46a); outline-offset: 2px; } .ds-chip:active { transform: translateY(1px); } .ds-chip.active { background: linear-gradient(180deg, color-mix(in srgb, var(--gold, #efbc5a) 78%, white), var(--gold, #efbc5a)); border-color: color-mix(in srgb, var(--gold, #efbc5a) 55%, transparent); color: #27190a; font-weight: 900; }"
+    },
+    {
+      "name": "Contestant Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The model cards on the wizard's Pick step. Selection is a 2px Heartbeat Pink border plus a pink ring — the strongest selection affordance in the system.",
+      "html": "<div style=\"display:flex;gap:16px\"><div class=\"ds-card\"><div class=\"ds-card-art\"></div><strong class=\"ds-card-name\">Qwen 2.5</strong><p class=\"ds-card-note\">Good all-rounder. Fits comfortably in your 12 GB.</p><span class=\"ds-fit-pill sweet\">Sweet spot</span></div><div class=\"ds-card picked\"><span class=\"ds-card-badge\">Picked</span><div class=\"ds-card-art\"></div><strong class=\"ds-card-name\">Llama 3.2</strong><p class=\"ds-card-note\">Quick and light. Great first contestant.</p><span class=\"ds-fit-pill good\">Good fit</span></div></div>",
+      "css": ".ds-card { position: relative; display: flex; flex-direction: column; gap: 10px; width: 220px; padding: 14px; border-radius: 16px; border: 1px solid var(--line, #5b4e62); background: var(--panel, #211b2b); } .ds-card.picked { border: 2px solid var(--pink, #e37185); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pink, #e37185) 15%, transparent); } .ds-card-art { height: 110px; border-radius: 12px; border: 2px solid color-mix(in srgb, var(--gold, #efbc5a) 35%, transparent); background: radial-gradient(circle at 50% 30%, rgba(255, 214, 111, 0.22), transparent 60%), var(--panel-2, #2d2638); } .ds-card-name { color: var(--text-strong, #fff9ef); font: 700 17px/1.25 var(--ui, Inter, system-ui, sans-serif); } .ds-card-note { margin: 0; color: var(--text, #efe5dc); font: 400 13px/1.35 var(--ui, Inter, system-ui, sans-serif); } .ds-card-badge { position: absolute; top: 10px; right: 10px; padding: 3px 8px; border-radius: 999px; background: var(--pink, #e37185); color: #2a0d16; font: 900 10px/1.4 var(--ui, Inter, system-ui, sans-serif); text-transform: uppercase; letter-spacing: 0.08em; }"
+    },
+    {
+      "name": "Fit Pill",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "The hardware-fit verdict badge. Read-only, four tones: Avocado for a comfortable fit, Broadcast Blue for good, Studio Gold for tight, Signal Red for out of reach.",
+      "html": "<div style=\"display:flex;gap:6px;flex-wrap:wrap\"><span class=\"ds-fit-pill sweet\">Sweet spot</span><span class=\"ds-fit-pill good\">Good fit</span><span class=\"ds-fit-pill tight\">Tight</span><span class=\"ds-fit-pill over\">Out of your league</span></div>",
+      "css": ".ds-fit-pill { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 999px; border: 1px solid rgba(255, 249, 239, 0.14); background: rgba(255, 249, 239, 0.045); color: var(--muted, #b9aaa2); font: 900 9px/1 var(--ui, Inter, system-ui, sans-serif); text-transform: uppercase; letter-spacing: 0.06em; } .ds-fit-pill.sweet { border-color: rgba(149, 180, 106, 0.58); color: var(--green, #95b46a); background: rgba(149, 180, 106, 0.12); } .ds-fit-pill.good { border-color: rgba(105, 167, 183, 0.58); color: var(--blue, #69a7b7); background: rgba(105, 167, 183, 0.12); } .ds-fit-pill.tight { border-color: rgba(239, 188, 90, 0.62); color: var(--gold, #efbc5a); background: rgba(239, 188, 90, 0.12); } .ds-fit-pill.over { border-color: rgba(217, 103, 79, 0.68); color: var(--red, #d9674f); background: rgba(217, 103, 79, 0.12); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "The search and form field pattern: a near-black well inside a Seam Lit hairline, with the Avocado focus ring on the wrapper.",
+      "html": "<label class=\"ds-field\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"M20 20l-3.5-3.5\"/></svg><input class=\"ds-input\" placeholder=\"Search models\"></label>",
+      "css": ".ds-field { display: inline-grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; min-height: 30px; width: 260px; border: 1px solid var(--line-bright, #8b7588); border-radius: 10px; background: #0b1013; color: var(--blue, #69a7b7); transition: border-color 0.15s; } .ds-field:focus-within { border-color: var(--green, #95b46a); box-shadow: 0 0 0 2px color-mix(in srgb, var(--green, #95b46a) 35%, transparent); } .ds-field svg { justify-self: center; } .ds-input { min-width: 0; height: 28px; border: 0; outline: 0; background: transparent; color: var(--text-strong, #fff9ef); font: 12px/1 var(--ui, Inter, system-ui, sans-serif); padding: 0 10px 0 0; } .ds-input::placeholder { color: var(--muted, #b9aaa2); }"
+    },
+    {
+      "name": "Wizard Step Rail",
+      "kind": "nav",
+      "refersTo": "chip-active",
+      "description": "The five-step rail across the top of Simple Mode: setup, pick, download, compare, winner. Active is the gold gradient, done is Avocado, locked recedes.",
+      "html": "<div class=\"ds-steps\"><button class=\"ds-step done\"><span class=\"ds-step-mark\">1</span><span class=\"ds-step-label\">Setup</span></button><i class=\"ds-step-dash\"></i><button class=\"ds-step active\"><span class=\"ds-step-mark\">2</span><span class=\"ds-step-label\">Pick</span></button><i class=\"ds-step-dash\"></i><button class=\"ds-step locked\"><span class=\"ds-step-mark\">3</span><span class=\"ds-step-label\">Download</span></button></div>",
+      "css": ".ds-steps { display: flex; align-items: center; } .ds-step-dash { width: 16px; height: 1px; margin: 0 2px; background: var(--line, #5b4e62); } .ds-step { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: var(--text, #efe5dc); cursor: pointer; transition: transform 0.12s ease, filter 0.12s ease; } .ds-step-mark { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; font: 900 11px/1 var(--ui, Inter, system-ui, sans-serif); } .ds-step-label { font: 900 12px/1 var(--ui, Inter, system-ui, sans-serif); text-transform: uppercase; letter-spacing: 0.03em; } .ds-step.active { background: linear-gradient(180deg, color-mix(in srgb, var(--gold, #efbc5a) 78%, white), var(--gold, #efbc5a)); border-color: color-mix(in srgb, var(--gold, #efbc5a) 55%, transparent); color: #27190a; box-shadow: 0 5px 12px rgba(0, 0, 0, 0.25); } .ds-step.active .ds-step-mark { background: rgba(39, 25, 10, 0.16); color: #27190a; } .ds-step.done { background: color-mix(in srgb, var(--green, #95b46a) 10%, transparent); border-color: color-mix(in srgb, var(--green, #95b46a) 50%, transparent); color: color-mix(in srgb, var(--green, #95b46a) 55%, var(--text-strong, #fff9ef)); } .ds-step.locked { background: color-mix(in srgb, var(--text-strong, #fff9ef) 3%, transparent); border-color: color-mix(in srgb, var(--text-strong, #fff9ef) 8%, transparent); color: color-mix(in srgb, var(--muted, #b9aaa2) 55%, var(--bg, #171523)); cursor: default; } .ds-step.done:hover, .ds-step.active:hover { transform: translateY(-1px); filter: brightness(1.04); } .ds-step:focus-visible { outline: 2px solid var(--green, #95b46a); outline-offset: 2px; }"
+    },
+    {
+      "name": "Side Menu Item",
+      "kind": "nav",
+      "refersTo": "panel",
+      "description": "The Advanced Mode sidebar row: index, icon, label, count. Active swaps the fill to Curtain Plum and turns icon and label Avocado.",
+      "html": "<nav class=\"ds-menu\"><button class=\"ds-menu-item active\"><b>01</b><svg width=\"21\" height=\"21\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 10h18\"/></svg><strong>Models</strong><em>142</em></button><button class=\"ds-menu-item\"><b>02</b><svg width=\"21\" height=\"21\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 20V10M6 20v-6M18 20V4\"/></svg><strong>Scorecards</strong><em>7</em></button></nav>",
+      "css": ".ds-menu { display: grid; gap: 7px; width: 196px; padding: 12px; border-radius: 16px; background: var(--panel, #211b2b); } .ds-menu-item { display: grid; grid-template-columns: 16px 21px minmax(0, 1fr) auto; align-items: center; gap: 7px; min-height: 40px; padding: 5px 7px; border: 0; border-radius: 12px; background: #10161a; color: var(--text, #efe5dc); text-align: left; cursor: pointer; transition: background 0.15s, color 0.15s; } .ds-menu-item b { color: var(--muted, #b9aaa2); font: 10px/1 var(--mono, Consolas, monospace); } .ds-menu-item strong { color: var(--text-strong, #fff9ef); font: 900 12px/1.15 var(--ui, Inter, system-ui, sans-serif); } .ds-menu-item em { color: var(--muted, #b9aaa2); font: 800 10px/1 var(--ui, Inter, system-ui, sans-serif); font-style: normal; text-align: right; text-transform: uppercase; } .ds-menu-item:hover, .ds-menu-item.active { background: var(--panel, #211b2b); box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb, 227, 113, 133), 0.58); } .ds-menu-item:hover svg, .ds-menu-item:hover strong, .ds-menu-item.active svg, .ds-menu-item.active strong { color: var(--green, #95b46a); } .ds-menu-item:focus-visible { outline: 2px solid var(--green, #95b46a); outline-offset: 2px; }"
+    },
+    {
+      "name": "Models Table",
+      "kind": "custom",
+      "refersTo": "table-header-cell",
+      "description": "The Advanced Mode dense table. Sticky header, 40px rows, gold wash on hover, dimmed rows for models the machine cannot run.",
+      "html": "<table class=\"ds-table\"><thead><tr><th>Model</th><th>Size</th><th>Fit</th><th class=\"sorted\">Match ▾</th></tr></thead><tbody><tr><td>qwen2.5:7b</td><td>4.7 GB</td><td>Sweet spot</td><td>92.7</td></tr><tr><td>llama3.2:3b</td><td>2.0 GB</td><td>Sweet spot</td><td>88.4</td></tr><tr class=\"over\"><td>llama3.3:70b</td><td>42 GB</td><td>Out of your league</td><td>—</td></tr></tbody></table>",
+      "css": ".ds-table { width: 100%; border-collapse: collapse; font-size: 12px; background: rgba(15, 16, 24, 0.6); } .ds-table th, .ds-table td { height: 40px; padding: 10px; border-right: 1px solid rgba(255, 249, 239, 0.08); border-bottom: 1px solid rgba(255, 249, 239, 0.08); text-align: left; white-space: nowrap; } .ds-table th { min-height: 42px; background: rgba(45, 38, 56, 0.9); color: var(--text-strong, #fff9ef); font: 800 11px/1 var(--ui, Inter, system-ui, sans-serif); } .ds-table th.sorted { color: var(--green, #95b46a); } .ds-table td { color: var(--text, #efe5dc); } .ds-table tbody tr { cursor: pointer; transition: background 0.15s; } .ds-table tbody tr:hover { background: rgba(239, 188, 90, 0.1); } .ds-table tbody tr.over { opacity: 0.72; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The 1974 Broadcast",
+    "overview": "RigMatch looks like a daytime television studio that was built in 1974 and has been running ever since. Not a pastiche of one — an actual one, lit and warm and slightly worn. The palette is a deep plum auditorium under stage light, with a gold that never changes no matter which theme you pick, because the bulbs above the set are the same bulbs in every episode. The themes are named for that era on purpose — Avocado Green, Mustard Yellow, Retro Teal, Velvet Chocolate — alongside Stage Plum, the default, which is the auditorium itself. Every one of them is a warm dark room, never a cool one.\n\nThe system holds one deliberate tension: theatre frames, data leads. The show is the container — the stage, the host, the marquee, the reveal — and it is allowed to be as theatrical as it wants at the edges. But the moment a number appears, the costume comes off. Scores, tables, speeds, and hardware readouts are rendered plainly and precisely, because the entire product is a claim that these measurements are trustworthy. A decorated measurement is a compromised one. When the show and the data disagree about a pixel, the data wins.\n\nInteractive things are warm and tactile — gold-gradient pills that lift a single pixel and brighten slightly when you touch them, like the illuminated buttons on a period console. Nothing bounces, nothing springs. The response is small, immediate, and physical.",
+    "keyCharacteristics": [
+      "Warm dark: a plum auditorium, never slate, never neutral grey",
+      "Gold is the constant across all five themes; it is the stage light itself",
+      "Two densities in one product: the wizard runs roughly 1.4-2.8x looser than the Advanced table",
+      "Pills for choices, soft rectangles for containers",
+      "Type runs entirely in the 600-950 weight range; there is no light or regular voice",
+      "Theatrical effects are confined to the stage; the data surfaces stay plain"
+    ],
+    "rules": [
+      { "name": "The Constant Gold Rule", "body": "Gold is #efbc5a in all five themes, without exception. Themes may re-point the accent, the background, and the neutrals; gold is the stage light and the stage light does not change between episodes. A theme that recolors gold has broken the set.", "section": "colors" },
+      { "name": "The Gold Is the Verdict Rule", "body": "Gold marks exactly two things: the thing that won, and the single next action. A screen with two gold elements competing has one too many. If everything is lit, nothing is.", "section": "colors" },
+      { "name": "The Warm Dark Rule", "body": "Every background in every theme is a warm dark — plum, olive, or chocolate. No cool greys, no blue-blacks, no #0f172a. The moment a surface reads as slate, the room has become a SaaS dashboard.", "section": "colors" },
+      { "name": "The Two Registers Rule", "body": "The wizard and the Advanced table are deliberately different typographic densities: 13-17px on a 28px gutter versus 12px in a 40px row on 10px padding. This is not drift to be normalized. Do not make the wizard denser or the table looser to unify them — they serve different people doing different jobs.", "section": "typography" },
+      { "name": "The Heavy-Only Rule", "body": "Nothing in the interface is set below weight 600. Labels are 900. If a new element needs to recede, use Dust (#b9aaa2) or a smaller size — never a lighter weight, which will read as a rendering bug against everything around it.", "section": "typography" },
+      { "name": "The Eyebrow Rule", "body": "Small uppercase labels carry tracking (0.08em is the canonical value, 0.1em for gold eyebrows). Uppercase without tracking at 10px is a legibility failure. This convention is currently applied inconsistently in the incumbent code; new work applies it every time.", "section": "typography" },
+      { "name": "The Single Breakpoint Set Rule", "body": "The incumbent code contains 17 distinct width breakpoints, with the same conceptual tablet break written as 920px in five places and 900px in two. New work uses 1280 / 920 / 640 and does not invent a new value. A layout that needs a break at 1247px is a layout with a sizing problem.", "section": "layout" },
+      { "name": "The No-Fixed-Height Rule", "body": "Below 1200px wide or 780px tall, the shell must release height: 100vh and become scrollable. A window smaller than the design target scrolls; it never clips.", "section": "layout" },
+      { "name": "The Lift-Only Rule", "body": "A shadow means the element is above the page — floating, active, or currently being acted on. A resting surface gets a tone step, not a shadow. If you cannot say what the element is floating above, delete the shadow.", "section": "elevation" },
+      { "name": "The Glow Stays On Stage Rule", "body": "Gold bloom, spotlight cones, and footlights belong to the stage, the reveal, and the marquee. A table, a score readout, a settings panel, or a form field never glows. This is the theatre-frames-data-leads principle expressed in light.", "section": "elevation" },
+      { "name": "The Pill Means Pick Rule", "body": "If it is a pill, it is a choice — selectable, toggleable, or the action to take. A pill that is purely informational and cannot be acted on is a miscue; use a soft rectangle or plain text.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do keep Studio Gold (#efbc5a) identical across every theme, and spend it on exactly two things per screen: what won, and what to do next. Composite its tints from rgba(var(--gold-rgb), a), the triplet form, rather than a literal rgba(239, 188, 90, a).",
+      "Do build depth from the plum ladder — Stage Plum for the room, Curtain Plum for a surface, Riser Plum for a surface on a surface — and reach for --panel-2 before inventing another rgba() tint.",
+      "Do keep the two densities apart: 12px type in 40px rows on 10px padding for Advanced Mode, 13-17px type on 14-28px spacing for the wizard.",
+      "Do put tracking on every uppercase label (0.08em at 10px). Uppercase without tracking at small sizes is a legibility failure.",
+      "Do use a pill for anything the user picks, and a soft rectangle for anything that holds content.",
+      "Do give every interactive element a visible focus ring — the global 2px Avocado outline at 2px offset — and a press state, not just a hover.",
+      "Do dim what the machine cannot run (opacity: 0.72) rather than hiding it. Showing the constraint is part of the product's honesty.",
+      "Do frame contestant portraits with the gold hairline. It is what makes them read as publicity stills from the show rather than as generic avatars.",
+      "Do use monospace for numerals that must align, since the system defines no tabular-figure setting.",
+      "Do add every new animation to a prefers-reduced-motion block in the same commit that introduces it."
+    ],
+    "donts": [
+      "Don't put stage lighting on a data surface. No gold bloom, spotlight, or glow on a table, a score readout, a form, or a settings panel. Theatre frames; data leads.",
+      "Don't use a shadow on a resting surface. If you cannot name what the element floats above, it does not get one.",
+      "Don't introduce a cool grey, slate, or blue-black background in any theme. Every RigMatch dark is a warm dark.",
+      "Don't set type below weight 600, and don't add a fourth plum step. To recede, use Dust or a smaller size.",
+      "Don't invent a new breakpoint. Use 1280 / 920 / 640; the incumbent 17-value sprawl is drift, not a system.",
+      "Don't hardcode a theme color as a literal hex — #211b2b in a component will not follow a theme switch. Reference the token.",
+      "Don't invent a second name for a token that exists. index.css defines twenty tokens and that is the whole vocabulary: --bg, --panel, --panel-2, --panel-hover, --line, --line-bright, --text, --text-strong, --muted, --primary-rgb, --gold, --gold-rgb, --green, --blue, --pink, --red, --shadow, --ui, --display, --mono. A parallel set (--accent, --surface, --text-secondary, --border) once accumulated against names that were never defined, and every rule using them silently painted nothing. Write the real token: rgb(var(--primary-rgb)) for the solid accent, rgba(var(--primary-rgb), a) for its tints, var(--panel), var(--line), var(--text-strong).",
+      "Don't give a var() a hex fallback. A fallback hides a missing token: an entire retired palette survived in fallbacks while the tokens beside them resolved to nothing, and no one noticed for releases. Let a missing token fail loudly.",
+      "Don't normalize the wizard and the Advanced table toward each other. The density gap is the product's two-audiences principle made visible.",
+      "Don't let a decorated number ship. A score, a speed, or a hardware figure is rendered plainly — the credibility of the measurement is the product.",
+      "Don't reach for neon, angular clip-paths, glitch effects, or monospace-as-personality. The gamer-benchmarking-tool look is the nearest and most dangerous trap.",
+      "Don't suppress a focus outline without providing a replacement treatment on the wrapper."
+    ]
+  }
+}
