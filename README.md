@@ -98,11 +98,20 @@ Rigmatch macOS downloads are unsigned beta builds distributed outside the App St
 3. First launch only: right-click **Rigmatch.app**, choose **Open**, then **Open** again.
 4. If macOS still blocks it, open **System Settings → Privacy & Security → Security** and choose **Open Anyway**.
 
-If macOS says the app is "damaged" after copying it to Applications, run once:
+If macOS says the app is **"damaged and can't be opened"** — and nothing appears
+in Privacy & Security to let you open it anyway — run this once:
 
 ```bash
-xattr -cr /Applications/Rigmatch.app
+xattr -dr com.apple.quarantine "/Applications/RigMatch.app" && codesign --force --deep --sign - "/Applications/RigMatch.app"
 ```
+
+Both halves matter on Apple Silicon. Clearing the quarantine flag alone is not
+enough: an arm64 app will not launch unless its code signature validates, and
+that is the part that was broken. The second command re-signs it locally.
+
+This affects builds up to and including 0.4.2. Later releases sign themselves
+during the build, so "damaged" should not appear at all — you may still see the
+ordinary unidentified-developer prompt covered in the steps above.
 </details>
 
 <details>
