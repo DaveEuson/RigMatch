@@ -2,6 +2,17 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.4.3',
+    label: 'Macs Can Open It Now',
+    date: 'Beta build',
+    notes: [
+      'RigMatch now opens on Apple Silicon Macs. Every previous build failed with "RigMatch is damaged and can\'t be opened" — and unlike the usual unsigned-app warning, there was no "Open Anyway" button in Privacy & Security to get past it, so there was genuinely nothing you could do. Apple Silicon refuses to run an app whose signature does not match its contents, and the build was rearranging the app after macOS had signed it and never signing it again. It now signs itself at the end of every build, and the build fails outright if that does not work rather than shipping something that cannot start.',
+      'If you hit this on an older build and gave up: sorry. It was not your Mac. Download this version and it should open normally — you will still see the ordinary "unidentified developer" prompt on first launch, which the download page explains how to clear.',
+      'The instructions for repairing an older install were also wrong. They only cleared the download flag, which was never the problem on Apple Silicon. The correct commands are now on the download page.',
+      'Intel Macs, Windows, and Linux were not affected by this and need no action.',
+    ],
+  },
+  {
     version: '0.4.2',
     label: 'The Parts You Could Not See',
     date: 'Beta build',
