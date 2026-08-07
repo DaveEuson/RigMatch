@@ -40,7 +40,7 @@ export const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
 export function amazonUrl(query: string): string {
   return `https://www.amazon.com/s?k=${encodeURIComponent(query)}&tag=${AMAZON_AFFILIATE_TAG}`;
 }
-export const APP_VERSION = '0.4.2';
+export const APP_VERSION = '0.4.3';
 export { CURRENT_SCORE_SCHEMA_VERSION } from './scoring';
 export const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch/issues/new';
 export const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
