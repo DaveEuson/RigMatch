@@ -159,7 +159,11 @@ RigMatch is 100% local. Models run through Ollama on your hardware; nothing you 
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Source-available, not open source — see [LICENSE](LICENSE).
+
+The code is published so you can read it and check what the app does, which is
+the point of a privacy claim you can't otherwise verify. It does not grant
+rights to copy, modify, or redistribute it. Using the released app is fine.
 
 ---
 
