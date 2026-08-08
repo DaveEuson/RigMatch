@@ -231,6 +231,9 @@ import type {
 } from './lib/modelCatalog';
 import { dropChat, dropTranscripts, writeLocal, writeLocalJson, writeLocalJsonWithFallback } from './lib/safeStorage';
 import { collapseModelVariants } from './lib/wizardVariants';
+// Same constant the Simple Mode download step gates on, so the wizard cannot
+// wave a lineup through that the run then refuses.
+import { MIN_CONTESTANTS } from './lib/downloadStatus';
 import {
   appendRuns,
   emptyRunHistory,
@@ -2207,6 +2210,36 @@ function App() {
     const listRunId = createRunProgressId('speed-date');
     const firstProgressId = `${listRunId}-0`;
 
+    // requestListTest checks this, but Simple Mode calls runListTest directly
+    // (onStartShow), bypassing it. With nothing runnable the loop below never
+    // executes, and the unseeded results.reduce threw "Reduce of empty array
+    // with no initial value" straight at the user. Reachable in practice:
+    // shortlisted models can all be platform-incompatible, which this filter
+    // removes but the download step's count does not.
+    if (runnableRows.length < MIN_CONTESTANTS) {
+      const why = runnableRows.length === 0
+        ? 'No installed models can run on this computer yet. Download at least two that fit.'
+        : `Speed Dating needs at least ${MIN_CONTESTANTS} installed models that run on this computer.`;
+      // Reported as a failed run rather than by clearing runProgress. Simple
+      // Mode latches `awaitingRun` when it asks for a show and only releases it
+      // once the run goes active or reports complete/failed — so returning
+      // silently would swap the crash for a wizard stuck on Compare with Next
+      // disabled under "The show is still running", no Back, and no way out but
+      // a restart. A failed phase releases it and shows the reason.
+      setRunProgress({
+        mode: 'speed-date',
+        phase: 'failed',
+        label: 'Speed Dating',
+        currentModel: runnableRows[0]?.displayName ?? 'Waiting',
+        completed: 0,
+        total: runnableRows.length,
+        percent: 0,
+        message: why,
+      });
+      setActivity(why);
+      return;
+    }
+
     if (hostBlocker) {
       setRunProgress({
         mode: 'speed-date',
@@ -2312,6 +2345,13 @@ function App() {
         if (isStopped) break;
       }
 
+      // Belt and braces: the guard above makes this unreachable today, but an
+      // unseeded reduce over an empty array throws a raw TypeError that lands
+      // in front of the user as the run's failure message. Fail with something
+      // readable if a future path ever gets here with nothing.
+      if (results.length === 0) {
+        throw new Error('No models finished a run, so there is nothing to compare.');
+      }
       const winner = results.reduce((best, result) =>
         compareBenchmarkResults(result, best) < 0 ? result : best,
       );
