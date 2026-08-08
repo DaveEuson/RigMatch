@@ -2,6 +2,18 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.4.4',
+    label: 'Readable, and Reachable',
+    date: 'Beta build',
+    notes: [
+      'Starting a show from Simple Mode can no longer fail with a programmer\'s error message. If none of the models in your lineup could actually run — which can happen even after they have all downloaded, because a model also has to suit your operating system — the show started anyway with nobody in it and fell over on the way to the results, showing you the words "Reduce of empty array with no initial value". Simple Mode now checks the lineup the same way Advanced Mode always has, and if there are fewer than two models that can run it says so plainly and lets you go back and pick more.',
+      'The red and blue status text throughout the app is now bright enough to read. Both were set at a strength meant for a light background and never adjusted for a dark one, so warnings, "out of your league" tags, size labels and error notes were low-contrast grey-on-dark in all five themes — worst on the raised panels, which is exactly where most of them appear. They are the same colours, just lifted until they clear the standard for readable text. Five more spots that had their colour written in by hand rather than taken from the theme were fixed too, including the remove button on a model card and the placeholder in the notes box, both of which were close to invisible.',
+      'Dialogs now behave like dialogs if you use a keyboard or a screen reader. Twenty windows in the app announced themselves as ones that block the page behind them, and none of them did: focus started outside the window, Tab walked straight out of it into the page underneath, and closing it left you wherever you had wandered to. Only four could be dismissed with Escape. Now the keyboard goes into a dialog when it opens, stays inside it, returns where it came from when it closes, and Escape works everywhere it should. The two that delete things — removing a model and clearing your data — were the worst of these: no Escape, no click-outside, so the only way to back out was to hunt for the Cancel button by tabbing through the page behind it.',
+      'Four things that called themselves dialogs were not, and pretended less rather than more: the update notice in the corner is a status message, the welcome tour is a coach mark you are meant to click past, and the test editor panel leaves the app usable behind it. Trapping the keyboard inside any of those would have been the wrong fix.',
+      'Under the hood: the last outstanding security advisory in the app\'s build tools is cleared, and a test now fails the build if any status colour drops below the readable threshold again.',
+    ],
+  },
+  {
     version: '0.4.3',
     label: 'Macs Can Open It Now',
     date: 'Beta build',
