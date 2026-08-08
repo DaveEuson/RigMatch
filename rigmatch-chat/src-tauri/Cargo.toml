@@ -3,7 +3,12 @@ name = "rigmatch-chat"
 version = "0.4.1"
 description = "RigMatch Chat — local AI model matchmaking companion"
 authors = ["RigMatch"]
-license = "MIT"
+# Not open source. There is no LICENSE under rigmatch-chat/, so the repository
+# root LICENSE governs this crate too: the source is published to be read and
+# audited, not reused. LicenseRef-* is the SPDX form for a custom licence, so
+# scanners and `cargo metadata` cannot mistake it for a permissive one — which
+# is what "MIT" here did, in the only machine-readable licence field in the repo.
+license = "LicenseRef-RigMatch-Source-Available"
 repository = ""
 edition = "2021"
 rust-version = "1.77.2"
