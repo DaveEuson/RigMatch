@@ -234,6 +234,7 @@ import { collapseModelVariants } from './lib/wizardVariants';
 // Same constant the Simple Mode download step gates on, so the wizard cannot
 // wave a lineup through that the run then refuses.
 import { MIN_CONTESTANTS } from './lib/downloadStatus';
+import { useDialog } from './lib/useDialog';
 import {
   appendRuns,
   emptyRunHistory,
@@ -3834,7 +3835,7 @@ function FirstRunTutorial({
 
   return (
     <div className="tutorial-backdrop" role="presentation">
-      <section className="tutorial-modal" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
+      <section className="tutorial-modal" role="dialog" aria-labelledby="tutorial-title">
         <div className="tutorial-title">
           <div className="tutorial-badge" aria-hidden="true">
             <Trophy />
@@ -4709,6 +4710,7 @@ function RunWarningModal({
   /** Measured when this modal opened; null while the probe is still running. */
   gpuContention: GpuContention | null;
 }) {
+  const runWarnRef = useDialog<HTMLElement>(onCancel);
   const [questionsExpanded, setQuestionsExpanded] = useState(false);
   const recognizeUploadRef = useRef<HTMLInputElement>(null);
   const activePreset = BENCHMARK_PRESETS.find(
@@ -4759,7 +4761,7 @@ function RunWarningModal({
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal" role="dialog" aria-modal="true" aria-labelledby="run-warning-title">
+      <section ref={runWarnRef} className="run-warning-modal" role="dialog" aria-modal="true" aria-labelledby="run-warning-title">
         <div className="modal-title">
           <AlertTriangle aria-hidden="true" />
           <div>
@@ -5302,12 +5304,13 @@ function QuickCheckWarningModal({
   onCancel: () => void;
   onConfirm: (dontWarnAgain: boolean) => void;
 }) {
+  const quickCheckRef = useDialog<HTMLElement>(onCancel);
   const [dontWarnAgain, setDontWarnAgain] = useState(false);
   const sizeLabel = row.sizeGb ? `${formatGb(row.sizeGb)}` : 'its full weights';
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal" role="dialog" aria-modal="true" aria-labelledby="quick-check-warning-title">
+      <section ref={quickCheckRef} className="run-warning-modal" role="dialog" aria-modal="true" aria-labelledby="quick-check-warning-title">
         <div className="modal-title">
           <AlertTriangle aria-hidden="true" />
           <div>
@@ -5357,13 +5360,14 @@ function ClearScoresModal({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const clearScoresRef = useDialog<HTMLElement>(onCancel);
   const isAll = pending.mode === 'all';
   const title = isAll ? 'Clear All Scores?' : `Clear ${pending.model} Score?`;
   const actionLabel = isAll ? 'Clear All Scores' : 'Clear Score';
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal destructive-modal" role="dialog" aria-modal="true" aria-labelledby="clear-scores-title">
+      <section ref={clearScoresRef} className="run-warning-modal destructive-modal" role="dialog" aria-modal="true" aria-labelledby="clear-scores-title">
         <div className="modal-title danger">
           <Trash2 aria-hidden="true" />
           <div>
@@ -5626,13 +5630,14 @@ function ThirdPartyDownloadConsentModal({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const consentRef = useDialog<HTMLElement>(onCancel);
   const [accepted, setAccepted] = useState(false);
   const visibleRows = rows.slice(0, 5);
   const hiddenCount = Math.max(0, rows.length - visibleRows.length);
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal third-party-download-modal" role="dialog" aria-modal="true" aria-labelledby="third-party-download-title">
+      <section ref={consentRef} className="run-warning-modal third-party-download-modal" role="dialog" aria-modal="true" aria-labelledby="third-party-download-title">
         <div className="modal-title">
           <AlertTriangle aria-hidden="true" />
           <div>
@@ -5773,6 +5778,7 @@ function UtilityPanel({
   const topRankedScore = rankedModelScores[0];
   const savedChatMessageCount = Math.max(0, chatMessages.length - 1);
   const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
+  const scoreExplainerRef = useDialog<HTMLDivElement>(() => setScoreExplainerOpen(false));
   const [scoreCopied, setScoreCopied] = useState(false);
   const [ollamaUpdateLatest, setOllamaUpdateLatest] = useState<string | null>(null);
   const [isCheckingOllamaUpdate, setIsCheckingOllamaUpdate] = useState(false);
@@ -5820,8 +5826,8 @@ function UtilityPanel({
       </div>
 
       {scoreExplainerOpen && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="How we score" onClick={() => setScoreExplainerOpen(false)}>
-          <div className="run-warning-modal score-explainer-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-backdrop" role="presentation" onClick={() => setScoreExplainerOpen(false)}>
+          <div ref={scoreExplainerRef} className="run-warning-modal score-explainer-modal" role="dialog" aria-modal="true" aria-label="How we score" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">
               <Trophy aria-hidden="true" />
               <div>
@@ -9268,8 +9274,11 @@ function TestSuiteEditorDock({
     onChange(questions.filter((_question, questionIndex) => questionIndex !== index));
   };
 
+  // Not aria-modal: this dock has no backdrop and the app behind it stays
+  // usable, so claiming modality told assistive tech the rest of the page was
+  // inert when it was not.
   return (
-    <aside className="suite-editor-dock" role="dialog" aria-modal="true" aria-label="Test Suite Editor">
+    <aside className="suite-editor-dock" role="dialog" aria-label="Test Suite Editor">
       <div className="suite-editor-title">
         <div>
           <span>Benchmark Lab</span>
@@ -10085,8 +10094,12 @@ function ProfileQuestionTranscript({
 }
 
 function ModeSplash({ onPick }: { onPick: (mode: UiMode) => void }) {
+  // No onClose: this is a required choice, so Escape must not dismiss it. Focus
+  // is still moved in and trapped — it is the first thing on screen at launch,
+  // and previously left focus on <body> behind a full-viewport overlay.
+  const splashRef = useDialog<HTMLDivElement>();
   return (
-    <div className="mode-splash" role="dialog" aria-modal="true" aria-label="Choose how to use RigMatch">
+    <div ref={splashRef} className="mode-splash" role="dialog" aria-modal="true" aria-label="Choose how to use RigMatch">
       <div className="mode-splash-card">
         <div className="mode-splash-brand">
           <BrandMark />

@@ -5,6 +5,7 @@ import { getModelDemoArtifacts, type DemoArtifact } from '../lib/labResults';
 import { useSandboxedPreview } from '../lib/useSandboxedPreview';
 import { getShortModelName } from '../lib/modelCatalog';
 import { AvatarBust } from './Avatars';
+import { useDialog } from '../lib/useDialog';
 
 /**
  * Ambient indicator that a skill test is running, visible on any tab so you
@@ -44,6 +45,7 @@ export function SkillRunMiniBar({ status, canShowLive, onShow, onStop }: {
  */
 export function LiveBuildModal({ build, onClose }: { build: { model: string; kind: 'app' | 'image' | 'vision'; text: string; done: boolean; error?: string }; onClose: () => void }) {
   const scrollRef = useRef<HTMLPreElement>(null);
+  const dialogRef = useDialog<HTMLElement>(onClose);
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -60,7 +62,7 @@ export function LiveBuildModal({ build, onClose }: { build: { model: string; kin
       : 'image models render all at once — no live tokens to show';
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal live-build-modal" role="dialog" aria-modal="true" aria-label={`${build.model} skill test in progress`}>
+      <section ref={dialogRef} className="run-warning-modal live-build-modal" role="dialog" aria-modal="true" aria-label={`${build.model} skill test in progress`}>
         <div className="modal-title">
           <Sparkles aria-hidden="true" className={build.done || build.error ? undefined : 'live-build-pulse'} />
           <div>
@@ -118,11 +120,7 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
   const isUnverified = demo.judged === false;
   const demoPreviewUrl = useSandboxedPreview(demo.kind === 'app' ? demo.html : null);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const demoDialogRef = useDialog<HTMLElement>(onClose);
 
   // Reset transient view state when switching between demos. Done during render
   // (the React-recommended pattern) rather than in an effect, to avoid a
@@ -154,6 +152,7 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
   return (
     <div className="modal-backdrop" role="presentation">
       <section
+        ref={demoDialogRef}
         className="run-warning-modal advanced-lab-preview-modal demo-result-modal"
         role="dialog"
         aria-modal="true"

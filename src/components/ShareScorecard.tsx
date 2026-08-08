@@ -3,6 +3,7 @@ import { Check, Copy, Download, X } from 'lucide-react';
 import type { SystemProfile, TestedModelScore } from '../types';
 import { getShortModelName } from '../lib/modelCatalog';
 import { formatThroughputValue } from '../lib/format';
+import { useDialog } from '../lib/useDialog';
 
 // Where a shared scorecard sends people — the marketing landing page, which then
 // funnels to the live demo or a download.
@@ -356,11 +357,7 @@ export function ShareScorecard({ model, score, system, onClose }: {
     else drawScorecard(ctx, opts);
   }, [style, modelName, score, system, showHostname]);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useDialog<HTMLElement>(onClose);
 
   const shareText = style === 'datingshow'
     ? `It's a match! ${modelName} won my PC's heart on RigMatch 💛 — grade ${score.grade}, ${score.total}/100. Which local AI is your top match?`
@@ -401,7 +398,7 @@ export function ShareScorecard({ model, score, system, onClose }: {
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal share-scorecard-modal" role="dialog" aria-modal="true" aria-label="Share your scorecard">
+      <section ref={dialogRef} className="run-warning-modal share-scorecard-modal" role="dialog" aria-modal="true" aria-label="Share your scorecard">
         <div className="modal-title">
           <div>
             <span>Share your Top Match</span>

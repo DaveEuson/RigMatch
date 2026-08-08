@@ -13,7 +13,7 @@ export function UpdateAvailableToast({ update, onGetUpdate, onDismiss }: {
   const [showNotes, setShowNotes] = useState(false);
 
   return (
-    <div className="update-toast" role="dialog" aria-label={`RigMatch ${update.latestVersion ?? ''} is available`}>
+    <div className="update-toast" role="status" aria-live="polite" aria-label={`RigMatch ${update.latestVersion ?? ''} is available`}>
       <div className="update-toast-head">
         <Sparkles aria-hidden="true" />
         <div>

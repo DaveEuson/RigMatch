@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { AlertTriangle, Check, Copy, Download, X } from 'lucide-react';
 import type { BuildHatchResult } from '../lib/hatchProfile';
+import { useDialog } from '../lib/useDialog';
 
 // "Export for Hatch": shows the JSON profile RigMatch built, with a primary
 // Copy-to-clipboard action (paste into Hatch → Messenger → Connection tab →
@@ -10,12 +11,7 @@ export function ExportHatchModal({ result, onClose }: {
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useDialog<HTMLElement>(onClose);
 
   const json = result.ok ? result.json : '';
 
@@ -44,7 +40,7 @@ export function ExportHatchModal({ result, onClose }: {
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal export-hatch-modal" role="dialog" aria-modal="true" aria-label="Export for Hatch">
+      <section ref={dialogRef} className="run-warning-modal export-hatch-modal" role="dialog" aria-modal="true" aria-label="Export for Hatch">
         <div className="modal-title">
           <div>
             <span>Export for Hatch</span>
