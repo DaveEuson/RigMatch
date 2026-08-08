@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * Focus management for a modal dialog.
@@ -40,22 +40,32 @@ import { useEffect, useRef } from 'react';
 const openDialogs: HTMLElement[] = [];
 
 export function useDialog<T extends HTMLElement = HTMLElement>(onClose?: () => void) {
-  const ref = useRef<T>(null);
+  // A callback ref, not an object ref, so the trap keys off the panel element
+  // itself. Not every caller renders its panel unconditionally — UtilityPanel
+  // calls this at the top of the component but attaches the ref only while
+  // `scoreExplainerOpen` is true — so an effect reading `ref.current` once would
+  // find null, bail, and never install anything. Keying on the node means the
+  // trap arrives when the panel mounts and leaves when it unmounts, wherever in
+  // the component the hook is called.
+  const [panel, setPanel] = useState<T | null>(null);
+  const panelRef = useCallback((node: T | null) => setPanel(node), []);
 
-  // Held in a ref so the effect below can have an empty dependency list. Every
-  // call site passes a freshly-created arrow (`onClose={() => setFoo(null)}`),
-  // so depending on `onClose` re-ran the whole effect on every parent render —
-  // restoring focus out of the dialog and then moving it back to the first
-  // control. The app re-renders every 1.6s during a run and once per streamed
-  // token while a build is live, so focus was being torn away continuously,
-  // exactly when a dialog was most likely to be open.
+  // Held in a ref so the effect below does not depend on the callback's
+  // identity. Every call site passes a freshly-created arrow
+  // (`onClose={() => setFoo(null)}`), so depending on `onClose` re-ran the whole
+  // effect on every parent render — restoring focus out of the dialog and then
+  // moving it back to the first control. The app re-renders every 1.6s during a
+  // run and once per streamed token while a build is live, so focus was being
+  // torn away continuously, exactly when a dialog was most likely to be open.
+  //
+  // Read at keypress time, which is also what lets a caller pass
+  // `isDeleting ? undefined : onCancel` to disable Escape mid-life.
   const onCloseRef = useRef(onClose);
   useEffect(() => {
     onCloseRef.current = onClose;
   });
 
   useEffect(() => {
-    const panel = ref.current;
     if (!panel) return;
 
     // Remember where focus came from so it can go back. Without this, closing a
@@ -81,10 +91,23 @@ export function useDialog<T extends HTMLElement = HTMLElement>(onClose?: () => v
       panel.focus();
     }
 
+    // Topmost by document position rather than by the order effects happened to
+    // run. React runs a child's effects before its parent's, so a dialog that
+    // renders another one in the same commit would register inside-out and hand
+    // the keyboard to the dialog underneath. All the modals share a z-index, so
+    // whichever comes last in the document is the one drawn on top.
+    const ownsKeyboard = () => {
+      const live = openDialogs.filter((el) => el.isConnected);
+      if (live.length === 0) return false;
+      const top = live.reduce((a, b) =>
+        a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? b : a);
+      return top === panel;
+    };
+
     const onKeyDown = (event: KeyboardEvent) => {
-      // A dialog underneath another one is inert: the top of the stack owns the
-      // keyboard until it closes.
-      if (openDialogs[openDialogs.length - 1] !== panel) return;
+      // A dialog underneath another one is inert: the top one owns the keyboard
+      // until it closes.
+      if (!ownsKeyboard()) return;
 
       if (event.key === 'Escape' && onCloseRef.current) {
         event.stopPropagation();
@@ -128,7 +151,7 @@ export function useDialog<T extends HTMLElement = HTMLElement>(onClose?: () => v
         previouslyFocused.focus?.();
       }
     };
-  }, []);
+  }, [panel]);
 
-  return ref;
+  return panelRef;
 }
