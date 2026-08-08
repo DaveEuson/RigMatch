@@ -1,6 +1,15 @@
 Copyright (c) 2026 Dave Euson. All Rights Reserved.
 
-This software and its source code are proprietary and confidential.
-Unauthorized copying, distribution, modification, or use of this software,
-in whole or in part, is strictly prohibited without the express written
+RigMatch is source-available, not open source.
+
+The source code is published so that anyone can read it, audit it, and verify
+what the application does — in particular, that it runs models locally and does
+not send your data anywhere. You are welcome to read it for that purpose.
+
+No rights to use the source code are granted beyond reading it. Copying,
+distributing, modifying, or creating derivative works from this software or its
+source code, in whole or in part, is prohibited without the express written
 permission of the copyright owner.
+
+Using the released application itself is, of course, fine — that is what it is
+for.
