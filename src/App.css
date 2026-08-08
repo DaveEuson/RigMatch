@@ -5083,10 +5083,10 @@ tbody tr.computer-row.selected {
   display: inline-block;
   margin-top: 3px;
   padding: 1px 5px;
-  border: 1px solid rgba(239, 100, 100, 0.5);
+  border: 1px solid rgba(255, 146, 120, 0.5);
   border-radius: 3px;
-  background: rgba(239, 100, 100, 0.1);
-  color: #ef6464;
+  background: rgba(255, 146, 120, 0.1);
+  color: var(--red);
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
@@ -8837,8 +8837,8 @@ tbody tr.computer-row.selected {
 }
 
 .roster-card:hover .roster-remove-btn {
-  background: rgba(238, 0, 85, 0.18);
-  color: rgba(238, 0, 85, 0.9);
+  background: rgba(255, 146, 120, 0.14);
+  color: var(--red);
 }
 
 .roster-remove-btn:hover {
@@ -13920,7 +13920,11 @@ tbody tr.computer-row.selected {
   border: none;
   border-radius: 50%;
   background: var(--pink);
-  color: #fff;
+  /* Near-black on pink, not white: white measured 2.90-3.07:1 across the
+     themes, under the 3:1 a graphical control needs. This is the same
+     text-on-pink value the wizard's picked badge uses. (There were two `color`
+     declarations here; the later one won, so editing the first did nothing.) */
+  color: #2a0d16;
   cursor: pointer;
 }
 
@@ -15697,7 +15701,7 @@ td {
 }
 
 .contestant-notes-area::placeholder {
-  color: rgba(255, 249, 239, 0.25);
+  color: var(--muted);
 }
 
 .contestant-notes-area:focus {
@@ -16743,9 +16747,9 @@ tbody tr.selected {
 }
 
 .fit-pill.out-of-league {
-  border-color: rgba(217, 103, 79, 0.68);
+  border-color: rgba(var(--red-rgb), 0.68);
   color: var(--red);
-  background: rgba(217, 103, 79, 0.12);
+  background: rgba(var(--red-rgb), 0.12);
 }
 
 .model-table tr.out-of-league {
@@ -16758,7 +16762,7 @@ tbody tr.selected {
 
 .size-pill.huge {
   color: var(--red);
-  background: rgba(217, 103, 79, 0.12);
+  background: rgba(var(--red-rgb), 0.12);
   box-shadow: none;
 }
 
@@ -18008,7 +18012,7 @@ a.whats-next-support:hover {
 .model-task-filters-label {
   font-size: 0.62rem;
   font-weight: 700;
-  color: rgba(200, 210, 220, 0.55);
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.07em;
   padding: 2px 8px;
@@ -18879,7 +18883,7 @@ a.whats-next-support:hover {
    the two mean different things about whether the comparison is fair. */
 .delta-hardware-flag.contention {
   color: var(--red);
-  border-color: rgba(217, 103, 79, 0.45);
+  border-color: rgba(var(--red-rgb), 0.45);
 }
 
 /* Press states.

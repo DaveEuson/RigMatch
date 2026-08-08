@@ -13,14 +13,17 @@
   --muted: #b9aaa2;
   --green: #95b46a;
   --primary-rgb: 227, 113, 133;
-  --blue: #69a7b7;
+  --blue: #6ba9b9;
   --pink: #e37185;
   --gold: #efbc5a;
   /* Triplet form for alpha compositing: rgba(var(--gold-rgb), 0.4). Gold is the
      one color identical in every theme, so it is declared here only — keep the
      two in sync if --gold ever moves. */
   --gold-rgb: 239, 188, 90;
-  --red: #d9674f;
+  --red: #ff9278;
+  /* Same deal as --gold-rgb: red is the other color identical in every theme,
+     and the status pills need it as a tint under red text. Keep in sync. */
+  --red-rgb: 255, 146, 120;
   --shadow: 0 18px 42px rgba(7, 5, 12, 0.42);
   --ui: "Inter", "Segoe UI", system-ui, sans-serif;
   --display: "Segoe UI", "Inter", system-ui, sans-serif;
@@ -46,10 +49,10 @@
   --muted: #b0ad94;
   --green: #9fbb6f;
   --primary-rgb: 230, 117, 83;
-  --blue: #5f9ba8;
+  --blue: #78b4c1;
   --pink: #e67583;
   --gold: #efbc5a;
-  --red: #d9674f;
+  --red: #ff9278;
 }
 
 [data-theme="mustard"] {
@@ -63,10 +66,10 @@
   --muted: #b9ab97;
   --green: #8fb36f;
   --primary-rgb: 239, 188, 90;
-  --blue: #65a6b8;
+  --blue: #70b1c3;
   --pink: #df708c;
   --gold: #efbc5a;
-  --red: #d9674f;
+  --red: #ff9278;
 }
 
 [data-theme="teal"] {
@@ -80,10 +83,10 @@
   --muted: #a8b6ad;
   --green: #9cb96e;
   --primary-rgb: 104, 168, 184;
-  --blue: #68a8b8;
+  --blue: #7bbbcc;
   --pink: #e0708a;
   --gold: #efbc5a;
-  --red: #d9674f;
+  --red: #ff9278;
 }
 
 [data-theme="chocolate"] {
@@ -97,10 +100,10 @@
   --muted: #b5a59c;
   --green: #96b46c;
   --primary-rgb: 220, 108, 78;
-  --blue: #68a2b0;
+  --blue: #73adbb;
   --pink: #e07086;
   --gold: #efbc5a;
-  --red: #d9674f;
+  --red: #ff9278;
 }
 
 * {
