@@ -85,6 +85,28 @@ test('only the topmost dialog handles the keyboard', () => {
   );
 });
 
+test('the sandboxed preview frames stay reachable, and focus cannot leak past them', () => {
+  const source = fs.readFileSync('src/lib/useDialog.ts', 'utf8');
+
+  // Without `iframe` in the selector the Tab handler's preventDefault made the
+  // frame unreachable, so the generated app in the App Builder and skill-demo
+  // previews could only be played with a mouse.
+  const selector = source.match(/panel\.querySelectorAll<HTMLElement>\(\s*'([^']+)'/);
+  assert.ok(selector, 'could not find the focusable selector');
+  assert.ok(selector[1].includes('iframe'), 'iframe must be in the focusable selector');
+
+  // Reaching it opens a hole keydown cannot close: key events inside a sandboxed
+  // frame belong to another browsing context, so the Tab that leaves the frame
+  // is never seen here and focus lands on the page behind the dialog.
+  assert.match(source, /addEventListener\('focusin'/, 'a focus backstop is required');
+  assert.match(source, /panel\.setAttribute\('tabindex', '-1'\)/, 'the panel must always accept focus');
+
+  // The dialogs this is for still hold an iframe.
+  for (const file of ['src/components/AppBuilderPreview.tsx', 'src/components/SkillDemoViewers.tsx']) {
+    assert.ok(fs.readFileSync(file, 'utf8').includes('<iframe'), `${file} should still embed a preview frame`);
+  }
+});
+
 test('the trap installs even when the panel mounts later than the hook', () => {
   // UtilityPanel calls useDialog at the top of the component but attaches the
   // ref only while `scoreExplainerOpen` is true. An effect that read an object

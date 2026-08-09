@@ -75,21 +75,28 @@ export function useDialog<T extends HTMLElement = HTMLElement>(onClose?: () => v
 
     openDialogs.push(panel);
 
+    // `iframe` is in here so the App Builder and skill-demo previews can be
+    // reached at all. Leaving it out did not merely skip it in the cycle: the
+    // Tab handler below preventDefaults at the ends, so the frame became
+    // unreachable by keyboard entirely and the generated app — the whole point
+    // of those two dialogs — was mouse-only.
     const focusable = () => Array.from(
       panel.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])',
       ),
     ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+
+    // Always focusable as a fallback, not only when the panel happens to have no
+    // controls: the focus backstop below needs somewhere that is guaranteed to
+    // accept focus, and a `.focus()` that silently does nothing would leave the
+    // caret outside the dialog with no second event to correct it. `-1` keeps it
+    // out of the Tab cycle, and out of `focusable()`.
+    panel.setAttribute('tabindex', '-1');
 
     // Move focus in. Prefer the first real control; fall back to the panel so
     // screen readers announce the dialog rather than leaving the user behind it.
     const first = focusable()[0];
-    if (first) {
-      first.focus();
-    } else {
-      panel.setAttribute('tabindex', '-1');
-      panel.focus();
-    }
+    (first ?? panel).focus();
 
     // Topmost by document position rather than by the order effects happened to
     // run. React runs a child's effects before its parent's, so a dialog that
@@ -138,11 +145,31 @@ export function useDialog<T extends HTMLElement = HTMLElement>(onClose?: () => v
       }
     };
 
+    // Keydown alone cannot hold the trap, because it only sees keys pressed in
+    // this document. Once focus is inside the sandboxed preview iframe, its key
+    // events belong to another browsing context and never reach us — so the Tab
+    // that leaves the frame's last control is invisible here, and focus lands on
+    // whatever follows the panel: the page behind the dialog.
+    //
+    // Watching where focus actually lands catches that, and every other route
+    // out too — programmatic focus, a click that lands outside, anything a
+    // future dialog does. Cheap, and it makes the trap a statement about focus
+    // rather than about one key.
+    const onFocusIn = (event: FocusEvent) => {
+      if (!ownsKeyboard()) return;
+      const target = event.target as Node | null;
+      if (target && panel.contains(target)) return;
+      const items = focusable();
+      (items[0] ?? panel).focus();
+    };
+
     // Capture phase: a dialog rendered inside a component that also listens for
     // Escape would otherwise see both handlers fire.
     document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('focusin', onFocusIn, true);
     return () => {
       document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('focusin', onFocusIn, true);
       const index = openDialogs.lastIndexOf(panel);
       if (index !== -1) openDialogs.splice(index, 1);
       // Only restore if focus is still somewhere in the dialog. If the app moved

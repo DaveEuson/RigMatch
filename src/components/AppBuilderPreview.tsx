@@ -21,8 +21,9 @@ export function AppBuilderPreviewModal({
   // Focus lands on the dialog's own controls, not the iframe. Auto-focusing the
   // frame put the keyboard inside untrusted, sandboxed content whose key events
   // never reach this component — so Escape was dead exactly where the effect had
-  // just placed the user, with no way back out except the mouse. The note above
-  // the frame already tells people to click into the app to play it.
+  // just placed the user, with no way back out except the mouse. The frame is
+  // still reachable, just not the landing spot: useDialog keeps it in the Tab
+  // cycle and pulls focus back into the dialog when it leaves the frame.
   const dialogRef = useDialog<HTMLElement>(onClose);
 
   return (
@@ -47,7 +48,7 @@ export function AppBuilderPreviewModal({
         </div>
         <p className="advanced-lab-preview-note">
           This runs the generated code in an isolated frame with network, storage, and RigMatch access blocked.
-          Click inside the game area first so it can hear your keyboard.
+          Click the app, or Tab to it, so it can hear your keyboard. Tab again to come back.
         </p>
         {previewUrl ? (
           <iframe
