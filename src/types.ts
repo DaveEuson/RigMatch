@@ -1,3 +1,6 @@
+import type { BenchmarkQuestionType } from './benchmarkSuite.ts';
+import type { TaskScores } from './lib/taskScores.ts';
+
 export type SystemProfile = {
   hostname: string;
   platform: string;
@@ -130,6 +133,12 @@ export type ScanResponse = {
 export type BenchmarkPromptResult = {
   id: string;
   label: string;
+  /**
+   * What this question was testing. Optional because runs recorded before it
+   * was kept have no way to say — those simply produce no per-task breakdown
+   * rather than an average over unknown material.
+   */
+  type?: BenchmarkQuestionType;
   prompt: string;
   elapsedMs: number;
   tokensPerSecond: number;
@@ -183,6 +192,11 @@ export type TestedModelScore = {
    * Optional -- scores saved before this field existed will not have it.
    */
   tokensPerSecond?: number;
+  /**
+   * What this model was good at, per kind of question, measured on this rig.
+   * Absent for runs recorded before question types were kept.
+   */
+  taskScores?: TaskScores;
 };
 
 export type BenchmarkProgressUpdate = {

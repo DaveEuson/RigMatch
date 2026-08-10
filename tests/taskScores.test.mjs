@@ -1,0 +1,164 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  MIN_QUESTIONS_FOR_VERDICT,
+  TASK_GROUPS,
+  bestModelForTask,
+  findTaskWinners,
+  isVerdictWorthy,
+  summarizeTaskScores,
+} from '../src/lib/taskScores.ts';
+
+/**
+ * The benchmark already asked typed questions and already scored every answer,
+ * but the two were never joined — the breakdown was averaged away, so
+ * "Best for coding" came from keyword-matching a curated list of specialties.
+ * That is generic knowledge about a model, and says nothing about the machine.
+ */
+const prompt = (type, sobrietyScore, status = 'ok') => ({
+  id: `${type}-${sobrietyScore}-${Math.random()}`,
+  label: type,
+  type,
+  prompt: 'q',
+  elapsedMs: 100,
+  tokensPerSecond: 40,
+  sobrietyScore,
+  response: 'a',
+  doneReason: 'stop',
+  status,
+});
+
+test('per-question scores are grouped by what the question tested', () => {
+  const scores = summarizeTaskScores([
+    prompt('coding', 90), prompt('coding', 80), prompt('coding', 70),
+    prompt('assistant', 60), prompt('assistant', 40),
+    prompt('truth', 55),
+    // json and format are both "does it do as it is told", so they count together.
+    prompt('json', 100), prompt('format', 80),
+  ]);
+
+  assert.deepEqual(scores.coding, { score: 80, questions: 3 });
+  assert.deepEqual(scores.chat, { score: 50, questions: 2 });
+  assert.deepEqual(scores.facts, { score: 55, questions: 1 });
+  assert.deepEqual(scores.instructions, { score: 90, questions: 2 });
+});
+
+test('runs from before question types were kept produce nothing, not a guess', () => {
+  // The alternative would be a confident average over unknown material.
+  const untyped = [{ ...prompt('coding', 90), type: undefined }];
+  assert.deepEqual(summarizeTaskScores(untyped), {});
+  assert.deepEqual(summarizeTaskScores([]), {});
+});
+
+test('questions the model never answered do not count against its ability', () => {
+  // A timeout or a dead model is a stability problem, which is scored
+  // separately — folding it in here would call a model bad at coding when it
+  // was actually just not running.
+  const scores = summarizeTaskScores([
+    prompt('coding', 90), prompt('coding', 88), prompt('coding', 92),
+    prompt('coding', 0, 'no-response'),
+    prompt('coding', 0, 'failed'),
+  ]);
+  assert.deepEqual(scores.coding, { score: 90, questions: 3 });
+
+  // A truncated answer is a real answer that ran out of room, so it counts.
+  const truncated = summarizeTaskScores([prompt('format', 40, 'truncated'), prompt('format', 60)]);
+  assert.deepEqual(truncated.instructions, { score: 50, questions: 2 });
+});
+
+test('a single question is not a verdict', () => {
+  assert.equal(isVerdictWorthy({ score: 99, questions: 1 }), false);
+  assert.equal(isVerdictWorthy({ score: 99, questions: MIN_QUESTIONS_FOR_VERDICT }), true);
+  assert.equal(isVerdictWorthy(undefined), false);
+});
+
+test('a task winner needs a real margin over the runner-up', () => {
+  // These scores come from a heuristic judge. Two models a point apart are
+  // indistinguishable, and picking between them would be inventing a result.
+  const close = findTaskWinners({
+    a: { coding: { score: 82, questions: 5 } },
+    b: { coding: { score: 80, questions: 5 } },
+  });
+  assert.deepEqual(close, [], 'two points apart is not a finding');
+
+  const clear = findTaskWinners({
+    a: { coding: { score: 92, questions: 5 } },
+    b: { coding: { score: 70, questions: 5 } },
+  });
+  assert.equal(clear.length, 1);
+  assert.equal(clear[0].model, 'a');
+  assert.equal(clear[0].margin, 22);
+  assert.equal(clear[0].label, 'Coding');
+});
+
+test('the only model scored at a task wins it outright', () => {
+  // There is nothing to be separated from, so the margin rule cannot apply.
+  const winners = findTaskWinners({
+    a: { coding: { score: 60, questions: 4 } },
+    b: { chat: { score: 90, questions: 4 } },
+  });
+  assert.deepEqual(
+    winners.map((w) => [w.task, w.model, w.margin]),
+    [['coding', 'a', 0], ['chat', 'b', 0]],
+  );
+});
+
+test('thinly-tested models are left out of the running entirely', () => {
+  const winners = findTaskWinners({
+    a: { coding: { score: 99, questions: 1 } },
+    b: { coding: { score: 70, questions: 6 } },
+  });
+  assert.equal(winners.length, 1);
+  assert.equal(winners[0].model, 'b', 'six questions at 70 beats one at 99');
+});
+
+test('routing picks from what is installed, not from every score on file', () => {
+  const byModel = {
+    'deleted:7b': { coding: { score: 99, questions: 5 } },
+    'llama3.2:3b': { coding: { score: 80, questions: 5 } },
+  };
+  assert.deepEqual(
+    bestModelForTask(byModel, 'coding', ['llama3.2:3b']),
+    { model: 'llama3.2:3b', score: 80 },
+    'a model no longer installed cannot be routed to',
+  );
+  assert.equal(bestModelForTask(byModel, 'chat', ['llama3.2:3b']), null, 'nothing measured for that task');
+  assert.equal(bestModelForTask({}, 'coding', ['llama3.2:3b']), null);
+});
+
+test('every benchmark question type is covered by exactly one group', () => {
+  // A type belonging to no group would be silently dropped; one belonging to
+  // two would be double-counted.
+  const seen = TASK_GROUPS.flatMap((g) => g.questionTypes);
+  assert.deepEqual([...seen].sort(), ['assistant', 'coding', 'format', 'json', 'truth']);
+  assert.equal(new Set(seen).size, seen.length, 'no question type in two groups');
+});
+
+test('the default ten-question run is too thin for most per-task verdicts', async () => {
+  // A real product constraint, pinned so it is not discovered by a user. The
+  // default run asks two questions of each of the five types. Only
+  // instruction-following clears the bar, because json and format pool.
+  const { DEFAULT_BENCHMARK_QUESTIONS } = await import('../src/benchmarkSuite.ts');
+  const asResults = (questions) => questions.map((q) => ({
+    id: q.id, label: q.label, type: q.type, prompt: q.prompt,
+    elapsedMs: 100, tokensPerSecond: 40, sobrietyScore: 80,
+    response: 'a', doneReason: 'stop', status: 'ok',
+  }));
+
+  const ten = summarizeTaskScores(asResults(DEFAULT_BENCHMARK_QUESTIONS));
+  assert.equal(ten.coding.questions, 2);
+  assert.equal(ten.instructions.questions, 4, 'json and format pool together');
+  assert.deepEqual(
+    Object.entries(ten).filter(([, v]) => isVerdictWorthy(v)).map(([k]) => k),
+    ['instructions'],
+    'at ten questions only instruction-following is worth calling',
+  );
+
+  // Twenty — the next level up — clears the bar for all four.
+  const twenty = summarizeTaskScores(asResults([...DEFAULT_BENCHMARK_QUESTIONS, ...DEFAULT_BENCHMARK_QUESTIONS]));
+  assert.deepEqual(
+    Object.entries(twenty).filter(([, v]) => isVerdictWorthy(v)).map(([k]) => k).sort(),
+    ['chat', 'coding', 'facts', 'instructions'],
+  );
+});

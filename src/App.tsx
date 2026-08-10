@@ -5964,7 +5964,15 @@ function UtilityPanel({
               <div className="task-picks-grid">
                 {taskPicks.map((pick) => (
                   <div key={pick.id} className="task-pick-card">
-                    <em>{pick.label}</em>
+                    <em>
+                      {pick.label}
+                      {pick.measured && (
+                        <span
+                          className="task-pick-measured"
+                          title={`Measured here: scored ${pick.taskScore} on this rig's ${pick.label.toLowerCase()} questions, rather than taken from the model's description.`}
+                        >measured</span>
+                      )}
+                    </em>
                     <strong title={pick.model}>{pick.model}</strong>
                     <span className={`score-row-grade ${getScoreTone(pick.score.total)}`}>
                       {formatMatchScore(pick.score)} · {pick.score.grade}

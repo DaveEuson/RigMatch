@@ -133,6 +133,16 @@ export type SummarizerChoice = {
 };
 
 /**
+ * A model's scores as they arrive over the RigMatch bridge. `taskScores` is the
+ * per-question-type breakdown, present only for runs benchmarked by a build
+ * that records it.
+ */
+export type ChatModelScore = {
+  sobriety?: number;
+  taskScores?: Partial<Record<string, { score: number; questions: number }>>;
+};
+
+/**
  * Which model writes the summary.
  *
  * Ranked on `sobriety` — RigMatch's answer-quality measure — and deliberately
@@ -153,10 +163,21 @@ export type SummarizerChoice = {
 export function pickSummarizer(
   currentModel: string,
   installed: string[],
-  scores: Record<string, { sobriety?: number }>,
+  scores: Record<string, ChatModelScore>,
   minimumGain = 8,
 ): SummarizerChoice {
-  const qualityOf = (model: string) => scores[model]?.sobriety ?? -1;
+  // Prefer what was actually measured for this kind of work. Summarising is
+  // following an instruction about a body of text, so the score from the
+  // benchmark's instruction questions describes it far better than an average
+  // over every kind of question — and a model can be strong overall while being
+  // careless about doing exactly as it is told.
+  const qualityOf = (model: string) => {
+    const score = scores[model];
+    if (!score) return -1;
+    const instructions = score.taskScores?.instructions;
+    if (instructions && instructions.questions >= 3) return instructions.score;
+    return score.sobriety ?? -1;
+  };
   const best = installed
     .filter((m) => qualityOf(m) >= 0)
     .sort((a, b) => qualityOf(b) - qualityOf(a))[0];

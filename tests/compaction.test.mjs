@@ -164,3 +164,38 @@ test('branched threads number themselves rather than piling up suffixes', () => 
   assert.equal(continuationTitle('Rotating a Postgres password (2)'), 'Rotating a Postgres password (3)');
   assert.equal(continuationTitle('Rotating a Postgres password (9)'), 'Rotating a Postgres password (10)');
 });
+
+test('the summariser prefers what was measured for instruction-following', () => {
+  // Summarising is following an instruction about a body of text. The
+  // benchmark asks instruction questions and scores each answer, so that is a
+  // far better description of the job than an average over every kind of
+  // question — a model can be strong overall and careless about doing exactly
+  // as it is told.
+  const installed = ['careful:3b', 'strong-overall:7b'];
+  const scores = {
+    'careful:3b': { sobriety: 70, taskScores: { instructions: { score: 95, questions: 4 } } },
+    'strong-overall:7b': { sobriety: 88, taskScores: { instructions: { score: 60, questions: 4 } } },
+  };
+  assert.deepEqual(
+    pickSummarizer('strong-overall:7b', installed, scores),
+    { model: 'careful:3b', borrowed: true },
+    'the higher overall score should lose to the measured instruction score',
+  );
+});
+
+test('a thin measurement falls back to the overall quality score', () => {
+  // One or two questions is not a finding, so it must not override a score
+  // drawn from the whole run.
+  const installed = ['a', 'b'];
+  const scores = {
+    a: { sobriety: 60, taskScores: { instructions: { score: 99, questions: 1 } } },
+    b: { sobriety: 90 },
+  };
+  assert.deepEqual(pickSummarizer('a', installed, scores), { model: 'b', borrowed: true });
+});
+
+test('models benchmarked before task scores existed still rank', () => {
+  // Every existing install is in this state until it re-runs a benchmark.
+  const scores = { a: { sobriety: 60 }, b: { sobriety: 92 } };
+  assert.deepEqual(pickSummarizer('a', ['a', 'b'], scores), { model: 'b', borrowed: true });
+});
