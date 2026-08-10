@@ -1,4 +1,5 @@
 import type { BenchmarkResult, TestedModelScore } from '../types';
+import { summarizeTaskScores } from './taskScores.ts';
 
 /**
  * Bump when the meaning of a saved score changes (weights, signals, or scale).
@@ -81,6 +82,7 @@ export function toTestedModelScore(result: BenchmarkResult, suiteName?: string):
     preciseTotal: calculatePreciseTotal(result.scores),
     scoreSchemaVersion: CURRENT_SCORE_SCHEMA_VERSION,
     tokensPerSecond: result.avgTokensPerSecond,
+    taskScores: summarizeTaskScores(result.prompts),
   };
 }
 

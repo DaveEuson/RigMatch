@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import { getDownloadRowStatus, summarizeDownloadStep, MIN_CONTESTANTS } from '../src/lib/downloadStatus.ts';
 
@@ -87,4 +88,20 @@ test('allInstalled stays distinct from canContinue', () => {
   assert.equal(withFailure.allInstalled, false, 'must not skip the step that shows the failure');
 
   assert.equal(summarize([row('a', true), row('b', true)]).allInstalled, true);
+});
+
+test('every lineup gate reads the shared minimum, not a literal', () => {
+  // Four places decide whether a lineup is big enough: the wizard's download
+  // gate, requestListTest, runListTest, and the lineup strip's own button and
+  // status line. They were not all reading the same value, so raising
+  // MIN_CONTESTANTS would have let requestListTest wave a lineup through that
+  // runListTest then refused as a failed run — the divergence the shared
+  // constant exists to prevent.
+  const app = fs.readFileSync('src/App.tsx', 'utf8');
+  const literals = [...app.matchAll(/\b(\w*[Rr]ows)\.length\s*[<>]=?\s*2\b/g)];
+  assert.deepEqual(
+    literals.map((m) => m[0]),
+    [],
+    'compare row counts against MIN_CONTESTANTS, not a literal 2',
+  );
 });

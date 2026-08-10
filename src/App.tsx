@@ -231,6 +231,10 @@ import type {
 } from './lib/modelCatalog';
 import { dropChat, dropTranscripts, writeLocal, writeLocalJson, writeLocalJsonWithFallback } from './lib/safeStorage';
 import { collapseModelVariants } from './lib/wizardVariants';
+// Same constant the Simple Mode download step gates on, so the wizard cannot
+// wave a lineup through that the run then refuses.
+import { MIN_CONTESTANTS } from './lib/downloadStatus';
+import { useDialog } from './lib/useDialog';
 import {
   appendRuns,
   emptyRunHistory,
@@ -2186,8 +2190,8 @@ function App() {
       return;
     }
 
-    if (runnableRows.length < 2) {
-      setActivity('Pick at least 2 installed models for Speed Dating. Five is the sweet spot.');
+    if (runnableRows.length < MIN_CONTESTANTS) {
+      setActivity(`Pick at least ${MIN_CONTESTANTS} installed models for Speed Dating. Five is the sweet spot.`);
       return;
     }
 
@@ -2206,6 +2210,36 @@ function App() {
     const hostBlocker = getLineupBenchmarkBlocker(runnableRows, selectedHost, ollama);
     const listRunId = createRunProgressId('speed-date');
     const firstProgressId = `${listRunId}-0`;
+
+    // requestListTest checks this, but Simple Mode calls runListTest directly
+    // (onStartShow), bypassing it. With nothing runnable the loop below never
+    // executes, and the unseeded results.reduce threw "Reduce of empty array
+    // with no initial value" straight at the user. Reachable in practice:
+    // shortlisted models can all be platform-incompatible, which this filter
+    // removes but the download step's count does not.
+    if (runnableRows.length < MIN_CONTESTANTS) {
+      const why = runnableRows.length === 0
+        ? 'No installed models can run on this computer yet. Download at least two that fit.'
+        : `Speed Dating needs at least ${MIN_CONTESTANTS} installed models that run on this computer.`;
+      // Reported as a failed run rather than by clearing runProgress. Simple
+      // Mode latches `awaitingRun` when it asks for a show and only releases it
+      // once the run goes active or reports complete/failed — so returning
+      // silently would swap the crash for a wizard stuck on Compare with Next
+      // disabled under "The show is still running", no Back, and no way out but
+      // a restart. A failed phase releases it and shows the reason.
+      setRunProgress({
+        mode: 'speed-date',
+        phase: 'failed',
+        label: 'Speed Dating',
+        currentModel: runnableRows[0]?.displayName ?? 'Waiting',
+        completed: 0,
+        total: runnableRows.length,
+        percent: 0,
+        message: why,
+      });
+      setActivity(why);
+      return;
+    }
 
     if (hostBlocker) {
       setRunProgress({
@@ -2312,6 +2346,13 @@ function App() {
         if (isStopped) break;
       }
 
+      // Belt and braces: the guard above makes this unreachable today, but an
+      // unseeded reduce over an empty array throws a raw TypeError that lands
+      // in front of the user as the run's failure message. Fail with something
+      // readable if a future path ever gets here with nothing.
+      if (results.length === 0) {
+        throw new Error('No models finished a run, so there is nothing to compare.');
+      }
       const winner = results.reduce((best, result) =>
         compareBenchmarkResults(result, best) < 0 ? result : best,
       );
@@ -3356,7 +3397,7 @@ function App() {
           modelScores={modelScores}
           disabled={isBenchmarking || isListTesting}
           isListTesting={isListTesting}
-          canRunSpeedDate={shortlistedRows.length >= 2 && shortlistedRows.every((row) => row.installed) && !isBenchmarking && !isListTesting}
+          canRunSpeedDate={shortlistedRows.length >= MIN_CONTESTANTS && shortlistedRows.every((row) => row.installed) && !isBenchmarking && !isListTesting}
           onRemove={toggleShortlist}
           onAdd={toggleShortlist}
           onRunListTest={requestListTest}
@@ -3794,7 +3835,7 @@ function FirstRunTutorial({
 
   return (
     <div className="tutorial-backdrop" role="presentation">
-      <section className="tutorial-modal" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
+      <section className="tutorial-modal" role="dialog" aria-labelledby="tutorial-title">
         <div className="tutorial-title">
           <div className="tutorial-badge" aria-hidden="true">
             <Trophy />
@@ -4669,6 +4710,7 @@ function RunWarningModal({
   /** Measured when this modal opened; null while the probe is still running. */
   gpuContention: GpuContention | null;
 }) {
+  const runWarnRef = useDialog<HTMLElement>(onCancel);
   const [questionsExpanded, setQuestionsExpanded] = useState(false);
   const recognizeUploadRef = useRef<HTMLInputElement>(null);
   const activePreset = BENCHMARK_PRESETS.find(
@@ -4719,7 +4761,7 @@ function RunWarningModal({
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal" role="dialog" aria-modal="true" aria-labelledby="run-warning-title">
+      <section ref={runWarnRef} className="run-warning-modal" role="dialog" aria-modal="true" aria-labelledby="run-warning-title">
         <div className="modal-title">
           <AlertTriangle aria-hidden="true" />
           <div>
@@ -5262,12 +5304,13 @@ function QuickCheckWarningModal({
   onCancel: () => void;
   onConfirm: (dontWarnAgain: boolean) => void;
 }) {
+  const quickCheckRef = useDialog<HTMLElement>(onCancel);
   const [dontWarnAgain, setDontWarnAgain] = useState(false);
   const sizeLabel = row.sizeGb ? `${formatGb(row.sizeGb)}` : 'its full weights';
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal" role="dialog" aria-modal="true" aria-labelledby="quick-check-warning-title">
+      <section ref={quickCheckRef} className="run-warning-modal" role="dialog" aria-modal="true" aria-labelledby="quick-check-warning-title">
         <div className="modal-title">
           <AlertTriangle aria-hidden="true" />
           <div>
@@ -5317,13 +5360,14 @@ function ClearScoresModal({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const clearScoresRef = useDialog<HTMLElement>(onCancel);
   const isAll = pending.mode === 'all';
   const title = isAll ? 'Clear All Scores?' : `Clear ${pending.model} Score?`;
   const actionLabel = isAll ? 'Clear All Scores' : 'Clear Score';
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal destructive-modal" role="dialog" aria-modal="true" aria-labelledby="clear-scores-title">
+      <section ref={clearScoresRef} className="run-warning-modal destructive-modal" role="dialog" aria-modal="true" aria-labelledby="clear-scores-title">
         <div className="modal-title danger">
           <Trash2 aria-hidden="true" />
           <div>
@@ -5586,13 +5630,14 @@ function ThirdPartyDownloadConsentModal({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const consentRef = useDialog<HTMLElement>(onCancel);
   const [accepted, setAccepted] = useState(false);
   const visibleRows = rows.slice(0, 5);
   const hiddenCount = Math.max(0, rows.length - visibleRows.length);
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal third-party-download-modal" role="dialog" aria-modal="true" aria-labelledby="third-party-download-title">
+      <section ref={consentRef} className="run-warning-modal third-party-download-modal" role="dialog" aria-modal="true" aria-labelledby="third-party-download-title">
         <div className="modal-title">
           <AlertTriangle aria-hidden="true" />
           <div>
@@ -5733,6 +5778,7 @@ function UtilityPanel({
   const topRankedScore = rankedModelScores[0];
   const savedChatMessageCount = Math.max(0, chatMessages.length - 1);
   const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
+  const scoreExplainerRef = useDialog<HTMLDivElement>(() => setScoreExplainerOpen(false));
   const [scoreCopied, setScoreCopied] = useState(false);
   const [ollamaUpdateLatest, setOllamaUpdateLatest] = useState<string | null>(null);
   const [isCheckingOllamaUpdate, setIsCheckingOllamaUpdate] = useState(false);
@@ -5780,8 +5826,8 @@ function UtilityPanel({
       </div>
 
       {scoreExplainerOpen && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="How we score" onClick={() => setScoreExplainerOpen(false)}>
-          <div className="run-warning-modal score-explainer-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-backdrop" role="presentation" onClick={() => setScoreExplainerOpen(false)}>
+          <div ref={scoreExplainerRef} className="run-warning-modal score-explainer-modal" role="dialog" aria-modal="true" aria-label="How we score" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">
               <Trophy aria-hidden="true" />
               <div>
@@ -5918,7 +5964,15 @@ function UtilityPanel({
               <div className="task-picks-grid">
                 {taskPicks.map((pick) => (
                   <div key={pick.id} className="task-pick-card">
-                    <em>{pick.label}</em>
+                    <em>
+                      {pick.label}
+                      {pick.measured && (
+                        <span
+                          className="task-pick-measured"
+                          title={`Measured here: scored ${pick.taskScore} on this rig's ${pick.label.toLowerCase()} questions, rather than taken from the model's description.`}
+                        >measured</span>
+                      )}
+                    </em>
                     <strong title={pick.model}>{pick.model}</strong>
                     <span className={`score-row-grade ${getScoreTone(pick.score.total)}`}>
                       {formatMatchScore(pick.score)} · {pick.score.grade}
@@ -7411,7 +7465,7 @@ function _ContestantsCommandDeck({
     ? `${speedProgress.percent}% · testing ${getQueueChipModelName(speedProgress.currentModel)}.`
     : speedWinner && speedWinnerScore
       ? `${speedWinner} leads with ${speedWinnerScore.total} Match.`
-      : shortlistedRows.length >= 2
+      : shortlistedRows.length >= MIN_CONTESTANTS
         ? `${shortlistedRows.length} contestants ready for ${questionCount} questions each.`
         : 'Pick at least two installed contestants for a fair comparison.';
   const downloadStatus = isPullCancelRequested
@@ -7565,17 +7619,17 @@ function ModelPoolLineupStrip({
   const slots = Array.from({ length: 5 }, (_item, index) => rows[index]);
   const full = rows.length >= 5;
   const missingDownloadCount = rows.filter((row) => !row.installed).length;
-  const canUsePrimaryAction = rows.length >= 2 && !disabled;
+  const canUsePrimaryAction = rows.length >= MIN_CONTESTANTS && !disabled;
   const classNames = ['model-pool-lineup', full ? 'full' : '', className].filter(Boolean).join(' ');
   const startLabel = isListTesting
     ? 'Testing...'
-    : rows.length < 2
-      ? `Pick ${Math.max(0, 2 - rows.length)} more`
+    : rows.length < MIN_CONTESTANTS
+      ? `Pick ${Math.max(0, MIN_CONTESTANTS - rows.length)} more`
       : missingDownloadCount > 0
         ? 'Open Setup'
         : 'Start Speed Dating';
-  const lineupStatus = rows.length < 2
-    ? 'Pick at least two contestants before the show starts.'
+  const lineupStatus = rows.length < MIN_CONTESTANTS
+    ? `Pick at least ${MIN_CONTESTANTS} contestants before the show starts.`
     : missingDownloadCount > 0
       ? `${missingDownloadCount} contestant${missingDownloadCount === 1 ? '' : 's'} need downloads. Open setup to download the selected lineup.`
       : full
@@ -8475,9 +8529,9 @@ function SpeedDatePanel({
   const winnerResult = listTestResult?.results.find((result) => result.model === listTestResult.winner);
   const selectedSlots = Array.from({ length: 5 }, (_, index) => shortlistedRows[index]);
   const uninstalledLineupRows = shortlistedRows.filter((row) => !row.installed);
-  const canRunListTest = shortlistedRows.length >= 2 && uninstalledLineupRows.length === 0 && !isListTesting;
+  const canRunListTest = shortlistedRows.length >= MIN_CONTESTANTS && uninstalledLineupRows.length === 0 && !isListTesting;
   const questionLabel = `${questionCount} questions per model`;
-  const runReadiness = shortlistedRows.length >= 2
+  const runReadiness = shortlistedRows.length >= MIN_CONTESTANTS
     ? uninstalledLineupRows.length > 0
       ? `${uninstalledLineupRows.length} contestant${uninstalledLineupRows.length === 1 ? '' : 's'} need downloads before the show starts.`
       : `${shortlistedRows.length} contestants will answer the same ${questionCount} questions.`
@@ -8564,7 +8618,7 @@ function SpeedDatePanel({
               disabled={!canRunListTest}
             >
               <Trophy aria-hidden="true" />
-              {isListTesting ? 'Testing' : shortlistedRows.length >= 2 ? uninstalledLineupRows.length > 0 ? 'Download First' : 'Start Speed Dating' : 'Pick 2+'}
+              {isListTesting ? 'Testing' : shortlistedRows.length >= MIN_CONTESTANTS ? uninstalledLineupRows.length > 0 ? 'Download First' : 'Start Speed Dating' : `Pick ${MIN_CONTESTANTS}+`}
             </button>
             <button
               type="button"
@@ -8748,7 +8802,7 @@ function SpeedDateShowAnimation({
     ? `Now testing ${getShortModelName(runProgress.currentModel)}`
     : winner
       ? `${getShortModelName(winner)} is holding the top score`
-      : rows.length >= 2
+      : rows.length >= MIN_CONTESTANTS
         ? `${rows.length} contestants ready for the same questions`
         : 'Pick at least two contestants to start the show';
   const cue = runProgress?.questionLabel
@@ -9228,8 +9282,11 @@ function TestSuiteEditorDock({
     onChange(questions.filter((_question, questionIndex) => questionIndex !== index));
   };
 
+  // Not aria-modal: this dock has no backdrop and the app behind it stays
+  // usable, so claiming modality told assistive tech the rest of the page was
+  // inert when it was not.
   return (
-    <aside className="suite-editor-dock" role="dialog" aria-modal="true" aria-label="Test Suite Editor">
+    <aside className="suite-editor-dock" role="dialog" aria-label="Test Suite Editor">
       <div className="suite-editor-title">
         <div>
           <span>Benchmark Lab</span>
@@ -10045,8 +10102,12 @@ function ProfileQuestionTranscript({
 }
 
 function ModeSplash({ onPick }: { onPick: (mode: UiMode) => void }) {
+  // No onClose: this is a required choice, so Escape must not dismiss it. Focus
+  // is still moved in and trapped — it is the first thing on screen at launch,
+  // and previously left focus on <body> behind a full-viewport overlay.
+  const splashRef = useDialog<HTMLDivElement>();
   return (
-    <div className="mode-splash" role="dialog" aria-modal="true" aria-label="Choose how to use RigMatch">
+    <div ref={splashRef} className="mode-splash" role="dialog" aria-modal="true" aria-label="Choose how to use RigMatch">
       <div className="mode-splash-card">
         <div className="mode-splash-brand">
           <BrandMark />
@@ -10418,30 +10479,51 @@ function ActivityPanel({
         <AppBuilderPreviewModal html={previewApp.html} model={previewApp.model} onClose={() => setPreviewApp(null)} />
       )}
       {previewImage && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setPreviewImage(null)}>
-          <section
-            className="run-warning-modal advanced-lab-preview-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Image generated by ${previewImage.model}`}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-title">
-              <Lightbulb aria-hidden="true" />
-              <div>
-                <span>Image Lab result</span>
-                <strong>{previewImage.model}</strong>
-              </div>
-              <button type="button" className="mini-button outline" onClick={() => setPreviewImage(null)}>
-                <X aria-hidden="true" />
-                Close
-              </button>
-            </div>
-            <img className="advanced-lab-generated-image" src={previewImage.src} alt={`Generated by ${previewImage.model}`} />
-          </section>
-        </div>
+        <ImageResultModal
+          src={previewImage.src}
+          model={previewImage.model}
+          onClose={() => setPreviewImage(null)}
+        />
       )}
     </section>
+  );
+}
+
+// Its own component so it can hold a hook. Inline in the parent's JSX it was the
+// one dialog left claiming aria-modal with nothing behind the claim — no focus
+// moved in, no trap, no Escape — while AppBuilderPreviewModal, rendered
+// directly above it, had all three.
+function ImageResultModal({ src, model, onClose }: {
+  src: string;
+  model: string;
+  onClose: () => void;
+}) {
+  const dialogRef = useDialog<HTMLElement>(onClose);
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <section
+        ref={dialogRef}
+        className="run-warning-modal advanced-lab-preview-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Image generated by ${model}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-title">
+          <Lightbulb aria-hidden="true" />
+          <div>
+            <span>Image Lab result</span>
+            <strong>{model}</strong>
+          </div>
+          <button type="button" className="mini-button outline" onClick={onClose}>
+            <X aria-hidden="true" />
+            Close
+          </button>
+        </div>
+        <img className="advanced-lab-generated-image" src={src} alt={`Generated by ${model}`} />
+      </section>
+    </div>
   );
 }
 

@@ -1,3 +1,4 @@
+import { bestModelForTask, type TaskGroupId } from './taskScores.ts';
 import type {
   AppLogEntry,
   BenchmarkResult,
@@ -1277,6 +1278,14 @@ export type TaskPick = {
   label: string;
   model: string;
   score: TestedModelScore;
+  /**
+   * True when this pick came from questions of that kind actually being asked
+   * on this machine, rather than from the catalogue's description of what the
+   * model is generally for.
+   */
+  measured?: boolean;
+  /** The measured score for that kind of question, when there is one. */
+  taskScore?: number;
 };
 
 export function getTaskTopPicks(modelScores: Record<string, TestedModelScore>): TaskPick[] {
@@ -1285,10 +1294,31 @@ export function getTaskTopPicks(modelScores: Record<string, TestedModelScore>): 
 
   const picks: TaskPick[] = [];
 
+  // The benchmark asks coding and assistant questions and scores each answer,
+  // so for those two categories there is a real result to use. The rest still
+  // come from the catalogue's keywords, which describe the model rather than
+  // its behaviour here.
+  const byModel = Object.fromEntries(scored.map((s) => [s.model, s.taskScores]));
+  const measuredFor: Partial<Record<TaskCategoryId, TaskGroupId>> = {
+    coding: 'coding',
+    assistant: 'chat',
+  };
+
   for (const category of TASK_CATEGORIES) {
     let best: TestedModelScore | null = null;
+    let measured: { model: string; score: number } | null = null;
 
-    if (category.id === 'speed') {
+    const measuredTask = measuredFor[category.id];
+    if (measuredTask) {
+      measured = bestModelForTask(byModel, measuredTask, scored.map((s) => s.model));
+      if (measured) {
+        best = scored.find((s) => s.model === measured!.model) ?? null;
+      }
+    }
+
+    if (best) {
+      // Already settled by measurement.
+    } else if (category.id === 'speed') {
       best = [...scored].sort((a, b) => b.speed - a.speed || compareTestedModelScores(a, b))[0] ?? null;
     } else {
       const matching = scored.filter((s) => {
@@ -1301,7 +1331,13 @@ export function getTaskTopPicks(modelScores: Record<string, TestedModelScore>): 
     if (best) {
       // Avoid duplicate model entries (keep the first matching category)
       if (!picks.some((p) => p.model === best!.model)) {
-        picks.push({ id: category.id, label: category.label, model: best.model, score: best });
+        picks.push({
+          id: category.id,
+          label: category.label,
+          model: best.model,
+          score: best,
+          ...(measured ? { measured: true, taskScore: measured.score } : {}),
+        });
       }
     }
   }

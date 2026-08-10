@@ -2876,6 +2876,11 @@ async function runBenchmarkInner(request = {}, sender, signal) {
     promptResults.push({
       id: prompt.id,
       label: prompt.label,
+      // Kept so the per-question scores can be grouped by what they tested.
+      // It was already being sent on progress events and then dropped here,
+      // which is why "best for coding" had to come from a curated keyword
+      // list rather than from this machine.
+      type: prompt.type,
       prompt: prompt.prompt,
       elapsedMs: Math.round(median(runs.map((run) => run.elapsedMs))),
       tokensPerSecond: Math.round(median(runs.map((run) => run.tokensPerSecond)) * 10) / 10,

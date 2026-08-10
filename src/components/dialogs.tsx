@@ -8,6 +8,7 @@ import { BUY_ME_A_COFFEE_URL, amazonUrl } from '../lib/appConfig';
 import { playJingle } from '../lib/sound';
 import { AvatarBust, MachineAvatar } from './Avatars';
 import { ShareScorecard } from './ShareScorecard';
+import { useDialog } from '../lib/useDialog';
 
 export function DeleteModelModal({
   row,
@@ -22,13 +23,14 @@ export function DeleteModelModal({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const dialogRef = useDialog<HTMLElement>(isDeleting ? undefined : onCancel);
   const modelName = row.installedModel?.model ?? row.displayName;
   const sizeLabel = row.sizeGb ? formatGb(row.sizeGb) : 'size unknown';
   const hostName = host?.hostname ?? 'selected computer';
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal destructive-modal" role="dialog" aria-modal="true" aria-labelledby="delete-model-title">
+      <section ref={dialogRef} className="run-warning-modal destructive-modal" role="dialog" aria-modal="true" aria-labelledby="delete-model-title">
         <div className="modal-title danger">
           <Trash2 aria-hidden="true" />
           <div>
@@ -95,13 +97,14 @@ export function CloseCleanupModal({
   onCancel: () => void;
   onUnderstand: () => void;
 }) {
+  const cleanupDialogRef = useDialog<HTMLElement>(isDeleting ? undefined : onCancel);
   const installedGb = sumModelRowGb(installedRows);
   const unscoredGb = sumModelRowGb(unscoredRows);
   const lowScoredGb = sumModelRowGb(lowScoredRows);
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal destructive-modal model-cleanup-modal" role="dialog" aria-modal="true" aria-labelledby="close-cleanup-title">
+      <section ref={cleanupDialogRef} className="run-warning-modal destructive-modal model-cleanup-modal" role="dialog" aria-modal="true" aria-labelledby="close-cleanup-title">
         <div className="modal-title danger">
           <Trash2 aria-hidden="true" />
           <div>
@@ -195,9 +198,11 @@ const SUPPORT_HARDWARE_LINKS = [
 ] as const;
 
 export function SupportModal({ onClose }: { onClose: () => void }) {
+  const dialogRef = useDialog<HTMLElement>(onClose);
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <section
+        ref={dialogRef}
         className="support-modal"
         role="dialog"
         aria-modal="true"
@@ -271,9 +276,10 @@ export function ClearDataModal({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const clearDialogRef = useDialog<HTMLElement>(onCancel);
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="run-warning-modal destructive-modal" role="dialog" aria-modal="true" aria-labelledby="clear-data-title">
+      <section ref={clearDialogRef} className="run-warning-modal destructive-modal" role="dialog" aria-modal="true" aria-labelledby="clear-data-title">
         <div className="modal-title danger">
           <Trash2 aria-hidden="true" />
           <div>
@@ -351,6 +357,7 @@ export function ChoiceCruiseModal({
   system: SystemProfile;
   onClose: () => void;
 }) {
+  const cruiseDialogRef = useDialog<HTMLElement>(onClose);
   const [shareOpen, setShareOpen] = useState(false);
   const hostName = host?.hostname ?? 'This computer';
   const shortModelName = getShortModelName(model);
@@ -361,7 +368,7 @@ export function ChoiceCruiseModal({
 
   return (
     <div className="modal-backdrop cruise-backdrop" role="presentation">
-      <section className="choice-cruise-modal" role="dialog" aria-modal="true" aria-labelledby="choice-cruise-title">
+      <section ref={cruiseDialogRef} className="choice-cruise-modal" role="dialog" aria-modal="true" aria-labelledby="choice-cruise-title">
         <div className="cruise-confetti" aria-hidden="true">
           {CONFETTI_PIECES.map((p, i) => (
             <span

@@ -1,9 +1,29 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { listModels, streamChat, getVersion, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
+import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, readConversationsFile, writeConversationsFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
+import { createWriteScheduler } from "./lib/writeScheduler";
+import {
+  KEEP_RECENT_MESSAGES,
+  buildContextMessages,
+  buildSummaryRequest,
+  compactionSplit,
+  continuationTitle,
+  pickSummarizer,
+  type SummarizerChoice,
+} from "./lib/compaction";
+import {
+  conversationsForModel,
+  createConversation,
+  deriveTitle,
+  migrateV1,
+  parseStore,
+  serializeStore,
+  withMessages,
+  type Conversation,
+} from "./lib/conversationStore";
 import {
   DEFAULT_PERSONALITY_ID,
   loadSettings,
@@ -11,6 +31,18 @@ import {
   type AppSettings,
   type PersonalityProfile,
 } from "./lib/settings";
+import {
+  CONTEXT_STEPS,
+  chooseContextSize,
+  estimateTokens,
+  formatContextSize,
+  formatGib,
+  getContextUsage,
+  kvBudgetFromVram,
+  kvCacheBytes,
+  type ModelContextInfo,
+  type VramInfo,
+} from "./lib/contextWindow";
 
 marked.use({ breaks: true, gfm: true });
 
@@ -58,22 +90,57 @@ type PersonalityDraft = {
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
+/** Stable empty list, so "no conversation open" does not remount the transcript. */
+const EMPTY_MESSAGES: AppMessage[] = [];
+
 const CONVERSATIONS_KEY = "rigmatch-chat:conversations:v1";
 const RIG_SCORES_KEY = "rigmatch-chat:rig-scores:v1";
 
 type BridgePayload = { scores: Record<string, ModelScore>; chosen: string | null };
 
-function loadConversations(): Record<string, AppMessage[]> {
-  try {
-    const raw = localStorage.getItem(CONVERSATIONS_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, AppMessage[]>) : {};
-  } catch {
-    return {};
-  }
-}
+/**
+ * Read history from the app data directory, importing anything still in
+ * localStorage the first time.
+ *
+ * The old key is only cleared once the file has been written successfully — if
+ * the write fails, the history stays where it was rather than being deleted
+ * from one place before it exists in the other.
+ */
+async function loadConversations(): Promise<Conversation[]> {
+  const options = {
+    makeId: (index: number) => `${Date.now().toString(36)}-migrated-${index}`,
+    now: Date.now(),
+    defaultPersonalityId: DEFAULT_PERSONALITY_ID,
+  };
 
-function saveConversations(data: Record<string, AppMessage[]>): void {
-  localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(data));
+  try {
+    // Handles both the v1 map and the v2 list, so a file written by any
+    // previous build is carried forward rather than replaced.
+    const fromFile = parseStore(await readConversationsFile(), options);
+    if (fromFile) return fromFile;
+  } catch {
+    // Fall through to the legacy store; an unreadable file must not lose it.
+  }
+
+  // Older still: the original localStorage map, from before history moved to
+  // a file at all.
+  let migrated: Conversation[];
+  try {
+    const legacyRaw = localStorage.getItem(CONVERSATIONS_KEY);
+    if (!legacyRaw) return [];
+    migrated = migrateV1(JSON.parse(legacyRaw) as Record<string, unknown>, options.makeId, options.now, DEFAULT_PERSONALITY_ID);
+  } catch {
+    return [];
+  }
+  if (migrated.length === 0) return [];
+
+  try {
+    await writeConversationsFile(serializeStore(migrated));
+    localStorage.removeItem(CONVERSATIONS_KEY);
+  } catch {
+    // Keep the legacy copy and try again next launch.
+  }
+  return migrated;
 }
 
 function loadCachedBridge(): BridgePayload {
@@ -157,6 +224,18 @@ function genId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** Relative for anything recent, then a date — how you look for an old thread. */
+function formatWhen(ts: number): string {
+  const minutes = Math.floor((Date.now() - ts) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 function getResponseLabel(score: ModelScore | undefined, sizeGb: number): string {
   if (score != null) {
     const s = score.speed;
@@ -235,14 +314,110 @@ function BuddyAvatar({
   );
 }
 
+/**
+ * How much of this model's memory the conversation is using.
+ *
+ * Without this the app gave no sign that anything was wrong: past the limit
+ * Ollama keeps the system prompt and the newest tokens, drops everything
+ * between, and answers as though the earlier turns were never said — while the
+ * transcript above still shows them all.
+ */
+function ContextMeter({ usage, info, limit }: {
+  usage: ReturnType<typeof getContextUsage>;
+  info: ModelContextInfo | null;
+  limit: number;
+}) {
+  const state = usage.willTruncate ? "full" : usage.nearLimit ? "near" : "ok";
+  const cost = info ? kvCacheBytes(info, limit) : 0;
+  const title = [
+    `Using about ${usage.used.toLocaleString()} of ${limit.toLocaleString()} tokens.`,
+    info ? `This model supports up to ${info.maxContext.toLocaleString()}.` : null,
+    cost > 0 ? `A ${formatContextSize(limit)} window costs roughly ${formatGib(cost)} of video memory.` : null,
+    usage.willTruncate
+      ? "The oldest messages will drop out of the model's memory on the next reply."
+      : null,
+  ].filter(Boolean).join(" ");
+
+  return (
+    <div className={`rm-context-meter rm-context-${state}`} title={title}>
+      <span className="rm-context-label">
+        {usage.willTruncate ? "MEMORY FULL" : "MEMORY"} {formatContextSize(usage.used)} / {formatContextSize(limit)}
+      </span>
+      <span className="rm-context-track" aria-hidden="true">
+        <span className="rm-context-fill" style={{ width: `${Math.round(usage.fraction * 100)}%` }} />
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The line in the transcript where the model's memory begins.
+ *
+ * Everything above it was said, is still on screen, and is no longer in front
+ * of the model — these notes stand in for it. Marking the boundary is the whole
+ * difference between compacting and what Ollama was doing silently.
+ */
+function SummaryMarker({ conversation }: { conversation: Conversation }) {
+  const [open, setOpen] = useState(false);
+  const count = conversation.summarizedCount ?? 0;
+  return (
+    <div className="rm-summary-marker">
+      <button type="button" className="rm-summary-toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <span className="rm-summary-rule" aria-hidden="true" />
+        <span className="rm-summary-label">
+          {count > 0
+            ? `${count} earlier message${count === 1 ? "" : "s"} summarised`
+            : "Continued from an earlier chat"}
+          {conversation.summaryBy ? ` · by ${getDisplayName(conversation.summaryBy)}` : ""}
+          {open ? " ▴" : " ▾"}
+        </span>
+        <span className="rm-summary-rule" aria-hidden="true" />
+      </button>
+      {open && <div className="rm-summary-body">{conversation.summary}</div>}
+    </div>
+  );
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [buddies, setBuddies] = useState<Buddy[]>([]);
   const [activeBuddy, setActiveBuddy] = useState<string | null>(null);
-  const [messagesByModel, setMessagesByModel] = useState<Record<string, AppMessage[]>>(() => loadConversations());
+  // Starts empty and fills in from disk. `historyLoaded` gates every write —
+  // without it the first save would fire with the empty initial state and
+  // overwrite the file before the load that was about to populate it landed.
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  /** Models whose thread list is unfolded in the sidebar. */
+  const [expandedModels, setExpandedModels] = useState<Set<string>>(() => new Set());
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Conversation | null>(null);
+  const [compacting, setCompacting] = useState(false);
+  const [compactError, setCompactError] = useState<string | null>(null);
+  // A summary waiting to be accepted. Held rather than applied, because a bad
+  // summary quietly poisons every later reply and only the user can tell.
+  const [compactPlan, setCompactPlan] = useState<{
+    conversationId: string;
+    upTo: number;
+    summary: string;
+    by: SummarizerChoice;
+  } | null>(null);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [persistError, setPersistError] = useState<string | null>(null);
   const [typingModel, setTypingModel] = useState<string | null>(null);
+  // Each model's declared memory, read once per model from /api/show.
+  const [contextInfo, setContextInfo] = useState<Record<string, ModelContextInfo | null>>({});
+  // What the machine has, read once. Null when it cannot be determined, which
+  // keeps the fixed budget rather than sizing against a guess.
+  const [vram, setVram] = useState<VramInfo | null>(null);
+  // Ollama's own token counts from the last completed reply in each
+  // conversation — what the model actually saw, as opposed to what we sent it.
+  // `messageCount` records how much of the transcript those counts covered, so
+  // anything added afterwards can be estimated on top rather than double-counted.
+  const [tokenMarkByKey, setTokenMarkByKey] = useState<
+    Record<string, { promptTokens: number; evalTokens: number; messageCount: number }>
+  >({});
   const [draft, setDraft] = useState("");
   const [ollamaVersion, setOllamaVersion] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("checking");
@@ -288,24 +463,82 @@ export default function App() {
   }, [buddies, settings.hiddenModels, modelRankings, chosenModel]);
 
   const activeBuddyObj = visibleBuddies.find((b) => b.modelName === activeBuddy) ?? null;
+  // The open thread's own personality wins, falling back to the app default for
+  // a model with nothing open yet. A thread started as Creative Copilot stays
+  // that way when you come back to it a week later.
+  const conversationPersonalityId = conversations.find((c) => c.id === activeConversationId)?.personalityId;
   const activePersonality = useMemo(
     () =>
-      settings.personalityProfiles.find((profile) => profile.id === settings.activePersonalityId)
+      settings.personalityProfiles.find((profile) => profile.id === (conversationPersonalityId ?? settings.activePersonalityId))
       ?? settings.personalityProfiles.find((profile) => profile.id === DEFAULT_PERSONALITY_ID)
       ?? settings.personalityProfiles[0],
-    [settings.activePersonalityId, settings.personalityProfiles],
+    [conversationPersonalityId, settings.activePersonalityId, settings.personalityProfiles],
   );
-  const activeConversationKey = activeBuddy
-    ? `${activeBuddy}::${activePersonality?.id ?? DEFAULT_PERSONALITY_ID}`
-    : null;
-  const activeMessages = useMemo(() => {
-    if (!activeConversationKey) return [];
-    if (messagesByModel[activeConversationKey]) return messagesByModel[activeConversationKey];
-    if (activePersonality?.id === DEFAULT_PERSONALITY_ID && activeBuddy) {
-      return messagesByModel[activeBuddy] ?? [];
-    }
-    return [];
-  }, [activeBuddy, activeConversationKey, activePersonality?.id, messagesByModel]);
+  /**
+   * The thread on screen: the one explicitly chosen, otherwise the model's most
+   * recent.
+   *
+   * Derived rather than assigned by an effect, because two things arrive
+   * independently — the model comes from the refresh (top pick, or best score)
+   * and the history comes from disk — so neither could select a thread on its
+   * own without a round of cascading renders. The fallback also covers deleting
+   * the open thread: the id stops matching and the next one down takes over,
+   * with nothing left holding a reference to something that no longer exists.
+   */
+  const activeConversation = useMemo(() => {
+    const chosen = conversations.find((c) => c.id === activeConversationId);
+    if (chosen) return chosen;
+    return activeBuddy ? conversationsForModel(conversations, activeBuddy)[0] ?? null : null;
+  }, [conversations, activeConversationId, activeBuddy]);
+  const activeConversationKey = activeConversation?.id ?? null;
+  const activeMessages = activeConversation?.messages ?? EMPTY_MESSAGES;
+  // How much memory the active model is actually being given. "auto" sizes it
+  // from the model's own limit against a KV budget; a pinned number is still
+  // clamped to what the model declares, since asking beyond that does nothing.
+  const activeContextInfo = activeBuddy ? contextInfo[activeBuddy] ?? null : null;
+  // The weights share the pool with the KV cache, so a 7B leaves far less room
+  // for context than a 3B on the same card. `sizeGb` is the download size,
+  // which is what gets loaded.
+  const activeKvBudget = useMemo(
+    () => kvBudgetFromVram(vram, (activeBuddyObj?.sizeGb ?? 0) * 1e9),
+    [vram, activeBuddyObj?.sizeGb],
+  );
+  const activeContextLimit = useMemo(() => {
+    if (settings.contextSize === "auto") return chooseContextSize(activeContextInfo, activeKvBudget);
+    if (!activeContextInfo) return settings.contextSize;
+    return Math.min(settings.contextSize, activeContextInfo.maxContext);
+  }, [settings.contextSize, activeContextInfo, activeKvBudget]);
+
+  // Exact where Ollama has told us, estimated only for what it has not seen yet.
+  //
+  // A completed turn gives both halves: prompt_eval_count covers the system
+  // prompt and every message up to that point, eval_count covers the reply. So
+  // the only guesswork is whatever has been typed or added since — which is why
+  // the mark is recorded against the message count it was measured at.
+  const contextUsage = useMemo(() => {
+    const measured = activeConversationKey ? tokenMarkByKey[activeConversationKey] : undefined;
+    const estimateFrom = (index: number) => activeMessages
+      .slice(index)
+      .reduce((sum, message) => sum + estimateTokens(message.content), 0);
+
+    // Only what is actually sent counts. On a compacted thread that is the
+    // summary plus the turns it does not cover, not the whole transcript —
+    // which is the point of compacting, and has to show in the gauge or the
+    // warning would never go away.
+    const summarized = activeConversation?.summarizedCount ?? 0;
+    const summaryTokens = estimateTokens(activeConversation?.summary ?? "");
+
+    const used = measured
+      ? measured.promptTokens + measured.evalTokens + estimateFrom(measured.messageCount)
+      : summaryTokens + estimateFrom(summarized);
+
+    return getContextUsage(used + estimateTokens(draft), activeContextLimit);
+  }, [activeConversationKey, tokenMarkByKey, activeMessages, activeConversation, draft, activeContextLimit]);
+
+  /** Enough conversation to be worth summarising, and not already done. */
+  const canCompact = activeConversation !== null
+    && compactionSplit(activeConversation.messages, activeConversation.summarizedCount ?? 0) !== null;
+
   const assistantDisplayName = activePersonality?.name || activeBuddyObj?.displayName || "RigMatch Buddy";
   const assistantAvatarSrc = activePersonality?.avatarDataUrl;
   const normalizeHiddenModels = useCallback(
@@ -348,7 +581,12 @@ export default function App() {
         const preferred = [bridge.chosen, topFromScores].find(
           (m): m is string => !!m && modelNames.includes(m),
         );
-        setActiveBuddy(preferred ?? chatModels[0].name);
+        const opening = preferred ?? chatModels[0].name;
+        setActiveBuddy(opening);
+        // Unfold it so the thread being shown is visible in the list. Done here
+        // rather than in an effect: this is already a callback, so it costs no
+        // extra render.
+        setExpandedModels((prev) => (prev.has(opening) ? prev : new Set(prev).add(opening)));
       }
     } catch {
       setBuddies([]);
@@ -412,11 +650,68 @@ export default function App() {
     return () => clearInterval(id);
   }, [settings.showSystemMonitor, settings.ollamaUrl]);
 
+  // ── Model memory ─────────────────────────────────────────────────────────
+
+  // Read each model's declared context once, when it is first opened. Cached by
+  // model name because it cannot change without the model itself changing, and
+  // a null result is cached too so a model whose metadata lacks these fields is
+  // not re-fetched on every switch.
+  useEffect(() => {
+    void getVramInfo().then(setVram);
+  }, []);
+
+
+  useEffect(() => {
+    if (!activeBuddy || activeBuddy in contextInfo) return;
+    let cancelled = false;
+    void getModelContextInfo(settings.ollamaUrl, activeBuddy).then((info) => {
+      if (!cancelled) setContextInfo((prev) => ({ ...prev, [activeBuddy]: info }));
+    });
+    return () => { cancelled = true; };
+  }, [activeBuddy, contextInfo, settings.ollamaUrl]);
+
   // ── Persist conversations ────────────────────────────────────────────────
 
   useEffect(() => {
-    saveConversations(messagesByModel);
-  }, [messagesByModel]);
+    let cancelled = false;
+    void loadConversations().then((loaded) => {
+      if (cancelled) return;
+      setConversations(loaded);
+      setHistoryLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // One writer for the life of the app. Updates arrive once per streamed token;
+  // this turns a burst of them into an occasional write, and keeps a failure
+  // from reaching React — an unguarded write here used to trip the error
+  // boundary on mount once localStorage was full, on every launch.
+  const writerRef = useRef<ReturnType<typeof createWriteScheduler<Conversation[]>> | null>(null);
+  if (writerRef.current == null) {
+    writerRef.current = createWriteScheduler<Conversation[]>({
+      write: async (value) => {
+        await writeConversationsFile(serializeStore(value));
+        setPersistError(null);
+      },
+      onError: (error) => setPersistError(String((error as Error)?.message ?? error)),
+    });
+  }
+
+  useEffect(() => {
+    if (!historyLoaded) return;
+    writerRef.current?.schedule(conversations);
+  }, [conversations, historyLoaded]);
+
+  // The last few hundred milliseconds of a reply would otherwise be lost if the
+  // window closed inside the coalescing window.
+  useEffect(() => {
+    const flush = () => { void writerRef.current?.flush(); };
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("beforeunload", flush);
+      flush();
+    };
+  }, []);
 
   // ── Scroll transcript ─────────────────────────────────────────────────────
 
@@ -438,14 +733,29 @@ export default function App() {
   // ── Send message ──────────────────────────────────────────────────────────
 
   const sendMessage = useCallback(async () => {
-    if (!activeBuddy || !activeConversationKey || !draft.trim() || typingModel) return;
+    if (!activeBuddy || !draft.trim() || typingModel) return;
+
+    // Typing into a model that has no thread open starts one, rather than
+    // refusing — the empty state is a chat waiting to happen, not an error.
+    const target = activeConversation
+      ?? createConversation({
+        id: genId(),
+        modelName: activeBuddy,
+        personalityId: activePersonality?.id ?? DEFAULT_PERSONALITY_ID,
+        now: Date.now(),
+      });
+    const conversationId = target.id;
 
     const userMsg: AppMessage = { id: genId(), role: "user", content: draft.trim(), ts: Date.now() };
-    const history = messagesByModel[activeConversationKey]
-      ?? (activePersonality?.id === DEFAULT_PERSONALITY_ID ? (messagesByModel[activeBuddy] ?? []) : []);
-    const updatedHistory = [...history, userMsg];
+    const updatedHistory = [...target.messages, userMsg];
 
-    setMessagesByModel((prev) => ({ ...prev, [activeConversationKey]: updatedHistory }));
+    setConversations((prev) => {
+      const now = Date.now();
+      const existing = prev.some((c) => c.id === conversationId);
+      const next = existing ? prev : [...prev, target];
+      return next.map((c) => (c.id === conversationId ? withMessages(c, updatedHistory, now) : c));
+    });
+    setActiveConversationId(conversationId);
     setDraft("");
     setTypingModel(activeBuddy);
 
@@ -460,7 +770,9 @@ export default function App() {
       ...(profilePrompt
         ? [{ role: "system" as const, content: profilePrompt }]
         : []),
-      ...updatedHistory.map((m) => ({ role: m.role, content: m.content })),
+      // Compacted threads send their summary in place of the turns it covers.
+      // The transcript above still shows all of them.
+      ...buildContextMessages(updatedHistory, target.summary, target.summarizedCount ?? 0),
     ];
     const assistantId = genId();
     let accumulated = "";
@@ -476,51 +788,78 @@ export default function App() {
         ollamaHistory,
         (token) => {
           accumulated += token;
-          setMessagesByModel((prev) => {
-            const msgs = prev[activeConversationKey] ?? [];
-            const last = msgs[msgs.length - 1];
-            if (last?.id === assistantId) {
-              return { ...prev, [activeConversationKey]: [...msgs.slice(0, -1), { ...last, content: accumulated }] };
-            }
-            return {
-              ...prev,
-              [activeConversationKey]: [
-                ...msgs,
-                { id: assistantId, role: "assistant", content: accumulated, ts: Date.now() },
-              ],
-            };
-          });
+          setConversations((prev) => prev.map((c) => {
+            if (c.id !== conversationId) return c;
+            const last = c.messages[c.messages.length - 1];
+            const messages = last?.id === assistantId
+              ? [...c.messages.slice(0, -1), { ...last, content: accumulated }]
+              : [...c.messages, { id: assistantId, role: "assistant" as const, content: accumulated, ts: Date.now() }];
+            // Not withMessages: the title is already settled by the user's
+            // message, and updatedAt would reshuffle the sidebar on every token.
+            return { ...c, messages };
+          }));
         },
         ctrl.signal,
+        {
+          numCtx: activeContextLimit,
+          onDone: ({ promptTokens, evalTokens }) => {
+            if (promptTokens <= 0) return;
+            setTokenMarkByKey((prev) => ({
+              ...prev,
+              [conversationId]: {
+                promptTokens,
+                evalTokens,
+                // The assistant message only exists if something was streamed.
+                messageCount: updatedHistory.length + (accumulated ? 1 : 0),
+              },
+            }));
+          },
+        },
       );
     } catch (err) {
       if ((err as Error)?.name !== "AbortError") {
-        setMessagesByModel((prev) => ({
-          ...prev,
-          [activeConversationKey]: [
-            ...(prev[activeConversationKey] ?? []),
-            {
-              id: genId(),
-              role: "assistant",
-              content: "Something went wrong. Is Ollama still running?",
-              ts: Date.now(),
-            },
-          ],
-        }));
+        setConversations((prev) => prev.map((c) => (c.id === conversationId
+          ? {
+              ...c,
+              messages: [...c.messages, {
+                id: genId(),
+                role: "assistant" as const,
+                content: "Something went wrong. Is Ollama still running?",
+                ts: Date.now(),
+              }],
+            }
+          : c)));
       }
     } finally {
       setTypingModel(null);
+      // A finished reply is the natural point to be durable. The coalescing
+      // window is only there to survive the stream itself, and Tauri's own
+      // close button does not reliably raise beforeunload.
+      void writerRef.current?.flush();
     }
   }, [
     activeBuddy,
-    activeConversationKey,
+    activeContextLimit,
+    activeConversation,
     activePersonality,
     draft,
-    messagesByModel,
     settings.ollamaUrl,
     settings.systemPrompt,
     typingModel,
   ]);
+
+  /**
+   * Stop the reply in progress. The abort reaches Ollama now, so the GPU is
+   * actually released rather than carrying on with a reply nobody will read.
+   * Whatever has already been streamed stays — it is a real partial answer, and
+   * often the reason for stopping is that it was already enough.
+   */
+  const stopGenerating = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setTypingModel(null);
+    void writerRef.current?.flush();
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -555,6 +894,7 @@ export default function App() {
       muted: draftSettings.muted,
       hiddenModels,
       showSystemMonitor: draftSettings.showSystemMonitor,
+      contextSize: draftSettings.contextSize,
     };
     saveSettings(next);
     setSettings(next);
@@ -579,9 +919,163 @@ export default function App() {
   };
 
   const clearAllHistory = () => {
-    setMessagesByModel({});
-    saveConversations({});
+    setConversations([]);
+    setActiveConversationId(null);
+    setTokenMarkByKey({});
+    // Straight to disk rather than through the coalescing window: "clear my
+    // history" should not still be on disk if the app closes a moment later.
+    writerRef.current?.schedule([]);
+    void writerRef.current?.flush();
   };
+
+  /**
+   * Open a model: unfold its threads and show the most recent one.
+   *
+   * Clicking the model a second time folds it away again, so a long model list
+   * stays scannable. Selecting a model with no history at all leaves nothing
+   * active — the empty state invites the first message, and sendMessage creates
+   * the thread then.
+   */
+  const openModel = useCallback((modelName: string) => {
+    setActiveBuddy(modelName);
+    setExpandedModels((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelName) && modelName === activeBuddy) next.delete(modelName);
+      else next.add(modelName);
+      return next;
+    });
+    setActiveConversationId((current) => {
+      const threads = conversationsForModel(conversations, modelName);
+      // Keep the current thread if it belongs to this model, so re-clicking to
+      // fold does not also jump you somewhere else.
+      if (threads.some((c) => c.id === current)) return current;
+      return threads[0]?.id ?? null;
+    });
+  }, [conversations, activeBuddy]);
+
+  /** Start a thread on a model. The sidebar unfolds so it is visible. */
+  const startNewConversation = useCallback((modelName: string) => {
+    // Reuse an empty thread on this model rather than stacking up identical
+    // "New chat" rows for someone who clicks it twice.
+    const spare = conversations.find((c) => c.modelName === modelName && c.messages.length === 0);
+    const conversation = spare ?? createConversation({
+      id: genId(),
+      modelName,
+      personalityId: settings.activePersonalityId,
+      now: Date.now(),
+    });
+    if (!spare) setConversations((prev) => [...prev, conversation]);
+    setActiveBuddy(modelName);
+    setActiveConversationId(conversation.id);
+    setExpandedModels((prev) => new Set(prev).add(modelName));
+    setDraft("");
+  }, [conversations, settings.activePersonalityId]);
+
+  const deleteConversation = useCallback((id: string) => {
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    setTokenMarkByKey(({ [id]: _removed, ...rest }) => rest);
+    // Land it immediately: a deletion still sitting in the coalescing window
+    // when the app closes would come back on the next launch.
+    setActiveConversationId((current) => (current === id ? null : current));
+    void writerRef.current?.flush();
+  }, []);
+
+  /**
+   * Summarise the older turns of the open thread.
+   *
+   * Nothing is applied here — the summary is shown first, because a bad one
+   * quietly poisons every later reply and the user is the only one who can
+   * tell. `compactPlan` holds it until Compact or Continue is pressed.
+   */
+  const runCompaction = useCallback(async () => {
+    if (!activeConversation || !activeBuddy || compacting) return;
+    const upTo = compactionSplit(activeConversation.messages, activeConversation.summarizedCount ?? 0);
+    if (upTo === null) return;
+
+    const summarizer = pickSummarizer(
+      activeBuddy,
+      buddies.map((b) => b.modelName),
+      rigScores,
+    );
+
+    setCompacting(true);
+    setCompactPlan(null);
+    try {
+      let text = "";
+      await streamChat(
+        settings.ollamaUrl,
+        summarizer.model,
+        buildSummaryRequest(activeConversation.messages, upTo, activeConversation.summary),
+        (token) => { text += token; },
+        undefined,
+        // Summarising is the one call that must not be truncated: it is reading
+        // the whole of the history that no longer fits.
+        { numCtx: activeContextLimit },
+      );
+      const summary = text.trim();
+      if (!summary) throw new Error("The model returned an empty summary.");
+      setCompactPlan({ conversationId: activeConversation.id, upTo, summary, by: summarizer });
+    } catch (error) {
+      setCompactError(String((error as Error)?.message ?? error));
+    } finally {
+      setCompacting(false);
+    }
+  }, [activeConversation, activeBuddy, buddies, rigScores, settings.ollamaUrl, activeContextLimit, compacting]);
+
+  /** Fold the summary into the open thread and carry on in it. */
+  const applyCompaction = useCallback(() => {
+    if (!compactPlan) return;
+    setConversations((prev) => prev.map((c) => (c.id === compactPlan.conversationId
+      ? { ...c, summary: compactPlan.summary, summarizedCount: compactPlan.upTo, summaryBy: compactPlan.by.model, updatedAt: Date.now() }
+      : c)));
+    // The prompt is a different length now, so the measured token count no
+    // longer describes what will be sent.
+    setTokenMarkByKey(({ [compactPlan.conversationId]: _stale, ...rest }) => rest);
+    setCompactPlan(null);
+    void writerRef.current?.flush();
+  }, [compactPlan]);
+
+  /**
+   * Start a fresh thread carrying the summary, leaving this one as it stands.
+   *
+   * The difference from Compact: the original keeps its full history and its
+   * own memory, and the new thread starts nearly empty. Better when the subject
+   * has moved on; Compact is better when it has not.
+   */
+  const branchFromCompaction = useCallback(() => {
+    if (!compactPlan || !activeConversation || !activeBuddy) return;
+    const branched: Conversation = {
+      ...createConversation({
+        id: genId(),
+        modelName: activeBuddy,
+        personalityId: activeConversation.personalityId,
+        now: Date.now(),
+      }),
+      title: continuationTitle(activeConversation.title),
+      titleIsAuto: false,
+      summary: compactPlan.summary,
+      // Nothing of its own yet, so the summary stands in for all of it.
+      summarizedCount: 0,
+      summaryBy: compactPlan.by.model,
+    };
+    setConversations((prev) => [...prev, branched]);
+    setActiveConversationId(branched.id);
+    setExpandedModels((prev) => new Set(prev).add(activeBuddy));
+    setCompactPlan(null);
+    void writerRef.current?.flush();
+  }, [compactPlan, activeConversation, activeBuddy]);
+
+  const renameConversation = useCallback((id: string, title: string) => {
+    const trimmed = title.trim();
+    setConversations((prev) => prev.map((c) => (c.id === id
+      // An empty box means "go back to naming it automatically", rather than
+      // leaving a blank row in the sidebar.
+      ? trimmed
+        ? { ...c, title: trimmed, titleIsAuto: false }
+        : { ...c, title: deriveTitle(c.messages), titleIsAuto: true }
+      : c)));
+    setRenamingId(null);
+  }, []);
 
   // Hide a model immediately (outside settings flow — from profile popup)
   const hideModelNow = (modelName: string) => {
@@ -599,9 +1093,21 @@ export default function App() {
     setDraftSettings(nextSettings);
   };
 
+  /**
+   * The personality belongs to the conversation, not to the app.
+   *
+   * It used to be half of the storage key, so changing the dropdown swapped you
+   * to a different — usually empty — thread and your conversation looked
+   * deleted. Nothing on screen said so. Now it changes the open thread's
+   * personality in place and becomes the default for new ones.
+   */
   const selectPersonality = (id: string) => {
-    const next = { ...settings, activePersonalityId: id };
-    applyPersonalitySettings(next);
+    applyPersonalitySettings({ ...settings, activePersonalityId: id });
+    if (activeConversationId) {
+      setConversations((prev) => prev.map((c) => (c.id === activeConversationId
+        ? { ...c, personalityId: id }
+        : c)));
+    }
   };
 
   const openNewPersonality = () => {
@@ -705,11 +1211,93 @@ export default function App() {
           <button
             type="button"
             className="rm-titlebar-btn close"
-            onClick={() => getCurrentWindow().close()}
+            // Land anything still inside the coalescing window before the
+            // webview goes away.
+            onClick={() => { void writerRef.current?.flush().finally(() => getCurrentWindow().close()); }}
             aria-label="Close"
           >×</button>
         </div>
       </div>
+
+      {/* The summary is shown before it is used. A poor one quietly degrades
+          every later reply, and the person who had the conversation is the only
+          one who can judge it. */}
+      {compactPlan && (
+        <div className="rm-modal-backdrop" role="presentation" onClick={() => setCompactPlan(null)}>
+          <div
+            className="rm-modal rm-modal-wide"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Free up room"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <strong>Here is what it kept</strong>
+            <p>
+              The first {compactPlan.upTo} message{compactPlan.upTo === 1 ? "" : "s"} summarised into these notes
+              {compactPlan.by.borrowed
+                ? ` by ${getDisplayName(compactPlan.by.model)}, which scores higher on your rig than the model you are chatting with`
+                : ""}
+              . The last {KEEP_RECENT_MESSAGES} stay exactly as they are, and nothing is deleted — the whole
+              conversation stays on screen either way.
+            </p>
+            <textarea
+              className="rm-compact-summary"
+              value={compactPlan.summary}
+              onChange={(e) => setCompactPlan((plan) => (plan ? { ...plan, summary: e.target.value } : plan))}
+              rows={9}
+            />
+            <div className="rm-modal-actions">
+              <button type="button" className="rm-btn-sm" onClick={() => setCompactPlan(null)}>Cancel</button>
+              <button type="button" className="rm-btn-sm" onClick={branchFromCompaction}>
+                Continue in a new chat
+              </button>
+              <button type="button" className="rm-btn-sm rm-btn-primary" onClick={applyCompaction}>
+                Compact this chat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deleting a conversation cannot be undone and there is no bin to
+          recover it from, so it gets asked about by name. */}
+      {confirmDelete && (
+        <div className="rm-modal-backdrop" role="presentation" onClick={() => setConfirmDelete(null)}>
+          <div
+            className="rm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Delete conversation"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <strong>Delete “{confirmDelete.title}”?</strong>
+            <p>
+              {confirmDelete.messages.length} message{confirmDelete.messages.length === 1 ? "" : "s"} with{" "}
+              {getDisplayName(confirmDelete.modelName)}. This cannot be undone.
+            </p>
+            <div className="rm-modal-actions">
+              <button type="button" className="rm-btn-sm" onClick={() => setConfirmDelete(null)}>Cancel</button>
+              <button
+                type="button"
+                className="rm-btn-sm rm-btn-danger"
+                onClick={() => { deleteConversation(confirmDelete.id); setConfirmDelete(null); }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Saving failing is worth saying out loud — the alternative is a chat
+          that looks fine and is gone at the next launch. It used to crash the
+          app instead, which at least you noticed. */}
+      {persistError && (
+        <div className="rm-persist-warning" role="status">
+          Your conversations are not being saved right now — {persistError}. Everything on screen is
+          still here until you close the app.
+        </div>
+      )}
 
       {/* ── System Monitor Bar ─────────────────────────────────────── */}
       {settings.showSystemMonitor && sysStats && (
@@ -770,22 +1358,23 @@ export default function App() {
             </div>
           )}
           {visibleBuddies.map((buddy) => {
-            const buddyConversationKey = `${buddy.modelName}::${activePersonality?.id ?? DEFAULT_PERSONALITY_ID}`;
-            const msgs = messagesByModel[buddyConversationKey]
-              ?? (activePersonality?.id === DEFAULT_PERSONALITY_ID ? (messagesByModel[buddy.modelName] ?? []) : []);
-            const lastMsg = msgs[msgs.length - 1];
+            const threads = conversationsForModel(conversations, buddy.modelName);
+            const lastMsg = threads[0]?.messages[threads[0].messages.length - 1];
             const isActive = buddy.modelName === activeBuddy;
             const isTyping = typingModel === buddy.modelName;
             const score = rigScores[buddy.modelName];
             const isChosen = buddy.modelName === chosenModel;
+            const isExpanded = expandedModels.has(buddy.modelName);
             return (
+              <div key={buddy.modelName} className="rm-buddy-group">
               <button
-                key={buddy.modelName}
                 type="button"
                 className={`rm-buddy-item${isActive ? " active" : ""}${isChosen ? " rm-buddy-chosen" : ""}`}
-                onClick={() => setActiveBuddy(buddy.modelName)}
+                aria-expanded={isExpanded}
+                onClick={() => openModel(buddy.modelName)}
                 onDoubleClick={() => setProfileModal(buddy)}
               >
+                <span className={`rm-buddy-caret${isExpanded ? " open" : ""}`} aria-hidden="true">▸</span>
                 <div className="rm-buddy-avatar-wrap">
                   <BuddyAvatar family={buddy.avatarFamily} isTyping={isTyping} />
                   <span className={`rm-online-dot${connectionStatus === "connected" ? " online" : ""}`} />
@@ -821,7 +1410,64 @@ export default function App() {
                     </span>
                   )}
                 </div>
+                {threads.length > 1 && (
+                  <span className="rm-thread-count" title={`${threads.length} conversations`}>{threads.length}</span>
+                )}
               </button>
+
+              {/* The subjects under this model. Folded away until the model is
+                  opened, so a long list of models stays scannable. */}
+              {isExpanded && (
+                <div className="rm-thread-list">
+                  {threads.map((thread) => (
+                    <div
+                      key={thread.id}
+                      className={`rm-thread-item${thread.id === activeConversation?.id ? " active" : ""}`}
+                    >
+                      {renamingId === thread.id ? (
+                        <input
+                          className="rm-thread-rename"
+                          defaultValue={thread.title}
+                          autoFocus
+                          onBlur={(e) => renameConversation(thread.id, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") renameConversation(thread.id, e.currentTarget.value);
+                            if (e.key === "Escape") setRenamingId(null);
+                          }}
+                        />
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="rm-thread-open"
+                            onClick={() => { setActiveBuddy(buddy.modelName); setActiveConversationId(thread.id); }}
+                            onDoubleClick={() => setRenamingId(thread.id)}
+                            title={`${thread.title} — double-click to rename`}
+                          >
+                            <span className="rm-thread-title">{thread.title}</span>
+                            <span className="rm-thread-meta">{formatWhen(thread.updatedAt)}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="rm-thread-delete"
+                            title="Delete this conversation"
+                            aria-label={`Delete conversation ${thread.title}`}
+                            onClick={() => setConfirmDelete(thread)}
+                          >×</button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="rm-thread-new"
+                    onClick={() => startNewConversation(buddy.modelName)}
+                  >
+                    + New chat
+                  </button>
+                </div>
+              )}
+              </div>
             );
           })}
         </div>
@@ -874,11 +1520,16 @@ export default function App() {
                 <em>
                   {typingModel === activeBuddy
                     ? "typing…"
-                    : connectionStatus === "connected"
-                      ? `using ${activeBuddyObj.displayName} through Ollama`
-                      : "Offline"}
+                    : connectionStatus !== "connected"
+                      ? "Offline"
+                      : activeConversation && activeConversation.messages.length > 0
+                        // Which subject you are in matters more than which model,
+                        // once a model can hold several.
+                        ? `${activeConversation.title} · ${activeBuddyObj.displayName}`
+                        : `using ${activeBuddyObj.displayName} through Ollama`}
                 </em>
               </div>
+              <ContextMeter usage={contextUsage} info={activeContextInfo} limit={activeContextLimit} />
               <span className="rm-chat-header-model" title="Actual local Ollama model">
                 MODEL {activeBuddyObj.modelName}
               </span>
@@ -889,7 +1540,7 @@ export default function App() {
                 <span>Personality</span>
                 <select
                   className="rm-personality-select"
-                  value={settings.activePersonalityId}
+                  value={activePersonality?.id ?? settings.activePersonalityId}
                   onChange={(event) => selectPersonality(event.target.value)}
                 >
                   {settings.personalityProfiles.map((profile) => (
@@ -909,6 +1560,27 @@ export default function App() {
               </button>
             </div>
 
+            {/* Offered before the limit, not after: past it Ollama has already
+                started dropping the oldest turns on its own. */}
+            {contextUsage.nearLimit && canCompact && !compactPlan && (
+              <div className={`rm-compact-bar${contextUsage.willTruncate ? " urgent" : ""}`}>
+                <span>
+                  {contextUsage.willTruncate
+                    ? "This chat has outgrown what the model can hold. The oldest messages are being left out of its memory."
+                    : "This chat is filling up the model's memory."}
+                </span>
+                <button type="button" className="rm-btn-sm" onClick={() => void runCompaction()} disabled={compacting}>
+                  {compacting ? "Summarising…" : "Free up room"}
+                </button>
+              </div>
+            )}
+            {compactError && (
+              <div className="rm-compact-bar urgent">
+                <span>Could not summarise: {compactError}</span>
+                <button type="button" className="rm-btn-sm" onClick={() => setCompactError(null)}>Dismiss</button>
+              </div>
+            )}
+
             <div className="rm-transcript" ref={transcriptRef}>
               {activeMessages.length === 0 && (
                 <div className="rm-transcript-empty">
@@ -926,8 +1598,20 @@ export default function App() {
                   </p>
                 </div>
               )}
-              {activeMessages.map((msg) => (
-                <div key={msg.id} className={`rm-message rm-message-${msg.role}`}>
+              {/* A branched thread starts with everything it knows in the
+                  summary and nothing above the line. */}
+              {activeConversation?.summary && (activeConversation.summarizedCount ?? 0) === 0 && (
+                <SummaryMarker conversation={activeConversation} />
+              )}
+              {activeMessages.map((msg, index) => (
+                <Fragment key={msg.id}>
+                  {/* Where the model's memory actually begins. Without this the
+                      transcript shows turns the model cannot see and gives no
+                      sign of it — the original complaint, in a milder form. */}
+                  {activeConversation?.summary && index === activeConversation.summarizedCount && (
+                    <SummaryMarker conversation={activeConversation} />
+                  )}
+                <div className={`rm-message rm-message-${msg.role}${activeConversation?.summary && index < (activeConversation.summarizedCount ?? 0) ? " rm-message-folded" : ""}`}>
                   {msg.role === "assistant" && (
                     <div className="rm-message-avatar">
                       <BuddyAvatar
@@ -955,6 +1639,7 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+                </Fragment>
               ))}
               {typingModel === activeBuddy && (
                 <div className="rm-message rm-message-assistant">
@@ -986,16 +1671,28 @@ export default function App() {
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={handleKeyDown}
                 rows={3}
-                disabled={!!typingModel}
+                /* Not disabled while a reply streams — there is no reason you
+                   cannot write the next message while waiting for this one. */
               />
-              <button
-                type="button"
-                className="rm-send-btn"
-                onClick={() => void sendMessage()}
-                disabled={!draft.trim() || !!typingModel}
-              >
-                Send
-              </button>
+              {typingModel ? (
+                <button
+                  type="button"
+                  className="rm-send-btn rm-stop-btn"
+                  onClick={stopGenerating}
+                  title="Stop this reply and free the graphics card"
+                >
+                  ■ Stop
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="rm-send-btn"
+                  onClick={() => void sendMessage()}
+                  disabled={!draft.trim()}
+                >
+                  Send
+                </button>
+              )}
             </div>
           </>
         ) : (
@@ -1261,6 +1958,46 @@ export default function App() {
                 />
                 <span>Mute all sounds</span>
               </label>
+
+              {/* ── Memory ── */}
+              <div className="rm-settings-section-label">Memory</div>
+              <label className="rm-settings-field">
+                <span>How much each chat can remember</span>
+                <select
+                  value={String(draftSettings.contextSize)}
+                  onChange={(e) => setDraftSettings((s) => ({
+                    ...s,
+                    contextSize: e.target.value === "auto" ? "auto" : Number(e.target.value),
+                  }))}
+                >
+                  <option value="auto">
+                    Auto — as much as fits comfortably{activeContextInfo ? ` (${formatContextSize(chooseContextSize(activeContextInfo, activeKvBudget))} for ${activeBuddyObj?.displayName ?? "this model"})` : ""}
+                  </option>
+                  {CONTEXT_STEPS.map((size) => {
+                    const cost = activeContextInfo ? kvCacheBytes(activeContextInfo, size) : 0;
+                    const overModel = !!activeContextInfo && size > activeContextInfo.maxContext;
+                    // Beyond what the card can hold, Ollama moves layers onto
+                    // the CPU — it still works, just slowly, so say so rather
+                    // than hiding the option.
+                    const overCard = activeKvBudget !== null && cost > activeKvBudget;
+                    return (
+                      <option key={size} value={size}>
+                        {formatContextSize(size)} tokens
+                        {cost > 0 ? ` — about ${formatGib(cost)} of video memory` : ""}
+                        {overModel ? " (beyond this model's limit)" : overCard ? " (too big for your card — would run on the CPU)" : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+              <p className="rm-settings-hint">
+                A bigger window remembers more of the conversation but reserves more video memory and
+                makes each reply take longer to start. Past the limit the oldest messages drop out of
+                the model's memory, even though they stay on screen.
+                {vram
+                  ? ` Auto is sizing against the ${formatGib(vram.totalBytes)} ${vram.unified ? "of shared memory" : "of video memory"} it found on this machine.`
+                  : " Auto is using a conservative default — no graphics card could be read on this machine."}
+              </p>
 
               {/* ── System Monitor ── */}
               <div className="rm-settings-section-label">System</div>

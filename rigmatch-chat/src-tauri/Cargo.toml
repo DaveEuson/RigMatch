@@ -1,6 +1,6 @@
 [package]
 name = "rigmatch-chat"
-version = "0.4.3"
+version = "0.4.4"
 description = "RigMatch Chat — local AI model matchmaking companion"
 authors = ["RigMatch"]
 # Not open source. There is no LICENSE under rigmatch-chat/, so the repository
@@ -27,3 +27,7 @@ serde_json = "1"
 reqwest = { version = "0.12", features = ["json"] }
 url = "2"
 sysinfo = "0.33"
+# Already in the tree via Tauri. Declared directly so a generation can be woken
+# and dropped the moment Stop is pressed, rather than only between chunks — a
+# model still loading into VRAM produces no chunks to check against.
+tokio = { version = "1", features = ["sync", "macros", "rt"] }

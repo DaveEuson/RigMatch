@@ -1,4 +1,5 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
+import type { ModelContextInfo, VramInfo } from "./contextWindow";
 
 export type OllamaModel = {
   name: string;
@@ -53,29 +54,87 @@ export async function listModels(baseUrl: string): Promise<OllamaModel[]> {
   return models.filter((m) => isValidModelName(m.name));
 }
 
+/**
+ * What the machine has to work with, or null when it cannot be determined — no
+ * NVIDIA tools and not a Mac. The caller keeps its fixed budget rather than
+ * sizing a KV cache against a guess.
+ */
+export async function getVramInfo(): Promise<VramInfo | null> {
+  try {
+    return await invoke<VramInfo | null>("get_vram_info");
+  } catch {
+    return null;
+  }
+}
+
+/** Conversation history, read from the app data directory. */
+export async function readConversationsFile(): Promise<string | null> {
+  return await invoke<string | null>("read_conversations");
+}
+
+export async function writeConversationsFile(contents: string): Promise<void> {
+  await invoke<void>("write_conversations", { contents });
+}
+
+export async function getModelContextInfo(
+  baseUrl: string,
+  model: string,
+): Promise<ModelContextInfo | null> {
+  try {
+    return await invoke<ModelContextInfo | null>("get_model_context_info", { baseUrl, model });
+  } catch {
+    // An older Ollama, or a model whose metadata does not carry these fields.
+    // The caller falls back to Ollama's own default rather than failing a chat.
+    return null;
+  }
+}
+
+/** Emitted by the Rust side: content as it arrives, then one final tally. */
+type StreamEvent =
+  | { type: "token"; value: string }
+  | { type: "done"; promptTokens: number; evalTokens: number };
+
 export async function streamChat(
   baseUrl: string,
   model: string,
   messages: ChatMessage[],
   onToken: (token: string) => void,
   signal?: AbortSignal,
+  options?: {
+    numCtx?: number;
+    /**
+     * Ollama's own count of the prompt tokens it evaluated. The only exact
+     * measure of how much of the conversation the model actually saw — if it
+     * comes back far below what was sent, the middle was silently dropped.
+     */
+    onDone?: (stats: { promptTokens: number; evalTokens: number }) => void;
+  },
 ): Promise<void> {
   assertLocalhostUrl(baseUrl);
   if (!isValidModelName(model)) throw new Error("Invalid model name");
 
-  const channel = new Channel<string>();
+  const channel = new Channel<StreamEvent>();
+  // Identifies this generation to the backend so it can be stopped. Aborting
+  // used to only stop tokens being *delivered* — Ollama carried on generating
+  // the whole reply, holding the GPU for output nobody would ever see.
+  const streamId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   let active = true;
   signal?.addEventListener("abort", () => {
     active = false;
+    void invoke("cancel_chat", { streamId }).catch(() => undefined);
   });
-  channel.onmessage = (token) => {
-    if (active) onToken(token);
+  channel.onmessage = (event) => {
+    if (!active) return;
+    if (event.type === "token") onToken(event.value);
+    else options?.onDone?.({ promptTokens: event.promptTokens, evalTokens: event.evalTokens });
   };
 
   const invokePromise = invoke<void>("stream_chat", {
     baseUrl,
     model,
     messages,
+    numCtx: options?.numCtx ?? null,
+    streamId,
     onToken: channel,
   });
 

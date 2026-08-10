@@ -13,8 +13,8 @@ colors:
   pink: "#e37185"
   gold: "#efbc5a"
   green: "#95b46a"
-  blue: "#69a7b7"
-  red: "#d9674f"
+  blue: "#6ba9b9"
+  red: "#ff9278"
 typography:
   display:
     fontFamily: "Segoe UI, Inter, system-ui, sans-serif"
@@ -173,8 +173,8 @@ A warm dark palette: a plum auditorium lit by a gold that never changes, with a 
 ### Tertiary
 
 - **Avocado** (`#95b46a`): success, completion, and confirmation. A finished step, a passed check, a model that fits comfortably. Also the global keyboard focus ring.
-- **Broadcast Blue** (`#69a7b7`): information and provenance. Model-family badges, counts, secondary metrics, the door to Advanced Mode.
-- **Signal Red** (`#d9674f`): failure and out-of-reach. A model too large for the machine, a run that errored, a destructive action.
+- **Broadcast Blue** (`#6ba9b9`, lifted per theme): information and provenance. Model-family badges, counts, secondary metrics, the door to Advanced Mode.
+- **Signal Red** (`#ff9278`): failure and out-of-reach. A model too large for the machine, a run that errored, a destructive action.
 
 ### Neutral
 
