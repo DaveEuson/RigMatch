@@ -1,10 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, readConversationsFile, writeConversationsFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
 import { createWriteScheduler } from "./lib/writeScheduler";
+import {
+  KEEP_RECENT_MESSAGES,
+  buildContextMessages,
+  buildSummaryRequest,
+  compactionSplit,
+  continuationTitle,
+  pickSummarizer,
+  type SummarizerChoice,
+} from "./lib/compaction";
 import {
   conversationsForModel,
   createConversation,
@@ -341,6 +350,34 @@ function ContextMeter({ usage, info, limit }: {
   );
 }
 
+/**
+ * The line in the transcript where the model's memory begins.
+ *
+ * Everything above it was said, is still on screen, and is no longer in front
+ * of the model — these notes stand in for it. Marking the boundary is the whole
+ * difference between compacting and what Ollama was doing silently.
+ */
+function SummaryMarker({ conversation }: { conversation: Conversation }) {
+  const [open, setOpen] = useState(false);
+  const count = conversation.summarizedCount ?? 0;
+  return (
+    <div className="rm-summary-marker">
+      <button type="button" className="rm-summary-toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <span className="rm-summary-rule" aria-hidden="true" />
+        <span className="rm-summary-label">
+          {count > 0
+            ? `${count} earlier message${count === 1 ? "" : "s"} summarised`
+            : "Continued from an earlier chat"}
+          {conversation.summaryBy ? ` · by ${getDisplayName(conversation.summaryBy)}` : ""}
+          {open ? " ▴" : " ▾"}
+        </span>
+        <span className="rm-summary-rule" aria-hidden="true" />
+      </button>
+      {open && <div className="rm-summary-body">{conversation.summary}</div>}
+    </div>
+  );
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -356,6 +393,16 @@ export default function App() {
   const [expandedModels, setExpandedModels] = useState<Set<string>>(() => new Set());
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Conversation | null>(null);
+  const [compacting, setCompacting] = useState(false);
+  const [compactError, setCompactError] = useState<string | null>(null);
+  // A summary waiting to be accepted. Held rather than applied, because a bad
+  // summary quietly poisons every later reply and only the user can tell.
+  const [compactPlan, setCompactPlan] = useState<{
+    conversationId: string;
+    upTo: number;
+    summary: string;
+    by: SummarizerChoice;
+  } | null>(null);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
   const [typingModel, setTypingModel] = useState<string | null>(null);
@@ -474,12 +521,23 @@ export default function App() {
       .slice(index)
       .reduce((sum, message) => sum + estimateTokens(message.content), 0);
 
+    // Only what is actually sent counts. On a compacted thread that is the
+    // summary plus the turns it does not cover, not the whole transcript —
+    // which is the point of compacting, and has to show in the gauge or the
+    // warning would never go away.
+    const summarized = activeConversation?.summarizedCount ?? 0;
+    const summaryTokens = estimateTokens(activeConversation?.summary ?? "");
+
     const used = measured
       ? measured.promptTokens + measured.evalTokens + estimateFrom(measured.messageCount)
-      : estimateFrom(0);
+      : summaryTokens + estimateFrom(summarized);
 
     return getContextUsage(used + estimateTokens(draft), activeContextLimit);
-  }, [activeConversationKey, tokenMarkByKey, activeMessages, draft, activeContextLimit]);
+  }, [activeConversationKey, tokenMarkByKey, activeMessages, activeConversation, draft, activeContextLimit]);
+
+  /** Enough conversation to be worth summarising, and not already done. */
+  const canCompact = activeConversation !== null
+    && compactionSplit(activeConversation.messages, activeConversation.summarizedCount ?? 0) !== null;
 
   const assistantDisplayName = activePersonality?.name || activeBuddyObj?.displayName || "RigMatch Buddy";
   const assistantAvatarSrc = activePersonality?.avatarDataUrl;
@@ -712,7 +770,9 @@ export default function App() {
       ...(profilePrompt
         ? [{ role: "system" as const, content: profilePrompt }]
         : []),
-      ...updatedHistory.map((m) => ({ role: m.role, content: m.content })),
+      // Compacted threads send their summary in place of the turns it covers.
+      // The transcript above still shows all of them.
+      ...buildContextMessages(updatedHistory, target.summary, target.summarizedCount ?? 0),
     ];
     const assistantId = genId();
     let accumulated = "";
@@ -920,6 +980,91 @@ export default function App() {
     void writerRef.current?.flush();
   }, []);
 
+  /**
+   * Summarise the older turns of the open thread.
+   *
+   * Nothing is applied here — the summary is shown first, because a bad one
+   * quietly poisons every later reply and the user is the only one who can
+   * tell. `compactPlan` holds it until Compact or Continue is pressed.
+   */
+  const runCompaction = useCallback(async () => {
+    if (!activeConversation || !activeBuddy || compacting) return;
+    const upTo = compactionSplit(activeConversation.messages, activeConversation.summarizedCount ?? 0);
+    if (upTo === null) return;
+
+    const summarizer = pickSummarizer(
+      activeBuddy,
+      buddies.map((b) => b.modelName),
+      rigScores,
+    );
+
+    setCompacting(true);
+    setCompactPlan(null);
+    try {
+      let text = "";
+      await streamChat(
+        settings.ollamaUrl,
+        summarizer.model,
+        buildSummaryRequest(activeConversation.messages, upTo, activeConversation.summary),
+        (token) => { text += token; },
+        undefined,
+        // Summarising is the one call that must not be truncated: it is reading
+        // the whole of the history that no longer fits.
+        { numCtx: activeContextLimit },
+      );
+      const summary = text.trim();
+      if (!summary) throw new Error("The model returned an empty summary.");
+      setCompactPlan({ conversationId: activeConversation.id, upTo, summary, by: summarizer });
+    } catch (error) {
+      setCompactError(String((error as Error)?.message ?? error));
+    } finally {
+      setCompacting(false);
+    }
+  }, [activeConversation, activeBuddy, buddies, rigScores, settings.ollamaUrl, activeContextLimit, compacting]);
+
+  /** Fold the summary into the open thread and carry on in it. */
+  const applyCompaction = useCallback(() => {
+    if (!compactPlan) return;
+    setConversations((prev) => prev.map((c) => (c.id === compactPlan.conversationId
+      ? { ...c, summary: compactPlan.summary, summarizedCount: compactPlan.upTo, summaryBy: compactPlan.by.model, updatedAt: Date.now() }
+      : c)));
+    // The prompt is a different length now, so the measured token count no
+    // longer describes what will be sent.
+    setTokenMarkByKey(({ [compactPlan.conversationId]: _stale, ...rest }) => rest);
+    setCompactPlan(null);
+    void writerRef.current?.flush();
+  }, [compactPlan]);
+
+  /**
+   * Start a fresh thread carrying the summary, leaving this one as it stands.
+   *
+   * The difference from Compact: the original keeps its full history and its
+   * own memory, and the new thread starts nearly empty. Better when the subject
+   * has moved on; Compact is better when it has not.
+   */
+  const branchFromCompaction = useCallback(() => {
+    if (!compactPlan || !activeConversation || !activeBuddy) return;
+    const branched: Conversation = {
+      ...createConversation({
+        id: genId(),
+        modelName: activeBuddy,
+        personalityId: activeConversation.personalityId,
+        now: Date.now(),
+      }),
+      title: continuationTitle(activeConversation.title),
+      titleIsAuto: false,
+      summary: compactPlan.summary,
+      // Nothing of its own yet, so the summary stands in for all of it.
+      summarizedCount: 0,
+      summaryBy: compactPlan.by.model,
+    };
+    setConversations((prev) => [...prev, branched]);
+    setActiveConversationId(branched.id);
+    setExpandedModels((prev) => new Set(prev).add(activeBuddy));
+    setCompactPlan(null);
+    void writerRef.current?.flush();
+  }, [compactPlan, activeConversation, activeBuddy]);
+
   const renameConversation = useCallback((id: string, title: string) => {
     const trimmed = title.trim();
     setConversations((prev) => prev.map((c) => (c.id === id
@@ -1073,6 +1218,46 @@ export default function App() {
           >×</button>
         </div>
       </div>
+
+      {/* The summary is shown before it is used. A poor one quietly degrades
+          every later reply, and the person who had the conversation is the only
+          one who can judge it. */}
+      {compactPlan && (
+        <div className="rm-modal-backdrop" role="presentation" onClick={() => setCompactPlan(null)}>
+          <div
+            className="rm-modal rm-modal-wide"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Free up room"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <strong>Here is what it kept</strong>
+            <p>
+              The first {compactPlan.upTo} message{compactPlan.upTo === 1 ? "" : "s"} summarised into these notes
+              {compactPlan.by.borrowed
+                ? ` by ${getDisplayName(compactPlan.by.model)}, which scores higher on your rig than the model you are chatting with`
+                : ""}
+              . The last {KEEP_RECENT_MESSAGES} stay exactly as they are, and nothing is deleted — the whole
+              conversation stays on screen either way.
+            </p>
+            <textarea
+              className="rm-compact-summary"
+              value={compactPlan.summary}
+              onChange={(e) => setCompactPlan((plan) => (plan ? { ...plan, summary: e.target.value } : plan))}
+              rows={9}
+            />
+            <div className="rm-modal-actions">
+              <button type="button" className="rm-btn-sm" onClick={() => setCompactPlan(null)}>Cancel</button>
+              <button type="button" className="rm-btn-sm" onClick={branchFromCompaction}>
+                Continue in a new chat
+              </button>
+              <button type="button" className="rm-btn-sm rm-btn-primary" onClick={applyCompaction}>
+                Compact this chat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Deleting a conversation cannot be undone and there is no bin to
           recover it from, so it gets asked about by name. */}
@@ -1375,6 +1560,27 @@ export default function App() {
               </button>
             </div>
 
+            {/* Offered before the limit, not after: past it Ollama has already
+                started dropping the oldest turns on its own. */}
+            {contextUsage.nearLimit && canCompact && !compactPlan && (
+              <div className={`rm-compact-bar${contextUsage.willTruncate ? " urgent" : ""}`}>
+                <span>
+                  {contextUsage.willTruncate
+                    ? "This chat has outgrown what the model can hold. The oldest messages are being left out of its memory."
+                    : "This chat is filling up the model's memory."}
+                </span>
+                <button type="button" className="rm-btn-sm" onClick={() => void runCompaction()} disabled={compacting}>
+                  {compacting ? "Summarising…" : "Free up room"}
+                </button>
+              </div>
+            )}
+            {compactError && (
+              <div className="rm-compact-bar urgent">
+                <span>Could not summarise: {compactError}</span>
+                <button type="button" className="rm-btn-sm" onClick={() => setCompactError(null)}>Dismiss</button>
+              </div>
+            )}
+
             <div className="rm-transcript" ref={transcriptRef}>
               {activeMessages.length === 0 && (
                 <div className="rm-transcript-empty">
@@ -1392,8 +1598,20 @@ export default function App() {
                   </p>
                 </div>
               )}
-              {activeMessages.map((msg) => (
-                <div key={msg.id} className={`rm-message rm-message-${msg.role}`}>
+              {/* A branched thread starts with everything it knows in the
+                  summary and nothing above the line. */}
+              {activeConversation?.summary && (activeConversation.summarizedCount ?? 0) === 0 && (
+                <SummaryMarker conversation={activeConversation} />
+              )}
+              {activeMessages.map((msg, index) => (
+                <Fragment key={msg.id}>
+                  {/* Where the model's memory actually begins. Without this the
+                      transcript shows turns the model cannot see and gives no
+                      sign of it — the original complaint, in a milder form. */}
+                  {activeConversation?.summary && index === activeConversation.summarizedCount && (
+                    <SummaryMarker conversation={activeConversation} />
+                  )}
+                <div className={`rm-message rm-message-${msg.role}${activeConversation?.summary && index < (activeConversation.summarizedCount ?? 0) ? " rm-message-folded" : ""}`}>
                   {msg.role === "assistant" && (
                     <div className="rm-message-avatar">
                       <BuddyAvatar
@@ -1421,6 +1639,7 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+                </Fragment>
               ))}
               {typingModel === activeBuddy && (
                 <div className="rm-message rm-message-assistant">

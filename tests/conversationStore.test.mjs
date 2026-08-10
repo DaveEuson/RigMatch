@@ -162,3 +162,31 @@ test('a model lists its own threads, newest first', () => {
   // Sorting must not reorder the caller's array in place.
   assert.deepEqual(conversations.map((c) => c.id), ['a', 'b', 'c']);
 });
+
+test('a compacted thread keeps its summary, and the count cannot outrun the messages', () => {
+  // summarizedCount decides how much of the transcript the model is NOT shown.
+  // A value larger than the conversation would hide real turns, so it is
+  // clamped to what is there rather than trusted.
+  const raw = (count) => JSON.stringify({
+    version: 2,
+    conversations: [{
+      id: 'a', modelName: 'llama3.2:3b', personalityId: 'default', title: 'T',
+      titleIsAuto: true, createdAt: 1, updatedAt: 2,
+      messages: [msg('user', 'one', 1), msg('assistant', 'two', 2), msg('user', 'three', 3)],
+      summary: 'notes', summarizedCount: count, summaryBy: 'qwen2.5:7b',
+    }],
+  });
+
+  const ok = parseStore(raw(2), OPTS)[0];
+  assert.equal(ok.summary, 'notes');
+  assert.equal(ok.summarizedCount, 2);
+  assert.equal(ok.summaryBy, 'qwen2.5:7b');
+
+  assert.equal(parseStore(raw(99), OPTS)[0].summarizedCount, 3, 'clamped to the messages present');
+  assert.equal(parseStore(raw(-5), OPTS)[0].summarizedCount, 0);
+
+  // A count without a summary would hide turns and put nothing in their place.
+  const orphan = JSON.parse(raw(2));
+  delete orphan.conversations[0].summary;
+  assert.equal(parseStore(JSON.stringify(orphan), OPTS)[0].summarizedCount, undefined);
+});

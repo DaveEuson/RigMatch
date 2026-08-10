@@ -31,6 +31,19 @@ export type Conversation = {
   createdAt: number;
   updatedAt: number;
   messages: StoredMessage[];
+  /**
+   * Notes standing in for the first `summarizedCount` messages when this thread
+   * is sent to the model.
+   *
+   * The messages themselves are kept: the transcript still shows every word
+   * that was said, and only what gets *sent* is shortened. That is the whole
+   * point — the previous behaviour was Ollama silently discarding turns while
+   * the transcript went on displaying them.
+   */
+  summary?: string;
+  summarizedCount?: number;
+  /** Which model wrote the summary, so the transcript can say. */
+  summaryBy?: string;
 };
 
 /**
@@ -131,6 +144,13 @@ function cleanConversation(value: unknown, index: number, makeId: (i: number) =>
   const messages = cleanMessages(c.messages);
   if (!messages) return null;
   if (typeof c.modelName !== "string" || !c.modelName) return null;
+  // A count that outran the messages would hide real turns from the model, so
+  // it is clamped to what is actually there rather than trusted.
+  const summary = typeof c.summary === "string" && c.summary ? c.summary : undefined;
+  const summarizedCount = summary && typeof c.summarizedCount === "number"
+    ? Math.max(0, Math.min(Math.floor(c.summarizedCount), messages.length))
+    : undefined;
+
   return {
     id: typeof c.id === "string" && c.id ? c.id : makeId(index),
     modelName: c.modelName,
@@ -140,6 +160,9 @@ function cleanConversation(value: unknown, index: number, makeId: (i: number) =>
     createdAt: typeof c.createdAt === "number" ? c.createdAt : now,
     updatedAt: typeof c.updatedAt === "number" ? c.updatedAt : now,
     messages,
+    ...(summary ? { summary } : {}),
+    ...(summarizedCount !== undefined ? { summarizedCount } : {}),
+    ...(typeof c.summaryBy === "string" && c.summaryBy ? { summaryBy: c.summaryBy } : {}),
   };
 }
 
