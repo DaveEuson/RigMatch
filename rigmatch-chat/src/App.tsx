@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { listModels, streamChat, getVersion, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
+import { listModels, streamChat, getVersion, getModelContextInfo, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
 import {
   DEFAULT_PERSONALITY_ID,
   loadSettings,
@@ -11,6 +11,16 @@ import {
   type AppSettings,
   type PersonalityProfile,
 } from "./lib/settings";
+import {
+  CONTEXT_STEPS,
+  chooseContextSize,
+  estimateTokens,
+  formatContextSize,
+  formatGib,
+  getContextUsage,
+  kvCacheBytes,
+  type ModelContextInfo,
+} from "./lib/contextWindow";
 
 marked.use({ breaks: true, gfm: true });
 
@@ -235,6 +245,42 @@ function BuddyAvatar({
   );
 }
 
+/**
+ * How much of this model's memory the conversation is using.
+ *
+ * Without this the app gave no sign that anything was wrong: past the limit
+ * Ollama keeps the system prompt and the newest tokens, drops everything
+ * between, and answers as though the earlier turns were never said — while the
+ * transcript above still shows them all.
+ */
+function ContextMeter({ usage, info, limit }: {
+  usage: ReturnType<typeof getContextUsage>;
+  info: ModelContextInfo | null;
+  limit: number;
+}) {
+  const state = usage.willTruncate ? "full" : usage.nearLimit ? "near" : "ok";
+  const cost = info ? kvCacheBytes(info, limit) : 0;
+  const title = [
+    `Using about ${usage.used.toLocaleString()} of ${limit.toLocaleString()} tokens.`,
+    info ? `This model supports up to ${info.maxContext.toLocaleString()}.` : null,
+    cost > 0 ? `A ${formatContextSize(limit)} window costs roughly ${formatGib(cost)} of video memory.` : null,
+    usage.willTruncate
+      ? "The oldest messages will drop out of the model's memory on the next reply."
+      : null,
+  ].filter(Boolean).join(" ");
+
+  return (
+    <div className={`rm-context-meter rm-context-${state}`} title={title}>
+      <span className="rm-context-label">
+        {usage.willTruncate ? "MEMORY FULL" : "MEMORY"} {formatContextSize(usage.used)} / {formatContextSize(limit)}
+      </span>
+      <span className="rm-context-track" aria-hidden="true">
+        <span className="rm-context-fill" style={{ width: `${Math.round(usage.fraction * 100)}%` }} />
+      </span>
+    </div>
+  );
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -243,6 +289,15 @@ export default function App() {
   const [activeBuddy, setActiveBuddy] = useState<string | null>(null);
   const [messagesByModel, setMessagesByModel] = useState<Record<string, AppMessage[]>>(() => loadConversations());
   const [typingModel, setTypingModel] = useState<string | null>(null);
+  // Each model's declared memory, read once per model from /api/show.
+  const [contextInfo, setContextInfo] = useState<Record<string, ModelContextInfo | null>>({});
+  // Ollama's own token counts from the last completed reply in each
+  // conversation — what the model actually saw, as opposed to what we sent it.
+  // `messageCount` records how much of the transcript those counts covered, so
+  // anything added afterwards can be estimated on top rather than double-counted.
+  const [tokenMarkByKey, setTokenMarkByKey] = useState<
+    Record<string, { promptTokens: number; evalTokens: number; messageCount: number }>
+  >({});
   const [draft, setDraft] = useState("");
   const [ollamaVersion, setOllamaVersion] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("checking");
@@ -306,6 +361,35 @@ export default function App() {
     }
     return [];
   }, [activeBuddy, activeConversationKey, activePersonality?.id, messagesByModel]);
+  // How much memory the active model is actually being given. "auto" sizes it
+  // from the model's own limit against a KV budget; a pinned number is still
+  // clamped to what the model declares, since asking beyond that does nothing.
+  const activeContextInfo = activeBuddy ? contextInfo[activeBuddy] ?? null : null;
+  const activeContextLimit = useMemo(() => {
+    if (settings.contextSize === "auto") return chooseContextSize(activeContextInfo);
+    if (!activeContextInfo) return settings.contextSize;
+    return Math.min(settings.contextSize, activeContextInfo.maxContext);
+  }, [settings.contextSize, activeContextInfo]);
+
+  // Exact where Ollama has told us, estimated only for what it has not seen yet.
+  //
+  // A completed turn gives both halves: prompt_eval_count covers the system
+  // prompt and every message up to that point, eval_count covers the reply. So
+  // the only guesswork is whatever has been typed or added since — which is why
+  // the mark is recorded against the message count it was measured at.
+  const contextUsage = useMemo(() => {
+    const measured = activeConversationKey ? tokenMarkByKey[activeConversationKey] : undefined;
+    const estimateFrom = (index: number) => activeMessages
+      .slice(index)
+      .reduce((sum, message) => sum + estimateTokens(message.content), 0);
+
+    const used = measured
+      ? measured.promptTokens + measured.evalTokens + estimateFrom(measured.messageCount)
+      : estimateFrom(0);
+
+    return getContextUsage(used + estimateTokens(draft), activeContextLimit);
+  }, [activeConversationKey, tokenMarkByKey, activeMessages, draft, activeContextLimit]);
+
   const assistantDisplayName = activePersonality?.name || activeBuddyObj?.displayName || "RigMatch Buddy";
   const assistantAvatarSrc = activePersonality?.avatarDataUrl;
   const normalizeHiddenModels = useCallback(
@@ -412,6 +496,21 @@ export default function App() {
     return () => clearInterval(id);
   }, [settings.showSystemMonitor, settings.ollamaUrl]);
 
+  // ── Model memory ─────────────────────────────────────────────────────────
+
+  // Read each model's declared context once, when it is first opened. Cached by
+  // model name because it cannot change without the model itself changing, and
+  // a null result is cached too so a model whose metadata lacks these fields is
+  // not re-fetched on every switch.
+  useEffect(() => {
+    if (!activeBuddy || activeBuddy in contextInfo) return;
+    let cancelled = false;
+    void getModelContextInfo(settings.ollamaUrl, activeBuddy).then((info) => {
+      if (!cancelled) setContextInfo((prev) => ({ ...prev, [activeBuddy]: info }));
+    });
+    return () => { cancelled = true; };
+  }, [activeBuddy, contextInfo, settings.ollamaUrl]);
+
   // ── Persist conversations ────────────────────────────────────────────────
 
   useEffect(() => {
@@ -492,6 +591,21 @@ export default function App() {
           });
         },
         ctrl.signal,
+        {
+          numCtx: activeContextLimit,
+          onDone: ({ promptTokens, evalTokens }) => {
+            if (promptTokens <= 0) return;
+            setTokenMarkByKey((prev) => ({
+              ...prev,
+              [activeConversationKey]: {
+                promptTokens,
+                evalTokens,
+                // The assistant message only exists if something was streamed.
+                messageCount: updatedHistory.length + (accumulated ? 1 : 0),
+              },
+            }));
+          },
+        },
       );
     } catch (err) {
       if ((err as Error)?.name !== "AbortError") {
@@ -513,6 +627,7 @@ export default function App() {
     }
   }, [
     activeBuddy,
+    activeContextLimit,
     activeConversationKey,
     activePersonality,
     draft,
@@ -555,6 +670,7 @@ export default function App() {
       muted: draftSettings.muted,
       hiddenModels,
       showSystemMonitor: draftSettings.showSystemMonitor,
+      contextSize: draftSettings.contextSize,
     };
     saveSettings(next);
     setSettings(next);
@@ -879,6 +995,7 @@ export default function App() {
                       : "Offline"}
                 </em>
               </div>
+              <ContextMeter usage={contextUsage} info={activeContextInfo} limit={activeContextLimit} />
               <span className="rm-chat-header-model" title="Actual local Ollama model">
                 MODEL {activeBuddyObj.modelName}
               </span>
@@ -1261,6 +1378,35 @@ export default function App() {
                 />
                 <span>Mute all sounds</span>
               </label>
+
+              {/* ── Memory ── */}
+              <div className="rm-settings-section-label">Memory</div>
+              <label className="rm-settings-field">
+                <span>How much each chat can remember</span>
+                <select
+                  value={String(draftSettings.contextSize)}
+                  onChange={(e) => setDraftSettings((s) => ({
+                    ...s,
+                    contextSize: e.target.value === "auto" ? "auto" : Number(e.target.value),
+                  }))}
+                >
+                  <option value="auto">
+                    Auto — as much as fits comfortably{activeContextInfo ? ` (${formatContextSize(chooseContextSize(activeContextInfo))} for ${activeBuddyObj?.displayName ?? "this model"})` : ""}
+                  </option>
+                  {CONTEXT_STEPS.map((size) => (
+                    <option key={size} value={size}>
+                      {formatContextSize(size)} tokens
+                      {activeContextInfo ? ` — about ${formatGib(kvCacheBytes(activeContextInfo, size))} of video memory` : ""}
+                      {activeContextInfo && size > activeContextInfo.maxContext ? " (beyond this model's limit)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="rm-settings-hint">
+                A bigger window remembers more of the conversation but reserves more video memory and
+                makes each reply take longer to start. Past the limit the oldest messages drop out of
+                the model's memory, even though they stay on screen.
+              </p>
 
               {/* ── System Monitor ── */}
               <div className="rm-settings-section-label">System</div>

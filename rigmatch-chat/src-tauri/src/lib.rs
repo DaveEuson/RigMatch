@@ -86,21 +86,134 @@ async fn list_ollama_models(base_url: String) -> Result<Vec<OllamaModel>, String
         .collect())
 }
 
+/// What a model says about its own memory, straight out of `/api/show`.
+///
+/// The architecture prefixes these keys with its own name (`llama.block_count`,
+/// `qwen2.attention.head_count_kv`, and so on), so they are matched on suffix
+/// rather than by building the key from a hardcoded family name.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelContextInfo {
+    pub max_context: u64,
+    pub block_count: u64,
+    pub head_count_kv: u64,
+    pub key_length: u64,
+    pub value_length: u64,
+}
+
+/// Look up `<arch>.<field>` without knowing the architecture name.
+///
+/// Multimodal models carry nested sub-architectures alongside the top-level
+/// one — deepseek-ocr publishes `deepseekocr.block_count` *and*
+/// `deepseekocr.sam.block_count` and `deepseekocr.vision.block_count`. The text
+/// model is always the shallowest key, so depth breaks the tie rather than
+/// whichever happened to come first in map order.
+///
+/// A key that exists with a null value counts as absent: granite4 publishes
+/// `head_count_kv` as null, and the caller needs that to fall through to its
+/// alternative rather than reading it as zero.
+fn find_suffixed(info: &serde_json::Map<String, serde_json::Value>, suffix: &str) -> Option<u64> {
+    info.iter()
+        .filter(|(k, _)| k.ends_with(suffix))
+        .filter_map(|(k, v)| v.as_u64().map(|n| (k.matches('.').count(), n)))
+        .min_by_key(|(depth, _)| *depth)
+        .map(|(_, n)| n)
+}
+
+/// Pull the memory-shaping fields out of an `/api/show` body.
+///
+/// Split from the request so it can be tested against real payloads — the
+/// fallbacks below exist because of specific models, not hypotheticals.
+fn parse_context_info(json: &serde_json::Value) -> Option<ModelContextInfo> {
+    let info = json["model_info"].as_object()?;
+    let max_context = find_suffixed(info, ".context_length")?;
+    let block_count = find_suffixed(info, ".block_count").unwrap_or(0);
+
+    // Without grouped-query attention there is no head_count_kv (or it is
+    // null, as on granite4) and every attention head carries its own KV.
+    let head_count_kv = find_suffixed(info, ".attention.head_count_kv")
+        .or_else(|| find_suffixed(info, ".attention.head_count"))
+        .unwrap_or(0);
+
+    // Some architectures omit the explicit per-head widths; they can be derived
+    // from the embedding width divided across the attention heads.
+    let derived_head_dim = || {
+        let embedding = find_suffixed(info, ".embedding_length")?;
+        let heads = find_suffixed(info, ".attention.head_count")?;
+        embedding.checked_div(heads)
+    };
+    let key_length = find_suffixed(info, ".attention.key_length")
+        .or_else(derived_head_dim)
+        .unwrap_or(0);
+    let value_length = find_suffixed(info, ".attention.value_length")
+        .or_else(derived_head_dim)
+        .unwrap_or(0);
+
+    Some(ModelContextInfo {
+        max_context,
+        block_count,
+        head_count_kv,
+        key_length,
+        value_length,
+    })
+}
+
+#[tauri::command]
+async fn get_model_context_info(
+    base_url: String,
+    model: String,
+) -> Result<Option<ModelContextInfo>, String> {
+    validate_localhost(&base_url)?;
+    validate_model_name(&model)?;
+    let url = format!("{}/api/show", base_url.trim_end_matches('/'));
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let res = client
+        .post(&url)
+        .json(&serde_json::json!({ "name": model }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Ok(None);
+    }
+    let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    Ok(parse_context_info(&json))
+}
+
+/// Streamed output. The final message carries Ollama's own `prompt_eval_count`,
+/// which is the only exact measure of how much of the conversation the model
+/// actually saw — the app previously had no way to know it had been truncated.
+#[derive(Serialize, Clone)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum StreamEvent {
+    Token { value: String },
+    Done { prompt_tokens: u64, eval_tokens: u64 },
+}
+
 #[tauri::command]
 async fn stream_chat(
     base_url: String,
     model: String,
     messages: Vec<ChatMessage>,
-    on_token: Channel<String>,
+    num_ctx: Option<u64>,
+    on_token: Channel<StreamEvent>,
 ) -> Result<(), String> {
     validate_localhost(&base_url)?;
     validate_model_name(&model)?;
     let url = format!("{}/api/chat", base_url.trim_end_matches('/'));
-    let body = serde_json::json!({
+    let mut body = serde_json::json!({
         "model": model,
         "messages": messages,
         "stream": true,
     });
+    // Without this Ollama uses its own default of 4096 regardless of what the
+    // model supports, and drops the middle of any longer conversation silently.
+    if let Some(ctx) = num_ctx {
+        body["options"] = serde_json::json!({ "num_ctx": ctx });
+    }
     let client = reqwest::Client::new();
     let mut res = client
         .post(&url)
@@ -124,10 +237,18 @@ async fn stream_chat(
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(trimmed) {
                 if let Some(content) = parsed["message"]["content"].as_str() {
                     if !content.is_empty() {
-                        on_token.send(content.to_string()).map_err(|e| e.to_string())?;
+                        on_token
+                            .send(StreamEvent::Token { value: content.to_string() })
+                            .map_err(|e| e.to_string())?;
                     }
                 }
                 if parsed["done"].as_bool().unwrap_or(false) {
+                    on_token
+                        .send(StreamEvent::Done {
+                            prompt_tokens: parsed["prompt_eval_count"].as_u64().unwrap_or(0),
+                            eval_tokens: parsed["eval_count"].as_u64().unwrap_or(0),
+                        })
+                        .map_err(|e| e.to_string())?;
                     return Ok(());
                 }
             }
@@ -231,6 +352,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_ollama_version,
             list_ollama_models,
+            get_model_context_info,
             stream_chat,
             open_rigmatch_ai,
             get_system_stats,
@@ -239,4 +361,91 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running RigMatch Chat");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Shapes taken from a live Ollama 0.32.7, not invented — each one is here
+    /// because it broke a simpler version of the parser.
+    #[test]
+    fn reads_a_plain_grouped_query_model() {
+        let json = serde_json::json!({ "model_info": {
+            "llama.context_length": 131072,
+            "llama.block_count": 28,
+            "llama.attention.head_count": 24,
+            "llama.attention.head_count_kv": 8,
+            "llama.attention.key_length": 128,
+            "llama.attention.value_length": 128,
+            "llama.embedding_length": 3072,
+        }});
+        let info = parse_context_info(&json).expect("llama should parse");
+        assert_eq!(info.max_context, 131072);
+        assert_eq!(info.block_count, 28);
+        assert_eq!(info.head_count_kv, 8);
+        assert_eq!(info.key_length, 128);
+        assert_eq!(info.value_length, 128);
+    }
+
+    #[test]
+    fn a_null_head_count_kv_falls_back_to_the_full_head_count() {
+        // granite4:3b publishes head_count_kv as JSON null and omits the
+        // per-head widths entirely. Reading null as 0 would make the KV cache
+        // look free and hand out a context far larger than the card can hold.
+        let json = serde_json::json!({ "model_info": {
+            "granite.context_length": 131072,
+            "granite.block_count": 40,
+            "granite.attention.head_count": 40,
+            "granite.attention.head_count_kv": serde_json::Value::Null,
+            "granite.embedding_length": 2560,
+        }});
+        let info = parse_context_info(&json).expect("granite should parse");
+        assert_eq!(info.head_count_kv, 40, "null must not be read as zero");
+        // 2560 embedding / 40 heads = 64 per head, derived rather than assumed.
+        assert_eq!(info.key_length, 64);
+        assert_eq!(info.value_length, 64);
+    }
+
+    #[test]
+    fn nested_sub_architectures_do_not_shadow_the_text_model() {
+        // deepseek-ocr carries vision and SAM towers alongside the text model.
+        // Matching on suffix alone can pick a tower's block_count; the text
+        // model is the shallowest key.
+        let json = serde_json::json!({ "model_info": {
+            "deepseekocr.context_length": 8192,
+            "deepseekocr.block_count": 12,
+            "deepseekocr.attention.head_count": 10,
+            "deepseekocr.attention.head_count_kv": 10,
+            "deepseekocr.embedding_length": 1280,
+            "deepseekocr.sam.block_count": 12,
+            "deepseekocr.sam.embedding_length": 768,
+            "deepseekocr.vision.block_count": 24,
+            "deepseekocr.vision.embedding_length": 1024,
+        }});
+        let info = parse_context_info(&json).expect("deepseek-ocr should parse");
+        assert_eq!(info.block_count, 12, "took a vision tower's depth");
+        assert_eq!(info.key_length, 128, "1280 / 10 heads, not the vision width");
+    }
+
+    #[test]
+    fn a_sub_architecture_sorting_first_still_loses_to_the_top_level() {
+        // Depth, not map order, is what decides — a nested key whose segment
+        // sorts before the field name would otherwise win.
+        let json = serde_json::json!({ "model_info": {
+            "arch.block_count": 32,
+            "arch.aaa.block_count": 99,
+            "arch.context_length": 4096,
+        }});
+        assert_eq!(parse_context_info(&json).unwrap().block_count, 32);
+    }
+
+    #[test]
+    fn a_model_without_a_declared_context_is_left_alone() {
+        // No context_length means we cannot size anything; the caller keeps
+        // Ollama's default rather than guessing.
+        let json = serde_json::json!({ "model_info": { "arch.block_count": 32 } });
+        assert!(parse_context_info(&json).is_none());
+        assert!(parse_context_info(&serde_json::json!({})).is_none());
+    }
 }

@@ -1445,3 +1445,59 @@ textarea:focus {
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(239,188,90,0.18); border-radius: 4px; }
+
+/* ── Context meter ───────────────────────────────────────────────── */
+/* How much of the model's memory this conversation is using. Sits beside the
+   MODEL badge because "which model" and "how much it can still remember" are
+   the same question when a chat runs long. */
+
+.rm-context-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+  /* No margin-left: auto — .rm-chat-header-info already flexes to fill. */
+  min-width: 104px;
+}
+
+.rm-context-label {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-family: "Courier New", monospace;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.rm-context-track {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.rm-context-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--green);
+  transition: width 0.25s ease, background 0.25s ease;
+}
+
+/* Amber once three quarters full, and the label turns to say so outright once
+   the next reply would push the oldest turns out of the model's memory. */
+.rm-context-near .rm-context-fill { background: var(--gold); }
+.rm-context-near .rm-context-label { color: var(--gold); }
+.rm-context-full .rm-context-fill { background: var(--pink); }
+.rm-context-full .rm-context-label { color: var(--pink); font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rm-context-fill { transition: none; }
+}
+
+.rm-settings-hint {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}

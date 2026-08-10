@@ -1,3 +1,5 @@
+import { CONTEXT_STEPS } from "./contextWindow";
+
 const SETTINGS_KEY = "rigmatch-chat-settings";
 
 export type AppSettings = {
@@ -10,6 +12,13 @@ export type AppSettings = {
   muted: boolean;
   hiddenModels: string[];
   showSystemMonitor: boolean;
+  /**
+   * How much conversation each model is asked to hold. "auto" sizes it from the
+   * model's own declared limit against a KV-cache budget; a number pins it.
+   * Larger windows cost VRAM and slow prompt processing, so this is a real
+   * choice rather than something to max out.
+   */
+  contextSize: "auto" | number;
 };
 
 export type PersonalityProfile = {
@@ -53,6 +62,7 @@ const DEFAULTS: AppSettings = {
   muted: false,
   hiddenModels: [],
   showSystemMonitor: true,
+  contextSize: "auto",
 };
 
 export function loadSettings(): AppSettings {
@@ -92,9 +102,17 @@ function normalizeSettings(settings: AppSettings): AppSettings {
     ? settings.activePersonalityId
     : DEFAULT_PERSONALITY_ID;
 
+  // A stored value from a hand-edited or older settings blob must not become a
+  // num_ctx the model cannot honour, so anything unrecognized falls back to auto.
+  const contextSize = settings.contextSize === "auto"
+    || (typeof settings.contextSize === "number" && CONTEXT_STEPS.includes(settings.contextSize as never))
+    ? settings.contextSize
+    : "auto";
+
   return {
     ...settings,
     activePersonalityId,
     personalityProfiles,
+    contextSize,
   };
 }
