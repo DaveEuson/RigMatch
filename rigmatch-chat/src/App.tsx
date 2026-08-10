@@ -3,7 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { listModels, streamChat, getVersion, getModelContextInfo, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
+import { listModels, streamChat, getVersion, getModelContextInfo, readConversationsFile, writeConversationsFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
+import { createWriteScheduler, parseStore, serializeStore, type ConversationMap } from "./lib/conversationStore";
 import {
   DEFAULT_PERSONALITY_ID,
   loadSettings,
@@ -73,17 +74,38 @@ const RIG_SCORES_KEY = "rigmatch-chat:rig-scores:v1";
 
 type BridgePayload = { scores: Record<string, ModelScore>; chosen: string | null };
 
-function loadConversations(): Record<string, AppMessage[]> {
+/**
+ * Read history from the app data directory, importing anything still in
+ * localStorage the first time.
+ *
+ * The old key is only cleared once the file has been written successfully — if
+ * the write fails, the history stays where it was rather than being deleted
+ * from one place before it exists in the other.
+ */
+async function loadConversations(): Promise<Record<string, AppMessage[]>> {
+  try {
+    const fromFile = parseStore(await readConversationsFile());
+    if (fromFile) return fromFile as Record<string, AppMessage[]>;
+  } catch {
+    // Fall through to the legacy store; an unreadable file must not lose it.
+  }
+
+  let legacy: Record<string, AppMessage[]> = {};
   try {
     const raw = localStorage.getItem(CONVERSATIONS_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, AppMessage[]>) : {};
+    legacy = raw ? (JSON.parse(raw) as Record<string, AppMessage[]>) : {};
   } catch {
     return {};
   }
-}
+  if (Object.keys(legacy).length === 0) return legacy;
 
-function saveConversations(data: Record<string, AppMessage[]>): void {
-  localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(data));
+  try {
+    await writeConversationsFile(serializeStore(legacy));
+    localStorage.removeItem(CONVERSATIONS_KEY);
+  } catch {
+    // Keep the legacy copy and try again next launch.
+  }
+  return legacy;
 }
 
 function loadCachedBridge(): BridgePayload {
@@ -287,7 +309,12 @@ export default function App() {
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [buddies, setBuddies] = useState<Buddy[]>([]);
   const [activeBuddy, setActiveBuddy] = useState<string | null>(null);
-  const [messagesByModel, setMessagesByModel] = useState<Record<string, AppMessage[]>>(() => loadConversations());
+  // Starts empty and fills in from disk. `historyLoaded` gates every write —
+  // without it the first save would fire with the empty initial state and
+  // overwrite the file before the load that was about to populate it landed.
+  const [messagesByModel, setMessagesByModel] = useState<Record<string, AppMessage[]>>({});
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [persistError, setPersistError] = useState<string | null>(null);
   const [typingModel, setTypingModel] = useState<string | null>(null);
   // Each model's declared memory, read once per model from /api/show.
   const [contextInfo, setContextInfo] = useState<Record<string, ModelContextInfo | null>>({});
@@ -514,8 +541,45 @@ export default function App() {
   // ── Persist conversations ────────────────────────────────────────────────
 
   useEffect(() => {
-    saveConversations(messagesByModel);
-  }, [messagesByModel]);
+    let cancelled = false;
+    void loadConversations().then((loaded) => {
+      if (cancelled) return;
+      setMessagesByModel(loaded);
+      setHistoryLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // One writer for the life of the app. Updates arrive once per streamed token;
+  // this turns a burst of them into an occasional write, and keeps a failure
+  // from reaching React — an unguarded write here used to trip the error
+  // boundary on mount once localStorage was full, on every launch.
+  const writerRef = useRef<ReturnType<typeof createWriteScheduler<ConversationMap>> | null>(null);
+  if (!writerRef.current) {
+    writerRef.current = createWriteScheduler<ConversationMap>({
+      write: async (value) => {
+        await writeConversationsFile(serializeStore(value));
+        setPersistError(null);
+      },
+      onError: (error) => setPersistError(String((error as Error)?.message ?? error)),
+    });
+  }
+
+  useEffect(() => {
+    if (!historyLoaded) return;
+    writerRef.current?.schedule(messagesByModel as ConversationMap);
+  }, [messagesByModel, historyLoaded]);
+
+  // The last few hundred milliseconds of a reply would otherwise be lost if the
+  // window closed inside the coalescing window.
+  useEffect(() => {
+    const flush = () => { void writerRef.current?.flush(); };
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("beforeunload", flush);
+      flush();
+    };
+  }, []);
 
   // ── Scroll transcript ─────────────────────────────────────────────────────
 
@@ -624,6 +688,10 @@ export default function App() {
       }
     } finally {
       setTypingModel(null);
+      // A finished reply is the natural point to be durable. The coalescing
+      // window is only there to survive the stream itself, and Tauri's own
+      // close button does not reliably raise beforeunload.
+      void writerRef.current?.flush();
     }
   }, [
     activeBuddy,
@@ -696,7 +764,11 @@ export default function App() {
 
   const clearAllHistory = () => {
     setMessagesByModel({});
-    saveConversations({});
+    setTokenMarkByKey({});
+    // Straight to disk rather than through the coalescing window: "clear my
+    // history" should not still be on disk if the app closes a moment later.
+    writerRef.current?.schedule({});
+    void writerRef.current?.flush();
   };
 
   // Hide a model immediately (outside settings flow — from profile popup)
@@ -821,11 +893,23 @@ export default function App() {
           <button
             type="button"
             className="rm-titlebar-btn close"
-            onClick={() => getCurrentWindow().close()}
+            // Land anything still inside the coalescing window before the
+            // webview goes away.
+            onClick={() => { void writerRef.current?.flush().finally(() => getCurrentWindow().close()); }}
             aria-label="Close"
           >×</button>
         </div>
       </div>
+
+      {/* Saving failing is worth saying out loud — the alternative is a chat
+          that looks fine and is gone at the next launch. It used to crash the
+          app instead, which at least you noticed. */}
+      {persistError && (
+        <div className="rm-persist-warning" role="status">
+          Your conversations are not being saved right now — {persistError}. Everything on screen is
+          still here until you close the app.
+        </div>
+      )}
 
       {/* ── System Monitor Bar ─────────────────────────────────────── */}
       {settings.showSystemMonitor && sysStats && (

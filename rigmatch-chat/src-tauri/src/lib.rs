@@ -258,6 +258,51 @@ async fn stream_chat(
     Ok(())
 }
 
+// ── Conversation storage ────────────────────────────────────────────────────
+//
+// Conversations used to live in localStorage, which is capped somewhere around
+// 5 MB. Going over it makes setItem throw, and the write sat unguarded in an
+// effect that runs on mount — so a full history tripped the error boundary on
+// startup and did it again on every launch, with no way back from inside the
+// app. A file in the app data directory has no such ceiling.
+
+fn conversations_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("conversations.json"))
+}
+
+fn read_json_file(path: &std::path::Path) -> Result<Option<String>, String> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => Ok(Some(text)),
+        // Nothing saved yet is the ordinary first-run case, not a failure.
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err.to_string()),
+    }
+}
+
+/// Write beside the target and rename over it, so a crash or a full disk
+/// part-way through leaves the previous history intact rather than a truncated
+/// file. `rename` replaces an existing destination on every platform Tauri
+/// targets, Windows included.
+fn write_json_file(path: &std::path::Path, contents: &str) -> Result<(), String> {
+    let temp = path.with_extension("json.writing");
+    std::fs::write(&temp, contents.as_bytes()).map_err(|e| e.to_string())?;
+    std::fs::rename(&temp, path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn read_conversations(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    read_json_file(&conversations_path(&app)?)
+}
+
+#[tauri::command]
+fn write_conversations(app: tauri::AppHandle, contents: String) -> Result<(), String> {
+    write_json_file(&conversations_path(&app)?, &contents)
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemStats {
@@ -354,6 +399,8 @@ pub fn run() {
             list_ollama_models,
             get_model_context_info,
             stream_chat,
+            read_conversations,
+            write_conversations,
             open_rigmatch_ai,
             get_system_stats,
             get_rig_scores,
@@ -447,5 +494,54 @@ mod tests {
         let json = serde_json::json!({ "model_info": { "arch.block_count": 32 } });
         assert!(parse_context_info(&json).is_none());
         assert!(parse_context_info(&serde_json::json!({})).is_none());
+    }
+
+    #[test]
+    fn a_missing_store_reads_as_empty_not_as_an_error() {
+        let dir = std::env::temp_dir().join("rigmatch-store-missing");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("conversations.json");
+        assert_eq!(read_json_file(&path).unwrap(), None);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn writing_replaces_an_existing_store_and_leaves_no_temp_behind() {
+        // Rename-over-existing is platform specific; this is the behaviour the
+        // atomic write depends on, so it gets checked rather than assumed.
+        let dir = std::env::temp_dir().join("rigmatch-store-replace");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("conversations.json");
+
+        write_json_file(&path, "{\"version\":1,\"conversations\":{}}").unwrap();
+        assert_eq!(read_json_file(&path).unwrap().unwrap(), "{\"version\":1,\"conversations\":{}}");
+
+        write_json_file(&path, "second").unwrap();
+        assert_eq!(read_json_file(&path).unwrap().unwrap(), "second");
+
+        // The scratch file must not survive a successful write.
+        assert!(!path.with_extension("json.writing").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_failed_write_leaves_the_previous_store_readable() {
+        // The temp file is what a partial write damages; the real one is only
+        // replaced once the bytes are down.
+        let dir = std::env::temp_dir().join("rigmatch-store-durable");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("conversations.json");
+        write_json_file(&path, "good").unwrap();
+
+        // A directory where the scratch file needs to go makes the write fail.
+        let temp = path.with_extension("json.writing");
+        std::fs::create_dir_all(&temp).unwrap();
+        assert!(write_json_file(&path, "bad").is_err());
+        assert_eq!(read_json_file(&path).unwrap().unwrap(), "good");
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

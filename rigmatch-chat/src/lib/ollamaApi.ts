@@ -54,6 +54,15 @@ export async function listModels(baseUrl: string): Promise<OllamaModel[]> {
   return models.filter((m) => isValidModelName(m.name));
 }
 
+/** Conversation history, read from the app data directory. */
+export async function readConversationsFile(): Promise<string | null> {
+  return await invoke<string | null>("read_conversations");
+}
+
+export async function writeConversationsFile(contents: string): Promise<void> {
+  await invoke<void>("write_conversations", { contents });
+}
+
 export async function getModelContextInfo(
   baseUrl: string,
   model: string,

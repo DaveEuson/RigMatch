@@ -1501,3 +1501,16 @@ textarea:focus {
   font-size: 11px;
   line-height: 1.5;
 }
+
+/* Saving failed — the conversation is still on screen but will not survive a
+   restart. Stated plainly rather than crashing, which is what used to happen
+   when localStorage filled up. */
+.rm-persist-warning {
+  padding: 7px 14px;
+  background: rgba(227, 113, 133, 0.14);
+  border-bottom: 1px solid var(--pink);
+  color: var(--text);
+  font-size: 11.5px;
+  line-height: 1.45;
+  flex-shrink: 0;
+}
