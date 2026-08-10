@@ -11,6 +11,7 @@ import {
   formatContextSize,
   formatGib,
   getContextUsage,
+  kvBudgetFromVram,
   kvBytesPerToken,
   kvCacheBytes,
 } from '../rigmatch-chat/src/lib/contextWindow.ts';
@@ -114,6 +115,78 @@ test('usage reports truncation before it happens, not after', () => {
   // Over the limit clamps rather than reporting a bar wider than the track.
   assert.equal(getContextUsage(99_999, 16384).fraction, 1);
   assert.equal(getContextUsage(0, 0).limit, OLLAMA_DEFAULT_CONTEXT);
+});
+
+/** Real figures: an RTX 4070's 12282 MiB, and weights from `/api/tags`. */
+const RTX_4070 = { totalBytes: 12282 * 1024 * 1024, unified: false };
+const WEIGHTS = {
+  'llama3.2:3b': 2_019_393_189,
+  'qwen2.5:7b': 4_683_087_332,
+  'granite4:3b': 2_099_521_385,
+};
+
+test('a real card lifts the context above the hardware-blind default', () => {
+  // The fixed 2 GiB budget knew nothing about the machine, so it was miserly on
+  // a big card: llama3.2:3b was held at 16384 when 32768 was measured to sit
+  // entirely on this GPU at 5.98 GB.
+  const info = MODELS['llama3.2:3b'];
+  const blind = chooseContextSize(info);
+  const aware = chooseContextSize(info, kvBudgetFromVram(RTX_4070, WEIGHTS['llama3.2:3b']));
+
+  assert.equal(blind, 16384);
+  assert.equal(aware, 32768);
+  assert.ok(aware > blind, 'knowing the hardware should never make it smaller here');
+});
+
+test('the weights come out of the same pool as the context', () => {
+  // A flat byte budget cannot express this: on one card a 7B leaves far less
+  // room for context than a 3B, and granite4 costs 400 KiB per token because it
+  // publishes no grouped-query metadata.
+  const budget = (model) => kvBudgetFromVram(RTX_4070, WEIGHTS[model]);
+  const smaller = budget('llama3.2:3b');
+  const larger = budget('qwen2.5:7b');
+  assert.ok(larger < smaller, 'heavier weights must leave less room for KV');
+
+  // granite4 was stuck at the 4096 default under the flat budget.
+  const granite = { maxContext: 131072, blockCount: 40, headCountKv: 40, keyLength: 64, valueLength: 64 };
+  assert.equal(chooseContextSize(granite), OLLAMA_DEFAULT_CONTEXT);
+  assert.equal(chooseContextSize(granite, budget('granite4:3b')), 16384);
+});
+
+test('a smaller card steps the context down rather than spilling to the CPU', () => {
+  // Overshooting does not fail loudly, it moves layers onto the CPU and the
+  // model crawls — so the budget has to shrink with the card.
+  const info = MODELS['llama3.2:3b'];
+  const card = (mib) => chooseContextSize(info, kvBudgetFromVram({ totalBytes: mib * 1024 * 1024, unified: false }, WEIGHTS['llama3.2:3b']));
+
+  assert.equal(card(12282), 32768); // RTX 4070
+  assert.equal(card(8192), 32768);  // 8 GB
+  assert.equal(card(6144), 16384);  // 6 GB
+  assert.equal(card(4096), 8192);   // 4 GB
+  // A card that cannot even hold the weights gets the floor, never less.
+  assert.equal(card(2048), OLLAMA_DEFAULT_CONTEXT);
+});
+
+test('unified memory keeps more back, because the OS is living in it too', () => {
+  const info = MODELS['llama3.2:3b'];
+  const bytes = 16 * 1024 * 1024 * 1024;
+  const dedicated = kvBudgetFromVram({ totalBytes: bytes, unified: false }, WEIGHTS['llama3.2:3b']);
+  const unified = kvBudgetFromVram({ totalBytes: bytes, unified: true }, WEIGHTS['llama3.2:3b']);
+  assert.ok(unified < dedicated, 'shared memory must reserve more than a dedicated card');
+  assert.equal(chooseContextSize(info, unified), 32768, '16 GB of unified memory still comfortably clears the ceiling');
+});
+
+test('unknown hardware falls back instead of guessing', () => {
+  // No NVIDIA card and not a Mac: the caller keeps the fixed budget rather than
+  // sizing a KV cache against a number nothing could check.
+  assert.equal(kvBudgetFromVram(null, 2e9), null);
+  assert.equal(kvBudgetFromVram({ totalBytes: 0, unified: false }, 2e9), null);
+  assert.equal(chooseContextSize(MODELS['llama3.2:3b'], undefined), 16384);
+  // null in particular: it is what kvBudgetFromVram returns on unknown
+  // hardware, and a default parameter does not fill in for it. Compared as a
+  // number it is zero, so every size would look unaffordable and every model
+  // would drop back to 4096 — the exact bug this whole change exists to fix.
+  assert.equal(chooseContextSize(MODELS['llama3.2:3b'], null), 16384);
 });
 
 test('token estimates are only for text not yet sent', () => {

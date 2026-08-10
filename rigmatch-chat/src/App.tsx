@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { listModels, streamChat, getVersion, getModelContextInfo, readConversationsFile, writeConversationsFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
+import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, readConversationsFile, writeConversationsFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
 import { createWriteScheduler, parseStore, serializeStore, type ConversationMap } from "./lib/conversationStore";
 import {
   DEFAULT_PERSONALITY_ID,
@@ -19,8 +19,10 @@ import {
   formatContextSize,
   formatGib,
   getContextUsage,
+  kvBudgetFromVram,
   kvCacheBytes,
   type ModelContextInfo,
+  type VramInfo,
 } from "./lib/contextWindow";
 
 marked.use({ breaks: true, gfm: true });
@@ -318,6 +320,9 @@ export default function App() {
   const [typingModel, setTypingModel] = useState<string | null>(null);
   // Each model's declared memory, read once per model from /api/show.
   const [contextInfo, setContextInfo] = useState<Record<string, ModelContextInfo | null>>({});
+  // What the machine has, read once. Null when it cannot be determined, which
+  // keeps the fixed budget rather than sizing against a guess.
+  const [vram, setVram] = useState<VramInfo | null>(null);
   // Ollama's own token counts from the last completed reply in each
   // conversation — what the model actually saw, as opposed to what we sent it.
   // `messageCount` records how much of the transcript those counts covered, so
@@ -392,11 +397,18 @@ export default function App() {
   // from the model's own limit against a KV budget; a pinned number is still
   // clamped to what the model declares, since asking beyond that does nothing.
   const activeContextInfo = activeBuddy ? contextInfo[activeBuddy] ?? null : null;
+  // The weights share the pool with the KV cache, so a 7B leaves far less room
+  // for context than a 3B on the same card. `sizeGb` is the download size,
+  // which is what gets loaded.
+  const activeKvBudget = useMemo(
+    () => kvBudgetFromVram(vram, (activeBuddyObj?.sizeGb ?? 0) * 1e9),
+    [vram, activeBuddyObj?.sizeGb],
+  );
   const activeContextLimit = useMemo(() => {
-    if (settings.contextSize === "auto") return chooseContextSize(activeContextInfo);
+    if (settings.contextSize === "auto") return chooseContextSize(activeContextInfo, activeKvBudget);
     if (!activeContextInfo) return settings.contextSize;
     return Math.min(settings.contextSize, activeContextInfo.maxContext);
-  }, [settings.contextSize, activeContextInfo]);
+  }, [settings.contextSize, activeContextInfo, activeKvBudget]);
 
   // Exact where Ollama has told us, estimated only for what it has not seen yet.
   //
@@ -529,6 +541,10 @@ export default function App() {
   // model name because it cannot change without the model itself changing, and
   // a null result is cached too so a model whose metadata lacks these fields is
   // not re-fetched on every switch.
+  useEffect(() => {
+    void getVramInfo().then(setVram);
+  }, []);
+
   useEffect(() => {
     if (!activeBuddy || activeBuddy in contextInfo) return;
     let cancelled = false;
@@ -1500,21 +1516,32 @@ export default function App() {
                   }))}
                 >
                   <option value="auto">
-                    Auto — as much as fits comfortably{activeContextInfo ? ` (${formatContextSize(chooseContextSize(activeContextInfo))} for ${activeBuddyObj?.displayName ?? "this model"})` : ""}
+                    Auto — as much as fits comfortably{activeContextInfo ? ` (${formatContextSize(chooseContextSize(activeContextInfo, activeKvBudget))} for ${activeBuddyObj?.displayName ?? "this model"})` : ""}
                   </option>
-                  {CONTEXT_STEPS.map((size) => (
-                    <option key={size} value={size}>
-                      {formatContextSize(size)} tokens
-                      {activeContextInfo ? ` — about ${formatGib(kvCacheBytes(activeContextInfo, size))} of video memory` : ""}
-                      {activeContextInfo && size > activeContextInfo.maxContext ? " (beyond this model's limit)" : ""}
-                    </option>
-                  ))}
+                  {CONTEXT_STEPS.map((size) => {
+                    const cost = activeContextInfo ? kvCacheBytes(activeContextInfo, size) : 0;
+                    const overModel = !!activeContextInfo && size > activeContextInfo.maxContext;
+                    // Beyond what the card can hold, Ollama moves layers onto
+                    // the CPU — it still works, just slowly, so say so rather
+                    // than hiding the option.
+                    const overCard = activeKvBudget !== null && cost > activeKvBudget;
+                    return (
+                      <option key={size} value={size}>
+                        {formatContextSize(size)} tokens
+                        {cost > 0 ? ` — about ${formatGib(cost)} of video memory` : ""}
+                        {overModel ? " (beyond this model's limit)" : overCard ? " (too big for your card — would run on the CPU)" : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </label>
               <p className="rm-settings-hint">
                 A bigger window remembers more of the conversation but reserves more video memory and
                 makes each reply take longer to start. Past the limit the oldest messages drop out of
                 the model's memory, even though they stay on screen.
+                {vram
+                  ? ` Auto is sizing against the ${formatGib(vram.totalBytes)} ${vram.unified ? "of shared memory" : "of video memory"} it found on this machine.`
+                  : " Auto is using a conservative default — no graphics card could be read on this machine."}
               </p>
 
               {/* ── System Monitor ── */}

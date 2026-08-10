@@ -1,5 +1,5 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
-import type { ModelContextInfo } from "./contextWindow";
+import type { ModelContextInfo, VramInfo } from "./contextWindow";
 
 export type OllamaModel = {
   name: string;
@@ -52,6 +52,19 @@ export async function getVersion(baseUrl: string): Promise<string | null> {
 export async function listModels(baseUrl: string): Promise<OllamaModel[]> {
   const models = await invoke<OllamaModel[]>("list_ollama_models", { baseUrl });
   return models.filter((m) => isValidModelName(m.name));
+}
+
+/**
+ * What the machine has to work with, or null when it cannot be determined — no
+ * NVIDIA tools and not a Mac. The caller keeps its fixed budget rather than
+ * sizing a KV cache against a guess.
+ */
+export async function getVramInfo(): Promise<VramInfo | null> {
+  try {
+    return await invoke<VramInfo | null>("get_vram_info");
+  } catch {
+    return null;
+  }
 }
 
 /** Conversation history, read from the app data directory. */

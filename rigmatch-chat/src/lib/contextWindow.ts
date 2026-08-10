@@ -47,6 +47,42 @@ export const DEFAULT_KV_BUDGET_BYTES = 2 * 1024 * 1024 * 1024;
  */
 export const AUTO_CONTEXT_CEILING = 32768;
 
+export type VramInfo = {
+  totalBytes: number;
+  /** System RAM shared with the CPU (Apple Silicon) rather than a card's own. */
+  unified: boolean;
+};
+
+/**
+ * Share of the pool the model and its KV cache may occupy between them.
+ *
+ * Going over does not fail, it spills layers to the CPU and the model crawls —
+ * the worst outcome for a product about speed, and invisible unless you are
+ * watching. A dedicated card only has to leave room for the desktop; unified
+ * memory is also running the operating system and everything else, so it keeps
+ * considerably more back.
+ */
+export const VRAM_USABLE_SHARE = 0.7;
+export const UNIFIED_USABLE_SHARE = 0.5;
+
+/**
+ * KV budget for a model on this machine, or null when the hardware is unknown
+ * and the caller should keep its fixed default.
+ *
+ * Weights are subtracted because they are in the same pool: a 7B model leaves
+ * far less room for context than a 3B on the same card, which a budget
+ * expressed as a flat number of bytes cannot express.
+ */
+export function kvBudgetFromVram(vram: VramInfo | null, modelWeightBytes: number): number | null {
+  if (!vram || !Number.isFinite(vram.totalBytes) || vram.totalBytes <= 0) return null;
+  const share = vram.unified ? UNIFIED_USABLE_SHARE : VRAM_USABLE_SHARE;
+  const usable = vram.totalBytes * share;
+  const weights = Number.isFinite(modelWeightBytes) && modelWeightBytes > 0 ? modelWeightBytes : 0;
+  // A model whose weights already exceed the share gets nothing extra — the
+  // floor in chooseContextSize keeps it at Ollama's default rather than below.
+  return Math.max(0, usable - weights);
+}
+
 /** Sizes offered in Settings. Powers of two because llama.cpp likes them. */
 export const CONTEXT_STEPS = [4096, 8192, 16384, 32768, 65536, 131072] as const;
 
@@ -75,9 +111,17 @@ export function kvCacheBytes(info: ModelContextInfo, contextSize: number): numbe
  */
 export function chooseContextSize(
   info: ModelContextInfo | null,
-  budgetBytes: number = DEFAULT_KV_BUDGET_BYTES,
+  // Accepts null so the result of kvBudgetFromVram can be passed straight
+  // through. A default parameter only fills in for undefined, and a null
+  // budget compares as zero — every size would look unaffordable and every
+  // model would silently drop back to 4096, which is the bug this all exists
+  // to fix.
+  budgetBytes?: number | null,
   ceiling: number = AUTO_CONTEXT_CEILING,
 ): number {
+  const budget = typeof budgetBytes === "number" && Number.isFinite(budgetBytes)
+    ? budgetBytes
+    : DEFAULT_KV_BUDGET_BYTES;
   if (!info || !Number.isFinite(info.maxContext) || info.maxContext <= 0) {
     return OLLAMA_DEFAULT_CONTEXT;
   }
@@ -91,7 +135,7 @@ export function chooseContextSize(
     if (step > limit) break;
     // Unknown or nonsensical metadata: fall back to the size alone rather than
     // dividing by zero and accepting everything.
-    if (perToken > 0 && step * perToken > budgetBytes) break;
+    if (perToken > 0 && step * perToken > budget) break;
     best = step;
   }
   return best;

@@ -358,6 +358,73 @@ fn write_conversations(app: tauri::AppHandle, contents: String) -> Result<(), St
     write_json_file(&conversations_path(&app)?, &contents)
 }
 
+// ── Video memory ────────────────────────────────────────────────────────────
+//
+// Context size was chosen against a fixed 2 GiB budget because nothing here
+// knew what card was fitted. That is safe on a small card and needlessly
+// miserly on a large one: an RTX 4070 holds llama3.2:3b at 32K entirely on the
+// GPU (measured at 5.98 GB) while the fixed budget stopped it at 16K.
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct VramInfo {
+    pub total_bytes: u64,
+    /// True when the pool is system RAM shared with the CPU (Apple Silicon).
+    /// The whole thing is never safely available, so the caller reserves more.
+    pub unified: bool,
+}
+
+/// Parse `nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits`.
+///
+/// Real captured output on this machine, both forms — `nounits` is not honoured
+/// by every driver version, so the unit-bearing one has to parse too:
+///   "12282"
+///   "12282 MiB"
+fn parse_nvidia_total_mb(output: &str) -> Option<u64> {
+    output
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with('#'))
+        .and_then(|line| line.split_whitespace().next())
+        .and_then(|number| number.trim_end_matches(',').parse::<u64>().ok())
+        .filter(|mb| *mb > 0)
+}
+
+fn nvidia_total_bytes() -> Option<u64> {
+    let mut command = std::process::Command::new("nvidia-smi");
+    command.args(["--query-gpu=memory.total", "--format=csv,noheader,nounits"]);
+    // Without this the probe flashes a console window on Windows every launch.
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let output = command.output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_nvidia_total_mb(&String::from_utf8_lossy(&output.stdout)).map(|mb| mb * 1024 * 1024)
+}
+
+#[tauri::command]
+fn get_vram_info(state: tauri::State<SysInfoState>) -> Option<VramInfo> {
+    // Apple Silicon has no separate pool to query — the GPU draws on system
+    // RAM, so that is the honest number, flagged so the caller reserves more.
+    #[cfg(target_os = "macos")]
+    {
+        let mut sys = state.0.lock().ok()?;
+        sys.refresh_memory();
+        return Some(VramInfo { total_bytes: sys.total_memory(), unified: true });
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = &state;
+        // No NVIDIA card, or no driver tools: the caller keeps its fixed budget
+        // rather than guessing at a number it cannot check.
+        nvidia_total_bytes().map(|total_bytes| VramInfo { total_bytes, unified: false })
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemStats {
@@ -462,6 +529,7 @@ pub fn run() {
             get_system_stats,
             get_rig_scores,
             get_ollama_vram,
+            get_vram_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running RigMatch Chat");
@@ -628,5 +696,31 @@ mod tests {
         }
         streams.0.lock().unwrap().remove("live");
         assert!(streams.0.lock().unwrap().is_empty(), "finished streams must not accumulate");
+    }
+
+    #[test]
+    fn nvidia_total_parses_both_output_forms() {
+        // Captured from the RTX 4070 on this machine. `nounits` is not honoured
+        // by every driver version, so the unit-bearing form has to parse too.
+        assert_eq!(parse_nvidia_total_mb("12282"), Some(12282));
+        assert_eq!(parse_nvidia_total_mb("12282 MiB"), Some(12282));
+        assert_eq!(parse_nvidia_total_mb("12282 MiB
+"), Some(12282));
+        // Multi-GPU: the first card is the one Ollama uses by default.
+        assert_eq!(parse_nvidia_total_mb("12282
+24564"), Some(12282));
+    }
+
+    #[test]
+    fn nvidia_total_refuses_anything_it_cannot_read() {
+        // Better to keep the fixed budget than to size a KV cache against a
+        // number that came out of an error message.
+        assert_eq!(parse_nvidia_total_mb(""), None);
+        assert_eq!(parse_nvidia_total_mb("
+
+"), None);
+        assert_eq!(parse_nvidia_total_mb("NVIDIA-SMI has failed"), None);
+        assert_eq!(parse_nvidia_total_mb("[N/A]"), None);
+        assert_eq!(parse_nvidia_total_mb("0"), None, "a zero total would divide badly");
     }
 }
