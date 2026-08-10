@@ -1,17 +1,14 @@
 /**
- * Where conversations live, and how often they get written.
+ * Conversations: what they are, and how they survive a version change.
  *
- * Two things were wrong. Conversations sat in localStorage, which is capped
- * around 5 MB — past that `setItem` throws, and the write sat unguarded in an
- * effect that runs on mount, so a full history tripped the error boundary on
- * startup and kept doing it on every launch. And the effect was keyed on the
- * message map, which changes on every streamed token, so the *entire* store was
- * re-serialized and written once per token: measured at 4.3 ms and 5 MB per
- * token on a heavy history, or about 2.6 seconds of blocked main thread and
- * 3 GB written for a single 600-token reply.
+ * They used to be a map from `model::personality` to a list of messages, which
+ * meant exactly one thread per model — no second subject, no title, no way to
+ * start over without losing what came before. This makes a conversation a thing
+ * with an identity, so a model can hold as many as you like.
  *
- * So: a file instead of localStorage, and writes coalesced instead of one per
- * token.
+ * The v1 shape is still out there in every existing install, so reading it and
+ * carrying it forward matters more than the new shape being tidy. Nothing here
+ * throws: a store that cannot be read must never cost someone their history.
  */
 
 export type StoredMessage = {
@@ -21,27 +18,142 @@ export type StoredMessage = {
   ts: number;
 };
 
-export type ConversationMap = Record<string, StoredMessage[]>;
+export type Conversation = {
+  id: string;
+  /** The Ollama model this thread talks to. */
+  modelName: string;
+  /** Which personality was active. Kept per thread so switching does not
+      silently swap you to a different, apparently empty conversation. */
+  personalityId: string;
+  title: string;
+  /** False once renamed by hand, so an auto title never overwrites a real one. */
+  titleIsAuto: boolean;
+  createdAt: number;
+  updatedAt: number;
+  messages: StoredMessage[];
+};
 
 /**
- * Bumped when the on-disk shape changes. A file from a newer version is left
- * alone rather than being read as if it were this one — better to start empty
- * than to quietly drop conversations a later build wrote.
+ * 1 — `{ "model::personality": Message[] }`, one thread per model.
+ * 2 — conversations with identity, titles, and many per model.
  */
-export const STORE_VERSION = 1;
+export const STORE_VERSION = 2;
 
-type StoreFile = { version: number; conversations: ConversationMap };
+export const NEW_CHAT_TITLE = "New chat";
 
-export function serializeStore(conversations: ConversationMap): string {
-  return JSON.stringify({ version: STORE_VERSION, conversations } satisfies StoreFile);
+/** Longest auto title before it gets cut at a word boundary. */
+const TITLE_MAX = 44;
+
+export function serializeStore(conversations: Conversation[]): string {
+  return JSON.stringify({ version: STORE_VERSION, conversations });
 }
 
 /**
- * Read a store file. Anything unreadable, from any version but this one, or not
- * shaped like a conversation map yields null — the caller keeps what it has
- * rather than replacing it with nonsense.
+ * A conversation's name, taken from the first thing asked in it.
+ *
+ * The opening question is what people remember a thread by — the same reason
+ * every other chat app does this — and it costs nothing, unlike asking a model
+ * to name it.
  */
-export function parseStore(raw: string | null): ConversationMap | null {
+export function deriveTitle(messages: StoredMessage[]): string {
+  // The first user message with something in it, rather than simply the first:
+  // a blank one should not leave the thread called "New chat" forever.
+  const line = messages
+    .filter((m) => m.role === "user")
+    .flatMap((m) => m.content.split("\n"))
+    .map((l) => l.trim())
+    .find(Boolean);
+  if (!line) return NEW_CHAT_TITLE;
+  if (line.length <= TITLE_MAX) return line;
+  // Cut at a word boundary when there is one near the end, so titles do not
+  // break mid-word.
+  const clipped = line.slice(0, TITLE_MAX);
+  const lastSpace = clipped.lastIndexOf(" ");
+  return `${(lastSpace > TITLE_MAX * 0.6 ? clipped.slice(0, lastSpace) : clipped).trimEnd()}…`;
+}
+
+function cleanMessages(value: unknown): StoredMessage[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter(
+    (m): m is StoredMessage =>
+      !!m && typeof m === "object"
+      && typeof (m as StoredMessage).content === "string"
+      && ((m as StoredMessage).role === "user" || (m as StoredMessage).role === "assistant"),
+  );
+}
+
+/**
+ * Turn the v1 map into conversations.
+ *
+ * Keys were `model::personalityId`, or a bare model name from before
+ * personalities existed. Both have to survive: a bare key is somebody's whole
+ * chat history with that model.
+ *
+ * `makeId` and `now` are injected so a migration is reproducible in a test
+ * rather than depending on the clock.
+ */
+export function migrateV1(
+  map: Record<string, unknown>,
+  makeId: (index: number) => string,
+  now: number,
+  defaultPersonalityId: string,
+): Conversation[] {
+  const conversations: Conversation[] = [];
+  for (const [key, rawMessages] of Object.entries(map)) {
+    const messages = cleanMessages(rawMessages);
+    // An empty thread carried nothing worth keeping and would show up as an
+    // untitled row in the sidebar.
+    if (!messages || messages.length === 0) continue;
+
+    const separator = key.lastIndexOf("::");
+    const modelName = separator === -1 ? key : key.slice(0, separator);
+    const personalityId = separator === -1 ? defaultPersonalityId : key.slice(separator + 2);
+    if (!modelName) continue;
+
+    const lastTs = messages[messages.length - 1]?.ts;
+    conversations.push({
+      id: makeId(conversations.length),
+      modelName,
+      personalityId: personalityId || defaultPersonalityId,
+      title: deriveTitle(messages),
+      titleIsAuto: true,
+      createdAt: messages[0]?.ts ?? now,
+      updatedAt: typeof lastTs === "number" ? lastTs : now,
+      messages,
+    });
+  }
+  return conversations;
+}
+
+function cleanConversation(value: unknown, index: number, makeId: (i: number) => string, now: number): Conversation | null {
+  if (!value || typeof value !== "object") return null;
+  const c = value as Partial<Conversation>;
+  const messages = cleanMessages(c.messages);
+  if (!messages) return null;
+  if (typeof c.modelName !== "string" || !c.modelName) return null;
+  return {
+    id: typeof c.id === "string" && c.id ? c.id : makeId(index),
+    modelName: c.modelName,
+    personalityId: typeof c.personalityId === "string" ? c.personalityId : "",
+    title: typeof c.title === "string" && c.title ? c.title : deriveTitle(messages),
+    titleIsAuto: c.titleIsAuto !== false,
+    createdAt: typeof c.createdAt === "number" ? c.createdAt : now,
+    updatedAt: typeof c.updatedAt === "number" ? c.updatedAt : now,
+    messages,
+  };
+}
+
+/**
+ * Read a store file of any version this build understands.
+ *
+ * A file from a *newer* version is refused rather than half-read — better to
+ * show nothing than to drop conversations a later build wrote and then save the
+ * damage back over them.
+ */
+export function parseStore(
+  raw: string | null,
+  options: { makeId: (index: number) => string; now: number; defaultPersonalityId: string },
+): Conversation[] | null {
   if (!raw) return null;
   let parsed: unknown;
   try {
@@ -50,121 +162,64 @@ export function parseStore(raw: string | null): ConversationMap | null {
     return null;
   }
   if (!parsed || typeof parsed !== "object") return null;
-  const file = parsed as Partial<StoreFile>;
-  if (file.version !== STORE_VERSION) return null;
-  if (!file.conversations || typeof file.conversations !== "object") return null;
+  const file = parsed as { version?: unknown; conversations?: unknown };
 
-  // Drop anything that is not a list of messages rather than handing the UI a
-  // value it will crash on.
-  const clean: ConversationMap = {};
-  for (const [key, messages] of Object.entries(file.conversations)) {
-    if (!Array.isArray(messages)) continue;
-    clean[key] = messages.filter(
-      (m): m is StoredMessage =>
-        !!m && typeof m === "object"
-        && typeof (m as StoredMessage).content === "string"
-        && ((m as StoredMessage).role === "user" || (m as StoredMessage).role === "assistant"),
+  if (file.version === 1) {
+    if (!file.conversations || typeof file.conversations !== "object") return null;
+    return migrateV1(
+      file.conversations as Record<string, unknown>,
+      options.makeId,
+      options.now,
+      options.defaultPersonalityId,
     );
   }
-  return clean;
+
+  if (file.version === STORE_VERSION) {
+    if (!Array.isArray(file.conversations)) return null;
+    return file.conversations
+      .map((c, i) => cleanConversation(c, i, options.makeId, options.now))
+      .filter((c): c is Conversation => c !== null);
+  }
+
+  return null;
 }
 
-export type WriteScheduler<T> = {
-  /** Note new state to be written. Replaces any pending value. */
-  schedule: (value: T) => void;
-  /** Write anything pending immediately. Resolves once the write settles. */
-  flush: () => Promise<void>;
-  /** Drop anything pending and stop the timers. */
-  cancel: () => void;
-};
+/** Newest first — the order the sidebar lists them in. */
+export function sortConversations(conversations: Conversation[]): Conversation[] {
+  return [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export function conversationsForModel(conversations: Conversation[], modelName: string): Conversation[] {
+  return sortConversations(conversations.filter((c) => c.modelName === modelName));
+}
 
 /**
- * Coalesces rapid updates into occasional writes.
- *
- * `delayMs` is the quiet period after the last change. `maxDelayMs` bounds how
- * long a continuous stream of changes can defer a write — without it a long
- * reply, which updates on every token, would never reach a quiet moment and
- * nothing would be saved until it finished.
- *
- * Writes never overlap and never reject: a failing write is reported through
- * `onError` and the next attempt carries the newest state anyway. Persistence
- * failing must not take the app down, which is exactly what it used to do.
+ * Fold a new or changed message list back into a conversation, refreshing the
+ * title while it is still automatic and always the modified time.
  */
-export function createWriteScheduler<T>(options: {
-  write: (value: T) => Promise<void>;
-  delayMs?: number;
-  maxDelayMs?: number;
-  onError?: (error: unknown) => void;
-  setTimer?: (fn: () => void, ms: number) => unknown;
-  clearTimer?: (handle: unknown) => void;
-  now?: () => number;
-}): WriteScheduler<T> {
-  const {
-    write,
-    delayMs = 800,
-    maxDelayMs = 4000,
-    onError,
-    setTimer = ((fn: () => void, ms: number) => setTimeout(fn, ms)) as (fn: () => void, ms: number) => unknown,
-    clearTimer = ((handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>)),
-    now = () => Date.now(),
-  } = options;
-
-  let pending: { value: T } | null = null;
-  let timer: unknown = null;
-  let firstPendingAt = 0;
-  let inFlight: Promise<void> | null = null;
-
-  const stopTimer = () => {
-    if (timer !== null) {
-      clearTimer(timer);
-      timer = null;
-    }
-  };
-
-  const runWrite = async (): Promise<void> => {
-    // One write at a time; whatever arrives meanwhile goes in the next one.
-    if (inFlight) return inFlight;
-    if (!pending) return;
-    const { value } = pending;
-    pending = null;
-    stopTimer();
-    inFlight = (async () => {
-      try {
-        await write(value);
-      } catch (error) {
-        onError?.(error);
-      } finally {
-        inFlight = null;
-      }
-    })();
-    await inFlight;
-    // Changes that landed during the write still need saving.
-    if (pending) await runWrite();
-  };
-
-  const arm = () => {
-    stopTimer();
-    const waited = now() - firstPendingAt;
-    const wait = Math.max(0, Math.min(delayMs, maxDelayMs - waited));
-    timer = setTimer(() => { void runWrite(); }, wait);
-  };
-
+export function withMessages(conversation: Conversation, messages: StoredMessage[], now: number): Conversation {
   return {
-    schedule(value: T) {
-      if (!pending) firstPendingAt = now();
-      pending = { value };
-      arm();
-    },
-    async flush() {
-      stopTimer();
-      await runWrite();
-      // A write that was already running may have started before the newest
-      // value arrived, so make sure that one lands too.
-      if (pending) await runWrite();
-    },
-    cancel() {
-      pending = null;
-      stopTimer();
-    },
+    ...conversation,
+    messages,
+    title: conversation.titleIsAuto ? deriveTitle(messages) : conversation.title,
+    updatedAt: now,
+  };
+}
+
+export function createConversation(options: {
+  id: string;
+  modelName: string;
+  personalityId: string;
+  now: number;
+}): Conversation {
+  return {
+    id: options.id,
+    modelName: options.modelName,
+    personalityId: options.personalityId,
+    title: NEW_CHAT_TITLE,
+    titleIsAuto: true,
+    createdAt: options.now,
+    updatedAt: options.now,
+    messages: [],
   };
 }

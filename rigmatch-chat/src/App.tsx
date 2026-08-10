@@ -4,7 +4,17 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, readConversationsFile, writeConversationsFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
-import { createWriteScheduler, parseStore, serializeStore, type ConversationMap } from "./lib/conversationStore";
+import { createWriteScheduler } from "./lib/writeScheduler";
+import {
+  conversationsForModel,
+  createConversation,
+  deriveTitle,
+  migrateV1,
+  parseStore,
+  serializeStore,
+  withMessages,
+  type Conversation,
+} from "./lib/conversationStore";
 import {
   DEFAULT_PERSONALITY_ID,
   loadSettings,
@@ -71,6 +81,9 @@ type PersonalityDraft = {
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
+/** Stable empty list, so "no conversation open" does not remount the transcript. */
+const EMPTY_MESSAGES: AppMessage[] = [];
+
 const CONVERSATIONS_KEY = "rigmatch-chat:conversations:v1";
 const RIG_SCORES_KEY = "rigmatch-chat:rig-scores:v1";
 
@@ -84,30 +97,41 @@ type BridgePayload = { scores: Record<string, ModelScore>; chosen: string | null
  * the write fails, the history stays where it was rather than being deleted
  * from one place before it exists in the other.
  */
-async function loadConversations(): Promise<Record<string, AppMessage[]>> {
+async function loadConversations(): Promise<Conversation[]> {
+  const options = {
+    makeId: (index: number) => `${Date.now().toString(36)}-migrated-${index}`,
+    now: Date.now(),
+    defaultPersonalityId: DEFAULT_PERSONALITY_ID,
+  };
+
   try {
-    const fromFile = parseStore(await readConversationsFile());
-    if (fromFile) return fromFile as Record<string, AppMessage[]>;
+    // Handles both the v1 map and the v2 list, so a file written by any
+    // previous build is carried forward rather than replaced.
+    const fromFile = parseStore(await readConversationsFile(), options);
+    if (fromFile) return fromFile;
   } catch {
     // Fall through to the legacy store; an unreadable file must not lose it.
   }
 
-  let legacy: Record<string, AppMessage[]> = {};
+  // Older still: the original localStorage map, from before history moved to
+  // a file at all.
+  let migrated: Conversation[];
   try {
-    const raw = localStorage.getItem(CONVERSATIONS_KEY);
-    legacy = raw ? (JSON.parse(raw) as Record<string, AppMessage[]>) : {};
+    const legacyRaw = localStorage.getItem(CONVERSATIONS_KEY);
+    if (!legacyRaw) return [];
+    migrated = migrateV1(JSON.parse(legacyRaw) as Record<string, unknown>, options.makeId, options.now, DEFAULT_PERSONALITY_ID);
   } catch {
-    return {};
+    return [];
   }
-  if (Object.keys(legacy).length === 0) return legacy;
+  if (migrated.length === 0) return [];
 
   try {
-    await writeConversationsFile(serializeStore(legacy));
+    await writeConversationsFile(serializeStore(migrated));
     localStorage.removeItem(CONVERSATIONS_KEY);
   } catch {
     // Keep the legacy copy and try again next launch.
   }
-  return legacy;
+  return migrated;
 }
 
 function loadCachedBridge(): BridgePayload {
@@ -189,6 +213,18 @@ function modelToBuddy(model: OllamaModel): Buddy {
 
 function genId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/** Relative for anything recent, then a date — how you look for an old thread. */
+function formatWhen(ts: number): string {
+  const minutes = Math.floor((Date.now() - ts) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function getResponseLabel(score: ModelScore | undefined, sizeGb: number): string {
@@ -314,7 +350,12 @@ export default function App() {
   // Starts empty and fills in from disk. `historyLoaded` gates every write —
   // without it the first save would fire with the empty initial state and
   // overwrite the file before the load that was about to populate it landed.
-  const [messagesByModel, setMessagesByModel] = useState<Record<string, AppMessage[]>>({});
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  /** Models whose thread list is unfolded in the sidebar. */
+  const [expandedModels, setExpandedModels] = useState<Set<string>>(() => new Set());
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Conversation | null>(null);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
   const [typingModel, setTypingModel] = useState<string | null>(null);
@@ -375,24 +416,35 @@ export default function App() {
   }, [buddies, settings.hiddenModels, modelRankings, chosenModel]);
 
   const activeBuddyObj = visibleBuddies.find((b) => b.modelName === activeBuddy) ?? null;
+  // The open thread's own personality wins, falling back to the app default for
+  // a model with nothing open yet. A thread started as Creative Copilot stays
+  // that way when you come back to it a week later.
+  const conversationPersonalityId = conversations.find((c) => c.id === activeConversationId)?.personalityId;
   const activePersonality = useMemo(
     () =>
-      settings.personalityProfiles.find((profile) => profile.id === settings.activePersonalityId)
+      settings.personalityProfiles.find((profile) => profile.id === (conversationPersonalityId ?? settings.activePersonalityId))
       ?? settings.personalityProfiles.find((profile) => profile.id === DEFAULT_PERSONALITY_ID)
       ?? settings.personalityProfiles[0],
-    [settings.activePersonalityId, settings.personalityProfiles],
+    [conversationPersonalityId, settings.activePersonalityId, settings.personalityProfiles],
   );
-  const activeConversationKey = activeBuddy
-    ? `${activeBuddy}::${activePersonality?.id ?? DEFAULT_PERSONALITY_ID}`
-    : null;
-  const activeMessages = useMemo(() => {
-    if (!activeConversationKey) return [];
-    if (messagesByModel[activeConversationKey]) return messagesByModel[activeConversationKey];
-    if (activePersonality?.id === DEFAULT_PERSONALITY_ID && activeBuddy) {
-      return messagesByModel[activeBuddy] ?? [];
-    }
-    return [];
-  }, [activeBuddy, activeConversationKey, activePersonality?.id, messagesByModel]);
+  /**
+   * The thread on screen: the one explicitly chosen, otherwise the model's most
+   * recent.
+   *
+   * Derived rather than assigned by an effect, because two things arrive
+   * independently — the model comes from the refresh (top pick, or best score)
+   * and the history comes from disk — so neither could select a thread on its
+   * own without a round of cascading renders. The fallback also covers deleting
+   * the open thread: the id stops matching and the next one down takes over,
+   * with nothing left holding a reference to something that no longer exists.
+   */
+  const activeConversation = useMemo(() => {
+    const chosen = conversations.find((c) => c.id === activeConversationId);
+    if (chosen) return chosen;
+    return activeBuddy ? conversationsForModel(conversations, activeBuddy)[0] ?? null : null;
+  }, [conversations, activeConversationId, activeBuddy]);
+  const activeConversationKey = activeConversation?.id ?? null;
+  const activeMessages = activeConversation?.messages ?? EMPTY_MESSAGES;
   // How much memory the active model is actually being given. "auto" sizes it
   // from the model's own limit against a KV budget; a pinned number is still
   // clamped to what the model declares, since asking beyond that does nothing.
@@ -471,7 +523,12 @@ export default function App() {
         const preferred = [bridge.chosen, topFromScores].find(
           (m): m is string => !!m && modelNames.includes(m),
         );
-        setActiveBuddy(preferred ?? chatModels[0].name);
+        const opening = preferred ?? chatModels[0].name;
+        setActiveBuddy(opening);
+        // Unfold it so the thread being shown is visible in the list. Done here
+        // rather than in an effect: this is already a callback, so it costs no
+        // extra render.
+        setExpandedModels((prev) => (prev.has(opening) ? prev : new Set(prev).add(opening)));
       }
     } catch {
       setBuddies([]);
@@ -545,6 +602,7 @@ export default function App() {
     void getVramInfo().then(setVram);
   }, []);
 
+
   useEffect(() => {
     if (!activeBuddy || activeBuddy in contextInfo) return;
     let cancelled = false;
@@ -560,7 +618,7 @@ export default function App() {
     let cancelled = false;
     void loadConversations().then((loaded) => {
       if (cancelled) return;
-      setMessagesByModel(loaded);
+      setConversations(loaded);
       setHistoryLoaded(true);
     });
     return () => { cancelled = true; };
@@ -570,9 +628,9 @@ export default function App() {
   // this turns a burst of them into an occasional write, and keeps a failure
   // from reaching React — an unguarded write here used to trip the error
   // boundary on mount once localStorage was full, on every launch.
-  const writerRef = useRef<ReturnType<typeof createWriteScheduler<ConversationMap>> | null>(null);
-  if (!writerRef.current) {
-    writerRef.current = createWriteScheduler<ConversationMap>({
+  const writerRef = useRef<ReturnType<typeof createWriteScheduler<Conversation[]>> | null>(null);
+  if (writerRef.current == null) {
+    writerRef.current = createWriteScheduler<Conversation[]>({
       write: async (value) => {
         await writeConversationsFile(serializeStore(value));
         setPersistError(null);
@@ -583,8 +641,8 @@ export default function App() {
 
   useEffect(() => {
     if (!historyLoaded) return;
-    writerRef.current?.schedule(messagesByModel as ConversationMap);
-  }, [messagesByModel, historyLoaded]);
+    writerRef.current?.schedule(conversations);
+  }, [conversations, historyLoaded]);
 
   // The last few hundred milliseconds of a reply would otherwise be lost if the
   // window closed inside the coalescing window.
@@ -617,14 +675,29 @@ export default function App() {
   // ── Send message ──────────────────────────────────────────────────────────
 
   const sendMessage = useCallback(async () => {
-    if (!activeBuddy || !activeConversationKey || !draft.trim() || typingModel) return;
+    if (!activeBuddy || !draft.trim() || typingModel) return;
+
+    // Typing into a model that has no thread open starts one, rather than
+    // refusing — the empty state is a chat waiting to happen, not an error.
+    const target = activeConversation
+      ?? createConversation({
+        id: genId(),
+        modelName: activeBuddy,
+        personalityId: activePersonality?.id ?? DEFAULT_PERSONALITY_ID,
+        now: Date.now(),
+      });
+    const conversationId = target.id;
 
     const userMsg: AppMessage = { id: genId(), role: "user", content: draft.trim(), ts: Date.now() };
-    const history = messagesByModel[activeConversationKey]
-      ?? (activePersonality?.id === DEFAULT_PERSONALITY_ID ? (messagesByModel[activeBuddy] ?? []) : []);
-    const updatedHistory = [...history, userMsg];
+    const updatedHistory = [...target.messages, userMsg];
 
-    setMessagesByModel((prev) => ({ ...prev, [activeConversationKey]: updatedHistory }));
+    setConversations((prev) => {
+      const now = Date.now();
+      const existing = prev.some((c) => c.id === conversationId);
+      const next = existing ? prev : [...prev, target];
+      return next.map((c) => (c.id === conversationId ? withMessages(c, updatedHistory, now) : c));
+    });
+    setActiveConversationId(conversationId);
     setDraft("");
     setTypingModel(activeBuddy);
 
@@ -655,20 +728,16 @@ export default function App() {
         ollamaHistory,
         (token) => {
           accumulated += token;
-          setMessagesByModel((prev) => {
-            const msgs = prev[activeConversationKey] ?? [];
-            const last = msgs[msgs.length - 1];
-            if (last?.id === assistantId) {
-              return { ...prev, [activeConversationKey]: [...msgs.slice(0, -1), { ...last, content: accumulated }] };
-            }
-            return {
-              ...prev,
-              [activeConversationKey]: [
-                ...msgs,
-                { id: assistantId, role: "assistant", content: accumulated, ts: Date.now() },
-              ],
-            };
-          });
+          setConversations((prev) => prev.map((c) => {
+            if (c.id !== conversationId) return c;
+            const last = c.messages[c.messages.length - 1];
+            const messages = last?.id === assistantId
+              ? [...c.messages.slice(0, -1), { ...last, content: accumulated }]
+              : [...c.messages, { id: assistantId, role: "assistant" as const, content: accumulated, ts: Date.now() }];
+            // Not withMessages: the title is already settled by the user's
+            // message, and updatedAt would reshuffle the sidebar on every token.
+            return { ...c, messages };
+          }));
         },
         ctrl.signal,
         {
@@ -677,7 +746,7 @@ export default function App() {
             if (promptTokens <= 0) return;
             setTokenMarkByKey((prev) => ({
               ...prev,
-              [activeConversationKey]: {
+              [conversationId]: {
                 promptTokens,
                 evalTokens,
                 // The assistant message only exists if something was streamed.
@@ -689,18 +758,17 @@ export default function App() {
       );
     } catch (err) {
       if ((err as Error)?.name !== "AbortError") {
-        setMessagesByModel((prev) => ({
-          ...prev,
-          [activeConversationKey]: [
-            ...(prev[activeConversationKey] ?? []),
-            {
-              id: genId(),
-              role: "assistant",
-              content: "Something went wrong. Is Ollama still running?",
-              ts: Date.now(),
-            },
-          ],
-        }));
+        setConversations((prev) => prev.map((c) => (c.id === conversationId
+          ? {
+              ...c,
+              messages: [...c.messages, {
+                id: genId(),
+                role: "assistant" as const,
+                content: "Something went wrong. Is Ollama still running?",
+                ts: Date.now(),
+              }],
+            }
+          : c)));
       }
     } finally {
       setTypingModel(null);
@@ -712,10 +780,9 @@ export default function App() {
   }, [
     activeBuddy,
     activeContextLimit,
-    activeConversationKey,
+    activeConversation,
     activePersonality,
     draft,
-    messagesByModel,
     settings.ollamaUrl,
     settings.systemPrompt,
     typingModel,
@@ -792,13 +859,78 @@ export default function App() {
   };
 
   const clearAllHistory = () => {
-    setMessagesByModel({});
+    setConversations([]);
+    setActiveConversationId(null);
     setTokenMarkByKey({});
     // Straight to disk rather than through the coalescing window: "clear my
     // history" should not still be on disk if the app closes a moment later.
-    writerRef.current?.schedule({});
+    writerRef.current?.schedule([]);
     void writerRef.current?.flush();
   };
+
+  /**
+   * Open a model: unfold its threads and show the most recent one.
+   *
+   * Clicking the model a second time folds it away again, so a long model list
+   * stays scannable. Selecting a model with no history at all leaves nothing
+   * active — the empty state invites the first message, and sendMessage creates
+   * the thread then.
+   */
+  const openModel = useCallback((modelName: string) => {
+    setActiveBuddy(modelName);
+    setExpandedModels((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelName) && modelName === activeBuddy) next.delete(modelName);
+      else next.add(modelName);
+      return next;
+    });
+    setActiveConversationId((current) => {
+      const threads = conversationsForModel(conversations, modelName);
+      // Keep the current thread if it belongs to this model, so re-clicking to
+      // fold does not also jump you somewhere else.
+      if (threads.some((c) => c.id === current)) return current;
+      return threads[0]?.id ?? null;
+    });
+  }, [conversations, activeBuddy]);
+
+  /** Start a thread on a model. The sidebar unfolds so it is visible. */
+  const startNewConversation = useCallback((modelName: string) => {
+    // Reuse an empty thread on this model rather than stacking up identical
+    // "New chat" rows for someone who clicks it twice.
+    const spare = conversations.find((c) => c.modelName === modelName && c.messages.length === 0);
+    const conversation = spare ?? createConversation({
+      id: genId(),
+      modelName,
+      personalityId: settings.activePersonalityId,
+      now: Date.now(),
+    });
+    if (!spare) setConversations((prev) => [...prev, conversation]);
+    setActiveBuddy(modelName);
+    setActiveConversationId(conversation.id);
+    setExpandedModels((prev) => new Set(prev).add(modelName));
+    setDraft("");
+  }, [conversations, settings.activePersonalityId]);
+
+  const deleteConversation = useCallback((id: string) => {
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    setTokenMarkByKey(({ [id]: _removed, ...rest }) => rest);
+    // Land it immediately: a deletion still sitting in the coalescing window
+    // when the app closes would come back on the next launch.
+    setActiveConversationId((current) => (current === id ? null : current));
+    void writerRef.current?.flush();
+  }, []);
+
+  const renameConversation = useCallback((id: string, title: string) => {
+    const trimmed = title.trim();
+    setConversations((prev) => prev.map((c) => (c.id === id
+      // An empty box means "go back to naming it automatically", rather than
+      // leaving a blank row in the sidebar.
+      ? trimmed
+        ? { ...c, title: trimmed, titleIsAuto: false }
+        : { ...c, title: deriveTitle(c.messages), titleIsAuto: true }
+      : c)));
+    setRenamingId(null);
+  }, []);
 
   // Hide a model immediately (outside settings flow — from profile popup)
   const hideModelNow = (modelName: string) => {
@@ -816,9 +948,21 @@ export default function App() {
     setDraftSettings(nextSettings);
   };
 
+  /**
+   * The personality belongs to the conversation, not to the app.
+   *
+   * It used to be half of the storage key, so changing the dropdown swapped you
+   * to a different — usually empty — thread and your conversation looked
+   * deleted. Nothing on screen said so. Now it changes the open thread's
+   * personality in place and becomes the default for new ones.
+   */
   const selectPersonality = (id: string) => {
-    const next = { ...settings, activePersonalityId: id };
-    applyPersonalitySettings(next);
+    applyPersonalitySettings({ ...settings, activePersonalityId: id });
+    if (activeConversationId) {
+      setConversations((prev) => prev.map((c) => (c.id === activeConversationId
+        ? { ...c, personalityId: id }
+        : c)));
+    }
   };
 
   const openNewPersonality = () => {
@@ -930,6 +1074,36 @@ export default function App() {
         </div>
       </div>
 
+      {/* Deleting a conversation cannot be undone and there is no bin to
+          recover it from, so it gets asked about by name. */}
+      {confirmDelete && (
+        <div className="rm-modal-backdrop" role="presentation" onClick={() => setConfirmDelete(null)}>
+          <div
+            className="rm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Delete conversation"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <strong>Delete “{confirmDelete.title}”?</strong>
+            <p>
+              {confirmDelete.messages.length} message{confirmDelete.messages.length === 1 ? "" : "s"} with{" "}
+              {getDisplayName(confirmDelete.modelName)}. This cannot be undone.
+            </p>
+            <div className="rm-modal-actions">
+              <button type="button" className="rm-btn-sm" onClick={() => setConfirmDelete(null)}>Cancel</button>
+              <button
+                type="button"
+                className="rm-btn-sm rm-btn-danger"
+                onClick={() => { deleteConversation(confirmDelete.id); setConfirmDelete(null); }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Saving failing is worth saying out loud — the alternative is a chat
           that looks fine and is gone at the next launch. It used to crash the
           app instead, which at least you noticed. */}
@@ -999,22 +1173,23 @@ export default function App() {
             </div>
           )}
           {visibleBuddies.map((buddy) => {
-            const buddyConversationKey = `${buddy.modelName}::${activePersonality?.id ?? DEFAULT_PERSONALITY_ID}`;
-            const msgs = messagesByModel[buddyConversationKey]
-              ?? (activePersonality?.id === DEFAULT_PERSONALITY_ID ? (messagesByModel[buddy.modelName] ?? []) : []);
-            const lastMsg = msgs[msgs.length - 1];
+            const threads = conversationsForModel(conversations, buddy.modelName);
+            const lastMsg = threads[0]?.messages[threads[0].messages.length - 1];
             const isActive = buddy.modelName === activeBuddy;
             const isTyping = typingModel === buddy.modelName;
             const score = rigScores[buddy.modelName];
             const isChosen = buddy.modelName === chosenModel;
+            const isExpanded = expandedModels.has(buddy.modelName);
             return (
+              <div key={buddy.modelName} className="rm-buddy-group">
               <button
-                key={buddy.modelName}
                 type="button"
                 className={`rm-buddy-item${isActive ? " active" : ""}${isChosen ? " rm-buddy-chosen" : ""}`}
-                onClick={() => setActiveBuddy(buddy.modelName)}
+                aria-expanded={isExpanded}
+                onClick={() => openModel(buddy.modelName)}
                 onDoubleClick={() => setProfileModal(buddy)}
               >
+                <span className={`rm-buddy-caret${isExpanded ? " open" : ""}`} aria-hidden="true">▸</span>
                 <div className="rm-buddy-avatar-wrap">
                   <BuddyAvatar family={buddy.avatarFamily} isTyping={isTyping} />
                   <span className={`rm-online-dot${connectionStatus === "connected" ? " online" : ""}`} />
@@ -1050,7 +1225,64 @@ export default function App() {
                     </span>
                   )}
                 </div>
+                {threads.length > 1 && (
+                  <span className="rm-thread-count" title={`${threads.length} conversations`}>{threads.length}</span>
+                )}
               </button>
+
+              {/* The subjects under this model. Folded away until the model is
+                  opened, so a long list of models stays scannable. */}
+              {isExpanded && (
+                <div className="rm-thread-list">
+                  {threads.map((thread) => (
+                    <div
+                      key={thread.id}
+                      className={`rm-thread-item${thread.id === activeConversation?.id ? " active" : ""}`}
+                    >
+                      {renamingId === thread.id ? (
+                        <input
+                          className="rm-thread-rename"
+                          defaultValue={thread.title}
+                          autoFocus
+                          onBlur={(e) => renameConversation(thread.id, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") renameConversation(thread.id, e.currentTarget.value);
+                            if (e.key === "Escape") setRenamingId(null);
+                          }}
+                        />
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="rm-thread-open"
+                            onClick={() => { setActiveBuddy(buddy.modelName); setActiveConversationId(thread.id); }}
+                            onDoubleClick={() => setRenamingId(thread.id)}
+                            title={`${thread.title} — double-click to rename`}
+                          >
+                            <span className="rm-thread-title">{thread.title}</span>
+                            <span className="rm-thread-meta">{formatWhen(thread.updatedAt)}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="rm-thread-delete"
+                            title="Delete this conversation"
+                            aria-label={`Delete conversation ${thread.title}`}
+                            onClick={() => setConfirmDelete(thread)}
+                          >×</button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="rm-thread-new"
+                    onClick={() => startNewConversation(buddy.modelName)}
+                  >
+                    + New chat
+                  </button>
+                </div>
+              )}
+              </div>
             );
           })}
         </div>
@@ -1103,9 +1335,13 @@ export default function App() {
                 <em>
                   {typingModel === activeBuddy
                     ? "typing…"
-                    : connectionStatus === "connected"
-                      ? `using ${activeBuddyObj.displayName} through Ollama`
-                      : "Offline"}
+                    : connectionStatus !== "connected"
+                      ? "Offline"
+                      : activeConversation && activeConversation.messages.length > 0
+                        // Which subject you are in matters more than which model,
+                        // once a model can hold several.
+                        ? `${activeConversation.title} · ${activeBuddyObj.displayName}`
+                        : `using ${activeBuddyObj.displayName} through Ollama`}
                 </em>
               </div>
               <ContextMeter usage={contextUsage} info={activeContextInfo} limit={activeContextLimit} />
@@ -1119,7 +1355,7 @@ export default function App() {
                 <span>Personality</span>
                 <select
                   className="rm-personality-select"
-                  value={settings.activePersonalityId}
+                  value={activePersonality?.id ?? settings.activePersonalityId}
                   onChange={(event) => selectPersonality(event.target.value)}
                 >
                   {settings.personalityProfiles.map((profile) => (

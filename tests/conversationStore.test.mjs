@@ -2,201 +2,163 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  NEW_CHAT_TITLE,
   STORE_VERSION,
-  createWriteScheduler,
+  conversationsForModel,
+  createConversation,
+  deriveTitle,
+  migrateV1,
   parseStore,
   serializeStore,
+  sortConversations,
+  withMessages,
 } from '../rigmatch-chat/src/lib/conversationStore.ts';
 
-const settle = () => new Promise((resolve) => setImmediate(resolve));
+const OPTS = { makeId: (i) => `id-${i}`, now: 1_770_000_000_000, defaultPersonalityId: 'default' };
+const msg = (role, content, ts) => ({ id: `${role}-${ts}`, role, content, ts });
 
-/** Controllable time, so the coalescing can be asserted rather than slept on. */
-function fakeClock() {
-  let current = 0;
-  let timers = [];
-  return {
-    now: () => current,
-    setTimer(fn, ms) {
-      const handle = { fn, at: current + ms };
-      timers.push(handle);
-      return handle;
-    },
-    clearTimer(handle) {
-      timers = timers.filter((t) => t !== handle);
-    },
-    async advance(ms) {
-      const target = current + ms;
-      for (;;) {
-        const due = timers.filter((t) => t.at <= target).sort((a, b) => a.at - b.at)[0];
-        if (!due) break;
-        timers = timers.filter((t) => t !== due);
-        current = due.at;
-        due.fn();
-        await settle();
-      }
-      current = target;
-      await settle();
-    },
-  };
-}
+/** A v1 store of the shape every existing install has on disk. */
+const V1 = {
+  version: 1,
+  conversations: {
+    'llama3.2:3b::default': [
+      msg('user', 'How do I rotate a Postgres password without downtime?', 1000),
+      msg('assistant', 'Create the new role first…', 1100),
+    ],
+    'qwen2.5:7b::creative-copilot': [
+      msg('user', 'Give me ten names for a bread shop', 2000),
+      msg('assistant', 'Crust Fund, Loafers…', 2100),
+    ],
+    // Written before personalities existed — someone's entire history with
+    // this model lives under a bare key.
+    'mistral:7b': [
+      msg('user', 'Explain zero-copy networking', 3000),
+      msg('assistant', 'The kernel avoids…', 3100),
+    ],
+    'gemma3:4b::default': [],
+  },
+};
 
-function recorder({ fail = false } = {}) {
-  const writes = [];
-  const errors = [];
-  let concurrent = 0;
-  let maxConcurrent = 0;
-  return {
-    writes,
-    errors,
-    get maxConcurrent() { return maxConcurrent; },
-    onError: (e) => errors.push(e),
-    async write(value) {
-      concurrent += 1;
-      maxConcurrent = Math.max(maxConcurrent, concurrent);
-      await settle();
-      concurrent -= 1;
-      if (fail) throw new Error('disk full');
-      writes.push(value);
-    },
-  };
-}
+test('a v1 store survives the move to conversations', () => {
+  const conversations = parseStore(JSON.stringify(V1), OPTS);
+  assert.equal(conversations.length, 3, 'the empty thread is dropped, the other three are kept');
 
-const scheduler = (rec, clock, opts = {}) => createWriteScheduler({
-  write: rec.write,
-  onError: rec.onError,
-  now: clock.now,
-  setTimer: clock.setTimer,
-  clearTimer: clock.clearTimer,
-  ...opts,
+  const byModel = Object.fromEntries(conversations.map((c) => [c.modelName, c]));
+  assert.equal(byModel['llama3.2:3b'].personalityId, 'default');
+  assert.equal(byModel['qwen2.5:7b'].personalityId, 'creative-copilot');
+  // The bare key is the one that would be easiest to lose.
+  assert.equal(byModel['mistral:7b'].personalityId, 'default', 'a pre-personality key keeps its messages');
+  assert.equal(byModel['mistral:7b'].messages.length, 2);
 });
 
-test('a store round-trips and carries its version', () => {
-  const conversations = { 'llama3.2:3b::default': [{ id: 'a', role: 'user', content: 'hi', ts: 1 }] };
-  const raw = serializeStore(conversations);
-  assert.equal(JSON.parse(raw).version, STORE_VERSION);
-  assert.deepEqual(parseStore(raw), conversations);
-});
-
-test('unreadable or foreign store files are refused, not half-read', () => {
-  // The caller keeps what it has instead of replacing it with nonsense.
-  assert.equal(parseStore(null), null);
-  assert.equal(parseStore(''), null);
-  assert.equal(parseStore('{oh no'), null);
-  assert.equal(parseStore('[]'), null);
-  assert.equal(parseStore(JSON.stringify({ conversations: {} })), null, 'no version');
-  assert.equal(
-    parseStore(JSON.stringify({ version: STORE_VERSION + 1, conversations: {} })),
-    null,
-    'a newer file must be left alone rather than misread',
+test('migration loses no messages', () => {
+  // The invariant that matters most: this runs once, over history someone
+  // cannot get back.
+  const before = Object.values(V1.conversations).flat();
+  const after = parseStore(JSON.stringify(V1), OPTS).flatMap((c) => c.messages);
+  assert.equal(after.length, before.length);
+  assert.deepEqual(
+    after.map((m) => m.content).sort(),
+    before.map((m) => m.content).sort(),
   );
 });
 
-test('entries that are not messages are dropped rather than handed to the UI', () => {
+test('migrated threads are named after what was asked in them', () => {
+  const conversations = parseStore(JSON.stringify(V1), OPTS);
+  const llama = conversations.find((c) => c.modelName === 'llama3.2:3b');
+  assert.equal(llama.title, 'How do I rotate a Postgres password without…');
+  assert.ok(llama.titleIsAuto, 'a derived title must stay derived until renamed');
+  // Times come from the messages, not the migration clock, so the sidebar
+  // orders a migrated history the way it actually happened.
+  assert.equal(llama.createdAt, 1000);
+  assert.equal(llama.updatedAt, 1100);
+});
+
+test('a colon in a model tag does not split the key in the wrong place', () => {
+  // Keys are `model::personality` and model names contain single colons —
+  // splitting on the first `::` is right, but only the *last* one is safe if a
+  // personality id ever contained one.
+  const migrated = migrateV1(
+    { 'qwen2.5-coder:0.5b::direct-helper': [msg('user', 'hi', 1)] },
+    OPTS.makeId, OPTS.now, 'default',
+  );
+  assert.equal(migrated[0].modelName, 'qwen2.5-coder:0.5b');
+  assert.equal(migrated[0].personalityId, 'direct-helper');
+});
+
+test('a v2 store round-trips', () => {
+  const original = parseStore(JSON.stringify(V1), OPTS);
+  const reread = parseStore(serializeStore(original), OPTS);
+  assert.deepEqual(reread, original);
+  assert.equal(JSON.parse(serializeStore(original)).version, STORE_VERSION);
+});
+
+test('a store from a newer build is refused rather than half-read', () => {
+  // Reading it would drop whatever the newer shape added, and the next save
+  // would write that loss back over the file.
+  assert.equal(parseStore(JSON.stringify({ version: 99, conversations: [] }), OPTS), null);
+  assert.equal(parseStore('{"version":2}', OPTS), null, 'v2 must carry an array');
+  assert.equal(parseStore('{oh no', OPTS), null);
+  assert.equal(parseStore(null, OPTS), null);
+});
+
+test('broken entries are dropped without taking the good ones with them', () => {
   const raw = JSON.stringify({
-    version: STORE_VERSION,
-    conversations: {
-      good: [{ id: 'a', role: 'user', content: 'hi', ts: 1 }],
-      notAnArray: { nope: true },
-      mixed: [
-        { id: 'b', role: 'assistant', content: 'ok', ts: 2 },
-        { id: 'c', role: 'system', content: 'wrong role', ts: 3 },
-        { id: 'd', role: 'user', ts: 4 },
-        null,
-      ],
-    },
+    version: 2,
+    conversations: [
+      { id: 'a', modelName: 'llama3.2:3b', personalityId: 'default', title: 'Kept',
+        titleIsAuto: false, createdAt: 1, updatedAt: 2, messages: [msg('user', 'hi', 1)] },
+      { id: 'b', messages: [] },                       // no model
+      { id: 'c', modelName: 'x', messages: 'not a list' },
+      null,
+    ],
   });
-  const parsed = parseStore(raw);
-  assert.deepEqual(Object.keys(parsed).sort(), ['good', 'mixed']);
-  assert.equal(parsed.mixed.length, 1);
-  assert.equal(parsed.mixed[0].id, 'b');
+  const conversations = parseStore(raw, OPTS);
+  assert.equal(conversations.length, 1);
+  assert.equal(conversations[0].title, 'Kept');
+  assert.equal(conversations[0].titleIsAuto, false, 'a hand-written title stays put');
 });
 
-test('a burst of updates becomes one write', async () => {
-  // The bug: an effect keyed on the message map wrote the whole store once per
-  // streamed token — 4.3 ms and 5 MB each, on the main thread.
-  const clock = fakeClock();
-  const rec = recorder();
-  const s = scheduler(rec, clock, { delayMs: 800, maxDelayMs: 4000 });
+test('titles are derived from the opening question, cut at a word', () => {
+  assert.equal(deriveTitle([]), NEW_CHAT_TITLE);
+  assert.equal(deriveTitle([msg('assistant', 'unprompted', 1)]), NEW_CHAT_TITLE);
+  assert.equal(deriveTitle([msg('user', '   ', 1), msg('user', 'Real question', 2)]), 'Real question');
+  // Leading blank lines are skipped rather than producing an empty title.
+  assert.equal(deriveTitle([msg('user', '\n\nAfter some blank lines', 1)]), 'After some blank lines');
 
-  for (let i = 0; i < 200; i++) {
-    s.schedule(`token-${i}`);
-    await clock.advance(1);
-  }
-  assert.equal(rec.writes.length, 0, 'nothing written while updates keep arriving');
+  const long = deriveTitle([msg('user', 'Explain how grouped query attention reduces the size of the key value cache', 1)]);
+  assert.ok(long.length <= 45, `too long: ${long}`);
+  assert.ok(long.endsWith('…'));
+  assert.ok(!/\s…$/.test(long), 'should not leave a dangling space before the ellipsis');
+  assert.ok(long.startsWith('Explain how grouped query attention'));
 
-  await clock.advance(800);
-  assert.equal(rec.writes.length, 1, '200 updates produced one write');
-  assert.equal(rec.writes[0], 'token-199', 'and it wrote the newest state');
+  // A single unbroken run has no word boundary to cut at, and must still fit.
+  const unbroken = deriveTitle([msg('user', 'x'.repeat(200), 1)]);
+  assert.ok(unbroken.length <= 45);
 });
 
-test('a long unbroken stream still gets saved before it ends', async () => {
-  // Without an upper bound, a reply that updates every few ms never reaches a
-  // quiet moment, so nothing would reach disk until the whole reply finished.
-  const clock = fakeClock();
-  const rec = recorder();
-  const s = scheduler(rec, clock, { delayMs: 800, maxDelayMs: 4000 });
+test('an automatic title follows the conversation; a renamed one does not', () => {
+  const base = createConversation({ id: 'c1', modelName: 'llama3.2:3b', personalityId: 'default', now: 10 });
+  assert.equal(base.title, NEW_CHAT_TITLE);
 
-  for (let i = 0; i < 1000; i++) {
-    s.schedule(`t-${i}`);
-    await clock.advance(10);
-  }
-  assert.ok(rec.writes.length >= 2, `expected periodic writes, got ${rec.writes.length}`);
-  // Roughly one per maxDelayMs over 10s — bounded, not per update.
-  assert.ok(rec.writes.length <= 5, `expected coalescing, got ${rec.writes.length}`);
+  const filled = withMessages(base, [msg('user', 'First real question', 20)], 20);
+  assert.equal(filled.title, 'First real question');
+  assert.equal(filled.updatedAt, 20);
+
+  const renamed = { ...filled, title: 'My own name', titleIsAuto: false };
+  const later = withMessages(renamed, [...renamed.messages, msg('user', 'Something else entirely', 30)], 30);
+  assert.equal(later.title, 'My own name', 'a rename must survive later messages');
+  assert.equal(later.updatedAt, 30);
 });
 
-test('flush writes immediately, and covers a value that arrived mid-write', async () => {
-  const clock = fakeClock();
-  const rec = recorder();
-  const s = scheduler(rec, clock);
-
-  s.schedule('first');
-  const flushing = s.flush();
-  s.schedule('second');
-  await flushing;
-  await settle();
-
-  assert.deepEqual(rec.writes, ['first', 'second']);
-});
-
-test('writes never overlap', async () => {
-  const clock = fakeClock();
-  const rec = recorder();
-  const s = scheduler(rec, clock, { delayMs: 10, maxDelayMs: 20 });
-
-  for (let i = 0; i < 20; i++) {
-    s.schedule(i);
-    await clock.advance(10);
-  }
-  await s.flush();
-  assert.equal(rec.maxConcurrent, 1, 'a slow write must not have another started on top of it');
-});
-
-test('a failing write is reported, never thrown, and does not stop the next one', async () => {
-  // Persistence failing used to take the whole app down: the unguarded
-  // setItem threw out of an effect and tripped the error boundary on mount.
-  const clock = fakeClock();
-  const failing = recorder({ fail: true });
-  const s = scheduler(failing, clock, { delayMs: 10 });
-
-  s.schedule('one');
-  await clock.advance(10);
-  await assert.doesNotReject(() => s.flush());
-  assert.equal(failing.errors.length, 1);
-  assert.match(String(failing.errors[0]), /disk full/);
-
-  s.schedule('two');
-  await clock.advance(10);
-  assert.equal(failing.errors.length, 2, 'the next attempt still runs');
-});
-
-test('cancel drops pending work', async () => {
-  const clock = fakeClock();
-  const rec = recorder();
-  const s = scheduler(rec, clock, { delayMs: 10 });
-
-  s.schedule('gone');
-  s.cancel();
-  await clock.advance(1000);
-  assert.deepEqual(rec.writes, []);
+test('a model lists its own threads, newest first', () => {
+  const conversations = [
+    { ...createConversation({ id: 'a', modelName: 'llama3.2:3b', personalityId: 'default', now: 1 }), updatedAt: 100 },
+    { ...createConversation({ id: 'b', modelName: 'llama3.2:3b', personalityId: 'default', now: 1 }), updatedAt: 300 },
+    { ...createConversation({ id: 'c', modelName: 'qwen2.5:7b', personalityId: 'default', now: 1 }), updatedAt: 200 },
+  ];
+  assert.deepEqual(conversationsForModel(conversations, 'llama3.2:3b').map((c) => c.id), ['b', 'a']);
+  assert.deepEqual(sortConversations(conversations).map((c) => c.id), ['b', 'c', 'a']);
+  // Sorting must not reorder the caller's array in place.
+  assert.deepEqual(conversations.map((c) => c.id), ['a', 'b', 'c']);
 });

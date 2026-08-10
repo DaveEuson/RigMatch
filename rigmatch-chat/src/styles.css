@@ -1526,3 +1526,180 @@ textarea:focus {
 .rm-stop-btn:hover {
   background: rgba(227, 113, 133, 0.26);
 }
+
+/* ── Conversation threads ────────────────────────────────────────── */
+/* A model can hold many subjects now, folded away under its name so a long
+   model list stays scannable. */
+
+.rm-buddy-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.rm-buddy-caret {
+  flex-shrink: 0;
+  width: 10px;
+  color: var(--text-muted);
+  font-size: 9px;
+  transition: transform 0.15s ease;
+}
+
+.rm-buddy-caret.open {
+  transform: rotate(90deg);
+}
+
+/* How many subjects live under a model, shown only when there is more than one
+   — otherwise it is noise on every row. */
+.rm-thread-count {
+  flex-shrink: 0;
+  min-width: 16px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.rm-thread-list {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0 6px 26px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.rm-thread-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+}
+
+.rm-thread-item:hover {
+  background: var(--bg-hover);
+}
+
+.rm-thread-item.active {
+  background: var(--bg-active);
+  box-shadow: inset 2px 0 0 var(--gold);
+}
+
+.rm-thread-open {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  padding: 5px 4px 5px 6px;
+  text-align: left;
+}
+
+.rm-thread-title {
+  color: var(--text);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rm-thread-item.active .rm-thread-title {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.rm-thread-meta {
+  color: var(--text-muted);
+  font-size: 9.5px;
+}
+
+/* Only on hover or when open: a delete on every row invites an accident. */
+.rm-thread-delete {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0;
+}
+
+.rm-thread-item:hover .rm-thread-delete,
+.rm-thread-item.active .rm-thread-delete,
+.rm-thread-delete:focus-visible {
+  opacity: 1;
+}
+
+.rm-thread-delete:hover {
+  background: rgba(227, 113, 133, 0.2);
+  color: var(--pink);
+}
+
+.rm-thread-rename {
+  flex: 1;
+  min-width: 0;
+  margin: 3px 4px;
+  padding: 3px 6px;
+  font-size: 11.5px;
+}
+
+.rm-thread-new {
+  padding: 5px 6px;
+  text-align: left;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.rm-thread-new:hover {
+  color: var(--gold);
+}
+
+/* ── Small confirm dialog ────────────────────────────────────────── */
+
+.rm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.rm-modal {
+  width: min(340px, calc(100vw - 48px));
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
+}
+
+.rm-modal strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.rm-modal p {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.rm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.rm-btn-danger {
+  background: rgba(227, 113, 133, 0.16);
+  border: 1px solid var(--pink);
+  color: var(--pink);
+}
+
+.rm-btn-danger:hover {
+  background: rgba(227, 113, 133, 0.28);
+}
