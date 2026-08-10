@@ -2190,8 +2190,8 @@ function App() {
       return;
     }
 
-    if (runnableRows.length < 2) {
-      setActivity('Pick at least 2 installed models for Speed Dating. Five is the sweet spot.');
+    if (runnableRows.length < MIN_CONTESTANTS) {
+      setActivity(`Pick at least ${MIN_CONTESTANTS} installed models for Speed Dating. Five is the sweet spot.`);
       return;
     }
 
@@ -3397,7 +3397,7 @@ function App() {
           modelScores={modelScores}
           disabled={isBenchmarking || isListTesting}
           isListTesting={isListTesting}
-          canRunSpeedDate={shortlistedRows.length >= 2 && shortlistedRows.every((row) => row.installed) && !isBenchmarking && !isListTesting}
+          canRunSpeedDate={shortlistedRows.length >= MIN_CONTESTANTS && shortlistedRows.every((row) => row.installed) && !isBenchmarking && !isListTesting}
           onRemove={toggleShortlist}
           onAdd={toggleShortlist}
           onRunListTest={requestListTest}
@@ -7457,7 +7457,7 @@ function _ContestantsCommandDeck({
     ? `${speedProgress.percent}% · testing ${getQueueChipModelName(speedProgress.currentModel)}.`
     : speedWinner && speedWinnerScore
       ? `${speedWinner} leads with ${speedWinnerScore.total} Match.`
-      : shortlistedRows.length >= 2
+      : shortlistedRows.length >= MIN_CONTESTANTS
         ? `${shortlistedRows.length} contestants ready for ${questionCount} questions each.`
         : 'Pick at least two installed contestants for a fair comparison.';
   const downloadStatus = isPullCancelRequested
@@ -7611,17 +7611,17 @@ function ModelPoolLineupStrip({
   const slots = Array.from({ length: 5 }, (_item, index) => rows[index]);
   const full = rows.length >= 5;
   const missingDownloadCount = rows.filter((row) => !row.installed).length;
-  const canUsePrimaryAction = rows.length >= 2 && !disabled;
+  const canUsePrimaryAction = rows.length >= MIN_CONTESTANTS && !disabled;
   const classNames = ['model-pool-lineup', full ? 'full' : '', className].filter(Boolean).join(' ');
   const startLabel = isListTesting
     ? 'Testing...'
-    : rows.length < 2
-      ? `Pick ${Math.max(0, 2 - rows.length)} more`
+    : rows.length < MIN_CONTESTANTS
+      ? `Pick ${Math.max(0, MIN_CONTESTANTS - rows.length)} more`
       : missingDownloadCount > 0
         ? 'Open Setup'
         : 'Start Speed Dating';
-  const lineupStatus = rows.length < 2
-    ? 'Pick at least two contestants before the show starts.'
+  const lineupStatus = rows.length < MIN_CONTESTANTS
+    ? `Pick at least ${MIN_CONTESTANTS} contestants before the show starts.`
     : missingDownloadCount > 0
       ? `${missingDownloadCount} contestant${missingDownloadCount === 1 ? '' : 's'} need downloads. Open setup to download the selected lineup.`
       : full
@@ -8521,9 +8521,9 @@ function SpeedDatePanel({
   const winnerResult = listTestResult?.results.find((result) => result.model === listTestResult.winner);
   const selectedSlots = Array.from({ length: 5 }, (_, index) => shortlistedRows[index]);
   const uninstalledLineupRows = shortlistedRows.filter((row) => !row.installed);
-  const canRunListTest = shortlistedRows.length >= 2 && uninstalledLineupRows.length === 0 && !isListTesting;
+  const canRunListTest = shortlistedRows.length >= MIN_CONTESTANTS && uninstalledLineupRows.length === 0 && !isListTesting;
   const questionLabel = `${questionCount} questions per model`;
-  const runReadiness = shortlistedRows.length >= 2
+  const runReadiness = shortlistedRows.length >= MIN_CONTESTANTS
     ? uninstalledLineupRows.length > 0
       ? `${uninstalledLineupRows.length} contestant${uninstalledLineupRows.length === 1 ? '' : 's'} need downloads before the show starts.`
       : `${shortlistedRows.length} contestants will answer the same ${questionCount} questions.`
@@ -8610,7 +8610,7 @@ function SpeedDatePanel({
               disabled={!canRunListTest}
             >
               <Trophy aria-hidden="true" />
-              {isListTesting ? 'Testing' : shortlistedRows.length >= 2 ? uninstalledLineupRows.length > 0 ? 'Download First' : 'Start Speed Dating' : 'Pick 2+'}
+              {isListTesting ? 'Testing' : shortlistedRows.length >= MIN_CONTESTANTS ? uninstalledLineupRows.length > 0 ? 'Download First' : 'Start Speed Dating' : `Pick ${MIN_CONTESTANTS}+`}
             </button>
             <button
               type="button"
@@ -8794,7 +8794,7 @@ function SpeedDateShowAnimation({
     ? `Now testing ${getShortModelName(runProgress.currentModel)}`
     : winner
       ? `${getShortModelName(winner)} is holding the top score`
-      : rows.length >= 2
+      : rows.length >= MIN_CONTESTANTS
         ? `${rows.length} contestants ready for the same questions`
         : 'Pick at least two contestants to start the show';
   const cue = runProgress?.questionLabel
