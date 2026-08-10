@@ -27,28 +27,52 @@ const contrast = (a, b) => {
   return (hi + 0.05) / (lo + 0.05);
 };
 
-/** Read a `--token: value;` block out of index.css. */
-function themeVars(css, selector) {
+/** The body of a `selector { … }` block in index.css. */
+function themeBlock(css, selector) {
   const re = new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([\\s\\S]*?)\\}`);
   const match = css.match(re);
   assert.ok(match, `no ${selector} block in src/index.css`);
+  return match[1];
+}
+
+/** Read a `--token: #rrggbb;` block out of index.css. */
+function themeVars(css, selector) {
   const vars = {};
-  for (const line of match[1].split('\n')) {
+  for (const line of themeBlock(css, selector).split('\n')) {
     const found = line.match(/(--[\w-]+):\s*(#[0-9a-fA-F]{6});/);
     if (found) vars[found[1]] = found[2];
   }
   return vars;
 }
 
+/** Read the `--token-rgb: r, g, b;` triplets out of the same block. */
+function themeTriplets(css, selector) {
+  const vars = {};
+  for (const line of themeBlock(css, selector).split('\n')) {
+    const found = line.match(/(--[\w-]+)-rgb:\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+);/);
+    if (found) vars[found[1]] = [Number(found[2]), Number(found[3]), Number(found[4])];
+  }
+  return vars;
+}
+
 const css = fs.readFileSync('src/index.css', 'utf8');
-const root = themeVars(css, ':root');
-const themes = {
-  'Stage Plum': root,
-  Avocado: { ...root, ...themeVars(css, '[data-theme="avocado"]') },
-  Mustard: { ...root, ...themeVars(css, '[data-theme="mustard"]') },
-  'Retro Teal': { ...root, ...themeVars(css, '[data-theme="teal"]') },
-  Chocolate: { ...root, ...themeVars(css, '[data-theme="chocolate"]') },
+const SELECTORS = {
+  'Stage Plum': ':root',
+  Avocado: '[data-theme="avocado"]',
+  Mustard: '[data-theme="mustard"]',
+  'Retro Teal': '[data-theme="teal"]',
+  Chocolate: '[data-theme="chocolate"]',
 };
+const root = themeVars(css, ':root');
+const rootTriplets = themeTriplets(css, ':root');
+const themes = {};
+const triplets = {};
+for (const [name, selector] of Object.entries(SELECTORS)) {
+  themes[name] = name === 'Stage Plum' ? root : { ...root, ...themeVars(css, selector) };
+  triplets[name] = name === 'Stage Plum'
+    ? rootTriplets
+    : { ...rootTriplets, ...themeTriplets(css, selector) };
+}
 
 test('status colours meet AA on both surfaces and on their own tint, in every theme', () => {
   const failures = [];
@@ -81,19 +105,70 @@ test('status colours meet AA on both surfaces and on their own tint, in every th
   assert.deepEqual(failures, [], `below ${AA}:1`);
 });
 
-test('the --*-rgb triplets match their hex tokens', () => {
-  // `--gold-rgb` and `--red-rgb` exist so the pills can tint at an alpha, and
-  // are declared once because those two colours are identical in every theme.
-  // That makes them the one place the palette can drift against itself: the
-  // pill tint stops being a tint of its own text and the ratio above is
-  // measuring a pairing that no longer ships. A comment asked for them to be
-  // kept in sync; this checks it.
-  for (const name of ['gold', 'red']) {
-    const triplet = css.match(new RegExp(`--${name}-rgb:\\s*([\\d\\s,]+);`));
-    assert.ok(triplet, `no --${name}-rgb in src/index.css`);
-    const actual = triplet[1].split(',').map((n) => Number(n.trim()));
-    assert.deepEqual(actual, hex(root[`--${name}`]), `--${name}-rgb drifted from --${name}`);
+test('the --*-rgb triplets match their hex tokens, in every theme', () => {
+  // The `-rgb` triplets exist so pills can tint at an alpha. They are the one
+  // place the palette can drift against itself: the tint stops being a tint of
+  // its own text, and the ratios above start measuring a pairing that does not
+  // ship. Gold and red are declared once (identical in every theme); blue,
+  // green and pink are declared per theme.
+  // --primary-rgb is the one triplet with no hex twin: the accent is only ever
+  // composited, never used flat, so there is no --primary to drift from. Pinned
+  // rather than skipped, so a typo like --bleu-rgb still fails here.
+  const NO_HEX_TWIN = ['--primary'];
+  const failures = [];
+  const orphans = new Set();
+
+  for (const [themeName, vars] of Object.entries(themes)) {
+    for (const [token, triplet] of Object.entries(triplets[themeName])) {
+      const hexValue = vars[token];
+      if (!hexValue) { orphans.add(token); continue; }
+      if (String(triplet) !== String(hex(hexValue))) {
+        failures.push(`${themeName} ${token}-rgb is ${triplet} but ${token} is ${hexValue}`);
+      }
+    }
   }
+
+  assert.deepEqual(failures, [], 'triplet drifted from its hex token');
+  assert.deepEqual([...orphans].sort(), NO_HEX_TWIN, 'unexpected --*-rgb with no matching hex token');
+  // And the per-theme ones really are declared per theme — a single root
+  // declaration would silently freeze four themes to the fifth's colour.
+  for (const name of ['blue', 'green', 'pink']) {
+    for (const [themeName, selector] of Object.entries(SELECTORS)) {
+      assert.ok(
+        themeTriplets(css, selector)[`--${name}`],
+        `${themeName} must declare its own --${name}-rgb`,
+      );
+    }
+  }
+});
+
+test('per-theme colours are not hardcoded as raw rgba() in App.css', () => {
+  // A literal cannot follow the theme. `--blue` used to be exactly
+  // rgb(105, 167, 183), the value hardcoded at 64 sites, so the two agreed by
+  // accident until the palette moved and every one of them went stale — a
+  // var(--blue) border drawn against an old-blue fill, in all five themes.
+  // Green had the same problem at 47 sites.
+  //
+  // Gold and red are identical in every theme, so a literal of those cannot go
+  // out of step with the theme and is only a tidiness matter. Pink is excluded
+  // for a sharper reason: --primary-rgb holds the same triplet as --pink in the
+  // default theme and a completely different colour in the other four, so a
+  // bare rgba(227, 113, 133, x) is genuinely ambiguous about which it meant.
+  const appCss = fs.readFileSync('src/App.css', 'utf8');
+  const offenders = [];
+
+  for (const name of ['blue', 'green']) {
+    for (const [themeName, vars] of Object.entries(themes)) {
+      const [r, g, b] = hex(vars[`--${name}`]);
+      const literal = new RegExp(`rgba?\\(\\s*${r}\\s*,\\s*${g}\\s*,\\s*${b}\\s*[,)]`, 'g');
+      const hits = appCss.match(literal);
+      if (hits) {
+        offenders.push(`--${name} (${themeName}) hardcoded ${hits.length}x — use rgba(var(--${name}-rgb), …)`);
+      }
+    }
+  }
+
+  assert.deepEqual(offenders, [], 'per-theme colour written as a literal');
 });
 
 test('the palette is actually being read (guard against a broken parser)', () => {

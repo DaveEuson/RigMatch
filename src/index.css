@@ -12,9 +12,20 @@
   --text-strong: #fff9ef;
   --muted: #b9aaa2;
   --green: #95b46a;
+  /* Per theme, like --blue-rgb: the tinted score and fit pills need it
+     under green text. */
+  --green-rgb: 149, 180, 106;
   --primary-rgb: 227, 113, 133;
   --blue: #6ba9b9;
+  /* Triplet form for alpha compositing, as with --gold-rgb. Unlike gold and
+     red this one differs per theme, so every block declares its own. */
+  --blue-rgb: 107, 169, 185;
   --pink: #e37185;
+  /* Per theme, like --blue-rgb. Note --primary-rgb happens to hold this same
+     triplet in the default theme only — they are different colors in the
+     other four, so a bare rgba(227, 113, 133, x) is ambiguous. Use this
+     when the value means "the pink". */
+  --pink-rgb: 227, 113, 133;
   --gold: #efbc5a;
   /* Triplet form for alpha compositing: rgba(var(--gold-rgb), 0.4). Gold is the
      one color identical in every theme, so it is declared here only — keep the
@@ -48,9 +59,12 @@
   --text-strong: #fff7ea;
   --muted: #b0ad94;
   --green: #9fbb6f;
+  --green-rgb: 159, 187, 111;
   --primary-rgb: 230, 117, 83;
   --blue: #78b4c1;
+  --blue-rgb: 120, 180, 193;
   --pink: #e67583;
+  --pink-rgb: 230, 117, 131;
   --gold: #efbc5a;
   --red: #ff9278;
 }
@@ -65,9 +79,12 @@
   --text-strong: #fff9ef;
   --muted: #b9ab97;
   --green: #8fb36f;
+  --green-rgb: 143, 179, 111;
   --primary-rgb: 239, 188, 90;
   --blue: #70b1c3;
+  --blue-rgb: 112, 177, 195;
   --pink: #df708c;
+  --pink-rgb: 223, 112, 140;
   --gold: #efbc5a;
   --red: #ff9278;
 }
@@ -82,9 +99,12 @@
   --text-strong: #fbfff7;
   --muted: #a8b6ad;
   --green: #9cb96e;
+  --green-rgb: 156, 185, 110;
   --primary-rgb: 104, 168, 184;
   --blue: #7bbbcc;
+  --blue-rgb: 123, 187, 204;
   --pink: #e0708a;
+  --pink-rgb: 224, 112, 138;
   --gold: #efbc5a;
   --red: #ff9278;
 }
@@ -99,9 +119,12 @@
   --text-strong: #fff8ee;
   --muted: #b5a59c;
   --green: #96b46c;
+  --green-rgb: 150, 180, 108;
   --primary-rgb: 220, 108, 78;
   --blue: #73adbb;
+  --blue-rgb: 115, 173, 187;
   --pink: #e07086;
+  --pink-rgb: 224, 112, 134;
   --gold: #efbc5a;
   --red: #ff9278;
 }
