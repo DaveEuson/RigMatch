@@ -705,6 +705,19 @@ export default function App() {
     typingModel,
   ]);
 
+  /**
+   * Stop the reply in progress. The abort reaches Ollama now, so the GPU is
+   * actually released rather than carrying on with a reply nobody will read.
+   * Whatever has already been streamed stays — it is a real partial answer, and
+   * often the reason for stopping is that it was already enough.
+   */
+  const stopGenerating = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setTypingModel(null);
+    void writerRef.current?.flush();
+  }, []);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -1187,16 +1200,28 @@ export default function App() {
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={handleKeyDown}
                 rows={3}
-                disabled={!!typingModel}
+                /* Not disabled while a reply streams — there is no reason you
+                   cannot write the next message while waiting for this one. */
               />
-              <button
-                type="button"
-                className="rm-send-btn"
-                onClick={() => void sendMessage()}
-                disabled={!draft.trim() || !!typingModel}
-              >
-                Send
-              </button>
+              {typingModel ? (
+                <button
+                  type="button"
+                  className="rm-send-btn rm-stop-btn"
+                  onClick={stopGenerating}
+                  title="Stop this reply and free the graphics card"
+                >
+                  ■ Stop
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="rm-send-btn"
+                  onClick={() => void sendMessage()}
+                  disabled={!draft.trim()}
+                >
+                  Send
+                </button>
+              )}
             </div>
           </>
         ) : (

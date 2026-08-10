@@ -193,13 +193,57 @@ pub enum StreamEvent {
     Done { prompt_tokens: u64, eval_tokens: u64 },
 }
 
+/// Generations that can still be stopped, by the id the caller gave them.
+///
+/// Aborting used to be a front-end fiction: the AbortController stopped tokens
+/// being *delivered*, but nothing told the backend, so this loop read the
+/// response to the end and Ollama kept generating — occupying the GPU for a
+/// reply nobody would ever see, and doing it again if the user sent something
+/// else in the meantime.
+#[derive(Default)]
+struct ActiveStreams(std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<tokio::sync::Notify>>>);
+
+#[tauri::command]
+fn cancel_chat(state: tauri::State<ActiveStreams>, stream_id: String) {
+    if let Ok(streams) = state.0.lock() {
+        if let Some(notify) = streams.get(&stream_id) {
+            // notify_one, not notify_waiters: a cancel that arrives before the
+            // loop starts waiting must still be seen rather than dropped.
+            notify.notify_one();
+        }
+    }
+}
+
 #[tauri::command]
 async fn stream_chat(
     base_url: String,
     model: String,
     messages: Vec<ChatMessage>,
     num_ctx: Option<u64>,
+    stream_id: String,
+    state: tauri::State<'_, ActiveStreams>,
     on_token: Channel<StreamEvent>,
+) -> Result<(), String> {
+    let cancel = std::sync::Arc::new(tokio::sync::Notify::new());
+    if let Ok(mut streams) = state.0.lock() {
+        streams.insert(stream_id.clone(), cancel.clone());
+    }
+    let result = run_stream(base_url, model, messages, num_ctx, on_token, &cancel).await;
+    // Deregister on every path, including the error ones, so the map does not
+    // grow for the life of the process.
+    if let Ok(mut streams) = state.0.lock() {
+        streams.remove(&stream_id);
+    }
+    result
+}
+
+async fn run_stream(
+    base_url: String,
+    model: String,
+    messages: Vec<ChatMessage>,
+    num_ctx: Option<u64>,
+    on_token: Channel<StreamEvent>,
+    cancel: &tokio::sync::Notify,
 ) -> Result<(), String> {
     validate_localhost(&base_url)?;
     validate_model_name(&model)?;
@@ -215,17 +259,28 @@ async fn stream_chat(
         body["options"] = serde_json::json!({ "num_ctx": ctx });
     }
     let client = reqwest::Client::new();
-    let mut res = client
-        .post(&url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    // Selected against cancellation as well: loading a large model into VRAM
+    // can take many seconds, and Stop has to work during that too.
+    let mut res = tokio::select! {
+        biased;
+        _ = cancel.notified() => return Ok(()),
+        sent = client.post(&url).json(&body).send() => sent.map_err(|e| e.to_string())?,
+    };
     if !res.status().is_success() {
         return Err(format!("Ollama chat returned {}", res.status()));
     }
     let mut buffer = String::new();
-    while let Some(chunk) = res.chunk().await.map_err(|e| e.to_string())? {
+    loop {
+        // Returning here drops the response, which closes the connection and is
+        // what actually makes Ollama stop generating — the point of the whole
+        // exercise. Waiting for the next chunk first would mean a stalled or
+        // slow generation ignored Stop until it produced something.
+        let next = tokio::select! {
+            biased;
+            _ = cancel.notified() => return Ok(()),
+            chunk = res.chunk() => chunk.map_err(|e| e.to_string())?,
+        };
+        let Some(chunk) = next else { break };
         buffer.push_str(&String::from_utf8_lossy(&chunk));
         let lines: Vec<&str> = buffer.split('\n').collect();
         let remainder = lines.last().cloned().unwrap_or("").to_string();
@@ -394,11 +449,13 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(SysInfoState(std::sync::Mutex::new(System::new())))
+        .manage(ActiveStreams::default())
         .invoke_handler(tauri::generate_handler![
             get_ollama_version,
             list_ollama_models,
             get_model_context_info,
             stream_chat,
+            cancel_chat,
             read_conversations,
             write_conversations,
             open_rigmatch_ai,
@@ -543,5 +600,33 @@ mod tests {
         assert_eq!(read_json_file(&path).unwrap().unwrap(), "good");
 
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_cancel_that_lands_before_the_wait_is_not_lost() {
+        // The select! only starts waiting once the request is in flight, so a
+        // Stop pressed in that window must still be seen. notify_one leaves a
+        // permit behind; notify_waiters would have dropped it on the floor and
+        // the generation would have run to completion anyway.
+        let notify = tokio::sync::Notify::new();
+        notify.notify_one();
+        tokio::time::timeout(std::time::Duration::from_millis(500), notify.notified())
+            .await
+            .expect("a cancel sent before the wait began was lost");
+    }
+
+    #[test]
+    fn cancelling_an_unknown_stream_is_harmless() {
+        // Stop can arrive after a reply has already finished and deregistered.
+        let streams = ActiveStreams::default();
+        let notify = std::sync::Arc::new(tokio::sync::Notify::new());
+        streams.0.lock().unwrap().insert("live".into(), notify);
+        {
+            let map = streams.0.lock().unwrap();
+            assert!(map.get("gone").is_none());
+            assert!(map.get("live").is_some());
+        }
+        streams.0.lock().unwrap().remove("live");
+        assert!(streams.0.lock().unwrap().is_empty(), "finished streams must not accumulate");
     }
 }

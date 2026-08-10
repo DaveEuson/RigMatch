@@ -1514,3 +1514,15 @@ textarea:focus {
   line-height: 1.45;
   flex-shrink: 0;
 }
+
+/* Stop replaces Send while a reply streams. Pressing it reaches Ollama and
+   releases the graphics card, rather than only hiding the rest of the reply. */
+.rm-stop-btn {
+  background: rgba(227, 113, 133, 0.16);
+  border-color: var(--pink);
+  color: var(--pink);
+}
+
+.rm-stop-btn:hover {
+  background: rgba(227, 113, 133, 0.26);
+}

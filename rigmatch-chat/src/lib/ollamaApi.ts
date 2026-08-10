@@ -101,9 +101,14 @@ export async function streamChat(
   if (!isValidModelName(model)) throw new Error("Invalid model name");
 
   const channel = new Channel<StreamEvent>();
+  // Identifies this generation to the backend so it can be stopped. Aborting
+  // used to only stop tokens being *delivered* — Ollama carried on generating
+  // the whole reply, holding the GPU for output nobody would ever see.
+  const streamId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   let active = true;
   signal?.addEventListener("abort", () => {
     active = false;
+    void invoke("cancel_chat", { streamId }).catch(() => undefined);
   });
   channel.onmessage = (event) => {
     if (!active) return;
@@ -116,6 +121,7 @@ export async function streamChat(
     model,
     messages,
     numCtx: options?.numCtx ?? null,
+    streamId,
     onToken: channel,
   });
 
