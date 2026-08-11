@@ -88,6 +88,7 @@ import type {
   TestedModelScore,
   UpdateChannel,
   UpdateCheckResponse,
+  ChatAttachment,
   ChatMessage,
   SkillRunStatus,
   GpuContention,
@@ -614,7 +615,7 @@ function App() {
   const [tutorialStep, setTutorialStep] = useState(0);
   const [chatInput, setChatInput] = useState('');
   // Pending image (data URL) the user attached for the next vision-model message.
-  const [chatImage, setChatImage] = useState<string | null>(null);
+  const [chatAttachment, setChatAttachment] = useState<ChatAttachment | null>(null);
   const [chatMessagesByModel, setChatMessagesByModel] = useState<Record<string, ChatMessage[]>>(
     savedHistory?.chatMessagesByModel ?? {},
   );
@@ -651,6 +652,9 @@ function App() {
   const selectedRow = modelRows.find(
     (row) => row.displayName === selectedModel || row.id === selectedModel,
   );
+  // No name fallback: a model without the audio capability rejects the request
+  // outright rather than answering badly, so guessing would produce a 400.
+  const chatSupportsAudio = canHearAudio(selectedRow ?? { displayName: selectedModel });
   const selectedModelScore = selectedRow
     ? getModelScore(selectedRow, modelScores)
     : modelScores[selectedModel];
@@ -2801,16 +2805,25 @@ function App() {
 
   const sendChat = useCallback(async () => {
     const message = chatInput.trim();
-    const image = chatImage;
-    // Allow an image-only send (e.g. "read this") but keep a default prompt so
-    // the model always gets some text to act on.
-    if (!message && !image) return;
+    const attachment = chatAttachment;
+    // Allow an attachment-only send (e.g. "read this") but keep a default
+    // prompt so the model always gets some text to act on.
+    if (!message && !attachment) return;
+
+    // Audio and images both travel in `images` — that is how Ollama takes a
+    // recording, verified against gemma4:e2b, which transcribed a WAV sent
+    // this way.
+    const attached = attachment ? [attachment.dataUrl] : undefined;
+    const defaultPrompt = attachment?.kind === 'audio'
+      ? 'What is said in this recording?'
+      : 'What is in this image?';
 
     const userMessage: ChatMessage = {
       id: `${Date.now()}-user`,
       role: 'user',
-      content: message || (image ? 'What is in this image?' : ''),
-      ...(image ? { images: [image] } : {}),
+      content: message || (attachment ? defaultPrompt : ''),
+      ...(attached ? { images: attached } : {}),
+      ...(attachment ? { attachmentKind: attachment.kind } : {}),
     };
     const chatModel = selectedModel;
     setChatMessagesByModel((prev) => ({
@@ -2818,7 +2831,7 @@ function App() {
       [chatModel]: [...(prev[chatModel] ?? [welcomeChatMessage]), userMessage],
     }));
     setChatInput('');
-    setChatImage(null);
+    setChatAttachment(null);
 
     try {
       const runtime = getModelRuntime(selectedRow, ollama);
@@ -2827,7 +2840,7 @@ function App() {
         message: userMessage.content,
         baseUrl: runtime.baseUrl,
         provider: runtime.provider,
-        ...(image ? { images: [image] } : {}),
+        ...(attached ? { images: attached } : {}),
       });
       setChatMessagesByModel((prev) => ({
         ...prev,
@@ -2847,7 +2860,7 @@ function App() {
         ],
       }));
     }
-  }, [chatImage, chatInput, ollama, selectedModel, selectedRow]);
+  }, [chatAttachment, chatInput, ollama, selectedModel, selectedRow]);
 
   // Launch scan: reads this machine, reuses the cached catalog. Not user-initiated,
   // so it performs no version lookups.
@@ -3482,8 +3495,9 @@ function App() {
           onSend={sendChat}
           liveShowActive={uiMode === 'advanced' && runProgress?.phase === 'running'}
           canSendImages={chatSupportsImages}
-          pendingImage={chatImage}
-          onAttachImage={setChatImage}
+          canSendAudio={chatSupportsAudio}
+          pendingAttachment={chatAttachment}
+          onAttach={setChatAttachment}
           availableModels={modelRows.filter((row) => row.installed).map((row) => row.displayName)}
           onModelChange={setSelectedModel}
         />

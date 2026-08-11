@@ -244,12 +244,27 @@ export type ChatResponse = {
   completedAt: string;
 };
 
+/**
+ * Something the user attached to a chat message. Audio and images travel the
+ * same way to Ollama — both go in the `images` array — but they preview
+ * differently and only some models can accept each.
+ */
+export type ChatAttachment = {
+  dataUrl: string;
+  kind: 'image' | 'audio';
+  name: string;
+};
+
 /** A single message in a local-model chat transcript. */
 export type ChatMessage = {
   id: string;
   role: 'user' | 'agent';
   content: string;
+  /** Attachments, base64 or data URLs. Audio rides here too — that is how
+      Ollama accepts a recording. */
   images?: string[];
+  /** What those attachments are, so the transcript renders them correctly. */
+  attachmentKind?: 'image' | 'audio';
 };
 
 /** Progress of a background skill-test run (App Builder / image / recognition). */
