@@ -6723,6 +6723,27 @@ function ModelCabinet({
     const base = rows.filter((row) => passesQuery(row) && passesDeveloper(row) && passesQuick(row));
     return Object.fromEntries(TASK_FILTER_CHIPS.map((chip) => [chip.id, base.filter((row) => modelMatchesTask(row, chip.id)).length]));
   }, [rows, passesQuery, passesDeveloper, passesQuick]);
+  /**
+   * Only offer a use case something can actually satisfy.
+   *
+   * "Makes video" matched nothing at all — not one of the models installed
+   * here, none of the 233 in Ollama's library, and nothing in the community
+   * namespace. There is no video generation on Ollama to find, so the filter
+   * promised a category it could never fill. Deciding this from the catalogue
+   * rather than deleting the chip means it comes back on its own the day a
+   * video model appears.
+   *
+   * Counted over every row rather than the filtered ones, so chips do not
+   * appear and vanish as a search is typed — and the active chip always stays,
+   * or clearing it would be impossible.
+   */
+  const offerableTaskFilters = useMemo(
+    () => TASK_FILTER_CHIPS.filter(
+      (chip) => chip.id === taskFilter || rows.some((row) => modelMatchesTask(row, chip.id)),
+    ),
+    [rows, taskFilter],
+  );
+
   const developerFilterOptions = useMemo(
     () => getDeveloperFilterOptions(rows.filter((row) => passesQuery(row) && passesQuick(row) && passesTask(row))),
     [rows, passesQuery, passesQuick, passesTask],
@@ -6917,7 +6938,7 @@ function ModelCabinet({
             </div>
             <div className="model-task-filters advanced-only" aria-label="Filter by use case">
               <span className="model-task-filters-label">For:</span>
-              {TASK_FILTER_CHIPS.map((chip) => (
+              {offerableTaskFilters.map((chip) => (
                 <button
                   key={chip.id}
                   type="button"

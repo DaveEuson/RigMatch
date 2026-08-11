@@ -61,10 +61,22 @@ export type HardwareFit = {
   detail: string;
   recommend: boolean;
 };
+/**
+ * Models that generate an image, matched by family name.
+ *
+ * This used to return true for anything under `x/`, which is simply Ollama's
+ * community namespace and says nothing about what a model does — it tagged
+ * `x/canary` as an image generator, a third of everything the "Makes images"
+ * filter returned. The namespace is stripped before matching so a model is
+ * judged on its name wherever it happens to be published.
+ */
 export function isLikelyImageGenerationModel(model: string): boolean {
-  const name = model.toLowerCase();
-  if (/ocr|vision|\bvl\b|embed/.test(name)) return false;
-  return name.startsWith('x/') || /flux|z-image|stable-?diffusion|sdxl/.test(name);
+  const full = (model || '').toLowerCase();
+  // Readers and encoders are the easiest thing to confuse with generators.
+  if (/ocr|vision|\bvl\b|-vl\b|embed/.test(full)) return false;
+  const name = full.includes('/') ? full.slice(full.lastIndexOf('/') + 1) : full;
+  return /flux|z-image|qwen-image|stable-?diffusion|\bsdxl\b|\bsd3\b|hidream|pixart|kolors|playground-v|lumina-image|\bchroma\b/
+    .test(name);
 }
 /** Multimodal models that can READ an image the user sends (vision/OCR), as
    opposed to models that GENERATE images. Used to offer image upload in chat. */
