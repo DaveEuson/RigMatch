@@ -14,6 +14,7 @@ import {
   pickSummarizer,
   type SummarizerChoice,
 } from "./lib/compaction";
+import { buildSessionNote } from "./lib/sessionNote";
 import {
   conversationsForModel,
   createConversation,
@@ -765,6 +766,19 @@ export default function App() {
         ? `Personality profile: ${activePersonality.name}\n${activePersonality.instructions.trim()}`
         : "",
       `You are currently powered by the local Ollama model "${activeBuddy}". Do not claim to be a different model.`,
+      // Questions like "how many chats have we had?" are about the app, not the
+      // conversation. Without these facts the model has no way to know and
+      // invents an answer — it claimed to be in its first chat while sitting in
+      // the second of two. Told rather than intercepted, so a genuine question
+      // that merely mentions chats is still answered by the model.
+      buildSessionNote({
+        // A thread being started by this very message is not in `conversations`
+        // yet — that update is queued below — so it has to count itself.
+        threadCount: conversationsForModel(conversations, activeBuddy).length
+          + (conversations.some((c) => c.id === target.id) ? 0 : 1),
+        startedAt: target.createdAt,
+        now: Date.now(),
+      }),
     ].filter(Boolean).join("\n\n");
     const ollamaHistory: ChatMessage[] = [
       ...(profilePrompt
@@ -842,6 +856,7 @@ export default function App() {
     activeContextLimit,
     activeConversation,
     activePersonality,
+    conversations,
     draft,
     settings.ollamaUrl,
     settings.systemPrompt,
