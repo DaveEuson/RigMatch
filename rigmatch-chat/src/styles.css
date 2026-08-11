@@ -1790,3 +1790,102 @@ textarea:focus {
 .rm-message-folded {
   opacity: 0.55;
 }
+
+/* ── Standing memory ─────────────────────────────────────────────── */
+/* Facts carried into every conversation. Nothing lands here without being
+   asked for, and everything in it is visible and editable. */
+
+.rm-remember-btn {
+  margin-left: 8px;
+  padding: 0 4px;
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-size: 9.5px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.rm-message:hover .rm-remember-btn,
+.rm-remember-btn:focus-visible {
+  opacity: 1;
+}
+
+.rm-remember-btn:hover {
+  background: rgba(239, 188, 90, 0.16);
+  color: var(--gold);
+}
+
+.rm-memory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.rm-memory-empty {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-style: italic;
+}
+
+.rm-memory-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Silenced, not deleted — still listed, visibly not in play. */
+.rm-memory-row.off .rm-memory-text {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.rm-memory-text {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 7px;
+  font-size: 11.5px;
+}
+
+.rm-memory-remove {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.rm-memory-remove:hover {
+  background: rgba(227, 113, 133, 0.2);
+  color: var(--pink);
+}
+
+.rm-memory-add {
+  display: flex;
+  gap: 6px;
+}
+
+.rm-memory-add input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 11.5px;
+}
+
+.rm-memory-forget-all {
+  margin-top: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.rm-memory-forget-all:hover {
+  border-color: var(--pink);
+  color: var(--pink);
+}

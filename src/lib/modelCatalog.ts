@@ -61,10 +61,85 @@ export type HardwareFit = {
   detail: string;
   recommend: boolean;
 };
+/**
+ * What a provider says a model can do, when it says anything.
+ *
+ * Ollama reports this from `/api/show` — observed vocabulary on 0.32.9:
+ * `completion`, `vision`, `tools`, `image`. It is only available for installed
+ * models; the browsable catalogue cannot be asked, so the name heuristics below
+ * remain the fallback rather than being replaced.
+ */
+type CapabilityBearing = {
+  capabilities?: string[];
+  installedModel?: { capabilities?: string[] };
+  displayName?: string;
+  name?: string;
+};
+
+export function getModelCapabilities(row: CapabilityBearing): string[] | null {
+  const reported = row.capabilities ?? row.installedModel?.capabilities;
+  return Array.isArray(reported) && reported.length > 0 ? reported : null;
+}
+
+/**
+ * Whether this model can answer at all through the provider it is installed on.
+ *
+ * An image model can be pulled and reports `capabilities: ['image']`, but
+ * generating returns "image generation models are not currently supported" and
+ * chatting returns "does not support chat" — Ollama distributes them without
+ * being able to run them. Measured on 0.32.9 against x/flux2-klein. Anything
+ * that cannot complete must be kept out of chat, out of benchmarks, and out of
+ * a lineup, or it scores an F for a fault that is not its own.
+ *
+ * Unknown capabilities mean an older provider or a catalogue entry, and those
+ * are assumed runnable — the previous behaviour, and wrong only for the handful
+ * of image models.
+ */
+export function canGenerateText(row: CapabilityBearing): boolean {
+  const capabilities = getModelCapabilities(row);
+  if (capabilities) return capabilities.includes('completion');
+  return !isLikelyImageGenerationModel(row.displayName ?? row.name ?? '');
+}
+
+/**
+ * Whether this model can be sent audio.
+ *
+ * Verified on 0.32.9: gemma4:e2b reports `audio` and transcribed a synthesised
+ * 42-word passage at 90/100 in 11 seconds, with the WAV passed in the same
+ * `images` array that carries pictures. gemma3:4b reports `vision` but not
+ * `audio`, and the identical request fails with "Failed to load image or audio
+ * file" — so this gate is what stands between a listening test and a guaranteed
+ * error scored against the model.
+ *
+ * Name matching is not offered as a fallback: nothing in a model's name
+ * reliably says it can hear, and guessing wrong produces that failure.
+ */
+export function canHearAudio(row: CapabilityBearing): boolean {
+  return getModelCapabilities(row)?.includes('audio') ?? false;
+}
+
+/**
+ * Models that generate an image.
+ *
+ * Prefers what the provider reports, and falls back to the family name for
+ * anything not installed. The name rule used to return true for anything under
+ * `x/`, which is simply Ollama's community namespace and says nothing about
+ * what a model does — it tagged `x/canary` as an image generator, a third of
+ * everything the "Makes images" filter returned.
+ */
+export function isImageGenerationModel(row: CapabilityBearing): boolean {
+  const capabilities = getModelCapabilities(row);
+  if (capabilities) return capabilities.includes('image');
+  return isLikelyImageGenerationModel(row.displayName ?? row.name ?? '');
+}
+/** Name-only fallback, for models the provider cannot be asked about. */
 export function isLikelyImageGenerationModel(model: string): boolean {
-  const name = model.toLowerCase();
-  if (/ocr|vision|\bvl\b|embed/.test(name)) return false;
-  return name.startsWith('x/') || /flux|z-image|stable-?diffusion|sdxl/.test(name);
+  const full = (model || '').toLowerCase();
+  // Readers and encoders are the easiest thing to confuse with generators.
+  if (/ocr|vision|\bvl\b|-vl\b|embed/.test(full)) return false;
+  const name = full.includes('/') ? full.slice(full.lastIndexOf('/') + 1) : full;
+  return /flux|z-image|qwen-image|stable-?diffusion|\bsdxl\b|\bsd3\b|hidream|pixart|kolors|playground-v|lumina-image|\bchroma\b/
+    .test(name);
 }
 /** Multimodal models that can READ an image the user sends (vision/OCR), as
    opposed to models that GENERATE images. Used to offer image upload in chat. */
@@ -1265,7 +1340,7 @@ export function getModelDreamTags(row: ModelRow): Array<'talk' | 'write' | 'code
 
 export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolean {
   if (task === 'uncensored') return isUncensoredModel(row.displayName);
-  if (task === 'imagegen') return isLikelyImageGenerationModel(row.displayName);
+  if (task === 'imagegen') return isImageGenerationModel(row);
   if (task === 'videogen') return isLikelyVideoGenerationModel(row.displayName);
   const category = TASK_CATEGORIES.find((c) => c.id === task);
   if (!category || category.keywords.length === 0) return true;

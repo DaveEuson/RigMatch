@@ -1,6 +1,6 @@
 import { useRef } from 'react';
-import { ImagePlus, X } from 'lucide-react';
-import type { ChatMessage } from '../types';
+import { ImagePlus, Mic, X } from 'lucide-react';
+import type { ChatAttachment, ChatMessage } from '../types';
 
 /**
  * Floating chat panel for talking to the selected local model. Self-contained:
@@ -18,8 +18,9 @@ export function ChatDock({
   onSend,
   liveShowActive,
   canSendImages,
-  pendingImage,
-  onAttachImage,
+  canSendAudio,
+  pendingAttachment,
+  onAttach,
   availableModels,
   onModelChange,
 }: {
@@ -32,8 +33,10 @@ export function ChatDock({
   onSend: () => void;
   liveShowActive?: boolean;
   canSendImages?: boolean;
-  pendingImage?: string | null;
-  onAttachImage?: (dataUrl: string | null) => void;
+  /** Models reporting the `audio` capability can be sent a recording. */
+  canSendAudio?: boolean;
+  pendingAttachment?: ChatAttachment | null;
+  onAttach?: (attachment: ChatAttachment | null) => void;
   /** Installed models the user can switch to without leaving the drawer. */
   availableModels?: string[];
   onModelChange?: (model: string) => void;
@@ -41,17 +44,26 @@ export function ChatDock({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (file: File | null | undefined) => {
-    if (!file || !onAttachImage) return;
-    if (!file.type.startsWith('image/')) return;
-    // Guard against huge files: Ollama vision models choke on very large inputs,
-    // and the base64 lives in memory until sent. Cap at ~8 MB.
-    if (file.size > 8 * 1024 * 1024) return;
+    if (!file || !onAttach) return;
+    const kind = file.type.startsWith('image/') ? 'image'
+      : file.type.startsWith('audio/') ? 'audio'
+        : null;
+    if (!kind) return;
+    if (kind === 'image' && !canSendImages) return;
+    if (kind === 'audio' && !canSendAudio) return;
+    // Guard against huge files: models choke on very large inputs, and the
+    // base64 lives in memory until sent. Audio gets more room because a minute
+    // of speech is already several megabytes.
+    const limit = (kind === 'audio' ? 25 : 8) * 1024 * 1024;
+    if (file.size > limit) return;
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result === 'string') onAttachImage(reader.result);
+      if (typeof reader.result === 'string') onAttach({ dataUrl: reader.result, kind, name: file.name });
     };
     reader.readAsDataURL(file);
   };
+
+  const accept = [canSendImages ? 'image/*' : '', canSendAudio ? 'audio/*' : ''].filter(Boolean).join(',');
 
   return (
     <aside className={`chat-dock${liveShowActive ? ' has-live-bar' : ''}`} aria-label={`Chat with ${agentName}`}>
@@ -80,17 +92,30 @@ export function ChatDock({
       <div className="chat-stream">
         {messages.map((message) => (
           <div key={message.id} className={`chat-message ${message.role}`}>
-            {message.images?.map((src, index) => (
-              <img key={index} src={src} alt="Attached" className="chat-message-image" />
+            {message.images?.map((src, index) => (message.attachmentKind === 'audio'
+              // A waveform cannot be shown, but the recording can be played
+              // back — otherwise a sent message gives no sign of what was in it.
+              ? <audio key={index} controls src={src} className="chat-message-audio" />
+              : <img key={index} src={src} alt="Attached" className="chat-message-image" />
             ))}
             {message.content && <span>{message.content}</span>}
           </div>
         ))}
       </div>
-      {pendingImage && (
-        <div className="chat-attachment" aria-label="Attached image">
-          <img src={pendingImage} alt="Attachment preview" />
-          <button type="button" className="chat-attachment-remove" onClick={() => onAttachImage?.(null)} aria-label="Remove image">
+      {pendingAttachment && (
+        <div className="chat-attachment" aria-label={pendingAttachment.kind === 'audio' ? 'Attached recording' : 'Attached image'}>
+          {pendingAttachment.kind === 'audio' ? (
+            // Nothing to preview, so say what it is. Playable, because sending
+            // the wrong recording is otherwise invisible until the answer.
+            <div className="chat-attachment-audio">
+              <Mic aria-hidden="true" />
+              <span title={pendingAttachment.name}>{pendingAttachment.name || 'Recording'}</span>
+              <audio controls src={pendingAttachment.dataUrl} />
+            </div>
+          ) : (
+            <img src={pendingAttachment.dataUrl} alt="Attachment preview" />
+          )}
+          <button type="button" className="chat-attachment-remove" onClick={() => onAttach?.(null)} aria-label="Remove attachment">
             <X aria-hidden="true" />
           </button>
         </div>
@@ -102,12 +127,12 @@ export function ChatDock({
           void onSend();
         }}
       >
-        {canSendImages && (
+        {(canSendImages || canSendAudio) && (
           <>
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept={accept}
               className="chat-file-input"
               onChange={(event) => {
                 handleFile(event.target.files?.[0]);

@@ -72,6 +72,13 @@ export type OllamaModel = {
   provider?: LocalModelProvider;
   providerLabel?: string;
   baseUrl?: string;
+  /**
+   * What the provider says this model can do — 'completion', 'vision',
+   * 'tools', 'image'. Absent for models that are not installed (the browsable
+   * catalogue cannot be asked) and for providers that do not report it, in
+   * which case callers fall back to reading the name.
+   */
+  capabilities?: string[];
 };
 
 export type LocalModelProvider = 'ollama' | 'lm-studio';
@@ -237,12 +244,27 @@ export type ChatResponse = {
   completedAt: string;
 };
 
+/**
+ * Something the user attached to a chat message. Audio and images travel the
+ * same way to Ollama — both go in the `images` array — but they preview
+ * differently and only some models can accept each.
+ */
+export type ChatAttachment = {
+  dataUrl: string;
+  kind: 'image' | 'audio';
+  name: string;
+};
+
 /** A single message in a local-model chat transcript. */
 export type ChatMessage = {
   id: string;
   role: 'user' | 'agent';
   content: string;
+  /** Attachments, base64 or data URLs. Audio rides here too — that is how
+      Ollama accepts a recording. */
   images?: string[];
+  /** What those attachments are, so the transcript renders them correctly. */
+  attachmentKind?: 'image' | 'audio';
 };
 
 /** Progress of a background skill-test run (App Builder / image / recognition). */

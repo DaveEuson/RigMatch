@@ -88,6 +88,7 @@ import type {
   TestedModelScore,
   UpdateChannel,
   UpdateCheckResponse,
+  ChatAttachment,
   ChatMessage,
   SkillRunStatus,
   GpuContention,
@@ -196,6 +197,8 @@ import {
   isCloudModel,
   isEmbeddingModel,
   isHostBenchmarkReady,
+  canGenerateText,
+  canHearAudio,
   isLikelyImageGenerationModel,
   isVisionModel,
   isListTestResult,
@@ -305,9 +308,11 @@ import {
   buildAppBuilderRetryPrompt,
   extractJudgedProblem,
   ADVANCED_IMAGE_GENERATION_PROMPT,
+  getListeningTestAudio,
   getVisionTestImageDataUrl,
   runAdvancedAppBuilderChallenge,
   runCodeChallenge,
+  runAdvancedListeningChallenge,
   runAdvancedVisionChallenge,
   runAdvancedImageGenerationChallenge,
   VISION_TEST_IMAGES,
@@ -364,7 +369,7 @@ const QUICK_CHECK_WARNING_KEY = 'rigmatch:quick-test-warning:v1';
 // The app version whose update nudge the user dismissed — so the gentle popup
 // shows once per new release, never nags for a version they've already seen.
 const UPDATE_PROMPT_DISMISSED_KEY = 'rigmatch:update-prompt-dismissed:v1';
-type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; recognize: boolean; recognizeImage: string; code: boolean; codeLanguage: string; codeTaskId: string; codeCustomTask: string; skipQuestions: boolean };
+type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; recognize: boolean; recognizeImage: string; listen: boolean; code: boolean; codeLanguage: string; codeTaskId: string; codeCustomTask: string; skipQuestions: boolean };
 type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
 
 type RunProgress = {
@@ -530,6 +535,7 @@ function App() {
     imagePrompt: ADVANCED_IMAGE_GENERATION_PROMPT,
     recognize: false,
     recognizeImage: DEFAULT_VISION_TEST_IMAGE,
+    listen: false,
     code: false,
     codeLanguage: DEFAULT_CODE_LANGUAGE,
     codeTaskId: CODE_TASK_PRESETS[0].id,
@@ -609,7 +615,7 @@ function App() {
   const [tutorialStep, setTutorialStep] = useState(0);
   const [chatInput, setChatInput] = useState('');
   // Pending image (data URL) the user attached for the next vision-model message.
-  const [chatImage, setChatImage] = useState<string | null>(null);
+  const [chatAttachment, setChatAttachment] = useState<ChatAttachment | null>(null);
   const [chatMessagesByModel, setChatMessagesByModel] = useState<Record<string, ChatMessage[]>>(
     savedHistory?.chatMessagesByModel ?? {},
   );
@@ -646,6 +652,9 @@ function App() {
   const selectedRow = modelRows.find(
     (row) => row.displayName === selectedModel || row.id === selectedModel,
   );
+  // No name fallback: a model without the audio capability rejects the request
+  // outright rather than answering badly, so guessing would produce a 400.
+  const chatSupportsAudio = canHearAudio(selectedRow ?? { displayName: selectedModel });
   const selectedModelScore = selectedRow
     ? getModelScore(selectedRow, modelScores)
     : modelScores[selectedModel];
@@ -2114,7 +2123,10 @@ function App() {
       && getHardwareFit(row, system.gpu.vramGb).recommend
       && !isCloudModel(row.displayName)
       && !isEmbeddingModel(row.displayName)
-      && !isLikelyImageGenerationModel(row.displayName));
+      // Capability-checked rather than name-guessed: a model Ollama reports as
+      // image-only cannot answer a benchmark question at all, and would take an
+      // F for a fault that is not its own.
+      && canGenerateText(row));
 
     // One entry per model name: an auto-picked lineup of five Gemma sizes would
     // be a rigged show — five near-identical contestants answering the same
@@ -2445,7 +2457,15 @@ function App() {
     const selection = skillTestSelection;
     const appPrompt = resolveAppBuilderPrompt(selection.appPromptId, selection.appCustomPrompt);
     const codeTask = resolveCodeTask(selection.codeTaskId, selection.codeCustomTask);
-    const jobs: Array<{ model: string; kind: 'app-builder' | 'image' | 'vision' | 'code' }> = [];
+    const jobs: Array<{ model: string; kind: 'app-builder' | 'image' | 'vision' | 'code' | 'listening' }> = [];
+    // Only models the provider reports as able to hear. A model without the
+    // `audio` capability fails the request outright — measured on gemma3:4b,
+    // which reads images happily and returns "Failed to load image or audio
+    // file" for the same call — and would take an F for being asked something
+    // it cannot do.
+    const canHear = (model: string) => canHearAudio(
+      modelRows.find((row) => row.displayName === model) ?? { displayName: model },
+    );
     for (const model of models) {
       if (selection.appBuilder && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
         jobs.push({ model, kind: 'app-builder' });
@@ -2459,12 +2479,18 @@ function App() {
       if (selection.recognize && isVisionModel(model)) {
         jobs.push({ model, kind: 'vision' });
       }
+      if (selection.listen && canHear(model)) {
+        jobs.push({ model, kind: 'listening' });
+      }
     }
     if (!jobs.length) return;
 
     // A vision recognition job needs a picture to read; load the bundled test
     // image once up front.
     const visionImage = jobs.some((job) => job.kind === 'vision') ? await getVisionTestImageDataUrl(selection.recognizeImage) : '';
+    // Likewise the listening test needs its recording, loaded once rather than
+    // per model — it is 630 KB of base64.
+    const listeningAudio = jobs.some((job) => job.kind === 'listening') ? await getListeningTestAudio() : '';
 
     const demos: DemoArtifact[] = [];
     stopSkillRef.current = false;
@@ -2527,6 +2553,21 @@ function App() {
         });
         try {
           result = await runAdvancedVisionChallenge(job.model, ollama.baseUrl, visionImage, streamId);
+        } finally {
+          unsubscribe?.();
+        }
+      } else if (job.kind === 'listening') {
+        // The transcript arrives as tokens, so it can be watched being typed
+        // out the same way a description is.
+        const streamId = `listening-${Date.now()}-${index}`;
+        activeSkillStreamIdRef.current = streamId;
+        setLiveBuild({ model: job.model, kind: 'vision', text: '', done: false });
+        const unsubscribe = agentArcadeApi.onAdvancedGenerateProgress?.((payload) => {
+          if (payload.streamId !== streamId) return;
+          setLiveBuild({ model: payload.model ?? job.model, kind: 'vision', text: payload.text, done: payload.done, error: payload.error });
+        });
+        try {
+          result = await runAdvancedListeningChallenge(job.model, ollama.baseUrl, listeningAudio, streamId);
         } finally {
           unsubscribe?.();
         }
@@ -2764,16 +2805,25 @@ function App() {
 
   const sendChat = useCallback(async () => {
     const message = chatInput.trim();
-    const image = chatImage;
-    // Allow an image-only send (e.g. "read this") but keep a default prompt so
-    // the model always gets some text to act on.
-    if (!message && !image) return;
+    const attachment = chatAttachment;
+    // Allow an attachment-only send (e.g. "read this") but keep a default
+    // prompt so the model always gets some text to act on.
+    if (!message && !attachment) return;
+
+    // Audio and images both travel in `images` — that is how Ollama takes a
+    // recording, verified against gemma4:e2b, which transcribed a WAV sent
+    // this way.
+    const attached = attachment ? [attachment.dataUrl] : undefined;
+    const defaultPrompt = attachment?.kind === 'audio'
+      ? 'What is said in this recording?'
+      : 'What is in this image?';
 
     const userMessage: ChatMessage = {
       id: `${Date.now()}-user`,
       role: 'user',
-      content: message || (image ? 'What is in this image?' : ''),
-      ...(image ? { images: [image] } : {}),
+      content: message || (attachment ? defaultPrompt : ''),
+      ...(attached ? { images: attached } : {}),
+      ...(attachment ? { attachmentKind: attachment.kind } : {}),
     };
     const chatModel = selectedModel;
     setChatMessagesByModel((prev) => ({
@@ -2781,7 +2831,7 @@ function App() {
       [chatModel]: [...(prev[chatModel] ?? [welcomeChatMessage]), userMessage],
     }));
     setChatInput('');
-    setChatImage(null);
+    setChatAttachment(null);
 
     try {
       const runtime = getModelRuntime(selectedRow, ollama);
@@ -2790,7 +2840,7 @@ function App() {
         message: userMessage.content,
         baseUrl: runtime.baseUrl,
         provider: runtime.provider,
-        ...(image ? { images: [image] } : {}),
+        ...(attached ? { images: attached } : {}),
       });
       setChatMessagesByModel((prev) => ({
         ...prev,
@@ -2810,7 +2860,7 @@ function App() {
         ],
       }));
     }
-  }, [chatImage, chatInput, ollama, selectedModel, selectedRow]);
+  }, [chatAttachment, chatInput, ollama, selectedModel, selectedRow]);
 
   // Launch scan: reads this machine, reuses the cached catalog. Not user-initiated,
   // so it performs no version lookups.
@@ -3445,8 +3495,9 @@ function App() {
           onSend={sendChat}
           liveShowActive={uiMode === 'advanced' && runProgress?.phase === 'running'}
           canSendImages={chatSupportsImages}
-          pendingImage={chatImage}
-          onAttachImage={setChatImage}
+          canSendAudio={chatSupportsAudio}
+          pendingAttachment={chatAttachment}
+          onAttach={setChatAttachment}
           availableModels={modelRows.filter((row) => row.installed).map((row) => row.displayName)}
           onModelChange={setSelectedModel}
         />
@@ -3525,6 +3576,10 @@ function App() {
             : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName)}
           skillSelection={skillTestSelection}
           onSkillSelectionChange={setSkillTestSelection}
+          listenCapable={(pendingRunMode === 'single'
+            ? modelRows.filter((row) => row.displayName === (pendingSingleModel ?? selectedModel))
+            : shortlistedRows.filter((row) => row.installed).slice(0, 5)
+          ).some((row) => canHearAudio(row))}
         />
       )}
 
@@ -3591,7 +3646,7 @@ function App() {
               .filter((row) => row.localProvider !== 'lm-studio'
                 && !isCloudModel(row.displayName)
                 && !isEmbeddingModel(row.displayName)
-                && !isLikelyImageGenerationModel(row.displayName))
+                && canGenerateText(row))
               .map((row) => ({ tag: row.displayName, sizeGb: row.sizeGb, score: getModelScore(row, modelScores) })),
             device: system.gpu.model && system.gpu.model !== 'Unknown GPU'
               ? [system.gpu.model, system.gpu.vramGb > 0 ? `${Math.round(system.gpu.vramGb)} GB` : null].filter(Boolean).join(' · ')
@@ -4665,6 +4720,7 @@ function RunWarningModal({
   lineupModels,
   skillSelection,
   onSkillSelectionChange,
+  listenCapable,
   qualityMode,
   judgeModel,
   judgeModelOptions,
@@ -4695,6 +4751,9 @@ function RunWarningModal({
   lineupModels: string[];
   skillSelection: SkillTestSelection;
   onSkillSelectionChange: (selection: SkillTestSelection) => void;
+  /** Whether any model in this run reports the audio capability. Computed
+      where the rows are, since the dialog only receives model names. */
+  listenCapable: boolean;
   qualityMode: 'heuristic' | 'judge';
   judgeModel: string;
   judgeModelOptions: string[];
@@ -4736,7 +4795,7 @@ function RunWarningModal({
   const codeCapable = appBuilderCapable && judgeActive;
   // Every model in the lineup is image-only → the Q&A round can't run at all.
   const imageOnlyLineup = lineupModels.length > 0 && lineupModels.every(isLikelyImageGenerationModel);
-  const anySkillSelected = (skillSelection.appBuilder && appBuilderCapable) || (skillSelection.code && codeCapable) || (skillSelection.image && imageCapable) || (skillSelection.recognize && visionCapable);
+  const anySkillSelected = (skillSelection.appBuilder && appBuilderCapable) || (skillSelection.code && codeCapable) || (skillSelection.image && imageCapable) || (skillSelection.recognize && visionCapable) || (skillSelection.listen && listenCapable);
   const skipQuestions = anySkillSelected && (skillSelection.skipQuestions || imageOnlyLineup);
   // Block the doomed case: an image-only model with no skill selected would just
   // fail the questions. Require a skill (the image one) first.
@@ -5151,6 +5210,20 @@ function RunWarningModal({
                       <em>{visionCapable
                         ? 'Shows a vision model a picture and streams its live description. Pick one below or upload your own. Adds about a minute per model.'
                         : 'No vision/OCR model in this run. Add one (like llava or a -vl model) to unlock.'}</em>
+                    </span>
+                  </label>
+                  <label className={`run-skill-test-option${listenCapable ? '' : ' disabled'}`}>
+                    <input
+                      type="checkbox"
+                      checked={skillSelection.listen && listenCapable}
+                      disabled={!listenCapable}
+                      onChange={(event) => onSkillSelectionChange({ ...skillSelection, listen: event.target.checked })}
+                    />
+                    <span>
+                      <strong>Listen to a recording</strong>
+                      <em>{listenCapable
+                        ? 'Plays a short spoken passage and compares the transcript word for word against what was actually said. The only score here measured against a right answer rather than judged. About twenty seconds per model.'
+                        : 'No model in this run can hear. Add one that reports audio support (like gemma4) to unlock.'}</em>
                     </span>
                   </label>
                   {visionCapable && skillSelection.recognize && (
@@ -6723,6 +6796,27 @@ function ModelCabinet({
     const base = rows.filter((row) => passesQuery(row) && passesDeveloper(row) && passesQuick(row));
     return Object.fromEntries(TASK_FILTER_CHIPS.map((chip) => [chip.id, base.filter((row) => modelMatchesTask(row, chip.id)).length]));
   }, [rows, passesQuery, passesDeveloper, passesQuick]);
+  /**
+   * Only offer a use case something can actually satisfy.
+   *
+   * "Makes video" matched nothing at all — not one of the models installed
+   * here, none of the 233 in Ollama's library, and nothing in the community
+   * namespace. There is no video generation on Ollama to find, so the filter
+   * promised a category it could never fill. Deciding this from the catalogue
+   * rather than deleting the chip means it comes back on its own the day a
+   * video model appears.
+   *
+   * Counted over every row rather than the filtered ones, so chips do not
+   * appear and vanish as a search is typed — and the active chip always stays,
+   * or clearing it would be impossible.
+   */
+  const offerableTaskFilters = useMemo(
+    () => TASK_FILTER_CHIPS.filter(
+      (chip) => chip.id === taskFilter || rows.some((row) => modelMatchesTask(row, chip.id)),
+    ),
+    [rows, taskFilter],
+  );
+
   const developerFilterOptions = useMemo(
     () => getDeveloperFilterOptions(rows.filter((row) => passesQuery(row) && passesQuick(row) && passesTask(row))),
     [rows, passesQuery, passesQuick, passesTask],
@@ -6917,7 +7011,7 @@ function ModelCabinet({
             </div>
             <div className="model-task-filters advanced-only" aria-label="Filter by use case">
               <span className="model-task-filters-label">For:</span>
-              {TASK_FILTER_CHIPS.map((chip) => (
+              {offerableTaskFilters.map((chip) => (
                 <button
                   key={chip.id}
                   type="button"

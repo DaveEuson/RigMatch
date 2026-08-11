@@ -10,10 +10,11 @@ import robotModelTest from '../assets/robot-model-test.webp';
 import robotContestantWall from '../assets/robot-contestant-wall.webp';
 import robotRigGreenroom from '../assets/robot-rig-greenroom.webp';
 import robotScorecardCeremony from '../assets/robot-scorecard-ceremony.webp';
+import listeningTestAudio from '../assets/listening-test.wav';
 import { agentArcadeApi } from '../api';
 import { describeRunError } from './format';
 import { type AdvancedLabCheck, type AdvancedLabResult } from './labResults';
-import { getAdvancedLabGrade, scoreAdvancedImageResponse, scoreAdvancedVisionResponse } from './labScoring';
+import { getAdvancedLabGrade, scoreAdvancedImageResponse, scoreAdvancedListeningResponse, scoreAdvancedVisionResponse } from './labScoring';
 import { extractHtmlDocument } from './labPreview';
 import { checkAppParses } from './appRunnability';
 import { judgeAppBuilder } from './appBuilderJudge';
@@ -599,6 +600,106 @@ export async function runAdvancedImageGenerationChallenge(
     return {
       model,
       challenge: 'image-generation',
+      score: 0,
+      grade: 'F',
+      elapsedMs: Math.round(performance.now() - startedAt),
+      response: '',
+      checks: [],
+      completedAt: new Date().toISOString(),
+      error: message,
+    };
+  }
+}
+
+/**
+ * The reference passage, word for word as it is spoken in listening-test.wav.
+ *
+ * Forty-two words, deliberately: a shorter script makes the metric too
+ * granular. Measured on gemma4:e2b, a model that heard an eight-word sentence
+ * perfectly but wrote "pass code" for "passcode" scored 75 — the same slip
+ * against this passage scores 95. It reads digits out individually, because the
+ * scorer treats "77" as "seven seven" and does not understand quantities.
+ */
+export const LISTENING_REFERENCE =
+  'The passcode is zebra seven seven. Please deliver the package to warehouse four on Tuesday morning. '
+  + 'The order reference is alpha nine three. Contact Priya on extension two one five if the loading bay '
+  + 'is closed. Do not use the side entrance.';
+
+export const ADVANCED_LISTENING_PROMPT =
+  'Listen to the audio and write down exactly what is said, word for word. Output only the words spoken.';
+
+let listeningAudioCache = '';
+
+/** The reference recording as bare base64, fetched from the bundled asset once. */
+export async function getListeningTestAudio(): Promise<string> {
+  if (listeningAudioCache) return listeningAudioCache;
+  try {
+    const response = await fetch(listeningTestAudio);
+    const buffer = await response.arrayBuffer();
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    // Chunked: spreading a 630 KB array into String.fromCharCode at once
+    // overflows the argument limit.
+    for (let i = 0; i < bytes.length; i += 8192) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    }
+    listeningAudioCache = btoa(binary);
+    return listeningAudioCache;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Play a known passage and score what the model wrote down.
+ *
+ * Audio rides the same `images` array that carries pictures — verified against
+ * Ollama 0.32.9, where gemma4:e2b transcribed this passage at 90/100 in eleven
+ * seconds. Only models reporting the `audio` capability should be given this:
+ * gemma3:4b reports `vision` but not `audio` and fails the identical request
+ * with "Failed to load image or audio file".
+ */
+export async function runAdvancedListeningChallenge(
+  model: string,
+  baseUrl: string,
+  audioBase64: string,
+  streamId?: string,
+): Promise<AdvancedLabResult> {
+  const startedAt = performance.now();
+  try {
+    if (!audioBase64) throw new Error('The listening test recording could not be loaded.');
+    const data = await agentArcadeApi.runAdvancedGenerate({
+      model,
+      baseUrl,
+      prompt: ADVANCED_LISTENING_PROMPT,
+      images: [audioBase64],
+      keep_alive: '10m',
+      timeoutMs: 240000,
+      options: {
+        temperature: 0,
+        // The transcript is the whole answer, and it must not be cut off —
+        // a truncated transcript scores as words the model failed to hear.
+        num_ctx: 8192,
+        num_predict: 800,
+      },
+      ...(streamId ? { stream: true, streamId } : {}),
+    });
+    if (data.error) throw new Error(data.error);
+    const raw = data.response ?? '';
+    const scored = scoreAdvancedListeningResponse(raw, LISTENING_REFERENCE, data.done_reason ?? '');
+    return {
+      model,
+      challenge: 'listening',
+      ...scored,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      response: raw,
+      completedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    const message = describeRunError(error instanceof Error ? error.message : 'Listening test failed.');
+    return {
+      model,
+      challenge: 'listening',
       score: 0,
       grade: 'F',
       elapsedMs: Math.round(performance.now() - startedAt),

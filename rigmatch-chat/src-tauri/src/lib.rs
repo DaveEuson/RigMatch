@@ -358,6 +358,26 @@ fn write_conversations(app: tauri::AppHandle, contents: String) -> Result<(), St
     write_json_file(&conversations_path(&app)?, &contents)
 }
 
+/// Standing memory lives beside the conversations rather than inside them: it
+/// belongs to the user, not to any one thread, and keeping it separate means
+/// clearing chat history does not silently take it too.
+fn memories_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("memories.json"))
+}
+
+#[tauri::command]
+fn read_memories(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    read_json_file(&memories_path(&app)?)
+}
+
+#[tauri::command]
+fn write_memories(app: tauri::AppHandle, contents: String) -> Result<(), String> {
+    write_json_file(&memories_path(&app)?, &contents)
+}
+
 // ── Video memory ────────────────────────────────────────────────────────────
 //
 // Context size was chosen against a fixed 2 GiB budget because nothing here
@@ -525,6 +545,8 @@ pub fn run() {
             cancel_chat,
             read_conversations,
             write_conversations,
+            read_memories,
+            write_memories,
             open_rigmatch_ai,
             get_system_stats,
             get_rig_scores,

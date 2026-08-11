@@ -4,6 +4,16 @@ Every RigMatch release, newest first. These are the same notes the app shows in
 Update Center — this file and the GitHub release pages are generated from
 `src/data/releaseNotes.ts`, so there is only one place to write them.
 
+## 0.5.0 — It Can Hear
+_Beta build_
+
+- RigMatch can test whether a model can listen. Some local models take audio as well as text, and nothing in the app knew it — one already installed on a typical machine can transcribe speech and had never been asked to. The new Listening test plays a short spoken passage and compares what the model wrote down against the words that were actually said, word for word.
+- This is the first score in RigMatch measured against a right answer. Every other quality number here is a judgement — a set of pattern checks, or a second model marking the first one's homework — and the app has always been honest that those are a rough guide. A transcript can simply be right or wrong, so the listening score is the real thing: a model that hears nine tenths of the passage scores 90, and that means exactly what it says.
+- You can also send a recording in chat, to any model that can take one. Attach it the same way you would a picture, and it plays back in the conversation so you can tell at a glance which file you sent.
+- The app now asks each model what it can do rather than guessing from its name. Ollama reports this directly — whether a model can hold a conversation, read pictures, hear audio, or generate images — and RigMatch reads it. That fixes a handful of quiet mistakes: models were being labelled by keywords in their names, so anything published in Ollama's community area was tagged as an image generator whether it was one or not.
+- It also stops a model being set up to fail. Ollama can download image-generation models but cannot actually run them yet, so putting one in a comparison guaranteed it a bottom score for something that was never its fault. Those are now kept out of comparisons and chat until they can genuinely run.
+- The "Makes video" filter is hidden, because nothing can satisfy it. There is no video generation on Ollama at all — everything that looks like it is a model that *watches* video rather than making it. The filter reappears by itself if that ever changes.
+
 ## 0.4.4 — Readable, and Reachable
 _Beta build_
 
