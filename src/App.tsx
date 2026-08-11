@@ -197,6 +197,7 @@ import {
   isEmbeddingModel,
   isHostBenchmarkReady,
   canGenerateText,
+  canHearAudio,
   isLikelyImageGenerationModel,
   isVisionModel,
   isListTestResult,
@@ -306,9 +307,11 @@ import {
   buildAppBuilderRetryPrompt,
   extractJudgedProblem,
   ADVANCED_IMAGE_GENERATION_PROMPT,
+  getListeningTestAudio,
   getVisionTestImageDataUrl,
   runAdvancedAppBuilderChallenge,
   runCodeChallenge,
+  runAdvancedListeningChallenge,
   runAdvancedVisionChallenge,
   runAdvancedImageGenerationChallenge,
   VISION_TEST_IMAGES,
@@ -365,7 +368,7 @@ const QUICK_CHECK_WARNING_KEY = 'rigmatch:quick-test-warning:v1';
 // The app version whose update nudge the user dismissed — so the gentle popup
 // shows once per new release, never nags for a version they've already seen.
 const UPDATE_PROMPT_DISMISSED_KEY = 'rigmatch:update-prompt-dismissed:v1';
-type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; recognize: boolean; recognizeImage: string; code: boolean; codeLanguage: string; codeTaskId: string; codeCustomTask: string; skipQuestions: boolean };
+type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; recognize: boolean; recognizeImage: string; listen: boolean; code: boolean; codeLanguage: string; codeTaskId: string; codeCustomTask: string; skipQuestions: boolean };
 type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
 
 type RunProgress = {
@@ -531,6 +534,7 @@ function App() {
     imagePrompt: ADVANCED_IMAGE_GENERATION_PROMPT,
     recognize: false,
     recognizeImage: DEFAULT_VISION_TEST_IMAGE,
+    listen: false,
     code: false,
     codeLanguage: DEFAULT_CODE_LANGUAGE,
     codeTaskId: CODE_TASK_PRESETS[0].id,
@@ -2449,7 +2453,15 @@ function App() {
     const selection = skillTestSelection;
     const appPrompt = resolveAppBuilderPrompt(selection.appPromptId, selection.appCustomPrompt);
     const codeTask = resolveCodeTask(selection.codeTaskId, selection.codeCustomTask);
-    const jobs: Array<{ model: string; kind: 'app-builder' | 'image' | 'vision' | 'code' }> = [];
+    const jobs: Array<{ model: string; kind: 'app-builder' | 'image' | 'vision' | 'code' | 'listening' }> = [];
+    // Only models the provider reports as able to hear. A model without the
+    // `audio` capability fails the request outright — measured on gemma3:4b,
+    // which reads images happily and returns "Failed to load image or audio
+    // file" for the same call — and would take an F for being asked something
+    // it cannot do.
+    const canHear = (model: string) => canHearAudio(
+      modelRows.find((row) => row.displayName === model) ?? { displayName: model },
+    );
     for (const model of models) {
       if (selection.appBuilder && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
         jobs.push({ model, kind: 'app-builder' });
@@ -2463,12 +2475,18 @@ function App() {
       if (selection.recognize && isVisionModel(model)) {
         jobs.push({ model, kind: 'vision' });
       }
+      if (selection.listen && canHear(model)) {
+        jobs.push({ model, kind: 'listening' });
+      }
     }
     if (!jobs.length) return;
 
     // A vision recognition job needs a picture to read; load the bundled test
     // image once up front.
     const visionImage = jobs.some((job) => job.kind === 'vision') ? await getVisionTestImageDataUrl(selection.recognizeImage) : '';
+    // Likewise the listening test needs its recording, loaded once rather than
+    // per model — it is 630 KB of base64.
+    const listeningAudio = jobs.some((job) => job.kind === 'listening') ? await getListeningTestAudio() : '';
 
     const demos: DemoArtifact[] = [];
     stopSkillRef.current = false;
@@ -2531,6 +2549,21 @@ function App() {
         });
         try {
           result = await runAdvancedVisionChallenge(job.model, ollama.baseUrl, visionImage, streamId);
+        } finally {
+          unsubscribe?.();
+        }
+      } else if (job.kind === 'listening') {
+        // The transcript arrives as tokens, so it can be watched being typed
+        // out the same way a description is.
+        const streamId = `listening-${Date.now()}-${index}`;
+        activeSkillStreamIdRef.current = streamId;
+        setLiveBuild({ model: job.model, kind: 'vision', text: '', done: false });
+        const unsubscribe = agentArcadeApi.onAdvancedGenerateProgress?.((payload) => {
+          if (payload.streamId !== streamId) return;
+          setLiveBuild({ model: payload.model ?? job.model, kind: 'vision', text: payload.text, done: payload.done, error: payload.error });
+        });
+        try {
+          result = await runAdvancedListeningChallenge(job.model, ollama.baseUrl, listeningAudio, streamId);
         } finally {
           unsubscribe?.();
         }
@@ -3529,6 +3562,10 @@ function App() {
             : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName)}
           skillSelection={skillTestSelection}
           onSkillSelectionChange={setSkillTestSelection}
+          listenCapable={(pendingRunMode === 'single'
+            ? modelRows.filter((row) => row.displayName === (pendingSingleModel ?? selectedModel))
+            : shortlistedRows.filter((row) => row.installed).slice(0, 5)
+          ).some((row) => canHearAudio(row))}
         />
       )}
 
@@ -4669,6 +4706,7 @@ function RunWarningModal({
   lineupModels,
   skillSelection,
   onSkillSelectionChange,
+  listenCapable,
   qualityMode,
   judgeModel,
   judgeModelOptions,
@@ -4699,6 +4737,9 @@ function RunWarningModal({
   lineupModels: string[];
   skillSelection: SkillTestSelection;
   onSkillSelectionChange: (selection: SkillTestSelection) => void;
+  /** Whether any model in this run reports the audio capability. Computed
+      where the rows are, since the dialog only receives model names. */
+  listenCapable: boolean;
   qualityMode: 'heuristic' | 'judge';
   judgeModel: string;
   judgeModelOptions: string[];
@@ -4740,7 +4781,7 @@ function RunWarningModal({
   const codeCapable = appBuilderCapable && judgeActive;
   // Every model in the lineup is image-only → the Q&A round can't run at all.
   const imageOnlyLineup = lineupModels.length > 0 && lineupModels.every(isLikelyImageGenerationModel);
-  const anySkillSelected = (skillSelection.appBuilder && appBuilderCapable) || (skillSelection.code && codeCapable) || (skillSelection.image && imageCapable) || (skillSelection.recognize && visionCapable);
+  const anySkillSelected = (skillSelection.appBuilder && appBuilderCapable) || (skillSelection.code && codeCapable) || (skillSelection.image && imageCapable) || (skillSelection.recognize && visionCapable) || (skillSelection.listen && listenCapable);
   const skipQuestions = anySkillSelected && (skillSelection.skipQuestions || imageOnlyLineup);
   // Block the doomed case: an image-only model with no skill selected would just
   // fail the questions. Require a skill (the image one) first.
@@ -5155,6 +5196,20 @@ function RunWarningModal({
                       <em>{visionCapable
                         ? 'Shows a vision model a picture and streams its live description. Pick one below or upload your own. Adds about a minute per model.'
                         : 'No vision/OCR model in this run. Add one (like llava or a -vl model) to unlock.'}</em>
+                    </span>
+                  </label>
+                  <label className={`run-skill-test-option${listenCapable ? '' : ' disabled'}`}>
+                    <input
+                      type="checkbox"
+                      checked={skillSelection.listen && listenCapable}
+                      disabled={!listenCapable}
+                      onChange={(event) => onSkillSelectionChange({ ...skillSelection, listen: event.target.checked })}
+                    />
+                    <span>
+                      <strong>Listen to a recording</strong>
+                      <em>{listenCapable
+                        ? 'Plays a short spoken passage and compares the transcript word for word against what was actually said. The only score here measured against a right answer rather than judged. About twenty seconds per model.'
+                        : 'No model in this run can hear. Add one that reports audio support (like gemma4) to unlock.'}</em>
                     </span>
                   </label>
                   {visionCapable && skillSelection.recognize && (

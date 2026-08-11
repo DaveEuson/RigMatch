@@ -10,6 +10,7 @@
  */
 
 import type { AdvancedLabCheck, AdvancedLabResult } from './labResults.ts';
+import { extractTranscript, scoreTranscription } from './transcription.ts';
 
 export function getAdvancedLabGrade(score: number) {
   if (score >= 92) return 'S';
@@ -113,4 +114,48 @@ export function describeLabFailure(result: Partial<AdvancedLabResult>): string |
   if (result?.error) return result.error;
   const failed = (result?.checks ?? []).find((check) => !check.passed);
   return failed ? failed.detail : undefined;
+}
+
+/**
+ * Grade a transcription against the words that were actually spoken.
+ *
+ * Unlike every other scorer here, this one does not tally pass/fail checks into
+ * a percentage — it reports a measurement. The reference speech is known, so
+ * accuracy is the share of it the model got right, and a model that hears 90%
+ * of a passage scores 90 rather than landing in whichever bucket a checklist
+ * puts it. That is the reason the challenge exists: it is the only quality
+ * number in RigMatch that is not a proxy.
+ *
+ * The checks are kept as explanation rather than as the score.
+ */
+export function scoreAdvancedListeningResponse(
+  response: string,
+  reference: string,
+  doneReason: string,
+): Scored {
+  const heard = extractTranscript(response ?? '');
+  const answered = heard.trim().length > 0;
+  const accuracy = scoreTranscription(reference, heard);
+
+  const checks: AdvancedLabCheck[] = [
+    {
+      label: 'Returned an answer',
+      passed: answered,
+      detail: answered
+        ? 'The model sent back a transcript to compare.'
+        : `Returned no text at all${doneReason ? ` (stop reason: ${doneReason})` : ''}. This model may not accept audio through Ollama.`,
+    },
+    {
+      label: 'Heard the passage',
+      passed: accuracy.score >= 50,
+      detail: `${accuracy.errors} word${accuracy.errors === 1 ? '' : 's'} wrong out of ${accuracy.referenceWords}.`,
+    },
+    {
+      label: 'Accurate transcription',
+      passed: accuracy.score >= 85,
+      detail: 'Within the variation you would expect between two people typing up the same recording.',
+    },
+  ];
+
+  return { score: accuracy.score, grade: getAdvancedLabGrade(accuracy.score), checks };
 }

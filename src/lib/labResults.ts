@@ -42,7 +42,7 @@ export type AdvancedLabCheck = {
 /** A stored skill-test result for one model + challenge. */
 export type AdvancedLabResult = {
   model: string;
-  challenge: 'app-builder' | 'image-generation' | 'image-recognition' | 'code';
+  challenge: 'app-builder' | 'image-generation' | 'image-recognition' | 'code' | 'listening';
   score: number;
   grade: string;
   elapsedMs: number;
