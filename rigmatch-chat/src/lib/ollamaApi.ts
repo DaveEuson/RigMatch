@@ -76,6 +76,15 @@ export async function writeConversationsFile(contents: string): Promise<void> {
   await invoke<void>("write_conversations", { contents });
 }
 
+/** Standing memory, kept beside conversations rather than inside them. */
+export async function readMemoriesFile(): Promise<string | null> {
+  return await invoke<string | null>("read_memories");
+}
+
+export async function writeMemoriesFile(contents: string): Promise<void> {
+  await invoke<void>("write_memories", { contents });
+}
+
 export async function getModelContextInfo(
   baseUrl: string,
   model: string,

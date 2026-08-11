@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, readConversationsFile, writeConversationsFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
+import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, readConversationsFile, writeConversationsFile, readMemoriesFile, writeMemoriesFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
 import { createWriteScheduler } from "./lib/writeScheduler";
 import {
   KEEP_RECENT_MESSAGES,
@@ -15,6 +15,16 @@ import {
   type SummarizerChoice,
 } from "./lib/compaction";
 import { buildSessionNote } from "./lib/sessionNote";
+import {
+  addMemory,
+  buildMemoryNote,
+  parseMemories,
+  removeMemory,
+  serializeMemories,
+  setMemoryEnabled,
+  updateMemory,
+  type Memory,
+} from "./lib/memory";
 import {
   conversationsForModel,
   createConversation,
@@ -394,6 +404,10 @@ export default function App() {
   const [expandedModels, setExpandedModels] = useState<Set<string>>(() => new Set());
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Conversation | null>(null);
+  // Standing memory: facts the user asked to be carried across conversations.
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const [memoriesLoaded, setMemoriesLoaded] = useState(false);
+  const [memoryDraft, setMemoryDraft] = useState("");
   const [compacting, setCompacting] = useState(false);
   const [compactError, setCompactError] = useState<string | null>(null);
   // A summary waiting to be accepted. Held rather than applied, because a bad
@@ -516,6 +530,9 @@ export default function App() {
   // prompt and every message up to that point, eval_count covers the reply. So
   // the only guesswork is whatever has been typed or added since — which is why
   // the mark is recorded against the message count it was measured at.
+  /** What memory contributes to every request, or null when there is nothing. */
+  const memoryNote = useMemo(() => buildMemoryNote(memories), [memories]);
+
   const contextUsage = useMemo(() => {
     const measured = activeConversationKey ? tokenMarkByKey[activeConversationKey] : undefined;
     const estimateFrom = (index: number) => activeMessages
@@ -531,10 +548,13 @@ export default function App() {
 
     const used = measured
       ? measured.promptTokens + measured.evalTokens + estimateFrom(measured.messageCount)
-      : summaryTokens + estimateFrom(summarized);
+      // Before the first measured reply, memory is part of what will be sent
+      // and would otherwise be invisible in the gauge. Ollama's own count
+      // covers it once there is one.
+      : summaryTokens + (memoryNote?.tokens ?? 0) + estimateFrom(summarized);
 
     return getContextUsage(used + estimateTokens(draft), activeContextLimit);
-  }, [activeConversationKey, tokenMarkByKey, activeMessages, activeConversation, draft, activeContextLimit]);
+  }, [activeConversationKey, tokenMarkByKey, activeMessages, activeConversation, draft, activeContextLimit, memoryNote]);
 
   /** Enough conversation to be worth summarising, and not already done. */
   const canCompact = activeConversation !== null
@@ -703,6 +723,39 @@ export default function App() {
     writerRef.current?.schedule(conversations);
   }, [conversations, historyLoaded]);
 
+  // Memory is loaded and written separately from conversations, so clearing
+  // chat history does not silently take it with it.
+  useEffect(() => {
+    let cancelled = false;
+    void readMemoriesFile()
+      .then((raw) => parseMemories(raw) ?? [])
+      .catch(() => [])
+      .then((loaded) => {
+        if (cancelled) return;
+        setMemories(loaded);
+        setMemoriesLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const memoryWriterRef = useRef<ReturnType<typeof createWriteScheduler<Memory[]>> | null>(null);
+  if (memoryWriterRef.current == null) {
+    memoryWriterRef.current = createWriteScheduler<Memory[]>({
+      write: async (value) => { await writeMemoriesFile(serializeMemories(value)); },
+      onError: (error) => setPersistError(String((error as Error)?.message ?? error)),
+      // A handful of edits, not a token stream — no reason to sit on them.
+      delayMs: 200,
+      maxDelayMs: 1000,
+    });
+  }
+
+  useEffect(() => {
+    // Gated the same way as conversations: an ungated first write would save
+    // the empty initial state over the file the load is about to fill.
+    if (!memoriesLoaded) return;
+    memoryWriterRef.current?.schedule(memories);
+  }, [memories, memoriesLoaded]);
+
   // The last few hundred milliseconds of a reply would otherwise be lost if the
   // window closed inside the coalescing window.
   useEffect(() => {
@@ -771,6 +824,10 @@ export default function App() {
       // invents an answer — it claimed to be in its first chat while sitting in
       // the second of two. Told rather than intercepted, so a genuine question
       // that merely mentions chats is still answered by the model.
+      // Standing memory rides ahead of the session facts: it is about the user,
+      // not about this conversation. Budgeted inside buildMemoryNote so it
+      // cannot quietly eat the window it sits next to.
+      memoryNote?.text ?? "",
       buildSessionNote({
         // A thread being started by this very message is not in `conversations`
         // yet — that update is queued below — so it has to count itself.
@@ -858,6 +915,7 @@ export default function App() {
     activePersonality,
     conversations,
     draft,
+    memoryNote,
     settings.ollamaUrl,
     settings.systemPrompt,
     typingModel,
@@ -967,6 +1025,11 @@ export default function App() {
       return threads[0]?.id ?? null;
     });
   }, [conversations, activeBuddy]);
+
+  const rememberText = useCallback((text: string) => {
+    setMemories((prev) => addMemory(prev, text, { id: genId(), now: Date.now() }));
+    void memoryWriterRef.current?.flush();
+  }, []);
 
   /** Start a thread on a model. The sidebar unfolds so it is visible. */
   const startNewConversation = useCallback((modelName: string) => {
@@ -1651,6 +1714,16 @@ export default function App() {
                     )}
                     <div className="rm-message-time">
                       {new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {/* Nothing is remembered unless it is asked for. Shown on
+                          hover so it does not clutter every message. */}
+                      <button
+                        type="button"
+                        className="rm-remember-btn"
+                        title="Remember this across all conversations"
+                        onClick={() => rememberText(msg.content)}
+                      >
+                        ✦ Remember
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1974,8 +2047,72 @@ export default function App() {
                 <span>Mute all sounds</span>
               </label>
 
+              {/* ── What it remembers about you ── */}
+              <div className="rm-settings-section-label">What it remembers about you</div>
+              <p className="rm-settings-hint">
+                Sent at the start of every conversation, with every model. Nothing is added here unless
+                you ask for it — use <strong>Remember</strong> on any message, or write your own below.
+                {memoryNote && memoryNote.omitted > 0 && (
+                  <> Only the {memoryNote.used} most recent fit; {memoryNote.omitted} are not being sent.</>
+                )}
+              </p>
+              <div className="rm-memory-list">
+                {memories.length === 0 && (
+                  <p className="rm-memory-empty">Nothing yet.</p>
+                )}
+                {memories.map((memory) => (
+                  <div key={memory.id} className={`rm-memory-row${memory.enabled ? "" : " off"}`}>
+                    <input
+                      type="checkbox"
+                      checked={memory.enabled}
+                      title={memory.enabled ? "Being sent — click to silence it" : "Kept, but not sent"}
+                      onChange={(e) => setMemories((prev) => setMemoryEnabled(prev, memory.id, e.target.checked))}
+                    />
+                    <input
+                      type="text"
+                      className="rm-memory-text"
+                      defaultValue={memory.text}
+                      onBlur={(e) => setMemories((prev) => updateMemory(prev, memory.id, e.target.value))}
+                    />
+                    <button
+                      type="button"
+                      className="rm-memory-remove"
+                      aria-label={`Forget: ${memory.text}`}
+                      title="Forget this"
+                      onClick={() => setMemories((prev) => removeMemory(prev, memory.id))}
+                    >×</button>
+                  </div>
+                ))}
+              </div>
+              <div className="rm-memory-add">
+                <input
+                  type="text"
+                  placeholder="Something it should always know about you…"
+                  value={memoryDraft}
+                  onChange={(e) => setMemoryDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" || !memoryDraft.trim()) return;
+                    rememberText(memoryDraft);
+                    setMemoryDraft("");
+                  }}
+                />
+                <button
+                  type="button"
+                  className="rm-btn-sm"
+                  disabled={!memoryDraft.trim()}
+                  onClick={() => { rememberText(memoryDraft); setMemoryDraft(""); }}
+                >Add</button>
+              </div>
+              {memories.length > 0 && (
+                <button
+                  type="button"
+                  className="rm-memory-forget-all"
+                  onClick={() => setMemories([])}
+                >Forget everything</button>
+              )}
+
               {/* ── Memory ── */}
-              <div className="rm-settings-section-label">Memory</div>
+              <div className="rm-settings-section-label">Conversation memory</div>
               <label className="rm-settings-field">
                 <span>How much each chat can remember</span>
                 <select
