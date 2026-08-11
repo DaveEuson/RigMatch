@@ -157,3 +157,27 @@ test('a provider that reports nothing falls back to the name, not to a refusal',
   assert.equal(canGenerateText({ displayName: 'x/flux2-klein' }), false, 'the name still catches known generators');
   assert.equal(isImageGenerationModel({ displayName: 'x/canary' }), false);
 });
+
+test('only models that report audio are offered a listening test', () => {
+  // Verified on 0.32.9: gemma4:e2b reports 'audio' and transcribed a 42-word
+  // passage at 90/100. gemma3:4b reports 'vision' but not 'audio', and the
+  // identical request failed with "Failed to load image or audio file" — a
+  // guaranteed error that would be scored against the model.
+  const src = fs.readFileSync('src/lib/modelCatalog.ts', 'utf8');
+  const start = src.indexOf('export function canHearAudio(');
+  assert.ok(start >= 0, 'canHearAudio not found');
+  const end = src.indexOf('\n}', start);
+  const body = src.slice(start, end + 2)
+    .replace('export function', 'function')
+    .replace(/\(row: CapabilityBearing\): boolean \{/, '(row) {');
+  const getCaps = 'function getModelCapabilities(row) { const r = row.capabilities ?? row.installedModel?.capabilities; return Array.isArray(r) && r.length > 0 ? r : null; }';
+  const canHearAudio = new Function(`${getCaps}\n${body}\nreturn canHearAudio;`)();
+
+  assert.equal(canHearAudio({ capabilities: ['completion', 'vision', 'audio', 'tools', 'thinking'] }), true, 'gemma4:e2b');
+  assert.equal(canHearAudio({ capabilities: ['completion', 'vision'] }), false, 'gemma3:4b reads images but cannot hear');
+  assert.equal(canHearAudio({ capabilities: ['completion', 'tools'] }), false);
+  // No name fallback: nothing in a name reliably says a model can hear, and
+  // guessing wrong produces the 400.
+  assert.equal(canHearAudio({ displayName: 'some-audio-model:7b' }), false);
+  assert.equal(canHearAudio({}), false);
+});

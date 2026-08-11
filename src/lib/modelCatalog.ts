@@ -102,6 +102,23 @@ export function canGenerateText(row: CapabilityBearing): boolean {
 }
 
 /**
+ * Whether this model can be sent audio.
+ *
+ * Verified on 0.32.9: gemma4:e2b reports `audio` and transcribed a synthesised
+ * 42-word passage at 90/100 in 11 seconds, with the WAV passed in the same
+ * `images` array that carries pictures. gemma3:4b reports `vision` but not
+ * `audio`, and the identical request fails with "Failed to load image or audio
+ * file" — so this gate is what stands between a listening test and a guaranteed
+ * error scored against the model.
+ *
+ * Name matching is not offered as a fallback: nothing in a model's name
+ * reliably says it can hear, and guessing wrong produces that failure.
+ */
+export function canHearAudio(row: CapabilityBearing): boolean {
+  return getModelCapabilities(row)?.includes('audio') ?? false;
+}
+
+/**
  * Models that generate an image.
  *
  * Prefers what the provider reports, and falls back to the family name for
