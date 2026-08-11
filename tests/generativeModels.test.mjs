@@ -84,3 +84,76 @@ test('the chip is hidden by the catalogue, not deleted from the code', () => {
   const catalog = fs.readFileSync('src/lib/modelCatalog.ts', 'utf8');
   assert.match(catalog, /id: 'videogen'/, 'the chip definition stays, ready for when it can be filled');
 });
+
+// ── Capability-based detection ───────────────────────────────────────────────
+//
+// Ollama reports what a model can do from /api/show. Vocabulary observed on
+// 0.32.9 against the models installed here:
+//   x/flux2-klein  -> ['image']                  (note: no 'completion')
+//   llama3.2:3b    -> ['completion', 'tools']
+//   bakllava       -> ['completion', 'vision']
+//   deepseek-ocr   -> ['completion', 'vision']
+
+function loadCapabilityFns() {
+  const src = fs.readFileSync('src/lib/modelCatalog.ts', 'utf8');
+  const grab = (name) => {
+    const start = src.indexOf(`export function ${name}(`);
+    assert.ok(start >= 0, `${name} not found`);
+    const end = src.indexOf('\n}', start);
+    return src.slice(start, end + 2)
+      .replace('export function', 'function')
+      .replace(/\(row: CapabilityBearing\): boolean \{/, '(row) {')
+      .replace(/\(row: CapabilityBearing\): string\[\] \| null \{/, '(row) {')
+      .replace(/\(model: string\): boolean \{/, '(model) {');
+  };
+  const body = ['getModelCapabilities', 'isLikelyImageGenerationModel', 'canGenerateText', 'isImageGenerationModel']
+    .map(grab).join('\n');
+  return new Function(`${body}\nreturn { getModelCapabilities, canGenerateText, isImageGenerationModel };`)();
+}
+
+const { canGenerateText, isImageGenerationModel } = loadCapabilityFns();
+
+test('what the provider reports beats what the name suggests', () => {
+  // A model called "canary" that reports completion is a chat model, whatever
+  // namespace it sits in — and this is the case the name rule got wrong.
+  const canary = { displayName: 'x/canary', capabilities: ['completion'] };
+  assert.equal(isImageGenerationModel(canary), false);
+  assert.equal(canGenerateText(canary), true);
+
+  // And a model whose name says nothing is still caught when it reports image.
+  const unnamed = { displayName: 'x/mystery-model', capabilities: ['image'] };
+  assert.equal(isImageGenerationModel(unnamed), true);
+});
+
+test('an image model is kept out of anything that would ask it to answer', () => {
+  // Measured on 0.32.9: generating returns "image generation models are not
+  // currently supported" and chatting returns "does not support chat". Ollama
+  // distributes them without being able to run them, so offering one means a
+  // guaranteed failure scored against the model.
+  const flux = { displayName: 'x/flux2-klein', capabilities: ['image'] };
+  assert.equal(canGenerateText(flux), false, 'must never reach a benchmark or a chat');
+  assert.equal(isImageGenerationModel(flux), true);
+});
+
+test('capabilities are read from the installed model when the row carries one', () => {
+  const row = { displayName: 'something', installedModel: { capabilities: ['image'] } };
+  assert.equal(isImageGenerationModel(row), true);
+  assert.equal(canGenerateText(row), false);
+});
+
+test('models that can answer are recognised as such', () => {
+  for (const caps of [['completion'], ['completion', 'tools'], ['completion', 'vision']]) {
+    const row = { displayName: 'whatever', capabilities: caps };
+    assert.equal(canGenerateText(row), true, `${caps} should be runnable`);
+    assert.equal(isImageGenerationModel(row), false);
+  }
+});
+
+test('a provider that reports nothing falls back to the name, not to a refusal', () => {
+  // The browsable catalogue cannot be asked, and an older Ollama has no
+  // capabilities field. Assuming "cannot run" there would empty the app.
+  assert.equal(canGenerateText({ displayName: 'llama3.2:3b' }), true);
+  assert.equal(canGenerateText({ displayName: 'mistral:7b', capabilities: [] }), true);
+  assert.equal(canGenerateText({ displayName: 'x/flux2-klein' }), false, 'the name still catches known generators');
+  assert.equal(isImageGenerationModel({ displayName: 'x/canary' }), false);
+});

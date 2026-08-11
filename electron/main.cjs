@@ -1856,6 +1856,54 @@ function assertValidModelName(model) {
   return security.assertValidModelName(model);
 }
 
+/**
+ * What Ollama says each model can do, from `/api/show`.
+ *
+ * The vocabulary observed on 0.32.9: `completion` (can answer at all), `vision`
+ * (can read an image it is sent), `tools`, and `image` (generates images — and
+ * notably arrives *without* `completion`). This replaces guessing from the
+ * model's name, which mislabelled anything published under Ollama's `x/`
+ * community namespace as an image generator.
+ *
+ * It also settles a question the name could never answer. An image model can be
+ * pulled and reports `capabilities: ['image']`, but asking it to generate
+ * anything returns `image generation models are not currently supported` and
+ * chatting with it returns `does not support chat`. Ollama distributes them
+ * without being able to run them, so RigMatch has to know not to offer one.
+ *
+ * Cached by name, since a model's capabilities cannot change without the model
+ * changing, and fetched in parallel so a large library does not slow a refresh.
+ * A failure leaves the field undefined and the caller falls back to the name.
+ */
+const modelCapabilityCache = new Map();
+
+async function attachModelCapabilities(baseUrl, models) {
+  await Promise.all(models.map(async (model) => {
+    const key = `${baseUrl}::${model.name}`;
+    if (modelCapabilityCache.has(key)) {
+      model.capabilities = modelCapabilityCache.get(key);
+      return;
+    }
+    try {
+      const shown = await fetchJson(
+        `${baseUrl}/api/show`,
+        { method: 'POST', body: JSON.stringify({ name: model.name }) },
+        4000,
+      );
+      const capabilities = Array.isArray(shown?.capabilities)
+        ? shown.capabilities.filter((item) => typeof item === 'string').slice(0, 12)
+        : undefined;
+      if (capabilities) {
+        modelCapabilityCache.set(key, capabilities);
+        model.capabilities = capabilities;
+      }
+    } catch {
+      // An older Ollama has no capabilities field, and a slow one is not worth
+      // failing a refresh over. The name heuristics still apply.
+    }
+  }));
+}
+
 async function getOllamaStatus(baseUrl = OLLAMA_LOCAL_URL) {
   assertLocalhostUrl(baseUrl);
   try {
@@ -1874,6 +1922,8 @@ async function getOllamaStatus(baseUrl = OLLAMA_LOCAL_URL) {
       parameterSize: model.details?.parameter_size,
       quantization: model.details?.quantization_level,
     }));
+
+    await attachModelCapabilities(baseUrl, models);
 
     return {
       ready: true,

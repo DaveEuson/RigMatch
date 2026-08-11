@@ -196,6 +196,7 @@ import {
   isCloudModel,
   isEmbeddingModel,
   isHostBenchmarkReady,
+  canGenerateText,
   isLikelyImageGenerationModel,
   isVisionModel,
   isListTestResult,
@@ -2114,7 +2115,10 @@ function App() {
       && getHardwareFit(row, system.gpu.vramGb).recommend
       && !isCloudModel(row.displayName)
       && !isEmbeddingModel(row.displayName)
-      && !isLikelyImageGenerationModel(row.displayName));
+      // Capability-checked rather than name-guessed: a model Ollama reports as
+      // image-only cannot answer a benchmark question at all, and would take an
+      // F for a fault that is not its own.
+      && canGenerateText(row));
 
     // One entry per model name: an auto-picked lineup of five Gemma sizes would
     // be a rigged show — five near-identical contestants answering the same
@@ -3591,7 +3595,7 @@ function App() {
               .filter((row) => row.localProvider !== 'lm-studio'
                 && !isCloudModel(row.displayName)
                 && !isEmbeddingModel(row.displayName)
-                && !isLikelyImageGenerationModel(row.displayName))
+                && canGenerateText(row))
               .map((row) => ({ tag: row.displayName, sizeGb: row.sizeGb, score: getModelScore(row, modelScores) })),
             device: system.gpu.model && system.gpu.model !== 'Unknown GPU'
               ? [system.gpu.model, system.gpu.vramGb > 0 ? `${Math.round(system.gpu.vramGb)} GB` : null].filter(Boolean).join(' · ')

@@ -72,6 +72,13 @@ export type OllamaModel = {
   provider?: LocalModelProvider;
   providerLabel?: string;
   baseUrl?: string;
+  /**
+   * What the provider says this model can do — 'completion', 'vision',
+   * 'tools', 'image'. Absent for models that are not installed (the browsable
+   * catalogue cannot be asked) and for providers that do not report it, in
+   * which case callers fall back to reading the name.
+   */
+  capabilities?: string[];
 };
 
 export type LocalModelProvider = 'ollama' | 'lm-studio';
