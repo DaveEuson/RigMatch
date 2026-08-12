@@ -17644,3 +17644,54 @@ a.whats-next-support:hover {
   display: block;
   margin-bottom: 6px;
 }
+
+/* ── ComfyUI settings ──────────────────────────────────────────────────────── */
+
+.settings-field {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.settings-field > span {
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.settings-field input {
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.settings-field input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* An address RigMatch will not accept is marked on the field itself, not only
+   in the warning below it, so it is obvious which control is at fault. */
+.settings-field input[aria-invalid='true'] {
+  border-color: var(--bad, #e0685f);
+}
+
+.settings-probe {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.settings-probe svg {
+  width: 14px;
+  height: 14px;
+}
+
+.settings-probe.ok { color: var(--good, #6fce8f); }
+.settings-probe.bad { color: var(--bad, #e0685f); }

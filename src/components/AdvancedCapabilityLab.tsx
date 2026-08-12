@@ -14,6 +14,15 @@ import { IMAGE_BENCHMARK_PROMPTS } from "../lib/imageGenScoring";
 import { IMAGE_RUN_SETTINGS, judgeCandidates, toLabResult } from "../lib/imageGenChallenge";
 import { runImageLabChallenge } from "../lib/imageGenRunner";
 import { comfyBridgeAvailable, getComfyStatus } from "../lib/comfyTransport";
+import { isVideoCheckpoint } from "../lib/videoGen";
+import {
+  DEFAULT_VIDEO_SIZE_ID,
+  VIDEO_SIZE_PRESETS,
+  describeVideoCost,
+  toVideoLabResult,
+  videoReadiness,
+} from "../lib/videoGenChallenge";
+import { runVideoLabChallenge } from "../lib/videoGenRunner";
 import { AppBuilderPreviewModal } from "./AppBuilderPreview";
 
 type AdvancedLabRunState = {
@@ -72,6 +81,10 @@ export function AdvancedCapabilityLab({
   const [imagePromptId, setImagePromptId] = useState(IMAGE_BENCHMARK_PROMPTS[0].id);
   const [judgeModel, setJudgeModel] = useState('');
   const imageAbortRef = useRef<AbortController | null>(null);
+  const [videoRunState, setVideoRunState] = useState<AdvancedLabRunState>({ phase: 'idle', result: null, message: '' });
+  const [videoCheckpoint, setVideoCheckpoint] = useState('');
+  const [videoSizeId, setVideoSizeId] = useState<string>(DEFAULT_VIDEO_SIZE_ID);
+  const videoAbortRef = useRef<AbortController | null>(null);
 
   /** For the Check again button, where setting state synchronously is fine. */
   const checkComfy = useCallback(async () => {
@@ -97,10 +110,24 @@ export function AdvancedCapabilityLab({
   }, []);
 
   const readiness = readinessFrom(comfyBridgeAvailable(), comfyStatus);
-  const availableCheckpoints = readiness.kind === 'ready' ? readiness.checkpoints : [];
+  // Video checkpoints are filtered out of the image picker. Handing an LTX
+  // model to a still-image graph fails deep inside the sampler with a shape
+  // error no user could act on.
+  const availableCheckpoints = (readiness.kind === 'ready' ? readiness.checkpoints : [])
+    .filter((name) => !isVideoCheckpoint(name));
   const activeCheckpoint = availableCheckpoints.includes(checkpoint)
     ? checkpoint
     : (availableCheckpoints[0] ?? '');
+
+  const videoReady = videoReadiness(
+    readiness.kind === 'ready' ? readiness.checkpoints : [],
+    comfyStatus?.textEncoders ?? [],
+  );
+  const videoCheckpoints = videoReady.kind === 'ready' ? videoReady.checkpoints : [];
+  const activeVideoCheckpoint = videoCheckpoints.includes(videoCheckpoint)
+    ? videoCheckpoint
+    : (videoCheckpoints[0] ?? '');
+  const activeEncoder = videoReady.kind === 'ready' ? videoReady.encoders[0] : '';
 
   const judges = useMemo(() => judgeCandidates(ollama.models), [ollama.models]);
   const activeJudge = judges.includes(judgeModel) ? judgeModel : (judges[0] ?? '');
@@ -121,7 +148,15 @@ export function AdvancedCapabilityLab({
     ? imageRunState.result
     : savedResults[imageResultKey] ?? null;
   const imageRunning = imageRunState.phase === 'running';
-  const canRunImageTest = readiness.kind === 'ready' && Boolean(activeCheckpoint) && !imageRunning;
+  const videoRunning = videoRunState.phase === 'running';
+  // Both share one GPU, so neither may start while the other is rendering.
+  const canRunImageTest = readiness.kind === 'ready' && Boolean(activeCheckpoint)
+    && !imageRunning && !videoRunning;
+  const canRunVideoTest = videoReady.kind === 'ready' && Boolean(activeVideoCheckpoint)
+    && Boolean(activeEncoder) && !imageRunning && !videoRunning;
+  const visibleVideoResult = videoRunState.result?.model === activeVideoCheckpoint
+    ? videoRunState.result
+    : savedResults[`video:${activeVideoCheckpoint}`] ?? null;
 
   const startChallenge = useCallback(async () => {
     if (!activeModel || !ollama.ready) return;
@@ -202,6 +237,56 @@ export function AdvancedCapabilityLab({
 
   const stopImageRun = useCallback(() => {
     imageAbortRef.current?.abort();
+  }, []);
+
+  const startVideoChallenge = useCallback(async () => {
+    if (!canRunVideoTest) return;
+    const controller = new AbortController();
+    videoAbortRef.current = controller;
+    const size = VIDEO_SIZE_PRESETS.find((p) => p.id === videoSizeId) ?? VIDEO_SIZE_PRESETS[0];
+    setVideoRunState({
+      phase: 'running',
+      result: null,
+      message: `Rendering ${size.width}x${size.height} with ${activeVideoCheckpoint}. Four seconds of video takes a while.`,
+    });
+
+    let run;
+    try {
+      run = await runVideoLabChallenge({
+        checkpoint: activeVideoCheckpoint,
+        textEncoder: activeEncoder,
+        sizeId: videoSizeId,
+        promptId: imagePromptId,
+        judgeModel: activeJudge || undefined,
+        ollamaBaseUrl: ollama.baseUrl,
+        signal: controller.signal,
+      });
+    } finally {
+      videoAbortRef.current = null;
+    }
+    const result = toVideoLabResult(run, imagePromptId);
+
+    setVideoRunState({
+      phase: result.error ? 'failed' : 'complete',
+      result,
+      message: result.error
+        ? result.error
+        : `${describeVideoCost(run)}${
+          run.judged
+            ? `, and ${activeJudge} confirmed ${Math.round((run.adherence ?? 0) * 100)}% of the prompt in the middle frame.`
+            : '. No vision model was available to check a frame, so this run is unjudged.'
+        }`,
+    });
+
+    if (!result.error) {
+      const merged = { ...readAdvancedLabResults(), [`video:${activeVideoCheckpoint}`]: result };
+      writeAdvancedLabResults(merged);
+      setSavedResults(merged);
+    }
+  }, [activeEncoder, activeJudge, activeVideoCheckpoint, canRunVideoTest, imagePromptId, ollama.baseUrl, videoSizeId]);
+
+  const stopVideoRun = useCallback(() => {
+    videoAbortRef.current?.abort();
   }, []);
 
   return (
@@ -501,37 +586,132 @@ export function AdvancedCapabilityLab({
           )}
         </article>
 
-        <article className="advanced-lab-card video-locked">
+        <article className="advanced-lab-card">
           <div className="advanced-lab-card-head">
             <Film aria-hidden="true" />
             <div>
-              <span>Research preview</span>
+              <span>Extra beta creative test</span>
               <strong>Video Generation</strong>
             </div>
-            <b className="advanced-lab-grade locked">Locked</b>
+            <b className={visibleVideoResult ? `advanced-lab-grade ${getScoreTone(visibleVideoResult.score)}` : 'advanced-lab-grade locked'}>
+              {visibleVideoResult ? `${visibleVideoResult.score} · ${visibleVideoResult.grade}` : 'Extra beta'}
+            </b>
           </div>
           <p>
-            No local backend RigMatch supports can generate video yet — Ollama has no video models today, so there
-            is honestly nothing to test. This card unlocks when that changes instead of pretending.
+            Renders four seconds of video on ComfyUI and checks a frame against the prompt.
+            Measured on a 12 GB card at 3x realtime for 768x512 &mdash; video needs less VRAM
+            than expected, and costs time instead.
           </p>
-          <div className="advanced-lab-checks">
-            <div className="failed" title="Ollama and LM Studio expose no video-generation endpoint today.">
-              <span>Miss</span>
-              <strong>Local video backend available</strong>
+
+          {readiness.kind !== 'ready' ? (
+            <div className="utility-empty compact">
+              <strong>Needs ComfyUI</strong>
+              <span>Video generation uses the same ComfyUI as the Image Lab above.</span>
             </div>
-            <div
-              className={(system.gpu.vramGb || 0) >= 16 ? 'passed' : 'failed'}
-              title={`Early local video models are expected to want roughly 16 GB+ of VRAM. This computer reports ${system.gpu.vramGb || 0} GB.`}
-            >
-              <span>{(system.gpu.vramGb || 0) >= 16 ? 'Pass' : 'Miss'}</span>
-              <strong>VRAM headroom (~16 GB+)</strong>
+          ) : videoReady.kind === 'no-checkpoint' ? (
+            <div className="utility-empty compact">
+              <strong>No video model installed</strong>
+              <span>
+                ComfyUI is running, but none of its checkpoints is a video model. LTX-Video is the
+                lightest that fits a consumer card; put it in ComfyUI&apos;s
+                <code> models/checkpoints</code> folder.
+              </span>
+              <button type="button" className="mini-button outline" onClick={() => void checkComfy()} disabled={comfyChecking}>
+                <RefreshCw className={comfyChecking ? 'spin' : ''} aria-hidden="true" />
+                Check again
+              </button>
             </div>
-          </div>
-          <div className="advanced-lab-safeguards">
-            <span>No auto-downloads</span>
-            <span>Separate Lab Grade</span>
-            <span>Backend + size warnings first</span>
-          </div>
+          ) : videoReady.kind === 'no-encoder' ? (
+            <div className="utility-empty compact">
+              <strong>No text encoder installed</strong>
+              <span>
+                A video model is present but LTX cannot run without a T5 encoder alongside it.
+                Put <code>t5xxl_fp8_e4m3fn.safetensors</code> in ComfyUI&apos;s
+                <code> models/text_encoders</code> folder &mdash; the fp8 build is about 4.9 GB,
+                half the size of fp16 and the sensible one for a consumer card.
+              </span>
+              <button type="button" className="mini-button outline" onClick={() => void checkComfy()} disabled={comfyChecking}>
+                <RefreshCw className={comfyChecking ? 'spin' : ''} aria-hidden="true" />
+                Check again
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="advanced-lab-image-controls">
+                <label htmlFor="advanced-video-checkpoint">Video model</label>
+                <select
+                  id="advanced-video-checkpoint"
+                  value={activeVideoCheckpoint}
+                  onChange={(event) => setVideoCheckpoint(event.target.value)}
+                  disabled={videoRunning}
+                >
+                  {videoCheckpoints.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="advanced-lab-image-controls">
+                <label htmlFor="advanced-video-size">Size</label>
+                <select
+                  id="advanced-video-size"
+                  value={videoSizeId}
+                  onChange={(event) => setVideoSizeId(event.target.value)}
+                  disabled={videoRunning}
+                >
+                  {VIDEO_SIZE_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>{preset.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="advanced-lab-safeguards">
+                <span>97 frames &middot; 4s</span>
+                <span>8 steps</span>
+                <span>{activeEncoder}</span>
+                <span>{judges.length ? 'frame judged' : 'unjudged'}</span>
+              </div>
+              <div className="advanced-lab-warning">
+                <AlertTriangle aria-hidden="true" />
+                <span>
+                  Motion quality is not scored. A frame can be checked against the prompt, but
+                  temporal consistency and flicker have no right answer and no local model judges
+                  them reliably &mdash; so the score covers speed and the frame, and says so.
+                </span>
+              </div>
+              <div className="advanced-lab-actions">
+                <button type="button" className="primary-button compact" onClick={() => void startVideoChallenge()} disabled={!canRunVideoTest}>
+                  <RefreshCw className={videoRunning ? 'spin' : ''} aria-hidden="true" />
+                  {videoRunning ? 'Rendering' : 'Run Video Test'}
+                </button>
+                {videoRunning && (
+                  <button type="button" className="mini-button outline" onClick={stopVideoRun}>
+                    Stop
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+          {videoRunState.message && (
+            <p className={`advanced-lab-message ${videoRunState.phase}`}>{videoRunState.message}</p>
+          )}
+          {visibleVideoResult && !visibleVideoResult.error && (
+            <div className="advanced-lab-result">
+              {visibleVideoResult.imageDataUrl && (
+                <img
+                  className="advanced-lab-generated-image"
+                  src={visibleVideoResult.imageDataUrl}
+                  alt="Middle frame of the generated video"
+                />
+              )}
+              <div className="advanced-lab-checks">
+                {visibleVideoResult.checks.map((check) => (
+                  <div key={check.label} className={check.passed ? 'passed' : 'failed'} title={check.detail}>
+                    <span>{check.passed ? 'Pass' : 'Miss'}</span>
+                    <strong>{check.label}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </article>
       </div>
       {previewOpen && previewHtml && visibleResult && (

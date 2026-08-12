@@ -282,6 +282,7 @@ import {
 import { getUpdateChannelLabel } from './lib/updateLabels';
 import { AvatarBust, MachineAvatar } from './components/Avatars';
 import { AppBuilderPreviewModal } from './components/AppBuilderPreview';
+import { ComfySettings } from './components/ComfySettings';
 import { ShareScorecard } from './components/ShareScorecard';
 import { ExportHatchModal } from './components/ExportHatchModal';
 import { buildHatchProfile } from './lib/hatchProfile';
@@ -6247,6 +6248,10 @@ function UtilityPanel({
             <ExternalLink aria-hidden="true" />
             Setup Guide
           </button>
+          </SettingsSection>
+
+          <SettingsSection eyebrow="Generation" title="ComfyUI" summary="Where image and video generation run, and whether RigMatch may unload models.">
+          <ComfySettings />
           </SettingsSection>
 
           <SettingsSection eyebrow="Updates" title="Versions & Release Notes" summary="RigMatch app updates, Ollama updates, and recent changes.">

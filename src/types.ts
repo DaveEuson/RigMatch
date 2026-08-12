@@ -412,6 +412,10 @@ export type ComfyStatus = {
   stats?: unknown;
   /** Filenames from /models/checkpoints. Empty is meaningful: running, no models. */
   checkpoints: string[];
+  /** T5 encoders from /models/text_encoders. An LTX graph cannot run without one. */
+  textEncoders?: string[];
+  /** /prompt's reply, carrying queue_remaining — how busy this instance is. */
+  execInfo?: unknown;
 };
 
 export type AgentArcadeApi = {

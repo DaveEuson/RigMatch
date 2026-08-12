@@ -1,14 +1,16 @@
 /**
- * Adapts the preload bridge to the transport `runImageGeneration` expects.
+ * Adapts the preload bridge to the transport the runners expect.
  *
- * The split is deliberate: the orchestration in imageGenRun.ts takes a plain
- * object of four functions, so its tests drive a fake and never touch Electron.
- * This file is the only place that knows the bridge exists.
+ * The split is deliberate: the orchestration in imageGenRun.ts and
+ * videoGenRun.ts takes a plain object of functions, so their tests drive a
+ * fake and never touch Electron. This file is the only place that knows the
+ * bridge exists.
  */
 
 import { agentArcadeApi } from '../api.ts';
-import { COMFY_DEFAULT_URL } from './comfyui.ts';
+import { readComfySettings } from './comfySettings.ts';
 import type { ComfyTransport } from './imageGenRun.ts';
+import type { VideoTransport } from './videoGenRun.ts';
 import type { ComfyStatus } from '../types.ts';
 
 /**
@@ -23,7 +25,12 @@ export function comfyBridgeAvailable(): boolean {
     && typeof agentArcadeApi.getComfyStatus === 'function';
 }
 
-export async function getComfyStatus(baseUrl: string = COMFY_DEFAULT_URL): Promise<ComfyStatus> {
+/** Wherever the user pointed RigMatch, defaulting to ComfyUI's own port. */
+export function comfyBaseUrl(): string {
+  return readComfySettings().baseUrl;
+}
+
+export async function getComfyStatus(baseUrl: string = comfyBaseUrl()): Promise<ComfyStatus> {
   if (!agentArcadeApi.getComfyStatus) return { reachable: false, checkpoints: [] };
   try {
     return await agentArcadeApi.getComfyStatus(baseUrl);
@@ -34,15 +41,34 @@ export async function getComfyStatus(baseUrl: string = COMFY_DEFAULT_URL): Promi
   }
 }
 
-export function createComfyTransport(baseUrl: string = COMFY_DEFAULT_URL): ComfyTransport {
+function requireBridge() {
   const api = agentArcadeApi;
   if (!api.comfySubmit || !api.comfyHistory || !api.comfyImage || !api.comfyInterrupt) {
     throw new Error('This build cannot reach ComfyUI.');
   }
+  return api;
+}
+
+export function createComfyTransport(baseUrl: string = comfyBaseUrl()): ComfyTransport {
+  const api = requireBridge();
   return {
     submit: (graph) => api.comfySubmit!(baseUrl, graph, 'rigmatch'),
     history: (promptId) => api.comfyHistory!(baseUrl, promptId),
     image: (ref) => api.comfyImage!(baseUrl, ref),
     interrupt: (promptId) => api.comfyInterrupt!(baseUrl, promptId),
+  };
+}
+
+/**
+ * The video transport, which additionally needs to be able to free.
+ *
+ * Free resolves harmlessly when the bridge does not offer it — an older
+ * preload should mean "cannot unload", not "cannot render video".
+ */
+export function createVideoTransport(baseUrl: string = comfyBaseUrl()): VideoTransport {
+  const api = requireBridge();
+  return {
+    ...createComfyTransport(baseUrl),
+    free: () => (api.comfyFree ? api.comfyFree(baseUrl) : Promise.resolve()),
   };
 }

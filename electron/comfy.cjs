@@ -29,16 +29,32 @@ function createComfyBridge({ fetchJson, assertLocalhostUrl }) {
     // second call because a server with no models installed is still reachable
     // and the user needs to be told those two things apart.
     const stats = await fetchJson(`${base}/system_stats`, {}, timeoutMs);
-    let checkpoints = [];
+
+    // Older builds do not expose /models/{folder}, and none of these are worth
+    // calling the server down over. Reachability is what /system_stats settled.
+    const listStrings = async (path) => {
+      try {
+        const listed = await fetchJson(`${base}${path}`, {}, timeoutMs);
+        return Array.isArray(listed) ? listed.filter((n) => typeof n === 'string') : [];
+      } catch {
+        return [];
+      }
+    };
+    const [checkpoints, textEncoders] = await Promise.all([
+      listStrings('/models/checkpoints'),
+      listStrings('/models/text_encoders'),
+    ]);
+
+    // Queue depth, so a run can refuse rather than share a GPU with whatever
+    // the user is already rendering.
+    let execInfo = null;
     try {
-      const listed = await fetchJson(`${base}/models/checkpoints`, {}, timeoutMs);
-      if (Array.isArray(listed)) checkpoints = listed.filter((n) => typeof n === 'string');
+      execInfo = await fetchJson(`${base}/prompt`, {}, timeoutMs);
     } catch {
-      // Older builds do not expose /models/{folder}. Reachability still holds,
-      // and the caller reports "running, but no checkpoints could be listed"
-      // rather than treating the server as down.
+      // Treated as idle: failing to read the queue must not block a run.
     }
-    return { reachable: true, stats, checkpoints };
+
+    return { reachable: true, stats, checkpoints, textEncoders, execInfo };
   }
 
   async function submit(baseUrl, graph, clientId) {
