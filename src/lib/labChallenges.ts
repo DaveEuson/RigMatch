@@ -1,9 +1,12 @@
 /**
- * The Advanced Lab / skill-test challenge layer: the app-builder and image
- * prompts + presets, the per-challenge scoring rubrics, and the runners that
- * drive Ollama for each challenge (build an app, generate an image, recognize
- * an image). Extracted from App.tsx so both the run flow and the Advanced Lab
- * view share one implementation.
+ * The Advanced Lab / skill-test challenge layer: the app-builder prompts and
+ * presets, the per-challenge scoring rubrics, and the runners that drive Ollama
+ * for each challenge (build an app, read an image, transcribe audio, write
+ * code). Extracted from App.tsx so both the run flow and the Advanced Lab view
+ * share one implementation.
+ *
+ * Generating an image is the one skill that is not here, because it is the one
+ * skill Ollama cannot do. It runs on ComfyUI instead — see imageGenChallenge.ts.
  */
 
 import robotModelTest from '../assets/robot-model-test.webp';
@@ -12,13 +15,13 @@ import robotRigGreenroom from '../assets/robot-rig-greenroom.webp';
 import robotScorecardCeremony from '../assets/robot-scorecard-ceremony.webp';
 import listeningTestAudio from '../assets/listening-test.wav';
 import { agentArcadeApi } from '../api';
-import { describeRunError } from './format';
-import { type AdvancedLabCheck, type AdvancedLabResult } from './labResults';
-import { getAdvancedLabGrade, scoreAdvancedImageResponse, scoreAdvancedListeningResponse, scoreAdvancedVisionResponse } from './labScoring';
-import { extractHtmlDocument } from './labPreview';
-import { checkAppParses } from './appRunnability';
-import { judgeAppBuilder } from './appBuilderJudge';
-import { buildCodePrompt, extractCodeBlock, judgeCode } from './codeChallenge';
+import { describeRunError } from './format.ts';
+import { type AdvancedLabCheck, type AdvancedLabResult } from './labResults.ts';
+import { getAdvancedLabGrade, scoreAdvancedListeningResponse, scoreAdvancedVisionResponse } from './labScoring.ts';
+import { extractHtmlDocument } from './labPreview.ts';
+import { checkAppParses } from './appRunnability.ts';
+import { judgeAppBuilder } from './appBuilderJudge.ts';
+import { buildCodePrompt, extractCodeBlock, judgeCode } from './codeChallenge.ts';
 
 // Code that doesn't even parse can't run — a blank screen must never outscore a
 // working app. Cap it here regardless of how good the structure looks. 25 is F.
@@ -36,14 +39,6 @@ export const VISION_TEST_IMAGES: VisionTestImage[] = [
 export const DEFAULT_VISION_TEST_IMAGE = VISION_TEST_IMAGES[0].src;
 
 export type AppBuilderPreset = { id: string; label: string; prompt: string };
-
-export type ImageGenerationModelOption = {
-  model: string;
-  label: string;
-  sizeGb: number;
-  license: string;
-  note: string;
-};
 
 // ── App Builder prompts ──────────────────────────────────────────────────────
 
@@ -169,50 +164,11 @@ export function resolveAppBuilderPrompt(promptId: string, customPrompt: string):
   return APP_BUILDER_PRESETS.find((preset) => preset.id === promptId)?.prompt ?? ADVANCED_APP_BUILDER_PROMPT;
 }
 
-// ── Image generation config ──────────────────────────────────────────────────
-
-export const ADVANCED_IMAGE_GENERATION_PROMPT = 'A cheerful robot dog sitting beside a retro computer, warm studio lighting, playful but realistic, detailed fur-like metal texture, cozy workshop background';
-export const ADVANCED_IMAGE_WIDTH = 512;
-export const ADVANCED_IMAGE_HEIGHT = 512;
-export const ADVANCED_IMAGE_STEPS = 12;
-export const IMAGE_GENERATION_MODEL_OPTIONS: ImageGenerationModelOption[] = [
-  {
-    model: 'x/flux2-klein:4b',
-    label: 'FLUX.2 Klein 4B',
-    sizeGb: 5.7,
-    license: 'Apache 2.0 weights',
-    note: 'Smallest current Ollama image option; still a large pull.',
-  },
-  {
-    model: 'x/z-image-turbo',
-    label: 'Z-Image Turbo fp8',
-    sizeGb: 13,
-    license: 'Apache 2.0 weights',
-    note: 'Photorealistic image model; much bigger download.',
-  },
-];
+// Image generation moved to ComfyUI — see imageGenChallenge.ts. Ollama hosts no
+// image models and its runtime refuses the ones that exist, so the config that
+// used to live here described pulls that could never run.
 
 export const ADVANCED_VISION_PROMPT = 'Look at this image and describe exactly what you see in a few clear sentences. If there is any readable text, transcribe it. Be specific about objects, colors, and layout.';
-
-// ── Image helpers ────────────────────────────────────────────────────────────
-
-export function imageModelMatches(installedModel: string, requestedModel: string) {
-  const installed = installedModel.toLowerCase();
-  const requested = requestedModel.toLowerCase();
-  const requestedBase = requested.replace(/:latest$/, '');
-  return installed === requested || installed === `${requested}:latest` || installed === requestedBase || installed.startsWith(`${requestedBase}:`);
-}
-
-export function getInstalledImageModelName(installedModels: string[], requestedModel: string) {
-  return installedModels.find((model) => imageModelMatches(model, requestedModel)) ?? '';
-}
-
-function buildImageDataUrl(image: string) {
-  const trimmed = image.trim();
-  if (!trimmed) return '';
-  if (trimmed.startsWith('data:image/')) return trimmed;
-  return `data:image/png;base64,${trimmed}`;
-}
 
 // Resolve a chosen picture (a bundled asset URL or an uploaded data URL) to a
 // PNG data URL the vision model can read. Uploaded data URLs pass through;
@@ -551,55 +507,6 @@ export async function runAdvancedVisionChallenge(
     return {
       model,
       challenge: 'image-recognition',
-      score: 0,
-      grade: 'F',
-      elapsedMs: Math.round(performance.now() - startedAt),
-      response: '',
-      checks: [],
-      completedAt: new Date().toISOString(),
-      error: message,
-    };
-  }
-}
-
-export async function runAdvancedImageGenerationChallenge(
-  model: string,
-  baseUrl: string,
-  prompt: string = ADVANCED_IMAGE_GENERATION_PROMPT,
-): Promise<AdvancedLabResult> {
-  const startedAt = performance.now();
-
-  try {
-    const data = await agentArcadeApi.runAdvancedGenerate({
-      model,
-      baseUrl,
-      prompt,
-      timeoutMs: 240000,
-      width: ADVANCED_IMAGE_WIDTH,
-      height: ADVANCED_IMAGE_HEIGHT,
-      steps: ADVANCED_IMAGE_STEPS,
-      keep_alive: '5m',
-    });
-    if (data.error) throw new Error(data.error);
-
-    const imageDataUrl = buildImageDataUrl(data.image ?? data.images?.[0] ?? '');
-    const scored = scoreAdvancedImageResponse(imageDataUrl, data.done_reason ?? '');
-    return {
-      model,
-      challenge: 'image-generation',
-      ...scored,
-      elapsedMs: Math.round(performance.now() - startedAt),
-      response: data.response ?? '',
-      imageDataUrl,
-      width: ADVANCED_IMAGE_WIDTH,
-      height: ADVANCED_IMAGE_HEIGHT,
-      completedAt: new Date().toISOString(),
-    };
-  } catch (error) {
-    const message = describeRunError(error instanceof Error ? error.message : 'Image generation failed.');
-    return {
-      model,
-      challenge: 'image-generation',
       score: 0,
       grade: 'F',
       elapsedMs: Math.round(performance.now() - startedAt),

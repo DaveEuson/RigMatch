@@ -2,7 +2,7 @@
 // it with the LLM judge. Unlike App Builder there's nothing to run/preview, so this
 // is judge-only (see docs/code-challenge-spec.md). Pure data + prompt builders live
 // here; the runner that drives Ollama/OpenRouter lives in labChallenges.ts.
-import { parseAppJudgeVerdict, type AppJudgeVerdict } from './appBuilderJudge';
+import { parseAppJudgeVerdict, type AppJudgeVerdict } from './appBuilderJudge.ts';
 
 export const CODE_LANGUAGES: Array<{ id: string; label: string }> = [
   { id: 'python', label: 'Python' },

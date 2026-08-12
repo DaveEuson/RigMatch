@@ -406,6 +406,14 @@ export type GpuContention = {
   source: string | null;
 };
 
+/** What ComfyUI reports about itself, or why it could not be reached. */
+export type ComfyStatus = {
+  reachable: boolean;
+  stats?: unknown;
+  /** Filenames from /models/checkpoints. Empty is meaningful: running, no models. */
+  checkpoints: string[];
+};
+
 export type AgentArcadeApi = {
   /**
    * `checkForUpdates` permits the one outbound call on this path — asking NVIDIA
@@ -431,6 +439,17 @@ export type AgentArcadeApi = {
   abortPull: (progressId?: string, reason?: 'pause' | 'cancel') => Promise<void>;
   deleteModel: (request: { model: string; baseUrl?: string }) => Promise<DeleteModelResponse>;
   runAdvancedGenerate: (request: AdvancedGenerateRequest) => Promise<AdvancedGenerateResponse>;
+  /**
+   * ComfyUI, which is where image generation actually happens — Ollama hosts no
+   * image models and its runtime refuses the ones that exist. Optional because
+   * an older preload will not have them, and the Image Lab has to tell the user
+   * ComfyUI is unavailable rather than throwing.
+   */
+  getComfyStatus?: (baseUrl?: string) => Promise<ComfyStatus>;
+  comfySubmit?: (baseUrl: string | undefined, graph: Record<string, unknown>, clientId?: string) => Promise<{ promptId: string }>;
+  comfyHistory?: (baseUrl: string | undefined, promptId: string) => Promise<unknown>;
+  comfyImage?: (baseUrl: string | undefined, ref: { filename: string; subfolder: string; type: string }) => Promise<string>;
+  comfyInterrupt?: (baseUrl: string | undefined, promptId: string) => Promise<unknown>;
   // Cloud judge bridge (strictly opt-in): one OpenRouter completion using the
   // user's own key, routed through the main process. Only used for judging.
   openRouterGenerate?: (request: { apiKey: string; model: string; prompt: string; maxTokens?: number }) => Promise<{ response: string; error: string | null }>;

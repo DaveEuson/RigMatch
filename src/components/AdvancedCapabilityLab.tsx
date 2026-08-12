@@ -1,26 +1,19 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Check, Code2, Copy, Download, Film, Lightbulb, Play, RefreshCw, ShieldCheck } from "lucide-react";
-import type { OllamaStatus, SystemProfile } from "../types";
-import { agentArcadeApi } from "../api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Check, Code2, Copy, Film, Lightbulb, Play, RefreshCw } from "lucide-react";
+import type { ComfyStatus, OllamaStatus, SystemProfile } from "../types";
 import { formatGb, getScoreTone } from "../lib/format";
 import { extractHtmlDocument } from "../lib/labPreview";
-import { isLikelyImageGenerationModel } from "../lib/modelCatalog";
 import { readAdvancedLabResults, writeAdvancedLabResults, type AdvancedLabResult } from "../lib/labResults";
 import {
   APP_BUILDER_PRESETS,
   DEFAULT_APP_BUILDER_PRESET_ID,
   resolveAppBuilderPrompt,
-  ADVANCED_IMAGE_GENERATION_PROMPT,
-  ADVANCED_IMAGE_WIDTH,
-  ADVANCED_IMAGE_HEIGHT,
-  ADVANCED_IMAGE_STEPS,
-  IMAGE_GENERATION_MODEL_OPTIONS,
-  imageModelMatches,
-  getInstalledImageModelName,
   runAdvancedAppBuilderChallenge,
-  runAdvancedImageGenerationChallenge,
-  type ImageGenerationModelOption,
 } from "../lib/labChallenges";
+import { IMAGE_BENCHMARK_PROMPTS } from "../lib/imageGenScoring";
+import { IMAGE_RUN_SETTINGS, judgeCandidates, toLabResult } from "../lib/imageGenChallenge";
+import { runImageLabChallenge } from "../lib/imageGenRunner";
+import { comfyBridgeAvailable, getComfyStatus } from "../lib/comfyTransport";
 import { AppBuilderPreviewModal } from "./AppBuilderPreview";
 
 type AdvancedLabRunState = {
@@ -29,27 +22,26 @@ type AdvancedLabRunState = {
   message: string;
 };
 
-async function pullOllamaModelWithProgress(
-  model: string,
-  baseUrl: string,
-  onProgress: (message: string, percent: number | null) => void,
-  signal: AbortSignal,
-) {
-  const progressId = `advanced-image-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  if (signal.aborted) throw new DOMException('Image model pull cancelled.', 'AbortError');
-  const unsubscribe = agentArcadeApi.onPullProgress?.((update) => {
-    if (update.id !== progressId) return;
-    onProgress(update.status || 'Downloading image model...', update.percent);
-  });
-  const abortPull = () => void agentArcadeApi.abortPull(progressId);
+/**
+ * Where the Image Lab stands before a run can happen.
+ *
+ * There are four distinct states and they need different words. ComfyUI not
+ * installed, ComfyUI running with no checkpoints, ready to go, and a build that
+ * has no bridge at all. Collapsing them into "unavailable" is what made the old
+ * Lab so confusing — it offered a Run button that could only ever produce an
+ * error.
+ */
+type ImageReadiness =
+  | { kind: 'no-bridge' }
+  | { kind: 'not-running' }
+  | { kind: 'no-checkpoints' }
+  | { kind: 'ready'; checkpoints: string[] };
 
-  try {
-    signal.addEventListener('abort', abortPull, { once: true });
-    await agentArcadeApi.pullModel({ model, baseUrl, progressId });
-  } finally {
-    signal.removeEventListener('abort', abortPull);
-    unsubscribe?.();
-  }
+function readinessFrom(available: boolean, status: ComfyStatus | null): ImageReadiness {
+  if (!available) return { kind: 'no-bridge' };
+  if (!status?.reachable) return { kind: 'not-running' };
+  if (!status.checkpoints.length) return { kind: 'no-checkpoints' };
+  return { kind: 'ready', checkpoints: status.checkpoints };
 }
 
 export function AdvancedCapabilityLab({
@@ -73,31 +65,45 @@ export function AdvancedCapabilityLab({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [appPromptId, setAppPromptId] = useState(DEFAULT_APP_BUILDER_PRESET_ID);
   const [appCustomPrompt, setAppCustomPrompt] = useState('');
-  const [imageModel, setImageModel] = useState(IMAGE_GENERATION_MODEL_OPTIONS[0].model);
-  const [imageConsent, setImageConsent] = useState(false);
-  const [imageTryAnyway, setImageTryAnyway] = useState(false);
   const [imageRunState, setImageRunState] = useState<AdvancedLabRunState>({ phase: 'idle', result: null, message: '' });
-  const [pulledImageModels, setPulledImageModels] = useState<Set<string>>(() => new Set());
-  const [imagePullState, setImagePullState] = useState<{
-    phase: 'idle' | 'pulling' | 'complete' | 'failed';
-    percent: number | null;
-    message: string;
-  }>({ phase: 'idle', percent: null, message: '' });
-  const imagePullAbortRef = useRef<AbortController | null>(null);
+  const [comfyStatus, setComfyStatus] = useState<ComfyStatus | null>(null);
+  const [comfyChecking, setComfyChecking] = useState(true);
+  const [checkpoint, setCheckpoint] = useState('');
+  const [imagePromptId, setImagePromptId] = useState(IMAGE_BENCHMARK_PROMPTS[0].id);
+  const [judgeModel, setJudgeModel] = useState('');
+  const imageAbortRef = useRef<AbortController | null>(null);
 
-  const imageModelOptions = useMemo<ImageGenerationModelOption[]>(() => {
-    const detected = ollama.models
-      .filter((model) => isLikelyImageGenerationModel(model.name || model.model || ''))
-      .filter((model) => !IMAGE_GENERATION_MODEL_OPTIONS.some((option) => imageModelMatches(model.name || model.model || '', option.model)))
-      .map((model) => ({
-        model: model.name || model.model || '',
-        label: `${model.name || model.model} · installed`,
-        sizeGb: model.sizeGb ?? 0,
-        license: 'Already in your library',
-        note: 'Detected in your local Ollama library — no new download needed.',
-      }));
-    return [...IMAGE_GENERATION_MODEL_OPTIONS, ...detected];
-  }, [ollama.models]);
+  /** For the Check again button, where setting state synchronously is fine. */
+  const checkComfy = useCallback(async () => {
+    setComfyChecking(true);
+    const status = await getComfyStatus();
+    setComfyStatus(status);
+    setComfyChecking(false);
+  }, []);
+
+  // ComfyUI is a separate program the user starts themselves, so it may not be
+  // up when this panel opens. The initial look does not set state on the way in
+  // — comfyChecking already starts true — and drops its answer if the panel
+  // closed while the probe was in flight.
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      const status = await getComfyStatus();
+      if (!live) return;
+      setComfyStatus(status);
+      setComfyChecking(false);
+    })();
+    return () => { live = false; };
+  }, []);
+
+  const readiness = readinessFrom(comfyBridgeAvailable(), comfyStatus);
+  const availableCheckpoints = readiness.kind === 'ready' ? readiness.checkpoints : [];
+  const activeCheckpoint = availableCheckpoints.includes(checkpoint)
+    ? checkpoint
+    : (availableCheckpoints[0] ?? '');
+
+  const judges = useMemo(() => judgeCandidates(ollama.models), [ollama.models]);
+  const activeJudge = judges.includes(judgeModel) ? judgeModel : (judges[0] ?? '');
 
   const activeModel = installedModels.includes(labModel) ? labModel : defaultModel;
   const activeModelInfo = ollama.models.find((model) => model.name === activeModel || model.model === activeModel);
@@ -110,19 +116,12 @@ export function AdvancedCapabilityLab({
   const isRunning = runState.phase === 'running';
   const isLargeModel = (activeModelInfo?.sizeGb ?? 0) >= Math.max(8, system.gpu.vramGb || 0);
   const canRun = ollama.ready && Boolean(activeModel) && !isRunning;
-  const imageOption = imageModelOptions.find((option) => option.model === imageModel) ?? imageModelOptions[0];
-  const installedImageModel = getInstalledImageModelName(installedModels, imageOption.model);
-  const pulledImageModel = pulledImageModels.has(imageOption.model) ? imageOption.model : '';
-  const activeImageModel = installedImageModel || pulledImageModel || imageOption.model;
-  const imageResultKey = `image:${activeImageModel}`;
-  const visibleImageResult = imageRunState.result?.model === activeImageModel ? imageRunState.result : savedResults[imageResultKey] ?? null;
-  const imagePlatformSupported = system.platform === 'darwin';
-  const imagePlatformAllowed = imagePlatformSupported || imageTryAnyway;
-  const imageInstalled = Boolean(installedImageModel || pulledImageModel);
-  const imagePulling = imagePullState.phase === 'pulling';
+  const imageResultKey = `image:${activeCheckpoint}`;
+  const visibleImageResult = imageRunState.result?.model === activeCheckpoint
+    ? imageRunState.result
+    : savedResults[imageResultKey] ?? null;
   const imageRunning = imageRunState.phase === 'running';
-  const canPullImageModel = ollama.ready && imagePlatformAllowed && imageConsent && !imageInstalled && !imagePulling && !imageRunning;
-  const canRunImageTest = ollama.ready && imagePlatformAllowed && imageInstalled && !imagePulling && !imageRunning;
+  const canRunImageTest = readiness.kind === 'ready' && Boolean(activeCheckpoint) && !imageRunning;
 
   const startChallenge = useCallback(async () => {
     if (!activeModel || !ollama.ready) return;
@@ -156,53 +155,54 @@ export function AdvancedCapabilityLab({
     }).catch(() => undefined);
   }, [visibleResult]);
 
-  const startImagePull = useCallback(async () => {
-    if (!canPullImageModel) return;
-    const controller = new AbortController();
-    imagePullAbortRef.current = controller;
-    setImagePullState({ phase: 'pulling', percent: null, message: `Pulling ${imageOption.label} (${formatGb(imageOption.sizeGb)})...` });
-    try {
-      await pullOllamaModelWithProgress(
-        imageOption.model,
-        ollama.baseUrl,
-        (message, percent) => setImagePullState({ phase: 'pulling', percent, message }),
-        controller.signal,
-      );
-      setPulledImageModels((current) => {
-        const next = new Set(current);
-        next.add(imageOption.model);
-        return next;
-      });
-      setImagePullState({ phase: 'complete', percent: 100, message: `${imageOption.label} is ready for the Image Lab.` });
-    } catch (error) {
-      const message = error instanceof DOMException && error.name === 'AbortError'
-        ? 'Image model pull cancelled.'
-        : error instanceof Error ? error.message : 'Image model pull failed.';
-      setImagePullState({ phase: 'failed', percent: null, message });
-    } finally {
-      imagePullAbortRef.current = null;
-    }
-  }, [canPullImageModel, imageOption, ollama.baseUrl]);
-
-  const cancelImagePull = useCallback(() => {
-    imagePullAbortRef.current?.abort();
-  }, []);
-
   const startImageChallenge = useCallback(async () => {
     if (!canRunImageTest) return;
-    setImageRunState({ phase: 'running', result: null, message: `Generating a ${ADVANCED_IMAGE_WIDTH}x${ADVANCED_IMAGE_HEIGHT} beta image with ${activeImageModel}...` });
-    const result = await runAdvancedImageGenerationChallenge(activeImageModel, ollama.baseUrl);
+    const controller = new AbortController();
+    imageAbortRef.current = controller;
+    setImageRunState({
+      phase: 'running',
+      result: null,
+      message: `Generating ${IMAGE_RUN_SETTINGS.width}x${IMAGE_RUN_SETTINGS.height} with ${activeCheckpoint}...`,
+    });
+
+    let run;
+    try {
+      run = await runImageLabChallenge({
+        checkpoint: activeCheckpoint,
+        promptId: imagePromptId,
+        judgeModel: activeJudge || undefined,
+        ollamaBaseUrl: ollama.baseUrl,
+        signal: controller.signal,
+      });
+    } finally {
+      imageAbortRef.current = null;
+    }
+    const result = toLabResult(run, imagePromptId);
+
     setImageRunState({
       phase: result.error ? 'failed' : 'complete',
       result,
-      message: result.error ? result.error : `${activeImageModel} generated an image in ${(result.elapsedMs / 1000).toFixed(1)}s.`,
+      // An unjudged run is a real result with a missing part, so it says so
+      // rather than presenting the score as if adherence had been measured.
+      message: result.error
+        ? result.error
+        : `${activeCheckpoint} drew it in ${(run.elapsedMs / 1000).toFixed(1)}s${
+          run.judged
+            ? `, and ${activeJudge} confirmed ${Math.round((run.adherence ?? 0) * 100)}% of the prompt.`
+            : '. No vision model was available to check the picture, so this run is unjudged.'
+        }`,
     });
+
     if (!result.error) {
       const merged = { ...readAdvancedLabResults(), [imageResultKey]: result };
       writeAdvancedLabResults(merged);
       setSavedResults(merged);
     }
-  }, [activeImageModel, canRunImageTest, imageResultKey, ollama.baseUrl]);
+  }, [activeCheckpoint, activeJudge, canRunImageTest, imagePromptId, imageResultKey, ollama.baseUrl]);
+
+  const stopImageRun = useCallback(() => {
+    imageAbortRef.current?.abort();
+  }, []);
 
   return (
     <section className="advanced-lab" aria-label="Advanced capability lab">
@@ -358,88 +358,110 @@ export function AdvancedCapabilityLab({
             </b>
           </div>
           <p>
-            Runs an experimental Ollama image model through the same local API. This is intentionally separate from the core Match score.
+            Image generation runs on ComfyUI, not Ollama — Ollama hosts no image models and its
+            runtime refuses the ones that exist. This is intentionally separate from the core Match score.
           </p>
-          <div className="advanced-lab-image-controls">
-            <label htmlFor="advanced-image-model">Image model</label>
-            <select
-              id="advanced-image-model"
-              value={imageOption.model}
-              onChange={(event) => {
-                setImageModel(event.target.value);
-                setImageConsent(false);
-              }}
-              disabled={imagePulling || imageRunning}
-            >
-              {imageModelOptions.map((option) => (
-                <option key={option.model} value={option.model}>
-                  {option.label} · {formatGb(option.sizeGb)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="advanced-lab-safeguards">
-            <span>{formatGb(imageOption.sizeGb)} pull</span>
-            <span>{ADVANCED_IMAGE_WIDTH}x{ADVANCED_IMAGE_HEIGHT}</span>
-            <span>{ADVANCED_IMAGE_STEPS} steps</span>
-            <span>{imageOption.license}</span>
-          </div>
-          <div className="advanced-lab-image-preview">
-            <span>Prompt</span>
-            <strong>{ADVANCED_IMAGE_GENERATION_PROMPT}</strong>
-            <em>{imageOption.note}</em>
-          </div>
-          <div className="advanced-lab-warning">
-            <ShieldCheck aria-hidden="true" />
-            <span>Extra beta safeguard: RigMatch will not auto-pull this. You must explicitly accept the size/platform warning before downloading.</span>
-          </div>
-          {!imagePlatformSupported && (
-            <label className="advanced-lab-consent warning">
-              <input
-                type="checkbox"
-                checked={imageTryAnyway}
-                onChange={(event) => setImageTryAnyway(event.target.checked)}
-                disabled={imagePulling || imageRunning}
-              />
-              <span>Ollama currently labels image generation as macOS-only. Let me try anyway on this platform.</span>
-            </label>
-          )}
-          {!imageInstalled && (
-            <label className="advanced-lab-consent">
-              <input
-                type="checkbox"
-                checked={imageConsent}
-                onChange={(event) => setImageConsent(event.target.checked)}
-                disabled={!imagePlatformAllowed || imagePulling || imageRunning}
-              />
-              <span>I understand this may download about {formatGb(imageOption.sizeGb)} and may be slow or unsupported.</span>
-            </label>
-          )}
-          <div className="advanced-lab-actions">
-            {!imageInstalled ? (
-              <button type="button" className="primary-button compact" onClick={() => void startImagePull()} disabled={!canPullImageModel}>
-                <Download aria-hidden="true" />
-                {imagePulling ? 'Downloading' : `Pull ${imageOption.label}`}
+
+          {readiness.kind !== 'ready' ? (
+            <div className="utility-empty compact">
+              {readiness.kind === 'no-bridge' ? (
+                <>
+                  <strong>Image generation needs the desktop app</strong>
+                  <span>This build has no bridge to ComfyUI, so pictures cannot be generated here.</span>
+                </>
+              ) : readiness.kind === 'no-checkpoints' ? (
+                <>
+                  <strong>ComfyUI is running, but has no models</strong>
+                  <span>
+                    Put a checkpoint (a <code>.safetensors</code> file) in ComfyUI&apos;s
+                    <code> models/checkpoints</code> folder and check again.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <strong>{comfyChecking ? 'Looking for ComfyUI...' : 'ComfyUI is not running'}</strong>
+                  <span>
+                    Start ComfyUI and it will be found on port 8188. It is a separate free program —
+                    RigMatch does not install or bundle it.
+                  </span>
+                </>
+              )}
+              <button type="button" className="mini-button outline" onClick={() => void checkComfy()} disabled={comfyChecking}>
+                <RefreshCw className={comfyChecking ? 'spin' : ''} aria-hidden="true" />
+                Check again
               </button>
-            ) : (
-              <button type="button" className="primary-button compact" onClick={() => void startImageChallenge()} disabled={!canRunImageTest}>
-                <RefreshCw className={imageRunning ? 'spin' : ''} aria-hidden="true" />
-                {imageRunning ? 'Generating' : 'Run Image Test'}
-              </button>
-            )}
-            {imagePulling && (
-              <button type="button" className="mini-button outline" onClick={cancelImagePull}>
-                Stop Pull
-              </button>
-            )}
-          </div>
-          {imagePullState.message && (
-            <div className={`advanced-lab-download ${imagePullState.phase}`}>
-              <span>{imagePullState.message}</span>
-              <div className="popularity-track" aria-hidden="true">
-                <i style={{ width: `${imagePullState.percent ?? 12}%` }} />
-              </div>
             </div>
+          ) : (
+            <>
+              <div className="advanced-lab-image-controls">
+                <label htmlFor="advanced-image-checkpoint">Checkpoint</label>
+                <select
+                  id="advanced-image-checkpoint"
+                  value={activeCheckpoint}
+                  onChange={(event) => setCheckpoint(event.target.value)}
+                  disabled={imageRunning}
+                >
+                  {availableCheckpoints.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="advanced-lab-image-controls">
+                <label htmlFor="advanced-image-prompt">Prompt</label>
+                <select
+                  id="advanced-image-prompt"
+                  value={imagePromptId}
+                  onChange={(event) => setImagePromptId(event.target.value)}
+                  disabled={imageRunning}
+                >
+                  {IMAGE_BENCHMARK_PROMPTS.map((prompt) => (
+                    <option key={prompt.id} value={prompt.id}>{prompt.prompt}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="advanced-lab-image-controls">
+                <label htmlFor="advanced-image-judge">Checked by</label>
+                <select
+                  id="advanced-image-judge"
+                  value={activeJudge}
+                  onChange={(event) => setJudgeModel(event.target.value)}
+                  disabled={imageRunning || !judges.length}
+                >
+                  {judges.length ? (
+                    judges.map((name) => <option key={name} value={name}>{name}</option>)
+                  ) : (
+                    <option value="">No vision model installed</option>
+                  )}
+                </select>
+              </div>
+              <div className="advanced-lab-safeguards">
+                <span>{IMAGE_RUN_SETTINGS.width}x{IMAGE_RUN_SETTINGS.height}</span>
+                <span>{IMAGE_RUN_SETTINGS.steps} steps</span>
+                <span>fixed seed</span>
+                <span>{judges.length ? 'adherence judged' : 'unjudged'}</span>
+              </div>
+              {!judges.length && (
+                <div className="advanced-lab-warning">
+                  <AlertTriangle aria-hidden="true" />
+                  <span>
+                    No vision model is installed, so nothing can check whether the picture matches the
+                    prompt. The run still measures speed and fit, and is reported unjudged rather than
+                    scored as if the picture were wrong.
+                  </span>
+                </div>
+              )}
+              <div className="advanced-lab-actions">
+                <button type="button" className="primary-button compact" onClick={() => void startImageChallenge()} disabled={!canRunImageTest}>
+                  <RefreshCw className={imageRunning ? 'spin' : ''} aria-hidden="true" />
+                  {imageRunning ? 'Generating' : 'Run Image Test'}
+                </button>
+                {imageRunning && (
+                  <button type="button" className="mini-button outline" onClick={stopImageRun}>
+                    Stop
+                  </button>
+                )}
+              </div>
+            </>
           )}
           {imageRunState.message && (
             <p className={`advanced-lab-message ${imageRunState.phase}`}>{imageRunState.message}</p>

@@ -307,17 +307,19 @@ import {
   resolveAppBuilderPrompt,
   buildAppBuilderRetryPrompt,
   extractJudgedProblem,
-  ADVANCED_IMAGE_GENERATION_PROMPT,
   getListeningTestAudio,
   getVisionTestImageDataUrl,
   runAdvancedAppBuilderChallenge,
   runCodeChallenge,
   runAdvancedListeningChallenge,
   runAdvancedVisionChallenge,
-  runAdvancedImageGenerationChallenge,
   VISION_TEST_IMAGES,
   DEFAULT_VISION_TEST_IMAGE,
 } from './lib/labChallenges';
+import { IMAGE_BENCHMARK_PROMPTS } from './lib/imageGenScoring';
+import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
+import { runImageLabChallenge } from './lib/imageGenRunner';
+import { getComfyStatus } from './lib/comfyTransport';
 import {
   CODE_LANGUAGES,
   CODE_TASK_PRESETS,
@@ -532,7 +534,7 @@ function App() {
     appPromptId: DEFAULT_APP_BUILDER_PRESET_ID,
     appCustomPrompt: '',
     image: false,
-    imagePrompt: ADVANCED_IMAGE_GENERATION_PROMPT,
+    imagePrompt: IMAGE_BENCHMARK_PROMPTS[0].id,
     recognize: false,
     recognizeImage: DEFAULT_VISION_TEST_IMAGE,
     listen: false,
@@ -548,6 +550,9 @@ function App() {
   const [liveBuild, setLiveBuild] = useState<{ model: string; kind: 'app' | 'image' | 'vision'; text: string; done: boolean; error?: string } | null>(null);
   // Whether the live view is expanded (true) or minimized to the mini-bar (false).
   const [liveBuildOpen, setLiveBuildOpen] = useState(true);
+  // Checkpoints ComfyUI has loaded. Image generation is the one skill that does
+  // not run on an Ollama model, so its candidates come from here.
+  const [comfyCheckpoints, setComfyCheckpoints] = useState<string[]>([]);
   const [closeCleanupOpen, setCloseCleanupOpen] = useState(false);
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
@@ -672,6 +677,17 @@ function App() {
       setSelectedModel('qwen2.5:7b');
     }
   }, [modelRows, selectedRow]);
+
+  // ComfyUI is a separate program the user starts themselves, so this is a
+  // look rather than a subscription. It drops its answer if the app closed
+  // while the probe was in flight.
+  useEffect(() => {
+    let live = true;
+    void getComfyStatus().then((status) => {
+      if (live) setComfyCheckpoints(status.checkpoints);
+    });
+    return () => { live = false; };
+  }, []);
 
   useEffect(() => {
     modelNewsRef.current = modelNews;
@@ -2473,9 +2489,6 @@ function App() {
       if (selection.code && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
         jobs.push({ model, kind: 'code' });
       }
-      if (selection.image && isLikelyImageGenerationModel(model)) {
-        jobs.push({ model, kind: 'image' });
-      }
       if (selection.recognize && isVisionModel(model)) {
         jobs.push({ model, kind: 'vision' });
       }
@@ -2483,6 +2496,17 @@ function App() {
         jobs.push({ model, kind: 'listening' });
       }
     }
+
+    // Image jobs do not come from this model list at all. Every other skill
+    // runs on an Ollama model; image generation runs on a ComfyUI checkpoint,
+    // so the candidates are whatever ComfyUI has loaded. Asking Ollama for them
+    // is what made this checkbox silently do nothing — it looked for installed
+    // models with names like flux or sdxl, and Ollama's library has none.
+    if (selection.image) {
+      const comfy = await getComfyStatus();
+      for (const name of comfy.checkpoints) jobs.push({ model: name, kind: 'image' });
+    }
+
     if (!jobs.length) return;
 
     // A vision recognition job needs a picture to read; load the bundled test
@@ -2573,8 +2597,15 @@ function App() {
         }
       } else {
         // Image generation can't stream tokens — show a "generating" state.
+        // job.model is a ComfyUI checkpoint here, not an Ollama model.
         setLiveBuild({ model: job.model, kind: 'image', text: '', done: false });
-        result = await runAdvancedImageGenerationChallenge(job.model, ollama.baseUrl, selection.imagePrompt);
+        const run = await runImageLabChallenge({
+          checkpoint: job.model,
+          promptId: selection.imagePrompt,
+          judgeModel: judgeCandidates(modelRows)[0],
+          ollamaBaseUrl: ollama.baseUrl,
+        });
+        result = toLabResult(run, selection.imagePrompt);
         setLiveBuild({ model: job.model, kind: 'image', text: '', done: true, error: result.error });
       }
       if (!result.error) {
@@ -2631,7 +2662,10 @@ function App() {
     } else if (!stopSkillRef.current) {
       setActivity(`Skill tests finished (${jobs.length} run${jobs.length === 1 ? '' : 's'}). Lab Grades are saved in Settings → Advanced Lab.`);
     }
-  }, [ollama.baseUrl, skillTestSelection, effectiveJudge]);
+    // modelRows is read to pick a vision model to judge the generated image;
+    // without it here the run would judge with whatever was installed when this
+    // callback was last built.
+  }, [ollama.baseUrl, skillTestSelection, effectiveJudge, modelRows]);
 
   // One improve pass: hand the model its previous attempt (plus an optional user
   // hint), stream the rebuild into the live view, and return the new result — or
@@ -3580,6 +3614,7 @@ function App() {
             ? modelRows.filter((row) => row.displayName === (pendingSingleModel ?? selectedModel))
             : shortlistedRows.filter((row) => row.installed).slice(0, 5)
           ).some((row) => canHearAudio(row))}
+          comfyCheckpoints={comfyCheckpoints}
         />
       )}
 
@@ -4734,6 +4769,7 @@ function RunWarningModal({
   onChangeOpenRouterKey,
   judgeActive,
   gpuContention,
+  comfyCheckpoints,
 }: {
   mode: PendingRunMode;
   selectedModel: string;
@@ -4754,6 +4790,10 @@ function RunWarningModal({
   /** Whether any model in this run reports the audio capability. Computed
       where the rows are, since the dialog only receives model names. */
   listenCapable: boolean;
+  /** Checkpoints ComfyUI has loaded. Image generation is the one skill that
+      does not run on a model from the lineup, so it is offered on the strength
+      of this rather than on what was picked. */
+  comfyCheckpoints: string[];
   qualityMode: 'heuristic' | 'judge';
   judgeModel: string;
   judgeModelOptions: string[];
@@ -4786,9 +4826,10 @@ function RunWarningModal({
   // Skill-test capability + skip-questions state, hoisted so both the question
   // and skill sections (and the footer) can react to it.
   const appBuilderCapable = lineupModels.some((m) => !isLikelyImageGenerationModel(m) && !isEmbeddingModel(m));
-  const hasImageModel = lineupModels.some((m) => isLikelyImageGenerationModel(m));
+  // Not from the lineup: image generation runs on a ComfyUI checkpoint, so
+  // whether it is offered depends on ComfyUI, not on which models were picked.
+  const hasImageModel = comfyCheckpoints.length > 0;
   const visionCapable = lineupModels.some((m) => isVisionModel(m));
-  const isMac = system.platform === 'darwin';
   const imageCapable = hasImageModel;
   // Code Challenge needs a code-capable model AND a judge — it's the only way to
   // grade arbitrary-language code (nothing to run/preview).
@@ -5182,21 +5223,24 @@ function RunWarningModal({
                     <span>
                       <strong>Create an image</strong>
                       <em>{!hasImageModel
-                        ? 'No image-generation model in this run. Install one (like x/flux2-klein) to unlock.'
-                        : isMac
-                          ? 'Adds roughly 1–4 minutes per image model. Uses the prompt below.'
-                          : 'Adds roughly 1–4 minutes. RigMatch will try on this PC — some image models are macOS-only (MLX) and will report why if they can\'t load.'}</em>
+                        ? 'Needs ComfyUI running with at least one checkpoint. Ollama cannot generate images.'
+                        : `Runs the prompt below on ${comfyCheckpoints.length === 1 ? 'your checkpoint' : `all ${comfyCheckpoints.length} checkpoints`} in ComfyUI, separately from the Ollama models above.`}</em>
                     </span>
                   </label>
                   {imageCapable && skillSelection.image && (
-                    <input
-                      type="text"
+                    // A fixed list rather than free text: the score depends on a
+                    // judge answering checkable propositions about the picture,
+                    // and an arbitrary prompt has none to check against.
+                    <select
                       className="run-skill-image-prompt"
                       value={skillSelection.imagePrompt}
                       onChange={(event) => onSkillSelectionChange({ ...skillSelection, imagePrompt: event.target.value })}
-                      placeholder="Describe the image to generate"
                       aria-label="Image generation prompt"
-                    />
+                    >
+                      {IMAGE_BENCHMARK_PROMPTS.map((prompt) => (
+                        <option key={prompt.id} value={prompt.id}>{prompt.prompt}</option>
+                      ))}
+                    </select>
                   )}
                   <label className={`run-skill-test-option${visionCapable ? '' : ' disabled'}`}>
                     <input

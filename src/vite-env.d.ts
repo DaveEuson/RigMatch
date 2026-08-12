@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { AgentArcadeApi } from './types';
+import type { AgentArcadeApi } from './types.ts';
 
 declare global {
   interface Window {

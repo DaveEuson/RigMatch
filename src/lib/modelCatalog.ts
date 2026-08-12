@@ -14,10 +14,10 @@ import type {
   TestedModelScore,
 } from '../types';
 import type { NavId } from '../components/SideMenu';
-import { getModelFamily, getModelOrigin } from './modelOrigins';
-import { normalizeModelKey } from './modelKey';
-import { compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore } from './scoring';
-import { formatBytes, formatBytesPerSecond, formatGb, hashString, formatThroughput } from './format';
+import { getModelFamily, getModelOrigin } from './modelOrigins.ts';
+import { normalizeModelKey } from './modelKey.ts';
+import { compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore } from './scoring.ts';
+import { formatBytes, formatBytesPerSecond, formatGb, hashString, formatThroughput } from './format.ts';
 import {
   APP_VERSION,
   GITHUB_ISSUES_URL,
@@ -28,7 +28,7 @@ import {
   themeOptions,
   type ThemeId,
   type UiMode,
-} from './appConfig';
+} from './appConfig.ts';
 
 export type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'origin' | 'source' | 'status' | 'score' | 'speed' | 'pulls';
 export type SortDirection = 'asc' | 'desc';
@@ -69,7 +69,7 @@ export type HardwareFit = {
  * models; the browsable catalogue cannot be asked, so the name heuristics below
  * remain the fallback rather than being replaced.
  */
-type CapabilityBearing = {
+export type CapabilityBearing = {
   capabilities?: string[];
   installedModel?: { capabilities?: string[] };
   displayName?: string;
@@ -840,7 +840,7 @@ export function mergeModelRows(catalog: CatalogModel[], installedModels: OllamaM
 
 // Re-exported from the leaf module so storage layers (runHistory) can key by
 // model without importing this file's React/asset graph.
-export { normalizeModelKey } from './modelKey';
+export { normalizeModelKey } from './modelKey.ts';
 
 export function isCloudModel(model: string): boolean {
   const lower = (model || '').toLowerCase();

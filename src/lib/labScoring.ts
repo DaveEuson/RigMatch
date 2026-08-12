@@ -71,36 +71,10 @@ export function scoreAdvancedVisionResponse(response: string, doneReason: string
   ]);
 }
 
-/**
- * Grade an image-generation attempt.
- *
- * A "Small beta size" check used to sit here asserting the configured width was
- * <= 512 — a constant in this repo, always true. It measured our own settings,
- * not the model, and handed every result a free quarter of its score.
- */
-export function scoreAdvancedImageResponse(imageDataUrl: string, doneReason: string): Scored {
-  const returned = (imageDataUrl ?? '').startsWith('data:image/');
-
-  return tally([
-    {
-      label: 'Image returned',
-      passed: returned,
-      detail: returned
-        ? 'Ollama returned an image payload instead of a text-only answer.'
-        : `No image payload came back${doneReason ? ` (stop reason: ${doneReason})` : ''}. This model may not generate images through Ollama.`,
-    },
-    {
-      label: 'PNG/base64 payload',
-      passed: returned && /^data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+/.test(imageDataUrl),
-      detail: 'The image payload looks like a browser-renderable base64 image.',
-    },
-    {
-      label: 'Completed cleanly',
-      passed: returned && doneReason !== 'length' && doneReason !== 'error',
-      detail: 'The image run did not report an obvious truncation or error stop.',
-    },
-  ]);
-}
+// Image generation is scored in imageGenScoring.ts now. What stood here only
+// ever asked whether a payload came back and whether it was valid base64 —
+// three checks about the transport, none about the picture. It could not have
+// been more, because Ollama never returned an image to look at.
 
 /**
  * Why a skill test produced nothing to look at, in one line.

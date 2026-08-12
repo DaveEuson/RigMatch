@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { agentArcadeApi } from '../api';
-import { buildSandboxedPreviewHtml } from './labPreview';
+import { buildSandboxedPreviewHtml } from './labPreview.ts';
 
 /**
  * Publish model-generated HTML and get back a URL to frame it from.

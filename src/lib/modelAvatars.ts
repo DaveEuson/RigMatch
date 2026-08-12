@@ -1,4 +1,4 @@
-import { getModelFamily, type ModelFamilyId } from './modelOrigins';
+import { getModelFamily, type ModelFamilyId } from './modelOrigins.ts';
 import machineAvatarLocal from '../assets/machine-avatar-local.webp';
 import modelAvatarCohere from '../assets/model-avatar-cohere.webp';
 import modelAvatarDeepSeek from '../assets/model-avatar-deepseek.webp';

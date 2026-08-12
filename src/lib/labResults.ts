@@ -5,10 +5,10 @@
  * truth. Pure + browser storage only — no React.
  */
 
-import { ADVANCED_LAB_STORAGE_KEY } from './appConfig';
-import { extractHtmlDocument } from './labPreview';
-import { extractCodeBlock } from './codeChallenge';
-import { describeLabFailure } from './labScoring';
+import { ADVANCED_LAB_STORAGE_KEY } from './appConfig.ts';
+import { extractHtmlDocument } from './labPreview.ts';
+import { extractCodeBlock } from './codeChallenge.ts';
+import { describeLabFailure } from './labScoring.ts';
 
 /** A viewable thing a model produced during a skill test. */
 export type DemoArtifact = {
@@ -108,4 +108,4 @@ export function getModelDemoArtifacts(model: string): DemoArtifact[] {
 // Rubrics and grading live in labScoring.ts, a leaf module with no assets or
 // storage so the grading logic stays directly testable. Re-exported so existing
 // importers are unaffected.
-export { describeLabFailure, getAdvancedLabGrade } from './labScoring';
+export { describeLabFailure, getAdvancedLabGrade } from './labScoring.ts';
