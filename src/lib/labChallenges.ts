@@ -571,6 +571,14 @@ export async function runAdvancedListeningChallenge(
   baseUrl: string,
   audioBase64: string,
   streamId?: string,
+  /**
+   * What the audio actually says. Defaults to the bundled passage; a recorded
+   * reading passes the script the user was shown, and an upload passes what
+   * they typed. Null means there is no reference — the transcript is returned
+   * and accuracy is reported as unavailable rather than scored against a
+   * guess.
+   */
+  reference: string | null = LISTENING_REFERENCE,
 ): Promise<AdvancedLabResult> {
   const startedAt = performance.now();
   try {
@@ -593,7 +601,22 @@ export async function runAdvancedListeningChallenge(
     });
     if (data.error) throw new Error(data.error);
     const raw = data.response ?? '';
-    const scored = scoreAdvancedListeningResponse(raw, LISTENING_REFERENCE, data.done_reason ?? '');
+    // With no reference there is nothing to compare against, so the run
+    // reports what was heard and leaves the score unset rather than inventing
+    // one. That mirrors how an unjudged image is handled.
+    const scored = reference === null
+      ? {
+        score: 0,
+        grade: 'n/a',
+        checks: [{
+          label: 'Transcript returned',
+          passed: Boolean(raw.trim()),
+          detail: raw.trim()
+            ? 'The model wrote something down, but nothing said what the audio contains, so accuracy could not be measured.'
+            : 'The model returned no transcript.',
+        }],
+      }
+      : scoreAdvancedListeningResponse(raw, reference, data.done_reason ?? '');
     return {
       model,
       challenge: 'listening',

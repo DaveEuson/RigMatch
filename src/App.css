@@ -17695,3 +17695,69 @@ a.whats-next-support:hover {
 
 .settings-probe.ok { color: var(--good, #6fce8f); }
 .settings-probe.bad { color: var(--bad, #e0685f); }
+
+/* ── Listening Lab ─────────────────────────────────────────────────────────── */
+
+.listening-script-card {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 12px 14px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.listening-script-card > span {
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.listening-script-card > strong {
+  font-weight: 500;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.listening-transcript {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.listening-transcript > span {
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.listening-transcript > strong {
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.settings-field textarea {
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.92rem;
+  resize: vertical;
+}
+
+/* The file input itself is hidden; its label is the visible button. Display:
+   none would remove it from the accessibility tree, so it is parked offscreen
+   instead. */
+.visually-hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}

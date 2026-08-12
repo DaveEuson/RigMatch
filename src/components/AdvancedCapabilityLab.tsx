@@ -14,6 +14,7 @@ import { IMAGE_BENCHMARK_PROMPTS } from "../lib/imageGenScoring";
 import { IMAGE_RUN_SETTINGS, judgeCandidates, toLabResult } from "../lib/imageGenChallenge";
 import { runImageLabChallenge } from "../lib/imageGenRunner";
 import { comfyBridgeAvailable, getComfyStatus } from "../lib/comfyTransport";
+import { canHearAudio } from "../lib/modelCatalog";
 import { isVideoCheckpoint } from "../lib/videoGen";
 import {
   DEFAULT_VIDEO_SIZE_ID,
@@ -23,6 +24,7 @@ import {
   videoReadiness,
 } from "../lib/videoGenChallenge";
 import { runVideoLabChallenge } from "../lib/videoGenRunner";
+import { ListeningLab } from "./ListeningLab";
 import { AppBuilderPreviewModal } from "./AppBuilderPreview";
 
 type AdvancedLabRunState = {
@@ -130,6 +132,13 @@ export function AdvancedCapabilityLab({
   const activeEncoder = videoReady.kind === 'ready' ? videoReady.encoders[0] : '';
 
   const judges = useMemo(() => judgeCandidates(ollama.models), [ollama.models]);
+  // Only models the provider reports as able to hear. Nothing in a name says
+  // so, and asking one that cannot returns "Failed to load image or audio
+  // file" — which would score the model down for being asked the wrong thing.
+  const hearingModels = useMemo(
+    () => ollama.models.filter((row) => canHearAudio(row)).map((row) => row.name || row.model).filter(Boolean),
+    [ollama.models],
+  );
   const activeJudge = judges.includes(judgeModel) ? judgeModel : (judges[0] ?? '');
 
   const activeModel = installedModels.includes(labModel) ? labModel : defaultModel;
@@ -713,6 +722,8 @@ export function AdvancedCapabilityLab({
             </div>
           )}
         </article>
+
+        <ListeningLab ollama={ollama} models={hearingModels} />
       </div>
       {previewOpen && previewHtml && visibleResult && (
         <AppBuilderPreviewModal
