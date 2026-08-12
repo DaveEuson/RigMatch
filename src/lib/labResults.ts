@@ -42,7 +42,7 @@ export type AdvancedLabCheck = {
 /** A stored skill-test result for one model + challenge. */
 export type AdvancedLabResult = {
   model: string;
-  challenge: 'app-builder' | 'image-generation' | 'image-recognition' | 'code' | 'listening';
+  challenge: 'app-builder' | 'image-generation' | 'video-generation' | 'image-recognition' | 'code' | 'listening';
   score: number;
   grade: string;
   elapsedMs: number;
@@ -91,7 +91,9 @@ export function getModelDemoArtifacts(model: string): DemoArtifact[] {
     if (result.challenge === 'app-builder') {
       const html = extractHtmlDocument(result.response);
       if (html) out.push({ model, kind: 'app', html, judged: wasJudged(result), grade: result.grade, score: result.score });
-    } else if (result.challenge === 'image-generation' && result.imageDataUrl) {
+    } else if ((result.challenge === 'image-generation' || result.challenge === 'video-generation') && result.imageDataUrl) {
+      // A video result's viewable artifact is its judged frame, so it rides the
+      // image path; the label below still says which lab produced it.
       out.push({ model, kind: 'image', imageDataUrl: result.imageDataUrl, grade: result.grade, score: result.score });
     } else if (result.challenge === 'image-recognition') {
       // Kept even with no description: a failed vision run is exactly what a

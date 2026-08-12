@@ -74,7 +74,7 @@ export function toVideoLabResult(run: VideoRunResult, promptId?: string): Advanc
   const prompt = imagePromptById(promptId);
   return {
     model: run.checkpoint,
-    challenge: 'image-generation',
+    challenge: 'video-generation',
     score: run.score,
     grade: run.grade,
     elapsedMs: run.elapsedMs,

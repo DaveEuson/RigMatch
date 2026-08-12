@@ -51,8 +51,13 @@ type ImageReadiness =
 function readinessFrom(available: boolean, status: ComfyStatus | null): ImageReadiness {
   if (!available) return { kind: 'no-bridge' };
   if (!status?.reachable) return { kind: 'not-running' };
-  if (!status.checkpoints.length) return { kind: 'no-checkpoints' };
-  return { kind: 'ready', checkpoints: status.checkpoints };
+  // Counted after removing video models, not before. A ComfyUI holding only
+  // an LTX checkpoint is not ready for *images* — judging readiness on the
+  // raw list rendered the ready branch with an empty picker and a dead Run
+  // button, explaining nothing.
+  const usable = status.checkpoints.filter((name) => !isVideoCheckpoint(name));
+  if (!usable.length) return { kind: 'no-checkpoints' };
+  return { kind: 'ready', checkpoints: usable };
 }
 
 export function AdvancedCapabilityLab({
@@ -111,20 +116,18 @@ export function AdvancedCapabilityLab({
     return () => { live = false; };
   }, []);
 
+  // readinessFrom has already removed video checkpoints: handing an LTX model
+  // to a still-image graph fails deep inside the sampler with a shape error no
+  // user could act on.
   const readiness = readinessFrom(comfyBridgeAvailable(), comfyStatus);
-  // Video checkpoints are filtered out of the image picker. Handing an LTX
-  // model to a still-image graph fails deep inside the sampler with a shape
-  // error no user could act on.
-  const availableCheckpoints = (readiness.kind === 'ready' ? readiness.checkpoints : [])
-    .filter((name) => !isVideoCheckpoint(name));
+  const availableCheckpoints = readiness.kind === 'ready' ? readiness.checkpoints : [];
   const activeCheckpoint = availableCheckpoints.includes(checkpoint)
     ? checkpoint
     : (availableCheckpoints[0] ?? '');
 
-  const videoReady = videoReadiness(
-    readiness.kind === 'ready' ? readiness.checkpoints : [],
-    comfyStatus?.textEncoders ?? [],
-  );
+  // From the raw list, not readiness: readiness has had video models stripped
+  // out, which are precisely the ones this needs.
+  const videoReady = videoReadiness(comfyStatus?.checkpoints ?? [], comfyStatus?.textEncoders ?? []);
   const videoCheckpoints = videoReady.kind === 'ready' ? videoReady.checkpoints : [];
   const activeVideoCheckpoint = videoCheckpoints.includes(videoCheckpoint)
     ? videoCheckpoint
@@ -465,10 +468,11 @@ export function AdvancedCapabilityLab({
                 </>
               ) : readiness.kind === 'no-checkpoints' ? (
                 <>
-                  <strong>ComfyUI is running, but has no models</strong>
+                  <strong>ComfyUI is running, but has no image model</strong>
                   <span>
-                    Put a checkpoint (a <code>.safetensors</code> file) in ComfyUI&apos;s
-                    <code> models/checkpoints</code> folder and check again.
+                    Put an image checkpoint (a <code>.safetensors</code> file) in ComfyUI&apos;s
+                    <code> models/checkpoints</code> folder and check again. A video model on its
+                    own does not count — it cannot render a still.
                   </span>
                 </>
               ) : (

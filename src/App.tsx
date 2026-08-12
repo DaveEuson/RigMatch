@@ -375,6 +375,15 @@ const QUICK_CHECK_WARNING_KEY = 'rigmatch:quick-test-warning:v1';
 // The app version whose update nudge the user dismissed — so the gentle popup
 // shows once per new release, never nags for a version they've already seen.
 const UPDATE_PROMPT_DISMISSED_KEY = 'rigmatch:update-prompt-dismissed:v1';
+/**
+ * Filters that match on a provider-reported capability and nothing else.
+ *
+ * Their counts are honest but partial: a model that is not installed cannot be
+ * asked what it can do. Named here so the note stays attached if more such
+ * filters are added.
+ */
+const CAPABILITY_ONLY_FILTERS = ['hears', 'videoread'];
+
 type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; video: boolean; videoSizeId: string; recognize: boolean; recognizeImage: string; listen: boolean; code: boolean; codeLanguage: string; codeTaskId: string; codeCustomTask: string; skipQuestions: boolean };
 type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
 
@@ -7162,6 +7171,20 @@ function ModelCabinet({
                 <button type="button" onClick={() => setQuickFilter('all')}>Show all</button>
               </div>
             )}
+            {CAPABILITY_ONLY_FILTERS.includes(taskFilter as string) && (
+              <div className="model-filter-note">
+                <ShieldCheck aria-hidden="true" />
+                {/* The count is what can be proven, not what exists. Ollama
+                    reports capabilities only for models it has downloaded, and
+                    guessing from a name puts a guaranteed failure on the
+                    scorecard of a model that never claimed the skill. */}
+                <span>
+                  This one counts only what your provider confirms, which it can
+                  only do for installed models. Others in the catalogue may have
+                  the same skill and cannot say so until they are installed.
+                </span>
+              </div>
+            )}
           </div>
         </details>
       </div>
@@ -10526,8 +10549,8 @@ function ActivityPanel({
       if (!result || result.error || !result.completedAt) continue;
       if (result.challenge === 'app-builder') {
         jobs.push({ key: `app:${result.model}`, model: result.model, kind: 'app', label: 'App Builder', grade: result.grade, score: result.score, completedAt: result.completedAt, html: extractHtmlDocument(result.response) });
-      } else if (result.challenge === 'image-generation') {
-        jobs.push({ key: `img:${result.model}`, model: result.model, kind: 'image', label: 'Image Lab', grade: result.grade, score: result.score, completedAt: result.completedAt, imageDataUrl: result.imageDataUrl });
+      } else if (result.challenge === 'image-generation' || result.challenge === 'video-generation') {
+        jobs.push({ key: `img:${result.model}`, model: result.model, kind: 'image', label: result.challenge === 'video-generation' ? 'Video Lab' : 'Image Lab', grade: result.grade, score: result.score, completedAt: result.completedAt, imageDataUrl: result.imageDataUrl });
       }
     }
     return jobs.sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt)).slice(0, 10);

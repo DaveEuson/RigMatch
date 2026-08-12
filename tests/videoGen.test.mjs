@@ -10,6 +10,7 @@ import {
   isVideoCheckpoint,
   middleFrameIndex,
 } from '../src/lib/videoGen.ts';
+import { videoReadiness } from '../src/lib/videoGenChallenge.ts';
 import {
   COMFORTABLE_COST,
   realtimeCost,
@@ -155,4 +156,30 @@ test('an unreadable queue reply counts as idle rather than blocking a run', () =
   assert.equal(comfyBusyCount(null), 0);
   assert.equal(comfyBusyCount({}), 0);
   assert.equal(comfyBusyCount({ exec_info: { queue_remaining: 'lots' } }), 0);
+});
+
+test('a ComfyUI holding only a video model is not ready for images', () => {
+  // The Image Lab filters video checkpoints out of its picker. Judging
+  // readiness on the unfiltered list rendered the ready branch with an empty
+  // dropdown and a dead Run button, explaining nothing — found by walking the
+  // live app after a checkpoint folder changed underneath it.
+  const only = ['ltx-video-2b-v0.9.5.safetensors'];
+  assert.deepEqual(only.filter((n) => !isVideoCheckpoint(n)), [],
+    'nothing is left for the image picker to offer');
+});
+
+test('the same ComfyUI IS ready for video, given an encoder', () => {
+  const ready = videoReadiness(['ltx-video-2b-v0.9.5.safetensors'], ['t5xxl_fp8_e4m3fn_scaled.safetensors']);
+  assert.equal(ready.kind, 'ready');
+  assert.deepEqual(ready.checkpoints, ['ltx-video-2b-v0.9.5.safetensors']);
+});
+
+test('a scaled fp8 encoder filename is still recognised as an encoder', () => {
+  // The real folder held t5xxl_fp8_e4m3fn_scaled.safetensors, not the exact
+  // name the docs use.
+  assert.ok(isTextEncoder('t5xxl_fp8_e4m3fn_scaled.safetensors'));
+});
+
+test('the 0.9.5 point release is recognised as a video checkpoint', () => {
+  assert.ok(isVideoCheckpoint('ltx-video-2b-v0.9.5.safetensors'));
 });
