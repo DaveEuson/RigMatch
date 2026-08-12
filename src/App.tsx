@@ -319,6 +319,9 @@ import {
 } from './lib/labChallenges';
 import { IMAGE_BENCHMARK_PROMPTS } from './lib/imageGenScoring';
 import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
+import { batchSeed, isVideoCheckpoint } from './lib/videoGen';
+import { DEFAULT_VIDEO_SIZE_ID, VIDEO_SIZE_PRESETS, toVideoLabResult, videoReadiness } from './lib/videoGenChallenge';
+import { runVideoLabChallenge } from './lib/videoGenRunner';
 import { runImageLabChallenge } from './lib/imageGenRunner';
 import { getComfyStatus } from './lib/comfyTransport';
 import {
@@ -372,7 +375,7 @@ const QUICK_CHECK_WARNING_KEY = 'rigmatch:quick-test-warning:v1';
 // The app version whose update nudge the user dismissed — so the gentle popup
 // shows once per new release, never nags for a version they've already seen.
 const UPDATE_PROMPT_DISMISSED_KEY = 'rigmatch:update-prompt-dismissed:v1';
-type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; recognize: boolean; recognizeImage: string; listen: boolean; code: boolean; codeLanguage: string; codeTaskId: string; codeCustomTask: string; skipQuestions: boolean };
+type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; video: boolean; videoSizeId: string; recognize: boolean; recognizeImage: string; listen: boolean; code: boolean; codeLanguage: string; codeTaskId: string; codeCustomTask: string; skipQuestions: boolean };
 type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
 
 type RunProgress = {
@@ -536,6 +539,8 @@ function App() {
     appCustomPrompt: '',
     image: false,
     imagePrompt: IMAGE_BENCHMARK_PROMPTS[0].id,
+    video: false,
+    videoSizeId: DEFAULT_VIDEO_SIZE_ID,
     recognize: false,
     recognizeImage: DEFAULT_VISION_TEST_IMAGE,
     listen: false,
@@ -554,6 +559,9 @@ function App() {
   // Checkpoints ComfyUI has loaded. Image generation is the one skill that does
   // not run on an Ollama model, so its candidates come from here.
   const [comfyCheckpoints, setComfyCheckpoints] = useState<string[]>([]);
+  // Tracked separately: a video model without a T5 encoder cannot render, and
+  // the two are fixed by fetching two different files.
+  const [comfyTextEncoders, setComfyTextEncoders] = useState<string[]>([]);
   const [closeCleanupOpen, setCloseCleanupOpen] = useState(false);
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
@@ -685,7 +693,9 @@ function App() {
   useEffect(() => {
     let live = true;
     void getComfyStatus().then((status) => {
-      if (live) setComfyCheckpoints(status.checkpoints);
+      if (!live) return;
+      setComfyCheckpoints(status.checkpoints);
+      setComfyTextEncoders(status.textEncoders ?? []);
     });
     return () => { live = false; };
   }, []);
@@ -2474,7 +2484,7 @@ function App() {
     const selection = skillTestSelection;
     const appPrompt = resolveAppBuilderPrompt(selection.appPromptId, selection.appCustomPrompt);
     const codeTask = resolveCodeTask(selection.codeTaskId, selection.codeCustomTask);
-    const jobs: Array<{ model: string; kind: 'app-builder' | 'image' | 'vision' | 'code' | 'listening' }> = [];
+    const jobs: Array<{ model: string; kind: 'app-builder' | 'image' | 'vision' | 'code' | 'listening' | 'video' }> = [];
     // Only models the provider reports as able to hear. A model without the
     // `audio` capability fails the request outright — measured on gemma3:4b,
     // which reads images happily and returns "Failed to load image or audio
@@ -2498,17 +2508,37 @@ function App() {
       }
     }
 
-    // Image jobs do not come from this model list at all. Every other skill
-    // runs on an Ollama model; image generation runs on a ComfyUI checkpoint,
-    // so the candidates are whatever ComfyUI has loaded. Asking Ollama for them
-    // is what made this checkbox silently do nothing — it looked for installed
-    // models with names like flux or sdxl, and Ollama's library has none.
-    if (selection.image) {
+    // Generation jobs do not come from this model list at all. Every other
+    // skill runs on an Ollama model; images and video run on ComfyUI
+    // checkpoints, so the candidates are whatever ComfyUI has loaded. Asking
+    // Ollama for them is what made the image checkbox silently do nothing — it
+    // looked for installed models named flux or sdxl, and Ollama has none.
+    let videoEncoder = '';
+    if (selection.image || selection.video) {
       const comfy = await getComfyStatus();
-      for (const name of comfy.checkpoints) jobs.push({ model: name, kind: 'image' });
+      if (selection.image) {
+        // A video checkpoint in a still-image graph fails deep in the sampler
+        // with a shape error, so it is never offered one.
+        for (const name of comfy.checkpoints.filter((n) => !isVideoCheckpoint(n))) {
+          jobs.push({ model: name, kind: 'image' });
+        }
+      }
+      if (selection.video) {
+        const ready = videoReadiness(comfy.checkpoints, comfy.textEncoders ?? []);
+        if (ready.kind === 'ready') {
+          videoEncoder = ready.encoders[0];
+          for (const name of ready.checkpoints) jobs.push({ model: name, kind: 'video' });
+        }
+      }
     }
 
     if (!jobs.length) return;
+
+    // One seed for the whole batch. Every video model then renders identical
+    // input so the comparison is fair, while a later batch gets a different
+    // seed and does real work instead of being served ComfyUI's cache — which
+    // returns the previous video in about 1.5s and would read as a fast rig.
+    const videoSeed = batchSeed();
 
     // A vision recognition job needs a picture to read; load the bundled test
     // image once up front.
@@ -2528,6 +2558,7 @@ function App() {
       const label = job.kind === 'app-builder' ? `App Builder skill test — ${job.model}`
         : job.kind === 'code' ? `Code Challenge — ${job.model}`
         : job.kind === 'image' ? `Image skill test — ${job.model}`
+        : job.kind === 'video' ? `Video skill test — ${job.model}`
         : `Image recognition skill test — ${job.model}`;
       setSkillRunStatus({ phase: 'running', label, completed: index, total: jobs.length });
       setActivity(`Skill test ${index + 1}/${jobs.length}: ${label}. This can take a few minutes per model.`);
@@ -2596,6 +2627,21 @@ function App() {
         } finally {
           unsubscribe?.();
         }
+      } else if (job.kind === 'video') {
+        // job.model is a ComfyUI video checkpoint. Every model in this batch
+        // gets the same seed, so what differs between them is the model.
+        setLiveBuild({ model: job.model, kind: 'image', text: '', done: false });
+        const run = await runVideoLabChallenge({
+          checkpoint: job.model,
+          textEncoder: videoEncoder,
+          sizeId: selection.videoSizeId,
+          promptId: selection.imagePrompt,
+          judgeModel: judgeCandidates(modelRows)[0],
+          ollamaBaseUrl: ollama.baseUrl,
+          seed: videoSeed,
+        });
+        result = toVideoLabResult(run, selection.imagePrompt);
+        setLiveBuild({ model: job.model, kind: 'image', text: '', done: true, error: result.error });
       } else {
         // Image generation can't stream tokens — show a "generating" state.
         // job.model is a ComfyUI checkpoint here, not an Ollama model.
@@ -2611,6 +2657,7 @@ function App() {
       }
       if (!result.error) {
         const key = job.kind === 'image' ? `image:${job.model}`
+          : job.kind === 'video' ? `video:${job.model}`
           : job.kind === 'vision' ? `vision:${job.model}`
           : job.kind === 'code' ? `code:${job.model}`
           : job.model;
@@ -3616,6 +3663,7 @@ function App() {
             : shortlistedRows.filter((row) => row.installed).slice(0, 5)
           ).some((row) => canHearAudio(row))}
           comfyCheckpoints={comfyCheckpoints}
+          comfyTextEncoders={comfyTextEncoders}
         />
       )}
 
@@ -4771,6 +4819,7 @@ function RunWarningModal({
   judgeActive,
   gpuContention,
   comfyCheckpoints,
+  comfyTextEncoders,
 }: {
   mode: PendingRunMode;
   selectedModel: string;
@@ -4795,6 +4844,8 @@ function RunWarningModal({
       does not run on a model from the lineup, so it is offered on the strength
       of this rather than on what was picked. */
   comfyCheckpoints: string[];
+  /** T5 encoders ComfyUI has. A video model cannot render without one. */
+  comfyTextEncoders: string[];
   qualityMode: 'heuristic' | 'judge';
   judgeModel: string;
   judgeModelOptions: string[];
@@ -4827,9 +4878,14 @@ function RunWarningModal({
   // Skill-test capability + skip-questions state, hoisted so both the question
   // and skill sections (and the footer) can react to it.
   const appBuilderCapable = lineupModels.some((m) => !isLikelyImageGenerationModel(m) && !isEmbeddingModel(m));
-  // Not from the lineup: image generation runs on a ComfyUI checkpoint, so
-  // whether it is offered depends on ComfyUI, not on which models were picked.
-  const hasImageModel = comfyCheckpoints.length > 0;
+  // Not from the lineup: generation runs on ComfyUI checkpoints, so whether it
+  // is offered depends on ComfyUI, not on which models were picked.
+  const hasImageModel = comfyCheckpoints.some((name) => !isVideoCheckpoint(name));
+  const videoCheckpointCount = comfyCheckpoints.filter(isVideoCheckpoint).length;
+  // A video model alone is not enough — LTX cannot run without a T5 encoder,
+  // and offering the test without one produces a failure inside CLIPLoader
+  // that reads as the model being broken.
+  const videoCapable = videoCheckpointCount > 0 && comfyTextEncoders.length > 0;
   const visionCapable = lineupModels.some((m) => isVisionModel(m));
   const imageCapable = hasImageModel;
   // Code Challenge needs a code-capable model AND a judge — it's the only way to
@@ -4837,7 +4893,7 @@ function RunWarningModal({
   const codeCapable = appBuilderCapable && judgeActive;
   // Every model in the lineup is image-only → the Q&A round can't run at all.
   const imageOnlyLineup = lineupModels.length > 0 && lineupModels.every(isLikelyImageGenerationModel);
-  const anySkillSelected = (skillSelection.appBuilder && appBuilderCapable) || (skillSelection.code && codeCapable) || (skillSelection.image && imageCapable) || (skillSelection.recognize && visionCapable) || (skillSelection.listen && listenCapable);
+  const anySkillSelected = (skillSelection.appBuilder && appBuilderCapable) || (skillSelection.code && codeCapable) || (skillSelection.image && imageCapable) || (skillSelection.video && videoCapable) || (skillSelection.recognize && visionCapable) || (skillSelection.listen && listenCapable);
   const skipQuestions = anySkillSelected && (skillSelection.skipQuestions || imageOnlyLineup);
   // Block the doomed case: an image-only model with no skill selected would just
   // fail the questions. Require a skill (the image one) first.
@@ -5240,6 +5296,32 @@ function RunWarningModal({
                     >
                       {IMAGE_BENCHMARK_PROMPTS.map((prompt) => (
                         <option key={prompt.id} value={prompt.id}>{prompt.prompt}</option>
+                      ))}
+                    </select>
+                  )}
+                  <label className={`run-skill-test-option${videoCapable ? '' : ' disabled'}`}>
+                    <input
+                      type="checkbox"
+                      checked={skillSelection.video && videoCapable}
+                      disabled={!videoCapable}
+                      onChange={(event) => onSkillSelectionChange({ ...skillSelection, video: event.target.checked })}
+                    />
+                    <span>
+                      <strong>Generate a video</strong>
+                      <em>{!videoCapable
+                        ? 'Needs ComfyUI running with a video model and a T5 text encoder.'
+                        : `Renders 4 seconds on ${videoCheckpointCount === 1 ? 'your video model' : `all ${videoCheckpointCount} video models`}. Slowest test here — roughly 12s per model at the smallest size, and minutes at Full HD.`}</em>
+                    </span>
+                  </label>
+                  {videoCapable && skillSelection.video && (
+                    <select
+                      className="run-skill-image-prompt"
+                      value={skillSelection.videoSizeId}
+                      onChange={(event) => onSkillSelectionChange({ ...skillSelection, videoSizeId: event.target.value })}
+                      aria-label="Video size"
+                    >
+                      {VIDEO_SIZE_PRESETS.map((preset) => (
+                        <option key={preset.id} value={preset.id}>{preset.label}</option>
                       ))}
                     </select>
                   )}
