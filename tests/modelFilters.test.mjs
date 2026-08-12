@@ -44,6 +44,18 @@ test('Makes audio finds speakers, not listeners', () => {
   assert.ok(!isLikelyAudioGenerationModel('llama3.2:3b'));
 });
 
+test('the word-boundary alternatives really are word boundaries', () => {
+  // These specific branches shipped once as literal backspace characters —
+  // the escaping collapsed in tooling — and every other test still passed,
+  // because none exercised them. Each assertion here fails against a backspace.
+  assert.ok(isLikelyAudioGenerationModel('some-tts:1b'), 'tts as a word');
+  assert.ok(isLikelyAudioGenerationModel('bark:small'), 'bark as a word');
+  assert.ok(!isLikelyAudioGenerationModel('battts-nonsense'), 'tts inside a word');
+  assert.ok(!isLikelyAudioGenerationModel('embarking:7b'), 'bark inside a word');
+  assert.ok(canWatchVideo(row('apollo:7b', undefined)), 'apollo as a word');
+  assert.ok(!canWatchVideo(row('apollonius:7b', undefined)), 'apollo inside a word');
+});
+
 test('the good-score line is where a B begins, taken from the grade bands', () => {
   const bMin = MATCH_GRADE_BANDS.find((band) => band.grade === 'B').min;
   assert.ok(isGoodScore(scored(bMin)));

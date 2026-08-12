@@ -1269,7 +1269,7 @@ export const TASK_FILTER_CHIPS: Array<{ id: ModelTaskFilterId; label: string }> 
 export function canWatchVideo(row: CapabilityBearing): boolean {
   const capabilities = getModelCapabilities(row);
   if (capabilities?.includes('video')) return true;
-  return /video-?llama|llava-?(next-?)?video|apollo|video-?chat/i
+  return /video-?llama|llava-?(next-?)?video|\bapollo\b|video-?chat/i
     .test(row.displayName ?? row.name ?? '');
 }
 
@@ -1283,7 +1283,7 @@ export function canWatchVideo(row: CapabilityBearing): boolean {
 export function isLikelyAudioGenerationModel(name: string): boolean {
   const lower = (name || '').toLowerCase();
   if (/whisper|transcribe/.test(lower)) return false; // hears, does not speak
-  return /tts|text-?to-?speech|kokoro|orpheus|bark|musicgen|stable-?audio|ace-?step|parler/.test(lower);
+  return /\btts\b|text-?to-?speech|kokoro|orpheus|\bbark\b|musicgen|stable-?audio|ace-?step|parler/.test(lower);
 }
 
 /** Models that generate video. No local backend runs these yet, so the filter
