@@ -16,7 +16,7 @@ import type {
 import type { NavId } from '../components/SideMenu';
 import { getModelFamily, getModelOrigin } from './modelOrigins.ts';
 import { normalizeModelKey } from './modelKey.ts';
-import { compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore } from './scoring.ts';
+import { MATCH_GRADE_BANDS, compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore } from './scoring.ts';
 import { formatBytes, formatBytesPerSecond, formatGb, hashString, formatThroughput } from './format.ts';
 import {
   APP_VERSION,
@@ -32,7 +32,7 @@ import {
 
 export type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'origin' | 'source' | 'status' | 'score' | 'speed' | 'pulls';
 export type SortDirection = 'asc' | 'desc';
-export type ModelQuickFilterId = 'all' | 'installed' | 'fits-vram' | 'scored' | 'unscored' | 'huge';
+export type ModelQuickFilterId = 'all' | 'installed' | 'fits-vram' | 'scored' | 'unscored' | 'good-score' | 'low-score' | 'huge';
 export type ListTestResult = {
   winner: string;
   results: TestedModelScore[];
@@ -1236,7 +1236,7 @@ export const TASK_CATEGORIES = [
 ] as const;
 
 export type TaskCategoryId = typeof TASK_CATEGORIES[number]['id'];
-export type ModelTaskFilterId = TaskCategoryId | 'uncensored' | 'imagegen' | 'videogen';
+export type ModelTaskFilterId = TaskCategoryId | 'uncensored' | 'imagegen' | 'videogen' | 'hears' | 'videoread' | 'audiogen';
 
 export const TASK_FILTER_CHIPS: Array<{ id: ModelTaskFilterId; label: string }> = [
   { id: 'coding',     label: 'Coding' },
@@ -1246,10 +1246,45 @@ export const TASK_FILTER_CHIPS: Array<{ id: ModelTaskFilterId; label: string }> 
   { id: 'tiny',       label: 'Tiny' },
   { id: 'imagegen',   label: 'Makes images' },
   { id: 'videogen',   label: 'Makes video' },
+  { id: 'audiogen',   label: 'Makes audio' },
   { id: 'vision',     label: 'Reads images/OCR' },
+  { id: 'hears',      label: 'Hears audio' },
+  { id: 'videoread',  label: 'Watches video' },
   { id: 'search',     label: 'Search' },
   { id: 'uncensored', label: 'Uncensored' },
 ];
+
+/**
+ * Models that read video the user sends.
+ *
+ * Ollama's capability vocabulary has no 'video' today and its API takes no
+ * video input, so this is provider-capability first (future-proof: the moment
+ * Ollama reports it, the filter lights up) with a name rule only for models
+ * that exist *specifically* for video understanding. Ordinary -vl vision
+ * models are deliberately not matched: they read frames as stills, and
+ * claiming they "watch video" through an API that cannot send video is the
+ * "Makes images: 0 models" lie with a new face. The chip row hides filters
+ * with no matches, so until such a model exists this simply does not appear.
+ */
+export function canWatchVideo(row: CapabilityBearing): boolean {
+  const capabilities = getModelCapabilities(row);
+  if (capabilities?.includes('video')) return true;
+  return /video-?llama|llava-?(next-?)?video|apollo|video-?chat/i
+    .test(row.displayName ?? row.name ?? '');
+}
+
+/**
+ * Models that produce audio — TTS and music.
+ *
+ * Name-only, because no local provider reports an audio-output capability and
+ * none runs one yet. Same contract as the video chips: recognizable the day
+ * they exist, hidden until then.
+ */
+export function isLikelyAudioGenerationModel(name: string): boolean {
+  const lower = (name || '').toLowerCase();
+  if (/whisper|transcribe/.test(lower)) return false; // hears, does not speak
+  return /tts|text-?to-?speech|kokoro|orpheus|bark|musicgen|stable-?audio|ace-?step|parler/.test(lower);
+}
 
 /** Models that generate video. No local backend runs these yet, so the filter
    is usually empty — it exists so such models are recognizable when they exist. */
@@ -1342,6 +1377,12 @@ export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolea
   if (task === 'uncensored') return isUncensoredModel(row.displayName);
   if (task === 'imagegen') return isImageGenerationModel(row);
   if (task === 'videogen') return isLikelyVideoGenerationModel(row.displayName);
+  // Provider-reported only, no name fallback: nothing in a name reliably says
+  // a model can hear, and matching one that cannot guarantees the "Failed to
+  // load image or audio file" error on its scorecard.
+  if (task === 'hears') return canHearAudio(row);
+  if (task === 'videoread') return canWatchVideo(row);
+  if (task === 'audiogen') return isLikelyAudioGenerationModel(row.displayName);
   const category = TASK_CATEGORIES.find((c) => c.id === task);
   if (!category || category.keywords.length === 0) return true;
   const specialties = getModelGoodForTags(row).map((s) => s.toLowerCase());
@@ -1460,6 +1501,8 @@ export function getModelQuickFilters(
     { id: 'fits-vram', label: 'Rig Picks', count: rows.filter((row) => modelFitsVram(row, vramGb)).length },
     { id: 'scored', label: 'Scored', count: rows.filter((row) => Boolean(getModelScore(row, scores))).length },
     { id: 'unscored', label: 'Unscored', count: rows.filter((row) => row.installed && !getModelScore(row, scores)).length },
+    { id: 'good-score', label: 'B or better', count: rows.filter((row) => isGoodScore(getModelScore(row, scores))).length },
+    { id: 'low-score', label: 'Below B', count: rows.filter((row) => isLowScore(getModelScore(row, scores))).length },
     { id: 'huge', label: 'Too Big', count: rows.filter((row) => getHardwareFit(row, vramGb).tone === 'out-of-league').length },
   ];
 }
@@ -1474,8 +1517,26 @@ export function modelMatchesQuickFilter(
   if (filter === 'fits-vram') return modelFitsVram(row, vramGb);
   if (filter === 'scored') return Boolean(score);
   if (filter === 'unscored') return row.installed && !score;
+  if (filter === 'good-score') return isGoodScore(score);
+  if (filter === 'low-score') return isLowScore(score);
   if (filter === 'huge') return getHardwareFit(row, vramGb).tone === 'out-of-league';
   return true;
+}
+
+/**
+ * The line between a good score and a poor one is where a B begins, taken
+ * from MATCH_GRADE_BANDS rather than restated — if the grading ever shifts,
+ * these filters shift with it instead of quietly disagreeing.
+ */
+const GOOD_SCORE_MIN = MATCH_GRADE_BANDS.find((band) => band.grade === 'B')?.min ?? 72;
+
+export function isGoodScore(score: TestedModelScore | undefined): boolean {
+  return Boolean(score && score.total >= GOOD_SCORE_MIN);
+}
+
+/** Scored, and badly — distinct from unscored, which is not a verdict at all. */
+export function isLowScore(score: TestedModelScore | undefined): boolean {
+  return Boolean(score && score.total < GOOD_SCORE_MIN);
 }
 
 export function modelFitsVram(row: ModelRow, vramGb: number) {
