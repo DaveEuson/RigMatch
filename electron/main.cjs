@@ -54,9 +54,15 @@ const {
   parseOllamaFamilyRows,
 } = require('./ollamaCatalog.cjs');
 const { summarizeMemory } = require('./systemProfile.cjs');
+const { createComfyBridge } = require('./comfy.cjs');
 
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const LM_STUDIO_LOCAL_URL = 'http://127.0.0.1:1234/v1';
+/** ComfyUI's default port. Image generation runs here, not through Ollama. */
+const COMFY_LOCAL_URL = 'http://127.0.0.1:8188';
+// Both dependencies are hoisted function declarations, so they are defined by
+// the time this runs despite appearing further down the file.
+const comfyBridge = createComfyBridge({ fetchJson, assertLocalhostUrl });
 const OLLAMA_LIBRARY_URL = 'https://ollama.com/library';
 const OLLAMA_NAMESPACE_URL = 'https://ollama.com/x';
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
@@ -515,6 +521,13 @@ function registerHandlers() {
   });
   handleLogged('ollama:deleteModel', 'ollama', (_event, request) => deleteModel(request));
   handleLogged('ollama:advancedGenerate', 'ollama', (event, request) => runAdvancedGenerate(request, event.sender));
+  // ComfyUI. The graph itself is built in the renderer by src/lib/comfyui.ts,
+  // so these handlers only carry it across and carry the reply back.
+  handleLogged('comfy:getStatus', 'comfy', (_event, baseUrl) => comfyBridge.getStatus(baseUrl ?? COMFY_LOCAL_URL));
+  handleLogged('comfy:submit', 'comfy', (_event, baseUrl, graph, clientId) => comfyBridge.submit(baseUrl ?? COMFY_LOCAL_URL, graph, clientId));
+  handleLogged('comfy:history', 'comfy', (_event, baseUrl, promptId) => comfyBridge.getHistory(baseUrl ?? COMFY_LOCAL_URL, promptId));
+  handleLogged('comfy:image', 'comfy', (_event, baseUrl, ref) => comfyBridge.getImage(baseUrl ?? COMFY_LOCAL_URL, ref));
+  handleLogged('comfy:interrupt', 'comfy', (_event, baseUrl, promptId) => comfyBridge.interrupt(baseUrl ?? COMFY_LOCAL_URL, promptId));
   // Stop button support: abort an in-flight streamed generation (App Builder /
   // vision) immediately instead of letting it run out its multi-minute budget.
   ipcMain.handle('ollama:abortAdvancedGenerate', (event, streamId) => {
