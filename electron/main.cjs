@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, protocol, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, protocol, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const os = require('node:os');
@@ -55,6 +55,7 @@ const {
 } = require('./ollamaCatalog.cjs');
 const { summarizeMemory } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
+const { downloadModel, verifyComfyFolder } = require('./comfyModels.cjs');
 
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const LM_STUDIO_LOCAL_URL = 'http://127.0.0.1:1234/v1';
@@ -63,6 +64,8 @@ const COMFY_LOCAL_URL = 'http://127.0.0.1:8188';
 // Both dependencies are hoisted function declarations, so they are defined by
 // the time this runs despite appearing further down the file.
 const comfyBridge = createComfyBridge({ fetchJson, assertLocalhostUrl });
+/** In-flight model downloads, so a Stop can reach the right one. */
+const activeModelDownloads = new Map();
 const OLLAMA_LIBRARY_URL = 'https://ollama.com/library';
 const OLLAMA_NAMESPACE_URL = 'https://ollama.com/x';
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
@@ -529,6 +532,43 @@ function registerHandlers() {
   handleLogged('comfy:image', 'comfy', (_event, baseUrl, ref) => comfyBridge.getImage(baseUrl ?? COMFY_LOCAL_URL, ref));
   handleLogged('comfy:interrupt', 'comfy', (_event, baseUrl, promptId) => comfyBridge.interrupt(baseUrl ?? COMFY_LOCAL_URL, promptId));
   handleLogged('comfy:free', 'comfy', (_event, baseUrl) => comfyBridge.free(baseUrl ?? COMFY_LOCAL_URL));
+  // Generation models: chosen folder, then verified against what the running
+  // server lists, then streamed in. See comfyModels.cjs for why verification
+  // is not optional.
+  handleLogged('comfy:pickFolder', 'comfy', async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const picked = await dialog.showOpenDialog(window, {
+      title: 'Where is ComfyUI?',
+      properties: ['openDirectory'],
+      message: 'Pick the ComfyUI folder — the one containing models/checkpoints.',
+    });
+    if (picked.canceled || !picked.filePaths.length) return { canceled: true };
+    return { canceled: false, folder: picked.filePaths[0] };
+  });
+  handleLogged('comfy:verifyFolder', 'comfy', (_event, folder, serverCheckpoints) =>
+    verifyComfyFolder(folder, serverCheckpoints));
+  handleLogged('comfy:downloadModel', 'comfy', async (event, request = {}) => {
+    const progressId = String(request.progressId || '');
+    const controller = new AbortController();
+    if (progressId) activeModelDownloads.set(progressId, controller);
+    try {
+      return await downloadModel(request, (progress) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send('comfy:downloadProgress', { id: progressId, ...progress });
+        }
+      }, controller.signal);
+    } finally {
+      if (progressId) activeModelDownloads.delete(progressId);
+    }
+  });
+  ipcMain.handle('comfy:abortDownload', (event, progressId) => {
+    assertTrustedIpcSender(event);
+    // Aborting mid-stream leaves only the .part file, which downloadModel
+    // removes; a half-written .safetensors would be listed by ComfyUI and then
+    // fail deep in the loader.
+    activeModelDownloads.get(String(progressId))?.abort();
+    return true;
+  });
   // Stop button support: abort an in-flight streamed generation (App Builder /
   // vision) immediately instead of letting it run out its multi-minute budget.
   ipcMain.handle('ollama:abortAdvancedGenerate', (event, streamId) => {

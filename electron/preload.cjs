@@ -23,6 +23,15 @@ const api = {
   comfyImage: (baseUrl, ref) => ipcRenderer.invoke('comfy:image', baseUrl, ref),
   comfyInterrupt: (baseUrl, promptId) => ipcRenderer.invoke('comfy:interrupt', baseUrl, promptId),
   comfyFree: (baseUrl) => ipcRenderer.invoke('comfy:free', baseUrl),
+  comfyPickFolder: () => ipcRenderer.invoke('comfy:pickFolder'),
+  comfyVerifyFolder: (folder, serverCheckpoints) => ipcRenderer.invoke('comfy:verifyFolder', folder, serverCheckpoints),
+  comfyDownloadModel: (request) => ipcRenderer.invoke('comfy:downloadModel', request),
+  comfyAbortDownload: (progressId) => ipcRenderer.invoke('comfy:abortDownload', progressId),
+  onComfyDownloadProgress: (callback) => {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on('comfy:downloadProgress', listener);
+    return () => ipcRenderer.removeListener('comfy:downloadProgress', listener);
+  },
   openRouterGenerate: (request) => ipcRenderer.invoke('judge:openRouterGenerate', request),
   abortAdvancedGenerate: (streamId) => ipcRenderer.invoke('ollama:abortAdvancedGenerate', streamId),
   cancelBenchmark: (progressId) => ipcRenderer.invoke('benchmark:cancel', progressId),

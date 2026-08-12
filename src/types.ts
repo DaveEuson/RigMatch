@@ -462,6 +462,22 @@ export type AgentArcadeApi = {
   comfyInterrupt?: (baseUrl: string | undefined, promptId: string) => Promise<unknown>;
   /** Unload models and evict cached outputs before a timed run. */
   comfyFree?: (baseUrl?: string) => Promise<unknown>;
+  /**
+   * Generation models do not come from Ollama, so they cannot be pulled — they
+   * are files that must land in a folder ComfyUI reads, and ComfyUI does not
+   * say where that is. Hence a picker, a verification step, and a downloader.
+   */
+  comfyPickFolder?: () => Promise<{ canceled: boolean; folder?: string }>;
+  comfyVerifyFolder?: (folder: string, serverCheckpoints: string[]) =>
+    Promise<{ ok: boolean; root?: string; reason?: string; warning?: string | null }>;
+  comfyDownloadModel?: (request: {
+    root: string; folder: string; filename: string; url: string;
+    expectedBytes?: number; progressId?: string;
+  }) => Promise<{ path: string; alreadyPresent: boolean; bytes: number }>;
+  comfyAbortDownload?: (progressId: string) => Promise<boolean>;
+  onComfyDownloadProgress?: (
+    callback: (progress: { id: string; received: number; total: number; percent: number | null }) => void,
+  ) => () => void;
   // Cloud judge bridge (strictly opt-in): one OpenRouter completion using the
   // user's own key, routed through the main process. Only used for judging.
   openRouterGenerate?: (request: { apiKey: string; model: string; prompt: string; maxTokens?: number }) => Promise<{ response: string; error: string | null }>;

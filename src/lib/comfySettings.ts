@@ -12,11 +12,19 @@
 
 export const COMFY_URL_STORAGE_KEY = 'rigmatch:comfy-url:v1';
 export const COMFY_DEDICATED_STORAGE_KEY = 'rigmatch:comfy-dedicated:v1';
+/** The verified models root, needed to write a download where ComfyUI reads it. */
+export const COMFY_FOLDER_STORAGE_KEY = 'rigmatch:comfy-folder:v1';
 
 export const COMFY_DEFAULT_BASE_URL = 'http://127.0.0.1:8188';
 
 export type ComfySettings = {
   baseUrl: string;
+  /**
+   * Where ComfyUI keeps its models, once verified against what the running
+   * server lists. Empty until someone picks it: ComfyUI reports its version
+   * and its devices but never its own path, so this cannot be discovered.
+   */
+  folder: string;
   /**
    * True when this ComfyUI exists for RigMatch. Only then may a run unload
    * models to get a clean VRAM reading; on a shared instance that would evict
@@ -65,18 +73,20 @@ export function normalizeComfyUrl(input: string): string | null {
 }
 
 export function readComfySettings(): ComfySettings {
-  if (typeof window === 'undefined') return { baseUrl: COMFY_DEFAULT_BASE_URL, dedicated: false };
+  if (typeof window === 'undefined') return { baseUrl: COMFY_DEFAULT_BASE_URL, dedicated: false, folder: '' };
   let baseUrl = COMFY_DEFAULT_BASE_URL;
   let dedicated = false;
+  let folder = '';
   try {
     baseUrl = normalizeComfyUrl(window.localStorage.getItem(COMFY_URL_STORAGE_KEY) ?? '')
       ?? COMFY_DEFAULT_BASE_URL;
     dedicated = window.localStorage.getItem(COMFY_DEDICATED_STORAGE_KEY) === 'true';
+    folder = window.localStorage.getItem(COMFY_FOLDER_STORAGE_KEY) ?? '';
   } catch {
     // Storage disabled. The defaults are the safe ones: the usual port, and
     // not permitted to unload anyone's models.
   }
-  return { baseUrl, dedicated };
+  return { baseUrl, dedicated, folder };
 }
 
 export function writeComfySettings(settings: Partial<ComfySettings>): void {
@@ -88,6 +98,11 @@ export function writeComfySettings(settings: Partial<ComfySettings>): void {
     }
     if (settings.dedicated !== undefined) {
       window.localStorage.setItem(COMFY_DEDICATED_STORAGE_KEY, settings.dedicated ? 'true' : 'false');
+    }
+    // Only ever written after verifyComfyFolder accepted it, so a stored
+    // folder is one the running server was proven to read.
+    if (settings.folder !== undefined) {
+      window.localStorage.setItem(COMFY_FOLDER_STORAGE_KEY, settings.folder);
     }
   } catch {
     // Nothing to do; the run will use whatever was already in effect.
