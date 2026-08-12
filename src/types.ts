@@ -108,6 +108,19 @@ export type CatalogModel = {
    * covers only the top twenty per capability, which is all /search returns.
    */
   capabilities?: string[];
+  /**
+   * What runs this model. Absent means Ollama, which is nearly everything.
+   *
+   * Deliberately a property of the row rather than a separate screen: someone
+   * who wants to make a video should search for "makes video", not learn that
+   * video lives in a different registry from chat. Where the file comes from
+   * is our problem.
+   */
+  runtime?: 'ollama' | 'comfyui';
+  /** Links a ComfyUI row back to its catalogue entry, for downloading. */
+  generationId?: string;
+  /** What this produces, for the capability filters. */
+  generationKind?: 'image' | 'video' | 'text-encoder';
 };
 
 export type CatalogResponse = {

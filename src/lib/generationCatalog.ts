@@ -145,3 +145,46 @@ export function downloadPlan(model: GenerationModel, installed: string[]): {
 export function isCatalogFile(filename: string): boolean {
   return GENERATION_MODELS.some((m) => m.filename.toLowerCase() === filename.toLowerCase());
 }
+
+/**
+ * The generation catalogue as catalogue rows, so these models appear in the
+ * Models screen beside everything else.
+ *
+ * They are not Ollama models and never will be, but that is a fact about how
+ * RigMatch fetches them, not a fact the user should have to hold. A row here
+ * carries `runtime: 'comfyui'` and the screen explains what that needs.
+ *
+ * `installed` is decided by whether ComfyUI is listing the file, which is the
+ * only definition that matters: a file on disk that the running server cannot
+ * see may as well not exist.
+ */
+export function generationCatalogRows(comfyFiles: string[]): Array<{
+  id: string;
+  name: string;
+  tag: string;
+  params: string;
+  sizeGb: number;
+  pack: string;
+  source: string;
+  live: boolean;
+  runtime: 'comfyui';
+  generationId: string;
+  generationKind: GenerationModelKind;
+  installedFile: boolean;
+}> {
+  const present = new Set((comfyFiles ?? []).map((n) => n.toLowerCase()));
+  return GENERATION_MODELS.map((model) => ({
+    id: `comfyui/${model.id}`,
+    name: model.label,
+    tag: model.kind === 'text-encoder' ? 'encoder' : model.kind,
+    params: model.kind === 'text-encoder' ? 'Text encoder' : model.kind === 'video' ? 'Video model' : 'Image model',
+    sizeGb: Number((model.bytes / 1e9).toFixed(2)),
+    pack: 'Generation',
+    source: 'Hugging Face',
+    live: true,
+    runtime: 'comfyui' as const,
+    generationId: model.id,
+    generationKind: model.kind,
+    installedFile: present.has(model.filename.toLowerCase()),
+  }));
+}

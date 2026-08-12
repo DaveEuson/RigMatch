@@ -1386,6 +1386,15 @@ export function getModelDreamTags(row: ModelRow): Array<'talk' | 'write' | 'code
 }
 
 export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolean {
+  // A generation model says outright what it makes, so nothing here has to
+  // infer it from a filename. "sd15.safetensors" matches no image-model name
+  // rule, and inferring is what made these filters read zero.
+  if (row.generationKind) {
+    if (task === 'imagegen') return row.generationKind === 'image';
+    if (task === 'videogen') return row.generationKind === 'video';
+    // A checkpoint is not a chat model; it matches none of the text tasks.
+    return false;
+  }
   if (task === 'uncensored') return isUncensoredModel(row.displayName);
   if (task === 'imagegen') return isImageGenerationModel(row);
   if (task === 'videogen') return isLikelyVideoGenerationModel(row.displayName);

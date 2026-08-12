@@ -321,9 +321,11 @@ import { IMAGE_BENCHMARK_PROMPTS } from './lib/imageGenScoring';
 import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
 import { batchSeed, isVideoCheckpoint } from './lib/videoGen';
 import { DEFAULT_VIDEO_SIZE_ID, VIDEO_SIZE_PRESETS, toVideoLabResult, videoReadiness } from './lib/videoGenChallenge';
+import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
 import { runVideoLabChallenge } from './lib/videoGenRunner';
 import { runImageLabChallenge } from './lib/imageGenRunner';
 import { describeComfyBusy, getComfyStatus } from './lib/comfyTransport';
+import { readComfySettings } from './lib/comfySettings';
 import {
   CODE_LANGUAGES,
   CODE_TASK_PRESETS,
@@ -668,8 +670,25 @@ function App() {
   );
 
   const modelRows = useMemo(
-    () => mergeModelRows(catalog, localModels),
-    [catalog, localModels],
+    () => {
+      const rows = mergeModelRows(catalog, localModels);
+      // Generation models join the same list rather than living on a screen of
+      // their own. Someone who wants to make a video searches for "makes
+      // video"; that video comes from Hugging Face and runs on ComfyUI is our
+      // problem, not a category they should have to learn.
+      const generation: ModelRow[] = generationCatalogRows([...comfyCheckpoints, ...comfyTextEncoders])
+        .map((entry) => ({
+          ...entry,
+          displayName: entry.name,
+          installed: entry.installedFile,
+          ready: entry.installedFile,
+          installLabel: entry.installedFile ? 'Installed' : 'Download',
+          canDownload: !entry.installedFile,
+          pulls: null,
+        }));
+      return [...generation, ...rows];
+    },
+    [catalog, localModels, comfyCheckpoints, comfyTextEncoders],
   );
 
   const selectedRow = modelRows.find(
@@ -1884,13 +1903,76 @@ function App() {
     setActivity(`Pausing ${pullingModel}. Start Download will resume through Ollama instead of dropping the queue.`);
   }, [isPullCancelRequested, isPullPauseRequested, isPullingModels, ollama.baseUrl, pullingModel]);
 
+  /**
+   * Fetch a generation model into ComfyUI's own folders.
+   *
+   * Needs somewhere to write, and ComfyUI never says where it lives — so
+   * without a verified folder this stops and says so rather than failing
+   * somewhere less obvious. The encoder rides along: a video checkpoint on its
+   * own renders nothing.
+   */
+  const downloadGenerationModel = useCallback(async (row: ModelRow): Promise<boolean> => {
+    const model = row.generationId ? generationModelById(row.generationId) : undefined;
+    if (!model) return false;
+
+    const { folder: comfyRoot } = readComfySettings();
+    if (!comfyRoot) {
+      setActivity(`${row.displayName} downloads into ComfyUI. Set the ComfyUI folder in Settings first — RigMatch cannot find it on its own.`);
+      return false;
+    }
+
+    const { needed, totalBytes } = downloadPlan(model, [...comfyCheckpoints, ...comfyTextEncoders]);
+    if (needed.length === 0) return true;
+
+    setActivity(`Downloading ${needed.map((m) => m.label).join(' + ')} — ${formatBytesGb(totalBytes)} in total.`);
+    for (const item of needed) {
+      const progressId = createRunProgressId('comfy');
+      const unsubscribe = agentArcadeApi.onComfyDownloadProgress?.((progress) => {
+        if (progress.id !== progressId) return;
+        setPullProgressByModel((current) => ({
+          ...current,
+          [row.displayName]: {
+            id: progressId,
+            model: row.displayName,
+            phase: 'pulling',
+            status: `${item.label} — ${formatBytesGb(progress.received)} of ${formatBytesGb(progress.total)}`,
+            percent: progress.percent,
+            updatedAt: new Date().toISOString(),
+          },
+        }));
+      });
+      try {
+        await agentArcadeApi.comfyDownloadModel?.({
+          root: comfyRoot, folder: item.folder, filename: item.filename,
+          url: item.url, expectedBytes: item.bytes, progressId,
+        });
+      } catch (error) {
+        setActivity(`${item.label} failed: ${error instanceof Error ? error.message : 'download error'}`);
+        return false;
+      } finally {
+        unsubscribe?.();
+      }
+    }
+    // ComfyUI only rescans its folders at startup, so a fresh file is invisible
+    // until it does. Better said now than discovered as a missing model later.
+    setActivity(`${row.displayName} downloaded. Restart ComfyUI so it picks up the new file.`);
+    void getComfyStatus().then((status) => {
+      setComfyCheckpoints(status.checkpoints);
+      setComfyTextEncoders(status.textEncoders ?? []);
+    });
+    return true;
+  }, [comfyCheckpoints, comfyTextEncoders]);
+
   const pullQueuedModels = useCallback(async () => {
     if (queuedRows.length === 0) {
       setActivity('Pick a model to download before starting the queue.');
       return;
     }
 
-    if (!ollama.ready) {
+    // Only Ollama models need Ollama. A ComfyUI download is a file fetch into
+    // a folder and has nothing to do with it, so a queue of those must not be
+    // blocked by an unrelated service being off.
+    if (!ollama.ready && queuedRows.some((row) => row.runtime !== 'comfyui')) {
       setActivity('Ollama must be running before RigMatch can download models.');
       return;
     }
@@ -1911,6 +1993,16 @@ function App() {
         if (pullQueueCancelRef.current) {
           wasCancelled = true;
           break;
+        }
+
+        // A generation model is a .safetensors file for ComfyUI, not something
+        // `ollama pull` could ever fetch. Routed here rather than filtered out
+        // of the queue, so the reason is visible instead of the row silently
+        // doing nothing.
+        if (row.runtime === 'comfyui') {
+          const done = await downloadGenerationModel(row);
+          if (done) completedCount += 1;
+          continue;
         }
 
         const progressId = createRunProgressId('pull');
@@ -2068,7 +2160,10 @@ function App() {
       pullQueueCancelRef.current = false;
       pullQueuePauseRef.current = false;
     }
-  }, [ollama.baseUrl, ollama.ready, pullProgressByModel, queuedRows, refreshRig, selectedHost?.hostname]);
+    // downloadGenerationModel closes over the ComfyUI file lists; without it
+    // here a queue would write against whatever they were when this callback
+    // was last built, and re-download a file already fetched.
+  }, [ollama.baseUrl, ollama.ready, pullProgressByModel, queuedRows, refreshRig, selectedHost?.hostname, downloadGenerationModel]);
 
   const queueMissingSpeedDateModels = useCallback((rows: ModelRow[]) => {
     const missingRows = rows.filter((row) => !row.installed && !queuedModelIds.has(row.displayName));
