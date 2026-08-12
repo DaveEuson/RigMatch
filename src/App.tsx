@@ -323,7 +323,7 @@ import { batchSeed, isVideoCheckpoint } from './lib/videoGen';
 import { DEFAULT_VIDEO_SIZE_ID, VIDEO_SIZE_PRESETS, toVideoLabResult, videoReadiness } from './lib/videoGenChallenge';
 import { runVideoLabChallenge } from './lib/videoGenRunner';
 import { runImageLabChallenge } from './lib/imageGenRunner';
-import { getComfyStatus } from './lib/comfyTransport';
+import { describeComfyBusy, getComfyStatus } from './lib/comfyTransport';
 import {
   CODE_LANGUAGES,
   CODE_TASK_PRESETS,
@@ -2524,7 +2524,15 @@ function App() {
     // looked for installed models named flux or sdxl, and Ollama has none.
     let videoEncoder = '';
     if (selection.image || selection.video) {
-      const comfy = await getComfyStatus();
+      // One check for the whole batch. Every generation job in it shares the
+      // same ComfyUI, so if it is busy now none of them will be measuring this
+      // computer.
+      const busy = await describeComfyBusy();
+      if (busy) {
+        setActivity(busy);
+        void agentArcadeApi.appendLog({ level: 'warn', source: 'renderer', message: `Generation jobs skipped: ${busy}` });
+      }
+      const comfy = busy ? { checkpoints: [], textEncoders: [] } : await getComfyStatus();
       if (selection.image) {
         // A video checkpoint in a still-image graph fails deep in the sampler
         // with a shape error, so it is never offered one.

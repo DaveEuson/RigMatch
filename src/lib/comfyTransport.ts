@@ -9,6 +9,7 @@
 
 import { agentArcadeApi } from '../api.ts';
 import { readComfySettings } from './comfySettings.ts';
+import { comfyBusyCount } from './videoGen.ts';
 import type { ComfyTransport } from './imageGenRun.ts';
 import type { VideoTransport } from './videoGenRun.ts';
 import type { ComfyStatus } from '../types.ts';
@@ -39,6 +40,40 @@ export async function getComfyStatus(baseUrl: string = comfyBaseUrl()): Promise<
     // program the user starts themselves.
     return { reachable: false, checkpoints: [] };
   }
+}
+
+/**
+ * Is ComfyUI free to be measured on?
+ *
+ * Returns the queue depth. Anything above zero means something else is in
+ * flight, which on a shared instance is the normal state rather than an error.
+ */
+export async function comfyQueueDepth(baseUrl: string = comfyBaseUrl()): Promise<number> {
+  if (!agentArcadeApi.getComfyStatus) return 0;
+  try {
+    const status = await agentArcadeApi.getComfyStatus(baseUrl);
+    return comfyBusyCount(status.execInfo ?? null);
+  } catch {
+    // Unreadable queue counts as idle: failing to ask must not block a run.
+    return 0;
+  }
+}
+
+/**
+ * Why a benchmark should not start right now, or null when it may.
+ *
+ * Sharing a GPU with a render already in flight does not fail — it queues,
+ * then both jobs fight for the card, and the time that produces describes
+ * neither. A wrong number that looks like a measurement is worse than a
+ * refusal, and on a shared ComfyUI this is the normal state rather than an
+ * error.
+ */
+export async function describeComfyBusy(baseUrl: string = comfyBaseUrl()): Promise<string | null> {
+  const depth = await comfyQueueDepth(baseUrl);
+  if (depth <= 0) return null;
+  return `ComfyUI is already working on ${depth} job${depth === 1 ? '' : 's'}. `
+    + 'Timing a run alongside it would measure the queue rather than this computer — '
+    + 'wait for it to finish, then try again.';
 }
 
 function requireBridge() {

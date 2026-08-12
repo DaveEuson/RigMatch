@@ -183,3 +183,18 @@ test('a scaled fp8 encoder filename is still recognised as an encoder', () => {
 test('the 0.9.5 point release is recognised as a video checkpoint', () => {
   assert.ok(isVideoCheckpoint('ltx-video-2b-v0.9.5.safetensors'));
 });
+
+test('a ComfyUI with only a video model is ready for video, whatever images think', () => {
+  // The video card used to gate on the Image Lab's readiness, which excludes
+  // video checkpoints — so the one setup video exists for (a video checkpoint
+  // and nothing else) declared itself unavailable. Caught by clicking Run in
+  // the live app and finding no button.
+  const ready = videoReadiness(['ltx-video-2b-v0.9.5.safetensors'], ['t5xxl_fp8_e4m3fn_scaled.safetensors']);
+  assert.equal(ready.kind, 'ready');
+  const imagePickerOffers = ['ltx-video-2b-v0.9.5.safetensors'].filter((n) => !isVideoCheckpoint(n));
+  assert.deepEqual(imagePickerOffers, [], 'images have nothing, and that must not stop video');
+});
+
+test('a umt5 encoder is recognised, as WAN models need one', () => {
+  assert.ok(isTextEncoder('umt5_xxl_fp8_e4m3fn_scaled.safetensors'));
+});

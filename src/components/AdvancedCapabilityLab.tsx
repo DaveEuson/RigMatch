@@ -13,7 +13,7 @@ import {
 import { IMAGE_BENCHMARK_PROMPTS } from "../lib/imageGenScoring";
 import { IMAGE_RUN_SETTINGS, judgeCandidates, toLabResult } from "../lib/imageGenChallenge";
 import { runImageLabChallenge } from "../lib/imageGenRunner";
-import { comfyBridgeAvailable, fetchComfyOutput, getComfyStatus } from "../lib/comfyTransport";
+import { comfyBridgeAvailable, describeComfyBusy, fetchComfyOutput, getComfyStatus } from "../lib/comfyTransport";
 import { canHearAudio } from "../lib/modelCatalog";
 import { isVideoCheckpoint } from "../lib/videoGen";
 import {
@@ -132,6 +132,11 @@ export function AdvancedCapabilityLab({
   // From the raw list, not readiness: readiness has had video models stripped
   // out, which are precisely the ones this needs.
   const videoReady = videoReadiness(comfyStatus?.checkpoints ?? [], comfyStatus?.textEncoders ?? []);
+  // Whether ComfyUI itself is usable, independent of what either lab wants.
+  // The video card asked `readiness` before this existed, and so declared
+  // itself unavailable whenever the only checkpoint installed was a video one
+  // — exactly the setup it is for.
+  const comfyUsable = readiness.kind !== 'no-bridge' && readiness.kind !== 'not-running';
   const videoCheckpoints = videoReady.kind === 'ready' ? videoReady.checkpoints : [];
   const activeVideoCheckpoint = videoCheckpoints.includes(videoCheckpoint)
     ? videoCheckpoint
@@ -208,6 +213,14 @@ export function AdvancedCapabilityLab({
 
   const startImageChallenge = useCallback(async () => {
     if (!canRunImageTest) return;
+    // Asked before anything is submitted: queuing behind someone else's render
+    // produces a time that measures the queue, and a wrong number that looks
+    // like a measurement is worse than refusing.
+    const busy = await describeComfyBusy();
+    if (busy) {
+      setImageRunState({ phase: 'failed', result: null, message: busy });
+      return;
+    }
     const controller = new AbortController();
     imageAbortRef.current = controller;
     setImageRunState({
@@ -257,6 +270,11 @@ export function AdvancedCapabilityLab({
 
   const startVideoChallenge = useCallback(async () => {
     if (!canRunVideoTest) return;
+    const busy = await describeComfyBusy();
+    if (busy) {
+      setVideoRunState({ phase: 'failed', result: null, message: busy });
+      return;
+    }
     const controller = new AbortController();
     videoAbortRef.current = controller;
     const size = VIDEO_SIZE_PRESETS.find((p) => p.id === videoSizeId) ?? VIDEO_SIZE_PRESETS[0];
@@ -643,10 +661,17 @@ export function AdvancedCapabilityLab({
             than expected, and costs time instead.
           </p>
 
-          {readiness.kind !== 'ready' ? (
+          {!comfyUsable ? (
             <div className="utility-empty compact">
-              <strong>Needs ComfyUI</strong>
-              <span>Video generation uses the same ComfyUI as the Image Lab above.</span>
+              <strong>{comfyChecking ? 'Looking for ComfyUI...' : 'ComfyUI is not running'}</strong>
+              <span>
+                Video generation uses the same ComfyUI as the Image Lab above. Start it and it will
+                be found on port 8188.
+              </span>
+              <button type="button" className="mini-button outline" onClick={() => void checkComfy()} disabled={comfyChecking}>
+                <RefreshCw className={comfyChecking ? 'spin' : ''} aria-hidden="true" />
+                Check again
+              </button>
             </div>
           ) : videoReady.kind === 'no-checkpoint' ? (
             <div className="utility-empty compact">
