@@ -22,6 +22,7 @@ const api = {
   comfyHistory: (baseUrl, promptId) => ipcRenderer.invoke('comfy:history', baseUrl, promptId),
   comfyImage: (baseUrl, ref) => ipcRenderer.invoke('comfy:image', baseUrl, ref),
   comfyInterrupt: (baseUrl, promptId) => ipcRenderer.invoke('comfy:interrupt', baseUrl, promptId),
+  comfyFree: (baseUrl) => ipcRenderer.invoke('comfy:free', baseUrl),
   openRouterGenerate: (request) => ipcRenderer.invoke('judge:openRouterGenerate', request),
   abortAdvancedGenerate: (streamId) => ipcRenderer.invoke('ollama:abortAdvancedGenerate', streamId),
   cancelBenchmark: (progressId) => ipcRenderer.invoke('benchmark:cancel', progressId),

@@ -528,6 +528,7 @@ function registerHandlers() {
   handleLogged('comfy:history', 'comfy', (_event, baseUrl, promptId) => comfyBridge.getHistory(baseUrl ?? COMFY_LOCAL_URL, promptId));
   handleLogged('comfy:image', 'comfy', (_event, baseUrl, ref) => comfyBridge.getImage(baseUrl ?? COMFY_LOCAL_URL, ref));
   handleLogged('comfy:interrupt', 'comfy', (_event, baseUrl, promptId) => comfyBridge.interrupt(baseUrl ?? COMFY_LOCAL_URL, promptId));
+  handleLogged('comfy:free', 'comfy', (_event, baseUrl) => comfyBridge.free(baseUrl ?? COMFY_LOCAL_URL));
   // Stop button support: abort an in-flight streamed generation (App Builder /
   // vision) immediately instead of letting it run out its multi-minute budget.
   ipcMain.handle('ollama:abortAdvancedGenerate', (event, streamId) => {

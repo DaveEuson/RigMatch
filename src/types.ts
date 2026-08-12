@@ -450,6 +450,8 @@ export type AgentArcadeApi = {
   comfyHistory?: (baseUrl: string | undefined, promptId: string) => Promise<unknown>;
   comfyImage?: (baseUrl: string | undefined, ref: { filename: string; subfolder: string; type: string }) => Promise<string>;
   comfyInterrupt?: (baseUrl: string | undefined, promptId: string) => Promise<unknown>;
+  /** Unload models and evict cached outputs before a timed run. */
+  comfyFree?: (baseUrl?: string) => Promise<unknown>;
   // Cloud judge bridge (strictly opt-in): one OpenRouter completion using the
   // user's own key, routed through the main process. Only used for judging.
   openRouterGenerate?: (request: { apiKey: string; model: string; prompt: string; maxTokens?: number }) => Promise<{ response: string; error: string | null }>;

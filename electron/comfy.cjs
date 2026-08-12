@@ -111,6 +111,27 @@ function createComfyBridge({ fetchJson, assertLocalhostUrl }) {
   }
 
   /**
+   * Unload models and drop cached node outputs.
+   *
+   * Called before a timed run, and it does two jobs. It gives a VRAM reading
+   * attributable to this run rather than to whatever was left resident — the
+   * spike without it reported a 1024x768 video using less memory than a
+   * 768x512 one, which is impossible. And it evicts ComfyUI's execution cache,
+   * without which resubmitting an identical graph returns the previous result
+   * in about two seconds; a fixed-seed benchmark would report that as the
+   * generation time on every run after the first.
+   */
+  async function free(baseUrl, { unloadModels = true, freeMemory = true } = {}) {
+    assertLocalhostUrl(baseUrl);
+    await fetchJson(
+      `${origin(baseUrl)}/free`,
+      { method: 'POST', body: JSON.stringify({ unload_models: unloadModels, free_memory: freeMemory }) },
+      DEFAULT_TIMEOUT_MS,
+    );
+    return { freed: true };
+  }
+
+  /**
    * Stop a run.
    *
    * Without a prompt id ComfyUI interrupts whatever is executing, so the id is
@@ -124,7 +145,7 @@ function createComfyBridge({ fetchJson, assertLocalhostUrl }) {
     return { stopped: true };
   }
 
-  return { getStatus, submit, getHistory, getImage, interrupt };
+  return { getStatus, submit, getHistory, getImage, interrupt, free };
 }
 
 module.exports = { createComfyBridge, describeComfyOrigin: origin };
