@@ -37,6 +37,8 @@ export type GenerationModel = {
   requires?: string[];
   /** True when this exact file has been downloaded and run by RigMatch. */
   proven?: boolean;
+  /** Who published it, taken from the Hugging Face repo the file comes from. */
+  publisher: string;
 };
 
 export const GENERATION_MODELS: GenerationModel[] = [
@@ -50,6 +52,7 @@ export const GENERATION_MODELS: GenerationModel[] = [
     bytes: 2132696762,
     note: 'The small, fast baseline. Runs on almost anything and carries its own text encoder.',
     proven: true,
+    publisher: 'Stability AI',
   },
   {
     id: 'sdxl-turbo',
@@ -60,6 +63,7 @@ export const GENERATION_MODELS: GenerationModel[] = [
     url: 'https://huggingface.co/stabilityai/sdxl-turbo/resolve/main/sd_xl_turbo_1.0_fp16.safetensors',
     bytes: 6938040714,
     note: 'Much better pictures than 1.5, and distilled so it still runs in a few steps. Bigger download.',
+    publisher: 'Stability AI',
   },
   {
     id: 'ltxv-distilled',
@@ -72,6 +76,7 @@ export const GENERATION_MODELS: GenerationModel[] = [
     note: 'Four seconds of video in about twelve seconds on a 12 GB card. The lightest video model worth running.',
     requires: ['t5xxl-fp8'],
     proven: true,
+    publisher: 'Lightricks',
   },
   {
     id: 'wan21-t2v-1_3b',
@@ -83,6 +88,7 @@ export const GENERATION_MODELS: GenerationModel[] = [
     bytes: 2839376512,
     note: 'A smaller video model with a different look. Needs the UMT5 encoder rather than T5.',
     requires: ['umt5-fp8'],
+    publisher: 'Alibaba',
   },
   {
     id: 't5xxl-fp8',
@@ -94,6 +100,7 @@ export const GENERATION_MODELS: GenerationModel[] = [
     bytes: 4893934904,
     note: 'What LTX-Video reads prompts with. The fp8 build is half the size of fp16 and the sensible one for a consumer card.',
     proven: true,
+    publisher: 'Google',
   },
   {
     id: 'umt5-fp8',
@@ -104,6 +111,7 @@ export const GENERATION_MODELS: GenerationModel[] = [
     url: 'https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors',
     bytes: 6740000000,
     note: 'What the WAN video models read prompts with. Not interchangeable with T5.',
+    publisher: 'Google',
   },
 ];
 
@@ -168,6 +176,7 @@ export function generationCatalogRows(comfyFiles: string[]): Array<{
   source: string;
   live: boolean;
   runtime: 'comfyui';
+  publisher: string;
   generationId: string;
   generationKind: GenerationModelKind;
   installedFile: boolean;
@@ -183,6 +192,7 @@ export function generationCatalogRows(comfyFiles: string[]): Array<{
     source: 'Hugging Face',
     live: true,
     runtime: 'comfyui' as const,
+    publisher: model.publisher,
     generationId: model.id,
     generationKind: model.kind,
     installedFile: present.has(model.filename.toLowerCase()),

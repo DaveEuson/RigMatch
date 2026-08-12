@@ -1,12 +1,12 @@
 import { useCallback, useState } from "react";
-import { AlertTriangle, Check, RefreshCw } from "lucide-react";
+import { AlertTriangle, Check, FolderOpen, RefreshCw } from "lucide-react";
 import {
   COMFY_DEFAULT_BASE_URL,
   normalizeComfyUrl,
   readComfySettings,
   writeComfySettings,
 } from "../lib/comfySettings";
-import { getComfyStatus } from "../lib/comfyTransport";
+import { getComfyStatus, pickAndVerifyComfyFolder } from "../lib/comfyTransport";
 
 /**
  * Where ComfyUI is, and whether RigMatch may disturb it.
@@ -24,6 +24,24 @@ export function ComfySettings() {
   const [probe, setProbe] = useState<{ phase: 'idle' | 'checking' | 'ok' | 'bad'; message: string }>({
     phase: 'idle', message: '',
   });
+  const [folder, setFolder] = useState(initial.folder);
+  const [folderNote, setFolderNote] = useState<{ tone: 'ok' | 'bad' | 'warn'; message: string } | null>(null);
+
+  const chooseFolder = useCallback(async () => {
+    const result = await pickAndVerifyComfyFolder();
+    if (result.canceled) return;
+    if (!result.ok || !result.root) {
+      // Not saved. A folder that failed verification is worse than none: it
+      // would silently take a multi-gigabyte download somewhere unused.
+      setFolderNote({ tone: 'bad', message: result.reason ?? 'That folder could not be verified.' });
+      return;
+    }
+    setFolder(result.root);
+    writeComfySettings({ folder: result.root });
+    setFolderNote(result.warning
+      ? { tone: 'warn', message: result.warning }
+      : { tone: 'ok', message: 'Verified against the ComfyUI that is running. Downloads will land here.' });
+  }, []);
 
   const normalized = normalizeComfyUrl(url);
   const urlValid = normalized !== null;
@@ -94,6 +112,28 @@ export function ComfySettings() {
         )}
         {probe.phase === 'bad' && (
           <span className="settings-probe bad"><AlertTriangle aria-hidden="true" /> {probe.message}</span>
+        )}
+      </div>
+
+      <div className="utility-stat">
+        <span>Models folder</span>
+        <strong>{folder || 'Not set — image and video models cannot be downloaded yet'}</strong>
+        <em>
+          ComfyUI reports its version and its graphics card but never its own location, so this
+          cannot be found automatically. RigMatch checks the folder you pick against the models
+          the running ComfyUI lists, and only accepts it if they match.
+        </em>
+      </div>
+      <div className="advanced-lab-actions">
+        <button type="button" className="mini-button outline" onClick={() => void chooseFolder()}>
+          <FolderOpen aria-hidden="true" />
+          {folder ? 'Change folder' : 'Choose ComfyUI folder'}
+        </button>
+        {folderNote && (
+          <span className={`settings-probe ${folderNote.tone === 'ok' ? 'ok' : 'bad'}`}>
+            {folderNote.tone === 'ok' ? <Check aria-hidden="true" /> : <AlertTriangle aria-hidden="true" />}
+            {folderNote.message}
+          </span>
         )}
       </div>
 

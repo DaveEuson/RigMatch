@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   GENERATION_MODELS,
+  generationCatalogRows,
   downloadPlan,
   formatBytesGb,
   generationModelById,
@@ -91,4 +92,28 @@ test('ids are unique, since downloads are keyed on them', () => {
   assert.equal(new Set(ids).size, ids.length);
   const files = GENERATION_MODELS.map((m) => m.filename.toLowerCase());
   assert.equal(new Set(files).size, files.length, 'two entries would overwrite each other');
+});
+
+test('every entry names its publisher', () => {
+  // These labels match no Ollama family, so without this the By column read
+  // "Unknown model family" for all of them.
+  for (const m of GENERATION_MODELS) {
+    assert.ok(m.publisher && m.publisher.length > 1, `${m.id} has no publisher`);
+  }
+});
+
+test('a row says what it makes rather than leaving it to be inferred', () => {
+  const rows = generationCatalogRows([]);
+  const ltx = rows.find((r) => r.generationId === 'ltxv-distilled');
+  assert.equal(ltx.generationKind, 'video');
+  assert.equal(ltx.runtime, 'comfyui');
+  assert.equal(ltx.publisher, 'Lightricks');
+});
+
+test('a row is installed only when ComfyUI is listing the file', () => {
+  // A file on disk the running server cannot see may as well not exist.
+  const absent = generationCatalogRows([]).find((r) => r.generationId === 'sd15');
+  assert.equal(absent.installedFile, false);
+  const present = generationCatalogRows(['sd15.safetensors']).find((r) => r.generationId === 'sd15');
+  assert.equal(present.installedFile, true);
 });

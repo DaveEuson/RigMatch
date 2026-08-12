@@ -119,6 +119,9 @@ export type CatalogModel = {
   runtime?: 'ollama' | 'comfyui';
   /** Links a ComfyUI row back to its catalogue entry, for downloading. */
   generationId?: string;
+  /** Who published it. Set for generation rows, whose names match no Ollama
+      family and would otherwise read "Unknown model family". */
+  publisher?: string;
   /** What this produces, for the capability filters. */
   generationKind?: 'image' | 'video' | 'text-encoder';
 };

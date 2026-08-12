@@ -386,6 +386,15 @@ const UPDATE_PROMPT_DISMISSED_KEY = 'rigmatch:update-prompt-dismissed:v1';
  */
 const CAPABILITY_ONLY_FILTERS = ['hears', 'videoread'];
 
+/**
+ * Filters whose results are ComfyUI models rather than Ollama ones.
+ *
+ * Listed so the "you will need ComfyUI" note appears exactly where those
+ * Download buttons are, rather than being something to discover in Settings
+ * after clicking one.
+ */
+const GENERATION_FILTERS = ['imagegen', 'videogen'];
+
 type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; video: boolean; videoSizeId: string; recognize: boolean; recognizeImage: string; listen: boolean; code: boolean; codeLanguage: string; codeTaskId: string; codeCustomTask: string; skipQuestions: boolean };
 type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
 
@@ -573,6 +582,9 @@ function App() {
   // Tracked separately: a video model without a T5 encoder cannot render, and
   // the two are fixed by fetching two different files.
   const [comfyTextEncoders, setComfyTextEncoders] = useState<string[]>([]);
+  // Re-read whenever the utility panel closes, so a folder chosen in Settings
+  // reaches the Models screen without a restart.
+  const [comfySettings, setComfySettings] = useState(() => readComfySettings());
   const [closeCleanupOpen, setCloseCleanupOpen] = useState(false);
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
@@ -609,6 +621,12 @@ function App() {
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null);
   const [activity, setActivity] = useState('Contestants is your hub: browse models, run tests, manage downloads, and start Speed Dating.');
   const [activeNavId, setActiveNavId] = useState<NavId>('models');
+  useEffect(() => {
+    // Cheap re-read on navigation: choosing a folder in Settings then going to
+    // Models should not need a restart, and localStorage has no change event
+    // for same-document writes.
+    setComfySettings(readComfySettings());
+  }, [activeNavId]);
   const [modelNews, setModelNews] = useState<ModelNewsState>(() => getSavedModelNewsState());
   const [modelNewsNotificationsEnabled, setModelNewsNotificationsEnabled] = useState(() => getSavedModelNewsNotificationsEnabled());
   const [notificationPermission, setNotificationPermission] = useState<ModelNotificationPermission>(() => getNotificationPermission());
@@ -3432,6 +3450,8 @@ function App() {
           <ModelCabinet
             active={true}
             rows={modelRows}
+            comfyFolderSet={Boolean(comfySettings.folder)}
+            onOpenComfyHelp={() => window.open('https://www.comfy.org/download', '_blank', 'noopener')}
             selectedModel={selectedModel}
             installedModelNames={installedModelNames}
             shortlistIds={shortlistIds}
@@ -6850,6 +6870,8 @@ function FirstModelWizard({ vramGb, onQueueModel }: { vramGb: number; onQueueMod
 function ModelCabinet({
   active,
   rows,
+  comfyFolderSet,
+  onOpenComfyHelp,
   selectedModel,
   installedModelNames,
   shortlistIds,
@@ -6890,6 +6912,9 @@ function ModelCabinet({
   newModelIds,
   onQuickCheck,
 }: {
+  /** Whether a verified ComfyUI models folder exists, so downloads can land. */
+  comfyFolderSet: boolean;
+  onOpenComfyHelp: () => void;
   active: boolean;
   rows: ModelRow[];
   selectedModel: string;
@@ -7274,6 +7299,20 @@ function ModelCabinet({
                 <button type="button" onClick={() => setQuickFilter('all')}>Show all</button>
               </div>
             )}
+            {GENERATION_FILTERS.includes(taskFilter as string) && !comfyFolderSet && (
+              <div className="model-filter-note">
+                <ShieldCheck aria-hidden="true" />
+                {/* Shown where the Download buttons are, not buried in
+                    Settings: this is the moment someone finds out these models
+                    need something they may not have. */}
+                <span>
+                  These run on ComfyUI, a separate free program RigMatch does not install.
+                  Once it is running, point RigMatch at its folder in Settings and these become
+                  one-click downloads.
+                </span>
+                <button type="button" onClick={() => void onOpenComfyHelp()}>What is ComfyUI?</button>
+              </div>
+            )}
             {CAPABILITY_ONLY_FILTERS.includes(taskFilter as string) && (
               <div className="model-filter-note">
                 <ShieldCheck aria-hidden="true" />
@@ -7392,7 +7431,7 @@ function ModelCabinet({
                 >
                   <td>
                     <button type="button" className="model-name-button" onClick={() => onSelect(row.displayName)}>
-                      <AvatarBust model={row.displayName} size="tiny" />
+                      <AvatarBust generationKind={row.generationKind} model={row.displayName} size="tiny" />
                       <span>
                         {row.displayName}
                         {isNewModel && <em className="model-new-sub">New</em>}
@@ -7436,8 +7475,8 @@ function ModelCabinet({
                       <span className="uncensored-badge" title="Uncensored / unrestricted model">unrestricted</span>
                     )}
                   </td>
-                  <td title={`${origin.organization} · ${origin.country}`}>
-                    <span className={`origin-pill origin-${origin.family}`}>{origin.organization}</span>
+                  <td title={`${row.publisher ?? origin.organization} · ${origin.country}`}>
+                    <span className={`origin-pill origin-${origin.family}`}>{row.publisher ?? origin.organization}</span>
                   </td>
                   <td>
                     <ModelStatusPill installed={installed} queued={queued} label={statusLabel} />
@@ -8074,7 +8113,7 @@ function ModelPoolLineupStrip({
           const score = getModelScore(row, modelScores);
           return (
             <article key={row.displayName} className="model-pool-lineup-card">
-              <AvatarBust model={row.displayName} size="tiny" />
+              <AvatarBust generationKind={row.generationKind} model={row.displayName} size="tiny" />
               <div>
                 <span>Contestant {index + 1}</span>
                 <strong>{row.displayName}</strong>
@@ -8191,7 +8230,7 @@ function SelectedContestantCard({
 
   return (
     <section className="contestant-spotlight" aria-label={`Selected contestant is ${row.displayName}`}>
-      <AvatarBust model={row.displayName} size="small" />
+      <AvatarBust generationKind={row.generationKind} model={row.displayName} size="small" />
       <div className="contestant-spotlight-copy">
         <span>Selected model</span>
         <strong>{row.displayName}</strong>
@@ -9186,7 +9225,7 @@ function SpeedDateShowAnimation({
             >
               {row ? (
                 <>
-                  <AvatarBust model={row.displayName} size="tiny" />
+                  <AvatarBust generationKind={row.generationKind} model={row.displayName} size="tiny" />
                   <span>{index + 1}</span>
                 </>
               ) : (
@@ -9237,7 +9276,7 @@ function SpeedDateContestantCard({
         <X aria-hidden="true" />
       </button>
       <div className="speed-date-contestant-head">
-        <AvatarBust model={row.displayName} size="tiny" />
+        <AvatarBust generationKind={row.generationKind} model={row.displayName} size="tiny" />
         <div>
           <span>Contestant {index + 1}</span>
           <strong>{row.displayName}</strong>
@@ -9975,7 +10014,7 @@ function AgentReveal({
                 onClick={() => onSelect(row.displayName)}
                 aria-label={`View ${row.displayName}`}
               >
-                <AvatarBust model={row.displayName} size="tiny" />
+                <AvatarBust generationKind={row.generationKind} model={row.displayName} size="tiny" />
                 <span className="roster-name">{getShortModelName(row.displayName)}</span>
                 <span className={rowScore ? `roster-score ${getScoreTone(rowScore.total)}` : 'roster-score empty'}>
                   {scoreLabel}

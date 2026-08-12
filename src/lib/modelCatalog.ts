@@ -1316,6 +1316,14 @@ export function isUncensoredModel(name: string): boolean {
 }
 
 export function getModelGoodForTags(row: ModelRow): string[] {
+  // A checkpoint is not a chat model, and running its filename through the
+  // personality profiler produced "chat, utility, experiments" on a video
+  // model. What it makes is already known, so nothing needs inferring.
+  if (row.generationKind) {
+    return row.generationKind === 'image' ? ['makes images']
+      : row.generationKind === 'video' ? ['makes video']
+      : ['reads prompts for image and video models'];
+  }
   const profile = getModelProfile(row.displayName);
   const tags = [
     isLikelyImageGenerationModel(row.displayName) ? 'makes images' : '',

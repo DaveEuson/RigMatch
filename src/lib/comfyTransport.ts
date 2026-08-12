@@ -99,6 +99,31 @@ export async function fetchComfyOutput(
   return requireBridge().comfyImage!(baseUrl, ref);
 }
 
+/**
+ * Ask for the ComfyUI folder, then prove it is the right one.
+ *
+ * Proving matters: two ComfyUI installs is an ordinary setup, and picking the
+ * one that is not running would write gigabytes where the live server never
+ * looks and then report success. The check compares the checkpoints on disk
+ * with the checkpoints the running server lists.
+ */
+export async function pickAndVerifyComfyFolder(baseUrl: string = comfyBaseUrl()): Promise<
+  { canceled: true } | { canceled: false; ok: boolean; root?: string; reason?: string; warning?: string | null }
+> {
+  const api = agentArcadeApi;
+  if (!api.comfyPickFolder || !api.comfyVerifyFolder) {
+    return { canceled: false, ok: false, reason: 'This build cannot open a folder picker.' };
+  }
+  const picked = await api.comfyPickFolder();
+  if (picked.canceled || !picked.folder) return { canceled: true };
+
+  // Asked fresh rather than reused: the listing is what the folder is checked
+  // against, and a stale one would compare against the wrong install.
+  const status = await getComfyStatus(baseUrl);
+  const verdict = await api.comfyVerifyFolder(picked.folder, status.checkpoints ?? []);
+  return { canceled: false, ...verdict };
+}
+
 export function createComfyTransport(baseUrl: string = comfyBaseUrl()): ComfyTransport {
   const api = requireBridge();
   return {
