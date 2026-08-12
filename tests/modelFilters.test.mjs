@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 globalThis.window = { localStorage: { getItem: () => null, setItem: () => {} } };
 
 const {
+  canHearAudio,
   canWatchVideo,
   isGoodScore,
   isLikelyAudioGenerationModel,
@@ -78,4 +79,28 @@ test('the score filters read through modelMatchesQuickFilter', () => {
   const r = row('tested:7b', undefined);
   assert.ok(modelMatchesQuickFilter(r, 'good-score', scored(90), 12));
   assert.ok(modelMatchesQuickFilter(r, 'low-score', scored(50), 12));
+});
+
+test('a catalogue model carries the library listing, so uninstalled models count', () => {
+  // The chips previously matched installed models only — /api/show answers
+  // about downloads and nothing else — so "Hears audio" read 1 against a
+  // 317-model catalogue and looked like a claim about the world.
+  const notInstalled = { displayName: 'gemma4:e2b', name: 'gemma4:e2b', capabilities: ['completion', 'audio'], installed: false };
+  assert.ok(modelMatchesTask(notInstalled, 'hears'));
+});
+
+test('an installed model report beats the library listing', () => {
+  // The library lists a family; /api/show describes the actual file. A family
+  // listed as hearing does not prove its smallest tag does.
+  const row = {
+    displayName: 'somefamily:0.5b',
+    name: 'somefamily:0.5b',
+    capabilities: ['completion', 'audio'],          // what the library says
+    installedModel: { capabilities: ['completion'] }, // what this file says
+  };
+  assert.ok(!canHearAudio(row), 'the installed report must win');
+});
+
+test('a model with neither source still matches nothing rather than guessing', () => {
+  assert.ok(!canHearAudio({ displayName: 'audio-sounding-name:7b', name: 'audio-sounding-name:7b' }));
 });

@@ -7174,14 +7174,15 @@ function ModelCabinet({
             {CAPABILITY_ONLY_FILTERS.includes(taskFilter as string) && (
               <div className="model-filter-note">
                 <ShieldCheck aria-hidden="true" />
-                {/* The count is what can be proven, not what exists. Ollama
-                    reports capabilities only for models it has downloaded, and
-                    guessing from a name puts a guaranteed failure on the
-                    scorecard of a model that never claimed the skill. */}
+                {/* Now counts the library's own listing as well as installed
+                    models, but that listing returns only its top twenty per
+                    capability — /search does not paginate. So the number is
+                    still a floor, just a far less misleading one than
+                    "whatever I happen to have downloaded". */}
                 <span>
-                  This one counts only what your provider confirms, which it can
-                  only do for installed models. Others in the catalogue may have
-                  the same skill and cannot say so until they are installed.
+                  Counts what your provider confirms plus what the Ollama library
+                  lists, which is its top twenty for this skill. Others may have it
+                  and not be listed — installing one always settles it.
                 </span>
               </div>
             )}

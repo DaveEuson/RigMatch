@@ -2071,10 +2071,14 @@ async function getOllamaCatalog(options = {}) {
       }));
     const liveCatalog = [...detailedCatalog, ...familyOnlyCatalog].slice(0, OLLAMA_LIBRARY_MODEL_LIMIT);
 
+    // Four more requests, in parallel with nothing else outstanding. A failure
+    // here degrades the chips to installed-only rather than failing the sync.
+    const capabilityIndex = await fetchLibraryCapabilityIndex().catch(() => new Map());
+
     const result = {
       syncedAt: new Date().toISOString(),
       source: 'Ollama library live scan',
-      models: mergeCatalogs(liveCatalog, fallback),
+      models: applyCapabilityIndex(mergeCatalogs(liveCatalog, fallback), capabilityIndex),
       error: null,
     };
     ollamaCatalogCache = result;
@@ -2101,6 +2105,49 @@ async function getOllamaCatalog(options = {}) {
   })();
 
   return catalogFetchPromise;
+}
+
+/**
+ * Which library models the Ollama site says can see, hear, use tools or think.
+ *
+ * Without this the capability chips could only ever count installed models —
+ * /api/show answers about downloads and nothing else — so "Hears audio" read
+ * "1" against a 317-model catalogue and looked like a fact about the world.
+ *
+ * /search?c=<capability> is the only endpoint that honours the filter:
+ * /library?c= silently ignores it and returns everything, which would mark
+ * every model as having every capability. There is no pagination — p= is
+ * ignored too — so this is the top twenty per capability, the same set the
+ * Ollama site shows. Partial, but partial in the direction of "these
+ * definitely can" rather than "only what I happen to have downloaded".
+ */
+const OLLAMA_LIBRARY_CAPABILITIES = ['vision', 'audio', 'tools', 'thinking'];
+
+async function fetchLibraryCapabilityIndex() {
+  const index = new Map();
+  await Promise.all(OLLAMA_LIBRARY_CAPABILITIES.map(async (capability) => {
+    try {
+      const html = await fetchOllamaHtml(`https://ollama.com/search?c=${capability}`, 7000);
+      for (const match of String(html).matchAll(/href="\/library\/([a-z0-9._-]+)"/gi)) {
+        const family = match[1].toLowerCase();
+        if (!index.has(family)) index.set(family, new Set());
+        index.get(family).add(capability);
+      }
+    } catch {
+      // One capability failing just means its chip counts installed models
+      // only, which is where every chip started.
+    }
+  }));
+  return index;
+}
+
+/** Attach library-reported capabilities to catalogue entries, by family. */
+function applyCapabilityIndex(models, index) {
+  if (!index || index.size === 0) return models;
+  return models.map((entry) => {
+    const caps = index.get(String(entry.name || '').toLowerCase());
+    return caps ? { ...entry, capabilities: [...caps] } : entry;
+  });
 }
 
 function mergeCatalogs(liveCatalog, fallback) {

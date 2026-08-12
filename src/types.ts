@@ -102,6 +102,12 @@ export type CatalogModel = {
   source: string;
   live: boolean;
   pulls?: number | null;
+  /**
+   * What the Ollama website lists this family as able to do. Coarser than an
+   * installed model's own report — it describes a family, not a tag — and
+   * covers only the top twenty per capability, which is all /search returns.
+   */
+  capabilities?: string[];
 };
 
 export type CatalogResponse = {

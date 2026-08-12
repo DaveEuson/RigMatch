@@ -13,7 +13,7 @@ import {
 import { IMAGE_BENCHMARK_PROMPTS } from "../lib/imageGenScoring";
 import { IMAGE_RUN_SETTINGS, judgeCandidates, toLabResult } from "../lib/imageGenChallenge";
 import { runImageLabChallenge } from "../lib/imageGenRunner";
-import { comfyBridgeAvailable, getComfyStatus } from "../lib/comfyTransport";
+import { comfyBridgeAvailable, fetchComfyOutput, getComfyStatus } from "../lib/comfyTransport";
 import { canHearAudio } from "../lib/modelCatalog";
 import { isVideoCheckpoint } from "../lib/videoGen";
 import {
@@ -92,6 +92,10 @@ export function AdvancedCapabilityLab({
   const [videoCheckpoint, setVideoCheckpoint] = useState('');
   const [videoSizeId, setVideoSizeId] = useState<string>(DEFAULT_VIDEO_SIZE_ID);
   const videoAbortRef = useRef<AbortController | null>(null);
+  // Loaded only when asked for. A few seconds of Full HD is megabytes, and the
+  // scored artifact is the frame — the footage is for the person, not the score.
+  const [playback, setPlayback] = useState<{ key: string; url: string } | null>(null);
+  const [loadingVideo, setLoadingVideo] = useState(false);
 
   /** For the Check again button, where setting state synchronously is fine. */
   const checkComfy = useCallback(async () => {
@@ -300,6 +304,29 @@ export function AdvancedCapabilityLab({
   const stopVideoRun = useCallback(() => {
     videoAbortRef.current?.abort();
   }, []);
+
+  const loadVideo = useCallback(async (ref: { filename: string; subfolder: string; type: string }) => {
+    setLoadingVideo(true);
+    try {
+      const dataUrl = await fetchComfyOutput(ref);
+      // A blob costs one copy and then behaves like a file; a multi-megabyte
+      // data: URL sitting in the DOM does not.
+      const blob = await (await fetch(dataUrl)).blob();
+      setPlayback((current) => {
+        if (current) URL.revokeObjectURL(current.url);
+        return { key: ref.filename, url: URL.createObjectURL(blob) };
+      });
+    } catch {
+      // The file may have been cleared from ComfyUI's output folder since the
+      // run. The frame and the score are still on screen, so this stays quiet.
+    } finally {
+      setLoadingVideo(false);
+    }
+  }, []);
+
+  // Object URLs outlive the component unless revoked, and each one pins a
+  // multi-megabyte blob in memory.
+  useEffect(() => () => { if (playback) URL.revokeObjectURL(playback.url); }, [playback]);
 
   return (
     <section className="advanced-lab" aria-label="Advanced capability lab">
@@ -708,12 +735,31 @@ export function AdvancedCapabilityLab({
           )}
           {visibleVideoResult && !visibleVideoResult.error && (
             <div className="advanced-lab-result">
-              {visibleVideoResult.imageDataUrl && (
-                <img
-                  className="advanced-lab-generated-image"
-                  src={visibleVideoResult.imageDataUrl}
-                  alt="Middle frame of the generated video"
-                />
+              {playback && playback.key === visibleVideoResult.videoRef?.filename ? (
+                <video className="advanced-lab-generated-image" src={playback.url} controls autoPlay loop muted />
+              ) : (
+                <>
+                  {visibleVideoResult.imageDataUrl && (
+                    <img
+                      className="advanced-lab-generated-image"
+                      src={visibleVideoResult.imageDataUrl}
+                      alt="Middle frame of the generated video"
+                    />
+                  )}
+                  {visibleVideoResult.videoRef && (
+                    <div className="advanced-lab-actions">
+                      <button
+                        type="button"
+                        className="mini-button outline"
+                        onClick={() => void loadVideo(visibleVideoResult.videoRef!)}
+                        disabled={loadingVideo}
+                      >
+                        <Play aria-hidden="true" />
+                        {loadingVideo ? 'Loading video' : 'Watch the video'}
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
               <div className="advanced-lab-checks">
                 {visibleVideoResult.checks.map((check) => (

@@ -76,8 +76,20 @@ export type CapabilityBearing = {
   name?: string;
 };
 
+/**
+ * What this model can do, best source first.
+ *
+ * The installed model wins. That comes from /api/show — the provider
+ * describing a file it actually has — whereas `row.capabilities` on a
+ * catalogue entry is what the Ollama website lists for the family, which is
+ * coarser: it covers a family rather than a tag, so a family listed as
+ * seeing does not prove that its 0.5b tag does.
+ *
+ * Both beat guessing from the name, which is why callers prefer this and fall
+ * back to a name rule only when it returns null.
+ */
 export function getModelCapabilities(row: CapabilityBearing): string[] | null {
-  const reported = row.capabilities ?? row.installedModel?.capabilities;
+  const reported = row.installedModel?.capabilities ?? row.capabilities;
   return Array.isArray(reported) && reported.length > 0 ? reported : null;
 }
 

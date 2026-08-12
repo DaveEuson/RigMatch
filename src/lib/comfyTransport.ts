@@ -49,6 +49,21 @@ function requireBridge() {
   return api;
 }
 
+/**
+ * Fetch any file ComfyUI wrote, as a data URL.
+ *
+ * Shares the bridge call the image path uses — it is content-type agnostic and
+ * already carries the size cap and the localhost guard, so a video needs no
+ * second channel. Only called when a video is actually played, because a few
+ * seconds of Full HD is megabytes and nothing should pay that on every render.
+ */
+export async function fetchComfyOutput(
+  ref: { filename: string; subfolder: string; type: string },
+  baseUrl: string = comfyBaseUrl(),
+): Promise<string> {
+  return requireBridge().comfyImage!(baseUrl, ref);
+}
+
 export function createComfyTransport(baseUrl: string = comfyBaseUrl()): ComfyTransport {
   const api = requireBridge();
   return {

@@ -50,6 +50,12 @@ export type AdvancedLabResult = {
   checks: AdvancedLabCheck[];
   completedAt: string;
   imageDataUrl?: string;
+  /**
+   * Where ComfyUI wrote the video, for a result that produced one. A reference
+   * rather than the bytes: a few seconds of footage is megabytes and
+   * localStorage would be full after a handful of runs.
+   */
+  videoRef?: { filename: string; subfolder: string; type: string };
   width?: number;
   height?: number;
   language?: string;

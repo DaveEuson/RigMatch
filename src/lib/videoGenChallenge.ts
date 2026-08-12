@@ -82,6 +82,7 @@ export function toVideoLabResult(run: VideoRunResult, promptId?: string): Advanc
     checks: run.checks,
     completedAt: new Date().toISOString(),
     imageDataUrl: run.frameDataUrl,
+    videoRef: run.videoRef,
     width: run.width,
     height: run.height,
     error: run.error,
