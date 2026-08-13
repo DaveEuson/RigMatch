@@ -88,16 +88,28 @@ export function getModelDeveloperKey(model: string) {
   return normalizeDeveloperId(getModelOrigin(model).organization);
 }
 
+/**
+ * Who made this row, for the developer filter.
+ *
+ * Prefers row.publisher: generation models match no Ollama family, so keying
+ * on the name grouped all six under "Unknown model family" while their rows
+ * displayed Lightricks and Stability AI. The grouping and the column must
+ * read the same source or the filter contradicts the table it filters.
+ */
+export function getRowDeveloper(row: Pick<ModelRow, 'displayName' | 'publisher'>) {
+  const label = row.publisher ?? getModelOrigin(row.displayName).organization;
+  return { id: normalizeDeveloperId(label), label };
+}
+
 export function getDeveloperFilterOptions(rows: ModelRow[]) {
   const counts = new Map<string, { id: string; label: string; count: number }>();
 
   rows.forEach((row) => {
-    const origin = getModelOrigin(row.displayName);
-    const id = normalizeDeveloperId(origin.organization);
+    const { id, label } = getRowDeveloper(row);
     const current = counts.get(id);
     counts.set(id, {
       id,
-      label: origin.organization,
+      label,
       count: (current?.count ?? 0) + 1,
     });
   });

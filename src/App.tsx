@@ -104,7 +104,7 @@ import {
 } from './lib/scoring';
 import {
   getDeveloperFilterOptions,
-  getModelDeveloperKey,
+  getRowDeveloper,
   getModelOrigin,
 } from './lib/modelOrigins';
 import {
@@ -7052,7 +7052,7 @@ function ModelCabinet({
     [query, queuedModelIds, modelScores],
   );
   const passesDeveloper = useCallback(
-    (row: ModelRow) => developerFilter === 'all' || getModelDeveloperKey(row.displayName) === developerFilter,
+    (row: ModelRow) => developerFilter === 'all' || getRowDeveloper(row).id === developerFilter,
     [developerFilter],
   );
   const passesQuick = useCallback(

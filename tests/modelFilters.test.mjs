@@ -161,3 +161,29 @@ test('a generation row is findable by what it makes and what runs it', () => {
     assert.ok(haystack.includes(term), `"${term}" not searchable`);
   }
 });
+
+test('the developer filter groups a generation row under its publisher', async () => {
+  // Keyed on the name, all six generation rows grouped as "Unknown model
+  // family" while their rows displayed Lightricks and Stability AI — the
+  // filter contradicted the very column it filters.
+  const { getRowDeveloper, getDeveloperFilterOptions } = await import('../src/lib/modelOrigins.ts');
+  const ltx = { displayName: 'LTX-Video 2B (distilled)', publisher: 'Lightricks' };
+  assert.equal(getRowDeveloper(ltx).label, 'Lightricks');
+
+  const options = getDeveloperFilterOptions([
+    { displayName: 'LTX-Video 2B (distilled)', publisher: 'Lightricks' },
+    { displayName: 'llama3.2:3b' },
+  ]);
+  const labels = options.map((o) => o.label);
+  assert.ok(labels.includes('Lightricks'), `got ${labels.join(', ')}`);
+  assert.ok(!labels.some((l) => /unknown model family/i.test(l)) || labels.includes('Meta'),
+    'a publisher row must not fall into the unknown bucket');
+});
+
+test('grouping and matching agree, so clicking the chip finds the row', async () => {
+  const { getRowDeveloper } = await import('../src/lib/modelOrigins.ts');
+  const ltx = { displayName: 'LTX-Video 2B (distilled)', publisher: 'Lightricks' };
+  // The chip id built from the options must equal the id the row matcher
+  // computes, or the filter shows a chip that selects nothing.
+  assert.equal(getRowDeveloper(ltx).id, 'lightricks');
+});

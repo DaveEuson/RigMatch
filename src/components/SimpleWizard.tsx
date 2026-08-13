@@ -567,7 +567,11 @@ function PickScreen({ wizardModels, modelsLoading, shortlistIds, shortlistedRows
   };
   const countLine = dream === 'all'
     ? `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} fit your PC`
-    : `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} ${dreamNoun[dream]} · all of them fit your PC`;
+    : filtered.length === 0
+      // "0 contestants · all of them fit your PC" contradicted itself; with
+      // nothing to count, the line just says so and the note below explains.
+      ? `No contestants ${dreamNoun[dream]} on this PC`
+      : `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} ${dreamNoun[dream]} · all of them fit your PC`;
 
   return (
     <div className="sw-pick">
