@@ -323,6 +323,9 @@ import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
 import { batchSeed, isVideoCheckpoint } from './lib/videoGen';
 import { DEFAULT_VIDEO_SIZE_ID, VIDEO_SIZE_PRESETS, toVideoLabResult, videoReadiness } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
+import { GOALS, goalById, goalHardwareExpectation, leagueLabel, type GoalId } from './lib/goals';
+import { taskFilterForGoal } from './lib/modelCatalog';
+import { readSelectedGoals, writeSelectedGoals } from './lib/goalSettings';
 import { runVideoLabChallenge } from './lib/videoGenRunner';
 import { runImageLabChallenge } from './lib/imageGenRunner';
 import { describeComfyBusy, getComfyStatus } from './lib/comfyTransport';
@@ -648,6 +651,12 @@ function App() {
   const [uiMode, setUiMode] = useState<UiMode>(() => getSavedUiMode());
   // First-launch splash: ask Simple vs Advanced before showing the app.
   const [showModeSplash, setShowModeSplash] = useState(() => !hasChosenInterfaceMode());
+  // Settings can reopen the goals step of the splash on its own — mistakes at
+  // first run must not be permanent, and localStorage is not a settings UI.
+  const [showGoalsEditor, setShowGoalsEditor] = useState(false);
+  // What the person said they want to do, first pick foremost. Drives the
+  // Models lens and the wizard's opening dream — a lens, never a lock.
+  const [selectedGoals, setSelectedGoals] = useState<GoalId[]>(() => readSelectedGoals());
   const [chatOpen, setChatOpen] = useState(false);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [pendingThirdPartyDownloadRows, setPendingThirdPartyDownloadRows] = useState<ModelRow[] | null>(null);
@@ -1584,14 +1593,26 @@ function App() {
       : 'Advanced mode selected. RigMatch will show more setup details, commands, and diagnostics.');
   }, []);
 
-  const chooseInterfaceMode = useCallback((nextMode: UiMode) => {
+  const chooseInterfaceMode = useCallback((nextMode: UiMode, goals: GoalId[] = []) => {
     selectUiMode(nextMode);
     // Persist immediately and record that the splash choice was made so it
     // won't reappear next launch. The Simple wizard opens itself at Setup.
     writeLocal(UI_MODE_STORAGE_KEY, nextMode);
     writeLocal(MODE_SPLASH_STORAGE_KEY, 'chosen');
+    writeSelectedGoals(goals);
+    setSelectedGoals(goals);
     setShowModeSplash(false);
   }, [selectUiMode]);
+
+  const saveGoalsFromSettings = useCallback((goals: GoalId[]) => {
+    writeSelectedGoals(goals);
+    setSelectedGoals(goals);
+    setShowGoalsEditor(false);
+    const primary = goals[0] ? goalById(goals[0]) : undefined;
+    setActivity(primary
+      ? `Goals updated. ${primary.matchLabel} now leads Models and Simple Mode.`
+      : 'Goals cleared. Models and Simple Mode show everything again.');
+  }, []);
 
   const requestBenchmarkForModel = useCallback((model: string) => {
     const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
@@ -3347,7 +3368,16 @@ function App() {
           </a>
         </div>
       )}
-      {showModeSplash && <ModeSplash onPick={chooseInterfaceMode} />}
+      {showModeSplash && <FirstRunSplash vramGb={system.gpu.vramGb || 0} onDone={chooseInterfaceMode} />}
+      {!showModeSplash && showGoalsEditor && (
+        <FirstRunSplash
+          vramGb={system.gpu.vramGb || 0}
+          onDone={chooseInterfaceMode}
+          initialGoals={selectedGoals}
+          onSaveGoals={saveGoalsFromSettings}
+          onCancel={() => setShowGoalsEditor(false)}
+        />
+      )}
       {uiMode === 'beginner' && (
         <SimpleWizard
           system={system}
@@ -3359,6 +3389,7 @@ function App() {
           onStartOllamaInstall={startOllamaInstall}
           onLaunchOllamaInstaller={launchOllamaInstaller}
           wizardModels={wizardModels}
+          initialDream={dreamForGoal(selectedGoals[0])}
           modelsLoading={modelRows.length === 0}
           shortlistIds={shortlistIds}
           shortlistedRows={shortlistedRows}
@@ -3486,6 +3517,7 @@ function App() {
             active={true}
             rows={modelRows}
             comfyFolderSet={Boolean(comfySettings.folder)}
+            goalLens={taskFilterForGoal(selectedGoals[0])}
             onOpenLab={() => selectNav('activity')}
             // Settings already explains ComfyUI in plain language; window.open
             // was popup-blocked in the browser preview and the review found the
@@ -3669,10 +3701,12 @@ function App() {
             updateCheck={updateCheck}
             isCheckingUpdates={isCheckingUpdates}
             uiMode={uiMode}
+            selectedGoals={selectedGoals}
             logPath={logPath}
             isLoadingLogs={isLoadingLogs}
             onThemeChange={selectTheme}
             onUiModeChange={selectUiMode}
+            onEditGoals={() => setShowGoalsEditor(true)}
             onRefreshLogs={loadLogs}
             onCopyLogs={copyLogs}
             onClearLogs={clearLogs}
@@ -5908,6 +5942,38 @@ function UiModePicker({
 }
 
 
+function GoalsSummary({
+  goals,
+  onEditGoals,
+}: {
+  goals: GoalId[];
+  onEditGoals: () => void;
+}) {
+  const primary = goals[0] ? goalById(goals[0]) : undefined;
+  return (
+    <section className="ui-mode-picker" aria-label="Your goals">
+      <div>
+        <span>Your Goals</span>
+        <strong>
+          {primary
+            ? `${primary.desire}${goals.length > 1 ? ` · +${goals.length - 1} more` : ''}`
+            : 'No goal picked yet'}
+        </strong>
+      </div>
+      <div className="mode-toggle" role="group" aria-label="Edit goals">
+        <button type="button" onClick={onEditGoals}>
+          <strong>Change goals</strong>
+          <span>
+            {primary
+              ? 'Your main goal points Models and Simple Mode at the right contestants.'
+              : 'Pick a goal and RigMatch leads with the models that can do it.'}
+          </span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function ThemePicker({
   themeId,
   onThemeChange,
@@ -6075,6 +6141,7 @@ function UtilityPanel({
   system,
   themeId,
   uiMode,
+  selectedGoals,
   appLogs,
   modelScores,
   chatMessages,
@@ -6085,6 +6152,7 @@ function UtilityPanel({
   isLoadingLogs,
   onThemeChange,
   onUiModeChange,
+  onEditGoals,
   onRefreshLogs,
   onCopyLogs,
   onClearLogs,
@@ -6109,6 +6177,7 @@ function UtilityPanel({
   system: SystemProfile;
   themeId: ThemeId;
   uiMode: UiMode;
+  selectedGoals: GoalId[];
   appLogs: AppLogEntry[];
   modelScores: Record<string, TestedModelScore>;
   chatMessages: ChatMessage[];
@@ -6119,6 +6188,7 @@ function UtilityPanel({
   isLoadingLogs: boolean;
   onThemeChange: (themeId: ThemeId) => void;
   onUiModeChange: (mode: UiMode) => void;
+  onEditGoals: () => void;
   onRefreshLogs: () => void;
   onCopyLogs: () => void;
   onClearLogs: () => void;
@@ -6323,13 +6393,13 @@ function UtilityPanel({
             <em>{topRankedScore ? `${formatMatchScore(topRankedScore)} total · ${topRankedScore.grade}` : 'Run a test to save the next scorecard.'}</em>
           </div>
           {taskPicks.length > 0 && (
-            <div className="task-picks-section" aria-label="Category picks">
-              <span>Category picks</span>
+            <div className="task-picks-section" aria-label="Matches by goal">
+              <span>Matches</span>
               <div className="task-picks-grid">
                 {taskPicks.map((pick) => (
                   <div key={pick.id} className="task-pick-card">
                     <em>
-                      {pick.label}
+                      {matchDisplayLabel(pick.id, pick.label)}
                       {pick.measured && (
                         <span
                           className="task-pick-measured"
@@ -6480,8 +6550,9 @@ function UtilityPanel({
             <strong>RigMatch</strong>
             <em>v{APP_VERSION}</em>
           </div>
-          <SettingsSection eyebrow="Interface" title="Preferences" summary="Mode, theme, and the Simple Mode path." defaultOpen>
+          <SettingsSection eyebrow="Interface" title="Preferences" summary="Mode, theme, goals, and the Simple Mode path." defaultOpen>
           <UiModePicker uiMode={uiMode} onUiModeChange={onUiModeChange} />
+          <GoalsSummary goals={selectedGoals} onEditGoals={onEditGoals} />
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
           </SettingsSection>
           <SettingsSection eyebrow="Local AI" title="Computer & Providers" summary="Runtime, Ollama, LM Studio, and local-only scope.">
@@ -6899,12 +6970,38 @@ function FirstModelWizard({ vramGb, onQueueModel }: { vramGb: number; onQueueMod
   );
 }
 
+/**
+ * A Match is the best model for a goal on this hardware — Dave's definition.
+ * Picks that map to a goal borrow its match label ("Best for talking");
+ * the scored qualities keep their plain names, since "Best for sticking to
+ * facts" is a quality of a chat model, not a goal someone arrives with.
+ */
+/** The wizard dream matching a goal, for opening PICK on the splash answer. */
+function dreamForGoal(goalId: string | undefined): 'talk' | 'write' | 'code' | 'image' | 'video' | undefined {
+  switch (goalId) {
+    case 'talk': return 'talk';
+    case 'write': return 'write';
+    case 'code': return 'code';
+    case 'make-images': return 'image';
+    case 'make-video':
+    case 'animate-image': return 'video';
+    default: return undefined;
+  }
+}
+
+function matchDisplayLabel(pickId: string, fallback: string): string {
+  const goalId = pickId === 'chat' ? 'talk' : pickId === 'coding' ? 'code' : undefined;
+  const goal = goalId ? GOALS.find((g) => g.id === goalId) : undefined;
+  return goal?.matchLabel ?? fallback;
+}
+
 function ModelCabinet({
   active,
   rows,
   comfyFolderSet,
   onOpenComfyHelp,
   onOpenLab,
+  goalLens,
   selectedModel,
   installedModelNames,
   shortlistIds,
@@ -6950,6 +7047,9 @@ function ModelCabinet({
   onOpenComfyHelp: () => void;
   /** Generation models are run from the Lab, not from a row's Test button. */
   onOpenLab: () => void;
+  /** The task filter implied by the user's primary goal, if any. Applied when
+      it changes and freely clearable after — a lens, never a lock. */
+  goalLens?: ModelTaskFilterId;
   active: boolean;
   rows: ModelRow[];
   selectedModel: string;
@@ -6999,7 +7099,17 @@ function ModelCabinet({
 }) {
   const [modelQuery, setModelQuery] = useState('');
   const [quickFilter, setQuickFilter] = useState<ModelQuickFilterId>('fits-vram');
-  const [taskFilter, setTaskFilter] = useState<ModelTaskFilterId | null>(null);
+  const [taskFilter, setTaskFilter] = useState<ModelTaskFilterId | null>(goalLens ?? null);
+  // Re-applied only when the goal itself changes (splash or a future goal
+  // editor) — clearing the filter afterwards sticks, so the goal steers
+  // without gripping. Adjusted during render rather than in an effect: the
+  // rerender happens before children paint, where an effect would flash the
+  // unfiltered list first.
+  const [appliedLens, setAppliedLens] = useState(goalLens);
+  if (goalLens !== appliedLens) {
+    setAppliedLens(goalLens);
+    if (goalLens) setTaskFilter(goalLens);
+  }
   const [developerFilter, setDeveloperFilter] = useState('all');
   const [sortKey, setSortKey] = useState<ModelSortKey>('status');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -10561,11 +10671,32 @@ function ProfileQuestionTranscript({
   );
 }
 
-function ModeSplash({ onPick }: { onPick: (mode: UiMode) => void }) {
-  // No onClose: this is a required choice, so Escape must not dismiss it. Focus
-  // is still moved in and trapped — it is the first thing on screen at launch,
-  // and previously left focus on <body> behind a full-viewport overlay.
-  const splashRef = useDialog<HTMLDivElement>();
+function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCancel }: {
+  vramGb: number;
+  onDone: (mode: UiMode, goals: GoalId[]) => void;
+  /** Set when reopened from Settings: pre-checks the saved picks. */
+  initialGoals?: GoalId[];
+  /** Set when reopened from Settings: save picks and close, no mode step. */
+  onSaveGoals?: (goals: GoalId[]) => void;
+  onCancel?: () => void;
+}) {
+  // On first run there is no onClose: the choice is required, so Escape must
+  // not dismiss it. Reopened from Settings it is an ordinary dialog and
+  // Escape cancels. Focus is trapped either way — it previously left focus on
+  // <body> behind a full-viewport overlay.
+  const splashRef = useDialog<HTMLDivElement>(onCancel);
+  // The desire comes before the mode: "what do you want to do?" is a question
+  // about the person, "Simple or Advanced?" is a question about our UI, and
+  // the person's question goes first.
+  const [step, setStep] = useState<'goals' | 'mode'>('goals');
+  const [picked, setPicked] = useState<GoalId[]>(initialGoals ?? []);
+
+  const toggle = (id: GoalId) => {
+    setPicked((current) => (current.includes(id)
+      ? current.filter((g) => g !== id)
+      : [...current, id]));
+  };
+
   return (
     <div ref={splashRef} className="mode-splash" role="dialog" aria-modal="true" aria-label="Choose how to use RigMatch">
       <div className="mode-splash-card">
@@ -10576,6 +10707,75 @@ function ModeSplash({ onPick }: { onPick: (mode: UiMode) => void }) {
             <span>Find the best AI your PC can run — nothing leaves this computer.</span>
           </div>
         </div>
+        {step === 'goals' ? (
+          <>
+            <h2 className="mode-splash-title">What would you like to do?</h2>
+            <p className="mode-splash-sub">Pick what matters most — you can add more anytime.</p>
+            <div className="goal-splash-grid">
+              {GOALS.map((goal) => {
+                const expectation = goalHardwareExpectation(goal, vramGb);
+                const selected = picked.includes(goal.id);
+                const pickOrder = picked.indexOf(goal.id) + 1;
+                return (
+                  <button
+                    key={goal.id}
+                    type="button"
+                    className={`goal-splash-option${selected ? ' selected' : ''} tone-${expectation.tone}`}
+                    onClick={() => toggle(goal.id)}
+                    aria-pressed={selected}
+                  >
+                    <strong>{goal.desire}</strong>
+                    {goal.runtime === 'none' ? (
+                      // A missing backend is nobody's hardware's fault.
+                      <em title={goal.unsupportedReason}>Not possible locally yet</em>
+                    ) : (
+                      <em title={expectation.note}>
+                        {leagueLabel(expectation.tone)}
+                        {goal.grading === 'none' ? " · can't be graded yet" : ''}
+                      </em>
+                    )}
+                    {selected && <span className="goal-splash-order">{pickOrder === 1 ? 'Main goal' : `#${pickOrder}`}</span>}
+                  </button>
+                );
+              })}
+            </div>
+            {picked.length > 1 && (
+              <p className="goal-splash-nudge">
+                One goal gets you one clear answer. The best model for coding is rarely the best
+                for chatting, so each goal you add means more testing time before RigMatch can
+                crown anyone. Your first pick leads.
+              </p>
+            )}
+            <div className="goal-splash-actions">
+              {onSaveGoals ? (
+                <>
+                  {onCancel && (
+                    <button type="button" className="mini-button" onClick={onCancel}>
+                      Cancel
+                    </button>
+                  )}
+                  <button type="button" className="primary-button" onClick={() => onSaveGoals(picked)}>
+                    {picked.length === 0 ? 'Clear goals' : 'Save goals'}
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="primary-button" onClick={() => setStep('mode')}>
+                  {picked.length === 0 ? 'Skip for now' : 'Continue'}
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <ModeStep onPick={(mode) => onDone(mode, picked)} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ModeStep({ onPick }: { onPick: (mode: UiMode) => void }) {
+  return (
+    <>
         <h2 className="mode-splash-title">How would you like to start?</h2>
         <p className="mode-splash-sub">You can switch anytime from the header.</p>
         <div className="mode-splash-options">
@@ -10592,8 +10792,7 @@ function ModeSplash({ onPick }: { onPick: (mode: UiMode) => void }) {
             <span className="mode-splash-cta">Open the control room</span>
           </button>
         </div>
-      </div>
-    </div>
+    </>
   );
 }
 

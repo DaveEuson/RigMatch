@@ -174,3 +174,15 @@ test('ids are unique, since the UI keys off them', () => {
   const ids = GOALS.map((g) => g.id);
   assert.equal(new Set(ids).size, ids.length);
 });
+
+test('a grading gap is never blamed on the hardware', () => {
+  // The splash's first render showed "Help me write..." as "out of your
+  // league" — but writing runs on any card; RigMatch just cannot score it.
+  // Only a missing backend is a hard stop.
+  const write = goalById('write');
+  assert.equal(goalHardwareExpectation(write, 12).tone, 'ready');
+  const animate = goalById('animate-image');
+  // Hardware-wise, animating an image is the same heavy video class.
+  assert.equal(goalHardwareExpectation(animate, 12).tone, 'ready');
+  assert.equal(goalHardwareExpectation(animate, 4).tone, 'unlikely');
+});

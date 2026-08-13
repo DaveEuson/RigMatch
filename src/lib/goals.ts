@@ -295,7 +295,11 @@ export function leagueLabel(tone: GoalExpectation['tone']): string {
 }
 
 export function goalHardwareExpectation(goal: Goal, vramGb: number): GoalExpectation {
-  if (goal.runtime === 'none' || goal.grading === 'none') {
+  // Only a missing BACKEND is a hard stop. A goal that runs but cannot be
+  // graded yet (writing, animating an image) must not read as "out of your
+  // league" — that blames the hardware for RigMatch's own gap, and the
+  // splash showed exactly that mislabel the first time it rendered.
+  if (goal.runtime === 'none') {
     return {
       tone: 'unlikely',
       note: goal.unsupportedReason ?? 'Not supported locally yet.',
@@ -304,6 +308,7 @@ export function goalHardwareExpectation(goal: Goal, vramGb: number): GoalExpecta
   }
 
   switch (goal.id) {
+    case 'animate-image':
     case 'make-video':
       // Measured: 4s of 768x512 in 12.1s with the card at ~12.4 GB of 12.9 —
       // the video models alone are ~11.2 GB before a frame is sampled.

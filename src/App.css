@@ -17782,3 +17782,68 @@ a.whats-next-support:hover {
   font-weight: 600;
   letter-spacing: 0.02em;
 }
+
+/* ── First-run goal picker ─────────────────────────────────────────────────── */
+
+.goal-splash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+  /* Twelve options must not push the mode step's buttons off a short screen. */
+  max-height: min(46vh, 420px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.goal-splash-option {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.goal-splash-option strong { font-size: 0.92rem; line-height: 1.25; }
+
+/* The league line: themed words up front, the plain facts in the tooltip. */
+.goal-splash-option em {
+  font-size: 0.75rem;
+  font-style: normal;
+  color: var(--muted);
+}
+.goal-splash-option.tone-ready em { color: var(--green, #9fbb6f); }
+.goal-splash-option.tone-unlikely em { color: var(--red, #ff9278); }
+
+.goal-splash-option.selected {
+  border-color: var(--gold, #efbc5a);
+  background: rgba(239, 188, 90, 0.12);
+}
+
+.goal-splash-order {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold, #efbc5a);
+}
+
+.goal-splash-nudge {
+  margin: 12px 2px 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.goal-splash-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}

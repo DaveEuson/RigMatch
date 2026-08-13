@@ -1457,6 +1457,32 @@ export function getModelDreamTags(row: ModelRow): Array<'talk' | 'write' | 'code
   return tags;
 }
 
+/**
+ * The Models filter that shows a goal's candidates.
+ *
+ * The splash asks what someone wants to do; this is how that answer reaches
+ * the Models screen without inventing a second filter system. Goals with no
+ * chip yet return undefined and simply apply no lens — never a wrong one.
+ */
+export function taskFilterForGoal(goalId: string | undefined): ModelTaskFilterId | undefined {
+  switch (goalId) {
+    case 'talk': return 'assistant';
+    case 'write': return 'writing';
+    case 'code': return 'coding';
+    case 'transcribe-file': return 'hears';
+    case 'describe-image': return 'vision';
+    case 'make-images': return 'imagegen';
+    // Image-to-video and text-to-video draw from the same checkpoint pool.
+    case 'animate-image': return 'videogen';
+    case 'make-video': return 'videogen';
+    case 'make-audio': return 'audiogen';
+    // use-tools has no capability chip yet; json-scored, so Matches can rank
+    // it, but the Models screen cannot filter for it until tools capability
+    // reporting lands. transcribe-live and ask-documents have no lens either.
+    default: return undefined;
+  }
+}
+
 export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolean {
   // A generation model says outright what it makes, so nothing here has to
   // infer it from a filename. "sd15.safetensors" matches no image-model name

@@ -111,6 +111,8 @@ type SimpleWizardProps = {
   shortlistIds: Set<string>;
   shortlistedRows: ModelRow[];
   onTogglePick: (row: ModelRow) => void;
+  /** The dream matching the first-run goal choice, so PICK opens on it. */
+  initialDream?: DreamFilterId;
   /** Fills the lineup with the best-fitting models for people who can't choose. */
   onChooseForMe: () => void;
   pullProgressByModel: Record<string, PullProgressUpdate>;
@@ -547,8 +549,10 @@ function ResultRow({ label, detail }: { label: string; detail: string }) {
 // ---------------------------------------------------------------------------
 // Pick
 
-function PickScreen({ wizardModels, modelsLoading, shortlistIds, shortlistedRows, onTogglePick, onChooseForMe }: SimpleWizardProps) {
-  const [dream, setDream] = useState<DreamFilterId>('all');
+function PickScreen({ wizardModels, modelsLoading, shortlistIds, shortlistedRows, onTogglePick, onChooseForMe, initialDream }: SimpleWizardProps) {
+  // Opens on the dream matching the splash's primary goal, when there is one
+  // — the person already answered this question once.
+  const [dream, setDream] = useState<DreamFilterId>(initialDream ?? 'all');
   const [showAll, setShowAll] = useState(false);
   const lineupFull = shortlistedRows.length >= 5;
 
