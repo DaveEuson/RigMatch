@@ -3451,6 +3451,7 @@ function App() {
             active={true}
             rows={modelRows}
             comfyFolderSet={Boolean(comfySettings.folder)}
+            onOpenLab={() => selectNav('activity')}
             onOpenComfyHelp={() => window.open('https://www.comfy.org/download', '_blank', 'noopener')}
             selectedModel={selectedModel}
             installedModelNames={installedModelNames}
@@ -6872,6 +6873,7 @@ function ModelCabinet({
   rows,
   comfyFolderSet,
   onOpenComfyHelp,
+  onOpenLab,
   selectedModel,
   installedModelNames,
   shortlistIds,
@@ -6915,6 +6917,8 @@ function ModelCabinet({
   /** Whether a verified ComfyUI models folder exists, so downloads can land. */
   comfyFolderSet: boolean;
   onOpenComfyHelp: () => void;
+  /** Generation models are run from the Lab, not from a row's Test button. */
+  onOpenLab: () => void;
   active: boolean;
   rows: ModelRow[];
   selectedModel: string;
@@ -7436,7 +7440,9 @@ function ModelCabinet({
                         {row.displayName}
                         {isNewModel && <em className="model-new-sub">New</em>}
                         {row.params && <em className="model-params-sub">{row.params}</em>}
-                        {row.localProviderLabel && <em className="model-provider-sub">{row.localProviderLabel}</em>}
+                        {row.runtime === 'comfyui'
+                          ? <em className="model-provider-sub comfy">ComfyUI</em>
+                          : row.localProviderLabel && <em className="model-provider-sub">{row.localProviderLabel}</em>}
                         {row.pulls != null && (
                           <em className="model-pulls-sub" title={`${row.pulls.toLocaleString()} pulls on Ollama`}>{formatPullCount(row.pulls)} pulls</em>
                         )}
@@ -7500,6 +7506,36 @@ function ModelCabinet({
                   )}
                   <td className={showDownloadProgress ? 'action-cell has-download-progress' : 'action-cell'}>
                     <div className="row-actions">
+                      {/* A checkpoint has no chat endpoint, no Ollama entry and
+                          no Match score. Offering Test, Chat, Speed Dating or
+                          "delete from Ollama" on one is offering four buttons
+                          that cannot work — the Lab is where these are run. */}
+                      {row.runtime === 'comfyui' ? (
+                        <>
+                          {row.installed ? (
+                            <button
+                              type="button"
+                              className="mini-button"
+                              onClick={() => onOpenLab()}
+                              title={`Try ${row.displayName} in the ${row.generationKind === 'video' ? 'Video' : 'Image'} Lab`}
+                            >
+                              <Play aria-hidden="true" />
+                              <span>Open Lab</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="mini-button"
+                              onClick={() => onQueueModel(row)}
+                              title={`Queue ${row.displayName} — ${row.sizeGb} GB into ComfyUI`}
+                            >
+                              <Download aria-hidden="true" />
+                              <span>{queued ? 'Queued' : 'Download'}</span>
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
                       <button
                         type="button"
                         className={shortlisted ? 'slot-button speed-date-row-button active' : 'slot-button speed-date-row-button'}
@@ -7568,6 +7604,8 @@ function ModelCabinet({
                         >
                           <span>{!platformFit.compatible ? 'macOS Only' : queued ? 'Remove' : `Get ${getQueueChipModelName(row.displayName)}`}</span>
                         </button>
+                      )}
+                        </>
                       )}
                     </div>
                     {showDownloadProgress && (

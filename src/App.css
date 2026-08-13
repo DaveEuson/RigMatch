@@ -17761,3 +17761,13 @@ a.whats-next-support:hover {
   opacity: 0;
   overflow: hidden;
 }
+
+/* A generation model runs somewhere else entirely, and the row has to say so
+   — the same line that reads "Ollama" for every other model. Tinted rather
+   than merely worded, because the actions available on these rows differ. */
+.model-provider-sub.comfy {
+  color: var(--accent);
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
