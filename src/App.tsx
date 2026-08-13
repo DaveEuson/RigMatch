@@ -323,7 +323,7 @@ import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
 import { batchSeed, isVideoCheckpoint } from './lib/videoGen';
 import { DEFAULT_VIDEO_SIZE_ID, VIDEO_SIZE_PRESETS, toVideoLabResult, videoReadiness } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
-import { GOALS, goalById, goalHardwareExpectation, leagueLabel, type GoalId } from './lib/goals';
+import { GOALS, goalById, goalHardwareExpectation, goalsByCategory, leagueLabel, type GoalId } from './lib/goals';
 import { taskFilterForGoal } from './lib/modelCatalog';
 import { readSelectedGoals, writeSelectedGoals } from './lib/goalSettings';
 import { runVideoLabChallenge } from './lib/videoGenRunner';
@@ -10711,33 +10711,40 @@ function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCancel }:
           <>
             <h2 className="mode-splash-title">What would you like to do?</h2>
             <p className="mode-splash-sub">Pick what matters most — you can add more anytime.</p>
-            <div className="goal-splash-grid">
-              {GOALS.map((goal) => {
-                const expectation = goalHardwareExpectation(goal, vramGb);
-                const selected = picked.includes(goal.id);
-                const pickOrder = picked.indexOf(goal.id) + 1;
-                return (
-                  <button
-                    key={goal.id}
-                    type="button"
-                    className={`goal-splash-option${selected ? ' selected' : ''} tone-${expectation.tone}`}
-                    onClick={() => toggle(goal.id)}
-                    aria-pressed={selected}
-                  >
-                    <strong>{goal.desire}</strong>
-                    {goal.runtime === 'none' ? (
-                      // A missing backend is nobody's hardware's fault.
-                      <em title={goal.unsupportedReason}>Not possible locally yet</em>
-                    ) : (
-                      <em title={expectation.note}>
-                        {leagueLabel(expectation.tone)}
-                        {goal.grading === 'none' ? " · can't be graded yet" : ''}
-                      </em>
-                    )}
-                    {selected && <span className="goal-splash-order">{pickOrder === 1 ? 'Main goal' : `#${pickOrder}`}</span>}
-                  </button>
-                );
-              })}
+            <div className="goal-splash-groups">
+              {goalsByCategory().map(({ category, goals }) => (
+                <section key={category.id} aria-label={category.label}>
+                  <h3 className="goal-splash-category">{category.label}</h3>
+                  <div className="goal-splash-grid">
+                    {goals.map((goal) => {
+                      const expectation = goalHardwareExpectation(goal, vramGb);
+                      const selected = picked.includes(goal.id);
+                      const pickOrder = picked.indexOf(goal.id) + 1;
+                      return (
+                        <button
+                          key={goal.id}
+                          type="button"
+                          className={`goal-splash-option${selected ? ' selected' : ''} tone-${expectation.tone}`}
+                          onClick={() => toggle(goal.id)}
+                          aria-pressed={selected}
+                        >
+                          <strong>{goal.desire}</strong>
+                          {goal.runtime === 'none' ? (
+                            // A missing backend is nobody's hardware's fault.
+                            <em title={goal.unsupportedReason}>Not possible locally yet</em>
+                          ) : (
+                            <em title={expectation.note}>
+                              {leagueLabel(expectation.tone)}
+                              {goal.grading === 'none' ? " · can't be graded yet" : ''}
+                            </em>
+                          )}
+                          {selected && <span className="goal-splash-order">{pickOrder === 1 ? 'Main goal' : `#${pickOrder}`}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
             </div>
             {picked.length > 1 && (
               <p className="goal-splash-nudge">

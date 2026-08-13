@@ -35,6 +35,24 @@ export type GoalId =
 
 export type GoalGrading = 'questions' | 'lab' | 'none';
 
+/**
+ * Dave's five shelves for the goal picker: "Chat, work, image, audio, video".
+ *
+ * Chat and Work split on his own earlier distinction — a private companion
+ * you feel safe talking to is not the same person as "help me write this
+ * email", so talking lives under Chat while writing, coding, automations and
+ * documents are Work. Media goals shelve by what they produce or consume.
+ */
+export const GOAL_CATEGORIES = [
+  { id: 'chat', label: 'Chat' },
+  { id: 'work', label: 'Work' },
+  { id: 'image', label: 'Image' },
+  { id: 'audio', label: 'Audio' },
+  { id: 'video', label: 'Video' },
+] as const;
+
+export type GoalCategoryId = (typeof GOAL_CATEGORIES)[number]['id'];
+
 export type Goal = {
   id: GoalId;
   /** In the user's voice, completing "I would like to...". */
@@ -43,6 +61,8 @@ export type Goal = {
   label: string;
   /** What a Match for this goal is called: "Best for coding". */
   matchLabel: string;
+  /** Which shelf of the goal picker this sits on. */
+  category: GoalCategoryId;
   /**
    * Which runtime does the work. 'none' means no local backend RigMatch
    * supports can do this yet — the goal is shown honestly as future, never
@@ -59,6 +79,7 @@ export type Goal = {
 export const GOALS: Goal[] = [
   {
     id: 'talk',
+    category: 'chat',
     desire: 'Talk to a model and ask it questions',
     label: 'Everyday chat',
     matchLabel: 'Best for talking',
@@ -68,6 +89,7 @@ export const GOALS: Goal[] = [
   },
   {
     id: 'write',
+    category: 'work',
     desire: 'Help me write emails, documents, and ideas',
     label: 'Writing',
     matchLabel: 'Best for writing',
@@ -86,6 +108,7 @@ export const GOALS: Goal[] = [
   },
   {
     id: 'code',
+    category: 'work',
     desire: 'Use a model to help me code',
     label: 'Coding',
     matchLabel: 'Best for coding',
@@ -95,6 +118,7 @@ export const GOALS: Goal[] = [
   },
   {
     id: 'transcribe-file',
+    category: 'audio',
     desire: 'Listen to an audio file and transcribe what it says',
     label: 'Transcribing recordings',
     matchLabel: 'Best for transcription',
@@ -106,6 +130,7 @@ export const GOALS: Goal[] = [
   },
   {
     id: 'transcribe-live',
+    category: 'audio',
     desire: 'Listen to audio in real time and transcribe as it happens',
     label: 'Live transcription',
     matchLabel: 'Best for live transcription',
@@ -118,6 +143,7 @@ export const GOALS: Goal[] = [
   },
   {
     id: 'describe-image',
+    category: 'image',
     desire: 'Look at a picture and describe what it sees',
     label: 'Reading images',
     matchLabel: 'Best for reading images',
@@ -127,6 +153,7 @@ export const GOALS: Goal[] = [
   },
   {
     id: 'make-images',
+    category: 'image',
     desire: 'Create an image from a prompt',
     label: 'Making images',
     matchLabel: 'Best for making images',
@@ -136,6 +163,7 @@ export const GOALS: Goal[] = [
   },
   {
     id: 'animate-image',
+    category: 'video',
     desire: 'Create a video from an image',
     label: 'Animating images',
     matchLabel: 'Best for animating images',
@@ -153,6 +181,7 @@ export const GOALS: Goal[] = [
   },
   {
     id: 'make-video',
+    category: 'video',
     desire: 'Create a video from a prompt',
     label: 'Making video',
     matchLabel: 'Best for making video',
@@ -162,6 +191,7 @@ export const GOALS: Goal[] = [
   },
   {
     id: 'use-tools',
+    category: 'work',
     desire: 'Power my tools and automations',
     // The Home Assistant crowd's whole reason for local AI, and scoreable on
     // day one: the suite already asks JSON/tool-output questions.
@@ -173,6 +203,7 @@ export const GOALS: Goal[] = [
   },
   {
     id: 'make-audio',
+    category: 'audio',
     desire: 'Create speech or music from text',
     label: 'Making audio',
     matchLabel: 'Best for making audio',
@@ -187,6 +218,7 @@ export const GOALS: Goal[] = [
   },
   {
     id: 'ask-documents',
+    category: 'work',
     desire: 'Ask questions about my documents',
     label: 'Your documents',
     matchLabel: 'Best for your documents',
@@ -203,6 +235,16 @@ export const GOALS: Goal[] = [
 
 export function goalById(id: string | undefined): Goal | undefined {
   return GOALS.find((goal) => goal.id === id);
+}
+
+/** The goal list arranged on its five shelves, in Dave's stated order. */
+export function goalsByCategory(): Array<{
+  category: (typeof GOAL_CATEGORIES)[number];
+  goals: Goal[];
+}> {
+  return GOAL_CATEGORIES
+    .map((category) => ({ category, goals: GOALS.filter((goal) => goal.category === category.id) }))
+    .filter((group) => group.goals.length > 0);
 }
 
 /** Goals ranked by benchmark questions — what question-based Matches can cover. */

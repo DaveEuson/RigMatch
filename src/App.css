@@ -17785,15 +17785,29 @@ a.whats-next-support:hover {
 
 /* ── First-run goal picker ─────────────────────────────────────────────────── */
 
-.goal-splash-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 8px;
+.goal-splash-groups {
   margin-top: 14px;
+  display: grid;
+  gap: 14px;
   /* Twelve options must not push the mode step's buttons off a short screen. */
   max-height: min(46vh, 420px);
   overflow-y: auto;
   padding-right: 4px;
+}
+
+.goal-splash-category {
+  margin: 0 0 6px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.goal-splash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
 }
 
 .goal-splash-option {

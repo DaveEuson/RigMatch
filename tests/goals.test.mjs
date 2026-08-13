@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 
 import {
   GOALS,
+  GOAL_CATEGORIES,
   MIN_QUESTIONS_PER_GOAL,
   MODEL_ATTRIBUTES,
   SCORED_QUALITIES,
   goalById,
   goalCoverage,
   goalHardwareExpectation,
+  goalsByCategory,
   questionScoredGoals,
 } from '../src/lib/goals.ts';
 import { TASK_GROUPS } from '../src/lib/taskScores.ts';
@@ -185,4 +187,24 @@ test('a grading gap is never blamed on the hardware', () => {
   // Hardware-wise, animating an image is the same heavy video class.
   assert.equal(goalHardwareExpectation(animate, 12).tone, 'ready');
   assert.equal(goalHardwareExpectation(animate, 4).tone, 'unlikely');
+});
+
+test("the shelves are Dave's five, in his order, and every goal sits on one", () => {
+  // "Lets catagrize them into things like 'Chat, work, image, audio, video'".
+  assert.deepEqual(GOAL_CATEGORIES.map((c) => c.label), ['Chat', 'Work', 'Image', 'Audio', 'Video']);
+  const valid = new Set(GOAL_CATEGORIES.map((c) => c.id));
+  for (const goal of GOALS) {
+    assert.ok(valid.has(goal.category), `${goal.id} sits on unknown shelf "${goal.category}"`);
+  }
+  // Grouping loses nothing and every shelf earns its header.
+  const grouped = goalsByCategory();
+  assert.equal(grouped.flatMap((g) => g.goals).length, GOALS.length);
+  for (const group of grouped) assert.ok(group.goals.length > 0);
+});
+
+test('chat and work split on the companion-vs-writing-helper distinction', () => {
+  // A safe person to talk with is Chat; "help me write this email" is Work.
+  assert.equal(goalById('talk').category, 'chat');
+  assert.equal(goalById('write').category, 'work');
+  assert.equal(goalById('code').category, 'work');
 });
