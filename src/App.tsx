@@ -586,6 +586,8 @@ function App() {
   // Re-read whenever the utility panel closes, so a folder chosen in Settings
   // reaches the Models screen without a restart.
   const [comfySettings, setComfySettings] = useState(() => readComfySettings());
+  /** The generation download in flight, so Stop can abort the right stream. */
+  const activeComfyDownloadRef = useRef<string | null>(null);
   const [closeCleanupOpen, setCloseCleanupOpen] = useState(false);
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
@@ -1868,6 +1870,12 @@ function App() {
       setIsPullPauseRequested(false);
       setIsPullPaused(false);
       void agentArcadeApi.abortPull(activePullProgressIdRef.current ?? undefined, 'cancel');
+      // A generation download is a file stream, not an Ollama pull, and
+      // abortPull cannot touch it — without this the multi-gigabyte fetch
+      // carried on writing after Stop and the UI said it had stopped.
+      if (activeComfyDownloadRef.current) {
+        void agentArcadeApi.comfyAbortDownload?.(activeComfyDownloadRef.current);
+      }
       setQueuedModelIds(new Set<string>());
       setPullProgressByModel((current) => {
         if (!pullingModel) return {};
@@ -1954,7 +1962,11 @@ function App() {
 
     setActivity(`Downloading ${needed.map((m) => m.label).join(' + ')} — ${formatBytesGb(totalBytes)} in total.`);
     for (const item of needed) {
+      // A video model and its encoder are two files; Stop during the first
+      // must not be followed by the second starting anyway.
+      if (pullQueueCancelRef.current) return false;
       const progressId = createRunProgressId('comfy');
+      activeComfyDownloadRef.current = progressId;
       const unsubscribe = agentArcadeApi.onComfyDownloadProgress?.((progress) => {
         if (progress.id !== progressId) return;
         setPullProgressByModel((current) => ({
@@ -1975,9 +1987,15 @@ function App() {
           url: item.url, expectedBytes: item.bytes, progressId,
         });
       } catch (error) {
-        setActivity(`${item.label} failed: ${error instanceof Error ? error.message : 'download error'}`);
+        // A cancelled stream lands here too; say stopped rather than failed,
+        // since the user asked for it.
+        const message = error instanceof Error ? error.message : 'download error';
+        setActivity(pullQueueCancelRef.current
+          ? `${item.label} download stopped.`
+          : `${item.label} failed: ${message}`);
         return false;
       } finally {
+        activeComfyDownloadRef.current = null;
         unsubscribe?.();
       }
     }
@@ -2831,9 +2849,12 @@ function App() {
         } else if (job.kind === 'code') {
           const code = extractCodeBlock(result.response);
           if (code) demos.push({ model: job.model, kind: 'code', code, language: result.language, note: result.checks[0]?.detail, grade: result.grade, score: result.score });
-        } else if (job.kind === 'image') {
+        } else if (job.kind === 'image' || job.kind === 'video') {
           // Carry the reason forward when nothing usable came back, so the viewer
           // can say why instead of showing an empty panel next to a grade.
+          // A video's viewable artifact is its judged frame, so it rides the
+          // image kind; without this branch the frame was produced, scored,
+          // saved — and then silently dropped from the results popup.
           demos.push({ model: job.model, kind: 'image', imageDataUrl: result.imageDataUrl, note: describeLabFailure(result), grade: result.grade, score: result.score });
         } else if (job.kind === 'vision') {
           demos.push({ model: job.model, kind: 'vision', imageDataUrl: result.imageDataUrl, description: result.response, note: describeLabFailure(result), grade: result.grade, score: result.score });

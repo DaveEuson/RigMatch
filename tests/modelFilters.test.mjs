@@ -187,3 +187,22 @@ test('grouping and matching agree, so clicking the chip finds the row', async ()
   // computes, or the filter shows a chip that selects nothing.
   assert.equal(getRowDeveloper(ltx).id, 'lightricks');
 });
+
+test('the benchmark blocker turns away a generation row before the host check', async () => {
+  // The detail panel's TEST MODEL calls startBenchmark, which consults only
+  // this blocker — the row action cell and the shortlist were gated, this
+  // third door was not, and the run would ask Ollama for a checkpoint.
+  const { getModelBenchmarkBlocker } = await import('../src/lib/modelCatalog.ts');
+  const ready = { ready: true, baseUrl: 'http://127.0.0.1:11434', version: '0.32.9', pingMs: 1, models: [], error: null };
+  const comfyRow = { displayName: 'LTX-Video 2B (distilled)', runtime: 'comfyui', generationKind: 'video', installed: true };
+  const blocker = getModelBenchmarkBlocker(comfyRow, undefined, ready);
+  assert.ok(blocker, 'a checkpoint must be blocked even when Ollama is ready');
+  assert.match(blocker, /draws instead of chatting|Run it from the Lab/);
+});
+
+test('an ordinary model is still testable', async () => {
+  const { getModelBenchmarkBlocker } = await import('../src/lib/modelCatalog.ts');
+  const ready = { ready: true, baseUrl: 'http://127.0.0.1:11434', version: '0.32.9', pingMs: 1, models: [], error: null };
+  const chat = { displayName: 'llama3.2:3b', installed: true, capabilities: ['completion'] };
+  assert.equal(getModelBenchmarkBlocker(chat, undefined, ready), null);
+});

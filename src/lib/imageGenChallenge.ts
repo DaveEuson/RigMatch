@@ -13,8 +13,17 @@ import type { ImageRunResult } from './imageGenRun.ts';
 import { IMAGE_BENCHMARK_PROMPTS, type ImagePrompt } from './imageGenScoring.ts';
 import type { AdvancedLabResult } from './labResults.ts';
 
-/** Small enough to be quick, large enough for a judge to read the scene. */
-export const IMAGE_RUN_SETTINGS = { width: 512, height: 512, steps: 20, seed: 12345 } as const;
+/**
+ * Small enough to be quick, large enough for a judge to read the scene.
+ *
+ * No seed here on purpose. A fixed one made every rerun of the same
+ * checkpoint identical to ComfyUI, which returns the cached image in about a
+ * second and a half — and the run then reported that as the render time.
+ * The seed comes from batchSeed() at call time instead: constant within one
+ * batch so checkpoints compare fairly, different between batches so the work
+ * actually happens.
+ */
+export const IMAGE_RUN_SETTINGS = { width: 512, height: 512, steps: 20 } as const;
 
 /**
  * Vision models that answer a yes/no question with something other than yes or

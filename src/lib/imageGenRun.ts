@@ -34,6 +34,11 @@ const POLL_INTERVAL_MS = 750;
 export const DEFAULT_RUN_TIMEOUT_MS = 300000;
 
 export type ComfyTransport = {
+  /**
+   * Unload models and evict cached node outputs. Optional: an older preload
+   * has no such call, and not being able to free must not stop a render.
+   */
+  free?: () => Promise<unknown>;
   submit: (graph: Record<string, unknown>) => Promise<{ promptId: string }>;
   history: (promptId: string) => Promise<unknown>;
   image: (ref: ComfyImageRef) => Promise<string>;
@@ -49,6 +54,12 @@ export type ImageRunOptions = {
   checkpoint: string;
   imagePrompt: ImagePrompt;
   settings?: Partial<Omit<Txt2ImgRequest, 'checkpoint' | 'prompt'>>;
+  /**
+   * Whether RigMatch owns this ComfyUI, exactly as for video. Freeing gives a
+   * VRAM reading attributable to this run, but unloads every resident model —
+   * unacceptable on an instance someone else is working in.
+   */
+  dedicated?: boolean;
   signal?: AbortSignal;
   timeoutMs?: number;
   /** Injected so tests do not wait in real time. */
@@ -79,6 +90,7 @@ export async function runImageGeneration(options: ImageRunOptions): Promise<Imag
     checkpoint,
     imagePrompt,
     settings = {},
+    dedicated = false,
     signal,
     timeoutMs = DEFAULT_RUN_TIMEOUT_MS,
     sleep = defaultSleep,
@@ -86,11 +98,17 @@ export async function runImageGeneration(options: ImageRunOptions): Promise<Imag
   } = options;
 
   const steps = settings.steps ?? 20;
-  const startedAt = now();
   const graph = buildTxt2ImgWorkflow({ checkpoint, prompt: imagePrompt.prompt, ...settings });
 
   let promptId: string | undefined;
+  let startedAt = now();
   try {
+    // Only on an instance RigMatch owns, and the clock restarts after it:
+    // unloading eleven gigabytes is not this model rendering slowly. The seed
+    // varying per batch is what actually defeats the cache — see the caller.
+    if (dedicated) await transport.free?.().catch(() => undefined);
+    startedAt = now();
+
     ({ promptId } = await transport.submit(graph));
 
     const images = await waitForImages({

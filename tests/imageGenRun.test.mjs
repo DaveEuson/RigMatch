@@ -10,11 +10,12 @@ const IMAGE_REF = { filename: 'out.png', subfolder: '', type: 'output' };
 /** A ComfyUI that becomes ready after `readyAfter` polls. */
 function fakeComfy({ readyAfter = 1, images = [IMAGE_REF], status, onInterrupt } = {}) {
   let polls = 0;
-  const calls = { submitted: 0, interrupts: [] };
+  const calls = { submitted: 0, interrupts: [], freed: 0, graphs: [] };
   return {
     calls,
     transport: {
-      submit: async () => { calls.submitted += 1; return { promptId: 'p1' }; },
+      free: async () => { calls.freed += 1; },
+      submit: async (g) => { calls.submitted += 1; calls.graphs.push(g); return { promptId: 'p1' }; },
       history: async () => {
         polls += 1;
         if (polls < readyAfter) return {};
@@ -137,4 +138,33 @@ test('polling waits for the image rather than giving up on the first empty histo
     transport, checkpoint: 'x', imagePrompt: PROMPT, ...fakeClock(),
   });
   assert.ok(result.imageDataUrl, 'should have waited for the image');
+});
+
+test('a shared ComfyUI is never freed by an image run either', () => {
+  // Same contract as video: /free unloads every resident model, which is not
+  // ours to do on an instance someone else is working in.
+  const { transport, calls } = fakeComfy();
+  return runImageGeneration({ transport, checkpoint: 'x', imagePrompt: PROMPT, ...fakeClock() })
+    .then(() => assert.equal(calls.freed, 0));
+});
+
+test('an instance RigMatch owns is freed, and the unload is not timed', async () => {
+  const clock = fakeClock();
+  const { transport, calls } = fakeComfy();
+  const slowFree = { ...transport, free: async () => { calls.freed += 1; clock.advance(30000); } };
+  const r = await runImageGeneration({
+    transport: slowFree, checkpoint: 'x', imagePrompt: PROMPT, dedicated: true, ...clock,
+  });
+  assert.equal(calls.freed, 1);
+  assert.ok(r.elapsedMs < 5000, `unloading was counted as render time: ${r.elapsedMs}ms`);
+});
+
+test('the caller supplies the seed, so it can vary between batches', async () => {
+  // A fixed seed made a rerun identical to ComfyUI, which answers from cache
+  // in ~1.5s — and the run reported that as the render time.
+  const { transport, calls } = fakeComfy();
+  await runImageGeneration({
+    transport, checkpoint: 'x', imagePrompt: PROMPT, settings: { seed: 4242 }, ...fakeClock(),
+  });
+  assert.equal(calls.graphs[0]['3'].inputs.seed, 4242);
 });

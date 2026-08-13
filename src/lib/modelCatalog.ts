@@ -1132,6 +1132,13 @@ export function getModelRuntime(row: ModelRow | undefined, ollama: OllamaStatus)
 }
 
 export function getModelBenchmarkBlocker(row: ModelRow | undefined, host: NetworkHost | undefined, ollama: OllamaStatus) {
+  // Checked before the host, because no host can run it: a benchmark asks
+  // questions and grades answers, and a checkpoint has no chat endpoint to
+  // ask. The row action cell and the shortlist were gated for this; the
+  // detail panel's TEST MODEL calls straight through to here and was not.
+  if (row && !canJoinComparison(row)) {
+    return `${row.displayName} cannot be tested this way — the test asks questions and grades the answers, and this model draws instead of chatting. Run it from the Lab.`;
+  }
   if (row?.localProvider === 'lm-studio') return null;
   return getHostBenchmarkBlocker(host, ollama);
 }
