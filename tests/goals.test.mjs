@@ -13,11 +13,15 @@ import {
 } from '../src/lib/goals.ts';
 import { TASK_GROUPS } from '../src/lib/taskScores.ts';
 
-test('the eight desires are exactly the ones Dave specified', () => {
-  // The list is a product decision, phrased in the user's voice. A drive-by
-  // "improvement" to it should fail a test, not slip through review.
+test('the desires are exactly the approved list', () => {
+  // Dave's eight, plus the four approved on review: writing (an oversight in
+  // the original list — a writing helper and a safe person to talk to are
+  // different people), tools/automations, audio generation, and documents.
+  // A drive-by "improvement" to this list should fail a test, not slip
+  // through review.
   assert.deepEqual(GOALS.map((g) => g.desire), [
     'Talk to a model and ask it questions',
+    'Help me write emails, documents, and ideas',
     'Use a model to help me code',
     'Listen to an audio file and transcribe what it says',
     'Listen to audio in real time and transcribe as it happens',
@@ -25,7 +29,36 @@ test('the eight desires are exactly the ones Dave specified', () => {
     'Create an image from a prompt',
     'Create a video from an image',
     'Create a video from a prompt',
+    'Power my tools and automations',
+    'Create speech or music from text',
+    'Ask questions about my documents',
   ]);
+});
+
+test('writing is honest about being unmeasurable, not scored on a proxy', () => {
+  // No writing question exists; format questions measure instruction-
+  // following. Grading writing on them would fabricate a measurement.
+  const write = goalById('write');
+  assert.equal(write.grading, 'none');
+  assert.match(write.unsupportedReason, /no writing question/i);
+});
+
+test('tools is scoreable on day one, using the json questions', () => {
+  // "Return only valid JSON for this local assistant request..." was always
+  // a tool-use question; it now counts under the goal it measures, and
+  // instruction-following keeps only format.
+  const tools = goalById('use-tools');
+  assert.equal(tools.grading, 'questions');
+  assert.deepEqual([...tools.questionTypes], ['json']);
+  const instructions = SCORED_QUALITIES.find((q) => q.id === 'instructions');
+  assert.deepEqual([...instructions.questionTypes], ['format']);
+});
+
+test('the league labels speak the theme while the note carries the facts', async () => {
+  const { leagueLabel } = await import('../src/lib/goals.ts');
+  assert.match(leagueLabel('unlikely'), /out of your league/i);
+  assert.match(leagueLabel('ready'), /match for your rig/i);
+  assert.match(leagueLabel('tight'), /punching above/i);
 });
 
 test('every goal is phrased as something a person wants to do', () => {

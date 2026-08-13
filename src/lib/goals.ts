@@ -27,10 +27,11 @@
 import type { BenchmarkQuestionType } from '../benchmarkSuite.ts';
 
 export type GoalId =
-  | 'talk' | 'code'
+  | 'talk' | 'write' | 'code' | 'use-tools'
   | 'transcribe-file' | 'transcribe-live'
   | 'describe-image'
-  | 'make-images' | 'animate-image' | 'make-video';
+  | 'make-images' | 'animate-image' | 'make-video' | 'make-audio'
+  | 'ask-documents';
 
 export type GoalGrading = 'questions' | 'lab' | 'none';
 
@@ -64,6 +65,24 @@ export const GOALS: Goal[] = [
     runtime: 'ollama',
     grading: 'questions',
     questionTypes: ['assistant'],
+  },
+  {
+    id: 'write',
+    desire: 'Help me write emails, documents, and ideas',
+    label: 'Writing',
+    matchLabel: 'Best for writing',
+    runtime: 'ollama',
+    // Distinct from talk on Dave's read: many people want a private companion
+    // they feel safe with, which is not the same person as "help me write
+    // this email". Not scoreable yet — the suite has no writing question, and
+    // `format` measures instruction-following, not writing well. Until a real
+    // writing question exists this goal filters without ranking.
+    grading: 'none',
+    unsupportedReason:
+      'RigMatch cannot grade writing yet — no writing question exists in the '
+      + 'test suite, and scoring it on formatting questions would be a '
+      + 'fabricated measurement.',
+    questionTypes: [],
   },
   {
     id: 'code',
@@ -141,6 +160,45 @@ export const GOALS: Goal[] = [
     grading: 'lab',
     questionTypes: [],
   },
+  {
+    id: 'use-tools',
+    desire: 'Power my tools and automations',
+    // The Home Assistant crowd's whole reason for local AI, and scoreable on
+    // day one: the suite already asks JSON/tool-output questions.
+    label: 'Tools & automations',
+    matchLabel: 'Best for automations',
+    runtime: 'ollama',
+    grading: 'questions',
+    questionTypes: ['json'],
+  },
+  {
+    id: 'make-audio',
+    desire: 'Create speech or music from text',
+    label: 'Making audio',
+    matchLabel: 'Best for making audio',
+    runtime: 'comfyui',
+    // The nodes exist — ACE-Step and Stable Audio were verified present in
+    // ComfyUI 0.32 — but no audio lab exists to grade the output yet.
+    grading: 'none',
+    unsupportedReason:
+      'ComfyUI can run audio models, but RigMatch has no listening-back test '
+      + 'to grade them with yet.',
+    questionTypes: [],
+  },
+  {
+    id: 'ask-documents',
+    desire: 'Ask questions about my documents',
+    label: 'Your documents',
+    matchLabel: 'Best for your documents',
+    runtime: 'none',
+    // Not a backend gap so much as an app gap: chatting over documents needs
+    // indexing RigMatch does not have. Honest future rather than hidden.
+    unsupportedReason:
+      'RigMatch cannot feed your documents to a model yet — that needs '
+      + 'document indexing planned for a future release.',
+    grading: 'none',
+    questionTypes: [],
+  },
 ];
 
 export function goalById(id: string | undefined): Goal | undefined {
@@ -162,7 +220,9 @@ export function questionScoredGoals(): Goal[] {
  */
 export const SCORED_QUALITIES = [
   { id: 'facts', label: 'Sticking to facts', questionTypes: ['truth'] },
-  { id: 'instructions', label: 'Following instructions', questionTypes: ['json', 'format'] },
+  // json moved to the use-tools goal, which is what those questions actually
+  // measure ("Return only valid JSON for this local assistant request...").
+  { id: 'instructions', label: 'Following instructions', questionTypes: ['format'] },
 ] as const;
 
 /**
@@ -219,6 +279,20 @@ export type GoalExpectation = {
   note: string;
   source: 'measured' | 'heuristic';
 };
+
+/**
+ * The expectation, in the show's voice.
+ *
+ * "Out of your league" was already this codebase's internal tone name for a
+ * model too big for the card (getHardwareFit); it just never reached the
+ * screen. Efficiency before theme: the themed label headlines, and the plain
+ * note underneath carries the facts and the "the test decides" promise.
+ */
+export function leagueLabel(tone: GoalExpectation['tone']): string {
+  if (tone === 'ready') return 'A good match for your rig';
+  if (tone === 'tight') return 'Punching above its weight';
+  return 'Might be out of your league';
+}
 
 export function goalHardwareExpectation(goal: Goal, vramGb: number): GoalExpectation {
   if (goal.runtime === 'none' || goal.grading === 'none') {
