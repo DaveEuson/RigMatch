@@ -8,59 +8,72 @@ import {
   SCORED_QUALITIES,
   goalById,
   goalCoverage,
-  scoreableGoals,
+  goalHardwareExpectation,
+  questionScoredGoals,
 } from '../src/lib/goals.ts';
 import { TASK_GROUPS } from '../src/lib/taskScores.ts';
 
+test('the eight desires are exactly the ones Dave specified', () => {
+  // The list is a product decision, phrased in the user's voice. A drive-by
+  // "improvement" to it should fail a test, not slip through review.
+  assert.deepEqual(GOALS.map((g) => g.desire), [
+    'Talk to a model and ask it questions',
+    'Use a model to help me code',
+    'Listen to an audio file and transcribe what it says',
+    'Listen to audio in real time and transcribe as it happens',
+    'Look at a picture and describe what it sees',
+    'Create an image from a prompt',
+    'Create a video from an image',
+    'Create a video from a prompt',
+  ]);
+});
+
 test('every goal is phrased as something a person wants to do', () => {
-  // The wizard asks "who's your dream model?" and the filters ask "what for?".
-  // Both read these labels, so a goal that names a property rather than an
-  // ambition would read as nonsense in one of them.
   for (const goal of GOALS) {
-    assert.ok(goal.label && goal.wizardLabel && goal.matchLabel, `${goal.id} is missing a label`);
+    assert.ok(goal.desire && goal.label && goal.matchLabel, `${goal.id} is missing a label`);
     assert.match(goal.matchLabel, /^Best for /, `${goal.id} match label should read "Best for ..."`);
   }
 });
 
-test('attributes are kept out of the goal list', () => {
-  // "Tiny" and "Uncensored" describe a model, not an ambition — the old chip
-  // row mixed them in, so the wizard would have offered "Tiny" as a dream.
-  const goalIds = new Set(GOALS.map((g) => g.id));
-  for (const attribute of MODEL_ATTRIBUTES) {
-    assert.ok(!goalIds.has(attribute.id), `${attribute.id} is an attribute, not a goal`);
-  }
+test('live transcription is honest about not existing locally yet', () => {
+  // Ollama takes whole files per request; nothing local streams audio. The
+  // goal is shown as future with a reason, never with a Run button that must
+  // fail — the stale "Create a video" row was tonight's lesson in the
+  // alternative.
+  const live = goalById('transcribe-live');
+  assert.equal(live.runtime, 'none');
+  assert.equal(live.grading, 'none');
+  assert.match(live.unsupportedReason, /whole files|stream/i);
 });
 
-test('scored qualities are kept out of the goal list too', () => {
-  // Nobody sets out to "do a sticking-to-facts"; it is how well a model holds
-  // up while chatting.
-  const goalIds = new Set(GOALS.map((g) => g.id));
-  for (const quality of SCORED_QUALITIES) {
-    assert.ok(!goalIds.has(quality.id), `${quality.id} is a quality, not a goal`);
-  }
+test('animating an image is supportable but honestly ungraded', () => {
+  // The LTX family has a local image-to-video template, so the models are
+  // real — but the Video Lab only drives text-to-video. Borrowing the t2v
+  // grade for i2v would be a fabricated measurement.
+  const animate = goalById('animate-image');
+  assert.equal(animate.runtime, 'comfyui');
+  assert.equal(animate.grading, 'none');
+  assert.match(animate.unsupportedReason, /cannot grade|text-to-video/i);
 });
 
-test('no question type is claimed by two different things', () => {
-  // A type counted under both a goal and a quality would score the same answer
-  // twice under different names.
-  const seen = new Map();
+test('a goal graded by questions actually has question types behind it', () => {
   for (const goal of GOALS) {
-    for (const type of goal.questionTypes) {
-      assert.ok(!seen.has(type), `${type} claimed by both ${seen.get(type)} and ${goal.id}`);
-      seen.set(type, goal.id);
-    }
+    assert.equal(goal.grading === 'questions', goal.questionTypes.length > 0,
+      `${goal.id}: grading=${goal.grading} with ${goal.questionTypes.length} question types`);
   }
-  for (const quality of SCORED_QUALITIES) {
-    for (const type of quality.questionTypes) {
-      assert.ok(!seen.has(type), `${type} claimed by both ${seen.get(type)} and ${quality.id}`);
-      seen.set(type, quality.id);
+});
+
+test('no question type is claimed twice across goals and qualities', () => {
+  const seen = new Map();
+  for (const owner of [...GOALS, ...SCORED_QUALITIES]) {
+    for (const type of owner.questionTypes) {
+      assert.ok(!seen.has(type), `${type} claimed by both ${seen.get(type)} and ${owner.id}`);
+      seen.set(type, owner.id);
     }
   }
 });
 
 test('every question type the suite asks is accounted for', () => {
-  // An unclaimed type is a question whose answer is graded but never rolls up
-  // into anything a user can see.
   const claimed = new Set([
     ...GOALS.flatMap((g) => g.questionTypes),
     ...SCORED_QUALITIES.flatMap((q) => q.questionTypes),
@@ -70,34 +83,14 @@ test('every question type the suite asks is accounted for', () => {
   }
 });
 
-test('writing is honest about not being measurable yet', () => {
-  // There is no writing question in the suite. `format` measures whether a
-  // model follows a formatting instruction, which is not writing well —
-  // scoring writing on it would be a fabricated measurement.
-  const write = goalById('write');
-  assert.equal(write.scoreable, false);
-  assert.deepEqual([...write.questionTypes], []);
-});
-
-test('a goal claiming to be scoreable actually has questions behind it', () => {
-  for (const goal of GOALS) {
-    assert.equal(goal.scoreable, goal.questionTypes.length > 0,
-      `${goal.id} claims scoreable=${goal.scoreable} with ${goal.questionTypes.length} question types`);
+test('attributes and qualities are kept out of the goal list', () => {
+  const goalIds = new Set(GOALS.map((g) => g.id));
+  for (const entry of [...MODEL_ATTRIBUTES, ...SCORED_QUALITIES]) {
+    assert.ok(!goalIds.has(entry.id), `${entry.id} is not a goal`);
   }
-});
-
-test('generation goals are marked as needing ComfyUI', () => {
-  // The UI must warn before someone picks a goal that needs a program they
-  // have not installed.
-  for (const id of ['make-images', 'make-video', 'make-audio']) {
-    assert.equal(goalById(id).runtime, 'comfyui', `${id} should need ComfyUI`);
-  }
-  assert.equal(goalById('talk').runtime, 'ollama');
 });
 
 test('the goal mapping preserves what the old task groups measured', () => {
-  // Chat and coding were already scored this way; the rename must not quietly
-  // change which questions feed which score.
   const oldChat = TASK_GROUPS.find((g) => g.id === 'chat');
   const oldCoding = TASK_GROUPS.find((g) => g.id === 'coding');
   assert.deepEqual([...goalById('talk').questionTypes], [...oldChat.questionTypes]);
@@ -105,16 +98,43 @@ test('the goal mapping preserves what the old task groups measured', () => {
 });
 
 test('a ten-question run is reported as too thin to rank goals', () => {
-  // Spread over the scoreable goals it leaves fewer than three questions each,
-  // and a winner named on one answer is noise wearing a rosette.
   const short = goalCoverage(10);
   assert.equal(short.enough, false);
   assert.ok(short.perGoal < MIN_QUESTIONS_PER_GOAL);
-  assert.ok(short.suggestion >= 20, 'should suggest a longer run');
+  assert.ok(short.suggestion >= 20);
 });
 
-test('a longer run clears the bar', () => {
+test('a twenty-question run clears the bar', () => {
   assert.equal(goalCoverage(20).enough, true);
+});
+
+test('hardware expectations declare their source, measured or heuristic', () => {
+  // Dave's rule: suggest from hardware, but the test is the determination.
+  // A note presented as fact must trace to a real run; everything else says
+  // rule of thumb.
+  for (const goal of GOALS) {
+    for (const vram of [4, 8, 12, 24]) {
+      const expectation = goalHardwareExpectation(goal, vram);
+      assert.ok(['measured', 'heuristic'].includes(expectation.source));
+      assert.ok(expectation.note.length > 20, `${goal.id}@${vram}GB has a throwaway note`);
+    }
+  }
+});
+
+test('video expectations are measured, tiered, and blunt below the floor', () => {
+  const video = goalById('make-video');
+  assert.equal(goalHardwareExpectation(video, 12).tone, 'ready');
+  assert.equal(goalHardwareExpectation(video, 12).source, 'measured');
+  assert.equal(goalHardwareExpectation(video, 8).tone, 'tight');
+  assert.equal(goalHardwareExpectation(video, 4).tone, 'unlikely');
+});
+
+test('an unsupported goal never gets an optimistic expectation', () => {
+  const live = goalById('transcribe-live');
+  for (const vram of [4, 12, 48]) {
+    assert.equal(goalHardwareExpectation(live, vram).tone, 'unlikely',
+      'no amount of VRAM makes an unsupported goal ready');
+  }
 });
 
 test('ids are unique, since the UI keys off them', () => {
