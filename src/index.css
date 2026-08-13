@@ -67,6 +67,9 @@
   --pink-rgb: 230, 117, 131;
   --gold: #efbc5a;
   --red: #ff9278;
+  --gold-rgb: 239, 188, 90;
+  --red-rgb: 255, 146, 120;
+  --panel-hover: #293424;
 }
 
 [data-theme="mustard"] {
@@ -87,6 +90,9 @@
   --pink-rgb: 223, 112, 140;
   --gold: #efbc5a;
   --red: #ff9278;
+  --gold-rgb: 239, 188, 90;
+  --red-rgb: 255, 146, 120;
+  --panel-hover: #352c3a;
 }
 
 [data-theme="teal"] {
@@ -107,6 +113,9 @@
   --pink-rgb: 224, 112, 138;
   --gold: #efbc5a;
   --red: #ff9278;
+  --gold-rgb: 239, 188, 90;
+  --red-rgb: 255, 146, 120;
+  --panel-hover: #253742;
 }
 
 [data-theme="chocolate"] {
@@ -127,6 +136,9 @@
   --pink-rgb: 224, 112, 134;
   --gold: #efbc5a;
   --red: #ff9278;
+  --gold-rgb: 239, 188, 90;
+  --red-rgb: 255, 146, 120;
+  --panel-hover: #352a28;
 }
 
 * {
