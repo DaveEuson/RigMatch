@@ -107,10 +107,32 @@ export function getModelCapabilities(row: CapabilityBearing): string[] | null {
  * are assumed runnable — the previous behaviour, and wrong only for the handful
  * of image models.
  */
-export function canGenerateText(row: CapabilityBearing): boolean {
+export function canGenerateText(row: CapabilityBearing & { generationKind?: string }): boolean {
+  // A ComfyUI checkpoint is settled before any capability lookup: it produces
+  // pixels, not words, and it has no capabilities field — which the fallback
+  // below reads as "assume runnable". That default exists so unknown Ollama
+  // catalogue entries are not excluded, and without this line it quietly
+  // qualified Stable Diffusion for a conversation benchmark.
+  if (row.generationKind) return false;
   const capabilities = getModelCapabilities(row);
   if (capabilities) return capabilities.includes('completion');
   return !isLikelyImageGenerationModel(row.displayName ?? row.name ?? '');
+}
+
+/**
+ * Whether a model can sit in the Speed Dating lineup at all.
+ *
+ * The comparison is a text conversation: every contestant answers the same
+ * questions and is graded on the answers. That is the shared floor, and only
+ * models that claim it may enter — not because differing capabilities make a
+ * comparison unfair in general (a vision model versus a text model is a fair
+ * chat comparison; the vision skill simply is not being graded), but because a
+ * model with no text floor at all would be graded on a skill it never
+ * claimed. Generation models compare against each other in the Lab instead,
+ * where a batch run gives every checkpoint the same prompt and the same seed.
+ */
+export function canJoinComparison(row: ModelRow): boolean {
+  return row.runtime !== 'comfyui' && canGenerateText(row) && !isEmbeddingModel(row.displayName);
 }
 
 /**

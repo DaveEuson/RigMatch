@@ -198,6 +198,7 @@ import {
   isEmbeddingModel,
   isHostBenchmarkReady,
   canGenerateText,
+  canJoinComparison,
   canHearAudio,
   isLikelyImageGenerationModel,
   isVisionModel,
@@ -757,7 +758,10 @@ function App() {
   const canBenchmark = Boolean(selectedRow?.installed && selectedHostCanBenchmark);
   const agentName = getAgentName(selectedModel);
   const shortlistedRows = useMemo(
-    () => modelRows.filter((row) => shortlistIds.has(row.displayName)).slice(0, 5),
+    // canJoinComparison here as well as at the doors: the shortlist persists in
+    // localStorage, so names can arrive from older sessions that predate the
+    // rule. Whatever got in, nothing without a text floor reaches a run.
+    () => modelRows.filter((row) => shortlistIds.has(row.displayName) && canJoinComparison(row)).slice(0, 5),
     [modelRows, shortlistIds],
   );
   const uninstalledShortlistedCount = useMemo(
@@ -2301,6 +2305,10 @@ function App() {
   }, [modelRows, system.gpu.vramGb, system.platform]);
 
   const toggleShortlist = useCallback((row: ModelRow) => {
+    if (!canJoinComparison(row)) {
+      setActivity(`${row.displayName} cannot join Speed Dating — the comparison is a conversation, and this model does not chat. Generation models race each other in the Lab, where every checkpoint gets the same prompt and seed.`);
+      return;
+    }
     const hardwareFit = getHardwareFit(row, system.gpu.vramGb);
     const platformFit = getPlatformFit(row.displayName, system.platform);
 

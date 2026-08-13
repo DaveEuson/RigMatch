@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 globalThis.window = { localStorage: { getItem: () => null, setItem: () => {} } };
 
 const {
+  canGenerateText,
   canHearAudio,
+  canJoinComparison,
   canWatchVideo,
   isGoodScore,
   isLikelyAudioGenerationModel,
@@ -103,4 +105,28 @@ test('an installed model report beats the library listing', () => {
 
 test('a model with neither source still matches nothing rather than guessing', () => {
   assert.ok(!canHearAudio({ displayName: 'audio-sounding-name:7b', name: 'audio-sounding-name:7b' }));
+});
+
+test('a generation checkpoint can never qualify for a text benchmark', () => {
+  // canGenerateText assumes unknown capabilities are runnable so that Ollama
+  // catalogue entries are not excluded — and a ComfyUI row has no capabilities
+  // field, so that default quietly qualified Stable Diffusion for a
+  // conversation benchmark. "Choose for me" would then have seated it, and the
+  // run would have asked Ollama for a model it has never heard of.
+  const sd15 = { displayName: 'Stable Diffusion 1.5', name: 'Stable Diffusion 1.5', generationKind: 'image' };
+  assert.equal(canGenerateText(sd15), false);
+});
+
+test('the comparison door turns away anything without the shared floor', () => {
+  // The comparison grades one thing every contestant claims: conversation.
+  // Differing extras (vision, audio) do not block entry — those simply are not
+  // what is being graded.
+  const comfy = { displayName: 'LTX-Video 2B (distilled)', runtime: 'comfyui', generationKind: 'video', installed: true };
+  const textModel = { displayName: 'llama3.2:3b', installed: true, capabilities: ['completion'] };
+  const visionModel = { displayName: 'gemma3:4b', installed: true, capabilities: ['completion', 'vision'] };
+  const embedder = { displayName: 'nomic-embed-text', installed: true };
+  assert.equal(canJoinComparison(comfy), false);
+  assert.equal(canJoinComparison(textModel), true);
+  assert.equal(canJoinComparison(visionModel), true, 'extra capabilities are not a reason to exclude');
+  assert.equal(canJoinComparison(embedder), false);
 });
