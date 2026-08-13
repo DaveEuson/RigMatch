@@ -16744,6 +16744,13 @@ a.whats-next-support:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+  /* Two lines, not unlimited. Wrapping freely made a five-pill model 105px
+     tall, so a 620px window showed about three rows of a thirteen-row table —
+     the tags are supporting detail and were costing more space than the data.
+     The row's title attribute still carries the full list, and the detail
+     panel shows every tag for the selected model. */
+  max-height: 42px;
+  overflow: hidden;
 }
 
 .good-for-chip {
