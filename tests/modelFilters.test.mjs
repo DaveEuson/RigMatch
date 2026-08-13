@@ -11,6 +11,7 @@ const {
   isGoodScore,
   isLikelyAudioGenerationModel,
   isLowScore,
+  getModelSearchText,
   modelMatchesQuickFilter,
   modelMatchesTask,
 } = await import('../src/lib/modelCatalog.ts');
@@ -129,4 +130,34 @@ test('the comparison door turns away anything without the shared floor', () => {
   assert.equal(canJoinComparison(textModel), true);
   assert.equal(canJoinComparison(visionModel), true, 'extra capabilities are not a reason to exclude');
   assert.equal(canJoinComparison(embedder), false);
+});
+
+test('searching the words a person types finds the capability', () => {
+  // The cold walkthrough typed "audio" and got "no contestants match" for a
+  // machine holding a model that hears. The haystack now carries capability
+  // words and their everyday synonyms.
+  const hearer = {
+    displayName: 'gemma4:e2b', name: 'gemma4:e2b', id: 'gemma4:e2b', tag: 'e2b',
+    params: '4B', sizeGb: 5.3, pack: 'Live', source: 'Ollama library', live: true,
+    installed: true, ready: true, installLabel: 'Installed',
+    capabilities: ['completion', 'audio'],
+  };
+  const haystack = getModelSearchText(hearer, false);
+  for (const term of ['audio', 'hears', 'transcribe']) {
+    assert.ok(haystack.includes(term), `"${term}" not searchable`);
+  }
+});
+
+test('a generation row is findable by what it makes and what runs it', () => {
+  const ltx = {
+    displayName: 'LTX-Video 2B (distilled)', name: 'LTX-Video 2B (distilled)',
+    id: 'comfyui/ltxv-distilled', tag: 'video', params: 'Video model', sizeGb: 6.34,
+    pack: 'Generation', source: 'Hugging Face', live: true, installed: false,
+    ready: false, installLabel: 'Download', runtime: 'comfyui',
+    generationId: 'ltxv-distilled', generationKind: 'video', publisher: 'Lightricks',
+  };
+  const haystack = getModelSearchText(ltx, false);
+  for (const term of ['comfyui', 'makes video', 'lightricks']) {
+    assert.ok(haystack.includes(term), `"${term}" not searchable`);
+  }
 });

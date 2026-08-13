@@ -611,7 +611,18 @@ function PickScreen({ wizardModels, modelsLoading, shortlistIds, shortlistedRows
         </div>
       ) : filtered.length === 0 ? (
         <div className="sw-pick-empty">
-          <p>Hmm, nobody fits that bill on this PC — try another type or show everyone.</p>
+          {dream === 'image' || dream === 'video' ? (
+            // Honest rather than empty: these models exist, they just are not
+            // Speed Dating contestants — they render instead of chatting.
+            <p>
+              {dream === 'video' ? 'Video makers' : 'Image makers'} are real, but they are not
+              contestants — they draw instead of chatting, so they cannot join Speed Dating.
+              Find them in Advanced Mode under Models ({dream === 'video' ? '"Makes video"' : '"Makes images"'}),
+              and run them from the Lab.
+            </p>
+          ) : (
+            <p>Hmm, nobody fits that bill on this PC — try another type or show everyone.</p>
+          )}
           <button type="button" className="sw-chip active" onClick={() => setDream('all')}><Sparkles aria-hidden="true" />Surprise me — show everyone</button>
         </div>
       ) : (

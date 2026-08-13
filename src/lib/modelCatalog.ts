@@ -736,6 +736,27 @@ export function getModelSortValue(
   }
 }
 
+/** Capability and runtime words for the search haystack, with the synonyms a
+    person actually types — "hears" for the audio capability, "comfyui" for a
+    generation row. Completion is skipped: every chat model has it, so it only
+    adds noise. */
+function describeCapabilitiesForSearch(row: ModelRow): string[] {
+  const words: string[] = [];
+  for (const capability of getModelCapabilities(row) ?? []) {
+    if (capability === 'audio') words.push('audio hears listening transcribe');
+    else if (capability === 'vision') words.push('vision sees reads images');
+    else if (capability === 'tools') words.push('tools function calling');
+    else if (capability === 'thinking') words.push('thinking reasoning');
+    else if (capability !== 'completion') words.push(capability);
+  }
+  if (row.runtime === 'comfyui') words.push('comfyui generation');
+  if (row.generationKind === 'image') words.push('image generation makes images');
+  if (row.generationKind === 'video') words.push('video generation makes video');
+  if (row.generationKind === 'text-encoder') words.push('text encoder');
+  if (row.publisher) words.push(row.publisher);
+  return words;
+}
+
 export function getModelSearchText(row: ModelRow, queued: boolean, score?: TestedModelScore) {
   const profile = getModelProfile(row.displayName);
   const goodForTags = getModelGoodForTags(row);
@@ -756,6 +777,10 @@ export function getModelSearchText(row: ModelRow, queued: boolean, score?: Teste
     profile.archetype,
     ...profile.specialties,
     ...goodForTags,
+    // Capabilities, in the words a person would type. The cold walkthrough
+    // searched "audio" for a model that can hear and got "no contestants
+    // match" — the ability existed, the haystack just never carried it.
+    ...describeCapabilitiesForSearch(row),
   ]
     .join(' ')
     .toLowerCase();
@@ -955,6 +980,16 @@ export function getSelectedContestantBlurb(
   score: TestedModelScore | undefined,
   hardwareFit: HardwareFit,
 ) {
+  // A generation model never reaches Speed Dating, so nothing below applies —
+  // and the profile passed in is the personality profiler's invention, which
+  // described a video checkpoint as "chat, utility, experiments" in review.
+  if (row.generationKind) {
+    const makes = row.generationKind === 'text-encoder'
+      ? 'reads prompts for image and video models'
+      : `makes ${row.generationKind}s`;
+    return `${row.displayName} ${makes} on ComfyUI. It does not chat, so it skips Speed Dating — run it from the Lab instead.`;
+  }
+
   if (score) {
     return `${row.displayName} scored ${score.total} (${score.grade}) on this rig. ${hardwareFit.detail}`;
   }

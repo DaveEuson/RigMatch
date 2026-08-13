@@ -878,6 +878,12 @@ function App() {
     const vramGb = system.gpu.vramGb;
     const fitRank: Record<string, number> = { 'sweet-spot': 0, good: 1, tight: 2 };
     const mapped = modelRows
+      // The wizard exists to seat a Speed Dating lineup, and generation models
+      // can never sit in one — showing them as pickable contestants and then
+      // silently refusing the pick was the cold walkthrough's worst finding.
+      // They live in Models and run in the Lab; the video/image dream filters
+      // say so instead of listing them.
+      .filter((row) => canJoinComparison(row))
       .filter((row) => getPlatformFit(row.displayName, system.platform).compatible)
       .map((row) => ({ row, fit: getHardwareFit(row, vramGb) }))
       .filter((entry) => entry.fit.recommend && entry.fit.tone !== 'unknown')
@@ -3460,7 +3466,10 @@ function App() {
             rows={modelRows}
             comfyFolderSet={Boolean(comfySettings.folder)}
             onOpenLab={() => selectNav('activity')}
-            onOpenComfyHelp={() => window.open('https://www.comfy.org/download', '_blank', 'noopener')}
+            // Settings already explains ComfyUI in plain language; window.open
+            // was popup-blocked in the browser preview and the review found the
+            // button dead. In-app navigation cannot be blocked.
+            onOpenComfyHelp={() => selectNav('settings')}
             selectedModel={selectedModel}
             installedModelNames={installedModelNames}
             shortlistIds={shortlistIds}
@@ -5559,13 +5568,6 @@ function RunWarningModal({
                     </span>
                   </label>
 
-                  <label className="run-skill-test-option disabled">
-                    <input type="checkbox" checked={false} disabled />
-                    <span>
-                      <strong>Create a video</strong>
-                      <em>No local backend can generate video yet — this unlocks when one ships.</em>
-                    </span>
-                  </label>
                 </>
               );
             })()}
