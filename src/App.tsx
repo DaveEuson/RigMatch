@@ -250,11 +250,13 @@ import {
   readRunHistory,
   removeRuns,
   seedFromBenchmarkResults,
+  toRunHardware,
   toRunHistoryEntry,
   writeRunHistory,
   type RunDelta,
   type RunHistory,
 } from './lib/runHistory';
+import { estimateBenchmarkMs, estimateSpeedDateMs, formatDuration } from './lib/runEstimates';
 import {
   amazonUrl,
   APP_VERSION,
@@ -3853,6 +3855,25 @@ function App() {
         <RunWarningModal
           mode={pendingRunMode}
           selectedModel={pendingSingleModel ?? selectedModel}
+          measuredPerModelMs={(() => {
+            const hardware = toRunHardware(system);
+            if (pendingRunMode === 'speed-date') {
+              const estimate = estimateSpeedDateMs(runHistory, {
+                models: shortlistedRows.map((row) => row.displayName),
+                questionCount: benchmarkQuestionCount,
+                hardware,
+              });
+              return estimate.source === 'measured'
+                ? estimate.ms / Math.max(1, shortlistedRows.length)
+                : null;
+            }
+            const estimate = estimateBenchmarkMs(runHistory, {
+              model: pendingSingleModel ?? selectedModel,
+              questionCount: benchmarkQuestionCount,
+              hardware,
+            });
+            return estimate.source === 'measured' ? estimate.ms : null;
+          })()}
           shortlistedCount={shortlistedRows.length}
           uninstalledContestantCount={shortlistedRows.filter((r) => !r.installed).length}
           questionCount={benchmarkQuestionCount}
@@ -5042,6 +5063,7 @@ function RunWarningModal({
   onChangeOpenRouterKey,
   judgeActive,
   gpuContention,
+  measuredPerModelMs,
   comfyCheckpoints,
   comfyTextEncoders,
 }: {
@@ -5084,6 +5106,11 @@ function RunWarningModal({
   judgeActive: boolean;
   /** Measured when this modal opened; null while the probe is still running. */
   gpuContention: GpuContention | null;
+  /**
+   * Per-model duration from this rig's own run history, when it has one.
+   * Null means no history yet — the static rule-of-thumb table applies.
+   */
+  measuredPerModelMs?: number | null;
 }) {
   const runWarnRef = useDialog<HTMLElement>(onCancel);
   const [questionsExpanded, setQuestionsExpanded] = useState(false);
@@ -5130,14 +5157,20 @@ function RunWarningModal({
     100: '100 — Full suite (30+ min per model)',
   };
 
-  // Rough minutes per model at each suite size (matches the labels above), scaled
-  // by lineup size. Not knowing how long a run takes is the biggest hesitation
-  // before the app's main action, so state it up front on the button.
+  // Not knowing how long a run takes is the biggest hesitation before the
+  // app's main action, so state it on the button. Past runs on this rig beat
+  // the static table — a measured pace is this machine's own, and it is
+  // labelled so; the table stays as the rule of thumb for a first run.
   const minutesPerModel: Record<BenchmarkQuestionCount, number> = { 10: 3, 20: 5, 50: 15, 100: 30 };
   const runModelCount = mode === 'single' ? 1 : Math.max(1, shortlistedCount);
-  const estimatedMinutes = skipQuestions ? 0 : minutesPerModel[questionCount] * runModelCount;
-  const estimateLabel = estimatedMinutes > 0
-    ? `~${estimatedMinutes} min${runModelCount > 1 ? ` total · ${runModelCount} models` : ''}`
+  const estimatedMs = skipQuestions ? 0 : (
+    typeof measuredPerModelMs === 'number' && measuredPerModelMs > 0
+      ? measuredPerModelMs * runModelCount
+      : minutesPerModel[questionCount] * 60_000 * runModelCount
+  );
+  const measured = typeof measuredPerModelMs === 'number' && measuredPerModelMs > 0;
+  const estimateLabel = estimatedMs > 0
+    ? `${formatDuration(estimatedMs)}${runModelCount > 1 ? ` total · ${runModelCount} models` : ''}${measured ? ' · measured here' : ''}`
     : null;
 
   return (
