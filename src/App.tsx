@@ -3723,11 +3723,13 @@ function App() {
             isCheckingUpdates={isCheckingUpdates}
             uiMode={uiMode}
             selectedGoals={selectedGoals}
+            installedRows={modelRows.filter((row) => row.installed)}
             logPath={logPath}
             isLoadingLogs={isLoadingLogs}
             onThemeChange={selectTheme}
             onUiModeChange={selectUiMode}
             onEditGoals={() => setShowGoalsEditor(true)}
+            onDeleteModel={requestDeleteModel}
             onRefreshLogs={loadLogs}
             onCopyLogs={copyLogs}
             onClearLogs={clearLogs}
@@ -6026,6 +6028,80 @@ function GoalsSummary({
   );
 }
 
+function ClosetSection({
+  rows,
+  modelScores,
+  topModel,
+  onDeleteModel,
+}: {
+  rows: ModelRow[];
+  modelScores: Record<string, TestedModelScore>;
+  topModel?: string;
+  onDeleteModel: (row: ModelRow) => void;
+}) {
+  // The closet: what is on the shelf, how much room it takes, and whether it
+  // ever earned its place. Sorted by size because that is the question that
+  // brings someone here — the close-cleanup dialog once offered to clear
+  // 38.5 GB in one click, and this is the calm version of that moment.
+  const entries = rows
+    .map((row) => ({
+      row,
+      sizeGb: row.installedModel?.sizeGb ?? row.sizeGb ?? 0,
+      score: modelScores[row.displayName],
+    }))
+    .sort((a, b) => b.sizeGb - a.sizeGb);
+  const totalGb = entries.reduce((sum, entry) => sum + entry.sizeGb, 0);
+  if (entries.length === 0) {
+    return (
+      <section className="closet-section" aria-label="Model storage">
+        <div className="closet-head">
+          <span>The Closet</span>
+          <strong>No installed models yet</strong>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="closet-section" aria-label="Model storage">
+      <div className="closet-head">
+        <span>The Closet</span>
+        <strong>{entries.length} model{entries.length === 1 ? '' : 's'} · {totalGb.toFixed(1)} GB on disk</strong>
+        <em>Keep the winner; evict who never earned a callback. Deleting always asks first, and anything evicted can be downloaded again.</em>
+      </div>
+      <ul className="closet-list">
+        {entries.map(({ row, sizeGb, score }) => {
+          const isWinner = topModel !== undefined && row.displayName === topModel;
+          return (
+            <li key={row.displayName} className={isWinner ? 'closet-winner' : ''}>
+              <div className="closet-row-name">
+                <strong>{row.displayName}</strong>
+                <em>
+                  {score
+                    ? `${formatMatchScore(score)} · ${score.grade} — tested ${new Date(score.completedAt).toLocaleDateString()}`
+                    : 'Never tested — taking up space on reputation alone'}
+                </em>
+              </div>
+              <span className="closet-size">{sizeGb > 0 ? `${sizeGb.toFixed(1)} GB` : '—'}</span>
+              {isWinner ? (
+                <span className="closet-keep" title="Your current top match. Probably worth its shelf space.">WINNER</span>
+              ) : (
+                <button
+                  type="button"
+                  className="mini-button closet-evict"
+                  onClick={() => onDeleteModel(row)}
+                  title={`Delete ${row.displayName} from this computer (asks first)`}
+                >
+                  Evict
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function ThemePicker({
   themeId,
   onThemeChange,
@@ -6194,6 +6270,7 @@ function UtilityPanel({
   themeId,
   uiMode,
   selectedGoals,
+  installedRows,
   appLogs,
   modelScores,
   chatMessages,
@@ -6205,6 +6282,7 @@ function UtilityPanel({
   onThemeChange,
   onUiModeChange,
   onEditGoals,
+  onDeleteModel,
   onRefreshLogs,
   onCopyLogs,
   onClearLogs,
@@ -6230,6 +6308,7 @@ function UtilityPanel({
   themeId: ThemeId;
   uiMode: UiMode;
   selectedGoals: GoalId[];
+  installedRows: ModelRow[];
   appLogs: AppLogEntry[];
   modelScores: Record<string, TestedModelScore>;
   chatMessages: ChatMessage[];
@@ -6241,6 +6320,7 @@ function UtilityPanel({
   onThemeChange: (themeId: ThemeId) => void;
   onUiModeChange: (mode: UiMode) => void;
   onEditGoals: () => void;
+  onDeleteModel: (row: ModelRow) => void;
   onRefreshLogs: () => void;
   onCopyLogs: () => void;
   onClearLogs: () => void;
@@ -6670,6 +6750,14 @@ function UtilityPanel({
           <UiModePicker uiMode={uiMode} onUiModeChange={onUiModeChange} />
           <GoalsSummary goals={selectedGoals} onEditGoals={onEditGoals} />
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
+          </SettingsSection>
+          <SettingsSection eyebrow="Storage" title="The Closet" summary="Who is taking up shelf space, and whether they earned it.">
+            <ClosetSection
+              rows={installedRows}
+              modelScores={modelScores}
+              topModel={rankedModelScores[0]?.model}
+              onDeleteModel={onDeleteModel}
+            />
           </SettingsSection>
           <SettingsSection eyebrow="Local AI" title="Computer & Providers" summary="Runtime, Ollama, LM Studio, and local-only scope.">
           <div className="utility-stat">

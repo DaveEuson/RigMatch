@@ -17874,6 +17874,34 @@ a.whats-next-support:hover {
   line-height: 1.35;
 }
 
+/* The Closet: shelf space, honestly accounted. */
+.closet-section { display: grid; gap: 10px; }
+
+.closet-head { display: grid; gap: 2px; }
+.closet-head > span {
+  font-size: 0.7rem; font-weight: 800; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--muted);
+}
+.closet-head > em { font-size: 0.78rem; color: var(--muted); font-style: normal; }
+
+.closet-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.closet-list li {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--panel-2);
+}
+.closet-list li.closet-winner { border-color: rgba(var(--gold-rgb), 0.55); }
+.closet-row-name { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.closet-row-name strong { font-size: 0.86rem; overflow-wrap: anywhere; }
+.closet-row-name em { font-size: 0.74rem; color: var(--muted); font-style: normal; }
+.closet-size { font-variant-numeric: tabular-nums; font-size: 0.82rem; color: var(--text); white-space: nowrap; }
+.closet-keep {
+  font-size: 0.68rem; font-weight: 900; letter-spacing: 0.08em;
+  color: var(--gold); border: 1px solid rgba(var(--gold-rgb), 0.4);
+  border-radius: 999px; padding: 2px 9px;
+}
+.closet-evict { white-space: nowrap; }
+
 .goal-splash-nudge {
   margin: 12px 2px 0;
   font-size: 0.82rem;
