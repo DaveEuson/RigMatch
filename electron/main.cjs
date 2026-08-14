@@ -1975,6 +1975,10 @@ async function getOllamaStatus(baseUrl = OLLAMA_LOCAL_URL) {
       family: model.details?.family,
       parameterSize: model.details?.parameter_size,
       quantization: model.details?.quantization_level,
+      // The digest identifies the exact weights. Tags mutate upstream, so a
+      // saved score keyed to a tag alone can quietly describe a different
+      // model than the one now installed under that name.
+      digest: model.digest,
     }));
 
     await attachModelCapabilities(baseUrl, models);

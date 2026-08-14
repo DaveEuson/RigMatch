@@ -69,6 +69,12 @@ export type OllamaModel = {
   family?: string;
   parameterSize?: string;
   quantization?: string;
+  /**
+   * Ollama's content digest for these exact weights. Tags mutate — pulling
+   * `llama3.1:8b` next month can fetch different weights under the same name —
+   * so the digest, not the tag, is what a saved score was actually measured on.
+   */
+  digest?: string;
   provider?: LocalModelProvider;
   providerLabel?: string;
   baseUrl?: string;
@@ -201,6 +207,18 @@ export type BenchmarkResult = {
   };
 };
 
+/** What a score was measured on, stamped at scoring time. */
+export type ScoreRigStamp = {
+  /** GPU model string, e.g. "NVIDIA GeForce RTX 4070". */
+  gpu: string;
+  vramGb: number;
+  driverVersion?: string;
+  appVersion: string;
+  /** Content digest of the exact weights tested, when the provider reports one. */
+  modelDigest?: string;
+  quantization?: string;
+};
+
 export type TestedModelScore = {
   model: string;
   total: number;
@@ -213,6 +231,14 @@ export type TestedModelScore = {
   suiteName?: string;
   preciseTotal?: number;
   scoreSchemaVersion?: number;
+  /**
+   * The setup this score was measured on. Scores are only meaningful relative
+   * to a rig, and both sides of the measurement can drift underneath a saved
+   * number: hardware and drivers change, and Ollama tags mutate so the same
+   * name can point at different weights. Absent on scores saved before the
+   * stamp existed — those can't claim drift either way.
+   */
+  rig?: ScoreRigStamp;
   /**
    * Measured generation throughput, carried over from the run's
    * `avgTokensPerSecond`. Kept alongside the `speed` sub-score because `speed`

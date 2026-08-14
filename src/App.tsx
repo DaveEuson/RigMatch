@@ -92,6 +92,7 @@ import type {
   ChatMessage,
   SkillRunStatus,
   GpuContention,
+  ScoreRigStamp,
 } from './types';
 import {
   MATCH_GRADE_BANDS,
@@ -99,6 +100,8 @@ import {
   compareTestedModelScores,
   formatMatchScore,
   isLegacyScore,
+  scoreDrift,
+  scoreDriftLabel,
   toTestedModelScore,
   upsertModelScores,
 } from './lib/scoring';
@@ -1593,6 +1596,21 @@ function App() {
       : 'Advanced mode selected. RigMatch will show more setup details, commands, and diagnostics.');
   }, []);
 
+  // Stamped onto every score at scoring time. Scores are relative to a rig,
+  // and Ollama tags mutate — the digest is the only durable identity for the
+  // weights that actually earned the number.
+  const rigStampForModel = useCallback((model: string): ScoreRigStamp => {
+    const installed = ollama.models.find((m) => m.name === model || m.model === model);
+    return {
+      gpu: system.gpu.model,
+      vramGb: system.gpu.vramGb,
+      driverVersion: system.gpu.driverVersion || undefined,
+      appVersion: APP_VERSION,
+      modelDigest: installed?.digest,
+      quantization: installed?.quantization,
+    };
+  }, [ollama.models, system.gpu.model, system.gpu.vramGb, system.gpu.driverVersion]);
+
   const chooseInterfaceMode = useCallback((nextMode: UiMode, goals: GoalId[] = []) => {
     selectUiMode(nextMode);
     // Persist immediately and record that the splash choice was made so it
@@ -1717,7 +1735,7 @@ function App() {
       }), modelToTest);
       setBenchmark(result);
       setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
-      setModelScores((current) => upsertModelScores(current, [result], currentSuiteName));
+      setModelScores((current) => upsertModelScores(current, [result], currentSuiteName, rigStampForModel));
       setClearedTopMatches((current) => removeSetValues(current, [result.model, modelToTest]));
       recordRuns([result]);
       setRunProgress({
@@ -1802,7 +1820,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsBenchmarking(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
     // The quick TEST button skips the full launch modal, but it still loads a
@@ -2531,7 +2549,7 @@ function App() {
         }), row.displayName);
         results.push(result);
         setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
-        setModelScores((current) => upsertModelScores(current, [result], currentSuiteName));
+        setModelScores((current) => upsertModelScores(current, [result], currentSuiteName, rigStampForModel));
         setClearedTopMatches((current) => removeSetValues(current, [result.model, row.displayName]));
         recordRuns([result]);
         const isStopped = stopRunRef.current;
@@ -2653,7 +2671,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge, rigStampForModel]);
 
   const runSkillTestsAfterRun = useCallback(async (models: string[]) => {
     const selection = skillTestSelection;
@@ -6208,7 +6226,14 @@ function UtilityPanel({
   const Icon = panel === 'history' ? History : Settings;
   const recentModelScores = useMemo(() => getRecentModelScores(modelScores), [modelScores]);
   const rankedModelScores = useMemo(() => getRankedModelScores(modelScores), [modelScores]);
-  const taskPicks = useMemo(() => getTaskTopPicks(modelScores), [modelScores]);
+  const taskPicks = useMemo(() => getTaskTopPicks(modelScores, (score) => {
+    const installed = ollama.models.find((m) => m.name === score.model || m.model === score.model);
+    return scoreDrift(score, {
+      gpuModel: system.gpu.model,
+      vramGb: system.gpu.vramGb,
+      modelDigest: installed?.digest,
+    }) !== null;
+  }), [modelScores, ollama.models, system.gpu.model, system.gpu.vramGb]);
   const topRankedScore = rankedModelScores[0];
   const savedChatMessageCount = Math.max(0, chatMessages.length - 1);
   const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
@@ -6423,6 +6448,12 @@ function UtilityPanel({
               {rankedModelScores.map((score, index) => {
                 const prevScore = rankedModelScores[index - 1];
                 const isTied = prevScore !== undefined && prevScore.total === score.total;
+                const installed = ollama.models.find((m) => m.name === score.model || m.model === score.model);
+                const drift = scoreDrift(score, {
+                  gpuModel: system.gpu.model,
+                  vramGb: system.gpu.vramGb,
+                  modelDigest: installed?.digest,
+                });
                 return (
                   <li
                     key={`${score.model}-${score.completedAt}`}
@@ -6438,6 +6469,14 @@ function UtilityPanel({
                       <span>
                         {score.model}
                         {isLegacyScore(score) && <span className="legacy-score-badge">Retest recommended</span>}
+                        {!isLegacyScore(score) && drift && (
+                          <span
+                            className="legacy-score-badge drift-badge"
+                            title={score.rig ? `Scored on ${score.rig.gpu} (${score.rig.vramGb} GB) with RigMatch ${score.rig.appVersion}.` : undefined}
+                          >
+                            {scoreDriftLabel(drift)}
+                          </span>
+                        )}
                         <ModelDemoChips model={score.model} label="" className="inline" />
                       </span>
                       <em>{score.speed} speed · {score.sobriety} accuracy · {score.fit} fit · {getResponseEstimate(score.speed)}</em>

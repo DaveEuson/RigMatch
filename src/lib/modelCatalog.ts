@@ -1523,8 +1523,19 @@ export type TaskPick = {
   taskScore?: number;
 };
 
-export function getTaskTopPicks(modelScores: Record<string, TestedModelScore>): TaskPick[] {
-  const scored = Object.values(modelScores).filter((s) => !isCloudModel(s.model) && !isLegacyScore(s));
+export function getTaskTopPicks(
+  modelScores: Record<string, TestedModelScore>,
+  /**
+   * True when a score has drifted from the current setup (hardware changed,
+   * or the tag now points at different weights). Drifted scores are excluded
+   * for the same reason legacy ones are: stale calibration must not crown a
+   * winner.
+   */
+  isDrifted?: (score: TestedModelScore) => boolean,
+): TaskPick[] {
+  const scored = Object.values(modelScores).filter(
+    (s) => !isCloudModel(s.model) && !isLegacyScore(s) && !(isDrifted?.(s) ?? false),
+  );
   if (scored.length === 0) return [];
 
   const picks: TaskPick[] = [];

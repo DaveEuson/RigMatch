@@ -282,3 +282,69 @@ test('every band in the published table is reachable and none are invented', () 
   // "A-" was displayed by the demo but exists in no grade table.
   assert.ok(!produced.has('A-'), 'A- is not a real grade');
 });
+
+// --- Rig fingerprints and score drift ---------------------------------------
+
+const stamped = (rig) => ({
+  model: 'llama3.1:8b', total: 90, grade: 'A', speed: 90, sobriety: 90,
+  stability: 90, fit: 90, completedAt: '2026-08-13T00:00:00Z',
+  scoreSchemaVersion: CURRENT_SCORE_SCHEMA_VERSION, rig,
+});
+
+const RIG = {
+  gpu: 'NVIDIA GeForce RTX 4070', vramGb: 12, appVersion: '0.6.0',
+  modelDigest: 'sha256:aaa', quantization: 'Q4_K_M',
+};
+
+test('a digest change outranks everything: the weights are not the weights', async () => {
+  const { scoreDrift } = await import('../src/lib/scoring.ts');
+  // Same GPU, same VRAM — but the tag now points at different weights.
+  assert.equal(
+    scoreDrift(stamped(RIG), { gpuModel: RIG.gpu, vramGb: 12, modelDigest: 'sha256:bbb' }),
+    'model-changed',
+  );
+});
+
+test('a different GPU or a VRAM shift of 1 GB+ is hardware drift', async () => {
+  const { scoreDrift } = await import('../src/lib/scoring.ts');
+  assert.equal(
+    scoreDrift(stamped(RIG), { gpuModel: 'AMD Radeon RX 7900', vramGb: 12 }),
+    'hardware-changed',
+  );
+  assert.equal(
+    scoreDrift(stamped(RIG), { gpuModel: RIG.gpu, vramGb: 24 }),
+    'hardware-changed',
+  );
+  // Sub-gigabyte wobble is profiler jitter, not a new card.
+  assert.equal(scoreDrift(stamped(RIG), { gpuModel: RIG.gpu, vramGb: 12.4 }), null);
+});
+
+test('an unstamped score claims nothing, and unknown digests stay silent', async () => {
+  const { scoreDrift } = await import('../src/lib/scoring.ts');
+  // Pre-stamp scores (and demo sample data) must never grow a drift badge.
+  assert.equal(scoreDrift(stamped(undefined), { gpuModel: 'Anything', vramGb: 4 }), null);
+  // Digest known on only one side proves nothing.
+  assert.equal(
+    scoreDrift(stamped({ ...RIG, modelDigest: undefined }), { gpuModel: RIG.gpu, vramGb: 12, modelDigest: 'sha256:bbb' }),
+    null,
+  );
+  // Matching setup: no drift.
+  assert.equal(
+    scoreDrift(stamped(RIG), { gpuModel: RIG.gpu, vramGb: 12, modelDigest: 'sha256:aaa' }),
+    null,
+  );
+});
+
+test('the drift labels tell the user which thing moved', async () => {
+  const { scoreDriftLabel } = await import('../src/lib/scoring.ts');
+  assert.match(scoreDriftLabel('model-changed'), /model updated/i);
+  assert.match(scoreDriftLabel('hardware-changed'), /different hardware/i);
+});
+
+test('drifted scores cannot crown a task winner', async () => {
+  const { getTaskTopPicks } = await import('../src/lib/modelCatalog.ts');
+  const scores = { 'llama3.1:8b': stamped(RIG) };
+  const everythingDrifted = () => true;
+  assert.equal(getTaskTopPicks(scores, everythingDrifted).length, 0);
+  assert.ok(getTaskTopPicks(scores).length > 0, 'without the check the score still crowns');
+});
