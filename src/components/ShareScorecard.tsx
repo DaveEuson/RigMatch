@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { copyText, type CopyState } from '../lib/clipboard';
 import { Check, Copy, Download, X } from 'lucide-react';
 import type { SystemProfile, TestedModelScore } from '../types';
 import { getShortModelName } from '../lib/modelCatalog';
@@ -345,7 +346,7 @@ export function ShareScorecard({ model, score, system, onClose }: {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [style, setStyle] = useState<CardStyle>('datingshow');
   const [showHostname, setShowHostname] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<CopyState>('idle');
   const modelName = useMemo(() => getShortModelName(model), [model]);
 
   useEffect(() => {
@@ -390,10 +391,10 @@ export function ShareScorecard({ model, score, system, onClose }: {
   ];
 
   const copyLink = useCallback(() => {
-    void navigator.clipboard?.writeText(SHARE_URL).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    }).catch(() => undefined);
+    void copyText(SHARE_URL).then((ok) => {
+      setCopied(ok ? 'copied' : 'failed');
+      window.setTimeout(() => setCopied('idle'), 1500);
+    });
   }, []);
 
   return (
@@ -443,8 +444,8 @@ export function ShareScorecard({ model, score, system, onClose }: {
             </a>
           ))}
           <button type="button" className="mini-button outline" onClick={copyLink}>
-            {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-            {copied ? 'Copied' : 'Copy link'}
+            {copied === 'copied' ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+            {copied === 'copied' ? 'Copied' : 'Copy link'}
           </button>
         </div>
         <p className="share-scorecard-hint">

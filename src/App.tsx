@@ -332,6 +332,7 @@ import { GOALS, goalById, goalHardwareExpectation, goalsByCategory, leagueLabel,
 import { taskFilterForGoal } from './lib/modelCatalog';
 import { readSelectedGoals, writeSelectedGoals } from './lib/goalSettings';
 import { getGoalMatches } from './lib/goalMatches';
+import { copyText, type CopyState } from './lib/clipboard';
 import { downloadMatchCard } from './lib/matchCard';
 import { runVideoLabChallenge } from './lib/videoGenRunner';
 import { runImageLabChallenge } from './lib/imageGenRunner';
@@ -4873,6 +4874,8 @@ function OllamaPrep({
 }) {
   const platformName = getPlatformName(system.platform);
   const ready = ollama.ready;
+  // A copy button that silently does nothing is worse than no button.
+  const [commandCopy, setCommandCopy] = useState<CopyState>('idle');
 
   // Ready state — compact success strip
   if (ready || !isDesktopRuntime) {
@@ -4928,9 +4931,12 @@ function OllamaPrep({
           <button
             type="button"
             className="mini-button outline"
-            onClick={() => navigator.clipboard.writeText(ip.command)}
+            onClick={() => void copyText(ip.command).then((ok) => {
+              setCommandCopy(ok ? 'copied' : 'failed');
+              window.setTimeout(() => setCommandCopy('idle'), 2400);
+            })}
           >
-            Copy
+            {commandCopy === 'copied' ? 'Copied' : commandCopy === 'failed' ? 'Select it above' : 'Copy'}
           </button>
           <p className="install-script-hint">Open a terminal, paste, and press Enter. Then click Check Again below.</p>
         </div>
@@ -6373,6 +6379,7 @@ function UtilityPanel({
   onSelectTopPick?: (model: string) => void;
 }) {
   const Icon = panel === 'history' ? History : Settings;
+  const [diagnosticsCopy, setDiagnosticsCopy] = useState<CopyState>('idle');
   const recentModelScores = useMemo(() => getRecentModelScores(modelScores), [modelScores]);
   const rankedModelScores = useMemo(() => getRankedModelScores(modelScores), [modelScores]);
   const isScoreDrifted = useCallback((score: TestedModelScore) => {
@@ -6920,11 +6927,14 @@ function UtilityPanel({
               <button
                 type="button"
                 className="mini-button outline"
-                onClick={() => void navigator.clipboard?.writeText(buildDiagnosticsText(system, ollama, logPath)).catch(() => undefined)}
+                onClick={() => void copyText(buildDiagnosticsText(system, ollama, logPath)).then((ok) => {
+                  setDiagnosticsCopy(ok ? 'copied' : 'failed');
+                  window.setTimeout(() => setDiagnosticsCopy('idle'), 2400);
+                })}
                 title="Copy hardware + version info to clipboard"
               >
                 <Copy aria-hidden="true" />
-                Copy Diagnostics
+                {diagnosticsCopy === 'copied' ? 'Copied' : diagnosticsCopy === 'failed' ? 'Copy failed' : 'Copy Diagnostics'}
               </button>
             </div>
           </div>

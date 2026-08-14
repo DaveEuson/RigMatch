@@ -20,6 +20,7 @@ import {
   type ComfyImageRef,
   type Txt2ImgRequest,
 } from './comfyui.ts';
+import { getErrorMessage } from './format.ts';
 import {
   buildJudgePrompt,
   readJudgeVerdict,
@@ -148,7 +149,11 @@ export async function runImageGeneration(options: ImageRunOptions): Promise<Imag
     // A cancelled run must not leave ComfyUI generating an image nobody will
     // see; the GPU stays pinned for the rest of the job otherwise.
     if (promptId) await transport.interrupt(promptId).catch(() => undefined);
-    const message = error instanceof Error ? error.message : 'Image generation failed.';
+    // getErrorMessage, not error.message: the raw form leaks the Electron IPC
+    // wrapper, so a ComfyUI that died between the status probe and the run
+    // showed "Error invoking remote method 'comfy:submit': TypeError: fetch
+    // failed" as the headline of the failure card.
+    const message = error ? getErrorMessage(error) : 'Image generation failed.';
     return failed(checkpoint, promptId, now() - startedAt, steps, message);
   }
 }

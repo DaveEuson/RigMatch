@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { copyText, type CopyState } from '../lib/clipboard';
 import { Code2, Image as ImageIcon, Maximize2, Play, RefreshCw, Sparkles, X } from 'lucide-react';
 import type { SkillRunStatus } from '../types';
 import { getModelDemoArtifacts, type DemoArtifact } from '../lib/labResults';
@@ -107,7 +108,7 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
 }) {
   const [index, setIndex] = useState(0);
   const [showCode, setShowCode] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<CopyState>('idle');
   const [hintOpen, setHintOpen] = useState(false);
   const [hint, setHint] = useState('');
   const [autoTimes, setAutoTimes] = useState(3);
@@ -129,7 +130,7 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
   if (index !== prevIndex) {
     setPrevIndex(index);
     setShowCode(false);
-    setCopied(false);
+    setCopied('idle');
     setHintOpen(false);
     setHint('');
     setWhyOpen(false);
@@ -139,10 +140,10 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
   const copyCode = () => {
     const text = demo.kind === 'code' ? demo.code : demo.html;
     if (!text) return;
-    void navigator.clipboard?.writeText(text).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    }).catch(() => undefined);
+    void copyText(text).then((ok) => {
+      setCopied(ok ? 'copied' : 'failed');
+      window.setTimeout(() => setCopied('idle'), 1500);
+    });
   };
   const kindLabel = demo.kind === 'app' ? 'App Builder'
     : demo.kind === 'code' ? `Code Challenge${demo.language ? ` · ${demo.language}` : ''}`
@@ -299,7 +300,7 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
             {demo.note && <div className="demo-judge-note">🧑‍⚖️ {demo.note}</div>}
             <button type="button" className="mini-button outline demo-code-copy" onClick={copyCode}>
               <Code2 aria-hidden="true" />
-              {copied ? 'Copied' : 'Copy code'}
+              {copied === 'copied' ? 'Copied' : 'Copy code'}
             </button>
             <pre className="live-build-stream demo-code-view">{demo.code || 'No code was returned.'}</pre>
           </div>
@@ -307,7 +308,7 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
           <div className="demo-code-wrap">
             <button type="button" className="mini-button outline demo-code-copy" onClick={copyCode}>
               <Code2 aria-hidden="true" />
-              {copied ? 'Copied' : 'Copy code'}
+              {copied === 'copied' ? 'Copied' : 'Copy code'}
             </button>
             <pre className="live-build-stream demo-code-view">{demo.html}</pre>
           </div>

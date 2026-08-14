@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { copyText, type CopyState } from '../lib/clipboard';
 import { AlertTriangle, Check, Code2, Copy, Film, Lightbulb, Play, RefreshCw } from "lucide-react";
 import type { ComfyStatus, OllamaStatus, SystemProfile } from "../types";
 import { formatGb, getScoreTone } from "../lib/format";
@@ -77,7 +78,7 @@ export function AdvancedCapabilityLab({
   const [labModel, setLabModel] = useState(defaultModel);
   const [savedResults, setSavedResults] = useState<Record<string, AdvancedLabResult>>(() => readAdvancedLabResults());
   const [runState, setRunState] = useState<AdvancedLabRunState>({ phase: 'idle', result: null, message: '' });
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<CopyState>('idle');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [appPromptId, setAppPromptId] = useState(DEFAULT_APP_BUILDER_PRESET_ID);
   const [appCustomPrompt, setAppCustomPrompt] = useState('');
@@ -181,7 +182,7 @@ export function AdvancedCapabilityLab({
 
   const startChallenge = useCallback(async () => {
     if (!activeModel || !ollama.ready) return;
-    setCopied(false);
+    setCopied('idle');
     setPreviewOpen(false);
     setRunState({ phase: 'running', result: null, message: `Asking ${activeModel} to build an app...` });
     const prompt = resolveAppBuilderPrompt(appPromptId, appCustomPrompt);
@@ -205,10 +206,10 @@ export function AdvancedCapabilityLab({
 
   const copyResult = useCallback(() => {
     if (!visibleResult?.response) return;
-    void navigator.clipboard?.writeText(visibleResult.response).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2200);
-    }).catch(() => undefined);
+    void copyText(visibleResult.response).then((ok) => {
+      setCopied(ok ? 'copied' : 'failed');
+      window.setTimeout(() => setCopied('idle'), 2200);
+    });
   }, [visibleResult]);
 
   const startImageChallenge = useCallback(async () => {
@@ -430,8 +431,8 @@ export function AdvancedCapabilityLab({
               {isRunning ? 'Running Lab Test' : 'Run App Builder'}
             </button>
             <button type="button" className="mini-button outline" onClick={copyResult} disabled={!visibleResult?.response}>
-              {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-              {copied ? 'Copied' : 'Copy Output'}
+              {copied === 'copied' ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+              {copied === 'copied' ? 'Copied' : 'Copy Output'}
             </button>
             <button
               type="button"

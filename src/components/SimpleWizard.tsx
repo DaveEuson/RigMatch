@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, SystemProfile } from '../types';
 import { STEPS, STEP_LABELS, footerHint, nextBlockedHint, type StepId } from '../lib/wizardCopy';
+import { copyText, type CopyState } from '../lib/clipboard';
 import { formatBytes, formatBytesPerSecond } from '../lib/format';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 import { getFriendlyModelName } from '../lib/modelCatalog';
@@ -430,6 +431,9 @@ function SetupScreen({
   // Only surface the "couldn't find Ollama" card after the user actually ran a
   // check that came back not-ready — never on first load before they've clicked.
   const [attempted, setAttempted] = useState(false);
+  // For a Linux user on first run this copy button is the only way forward, and
+  // it used to fail in total silence.
+  const [copiedCommand, setCopiedCommand] = useState<CopyState>('idle');
   const runCheck = () => { setAttempted(true); onCheckComputer(); };
 
   // Install-flow state. Linux gets a copyable one-liner (no installer binary);
@@ -490,9 +494,12 @@ function SetupScreen({
               <button
                 type="button"
                 className="sw-ghost-pill"
-                onClick={() => void navigator.clipboard?.writeText(install.command).catch(() => undefined)}
+                onClick={() => void copyText(install.command).then((ok) => {
+                  setCopiedCommand(ok ? 'copied' : 'failed');
+                  window.setTimeout(() => setCopiedCommand('idle'), 2400);
+                })}
               >
-                Copy
+                {copiedCommand === 'copied' ? 'Copied' : copiedCommand === 'failed' ? 'Select it above instead' : 'Copy'}
               </button>
             </div>
           ) : installerReady ? (

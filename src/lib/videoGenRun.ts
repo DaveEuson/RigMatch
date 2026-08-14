@@ -17,6 +17,7 @@
  */
 
 import { extractImages, readStatus, type ComfyImageRef } from './comfyui.ts';
+import { getErrorMessage } from './format.ts';
 import { buildTxt2VideoWorkflow, LTX_DEFAULTS, VIDEO_FRAME_NODE, VIDEO_OUTPUT_NODE } from './videoGen.ts';
 import { scoreVideoGeneration } from './videoGenScoring.ts';
 import { buildJudgePrompt, readJudgeVerdict, scoreAdherence, type ImagePrompt } from './imageGenScoring.ts';
@@ -142,7 +143,9 @@ export async function runVideoGeneration(options: VideoRunOptions): Promise<Vide
     return { ...base, promptId, frameDataUrl, videoRef, adherence, elapsedMs, ...scored };
   } catch (error) {
     if (promptId) await transport.interrupt(promptId).catch(() => undefined);
-    const message = error instanceof Error ? error.message : 'Video generation failed.';
+    // See imageGenRun: error.message leaks the Electron IPC wrapper into the
+    // failure card's headline.
+    const message = error ? getErrorMessage(error) : 'Video generation failed.';
     return failed(base, promptId, message);
   }
 }

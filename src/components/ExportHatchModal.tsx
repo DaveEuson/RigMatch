@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { copyText, type CopyState } from '../lib/clipboard';
 import { AlertTriangle, Check, Copy, Download, X } from 'lucide-react';
 import type { BuildHatchResult } from '../lib/hatchProfile';
 import { useDialog } from '../lib/useDialog';
@@ -10,17 +11,17 @@ export function ExportHatchModal({ result, onClose }: {
   result: BuildHatchResult;
   onClose: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<CopyState>('idle');
   const dialogRef = useDialog<HTMLElement>(onClose);
 
   const json = result.ok ? result.json : '';
 
   const copyJson = useCallback(() => {
     if (!json) return;
-    void navigator.clipboard?.writeText(json).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    }).catch(() => undefined);
+    void copyText(json).then((ok) => {
+      setCopied(ok ? 'copied' : 'failed');
+      window.setTimeout(() => setCopied('idle'), 1600);
+    });
   }, [json]);
 
   const downloadJson = useCallback(() => {
@@ -62,8 +63,12 @@ export function ExportHatchModal({ result, onClose }: {
 
             <div className="export-hatch-actions">
               <button type="button" className="pick-this-one-btn" onClick={copyJson}>
-                {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-                {copied ? 'Copied — paste into Hatch' : 'Copy to clipboard'}
+                {copied === 'copied' ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                {copied === 'copied'
+                  ? 'Copied — paste into Hatch'
+                  : copied === 'failed'
+                    ? 'Could not copy — select the text and copy manually'
+                    : 'Copy to clipboard'}
               </button>
               <button type="button" className="mini-button outline" onClick={downloadJson}>
                 <Download aria-hidden="true" />
