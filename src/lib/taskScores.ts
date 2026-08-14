@@ -17,15 +17,20 @@ import type { BenchmarkQuestionType } from '../benchmarkSuite.ts';
 import type { BenchmarkPromptResult } from '../types.ts';
 
 /**
- * The benchmark asks five kinds of question. They group into four things a
- * person would actually choose a model for — `json` and `format` are both
- * "does it do as it is told", so they are counted together.
+ * The benchmark asks five kinds of question, one group each. `json` and
+ * `format` used to pool as "does it do as it is told", but the goal taxonomy
+ * split them: the JSON questions were always tool-output questions ("Return
+ * only valid JSON for this local assistant request...") and now crown the
+ * tools-and-automations goal, while `format` alone measures instruction-
+ * following. Scores saved under the old pooling are a different measurement —
+ * that is why CURRENT_SCORE_SCHEMA_VERSION bumped when these split.
  */
 export const TASK_GROUPS = [
   { id: 'coding', label: 'Coding', questionTypes: ['coding'] },
   { id: 'chat', label: 'Everyday chat', questionTypes: ['assistant'] },
   { id: 'facts', label: 'Sticking to facts', questionTypes: ['truth'] },
-  { id: 'instructions', label: 'Following instructions', questionTypes: ['json', 'format'] },
+  { id: 'tools', label: 'Tools & automations', questionTypes: ['json'] },
+  { id: 'instructions', label: 'Following instructions', questionTypes: ['format'] },
 ] as const satisfies ReadonlyArray<{
   id: string;
   label: string;

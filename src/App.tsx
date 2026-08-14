@@ -329,6 +329,7 @@ import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById
 import { GOALS, goalById, goalHardwareExpectation, goalsByCategory, leagueLabel, type GoalId } from './lib/goals';
 import { taskFilterForGoal } from './lib/modelCatalog';
 import { readSelectedGoals, writeSelectedGoals } from './lib/goalSettings';
+import { getGoalMatches } from './lib/goalMatches';
 import { runVideoLabChallenge } from './lib/videoGenRunner';
 import { runImageLabChallenge } from './lib/imageGenRunner';
 import { describeComfyBusy, getComfyStatus } from './lib/comfyTransport';
@@ -6226,14 +6227,19 @@ function UtilityPanel({
   const Icon = panel === 'history' ? History : Settings;
   const recentModelScores = useMemo(() => getRecentModelScores(modelScores), [modelScores]);
   const rankedModelScores = useMemo(() => getRankedModelScores(modelScores), [modelScores]);
-  const taskPicks = useMemo(() => getTaskTopPicks(modelScores, (score) => {
+  const isScoreDrifted = useCallback((score: TestedModelScore) => {
     const installed = ollama.models.find((m) => m.name === score.model || m.model === score.model);
     return scoreDrift(score, {
       gpuModel: system.gpu.model,
       vramGb: system.gpu.vramGb,
       modelDigest: installed?.digest,
     }) !== null;
-  }), [modelScores, ollama.models, system.gpu.model, system.gpu.vramGb]);
+  }, [ollama.models, system.gpu.model, system.gpu.vramGb]);
+  const taskPicks = useMemo(() => getTaskTopPicks(modelScores, isScoreDrifted), [modelScores, isScoreDrifted]);
+  const goalMatches = useMemo(
+    () => getGoalMatches(selectedGoals, modelScores, isScoreDrifted),
+    [selectedGoals, modelScores, isScoreDrifted],
+  );
   const topRankedScore = rankedModelScores[0];
   const savedChatMessageCount = Math.max(0, chatMessages.length - 1);
   const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
@@ -6417,9 +6423,47 @@ function UtilityPanel({
             <strong>{topRankedScore ? topRankedScore.model : 'No saved score'}</strong>
             <em>{topRankedScore ? `${formatMatchScore(topRankedScore)} total · ${topRankedScore.grade}` : 'Run a test to save the next scorecard.'}</em>
           </div>
-          {taskPicks.length > 0 && (
-            <div className="task-picks-section" aria-label="Matches by goal">
+          {goalMatches.length > 0 && (
+            <div className="task-picks-section goal-match-board" aria-label="Your matches by goal">
               <span>Matches</span>
+              <div className="task-picks-grid">
+                {goalMatches.map((match) => (
+                  <div
+                    key={match.goal.id}
+                    className={`task-pick-card${match.isMainGoal ? ' main-goal-card' : ''}${match.pick ? '' : ' awaiting-card'}`}
+                  >
+                    <em>
+                      {match.isMainGoal ? 'Your Match' : match.goal.matchLabel}
+                      {match.pick && (
+                        <span
+                          className="task-pick-measured"
+                          title={`Measured here: scored ${match.pick.taskScore} on this rig's ${match.goal.label.toLowerCase()} questions. Goal crowns only ever come from measurement.`}
+                        >measured</span>
+                      )}
+                    </em>
+                    {match.isMainGoal && <span className="goal-match-sub">{match.goal.matchLabel}</span>}
+                    {match.pick ? (
+                      <>
+                        <strong title={match.pick.model}>{match.pick.model}</strong>
+                        <span className={`score-row-grade ${getScoreTone(match.pick.score.total)}`}>
+                          {match.pick.taskScore} on {match.goal.label.toLowerCase()} · {formatMatchScore(match.pick.score)} overall
+                        </span>
+                        <span className="task-pick-response-time">{getResponseEstimate(match.pick.score.speed)}</span>
+                      </>
+                    ) : (
+                      <>
+                        <strong>No crown yet</strong>
+                        <span className="goal-match-awaiting">{match.awaiting}</span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {taskPicks.length > 0 && (
+            <div className="task-picks-section" aria-label="Category picks">
+              <span>{goalMatches.length > 0 ? 'More picks' : 'Matches'}</span>
               <div className="task-picks-grid">
                 {taskPicks.map((pick) => (
                   <div key={pick.id} className="task-pick-card">

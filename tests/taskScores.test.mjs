@@ -34,14 +34,15 @@ test('per-question scores are grouped by what the question tested', () => {
     prompt('coding', 90), prompt('coding', 80), prompt('coding', 70),
     prompt('assistant', 60), prompt('assistant', 40),
     prompt('truth', 55),
-    // json and format are both "does it do as it is told", so they count together.
+    // json crowns the tools goal; format alone measures instruction-following.
     prompt('json', 100), prompt('format', 80),
   ]);
 
   assert.deepEqual(scores.coding, { score: 80, questions: 3 });
   assert.deepEqual(scores.chat, { score: 50, questions: 2 });
   assert.deepEqual(scores.facts, { score: 55, questions: 1 });
-  assert.deepEqual(scores.instructions, { score: 90, questions: 2 });
+  assert.deepEqual(scores.tools, { score: 100, questions: 1 });
+  assert.deepEqual(scores.instructions, { score: 80, questions: 1 });
 });
 
 test('runs from before question types were kept produce nothing, not a guess', () => {
@@ -135,10 +136,11 @@ test('every benchmark question type is covered by exactly one group', () => {
   assert.equal(new Set(seen).size, seen.length, 'no question type in two groups');
 });
 
-test('the default ten-question run is too thin for most per-task verdicts', async () => {
+test('the default ten-question run is too thin for any per-task verdict', async () => {
   // A real product constraint, pinned so it is not discovered by a user. The
-  // default run asks two questions of each of the five types. Only
-  // instruction-following clears the bar, because json and format pool.
+  // default run asks two questions of each of the five types, and since json
+  // split out of instructions into its own tools group, no group reaches the
+  // three answers a verdict needs. Twenty questions is the honest minimum.
   const { DEFAULT_BENCHMARK_QUESTIONS } = await import('../src/benchmarkSuite.ts');
   const asResults = (questions) => questions.map((q) => ({
     id: q.id, label: q.label, type: q.type, prompt: q.prompt,
@@ -148,17 +150,18 @@ test('the default ten-question run is too thin for most per-task verdicts', asyn
 
   const ten = summarizeTaskScores(asResults(DEFAULT_BENCHMARK_QUESTIONS));
   assert.equal(ten.coding.questions, 2);
-  assert.equal(ten.instructions.questions, 4, 'json and format pool together');
+  assert.equal(ten.tools.questions, 2, 'json stands alone as the tools group');
+  assert.equal(ten.instructions.questions, 2, 'format alone measures instruction-following');
   assert.deepEqual(
     Object.entries(ten).filter(([, v]) => isVerdictWorthy(v)).map(([k]) => k),
-    ['instructions'],
-    'at ten questions only instruction-following is worth calling',
+    [],
+    'at ten questions nothing is worth calling a verdict',
   );
 
-  // Twenty — the next level up — clears the bar for all four.
+  // Twenty — the next level up — clears the bar for all five.
   const twenty = summarizeTaskScores(asResults([...DEFAULT_BENCHMARK_QUESTIONS, ...DEFAULT_BENCHMARK_QUESTIONS]));
   assert.deepEqual(
     Object.entries(twenty).filter(([, v]) => isVerdictWorthy(v)).map(([k]) => k).sort(),
-    ['chat', 'coding', 'facts', 'instructions'],
+    ['chat', 'coding', 'facts', 'instructions', 'tools'],
   );
 });

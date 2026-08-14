@@ -5,8 +5,12 @@ import { summarizeTaskScores } from './taskScores.ts';
  * Bump when the meaning of a saved score changes (weights, signals, or scale).
  * Scores tagged with an older version are flagged "Retest recommended" and are
  * excluded from category picks so stale calibration cannot crown a winner.
+ *
+ * v5: the json questions moved out of the pooled "instructions" task group
+ * into their own "tools" group. A v4 instructions score mixes two question
+ * kinds a v5 one does not, so the two cannot be ranked against each other.
  */
-export const CURRENT_SCORE_SCHEMA_VERSION = 4;
+export const CURRENT_SCORE_SCHEMA_VERSION = 5;
 
 /**
  * Relative weights that make up the 0–100 Match Score. They sum to 1.0.

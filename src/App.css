@@ -17850,6 +17850,30 @@ a.whats-next-support:hover {
   color: var(--gold, #efbc5a);
 }
 
+/* The Matches board: one crown per selected goal, main goal headlines. */
+.goal-match-board .main-goal-card {
+  border-color: var(--gold, #efbc5a);
+  background: rgba(239, 188, 90, 0.08);
+}
+
+.goal-match-board .main-goal-card > em { color: var(--gold, #efbc5a); }
+
+.goal-match-sub {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* An empty crown is a promise, not a failure — keep it quiet, not red. */
+.goal-match-board .awaiting-card { opacity: 0.82; }
+
+.goal-match-awaiting {
+  font-size: 0.76rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .goal-splash-nudge {
   margin: 12px 2px 0;
   font-size: 0.82rem;
