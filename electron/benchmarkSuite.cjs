@@ -145,12 +145,19 @@ function buildBenchmarkPromptPlan(value = 10, sourceQuestions = DEFAULT_BENCHMAR
   });
 }
 
+// MUST stay in step with isBenchmarkQuestionType in src/benchmarkSuite.ts.
+// This is the main process's own copy, and an unknown type here is silently
+// rewritten to 'assistant' — which is exactly what happened to 'writing':
+// every writing question ran as a chat question, scored into the chat group,
+// and the writing goal could never be crowned. tests/benchmarkSuiteParity
+// locks the two lists together so the next type cannot drift the same way.
 function isBenchmarkQuestionType(value) {
   return value === 'json'
     || value === 'truth'
     || value === 'format'
     || value === 'assistant'
-    || value === 'coding';
+    || value === 'coding'
+    || value === 'writing';
 }
 
 module.exports = {
