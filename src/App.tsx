@@ -332,6 +332,7 @@ import { GOALS, goalById, goalHardwareExpectation, goalsByCategory, leagueLabel,
 import { taskFilterForGoal } from './lib/modelCatalog';
 import { readSelectedGoals, writeSelectedGoals } from './lib/goalSettings';
 import { getGoalMatches } from './lib/goalMatches';
+import { downloadMatchCard } from './lib/matchCard';
 import { runVideoLabChallenge } from './lib/videoGenRunner';
 import { runImageLabChallenge } from './lib/imageGenRunner';
 import { describeComfyBusy, getComfyStatus } from './lib/comfyTransport';
@@ -6476,6 +6477,21 @@ function UtilityPanel({
             <div className="utility-stat-head">
               <span>Ranking board</span>
               <div className="utility-stat-head-actions">
+                {topRankedScore && (
+                  <button
+                    type="button"
+                    className="how-we-score-trigger"
+                    onClick={() => {
+                      void downloadMatchCard({ score: topRankedScore, appVersion: APP_VERSION }).then((saved) => {
+                        if (!saved) return;
+                      });
+                    }}
+                    title={`Save a match card image of ${topRankedScore.model} — share it wherever you like; RigMatch sends nothing anywhere.`}
+                  >
+                    <Share2 aria-hidden="true" />
+                    Share card
+                  </button>
+                )}
                 {rankedModelScores.length > 0 && onSelectTopPick && (
                   <button
                     type="button"
