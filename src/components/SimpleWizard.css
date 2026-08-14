@@ -886,7 +886,7 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 
 .sw-winner-share:hover {
   border-color: var(--gold);
-  background: rgba(239, 188, 90, 0.14);
+  background: rgba(var(--gold-rgb), 0.14);
 }
 
 .sw-winner-share svg { width: 15px; height: 15px; }
