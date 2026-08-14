@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getErrorMessage } from '../lib/format';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { AlertTriangle, Check, Code2, Copy, Film, Lightbulb, Play, RefreshCw } from "lucide-react";
 import type { ComfyStatus, OllamaStatus, SystemProfile } from "../types";
@@ -595,7 +596,12 @@ export function AdvancedCapabilityLab({
                 </div>
               )}
               <div className="advanced-lab-actions">
-                <button type="button" className="primary-button compact" onClick={() => void startImageChallenge()} disabled={!canRunImageTest}>
+                <button type="button" className="primary-button compact" onClick={() => void startImageChallenge().catch((error: unknown) => {
+                  // Without this a throw before the run's own try — requireBridge,
+                  // say — left phase:'running' forever: a permanent spinner and an
+                  // unhandled rejection, with nothing on screen to explain it.
+                  setImageRunState({ phase: 'failed', result: null, message: getErrorMessage(error) });
+                })} disabled={!canRunImageTest}>
                   <RefreshCw className={imageRunning ? 'spin' : ''} aria-hidden="true" />
                   {imageRunning ? 'Generating' : 'Run Image Test'}
                 </button>
@@ -744,7 +750,9 @@ export function AdvancedCapabilityLab({
                 </span>
               </div>
               <div className="advanced-lab-actions">
-                <button type="button" className="primary-button compact" onClick={() => void startVideoChallenge()} disabled={!canRunVideoTest}>
+                <button type="button" className="primary-button compact" onClick={() => void startVideoChallenge().catch((error: unknown) => {
+                  setVideoRunState({ phase: 'failed', result: null, message: getErrorMessage(error) });
+                })} disabled={!canRunVideoTest}>
                   <RefreshCw className={videoRunning ? 'spin' : ''} aria-hidden="true" />
                   {videoRunning ? 'Rendering' : 'Run Video Test'}
                 </button>

@@ -2694,6 +2694,18 @@ function App() {
     }
   }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge, rigStampForModel, tellUser]);
 
+  /**
+   * A skill run that throws must not leave the mini bar spinning forever.
+   * These are launched with `void`, so nothing else catches them.
+   */
+  const reportSkillRunFailure = useCallback((error: unknown) => {
+    const message = getErrorMessage(error);
+    setSkillRunStatus({ phase: 'failed', label: `Skill tests stopped: ${message}`, completed: 0, total: 0 });
+    setLiveBuild(null);
+    activeSkillStreamIdRef.current = null;
+    tellUser(`Skill tests stopped: ${message}`);
+  }, [tellUser]);
+
   const runSkillTestsAfterRun = useCallback(async (models: string[]) => {
     const selection = skillTestSelection;
     const appPrompt = resolveAppBuilderPrompt(selection.appPromptId, selection.appCustomPrompt);
@@ -3090,19 +3102,19 @@ function App() {
     const imageOnly = skillModels.length > 0 && skillModels.every(isLikelyImageGenerationModel);
     if (anySkill && (selection.skipQuestions || imageOnly)) {
       setActivity('Running skill tests only — the question round was skipped.');
-      void runSkillTestsAfterRun(skillModels);
+      void runSkillTestsAfterRun(skillModels).catch(reportSkillRunFailure);
       return;
     }
 
     if (mode === 'single') {
-      void startBenchmark(model).then(() => runSkillTestsAfterRun(skillModels));
+      void startBenchmark(model).then(() => runSkillTestsAfterRun(skillModels)).catch(reportSkillRunFailure);
       return;
     }
 
     if (mode === 'speed-date') {
-      void runListTest().then(() => runSkillTestsAfterRun(skillModels));
+      void runListTest().then(() => runSkillTestsAfterRun(skillModels)).catch(reportSkillRunFailure);
     }
-  }, [pendingGpuContention, pendingRunMode, pendingSingleModel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, skillTestSelection, startBenchmark]);
+  }, [pendingGpuContention, pendingRunMode, pendingSingleModel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, skillTestSelection, startBenchmark, reportSkillRunFailure]);
 
   const cancelPendingRun = useCallback(() => {
     setPendingRunMode(null);
@@ -5232,6 +5244,24 @@ function RunWarningModal({
             storage bandwidth, fans, and battery until the run finishes.
           </p>
           <p>{runScope}</p>
+
+          {/* On battery, a laptop throttles its GPU hard — the same model can
+              score materially lower for a reason that has nothing to do with
+              the model, and the run still lands in the timeline as a real
+              result. Same rule as GPU contention: warn, never block. */}
+          {system.battery.hasBattery && system.battery.acConnected === false && (
+            <div className="gpu-contention-note level-busy" role="status">
+              <Activity aria-hidden="true" />
+              <div>
+                <strong>Running on battery</strong>
+                <p>
+                  Most laptops throttle the graphics card on battery, so scores measured now can come out
+                  below what this machine can really do{typeof system.battery.percent === 'number' ? ` (${system.battery.percent}% charge)` : ''}.
+                  Plug in for a fair reading, or carry on — the result is still saved either way.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Something else using the graphics card is the most common reason a
               score comes out below what a machine can really do — and since
@@ -7856,6 +7886,14 @@ function ModelCabinet({
                         {row.displayName}
                         {isNewModel && <em className="model-new-sub">New</em>}
                         {row.params && <em className="model-params-sub">{row.params}</em>}
+                        {row.installedModel?.quantization && (
+                          <em
+                            className="model-quant-sub"
+                            title={`Quantization ${row.installedModel.quantization}. A different quantization of the same model is a different contestant — different quality, VRAM and speed.`}
+                          >
+                            {row.installedModel.quantization}
+                          </em>
+                        )}
                         {row.runtime === 'comfyui'
                           ? <em className="model-provider-sub comfy">ComfyUI</em>
                           : row.localProviderLabel && <em className="model-provider-sub">{row.localProviderLabel}</em>}

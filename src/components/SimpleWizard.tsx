@@ -584,7 +584,7 @@ function PickScreen({ wizardModels, modelsLoading, shortlistIds, shortlistedRows
     <div className="sw-pick">
       <div className="sw-dream">
         <span className="sw-eyebrow">Who's your dream model?</span>
-        <div className="sw-dream-chips">
+        <div className="sw-dream-chips" role="group" aria-label="Filter contestants by what you want">
           {DREAM_CHIPS.map((chip) => {
             const Icon = chip.icon;
             return (
@@ -592,6 +592,7 @@ function PickScreen({ wizardModels, modelsLoading, shortlistIds, shortlistedRows
                 key={chip.id}
                 type="button"
                 className={`sw-chip ${dream === chip.id ? 'active' : ''}`}
+                aria-pressed={dream === chip.id}
                 onClick={() => { setDream(chip.id); setShowAll(false); }}
               >
                 <Icon aria-hidden="true" />

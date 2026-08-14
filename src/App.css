@@ -17906,6 +17906,19 @@ a.whats-next-support:hover {
 }
 .closet-evict { white-space: nowrap; }
 
+/* Quantization on the row: q4 and q8 of one model are different contestants. */
+.model-quant-sub {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
 .goal-splash-nudge {
   margin: 12px 2px 0;
   font-size: 0.82rem;
