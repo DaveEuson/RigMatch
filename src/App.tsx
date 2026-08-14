@@ -4232,6 +4232,12 @@ function FirstRunTutorial({
   const step = visibleSteps[currentIndex];
   const isLastStep = currentIndex === visibleSteps.length - 1;
 
+  // The only role="dialog" in the app that did not do this. It is the FIRST
+  // thing on screen at first run, behind a full-viewport scrim: focus stayed on
+  // <body>, Escape did nothing, and reaching its own Next button meant tabbing
+  // through the entire dimmed app behind it.
+  const tutorialRef = useDialog<HTMLElement>(onClose);
+
   const goToStep = (nextIndex: number) => {
     const boundedIndex = Math.min(Math.max(nextIndex, 0), visibleSteps.length - 1);
     onStepChange(boundedIndex);
@@ -4240,7 +4246,13 @@ function FirstRunTutorial({
 
   return (
     <div className="tutorial-backdrop" role="presentation">
-      <section className="tutorial-modal" role="dialog" aria-labelledby="tutorial-title">
+      <section
+        ref={tutorialRef}
+        className="tutorial-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tutorial-title"
+      >
         <div className="tutorial-title">
           <div className="tutorial-badge" aria-hidden="true">
             <Trophy />
@@ -6657,7 +6669,18 @@ function UtilityPanel({
                     title={onSelectTopPick ? `View ${score.model} in Top Pick` : undefined}
                     role={onSelectTopPick ? 'button' : undefined}
                     tabIndex={onSelectTopPick ? 0 : undefined}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelectTopPick?.(score.model); }}
+                    onKeyDown={(e) => {
+                      // Only when the row itself has focus. The row is a
+                      // role="button" containing a real button, so without this
+                      // test Enter on "Remove" deleted the score AND navigated
+                      // away — one keystroke, two actions, mouse users immune.
+                      if (e.target !== e.currentTarget) return;
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        // Space scrolls the page otherwise.
+                        e.preventDefault();
+                        onSelectTopPick?.(score.model);
+                      }
+                    }}
                   >
                     <b>{isTied ? '=' : index + 1}</b>
                     <div className="score-row-name">

@@ -12833,7 +12833,11 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 a:focus-visible,
-tr:focus-visible {
+tr:focus-visible,
+/* Anything given a tabindex is keyboard-reachable and therefore needs to show
+   it. The enumerated list above missed the ranked score rows, which are
+   role="button" <li>s — so tabbing through the scoreboard was invisible. */
+[tabindex]:focus-visible {
   outline: 2px solid var(--green);
   outline-offset: 2px;
 }
