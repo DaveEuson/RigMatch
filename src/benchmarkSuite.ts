@@ -1,7 +1,7 @@
 export const BENCHMARK_QUESTION_LEVELS = [10, 20, 50, 100] as const;
 
 export type BenchmarkQuestionCount = (typeof BENCHMARK_QUESTION_LEVELS)[number];
-export type BenchmarkQuestionType = 'json' | 'truth' | 'format' | 'assistant' | 'coding';
+export type BenchmarkQuestionType = 'json' | 'truth' | 'format' | 'assistant' | 'coding' | 'writing';
 
 export type BenchmarkQuestion = {
   id: string;
@@ -183,11 +183,11 @@ export const BENCHMARK_PRESETS: BenchmarkPreset[] = [
     questions: [
       { id: 'pre_code_1',  label: 'Write a function',   type: 'coding',    prompt: 'Write a compact JavaScript function named clampScore that accepts a number and returns it clamped between 0 and 100. Use Math.min and Math.max.' },
       { id: 'pre_code_2',  label: 'JSON API spec',      type: 'json',      prompt: 'Return only valid JSON describing a REST API endpoint. Use keys: intent, action, target, urgency. Set intent to "fetch_user", action to "GET /users/{id}".' },
-      { id: 'pre_code_3',  label: 'Code review',        type: 'assistant', prompt: 'Review this JavaScript snippet in one short paragraph: const result = arr.filter(x => x != null).map(x => x.toString()).join(\', \');' },
-      { id: 'pre_code_4',  label: 'Debug reasoning',    type: 'assistant', prompt: 'A React component renders correctly on first load but loses state after a parent re-render. List the two most likely causes and one quick fix.' },
+      { id: 'pre_code_3',  label: 'Code review',        type: 'coding', prompt: 'Review this JavaScript snippet in one short paragraph: const result = arr.filter(x => x != null).map(x => x.toString()).join(\', \');' },
+      { id: 'pre_code_4',  label: 'Debug reasoning',    type: 'coding', prompt: 'A React component renders correctly on first load but loses state after a parent re-render. List the two most likely causes and one quick fix.' },
       { id: 'pre_code_5',  label: 'Format: steps',      type: 'format',    prompt: 'Reply with exactly three numbered steps to set up a new Node.js project with TypeScript from scratch.' },
       { id: 'pre_code_6',  label: 'Async patterns',     type: 'coding',    prompt: 'Write a compact JavaScript function named clampScore that uses Math.min and Math.max to clamp a value between 0 and 100. Then show how to call it asynchronously.' },
-      { id: 'pre_code_7',  label: 'SQL query',          type: 'assistant', prompt: 'Write a SQL query that finds all users who placed more than 3 orders in the last 30 days. Tables: users(id, email) and orders(id, user_id, created_at).' },
+      { id: 'pre_code_7',  label: 'SQL query',          type: 'coding', prompt: 'Write a SQL query that finds all users who placed more than 3 orders in the last 30 days. Tables: users(id, email) and orders(id, user_id, created_at).' },
       { id: 'pre_code_8',  label: 'Truth: system',      type: 'truth',     prompt: 'What version of Node.js is installed on my machine? If this was not provided to you, say you cannot determine it from the prompt.' },
       { id: 'pre_code_9',  label: 'Format: bullets',    type: 'format',    prompt: 'Reply with exactly two short bullet points on when to use async/await versus raw Promises in JavaScript.' },
       { id: 'pre_code_10', label: 'Structured choice',  type: 'json',      prompt: 'Return only valid JSON comparing REST vs GraphQL for a new mobile app. Use keys: winner, reason, risks, next_step.' },
@@ -215,15 +215,15 @@ export const BENCHMARK_PRESETS: BenchmarkPreset[] = [
     label: 'Writing',
     description: 'Creative writing, editing, formatting, and clear communication.',
     questions: [
-      { id: 'pre_write_1',  label: 'Product copy',       type: 'assistant', prompt: 'Write a two-sentence product description for wireless noise-cancelling headphones aimed at remote workers.' },
+      { id: 'pre_write_1',  label: 'Product copy',       type: 'writing', prompt: 'Write a two-sentence product description for wireless noise-cancelling headphones aimed at remote workers.' },
       { id: 'pre_write_2',  label: 'Format: bullets',    type: 'format',    prompt: 'Reply with exactly two short bullet points on what makes a great blog post introduction.' },
-      { id: 'pre_write_3',  label: 'Opening line',       type: 'assistant', prompt: 'Write one compelling opening line for a blog post about why most productivity advice fails.' },
-      { id: 'pre_write_4',  label: 'Rewrite for clarity',type: 'assistant', prompt: 'Rewrite this sentence to be shorter and clearer: "In the event that you are in possession of additional feedback that you would like to provide to our team, please do not hesitate to reach out at your earliest convenience."' },
+      { id: 'pre_write_3',  label: 'Opening line',       type: 'writing', prompt: 'Write one compelling opening line for a blog post about why most productivity advice fails.' },
+      { id: 'pre_write_4',  label: 'Rewrite for clarity',type: 'writing', prompt: 'Rewrite this sentence to be shorter and clearer: "In the event that you are in possession of additional feedback that you would like to provide to our team, please do not hesitate to reach out at your earliest convenience."' },
       { id: 'pre_write_5',  label: 'Format: steps',      type: 'format',    prompt: 'Reply with exactly three numbered steps for editing a first draft for clarity and concision.' },
-      { id: 'pre_write_6',  label: 'Professional bio',   type: 'assistant', prompt: 'Write a professional two-sentence bio for a freelance UX designer who specializes in mobile apps.' },
+      { id: 'pre_write_6',  label: 'Professional bio',   type: 'writing', prompt: 'Write a professional two-sentence bio for a freelance UX designer who specializes in mobile apps.' },
       { id: 'pre_write_7',  label: 'Truth: recent',      type: 'truth',     prompt: 'What was the bestselling book published last month? If this information was not provided to you, say you cannot determine it from the prompt.' },
-      { id: 'pre_write_8',  label: 'Subject lines',      type: 'assistant', prompt: "Write three possible email subject lines for a re-engagement campaign targeting users who haven't logged in for 30 days." },
-      { id: 'pre_write_9',  label: 'Summarize concept',  type: 'assistant', prompt: 'Summarize "show don\'t tell" in creative writing in exactly two sentences.' },
+      { id: 'pre_write_8',  label: 'Subject lines',      type: 'writing', prompt: "Write three possible email subject lines for a re-engagement campaign targeting users who haven't logged in for 30 days." },
+      { id: 'pre_write_9',  label: 'Summarize concept',  type: 'writing', prompt: 'Summarize "show don\'t tell" in creative writing in exactly two sentences.' },
       { id: 'pre_write_10', label: 'Structured choice',  type: 'json',      prompt: 'Return only valid JSON comparing two writing styles. Use keys: winner, reason, risks, next_step. Styles: formal business writing vs. conversational tone.' },
     ],
   },
@@ -272,5 +272,6 @@ function isBenchmarkQuestionType(value: unknown): value is BenchmarkQuestionType
     || value === 'truth'
     || value === 'format'
     || value === 'assistant'
-    || value === 'coding';
+    || value === 'coding'
+    || value === 'writing';
 }

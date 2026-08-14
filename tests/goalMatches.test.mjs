@@ -49,7 +49,9 @@ test('ungradable goals say why instead of wearing a fake crown', () => {
   const byId = Object.fromEntries(
     getGoalMatches(['write', 'transcribe-file', 'transcribe-live'], scores).map((m) => [m.goal.id, m]),
   );
-  assert.match(byId['write'].awaiting, /nothing can grade it yet/i);
+  // Writing is now scored on writing questions, so it awaits a measurement
+  // like any other question-graded goal rather than apologising for itself.
+  assert.match(byId['write'].awaiting, /no measured winner|mark them/i);
   assert.match(byId['transcribe-file'].awaiting, /Listening Lab/);
   assert.match(byId['transcribe-live'].awaiting, /not possible locally/i);
   for (const match of Object.values(byId)) assert.equal(match.pick, undefined);
@@ -61,4 +63,34 @@ test('goal crowns are measured-only: no keyword fallback', () => {
   const scores = { 'a': score('a', undefined) };
   const [match] = getGoalMatches(['code'], scores);
   assert.equal(match.pick, undefined);
+});
+
+test('a goal blocked only by the missing judge says so, and says where to fix it', () => {
+  // "Run a test with enough questions" is useless advice when the questions
+  // were asked and the scorer simply cannot mark prose.
+  const scores = {
+    'a': {
+      model: 'a', total: 90, grade: 'A', speed: 90, sobriety: 90, stability: 90, fit: 90,
+      completedAt: '2026-08-13T00:00:00Z', scoreSchemaVersion: CURRENT_SCORE_SCHEMA_VERSION,
+      taskScores: { chat: { score: 88, questions: 6, graded: 0 } },
+    },
+  };
+  const [talk] = getGoalMatches(['talk'], scores);
+  assert.equal(talk.pick, undefined, 'a length proxy must not crown anyone');
+  assert.equal(talk.needsJudge, true);
+  assert.match(talk.awaiting, /judge/i);
+  assert.match(talk.awaiting, /settings/i, 'point at where to turn it on');
+});
+
+test('a properly marked goal still crowns normally', () => {
+  const scores = {
+    'a': {
+      model: 'a', total: 90, grade: 'A', speed: 90, sobriety: 90, stability: 90, fit: 90,
+      completedAt: '2026-08-13T00:00:00Z', scoreSchemaVersion: CURRENT_SCORE_SCHEMA_VERSION,
+      taskScores: { chat: { score: 88, questions: 6, graded: 6 } },
+    },
+  };
+  const [talk] = getGoalMatches(['talk'], scores);
+  assert.equal(talk.pick.model, 'a');
+  assert.ok(!talk.needsJudge);
 });

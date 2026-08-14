@@ -16,11 +16,12 @@ import type { TestedModelScore } from '../types.ts';
 import { goalById, type Goal, type GoalId } from './goals.ts';
 import { isLegacyScore } from './scoring.ts';
 import { isCloudModel } from './modelCatalog.ts';
-import { bestModelForTask, type TaskGroupId } from './taskScores.ts';
+import { bestModelForTask, needsJudge, type TaskGroupId } from './taskScores.ts';
 
 /** Which measured task group crowns a question-graded goal. */
 const GROUP_FOR_GOAL: Partial<Record<GoalId, TaskGroupId>> = {
   talk: 'chat',
+  write: 'writing',
   code: 'coding',
   'use-tools': 'tools',
 };
@@ -46,6 +47,8 @@ export type GoalMatch = {
   };
   /** When there is no crown, why not — honest and actionable. */
   awaiting?: string;
+  /** True when the only thing missing is a judge to mark the answers. */
+  needsJudge?: boolean;
 };
 
 export function getGoalMatches(
@@ -73,15 +76,22 @@ export function getGoalMatches(
           const score = eligible.find((s) => s.model === best.model);
           if (score) return { ...base, pick: { model: best.model, taskScore: best.score, score } };
         }
+        // Answers exist but nothing could mark them. Say which problem it is:
+        // "run more questions" is useless advice when the questions were asked
+        // and the scorer simply cannot grade prose.
+        const unmarked = eligible.some((s) => needsJudge(s.taskScores?.[group]));
         return {
           ...base,
-          awaiting: 'No measured winner yet — run a test with enough questions and one gets crowned.',
+          awaiting: unmarked
+            ? 'Answers are in, but nothing here can mark them — turn on the judge in Settings and re-run to crown this one.'
+            : 'No measured winner yet — run a test with enough questions and one gets crowned.',
+          needsJudge: unmarked,
         };
       }
 
       if (goal.grading === 'lab') {
         const lab = LAB_FOR_GOAL[goal.id] ?? 'Lab';
-        return { ...base, awaiting: `The ${lab} decides this crown — lab wins are not wired into Matches yet.` };
+        return { ...base, awaiting: `The ${lab} crowns this one — open it from Advanced Mode and run a test.` };
       }
 
       return {

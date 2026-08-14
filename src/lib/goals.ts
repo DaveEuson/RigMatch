@@ -96,15 +96,12 @@ export const GOALS: Goal[] = [
     runtime: 'ollama',
     // Distinct from talk on Dave's read: many people want a private companion
     // they feel safe with, which is not the same person as "help me write
-    // this email". Not scoreable yet — the suite has no writing question, and
-    // `format` measures instruction-following, not writing well. Until a real
-    // writing question exists this goal filters without ranking.
-    grading: 'none',
-    unsupportedReason:
-      'RigMatch cannot grade writing yet — no writing question exists in the '
-      + 'test suite, and scoring it on formatting questions would be a '
-      + 'fabricated measurement.',
-    questionTypes: [],
+    // this email". The Writing preset's six writing questions were typed
+    // 'assistant' and so counted as chat; typed honestly, they crown this.
+    // Note the heuristic cannot mark prose — a writing crown needs the judge,
+    // which isVerdictWorthy enforces rather than crowning on a length proxy.
+    grading: 'questions',
+    questionTypes: ['writing'],
   },
   {
     id: 'code',

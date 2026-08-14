@@ -28,6 +28,7 @@ import type { BenchmarkPromptResult } from '../types.ts';
 export const TASK_GROUPS = [
   { id: 'coding', label: 'Coding', questionTypes: ['coding'] },
   { id: 'chat', label: 'Everyday chat', questionTypes: ['assistant'] },
+  { id: 'writing', label: 'Writing', questionTypes: ['writing'] },
   { id: 'facts', label: 'Sticking to facts', questionTypes: ['truth'] },
   { id: 'tools', label: 'Tools & automations', questionTypes: ['json'] },
   { id: 'instructions', label: 'Following instructions', questionTypes: ['format'] },
@@ -44,6 +45,14 @@ export type TaskScore = {
   score: number;
   /** Questions it is drawn from — a score from one question is not a finding. */
   questions: number;
+  /**
+   * How many of those answers something could actually grade. Chat and writing
+   * questions have no heuristic behind them — without a judge their score is a
+   * length proxy — so a group where this is 0 has a number but no measurement,
+   * and must not be presented as a verdict. Absent on runs recorded before
+   * scoredBy was kept, which are treated as graded rather than retro-doubted.
+   */
+  graded?: number;
 };
 
 export type TaskScores = Partial<Record<TaskGroupId, TaskScore>>;
@@ -74,18 +83,36 @@ export function summarizeTaskScores(prompts: BenchmarkPromptResult[]): TaskScore
     );
     if (matching.length === 0) continue;
     const total = matching.reduce((sum, prompt) => sum + prompt.sobrietyScore, 0);
+    // An older run has no scoredBy at all; count those as graded so this does
+    // not retroactively cast doubt on results it cannot actually assess.
+    const graded = matching.filter((prompt) => prompt.scoredBy !== 'unjudged').length;
     scores[group.id] = {
       score: Math.round(total / matching.length),
       questions: matching.length,
+      graded,
     };
   }
 
   return scores;
 }
 
-/** Whether a group has enough behind it to be shown as a verdict. */
+/**
+ * Whether a group has enough behind it to be shown as a verdict.
+ *
+ * Two ways to fail: too few answers, or enough answers that nothing could
+ * grade. The second was the quieter bug — "Best for talking" was crowned on
+ * chat answers scored purely by character count, so the longest-winded model
+ * won. A number is not a measurement.
+ */
 export function isVerdictWorthy(task: TaskScore | undefined): task is TaskScore {
-  return task !== undefined && task.questions >= MIN_QUESTIONS_FOR_VERDICT;
+  if (task === undefined || task.questions < MIN_QUESTIONS_FOR_VERDICT) return false;
+  return (task.graded ?? task.questions) >= MIN_QUESTIONS_FOR_VERDICT;
+}
+
+/** True when answers exist but nothing could grade them — the judge would. */
+export function needsJudge(task: TaskScore | undefined): boolean {
+  if (!task || task.questions < MIN_QUESTIONS_FOR_VERDICT) return false;
+  return (task.graded ?? task.questions) < MIN_QUESTIONS_FOR_VERDICT;
 }
 
 export type TaskWinner = {

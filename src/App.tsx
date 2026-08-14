@@ -5968,9 +5968,13 @@ function HowWeScoreSection() {
             on a Mac Studio with 64 GB unified memory.
           </p>
           <p className="how-we-score-footer">
-            <strong>Answer quality is a heuristic proxy, not a verdict.</strong> The rule-based checks catch obvious
-            wins and failures, but they can misjudge a good answer written in an unexpected way. When a quality score
-            looks off, open the scorecard and read the saved answer transcript — that is the source of truth.
+            <strong>Answer quality is a heuristic proxy, not a verdict.</strong> The rule-based checks work by matching
+            a shape: valid JSON with the right keys, a refusal where one belongs, a list of the requested length, a
+            correct clamp function. Where a question has no such shape — everyday chat and writing — there is nothing
+            to match, so the fallback scores by answer <em>length</em>. That is not a quality measurement, and RigMatch
+            will not crown a Match on it: those goals stay uncrowned until you turn on the judge, which reads the answer
+            and marks it properly. When any quality score looks off, open the scorecard and read the saved transcript —
+            that is the source of truth.
           </p>
         </div>
       )}
@@ -10036,10 +10040,11 @@ function getPromptDiagnosticText(prompt: BenchmarkPromptResult) {
   return '';
 }
 
-const BENCHMARK_QUESTION_TYPES: BenchmarkQuestionType[] = ['assistant', 'json', 'truth', 'format', 'coding'];
+const BENCHMARK_QUESTION_TYPES: BenchmarkQuestionType[] = ['assistant', 'writing', 'json', 'truth', 'format', 'coding'];
 
 const BENCHMARK_TYPE_LABELS: Record<BenchmarkQuestionType, string> = {
   assistant: 'Assistant response',
+  writing: 'Writing task',
   json: 'JSON output',
   truth: 'Truthfulness',
   format: 'Format following',

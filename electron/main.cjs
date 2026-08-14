@@ -15,6 +15,7 @@ const {
   buildPromptDiagnostic,
   summarizePromptDiagnostics,
   scoreSobriety,
+  heuristicCanGrade,
   getBenchmarkPromptStatus,
   summarizeDoneReasons,
   summarizePromptStatuses,
@@ -2971,6 +2972,12 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       const sobrietyScore = promptJudgeScore != null
         ? promptJudgeScore
         : scoreSobriety(prompt, responseText);
+      // Say which of the three this number actually is. Without it the UI
+      // cannot tell a graded answer from a length proxy, and was crowning
+      // "best for talking" on the latter.
+      const scoredBy = promptJudgeScore != null
+        ? 'judge'
+        : heuristicCanGrade(prompt.type, prompt.prompt) ? 'heuristic' : 'unjudged';
       const promptStatus = getBenchmarkPromptStatus(responseText, doneReason);
       const diagnostic = buildPromptDiagnostic({
         responseText,
@@ -2987,6 +2994,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         firstTokenMs,
         tokensPerSecond,
         sobrietyScore,
+        scoredBy,
         response: responseText,
         doneReason: doneReason || 'complete',
         status: promptStatus,

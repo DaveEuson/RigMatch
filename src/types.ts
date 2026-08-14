@@ -178,6 +178,14 @@ export type BenchmarkPromptResult = {
   elapsedMs: number;
   tokensPerSecond: number;
   sobrietyScore: number;
+  /**
+   * How sobrietyScore was arrived at. 'judge' is a real quality reading;
+   * 'heuristic' means a rule matched (JSON keys, a refusal, a list shape);
+   * 'unjudged' means nothing could actually grade this answer and the number
+   * is a placeholder — prose scored by length, or code the scorer can only
+   * confirm is code. Absent on runs recorded before this was kept.
+   */
+  scoredBy?: 'judge' | 'heuristic' | 'unjudged';
   response: string;
   doneReason: string;
   status?: 'ok' | 'no-response' | 'truncated' | 'failed';

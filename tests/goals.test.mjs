@@ -37,12 +37,16 @@ test('the desires are exactly the approved list', () => {
   ]);
 });
 
-test('writing is honest about being unmeasurable, not scored on a proxy', () => {
-  // No writing question exists; format questions measure instruction-
-  // following. Grading writing on them would fabricate a measurement.
+test('writing is scored on writing questions, and only on those', () => {
+  // It used to say "cannot be graded" while the app shipped a Writing preset
+  // whose six writing questions were typed 'assistant' — so they scored as
+  // chat and the goal they belonged to went uncrowned. Typed honestly, the
+  // questions crown the goal. The heuristic still cannot MARK prose; that is
+  // isVerdictWorthy's job, not a reason to mistype the questions.
   const write = goalById('write');
-  assert.equal(write.grading, 'none');
-  assert.match(write.unsupportedReason, /no writing question/i);
+  assert.equal(write.grading, 'questions');
+  assert.deepEqual([...write.questionTypes], ['writing']);
+  assert.equal(write.unsupportedReason, undefined, 'nothing left to apologise for');
 });
 
 test('tools is scoreable on day one, using the json questions', () => {
@@ -113,7 +117,7 @@ test('every question type the suite asks is accounted for', () => {
     ...GOALS.flatMap((g) => g.questionTypes),
     ...SCORED_QUALITIES.flatMap((q) => q.questionTypes),
   ]);
-  for (const type of ['json', 'truth', 'format', 'assistant', 'coding']) {
+  for (const type of ['json', 'truth', 'format', 'assistant', 'coding', 'writing']) {
     assert.ok(claimed.has(type), `question type "${type}" belongs to nothing`);
   }
 });
