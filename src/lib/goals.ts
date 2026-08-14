@@ -230,6 +230,30 @@ export const GOALS: Goal[] = [
   },
 ];
 
+/**
+ * The test focus that measures a goal.
+ *
+ * The presets were goal-shaped from the start — Coding, Chat & Daily, Writing,
+ * Reasoning — but nothing connected them, so someone who said "help me code"
+ * at first run had to separately know to pick the Coding focus before their
+ * run would ask enough coding questions to crown anyone. A goal with no
+ * matching focus returns undefined and the General suite applies.
+ *
+ * Returns a preset id rather than the preset itself: goals.ts is the taxonomy,
+ * and importing the question bank here would invert that dependency.
+ */
+export function presetIdForGoal(goalId: string | undefined): string | undefined {
+  switch (goalId) {
+    case 'talk': return 'chat';
+    case 'write': return 'writing';
+    case 'code': return 'coding';
+    case 'use-tools': return 'tools';
+    // Lab-graded goals (images, video, transcription, reading pictures) are not
+    // measured by questions at all, so no focus would help them.
+    default: return undefined;
+  }
+}
+
 export function goalById(id: string | undefined): Goal | undefined {
   return GOALS.find((goal) => goal.id === id);
 }

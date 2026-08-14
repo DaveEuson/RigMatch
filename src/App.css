@@ -17035,6 +17035,44 @@ a.whats-next-support:hover {
   box-shadow: inset 0 0 0 1px rgba(255, 249, 239, 0.03);
 }
 
+/* The focus that measures the user's stated goal. Marked, not auto-applied:
+   a suite someone tuned by hand must not be swapped without them asking. */
+.run-focus-chips button.matches-goal {
+  border-color: rgba(var(--gold-rgb), 0.6);
+}
+
+.focus-goal-flag {
+  margin-left: 6px;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-style: normal;
+  color: var(--gold);
+}
+
+.run-focus-chips button.active .focus-goal-flag { color: var(--bg); }
+
+.run-focus-goal-suggest {
+  all: unset;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border: 1px solid rgba(var(--gold-rgb), 0.4);
+  border-radius: 10px;
+  background: rgba(var(--gold-rgb), 0.09);
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.run-focus-goal-suggest:hover { background: rgba(var(--gold-rgb), 0.16); }
+.run-focus-goal-suggest svg { flex: none; width: 15px; height: 15px; margin-top: 2px; color: var(--gold); }
+.run-focus-goal-suggest strong { color: var(--gold); }
+
 .run-focus-chips button:hover {
   transform: translateY(-1px);
   border-color: rgba(var(--gold-rgb), 0.58);

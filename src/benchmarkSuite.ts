@@ -228,6 +228,27 @@ export const BENCHMARK_PRESETS: BenchmarkPreset[] = [
     ],
   },
   {
+    id: 'tools',
+    label: 'Tools & Automations',
+    description: 'Structured output for home automation, scripts, and anything that reads a model\'s answer as data.',
+    questions: [
+      // Weighted to json, because that is what the tools goal is crowned on —
+      // six of them clears the three-answer bar in a single ten-question run.
+      // Every other preset was goal-shaped already; this one was the gap that
+      // left "Power my tools and automations" with nowhere to send people.
+      { id: 'pre_tool_1',  label: 'Device command',     type: 'json',      prompt: 'Return only valid JSON for this home-automation request: "dim the kitchen lights to 30% at sunset". Use keys intent, action, target, and urgency.' },
+      { id: 'pre_tool_2',  label: 'Tool choice',        type: 'json',      prompt: 'Return only valid JSON choosing between two tools for "find last month\'s electricity usage". Use keys winner, reason, risks, next_step. Tools: a database query vs. a web search.' },
+      { id: 'pre_tool_3',  label: 'Format: steps',      type: 'format',    prompt: 'Reply with exactly three numbered steps to add a new smart plug to an existing home-automation setup.' },
+      { id: 'pre_tool_4',  label: 'Sensor reading',     type: 'json',      prompt: 'Return only valid JSON describing a temperature sensor reading. Use keys intent, action, target, urgency. Set intent to "read_sensor" and target to "living_room_thermostat".' },
+      { id: 'pre_tool_5',  label: 'Truth: device state',type: 'truth',     prompt: 'Is my front door currently locked? If this information was not provided to you, say you cannot determine it from the prompt.' },
+      { id: 'pre_tool_6',  label: 'Schedule payload',   type: 'json',      prompt: 'Return only valid JSON for a recurring automation: run the hallway lights every weekday at 07:00. Use keys intent, action, target, urgency.' },
+      { id: 'pre_tool_7',  label: 'Format: bullets',    type: 'format',    prompt: 'Reply with exactly two short bullet points on when an automation should run locally rather than in the cloud.' },
+      { id: 'pre_tool_8',  label: 'Webhook body',       type: 'json',      prompt: 'Return only valid JSON for a webhook that reports a motion event. Use keys intent, action, target, urgency. Set intent to "motion_detected".' },
+      { id: 'pre_tool_9',  label: 'Failure path',       type: 'json',      prompt: 'Return only valid JSON describing what to do when a smart device does not respond. Use keys intent, action, target, urgency.' },
+      { id: 'pre_tool_10', label: 'Parse a request',    type: 'json',      prompt: 'Return only valid JSON parsing this instruction: "turn off everything downstairs except the fridge". Use keys intent, action, target, urgency.' },
+    ],
+  },
+  {
     id: 'reasoning',
     label: 'Reasoning',
     description: 'Analytical thinking, structured decisions, and logical clarity.',

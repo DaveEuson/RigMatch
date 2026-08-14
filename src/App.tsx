@@ -328,7 +328,7 @@ import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
 import { batchSeed, isVideoCheckpoint } from './lib/videoGen';
 import { DEFAULT_VIDEO_SIZE_ID, VIDEO_SIZE_PRESETS, toVideoLabResult, videoReadiness } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
-import { GOALS, goalById, goalHardwareExpectation, goalsByCategory, leagueLabel, type GoalId } from './lib/goals';
+import { GOALS, goalById, goalHardwareExpectation, goalsByCategory, leagueLabel, presetIdForGoal, type GoalId } from './lib/goals';
 import { taskFilterForGoal } from './lib/modelCatalog';
 import { readSelectedGoals, writeSelectedGoals } from './lib/goalSettings';
 import { getGoalMatches } from './lib/goalMatches';
@@ -3919,6 +3919,8 @@ function App() {
           onDownloadMissing={() => requestThirdPartyModelDownloads(shortlistedRows)}
           onChangeQuestionCount={setBenchmarkQuestionCount}
           onLoadPreset={setBenchmarkQuestions}
+          goalPresetId={presetIdForGoal(selectedGoals[0])}
+          goalDesire={selectedGoals[0] ? goalById(selectedGoals[0])?.desire.toLowerCase() : undefined}
           onEditQuestions={() => { cancelPendingRun(); setSuiteEditorOpen(true); }}
           qualityMode={qualityMode}
           judgeModel={effectiveJudgeModel}
@@ -5096,6 +5098,8 @@ function RunWarningModal({
   onDownloadMissing,
   onChangeQuestionCount,
   onLoadPreset,
+  goalPresetId,
+  goalDesire,
   onEditQuestions,
   lineupModels,
   skillSelection,
@@ -5130,6 +5134,10 @@ function RunWarningModal({
   onDownloadMissing?: () => void;
   onChangeQuestionCount: (count: BenchmarkQuestionCount) => void;
   onLoadPreset?: (questions: BenchmarkQuestion[]) => void;
+  /** The preset that measures the user's main goal, when one does. */
+  goalPresetId?: string;
+  /** That goal in the user's own words, for the copy. */
+  goalDesire?: string;
   onEditQuestions?: () => void;
   lineupModels: string[];
   skillSelection: SkillTestSelection;
@@ -5297,15 +5305,38 @@ function RunWarningModal({
                   <button
                     key={preset.id}
                     type="button"
-                    className={activePreset?.id === preset.id ? 'active' : ''}
+                    className={`${activePreset?.id === preset.id ? 'active' : ''}${preset.id === goalPresetId ? ' matches-goal' : ''}`}
                     onClick={() => onLoadPreset(preset.questions)}
                     aria-pressed={activePreset?.id === preset.id ? 'true' : 'false'}
-                    title={preset.description}
+                    title={preset.id === goalPresetId
+                      ? `${preset.description} This is the focus that measures your goal.`
+                      : preset.description}
                   >
                     {preset.label}
+                    {preset.id === goalPresetId && <em className="focus-goal-flag">Your goal</em>}
                   </button>
                 ))}
               </div>
+              {/* The connection the app never made: a goal was chosen at first
+                  run, and the run that would measure it had to be found
+                  separately. Offered, not forced — a suite someone tuned by
+                  hand must not be replaced without them asking. */}
+              {goalPresetId && activePreset?.id !== goalPresetId && (
+                <button
+                  type="button"
+                  className="run-focus-goal-suggest"
+                  onClick={() => {
+                    const preset = BENCHMARK_PRESETS.find((entry) => entry.id === goalPresetId);
+                    if (preset) onLoadPreset(preset.questions);
+                  }}
+                >
+                  <Sparkles aria-hidden="true" />
+                  <span>
+                    Focus on <strong>{goalDesire ?? 'your goal'}</strong> — asks more of the questions that
+                    crown a Match for it, so a shorter run still names a winner.
+                  </span>
+                </button>
+              )}
               <em className="run-focus-hint">
                 {activePreset ? activePreset.description : 'Mixed general-purpose questions covering JSON output, instruction following, and daily tasks.'}
               </em>
