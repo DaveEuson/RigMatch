@@ -661,6 +661,9 @@ function App() {
   // Settings can reopen the goals step of the splash on its own — mistakes at
   // first run must not be permanent, and localStorage is not a settings UI.
   const [showGoalsEditor, setShowGoalsEditor] = useState(false);
+  // The message Simple Mode is currently showing, if any. Advanced reads the
+  // same text off the Ticker and does not need it.
+  const [simpleNotice, setSimpleNotice] = useState<string | null>(null);
   // What the person said they want to do, first pick foremost. Drives the
   // Models lens and the wizard's opening dream — a lens, never a lock.
   const [selectedGoals, setSelectedGoals] = useState<GoalId[]>(() => readSelectedGoals());
@@ -1600,6 +1603,19 @@ function App() {
       : 'Advanced mode selected. RigMatch will show more setup details, commands, and diagnostics.');
   }, []);
 
+  /**
+   * Say something the user genuinely needs to read, in whichever mode they are in.
+   *
+   * setActivity alone was not enough: it renders only inside <Ticker>, which is
+   * gated to Advanced, so in Simple Mode — the default — every refusal and
+   * failure was written to state nobody paints. Use this for anything a user
+   * must act on; plain setActivity remains right for running commentary.
+   */
+  const tellUser = useCallback((message: string) => {
+    setActivity(message);
+    setSimpleNotice(message);
+  }, []);
+
   // Stamped onto every score at scoring time. Scores are relative to a rig,
   // and Ollama tags mutate — the digest is the only durable identity for the
   // weights that actually earned the number.
@@ -1812,7 +1828,7 @@ function App() {
         percent: 0,
         message: errorMessage,
       });
-      setActivity(`Benchmark failed: ${errorMessage}`);
+      tellUser(`The test stopped: ${errorMessage}`);
       // Re-read the provider. The commonest reason a run dies is that Ollama
       // went away mid-test, and nothing here updated ollama.ready — so the app
       // kept showing "Ollama ready" and "Desktop bridge online" for a provider
@@ -1824,7 +1840,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsBenchmarking(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel, tellUser]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
     // The quick TEST button skips the full launch modal, but it still loads a
@@ -2304,7 +2320,7 @@ function App() {
     }
 
     if (queuedRowsForDownload.length === 0) {
-      setActivity(`No missing Speed Dating contestants were queued. ${blockedReasons[0] ?? 'Check model availability first.'}`);
+      tellUser(`Nothing could be queued for download. ${blockedReasons[0] ?? 'Check model availability first.'} Go back and pick a different model.`);
       return;
     }
 
@@ -2320,7 +2336,7 @@ function App() {
 
     const blockedNote = blockedReasons.length > 0 ? ` ${blockedReasons.length} could not be queued.` : '';
     setActivity(`${queuedRowsForDownload.length} missing Speed Dating contestant${queuedRowsForDownload.length === 1 ? '' : 's'} queued for download.${blockedNote}`);
-  }, [modelRows, ollama.baseUrl, queuedModelIds, system.gpu.vramGb, system.platform, system.storage.availableGb]);
+  }, [modelRows, ollama.baseUrl, queuedModelIds, system.gpu.vramGb, system.platform, system.storage.availableGb, tellUser]);
 
   const requestThirdPartyModelDownloads = useCallback((rows: ModelRow[]) => {
     const missingRows = rows.filter((row) => !row.installed);
@@ -2363,13 +2379,13 @@ function App() {
     }).slice(0, 5);
 
     if (ranked.length === 0) {
-      setActivity('No models fit this computer yet — check your computer first, or download one.');
+      tellUser('No models fit this computer yet — run the computer check first, or download one from the list.');
       return;
     }
 
     setShortlistIds(new Set(ranked.map((row) => row.displayName)));
     setActivity(`Picked ${ranked.length} contestant${ranked.length === 1 ? '' : 's'} that fit this computer.`);
-  }, [modelRows, system.gpu.vramGb, system.platform]);
+  }, [modelRows, system.gpu.vramGb, system.platform, tellUser]);
 
   const toggleShortlist = useCallback((row: ModelRow) => {
     if (!canJoinComparison(row)) {
@@ -2667,7 +2683,7 @@ function App() {
         message: errorMessage,
         lastResult: current?.lastResult,
       }));
-      setActivity(`Speed Dating failed: ${errorMessage}`);
+      tellUser(`Speed Dating stopped: ${errorMessage}`);
       // See the note in startBenchmark's catch: without this, ollama.ready
       // stays stale-true and the reconnect poll never starts.
       void refreshProviderStatus();
@@ -2675,7 +2691,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge, rigStampForModel]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge, rigStampForModel, tellUser]);
 
   const runSkillTestsAfterRun = useCallback(async (models: string[]) => {
     const selection = skillTestSelection;
@@ -3412,6 +3428,8 @@ function App() {
           onLaunchOllamaInstaller={launchOllamaInstaller}
           wizardModels={wizardModels}
           initialDream={dreamForGoal(selectedGoals[0])}
+          notice={simpleNotice}
+          onDismissNotice={() => setSimpleNotice(null)}
           modelsLoading={modelRows.length === 0}
           shortlistIds={shortlistIds}
           shortlistedRows={shortlistedRows}
@@ -3431,7 +3449,7 @@ function App() {
           onRunAgain={() => undefined}
           onSwitchToAdvanced={() => { setCameFromSimple(false); selectUiMode('advanced'); }}
           initialStep={wizardStep}
-          onStepChange={setWizardStep}
+          onStepChange={(next) => { setWizardStep(next); setSimpleNotice(null); }}
           onShareScore={() => setShareWinnerOpen(true)}
         />
       )}

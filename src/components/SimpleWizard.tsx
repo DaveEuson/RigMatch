@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
@@ -22,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, SystemProfile } from '../types';
+import { STEPS, STEP_LABELS, footerHint, nextBlockedHint, type StepId } from '../lib/wizardCopy';
 import { formatBytes, formatBytesPerSecond } from '../lib/format';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 import { getFriendlyModelName } from '../lib/modelCatalog';
@@ -57,6 +59,12 @@ type SimpleRunProgress = {
   phase: 'running' | 'complete' | 'failed';
   currentModel: string;
   percent: number;
+  /**
+   * Why a run stopped. The App has always passed this; this type used to omit
+   * it, so Simple Mode discarded every failure reason it was handed and left
+   * beginners on a frozen game show with no explanation.
+   */
+  message?: string;
   /** Number of lineup models fully tested so far — used for per-model podium state. */
   completed?: number;
   lastResult?: { model: string; total: number; grade: string };
@@ -68,15 +76,7 @@ type SimpleRunProgress = {
   questionScores?: Record<string, number>;
 } | null;
 
-export type StepId = 'setup' | 'pick' | 'download' | 'compare' | 'winner';
-const STEPS: StepId[] = ['setup', 'pick', 'download', 'compare', 'winner'];
-const STEP_LABELS: Record<StepId, string> = {
-  setup: 'Setup',
-  pick: 'Pick',
-  download: 'Download',
-  compare: 'Compare',
-  winner: 'Winner',
-};
+export type { StepId };
 
 const HOST_COPY: Record<StepId, string> = {
   setup: "Welcome to RigMatch! First, let's take a quick peek at your computer. One click — I'll handle the rest.",
@@ -113,6 +113,13 @@ type SimpleWizardProps = {
   onTogglePick: (row: ModelRow) => void;
   /** The dream matching the first-run goal choice, so PICK opens on it. */
   initialDream?: DreamFilterId;
+  /**
+   * Something the app needs this user to read — a refusal, a blocked queue, a
+   * failed run. Advanced Mode shows these in the Ticker, which is Advanced-only,
+   * so without this Simple Mode is mute by construction.
+   */
+  notice?: string | null;
+  onDismissNotice?: () => void;
   /** Fills the lineup with the best-fitting models for people who can't choose. */
   onChooseForMe: () => void;
   pullProgressByModel: Record<string, PullProgressUpdate>;
@@ -210,6 +217,10 @@ export function SimpleWizard(props: SimpleWizardProps) {
     props.onStepChange?.(next);
   };
 
+  // Only offer "Stop the show" while a show is actually running. Keyed to the
+  // step alone, a finished or failed run left Compare with no Back button at
+  // all — the one screen a beginner could get stranded on.
+  const showRunning = step === 'compare' && benchmarkActive;
   const stepIndex = STEPS.indexOf(step);
   // Compare is only "complete" once the show has actually finished — leaving it
   // true mid-run let a beginner click through to a winner crowned on partial data.
@@ -343,6 +354,16 @@ export function SimpleWizard(props: SimpleWizardProps) {
           </div>
         </div>
 
+        {props.notice && (
+          <div className="sw-notice" role="status">
+            <AlertTriangle aria-hidden="true" />
+            <p>{props.notice}</p>
+            {props.onDismissNotice && (
+              <button type="button" onClick={props.onDismissNotice}>Got it</button>
+            )}
+          </div>
+        )}
+
         {step === 'setup' && <SetupScreen {...props} />}
         {step === 'pick' && <PickScreen {...props} />}
         {step === 'download' && <DownloadScreen {...props} />}
@@ -356,15 +377,15 @@ export function SimpleWizard(props: SimpleWizardProps) {
             <button
               type="button"
               className="sw-ghost-pill"
-              onClick={step === 'compare' ? props.onStopShow : downloadsActive ? props.onCancelDownloads : goBack}
-              title={step === 'compare'
+              onClick={showRunning ? props.onStopShow : downloadsActive ? props.onCancelDownloads : goBack}
+              title={showRunning
                 ? 'Stops after the current question. Models already scored keep their results.'
                 : downloadsActive
                   ? 'Stops after the current file. Anything already downloaded stays on your PC.'
                   : undefined}
             >
               <ArrowLeft aria-hidden="true" />
-              {step === 'compare' ? 'Stop the show' : downloadsActive ? 'Stop downloads' : 'Back'}
+              {showRunning ? 'Stop the show' : downloadsActive ? 'Stop downloads' : 'Back'}
             </button>
           )}
         </div>
@@ -378,7 +399,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
               className="sw-gold-pill"
               onClick={goNext}
               disabled={!stepComplete[step]}
-              title={stepComplete[step] ? undefined : nextBlockedHint(step, downloadBlockedReason)}
+              title={stepComplete[step] ? undefined : nextBlockedHint(step, downloadBlockedReason, props.runProgress?.phase === 'failed')}
             >
               {nextLabel[step]}
               <ArrowRight aria-hidden="true" />
@@ -388,31 +409,6 @@ export function SimpleWizard(props: SimpleWizardProps) {
       </footer>
     </div>
   );
-}
-
-function footerHint(step: StepId, ready: boolean, pickCount: number): string {
-  switch (step) {
-    // Only claim readiness once the check has actually passed. Before that this
-    // line congratulated the user for a scan that hadn't run — and once it has,
-    // the Setup screen already says so, so the footer stays quiet either way.
-    case 'setup': return ready ? '' : 'One click checks Ollama and your hardware — nothing is installed or changed';
-    case 'download': return 'Heads up: the show works your GPU, CPU, and fans hard until a winner is crowned — close heavy apps first';
-    case 'compare': return 'Scores appear live — the winner is crowned after the last round';
-    case 'winner': return 'RigMatch remembers your Top Match — find it any time in the header';
-    default: return pickCount ? '' : 'Pick at least 1 to continue';
-  }
-}
-
-function nextBlockedHint(step: StepId, downloadReason?: string): string {
-  switch (step) {
-    case 'setup': return 'Check your computer first';
-    case 'pick': return 'Pick at least 1 to continue';
-    // "Waiting for downloads to finish" was shown even when every download had
-    // already stopped and one had failed, which was simply untrue.
-    case 'download': return downloadReason || 'Waiting for downloads to finish';
-    case 'compare': return 'The show is still running';
-    default: return '';
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -819,12 +815,16 @@ function getEtaLabel(pull?: PullProgressUpdate): string {
 // Compare
 
 function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
+  const failed = runProgress?.phase === 'failed';
   const activeModel = runProgress?.currentModel ?? '';
   const round = (runProgress?.questionIndex ?? 0) + 1;
   // questionTotal is the questions asked of EACH model. Falling back to the
   // model count was meaningless — those are different quantities.
   const totalRounds = runProgress?.questionTotal ?? 0;
-  const question = runProgress?.questionPrompt ?? 'The host is lining up the next question…';
+  // A dead run must not keep claiming the host is lining up the next question.
+  const question = failed
+    ? (runProgress?.message ?? 'The show stopped early.')
+    : runProgress?.questionPrompt ?? 'The host is lining up the next question…';
   const completed = runProgress?.completed ?? 0;
   const [showPrompt, setShowPrompt] = useState(false);
 

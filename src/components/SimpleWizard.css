@@ -948,3 +948,47 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
      an order of magnitude below anything that triggers motion sensitivity, and
      removing them would cost real feedback for no accessibility gain. */
 }
+
+/* The message channel Simple Mode never had. Advanced renders these in the
+   Ticker; without this the mode most beginners use is mute by construction. */
+.sw-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(var(--gold-rgb), 0.42);
+  border-radius: 12px;
+  background: rgba(var(--gold-rgb), 0.10);
+  color: var(--text);
+}
+
+.sw-notice svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--gold);
+}
+
+.sw-notice p {
+  flex: 1;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.sw-notice button {
+  flex: none;
+  padding: 4px 12px;
+  border: 1px solid rgba(var(--gold-rgb), 0.5);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gold);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sw-notice button:hover { background: rgba(var(--gold-rgb), 0.16); }
