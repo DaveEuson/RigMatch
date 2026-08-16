@@ -840,6 +840,28 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 
 /* Beginner-clarity additions: safety line, card size badge, winner subtitle,
    and the collapsible raw benchmark prompt on Compare. */
+/* The "what is this even for" opener, above the scan headline. Sized between
+   the h2 and the muted body copy so it reads as the lead, not a caption. */
+.sw-setup-lede {
+  max-width: 60ch;
+  margin: 0 auto 2px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text);
+}
+/* A full lineup is a status, not an action. Sized and coloured to sit where
+   the Pick button was without impersonating it. */
+.sw-card-full {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: transparent;
+}
 .sw-setup-safety { font-size: 12px; margin-top: -10px; }
 .sw-card-size { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
 /* Note under the size line when one card stands in for several size variants. */

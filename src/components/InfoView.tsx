@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import { glossaryEntry, type GlossaryEntry } from '../lib/glossary';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { findGlossaryTerms, glossaryEntry } from '../lib/glossary';
+import { InfoContext, useInfoControls } from '../lib/infoContext';
 
 /**
  * What the Host is currently explaining.
@@ -17,14 +18,6 @@ import { glossaryEntry, type GlossaryEntry } from '../lib/glossary';
  * never changes size when pointed at.
  */
 
-type InfoState = {
-  entry?: GlossaryEntry;
-  show: (id: string) => void;
-  clear: () => void;
-};
-
-const InfoContext = createContext<InfoState>({ show: () => {}, clear: () => {} });
-
 export function InfoViewProvider({ children }: { children: ReactNode }) {
   const [id, setId] = useState<string | undefined>();
   const show = useCallback((next: string) => setId(next), []);
@@ -36,11 +29,6 @@ export function InfoViewProvider({ children }: { children: ReactNode }) {
   return <InfoContext.Provider value={value}>{children}</InfoContext.Provider>;
 }
 
-/** What the Host should be saying right now, if anything is being pointed at. */
-export function useExplaining(): GlossaryEntry | undefined {
-  return useContext(InfoContext).entry;
-}
-
 /**
  * A term the Host will explain when it is pointed at or tabbed to.
  *
@@ -49,7 +37,7 @@ export function useExplaining(): GlossaryEntry | undefined {
  * mid-paragraph reads as something you are meant to type into.
  */
 export function Explain({ id, children }: { id: string; children?: ReactNode }) {
-  const { show, clear } = useContext(InfoContext);
+  const { show, clear } = useInfoControls();
   const entry = glossaryEntry(id);
   if (!entry) return <>{children}</>;
   return (
@@ -68,4 +56,26 @@ export function Explain({ id, children }: { id: string; children?: ReactNode }) 
       {children ?? entry.term}
     </button>
   );
+}
+
+/**
+ * Explain whatever glossary terms happen to appear in a runtime-built string.
+ *
+ * For copy the app assembles rather than the JSX spells out — a per-model fit
+ * line, a formatted size, an error the main process worded. Text with no known
+ * term renders exactly as it was passed in.
+ */
+export function ExplainText({ text }: { text: string }) {
+  const hits = findGlossaryTerms(text);
+  if (hits.length === 0) return <>{text}</>;
+
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (const hit of hits) {
+    if (hit.start > cursor) parts.push(text.slice(cursor, hit.start));
+    parts.push(<Explain key={hit.id} id={hit.id}>{text.slice(hit.start, hit.end)}</Explain>);
+    cursor = hit.end;
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return <>{parts}</>;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -25,7 +25,8 @@ import {
 import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, SystemProfile } from '../types';
 import { STEPS, STEP_LABELS, footerHint, nextBlockedHint, type StepId } from '../lib/wizardCopy';
 import { copyText, type CopyState } from '../lib/clipboard';
-import { Explain, InfoViewProvider, useExplaining } from './InfoView';
+import { Explain, ExplainText, InfoViewProvider } from './InfoView';
+import { useExplaining } from '../lib/infoContext';
 import { formatBytes, formatBytesPerSecond } from '../lib/format';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 import { getFriendlyModelName } from '../lib/modelCatalog';
@@ -477,10 +478,19 @@ function SetupScreen({
   return (
     <div className="sw-setup">
       <div className="sw-setup-hero" style={{ backgroundImage: `url(${rigGreenroom})` }} aria-hidden="true" />
-      <h2>Let's check your computer</h2>
+      {/* Say what the thing IS before asking to scan for it. Without this the
+          first screen a newcomer meets is a hardware check for something they
+          have not been told the purpose of. */}
+      <p className="sw-setup-lede">
+        An <Explain id="model">AI model</Explain> is a program that runs on your own computer — it can hold a
+        conversation, help you write, explain code, or make pictures. They're free, there are hundreds,
+        and which one is best depends entirely on the machine you have.
+      </p>
+      <h2>So let's check your computer</h2>
       <p className="sw-muted">
-        RigMatch looks at your <Explain id="graphics-card">graphics card</Explain> and memory to find{' '}
-        <Explain id="model">AI models</Explain> that fit. Everything stays on your PC — no account, no cloud.
+        RigMatch looks at your <Explain id="graphics-card">graphics card</Explain> and memory, works out which
+        models will actually run well here, then has them compete so you can crown a winner.
+        Everything stays on your PC — no account, no cloud.
       </p>
       {/* Beginners' real fear is "will this break my computer." Name it once, here. */}
       <p className="sw-muted sw-setup-safety">
@@ -498,7 +508,10 @@ function SetupScreen({
             <strong>You're all set!</strong>
             <button type="button" className="sw-link" onClick={onCheckComputer}>Check again</button>
           </div>
-          <ResultRow label="Local AI found" detail="Ollama is installed and running" />
+          <ResultRow
+            label="Local AI found"
+            detail={<><Explain id="ollama">Ollama</Explain> is installed and running</>}
+          />
           <ResultRow label="Strong graphics card" detail={`${gpu} — great for local AI`} />
           <ResultRow label="Plenty of space" detail={`${freeGb} GB free for models`} />
         </div>
@@ -572,7 +585,7 @@ function SetupScreen({
   );
 }
 
-function ResultRow({ label, detail }: { label: string; detail: string }) {
+function ResultRow({ label, detail }: { label: string; detail: ReactNode }) {
   return (
     <div className="sw-result-row">
       <strong>{label}</strong>
@@ -737,16 +750,23 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
       </div>
       <span className={`sw-fit-badge ${model.fitTier === 'slower' ? 'gold' : 'green'}`} title={model.fitDetail}>
         <Heart aria-hidden="true" />{fitLabel}
-        {model.fitDetail && <i className="sw-fit-detail">{model.fitDetail}</i>}
+        {model.fitDetail && <i className="sw-fit-detail"><ExplainText text={model.fitDetail} /></i>}
       </span>
-      <button
-        type="button"
-        className={picked ? 'sw-card-btn picked' : 'sw-card-btn'}
-        onClick={onToggle}
-        disabled={disabled}
-      >
-        {picked ? 'Picked ✓ · Click to remove' : disabled ? 'Lineup full' : '♥ Pick'}
-      </button>
+      {/* A full lineup used to leave "Lineup full" sitting in the primary
+          button — so most cards in the grid presented a dead gold control as
+          their call to action. It is a status, so it reads as one, and it says
+          what to do about it. */}
+      {disabled ? (
+        <p className="sw-card-full">Lineup full — drop one from your lineup to swap it in.</p>
+      ) : (
+        <button
+          type="button"
+          className={picked ? 'sw-card-btn picked' : 'sw-card-btn'}
+          onClick={onToggle}
+        >
+          {picked ? 'Picked ✓ · Click to remove' : '♥ Pick'}
+        </button>
+      )}
     </article>
   );
 }

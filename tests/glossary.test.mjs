@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { GLOSSARY, glossaryEntry, tickerTips } from '../src/lib/glossary.ts';
+import { GLOSSARY, findGlossaryTerms, glossaryEntry, tickerTips } from '../src/lib/glossary.ts';
 
 /**
  * The point of this file is a promise: someone who has never run a local model
@@ -96,4 +96,62 @@ test('the Advanced ticker reads from the same source', () => {
   }
   const vram = tips.find((tip) => tip.term.includes('VRAM'));
   assert.ok(vram, 'the technical name should still be findable for people who know it');
+});
+
+// ---------------------------------------------------------------------------
+// Terms inside strings the app builds at runtime
+
+test('a term is found inside copy the app assembled', () => {
+  // The real case: every card in the Pick grid carries this line, which is
+  // built per model and so cannot be wrapped by hand in the JSX.
+  const hits = findGlossaryTerms('4.7 GB of your 12 GB VRAM');
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].id, 'vram');
+  assert.equal('4.7 GB of your 12 GB VRAM'.slice(hits[0].start, hits[0].end), 'VRAM');
+});
+
+test('the technical name and the friendly name both resolve', () => {
+  assert.equal(findGlossaryTerms('Check your GPU')[0]?.id, 'graphics-card');
+  assert.equal(findGlossaryTerms('Check your graphics card')[0]?.id, 'graphics-card');
+});
+
+test('a longer term is not shadowed by a shorter one inside it', () => {
+  const hits = findGlossaryTerms('It needs graphics memory to run');
+  assert.equal(hits.length, 1, 'one span, not two overlapping ones');
+  assert.equal(hits[0].id, 'vram');
+});
+
+test('a term is marked once, not every time it appears', () => {
+  // Four underlines of the same word in one sentence is noise, not help.
+  const hits = findGlossaryTerms('VRAM, more VRAM, and still more VRAM');
+  assert.equal(hits.length, 1);
+});
+
+test('matches come back in reading order', () => {
+  const text = 'Ollama needs graphics memory';
+  const hits = findGlossaryTerms(text);
+  assert.ok(hits.length >= 2);
+  for (let i = 1; i < hits.length; i += 1) {
+    assert.ok(hits[i].start >= hits[i - 1].end, 'spans must not overlap or run backwards');
+  }
+});
+
+test('plain copy with no jargon is left completely alone', () => {
+  assert.deepEqual(findGlossaryTerms('Everything stays on your computer.'), []);
+  assert.deepEqual(findGlossaryTerms(''), []);
+});
+
+test('a term only matches as a whole word', () => {
+  // Substring matching would underline the middle of unrelated words and, in
+  // the download screen, the middle of file names.
+  assert.deepEqual(findGlossaryTerms('VRAMble'), []);
+  assert.deepEqual(findGlossaryTerms('unVRAM'), []);
+});
+
+test('every entry can actually be found by its own name', () => {
+  // A term nothing can match is a definition that will never be shown.
+  for (const entry of GLOSSARY) {
+    const hits = findGlossaryTerms(entry.term);
+    assert.equal(hits[0]?.id, entry.id, `"${entry.term}" does not match its own entry`);
+  }
 });

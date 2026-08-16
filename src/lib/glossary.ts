@@ -147,3 +147,52 @@ export function tickerTips(): Array<{ term: string; tip: string }> {
     tip: entry.because ? `${entry.plain} ${entry.because}` : entry.plain,
   }));
 }
+
+/** Every name a glossary entry answers to, longest first. */
+const TERM_ALIASES = GLOSSARY
+  .flatMap((entry) => [entry.term, entry.alsoCalled]
+    .filter((name): name is string => Boolean(name))
+    .map((name) => ({ id: entry.id, name })))
+  .sort((a, b) => b.name.length - a.name.length);
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Locate glossary terms inside a string the app assembled at runtime.
+ *
+ * The most-repeated jargon in Simple Mode is not written in the JSX where it
+ * could be wrapped by hand — "4.7 GB of your 12 GB VRAM" is built per model and
+ * appears on every card in the Pick grid. Matching the string lets that copy
+ * stay exactly as it is and still be explainable.
+ *
+ * Longest name wins, so "graphics memory" is not shadowed by "memory", and each
+ * entry is marked once: underlining the same word four times in a paragraph is
+ * noise, not help.
+ */
+export function findGlossaryTerms(text: string): Array<{ id: string; start: number; end: number }> {
+  const found: Array<{ id: string; start: number; end: number }> = [];
+  const claimed: boolean[] = new Array(text.length).fill(false);
+
+  for (const { id, name } of TERM_ALIASES) {
+    if (found.some((hit) => hit.id === id)) continue;
+    // String.raw, not a plain literal: '\b' in a template becomes a literal
+    // backspace byte and the pattern then silently matches nothing.
+    //
+    // The boundaries are conditional because a term may not begin or end with a
+    // word character — 'Model size (3B, 7B)' ends in a bracket, and \b after a
+    // bracket at end-of-string never matches, so that entry could never be
+    // found at all.
+    const open = /^\w/.test(name) ? String.raw`\b` : '';
+    const close = /\w$/.test(name) ? String.raw`\b` : '';
+    const pattern = new RegExp(`${open}${escapeRegExp(name)}${close}`, 'i');
+    const match = pattern.exec(text);
+    if (!match) continue;
+    const start = match.index;
+    const end = start + match[0].length;
+    if (claimed.slice(start, end).some(Boolean)) continue;
+    for (let i = start; i < end; i += 1) claimed[i] = true;
+    found.push({ id, start, end });
+  }
+
+  return found.sort((a, b) => a.start - b.start);
+}
