@@ -14,6 +14,7 @@ import { chromium } from 'playwright';
 
 const url = process.env.RIGMATCH_TOUR_URL || 'http://127.0.0.1:5173/';
 const SIZES = [
+  { label: 'minimum 1280x820', width: 1280, height: 820 },
   { label: 'laptop  1440x820', width: 1440, height: 820 },
   { label: 'desktop 1440x980', width: 1440, height: 980 },
   { label: 'tall    1440x1200', width: 1440, height: 1200 },
@@ -80,6 +81,14 @@ for (const size of SIZES) {
       panelScrollHeight: panel ? Math.round(panel.scrollHeight) : null,
       panelOverflows: panel ? panel.scrollHeight > panel.clientHeight + 2 : null,
       sideMenu: measure('.side-menu'),
+      menuParts: (() => {
+        const menu = document.querySelector('.side-menu');
+        if (!menu) return [];
+        return [...menu.children].filter((c) => getComputedStyle(c).display !== 'none').map((c) => ({
+          className: String(c.className).split(' ')[0] || c.tagName.toLowerCase(),
+          height: Math.round(c.getBoundingClientRect().height),
+        }));
+      })(),
       // Can every menu item actually be reached? A nav that silently clips is
       // worse than a cramped panel: the item is not merely small, it is gone.
       sideMenuNav: (() => {
@@ -134,6 +143,7 @@ for (const size of SIZES) {
   console.log('  shot                ' + `${outDir}/shell-${size.width}x${size.height}.png`);
   const nav = bands.sideMenuNav;
   console.log(`  side menu           ${bands.sideMenu}  items ${nav?.total}  clipped: ${nav?.clipped.length ? nav.clipped.join(', ') : 'none'}  scrollable: ${nav?.scrollable}  overflow-y: ${nav?.overflowY}`);
+  console.log('  menu parts          ' + (bands.menuParts || []).map((p) => `${p.className}:${p.height}`).join('  '));
   console.log('  deck children       ' + bands.topDeckChildren.map((c) => `${c.className}:${c.height}(${c.intrinsic})`).join('  '));
   await page.screenshot({ path: `${outDir}/shell-${size.width}x${size.height}.png`, fullPage: false });
   await context.close();

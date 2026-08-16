@@ -18096,15 +18096,28 @@ a.whats-next-support:hover {
 .side-menu::-webkit-scrollbar-thumb:hover { background: rgba(var(--gold-rgb), 0.7); }
 
 @media (max-height: 900px) {
+  /* Measured at 1280x820 — the smallest window the packaged app allows, since
+     it sets minWidth 1280 / minHeight 820. The rail had 362px for 448px of
+     content, so Settings sat outside the box. It scrolls, but the primary
+     navigation should not need scrolling at the app's own minimum size.
+
+     What goes: the description under each label, the number badge (which also
+     stops labels wrapping to two lines in the narrower 1280 rail), and the
+     breathing room. What stays: every destination, its badge value, and the
+     support links. */
   .side-menu-item {
-    min-height: 38px;
-    padding-top: 3px;
-    padding-bottom: 3px;
+    min-height: 32px;
+    padding: 2px 7px;
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+    gap: 6px;
   }
-  /* The label and the badge stay; the sentence under it goes. */
+  .side-menu-item > b { display: none; }
   .side-menu-copy small { display: none; }
-  .side-menu-nav { gap: 5px; }
-  .side-menu-title { padding-top: 4px; padding-bottom: 4px; }
+  .side-menu-copy strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .side-menu-nav { gap: 4px; }
+  .side-menu-title { padding-top: 2px; padding-bottom: 2px; }
+  .side-menu-donate,
+  .side-menu-bug-report { padding-top: 4px; padding-bottom: 4px; font-size: 10px; }
 }
 
 /* The Models filter chips measured 21px tall — under the 24px minimum target

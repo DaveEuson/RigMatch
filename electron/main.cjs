@@ -325,6 +325,29 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // Electron grants every permission a renderer asks for unless a handler says
+  // otherwise, which sat oddly beside contextIsolation, the sandbox, the CSP
+  // and the host allowlists. RigMatch needs exactly one: the microphone, for
+  // the listening test. Everything else — camera, geolocation, notifications,
+  // clipboard reads, MIDI, USB, serial — is refused, and refused audibly
+  // rather than silently, so a future feature that needs one fails loudly here
+  // instead of mysteriously in the renderer.
+  const ALLOWED_PERMISSIONS = new Set(['media', 'audioCapture']);
+  const decide = (permission) => {
+    const allowed = ALLOWED_PERMISSIONS.has(permission);
+    if (!allowed) {
+      console.warn(`[permissions] refused "${permission}": not in ALLOWED_PERMISSIONS`);
+    }
+    return allowed;
+  };
+  win.webContents.session.setPermissionRequestHandler((_contents, permission, callback) => {
+    callback(decide(permission));
+  });
+  // The request handler covers prompts; the check handler covers the synchronous
+  // queries a page can make without prompting. Both are needed, or a permission
+  // denied at the prompt still reads as "granted" when queried.
+  win.webContents.session.setPermissionCheckHandler((_contents, permission) => decide(permission));
+
   if (isDev()) {
     win.loadURL('http://127.0.0.1:5173');
   } else {

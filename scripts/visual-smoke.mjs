@@ -87,11 +87,14 @@ async function runBrowserChecks(url) {
   const advancedMenuVisible = await page.locator('.side-menu').isVisible();
   await page.screenshot({ path: screenshots.advanced, fullPage: false });
 
-  // A short laptop window, where the nav rail runs out of room. At 1440x820
-  // it silently clipped Activity and Settings off the end: the rail scrolls,
-  // which is the intended behaviour, but nothing said so, and the primary
-  // navigation simply appeared to stop before Settings existed.
-  const shortCtx = await browser.newContext({ viewport: { width: 1440, height: 820 } });
+  // The smallest window the packaged app allows: it sets minWidth 1280 and
+  // minHeight 820, so this exact size is the reachable worst case rather than a
+  // hypothetical one. The rail silently clipped Activity and Settings off the
+  // end here — it scrolls, which is intended, but nothing said so, and the
+  // primary navigation appeared to stop before Settings existed. Checking
+  // 1440x820 instead missed it, because the wider rail keeps labels on one
+  // line and the items shorter.
+  const shortCtx = await browser.newContext({ viewport: { width: 1280, height: 820 } });
   const shortPage = await shortCtx.newPage();
   await shortPage.goto(url, { waitUntil: 'networkidle' });
   await forceSimpleMode(shortPage);
@@ -149,7 +152,7 @@ async function runBrowserChecks(url) {
       : '';
     if (failed.includes('navReachableOnShortScreen')) {
       throw new Error(`Visual smoke failed: the nav rail clips [${clippedNav.join(', ')}] `
-        + 'at 1440x820 with no visible scroll affordance');
+        + "at 1280x820, the app's own minimum window size");
     }
     throw new Error(`Visual smoke failed: ${failed.join(', ')}${railDetail}${issues.length ? `; console: ${issues.join(' | ')}` : ''}`);
   }
