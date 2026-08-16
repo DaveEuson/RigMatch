@@ -4104,7 +4104,13 @@ function App() {
         </button>
       )}
 
-      {tutorialOpen && (
+      {/* Never at the same time as the mode splash. Both open on a true first
+          run: the splash sits above it at z-index 200, so the tour was invisible
+          — but it mounts second, so its focus trap won, and a keyboard user was
+          tabbing through a dialog they could not see behind the one they could.
+          The tour also walks nav items whose visibility depends on the mode the
+          splash has not been answered with yet. */}
+      {tutorialOpen && !showModeSplash && (
         <FirstRunTutorial
           stepIndex={tutorialStep}
           installedCount={ollama.models.length}
