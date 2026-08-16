@@ -80,20 +80,30 @@ export function CloseCleanupModal({
   installedRows,
   unscoredRows,
   lowScoredRows,
+  exceptTopPickRows,
+  topPickName,
   isDeleting,
   message,
   onDeleteUnscored,
   onDeleteLowScored,
+  onDeleteExceptTopPick,
+  onDeleteEverything,
   onCancel,
   onUnderstand,
 }: {
   installedRows: ModelRow[];
   unscoredRows: ModelRow[];
   lowScoredRows: ModelRow[];
+  /** Everything deletable except the current Top Pick. */
+  exceptTopPickRows: ModelRow[];
+  /** The model being spared, when one has been crowned. */
+  topPickName?: string;
   isDeleting: boolean;
   message: string | null;
   onDeleteUnscored: () => void;
   onDeleteLowScored: () => void;
+  onDeleteExceptTopPick: () => void;
+  onDeleteEverything: () => void;
   onCancel: () => void;
   onUnderstand: () => void;
 }) {
@@ -101,6 +111,12 @@ export function CloseCleanupModal({
   const installedGb = sumModelRowGb(installedRows);
   const unscoredGb = sumModelRowGb(unscoredRows);
   const lowScoredGb = sumModelRowGb(lowScoredRows);
+  const exceptTopPickGb = sumModelRowGb(exceptTopPickRows);
+  // Wiping everything is the one action here with nothing left to fall back
+  // on, so it arms before it fires. The other sweeps all leave something
+  // behind; this one does not, and it is sitting next to Cancel on the way out
+  // of the app where people click quickly.
+  const [armedForEverything, setArmedForEverything] = useState(false);
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -133,6 +149,15 @@ export function CloseCleanupModal({
               <strong>{lowScoredRows.length}</strong>
               <em>{formatGb(lowScoredGb)} from lower-ranked matches.</em>
             </div>
+            <div>
+              <span>{topPickName ? 'All But Your Match' : 'Everything Installed'}</span>
+              <strong>{exceptTopPickRows.length}</strong>
+              <em>
+                {topPickName
+                  ? `${formatGb(exceptTopPickGb)}, keeping ${getShortModelName(topPickName)}.`
+                  : `${formatGb(exceptTopPickGb)} — nothing scored yet, so there is no match to keep.`}
+              </em>
+            </div>
           </div>
           {message && (
             <div className="run-download-warning model-cleanup-message">
@@ -164,6 +189,39 @@ export function CloseCleanupModal({
             <Trash2 aria-hidden="true" />
             {isDeleting ? 'Deleting...' : `Delete 80 or Below (${lowScoredRows.length})`}
           </button>
+          <button
+            type="button"
+            className="danger-button compact"
+            onClick={onDeleteExceptTopPick}
+            disabled={isDeleting || exceptTopPickRows.length === 0}
+            title={topPickName
+              ? `Delete every other model and keep ${topPickName}`
+              : 'Delete every installed model — nothing has been scored, so there is no match to keep'}
+          >
+            <Trash2 aria-hidden="true" />
+            {isDeleting ? 'Deleting...' : topPickName
+              ? `Keep Only My Match (${exceptTopPickRows.length})`
+              : `Delete All (${exceptTopPickRows.length})`}
+          </button>
+          {topPickName && (
+            <button
+              type="button"
+              className={`danger-button compact${armedForEverything ? ' armed' : ''}`}
+              onClick={() => {
+                // Two taps, on purpose: this is the only option that leaves
+                // nothing behind, including the model the user just crowned.
+                if (!armedForEverything) { setArmedForEverything(true); return; }
+                onDeleteEverything();
+              }}
+              disabled={isDeleting || installedRows.length === 0}
+              title={`Delete all ${installedRows.length} installed models, including ${topPickName}`}
+            >
+              <Trash2 aria-hidden="true" />
+              {isDeleting ? 'Deleting...' : armedForEverything
+                ? `Really delete all ${installedRows.length}?`
+                : `Delete All Including Match (${installedRows.length})`}
+            </button>
+          )}
           <button type="button" className="mini-button outline" onClick={onUnderstand} disabled={isDeleting}>
             <Check aria-hidden="true" />
             I Understand

@@ -333,6 +333,7 @@ import { GOALS, goalById, goalHardwareExpectation, goalsByCategory, leagueLabel,
 import { taskFilterForGoal } from './lib/modelCatalog';
 import { readSelectedGoals, writeSelectedGoals } from './lib/goalSettings';
 import { getGoalMatches } from './lib/goalMatches';
+import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { copyText, type CopyState } from './lib/clipboard';
 import { downloadMatchCard } from './lib/matchCard';
 import { runVideoLabChallenge } from './lib/videoGenRunner';
@@ -791,10 +792,7 @@ function App() {
     () => shortlistedRows.filter((row) => !row.installed).length,
     [shortlistedRows],
   );
-  const installedRowsForCleanup = useMemo(
-    () => modelRows.filter((row) => row.installed && row.localProvider !== 'lm-studio'),
-    [modelRows],
-  );
+  const installedRowsForCleanup = useMemo(() => deletableRows(modelRows), [modelRows]);
   // Installed local (Ollama) models fit to judge, most capable first. Not
   // simply the biggest file: an embedding or OCR model is often the largest
   // thing installed and grades prose as confident nonsense.
@@ -861,6 +859,11 @@ function App() {
     () => installedRowsForCleanup.filter((row) => !getModelScore(row, modelScores)),
     [installedRowsForCleanup, modelScores],
   );
+  const exceptTopPickRowsForCleanup = useMemo(
+    () => rowsExceptTopPick(modelRows, modelScores),
+    [modelRows, modelScores],
+  );
+
   const lowScoredRowsForCleanup = useMemo(
     () => installedRowsForCleanup.filter((row) => {
       const score = getModelScore(row, modelScores);
@@ -4083,8 +4086,12 @@ function App() {
           lowScoredRows={lowScoredRowsForCleanup}
           isDeleting={isCloseCleanupDeleting}
           message={closeCleanupMessage}
+          exceptTopPickRows={exceptTopPickRowsForCleanup}
+          topPickName={topPickToKeep(modelScores)}
           onDeleteUnscored={() => { void deleteRowsThenClose(unscoredRowsForCleanup, 'unscored'); }}
           onDeleteLowScored={() => { void deleteRowsThenClose(lowScoredRowsForCleanup, 'low-scored'); }}
+          onDeleteExceptTopPick={() => { void deleteRowsThenClose(exceptTopPickRowsForCleanup, 'all but your Top Pick'); }}
+          onDeleteEverything={() => { void deleteRowsThenClose(installedRowsForCleanup, 'installed'); }}
           onCancel={cancelCloseCleanup}
           onUnderstand={() => { void closeAppAfterCleanup(); }}
         />

@@ -17944,6 +17944,13 @@ a.whats-next-support:hover {
 }
 .closet-evict { white-space: nowrap; }
 
+/* Armed state for the one cleanup option that leaves nothing behind. */
+.danger-button.compact.armed {
+  background: var(--red);
+  color: var(--bg);
+  border-color: var(--red);
+}
+
 /* Owned by another program: shown, counted, but not deletable from here. */
 .closet-elsewhere {
   font-size: 0.68rem;
