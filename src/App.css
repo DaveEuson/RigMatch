@@ -375,7 +375,7 @@
 .global-mode-switch span {
   grid-column: 1 / -1;
   color: var(--gold);
-  font-size: 8px;
+  font-size: 9px;
   line-height: 1;
   font-weight: 900;
   text-transform: uppercase;
@@ -391,7 +391,9 @@
   border-radius: 8px;
   background: transparent;
   color: var(--muted);
-  font-size: 8px;
+  /* Was 8px. This is the control that switches the entire interface between
+     its two modes; at 8px uppercase it was the smallest text in the app. */
+  font-size: 10px;
   font-weight: 900;
   text-transform: uppercase;
   cursor: pointer;
@@ -13736,7 +13738,8 @@ td {
 
 .top-deck .top-deck-use-model-btn {
   padding: 3px 6px;
-  font-size: 8px;
+  /* Was 8px. This is a button, and its label has to be read to be used. */
+  font-size: 10px;
 }
 
 .top-deck .mini-bars i {
@@ -13812,6 +13815,14 @@ td {
   box-shadow: var(--shadow);
   overflow: hidden;
   display: grid;
+  /* minmax(0, 1fr), not the implicit `auto` column this had. An auto column
+     sizes to its content's minimum and refuses to shrink below it, so at
+     1024x640 the Models panel demanded 935px inside a 756px stage and the
+     `overflow: hidden` above quietly sliced the right-hand side off — the
+     selected-model panel, the result count and the Models/Settings buttons
+     were all simply cut, with no scrollbar to reach any of them. Clamping the
+     column lets the children shrink and scroll on their own terms. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
 }
 
@@ -14413,7 +14424,9 @@ td {
 
 .radar-label {
   fill: var(--muted);
-  font-size: 7px;
+  /* Was 7px, the smallest text anywhere in the app. These name the axes of the
+     score breakdown, so they are the labels that make the chart mean anything. */
+  font-size: 9px;
   font-weight: 700;
   font-family: inherit;
   text-transform: uppercase;
@@ -14509,7 +14522,10 @@ td {
 }
 
 .delta-hardware-flag {
-  font-size: 8px;
+  /* Was 8px. This is the warning that a score was measured on different
+     hardware and may no longer describe this machine — the last thing that
+     should be the smallest text on screen. */
+  font-size: 10px;
   font-style: normal;
   font-weight: 900;
   letter-spacing: 0.04em;
@@ -15760,7 +15776,9 @@ tbody tr.selected {
   }
 
   .global-mode-switch button {
-    min-height: 20px;
+    /* 24px, not 20px. Narrow screens are the ones most likely to be touched,
+       and this is where the target was smallest. */
+    min-height: 24px;
   }
 
   .stage-content {
@@ -18087,4 +18105,20 @@ a.whats-next-support:hover {
   .side-menu-copy small { display: none; }
   .side-menu-nav { gap: 5px; }
   .side-menu-title { padding-top: 4px; padding-bottom: 4px; }
+}
+
+/* The Models filter chips measured 21px tall — under the 24px minimum target
+   size, and they are the main way of narrowing a thirteen-model list. */
+.model-task-filters button {
+  min-height: 24px;
+}
+
+/* Text links that act as buttons still need a hittable box. "Check again" on
+   the setup screen measured 76x18 and the ticker's Chat link 15px tall; both
+   are standalone controls rather than words inside a sentence, so the WCAG 2.2
+   inline exception does not cover them. */
+.ticker-chat-link {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
 }

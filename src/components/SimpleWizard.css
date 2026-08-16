@@ -64,7 +64,7 @@
 .sw-brand .global-mode-switch span {
   grid-column: 1 / -1;
   color: var(--gold);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: normal;
   text-align: left;
   padding-left: 3px;
@@ -1223,4 +1223,11 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 @media (max-width: 900px) {
   .sw-host-avatar { width: 64px; height: 64px; }
   .sw-host-bubble { min-height: 0; font-size: 0.95rem; }
+}
+
+/* Standalone text controls need a hittable box; "Check again" measured 18px. */
+.sw-link {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
 }
