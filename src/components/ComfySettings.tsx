@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { AlertTriangle, Check, FolderOpen, RefreshCw } from "lucide-react";
+import { AlertTriangle, Check, FolderOpen, RefreshCw, Search } from "lucide-react";
 import {
   COMFY_DEFAULT_BASE_URL,
   normalizeComfyUrl,
@@ -7,6 +7,7 @@ import {
   writeComfySettings,
 } from "../lib/comfySettings";
 import { getComfyStatus, pickAndVerifyComfyFolder } from "../lib/comfyTransport";
+import { agentArcadeApi } from "../api";
 
 /**
  * Where ComfyUI is, and whether RigMatch may disturb it.
@@ -42,6 +43,35 @@ export function ComfySettings() {
       ? { tone: 'warn', message: result.warning }
       : { tone: 'ok', message: 'Verified against the ComfyUI that is running. Downloads will land here.' });
   }, []);
+
+  /**
+   * Find ComfyUI rather than asking where it is.
+   *
+   * Its API never reports its own location, but it is a running process and a
+   * process has a path — so whatever is serving the port can be traced back to
+   * its folder. The result is still put through the same verification a
+   * hand-picked folder gets, because two ComfyUI installs on one machine is
+   * normal and a wrong guess writes gigabytes into the unused one.
+   */
+  const findFolder = useCallback(async () => {
+    setFolderNote({ tone: 'ok', message: 'Looking for ComfyUI…' });
+    const status = await getComfyStatus(normalizeComfyUrl(url) ?? undefined);
+    const result = await agentArcadeApi.comfyLocateFolder?.(
+      normalizeComfyUrl(url) ?? '', status.checkpoints ?? [],
+    );
+    if (!result?.found || !result.folder) {
+      setFolderNote({
+        tone: 'bad',
+        message: status.reachable
+          ? 'Could not work out where ComfyUI is from the running program. Pick the folder instead.'
+          : 'Start ComfyUI first — RigMatch finds it by looking at what is running.',
+      });
+      return;
+    }
+    setFolder(result.folder);
+    writeComfySettings({ folder: result.folder });
+    setFolderNote({ tone: 'ok', message: `Found it, and checked it against the ComfyUI that is running. Downloads will land in ${result.folder}.` });
+  }, [url]);
 
   const normalized = normalizeComfyUrl(url);
   const urlValid = normalized !== null;
@@ -119,15 +149,20 @@ export function ComfySettings() {
         <span>Models folder</span>
         <strong>{folder || 'Not set — image and video models cannot be downloaded yet'}</strong>
         <em>
-          ComfyUI reports its version and its graphics card but never its own location, so this
-          cannot be found automatically. RigMatch checks the folder you pick against the models
-          the running ComfyUI lists, and only accepts it if they match.
+          ComfyUI never reports its own location, but RigMatch can work it out from the running
+          program. Either way the folder is checked against the models that ComfyUI actually
+          lists, and only accepted if they match — two installs on one machine is normal, and a
+          multi-gigabyte download landing in the unused one is not.
         </em>
       </div>
       <div className="advanced-lab-actions">
+        <button type="button" className="mini-button" onClick={() => void findFolder()}>
+          <Search aria-hidden="true" />
+          Find ComfyUI for me
+        </button>
         <button type="button" className="mini-button outline" onClick={() => void chooseFolder()}>
           <FolderOpen aria-hidden="true" />
-          {folder ? 'Change folder' : 'Choose ComfyUI folder'}
+          {folder ? 'Change folder' : 'Pick it myself'}
         </button>
         {folderNote && (
           <span className={`settings-probe ${folderNote.tone === 'ok' ? 'ok' : 'bad'}`}>

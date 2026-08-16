@@ -57,6 +57,7 @@ const {
 const { summarizeMemory } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
 const { downloadModel, verifyComfyFolder } = require('./comfyModels.cjs');
+const { locateComfyRoots } = require('./comfyLocate.cjs');
 
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const LM_STUDIO_LOCAL_URL = 'http://127.0.0.1:1234/v1';
@@ -548,6 +549,22 @@ function registerHandlers() {
   });
   handleLogged('comfy:verifyFolder', 'comfy', (_event, folder, serverCheckpoints) =>
     verifyComfyFolder(folder, serverCheckpoints));
+  /**
+   * Find ComfyUI without making the user go looking for it.
+   *
+   * Every candidate still goes through verifyComfyFolder against what the
+   * running server lists, so an auto-detected folder is held to exactly the
+   * same standard as a hand-picked one — the whole point of that check is that
+   * two ComfyUI installs on one machine is normal.
+   */
+  handleLogged('comfy:locateFolder', 'comfy', async (_event, baseUrl, serverCheckpoints = []) => {
+    const located = await locateComfyRoots(baseUrl ?? COMFY_LOCAL_URL);
+    for (const folder of located.roots) {
+      const verdict = await verifyComfyFolder(folder, serverCheckpoints);
+      if (verdict.ok) return { found: true, folder, verdict, source: located.source };
+    }
+    return { found: false, roots: located.roots, source: located.source };
+  });
   handleLogged('comfy:downloadModel', 'comfy', async (event, request = {}) => {
     const progressId = String(request.progressId || '');
     const controller = new AbortController();

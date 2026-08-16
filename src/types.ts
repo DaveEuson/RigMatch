@@ -518,6 +518,15 @@ export type AgentArcadeApi = {
    * say where that is. Hence a picker, a verification step, and a downloader.
    */
   comfyPickFolder?: () => Promise<{ canceled: boolean; folder?: string }>;
+  /**
+   * Where ComfyUI is, worked out from the process serving its port. The result
+   * has already been verified against the running server, so a hit is safe to
+   * offer; a miss falls back to the folder picker.
+   */
+  comfyLocateFolder?: (baseUrl: string, serverCheckpoints: string[]) => Promise<{
+    found: boolean; folder?: string; roots?: string[]; source: string;
+    verdict?: { ok: boolean; reason?: string };
+  }>;
   comfyVerifyFolder?: (folder: string, serverCheckpoints: string[]) =>
     Promise<{ ok: boolean; root?: string; reason?: string; warning?: string | null }>;
   comfyDownloadModel?: (request: {
