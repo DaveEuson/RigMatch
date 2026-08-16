@@ -944,6 +944,57 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   .sw-scoreboard li { grid-template-columns: 20px 28px 1fr auto; gap: 8px; padding: 7px 10px; }
   .sw-scoreboard img { width: 28px; height: 28px; }
 }
+/* Live scores for the model currently answering.
+   The Compare panel stretches to fill the step, so its bottom third sat empty
+   for the whole run — on the one screen where the user is doing nothing but
+   waiting and wants to know how it is going. */
+.sw-answer-strip {
+  width: min(720px, 100%);
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sw-answer-strip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sw-answer-strip-head em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sw-answer-strip > p { margin: 0; font-size: 12px; }
+.sw-answer-strip ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sw-answer-strip li {
+  min-width: 34px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+/* Tone follows the podium colours already used on this screen, and never
+   carries meaning on colour alone — the number is always the number. */
+.sw-answer-strip li.good { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
+.sw-answer-strip li.fair { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+.sw-answer-strip li.poor { color: var(--muted); }
+
 .sw-setup-safety { font-size: 12px; margin-top: -10px; }
 .sw-card-size { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
 /* Note under the size line when one card stands in for several size variants. */

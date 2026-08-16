@@ -120,6 +120,65 @@
   box-shadow: var(--shadow);
 }
 
+/* Collapsing the stats strip.
+
+   Measured at 1440x820: the panel got 348px — 42% of the viewport — for 1063px
+   of content, with this header taking 122px of the remainder. Collapsed, it
+   keeps the brand, the mode switch and the Local AI status (the parts that are
+   controls rather than readouts) and drops the per-metric tiles.
+
+   scripts/measure-shell.mjs prints these numbers again on demand. */
+.top-deck { position: relative; }
+
+.top-deck-collapse {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--muted);
+  cursor: pointer;
+}
+.top-deck-collapse:hover { color: var(--text-strong); border-color: var(--gold); }
+.top-deck-collapse svg { width: 15px; height: 15px; }
+
+/* Deliberately does NOT restate grid-template-columns. Hiding .monitor-grid
+   removes it from the grid entirely, so the four remaining children fit the
+   existing five tracks on one row. An earlier three-column override wrapped
+   them onto two rows and made the header TALLER — 122px to 182px, which took
+   the panel down to 288px instead of up. */
+.top-deck.collapsed {
+  padding: 6px 14px;
+}
+/* Readouts go; controls stay. */
+.top-deck.collapsed .monitor-grid,
+.top-deck.collapsed .brand-block p,
+.top-deck.collapsed .local-status-card em,
+.top-deck.collapsed .rig-card > div > span:last-child { display: none; }
+.top-deck.collapsed .brand-block h1 { font-size: 15px; }
+.top-deck.collapsed .local-status-card { padding-top: 4px; padding-bottom: 4px; }
+
+/* A pointer is not the only way to reach this control. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.top-deck-collapse:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
 .top-deck {
   min-height: 60px;
   min-width: 0;
@@ -17992,4 +18051,40 @@ a.whats-next-support:hover {
   display: flex;
   justify-content: flex-end;
   margin-top: 14px;
+}
+
+/* ── The nav rail on a short screen ─────────────────────────────────────────
+   Measured at 1440x820: Activity and Settings both sat outside the rail's box.
+   The rail does scroll — that is the deliberate choice recorded above, one
+   scroll for the whole sidebar rather than a nested well — but it scrolled with
+   no visible sign, so the primary navigation simply appeared to stop at item 6
+   and Settings looked absent from the app.
+
+   Two parts: make the scrollbar visible whenever it is scrollable, and shrink
+   the items enough on short screens that most people never need it. The
+   descriptions are the first thing to go; they explain a destination that the
+   label already names. */
+
+.side-menu {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--gold-rgb), 0.5) transparent;
+}
+.side-menu::-webkit-scrollbar { width: 8px; }
+.side-menu::-webkit-scrollbar-track { background: transparent; }
+.side-menu::-webkit-scrollbar-thumb {
+  background: rgba(var(--gold-rgb), 0.45);
+  border-radius: 4px;
+}
+.side-menu::-webkit-scrollbar-thumb:hover { background: rgba(var(--gold-rgb), 0.7); }
+
+@media (max-height: 900px) {
+  .side-menu-item {
+    min-height: 38px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+  /* The label and the badge stay; the sentence under it goes. */
+  .side-menu-copy small { display: none; }
+  .side-menu-nav { gap: 5px; }
+  .side-menu-title { padding-top: 4px; padding-bottom: 4px; }
 }

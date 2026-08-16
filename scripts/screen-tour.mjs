@@ -265,6 +265,15 @@ async function currentStep(page) {
 
 async function capture(page, step, scope = '.sw-content') {
   const file = path.join(outDir, `${step}.png`);
+  // Let the images finish decoding first. A screenshot taken mid-decode shows
+  // blank squares where the avatars are, which reads exactly like a broken
+  // asset — one such shot cost a round of investigation into avatars that were
+  // loading perfectly.
+  await page.evaluate(() => Promise.all(
+    [...document.images]
+      .filter((image) => !image.complete || image.naturalWidth === 0)
+      .map((image) => image.decode().catch(() => undefined)),
+  )).catch(() => undefined);
   await page.screenshot({ path: file, fullPage: true });
 
   const root = page.locator(scope).first();

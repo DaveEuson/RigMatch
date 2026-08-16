@@ -132,6 +132,7 @@ import { ReleaseNotes, UpdateCenter } from './components/UpdateCenter';
 import { releaseNotes } from './data/releaseNotes';
 import { licenseLinksForModels } from './lib/modelLicenses';
 import { lineupStanding, standingLine } from './lib/lineupStanding';
+import { readDeckExpanded, writeDeckExpanded } from './lib/deckSettings';
 import { playJingle } from './lib/sound';
 import { TopDeck } from './components/TopDeck';
 import {
@@ -1018,6 +1019,13 @@ function App() {
         grade: score.grade,
       })),
     [shortlistedRows, modelScores],
+  );
+
+  // Advanced's stats strip. Read once from the stored choice, falling back to
+  // a rule based on how much height this screen actually has — see
+  // scripts/measure-shell.mjs for the numbers that set the threshold.
+  const [deckExpanded, setDeckExpanded] = useState(
+    () => readDeckExpanded(typeof window === 'undefined' ? 1080 : window.innerHeight),
   );
 
   // Simple Mode needs its own share state: Advanced's lives inside the profile
@@ -3636,6 +3644,8 @@ function App() {
         onClearTopPick={clearTopMatch}
         onRestoreClearedTopPicks={restoreClearedTopMatches}
         clearedTopPickCount={clearedTopMatches.size}
+        deckExpanded={deckExpanded}
+        onDeckExpandedChange={(expanded) => { setDeckExpanded(expanded); writeDeckExpanded(expanded); }}
       />
 
       <SideMenu

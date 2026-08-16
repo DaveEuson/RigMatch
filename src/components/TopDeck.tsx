@@ -1,4 +1,4 @@
-import { AlertTriangle, Bot, Boxes, Download, RefreshCw, ScanLine, ShieldCheck, Trophy, X } from 'lucide-react';
+import { AlertTriangle, Bot, Boxes, ChevronDown, ChevronUp, Download, RefreshCw, ScanLine, ShieldCheck, Trophy, X } from 'lucide-react';
 import type { OllamaStatus, SystemProfile } from '../types';
 import type { UiMode } from '../lib/appConfig';
 import type { RigPick } from '../lib/modelCatalog';
@@ -20,6 +20,8 @@ export function TopDeck({
   onClearTopPick,
   onRestoreClearedTopPicks,
   clearedTopPickCount,
+  deckExpanded,
+  onDeckExpandedChange,
 }: {
   system: SystemProfile;
   ollama: OllamaStatus;
@@ -34,6 +36,9 @@ export function TopDeck({
   onClearTopPick: () => void;
   onRestoreClearedTopPicks: () => void;
   clearedTopPickCount: number;
+  /** Advanced only: whether the stats strip is showing. */
+  deckExpanded: boolean;
+  onDeckExpandedChange: (expanded: boolean) => void;
 }) {
   const gpuLabel = system.gpu.isUnifiedMemory
     ? `${system.gpu.model} · Unified Memory`
@@ -56,8 +61,25 @@ export function TopDeck({
     isLocal: true,
   };
 
+  const modeClass = uiMode === 'advanced' ? 'top-deck mode-advanced' : 'top-deck mode-simple';
   return (
-    <header className={uiMode === 'advanced' ? 'top-deck mode-advanced' : 'top-deck mode-simple'}>
+    <header className={deckExpanded ? modeClass : `${modeClass} collapsed`}>
+      {/* Advanced only: on a 1440x820 laptop this strip is 122px of permanent
+          chrome while the panel doing the work gets 348px for 1063px of
+          content. Simple Mode has no panel to squeeze, so it keeps the full
+          header. */}
+      {uiMode === 'advanced' && (
+        <button
+          type="button"
+          className="top-deck-collapse"
+          onClick={() => onDeckExpandedChange(!deckExpanded)}
+          aria-expanded={deckExpanded}
+          title={deckExpanded ? 'Hide the stats strip and give the height to the panel' : 'Show the stats strip'}
+        >
+          {deckExpanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+          <span className="sr-only">{deckExpanded ? 'Collapse system stats' : 'Expand system stats'}</span>
+        </button>
+      )}
       <div className="brand-block" aria-label="RigMatch">
         <BrandMark />
         <div>

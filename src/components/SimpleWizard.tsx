@@ -932,6 +932,15 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
   }, [runningPhase]);
   const elapsedMs = runClock ? runClock.now - runClock.startedAt : 0;
 
+  // Scores for the model currently answering, as they land. The panel stretches
+  // to fill the step, so without this the bottom third of the busiest screen in
+  // the app was blank for the entire run — on the one screen where the user is
+  // doing nothing but waiting and wants to know how it is going.
+  const answered = Object.values(runProgress?.questionScores ?? {}).filter((value) => Number.isFinite(value));
+  const answeredAverage = answered.length > 0
+    ? Math.round(answered.reduce((sum, value) => sum + value, 0) / answered.length)
+    : null;
+
   const remainingLabel = elapsedMs > 0 && totalQuestions > 0 && questionsDone >= 3
     ? formatDuration((elapsedMs / questionsDone) * (totalQuestions - questionsDone)).replace('~', '')
     : '';
@@ -1020,6 +1029,30 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
           >
             <i style={{ width: `${Math.max(2, overallPercent)}%` }} />
           </div>
+        </div>
+
+        <div className="sw-answer-strip">
+          <div className="sw-answer-strip-head">
+            <span className="sw-eyebrow">
+              {activeModel ? `${getFriendlyModelName(activeModel)}'s answers so far` : 'Answers so far'}
+            </span>
+            {answeredAverage != null && (
+              <em>{answered.length} scored · averaging {answeredAverage}</em>
+            )}
+          </div>
+          {answered.length === 0 ? (
+            <p className="sw-muted">
+              Every answer is scored out of 100 as it arrives. They'll show up here.
+            </p>
+          ) : (
+            <ol aria-label="Answer scores for the model currently answering">
+              {answered.map((score, index) => (
+                <li key={index} className={score >= 85 ? 'good' : score >= 70 ? 'fair' : 'poor'}>
+                  {score}
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
       </div>
     </div>

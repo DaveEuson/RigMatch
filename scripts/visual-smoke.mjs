@@ -87,6 +87,29 @@ async function runBrowserChecks(url) {
   const advancedMenuVisible = await page.locator('.side-menu').isVisible();
   await page.screenshot({ path: screenshots.advanced, fullPage: false });
 
+  // A short laptop window, where the nav rail runs out of room. At 1440x820
+  // it silently clipped Activity and Settings off the end: the rail scrolls,
+  // which is the intended behaviour, but nothing said so, and the primary
+  // navigation simply appeared to stop before Settings existed.
+  const shortCtx = await browser.newContext({ viewport: { width: 1440, height: 820 } });
+  const shortPage = await shortCtx.newPage();
+  await shortPage.goto(url, { waitUntil: 'networkidle' });
+  await forceSimpleMode(shortPage);
+  await shortPage.getByLabel('Advanced Mode').click();
+  await shortPage.waitForSelector('.side-menu-item', { timeout: 10000 });
+  const clippedNav = await shortPage.evaluate(() => {
+    const menu = document.querySelector('.side-menu');
+    if (!menu) return ['side menu missing'];
+    const box = menu.getBoundingClientRect();
+    return [...menu.querySelectorAll('.side-menu-item')]
+      .filter((item) => {
+        const rect = item.getBoundingClientRect();
+        return rect.bottom > box.bottom + 1 || rect.top < box.top - 1;
+      })
+      .map((item) => item.getAttribute('aria-label') || 'unnamed');
+  });
+  await shortCtx.close();
+
   const mobile = await browser.newContext({ viewport: { width: 390, height: 900 }, isMobile: true });
   const mobilePage = await mobile.newPage();
   const mobileConsoleIssues = collectConsoleIssues(mobilePage);
@@ -116,6 +139,7 @@ async function runBrowserChecks(url) {
     noFrameworkOverlay: overlayCount === 0,
     noConsoleIssues: issues.length === 0,
     noOldSobrietyCopy: !simpleText.includes('Sobriety') && !mobileText.includes('Sobriety'),
+    navReachableOnShortScreen: clippedNav.length === 0,
   };
   const failed = Object.entries(checks).filter(([, value]) => !value).map(([key]) => key);
 
@@ -123,6 +147,10 @@ async function runBrowserChecks(url) {
     const railDetail = failed.includes('simpleStepPills')
       ? `; step rail: [${simpleStepLabels.join(', ') || 'none'}]`
       : '';
+    if (failed.includes('navReachableOnShortScreen')) {
+      throw new Error(`Visual smoke failed: the nav rail clips [${clippedNav.join(', ')}] `
+        + 'at 1440x820 with no visible scroll affordance');
+    }
     throw new Error(`Visual smoke failed: ${failed.join(', ')}${railDetail}${issues.length ? `; console: ${issues.join(' | ')}` : ''}`);
   }
 
@@ -130,6 +158,7 @@ async function runBrowserChecks(url) {
     url,
     checks,
     stepRail: simpleStepLabels,
+    clippedNav,
     consoleIssues: issues,
   };
 }
