@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -8,6 +8,7 @@ import {
   Download,
   ExternalLink,
   Heart,
+  HelpCircle,
   Image as ImageIcon,
   Info,
   Lock,
@@ -25,6 +26,7 @@ import {
 import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, SystemProfile } from '../types';
 import { STEPS, STEP_LABELS, footerHint, nextBlockedHint, type StepId } from '../lib/wizardCopy';
 import { copyText, type CopyState } from '../lib/clipboard';
+import { glossaryEntry } from '../lib/glossary';
 import { formatBytes, formatBytesPerSecond } from '../lib/format';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 import { getFriendlyModelName } from '../lib/modelCatalog';
@@ -412,6 +414,42 @@ export function SimpleWizard(props: SimpleWizardProps) {
   );
 }
 
+/**
+ * A word a newcomer may not know, with its explanation one tap away.
+ *
+ * Deliberately a button that expands text in place, not a hover tooltip:
+ * hover does not exist on a touchscreen, and someone who does not know a word
+ * has no reason to suspect that hovering it would help. The dotted underline
+ * is the only hint, and pressing it puts the answer directly under the word.
+ */
+function Explain({ id, children }: { id: string; children?: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const entry = glossaryEntry(id);
+  if (!entry) return <>{children}</>;
+  return (
+    <span className="sw-explain-wrap">
+      <button
+        type="button"
+        className="sw-explain-term"
+        onClick={() => setOpen((was) => !was)}
+        aria-expanded={open}
+        aria-label={`${entry.term} — what does this mean?`}
+      >
+        {children ?? entry.term}
+        <HelpCircle aria-hidden="true" />
+      </button>
+      {open && (
+        <span className="sw-explain-body" role="note">
+          <strong>{entry.term}</strong>
+          <span>{entry.plain}</span>
+          {entry.because && <span>{entry.because}</span>}
+          {entry.alsoCalled && <em>Sometimes called “{entry.alsoCalled}”.</em>}
+        </span>
+      )}
+    </span>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Setup
 
@@ -451,7 +489,8 @@ function SetupScreen({
       <div className="sw-setup-hero" style={{ backgroundImage: `url(${rigGreenroom})` }} aria-hidden="true" />
       <h2>Let's check your computer</h2>
       <p className="sw-muted">
-        RigMatch looks at your graphics card and memory to find AI models that fit. Everything stays on your PC — no account, no cloud.
+        RigMatch looks at your <Explain id="graphics-card">graphics card</Explain> and memory to find{' '}
+        <Explain id="model">AI models</Explain> that fit. Everything stays on your PC — no account, no cloud.
       </p>
       {/* Beginners' real fear is "will this break my computer." Name it once, here. */}
       <p className="sw-muted sw-setup-safety">
@@ -482,10 +521,13 @@ function SetupScreen({
             <strong>We couldn't find Ollama</strong>
           </div>
           <p className="sw-muted sw-setup-error-copy">
-            RigMatch needs Ollama — the free local AI engine that runs models on your PC.
-            {isLinux
-              ? ' Copy the one-line command below into a terminal, then check again.'
-              : " RigMatch can download and start the installer for you — you won't need to leave this window."}
+            RigMatch needs <Explain id="ollama">Ollama</Explain> — a free program that does the actual
+            work of running models on your PC.
+            {isLinux ? (
+              <> Copy the one-line command below into a <Explain id="terminal">terminal</Explain>, then check again.</>
+            ) : (
+              " RigMatch can download and start the installer for you — you won't need to leave this window."
+            )}
           </p>
 
           {isLinuxScript ? (
@@ -689,7 +731,7 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
           {model.row.installed
             ? '✓ Already on your PC'
             : model.row.sizeGb
-              ? `${model.row.sizeGb} GB download`
+              ? <Explain id="download-size">{`${model.row.sizeGb} GB download`}</Explain>
               : 'Size unknown'}
         </span>
         {/* Collapsed siblings get one honest line instead of N clone cards. */}
@@ -970,7 +1012,8 @@ function WinnerScreen({ winner, shortlistedRows, onChatWithWinner, onOpenScoreca
           </span>
           {/* Say what the number means — a beginner has never seen either scale. */}
           <p className="sw-winner-why">
-            Best combination of speed, answer quality, and fit for your PC out of the {shortlistedRows.length} you tested — scored out of 100.
+            Best combination of speed, answer quality, and fit for your PC out of the {shortlistedRows.length} you
+            tested — this is its <Explain id="match-score">Match Score</Explain>.
           </p>
           {/* Sharing belongs at the moment of the result, not three clicks away
               in Advanced Mode where a Simple Mode user will never find it. */}

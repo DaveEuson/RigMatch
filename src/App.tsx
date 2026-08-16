@@ -2037,13 +2037,44 @@ function App() {
    * own renders nothing.
    */
   const downloadGenerationModel = useCallback(async (row: ModelRow): Promise<boolean> => {
+    /**
+     * Refusing a download must LOOK like refusing it.
+     *
+     * These early returns used to leave no progress entry behind, and
+     * getDownloadRowStatus reads "no entry" as 'queued' — so a download that
+     * was declined before it started sat in the list saying "Queued" forever,
+     * with the reason in a single Ticker line that scrolls away and never
+     * appears in Simple Mode at all. A stuck progress bar is worse than an
+     * error: it tells the user to keep waiting.
+     */
+    const refuse = (why: string): false => {
+      setPullProgressByModel((current) => ({
+        ...current,
+        [row.displayName]: {
+          id: `comfy-refused-${row.displayName}`,
+          model: row.displayName,
+          phase: 'failed',
+          status: why,
+          percent: null,
+          error: why,
+          updatedAt: new Date().toISOString(),
+        },
+      }));
+      tellUser(why);
+      return false;
+    };
+
     const model = row.generationId ? generationModelById(row.generationId) : undefined;
-    if (!model) return false;
+    if (!model) {
+      return refuse(`${row.displayName} is not in RigMatch's download list, so there is nothing to fetch.`);
+    }
 
     const { folder: comfyRoot } = readComfySettings();
     if (!comfyRoot) {
-      setActivity(`${row.displayName} downloads into ComfyUI. Set the ComfyUI folder in Settings first — RigMatch cannot find it on its own.`);
-      return false;
+      return refuse(
+        `${row.displayName} installs into ComfyUI, and RigMatch does not know where ComfyUI is yet. `
+        + 'Open Settings → Generation and point it at your ComfyUI folder, then try again.',
+      );
     }
 
     const { needed, totalBytes } = downloadPlan(model, [...comfyCheckpoints, ...comfyTextEncoders]);
@@ -2078,11 +2109,12 @@ function App() {
       } catch (error) {
         // A cancelled stream lands here too; say stopped rather than failed,
         // since the user asked for it.
-        const message = error instanceof Error ? error.message : 'download error';
-        setActivity(pullQueueCancelRef.current
-          ? `${item.label} download stopped.`
-          : `${item.label} failed: ${message}`);
-        return false;
+        const message = getErrorMessage(error);
+        if (pullQueueCancelRef.current) {
+          setActivity(`${item.label} download stopped.`);
+          return false;
+        }
+        return refuse(`${item.label} could not be downloaded. ${message}`);
       } finally {
         activeComfyDownloadRef.current = null;
         unsubscribe?.();
@@ -2096,7 +2128,7 @@ function App() {
       setComfyTextEncoders(status.textEncoders ?? []);
     });
     return true;
-  }, [comfyCheckpoints, comfyTextEncoders]);
+  }, [comfyCheckpoints, comfyTextEncoders, tellUser]);
 
   const pullQueuedModels = useCallback(async () => {
     if (queuedRows.length === 0) {
@@ -8089,15 +8121,35 @@ function ModelCabinet({
                               <span>Open Lab</span>
                             </button>
                           ) : (
-                            <button
-                              type="button"
-                              className="mini-button"
-                              onClick={() => onQueueModel(row)}
-                              title={`Queue ${row.displayName} — ${row.sizeGb} GB into ComfyUI`}
-                            >
-                              <Download aria-hidden="true" />
-                              <span>{queued ? 'Queued' : 'Download'}</span>
-                            </button>
+                            /* Without a ComfyUI folder there is nowhere to put
+                               the file, so Download cannot work — and it used to
+                               be offered anyway, queue silently, and sit at
+                               "Queued" forever. Send people to the setting that
+                               unblocks it instead of to a dead end. The existing
+                               guidance about this lived only under the
+                               imagegen/videogen filters, so anyone who found the
+                               row by searching never saw it. */
+                            !comfyFolderSet ? (
+                              <button
+                                type="button"
+                                className="mini-button"
+                                onClick={() => void onOpenComfyHelp()}
+                                title={`${row.displayName} installs into ComfyUI. RigMatch needs to know where ComfyUI is before it can download anything.`}
+                              >
+                                <Settings aria-hidden="true" />
+                                <span>Set up ComfyUI</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="mini-button"
+                                onClick={() => onQueueModel(row)}
+                                title={`Queue ${row.displayName} — ${row.sizeGb} GB into ComfyUI`}
+                              >
+                                <Download aria-hidden="true" />
+                                <span>{queued ? 'Queued' : 'Download'}</span>
+                              </button>
+                            )
                           )}
                         </>
                       ) : (
