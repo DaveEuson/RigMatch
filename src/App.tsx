@@ -332,7 +332,10 @@ import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById
 import { tickerTips } from './lib/glossary';
 import { GOALS, goalById, goalHardwareExpectation, goalsByCategory, leagueLabel, presetIdForGoal, type GoalId } from './lib/goals';
 import { taskFilterForGoal } from './lib/modelCatalog';
-import { readSelectedGoals, writeSelectedGoals } from './lib/goalSettings';
+import {
+  firstRunStep, hasBeenOfferedGoals, markGoalsOffered, readSelectedGoals, writeSelectedGoals,
+  type FirstRunStep,
+} from './lib/goalSettings';
 import { getGoalMatches } from './lib/goalMatches';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { copyText, type CopyState } from './lib/clipboard';
@@ -661,7 +664,18 @@ function App() {
   const [themeId, setThemeId] = useState<ThemeId>(() => getSavedThemeId());
   const [uiMode, setUiMode] = useState<UiMode>(() => getSavedUiMode());
   // First-launch splash: ask Simple vs Advanced before showing the app.
-  const [showModeSplash, setShowModeSplash] = useState(() => !hasChosenInterfaceMode());
+  /**
+   * What to ask on launch. See firstRunStep: an upgrading user has already
+   * answered the mode question, and the old gate read that as having answered
+   * the goal question too — so everyone upgrading from 0.5 would have arrived
+   * in 0.6 with the goal picker, the Matches board and the goal lens all dark.
+   */
+  const [firstRun, setFirstRun] = useState<FirstRunStep>(() => firstRunStep({
+    modeChosen: hasChosenInterfaceMode(),
+    goalsOffered: hasBeenOfferedGoals(),
+  }));
+  const showModeSplash = firstRun === 'goals-and-mode';
+  const showGoalsIntro = firstRun === 'goals-only';
   // Settings can reopen the goals step of the splash on its own — mistakes at
   // first run must not be permanent, and localStorage is not a settings UI.
   const [showGoalsEditor, setShowGoalsEditor] = useState(false);
@@ -1668,7 +1682,8 @@ function App() {
     writeLocal(MODE_SPLASH_STORAGE_KEY, 'chosen');
     writeSelectedGoals(goals);
     setSelectedGoals(goals);
-    setShowModeSplash(false);
+    markGoalsOffered();
+    setFirstRun('none');
   }, [selectUiMode]);
 
   const saveGoalsFromSettings = useCallback((goals: GoalId[]) => {
@@ -3482,6 +3497,23 @@ function App() {
         </div>
       )}
       {showModeSplash && <FirstRunSplash vramGb={system.gpu.vramGb || 0} onDone={chooseInterfaceMode} />}
+      {/* Upgraded from a version without goals: ask the new question, leave
+          the mode they already chose alone. */}
+      {showGoalsIntro && (
+        <FirstRunSplash
+          vramGb={system.gpu.vramGb || 0}
+          onDone={chooseInterfaceMode}
+          initialGoals={selectedGoals}
+          isUpgrade
+          onSaveGoals={(goals) => {
+            writeSelectedGoals(goals);
+            setSelectedGoals(goals);
+            markGoalsOffered();
+            setFirstRun('none');
+          }}
+          onCancel={() => { markGoalsOffered(); setFirstRun('none'); }}
+        />
+      )}
       {!showModeSplash && showGoalsEditor && (
         <FirstRunSplash
           vramGb={system.gpu.vramGb || 0}
@@ -11149,11 +11181,14 @@ function ProfileQuestionTranscript({
   );
 }
 
-function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCancel }: {
+function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCancel, isUpgrade }: {
   vramGb: number;
   onDone: (mode: UiMode, goals: GoalId[]) => void;
   /** Set when reopened from Settings: pre-checks the saved picks. */
   initialGoals?: GoalId[];
+  /** Set when this is an existing user meeting the goal question for the
+   *  first time — the copy should welcome them back, not greet a stranger. */
+  isUpgrade?: boolean;
   /** Set when reopened from Settings: save picks and close, no mode step. */
   onSaveGoals?: (goals: GoalId[]) => void;
   onCancel?: () => void;
@@ -11187,8 +11222,14 @@ function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCancel }:
         </div>
         {step === 'goals' ? (
           <>
-            <h2 className="mode-splash-title">What would you like to do?</h2>
-            <p className="mode-splash-sub">Pick what matters most — you can add more anytime.</p>
+            <h2 className="mode-splash-title">
+              {isUpgrade ? 'New in this version: what would you like to do?' : 'What would you like to do?'}
+            </h2>
+            <p className="mode-splash-sub">
+              {isUpgrade
+                ? 'RigMatch can now point itself at what you actually want. Pick one and the model list, the tests and the winners all follow it. Your saved scores and settings are untouched.'
+                : 'Pick what matters most — you can add more anytime.'}
+            </p>
             <div className="goal-splash-groups">
               {goalsByCategory().map(({ category, goals }) => (
                 <section key={category.id} aria-label={category.label}>
@@ -11236,11 +11277,13 @@ function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCancel }:
                 <>
                   {onCancel && (
                     <button type="button" className="mini-button" onClick={onCancel}>
-                      Cancel
+                      {isUpgrade ? 'Not now' : 'Cancel'}
                     </button>
                   )}
                   <button type="button" className="primary-button" onClick={() => onSaveGoals(picked)}>
-                    {picked.length === 0 ? 'Clear goals' : 'Save goals'}
+                    {isUpgrade
+                      ? (picked.length === 0 ? 'Skip for now' : 'Use these goals')
+                      : (picked.length === 0 ? 'Clear goals' : 'Save goals')}
                   </button>
                 </>
               ) : (

@@ -32,7 +32,9 @@
     "test": "node scripts/run-tests.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
-    "pack:win:local": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& npm run build && npm run build:chat && npm run prepare:companions && electron-builder --dir --win --config.win.signAndEditExecutable=false"
+    "pack:win:local": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& npm run build && npm run build:chat && npm run prepare:companions && electron-builder --dir --win --config.win.signAndEditExecutable=false",
+    "sweep": "node scripts/release-sweep.mjs",
+    "sweep:net": "node scripts/release-sweep.mjs --net"
   },
   "build": {
     "appId": "ai.rigmatch.app",
