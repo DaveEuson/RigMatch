@@ -988,6 +988,35 @@ function App() {
     [topRigPick],
   );
 
+  /**
+   * How the whole lineup placed, best first.
+   *
+   * The show is a comparison and the Winner screen was throwing the comparison
+   * away: it announced one model "out of the 5 you tested" and then showed
+   * nothing whatever about the other four. Every score is already here; only
+   * Advanced Mode was allowed to see them, which is exactly backwards for the
+   * mode whose users will never open Advanced.
+   */
+  const wizardLineupResults = useMemo(
+    () => shortlistedRows
+      .flatMap((row) => {
+        const score = modelScores[row.displayName];
+        return score ? [{ row, score }] : [];
+      })
+      // The app's own comparator, not a total-descending sort: the board shows
+      // the one-decimal Match value, and ranking on the rounded integer put
+      // 87.5 above 87.6 — a list that visibly contradicted its own numbers.
+      .sort((a, b) => compareTestedModelScores(a.score, b.score))
+      .map(({ row, score }) => ({
+        model: row.displayName,
+        name: getFriendlyModelName(row.displayName),
+        scoreLabel: formatMatchScore(score),
+        total: score.total,
+        grade: score.grade,
+      })),
+    [shortlistedRows, modelScores],
+  );
+
   // Simple Mode needs its own share state: Advanced's lives inside the profile
   // panel, which is not mounted in the guided path.
   const [shareWinnerOpen, setShareWinnerOpen] = useState(false);
@@ -3551,6 +3580,7 @@ function App() {
           onStartShow={() => { void runListTest(); }}
           onStopShow={requestStopRun}
           winner={wizardWinner}
+          lineupResults={wizardLineupResults}
           onChatWithWinner={openChatWithWinner}
           onOpenScorecard={() => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('history'); }}
           onRunAgain={() => undefined}

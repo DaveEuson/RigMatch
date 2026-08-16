@@ -140,6 +140,8 @@ type SimpleWizardProps = {
   onStartShow: () => void;
   onStopShow: () => void;
   winner: { model: string; score: number; scoreLabel: string; grade: string } | null;
+  /** Every model in the lineup that has a score, best first. */
+  lineupResults?: Array<{ model: string; name: string; scoreLabel: string; total: number; grade: string }>;
   onChatWithWinner: () => void;
   onOpenScorecard: () => void;
   /** Opens the shareable scorecard image for the winning model. */
@@ -1027,7 +1029,7 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
 // ---------------------------------------------------------------------------
 // Winner
 
-function WinnerScreen({ winner, shortlistedRows, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
+function WinnerScreen({ winner, shortlistedRows, lineupResults, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
   if (!winner) {
     return <div className="sw-winner"><p className="sw-muted">Run the show to crown your Top Match.</p></div>;
   }
@@ -1066,6 +1068,35 @@ function WinnerScreen({ winner, shortlistedRows, onChatWithWinner, onOpenScoreca
           </button>
         </div>
       </div>
+
+      {/* The rest of the comparison. Announcing one winner and hiding the other
+          four made the show's whole output a single number, and left "out of
+          the 5 you tested" as a claim the screen did not back up. */}
+      {(lineupResults?.length ?? 0) > 1 && (
+        <div className="sw-scoreboard">
+          <span className="sw-eyebrow">How the lineup finished</span>
+          <ol>
+            {lineupResults!.map((result, index) => (
+              <li key={result.model} className={result.model === winner.model ? 'winner' : undefined}>
+                <b className="sw-place">{index + 1}</b>
+                <img src={getModelAvatarSrc(result.model)} alt="" />
+                <span className="sw-scoreboard-name">
+                  {result.name}
+                  <em>{result.model}</em>
+                </span>
+                <span className="sw-scoreboard-score">
+                  {result.scoreLabel}
+                  <em>Grade {result.grade}</em>
+                </span>
+              </li>
+            ))}
+          </ol>
+          <p className="sw-muted sw-scoreboard-note">
+            Every one of these ran the same questions on your PC. A close second may still
+            suit you better — try chatting with either.
+          </p>
+        </div>
+      )}
 
       <div className="sw-doors">
         <div className="sw-door chat">

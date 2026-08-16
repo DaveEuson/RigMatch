@@ -865,6 +865,85 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 /* Time remaining next to the question count on Compare. Quiet, because it is
    a forecast that firms up as the run goes. */
 .sw-eta { margin-left: 6px; font-style: normal; color: var(--muted); }
+/* The full result of the show, under the winner. A table would read as data
+   to audit; this is a podium, so places and scores are what carry weight. */
+.sw-scoreboard {
+  width: min(720px, 100%);
+  margin: 22px auto 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sw-scoreboard ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sw-scoreboard li {
+  display: grid;
+  grid-template-columns: 24px 34px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.sw-scoreboard li.winner {
+  border-color: var(--gold);
+  background: rgba(240, 190, 90, 0.09);
+}
+.sw-place {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.sw-scoreboard li.winner .sw-place { color: var(--gold); }
+.sw-scoreboard img {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+.sw-scoreboard-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-weight: 600;
+}
+/* The raw tag stays available for anyone who wants to look the model up, but
+   never at the same weight as the name they chose it by. */
+.sw-scoreboard-name em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sw-scoreboard-score {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.sw-scoreboard-score em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.sw-scoreboard-note { margin: 2px 0 0; font-size: 12px; text-align: center; }
+
+@media (max-width: 620px) {
+  .sw-scoreboard li { grid-template-columns: 20px 28px 1fr auto; gap: 8px; padding: 7px 10px; }
+  .sw-scoreboard img { width: 28px; height: 28px; }
+}
 .sw-setup-safety { font-size: 12px; margin-top: -10px; }
 .sw-card-size { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
 /* Note under the size line when one card stands in for several size variants. */
