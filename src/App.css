@@ -17865,7 +17865,13 @@ a.whats-next-support:hover {
   cursor: pointer;
 }
 
-.goal-splash-option strong { font-size: 0.92rem; line-height: 1.25; }
+/* Room for the "Main goal" badge pinned top-right, which otherwise lands on
+   top of a title long enough to wrap. */
+.goal-splash-option strong {
+  font-size: 0.92rem;
+  line-height: 1.25;
+  padding-right: 62px;
+}
 
 /* The league line: themed words up front, the plain facts in the tooltip. */
 .goal-splash-option em {

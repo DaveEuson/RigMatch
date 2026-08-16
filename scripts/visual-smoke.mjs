@@ -62,6 +62,7 @@ async function runBrowserChecks(url) {
   await page.goto(url, { waitUntil: 'networkidle' });
   await forceSimpleMode(page);
   await page.waitForSelector('.sw-shell', { timeout: 10000 });
+  await assertNoBlockingDialog(page);
 
   const title = await page.title();
   const simpleText = await page.locator('body').innerText();
@@ -146,6 +147,22 @@ function collectConsoleIssues(page) {
   return issues;
 }
 
+/**
+ * A modal left open here does not fail the run — it makes every later click
+ * retry until the whole script times out, with the reason buried in Playwright
+ * retry noise. Name it instead.
+ */
+async function assertNoBlockingDialog(page) {
+  const blocker = await page.evaluate(() => {
+    const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+    return dialog ? (dialog.getAttribute('aria-label') || dialog.className) : null;
+  });
+  if (blocker) {
+    throw new Error(`A modal dialog is blocking the page: "${blocker}". `
+      + 'Seed whatever storage key dismisses it in forceSimpleMode().');
+  }
+}
+
 async function forceSimpleMode(page) {
   await page.evaluate(() => {
     localStorage.setItem('rigmatch:ui-mode:v1', 'beginner');
@@ -153,6 +170,11 @@ async function forceSimpleMode(page) {
     // The mode splash is a modal dialog that intercepts pointer events, so
     // without this the Advanced Mode click below never lands.
     localStorage.setItem('rigmatch:mode-splash:v1', 'chosen');
+    // 0.6 added a second first-run dialog: someone who chose a mode before
+    // goals existed is still asked the goal question, which is right for a
+    // real upgrade and fatal for a screenshot run — it intercepts the same
+    // pointer events and the script retried a click for sixty seconds.
+    localStorage.setItem('rigmatch:goals-offered:v1', 'yes');
   });
   await page.reload({ waitUntil: 'networkidle' });
 }

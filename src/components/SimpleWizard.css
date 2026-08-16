@@ -992,3 +992,80 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 }
 
 .sw-notice button:hover { background: rgba(var(--gold-rgb), 0.16); }
+
+/* ---------------------------------------------------------------------------
+   The Host as the explainer.
+
+   He is bigger and louder than he was, because he is now the answer to "what
+   does that mean" as well as the narrator — and because a beginner needs one
+   obvious place to look rather than a second panel to notice.
+   --------------------------------------------------------------------------- */
+.sw-host-strip {
+  align-items: center;
+  gap: 18px;
+}
+
+.sw-host-avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 20px;
+  border: 2px solid rgba(var(--gold-rgb), 0.45);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+
+.sw-host-bubble {
+  flex: 1;
+  min-height: 104px;
+  font-size: 1.02rem;
+  line-height: 1.55;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.sw-host-bubble p { margin: 0; }
+.sw-host-bubble p + p { margin-top: 8px; }
+
+/* Answering a question rather than narrating the step. */
+.sw-host-strip.explaining .sw-host-avatar {
+  border-color: var(--gold);
+  transform: scale(1.03);
+}
+
+.sw-host-strip.explaining .sw-host-bubble {
+  border-color: rgba(var(--gold-rgb), 0.55);
+  background: rgba(var(--gold-rgb), 0.09);
+}
+
+.sw-host-strip.explaining .sw-host-bubble > span { color: var(--gold); }
+
+.sw-host-because { color: var(--muted); }
+
+.sw-host-also {
+  font-size: 0.86rem;
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+/* A term reads as part of the sentence. An unstyled button renders as a white
+   box mid-paragraph and looks like something to type into. */
+.sw-explain-term {
+  all: unset;
+  display: inline;
+  cursor: help;
+  color: var(--gold);
+  border-bottom: 1px dotted currentColor;
+  white-space: normal;
+}
+
+.sw-explain-term:hover { border-bottom-style: solid; }
+
+.sw-explain-term:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@media (max-width: 900px) {
+  .sw-host-avatar { width: 64px; height: 64px; }
+  .sw-host-bubble { min-height: 0; font-size: 0.95rem; }
+}

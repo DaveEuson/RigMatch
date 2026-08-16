@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -8,7 +8,6 @@ import {
   Download,
   ExternalLink,
   Heart,
-  HelpCircle,
   Image as ImageIcon,
   Info,
   Lock,
@@ -26,7 +25,7 @@ import {
 import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, SystemProfile } from '../types';
 import { STEPS, STEP_LABELS, footerHint, nextBlockedHint, type StepId } from '../lib/wizardCopy';
 import { copyText, type CopyState } from '../lib/clipboard';
-import { glossaryEntry } from '../lib/glossary';
+import { Explain, InfoViewProvider, useExplaining } from './InfoView';
 import { formatBytes, formatBytesPerSecond } from '../lib/format';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 import { getFriendlyModelName } from '../lib/modelCatalog';
@@ -286,6 +285,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
   };
 
   return (
+    <InfoViewProvider>
     <div className="sw-shell">
       <header className="sw-header">
         <div className="sw-brand">
@@ -349,13 +349,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
       </header>
 
       <div className="sw-content">
-        <div className="sw-host-strip">
-          <img className="sw-host-avatar" src={HOST_AVATAR_SRC} alt="" />
-          <div className="sw-host-bubble">
-            <span>The host</span>
-            <p>{HOST_COPY[step]}</p>
-          </div>
-        </div>
+        <HostStrip step={step} />
 
         {props.notice && (
           <div className="sw-notice" role="status">
@@ -411,42 +405,38 @@ export function SimpleWizard(props: SimpleWizardProps) {
         </div>
       </footer>
     </div>
+    </InfoViewProvider>
   );
 }
 
 /**
- * A word a newcomer may not know, with its explanation one tap away.
+ * The Host, who narrates the step until you point at something you do not know
+ * — then he explains that instead, and goes back to narrating when you stop.
  *
- * Deliberately a button that expands text in place, not a hover tooltip:
- * hover does not exist on a touchscreen, and someone who does not know a word
- * has no reason to suspect that hovering it would help. The dotted underline
- * is the only hint, and pressing it puts the answer directly under the word.
+ * One voice, one place to look. A separate info panel would have been a second
+ * thing to notice, and the whole problem is that a beginner does not know what
+ * to look for.
  */
-function Explain({ id, children }: { id: string; children?: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const entry = glossaryEntry(id);
-  if (!entry) return <>{children}</>;
+function HostStrip({ step }: { step: StepId }) {
+  const explaining = useExplaining();
   return (
-    <span className="sw-explain-wrap">
-      <button
-        type="button"
-        className="sw-explain-term"
-        onClick={() => setOpen((was) => !was)}
-        aria-expanded={open}
-        aria-label={`${entry.term} — what does this mean?`}
-      >
-        {children ?? entry.term}
-        <HelpCircle aria-hidden="true" />
-      </button>
-      {open && (
-        <span className="sw-explain-body" role="note">
-          <strong>{entry.term}</strong>
-          <span>{entry.plain}</span>
-          {entry.because && <span>{entry.because}</span>}
-          {entry.alsoCalled && <em>Sometimes called “{entry.alsoCalled}”.</em>}
-        </span>
-      )}
-    </span>
+    <div className={`sw-host-strip${explaining ? ' explaining' : ''}`}>
+      <img className="sw-host-avatar" src={HOST_AVATAR_SRC} alt="" />
+      <div className="sw-host-bubble">
+        <span>{explaining ? explaining.term : 'The host'}</span>
+        {explaining ? (
+          <>
+            <p>{explaining.plain}</p>
+            {explaining.because && <p className="sw-host-because">{explaining.because}</p>}
+            {explaining.alsoCalled && (
+              <p className="sw-host-also">Sometimes called “{explaining.alsoCalled}”.</p>
+            )}
+          </>
+        ) : (
+          <p>{HOST_COPY[step]}</p>
+        )}
+      </div>
+    </div>
   );
 }
 
