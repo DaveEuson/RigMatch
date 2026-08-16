@@ -329,6 +329,7 @@ import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
 import { batchSeed, isVideoCheckpoint } from './lib/videoGen';
 import { DEFAULT_VIDEO_SIZE_ID, VIDEO_SIZE_PRESETS, toVideoLabResult, videoReadiness } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
+import { tickerTips } from './lib/glossary';
 import { GOALS, goalById, goalHardwareExpectation, goalsByCategory, leagueLabel, presetIdForGoal, type GoalId } from './lib/goals';
 import { taskFilterForGoal } from './lib/modelCatalog';
 import { readSelectedGoals, writeSelectedGoals } from './lib/goalSettings';
@@ -11618,21 +11619,10 @@ function ImageResultModal({ src, model, onClose }: {
   );
 }
 
-const LEARNING_TIPS: { term: string; tip: string }[] = [
-  { term: 'Match Score', tip: 'A 0–100 rating combining speed, quality, reliability, and hardware fit.' },
-  { term: 'Speed Dating', tip: 'Test multiple models with the same questions side-by-side to find your best fit.' },
-  { term: 'VRAM', tip: "Video RAM on your GPU. Models must fit here to run fast — too big means slow or won't load." },
-  { term: 'Rig Picks', tip: 'Models our algorithm recommends specifically for your GPU and hardware.' },
-  { term: 'Ollama', tip: 'The local server that downloads and runs AI models privately on your machine.' },
-  { term: 'Tokens/s', tip: 'Roughly how many words a model produces per second. Higher = faster responses.' },
-  { term: 'Parameters (3B, 7B…)', tip: 'Billions of values the model learned. Bigger = more capable but slower and heavier.' },
-  { term: 'Quantization (Q4/Q8)', tip: 'Compression that shrinks model size. Q4 = smaller and faster, Q8 = more accurate.' },
-  { term: 'Accuracy', tip: 'Whether a model follows instructions and avoids making things up (hallucinating).' },
-  { term: 'Grade (S/A/B/C)', tip: 'Overall rating: S is exceptional, A is great, B is solid, C needs improvement.' },
-  { term: 'Embedding model', tip: 'Converts text into search vectors — not for chat or generation, so filtered out here.' },
-  { term: 'Contestants', tip: 'Your shortlist of up to 5 models competing in Speed Dating. Add them from the model table.' },
-  { term: 'Context window', tip: 'How much text a model can hold in memory at once. Bigger = longer conversations without forgetting.' },
-];
+// The rotating tips, from the one place definitions live. They used to be
+// written out here, which meant the explanations existed only in Advanced Mode
+// — shown to the people who needed them least. See lib/glossary.ts.
+const LEARNING_TIPS: { term: string; tip: string }[] = tickerTips();
 
 function Ticker({
   activity,
