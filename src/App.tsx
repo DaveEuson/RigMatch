@@ -131,6 +131,7 @@ import { BrandMark, PanelHeader, MetricTile } from './components/CommonChrome';
 import { ReleaseNotes, UpdateCenter } from './components/UpdateCenter';
 import { releaseNotes } from './data/releaseNotes';
 import { licenseLinksForModels } from './lib/modelLicenses';
+import { lineupStanding, standingLine } from './lib/lineupStanding';
 import { playJingle } from './lib/sound';
 import { TopDeck } from './components/TopDeck';
 import {
@@ -9684,7 +9685,14 @@ function SpeedDatePanel({
         className="speed-date-art-banner"
         kicker="Tonight's lineup"
         title="Five contestants, one rig, same questions"
-        body={winnerResult ? `${listTestResult?.winner} is leading with ${winnerResult.total} Match.` : 'Run the show to crown your Top Match for this computer.'}
+        // Checked against the lineup on screen, not just read from the saved
+        // result: listTestResult survives across sessions, so swapping one
+        // contestant was enough to make this announce a leader that is not in
+        // tonight's lineup at all.
+        body={standingLine(
+          lineupStanding(listTestResult?.winner, shortlistedRows.map((row) => row.displayName)),
+          winnerResult?.total,
+        )}
       />
 
       <div className="speed-date-body">
@@ -9909,13 +9917,16 @@ function SpeedDateShowAnimation({
   winner?: string;
   host?: NetworkHost;
 }) {
+  // The saved winner only counts as the current one if it is actually on this
+  // stage; otherwise the podium highlights a model the lineup does not contain.
+  const standing = lineupStanding(winner, rows.map((row) => row.displayName));
   const activeModel = runProgress?.phase === 'running'
     ? runProgress.currentModel
-    : winner ?? rows[0]?.displayName ?? '';
+    : (standing.kind === 'leading' ? standing.model : rows[0]?.displayName ?? '');
   const stageStatus = runProgress?.phase === 'running'
     ? `Now testing ${getShortModelName(runProgress.currentModel)}`
-    : winner
-      ? `${getShortModelName(winner)} is holding the top score`
+    : standing.kind === 'leading'
+      ? `${getShortModelName(standing.model)} is holding the top score`
       : rows.length >= MIN_CONTESTANTS
         ? `${rows.length} contestants ready for the same questions`
         : 'Pick at least two contestants to start the show';
