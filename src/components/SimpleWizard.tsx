@@ -28,6 +28,7 @@ import { copyText, type CopyState } from '../lib/clipboard';
 import { Explain, ExplainText, InfoViewProvider } from './InfoView';
 import { useExplaining } from '../lib/infoContext';
 import { formatBytes, formatBytesPerSecond } from '../lib/format';
+import { formatDuration } from '../lib/runEstimates';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 import { getFriendlyModelName } from '../lib/modelCatalog';
 import { getDownloadRowStatus, summarizeDownloadStep } from '../lib/downloadStatus';
@@ -905,6 +906,34 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
     // model-level figure rather than showing a made-up number.
     : (runProgress?.percent ?? 0);
 
+  // How much longer this will take, measured from the run in progress rather
+  // than forecast up front. Someone sitting here for a quarter of an hour has
+  // already spent the forecast; what they want to know is whether to wait.
+  // Nothing is claimed until a few questions have actually been timed, so the
+  // first number shown is evidence rather than a guess.
+  const runningPhase = runProgress?.phase;
+  // The tick owns the elapsed time. Reading a ref and the clock during render
+  // instead would make the number depend on whenever React happened to
+  // re-render, which is both impure and wrong on a screen that re-renders
+  // every time a question lands.
+  const [runClock, setRunClock] = useState<{ startedAt: number; now: number } | null>(null);
+  useEffect(() => {
+    if (runningPhase !== 'running') return undefined;
+    const startedAt = Date.now();
+    const timer = setInterval(() => setRunClock({ startedAt, now: Date.now() }), 1000);
+    return () => {
+      clearInterval(timer);
+      // Drop the reading along with the run it belonged to, so the next show
+      // cannot briefly forecast from the previous one's start time.
+      setRunClock(null);
+    };
+  }, [runningPhase]);
+  const elapsedMs = runClock ? runClock.now - runClock.startedAt : 0;
+
+  const remainingLabel = elapsedMs > 0 && totalQuestions > 0 && questionsDone >= 3
+    ? formatDuration((elapsedMs / questionsDone) * (totalQuestions - questionsDone)).replace('~', '')
+    : '';
+
   // Turn the suite's internal question label into something a beginner reads as
   // a skill being tested, not a format spec.
   const rawLabel = (runProgress?.questionLabel ?? '').toLowerCase();
@@ -955,7 +984,10 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
             return (
               <div key={row.displayName} className={`sw-podium ${state}`}>
                 <img src={getModelAvatarSrc(row.displayName)} alt="" />
-                <strong>{row.displayName}</strong>
+                {/* The name they picked, not the raw tag. Pick shows
+                    "Qwen2.5"; showing "qwen2.5:7b" here reads as a different
+                    contestant to someone who does not know the notation. */}
+                <strong>{getFriendlyModelName(row.displayName)}</strong>
                 <span className={`sw-podium-pill ${state}`}>
                   {state === 'answering' ? <><i /><i /><i /> Answering</> : state === 'done' ? '✓ Done' : 'Waiting'}
                 </span>
@@ -973,6 +1005,7 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
               {totalQuestions > 0
                 ? `${questionsDone} of ${totalQuestions} questions`
                 : `${overallPercent}%`}
+              {remainingLabel && <em className="sw-eta">· about {remainingLabel} left</em>}
             </span>
           </div>
           <div

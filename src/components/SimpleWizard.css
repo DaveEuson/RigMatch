@@ -862,6 +862,9 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   border-radius: 10px;
   background: transparent;
 }
+/* Time remaining next to the question count on Compare. Quiet, because it is
+   a forecast that firms up as the run goes. */
+.sw-eta { margin-left: 6px; font-style: normal; color: var(--muted); }
 .sw-setup-safety { font-size: 12px; margin-top: -10px; }
 .sw-card-size { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
 /* Note under the size line when one card stands in for several size variants. */

@@ -87,6 +87,26 @@ async function run(url) {
     seen.add(step);
     screens.push(await capture(page, step));
 
+    // Compare is the only screen that changes on its own, and everything worth
+    // reviewing there — live scores, the time remaining — is absent in the
+    // first second, so photographing it on arrival reviews a loading state.
+    // Wait for the run to have actually produced something rather than for a
+    // fixed duration, and stop early if it finishes and moves on: a fixed
+    // sleep here photographed the Winner screen and filed it under Compare.
+    if (step === 'compare') {
+      let shot = false;
+      for (let tick = 0; tick < 40; tick += 1) {
+        await page.waitForTimeout(1000);
+        // Keep waiting after the mid-run shot: the run finishing is what
+        // unlocks Winner, and leaving early strands the tour here.
+        if ((await currentStep(page)) !== 'compare') break;
+        if (!shot && (await page.locator('.sw-eta').count()) > 0) {
+          screens.push({ ...(await capture(page, 'compare-midrun')), note: `${tick + 1}s into the run` });
+          shot = true;
+        }
+      }
+    }
+
     const next = page.locator('.sw-footer-right button:not([disabled])').last();
     if ((await next.count()) === 0) break;
     const before = step;
@@ -96,6 +116,34 @@ async function run(url) {
       before,
       { timeout: 5000 },
     ).catch(() => {});
+  }
+
+  // The forward walk stops wherever the wizard gates progress — Compare's
+  // button stays disabled until a run finishes, so a forward-only tour never
+  // photographs Winner, which is the screen the whole app builds toward. Pick
+  // up anything it missed through the step rail, which offers exactly the
+  // steps this state has already completed.
+  for (let guard = 0; guard < 8; guard += 1) {
+    const pending = await page.evaluate((visited) => {
+      const pills = [...document.querySelectorAll('.sw-step:not([disabled])')];
+      const hit = pills.find((pill) => {
+        const label = pill.querySelector('.sw-step-label')?.textContent?.trim().toLowerCase();
+        return label && !visited.includes(label);
+      });
+      return hit ? hit.querySelector('.sw-step-label')?.textContent?.trim().toLowerCase() : null;
+    }, [...seen]);
+    if (!pending) break;
+
+    await page.locator('.sw-step', { hasText: new RegExp(`^${pending}$`, 'i') }).first().click();
+    await page.waitForFunction(
+      (want) => document.querySelector('.sw-step.active .sw-step-label')?.textContent?.trim().toLowerCase() === want,
+      pending,
+      { timeout: 5000 },
+    ).catch(() => {});
+    const landed = await currentStep(page);
+    if (!landed || seen.has(landed)) break;
+    seen.add(landed);
+    screens.push({ ...(await capture(page, landed)), reachedVia: 'step rail' });
   }
 
   await browser.close();
