@@ -220,6 +220,7 @@ import {
   removeBenchmarkResults,
   removeListTestScores,
   removeModelScores,
+  textJudgeCandidates,
   removePullProgress,
   removePullProgressForModels,
   removeSetValues,
@@ -794,12 +795,11 @@ function App() {
     () => modelRows.filter((row) => row.installed && row.localProvider !== 'lm-studio'),
     [modelRows],
   );
-  // Installed local (Ollama) models eligible to act as the judge, largest first —
-  // a bigger model is the better grader, so it makes the best default.
+  // Installed local (Ollama) models fit to judge, most capable first. Not
+  // simply the biggest file: an embedding or OCR model is often the largest
+  // thing installed and grades prose as confident nonsense.
   const judgeModelOptions = useMemo(
-    () => [...installedRowsForCleanup]
-      .sort((a, b) => (b.sizeGb ?? 0) - (a.sizeGb ?? 0))
-      .map((row) => row.displayName),
+    () => textJudgeCandidates(installedRowsForCleanup),
     [installedRowsForCleanup],
   );
   // The judge model actually sent with a run: the user's pick if it's still
@@ -813,6 +813,21 @@ function App() {
   // The judge configuration a run actually uses, or null when judging is off /
   // not usable (cloud without a key falls back to heuristic — never silently to
   // a different judge the user didn't pick).
+  /**
+   * A local model to mark the answers the rules cannot, when judging is off.
+   *
+   * Chat and writing questions have no shape for the heuristic to match, so
+   * 0.6 stopped them crowning anyone — which left those goals graded but
+   * uncrownable unless the user found the judge setting. This hands the main
+   * process a local judge for exactly those questions. Never the cloud judge:
+   * auto-engaging something that costs money and leaves the machine would be
+   * wrong however useful the score.
+   */
+  const autoJudgeModel = useMemo(() => {
+    if (qualityMode === 'judge') return '';
+    return judgeModelOptions[0] ?? '';
+  }, [qualityMode, judgeModelOptions]);
+
   const effectiveJudge = useMemo<{ provider: 'local' | 'openrouter'; model: string; apiKey?: string } | null>(() => {
     if (qualityMode !== 'judge') return null;
     if (judgeSource === 'openrouter') {
@@ -1753,6 +1768,7 @@ function App() {
         judgeModel: effectiveJudge?.model,
         judgeProvider: effectiveJudge?.provider,
         judgeApiKey: effectiveJudge?.apiKey,
+        autoJudgeModel,
       }), modelToTest);
       setBenchmark(result);
       setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
@@ -1841,7 +1857,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsBenchmarking(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel, tellUser]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel, tellUser, autoJudgeModel]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
     // The quick TEST button skips the full launch modal, but it still loads a
@@ -2567,6 +2583,7 @@ function App() {
           judgeModel: effectiveJudge?.model,
           judgeProvider: effectiveJudge?.provider,
           judgeApiKey: effectiveJudge?.apiKey,
+        autoJudgeModel,
         }), row.displayName);
         results.push(result);
         setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
@@ -2692,7 +2709,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge, rigStampForModel, tellUser]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge, rigStampForModel, tellUser, autoJudgeModel]);
 
   /**
    * A skill run that throws must not leave the mini bar spinning forever.
@@ -3919,6 +3936,7 @@ function App() {
           onDownloadMissing={() => requestThirdPartyModelDownloads(shortlistedRows)}
           onChangeQuestionCount={setBenchmarkQuestionCount}
           onLoadPreset={setBenchmarkQuestions}
+          autoJudgeModel={autoJudgeModel}
           goalPresetId={presetIdForGoal(selectedGoals[0])}
           goalDesire={selectedGoals[0] ? goalById(selectedGoals[0])?.desire.toLowerCase() : undefined}
           onEditQuestions={() => { cancelPendingRun(); setSuiteEditorOpen(true); }}
@@ -5098,6 +5116,7 @@ function RunWarningModal({
   onDownloadMissing,
   onChangeQuestionCount,
   onLoadPreset,
+  autoJudgeModel,
   goalPresetId,
   goalDesire,
   onEditQuestions,
@@ -5134,6 +5153,8 @@ function RunWarningModal({
   onDownloadMissing?: () => void;
   onChangeQuestionCount: (count: BenchmarkQuestionCount) => void;
   onLoadPreset?: (questions: BenchmarkQuestion[]) => void;
+  /** A local model that will mark the prose questions, when judging is off. */
+  autoJudgeModel?: string;
   /** The preset that measures the user's main goal, when one does. */
   goalPresetId?: string;
   /** That goal in the user's own words, for the copy. */
@@ -5174,6 +5195,10 @@ function RunWarningModal({
   const runWarnRef = useDialog<HTMLElement>(onCancel);
   const [questionsExpanded, setQuestionsExpanded] = useState(false);
   const recognizeUploadRef = useRef<HTMLInputElement>(null);
+  // Questions the rules cannot mark: chat and writing have no shape to match.
+  const proseQuestionCount = benchmarkQuestions.filter(
+    (question) => question.type === 'assistant' || question.type === 'writing',
+  ).length;
   const activePreset = BENCHMARK_PRESETS.find(
     (p) => p.questions.length === benchmarkQuestions.length &&
       p.questions.every((q, i) => q.id === benchmarkQuestions[i]?.id),
@@ -5340,6 +5365,16 @@ function RunWarningModal({
               <em className="run-focus-hint">
                 {activePreset ? activePreset.description : 'Mixed general-purpose questions covering JSON output, instruction following, and daily tasks.'}
               </em>
+              {/* Chat and writing answers have no shape for the rules to match,
+                  so they get marked by a second model instead of by length.
+                  Say so — it is why those questions take longer. */}
+              {proseQuestionCount > 0 && (
+                <em className="run-focus-hint judge-note">
+                  {autoJudgeModel
+                    ? `${proseQuestionCount} of these have no right answer to check against, so ${autoJudgeModel} reads and marks them. That is the only way chat and writing get a real score, and it is why those questions take a little longer.`
+                    : `${proseQuestionCount} of these ask for chat or writing, which nothing installed can mark — download a second model and RigMatch will use it to grade them.`}
+                </em>
+              )}
             </div>
           )}
 

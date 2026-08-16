@@ -2788,9 +2788,28 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   } catch { judgeModel = ''; }
   const judgeProvider = request.judgeProvider === 'openrouter' ? 'openrouter' : 'local';
   const judgeApiKey = typeof request.judgeApiKey === 'string' ? request.judgeApiKey.trim() : '';
-  const useJudge = request.qualityMode === 'judge' && Boolean(judgeModel) && (
+  const judgeUsable = Boolean(judgeModel) && (
     judgeProvider === 'openrouter' ? Boolean(judgeApiKey) : provider === 'ollama'
   );
+  const useJudge = request.qualityMode === 'judge' && judgeUsable;
+  /**
+   * Judge the answers the rules genuinely cannot mark, even when judging is off.
+   *
+   * Chat and writing questions have no shape to match, so the heuristic scores
+   * them by length — which is not a measurement, and 0.6 stopped it crowning
+   * anyone. That left those goals graded but uncrownable unless the user found
+   * the judge setting, which is honest and useless. So the judge marks exactly
+   * the questions that need it and nothing else: a coding or JSON run pays
+   * nothing, and a chat run pays only for its chat questions.
+   *
+   * `qualityMode: 'judge'` still means judge EVERYTHING — an explicit choice is
+   * never quietly narrowed.
+   */
+  // Deliberately LOCAL ONLY, and never the configured cloud judge: engaging a
+  // paid, off-machine judge without being asked would break both the wallet
+  // and the promise that nothing leaves this computer.
+  const autoJudgeModel = String(request.autoJudgeModel || '').trim();
+  const autoJudgeUnmarkable = !useJudge && provider === 'ollama' && Boolean(autoJudgeModel);
   const sendProgress = (update) => {
     const payload = {
       id: progressId,
@@ -2824,9 +2843,9 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       questionCount,
       benchmarkMode: provider === 'lm-studio' ? 'openai-compatible' : 'ollama-parity',
       provider,
-      qualityScoring: useJudge ? 'judge' : 'heuristic',
-      judgeModel: useJudge ? judgeModel : null,
-      judgeProvider: useJudge ? judgeProvider : null,
+      qualityScoring: useJudge ? 'judge' : autoJudgeUnmarkable ? 'heuristic + judge for unmarkable' : 'heuristic',
+      judgeModel: useJudge ? judgeModel : autoJudgeUnmarkable ? autoJudgeModel : null,
+      judgeProvider: useJudge ? judgeProvider : autoJudgeUnmarkable ? 'local' : null,
       thinkingDisabled: provider === 'ollama' ? BENCHMARK_THINK_DISABLED : false,
       warmup: {
         enabled: true,
@@ -2959,13 +2978,14 @@ async function runBenchmarkInner(request = {}, sender, signal) {
 
       // Judge grades the representative (first-run) answer; later runs reuse it.
       // On any judge failure, promptJudgeScore stays null and we use the heuristic.
-      if (useJudge && runIndex === 0) {
+      const autoJudgeThis = autoJudgeUnmarkable && !heuristicCanGrade(prompt.type, prompt.prompt);
+      if ((useJudge || autoJudgeThis) && runIndex === 0) {
         const verdict = await scoreQualityWithJudge({
           prompt,
           response: responseText,
-          generate: (judgePrompt) => (judgeProvider === 'openrouter'
+          generate: (judgePrompt) => (useJudge && judgeProvider === 'openrouter'
             ? openRouterGenerateText(judgeApiKey, judgeModel, judgePrompt, 200, signal)
-            : runJudgeGenerate(baseUrl, judgeModel, judgePrompt, signal)),
+            : runJudgeGenerate(baseUrl, useJudge ? judgeModel : autoJudgeModel, judgePrompt, signal)),
         });
         promptJudgeScore = verdict ? verdict.score : null;
       }

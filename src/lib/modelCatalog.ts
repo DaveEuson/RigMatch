@@ -120,6 +120,41 @@ export function canGenerateText(row: CapabilityBearing & { generationKind?: stri
 }
 
 /**
+ * Models fit to mark another model's prose, most capable first.
+ *
+ * The judge reads an answer and scores it, so it has to be able to hold a
+ * conversation — an embedding model, a ComfyUI checkpoint or an OCR model
+ * cannot, and picking one produces confident nonsense rather than an error.
+ * That mattered less when judging was opt-in and hand-picked; now that chat
+ * and writing questions are marked by a judge automatically, the default
+ * cannot simply be "the biggest file installed".
+ *
+ * Sorted largest-first because a bigger model is the better grader, with the
+ * known-weak ones pushed to the back rather than dropped — they are still
+ * better than scoring prose by its length.
+ */
+export function textJudgeCandidates(
+  rows: Array<CapabilityBearing & { generationKind?: string; sizeGb?: number | null }>,
+): string[] {
+  const names = [...rows]
+    .filter((row) => canGenerateText(row) && !isEmbeddingModel(row.displayName ?? row.name ?? ''))
+    .sort((a, b) => (b.sizeGb ?? 0) - (a.sizeGb ?? 0))
+    .map((row) => row.displayName ?? row.name ?? '')
+    .filter(Boolean);
+  return [
+    ...names.filter((name) => !WEAK_TEXT_JUDGE.test(name)),
+    ...names.filter((name) => WEAK_TEXT_JUDGE.test(name)),
+  ];
+}
+
+/**
+ * Models that answer but grade badly. OCR models transcribe rather than judge,
+ * and the small llava family answers "1" to almost anything — both measured
+ * while validating the image judge, and both equally useless on prose.
+ */
+const WEAK_TEXT_JUDGE = /\bocr\b|deepseek-ocr|got-ocr|olmocr|bakllava|^llava|\/llava/i;
+
+/**
  * Whether a model can sit in the Speed Dating lineup at all.
  *
  * The comparison is a text conversation: every contestant answers the same

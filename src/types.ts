@@ -550,6 +550,14 @@ export type AgentArcadeApi = {
     judgeModel?: string;
     judgeProvider?: 'local' | 'openrouter';
     judgeApiKey?: string;
+    /**
+     * A local model used to mark only the answers the heuristic cannot — chat
+     * and writing, which have no shape to match and would otherwise be scored
+     * by length. Applies when qualityMode is 'heuristic'; `judge` still means
+     * judge everything. Always local: auto-engaging a paid, off-machine judge
+     * would break both the wallet and the local-only promise.
+     */
+    autoJudgeModel?: string;
   }) => Promise<BenchmarkResult>;
   onBenchmarkProgress?: (callback: (update: BenchmarkProgressUpdate) => void) => () => void;
   getActiveBenchmark: () => Promise<BenchmarkStatus>;
