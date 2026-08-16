@@ -368,6 +368,7 @@ import {
 } from './components/ScoreVisuals';
 import {
   compareVersionStrings,
+  countWithVerb,
   formatGb,
   formatMs,
   formatPullCount,
@@ -2545,7 +2546,7 @@ function App() {
     const hostBlocker = getLineupBenchmarkBlocker(runnableRows, selectedHost, ollama);
 
     if (missingDownloadCount > 0) {
-      setActivity(`${missingDownloadCount} Speed Dating contestant${missingDownloadCount === 1 ? '' : 's'} need downloads first. Open setup and use Download All.`);
+      setActivity(`${countWithVerb(missingDownloadCount, 'Speed Dating contestant', 'needs', 'need')} downloading first. Open setup and use Download All.`);
       return;
     }
 
@@ -8744,7 +8745,7 @@ function ModelPoolLineupStrip({
   const lineupStatus = rows.length < MIN_CONTESTANTS
     ? `Pick at least ${MIN_CONTESTANTS} contestants before the show starts.`
     : missingDownloadCount > 0
-      ? `${missingDownloadCount} contestant${missingDownloadCount === 1 ? '' : 's'} need downloads. Open setup to download the selected lineup.`
+      ? `${countWithVerb(missingDownloadCount, 'contestant', 'needs', 'need')} downloading. Open setup to download the selected lineup.`
       : full
         ? 'Lineup full. Remove a contestant to swap.'
         : 'Ready. Add more or start the show.';
@@ -9646,7 +9647,7 @@ function SpeedDatePanel({
   const questionLabel = `${questionCount} questions per model`;
   const runReadiness = shortlistedRows.length >= MIN_CONTESTANTS
     ? uninstalledLineupRows.length > 0
-      ? `${uninstalledLineupRows.length} contestant${uninstalledLineupRows.length === 1 ? '' : 's'} need downloads before the show starts.`
+      ? `${countWithVerb(uninstalledLineupRows.length, 'contestant', 'needs', 'need')} downloading before the show starts.`
       : `${shortlistedRows.length} contestants will answer the same ${questionCount} questions.`
     : 'Pick at least two installed contestants before the show starts.';
 

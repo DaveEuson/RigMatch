@@ -30,6 +30,7 @@
     "release:notes": "node scripts/build-release-notes.mjs",
     "release:notes:check": "node scripts/build-release-notes.mjs --check",
     "test": "node scripts/run-tests.mjs",
+    "typecheck": "tsc -b",
     "lint": "eslint .",
     "preview": "vite preview",
     "pack:win:local": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& npm run build && npm run build:chat && npm run prepare:companions && electron-builder --dir --win --config.win.signAndEditExecutable=false",

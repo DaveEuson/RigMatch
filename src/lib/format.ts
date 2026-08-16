@@ -212,3 +212,16 @@ export function compareVersionStrings(a: string, b: string): number {
   }
   return 0;
 }
+
+/**
+ * "1 contestant needs" / "3 contestants need".
+ *
+ * Pluralising the noun and leaving the verb behind produced "1 contestant need
+ * downloads" on the Models screen — the sort of line that makes a working app
+ * read as an unfinished one.
+ */
+export function countWithVerb(count: number, noun: string, singularVerb: string, pluralVerb: string): string {
+  return count === 1
+    ? `${count} ${noun} ${singularVerb}`
+    : `${count} ${noun}s ${pluralVerb}`;
+}
