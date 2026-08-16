@@ -130,6 +130,7 @@ import { GameShowHost } from './components/GameShowHost';
 import { BrandMark, PanelHeader, MetricTile } from './components/CommonChrome';
 import { ReleaseNotes, UpdateCenter } from './components/UpdateCenter';
 import { releaseNotes } from './data/releaseNotes';
+import { licenseLinksForModels } from './lib/modelLicenses';
 import { playJingle } from './lib/sound';
 import { TopDeck } from './components/TopDeck';
 import {
@@ -6502,8 +6503,11 @@ function ThirdPartyDownloadConsentModal({
             )}
           </ol>
 
+          {/* The terms for the models actually queued, not a fixed list. This
+              dialog asks for informed consent; linking Gemma's prohibited-use
+              policy while downloading DeepSeek is the opposite of informing. */}
           <div className="third-party-download-links" aria-label="Model provider terms">
-            {THIRD_PARTY_MODEL_LINKS.map((link) => (
+            {licenseLinksForModels(rows.map((row) => row.displayName)).map((link) => (
               <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer">
                 {link.label}
                 <ExternalLink aria-hidden="true" />

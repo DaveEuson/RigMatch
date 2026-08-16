@@ -146,8 +146,115 @@ async function run(url) {
     screens.push({ ...(await capture(page, landed)), reachedVia: 'step rail' });
   }
 
+  screens.push(...await tourDownload(page, seen));
+  screens.push(...await tourAdvanced(page));
+
   await browser.close();
   return screens;
+}
+
+/**
+ * The Download step, which no straight walk through the wizard ever reaches.
+ *
+ * It is skipped whenever every picked model is already installed, which is
+ * always true of a machine that has been used and always true of the sample
+ * data — so the one screen in Simple Mode that handles multi-gigabyte waits and
+ * failures is also the one nobody photographs. Build the state deliberately:
+ * go back to Pick, drop an installed contestant, and add one that has to be
+ * fetched.
+ */
+async function tourDownload(page, seen) {
+  const goToPick = page.locator('.sw-step', { hasText: /^pick$/i }).first();
+  if (await goToPick.isDisabled().catch(() => true)) return [];
+  await goToPick.click();
+  await page.waitForTimeout(400);
+
+  // Free a slot, then take a card that advertises a download rather than
+  // "Already on your PC".
+  const drop = page.locator('.sw-card.picked button', { hasText: /click to remove/i }).first();
+  if ((await drop.count()) === 0) return [];
+  await drop.click();
+  await page.waitForTimeout(300);
+
+  const needsFetch = page.locator('.sw-card', { hasText: /GB download/i })
+    .locator('button', { hasText: /pick/i }).first();
+  if ((await needsFetch.count()) === 0) return [];
+  await needsFetch.click();
+  await page.waitForTimeout(300);
+
+  const next = page.locator('.sw-footer-right button:not([disabled])').last();
+  if ((await next.count()) === 0) return [];
+  await next.click();
+  await page.waitForTimeout(800);
+
+  const landed = await currentStep(page);
+  if (landed !== 'download' || seen.has('download')) {
+    return [{
+      step: 'download',
+      skipped: true,
+      note: `could not reach the Download step (landed on "${landed}") — it stays unphotographed`,
+    }];
+  }
+  seen.add('download');
+  const shot = { ...(await capture(page, 'download')), note: 'reached by swapping in a model that is not installed' };
+  await dismissModal(page);
+  return [shot];
+}
+
+/**
+ * Close whatever dialog is open, so the next leg of the tour can click.
+ *
+ * The download consent dialog is modal, and leaving it up turned the whole
+ * Advanced tour into an empty result that read as "nine screens, nothing to
+ * report" rather than "never got past a modal".
+ */
+async function dismissModal(page) {
+  const open = page.locator('[role="dialog"][aria-modal="true"]');
+  if ((await open.count()) === 0) return;
+  const cancel = open.locator('button', { hasText: /^(cancel|close|not now)$/i }).first();
+  if ((await cancel.count()) > 0) await cancel.click().catch(() => {});
+  else await page.keyboard.press('Escape');
+  await page.waitForSelector('[role="dialog"][aria-modal="true"]', { state: 'detached', timeout: 5000 })
+    .catch(() => { throw new Error('a modal dialog would not close; the rest of the tour cannot click'); });
+}
+
+/**
+ * Every screen behind the Advanced side menu.
+ *
+ * Simple Mode is four screens and got four passes; Advanced is nine and had
+ * never been walked one at a time at all. The jargon report matters less here —
+ * this mode is for people who want the raw numbers — but "offered where it
+ * cannot work" and "empty with no explanation" matter just as much.
+ */
+async function tourAdvanced(page) {
+  const found = [];
+  // Not swallowed: a silent catch here returned an empty Advanced tour that
+  // looked like "nine screens with nothing to report" rather than "never got
+  // in". Say which it was.
+  await page.getByLabel('Advanced Mode').click();
+  try {
+    await page.waitForSelector('.side-menu-item', { timeout: 10000 });
+  } catch {
+    throw new Error('switched to Advanced Mode but no side-menu items rendered — '
+      + `current step was "${await currentStep(page)}"`);
+  }
+
+  // The item's own aria-label, not its text: the rendered button concatenates
+  // its number, title, description and badge into "1ModelsBrowse, test,
+  // compare13", which makes a useless slug and an unreadable report.
+  const labels = await page.locator('.side-menu-item').evaluateAll(
+    (nodes) => nodes.map((node) => node.getAttribute('aria-label') || ''),
+  );
+  for (const [index, raw] of labels.entries()) {
+    const label = raw.replace(/\s+/g, ' ').trim();
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    await page.locator('.side-menu-item').nth(index).click();
+    // The panel swaps in place, so there is no navigation to await. Settle on
+    // the network instead of a fixed sleep.
+    await page.waitForLoadState('networkidle').catch(() => {});
+    found.push({ ...(await capture(page, `advanced-${slug || index}`, '.app-main, .panel, body')), menuLabel: label });
+  }
+  return found;
 }
 
 async function currentStep(page) {
@@ -156,14 +263,21 @@ async function currentStep(page) {
     .catch(() => null);
 }
 
-async function capture(page, step) {
+async function capture(page, step, scope = '.sw-content') {
   const file = path.join(outDir, `${step}.png`);
   await page.screenshot({ path: file, fullPage: true });
 
+  const root = page.locator(scope).first();
   const host = await page.locator('.sw-host-bubble').innerText().catch(() => '');
   const explainable = await page.locator('.sw-explain-term').allTextContents();
-  const body = await page.locator('.sw-content').innerText().catch(() => '');
-  const buttons = (await page.locator('.sw-content button').allTextContents())
+  const body = await root.innerText().catch(() => '');
+  const buttons = (await root.locator('button').allTextContents())
+    .map((t) => t.replace(/\s+/g, ' ').trim()).filter(Boolean);
+
+  // Controls offered where they cannot work. This release's worst bug was a
+  // Download button with nowhere to download to, so a disabled control with no
+  // stated reason is worth reporting on every screen.
+  const deadControls = (await root.locator('button[disabled]').allTextContents())
     .map((t) => t.replace(/\s+/g, ' ').trim()).filter(Boolean);
 
   // Jargon the screen uses but does not offer to explain. The explainable
@@ -182,6 +296,7 @@ async function capture(page, step) {
     explainable,
     unexplained,
     buttons: [...new Set(buttons)],
+    deadControls: [...new Set(deadControls)],
     words: body.split(/\s+/).filter(Boolean).length,
   };
 }
