@@ -28,17 +28,29 @@ if (!pkg) {
 const entries = asar.listPackage(pkg);
 const wanted = entries.filter((entry) => /[\\/]dist[\\/]assets[\\/].*\.(js|css)$/.test(entry));
 
+/** Read one packaged file, given the path exactly as listPackage reported it. */
+const readEntry = (entry) => asar.extractFile(pkg, entry.replace(/^[\\/]+/, '')).toString();
+
+// The main process ships separately from the renderer bundle, so checking only
+// dist/assets would have missed everything in electron/ — including the
+// permission handler, which is the whole of the renderer's security posture
+// toward the camera, microphone and the rest.
+const mainEntry = entries.find((entry) => /[\\/]electron[\\/]main\.cjs$/.test(entry));
+const mainProcess = mainEntry ? readEntry(mainEntry) : '';
+if (!mainProcess) {
+  console.error('electron/main.cjs is not in the package — the app has no main process');
+  process.exit(1);
+}
+
 let js = '';
 let css = '';
 const failures = [];
 for (const entry of wanted) {
-  // Strip only the leading separator. Keep the native separators.
-  const rel = entry.replace(/^[\\/]+/, '');
   try {
-    const text = asar.extractFile(pkg, rel).toString();
-    if (rel.endsWith('.css')) css += text; else js += text;
+    const text = readEntry(entry);
+    if (entry.endsWith('.css')) css += text; else js += text;
   } catch (error) {
-    failures.push(`${rel}: ${error.message}`);
+    failures.push(`${entry}: ${error.message}`);
   }
 }
 
@@ -79,6 +91,14 @@ const PRESENT = [
   ['upgrade prompt copy', js, 'New in this version'],
   ['auto-judge note in the run dialog', js, 'no right answer to check against'],
   ['release notes mention the licence fix', js, "links that model's terms"],
+  // Main process — ships separately from the renderer bundle, so probing only
+  // dist/assets would miss everything in electron/, including the permission
+  // handler that is the whole of the renderer's posture toward the microphone.
+  ['permission requests are gated', mainProcess, 'setPermissionRequestHandler'],
+  ['permission checks are gated too', mainProcess, 'setPermissionCheckHandler'],
+  ['only the microphone is allowed', mainProcess, "ALLOWED_PERMISSIONS = new Set(['media'"],
+  ['ComfyUI can be located automatically', mainProcess, 'comfy:locateFolder'],
+  ['the scores bridge stays on loopback', mainProcess, "'127.0.0.1'"],
 ];
 
 /** Things that must NOT be in the bundle. */
