@@ -555,9 +555,11 @@ export type AgentArcadeApi = {
      * and writing, which have no shape to match and would otherwise be scored
      * by length. Applies when qualityMode is 'heuristic'; `judge` still means
      * judge everything. Always local: auto-engaging a paid, off-machine judge
-     * would break both the wallet and the local-only promise.
+     * would break both the wallet and the local-only promise. Sent as an
+     * ordered list so the main process can skip the model under test — a model
+     * grading its own answers marks itself generously.
      */
-    autoJudgeModel?: string;
+    autoJudgeModels?: string[];
   }) => Promise<BenchmarkResult>;
   onBenchmarkProgress?: (callback: (update: BenchmarkProgressUpdate) => void) => () => void;
   getActiveBenchmark: () => Promise<BenchmarkStatus>;

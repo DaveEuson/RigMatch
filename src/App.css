@@ -17944,6 +17944,18 @@ a.whats-next-support:hover {
 }
 .closet-evict { white-space: nowrap; }
 
+/* Owned by another program: shown, counted, but not deletable from here. */
+.closet-elsewhere {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
 /* Quantization on the row: q4 and q8 of one model are different contestants. */
 .model-quant-sub {
   font-size: 0.62rem;

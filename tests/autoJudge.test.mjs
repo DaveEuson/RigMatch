@@ -79,3 +79,53 @@ test('the weak-judge rule matches whole words, not substrings', () => {
   ]);
   assert.equal(picked[0], 'socratic-tutor:7b', 'a real model was demoted by a substring match');
 });
+
+test('a model never marks its own answers', () => {
+  // autoJudgeModel is picked from an ordered list by the main process, which
+  // drops the model under test. Without that, benchmarking the largest
+  // installed model — or running on a one-model machine — has the model
+  // grading itself, which marks generously and then crowns a Match.
+  const pickJudge = (candidates, modelUnderTest) => candidates
+    .map((name) => String(name || '').trim())
+    .find((name) => name && name !== modelUnderTest) || '';
+
+  assert.equal(pickJudge(['gemma4:e2b', 'granite4:3b'], 'gemma4:e2b'), 'granite4:3b',
+    'the top candidate is the model being tested, so the next one judges');
+  assert.equal(pickJudge(['gemma4:e2b', 'granite4:3b'], 'llama3.2:3b'), 'gemma4:e2b');
+  assert.equal(pickJudge(['solo:7b'], 'solo:7b'), '',
+    'one model installed means no judge at all — better than self-grading');
+  assert.equal(pickJudge([], 'anything'), '');
+});
+
+test('the clamp rubric is not tripped by a custom question about clamping', () => {
+  // Custom suites are a feature. "how do I clamp an audio buffer" must not be
+  // marked against Math.min/Math.max and the literal 0 and 100 bounds.
+  assert.equal(heuristicCanGrade('coding', 'Explain how to clamp an audio buffer in Rust.'), false);
+  assert.equal(heuristicCanGrade('coding', 'Write a clamp for a slider value.'), false);
+  // The built-in ones still are, by the function name the rubric grades.
+  assert.equal(heuristicCanGrade('coding', 'Write a compact JavaScript function named clampScore that accepts a number.'), true);
+});
+
+test('the rubric marks questions that ask for a clamp, not ones that mention one', () => {
+  // Two coding questions ship in the default suite and only one is markable.
+  // coding_help asks the model to WRITE clampScore, which the rubric knows the
+  // answer to. tiny_code_review asks it to REVIEW a snippet that happens to
+  // contain Math.min/Math.max — grading that with the write-a-clamp rubric
+  // would score an answer for echoing the snippet back, so it must stay
+  // unmarkable and go to the judge.
+  const coding = [
+    ...DEFAULT_BENCHMARK_QUESTIONS,
+    ...BENCHMARK_PRESETS.flatMap((p) => p.questions),
+  ].filter((q) => q.type === 'coding');
+
+  const asksToWrite = coding.filter((q) => /named clampScore/i.test(q.prompt));
+  assert.ok(asksToWrite.length >= 2, 'expected the built-in write-a-clamp questions to exist');
+  for (const question of asksToWrite) {
+    assert.equal(heuristicCanGrade('coding', question.prompt), true, `${question.id} should be markable`);
+  }
+
+  const review = coding.find((q) => /Review this JavaScript snippet/i.test(q.prompt));
+  assert.ok(review, 'expected the code-review question to exist');
+  assert.equal(heuristicCanGrade('coding', review.prompt), false,
+    'reviewing a clamp is not writing one — the rubric cannot mark it');
+});

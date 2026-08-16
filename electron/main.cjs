@@ -2808,7 +2808,13 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   // Deliberately LOCAL ONLY, and never the configured cloud judge: engaging a
   // paid, off-machine judge without being asked would break both the wallet
   // and the promise that nothing leaves this computer.
-  const autoJudgeModel = String(request.autoJudgeModel || '').trim();
+  // Never the model being tested: a model marking its own answers grades
+  // itself generously, and that score goes on to crown a Match. In a lineup
+  // every contestant is the model under test in turn, so picking a single
+  // judge up front would guarantee self-grading for one of them.
+  const autoJudgeModel = (Array.isArray(request.autoJudgeModels) ? request.autoJudgeModels : [])
+    .map((name) => String(name || '').trim())
+    .find((name) => name && name !== model) || '';
   const autoJudgeUnmarkable = !useJudge && provider === 'ollama' && Boolean(autoJudgeModel);
   const sendProgress = (update) => {
     const payload = {
@@ -3096,7 +3102,21 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   const avgLatency = average(promptResults.map((result) => result.elapsedMs));
   const firstTokenSamples = rawRuns.map((r) => r.firstTokenMs).filter(Number.isFinite);
   const avgFirstToken = firstTokenSamples.length > 0 ? average(firstTokenSamples) : null;
-  const avgSobriety = average(promptResults.map((result) => result.sobrietyScore));
+  /**
+   * Answer quality, from the answers something could actually mark.
+   *
+   * An 'unjudged' score is a placeholder — prose scored by its character
+   * count, or code the scorer can only confirm is code. Those were being
+   * averaged into the headline number and weighted at 0.34 of the Match
+   * total, so models were still ranked against each other partly by how long
+   * they wrote, while the crown logic was correctly refusing the same numbers.
+   * Rank on what was measured; fall back to the full set only when nothing at
+   * all could be marked, so a run still produces a score rather than a blank.
+   */
+  const markedResults = promptResults.filter((result) => result.scoredBy !== 'unjudged');
+  const unmarkedCount = promptResults.length - markedResults.length;
+  const avgSobriety = average((markedResults.length > 0 ? markedResults : promptResults)
+    .map((result) => result.sobrietyScore));
   const stabilityScore = Math.round((rawRuns.filter(isStableBenchmarkRun).length / rawRuns.length) * 100);
   // Scale official Ollama generation speed: 5 tok/s = 0, 100 tok/s = 100.
   const speedScore = clamp(Math.round((avgTokens - 5) / 95 * 100));
@@ -3136,6 +3156,10 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       questionCount,
       scores: result.scores,
       promptCount: promptResults.length,
+      // How many answers nothing could mark. Answer quality is averaged over
+      // the rest; if this equals promptCount the score is a length proxy and
+      // the log is the only place that says so.
+      unmarkedPrompts: unmarkedCount,
       unstablePrompts: promptResults
         .filter((prompt) => prompt.status && prompt.status !== 'ok')
         .map((prompt) => ({

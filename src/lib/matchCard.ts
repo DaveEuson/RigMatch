@@ -133,14 +133,25 @@ export function downloadMatchCard(input: MatchCardInput): Promise<boolean> {
     const canvas = document.createElement('canvas');
     drawMatchCard(canvas, input);
     canvas.toBlob((blob) => {
+      // No blob means the canvas produced nothing — say so rather than
+      // reporting a save that did not happen.
       if (!blob) { resolve(false); return; }
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = `rigmatch-${input.score.model.replace(/[^a-z0-9.-]+/gi, '-')}.png`;
+      // In the document, and revoked on a later tick. The download is
+      // asynchronous: revoking the blob URL in the same synchronous block
+      // races the fetch of that blob and can cancel the save outright, and a
+      // detached anchor is not clickable in every engine.
+      link.style.display = 'none';
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
-      resolve(true);
+      window.setTimeout(() => {
+        link.remove();
+        URL.revokeObjectURL(url);
+        resolve(true);
+      }, 1000);
     }, 'image/png');
   });
 }

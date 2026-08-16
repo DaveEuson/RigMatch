@@ -47,6 +47,35 @@ test('an genuinely unknown type still falls back rather than crashing', () => {
   assert.equal(plan[0].type, 'assistant', 'the fallback itself is fine — silently losing a REAL type is the bug');
 });
 
+test('the generated default suite is identical in both copies', () => {
+  // The type guard was the drift that bit, but the templates and scenarios are
+  // duplicated too and were unguarded — a reworded or reordered template would
+  // change what the main process actually asks while every TS-side test still
+  // passed. Compare the built plan itself, which is the thing that runs.
+  const fromTs = DEFAULT_BENCHMARK_QUESTIONS;
+  const fromCjs = cjs.buildBenchmarkPromptPlan(fromTs.length, undefined);
+  assert.equal(fromCjs.length, fromTs.length, 'the two copies build different default suites');
+  for (const [index, question] of fromTs.entries()) {
+    assert.equal(fromCjs[index].id, question.id, `default question ${index}: id drifted`);
+    assert.equal(fromCjs[index].type, question.type, `default question ${index}: type drifted`);
+    assert.equal(fromCjs[index].prompt, question.prompt, `default question ${index}: wording drifted`);
+    assert.equal(fromCjs[index].label, question.label, `default question ${index}: label drifted`);
+  }
+});
+
+test('both copies scale a suite to a requested length the same way', () => {
+  // buildBenchmarkPromptPlan repeats the suite and suffixes the round; if the
+  // two implementations disagree, the run asks different questions than the UI
+  // counted — which is how the prose-question note went wrong.
+  const suite = BENCHMARK_PRESETS.find((p) => p.id === 'chat').questions;
+  for (const count of [10, 20, 50]) {
+    const plan = cjs.buildBenchmarkPromptPlan(count, suite);
+    assert.equal(plan.length, count);
+    const ids = plan.map((q) => q.id);
+    assert.equal(new Set(ids).size, ids.length, `${count}: repeated questions must get distinct ids`);
+  }
+});
+
 test('the question count levels match', () => {
   assert.deepEqual([...cjs.BENCHMARK_QUESTION_LEVELS ?? []], [...BENCHMARK_QUESTION_LEVELS],
     'the two copies offer different run lengths');

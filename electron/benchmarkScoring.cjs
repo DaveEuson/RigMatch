@@ -11,6 +11,18 @@ function buildBenchmarkGenerateBody({ model, prompt, keepAlive, options }) {
   };
 }
 
+/**
+ * The one coding question this scorer knows the answer to.
+ *
+ * Matched on the function name the rubric actually grades, not on the word
+ * "clamp": custom suites are a feature, and a user question like "how do I
+ * clamp an audio buffer" would otherwise be marked against Math.min/Math.max
+ * and the literal 0 and 100 bounds, scoring a correct answer 38 — and, worse,
+ * counting as a real mark. Question ids cannot be used here: the plan appends
+ * a round suffix, and stripping it makes pre_code_1 collide with pre_code_3.
+ */
+const ASKS_FOR_CLAMP = /clampScore/i;
+
 function scoreSobriety(prompt, response) {
   const text = response.trim();
   if (!text) return 0;
@@ -57,7 +69,7 @@ function scoreSobriety(prompt, response) {
     // assuming every coding question is that one — three real coding questions
     // in the Coding preset (SQL, a React fix, a code review) were typed
     // 'assistant' purely to dodge this branch scoring them 38.
-    const asksForClamp = /clamp/i.test(String(prompt.prompt || ''));
+    const asksForClamp = ASKS_FOR_CLAMP.test(String(prompt.prompt || ''));
     // Recognize a function definition without hard-coding the requested name,
     // so a correct answer that names things differently is not penalized.
     const definesFunction = /\bfunction\b/.test(text) || /=>/.test(text) || /\bconst\s+\w+\s*=/.test(text);
@@ -107,7 +119,7 @@ const HEURISTIC_BLIND_TYPES = ['assistant', 'writing'];
 function heuristicCanGrade(type, prompt) {
   if (HEURISTIC_BLIND_TYPES.includes(type)) return false;
   // Coding is gradeable only for the one question this scorer knows.
-  if (type === 'coding') return /clamp/i.test(String(prompt || ''));
+  if (type === 'coding') return ASKS_FOR_CLAMP.test(String(prompt || ''));
   return true;
 }
 

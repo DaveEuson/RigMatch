@@ -17,7 +17,11 @@
  *
  * Sizes are the real content-length in bytes, not marketing numbers, because
  * they are shown to someone deciding whether to spend their evening on a
- * download.
+ * download — and because comfyModels.cjs deletes a download whose byte count
+ * falls short of this one. A number rounded UP therefore destroys a perfectly
+ * good file whenever the server omits content-length. Four of these six were
+ * wrong until they were fetched and checked; scripts/check-model-sizes.mjs
+ * re-checks them against the server on demand.
  */
 
 export type GenerationModelKind = 'image' | 'video' | 'text-encoder';
@@ -61,7 +65,7 @@ export const GENERATION_MODELS: GenerationModel[] = [
     folder: 'checkpoints',
     filename: 'sdxl-turbo.safetensors',
     url: 'https://huggingface.co/stabilityai/sdxl-turbo/resolve/main/sd_xl_turbo_1.0_fp16.safetensors',
-    bytes: 6938040714,
+    bytes: 6938081905,
     note: 'Much better pictures than 1.5, and distilled so it still runs in a few steps. Bigger download.',
     publisher: 'Stability AI',
   },
@@ -72,7 +76,7 @@ export const GENERATION_MODELS: GenerationModel[] = [
     folder: 'checkpoints',
     filename: 'ltxv-2b-distilled.safetensors',
     url: 'https://huggingface.co/Lightricks/LTX-Video/resolve/main/ltxv-2b-0.9.6-distilled-04-25.safetensors',
-    bytes: 6338544128,
+    bytes: 6340744028,
     note: 'Four seconds of video in about twelve seconds on a 12 GB card. The lightest video model worth running.',
     requires: ['t5xxl-fp8'],
     proven: true,
@@ -85,7 +89,7 @@ export const GENERATION_MODELS: GenerationModel[] = [
     folder: 'checkpoints',
     filename: 'wan2.1_t2v_1.3B_fp16.safetensors',
     url: 'https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors',
-    bytes: 2839376512,
+    bytes: 2838303560,
     note: 'A smaller video model with a different look. Needs the UMT5 encoder rather than T5.',
     requires: ['umt5-fp8'],
     publisher: 'Alibaba',
@@ -109,7 +113,7 @@ export const GENERATION_MODELS: GenerationModel[] = [
     folder: 'text_encoders',
     filename: 'umt5_xxl_fp8_e4m3fn_scaled.safetensors',
     url: 'https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors',
-    bytes: 6740000000,
+    bytes: 6735906897,
     note: 'What the WAN video models read prompts with. Not interchangeable with T5.',
     publisher: 'Google',
   },

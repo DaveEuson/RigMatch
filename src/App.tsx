@@ -823,9 +823,14 @@ function App() {
    * auto-engaging something that costs money and leaves the machine would be
    * wrong however useful the score.
    */
-  const autoJudgeModel = useMemo(() => {
-    if (qualityMode === 'judge') return '';
-    return judgeModelOptions[0] ?? '';
+  const autoJudgeModels = useMemo(() => {
+    if (qualityMode === 'judge') return [];
+    // The whole ordered list, not just the best one: the main process drops
+    // the model it is testing and takes the next, because a model marking its
+    // own answers grades itself generously and that score then crowns a Match.
+    // A lineup makes this certain rather than unlikely — every contestant is
+    // the model under test in turn.
+    return judgeModelOptions;
   }, [qualityMode, judgeModelOptions]);
 
   const effectiveJudge = useMemo<{ provider: 'local' | 'openrouter'; model: string; apiKey?: string } | null>(() => {
@@ -1458,7 +1463,11 @@ function App() {
       setActivity(`${row.displayName} is managed by LM Studio. Delete it from LM Studio if you want to free disk space.`);
       return;
     }
-    setSelectedModel(row.displayName);
+    // Deliberately does NOT touch selectedModel. It used to, which was fine on
+    // the Models screen but wrong from the Closet in Settings: clicking Evict
+    // reassigned the app's selected model, and cancelling the confirmation left
+    // it reassigned — Top Pick and chat silently pointing somewhere new after an
+    // action the user backed out of.
     setPendingDeleteModel(row);
   }, []);
 
@@ -1768,7 +1777,7 @@ function App() {
         judgeModel: effectiveJudge?.model,
         judgeProvider: effectiveJudge?.provider,
         judgeApiKey: effectiveJudge?.apiKey,
-        autoJudgeModel,
+        autoJudgeModels,
       }), modelToTest);
       setBenchmark(result);
       setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
@@ -1857,7 +1866,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsBenchmarking(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel, tellUser, autoJudgeModel]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
     // The quick TEST button skips the full launch modal, but it still loads a
@@ -2583,7 +2592,7 @@ function App() {
           judgeModel: effectiveJudge?.model,
           judgeProvider: effectiveJudge?.provider,
           judgeApiKey: effectiveJudge?.apiKey,
-        autoJudgeModel,
+        autoJudgeModels,
         }), row.displayName);
         results.push(result);
         setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
@@ -2709,7 +2718,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge, rigStampForModel, tellUser, autoJudgeModel]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels]);
 
   /**
    * A skill run that throws must not leave the mini bar spinning forever.
@@ -3936,7 +3945,7 @@ function App() {
           onDownloadMissing={() => requestThirdPartyModelDownloads(shortlistedRows)}
           onChangeQuestionCount={setBenchmarkQuestionCount}
           onLoadPreset={setBenchmarkQuestions}
-          autoJudgeModel={autoJudgeModel}
+          autoJudgeModel={autoJudgeModels.find((m) => m !== (pendingSingleModel ?? selectedModel)) ?? ''}
           goalPresetId={presetIdForGoal(selectedGoals[0])}
           goalDesire={selectedGoals[0] ? goalById(selectedGoals[0])?.desire.toLowerCase() : undefined}
           onEditQuestions={() => { cancelPendingRun(); setSuiteEditorOpen(true); }}
@@ -5202,7 +5211,10 @@ function RunWarningModal({
   const [questionsExpanded, setQuestionsExpanded] = useState(false);
   const recognizeUploadRef = useRef<HTMLInputElement>(null);
   // Questions the rules cannot mark: chat and writing have no shape to match.
-  const proseQuestionCount = benchmarkQuestions.filter(
+  // Counted from the plan, not the suite: the plan repeats the suite to reach
+  // questionCount, so a ten-question Chat suite run at 50 asks 30 prose
+  // questions, not 6 — and this sentence exists to explain the extra time.
+  const proseQuestionCount = buildBenchmarkPromptPlan(questionCount, benchmarkQuestions).filter(
     (question) => question.type === 'assistant' || question.type === 'writing',
   ).length;
   const activePreset = BENCHMARK_PRESETS.find(
@@ -6186,6 +6198,14 @@ function ClosetSection({
   // ever earned its place. Sorted by size because that is the question that
   // brings someone here — the close-cleanup dialog once offered to clear
   // 38.5 GB in one click, and this is the calm version of that moment.
+  // Who owns the file, when it is not Ollama. ComfyUI checkpoints are the
+  // biggest things on disk and the reason someone opens this screen, so they
+  // are still listed and still counted — they just cannot be deleted here.
+  const evictedBy = (row: ModelRow): string | null => {
+    if (row.runtime === 'comfyui') return 'In ComfyUI';
+    if (row.localProvider === 'lm-studio') return 'In LM Studio';
+    return null;
+  };
   const entries = rows
     .map((row) => ({
       row,
@@ -6209,7 +6229,11 @@ function ClosetSection({
       <div className="closet-head">
         <span>The Closet</span>
         <strong>{entries.length} model{entries.length === 1 ? '' : 's'} · {totalGb.toFixed(1)} GB on disk</strong>
-        <em>Keep the winner; evict who never earned a callback. Deleting always asks first, and anything evicted can be downloaded again.</em>
+        <em>
+          Keep the winner; evict who never earned a callback. Deleting always asks first, and anything
+          evicted can be downloaded again. Models owned by ComfyUI or LM Studio are listed for their disk
+          size but have to be removed where they live.
+        </em>
       </div>
       <ul className="closet-list">
         {entries.map(({ row, sizeGb, score }) => {
@@ -6227,6 +6251,14 @@ function ClosetSection({
               <span className="closet-size">{sizeGb > 0 ? `${sizeGb.toFixed(1)} GB` : '—'}</span>
               {isWinner ? (
                 <span className="closet-keep" title="Your current top match. Probably worth its shelf space.">WINNER</span>
+              ) : evictedBy(row) ? (
+                // A button that cannot do what it says is worse than no button.
+                // Ollama is the only thing RigMatch can delete from; ComfyUI
+                // checkpoints and LM Studio models are owned elsewhere, and
+                // routing them through Ollama's delete API just 404s.
+                <span className="closet-elsewhere" title={`RigMatch cannot delete this one. ${evictedBy(row)}`}>
+                  {evictedBy(row)}
+                </span>
               ) : (
                 <button
                   type="button"
