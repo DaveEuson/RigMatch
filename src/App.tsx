@@ -154,7 +154,6 @@ import {
   getCudaDetail,
   getCudaSummary,
   getDiskGuard,
-  getFootprintFit,
   getHardwareFit,
   getLineupBenchmarkBlocker,
   getLocalRigDetailCards,
@@ -361,7 +360,6 @@ import {
   PopularityMeter,
   PromptStatusPill,
   RomanceArtBanner,
-  ScoreBars,
   ScoreLegend,
   ScoreRadar,
   ScoreDeltaCell,
@@ -382,7 +380,6 @@ import {
   gradeFor,
 } from './lib/format';
 import robotContestantWall from './assets/robot-contestant-wall.webp';
-import robotModelTest from './assets/robot-model-test.webp';
 import robotRigGreenroom from './assets/robot-rig-greenroom.webp';
 import robotRomanceHero from './assets/robot-romance-hero.webp';
 import robotScorecardCeremony from './assets/robot-scorecard-ceremony.webp';
@@ -3810,26 +3807,6 @@ function App() {
             onRemoveCandidate={toggleShortlist}
             onQueueMissingModels={requestThirdPartyModelDownloads}
             onRunListTest={requestListTest}
-          />
-        )}
-        {activeNavId === 'bench' && (
-          <BenchmarkRun
-            active={true}
-            model={selectedModel}
-            benchmarkForModel={selectedBenchmark}
-            selectedScore={selectedModelScore}
-            isRunning={isBenchmarking}
-            canBenchmark={canBenchmark}
-            hostReady={selectedHostCanBenchmark}
-            system={system}
-            host={selectedHost}
-            selectedRow={selectedRow}
-            runProgress={runProgress}
-            questionCount={benchmarkQuestionCount}
-            onOpenSuiteEditor={() => setSuiteEditorOpen(true)}
-            onOpenLogs={openLogsPanel}
-            onStart={requestBenchmark}
-            onStop={requestStopRun}
           />
         )}
         {activeNavId === 'agent' && (
@@ -9231,218 +9208,7 @@ function SortableModelHeader({
 }
 
 
-function BenchmarkRun({
-  active,
-  model,
-  benchmarkForModel,
-  selectedScore,
-  isRunning,
-  canBenchmark,
-  hostReady,
-  system,
-  host,
-  selectedRow,
-  runProgress,
-  questionCount,
-  onOpenSuiteEditor,
-  onOpenLogs,
-  onStart,
-  onStop,
-}: {
-  active: boolean;
-  model: string;
-  benchmarkForModel: BenchmarkResult | null;
-  selectedScore?: TestedModelScore;
-  isRunning: boolean;
-  canBenchmark: boolean;
-  hostReady: boolean;
-  system: SystemProfile;
-  host?: NetworkHost;
-  selectedRow?: ModelRow;
-  runProgress: RunProgress | null;
-  questionCount: BenchmarkQuestionCount;
-  onOpenSuiteEditor: () => void;
-  onOpenLogs: () => void;
-  onStart: () => void;
-  onStop: () => void;
-}) {
-  const scoreStatus = isRunning
-    ? 'Model test in progress'
-    : selectedScore
-      ? `Last test grade ${selectedScore.grade}`
-      : 'Not tested yet';
-  const runActionLabel = isRunning ? 'Running' : selectedScore ? 'Run Again' : 'Start Test';
 
-  return (
-    <section className={active ? 'panel benchmark-panel panel-focused' : 'panel benchmark-panel'}>
-      <PanelHeader
-        icon={Gauge}
-        title="Single Model Test"
-        actionLabel={runActionLabel}
-        onAction={onStart}
-        busy={isRunning}
-        meta={isRunning ? 'Running' : canBenchmark ? 'Ready' : hostReady ? 'Pick a model' : 'Computer not ready'}
-      />
-
-      <CompatibilityIntroCard
-        model={model}
-        host={host}
-        score={selectedScore}
-        benchmark={benchmarkForModel}
-        questionCount={questionCount}
-        canBenchmark={canBenchmark}
-        hostReady={hostReady}
-        isRunning={isRunning}
-        onStart={onStart}
-        onOpenSuiteEditor={onOpenSuiteEditor}
-      />
-
-      {runProgress?.mode === 'single' && (
-        <RunProgressPanel
-          progress={runProgress}
-          host={host}
-          showAnimation={false}
-          onOpenLogs={onOpenLogs}
-        />
-      )}
-
-      <div className="run-title">
-        <strong>{model}</strong>
-        <span>{scoreStatus}</span>
-      </div>
-
-      <div className="test-suite-strip">
-        <div>
-          <span>Test Questions</span>
-          <strong>{questionCount} questions</strong>
-        </div>
-        <button type="button" className="mini-button outline advanced-only" onClick={onOpenSuiteEditor}>
-          <Settings aria-hidden="true" />
-          Edit Questions
-        </button>
-      </div>
-
-      <TestProcessCard mode="single" questionCount={questionCount} />
-
-      <MatchDetails
-        benchmark={benchmarkForModel}
-        score={selectedScore}
-        host={host}
-        model={model}
-        row={selectedRow}
-        system={system}
-      />
-
-      <ScoreBars benchmark={benchmarkForModel} score={selectedScore} active={isRunning} />
-
-      <ResourceWarning cuda={system.cuda} />
-
-      <button
-        type="button"
-        className="danger-button"
-        disabled={!isRunning}
-        onClick={onStop}
-        title="Stop after the current question finishes"
-      >
-        <Zap aria-hidden="true" />
-        Stop Run
-      </button>
-    </section>
-  );
-}
-
-function CompatibilityIntroCard({
-  model,
-  host,
-  score,
-  benchmark,
-  questionCount,
-  canBenchmark,
-  hostReady,
-  isRunning,
-  onStart,
-  onOpenSuiteEditor,
-}: {
-  model: string;
-  host?: NetworkHost;
-  score?: TestedModelScore;
-  benchmark: BenchmarkResult | null;
-  questionCount: BenchmarkQuestionCount;
-  canBenchmark: boolean;
-  hostReady: boolean;
-  isRunning: boolean;
-  onStart: () => void;
-  onOpenSuiteEditor: () => void;
-}) {
-  const hostName = host?.hostname ?? 'this computer';
-  const statusLabel = isRunning
-    ? 'One-model test in progress'
-    : score
-      ? `${score.total} Match · ${score.grade}`
-      : canBenchmark
-        ? 'Ready to test'
-        : hostReady
-          ? 'Pick an installed model'
-          : 'Ollama is not ready';
-  const actionLabel = isRunning ? 'Testing' : score ? 'Run Again' : 'Start Model Test';
-
-  return (
-    <section
-      className="compatibility-intro-card"
-      style={{ backgroundImage: `url(${robotModelTest})` }}
-      aria-label="What the model test does"
-    >
-      <div className="compatibility-intro-copy">
-        <span>What this window does</span>
-        <strong>Test one AI model against this computer</strong>
-        <p>
-          RigMatch asks <b>{model}</b> the selected questions, times the answers, checks answer quality,
-          and turns that into a Match score for <b>{hostName}</b>.
-        </p>
-      </div>
-
-      <div className="compatibility-next-step" aria-label="Model test status">
-        <span>{statusLabel}</span>
-        <strong>{benchmark ? `${benchmark.prompts.length} answers saved` : `${questionCount} questions queued`}</strong>
-        <em>Scores and question transcripts appear on the Top Pick profile.</em>
-        <div>
-          <button type="button" className="primary-button compact" onClick={onStart} disabled={isRunning || !canBenchmark}>
-            <Gauge aria-hidden="true" />
-            {actionLabel}
-          </button>
-          <button type="button" className="mini-button outline advanced-only" onClick={onOpenSuiteEditor} disabled={isRunning}>
-            <Settings aria-hidden="true" />
-            Edit Questions
-          </button>
-        </div>
-      </div>
-
-      <ol className="compatibility-steps" aria-label="Model test steps">
-        <li>
-          <MessageSquare aria-hidden="true" />
-          <div>
-            <span>1. Ask</span>
-            <strong>{questionCount} test questions</strong>
-          </div>
-        </li>
-        <li>
-          <Gauge aria-hidden="true" />
-          <div>
-            <span>2. Score</span>
-            <strong>quality, speed, finish rate, fit</strong>
-          </div>
-        </li>
-        <li>
-          <Trophy aria-hidden="true" />
-          <div>
-            <span>3. Crown</span>
-            <strong>{score ? `current score ${score.total}` : 'a match score'}</strong>
-          </div>
-        </li>
-      </ol>
-    </section>
-  );
-}
 
 function TestProcessCard({ mode, questionCount }: { mode: PendingRunMode; questionCount: BenchmarkQuestionCount }) {
   const isSpeedDate = mode === 'speed-date';
@@ -9498,114 +9264,6 @@ function TestProcessCard({ mode, questionCount }: { mode: PendingRunMode; questi
   );
 }
 
-function MatchDetails({
-  benchmark,
-  score,
-  host,
-  model,
-  row,
-  system,
-}: {
-  benchmark: BenchmarkResult | null;
-  score?: TestedModelScore;
-  host?: NetworkHost;
-  model: string;
-  row?: ModelRow;
-  system: SystemProfile;
-}) {
-  const profile = getModelProfile(model);
-  const sizeGb = row?.sizeGb ?? row?.installedModel?.sizeGb ?? null;
-  const footprint = getFootprintFit(sizeGb, system);
-  const topPrompt = benchmark?.prompts
-    .slice()
-    .sort((a, b) => b.sobrietyScore - a.sobrietyScore)[0];
-  const matchScoreRows = [
-    {
-      label: 'Computer Fit',
-      value: score ? `${score.fit}%` : 'N/A',
-      detail: 'How well this model fits the computer based on model size, VRAM, RAM, and the latest test.',
-    },
-    {
-      // This row has always shown score.total. Labelling it "Chemistry" gave the
-      // Match score a second name — and a different panel used that same name for
-      // a different number. Theme words stay in headings and prose, not on metrics.
-      label: 'Match score',
-      value: score ? String(score.total) : 'N/A',
-      detail: 'Overall Match score: 34% answer quality, 32% speed, 18% finish rate, 16% computer fit.',
-    },
-    {
-      label: 'Best Proof',
-      value: score ? String(topPrompt ? topPrompt.sobrietyScore : score.sobriety) : 'N/A',
-      detail: 'Highest prompt reliability score from the latest compatibility test.',
-    },
-  ];
-  const matchRows = [
-    {
-      label: 'Computer',
-      value: host?.hostname ?? system.hostname,
-      detail: `${system.gpu.model} · ${system.gpu.vramGb || '?'} GB VRAM`,
-    },
-    {
-      label: 'Agent Style',
-      value: profile.archetype,
-      detail: profile.specialties.join(' · '),
-    },
-    {
-      label: 'Footprint',
-      value: sizeGb ? formatGb(sizeGb) : 'Size unknown',
-      detail: footprint,
-    },
-    {
-      label: 'Acceleration',
-      value: getCudaSummary(system.cuda),
-      detail: getCudaDetail(system.cuda),
-    },
-  ];
-
-  return (
-    <div className="match-details" aria-label="System and model match details">
-      <div className="match-details-head">
-        <span>Why this pairing?</span>
-        <strong>{profile.agentName} + {host?.hostname ?? system.hostname}</strong>
-      </div>
-
-      <div className="match-score-strip">
-        {matchScoreRows.map((item) => (
-          <div key={item.label} title={item.detail} aria-label={`${item.label}: ${item.value}. ${item.detail}`}>
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-          </div>
-        ))}
-      </div>
-
-      <div className="match-detail-grid">
-        {matchRows.map((item) => (
-          <div key={item.label}>
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-            <em>{item.detail}</em>
-          </div>
-        ))}
-      </div>
-
-      {benchmark?.prompts.length ? (
-        <div className="prompt-list compact" aria-label="Prompt proof points">
-          {benchmark.prompts.slice(0, 3).map((prompt) => (
-            <div className="prompt-row" key={prompt.id}>
-              <span>{prompt.label}</span>
-              <strong>{prompt.sobrietyScore}</strong>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="prompt-proof-empty">
-          <strong>{score ? 'Summary saved' : 'No test yet'}</strong>
-          <span>{score ? 'Run this model again to refresh the proof.' : 'Run a test to grade this model on this computer.'}</span>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function SpeedDatePanel({
   active,
@@ -10538,26 +10196,6 @@ function TestSuiteEditorDock({
   );
 }
 
-function ResourceWarning({ cuda }: { cuda: SystemProfile['cuda'] }) {
-  const cudaSummary = getCudaSummary(cuda);
-  const cudaDetail = getCudaDetail(cuda);
-
-  return (
-    <div className={`resource-warning ${cuda.status}`}>
-      <AlertTriangle aria-hidden="true" />
-      <div className="resource-copy">
-        <span>Resource Warning</span>
-        <strong>Tests can max CPU, GPU, VRAM, fans, and battery.</strong>
-        <em>Close games, renders, and heavy apps before a long run.</em>
-      </div>
-      <div className="cuda-status">
-        <span>CUDA Check</span>
-        <strong>{cudaSummary}</strong>
-        <em>{cudaDetail}</em>
-      </div>
-    </div>
-  );
-}
 
 function AgentReveal({
   active,

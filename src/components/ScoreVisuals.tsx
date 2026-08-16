@@ -1,5 +1,5 @@
 import { ShieldCheck, Download } from 'lucide-react';
-import type { BenchmarkPromptResult, BenchmarkResult, TestedModelScore } from '../types';
+import type { BenchmarkPromptResult, TestedModelScore } from '../types';
 import { formatPullCount, getPopularityPercent, getScoreTone, getScoreTooltip } from '../lib/format';
 import { formatMatchScore } from '../lib/scoring';
 import { formatRunDelta, type RunDelta } from '../lib/runHistory';
@@ -199,65 +199,6 @@ export function PromptStatusPill({ status }: { status?: BenchmarkPromptResult['s
       : 'Failed';
 
   return <span className={`prompt-status-pill ${status}`}>{label}</span>;
-}
-
-export function ScoreBars({
-  benchmark,
-  score,
-  active,
-}: {
-  benchmark: BenchmarkResult | null;
-  score?: TestedModelScore;
-  active: boolean;
-}) {
-  const avgTps = benchmark?.avgTokensPerSecond ?? benchmark?.prompts[0]?.tokensPerSecond;
-  const firstTokenMs = benchmark?.avgFirstTokenMs ?? benchmark?.prompts[0]?.elapsedMs;
-  const avgResponseMs = benchmark?.avgLatencyMs;
-  const rows = [
-    { label: 'Speed (tok/s)', value: avgTps, max: 140, unit: ' tok/s', raw: avgTps },
-    { label: 'Generation Speed', value: score?.speed ?? benchmark?.scores.speed, max: 100, unit: '%' },
-    {
-      label: 'Avg Response Time',
-      value: avgResponseMs,
-      max: 30000,
-      unit: 'ms',
-      display: avgResponseMs != null ? (avgResponseMs >= 1000 ? `${(avgResponseMs / 1000).toFixed(1)}s` : `${avgResponseMs}ms`) : undefined,
-    },
-    {
-      label: 'First Token',
-      value: firstTokenMs,
-      max: 10000,
-      unit: 'ms',
-      display: firstTokenMs != null ? (firstTokenMs >= 1000 ? `${(firstTokenMs / 1000).toFixed(1)}s` : `${firstTokenMs}ms`) : undefined,
-      invertBar: true,
-    },
-    { label: 'Answer Quality', value: score?.sobriety ?? benchmark?.scores.sobriety, max: 100, unit: '%' },
-  ];
-  const hasScore = Boolean(score || benchmark);
-
-  return (
-    <div className="score-bars">
-      <div className="overall-progress">
-        <span>Overall Progress</span>
-        <strong>{active ? '42%' : hasScore ? '100%' : 'N/A'}</strong>
-        <i style={{ width: active ? '42%' : hasScore ? '100%' : '0%' }} />
-      </div>
-      {rows.map((row) => {
-        const pct = Number.isFinite(row.value) ? Math.min(100, ((row.value ?? 0) / row.max) * 100) : 0;
-        const barPct = row.invertBar ? Math.max(0, 100 - pct) : pct;
-        const displayVal = row.display ?? (Number.isFinite(row.value) ? `${Math.round(row.value ?? 0)}${row.unit}` : 'N/A');
-        return (
-          <div className={Number.isFinite(row.value) ? 'bar-row' : 'bar-row empty'} key={row.label}>
-            <span>{row.label}</span>
-            <div>
-              <i style={{ width: `${barPct}%` }} />
-            </div>
-            <strong>{displayVal}</strong>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 export function ScoreTile({

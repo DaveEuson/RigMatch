@@ -1,6 +1,6 @@
 import { Bug, type LucideIcon } from 'lucide-react';
 
-export type NavId = 'lan' | 'models' | 'whatsNew' | 'speedDate' | 'bench' | 'agent' | 'history' | 'activity' | 'settings';
+export type NavId = 'lan' | 'models' | 'whatsNew' | 'speedDate' | 'agent' | 'history' | 'activity' | 'settings';
 
 export type NavItem = {
   id: NavId;
@@ -47,7 +47,6 @@ export function SideMenu({
     models: `${modelCount}`,
     whatsNew: newModelDropCount > 0 ? `${newModelDropCount} new` : 'None',
     speedDate: `${shortlistCount}/5`,
-    bench: isRunning ? 'Live' : '1 model',
     agent: topPickMeta,
     history: scoredCount > 0 ? `${scoredCount}` : 'New',
     activity: isRunning ? 'Live' : 'Idle',
