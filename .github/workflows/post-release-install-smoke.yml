@@ -1,6 +1,11 @@
 name: Post-release install smoke
 
 on:
+  # Fires itself when a release is published — including pre-releases, which are
+  # exactly the ones worth smoke-testing before promoting them. It stayed
+  # dispatch-only through 0.6.0 and therefore never ran for it.
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       tag:
@@ -32,7 +37,7 @@ jobs:
       - name: Download Linux release assets
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
           APPIMAGE_SUFFIX: ${{ matrix.appimage_suffix }}
           DEB_SUFFIX: ${{ matrix.deb_suffix }}
         shell: bash
@@ -56,7 +61,7 @@ jobs:
 
       - name: Verify AppImage can be extracted
         env:
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
           APPIMAGE_SUFFIX: ${{ matrix.appimage_suffix }}
         shell: bash
         run: |
@@ -72,7 +77,7 @@ jobs:
 
       - name: Install Debian package
         env:
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
           DEB_SUFFIX: ${{ matrix.deb_suffix }}
         shell: bash
         run: |
@@ -105,7 +110,7 @@ jobs:
       - name: Download macOS release asset
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
           DMG_SUFFIX: ${{ matrix.dmg_suffix }}
         shell: bash
         run: |
@@ -125,7 +130,7 @@ jobs:
 
       - name: Mount DMG and inspect apps
         env:
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
           DMG_SUFFIX: ${{ matrix.dmg_suffix }}
         shell: bash
         run: |
