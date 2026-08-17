@@ -1025,6 +1025,28 @@ function App() {
     () => readDeckExpanded(typeof window === 'undefined' ? 1080 : window.innerHeight),
   );
 
+  /**
+   * What this PC can actually generate.
+   *
+   * The Pick screen filters generation models out of the Speed Dating lineup —
+   * correctly, they cannot be benchmarked — and then had to describe the empty
+   * grid. It said "No contestants can make video on this PC", which is not
+   * true: LTX-Video and WAN both ship in the catalogue and run here. Handing
+   * the wizard the real figures lets it say something true instead of
+   * discouraging someone away from a feature that works.
+   */
+  const generationSummary = useMemo(() => {
+    const summarize = (kind: 'image' | 'video') => {
+      const rows = modelRows.filter((row) => row.generationKind === kind);
+      return {
+        total: rows.length,
+        installed: rows.filter((row) => row.installed).length,
+        names: rows.map((row) => row.displayName),
+      };
+    };
+    return { image: summarize('image'), video: summarize('video') };
+  }, [modelRows]);
+
   // Simple Mode needs its own share state: Advanced's lives inside the profile
   // panel, which is not mounted in the guided path.
   const [shareWinnerOpen, setShareWinnerOpen] = useState(false);
@@ -3589,6 +3611,7 @@ function App() {
           onStopShow={requestStopRun}
           winner={wizardWinner}
           lineupResults={wizardLineupResults}
+          generation={generationSummary}
           onChatWithWinner={openChatWithWinner}
           onOpenScorecard={() => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('history'); }}
           onRunAgain={() => undefined}

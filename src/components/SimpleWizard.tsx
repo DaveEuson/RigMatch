@@ -140,6 +140,15 @@ type SimpleWizardProps = {
   onStartShow: () => void;
   onStopShow: () => void;
   winner: { model: string; score: number; scoreLabel: string; grade: string } | null;
+  /**
+   * What this PC can generate, which the Pick grid deliberately excludes.
+   * Without it the empty grid was described as "no contestants can make video
+   * on this PC" — a claim about the machine that the grid cannot support.
+   */
+  generation?: {
+    image: { total: number; installed: number; names: string[] };
+    video: { total: number; installed: number; names: string[] };
+  };
   /** Every model in the lineup that has a score, best first. */
   lineupResults?: Array<{ model: string; name: string; scoreLabel: string; total: number; grade: string }>;
   onChatWithWinner: () => void;
@@ -426,18 +435,24 @@ function HostStrip({ step }: { step: StepId }) {
   return (
     <div className={`sw-host-strip${explaining ? ' explaining' : ''}`}>
       <img className="sw-host-avatar" src={HOST_AVATAR_SRC} alt="" />
+      {/* The narration stays in the layout at a constant height; the
+          explanation is layered ON TOP of it rather than replacing it. An
+          explanation runs to three paragraphs against the narration's two
+          lines, so swapping them in place grew the bubble by ~33px and shoved
+          the entire page down every time the pointer crossed a term — the
+          whole screen danced. Nothing below the host may move. */}
       <div className="sw-host-bubble">
-        <span>{explaining ? explaining.term : 'The host'}</span>
-        {explaining ? (
-          <>
+        <span>The host</span>
+        <p>{HOST_COPY[step]}</p>
+        {explaining && (
+          <div className="sw-host-explain" role="status">
+            <span>{explaining.term}</span>
             <p>{explaining.plain}</p>
             {explaining.because && <p className="sw-host-because">{explaining.because}</p>}
             {explaining.alsoCalled && (
               <p className="sw-host-also">Sometimes called “{explaining.alsoCalled}”.</p>
             )}
-          </>
-        ) : (
-          <p>{HOST_COPY[step]}</p>
+          </div>
         )}
       </div>
     </div>
@@ -600,7 +615,15 @@ function ResultRow({ label, detail }: { label: string; detail: ReactNode }) {
 // ---------------------------------------------------------------------------
 // Pick
 
-function PickScreen({ wizardModels, modelsLoading, shortlistIds, shortlistedRows, onTogglePick, onChooseForMe, initialDream }: SimpleWizardProps) {
+/** "A", "A and B", "A, B and C" — a list a person reads, not an array dump. */
+function listNames(names: string[]): string {
+  if (names.length === 0) return '';
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+function PickScreen({
+  generation, wizardModels, modelsLoading, shortlistIds, shortlistedRows, onTogglePick, onChooseForMe, initialDream }: SimpleWizardProps) {
   // Opens on the dream matching the splash's primary goal, when there is one
   // — the person already answered this question once.
   const [dream, setDream] = useState<DreamFilterId>(initialDream ?? 'all');
@@ -620,12 +643,19 @@ function PickScreen({ wizardModels, modelsLoading, shortlistIds, shortlistedRows
     image: 'can make images',
     video: 'can make video',
   };
+  // Image and video makers are deliberately absent from this grid — they
+  // cannot be benchmarked — so an empty grid here says nothing about whether
+  // this PC can make images or video. It said "No contestants can make video
+  // on this PC", which was simply false: the models exist, ship in the
+  // catalogue, and run. Report what is actually true of the machine.
+  const makers = dream === 'video' ? generation?.video : dream === 'image' ? generation?.image : undefined;
+  const makerNoun = dream === 'video' ? 'video maker' : 'image maker';
   const countLine = dream === 'all'
     ? `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} fit your PC`
     : filtered.length === 0
-      // "0 contestants · all of them fit your PC" contradicted itself; with
-      // nothing to count, the line just says so and the note below explains.
-      ? `No contestants ${dreamNoun[dream]} on this PC`
+      ? (makers && makers.total > 0
+        ? `${makers.total} ${makerNoun}${makers.total === 1 ? '' : 's'} run on this PC — they just don't compete here`
+        : `No contestants ${dreamNoun[dream]} on this PC`)
       : `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} ${dreamNoun[dream]} · all of them fit your PC`;
 
   return (
@@ -674,12 +704,26 @@ function PickScreen({ wizardModels, modelsLoading, shortlistIds, shortlistedRows
           {dream === 'image' || dream === 'video' ? (
             // Honest rather than empty: these models exist, they just are not
             // Speed Dating contestants — they render instead of chatting.
-            <p>
-              {dream === 'video' ? 'Video makers' : 'Image makers'} are real, but they are not
-              contestants — they draw instead of chatting, so they cannot join Speed Dating.
-              Find them in Advanced Mode under Models ({dream === 'video' ? '"Makes video"' : '"Makes images"'}),
-              and run them from the Lab.
-            </p>
+            <>
+              {makers && makers.total > 0 ? (
+                <p>
+                  {listNames(makers.names)} run on this PC.{' '}
+                  {makers.installed > 0
+                    ? `${makers.installed === makers.total ? 'Both are' : `${makers.installed} of them is`} already installed. `
+                    : 'They need downloading first. '}
+                  They draw instead of chatting, so they cannot join Speed Dating — find them in
+                  Advanced Mode under Models ({dream === 'video' ? '"Makes video"' : '"Makes images"'}),
+                  and run them from the Lab.
+                </p>
+              ) : (
+                <p>
+                  {dream === 'video' ? 'Video makers' : 'Image makers'} are real, but they are not
+                  contestants — they draw instead of chatting, so they cannot join Speed Dating.
+                  Find them in Advanced Mode under Models ({dream === 'video' ? '"Makes video"' : '"Makes images"'}),
+                  and run them from the Lab.
+                </p>
+              )}
+            </>
           ) : (
             <p>Hmm, nobody fits that bill on this PC — try another type or show everyone.</p>
           )}
