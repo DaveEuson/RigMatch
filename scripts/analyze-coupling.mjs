@@ -26,7 +26,20 @@ function declarations() {
     if (match) found.push({ kind: match[1], name: match[2], start: i });
   }
   for (let i = 0; i < found.length; i += 1) {
-    found[i].end = (i + 1 < found.length ? found[i + 1].start : lines.length) - 1;
+    const limit = (i + 1 < found.length ? found[i + 1].start : lines.length) - 1;
+    // Close on the declaration's own bare `}` at column 0 — the same boundary
+    // extract-component.mjs asserts before it cuts. Running to the next
+    // declaration instead swallows everything in between, and for the file's
+    // last declaration that is `export default App;`, which showed up as
+    // FlirtTestAnimation depending on App: a dependency that does not exist.
+    let end = limit;
+    for (let j = found[i].start; j <= limit; j += 1) {
+      // Bare, not merely leading: `/^\}/` also matches the `}) {` that closes a
+      // props destructuring, which truncated every component to ~11 lines and
+      // emptied the whole report.
+      if (/^\}\s*;?\s*$/.test(lines[j])) { end = j; break; }
+    }
+    found[i].end = end;
     found[i].size = found[i].end - found[i].start + 1;
   }
   return found;
@@ -47,8 +60,27 @@ for (const match of source.matchAll(/^import\s+([A-Za-z_$][\w$]*)\s+from/gm)) im
 
 const REACT_ETC = new Set(['useState', 'useEffect', 'useMemo', 'useCallback', 'useRef', 'Fragment']);
 
+/**
+ * Drop comments and quoted strings before looking for identifiers.
+ *
+ * Without this, prose counts as code: ActivityPanel reported a dependency on
+ * App purely from the words "App Builder" in a comment and a label. Template
+ * literals are left intact because `${...}` inside them holds real references.
+ *
+ * JSX text is not stripped — it cannot be told from markup by regex — so a
+ * capitalized word in visible copy can still leak through. This report ranks
+ * extraction cost; it is not a proof, and the compiler remains the authority.
+ */
+function stripProse(text) {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ')
+    .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, '""');
+}
+
 function analyze(decl) {
-  const body = lines.slice(decl.start, decl.end + 1).join('\n');
+  const body = stripProse(lines.slice(decl.start, decl.end + 1).join('\n'));
   const used = new Set();
   for (const match of body.matchAll(/\b([A-Za-z_$][\w$]*)\b/g)) used.add(match[1]);
 
@@ -56,6 +88,9 @@ function analyze(decl) {
   const importsNeeded = new Set();
   for (const name of used) {
     if (name === decl.name) continue;
+    // App is the root component: nothing moves out with it, and a genuine
+    // reference to it would be a cycle rather than a dependency to carry.
+    if (name === 'App') continue;
     if (byName.has(name)) localHelpers.push(name);
     else if (imported.has(name) && !REACT_ETC.has(name)) importsNeeded.add(name);
   }

@@ -29,7 +29,14 @@ function missingNames() {
   const pattern = new RegExp(`${escaped}\\(\\d+,\\d+\\): error TS2304: Cannot find name '([^']+)'`, 'g');
   for (const match of output.matchAll(pattern)) names.add(match[1]);
   // TS2552 ("did you mean") and TS2749 (value used as type) name things too.
-  const alt = new RegExp(`${escaped}\\(\\d+,\\d+\\): error TS(?:2552|2749|2503): [^']*'([^']+)'`, 'g');
+  //
+  // TS2786 ("X cannot be used as a JSX component") is the one that matters for
+  // icons: lucide exports names that also exist as DOM globals — History,
+  // Image, Text, Table, Option — and a missing import for one of those does not
+  // raise TS2304, because the global is a perfectly real value. It binds
+  // silently and only complains when rendered. That shipped through three
+  // extractions before the compiler was asked the right question.
+  const alt = new RegExp(`${escaped}\\(\\d+,\\d+\\): error TS(?:2552|2749|2503|2786): [^']*'([^']+)'`, 'g');
   for (const match of output.matchAll(alt)) names.add(match[1]);
   return [...names];
 }
