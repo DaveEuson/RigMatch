@@ -7070,7 +7070,9 @@ function UtilityPanel({
       )}
 
       {panel === 'settings' && (
-        <div className="utility-body">
+        // settings-body, not just utility-body: this column is prose-width
+        // rows, and the class other utility panels share must not inherit that.
+        <div className="utility-body settings-body">
           <div className="utility-logo">
             <BrandMark />
             <strong>RigMatch</strong>

@@ -10297,6 +10297,32 @@ tbody tr.computer-row.selected {
   line-height: 1.35;
 }
 
+/* The row is a button spanning the whole panel, and it had no hover state, no
+   focus ring and no pressed state — so pointing at it did nothing, and on a
+   wide monitor the chevron sat a screen away from the label it belonged to.
+   Clicking felt like guessing. */
+.settings-section-toggle:hover {
+  background: rgba(255, 249, 239, 0.05);
+}
+
+.settings-section-toggle:hover strong {
+  color: var(--gold);
+}
+
+.settings-section-toggle:active {
+  background: rgba(255, 249, 239, 0.08);
+}
+
+.settings-section-toggle:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
+.settings-section-toggle:hover svg {
+  color: var(--text-strong);
+}
+
 .settings-section-toggle svg {
   width: 18px;
   height: 18px;
@@ -18165,4 +18191,12 @@ a.whats-next-support:hover {
   font-size: 11px;
   line-height: 1.45;
   color: var(--muted);
+}
+
+/* Settings is a column of prose-width rows, not a spreadsheet. Unconstrained,
+   each row stretched the full width of an ultrawide monitor and put the
+   chevron roughly 1900px from the label it opens — the two halves of one
+   control at opposite ends of the desk. */
+.settings-body {
+  width: min(920px, 100%);
 }
