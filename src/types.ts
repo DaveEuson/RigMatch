@@ -615,3 +615,31 @@ export type ModelRow = CatalogModel & {
   localBaseUrl?: string;
   canDownload?: boolean;
 };
+
+/**
+ * Which kind of run the confirmation dialog is about to start.
+ *
+ * Lives here rather than in App.tsx so RunWarningModal can be its own file:
+ * a component that only needs two type names should not have to import from
+ * the 12,000-line module it was extracted from.
+ */
+export type PendingRunMode = 'single' | 'speed-date';
+
+/** Everything the run composer's optional skill tests can be set to. */
+export type SkillTestSelection = {
+  appBuilder: boolean;
+  appPromptId: string;
+  appCustomPrompt: string;
+  image: boolean;
+  imagePrompt: string;
+  video: boolean;
+  videoSizeId: string;
+  recognize: boolean;
+  recognizeImage: string;
+  listen: boolean;
+  code: boolean;
+  codeLanguage: string;
+  codeTaskId: string;
+  codeCustomTask: string;
+  skipQuestions: boolean;
+};
