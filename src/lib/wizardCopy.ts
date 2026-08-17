@@ -48,3 +48,25 @@ export function nextBlockedHint(step: StepId, downloadReason?: string, runFailed
     default: return '';
   }
 }
+
+/**
+ * Why the Listening Test cannot start.
+ *
+ * The button was disabled on four separate conditions and named none of them,
+ * so a dead primary control sat on the panel with no way to work out what it
+ * wanted. Four states, four sentences — the same rule the wizard footer
+ * follows.
+ */
+export function listeningBlockedReason(state: {
+  hasModel: boolean;
+  providerReady: boolean;
+  running: boolean;
+  needsCapture: boolean;
+  hasCapture: boolean;
+}): string {
+  if (state.running) return '';
+  if (!state.hasModel) return 'Pick a model that can hear first';
+  if (!state.providerReady) return 'Start Ollama first';
+  if (state.needsCapture && !state.hasCapture) return 'Record or upload audio first';
+  return '';
+}

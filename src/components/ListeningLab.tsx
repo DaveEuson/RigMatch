@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Mic, RefreshCw, Square, Upload } from "lucide-react";
 import { getScoreTone } from "../lib/format";
+import { listeningBlockedReason } from "../lib/wizardCopy";
 import { readAdvancedLabResults, writeAdvancedLabResults, type AdvancedLabResult } from "../lib/labResults";
 import { LISTENING_REFERENCE, getListeningTestAudio, runAdvancedListeningChallenge } from "../lib/labChallenges";
 import {
@@ -57,6 +58,13 @@ export function ListeningLab({ ollama, models }: { ollama: OllamaStatus; models:
   const running = runState.phase === 'running';
   const needsCapture = source !== 'sample';
   const canRun = Boolean(activeModel) && ollama.ready && !running && (!needsCapture || Boolean(captured));
+  const blockedReason = listeningBlockedReason({
+    hasModel: Boolean(activeModel),
+    providerReady: ollama.ready,
+    running,
+    needsCapture,
+    hasCapture: Boolean(captured),
+  });
 
   // A recording left running when the panel closes keeps the microphone light
   // on, which is alarming and entirely our fault.
@@ -246,6 +254,9 @@ export function ListeningLab({ ollama, models }: { ollama: OllamaStatus; models:
           <RefreshCw className={running ? 'spin' : ''} aria-hidden="true" />
           {running ? 'Listening' : 'Run Listening Test'}
         </button>
+        {/* A disabled primary button that says nothing is a dead end: this one
+            was gated on four separate conditions and named none of them. */}
+        {blockedReason && <span className="advanced-lab-blocked">{blockedReason}</span>}
       </div>
 
       {runState.message && <p className={`advanced-lab-message ${runState.phase}`}>{runState.message}</p>}

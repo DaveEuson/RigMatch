@@ -18200,3 +18200,68 @@ a.whats-next-support:hover {
 .settings-body {
   width: min(920px, 100%);
 }
+
+/* Why a disabled action cannot run, beside the action itself. A dead primary
+   button that explains nothing is a dead end, not a disabled state. */
+.advanced-lab-blocked {
+  align-self: center;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+/* ── Screen-audit findings ──────────────────────────────────────────────────
+   Found by driving each screen and comparing computed styles before and after
+   hover, and measuring every control's box. All three are the same underlying
+   mistake: something is interactive but does not say so, or is smaller than a
+   finger. */
+
+/* The mode and theme cards in Settings are buttons that did not react to a
+   pointer at all — the same complaint as the settings rows, one level in. */
+.ui-mode-picker button:hover,
+.theme-picker button:hover {
+  border-color: rgba(var(--gold-rgb), 0.55);
+  background: rgba(255, 249, 239, 0.05);
+}
+.ui-mode-picker button:focus-visible,
+.theme-picker button:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* The Comparison panel's "By Model" / "Side by Side" tabs. The container is
+   .speed-date-view-toggle — an earlier guess at .speed-date-qa-tabs matched
+   nothing, which is why the audit still reported no hover response. */
+.speed-date-view-toggle button:not(.active):hover {
+  border-color: rgba(var(--gold-rgb), 0.5);
+  background: rgba(255, 249, 239, 0.05);
+  color: var(--text-strong);
+}
+.speed-date-view-toggle button:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* Remove buttons on Top Pick measured 16x16 — under the 24px minimum target,
+   and they are destructive, which is the worst combination to have to aim at. */
+.roster-remove-btn,
+.speed-date-remove,
+.icon-action {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+/* Text links acting as buttons on Scorecards measured 20px tall. */
+.how-we-score-trigger,
+.scorecard-actions .mini-button,
+.scorecard-actions button {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Measured at 8px in the screen audit. A score pill is the row's headline and
+   "Not tested" is the state that asks you to do something — neither belongs at
+   the smallest size in the app. */
+.roster-score { font-size: 10px; }
+.speed-untested { font-size: 10px; opacity: 0.7; }

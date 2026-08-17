@@ -38,6 +38,7 @@
     "sweep:net": "node scripts/release-sweep.mjs --net",
     "gates": "node scripts/gate-download.mjs && node scripts/gate-provider.mjs",
     "audit:claims": "node scripts/audit-claims.mjs",
+    "audit:screens": "node scripts/audit-screens.mjs",
     "sweep:layout": "node scripts/responsive-sweep.mjs",
     "sweep:shell": "node scripts/measure-shell.mjs"
   },
