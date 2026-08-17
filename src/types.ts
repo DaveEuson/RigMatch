@@ -535,7 +535,16 @@ export type AgentArcadeApi = {
   }) => Promise<{ path: string; alreadyPresent: boolean; bytes: number }>;
   comfyAbortDownload?: (progressId: string) => Promise<boolean>;
   onComfyDownloadProgress?: (
-    callback: (progress: { id: string; received: number; total: number; percent: number | null }) => void,
+    // bytesPerSecond is measured in the main process, which is the only side
+    // that sees the stream's timing; the renderer's status line needs it or a
+    // moving download reads as "-- MB/s · waiting for bytes".
+    callback: (progress: {
+      id: string;
+      received: number;
+      total: number;
+      percent: number | null;
+      bytesPerSecond?: number | null;
+    }) => void,
   ) => () => void;
   // Cloud judge bridge (strictly opt-in): one OpenRouter completion using the
   // user's own key, routed through the main process. Only used for judging.

@@ -40,52 +40,6 @@ function gradeColor(grade: string): string {
   return COLORS.quiet;
 }
 
-// Deterministic confetti (no Math.random, so the card renders identically every
-// time) scattered in the margins, clear of the center content.
-const CONFETTI: Array<{ x: number; y: number; s: number; r: number; c: keyof typeof COLORS }> = [
-  { x: 120, y: 40, s: 16, r: 0.3, c: 'gold' }, { x: 300, y: 26, s: 12, r: 0.8, c: 'coral' },
-  { x: 520, y: 46, s: 13, r: 0.5, c: 'speed' }, { x: 700, y: 24, s: 12, r: 1.1, c: 'fit' },
-  { x: 900, y: 42, s: 16, r: 0.2, c: 'coral' }, { x: 1064, y: 30, s: 12, r: 0.7, c: 'gold' },
-  { x: 66, y: 180, s: 14, r: 0.6, c: 'coral' }, { x: 128, y: 300, s: 12, r: 1.0, c: 'speed' },
-  { x: 58, y: 432, s: 16, r: 0.4, c: 'gold' }, { x: 150, y: 528, s: 12, r: 0.9, c: 'fit' },
-  { x: 1132, y: 190, s: 14, r: 0.5, c: 'fit' }, { x: 1078, y: 312, s: 12, r: 1.2, c: 'gold' },
-  { x: 1142, y: 442, s: 16, r: 0.3, c: 'coral' }, { x: 1052, y: 536, s: 12, r: 0.8, c: 'speed' },
-  { x: 210, y: 612, s: 12, r: 0.6, c: 'gold' }, { x: 992, y: 616, s: 14, r: 0.4, c: 'coral' },
-];
-
-function drawConfetti(ctx: CanvasRenderingContext2D) {
-  ctx.save();
-  ctx.globalAlpha = 0.85;
-  for (const p of CONFETTI) {
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(p.r);
-    ctx.fillStyle = COLORS[p.c];
-    ctx.beginPath();
-    ctx.roundRect(-p.s / 2, -p.s / 2, p.s, p.s * 0.62, 2);
-    ctx.fill();
-    ctx.restore();
-  }
-  ctx.restore();
-}
-
-// A filled heart centered at (cx, cy); `size` is roughly the half-width.
-function fillHeart(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, color: string, alpha = 1) {
-  const s = size;
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(cx, cy + s * 0.35);
-  ctx.bezierCurveTo(cx, cy, cx - s, cy, cx - s, cy + s * 0.35);
-  ctx.bezierCurveTo(cx - s, cy + s * 0.7, cx, cy + s * 0.95, cx, cy + s * 1.15);
-  ctx.bezierCurveTo(cx, cy + s * 0.95, cx + s, cy + s * 0.7, cx + s, cy + s * 0.35);
-  ctx.bezierCurveTo(cx + s, cy, cx, cy, cx, cy + s * 0.35);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-}
-
 // Rounded inner border for a "framed card" feel.
 function drawFrame(ctx: CanvasRenderingContext2D, color: string) {
   ctx.save();
@@ -98,33 +52,76 @@ function drawFrame(ctx: CanvasRenderingContext2D, color: string) {
   ctx.restore();
 }
 
-// A graphic stat chip: colored value + label in a bordered pill.
+/**
+ * A stat chip: the value large in its accent colour, the label small beneath.
+ *
+ * No emoji. The old chips led each value with ⚡🎯🧩, which rendered in the
+ * platform's emoji font next to the numerals' text font — two typefaces
+ * fighting inside a 66px box was a good part of why the card read as rough.
+ * The accent colour already distinguishes the three; the label names them.
+ */
 function drawStatChip(
   ctx: CanvasRenderingContext2D,
   cx: number, cy: number, w: number, h: number,
-  emoji: string, label: string, value: string, color: string,
+  label: string, value: string, color: string,
 ) {
   const x = cx - w / 2, y = cy - h / 2;
   ctx.save();
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.035)';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
   ctx.beginPath();
-  ctx.roundRect(x, y, w, h, 16);
+  ctx.roundRect(x, y, w, h, 14);
   ctx.fill();
   ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.6;
-  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.roundRect(x, y, w, h, 16);
+  ctx.roundRect(x, y, w, h, 14);
   ctx.stroke();
   ctx.restore();
 
   ctx.textAlign = 'center';
-  ctx.font = '800 30px system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+  ctx.font = '800 32px system-ui, sans-serif';
   ctx.fillStyle = color;
-  ctx.fillText(`${emoji} ${value}`, cx, cy + 2);
-  ctx.font = '600 15px system-ui, sans-serif';
+  ctx.fillText(value, cx, cy + 4);
+  ctx.font = '600 13px system-ui, sans-serif';
   ctx.fillStyle = COLORS.muted;
-  ctx.fillText(label, cx, cy + 24);
+  ctx.fillText(label, cx, cy + 25);
+}
+
+/** A four-point sparkle — drawn, so it matches the type instead of the emoji font. */
+function drawSparkle(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.quadraticCurveTo(cx + r * 0.12, cy - r * 0.12, cx + r, cy);
+  ctx.quadraticCurveTo(cx + r * 0.12, cy + r * 0.12, cx, cy + r);
+  ctx.quadraticCurveTo(cx - r * 0.12, cy + r * 0.12, cx - r, cy);
+  ctx.quadraticCurveTo(cx - r * 0.12, cy - r * 0.12, cx, cy - r);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * A row of marquee bulbs under the gold strip — the one decorative idea the
+ * card commits to, instead of scattered rectangles and smudged hearts. Evenly
+ * spaced, alternating bright and dim like a theatre sign.
+ */
+function drawMarqueeBulbs(ctx: CanvasRenderingContext2D) {
+  const count = 33;
+  const inset = 48;
+  const step = (CARD_W - inset * 2) / (count - 1);
+  ctx.save();
+  for (let i = 0; i < count; i += 1) {
+    ctx.globalAlpha = i % 2 === 0 ? 0.85 : 0.3;
+    ctx.fillStyle = COLORS.gold;
+    ctx.beginPath();
+    ctx.arc(inset + i * step, 34, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function rigParts(system: SystemProfile, showHostname: boolean): string[] {
@@ -260,12 +257,17 @@ function drawDatingCard(
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
 
-  // Decorative layer (behind the content): confetti, floating hearts, frame.
-  drawConfetti(ctx);
-  fillHeart(ctx, 158, 156, 20, COLORS.coral, 0.5);
-  fillHeart(ctx, 1052, 150, 16, COLORS.gold, 0.45);
-  fillHeart(ctx, 1092, 470, 14, COLORS.coral, 0.4);
-  fillHeart(ctx, 96, 470, 13, COLORS.gold, 0.4);
+  // Decorative layer, behind the content. One committed idea — a theatre
+  // marquee — instead of the previous scatter: random rectangles that read as
+  // accidents and bezier hearts that rendered as dark smudges. The corners
+  // keep two drawn sparkles each, small and dim, so the frame isn't sterile.
+  drawMarqueeBulbs(ctx);
+  drawSparkle(ctx, 92, 132, 9, COLORS.gold, 0.5);
+  drawSparkle(ctx, 124, 168, 5, COLORS.coral, 0.4);
+  drawSparkle(ctx, 1108, 132, 9, COLORS.gold, 0.5);
+  drawSparkle(ctx, 1076, 168, 5, COLORS.coral, 0.4);
+  drawSparkle(ctx, 108, 540, 7, COLORS.coral, 0.35);
+  drawSparkle(ctx, 1092, 540, 7, COLORS.coral, 0.35);
   drawFrame(ctx, COLORS.gold);
 
   ctx.fillStyle = COLORS.gold;
@@ -274,9 +276,22 @@ function drawDatingCard(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
 
+  // Drawn sparkles flank the headline; the ✨ emoji set its own typeface next
+  // to the display type and was part of the roughness.
   ctx.font = '800 38px system-ui, sans-serif';
   ctx.fillStyle = COLORS.gold;
-  ctx.fillText('✨  IT’S A MATCH!  ✨', CARD_W / 2, 96);
+  ctx.fillText('IT’S A MATCH!', CARD_W / 2, 96);
+  const titleHalf = ctx.measureText('IT’S A MATCH!').width / 2;
+  drawSparkle(ctx, CARD_W / 2 - titleHalf - 42, 84, 12, COLORS.gold);
+  drawSparkle(ctx, CARD_W / 2 + titleHalf + 42, 84, 12, COLORS.gold);
+
+  // A soft spotlight behind the heart, so the centrepiece sits in light
+  // rather than floating on flat brown.
+  const spot = ctx.createRadialGradient(CARD_W / 2, 185, 10, CARD_W / 2, 185, 170);
+  spot.addColorStop(0, 'rgba(255, 201, 87, 0.18)');
+  spot.addColorStop(1, 'rgba(255, 201, 87, 0)');
+  ctx.fillStyle = spot;
+  ctx.fillRect(CARD_W / 2 - 180, 15, 360, 360);
 
   ctx.font = '84px system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
   ctx.fillText('\u{1F49B}', CARD_W / 2, 210);
@@ -300,7 +315,7 @@ function drawDatingCard(
   );
 
   // Grade + score pill.
-  const pillText = `GRADE ${score.grade}    ·    ${score.total} / 100 MATCH`;
+  const pillText = `GRADE ${score.grade}  ·  ${score.total}/100 MATCH`;
   ctx.font = '800 26px system-ui, sans-serif';
   const pw = ctx.measureText(pillText).width + 56;
   const px = (CARD_W - pw) / 2, py = 382, ph = 56;
@@ -331,11 +346,11 @@ function drawDatingCard(
   // measured instead -- "109 TOK/S" is a real number a reader can compare.
   // Scores saved before the rate was persisted fall back to the sub-score.
   const rate = formatThroughputValue(score.tokensPerSecond);
-  drawStatChip(ctx, firstCx, chipY, chipW, chipH, '⚡',
-    rate === null ? 'SPEED' : 'TOK/S',
+  drawStatChip(ctx, firstCx, chipY, chipW, chipH,
+    rate === null ? 'SPEED' : 'TOKENS / SEC',
     rate ?? String(Math.round(score.speed)), COLORS.speed);
-  drawStatChip(ctx, firstCx + chipW + chipGap, chipY, chipW, chipH, '\u{1F3AF}', 'QUALITY', String(Math.round(score.sobriety)), COLORS.quality);
-  drawStatChip(ctx, firstCx + (chipW + chipGap) * 2, chipY, chipW, chipH, '\u{1F9E9}', 'FIT', String(Math.round(score.fit)), COLORS.fit);
+  drawStatChip(ctx, firstCx + chipW + chipGap, chipY, chipW, chipH, 'QUALITY', String(Math.round(score.sobriety)), COLORS.quality);
+  drawStatChip(ctx, firstCx + (chipW + chipGap) * 2, chipY, chipW, chipH, 'FIT', String(Math.round(score.fit)), COLORS.fit);
 
   // Rig line.
   const rig = rigParts(system, showHostname).slice(0, 3).join('   ·   ');
@@ -502,4 +517,21 @@ export function ShareScorecard({ model, score, system, onClose }: {
       </section>
     </div>
   );
+}
+
+/**
+ * Render a card straight to a canvas, for scripts/render-card.mjs.
+ *
+ * Card design is iterative, and the alternative was driving five wizard steps
+ * for every look at a drawing. Exported rather than duplicated so the script
+ * always sees the real draw code; it is a dev tool, not app surface, and
+ * nothing in the app calls it.
+ */
+export function __drawForTest(
+  ctx: CanvasRenderingContext2D,
+  style: CardStyle,
+  opts: { modelName: string; score: TestedModelScore; system: SystemProfile; showHostname: boolean },
+) {
+  if (style === 'datingshow') drawDatingCard(ctx, opts);
+  else drawScorecard(ctx, opts);
 }

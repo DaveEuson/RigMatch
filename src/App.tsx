@@ -2171,6 +2171,11 @@ function App() {
             phase: 'pulling',
             status: `${item.label} — ${formatBytesGb(progress.received)} of ${formatBytesGb(progress.total)}`,
             percent: progress.percent,
+            // The detail line under the bar reads these three; without them a
+            // moving download said "-- MB/s · waiting for bytes" at 3%.
+            completedBytes: progress.received,
+            totalBytes: progress.total || undefined,
+            speedBps: progress.bytesPerSecond ?? undefined,
             updatedAt: new Date().toISOString(),
           },
         }));

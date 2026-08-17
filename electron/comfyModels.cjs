@@ -165,8 +165,10 @@ async function downloadModel({ root, folder, filename, url, expectedBytes }, onP
   }
 
   const total = Number(response.headers.get('content-length')) || expectedBytes || 0;
+  const startedAt = Date.now();
   let received = 0;
   let lastReport = 0;
+  let lastReceived = 0;
 
   const source = Readable.fromWeb(response.body);
   source.on('data', (chunk) => {
@@ -175,8 +177,22 @@ async function downloadModel({ root, folder, filename, url, expectedBytes }, onP
     // second and every event crosses an IPC boundary.
     const now = Date.now();
     if (now - lastReport >= 400) {
+      // The rate is measured here because only this side has the timing. The
+      // renderer's status line reads speedBps, and without it a download that
+      // was visibly moving said "-- MB/s · waiting for bytes" beside its own
+      // advancing bar. First report averages since the start; later ones use
+      // the window since the previous report, so stalls show up as a real 0.
+      const windowMs = lastReport ? now - lastReport : now - startedAt;
+      const windowBytes = lastReport ? received - lastReceived : received;
+      const bytesPerSecond = windowMs > 0 ? Math.round((windowBytes / windowMs) * 1000) : null;
       lastReport = now;
-      onProgress?.({ received, total, percent: total ? Math.round((received / total) * 100) : null });
+      lastReceived = received;
+      onProgress?.({
+        received,
+        total,
+        percent: total ? Math.round((received / total) * 100) : null,
+        bytesPerSecond,
+      });
     }
   });
 
