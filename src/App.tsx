@@ -5882,9 +5882,9 @@ function RunWarningModal({
                       onChange={(event) => onSkillSelectionChange({ ...skillSelection, listen: event.target.checked })}
                     />
                     <span>
-                      <strong>Listen to a recording</strong>
+                      <strong>Listen to the sample clip</strong>
                       <em>{listenCapable
-                        ? 'Plays a short spoken passage and compares the transcript word for word against what was actually said. The only score here measured against a right answer rather than judged. About twenty seconds per model.'
+                        ? 'Plays RigMatch\u2019s own short recording and compares the transcript word for word against what was actually said. The only score here measured against a right answer rather than judged. About twenty seconds per model. To test your own voice instead, use the Listening card in Activity.'
                         : 'No model in this run can hear. Add one that reports audio support (like gemma4) to unlock.'}</em>
                     </span>
                   </label>
