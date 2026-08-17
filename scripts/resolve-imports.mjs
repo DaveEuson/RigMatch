@@ -90,5 +90,12 @@ if (unresolved.length) {
 
 const source = readFileSync(target, 'utf-8');
 const header = '// EXTRACTION-IN-PROGRESS: imports resolved by tsc -b, see the commit message.\n';
-writeFileSync(target, source.replace(header, `${lines.join('\n')}\n`));
-console.log(`\nwrote ${lines.length} import line(s) into ${target}`);
+// On a second pass the placeholder is already gone, and replace() would then
+// silently write nothing while still reporting success — so prepend instead.
+// That exact false green cost a debugging round: "wrote 2 import lines" while
+// the file kept failing on the two names those lines were meant to supply.
+const written = source.includes(header)
+  ? source.replace(header, `${lines.join('\n')}\n`)
+  : `${lines.join('\n')}\n${source}`;
+writeFileSync(target, written);
+console.log(`\nwrote ${lines.length} import line(s) into ${target}${source.includes(header) ? '' : ' (prepended)'}`);

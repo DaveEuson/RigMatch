@@ -643,3 +643,39 @@ export type SkillTestSelection = {
   codeCustomTask: string;
   skipQuestions: boolean;
 };
+
+/**
+ * A benchmark run in flight, as the UI sees it.
+ *
+ * Lives here because five components render it — the panels, the spotlight,
+ * the transcript, the activity list — and each needs the shape without needing
+ * App.tsx.
+ */
+export type RunProgress = {
+  progressId?: string;
+  mode: PendingRunMode;
+  phase: 'running' | 'complete' | 'failed';
+  label: string;
+  currentModel: string;
+  completed: number;
+  total: number;
+  percent: number;
+  message: string;
+  lastResult?: {
+    model: string;
+    total: number;
+    grade: string;
+}
+  questionIndex?: number;
+  questionTotal?: number;
+  questionLabel?: string;
+  questionPrompt?: string;
+  questionPhase?: BenchmarkProgressUpdate['phase'];
+  questionRunIndex?: number;
+  questionRunTotal?: number;
+  completedQuestions?: number;
+  questionScores?: Record<string, number>;
+};
+
+/** How the Speed Dating transcript is grouped. */
+export type TranscriptViewMode = 'by-model' | 'by-question';
