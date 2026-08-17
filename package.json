@@ -18,10 +18,10 @@
     "dist": "npm run build && npm run build:chat && npm run prepare:companions && electron-builder",
     "dist:win": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& npm run build && npm run build:chat && npm run prepare:companions && electron-builder --win",
     "dist:mac": "npm run build && npm run build:chat && npm run prepare:companions && electron-builder --mac",
-    "dist:linux": "npm run build && npm run build:chat && npm run prepare:companions && electron-builder --linux",
+    "dist:linux": "node scripts/check-linux-advisories.mjs && npm run build && npm run build:chat && npm run prepare:companions && electron-builder --linux",
     "pack:win": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& npm run build && npm run build:chat && npm run prepare:companions && electron-builder --dir --win",
     "pack:mac": "npm run build && npm run build:chat && npm run prepare:companions && electron-builder --dir --mac",
-    "pack:linux": "npm run build && npm run build:chat && npm run prepare:companions && electron-builder --dir --linux",
+    "pack:linux": "node scripts/check-linux-advisories.mjs && npm run build && npm run build:chat && npm run prepare:companions && electron-builder --dir --linux",
     "benchmark:ollama": "node scripts/benchmark-ollama.mjs",
     "compare:ollama-speed": "node scripts/compare-ollama-speed.mjs",
     "smoke:bench": "node scripts/smoke-benchmark.mjs",
@@ -40,7 +40,8 @@
     "audit:claims": "node scripts/audit-claims.mjs",
     "audit:screens": "node scripts/audit-screens.mjs",
     "sweep:layout": "node scripts/responsive-sweep.mjs",
-    "sweep:shell": "node scripts/measure-shell.mjs"
+    "sweep:shell": "node scripts/measure-shell.mjs",
+    "check:linux": "node scripts/check-linux-advisories.mjs"
   },
   "build": {
     "appId": "ai.rigmatch.app",
