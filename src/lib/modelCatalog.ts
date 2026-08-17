@@ -2135,3 +2135,21 @@ export function playDoneJingle() {
     // audio not available
   }
 }
+
+/**
+ * Filters that match on a provider-reported capability and nothing else.
+ *
+ * Their counts are honest but partial: a model that is not installed cannot be
+ * asked what it can do. Named here so the note stays attached if more such
+ * filters are added.
+ */
+export const CAPABILITY_ONLY_FILTERS = ['hears', 'videoread'];
+
+/**
+ * Filters whose results are ComfyUI models rather than Ollama ones.
+ *
+ * Listed so the "you will need ComfyUI" note appears exactly where those
+ * Download buttons are, rather than being something to discover in Settings
+ * after clicking one.
+ */
+export const GENERATION_FILTERS = ['imagegen', 'videogen'];

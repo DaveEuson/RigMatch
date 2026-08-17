@@ -2,19 +2,23 @@
 /**
  * Remove imports App.tsx no longer uses after a component moves out.
  *
- * tsc names them precisely, so nothing is guessed. It re-runs until clean,
- * because removing a line shifts every line number after it.
+ * tsc names them precisely, so nothing is guessed, and it re-runs until clean
+ * because every removal shifts the line numbers after it.
  *
- * THE RULE THAT MATTERS: only ever edit a line that is part of an import
- * statement. Not every "declared but never used" is an import — extracting a
- * component also orphans the helpers only it called, and tsc then points at
- * their `function Name(` declarations. An earlier version of this script
- * happily applied its regex there and stripped the names off two function
- * declarations, leaving `function({` behind. Silent, syntactically broken, and
- * only caught because the next extraction failed to compile.
+ * Two rules, both learned by breaking App.tsx and rolling it back:
  *
- * An orphaned declaration is a finding, not a thing to delete: it usually means
- * that component should be extracted next, alongside the one that used it.
+ * 1. ONLY EDIT IMPORTS. Extracting a component also orphans the helpers only
+ *    it called, and tsc then points at their `function Name(` declarations. An
+ *    earlier version applied its regex there and stripped the names off two
+ *    declarations, leaving `function({` — silent, broken, and caught only
+ *    because the next extraction failed to compile. Orphaned declarations are
+ *    reported instead: they usually want extracting next, not deleting.
+ *
+ * 2. AN IMPORT IS A STATEMENT, NOT A LINE. They span many lines here. Removing
+ *    just the reported line left `import from './x'` for a default import, and
+ *    for a wholly-unused multi-line import it deleted the `import {` and left
+ *    the body behind as loose identifiers. So statements are parsed first, and
+ *    every edit is expressed against a statement's full span.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -22,74 +26,67 @@ import { execSync } from 'node:child_process';
 
 const path = 'src/App.tsx';
 
-function unusedInApp() {
+function diagnostics() {
   let output = '';
   try {
     execSync('npx tsc -b', { encoding: 'utf-8', stdio: 'pipe' });
   } catch (error) {
     output = `${error.stdout ?? ''}${error.stderr ?? ''}`;
   }
-  // TS6133 unused value, TS6196 unused type, TS6192 a whole import unused.
-  const single = [...output.matchAll(/src[/\\]App\.tsx\((\d+),(\d+)\): error TS6(?:133|196): '([^']+)' is declared but (?:its value is )?never (?:read|used)/g)]
-    .map((m) => ({ line: Number(m[1]), name: m[3], whole: false }));
-  const whole = [...output.matchAll(/src[/\\]App\.tsx\((\d+),(\d+)\): error TS6192: All imports in import declaration are unused/g)]
+  const named = [...output.matchAll(/src[/\\]App\.tsx\((\d+),\d+\): error TS6(?:133|196): '([^']+)' is declared but (?:its value is )?never (?:read|used)/g)]
+    .map((m) => ({ line: Number(m[1]), name: m[2], whole: false }));
+  const whole = [...output.matchAll(/src[/\\]App\.tsx\((\d+),\d+\): error TS6192: All imports in import declaration are unused/g)]
     .map((m) => ({ line: Number(m[1]), name: null, whole: true }));
-  return [...single, ...whole];
+  return [...named, ...whole];
 }
 
-/**
- * Is this line inside an import statement? Imports here span several lines, so
- * a bare name on its own line has to be judged by what encloses it.
- */
-function insideImport(lines, index) {
-  const line = lines[index];
-  if (/^\s*import\b/.test(line)) return true;
-  for (let i = index; i >= 0 && index - i < 60; i -= 1) {
-    if (/^\s*import\b/.test(lines[i])) {
-      // An import that has not closed before reaching our line still encloses it.
-      const between = lines.slice(i, index + 1).join('\n');
-      const closed = /}\s*from\s*'[^']*';/.test(between.slice(0, between.length - line.length));
-      return !closed;
+/** Every import statement in the file, with the full line span it occupies. */
+function importStatements(lines) {
+  const found = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!/^\s*import\b/.test(lines[i])) continue;
+    let end = i;
+    // A statement ends at the line carrying its `from '...';` (or its own `;`).
+    while (end < lines.length && !/from\s*'[^']*';\s*$/.test(lines[end]) && !/^\s*import\s*'[^']*';\s*$/.test(lines[end])) {
+      end += 1;
+      if (end - i > 200) break;
     }
-    if (/^\s*(export\s+)?(function|const|class|type|interface)\b/.test(lines[i])) return false;
+    found.push({ start: i, end });
+    i = end;
   }
-  return false;
+  return found;
 }
 
 const skipped = [];
 
 for (let round = 1; round <= 8; round += 1) {
-  const unused = unusedInApp();
-  if (unused.length === 0) { console.log(`clean after ${round - 1} round(s)`); break; }
+  const reported = diagnostics();
+  if (reported.length === 0) { console.log(`clean after ${round - 1} round(s)`); break; }
 
   const lines = readFileSync(path, 'utf-8').split('\n');
+  const statements = importStatements(lines);
+  const owning = (lineNumber) => statements.find((s) => lineNumber - 1 >= s.start && lineNumber - 1 <= s.end);
+
   const removed = [];
-  // Bottom-up so earlier line numbers stay valid.
-  for (const { line, name, whole } of [...unused].sort((a, b) => b.line - a.line)) {
+  const wholeSpans = [];
+  // Bottom-up so earlier line numbers stay valid as we edit.
+  for (const { line, name, whole } of [...reported].sort((a, b) => b.line - a.line)) {
+    const statement = owning(line);
+    if (!statement) {
+      skipped.push(`${name ?? '(import)'} at line ${line}: ${(lines[line - 1] ?? '').trim().slice(0, 60)}`);
+      continue;
+    }
+
     const text = lines[line - 1];
-    if (text === undefined) continue;
-
-    if (!insideImport(lines, line - 1)) {
-      // Not an import. Report it and leave it exactly as it is.
-      skipped.push(`${name ?? '(import)'} at line ${line}: ${text.trim().slice(0, 60)}`);
+    const isDefault = new RegExp(`^\\s*import\\s+${name}\\s+from\\s`).test(text);
+    if (whole || isDefault) {
+      wholeSpans.push(statement);
+      removed.push(`${name ?? '(statement)'}${isDefault ? ' (default)' : ''}`);
       continue;
     }
 
-    if (whole) {
-      lines.splice(line - 1, 1);
-      removed.push('(whole import)');
-      continue;
-    }
-    // A default import IS the whole statement — `import name from '...'`.
-    // Stripping just the name leaves `import from '...'`, which is a syntax
-    // error the next extraction inherits.
-    if (new RegExp(`^\\s*import\\s+${name}\\s+from\\s`).test(text)) {
-      lines.splice(line - 1, 1);
-      removed.push(`${name} (default)`);
-      continue;
-    }
     if (new RegExp(`^\\s*(?:type\\s+)?${name},?\\s*$`).test(text)) {
-      lines.splice(line - 1, 1);
+      lines[line - 1] = null; // marked, spliced below so spans stay stable
       removed.push(name);
     } else if (text.includes(`${name},`)) {
       lines[line - 1] = text.replace(new RegExp(`\\b(?:type\\s+)?${name},\\s*`), '');
@@ -100,15 +97,20 @@ for (let round = 1; round <= 8; round += 1) {
     }
   }
 
+  // Whole statements last and bottom-up, so no span invalidates another.
+  for (const span of wholeSpans.sort((a, b) => b.start - a.start)) {
+    for (let i = span.start; i <= span.end; i += 1) lines[i] = null;
+  }
+
   if (removed.length === 0) {
     console.log(`round ${round}: nothing left that is safe to touch`);
     break;
   }
-  writeFileSync(path, lines.join('\n'));
+  writeFileSync(path, lines.filter((line) => line !== null).join('\n'));
   console.log(`round ${round}: removed ${removed.length} — ${removed.slice(0, 8).join(', ')}${removed.length > 8 ? ', …' : ''}`);
 }
 
 if (skipped.length) {
-  console.log('\nLeft alone (not imports — probably wants extracting next):');
+  console.log('\nLeft alone (not inside an import — probably wants extracting next):');
   for (const entry of [...new Set(skipped)]) console.log(`   ${entry}`);
 }

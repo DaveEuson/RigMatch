@@ -3,7 +3,6 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowLeft,
-  ArrowUpDown,
   Bot,
   Boxes,
   Bug,
@@ -15,7 +14,6 @@ import {
   Coffee,
   Copy,
   Download,
-  Eraser,
   ExternalLink,
   FolderOpen,
   Gauge,
@@ -30,7 +28,6 @@ import {
   Plus,
   RefreshCw,
   Share2,
-  Search,
   Settings,
   ShieldCheck,
   ShoppingCart,
@@ -102,13 +99,7 @@ import {
   upsertModelScores,
 } from './lib/scoring';
 import {
-  getDeveloperFilterOptions,
-  getRowDeveloper,
-  getModelOrigin,
-} from './lib/modelOrigins';
-import {
   getEmptyModelNewsState,
-  getModelNewsId,
   getNotificationPermission,
   getSavedModelNewsNotificationsEnabled,
   getSavedModelNewsState,
@@ -132,7 +123,6 @@ import { readDeckExpanded, writeDeckExpanded } from './lib/deckSettings';
 import { playJingle } from './lib/sound';
 import { TopDeck } from './components/TopDeck';
 import {
-  TASK_FILTER_CHIPS,
   addSetValues,
   buildBugReportUrl,
   buildDiagnosticsText,
@@ -156,15 +146,10 @@ import {
   getModelDreamTags,
   getModelEpithet,
   getModelGoodForLine,
-  getModelGoodForTags,
   getModelProfile,
   getModelProfileHighlights,
-  getModelQuickFilters,
   getModelRuntime,
   getModelScore,
-  getModelSearchText,
-  getModelSortLabel,
-  getModelStatusLabel,
   getNavLabel,
   getPlatformFit,
   getPlatformName,
@@ -183,7 +168,6 @@ import {
   getScoreTimelineNote,
   getFriendlyModelName,
   getShortModelName,
-  getSizeRisk,
   getTaskTopPicks,
   getThemeLabel,
   isBenchmarkByModel,
@@ -201,10 +185,8 @@ import {
   isListTestResult,
   isModelScores,
   isRecord,
-  isUncensoredModel,
   isVisiblePullProgress,
   mergeModelRows,
-  modelMatchesQuickFilter,
   modelMatchesTask,
   normalizeBenchmarkResultModel,
   normalizeModelKey,
@@ -217,18 +199,14 @@ import {
   removePullProgress,
   removePullProgressForModels,
   removeSetValues,
-  sortModelRows,
   sumQueuedGb,
   upsertBenchmarkResults,
 } from './lib/modelCatalog';
 import type {
   ListTestResult,
   ModelProfile,
-  ModelQuickFilterId,
-  ModelSortKey,
   ModelTaskFilterId,
   RigPick,
-  SortDirection,
 } from './lib/modelCatalog';
 import { dropChat, dropTranscripts, writeLocal, writeLocalJson, writeLocalJsonWithFallback } from './lib/safeStorage';
 import { collapseModelVariants } from './lib/wizardVariants';
@@ -247,7 +225,6 @@ import {
   toRunHardware,
   toRunHistoryEntry,
   writeRunHistory,
-  type RunDelta,
   type RunHistory,
 } from './lib/runHistory';
 import { estimateBenchmarkMs, estimateSpeedDateMs } from './lib/runEstimates';
@@ -292,15 +269,19 @@ import { ChatDock } from './components/ChatDock';
 import { SkillRunMiniBar, LiveBuildModal, DemoResultModal, ModelDemoChips } from './components/SkillDemoViewers';
 import { AdvancedCapabilityLab } from './components/AdvancedCapabilityLab';
 import { RunWarningModal } from './components/RunWarningModal';
+import { ModelCabinet } from './components/ModelCabinet';
+import { } from './components/FirstModelWizard';
+import { } from './components/SortableModelHeader';
+import { } from './components/DiskGuard';
 import { AgentReveal } from './components/AgentReveal';
-import { SelectedContestantCard } from './components/SelectedContestantCard';
+import { } from './components/SelectedContestantCard';
 import { SpeedDateTranscriptPanel } from './components/SpeedDateTranscriptPanel';
 import { } from './lib/promptDiagnostic';
 import { } from './components/ProfileQuestionTranscript';
 import { } from './components/ProfileScoreDetails';
 import { } from './components/AgentDatingProfile';
 import { } from './components/ResultExplanationCard';
-import { DownloadProgressInline } from './components/DownloadProgressInline';
+import { } from './components/DownloadProgressInline';
 import { LiveFlirtSpotlight } from './components/LiveFlirtSpotlight';
 import { extractHtmlDocument } from './lib/labPreview';
 import {
@@ -351,11 +332,7 @@ import {
   extractCodeBlock,
 } from './lib/codeChallenge';
 import {
-  ModelScorePill,
-  ModelStatusPill,
-  PopularityMeter,
   RomanceArtBanner,
-  ScoreLegend,
 } from './components/ScoreVisuals';
 import {
   compareVersionStrings,
@@ -366,7 +343,6 @@ import {
   getResponseEstimate,
   getScoreTone,
 } from './lib/format';
-import robotContestantWall from './assets/robot-contestant-wall.webp';
 import robotRigGreenroom from './assets/robot-rig-greenroom.webp';
 import robotScorecardCeremony from './assets/robot-scorecard-ceremony.webp';
 import robotSpeedDateShow from './assets/robot-speed-date-show.webp';
@@ -381,23 +357,6 @@ const QUICK_CHECK_WARNING_KEY = 'rigmatch:quick-test-warning:v1';
 // The app version whose update nudge the user dismissed — so the gentle popup
 // shows once per new release, never nags for a version they've already seen.
 const UPDATE_PROMPT_DISMISSED_KEY = 'rigmatch:update-prompt-dismissed:v1';
-/**
- * Filters that match on a provider-reported capability and nothing else.
- *
- * Their counts are honest but partial: a model that is not installed cannot be
- * asked what it can do. Named here so the note stays attached if more such
- * filters are added.
- */
-const CAPABILITY_ONLY_FILTERS = ['hears', 'videoread'];
-
-/**
- * Filters whose results are ComfyUI models rather than Ollama ones.
- *
- * Listed so the "you will need ComfyUI" note appears exactly where those
- * Download buttons are, rather than being something to discover in Settings
- * after clicking one.
- */
-const GENERATION_FILTERS = ['imagegen', 'videogen'];
 
 type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
 
@@ -6515,180 +6474,6 @@ function LogEntry({ entry }: { entry: AppLogEntry }) {
   );
 }
 
-type FirstModelUseCase = 'chat' | 'code' | 'writing' | 'reasoning' | 'speed';
-
-const USE_CASES: Array<{ id: FirstModelUseCase; emoji: string; label: string; description: string }> = [
-  { id: 'chat',      emoji: '💬', label: 'Chat & Daily Help',   description: 'Ask questions, get summaries, brainstorm ideas' },
-  { id: 'code',      emoji: '💻', label: 'Coding',              description: 'Write code, debug, explain errors' },
-  { id: 'writing',   emoji: '✍️',  label: 'Writing',            description: 'Drafts, emails, creative content' },
-  { id: 'reasoning', emoji: '🧠', label: 'Research & Analysis', description: 'Deep thinking, comparisons, long documents' },
-  { id: 'speed',     emoji: '⚡', label: 'Just the Fastest',    description: 'Quick answers, low-latency, lightweight' },
-];
-
-type FirstModelPick = { id: string; name: string; size: string; why: string; vramNote: string };
-
-function getFirstModelPicks(useCase: FirstModelUseCase, vramGb: number): FirstModelPick[] {
-  const tier = vramGb >= 16 ? 'large' : vramGb >= 10 ? 'medium' : vramGb >= 6 ? 'small' : 'tiny';
-
-  const picks: Record<FirstModelUseCase, Record<string, FirstModelPick[]>> = {
-    chat: {
-      large:  [
-        { id: 'llama3.1:8b',   name: 'Llama 3.1 8B',   size: '4.9 GB', why: 'Meta\'s flagship chat model — balanced, articulate, great for everyday conversation', vramNote: 'Runs fully in VRAM' },
-        { id: 'gemma3:4b',     name: 'Gemma 3 4B',     size: '3.3 GB', why: 'Google\'s compact model — fast, friendly, surprisingly capable for its size', vramNote: 'Runs fully in VRAM' },
-      ],
-      medium: [
-        { id: 'gemma3:4b',     name: 'Gemma 3 4B',     size: '3.3 GB', why: 'Google\'s compact model — fast, friendly, great for daily chat', vramNote: 'Runs fully in VRAM' },
-        { id: 'llama3.2:3b',   name: 'Llama 3.2 3B',   size: '2.0 GB', why: 'Meta\'s small but sharp chat model — snappy and reliable', vramNote: 'Runs fully in VRAM' },
-      ],
-      small:  [
-        { id: 'llama3.2:3b',   name: 'Llama 3.2 3B',   size: '2.0 GB', why: 'Meta\'s small but sharp chat model — snappy and reliable', vramNote: 'Runs fully in VRAM' },
-        { id: 'phi3:mini',     name: 'Phi-3 Mini',     size: '2.3 GB', why: 'Microsoft\'s tiny powerhouse — efficient and surprisingly good at conversation', vramNote: 'Runs fully in VRAM' },
-      ],
-      tiny:   [
-        { id: 'phi3:mini',     name: 'Phi-3 Mini',     size: '2.3 GB', why: 'Microsoft\'s tiny powerhouse — the best chat you\'ll get on limited hardware', vramNote: 'May use system RAM' },
-        { id: 'llama3.2:1b',   name: 'Llama 3.2 1B',   size: '1.3 GB', why: 'Ultra-light — runs anywhere, answers quickly', vramNote: 'Runs on CPU too' },
-      ],
-    },
-    code: {
-      large:  [
-        { id: 'qwen2.5-coder:7b',  name: 'Qwen 2.5 Coder 7B',  size: '4.7 GB', why: 'Best-in-class local coding model — great at completions, explanations, and debugging', vramNote: 'Runs fully in VRAM' },
-        { id: 'deepseek-coder:6.7b', name: 'DeepSeek Coder 7B', size: '3.8 GB', why: 'Built specifically for code — strong on Python, JS, and TypeScript', vramNote: 'Runs fully in VRAM' },
-      ],
-      medium: [
-        { id: 'qwen2.5-coder:7b',  name: 'Qwen 2.5 Coder 7B',  size: '4.7 GB', why: 'Best-in-class local coding model — completions, debugging, and explanations', vramNote: 'Runs fully in VRAM' },
-        { id: 'qwen2.5-coder:3b',  name: 'Qwen 2.5 Coder 3B',  size: '2.0 GB', why: 'Smaller but still very capable — good fallback if 7B is too slow', vramNote: 'Runs fully in VRAM' },
-      ],
-      small:  [
-        { id: 'qwen2.5-coder:3b',  name: 'Qwen 2.5 Coder 3B',  size: '2.0 GB', why: 'Compact coding model — better at code than most general models twice its size', vramNote: 'Runs fully in VRAM' },
-        { id: 'qwen2.5-coder:1.5b',name: 'Qwen 2.5 Coder 1.5B',size: '1.0 GB', why: 'Tiny but surprisingly good at short code tasks and explaining errors', vramNote: 'Runs fully in VRAM' },
-      ],
-      tiny:   [
-        { id: 'qwen2.5-coder:1.5b',name: 'Qwen 2.5 Coder 1.5B',size: '1.0 GB', why: 'The best coding help you can get on minimal hardware', vramNote: 'Runs on CPU too' },
-      ],
-    },
-    writing: {
-      large:  [
-        { id: 'llama3.1:8b',   name: 'Llama 3.1 8B',   size: '4.9 GB', why: 'Excellent writer — handles tone, structure, and style with ease', vramNote: 'Runs fully in VRAM' },
-        { id: 'mistral:7b',    name: 'Mistral 7B',     size: '4.1 GB', why: 'Strong prose model — clean, confident writing output', vramNote: 'Runs fully in VRAM' },
-      ],
-      medium: [
-        { id: 'mistral:7b',    name: 'Mistral 7B',     size: '4.1 GB', why: 'Strong prose model — clean, confident writing output', vramNote: 'Runs fully in VRAM' },
-        { id: 'gemma3:4b',     name: 'Gemma 3 4B',     size: '3.3 GB', why: 'Great at summaries, emails, and short-form creative writing', vramNote: 'Runs fully in VRAM' },
-      ],
-      small:  [
-        { id: 'gemma3:4b',     name: 'Gemma 3 4B',     size: '3.3 GB', why: 'Great at summaries, emails, and short-form creative writing', vramNote: 'Runs fully in VRAM' },
-        { id: 'phi3:mini',     name: 'Phi-3 Mini',     size: '2.3 GB', why: 'Compact and surprisingly good at structured writing tasks', vramNote: 'Runs fully in VRAM' },
-      ],
-      tiny:   [
-        { id: 'phi3:mini',     name: 'Phi-3 Mini',     size: '2.3 GB', why: 'Best writing quality available on limited hardware', vramNote: 'May use system RAM' },
-      ],
-    },
-    reasoning: {
-      large:  [
-        { id: 'deepseek-r1:7b', name: 'DeepSeek R1 7B', size: '4.7 GB', why: 'Built for step-by-step reasoning — explains its thinking, great for analysis', vramNote: 'Runs fully in VRAM' },
-        { id: 'qwen2.5:7b',     name: 'Qwen 2.5 7B',    size: '4.7 GB', why: 'Excellent at following complex instructions and multi-step tasks', vramNote: 'Runs fully in VRAM' },
-      ],
-      medium: [
-        { id: 'deepseek-r1:7b', name: 'DeepSeek R1 7B', size: '4.7 GB', why: 'Built for step-by-step reasoning — explains its thinking, great for analysis', vramNote: 'Runs fully in VRAM' },
-        { id: 'llama3.2:3b',    name: 'Llama 3.2 3B',   size: '2.0 GB', why: 'Solid reasoning for its size — good for structured Q&A and comparisons', vramNote: 'Runs fully in VRAM' },
-      ],
-      small:  [
-        { id: 'llama3.2:3b',    name: 'Llama 3.2 3B',   size: '2.0 GB', why: 'Best reasoning option at this VRAM level — follows instructions well', vramNote: 'Runs fully in VRAM' },
-        { id: 'phi3:mini',      name: 'Phi-3 Mini',      size: '2.3 GB', why: 'Microsoft trained it specifically for logical tasks — punches above its weight', vramNote: 'Runs fully in VRAM' },
-      ],
-      tiny:   [
-        { id: 'phi3:mini',      name: 'Phi-3 Mini',      size: '2.3 GB', why: 'The reasoning standout at this size — Microsoft\'s focus was logic and instruction-following', vramNote: 'May use system RAM' },
-      ],
-    },
-    speed: {
-      large:  [
-        { id: 'llama3.2:3b',    name: 'Llama 3.2 3B',   size: '2.0 GB', why: 'Tiny model on a capable GPU = instant responses. Best speed/quality ratio for quick answers', vramNote: 'Flies in VRAM' },
-        { id: 'gemma3:1b',      name: 'Gemma 3 1B',     size: '0.8 GB', why: 'Google\'s smallest model — basically instant on modern hardware', vramNote: 'Flies in VRAM' },
-      ],
-      medium: [
-        { id: 'llama3.2:3b',    name: 'Llama 3.2 3B',   size: '2.0 GB', why: 'Fast and capable — the sweet spot for quick, reliable responses', vramNote: 'Flies in VRAM' },
-        { id: 'phi3:mini',      name: 'Phi-3 Mini',      size: '2.3 GB', why: 'Snappy and smart — responds quickly without sacrificing too much quality', vramNote: 'Flies in VRAM' },
-      ],
-      small:  [
-        { id: 'llama3.2:1b',    name: 'Llama 3.2 1B',   size: '1.3 GB', why: 'Ultra-light — the fastest responses you\'ll get on any hardware', vramNote: 'Very fast even on CPU' },
-        { id: 'gemma3:1b',      name: 'Gemma 3 1B',     size: '0.8 GB', why: 'Google\'s smallest — basically instant responses', vramNote: 'Runs on CPU too' },
-      ],
-      tiny:   [
-        { id: 'llama3.2:1b',    name: 'Llama 3.2 1B',   size: '1.3 GB', why: 'The speed king at any VRAM level — downloads fast, responds fast', vramNote: 'Runs on CPU' },
-        { id: 'gemma3:1b',      name: 'Gemma 3 1B',     size: '0.8 GB', why: 'Tiny but functional — a good first download just to see it work', vramNote: 'Runs on CPU' },
-      ],
-    },
-  };
-
-  return picks[useCase][tier] ?? picks[useCase].small ?? [];
-}
-
-function FirstModelWizard({ vramGb, onQueueModel }: { vramGb: number; onQueueModel: (modelId: string) => void }) {
-  const [useCase, setUseCase] = useState<FirstModelUseCase | null>(null);
-  const [dismissed, setDismissed] = useState(false);
-
-  if (dismissed) return null;
-
-  const picks = useCase ? getFirstModelPicks(useCase, vramGb) : [];
-
-  return (
-    <div className="first-model-wizard">
-      <div className="fmw-header">
-        <div className="fmw-title">
-          <span>🎬 Start here</span>
-          <strong>Yeah, a lot of models. Let's narrow it down.</strong>
-          <em>Answer one question and we'll pick your first contestant.</em>
-        </div>
-        <button type="button" className="icon-action" onClick={() => setDismissed(true)} aria-label="Dismiss" title="Show me the full list instead">
-          <X aria-hidden="true" />
-        </button>
-      </div>
-
-      <div className="fmw-use-cases" role="group" aria-label="What do you mainly want to use AI for?">
-        <p className="fmw-question">What do you mainly want to use AI for?</p>
-        {USE_CASES.map((uc) => (
-          <button
-            key={uc.id}
-            type="button"
-            className={`fmw-use-case-btn${useCase === uc.id ? ' active' : ''}`}
-            onClick={() => setUseCase(useCase === uc.id ? null : uc.id)}
-            aria-pressed={useCase === uc.id}
-          >
-            <span className="fmw-emoji">{uc.emoji}</span>
-            <span className="fmw-label">{uc.label}</span>
-            <span className="fmw-desc">{uc.description}</span>
-          </button>
-        ))}
-      </div>
-
-      {useCase && picks.length > 0 && (
-        <div className="fmw-picks">
-          <p className="fmw-picks-label">
-            Perfect picks for your rig{vramGb > 0 ? ` (${vramGb} GB VRAM)` : ''} →
-          </p>
-          {picks.map((pick, i) => (
-            <div key={pick.id} className={`fmw-pick-card${i === 0 ? ' recommended' : ''}`}>
-              {i === 0 && <span className="fmw-pick-badge">⭐ Best match</span>}
-              <div className="fmw-pick-info">
-                <strong>{pick.name}</strong>
-                <em>{pick.size} · {pick.vramNote}</em>
-                <p>{pick.why}</p>
-              </div>
-              <button
-                type="button"
-                className={i === 0 ? 'primary-button compact' : 'mini-button'}
-                onClick={() => { onQueueModel(pick.id); setDismissed(true); }}
-              >
-                <Download aria-hidden="true" />
-                {i === 0 ? 'Download & Queue' : 'Queue'}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /**
  * A Match is the best model for a goal on this hardware — Dave's definition.
@@ -6713,925 +6498,6 @@ function matchDisplayLabel(pickId: string, fallback: string): string {
   const goalId = pickId === 'chat' ? 'talk' : pickId === 'coding' ? 'code' : undefined;
   const goal = goalId ? GOALS.find((g) => g.id === goalId) : undefined;
   return goal?.matchLabel ?? fallback;
-}
-
-function ModelCabinet({
-  active,
-  rows,
-  comfyFolderSet,
-  onOpenComfyHelp,
-  onOpenLab,
-  goalLens,
-  selectedModel,
-  installedModelNames,
-  shortlistIds,
-  queuedModelIds,
-  pullProgressByModel,
-  modelScores,
-  benchmarkByModel,
-  diskGuard,
-  vramGb,
-  platform,
-  queuedCount,
-  isBenchmarking,
-  isPulling,
-  isPullCancelRequested,
-  isPullPauseRequested,
-  isPullPaused,
-  isDeletingModel,
-  pullingModel,
-  shortlistedCount,
-  onSelect,
-  onScoreModel,
-  onDeleteModel,
-  onClearScore,
-  onQueueModel,
-  onPullQueued,
-  onPauseQueue,
-  onCancelQueue,
-  onToggleShortlist,
-  onOpenSpeedDate,
-  onOpenTopPick,
-  onRefresh,
-  onChooseModel,
-  onOpenModelChat,
-  modelNotes,
-  onSaveModelNote,
-  scoreTrend,
-  scoreDeltas,
-  newModelIds,
-  onQuickCheck,
-}: {
-  /** Whether a verified ComfyUI models folder exists, so downloads can land. */
-  comfyFolderSet: boolean;
-  onOpenComfyHelp: () => void;
-  /** Generation models are run from the Lab, not from a row's Test button. */
-  onOpenLab: () => void;
-  /** The task filter implied by the user's primary goal, if any. Applied when
-      it changes and freely clearable after — a lens, never a lock. */
-  goalLens?: ModelTaskFilterId;
-  active: boolean;
-  rows: ModelRow[];
-  selectedModel: string;
-  installedModelNames: Set<string>;
-  shortlistIds: Set<string>;
-  queuedModelIds: Set<string>;
-  pullProgressByModel: Record<string, PullProgressUpdate>;
-  modelScores: Record<string, TestedModelScore>;
-  benchmarkByModel: Record<string, BenchmarkResult>;
-  diskGuard: ReturnType<typeof getDiskGuard>;
-  vramGb: number;
-  platform: string;
-  queuedCount: number;
-  isBenchmarking: boolean;
-  isListTesting: boolean;
-  isPulling: boolean;
-  isPullCancelRequested: boolean;
-  isPullPauseRequested: boolean;
-  isPullPaused: boolean;
-  isDeletingModel: boolean;
-  pullingModel: string | null;
-  listTestResult: ListTestResult | null;
-  runProgress: RunProgress | null;
-  questionCount: BenchmarkQuestionCount;
-  shortlistedCount: number;
-  onSelect: (model: string) => void;
-  onScoreModel: (row: ModelRow) => void;
-  onDeleteModel: (row: ModelRow) => void;
-  onClearScore: (model: string) => void;
-  onQueueModel: (row: ModelRow) => void;
-  onPullQueued: () => void;
-  onPauseQueue: () => void;
-  onCancelQueue: () => void;
-  onToggleShortlist: (row: ModelRow) => void;
-  onOpenSuiteEditor: () => void;
-  onOpenSpeedDate: () => void;
-  onOpenTopPick: () => void;
-  onRefresh: () => void;
-  onChooseModel: (model: string) => void;
-  onOpenModelChat: (model: string) => void;
-  modelNotes: Record<string, string>;
-  onSaveModelNote: (model: string, note: string) => void;
-  scoreTrend: Record<string, number[]>;
-  scoreDeltas: Record<string, RunDelta>;
-  newModelIds: Set<string>;
-  onQuickCheck: (row: ModelRow) => void;
-}) {
-  const [modelQuery, setModelQuery] = useState('');
-  const [quickFilter, setQuickFilter] = useState<ModelQuickFilterId>('fits-vram');
-  const [taskFilter, setTaskFilter] = useState<ModelTaskFilterId | null>(goalLens ?? null);
-  // Re-applied only when the goal itself changes (splash or a future goal
-  // editor) — clearing the filter afterwards sticks, so the goal steers
-  // without gripping. Adjusted during render rather than in an effect: the
-  // rerender happens before children paint, where an effect would flash the
-  // unfiltered list first.
-  const [appliedLens, setAppliedLens] = useState(goalLens);
-  if (goalLens !== appliedLens) {
-    setAppliedLens(goalLens);
-    if (goalLens) setTaskFilter(goalLens);
-  }
-  const [developerFilter, setDeveloperFilter] = useState('all');
-  const [sortKey, setSortKey] = useState<ModelSortKey>('status');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  // Column widths: Model, Size, Good For, Origin, Status, Match, Popularity (Actions fills remainder)
-  // Size fits "Sweet spot", Status fits "Not Installed" (its pill needs ~81px +
-  // cell padding), Match fits its header — the previous 62/80/66 defaults
-  // ellipsized all three.
-  const [colWidths, setColWidths] = useState([156, 92, 126, 86, 110, 76, 96]);
-  // Popularity is the least essential column (the local Ollama API exposes no
-  // pull counts), so it yields first on narrower windows instead of forcing
-  // horizontal scrolling. Handled in JS because the <col> track would keep
-  // its width even if the cells were hidden with CSS.
-  const [hidePopularity, setHidePopularity] = useState(() =>
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 1600px)').matches);
-  useEffect(() => {
-    const media = window.matchMedia('(max-width: 1600px)');
-    const update = () => setHidePopularity(media.matches);
-    media.addEventListener('change', update);
-    window.addEventListener('resize', update);
-    return () => {
-      media.removeEventListener('change', update);
-      window.removeEventListener('resize', update);
-    };
-  }, []);
-  // ollama.com removed public pull counts from its library pages (July 2026), so
-  // live scrapes now return pulls: null for every model. When no row has pull
-  // data, the Popularity column would be a wall of "No pull data" — repurpose it
-  // as a measured-speed column instead. If Ollama ever restores the stats, the
-  // column flips back to Popularity automatically.
-  const hasAnyPullData = useMemo(() => rows.some((row) => row.pulls != null), [rows]);
-  const colWidthsRef = useRef(colWidths);
-  useEffect(() => {
-    colWidthsRef.current = colWidths;
-  }, [colWidths]);
-  const handleColResizeStart = useCallback((colIndex: number, e: React.MouseEvent) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = colWidthsRef.current[colIndex];
-    const onMouseMove = (ev: MouseEvent) => {
-      const newWidth = Math.max(40, startWidth + ev.clientX - startX);
-      setColWidths(prev => { const next = [...prev]; next[colIndex] = newWidth; return next; });
-    };
-    const onMouseUp = () => {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-  }, []);
-  const selectedRow = rows.find((row) => row.displayName === selectedModel || row.id === selectedModel);
-  const selectedProfile = getModelProfile(selectedRow?.displayName ?? selectedModel);
-  const selectedScore = selectedRow ? getModelScore(selectedRow, modelScores) : modelScores[selectedModel];
-  const selectedQueued = selectedRow ? queuedModelIds.has(selectedRow.displayName) : false;
-  const selectedShortlisted = selectedRow ? shortlistIds.has(selectedRow.displayName) : false;
-  const selectedInstalled = selectedRow ? installedModelNames.has(selectedRow.displayName) || selectedRow.installed : false;
-  const selectedPullProgress = selectedRow ? pullProgressByModel[selectedRow.displayName] : undefined;
-  const selectedPulling = Boolean(selectedRow && pullingModel === selectedRow.displayName);
-  const query = modelQuery.trim().toLowerCase();
-  /**
-   * Faceted counts: every chip counts the rows that pass the OTHER active
-   * filters, so its number is exactly what clicking it will show.
-   *
-   * These used to count across the whole catalog regardless of what else was
-   * on, which produced chips that promised results and delivered an empty
-   * table — "Makes images 3" while Rig Picks was active, when all three image
-   * models were in the too-big-for-this-VRAM bucket.
-   */
-  const passesQuery = useCallback(
-    (row: ModelRow) => !query
-      || getModelSearchText(row, queuedModelIds.has(row.displayName), getModelScore(row, modelScores)).includes(query),
-    [query, queuedModelIds, modelScores],
-  );
-  const passesDeveloper = useCallback(
-    (row: ModelRow) => developerFilter === 'all' || getRowDeveloper(row).id === developerFilter,
-    [developerFilter],
-  );
-  const passesQuick = useCallback(
-    (row: ModelRow) => modelMatchesQuickFilter(row, quickFilter, getModelScore(row, modelScores), vramGb),
-    [quickFilter, modelScores, vramGb],
-  );
-  const passesTask = useCallback(
-    (row: ModelRow) => !taskFilter || modelMatchesTask(row, taskFilter),
-    [taskFilter],
-  );
-
-  const quickFilters = useMemo(
-    () => getModelQuickFilters(rows.filter((row) => passesQuery(row) && passesDeveloper(row) && passesTask(row)), modelScores, vramGb),
-    [rows, modelScores, vramGb, passesQuery, passesDeveloper, passesTask],
-  );
-  // Headline "N models look realistic for your VRAM" is about the rig, not the
-  // current filter selection, so it stays a whole-catalog figure.
-  const vramSafeCount = useMemo(
-    () => getModelQuickFilters(rows, modelScores, vramGb).find((filter) => filter.id === 'fits-vram')?.count ?? 0,
-    [rows, modelScores, vramGb],
-  );
-  const taskFilterCounts = useMemo(() => {
-    const base = rows.filter((row) => passesQuery(row) && passesDeveloper(row) && passesQuick(row));
-    return Object.fromEntries(TASK_FILTER_CHIPS.map((chip) => [chip.id, base.filter((row) => modelMatchesTask(row, chip.id)).length]));
-  }, [rows, passesQuery, passesDeveloper, passesQuick]);
-  /**
-   * Only offer a use case something can actually satisfy.
-   *
-   * "Makes video" matched nothing at all — not one of the models installed
-   * here, none of the 233 in Ollama's library, and nothing in the community
-   * namespace. There is no video generation on Ollama to find, so the filter
-   * promised a category it could never fill. Deciding this from the catalogue
-   * rather than deleting the chip means it comes back on its own the day a
-   * video model appears.
-   *
-   * Counted over every row rather than the filtered ones, so chips do not
-   * appear and vanish as a search is typed — and the active chip always stays,
-   * or clearing it would be impossible.
-   */
-  const offerableTaskFilters = useMemo(
-    () => TASK_FILTER_CHIPS.filter(
-      (chip) => chip.id === taskFilter || rows.some((row) => modelMatchesTask(row, chip.id)),
-    ),
-    [rows, taskFilter],
-  );
-
-  const developerFilterOptions = useMemo(
-    () => getDeveloperFilterOptions(rows.filter((row) => passesQuery(row) && passesQuick(row) && passesTask(row))),
-    [rows, passesQuery, passesQuick, passesTask],
-  );
-  const activeDeveloperFilter = developerFilterOptions.some((option) => option.id === developerFilter) ? developerFilter : 'all';
-  const shortlistedRows = useMemo(
-    () => rows.filter((row) => shortlistIds.has(row.displayName)).slice(0, 5),
-    [rows, shortlistIds],
-  );
-  const speedDateLineupFull = shortlistedRows.length >= 5;
-  const queuedRows = useMemo(
-    () => rows.filter((row) => queuedModelIds.has(row.displayName)),
-    [queuedModelIds, rows],
-  );
-  const queuedPreviewRows = queuedRows.filter((row) => row.displayName !== pullingModel);
-  const queuePreviewLimit = isPulling ? 2 : 3;
-  const visibleQueuePreview = queuedPreviewRows.slice(0, queuePreviewLimit);
-  const hiddenQueueCount = Math.max(0, queuedPreviewRows.length - visibleQueuePreview.length);
-  const queueStatusLabel = isPullCancelRequested
-    ? 'Canceling download'
-    : isPullPauseRequested
-      ? 'Pausing download'
-      : isPullPaused
-        ? 'Paused'
-        : isPulling
-          ? 'Downloading now'
-          : queuedCount > 0
-            ? `${queuedCount} queued · ${formatGb(diskGuard.queuedGb)}`
-            : 'No downloads queued';
-  const queuePreviewText = visibleQueuePreview.map((row) => row.displayName).join(', ');
-  const queueHelperText = isPullCancelRequested
-    ? `Stopping ${pullingModel ?? 'the current Ollama pull'} and clearing the queue.`
-    : isPullPauseRequested
-      ? `Pausing ${pullingModel ?? 'the current model'} and keeping it queued.`
-      : isPullPaused
-        ? 'Paused downloads stay queued. Start Download resumes through Ollama cached layers when possible.'
-        : isPulling
-          ? `Pulling ${pullingModel ?? 'the current model'} through Ollama. Pause keeps it queued; Cancel clears the queue.`
-          : queuedCount > 0
-            ? `Ready to download ${queuePreviewText || 'queued models'}${hiddenQueueCount > 0 ? ` and ${hiddenQueueCount} more` : ''}.`
-            : 'Use Get Model on a contestant to stage a download.';
-  const visibleRows = useMemo(() => {
-    // Same predicates the chip counts use, so a chip can never promise rows the
-    // table does not then show.
-    const filteredRows = rows.filter(
-      (row) => passesQuery(row) && passesDeveloper(row) && passesQuick(row) && passesTask(row),
-    );
-
-    return sortModelRows(filteredRows, sortKey, sortDirection, queuedModelIds, modelScores, benchmarkByModel);
-  }, [benchmarkByModel, modelScores, passesQuery, passesDeveloper, passesQuick, passesTask, queuedModelIds, rows, sortDirection, sortKey]);
-  // Say what each number counts — the catalog total, the installed count, and the
-  // VRAM-fit count are different measures and read as contradictory when all three
-  // are just "N models".
-  const modelCountLabel = query || quickFilter !== 'all' || taskFilter || activeDeveloperFilter !== 'all'
-    ? `${visibleRows.length} of ${rows.length} shown`
-    : `${rows.length} in catalog`;
-  const vramLabel = vramGb > 0 ? `${formatGb(vramGb)} VRAM` : 'detected VRAM';
-  const activeQuickFilter = quickFilters.find((filter) => filter.id === quickFilter);
-  const activeDeveloperLabel = activeDeveloperFilter === 'all'
-    ? null
-    : developerFilterOptions.find((option) => option.id === activeDeveloperFilter)?.label ?? activeDeveloperFilter;
-  const activeTaskLabel = taskFilter ? TASK_FILTER_CHIPS.find((chip) => chip.id === taskFilter)?.label ?? taskFilter : null;
-  const activeFilterSummary = [
-    quickFilter !== 'all' ? activeQuickFilter?.label : null,
-    activeDeveloperLabel,
-    activeTaskLabel,
-  ].filter(Boolean).join(' · ');
-  const activeFilterCount = [
-    quickFilter !== 'all',
-    activeDeveloperFilter !== 'all',
-    Boolean(taskFilter),
-  ].filter(Boolean).length;
-
-  const changeSort = (nextKey: ModelSortKey) => {
-    if (nextKey === sortKey) {
-      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
-      return;
-    }
-
-    setSortKey(nextKey);
-    setSortDirection(nextKey === 'name' ? 'asc' : 'desc');
-  };
-
-  return (
-    <section className={active ? 'panel model-panel panel-focused' : 'panel model-panel'}>
-      <header
-        className="model-hub-header"
-        style={{ backgroundImage: `url(${robotContestantWall})` }}
-        aria-label="Models"
-      >
-        <div className="model-hub-header-copy">
-          <h2>Models</h2>
-          <em>{vramSafeCount} models look realistic for {vramLabel}. Test one model or run Speed Dating from here.</em>
-        </div>
-        <div className="model-hub-header-side">
-          <span>{modelCountLabel}</span>
-          <button type="button" className="mini-button" onClick={onRefresh}>
-            <RefreshCw aria-hidden="true" />
-            Refresh
-          </button>
-        </div>
-      </header>
-      <div className="cabinet-body">
-      <div className="cabinet-main">
-      {installedModelNames.size === 0 && isDesktopRuntime && (
-        <FirstModelWizard vramGb={vramGb} onQueueModel={(modelId) => {
-          const row = rows.find((r) => r.id === modelId || r.displayName === modelId);
-          if (row) onQueueModel(row);
-        }} />
-      )}
-      <div className="model-tools">
-        <label className="model-search">
-          <Search aria-hidden="true" />
-          <span className="sr-only">Search models</span>
-          <input
-            type="search"
-            value={modelQuery}
-            onChange={(event) => setModelQuery(event.target.value)}
-            placeholder="Search models by name, strength, size, or status..."
-            aria-label="Search models"
-          />
-          {modelQuery && (
-            <button type="button" onClick={() => setModelQuery('')} aria-label="Clear model search">
-              <X aria-hidden="true" />
-            </button>
-          )}
-        </label>
-        <span className="model-sort-status advanced-only">
-          Sort: {getModelSortLabel(sortKey)} / {sortDirection === 'asc' ? 'Asc' : 'Desc'}
-        </span>
-        <details className="model-filter-menu">
-          <summary aria-label="Open model filters">
-            <SlidersHorizontal aria-hidden="true" />
-            <span>Filters</span>
-            <em>{activeFilterCount > 0 ? `${activeFilterCount} active` : 'Default'}</em>
-            <ChevronDown aria-hidden="true" />
-          </summary>
-          <div className="model-filter-tray">
-            <div className="model-filter-tray-head">
-              <span>{activeFilterSummary || 'All model filters are available here.'}</span>
-              <button
-                type="button"
-                className="model-filter-reset"
-                onClick={() => {
-                  setQuickFilter('all');
-                  setDeveloperFilter('all');
-                  setTaskFilter(null);
-                }}
-                disabled={activeFilterCount === 0}
-              >
-                Reset
-              </button>
-            </div>
-            <div className="model-quick-filters" aria-label="Model quick filters">
-              {quickFilters.map((filter) => (
-                <button
-                  key={filter.id}
-                  type="button"
-                  className={quickFilter === filter.id ? 'active' : ''}
-                  onClick={() => setQuickFilter(filter.id)}
-                  aria-pressed={quickFilter === filter.id}
-                >
-                  <span>{filter.label}</span>
-                  <em>{filter.count}</em>
-                </button>
-              ))}
-            </div>
-            <div className="model-task-filters model-developer-filters" aria-label="Filter by developer">
-              <span className="model-task-filters-label">By:</span>
-              <button
-                type="button"
-                className={activeDeveloperFilter === 'all' ? 'active' : ''}
-                onClick={() => setDeveloperFilter('all')}
-                aria-pressed={activeDeveloperFilter === 'all' ? 'true' : 'false'}
-              >
-                All
-                <em>{rows.length}</em>
-              </button>
-              {developerFilterOptions.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  className={activeDeveloperFilter === option.id ? 'active' : ''}
-                  onClick={() => setDeveloperFilter(activeDeveloperFilter === option.id ? 'all' : option.id)}
-                  aria-pressed={activeDeveloperFilter === option.id ? 'true' : 'false'}
-                  title={`Show models by ${option.label}`}
-                >
-                  {option.label}
-                  <em>{option.count}</em>
-                </button>
-              ))}
-            </div>
-            <div className="model-task-filters advanced-only" aria-label="Filter by use case">
-              <span className="model-task-filters-label">For:</span>
-              {offerableTaskFilters.map((chip) => (
-                <button
-                  key={chip.id}
-                  type="button"
-                  className={taskFilter === chip.id ? 'active' : ''}
-                  onClick={() => setTaskFilter(taskFilter === chip.id ? null : chip.id)}
-                  aria-pressed={taskFilter === chip.id ? 'true' : 'false'}
-                >
-                  {chip.label}
-                  <em>{taskFilterCounts[chip.id] ?? 0}</em>
-                </button>
-              ))}
-            </div>
-            {quickFilter === 'fits-vram' && (
-              <div className="model-filter-note">
-                <ShieldCheck aria-hidden="true" />
-                <span>Showing {vramSafeCount} rig picks for {vramLabel}, including close fits. Models too big for your VRAM stay hidden unless you show all.</span>
-                <button type="button" onClick={() => setQuickFilter('all')}>Show all</button>
-              </div>
-            )}
-            {GENERATION_FILTERS.includes(taskFilter as string) && !comfyFolderSet && (
-              <div className="model-filter-note">
-                <ShieldCheck aria-hidden="true" />
-                {/* Shown where the Download buttons are, not buried in
-                    Settings: this is the moment someone finds out these models
-                    need something they may not have. */}
-                <span>
-                  These run on ComfyUI, a separate free program RigMatch does not install.
-                  Once it is running, point RigMatch at its folder in Settings and these become
-                  one-click downloads.
-                </span>
-                <button type="button" onClick={() => void onOpenComfyHelp()}>What is ComfyUI?</button>
-              </div>
-            )}
-            {CAPABILITY_ONLY_FILTERS.includes(taskFilter as string) && (
-              <div className="model-filter-note">
-                <ShieldCheck aria-hidden="true" />
-                {/* Now counts the library's own listing as well as installed
-                    models, but that listing returns only its top twenty per
-                    capability — /search does not paginate. So the number is
-                    still a floor, just a far less misleading one than
-                    "whatever I happen to have downloaded". */}
-                <span>
-                  Counts what your provider confirms plus what the Ollama library
-                  lists, which is its top twenty for this skill. Others may have it
-                  and not be listed — installing one always settles it.
-                </span>
-              </div>
-            )}
-          </div>
-        </details>
-      </div>
-      <ScoreLegend />
-      {shortlistedCount >= 5 && (
-        <div className="lineup-full-banner" role="status">
-          <span>⚡ Speed Dating lineup is full — 5/5 contestants selected. Remove one to swap in another.</span>
-        </div>
-      )}
-      <div className="table-wrap model-table">
-        <table>
-          <colgroup>
-            {colWidths.map((w, i) => (hidePopularity && i === 6 ? null : <col key={i} style={{ width: w }} />))}
-            <col />
-          </colgroup>
-          <thead>
-            <tr>
-              <SortableModelHeader label="Model" sortName="name" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(0, e)} />
-              <SortableModelHeader label="Size" sortName="size" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(1, e)} />
-              <SortableModelHeader label="Good For" sortName="skill" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(2, e)} />
-              <SortableModelHeader label="By" sortName="origin" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(3, e)} />
-              <SortableModelHeader label="Status" sortName="status" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(4, e)} />
-              <SortableModelHeader label="Match" sortName="score" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(5, e)} />
-              {!hidePopularity && (
-                <SortableModelHeader
-                  label={hasAnyPullData ? 'Popularity' : 'Speed'}
-                  sortName={hasAnyPullData ? 'pulls' : 'speed'}
-                  sortKey={sortKey}
-                  direction={sortDirection}
-                  onSort={changeSort}
-                  onResizeStart={(e) => handleColResizeStart(6, e)}
-                />
-              )}
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleRows.map((row) => {
-              const selected = selectedModel === row.displayName || selectedModel === row.id;
-              const installed = installedModelNames.has(row.displayName) || row.installed;
-              const queued = queuedModelIds.has(row.displayName);
-              const rowPullProgress = pullProgressByModel[row.displayName];
-              const isPullingRow = pullingModel === row.displayName;
-              const shortlisted = shortlistIds.has(row.displayName);
-              const origin = getModelOrigin(row.displayName);
-              const sizeRisk = getSizeRisk(row.sizeGb);
-              const statusLabel = getModelStatusLabel(row, queued);
-              const score = getModelScore(row, modelScores);
-              // Look up with the normalized-key helper: benchmarkByModel is keyed
-              // by normalizeModelKey, so a raw displayName misses on any non-lowercase name.
-              const rowBenchmark = getBenchmarkForModel(benchmarkByModel, row.displayName, row);
-              const isNewModel = newModelIds.has(getModelNewsId(row));
-              const goodForTags = getModelGoodForTags(row);
-              const hardwareFit = getHardwareFit(row, vramGb);
-              const platformFit = getPlatformFit(row.displayName, platform);
-              const speedDateLineupFullForRow = shortlistedCount >= 5;
-              const canJoinSpeedDate = platformFit.compatible && hardwareFit.recommend;
-              const canChangeSpeedDateSlot = canJoinSpeedDate && (shortlisted || !speedDateLineupFullForRow);
-              const speedDateSlotLabel = shortlisted
-                ? 'Selected'
-                : !platformFit.compatible
-                  ? 'OS Only'
-                  : !hardwareFit.recommend
-                  // Unknown-size models aren't "too big" — we just can't verify the
-                  // footprint yet. Say so instead of falsely calling them too big.
-                  ? (hardwareFit.tone === 'unknown' ? 'Size unknown' : 'Too Big')
-                  : speedDateLineupFullForRow
-                    ? '+ Speed Date'
-                    : 'Add to Speed Dating';
-              const speedDateSlotTitle = !platformFit.compatible
-                ? platformFit.reason
-                : !hardwareFit.recommend
-                ? hardwareFit.detail
-                : shortlisted
-                  ? installed
-                    ? `Remove ${row.displayName} from Speed Dating`
-                    : `In lineup — download ${row.displayName} before running the test. Click to remove.`
-                  : speedDateLineupFullForRow
-                    ? 'Speed Dating lineup is full. Remove one contestant from the lineup first.'
-                    : installed
-                      ? `Add ${row.displayName} to Speed Dating`
-                      : `Add ${row.displayName} to lineup — download it before starting the test`;
-              const speedDateSlotAriaLabel = shortlisted
-                ? `Remove ${row.displayName} from Speed Dating`
-                : canJoinSpeedDate
-                  ? `Add ${row.displayName} to Speed Dating`
-                  : !platformFit.compatible
-                    ? `${row.displayName} is not available for Speed Dating on this operating system`
-                    : `${row.displayName} is too large for Speed Dating on this computer`;
-              const rowClassName = [
-                selected ? 'selected' : '',
-                hardwareFit.tone === 'out-of-league' ? 'out-of-league' : '',
-              ].filter(Boolean).join(' ');
-              const showDownloadProgress = !installed && (queued || isPullingRow || isVisiblePullProgress(rowPullProgress));
-              return (
-                <tr
-                  key={row.id}
-                  className={rowClassName}
-                  onDoubleClick={() => { onSelect(row.displayName); onOpenTopPick(); }}
-                  title="Double-click to open profile"
-                >
-                  <td>
-                    <button type="button" className="model-name-button" onClick={() => onSelect(row.displayName)}>
-                      <AvatarBust generationKind={row.generationKind} model={row.displayName} size="tiny" />
-                      <span>
-                        {row.displayName}
-                        {isNewModel && <em className="model-new-sub">New</em>}
-                        {row.params && <em className="model-params-sub">{row.params}</em>}
-                        {row.installedModel?.quantization && (
-                          <em
-                            className="model-quant-sub"
-                            title={`Quantization ${row.installedModel.quantization}. A different quantization of the same model is a different contestant — different quality, VRAM and speed.`}
-                          >
-                            {row.installedModel.quantization}
-                          </em>
-                        )}
-                        {row.runtime === 'comfyui'
-                          ? <em className="model-provider-sub comfy">ComfyUI</em>
-                          : row.localProviderLabel && <em className="model-provider-sub">{row.localProviderLabel}</em>}
-                        {row.pulls != null && (
-                          <em className="model-pulls-sub" title={`${row.pulls.toLocaleString()} pulls on Ollama`}>{formatPullCount(row.pulls)} pulls</em>
-                        )}
-                      </span>
-                    </button>
-                    {isCloudModel(row.displayName) && (
-                      <span className="model-warning-tag" title="This model runs on remote servers — prompts leave your computer">☁ Cloud</span>
-                    )}
-                    {isEmbeddingModel(row.displayName) && (
-                      <span className="model-warning-tag" title="Embedding model — not for chat or text generation">Embed only</span>
-                    )}
-                    {!platformFit.compatible && (
-                      <span className="platform-tag" title={platformFit.reason}>macOS only</span>
-                    )}
-                  </td>
-                  <td title={platformFit.compatible ? `${sizeRisk.message} ${hardwareFit.detail}` : platformFit.reason}>
-                    <div className="size-fit-cell">
-                      <span className={`size-pill ${sizeRisk.tone}`}>
-                        {row.sizeGb ? `${row.sizeGb} GB` : '?'}
-                      </span>
-                      {platformFit.compatible
-                        // Strip the "· X GB" suffix — the size pill above already
-                        // shows it, and the duplicate forced an ellipsis.
-                        ? <span className={`fit-pill ${hardwareFit.tone}`}>{hardwareFit.label.replace(/\s*·.*$/, '')}</span>
-                        : <span className="fit-pill out-of-league">macOS Only</span>
-                      }
-                    </div>
-                  </td>
-                  <td className="good-for-cell" title={goodForTags.join(', ')}>
-                    <div className="good-for-tags">
-                      {goodForTags.map((tag) => (
-                        <span key={tag} className="good-for-chip">{tag}</span>
-                      ))}
-                    </div>
-                    {isUncensoredModel(row.displayName) && (
-                      <span className="uncensored-badge" title="Uncensored / unrestricted model">unrestricted</span>
-                    )}
-                  </td>
-                  <td title={`${row.publisher ?? origin.organization} · ${origin.country}`}>
-                    <span className={`origin-pill origin-${origin.family}`}>{row.publisher ?? origin.organization}</span>
-                  </td>
-                  <td>
-                    <ModelStatusPill installed={installed} queued={queued} label={statusLabel} />
-                  </td>
-                  <td>
-                    <ModelScorePill score={score} />
-                  </td>
-                  {!hidePopularity && (
-                    <td className="speed-cell">
-                      <div className="speed-pop-cell">
-                        {rowBenchmark?.avgTokensPerSecond != null && (
-                          <span className="speed-pill tested">{Math.round(rowBenchmark.avgTokensPerSecond)} tok/s</span>
-                        )}
-                        {hasAnyPullData ? (
-                          <PopularityMeter pulls={row.pulls} />
-                        ) : rowBenchmark?.avgTokensPerSecond == null && (
-                          <span className="speed-untested" title="Run a test to measure this model's speed on this computer">Not tested</span>
-                        )}
-                      </div>
-                    </td>
-                  )}
-                  <td className={showDownloadProgress ? 'action-cell has-download-progress' : 'action-cell'}>
-                    <div className="row-actions">
-                      {/* A checkpoint has no chat endpoint, no Ollama entry and
-                          no Match score. Offering Test, Chat, Speed Dating or
-                          "delete from Ollama" on one is offering four buttons
-                          that cannot work — the Lab is where these are run. */}
-                      {row.runtime === 'comfyui' ? (
-                        <>
-                          {row.installed ? (
-                            <button
-                              type="button"
-                              className="mini-button"
-                              onClick={() => onOpenLab()}
-                              title={`Try ${row.displayName} in the ${row.generationKind === 'video' ? 'Video' : 'Image'} Lab`}
-                            >
-                              <Play aria-hidden="true" />
-                              <span>Open Lab</span>
-                            </button>
-                          ) : (
-                            /* Without a ComfyUI folder there is nowhere to put
-                               the file, so Download cannot work — and it used to
-                               be offered anyway, queue silently, and sit at
-                               "Queued" forever. Send people to the setting that
-                               unblocks it instead of to a dead end. The existing
-                               guidance about this lived only under the
-                               imagegen/videogen filters, so anyone who found the
-                               row by searching never saw it. */
-                            !comfyFolderSet ? (
-                              <button
-                                type="button"
-                                className="mini-button"
-                                onClick={() => void onOpenComfyHelp()}
-                                title={`${row.displayName} installs into ComfyUI. RigMatch needs to know where ComfyUI is before it can download anything.`}
-                              >
-                                <Settings aria-hidden="true" />
-                                <span>Set up ComfyUI</span>
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="mini-button"
-                                onClick={() => onQueueModel(row)}
-                                title={`Queue ${row.displayName} — ${row.sizeGb} GB into ComfyUI`}
-                              >
-                                <Download aria-hidden="true" />
-                                <span>{queued ? 'Queued' : 'Download'}</span>
-                              </button>
-                            )
-                          )}
-                        </>
-                      ) : (
-                        <>
-                      <button
-                        type="button"
-                        className={shortlisted ? 'slot-button speed-date-row-button active' : 'slot-button speed-date-row-button'}
-                        onClick={() => onToggleShortlist(row)}
-                        disabled={!canChangeSpeedDateSlot}
-                        title={speedDateSlotTitle}
-                        aria-label={speedDateSlotAriaLabel}
-                      >
-                        <span>{speedDateSlotLabel}</span>
-                      </button>
-                      {installed ? (
-                        <>
-                          {/* "Pick as top model" lives in the detail panel, not on every
-                              row — seven repeated bright buttons out-shouted the actual
-                              primary actions while being the least-used one. */}
-                          <button
-                            type="button"
-                            className={`mini-button score-row-button${!hardwareFit.recommend ? ' warn' : ''}`}
-                            onClick={() => onScoreModel(row)}
-                            disabled={isBenchmarking}
-                            title={hardwareFit.recommend ? `Test ${row.displayName} on this computer` : hardwareFit.tone === 'unknown' ? `⚠ Size unknown — RigMatch can't gauge fit yet, test anyway?` : `⚠ Too big for your VRAM — will be slow, test anyway?`}
-                          >
-                            <Gauge aria-hidden="true" />
-                            Test
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-action chat-model-button"
-                            onClick={() => onOpenModelChat(row.displayName)}
-                            title={`Chat with ${row.displayName}`}
-                            aria-label={`Chat with ${row.displayName}`}
-                          >
-                            <MessageSquare aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-action delete-model-button"
-                            onClick={() => onDeleteModel(row)}
-                            disabled={isBenchmarking || isDeletingModel || row.localProvider === 'lm-studio'}
-                            title={row.localProvider === 'lm-studio' ? 'Manage LM Studio models in LM Studio' : `Delete ${row.displayName} from Ollama`}
-                            aria-label={row.localProvider === 'lm-studio' ? `${row.displayName} is managed in LM Studio` : `Delete ${row.displayName} from Ollama`}
-                          >
-                            <Trash2 aria-hidden="true" />
-                          </button>
-                          {score && (
-                            <button
-                              type="button"
-                              className="icon-action score-clear-button"
-                              onClick={() => onClearScore(row.displayName)}
-                              title={`Clear ${row.displayName}'s saved score — the model stays installed`}
-                              aria-label={`Clear ${row.displayName}'s saved score`}
-                            >
-                              <Eraser aria-hidden="true" />
-                            </button>
-                          )}
-                          <ModelDemoChips model={row.displayName} label="" className="inline" />
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          className={queued ? 'mini-button queued download-row-button' : `mini-button outline download-row-button${!hardwareFit.recommend ? ' warn' : ''}`}
-                          onClick={() => onQueueModel(row)}
-                          disabled={!queued && !platformFit.compatible}
-                          title={!platformFit.compatible ? platformFit.reason : !hardwareFit.recommend ? (hardwareFit.tone === 'unknown' ? `Size unknown — download to find out the footprint?` : `⚠ Too big for your VRAM — download anyway?`) : `${queued ? 'Remove from queue' : `Get ${row.displayName}`}: ${row.sizeGb ? formatGb(row.sizeGb) : 'unknown size'}`}
-                          aria-label={!platformFit.compatible ? platformFit.reason : queued ? `Remove ${row.displayName} from the download queue` : `Get ${row.displayName}`}
-                        >
-                          <span>{!platformFit.compatible ? 'macOS Only' : queued ? 'Remove' : `Get ${getQueueChipModelName(row.displayName)}`}</span>
-                        </button>
-                      )}
-                        </>
-                      )}
-                    </div>
-                    {showDownloadProgress && (
-                      <DownloadProgressInline
-                        model={row.displayName}
-                        queued={queued}
-                        isActive={isPullingRow}
-                        isStopping={isPullCancelRequested && isPullingRow}
-                        progress={rowPullProgress}
-                        onCancel={() => (isPullingRow ? onCancelQueue() : onQueueModel(row))}
-                      />
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-            {visibleRows.length === 0 && (
-              <tr className="empty-row">
-                <td colSpan={hidePopularity ? 7 : 8}>
-                  <div className="table-empty-state">
-                    <strong>No contestants match these filters</strong>
-                    <span>Clear the search or show the full model pool.</span>
-                    <button
-                      type="button"
-                      className="mini-button outline"
-                      onClick={() => {
-                        setModelQuery('');
-                        setQuickFilter('all');
-                      }}
-                    >
-                      Show All
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      <div className="model-footer">
-        <DiskGuard guard={diskGuard} />
-        <div className="pull-queue" aria-live="polite">
-          <div className="queue-status-copy">
-            <span>Download Queue</span>
-            <strong>{queueStatusLabel}</strong>
-            <em>{queueHelperText}</em>
-          </div>
-          <div className="queue-chip-list" aria-label="Queued downloads">
-            {isPulling && pullingModel && (
-              <span
-                className={isPullCancelRequested ? 'queue-chip stopping' : isPullPauseRequested ? 'queue-chip paused' : 'queue-chip active'}
-                title={pullingModel}
-              >
-                <RefreshCw aria-hidden="true" />
-                {getQueueChipModelName(pullingModel)}
-              </span>
-            )}
-            {visibleQueuePreview.map((row) => (
-              <span key={row.displayName} className="queue-chip" title={row.displayName}>
-                {getQueueChipModelName(row.displayName)}
-              </span>
-            ))}
-            {hiddenQueueCount > 0 && (
-              <span className="queue-chip muted">+{hiddenQueueCount} more</span>
-            )}
-            {queuedCount === 0 && !isPulling && (
-              <span className="queue-chip muted">Empty</span>
-            )}
-          </div>
-          <div className="queue-actions">
-            <button
-              type="button"
-              className={queuedCount > 0 || isPulling ? 'primary-button compact' : 'mini-button outline'}
-              onClick={onPullQueued}
-              disabled={queuedCount === 0 || isPulling}
-            >
-              <Download aria-hidden="true" />
-              {isPulling ? 'Downloading' : isPullPaused ? 'Resume Download' : queuedCount > 0 ? 'Start Download' : 'Download'}
-            </button>
-            {isPulling && (
-              <button
-                type="button"
-                className="mini-button outline queue-pause-button"
-                onClick={onPauseQueue}
-                disabled={isPullPauseRequested || isPullCancelRequested}
-                title="Pause the active Ollama pull and keep it in the queue"
-              >
-                <Pause aria-hidden="true" />
-                {isPullPauseRequested ? 'Pausing' : 'Pause'}
-              </button>
-            )}
-            {(queuedCount > 0 || isPulling) && (
-              <button
-                type="button"
-                className="mini-button outline queue-cancel-button"
-                onClick={onCancelQueue}
-                disabled={isPullCancelRequested}
-                title={isPulling ? 'Cancel the active Ollama pull and clear queued downloads' : 'Cancel all queued downloads'}
-              >
-                <X aria-hidden="true" />
-                {isPullCancelRequested ? 'Canceling' : isPulling ? 'Cancel Queue' : 'Cancel Queue'}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-      </div>
-      <div className="cabinet-sidebar">
-        <SelectedContestantCard
-          row={selectedRow}
-          profile={selectedProfile}
-          score={selectedScore}
-          vramGb={vramGb}
-          installed={selectedInstalled}
-          queued={selectedQueued}
-          shortlisted={selectedShortlisted}
-          speedDateLineupFull={speedDateLineupFull}
-          pullProgress={selectedPullProgress}
-          isPulling={selectedPulling}
-          isPullStopping={Boolean(isPullCancelRequested && selectedPulling)}
-          isBenchmarking={isBenchmarking}
-          onChooseModel={onChooseModel}
-          onScoreModel={onScoreModel}
-          onQueueModel={onQueueModel}
-          onCancelQueue={onCancelQueue}
-          onToggleShortlist={onToggleShortlist}
-          onOpenSpeedDate={onOpenSpeedDate}
-          modelNotes={modelNotes}
-          onSaveModelNote={onSaveModelNote}
-          scoreTrend={scoreTrend}
-          scoreDeltas={scoreDeltas}
-          onQuickCheck={onQuickCheck}
-        />
-      </div>
-      </div>
-    </section>
-  );
 }
 
 // @ts-expect-error Retained prototype command deck is intentionally not mounted in the 0.1.x UI.
@@ -8072,46 +6938,6 @@ function _ModelProfileMini({
         </div>
       ))}
     </div>
-  );
-}
-
-function SortableModelHeader({
-  label,
-  sortName,
-  sortKey,
-  direction,
-  onSort,
-  onResizeStart,
-}: {
-  label: string;
-  sortName: ModelSortKey;
-  sortKey: ModelSortKey;
-  direction: SortDirection;
-  onSort: (sortName: ModelSortKey) => void;
-  onResizeStart?: (e: React.MouseEvent) => void;
-}) {
-  const active = sortName === sortKey;
-
-  return (
-    <th aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
-      <button
-        type="button"
-        className={active ? 'sort-header active' : 'sort-header'}
-        onClick={() => onSort(sortName)}
-      >
-        <span>{label}</span>
-        <ArrowUpDown aria-hidden="true" />
-      </button>
-      {onResizeStart && (
-        <span
-          className="col-resize-handle"
-          onMouseDown={onResizeStart}
-          onClick={(e) => e.stopPropagation()}
-          role="separator"
-          aria-label={`Resize ${label} column`}
-        />
-      )}
-    </th>
   );
 }
 
@@ -9801,21 +8627,6 @@ function FlirtTestAnimation({
 }
 
 
-
-function DiskGuard({ guard }: { guard: ReturnType<typeof getDiskGuard> }) {
-  return (
-    <div className={`disk-guard ${guard.tone}`}>
-      <div>
-        <span>Storage</span>
-        <strong>{guard.summary}</strong>
-      </div>
-      <div className="disk-bar" aria-label={guard.summary}>
-        <i style={{ width: `${guard.percent}%` }} />
-      </div>
-      <em>{guard.message}</em>
-    </div>
-  );
-}
 
 
 export default App;
