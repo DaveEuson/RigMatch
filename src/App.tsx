@@ -2515,7 +2515,11 @@ function App() {
     }).slice(0, 5);
 
     if (ranked.length === 0) {
-      tellUser('No models fit this computer yet — run the computer check first, or download one from the list.');
+      // "chat models", not "models": this ranks Speed Dating contestants, and
+      // image and video makers are excluded by design. Saying "no models fit"
+      // turns a deliberate filter into a claim about the hardware — the same
+      // mistake that told people this PC could not make video.
+      tellUser('No chat models fit this computer yet — run the computer check first, or download one from the list.');
       return;
     }
 
@@ -2607,7 +2611,8 @@ function App() {
     // removes but the download step's count does not.
     if (runnableRows.length < MIN_CONTESTANTS) {
       const why = runnableRows.length === 0
-        ? 'No installed models can run on this computer yet. Download at least two that fit.'
+        // Scoped to chat models for the same reason as onChooseForMe above.
+        ? 'No installed chat models can run on this computer yet. Download at least two that fit.'
         : `Speed Dating needs at least ${MIN_CONTESTANTS} installed models that run on this computer.`;
       // Reported as a failed run rather than by clearing runProgress. Simple
       // Mode latches `awaitingRun` when it asks for a show and only releases it
