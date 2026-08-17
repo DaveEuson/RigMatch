@@ -1,8 +1,8 @@
 import type { ModelRow, NetworkHost, SystemProfile, TestedModelScore } from '../types';
-import { getFootprintFit, formatHistoryTime, type ModelProfile } from './modelCatalog';
-import { getModelOrigin } from './modelOrigins';
-import { formatGb } from './format';
-import { formatMatchScore } from './scoring';
+import { getFootprintFit, formatHistoryTime, type ModelProfile } from './modelCatalog.ts';
+import { getModelOrigin } from './modelOrigins.ts';
+import { formatGb } from './format.ts';
+import { formatMatchScore } from './scoring.ts';
 
 // The dating-show "OkCupid profile" copy for a model: pure content generators
 // that turn a model profile + score + rig into the playful sections and detail

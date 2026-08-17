@@ -14,6 +14,25 @@ const api = {
   abortPull: (progressId, reason) => ipcRenderer.invoke('ollama:abortPull', progressId, reason),
   deleteModel: (request) => ipcRenderer.invoke('ollama:deleteModel', request),
   runAdvancedGenerate: (request) => ipcRenderer.invoke('ollama:advancedGenerate', request),
+  // ComfyUI, the image-generation runtime. Separate from the Ollama calls
+  // above because it is a separate server with a different shape: submit a
+  // graph, poll, then fetch the image by name.
+  getComfyStatus: (baseUrl) => ipcRenderer.invoke('comfy:getStatus', baseUrl),
+  comfySubmit: (baseUrl, graph, clientId) => ipcRenderer.invoke('comfy:submit', baseUrl, graph, clientId),
+  comfyHistory: (baseUrl, promptId) => ipcRenderer.invoke('comfy:history', baseUrl, promptId),
+  comfyImage: (baseUrl, ref) => ipcRenderer.invoke('comfy:image', baseUrl, ref),
+  comfyInterrupt: (baseUrl, promptId) => ipcRenderer.invoke('comfy:interrupt', baseUrl, promptId),
+  comfyFree: (baseUrl) => ipcRenderer.invoke('comfy:free', baseUrl),
+  comfyPickFolder: () => ipcRenderer.invoke('comfy:pickFolder'),
+  comfyVerifyFolder: (folder, serverCheckpoints) => ipcRenderer.invoke('comfy:verifyFolder', folder, serverCheckpoints),
+  comfyLocateFolder: (baseUrl, serverCheckpoints) => ipcRenderer.invoke('comfy:locateFolder', baseUrl, serverCheckpoints),
+  comfyDownloadModel: (request) => ipcRenderer.invoke('comfy:downloadModel', request),
+  comfyAbortDownload: (progressId) => ipcRenderer.invoke('comfy:abortDownload', progressId),
+  onComfyDownloadProgress: (callback) => {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on('comfy:downloadProgress', listener);
+    return () => ipcRenderer.removeListener('comfy:downloadProgress', listener);
+  },
   openRouterGenerate: (request) => ipcRenderer.invoke('judge:openRouterGenerate', request),
   abortAdvancedGenerate: (streamId) => ipcRenderer.invoke('ollama:abortAdvancedGenerate', streamId),
   cancelBenchmark: (progressId) => ipcRenderer.invoke('benchmark:cancel', progressId),

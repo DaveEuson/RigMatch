@@ -5,10 +5,10 @@
  * truth. Pure + browser storage only — no React.
  */
 
-import { ADVANCED_LAB_STORAGE_KEY } from './appConfig';
-import { extractHtmlDocument } from './labPreview';
-import { extractCodeBlock } from './codeChallenge';
-import { describeLabFailure } from './labScoring';
+import { ADVANCED_LAB_STORAGE_KEY } from './appConfig.ts';
+import { extractHtmlDocument } from './labPreview.ts';
+import { extractCodeBlock } from './codeChallenge.ts';
+import { describeLabFailure } from './labScoring.ts';
 
 /** A viewable thing a model produced during a skill test. */
 export type DemoArtifact = {
@@ -42,7 +42,7 @@ export type AdvancedLabCheck = {
 /** A stored skill-test result for one model + challenge. */
 export type AdvancedLabResult = {
   model: string;
-  challenge: 'app-builder' | 'image-generation' | 'image-recognition' | 'code' | 'listening';
+  challenge: 'app-builder' | 'image-generation' | 'video-generation' | 'image-recognition' | 'code' | 'listening';
   score: number;
   grade: string;
   elapsedMs: number;
@@ -50,6 +50,12 @@ export type AdvancedLabResult = {
   checks: AdvancedLabCheck[];
   completedAt: string;
   imageDataUrl?: string;
+  /**
+   * Where ComfyUI wrote the video, for a result that produced one. A reference
+   * rather than the bytes: a few seconds of footage is megabytes and
+   * localStorage would be full after a handful of runs.
+   */
+  videoRef?: { filename: string; subfolder: string; type: string };
   width?: number;
   height?: number;
   language?: string;
@@ -91,7 +97,9 @@ export function getModelDemoArtifacts(model: string): DemoArtifact[] {
     if (result.challenge === 'app-builder') {
       const html = extractHtmlDocument(result.response);
       if (html) out.push({ model, kind: 'app', html, judged: wasJudged(result), grade: result.grade, score: result.score });
-    } else if (result.challenge === 'image-generation' && result.imageDataUrl) {
+    } else if ((result.challenge === 'image-generation' || result.challenge === 'video-generation') && result.imageDataUrl) {
+      // A video result's viewable artifact is its judged frame, so it rides the
+      // image path; the label below still says which lab produced it.
       out.push({ model, kind: 'image', imageDataUrl: result.imageDataUrl, grade: result.grade, score: result.score });
     } else if (result.challenge === 'image-recognition') {
       // Kept even with no description: a failed vision run is exactly what a
@@ -108,4 +116,4 @@ export function getModelDemoArtifacts(model: string): DemoArtifact[] {
 // Rubrics and grading live in labScoring.ts, a leaf module with no assets or
 // storage so the grading logic stays directly testable. Re-exported so existing
 // importers are unaffected.
-export { describeLabFailure, getAdvancedLabGrade } from './labScoring';
+export { describeLabFailure, getAdvancedLabGrade } from './labScoring.ts';

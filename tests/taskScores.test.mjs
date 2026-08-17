@@ -7,6 +7,7 @@ import {
   bestModelForTask,
   findTaskWinners,
   isVerdictWorthy,
+  needsJudge,
   summarizeTaskScores,
 } from '../src/lib/taskScores.ts';
 
@@ -34,14 +35,18 @@ test('per-question scores are grouped by what the question tested', () => {
     prompt('coding', 90), prompt('coding', 80), prompt('coding', 70),
     prompt('assistant', 60), prompt('assistant', 40),
     prompt('truth', 55),
-    // json and format are both "does it do as it is told", so they count together.
+    // json crowns the tools goal; format alone measures instruction-following.
     prompt('json', 100), prompt('format', 80),
   ]);
 
-  assert.deepEqual(scores.coding, { score: 80, questions: 3 });
-  assert.deepEqual(scores.chat, { score: 50, questions: 2 });
-  assert.deepEqual(scores.facts, { score: 55, questions: 1 });
-  assert.deepEqual(scores.instructions, { score: 90, questions: 2 });
+  // `graded` counts answers something could actually mark; these fixtures
+  // carry no scoredBy, which is how an older run looks, and those are trusted
+  // rather than retroactively doubted.
+  assert.deepEqual(scores.coding, { score: 80, questions: 3, graded: 3 });
+  assert.deepEqual(scores.chat, { score: 50, questions: 2, graded: 2 });
+  assert.deepEqual(scores.facts, { score: 55, questions: 1, graded: 1 });
+  assert.deepEqual(scores.tools, { score: 100, questions: 1, graded: 1 });
+  assert.deepEqual(scores.instructions, { score: 80, questions: 1, graded: 1 });
 });
 
 test('runs from before question types were kept produce nothing, not a guess', () => {
@@ -60,11 +65,11 @@ test('questions the model never answered do not count against its ability', () =
     prompt('coding', 0, 'no-response'),
     prompt('coding', 0, 'failed'),
   ]);
-  assert.deepEqual(scores.coding, { score: 90, questions: 3 });
+  assert.deepEqual(scores.coding, { score: 90, questions: 3, graded: 3 });
 
   // A truncated answer is a real answer that ran out of room, so it counts.
   const truncated = summarizeTaskScores([prompt('format', 40, 'truncated'), prompt('format', 60)]);
-  assert.deepEqual(truncated.instructions, { score: 50, questions: 2 });
+  assert.deepEqual(truncated.instructions, { score: 50, questions: 2, graded: 2 });
 });
 
 test('a single question is not a verdict', () => {
@@ -131,14 +136,15 @@ test('every benchmark question type is covered by exactly one group', () => {
   // A type belonging to no group would be silently dropped; one belonging to
   // two would be double-counted.
   const seen = TASK_GROUPS.flatMap((g) => g.questionTypes);
-  assert.deepEqual([...seen].sort(), ['assistant', 'coding', 'format', 'json', 'truth']);
+  assert.deepEqual([...seen].sort(), ['assistant', 'coding', 'format', 'json', 'truth', 'writing']);
   assert.equal(new Set(seen).size, seen.length, 'no question type in two groups');
 });
 
-test('the default ten-question run is too thin for most per-task verdicts', async () => {
+test('the default ten-question run is too thin for any per-task verdict', async () => {
   // A real product constraint, pinned so it is not discovered by a user. The
-  // default run asks two questions of each of the five types. Only
-  // instruction-following clears the bar, because json and format pool.
+  // default run asks two questions of each of the five types, and since json
+  // split out of instructions into its own tools group, no group reaches the
+  // three answers a verdict needs. Twenty questions is the honest minimum.
   const { DEFAULT_BENCHMARK_QUESTIONS } = await import('../src/benchmarkSuite.ts');
   const asResults = (questions) => questions.map((q) => ({
     id: q.id, label: q.label, type: q.type, prompt: q.prompt,
@@ -148,17 +154,45 @@ test('the default ten-question run is too thin for most per-task verdicts', asyn
 
   const ten = summarizeTaskScores(asResults(DEFAULT_BENCHMARK_QUESTIONS));
   assert.equal(ten.coding.questions, 2);
-  assert.equal(ten.instructions.questions, 4, 'json and format pool together');
+  assert.equal(ten.tools.questions, 2, 'json stands alone as the tools group');
+  assert.equal(ten.instructions.questions, 2, 'format alone measures instruction-following');
   assert.deepEqual(
     Object.entries(ten).filter(([, v]) => isVerdictWorthy(v)).map(([k]) => k),
-    ['instructions'],
-    'at ten questions only instruction-following is worth calling',
+    [],
+    'at ten questions nothing is worth calling a verdict',
   );
 
-  // Twenty — the next level up — clears the bar for all four.
+  // Twenty — the next level up — clears the bar for all five.
   const twenty = summarizeTaskScores(asResults([...DEFAULT_BENCHMARK_QUESTIONS, ...DEFAULT_BENCHMARK_QUESTIONS]));
   assert.deepEqual(
     Object.entries(twenty).filter(([, v]) => isVerdictWorthy(v)).map(([k]) => k).sort(),
-    ['chat', 'coding', 'facts', 'instructions'],
+    ['chat', 'coding', 'facts', 'instructions', 'tools'],
   );
+});
+
+test('a score nothing could grade is not a verdict, however many answers', () => {
+  // The quiet version of the bug: chat answers are scored by character count
+  // when no judge is running, so "best for talking" went to the wordiest model.
+  // Enough answers is not enough — something has to have marked them.
+  const ungraded = { score: 88, questions: 6, graded: 0 };
+  assert.equal(isVerdictWorthy(ungraded), false);
+  assert.equal(needsJudge(ungraded), true, 'and the UI should offer the judge');
+
+  const graded = { score: 88, questions: 6, graded: 6 };
+  assert.equal(isVerdictWorthy(graded), true);
+  assert.equal(needsJudge(graded), false);
+
+  // Too few answers is a different problem, and not one the judge fixes.
+  assert.equal(needsJudge({ score: 90, questions: 1, graded: 0 }), false);
+});
+
+test('unjudged answers are counted out of graded, judged ones in', () => {
+  const mixed = summarizeTaskScores([
+    { ...prompt('assistant', 90), scoredBy: 'unjudged' },
+    { ...prompt('assistant', 80), scoredBy: 'unjudged' },
+    { ...prompt('assistant', 70), scoredBy: 'judge' },
+  ]);
+  assert.equal(mixed.chat.questions, 3);
+  assert.equal(mixed.chat.graded, 1, 'only the judged answer was actually marked');
+  assert.equal(isVerdictWorthy(mixed.chat), false, 'one real mark is not three');
 });

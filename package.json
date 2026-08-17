@@ -1,7 +1,7 @@
 {
   "name": "rigmatch-ai",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "packageManager": "npm@10.9.3",
   "description": "Find the best AI model your computer can run, 100% locally",
   "author": "Dave Euson <daveeuson@gmail.com>",
@@ -30,9 +30,15 @@
     "release:notes": "node scripts/build-release-notes.mjs",
     "release:notes:check": "node scripts/build-release-notes.mjs --check",
     "test": "node scripts/run-tests.mjs",
+    "typecheck": "tsc -b",
     "lint": "eslint .",
     "preview": "vite preview",
-    "pack:win:local": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& npm run build && npm run build:chat && npm run prepare:companions && electron-builder --dir --win --config.win.signAndEditExecutable=false"
+    "pack:win:local": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& npm run build && npm run build:chat && npm run prepare:companions && electron-builder --dir --win --config.win.signAndEditExecutable=false",
+    "sweep": "node scripts/release-sweep.mjs",
+    "sweep:net": "node scripts/release-sweep.mjs --net",
+    "gates": "node scripts/gate-download.mjs && node scripts/gate-provider.mjs",
+    "sweep:layout": "node scripts/responsive-sweep.mjs",
+    "sweep:shell": "node scripts/measure-shell.mjs"
   },
   "build": {
     "appId": "ai.rigmatch.app",

@@ -159,14 +159,47 @@ export function getErrorMessage(error: unknown) {
 }
 
 /**
- * Turn a few common raw Ollama runner failures into plain-language guidance
- * instead of a 500/stack-trace wall. Falls through to the original message.
+ * Turn common raw failures into plain-language guidance instead of a
+ * stack-trace wall. Falls through to the original message.
+ *
+ * Every rule here earns its place by being something a user actually saw: a
+ * disk-full pull surfaced Ollama's own `no space left on device` complete with
+ * a blob path, and a ComfyUI that died between the status probe and the run
+ * showed the raw Electron IPC wrapper. The original text is appended where it
+ * might still help someone diagnosing, but it never leads.
  */
 export function describeRunError(message: string): string {
   const lower = message.toLowerCase();
+
   if (lower.includes('mlx')) {
     return 'This looks like an Apple Silicon (macOS) model — it runs on Apple\'s MLX framework, which Ollama can\'t load on Windows or Linux. Image models like x/flux2 are macOS-only for now.';
   }
+
+  // Disk full, from Ollama's own writer or the OS.
+  if (lower.includes('no space left') || lower.includes('enospc') || lower.includes('not enough space')) {
+    return 'Your disk ran out of space partway through. Free some room — the Closet in Settings shows which models are taking the most — then start the download again. Partly-downloaded files are cleaned up automatically.';
+  }
+
+  // A tag that does not exist upstream, usually a typo or a renamed model.
+  if (lower.includes('file does not exist') || /\b404\b/.test(lower) || lower.includes('model not found') || lower.includes('pull model manifest')) {
+    return 'That model name was not found in the library. Check the spelling, or pick it from the Models list so the exact tag comes from there.';
+  }
+
+  // Nothing listening: the provider went away, or was never running.
+  if (lower.includes('econnrefused') || lower.includes('connection refused') || lower.includes('fetch failed')
+      || lower.includes('socket hang up') || lower.includes('econnreset')) {
+    return 'Nothing answered on that address. The program serving it — Ollama, LM Studio, or ComfyUI — is probably not running any more. Start it and try again.';
+  }
+
+  // Permission problems, most often an installer or a protected folder.
+  if (lower.includes('eperm') || lower.includes('eacces') || lower.includes('permission denied')) {
+    return 'Windows refused permission for that file. It is usually a folder that needs administrator rights, or an antivirus holding the file open. Try a different folder, or run the installer yourself.';
+  }
+
+  if (lower.includes('etimedout') || lower.includes('timeout')) {
+    return 'That took too long and was given up on. A slow or interrupted connection is the usual cause — trying again normally works.';
+  }
+
   return message;
 }
 
@@ -178,4 +211,17 @@ export function compareVersionStrings(a: string, b: string): number {
     if (diff !== 0) return diff;
   }
   return 0;
+}
+
+/**
+ * "1 contestant needs" / "3 contestants need".
+ *
+ * Pluralising the noun and leaving the verb behind produced "1 contestant need
+ * downloads" on the Models screen — the sort of line that makes a working app
+ * read as an unfinished one.
+ */
+export function countWithVerb(count: number, noun: string, singularVerb: string, pluralVerb: string): string {
+  return count === 1
+    ? `${count} ${noun} ${singularVerb}`
+    : `${count} ${noun}s ${pluralVerb}`;
 }

@@ -4,9 +4,9 @@ import type {
   NetworkHost,
   OllamaStatus,
   SystemProfile,
-} from './types';
-import { appendRuns, emptyRunHistory, type RunHardware, type RunHistory, type RunHistoryEntry } from './lib/runHistory';
-import { gradeForMatchScore } from './lib/scoring';
+} from './types.ts';
+import { appendRuns, emptyRunHistory, type RunHardware, type RunHistory, type RunHistoryEntry } from './lib/runHistory.ts';
+import { gradeForMatchScore } from './lib/scoring.ts';
 
 // ── Pre-scan defaults (desktop) ──────────────────────────────────────────────
 // The demo* values below are sample data for the browser preview. On desktop

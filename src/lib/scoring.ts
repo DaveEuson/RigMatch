@@ -1,12 +1,16 @@
-import type { BenchmarkResult, TestedModelScore } from '../types';
+import type { BenchmarkResult, ScoreRigStamp, TestedModelScore } from '../types';
 import { summarizeTaskScores } from './taskScores.ts';
 
 /**
  * Bump when the meaning of a saved score changes (weights, signals, or scale).
  * Scores tagged with an older version are flagged "Retest recommended" and are
  * excluded from category picks so stale calibration cannot crown a winner.
+ *
+ * v5: the json questions moved out of the pooled "instructions" task group
+ * into their own "tools" group. A v4 instructions score mixes two question
+ * kinds a v5 one does not, so the two cannot be ranked against each other.
  */
-export const CURRENT_SCORE_SCHEMA_VERSION = 4;
+export const CURRENT_SCORE_SCHEMA_VERSION = 5;
 
 /**
  * Relative weights that make up the 0–100 Match Score. They sum to 1.0.
@@ -68,7 +72,11 @@ export function calculatePreciseTotal(score: MatchScoreLike): number {
 }
 
 /** Convert a completed benchmark run into the persisted per-model score shape. */
-export function toTestedModelScore(result: BenchmarkResult, suiteName?: string): TestedModelScore {
+export function toTestedModelScore(
+  result: BenchmarkResult,
+  suiteName?: string,
+  rig?: ScoreRigStamp,
+): TestedModelScore {
   return {
     model: result.model,
     total: result.scores.total,
@@ -83,6 +91,7 @@ export function toTestedModelScore(result: BenchmarkResult, suiteName?: string):
     scoreSchemaVersion: CURRENT_SCORE_SCHEMA_VERSION,
     tokensPerSecond: result.avgTokensPerSecond,
     taskScores: summarizeTaskScores(result.prompts),
+    rig,
   };
 }
 
@@ -91,12 +100,52 @@ export function upsertModelScores(
   current: Record<string, TestedModelScore>,
   results: BenchmarkResult[],
   suiteName?: string,
+  rigForModel?: (model: string) => ScoreRigStamp | undefined,
 ): Record<string, TestedModelScore> {
   return results.reduce<Record<string, TestedModelScore>>((next, result) => {
-    const score = toTestedModelScore(result, suiteName);
+    const score = toTestedModelScore(result, suiteName, rigForModel?.(result.model));
     next[score.model] = score;
     return next;
   }, { ...current });
+}
+
+/**
+ * How a saved score has drifted from what is in front of the user now.
+ *
+ * 'model-changed' is the strongest claim — the digest proves the weights under
+ * this tag are not the weights that earned the number. 'hardware-changed'
+ * means the GPU or its VRAM differs from the stamp; scores are relative to a
+ * rig, so the number describes a computer that is no longer this one. A score
+ * with no stamp predates stamping and can claim neither — the schema-version
+ * badge already covers genuinely old scores.
+ */
+export type ScoreDrift = 'model-changed' | 'hardware-changed' | null;
+
+export function scoreDrift(
+  score: TestedModelScore,
+  current: { gpuModel?: string; vramGb?: number; modelDigest?: string },
+): ScoreDrift {
+  const stamp = score.rig;
+  if (!stamp) return null;
+  if (stamp.modelDigest && current.modelDigest && stamp.modelDigest !== current.modelDigest) {
+    return 'model-changed';
+  }
+  if (current.gpuModel && stamp.gpu && current.gpuModel !== stamp.gpu) {
+    return 'hardware-changed';
+  }
+  // VRAM shifts of a whole gigabyte mean a different card or a different
+  // sharing arrangement, not measurement jitter in the profiler.
+  if (typeof current.vramGb === 'number' && current.vramGb > 0 && Math.abs(current.vramGb - stamp.vramGb) >= 1) {
+    return 'hardware-changed';
+  }
+  return null;
+}
+
+/** The badge line for a drifted score, in words a user can act on. */
+export function scoreDriftLabel(drift: Exclude<ScoreDrift, null>): string {
+  return drift === 'model-changed'
+    ? 'Model updated since this score — retest'
+    : 'Scored on different hardware — retest';
 }
 
 /** True when a saved score was produced by an older scoring schema. */

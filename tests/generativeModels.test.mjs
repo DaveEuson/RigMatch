@@ -103,6 +103,9 @@ function loadCapabilityFns() {
     return src.slice(start, end + 2)
       .replace('export function', 'function')
       .replace(/\(row: CapabilityBearing\): boolean \{/, '(row) {')
+      // The signature can carry an intersection type — the annotation runs to
+      // the LAST "): boolean {" on the line, so match greedily.
+      .replace(/\(row: CapabilityBearing & .+\): boolean \{/, '(row) {')
       .replace(/\(row: CapabilityBearing\): string\[\] \| null \{/, '(row) {')
       .replace(/\(model: string\): boolean \{/, '(model) {');
   };

@@ -5,15 +5,15 @@ import {
   demoLmStudio,
   demoOllama,
   demoSystem,
-} from './sampleData';
-import { buildBenchmarkPromptPlan, normalizeBenchmarkQuestionCount } from './benchmarkSuite';
-import type { AdvancedGenerateProgress, AgentArcadeApi, BenchmarkProgressUpdate, PullProgressUpdate, UpdateChannel } from './types';
-import { calculatePreciseTotal, gradeForMatchScore } from './lib/scoring';
+} from './sampleData.ts';
+import { buildBenchmarkPromptPlan, normalizeBenchmarkQuestionCount } from './benchmarkSuite.ts';
+import type { AdvancedGenerateProgress, AgentArcadeApi, BenchmarkProgressUpdate, PullProgressUpdate, UpdateChannel } from './types.ts';
+import { calculatePreciseTotal, gradeForMatchScore } from './lib/scoring.ts';
 
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
 const RIGMATCH_RELEASES_URL = 'https://github.com/daveeuson/RigMatch/releases';
-const APP_VERSION = '0.5.0';
+const APP_VERSION = '0.6.0';
 
 // Sample App Builder output used to simulate token streaming in preview mode —
 // prose "reasoning" followed by a real single-file interactive canvas app.

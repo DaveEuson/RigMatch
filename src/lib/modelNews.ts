@@ -1,5 +1,5 @@
 import type { CatalogModel } from '../types';
-import { writeLocalJson } from './safeStorage';
+import { writeLocalJson } from './safeStorage.ts';
 
 export const MODEL_NEWS_STORAGE_KEY = 'rigmatch:model-news:v1';
 export const MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY = 'rigmatch:model-news-notifications:v1';

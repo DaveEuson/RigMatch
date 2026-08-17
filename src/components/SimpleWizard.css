@@ -64,7 +64,7 @@
 .sw-brand .global-mode-switch span {
   grid-column: 1 / -1;
   color: var(--gold);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: normal;
   text-align: left;
   padding-left: 3px;
@@ -840,6 +840,161 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 
 /* Beginner-clarity additions: safety line, card size badge, winner subtitle,
    and the collapsible raw benchmark prompt on Compare. */
+/* The "what is this even for" opener, above the scan headline. Sized between
+   the h2 and the muted body copy so it reads as the lead, not a caption. */
+.sw-setup-lede {
+  max-width: 60ch;
+  margin: 0 auto 2px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text);
+}
+/* A full lineup is a status, not an action. Sized and coloured to sit where
+   the Pick button was without impersonating it. */
+.sw-card-full {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: transparent;
+}
+/* Time remaining next to the question count on Compare. Quiet, because it is
+   a forecast that firms up as the run goes. */
+.sw-eta { margin-left: 6px; font-style: normal; color: var(--muted); }
+/* The full result of the show, under the winner. A table would read as data
+   to audit; this is a podium, so places and scores are what carry weight. */
+.sw-scoreboard {
+  width: min(720px, 100%);
+  margin: 22px auto 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sw-scoreboard ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sw-scoreboard li {
+  display: grid;
+  grid-template-columns: 24px 34px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.sw-scoreboard li.winner {
+  border-color: var(--gold);
+  background: rgba(240, 190, 90, 0.09);
+}
+.sw-place {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.sw-scoreboard li.winner .sw-place { color: var(--gold); }
+.sw-scoreboard img {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+.sw-scoreboard-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-weight: 600;
+}
+/* The raw tag stays available for anyone who wants to look the model up, but
+   never at the same weight as the name they chose it by. */
+.sw-scoreboard-name em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sw-scoreboard-score {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.sw-scoreboard-score em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.sw-scoreboard-note { margin: 2px 0 0; font-size: 12px; text-align: center; }
+
+@media (max-width: 620px) {
+  .sw-scoreboard li { grid-template-columns: 20px 28px 1fr auto; gap: 8px; padding: 7px 10px; }
+  .sw-scoreboard img { width: 28px; height: 28px; }
+}
+/* Live scores for the model currently answering.
+   The Compare panel stretches to fill the step, so its bottom third sat empty
+   for the whole run — on the one screen where the user is doing nothing but
+   waiting and wants to know how it is going. */
+.sw-answer-strip {
+  width: min(720px, 100%);
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sw-answer-strip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sw-answer-strip-head em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sw-answer-strip > p { margin: 0; font-size: 12px; }
+.sw-answer-strip ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sw-answer-strip li {
+  min-width: 34px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+/* Tone follows the podium colours already used on this screen, and never
+   carries meaning on colour alone — the number is always the number. */
+.sw-answer-strip li.good { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
+.sw-answer-strip li.fair { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+.sw-answer-strip li.poor { color: var(--muted); }
+
 .sw-setup-safety { font-size: 12px; margin-top: -10px; }
 .sw-card-size { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
 /* Note under the size line when one card stands in for several size variants. */
@@ -886,7 +1041,7 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 
 .sw-winner-share:hover {
   border-color: var(--gold);
-  background: rgba(239, 188, 90, 0.14);
+  background: rgba(var(--gold-rgb), 0.14);
 }
 
 .sw-winner-share svg { width: 15px; height: 15px; }
@@ -947,4 +1102,132 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   /* The 1px hover lift and press settle are deliberately left alone. They are
      an order of magnitude below anything that triggers motion sensitivity, and
      removing them would cost real feedback for no accessibility gain. */
+}
+
+/* The message channel Simple Mode never had. Advanced renders these in the
+   Ticker; without this the mode most beginners use is mute by construction. */
+.sw-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(var(--gold-rgb), 0.42);
+  border-radius: 12px;
+  background: rgba(var(--gold-rgb), 0.10);
+  color: var(--text);
+}
+
+.sw-notice svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--gold);
+}
+
+.sw-notice p {
+  flex: 1;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.sw-notice button {
+  flex: none;
+  padding: 4px 12px;
+  border: 1px solid rgba(var(--gold-rgb), 0.5);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gold);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sw-notice button:hover { background: rgba(var(--gold-rgb), 0.16); }
+
+/* ---------------------------------------------------------------------------
+   The Host as the explainer.
+
+   He is bigger and louder than he was, because he is now the answer to "what
+   does that mean" as well as the narrator — and because a beginner needs one
+   obvious place to look rather than a second panel to notice.
+   --------------------------------------------------------------------------- */
+.sw-host-strip {
+  align-items: center;
+  gap: 18px;
+}
+
+.sw-host-avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 20px;
+  border: 2px solid rgba(var(--gold-rgb), 0.45);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+
+.sw-host-bubble {
+  flex: 1;
+  min-height: 104px;
+  font-size: 1.02rem;
+  line-height: 1.55;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.sw-host-bubble p { margin: 0; }
+.sw-host-bubble p + p { margin-top: 8px; }
+
+/* Answering a question rather than narrating the step. */
+.sw-host-strip.explaining .sw-host-avatar {
+  border-color: var(--gold);
+  transform: scale(1.03);
+}
+
+.sw-host-strip.explaining .sw-host-bubble {
+  border-color: rgba(var(--gold-rgb), 0.55);
+  background: rgba(var(--gold-rgb), 0.09);
+}
+
+.sw-host-strip.explaining .sw-host-bubble > span { color: var(--gold); }
+
+.sw-host-because { color: var(--muted); }
+
+.sw-host-also {
+  font-size: 0.86rem;
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+/* A term reads as part of the sentence. An unstyled button renders as a white
+   box mid-paragraph and looks like something to type into. */
+.sw-explain-term {
+  all: unset;
+  display: inline;
+  cursor: help;
+  color: var(--gold);
+  border-bottom: 1px dotted currentColor;
+  white-space: normal;
+}
+
+.sw-explain-term:hover { border-bottom-style: solid; }
+
+.sw-explain-term:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@media (max-width: 900px) {
+  .sw-host-avatar { width: 64px; height: 64px; }
+  .sw-host-bubble { min-height: 0; font-size: 0.95rem; }
+}
+
+/* Standalone text controls need a hittable box; "Check again" measured 18px. */
+.sw-link {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
 }

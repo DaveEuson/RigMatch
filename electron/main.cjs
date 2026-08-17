@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, protocol, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, protocol, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const os = require('node:os');
@@ -15,6 +15,7 @@ const {
   buildPromptDiagnostic,
   summarizePromptDiagnostics,
   scoreSobriety,
+  heuristicCanGrade,
   getBenchmarkPromptStatus,
   summarizeDoneReasons,
   summarizePromptStatuses,
@@ -54,9 +55,19 @@ const {
   parseOllamaFamilyRows,
 } = require('./ollamaCatalog.cjs');
 const { summarizeMemory } = require('./systemProfile.cjs');
+const { createComfyBridge } = require('./comfy.cjs');
+const { downloadModel, verifyComfyFolder } = require('./comfyModels.cjs');
+const { locateComfyRoots } = require('./comfyLocate.cjs');
 
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const LM_STUDIO_LOCAL_URL = 'http://127.0.0.1:1234/v1';
+/** ComfyUI's default port. Image generation runs here, not through Ollama. */
+const COMFY_LOCAL_URL = 'http://127.0.0.1:8188';
+// Both dependencies are hoisted function declarations, so they are defined by
+// the time this runs despite appearing further down the file.
+const comfyBridge = createComfyBridge({ fetchJson, assertLocalhostUrl });
+/** In-flight model downloads, so a Stop can reach the right one. */
+const activeModelDownloads = new Map();
 const OLLAMA_LIBRARY_URL = 'https://ollama.com/library';
 const OLLAMA_NAMESPACE_URL = 'https://ollama.com/x';
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
@@ -314,6 +325,29 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // Electron grants every permission a renderer asks for unless a handler says
+  // otherwise, which sat oddly beside contextIsolation, the sandbox, the CSP
+  // and the host allowlists. RigMatch needs exactly one: the microphone, for
+  // the listening test. Everything else — camera, geolocation, notifications,
+  // clipboard reads, MIDI, USB, serial — is refused, and refused audibly
+  // rather than silently, so a future feature that needs one fails loudly here
+  // instead of mysteriously in the renderer.
+  const ALLOWED_PERMISSIONS = new Set(['media', 'audioCapture']);
+  const decide = (permission) => {
+    const allowed = ALLOWED_PERMISSIONS.has(permission);
+    if (!allowed) {
+      console.warn(`[permissions] refused "${permission}": not in ALLOWED_PERMISSIONS`);
+    }
+    return allowed;
+  };
+  win.webContents.session.setPermissionRequestHandler((_contents, permission, callback) => {
+    callback(decide(permission));
+  });
+  // The request handler covers prompts; the check handler covers the synchronous
+  // queries a page can make without prompting. Both are needed, or a permission
+  // denied at the prompt still reads as "granted" when queried.
+  win.webContents.session.setPermissionCheckHandler((_contents, permission) => decide(permission));
+
   if (isDev()) {
     win.loadURL('http://127.0.0.1:5173');
   } else {
@@ -515,6 +549,67 @@ function registerHandlers() {
   });
   handleLogged('ollama:deleteModel', 'ollama', (_event, request) => deleteModel(request));
   handleLogged('ollama:advancedGenerate', 'ollama', (event, request) => runAdvancedGenerate(request, event.sender));
+  // ComfyUI. The graph itself is built in the renderer by src/lib/comfyui.ts,
+  // so these handlers only carry it across and carry the reply back.
+  handleLogged('comfy:getStatus', 'comfy', (_event, baseUrl) => comfyBridge.getStatus(baseUrl ?? COMFY_LOCAL_URL));
+  handleLogged('comfy:submit', 'comfy', (_event, baseUrl, graph, clientId) => comfyBridge.submit(baseUrl ?? COMFY_LOCAL_URL, graph, clientId));
+  handleLogged('comfy:history', 'comfy', (_event, baseUrl, promptId) => comfyBridge.getHistory(baseUrl ?? COMFY_LOCAL_URL, promptId));
+  handleLogged('comfy:image', 'comfy', (_event, baseUrl, ref) => comfyBridge.getImage(baseUrl ?? COMFY_LOCAL_URL, ref));
+  handleLogged('comfy:interrupt', 'comfy', (_event, baseUrl, promptId) => comfyBridge.interrupt(baseUrl ?? COMFY_LOCAL_URL, promptId));
+  handleLogged('comfy:free', 'comfy', (_event, baseUrl) => comfyBridge.free(baseUrl ?? COMFY_LOCAL_URL));
+  // Generation models: chosen folder, then verified against what the running
+  // server lists, then streamed in. See comfyModels.cjs for why verification
+  // is not optional.
+  handleLogged('comfy:pickFolder', 'comfy', async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const picked = await dialog.showOpenDialog(window, {
+      title: 'Where is ComfyUI?',
+      properties: ['openDirectory'],
+      message: 'Pick the ComfyUI folder — the one containing models/checkpoints.',
+    });
+    if (picked.canceled || !picked.filePaths.length) return { canceled: true };
+    return { canceled: false, folder: picked.filePaths[0] };
+  });
+  handleLogged('comfy:verifyFolder', 'comfy', (_event, folder, serverCheckpoints) =>
+    verifyComfyFolder(folder, serverCheckpoints));
+  /**
+   * Find ComfyUI without making the user go looking for it.
+   *
+   * Every candidate still goes through verifyComfyFolder against what the
+   * running server lists, so an auto-detected folder is held to exactly the
+   * same standard as a hand-picked one — the whole point of that check is that
+   * two ComfyUI installs on one machine is normal.
+   */
+  handleLogged('comfy:locateFolder', 'comfy', async (_event, baseUrl, serverCheckpoints = []) => {
+    const located = await locateComfyRoots(baseUrl ?? COMFY_LOCAL_URL);
+    for (const folder of located.roots) {
+      const verdict = await verifyComfyFolder(folder, serverCheckpoints);
+      if (verdict.ok) return { found: true, folder, verdict, source: located.source };
+    }
+    return { found: false, roots: located.roots, source: located.source };
+  });
+  handleLogged('comfy:downloadModel', 'comfy', async (event, request = {}) => {
+    const progressId = String(request.progressId || '');
+    const controller = new AbortController();
+    if (progressId) activeModelDownloads.set(progressId, controller);
+    try {
+      return await downloadModel(request, (progress) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send('comfy:downloadProgress', { id: progressId, ...progress });
+        }
+      }, controller.signal);
+    } finally {
+      if (progressId) activeModelDownloads.delete(progressId);
+    }
+  });
+  ipcMain.handle('comfy:abortDownload', (event, progressId) => {
+    assertTrustedIpcSender(event);
+    // Aborting mid-stream leaves only the .part file, which downloadModel
+    // removes; a half-written .safetensors would be listed by ComfyUI and then
+    // fail deep in the loader.
+    activeModelDownloads.get(String(progressId))?.abort();
+    return true;
+  });
   // Stop button support: abort an in-flight streamed generation (App Builder /
   // vision) immediately instead of letting it run out its multi-minute budget.
   ipcMain.handle('ollama:abortAdvancedGenerate', (event, streamId) => {
@@ -1921,6 +2016,10 @@ async function getOllamaStatus(baseUrl = OLLAMA_LOCAL_URL) {
       family: model.details?.family,
       parameterSize: model.details?.parameter_size,
       quantization: model.details?.quantization_level,
+      // The digest identifies the exact weights. Tags mutate upstream, so a
+      // saved score keyed to a tag alone can quietly describe a different
+      // model than the one now installed under that name.
+      digest: model.digest,
     }));
 
     await attachModelCapabilities(baseUrl, models);
@@ -2057,10 +2156,14 @@ async function getOllamaCatalog(options = {}) {
       }));
     const liveCatalog = [...detailedCatalog, ...familyOnlyCatalog].slice(0, OLLAMA_LIBRARY_MODEL_LIMIT);
 
+    // Four more requests, in parallel with nothing else outstanding. A failure
+    // here degrades the chips to installed-only rather than failing the sync.
+    const capabilityIndex = await fetchLibraryCapabilityIndex().catch(() => new Map());
+
     const result = {
       syncedAt: new Date().toISOString(),
       source: 'Ollama library live scan',
-      models: mergeCatalogs(liveCatalog, fallback),
+      models: applyCapabilityIndex(mergeCatalogs(liveCatalog, fallback), capabilityIndex),
       error: null,
     };
     ollamaCatalogCache = result;
@@ -2087,6 +2190,49 @@ async function getOllamaCatalog(options = {}) {
   })();
 
   return catalogFetchPromise;
+}
+
+/**
+ * Which library models the Ollama site says can see, hear, use tools or think.
+ *
+ * Without this the capability chips could only ever count installed models —
+ * /api/show answers about downloads and nothing else — so "Hears audio" read
+ * "1" against a 317-model catalogue and looked like a fact about the world.
+ *
+ * /search?c=<capability> is the only endpoint that honours the filter:
+ * /library?c= silently ignores it and returns everything, which would mark
+ * every model as having every capability. There is no pagination — p= is
+ * ignored too — so this is the top twenty per capability, the same set the
+ * Ollama site shows. Partial, but partial in the direction of "these
+ * definitely can" rather than "only what I happen to have downloaded".
+ */
+const OLLAMA_LIBRARY_CAPABILITIES = ['vision', 'audio', 'tools', 'thinking'];
+
+async function fetchLibraryCapabilityIndex() {
+  const index = new Map();
+  await Promise.all(OLLAMA_LIBRARY_CAPABILITIES.map(async (capability) => {
+    try {
+      const html = await fetchOllamaHtml(`https://ollama.com/search?c=${capability}`, 7000);
+      for (const match of String(html).matchAll(/href="\/library\/([a-z0-9._-]+)"/gi)) {
+        const family = match[1].toLowerCase();
+        if (!index.has(family)) index.set(family, new Set());
+        index.get(family).add(capability);
+      }
+    } catch {
+      // One capability failing just means its chip counts installed models
+      // only, which is where every chip started.
+    }
+  }));
+  return index;
+}
+
+/** Attach library-reported capabilities to catalogue entries, by family. */
+function applyCapabilityIndex(models, index) {
+  if (!index || index.size === 0) return models;
+  return models.map((entry) => {
+    const caps = index.get(String(entry.name || '').toLowerCase());
+    return caps ? { ...entry, capabilities: [...caps] } : entry;
+  });
 }
 
 function mergeCatalogs(liveCatalog, fallback) {
@@ -2682,9 +2828,34 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   } catch { judgeModel = ''; }
   const judgeProvider = request.judgeProvider === 'openrouter' ? 'openrouter' : 'local';
   const judgeApiKey = typeof request.judgeApiKey === 'string' ? request.judgeApiKey.trim() : '';
-  const useJudge = request.qualityMode === 'judge' && Boolean(judgeModel) && (
+  const judgeUsable = Boolean(judgeModel) && (
     judgeProvider === 'openrouter' ? Boolean(judgeApiKey) : provider === 'ollama'
   );
+  const useJudge = request.qualityMode === 'judge' && judgeUsable;
+  /**
+   * Judge the answers the rules genuinely cannot mark, even when judging is off.
+   *
+   * Chat and writing questions have no shape to match, so the heuristic scores
+   * them by length — which is not a measurement, and 0.6 stopped it crowning
+   * anyone. That left those goals graded but uncrownable unless the user found
+   * the judge setting, which is honest and useless. So the judge marks exactly
+   * the questions that need it and nothing else: a coding or JSON run pays
+   * nothing, and a chat run pays only for its chat questions.
+   *
+   * `qualityMode: 'judge'` still means judge EVERYTHING — an explicit choice is
+   * never quietly narrowed.
+   */
+  // Deliberately LOCAL ONLY, and never the configured cloud judge: engaging a
+  // paid, off-machine judge without being asked would break both the wallet
+  // and the promise that nothing leaves this computer.
+  // Never the model being tested: a model marking its own answers grades
+  // itself generously, and that score goes on to crown a Match. In a lineup
+  // every contestant is the model under test in turn, so picking a single
+  // judge up front would guarantee self-grading for one of them.
+  const autoJudgeModel = (Array.isArray(request.autoJudgeModels) ? request.autoJudgeModels : [])
+    .map((name) => String(name || '').trim())
+    .find((name) => name && name !== model) || '';
+  const autoJudgeUnmarkable = !useJudge && provider === 'ollama' && Boolean(autoJudgeModel);
   const sendProgress = (update) => {
     const payload = {
       id: progressId,
@@ -2718,9 +2889,9 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       questionCount,
       benchmarkMode: provider === 'lm-studio' ? 'openai-compatible' : 'ollama-parity',
       provider,
-      qualityScoring: useJudge ? 'judge' : 'heuristic',
-      judgeModel: useJudge ? judgeModel : null,
-      judgeProvider: useJudge ? judgeProvider : null,
+      qualityScoring: useJudge ? 'judge' : autoJudgeUnmarkable ? 'heuristic + judge for unmarkable' : 'heuristic',
+      judgeModel: useJudge ? judgeModel : autoJudgeUnmarkable ? autoJudgeModel : null,
+      judgeProvider: useJudge ? judgeProvider : autoJudgeUnmarkable ? 'local' : null,
       thinkingDisabled: provider === 'ollama' ? BENCHMARK_THINK_DISABLED : false,
       warmup: {
         enabled: true,
@@ -2853,19 +3024,26 @@ async function runBenchmarkInner(request = {}, sender, signal) {
 
       // Judge grades the representative (first-run) answer; later runs reuse it.
       // On any judge failure, promptJudgeScore stays null and we use the heuristic.
-      if (useJudge && runIndex === 0) {
+      const autoJudgeThis = autoJudgeUnmarkable && !heuristicCanGrade(prompt.type, prompt.prompt);
+      if ((useJudge || autoJudgeThis) && runIndex === 0) {
         const verdict = await scoreQualityWithJudge({
           prompt,
           response: responseText,
-          generate: (judgePrompt) => (judgeProvider === 'openrouter'
+          generate: (judgePrompt) => (useJudge && judgeProvider === 'openrouter'
             ? openRouterGenerateText(judgeApiKey, judgeModel, judgePrompt, 200, signal)
-            : runJudgeGenerate(baseUrl, judgeModel, judgePrompt, signal)),
+            : runJudgeGenerate(baseUrl, useJudge ? judgeModel : autoJudgeModel, judgePrompt, signal)),
         });
         promptJudgeScore = verdict ? verdict.score : null;
       }
       const sobrietyScore = promptJudgeScore != null
         ? promptJudgeScore
         : scoreSobriety(prompt, responseText);
+      // Say which of the three this number actually is. Without it the UI
+      // cannot tell a graded answer from a length proxy, and was crowning
+      // "best for talking" on the latter.
+      const scoredBy = promptJudgeScore != null
+        ? 'judge'
+        : heuristicCanGrade(prompt.type, prompt.prompt) ? 'heuristic' : 'unjudged';
       const promptStatus = getBenchmarkPromptStatus(responseText, doneReason);
       const diagnostic = buildPromptDiagnostic({
         responseText,
@@ -2882,6 +3060,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         firstTokenMs,
         tokensPerSecond,
         sobrietyScore,
+        scoredBy,
         response: responseText,
         doneReason: doneReason || 'complete',
         status: promptStatus,
@@ -2963,7 +3142,21 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   const avgLatency = average(promptResults.map((result) => result.elapsedMs));
   const firstTokenSamples = rawRuns.map((r) => r.firstTokenMs).filter(Number.isFinite);
   const avgFirstToken = firstTokenSamples.length > 0 ? average(firstTokenSamples) : null;
-  const avgSobriety = average(promptResults.map((result) => result.sobrietyScore));
+  /**
+   * Answer quality, from the answers something could actually mark.
+   *
+   * An 'unjudged' score is a placeholder — prose scored by its character
+   * count, or code the scorer can only confirm is code. Those were being
+   * averaged into the headline number and weighted at 0.34 of the Match
+   * total, so models were still ranked against each other partly by how long
+   * they wrote, while the crown logic was correctly refusing the same numbers.
+   * Rank on what was measured; fall back to the full set only when nothing at
+   * all could be marked, so a run still produces a score rather than a blank.
+   */
+  const markedResults = promptResults.filter((result) => result.scoredBy !== 'unjudged');
+  const unmarkedCount = promptResults.length - markedResults.length;
+  const avgSobriety = average((markedResults.length > 0 ? markedResults : promptResults)
+    .map((result) => result.sobrietyScore));
   const stabilityScore = Math.round((rawRuns.filter(isStableBenchmarkRun).length / rawRuns.length) * 100);
   // Scale official Ollama generation speed: 5 tok/s = 0, 100 tok/s = 100.
   const speedScore = clamp(Math.round((avgTokens - 5) / 95 * 100));
@@ -3003,6 +3196,10 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       questionCount,
       scores: result.scores,
       promptCount: promptResults.length,
+      // How many answers nothing could mark. Answer quality is averaged over
+      // the rest; if this equals promptCount the score is a length proxy and
+      // the log is the only place that says so.
+      unmarkedPrompts: unmarkedCount,
       unstablePrompts: promptResults
         .filter((prompt) => prompt.status && prompt.status !== 'ok')
         .map((prompt) => ({

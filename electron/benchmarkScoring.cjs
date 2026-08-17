@@ -11,6 +11,18 @@ function buildBenchmarkGenerateBody({ model, prompt, keepAlive, options }) {
   };
 }
 
+/**
+ * The one coding question this scorer knows the answer to.
+ *
+ * Matched on the function name the rubric actually grades, not on the word
+ * "clamp": custom suites are a feature, and a user question like "how do I
+ * clamp an audio buffer" would otherwise be marked against Math.min/Math.max
+ * and the literal 0 and 100 bounds, scoring a correct answer 38 — and, worse,
+ * counting as a real mark. Question ids cannot be used here: the plan appends
+ * a round suffix, and stripping it makes pre_code_1 collide with pre_code_3.
+ */
+const ASKS_FOR_CLAMP = /clampScore/i;
+
 function scoreSobriety(prompt, response) {
   const text = response.trim();
   if (!text) return 0;
@@ -52,21 +64,63 @@ function scoreSobriety(prompt, response) {
   }
 
   if (prompt.type === 'coding') {
+    // The clamp prompt is the one coding question this scorer can genuinely
+    // mark: it knows the required answer. Detect it from the prompt rather than
+    // assuming every coding question is that one — three real coding questions
+    // in the Coding preset (SQL, a React fix, a code review) were typed
+    // 'assistant' purely to dodge this branch scoring them 38.
+    const asksForClamp = ASKS_FOR_CLAMP.test(String(prompt.prompt || ''));
     // Recognize a function definition without hard-coding the requested name,
     // so a correct answer that names things differently is not penalized.
     const definesFunction = /\bfunction\b/.test(text) || /=>/.test(text) || /\bconst\s+\w+\s*=/.test(text);
-    // Accept clamping via Math.min/Math.max OR an equivalent ternary/comparison
-    // against the 0 and 100 bounds — both are valid, idiomatic solutions.
-    const usesMathClamp = /Math\.min\b/.test(text) && /Math\.max\b/.test(text);
-    const usesConditionalClamp = /\b0\b/.test(text) && /\b100\b/.test(text) && /(\?|[<>]=?)/.test(text);
-    const clamps = usesMathClamp || usesConditionalClamp;
-    if (definesFunction && clamps) return 92;
-    if (clamps) return 72;
-    if (definesFunction) return 58;
-    return 38;
+
+    if (asksForClamp) {
+      // Accept clamping via Math.min/Math.max OR an equivalent ternary/comparison
+      // against the 0 and 100 bounds — both are valid, idiomatic solutions.
+      const usesMathClamp = /Math\.min\b/.test(text) && /Math\.max\b/.test(text);
+      const usesConditionalClamp = /\b0\b/.test(text) && /\b100\b/.test(text) && /(\?|[<>]=?)/.test(text);
+      const clamps = usesMathClamp || usesConditionalClamp;
+      if (definesFunction && clamps) return 92;
+      if (clamps) return 72;
+      if (definesFunction) return 58;
+      return 38;
+    }
+
+    // Any other coding question: all this can honestly tell is whether the
+    // answer contains code at all. Whether the code is CORRECT needs the judge,
+    // and HEURISTIC_BLIND_TYPES says so rather than dressing this up as a mark.
+    const looksLikeCode = /```/.test(text)
+      || definesFunction
+      || /\bdef\s+\w+\s*\(/.test(text)
+      || /\bclass\s+\w+/.test(text)
+      || /\bSELECT\b[\s\S]*\bFROM\b/i.test(text);
+    return looksLikeCode ? 70 : 30;
   }
 
+  // Everything else — 'assistant', and any future open-ended type — reaches
+  // here. There is no rule that marks a good conversational answer, so this
+  // scores by LENGTH: 78 for anything, up to 92 for a long one. It is not a
+  // quality measurement and must never be presented as one; see
+  // HEURISTIC_BLIND_TYPES, which is what stops it crowning a winner.
   return clamp(78 + Math.min(14, Math.floor(text.length / 80)));
+}
+
+/**
+ * Question types the heuristic cannot actually grade.
+ *
+ * For these it returns a number anyway — a length proxy for prose, a
+ * has-code-or-not check for general coding — because the run still needs a
+ * value. But a number that does not measure quality must not be allowed to
+ * crown a winner or fill a scorecard as though it did. The judge grades these
+ * properly; without one, the app says so.
+ */
+const HEURISTIC_BLIND_TYPES = ['assistant', 'writing'];
+
+function heuristicCanGrade(type, prompt) {
+  if (HEURISTIC_BLIND_TYPES.includes(type)) return false;
+  // Coding is gradeable only for the one question this scorer knows.
+  if (type === 'coding') return ASKS_FOR_CLAMP.test(String(prompt || ''));
+  return true;
 }
 
 function getBenchmarkPromptStatus(response, doneReason) {
@@ -192,6 +246,8 @@ function clamp(value) {
 
 module.exports = {
   BENCHMARK_THINK_DISABLED,
+  HEURISTIC_BLIND_TYPES,
+  heuristicCanGrade,
   buildBenchmarkGenerateBody,
   buildPromptDiagnostic,
   summarizePromptDiagnostics,

@@ -62,6 +62,7 @@ async function runBrowserChecks(url) {
   await page.goto(url, { waitUntil: 'networkidle' });
   await forceSimpleMode(page);
   await page.waitForSelector('.sw-shell', { timeout: 10000 });
+  await assertNoBlockingDialog(page);
 
   const title = await page.title();
   const simpleText = await page.locator('body').innerText();
@@ -85,6 +86,32 @@ async function runBrowserChecks(url) {
   const wizardGoneInAdvanced = !(await page.locator('.sw-shell').isVisible().catch(() => false));
   const advancedMenuVisible = await page.locator('.side-menu').isVisible();
   await page.screenshot({ path: screenshots.advanced, fullPage: false });
+
+  // The smallest window the packaged app allows: it sets minWidth 1280 and
+  // minHeight 820, so this exact size is the reachable worst case rather than a
+  // hypothetical one. The rail silently clipped Activity and Settings off the
+  // end here — it scrolls, which is intended, but nothing said so, and the
+  // primary navigation appeared to stop before Settings existed. Checking
+  // 1440x820 instead missed it, because the wider rail keeps labels on one
+  // line and the items shorter.
+  const shortCtx = await browser.newContext({ viewport: { width: 1280, height: 820 } });
+  const shortPage = await shortCtx.newPage();
+  await shortPage.goto(url, { waitUntil: 'networkidle' });
+  await forceSimpleMode(shortPage);
+  await shortPage.getByLabel('Advanced Mode').click();
+  await shortPage.waitForSelector('.side-menu-item', { timeout: 10000 });
+  const clippedNav = await shortPage.evaluate(() => {
+    const menu = document.querySelector('.side-menu');
+    if (!menu) return ['side menu missing'];
+    const box = menu.getBoundingClientRect();
+    return [...menu.querySelectorAll('.side-menu-item')]
+      .filter((item) => {
+        const rect = item.getBoundingClientRect();
+        return rect.bottom > box.bottom + 1 || rect.top < box.top - 1;
+      })
+      .map((item) => item.getAttribute('aria-label') || 'unnamed');
+  });
+  await shortCtx.close();
 
   const mobile = await browser.newContext({ viewport: { width: 390, height: 900 }, isMobile: true });
   const mobilePage = await mobile.newPage();
@@ -115,6 +142,7 @@ async function runBrowserChecks(url) {
     noFrameworkOverlay: overlayCount === 0,
     noConsoleIssues: issues.length === 0,
     noOldSobrietyCopy: !simpleText.includes('Sobriety') && !mobileText.includes('Sobriety'),
+    navReachableOnShortScreen: clippedNav.length === 0,
   };
   const failed = Object.entries(checks).filter(([, value]) => !value).map(([key]) => key);
 
@@ -122,6 +150,10 @@ async function runBrowserChecks(url) {
     const railDetail = failed.includes('simpleStepPills')
       ? `; step rail: [${simpleStepLabels.join(', ') || 'none'}]`
       : '';
+    if (failed.includes('navReachableOnShortScreen')) {
+      throw new Error(`Visual smoke failed: the nav rail clips [${clippedNav.join(', ')}] `
+        + "at 1280x820, the app's own minimum window size");
+    }
     throw new Error(`Visual smoke failed: ${failed.join(', ')}${railDetail}${issues.length ? `; console: ${issues.join(' | ')}` : ''}`);
   }
 
@@ -129,6 +161,7 @@ async function runBrowserChecks(url) {
     url,
     checks,
     stepRail: simpleStepLabels,
+    clippedNav,
     consoleIssues: issues,
   };
 }
@@ -146,6 +179,22 @@ function collectConsoleIssues(page) {
   return issues;
 }
 
+/**
+ * A modal left open here does not fail the run — it makes every later click
+ * retry until the whole script times out, with the reason buried in Playwright
+ * retry noise. Name it instead.
+ */
+async function assertNoBlockingDialog(page) {
+  const blocker = await page.evaluate(() => {
+    const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+    return dialog ? (dialog.getAttribute('aria-label') || dialog.className) : null;
+  });
+  if (blocker) {
+    throw new Error(`A modal dialog is blocking the page: "${blocker}". `
+      + 'Seed whatever storage key dismisses it in forceSimpleMode().');
+  }
+}
+
 async function forceSimpleMode(page) {
   await page.evaluate(() => {
     localStorage.setItem('rigmatch:ui-mode:v1', 'beginner');
@@ -153,6 +202,11 @@ async function forceSimpleMode(page) {
     // The mode splash is a modal dialog that intercepts pointer events, so
     // without this the Advanced Mode click below never lands.
     localStorage.setItem('rigmatch:mode-splash:v1', 'chosen');
+    // 0.6 added a second first-run dialog: someone who chose a mode before
+    // goals existed is still asked the goal question, which is right for a
+    // real upgrade and fatal for a screenshot run — it intercepts the same
+    // pointer events and the script retried a click for sixty seconds.
+    localStorage.setItem('rigmatch:goals-offered:v1', 'yes');
   });
   await page.reload({ waitUntil: 'networkidle' });
 }

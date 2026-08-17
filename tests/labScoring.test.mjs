@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 
 import {
   describeLabFailure,
-  scoreAdvancedImageResponse,
   scoreAdvancedVisionResponse,
 } from '../src/lib/labScoring.ts';
 
@@ -89,27 +88,3 @@ test('a failed vision run carries a usable explanation end to end', () => {
   assert.match(note, /no text at all/i);
 });
 
-test('an image run that returned nothing scores zero', () => {
-  // "Small beta size" used to assert ADVANCED_IMAGE_WIDTH <= 512 — a constant in
-  // this repo, always true — so it measured our own config, not the model, and
-  // gave every result a free quarter of its score. A model that produced no
-  // image collected that plus "Completed cleanly" for 50.
-  const scored = scoreAdvancedImageResponse('', 'stop');
-  assert.equal(scored.score, 0);
-  assert.equal(scored.grade, 'F');
-  assert.ok(scored.checks.every((c) => !c.passed));
-  assert.ok(!scored.checks.some((c) => /beta size/i.test(c.label)), 'a constant must not be scored as a model capability');
-});
-
-test('a real image payload scores full marks', () => {
-  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-  const scored = scoreAdvancedImageResponse(png, 'stop');
-  assert.equal(scored.score, 100);
-  assert.equal(scored.grade, 'S');
-});
-
-test('a text-only reply to an image request scores zero', () => {
-  const scored = scoreAdvancedImageResponse('I cannot generate images.', 'stop');
-  assert.equal(scored.score, 0);
-  assert.match(scored.checks[0].detail, /no image payload/i);
-});

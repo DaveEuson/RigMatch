@@ -40,8 +40,8 @@ export const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
 export function amazonUrl(query: string): string {
   return `https://www.amazon.com/s?k=${encodeURIComponent(query)}&tag=${AMAZON_AFFILIATE_TAG}`;
 }
-export const APP_VERSION = '0.5.0';
-export { CURRENT_SCORE_SCHEMA_VERSION } from './scoring';
+export const APP_VERSION = '0.6.0';
+export { CURRENT_SCORE_SCHEMA_VERSION } from './scoring.ts';
 export const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch/issues/new';
 export const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
 export const HISTORY_STORAGE_KEY = 'rigmatch:history:v1';
@@ -49,7 +49,7 @@ export const HISTORY_STORAGE_KEY = 'rigmatch:history:v1';
 // of current state) so a quota failure on one cannot take the other down.
 // Declared in runHistory.ts to keep that module Node-testable; re-exported here
 // so every storage key remains discoverable in one place.
-export { RUN_HISTORY_STORAGE_KEY } from './runHistory';
+export { RUN_HISTORY_STORAGE_KEY } from './runHistory.ts';
 export const THEME_STORAGE_KEY = 'agentArcadeTheme';
 export const TUTORIAL_STORAGE_KEY = 'rigmatch:first-run-tutorial:v1';
 export const UI_MODE_STORAGE_KEY = 'rigmatch:ui-mode:v1';

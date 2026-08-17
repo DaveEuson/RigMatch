@@ -1,26 +1,32 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Check, Code2, Copy, Download, Film, Lightbulb, Play, RefreshCw, ShieldCheck } from "lucide-react";
-import type { OllamaStatus, SystemProfile } from "../types";
-import { agentArcadeApi } from "../api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getErrorMessage } from '../lib/format';
+import { copyText, type CopyState } from '../lib/clipboard';
+import { AlertTriangle, Check, Code2, Copy, Film, Lightbulb, Play, RefreshCw } from "lucide-react";
+import type { ComfyStatus, OllamaStatus, SystemProfile } from "../types";
 import { formatGb, getScoreTone } from "../lib/format";
 import { extractHtmlDocument } from "../lib/labPreview";
-import { isLikelyImageGenerationModel } from "../lib/modelCatalog";
 import { readAdvancedLabResults, writeAdvancedLabResults, type AdvancedLabResult } from "../lib/labResults";
 import {
   APP_BUILDER_PRESETS,
   DEFAULT_APP_BUILDER_PRESET_ID,
   resolveAppBuilderPrompt,
-  ADVANCED_IMAGE_GENERATION_PROMPT,
-  ADVANCED_IMAGE_WIDTH,
-  ADVANCED_IMAGE_HEIGHT,
-  ADVANCED_IMAGE_STEPS,
-  IMAGE_GENERATION_MODEL_OPTIONS,
-  imageModelMatches,
-  getInstalledImageModelName,
   runAdvancedAppBuilderChallenge,
-  runAdvancedImageGenerationChallenge,
-  type ImageGenerationModelOption,
 } from "../lib/labChallenges";
+import { IMAGE_BENCHMARK_PROMPTS } from "../lib/imageGenScoring";
+import { IMAGE_RUN_SETTINGS, judgeCandidates, toLabResult } from "../lib/imageGenChallenge";
+import { runImageLabChallenge } from "../lib/imageGenRunner";
+import { comfyBridgeAvailable, describeComfyBusy, fetchComfyOutput, getComfyStatus } from "../lib/comfyTransport";
+import { canHearAudio } from "../lib/modelCatalog";
+import { isVideoCheckpoint } from "../lib/videoGen";
+import {
+  DEFAULT_VIDEO_SIZE_ID,
+  VIDEO_SIZE_PRESETS,
+  describeVideoCost,
+  toVideoLabResult,
+  videoReadiness,
+} from "../lib/videoGenChallenge";
+import { runVideoLabChallenge } from "../lib/videoGenRunner";
+import { ListeningLab } from "./ListeningLab";
 import { AppBuilderPreviewModal } from "./AppBuilderPreview";
 
 type AdvancedLabRunState = {
@@ -29,27 +35,31 @@ type AdvancedLabRunState = {
   message: string;
 };
 
-async function pullOllamaModelWithProgress(
-  model: string,
-  baseUrl: string,
-  onProgress: (message: string, percent: number | null) => void,
-  signal: AbortSignal,
-) {
-  const progressId = `advanced-image-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  if (signal.aborted) throw new DOMException('Image model pull cancelled.', 'AbortError');
-  const unsubscribe = agentArcadeApi.onPullProgress?.((update) => {
-    if (update.id !== progressId) return;
-    onProgress(update.status || 'Downloading image model...', update.percent);
-  });
-  const abortPull = () => void agentArcadeApi.abortPull(progressId);
+/**
+ * Where the Image Lab stands before a run can happen.
+ *
+ * There are four distinct states and they need different words. ComfyUI not
+ * installed, ComfyUI running with no checkpoints, ready to go, and a build that
+ * has no bridge at all. Collapsing them into "unavailable" is what made the old
+ * Lab so confusing — it offered a Run button that could only ever produce an
+ * error.
+ */
+type ImageReadiness =
+  | { kind: 'no-bridge' }
+  | { kind: 'not-running' }
+  | { kind: 'no-checkpoints' }
+  | { kind: 'ready'; checkpoints: string[] };
 
-  try {
-    signal.addEventListener('abort', abortPull, { once: true });
-    await agentArcadeApi.pullModel({ model, baseUrl, progressId });
-  } finally {
-    signal.removeEventListener('abort', abortPull);
-    unsubscribe?.();
-  }
+function readinessFrom(available: boolean, status: ComfyStatus | null): ImageReadiness {
+  if (!available) return { kind: 'no-bridge' };
+  if (!status?.reachable) return { kind: 'not-running' };
+  // Counted after removing video models, not before. A ComfyUI holding only
+  // an LTX checkpoint is not ready for *images* — judging readiness on the
+  // raw list rendered the ready branch with an empty picker and a dead Run
+  // button, explaining nothing.
+  const usable = status.checkpoints.filter((name) => !isVideoCheckpoint(name));
+  if (!usable.length) return { kind: 'no-checkpoints' };
+  return { kind: 'ready', checkpoints: usable };
 }
 
 export function AdvancedCapabilityLab({
@@ -69,35 +79,81 @@ export function AdvancedCapabilityLab({
   const [labModel, setLabModel] = useState(defaultModel);
   const [savedResults, setSavedResults] = useState<Record<string, AdvancedLabResult>>(() => readAdvancedLabResults());
   const [runState, setRunState] = useState<AdvancedLabRunState>({ phase: 'idle', result: null, message: '' });
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<CopyState>('idle');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [appPromptId, setAppPromptId] = useState(DEFAULT_APP_BUILDER_PRESET_ID);
   const [appCustomPrompt, setAppCustomPrompt] = useState('');
-  const [imageModel, setImageModel] = useState(IMAGE_GENERATION_MODEL_OPTIONS[0].model);
-  const [imageConsent, setImageConsent] = useState(false);
-  const [imageTryAnyway, setImageTryAnyway] = useState(false);
   const [imageRunState, setImageRunState] = useState<AdvancedLabRunState>({ phase: 'idle', result: null, message: '' });
-  const [pulledImageModels, setPulledImageModels] = useState<Set<string>>(() => new Set());
-  const [imagePullState, setImagePullState] = useState<{
-    phase: 'idle' | 'pulling' | 'complete' | 'failed';
-    percent: number | null;
-    message: string;
-  }>({ phase: 'idle', percent: null, message: '' });
-  const imagePullAbortRef = useRef<AbortController | null>(null);
+  const [comfyStatus, setComfyStatus] = useState<ComfyStatus | null>(null);
+  const [comfyChecking, setComfyChecking] = useState(true);
+  const [checkpoint, setCheckpoint] = useState('');
+  const [imagePromptId, setImagePromptId] = useState(IMAGE_BENCHMARK_PROMPTS[0].id);
+  const [judgeModel, setJudgeModel] = useState('');
+  const imageAbortRef = useRef<AbortController | null>(null);
+  const [videoRunState, setVideoRunState] = useState<AdvancedLabRunState>({ phase: 'idle', result: null, message: '' });
+  const [videoCheckpoint, setVideoCheckpoint] = useState('');
+  const [videoSizeId, setVideoSizeId] = useState<string>(DEFAULT_VIDEO_SIZE_ID);
+  const videoAbortRef = useRef<AbortController | null>(null);
+  // Loaded only when asked for. A few seconds of Full HD is megabytes, and the
+  // scored artifact is the frame — the footage is for the person, not the score.
+  const [playback, setPlayback] = useState<{ key: string; url: string } | null>(null);
+  const [loadingVideo, setLoadingVideo] = useState(false);
 
-  const imageModelOptions = useMemo<ImageGenerationModelOption[]>(() => {
-    const detected = ollama.models
-      .filter((model) => isLikelyImageGenerationModel(model.name || model.model || ''))
-      .filter((model) => !IMAGE_GENERATION_MODEL_OPTIONS.some((option) => imageModelMatches(model.name || model.model || '', option.model)))
-      .map((model) => ({
-        model: model.name || model.model || '',
-        label: `${model.name || model.model} · installed`,
-        sizeGb: model.sizeGb ?? 0,
-        license: 'Already in your library',
-        note: 'Detected in your local Ollama library — no new download needed.',
-      }));
-    return [...IMAGE_GENERATION_MODEL_OPTIONS, ...detected];
-  }, [ollama.models]);
+  /** For the Check again button, where setting state synchronously is fine. */
+  const checkComfy = useCallback(async () => {
+    setComfyChecking(true);
+    const status = await getComfyStatus();
+    setComfyStatus(status);
+    setComfyChecking(false);
+  }, []);
+
+  // ComfyUI is a separate program the user starts themselves, so it may not be
+  // up when this panel opens. The initial look does not set state on the way in
+  // — comfyChecking already starts true — and drops its answer if the panel
+  // closed while the probe was in flight.
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      const status = await getComfyStatus();
+      if (!live) return;
+      setComfyStatus(status);
+      setComfyChecking(false);
+    })();
+    return () => { live = false; };
+  }, []);
+
+  // readinessFrom has already removed video checkpoints: handing an LTX model
+  // to a still-image graph fails deep inside the sampler with a shape error no
+  // user could act on.
+  const readiness = readinessFrom(comfyBridgeAvailable(), comfyStatus);
+  const availableCheckpoints = readiness.kind === 'ready' ? readiness.checkpoints : [];
+  const activeCheckpoint = availableCheckpoints.includes(checkpoint)
+    ? checkpoint
+    : (availableCheckpoints[0] ?? '');
+
+  // From the raw list, not readiness: readiness has had video models stripped
+  // out, which are precisely the ones this needs.
+  const videoReady = videoReadiness(comfyStatus?.checkpoints ?? [], comfyStatus?.textEncoders ?? []);
+  // Whether ComfyUI itself is usable, independent of what either lab wants.
+  // The video card asked `readiness` before this existed, and so declared
+  // itself unavailable whenever the only checkpoint installed was a video one
+  // — exactly the setup it is for.
+  const comfyUsable = readiness.kind !== 'no-bridge' && readiness.kind !== 'not-running';
+  const videoCheckpoints = videoReady.kind === 'ready' ? videoReady.checkpoints : [];
+  const activeVideoCheckpoint = videoCheckpoints.includes(videoCheckpoint)
+    ? videoCheckpoint
+    : (videoCheckpoints[0] ?? '');
+  const activeEncoder = videoReady.kind === 'ready' ? videoReady.encoders[0] : '';
+
+  const judges = useMemo(() => judgeCandidates(ollama.models), [ollama.models]);
+  // Only models the provider reports as able to hear. Nothing in a name says
+  // so, and asking one that cannot returns "Failed to load image or audio
+  // file" — which would score the model down for being asked the wrong thing.
+  const hearingModels = useMemo(
+    () => ollama.models.filter((row) => canHearAudio(row)).map((row) => row.name || row.model).filter(Boolean),
+    [ollama.models],
+  );
+  const activeJudge = judges.includes(judgeModel) ? judgeModel : (judges[0] ?? '');
 
   const activeModel = installedModels.includes(labModel) ? labModel : defaultModel;
   const activeModelInfo = ollama.models.find((model) => model.name === activeModel || model.model === activeModel);
@@ -110,23 +166,24 @@ export function AdvancedCapabilityLab({
   const isRunning = runState.phase === 'running';
   const isLargeModel = (activeModelInfo?.sizeGb ?? 0) >= Math.max(8, system.gpu.vramGb || 0);
   const canRun = ollama.ready && Boolean(activeModel) && !isRunning;
-  const imageOption = imageModelOptions.find((option) => option.model === imageModel) ?? imageModelOptions[0];
-  const installedImageModel = getInstalledImageModelName(installedModels, imageOption.model);
-  const pulledImageModel = pulledImageModels.has(imageOption.model) ? imageOption.model : '';
-  const activeImageModel = installedImageModel || pulledImageModel || imageOption.model;
-  const imageResultKey = `image:${activeImageModel}`;
-  const visibleImageResult = imageRunState.result?.model === activeImageModel ? imageRunState.result : savedResults[imageResultKey] ?? null;
-  const imagePlatformSupported = system.platform === 'darwin';
-  const imagePlatformAllowed = imagePlatformSupported || imageTryAnyway;
-  const imageInstalled = Boolean(installedImageModel || pulledImageModel);
-  const imagePulling = imagePullState.phase === 'pulling';
+  const imageResultKey = `image:${activeCheckpoint}`;
+  const visibleImageResult = imageRunState.result?.model === activeCheckpoint
+    ? imageRunState.result
+    : savedResults[imageResultKey] ?? null;
   const imageRunning = imageRunState.phase === 'running';
-  const canPullImageModel = ollama.ready && imagePlatformAllowed && imageConsent && !imageInstalled && !imagePulling && !imageRunning;
-  const canRunImageTest = ollama.ready && imagePlatformAllowed && imageInstalled && !imagePulling && !imageRunning;
+  const videoRunning = videoRunState.phase === 'running';
+  // Both share one GPU, so neither may start while the other is rendering.
+  const canRunImageTest = readiness.kind === 'ready' && Boolean(activeCheckpoint)
+    && !imageRunning && !videoRunning;
+  const canRunVideoTest = videoReady.kind === 'ready' && Boolean(activeVideoCheckpoint)
+    && Boolean(activeEncoder) && !imageRunning && !videoRunning;
+  const visibleVideoResult = videoRunState.result?.model === activeVideoCheckpoint
+    ? videoRunState.result
+    : savedResults[`video:${activeVideoCheckpoint}`] ?? null;
 
   const startChallenge = useCallback(async () => {
     if (!activeModel || !ollama.ready) return;
-    setCopied(false);
+    setCopied('idle');
     setPreviewOpen(false);
     setRunState({ phase: 'running', result: null, message: `Asking ${activeModel} to build an app...` });
     const prompt = resolveAppBuilderPrompt(appPromptId, appCustomPrompt);
@@ -150,59 +207,146 @@ export function AdvancedCapabilityLab({
 
   const copyResult = useCallback(() => {
     if (!visibleResult?.response) return;
-    void navigator.clipboard?.writeText(visibleResult.response).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2200);
-    }).catch(() => undefined);
+    void copyText(visibleResult.response).then((ok) => {
+      setCopied(ok ? 'copied' : 'failed');
+      window.setTimeout(() => setCopied('idle'), 2200);
+    });
   }, [visibleResult]);
-
-  const startImagePull = useCallback(async () => {
-    if (!canPullImageModel) return;
-    const controller = new AbortController();
-    imagePullAbortRef.current = controller;
-    setImagePullState({ phase: 'pulling', percent: null, message: `Pulling ${imageOption.label} (${formatGb(imageOption.sizeGb)})...` });
-    try {
-      await pullOllamaModelWithProgress(
-        imageOption.model,
-        ollama.baseUrl,
-        (message, percent) => setImagePullState({ phase: 'pulling', percent, message }),
-        controller.signal,
-      );
-      setPulledImageModels((current) => {
-        const next = new Set(current);
-        next.add(imageOption.model);
-        return next;
-      });
-      setImagePullState({ phase: 'complete', percent: 100, message: `${imageOption.label} is ready for the Image Lab.` });
-    } catch (error) {
-      const message = error instanceof DOMException && error.name === 'AbortError'
-        ? 'Image model pull cancelled.'
-        : error instanceof Error ? error.message : 'Image model pull failed.';
-      setImagePullState({ phase: 'failed', percent: null, message });
-    } finally {
-      imagePullAbortRef.current = null;
-    }
-  }, [canPullImageModel, imageOption, ollama.baseUrl]);
-
-  const cancelImagePull = useCallback(() => {
-    imagePullAbortRef.current?.abort();
-  }, []);
 
   const startImageChallenge = useCallback(async () => {
     if (!canRunImageTest) return;
-    setImageRunState({ phase: 'running', result: null, message: `Generating a ${ADVANCED_IMAGE_WIDTH}x${ADVANCED_IMAGE_HEIGHT} beta image with ${activeImageModel}...` });
-    const result = await runAdvancedImageGenerationChallenge(activeImageModel, ollama.baseUrl);
+    // Asked before anything is submitted: queuing behind someone else's render
+    // produces a time that measures the queue, and a wrong number that looks
+    // like a measurement is worse than refusing.
+    const busy = await describeComfyBusy();
+    if (busy) {
+      setImageRunState({ phase: 'failed', result: null, message: busy });
+      return;
+    }
+    const controller = new AbortController();
+    imageAbortRef.current = controller;
+    setImageRunState({
+      phase: 'running',
+      result: null,
+      message: `Generating ${IMAGE_RUN_SETTINGS.width}x${IMAGE_RUN_SETTINGS.height} with ${activeCheckpoint}...`,
+    });
+
+    let run;
+    try {
+      run = await runImageLabChallenge({
+        checkpoint: activeCheckpoint,
+        promptId: imagePromptId,
+        judgeModel: activeJudge || undefined,
+        ollamaBaseUrl: ollama.baseUrl,
+        signal: controller.signal,
+      });
+    } finally {
+      imageAbortRef.current = null;
+    }
+    const result = toLabResult(run, imagePromptId);
+
     setImageRunState({
       phase: result.error ? 'failed' : 'complete',
       result,
-      message: result.error ? result.error : `${activeImageModel} generated an image in ${(result.elapsedMs / 1000).toFixed(1)}s.`,
+      // An unjudged run is a real result with a missing part, so it says so
+      // rather than presenting the score as if adherence had been measured.
+      message: result.error
+        ? result.error
+        : `${activeCheckpoint} drew it in ${(run.elapsedMs / 1000).toFixed(1)}s${
+          run.judged
+            ? `, and ${activeJudge} confirmed ${Math.round((run.adherence ?? 0) * 100)}% of the prompt.`
+            : '. No vision model was available to check the picture, so this run is unjudged.'
+        }`,
     });
+
     if (!result.error) {
       const merged = { ...readAdvancedLabResults(), [imageResultKey]: result };
       writeAdvancedLabResults(merged);
       setSavedResults(merged);
     }
-  }, [activeImageModel, canRunImageTest, imageResultKey, ollama.baseUrl]);
+  }, [activeCheckpoint, activeJudge, canRunImageTest, imagePromptId, imageResultKey, ollama.baseUrl]);
+
+  const stopImageRun = useCallback(() => {
+    imageAbortRef.current?.abort();
+  }, []);
+
+  const startVideoChallenge = useCallback(async () => {
+    if (!canRunVideoTest) return;
+    const busy = await describeComfyBusy();
+    if (busy) {
+      setVideoRunState({ phase: 'failed', result: null, message: busy });
+      return;
+    }
+    const controller = new AbortController();
+    videoAbortRef.current = controller;
+    const size = VIDEO_SIZE_PRESETS.find((p) => p.id === videoSizeId) ?? VIDEO_SIZE_PRESETS[0];
+    setVideoRunState({
+      phase: 'running',
+      result: null,
+      message: `Rendering ${size.width}x${size.height} with ${activeVideoCheckpoint}. Four seconds of video takes a while.`,
+    });
+
+    let run;
+    try {
+      run = await runVideoLabChallenge({
+        checkpoint: activeVideoCheckpoint,
+        textEncoder: activeEncoder,
+        sizeId: videoSizeId,
+        promptId: imagePromptId,
+        judgeModel: activeJudge || undefined,
+        ollamaBaseUrl: ollama.baseUrl,
+        signal: controller.signal,
+      });
+    } finally {
+      videoAbortRef.current = null;
+    }
+    const result = toVideoLabResult(run, imagePromptId);
+
+    setVideoRunState({
+      phase: result.error ? 'failed' : 'complete',
+      result,
+      message: result.error
+        ? result.error
+        : `${describeVideoCost(run)}${
+          run.judged
+            ? `, and ${activeJudge} confirmed ${Math.round((run.adherence ?? 0) * 100)}% of the prompt in the middle frame.`
+            : '. No vision model was available to check a frame, so this run is unjudged.'
+        }`,
+    });
+
+    if (!result.error) {
+      const merged = { ...readAdvancedLabResults(), [`video:${activeVideoCheckpoint}`]: result };
+      writeAdvancedLabResults(merged);
+      setSavedResults(merged);
+    }
+  }, [activeEncoder, activeJudge, activeVideoCheckpoint, canRunVideoTest, imagePromptId, ollama.baseUrl, videoSizeId]);
+
+  const stopVideoRun = useCallback(() => {
+    videoAbortRef.current?.abort();
+  }, []);
+
+  const loadVideo = useCallback(async (ref: { filename: string; subfolder: string; type: string }) => {
+    setLoadingVideo(true);
+    try {
+      const dataUrl = await fetchComfyOutput(ref);
+      // A blob costs one copy and then behaves like a file; a multi-megabyte
+      // data: URL sitting in the DOM does not.
+      const blob = await (await fetch(dataUrl)).blob();
+      setPlayback((current) => {
+        if (current) URL.revokeObjectURL(current.url);
+        return { key: ref.filename, url: URL.createObjectURL(blob) };
+      });
+    } catch {
+      // The file may have been cleared from ComfyUI's output folder since the
+      // run. The frame and the score are still on screen, so this stays quiet.
+    } finally {
+      setLoadingVideo(false);
+    }
+  }, []);
+
+  // Object URLs outlive the component unless revoked, and each one pins a
+  // multi-megabyte blob in memory.
+  useEffect(() => () => { if (playback) URL.revokeObjectURL(playback.url); }, [playback]);
 
   return (
     <section className="advanced-lab" aria-label="Advanced capability lab">
@@ -288,8 +432,8 @@ export function AdvancedCapabilityLab({
               {isRunning ? 'Running Lab Test' : 'Run App Builder'}
             </button>
             <button type="button" className="mini-button outline" onClick={copyResult} disabled={!visibleResult?.response}>
-              {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-              {copied ? 'Copied' : 'Copy Output'}
+              {copied === 'copied' ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+              {copied === 'copied' ? 'Copied' : 'Copy Output'}
             </button>
             <button
               type="button"
@@ -358,88 +502,116 @@ export function AdvancedCapabilityLab({
             </b>
           </div>
           <p>
-            Runs an experimental Ollama image model through the same local API. This is intentionally separate from the core Match score.
+            Image generation runs on ComfyUI, not Ollama — Ollama hosts no image models and its
+            runtime refuses the ones that exist. This is intentionally separate from the core Match score.
           </p>
-          <div className="advanced-lab-image-controls">
-            <label htmlFor="advanced-image-model">Image model</label>
-            <select
-              id="advanced-image-model"
-              value={imageOption.model}
-              onChange={(event) => {
-                setImageModel(event.target.value);
-                setImageConsent(false);
-              }}
-              disabled={imagePulling || imageRunning}
-            >
-              {imageModelOptions.map((option) => (
-                <option key={option.model} value={option.model}>
-                  {option.label} · {formatGb(option.sizeGb)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="advanced-lab-safeguards">
-            <span>{formatGb(imageOption.sizeGb)} pull</span>
-            <span>{ADVANCED_IMAGE_WIDTH}x{ADVANCED_IMAGE_HEIGHT}</span>
-            <span>{ADVANCED_IMAGE_STEPS} steps</span>
-            <span>{imageOption.license}</span>
-          </div>
-          <div className="advanced-lab-image-preview">
-            <span>Prompt</span>
-            <strong>{ADVANCED_IMAGE_GENERATION_PROMPT}</strong>
-            <em>{imageOption.note}</em>
-          </div>
-          <div className="advanced-lab-warning">
-            <ShieldCheck aria-hidden="true" />
-            <span>Extra beta safeguard: RigMatch will not auto-pull this. You must explicitly accept the size/platform warning before downloading.</span>
-          </div>
-          {!imagePlatformSupported && (
-            <label className="advanced-lab-consent warning">
-              <input
-                type="checkbox"
-                checked={imageTryAnyway}
-                onChange={(event) => setImageTryAnyway(event.target.checked)}
-                disabled={imagePulling || imageRunning}
-              />
-              <span>Ollama currently labels image generation as macOS-only. Let me try anyway on this platform.</span>
-            </label>
-          )}
-          {!imageInstalled && (
-            <label className="advanced-lab-consent">
-              <input
-                type="checkbox"
-                checked={imageConsent}
-                onChange={(event) => setImageConsent(event.target.checked)}
-                disabled={!imagePlatformAllowed || imagePulling || imageRunning}
-              />
-              <span>I understand this may download about {formatGb(imageOption.sizeGb)} and may be slow or unsupported.</span>
-            </label>
-          )}
-          <div className="advanced-lab-actions">
-            {!imageInstalled ? (
-              <button type="button" className="primary-button compact" onClick={() => void startImagePull()} disabled={!canPullImageModel}>
-                <Download aria-hidden="true" />
-                {imagePulling ? 'Downloading' : `Pull ${imageOption.label}`}
+
+          {readiness.kind !== 'ready' ? (
+            <div className="utility-empty compact">
+              {readiness.kind === 'no-bridge' ? (
+                <>
+                  <strong>Image generation needs the desktop app</strong>
+                  <span>This build has no bridge to ComfyUI, so pictures cannot be generated here.</span>
+                </>
+              ) : readiness.kind === 'no-checkpoints' ? (
+                <>
+                  <strong>ComfyUI is running, but has no image model</strong>
+                  <span>
+                    Put an image checkpoint (a <code>.safetensors</code> file) in ComfyUI&apos;s
+                    <code> models/checkpoints</code> folder and check again. A video model on its
+                    own does not count — it cannot render a still.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <strong>{comfyChecking ? 'Looking for ComfyUI...' : 'ComfyUI is not running'}</strong>
+                  <span>
+                    Start ComfyUI and it will be found on port 8188. It is a separate free program —
+                    RigMatch does not install or bundle it.
+                  </span>
+                </>
+              )}
+              <button type="button" className="mini-button outline" onClick={() => void checkComfy()} disabled={comfyChecking}>
+                <RefreshCw className={comfyChecking ? 'spin' : ''} aria-hidden="true" />
+                Check again
               </button>
-            ) : (
-              <button type="button" className="primary-button compact" onClick={() => void startImageChallenge()} disabled={!canRunImageTest}>
-                <RefreshCw className={imageRunning ? 'spin' : ''} aria-hidden="true" />
-                {imageRunning ? 'Generating' : 'Run Image Test'}
-              </button>
-            )}
-            {imagePulling && (
-              <button type="button" className="mini-button outline" onClick={cancelImagePull}>
-                Stop Pull
-              </button>
-            )}
-          </div>
-          {imagePullState.message && (
-            <div className={`advanced-lab-download ${imagePullState.phase}`}>
-              <span>{imagePullState.message}</span>
-              <div className="popularity-track" aria-hidden="true">
-                <i style={{ width: `${imagePullState.percent ?? 12}%` }} />
-              </div>
             </div>
+          ) : (
+            <>
+              <div className="advanced-lab-image-controls">
+                <label htmlFor="advanced-image-checkpoint">Checkpoint</label>
+                <select
+                  id="advanced-image-checkpoint"
+                  value={activeCheckpoint}
+                  onChange={(event) => setCheckpoint(event.target.value)}
+                  disabled={imageRunning}
+                >
+                  {availableCheckpoints.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="advanced-lab-image-controls">
+                <label htmlFor="advanced-image-prompt">Prompt</label>
+                <select
+                  id="advanced-image-prompt"
+                  value={imagePromptId}
+                  onChange={(event) => setImagePromptId(event.target.value)}
+                  disabled={imageRunning}
+                >
+                  {IMAGE_BENCHMARK_PROMPTS.map((prompt) => (
+                    <option key={prompt.id} value={prompt.id}>{prompt.prompt}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="advanced-lab-image-controls">
+                <label htmlFor="advanced-image-judge">Checked by</label>
+                <select
+                  id="advanced-image-judge"
+                  value={activeJudge}
+                  onChange={(event) => setJudgeModel(event.target.value)}
+                  disabled={imageRunning || !judges.length}
+                >
+                  {judges.length ? (
+                    judges.map((name) => <option key={name} value={name}>{name}</option>)
+                  ) : (
+                    <option value="">No vision model installed</option>
+                  )}
+                </select>
+              </div>
+              <div className="advanced-lab-safeguards">
+                <span>{IMAGE_RUN_SETTINGS.width}x{IMAGE_RUN_SETTINGS.height}</span>
+                <span>{IMAGE_RUN_SETTINGS.steps} steps</span>
+                <span>fixed seed</span>
+                <span>{judges.length ? 'adherence judged' : 'unjudged'}</span>
+              </div>
+              {!judges.length && (
+                <div className="advanced-lab-warning">
+                  <AlertTriangle aria-hidden="true" />
+                  <span>
+                    No vision model is installed, so nothing can check whether the picture matches the
+                    prompt. The run still measures speed and fit, and is reported unjudged rather than
+                    scored as if the picture were wrong.
+                  </span>
+                </div>
+              )}
+              <div className="advanced-lab-actions">
+                <button type="button" className="primary-button compact" onClick={() => void startImageChallenge().catch((error: unknown) => {
+                  // Without this a throw before the run's own try — requireBridge,
+                  // say — left phase:'running' forever: a permanent spinner and an
+                  // unhandled rejection, with nothing on screen to explain it.
+                  setImageRunState({ phase: 'failed', result: null, message: getErrorMessage(error) });
+                })} disabled={!canRunImageTest}>
+                  <RefreshCw className={imageRunning ? 'spin' : ''} aria-hidden="true" />
+                  {imageRunning ? 'Generating' : 'Run Image Test'}
+                </button>
+                {imageRunning && (
+                  <button type="button" className="mini-button outline" onClick={stopImageRun}>
+                    Stop
+                  </button>
+                )}
+              </div>
+            </>
           )}
           {imageRunState.message && (
             <p className={`advanced-lab-message ${imageRunState.phase}`}>{imageRunState.message}</p>
@@ -479,38 +651,163 @@ export function AdvancedCapabilityLab({
           )}
         </article>
 
-        <article className="advanced-lab-card video-locked">
+        <article className="advanced-lab-card">
           <div className="advanced-lab-card-head">
             <Film aria-hidden="true" />
             <div>
-              <span>Research preview</span>
+              <span>Extra beta creative test</span>
               <strong>Video Generation</strong>
             </div>
-            <b className="advanced-lab-grade locked">Locked</b>
+            <b className={visibleVideoResult ? `advanced-lab-grade ${getScoreTone(visibleVideoResult.score)}` : 'advanced-lab-grade locked'}>
+              {visibleVideoResult ? `${visibleVideoResult.score} · ${visibleVideoResult.grade}` : 'Extra beta'}
+            </b>
           </div>
           <p>
-            No local backend RigMatch supports can generate video yet — Ollama has no video models today, so there
-            is honestly nothing to test. This card unlocks when that changes instead of pretending.
+            Renders four seconds of video on ComfyUI and checks a frame against the prompt.
+            Measured on a 12 GB card at 3x realtime for 768x512 &mdash; video needs less VRAM
+            than expected, and costs time instead.
           </p>
-          <div className="advanced-lab-checks">
-            <div className="failed" title="Ollama and LM Studio expose no video-generation endpoint today.">
-              <span>Miss</span>
-              <strong>Local video backend available</strong>
+
+          {!comfyUsable ? (
+            <div className="utility-empty compact">
+              <strong>{comfyChecking ? 'Looking for ComfyUI...' : 'ComfyUI is not running'}</strong>
+              <span>
+                Video generation uses the same ComfyUI as the Image Lab above. Start it and it will
+                be found on port 8188.
+              </span>
+              <button type="button" className="mini-button outline" onClick={() => void checkComfy()} disabled={comfyChecking}>
+                <RefreshCw className={comfyChecking ? 'spin' : ''} aria-hidden="true" />
+                Check again
+              </button>
             </div>
-            <div
-              className={(system.gpu.vramGb || 0) >= 16 ? 'passed' : 'failed'}
-              title={`Early local video models are expected to want roughly 16 GB+ of VRAM. This computer reports ${system.gpu.vramGb || 0} GB.`}
-            >
-              <span>{(system.gpu.vramGb || 0) >= 16 ? 'Pass' : 'Miss'}</span>
-              <strong>VRAM headroom (~16 GB+)</strong>
+          ) : videoReady.kind === 'no-checkpoint' ? (
+            <div className="utility-empty compact">
+              <strong>No video model installed</strong>
+              <span>
+                ComfyUI is running, but none of its checkpoints is a video model. LTX-Video is the
+                lightest that fits a consumer card; put it in ComfyUI&apos;s
+                <code> models/checkpoints</code> folder.
+              </span>
+              <button type="button" className="mini-button outline" onClick={() => void checkComfy()} disabled={comfyChecking}>
+                <RefreshCw className={comfyChecking ? 'spin' : ''} aria-hidden="true" />
+                Check again
+              </button>
             </div>
-          </div>
-          <div className="advanced-lab-safeguards">
-            <span>No auto-downloads</span>
-            <span>Separate Lab Grade</span>
-            <span>Backend + size warnings first</span>
-          </div>
+          ) : videoReady.kind === 'no-encoder' ? (
+            <div className="utility-empty compact">
+              <strong>No text encoder installed</strong>
+              <span>
+                A video model is present but LTX cannot run without a T5 encoder alongside it.
+                Put <code>t5xxl_fp8_e4m3fn.safetensors</code> in ComfyUI&apos;s
+                <code> models/text_encoders</code> folder &mdash; the fp8 build is about 4.9 GB,
+                half the size of fp16 and the sensible one for a consumer card.
+              </span>
+              <button type="button" className="mini-button outline" onClick={() => void checkComfy()} disabled={comfyChecking}>
+                <RefreshCw className={comfyChecking ? 'spin' : ''} aria-hidden="true" />
+                Check again
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="advanced-lab-image-controls">
+                <label htmlFor="advanced-video-checkpoint">Video model</label>
+                <select
+                  id="advanced-video-checkpoint"
+                  value={activeVideoCheckpoint}
+                  onChange={(event) => setVideoCheckpoint(event.target.value)}
+                  disabled={videoRunning}
+                >
+                  {videoCheckpoints.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="advanced-lab-image-controls">
+                <label htmlFor="advanced-video-size">Size</label>
+                <select
+                  id="advanced-video-size"
+                  value={videoSizeId}
+                  onChange={(event) => setVideoSizeId(event.target.value)}
+                  disabled={videoRunning}
+                >
+                  {VIDEO_SIZE_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>{preset.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="advanced-lab-safeguards">
+                <span>97 frames &middot; 4s</span>
+                <span>8 steps</span>
+                <span>{activeEncoder}</span>
+                <span>{judges.length ? 'frame judged' : 'unjudged'}</span>
+              </div>
+              <div className="advanced-lab-warning">
+                <AlertTriangle aria-hidden="true" />
+                <span>
+                  Motion quality is not scored. A frame can be checked against the prompt, but
+                  temporal consistency and flicker have no right answer and no local model judges
+                  them reliably &mdash; so the score covers speed and the frame, and says so.
+                </span>
+              </div>
+              <div className="advanced-lab-actions">
+                <button type="button" className="primary-button compact" onClick={() => void startVideoChallenge().catch((error: unknown) => {
+                  setVideoRunState({ phase: 'failed', result: null, message: getErrorMessage(error) });
+                })} disabled={!canRunVideoTest}>
+                  <RefreshCw className={videoRunning ? 'spin' : ''} aria-hidden="true" />
+                  {videoRunning ? 'Rendering' : 'Run Video Test'}
+                </button>
+                {videoRunning && (
+                  <button type="button" className="mini-button outline" onClick={stopVideoRun}>
+                    Stop
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+          {videoRunState.message && (
+            <p className={`advanced-lab-message ${videoRunState.phase}`}>{videoRunState.message}</p>
+          )}
+          {visibleVideoResult && !visibleVideoResult.error && (
+            <div className="advanced-lab-result">
+              {playback && playback.key === visibleVideoResult.videoRef?.filename ? (
+                <video className="advanced-lab-generated-image" src={playback.url} controls autoPlay loop muted />
+              ) : (
+                <>
+                  {visibleVideoResult.imageDataUrl && (
+                    <img
+                      className="advanced-lab-generated-image"
+                      src={visibleVideoResult.imageDataUrl}
+                      alt="Middle frame of the generated video"
+                    />
+                  )}
+                  {visibleVideoResult.videoRef && (
+                    <div className="advanced-lab-actions">
+                      <button
+                        type="button"
+                        className="mini-button outline"
+                        onClick={() => void loadVideo(visibleVideoResult.videoRef!)}
+                        disabled={loadingVideo}
+                      >
+                        <Play aria-hidden="true" />
+                        {loadingVideo ? 'Loading video' : 'Watch the video'}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+              <div className="advanced-lab-checks">
+                {visibleVideoResult.checks.map((check) => (
+                  <div key={check.label} className={check.passed ? 'passed' : 'failed'} title={check.detail}>
+                    <span>{check.passed ? 'Pass' : 'Miss'}</span>
+                    <strong>{check.label}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </article>
+
+        <ListeningLab ollama={ollama} models={hearingModels} />
       </div>
       {previewOpen && previewHtml && visibleResult && (
         <AppBuilderPreviewModal

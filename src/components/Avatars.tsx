@@ -1,10 +1,22 @@
 import type { NetworkHost } from '../types';
 import { getModelFamily } from '../lib/modelOrigins';
-import { MODEL_AVATAR_ASSETS, GENERIC_MODEL_AVATAR, HOST_AVATAR_SRC } from '../lib/modelAvatars';
+import { MODEL_AVATAR_ASSETS, GENERIC_MODEL_AVATAR, HOST_AVATAR_SRC, getGenerationAvatarSrc } from '../lib/modelAvatars';
 
-export function AvatarBust({ model, size, extraClass }: { model: string; size: 'tiny' | 'small' | 'large'; extraClass?: string }) {
-  const family = getModelFamily(model);
-  const avatarSrc = MODEL_AVATAR_ASSETS[family] ?? GENERIC_MODEL_AVATAR;
+export function AvatarBust({ model, size, extraClass, generationKind }: {
+  model: string;
+  size: 'tiny' | 'small' | 'large';
+  extraClass?: string;
+  /**
+   * Set for ComfyUI rows. Their names match no Ollama family, so without it a
+   * video model wears the generic chat robot and the image-generation portrait
+   * that already exists never appears.
+   */
+  generationKind?: 'image' | 'video' | 'text-encoder';
+}) {
+  const family = generationKind ? `gen-${generationKind}` : getModelFamily(model);
+  const avatarSrc = generationKind
+    ? getGenerationAvatarSrc(generationKind)
+    : MODEL_AVATAR_ASSETS[getModelFamily(model)] ?? GENERIC_MODEL_AVATAR;
 
   return (
     <span

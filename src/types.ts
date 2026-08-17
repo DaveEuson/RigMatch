@@ -69,6 +69,12 @@ export type OllamaModel = {
   family?: string;
   parameterSize?: string;
   quantization?: string;
+  /**
+   * Ollama's content digest for these exact weights. Tags mutate — pulling
+   * `llama3.1:8b` next month can fetch different weights under the same name —
+   * so the digest, not the tag, is what a saved score was actually measured on.
+   */
+  digest?: string;
   provider?: LocalModelProvider;
   providerLabel?: string;
   baseUrl?: string;
@@ -102,6 +108,28 @@ export type CatalogModel = {
   source: string;
   live: boolean;
   pulls?: number | null;
+  /**
+   * What the Ollama website lists this family as able to do. Coarser than an
+   * installed model's own report — it describes a family, not a tag — and
+   * covers only the top twenty per capability, which is all /search returns.
+   */
+  capabilities?: string[];
+  /**
+   * What runs this model. Absent means Ollama, which is nearly everything.
+   *
+   * Deliberately a property of the row rather than a separate screen: someone
+   * who wants to make a video should search for "makes video", not learn that
+   * video lives in a different registry from chat. Where the file comes from
+   * is our problem.
+   */
+  runtime?: 'ollama' | 'comfyui';
+  /** Links a ComfyUI row back to its catalogue entry, for downloading. */
+  generationId?: string;
+  /** Who published it. Set for generation rows, whose names match no Ollama
+      family and would otherwise read "Unknown model family". */
+  publisher?: string;
+  /** What this produces, for the capability filters. */
+  generationKind?: 'image' | 'video' | 'text-encoder';
 };
 
 export type CatalogResponse = {
@@ -150,6 +178,14 @@ export type BenchmarkPromptResult = {
   elapsedMs: number;
   tokensPerSecond: number;
   sobrietyScore: number;
+  /**
+   * How sobrietyScore was arrived at. 'judge' is a real quality reading;
+   * 'heuristic' means a rule matched (JSON keys, a refusal, a list shape);
+   * 'unjudged' means nothing could actually grade this answer and the number
+   * is a placeholder — prose scored by length, or code the scorer can only
+   * confirm is code. Absent on runs recorded before this was kept.
+   */
+  scoredBy?: 'judge' | 'heuristic' | 'unjudged';
   response: string;
   doneReason: string;
   status?: 'ok' | 'no-response' | 'truncated' | 'failed';
@@ -179,6 +215,18 @@ export type BenchmarkResult = {
   };
 };
 
+/** What a score was measured on, stamped at scoring time. */
+export type ScoreRigStamp = {
+  /** GPU model string, e.g. "NVIDIA GeForce RTX 4070". */
+  gpu: string;
+  vramGb: number;
+  driverVersion?: string;
+  appVersion: string;
+  /** Content digest of the exact weights tested, when the provider reports one. */
+  modelDigest?: string;
+  quantization?: string;
+};
+
 export type TestedModelScore = {
   model: string;
   total: number;
@@ -191,6 +239,14 @@ export type TestedModelScore = {
   suiteName?: string;
   preciseTotal?: number;
   scoreSchemaVersion?: number;
+  /**
+   * The setup this score was measured on. Scores are only meaningful relative
+   * to a rig, and both sides of the measurement can drift underneath a saved
+   * number: hardware and drivers change, and Ollama tags mutate so the same
+   * name can point at different weights. Absent on scores saved before the
+   * stamp existed — those can't claim drift either way.
+   */
+  rig?: ScoreRigStamp;
   /**
    * Measured generation throughput, carried over from the run's
    * `avgTokensPerSecond`. Kept alongside the `speed` sub-score because `speed`
@@ -406,6 +462,18 @@ export type GpuContention = {
   source: string | null;
 };
 
+/** What ComfyUI reports about itself, or why it could not be reached. */
+export type ComfyStatus = {
+  reachable: boolean;
+  stats?: unknown;
+  /** Filenames from /models/checkpoints. Empty is meaningful: running, no models. */
+  checkpoints: string[];
+  /** T5 encoders from /models/text_encoders. An LTX graph cannot run without one. */
+  textEncoders?: string[];
+  /** /prompt's reply, carrying queue_remaining — how busy this instance is. */
+  execInfo?: unknown;
+};
+
 export type AgentArcadeApi = {
   /**
    * `checkForUpdates` permits the one outbound call on this path — asking NVIDIA
@@ -431,6 +499,44 @@ export type AgentArcadeApi = {
   abortPull: (progressId?: string, reason?: 'pause' | 'cancel') => Promise<void>;
   deleteModel: (request: { model: string; baseUrl?: string }) => Promise<DeleteModelResponse>;
   runAdvancedGenerate: (request: AdvancedGenerateRequest) => Promise<AdvancedGenerateResponse>;
+  /**
+   * ComfyUI, which is where image generation actually happens — Ollama hosts no
+   * image models and its runtime refuses the ones that exist. Optional because
+   * an older preload will not have them, and the Image Lab has to tell the user
+   * ComfyUI is unavailable rather than throwing.
+   */
+  getComfyStatus?: (baseUrl?: string) => Promise<ComfyStatus>;
+  comfySubmit?: (baseUrl: string | undefined, graph: Record<string, unknown>, clientId?: string) => Promise<{ promptId: string }>;
+  comfyHistory?: (baseUrl: string | undefined, promptId: string) => Promise<unknown>;
+  comfyImage?: (baseUrl: string | undefined, ref: { filename: string; subfolder: string; type: string }) => Promise<string>;
+  comfyInterrupt?: (baseUrl: string | undefined, promptId: string) => Promise<unknown>;
+  /** Unload models and evict cached outputs before a timed run. */
+  comfyFree?: (baseUrl?: string) => Promise<unknown>;
+  /**
+   * Generation models do not come from Ollama, so they cannot be pulled — they
+   * are files that must land in a folder ComfyUI reads, and ComfyUI does not
+   * say where that is. Hence a picker, a verification step, and a downloader.
+   */
+  comfyPickFolder?: () => Promise<{ canceled: boolean; folder?: string }>;
+  /**
+   * Where ComfyUI is, worked out from the process serving its port. The result
+   * has already been verified against the running server, so a hit is safe to
+   * offer; a miss falls back to the folder picker.
+   */
+  comfyLocateFolder?: (baseUrl: string, serverCheckpoints: string[]) => Promise<{
+    found: boolean; folder?: string; roots?: string[]; source: string;
+    verdict?: { ok: boolean; reason?: string };
+  }>;
+  comfyVerifyFolder?: (folder: string, serverCheckpoints: string[]) =>
+    Promise<{ ok: boolean; root?: string; reason?: string; warning?: string | null }>;
+  comfyDownloadModel?: (request: {
+    root: string; folder: string; filename: string; url: string;
+    expectedBytes?: number; progressId?: string;
+  }) => Promise<{ path: string; alreadyPresent: boolean; bytes: number }>;
+  comfyAbortDownload?: (progressId: string) => Promise<boolean>;
+  onComfyDownloadProgress?: (
+    callback: (progress: { id: string; received: number; total: number; percent: number | null }) => void,
+  ) => () => void;
   // Cloud judge bridge (strictly opt-in): one OpenRouter completion using the
   // user's own key, routed through the main process. Only used for judging.
   openRouterGenerate?: (request: { apiKey: string; model: string; prompt: string; maxTokens?: number }) => Promise<{ response: string; error: string | null }>;
@@ -453,6 +559,16 @@ export type AgentArcadeApi = {
     judgeModel?: string;
     judgeProvider?: 'local' | 'openrouter';
     judgeApiKey?: string;
+    /**
+     * A local model used to mark only the answers the heuristic cannot — chat
+     * and writing, which have no shape to match and would otherwise be scored
+     * by length. Applies when qualityMode is 'heuristic'; `judge` still means
+     * judge everything. Always local: auto-engaging a paid, off-machine judge
+     * would break both the wallet and the local-only promise. Sent as an
+     * ordered list so the main process can skip the model under test — a model
+     * grading its own answers marks itself generously.
+     */
+    autoJudgeModels?: string[];
   }) => Promise<BenchmarkResult>;
   onBenchmarkProgress?: (callback: (update: BenchmarkProgressUpdate) => void) => () => void;
   getActiveBenchmark: () => Promise<BenchmarkStatus>;

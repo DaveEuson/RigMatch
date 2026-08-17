@@ -14,10 +14,10 @@ import type {
   TestedModelScore,
 } from '../types';
 import type { NavId } from '../components/SideMenu';
-import { getModelFamily, getModelOrigin } from './modelOrigins';
-import { normalizeModelKey } from './modelKey';
-import { compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore } from './scoring';
-import { formatBytes, formatBytesPerSecond, formatGb, hashString, formatThroughput } from './format';
+import { getModelFamily, getModelOrigin } from './modelOrigins.ts';
+import { normalizeModelKey } from './modelKey.ts';
+import { MATCH_GRADE_BANDS, compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore } from './scoring.ts';
+import { formatBytes, formatBytesPerSecond, formatGb, hashString, formatThroughput } from './format.ts';
 import {
   APP_VERSION,
   GITHUB_ISSUES_URL,
@@ -28,11 +28,11 @@ import {
   themeOptions,
   type ThemeId,
   type UiMode,
-} from './appConfig';
+} from './appConfig.ts';
 
 export type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'origin' | 'source' | 'status' | 'score' | 'speed' | 'pulls';
 export type SortDirection = 'asc' | 'desc';
-export type ModelQuickFilterId = 'all' | 'installed' | 'fits-vram' | 'scored' | 'unscored' | 'huge';
+export type ModelQuickFilterId = 'all' | 'installed' | 'fits-vram' | 'scored' | 'unscored' | 'good-score' | 'low-score' | 'huge';
 export type ListTestResult = {
   winner: string;
   results: TestedModelScore[];
@@ -69,15 +69,27 @@ export type HardwareFit = {
  * models; the browsable catalogue cannot be asked, so the name heuristics below
  * remain the fallback rather than being replaced.
  */
-type CapabilityBearing = {
+export type CapabilityBearing = {
   capabilities?: string[];
   installedModel?: { capabilities?: string[] };
   displayName?: string;
   name?: string;
 };
 
+/**
+ * What this model can do, best source first.
+ *
+ * The installed model wins. That comes from /api/show — the provider
+ * describing a file it actually has — whereas `row.capabilities` on a
+ * catalogue entry is what the Ollama website lists for the family, which is
+ * coarser: it covers a family rather than a tag, so a family listed as
+ * seeing does not prove that its 0.5b tag does.
+ *
+ * Both beat guessing from the name, which is why callers prefer this and fall
+ * back to a name rule only when it returns null.
+ */
 export function getModelCapabilities(row: CapabilityBearing): string[] | null {
-  const reported = row.capabilities ?? row.installedModel?.capabilities;
+  const reported = row.installedModel?.capabilities ?? row.capabilities;
   return Array.isArray(reported) && reported.length > 0 ? reported : null;
 }
 
@@ -95,10 +107,67 @@ export function getModelCapabilities(row: CapabilityBearing): string[] | null {
  * are assumed runnable — the previous behaviour, and wrong only for the handful
  * of image models.
  */
-export function canGenerateText(row: CapabilityBearing): boolean {
+export function canGenerateText(row: CapabilityBearing & { generationKind?: string }): boolean {
+  // A ComfyUI checkpoint is settled before any capability lookup: it produces
+  // pixels, not words, and it has no capabilities field — which the fallback
+  // below reads as "assume runnable". That default exists so unknown Ollama
+  // catalogue entries are not excluded, and without this line it quietly
+  // qualified Stable Diffusion for a conversation benchmark.
+  if (row.generationKind) return false;
   const capabilities = getModelCapabilities(row);
   if (capabilities) return capabilities.includes('completion');
   return !isLikelyImageGenerationModel(row.displayName ?? row.name ?? '');
+}
+
+/**
+ * Models fit to mark another model's prose, most capable first.
+ *
+ * The judge reads an answer and scores it, so it has to be able to hold a
+ * conversation — an embedding model, a ComfyUI checkpoint or an OCR model
+ * cannot, and picking one produces confident nonsense rather than an error.
+ * That mattered less when judging was opt-in and hand-picked; now that chat
+ * and writing questions are marked by a judge automatically, the default
+ * cannot simply be "the biggest file installed".
+ *
+ * Sorted largest-first because a bigger model is the better grader, with the
+ * known-weak ones pushed to the back rather than dropped — they are still
+ * better than scoring prose by its length.
+ */
+export function textJudgeCandidates(
+  rows: Array<CapabilityBearing & { generationKind?: string; sizeGb?: number | null }>,
+): string[] {
+  const names = [...rows]
+    .filter((row) => canGenerateText(row) && !isEmbeddingModel(row.displayName ?? row.name ?? ''))
+    .sort((a, b) => (b.sizeGb ?? 0) - (a.sizeGb ?? 0))
+    .map((row) => row.displayName ?? row.name ?? '')
+    .filter(Boolean);
+  return [
+    ...names.filter((name) => !WEAK_TEXT_JUDGE.test(name)),
+    ...names.filter((name) => WEAK_TEXT_JUDGE.test(name)),
+  ];
+}
+
+/**
+ * Models that answer but grade badly. OCR models transcribe rather than judge,
+ * and the small llava family answers "1" to almost anything — both measured
+ * while validating the image judge, and both equally useless on prose.
+ */
+const WEAK_TEXT_JUDGE = /\bocr\b|deepseek-ocr|got-ocr|olmocr|bakllava|^llava|\/llava/i;
+
+/**
+ * Whether a model can sit in the Speed Dating lineup at all.
+ *
+ * The comparison is a text conversation: every contestant answers the same
+ * questions and is graded on the answers. That is the shared floor, and only
+ * models that claim it may enter — not because differing capabilities make a
+ * comparison unfair in general (a vision model versus a text model is a fair
+ * chat comparison; the vision skill simply is not being graded), but because a
+ * model with no text floor at all would be graded on a skill it never
+ * claimed. Generation models compare against each other in the Lab instead,
+ * where a batch run gives every checkpoint the same prompt and the same seed.
+ */
+export function canJoinComparison(row: ModelRow): boolean {
+  return row.runtime !== 'comfyui' && canGenerateText(row) && !isEmbeddingModel(row.displayName);
 }
 
 /**
@@ -702,6 +771,27 @@ export function getModelSortValue(
   }
 }
 
+/** Capability and runtime words for the search haystack, with the synonyms a
+    person actually types — "hears" for the audio capability, "comfyui" for a
+    generation row. Completion is skipped: every chat model has it, so it only
+    adds noise. */
+function describeCapabilitiesForSearch(row: ModelRow): string[] {
+  const words: string[] = [];
+  for (const capability of getModelCapabilities(row) ?? []) {
+    if (capability === 'audio') words.push('audio hears listening transcribe');
+    else if (capability === 'vision') words.push('vision sees reads images');
+    else if (capability === 'tools') words.push('tools function calling');
+    else if (capability === 'thinking') words.push('thinking reasoning');
+    else if (capability !== 'completion') words.push(capability);
+  }
+  if (row.runtime === 'comfyui') words.push('comfyui generation');
+  if (row.generationKind === 'image') words.push('image generation makes images');
+  if (row.generationKind === 'video') words.push('video generation makes video');
+  if (row.generationKind === 'text-encoder') words.push('text encoder');
+  if (row.publisher) words.push(row.publisher);
+  return words;
+}
+
 export function getModelSearchText(row: ModelRow, queued: boolean, score?: TestedModelScore) {
   const profile = getModelProfile(row.displayName);
   const goodForTags = getModelGoodForTags(row);
@@ -722,6 +812,10 @@ export function getModelSearchText(row: ModelRow, queued: boolean, score?: Teste
     profile.archetype,
     ...profile.specialties,
     ...goodForTags,
+    // Capabilities, in the words a person would type. The cold walkthrough
+    // searched "audio" for a model that can hear and got "no contestants
+    // match" — the ability existed, the haystack just never carried it.
+    ...describeCapabilitiesForSearch(row),
   ]
     .join(' ')
     .toLowerCase();
@@ -840,7 +934,7 @@ export function mergeModelRows(catalog: CatalogModel[], installedModels: OllamaM
 
 // Re-exported from the leaf module so storage layers (runHistory) can key by
 // model without importing this file's React/asset graph.
-export { normalizeModelKey } from './modelKey';
+export { normalizeModelKey } from './modelKey.ts';
 
 export function isCloudModel(model: string): boolean {
   const lower = (model || '').toLowerCase();
@@ -921,6 +1015,16 @@ export function getSelectedContestantBlurb(
   score: TestedModelScore | undefined,
   hardwareFit: HardwareFit,
 ) {
+  // A generation model never reaches Speed Dating, so nothing below applies —
+  // and the profile passed in is the personality profiler's invention, which
+  // described a video checkpoint as "chat, utility, experiments" in review.
+  if (row.generationKind) {
+    const makes = row.generationKind === 'text-encoder'
+      ? 'reads prompts for image and video models'
+      : `makes ${row.generationKind}s`;
+    return `${row.displayName} ${makes} on ComfyUI. It does not chat, so it skips Speed Dating — run it from the Lab instead.`;
+  }
+
   if (score) {
     return `${row.displayName} scored ${score.total} (${score.grade}) on this rig. ${hardwareFit.detail}`;
   }
@@ -1063,6 +1167,13 @@ export function getModelRuntime(row: ModelRow | undefined, ollama: OllamaStatus)
 }
 
 export function getModelBenchmarkBlocker(row: ModelRow | undefined, host: NetworkHost | undefined, ollama: OllamaStatus) {
+  // Checked before the host, because no host can run it: a benchmark asks
+  // questions and grades answers, and a checkpoint has no chat endpoint to
+  // ask. The row action cell and the shortlist were gated for this; the
+  // detail panel's TEST MODEL calls straight through to here and was not.
+  if (row && !canJoinComparison(row)) {
+    return `${row.displayName} cannot be tested this way — the test asks questions and grades the answers, and this model draws instead of chatting. Run it from the Lab.`;
+  }
   if (row?.localProvider === 'lm-studio') return null;
   return getHostBenchmarkBlocker(host, ollama);
 }
@@ -1236,7 +1347,7 @@ export const TASK_CATEGORIES = [
 ] as const;
 
 export type TaskCategoryId = typeof TASK_CATEGORIES[number]['id'];
-export type ModelTaskFilterId = TaskCategoryId | 'uncensored' | 'imagegen' | 'videogen';
+export type ModelTaskFilterId = TaskCategoryId | 'uncensored' | 'imagegen' | 'videogen' | 'hears' | 'videoread' | 'audiogen';
 
 export const TASK_FILTER_CHIPS: Array<{ id: ModelTaskFilterId; label: string }> = [
   { id: 'coding',     label: 'Coding' },
@@ -1246,10 +1357,45 @@ export const TASK_FILTER_CHIPS: Array<{ id: ModelTaskFilterId; label: string }> 
   { id: 'tiny',       label: 'Tiny' },
   { id: 'imagegen',   label: 'Makes images' },
   { id: 'videogen',   label: 'Makes video' },
+  { id: 'audiogen',   label: 'Makes audio' },
   { id: 'vision',     label: 'Reads images/OCR' },
+  { id: 'hears',      label: 'Hears audio' },
+  { id: 'videoread',  label: 'Watches video' },
   { id: 'search',     label: 'Search' },
   { id: 'uncensored', label: 'Uncensored' },
 ];
+
+/**
+ * Models that read video the user sends.
+ *
+ * Ollama's capability vocabulary has no 'video' today and its API takes no
+ * video input, so this is provider-capability first (future-proof: the moment
+ * Ollama reports it, the filter lights up) with a name rule only for models
+ * that exist *specifically* for video understanding. Ordinary -vl vision
+ * models are deliberately not matched: they read frames as stills, and
+ * claiming they "watch video" through an API that cannot send video is the
+ * "Makes images: 0 models" lie with a new face. The chip row hides filters
+ * with no matches, so until such a model exists this simply does not appear.
+ */
+export function canWatchVideo(row: CapabilityBearing): boolean {
+  const capabilities = getModelCapabilities(row);
+  if (capabilities?.includes('video')) return true;
+  return /video-?llama|llava-?(next-?)?video|\bapollo\b|video-?chat/i
+    .test(row.displayName ?? row.name ?? '');
+}
+
+/**
+ * Models that produce audio — TTS and music.
+ *
+ * Name-only, because no local provider reports an audio-output capability and
+ * none runs one yet. Same contract as the video chips: recognizable the day
+ * they exist, hidden until then.
+ */
+export function isLikelyAudioGenerationModel(name: string): boolean {
+  const lower = (name || '').toLowerCase();
+  if (/whisper|transcribe/.test(lower)) return false; // hears, does not speak
+  return /\btts\b|text-?to-?speech|kokoro|orpheus|\bbark\b|musicgen|stable-?audio|ace-?step|parler/.test(lower);
+}
 
 /** Models that generate video. No local backend runs these yet, so the filter
    is usually empty — it exists so such models are recognizable when they exist. */
@@ -1269,6 +1415,14 @@ export function isUncensoredModel(name: string): boolean {
 }
 
 export function getModelGoodForTags(row: ModelRow): string[] {
+  // A checkpoint is not a chat model, and running its filename through the
+  // personality profiler produced "chat, utility, experiments" on a video
+  // model. What it makes is already known, so nothing needs inferring.
+  if (row.generationKind) {
+    return row.generationKind === 'image' ? ['makes images']
+      : row.generationKind === 'video' ? ['makes video']
+      : ['reads prompts for image and video models'];
+  }
   const profile = getModelProfile(row.displayName);
   const tags = [
     isLikelyImageGenerationModel(row.displayName) ? 'makes images' : '',
@@ -1338,10 +1492,51 @@ export function getModelDreamTags(row: ModelRow): Array<'talk' | 'write' | 'code
   return tags;
 }
 
+/**
+ * The Models filter that shows a goal's candidates.
+ *
+ * The splash asks what someone wants to do; this is how that answer reaches
+ * the Models screen without inventing a second filter system. Goals with no
+ * chip yet return undefined and simply apply no lens — never a wrong one.
+ */
+export function taskFilterForGoal(goalId: string | undefined): ModelTaskFilterId | undefined {
+  switch (goalId) {
+    case 'talk': return 'assistant';
+    case 'write': return 'writing';
+    case 'code': return 'coding';
+    case 'transcribe-file': return 'hears';
+    case 'describe-image': return 'vision';
+    case 'make-images': return 'imagegen';
+    // Image-to-video and text-to-video draw from the same checkpoint pool.
+    case 'animate-image': return 'videogen';
+    case 'make-video': return 'videogen';
+    case 'make-audio': return 'audiogen';
+    // use-tools has no capability chip yet; json-scored, so Matches can rank
+    // it, but the Models screen cannot filter for it until tools capability
+    // reporting lands. transcribe-live and ask-documents have no lens either.
+    default: return undefined;
+  }
+}
+
 export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolean {
+  // A generation model says outright what it makes, so nothing here has to
+  // infer it from a filename. "sd15.safetensors" matches no image-model name
+  // rule, and inferring is what made these filters read zero.
+  if (row.generationKind) {
+    if (task === 'imagegen') return row.generationKind === 'image';
+    if (task === 'videogen') return row.generationKind === 'video';
+    // A checkpoint is not a chat model; it matches none of the text tasks.
+    return false;
+  }
   if (task === 'uncensored') return isUncensoredModel(row.displayName);
   if (task === 'imagegen') return isImageGenerationModel(row);
   if (task === 'videogen') return isLikelyVideoGenerationModel(row.displayName);
+  // Provider-reported only, no name fallback: nothing in a name reliably says
+  // a model can hear, and matching one that cannot guarantees the "Failed to
+  // load image or audio file" error on its scorecard.
+  if (task === 'hears') return canHearAudio(row);
+  if (task === 'videoread') return canWatchVideo(row);
+  if (task === 'audiogen') return isLikelyAudioGenerationModel(row.displayName);
   const category = TASK_CATEGORIES.find((c) => c.id === task);
   if (!category || category.keywords.length === 0) return true;
   const specialties = getModelGoodForTags(row).map((s) => s.toLowerCase());
@@ -1363,8 +1558,19 @@ export type TaskPick = {
   taskScore?: number;
 };
 
-export function getTaskTopPicks(modelScores: Record<string, TestedModelScore>): TaskPick[] {
-  const scored = Object.values(modelScores).filter((s) => !isCloudModel(s.model) && !isLegacyScore(s));
+export function getTaskTopPicks(
+  modelScores: Record<string, TestedModelScore>,
+  /**
+   * True when a score has drifted from the current setup (hardware changed,
+   * or the tag now points at different weights). Drifted scores are excluded
+   * for the same reason legacy ones are: stale calibration must not crown a
+   * winner.
+   */
+  isDrifted?: (score: TestedModelScore) => boolean,
+): TaskPick[] {
+  const scored = Object.values(modelScores).filter(
+    (s) => !isCloudModel(s.model) && !isLegacyScore(s) && !(isDrifted?.(s) ?? false),
+  );
   if (scored.length === 0) return [];
 
   const picks: TaskPick[] = [];
@@ -1460,6 +1666,8 @@ export function getModelQuickFilters(
     { id: 'fits-vram', label: 'Rig Picks', count: rows.filter((row) => modelFitsVram(row, vramGb)).length },
     { id: 'scored', label: 'Scored', count: rows.filter((row) => Boolean(getModelScore(row, scores))).length },
     { id: 'unscored', label: 'Unscored', count: rows.filter((row) => row.installed && !getModelScore(row, scores)).length },
+    { id: 'good-score', label: 'B or better', count: rows.filter((row) => isGoodScore(getModelScore(row, scores))).length },
+    { id: 'low-score', label: 'Below B', count: rows.filter((row) => isLowScore(getModelScore(row, scores))).length },
     { id: 'huge', label: 'Too Big', count: rows.filter((row) => getHardwareFit(row, vramGb).tone === 'out-of-league').length },
   ];
 }
@@ -1474,8 +1682,26 @@ export function modelMatchesQuickFilter(
   if (filter === 'fits-vram') return modelFitsVram(row, vramGb);
   if (filter === 'scored') return Boolean(score);
   if (filter === 'unscored') return row.installed && !score;
+  if (filter === 'good-score') return isGoodScore(score);
+  if (filter === 'low-score') return isLowScore(score);
   if (filter === 'huge') return getHardwareFit(row, vramGb).tone === 'out-of-league';
   return true;
+}
+
+/**
+ * The line between a good score and a poor one is where a B begins, taken
+ * from MATCH_GRADE_BANDS rather than restated — if the grading ever shifts,
+ * these filters shift with it instead of quietly disagreeing.
+ */
+const GOOD_SCORE_MIN = MATCH_GRADE_BANDS.find((band) => band.grade === 'B')?.min ?? 72;
+
+export function isGoodScore(score: TestedModelScore | undefined): boolean {
+  return Boolean(score && score.total >= GOOD_SCORE_MIN);
+}
+
+/** Scored, and badly — distinct from unscored, which is not a verdict at all. */
+export function isLowScore(score: TestedModelScore | undefined): boolean {
+  return Boolean(score && score.total < GOOD_SCORE_MIN);
 }
 
 export function modelFitsVram(row: ModelRow, vramGb: number) {

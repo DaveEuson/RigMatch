@@ -92,6 +92,7 @@ import type {
   ChatMessage,
   SkillRunStatus,
   GpuContention,
+  ScoreRigStamp,
 } from './types';
 import {
   MATCH_GRADE_BANDS,
@@ -99,12 +100,14 @@ import {
   compareTestedModelScores,
   formatMatchScore,
   isLegacyScore,
+  scoreDrift,
+  scoreDriftLabel,
   toTestedModelScore,
   upsertModelScores,
 } from './lib/scoring';
 import {
   getDeveloperFilterOptions,
-  getModelDeveloperKey,
+  getRowDeveloper,
   getModelOrigin,
 } from './lib/modelOrigins';
 import {
@@ -127,6 +130,9 @@ import { GameShowHost } from './components/GameShowHost';
 import { BrandMark, PanelHeader, MetricTile } from './components/CommonChrome';
 import { ReleaseNotes, UpdateCenter } from './components/UpdateCenter';
 import { releaseNotes } from './data/releaseNotes';
+import { licenseLinksForModels } from './lib/modelLicenses';
+import { lineupStanding, standingLine } from './lib/lineupStanding';
+import { readDeckExpanded, writeDeckExpanded } from './lib/deckSettings';
 import { playJingle } from './lib/sound';
 import { TopDeck } from './components/TopDeck';
 import {
@@ -148,7 +154,6 @@ import {
   getCudaDetail,
   getCudaSummary,
   getDiskGuard,
-  getFootprintFit,
   getHardwareFit,
   getLineupBenchmarkBlocker,
   getLocalRigDetailCards,
@@ -198,6 +203,7 @@ import {
   isEmbeddingModel,
   isHostBenchmarkReady,
   canGenerateText,
+  canJoinComparison,
   canHearAudio,
   isLikelyImageGenerationModel,
   isVisionModel,
@@ -216,6 +222,7 @@ import {
   removeBenchmarkResults,
   removeListTestScores,
   removeModelScores,
+  textJudgeCandidates,
   removePullProgress,
   removePullProgressForModels,
   removeSetValues,
@@ -246,11 +253,13 @@ import {
   readRunHistory,
   removeRuns,
   seedFromBenchmarkResults,
+  toRunHardware,
   toRunHistoryEntry,
   writeRunHistory,
   type RunDelta,
   type RunHistory,
 } from './lib/runHistory';
+import { estimateBenchmarkMs, estimateSpeedDateMs, formatDuration } from './lib/runEstimates';
 import {
   amazonUrl,
   APP_VERSION,
@@ -282,6 +291,7 @@ import {
 import { getUpdateChannelLabel } from './lib/updateLabels';
 import { AvatarBust, MachineAvatar } from './components/Avatars';
 import { AppBuilderPreviewModal } from './components/AppBuilderPreview';
+import { ComfySettings } from './components/ComfySettings';
 import { ShareScorecard } from './components/ShareScorecard';
 import { ExportHatchModal } from './components/ExportHatchModal';
 import { buildHatchProfile } from './lib/hatchProfile';
@@ -307,17 +317,35 @@ import {
   resolveAppBuilderPrompt,
   buildAppBuilderRetryPrompt,
   extractJudgedProblem,
-  ADVANCED_IMAGE_GENERATION_PROMPT,
   getListeningTestAudio,
   getVisionTestImageDataUrl,
   runAdvancedAppBuilderChallenge,
   runCodeChallenge,
   runAdvancedListeningChallenge,
   runAdvancedVisionChallenge,
-  runAdvancedImageGenerationChallenge,
   VISION_TEST_IMAGES,
   DEFAULT_VISION_TEST_IMAGE,
 } from './lib/labChallenges';
+import { IMAGE_BENCHMARK_PROMPTS } from './lib/imageGenScoring';
+import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
+import { batchSeed, isVideoCheckpoint } from './lib/videoGen';
+import { DEFAULT_VIDEO_SIZE_ID, VIDEO_SIZE_PRESETS, toVideoLabResult, videoReadiness } from './lib/videoGenChallenge';
+import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
+import { tickerTips } from './lib/glossary';
+import { GOALS, goalById, goalHardwareExpectation, goalsByCategory, leagueLabel, presetIdForGoal, type GoalId } from './lib/goals';
+import { taskFilterForGoal } from './lib/modelCatalog';
+import {
+  firstRunStep, hasBeenOfferedGoals, markGoalsOffered, readSelectedGoals, writeSelectedGoals,
+  type FirstRunStep,
+} from './lib/goalSettings';
+import { getGoalMatches } from './lib/goalMatches';
+import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
+import { copyText, type CopyState } from './lib/clipboard';
+import { downloadMatchCard } from './lib/matchCard';
+import { runVideoLabChallenge } from './lib/videoGenRunner';
+import { runImageLabChallenge } from './lib/imageGenRunner';
+import { describeComfyBusy, getComfyStatus } from './lib/comfyTransport';
+import { readComfySettings } from './lib/comfySettings';
 import {
   CODE_LANGUAGES,
   CODE_TASK_PRESETS,
@@ -332,7 +360,6 @@ import {
   PopularityMeter,
   PromptStatusPill,
   RomanceArtBanner,
-  ScoreBars,
   ScoreLegend,
   ScoreRadar,
   ScoreDeltaCell,
@@ -341,6 +368,7 @@ import {
 } from './components/ScoreVisuals';
 import {
   compareVersionStrings,
+  countWithVerb,
   formatGb,
   formatMs,
   formatPullCount,
@@ -352,7 +380,6 @@ import {
   gradeFor,
 } from './lib/format';
 import robotContestantWall from './assets/robot-contestant-wall.webp';
-import robotModelTest from './assets/robot-model-test.webp';
 import robotRigGreenroom from './assets/robot-rig-greenroom.webp';
 import robotRomanceHero from './assets/robot-romance-hero.webp';
 import robotScorecardCeremony from './assets/robot-scorecard-ceremony.webp';
@@ -369,7 +396,25 @@ const QUICK_CHECK_WARNING_KEY = 'rigmatch:quick-test-warning:v1';
 // The app version whose update nudge the user dismissed — so the gentle popup
 // shows once per new release, never nags for a version they've already seen.
 const UPDATE_PROMPT_DISMISSED_KEY = 'rigmatch:update-prompt-dismissed:v1';
-type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; recognize: boolean; recognizeImage: string; listen: boolean; code: boolean; codeLanguage: string; codeTaskId: string; codeCustomTask: string; skipQuestions: boolean };
+/**
+ * Filters that match on a provider-reported capability and nothing else.
+ *
+ * Their counts are honest but partial: a model that is not installed cannot be
+ * asked what it can do. Named here so the note stays attached if more such
+ * filters are added.
+ */
+const CAPABILITY_ONLY_FILTERS = ['hears', 'videoread'];
+
+/**
+ * Filters whose results are ComfyUI models rather than Ollama ones.
+ *
+ * Listed so the "you will need ComfyUI" note appears exactly where those
+ * Download buttons are, rather than being something to discover in Settings
+ * after clicking one.
+ */
+const GENERATION_FILTERS = ['imagegen', 'videogen'];
+
+type SkillTestSelection = { appBuilder: boolean; appPromptId: string; appCustomPrompt: string; image: boolean; imagePrompt: string; video: boolean; videoSizeId: string; recognize: boolean; recognizeImage: string; listen: boolean; code: boolean; codeLanguage: string; codeTaskId: string; codeCustomTask: string; skipQuestions: boolean };
 type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
 
 type RunProgress = {
@@ -532,7 +577,9 @@ function App() {
     appPromptId: DEFAULT_APP_BUILDER_PRESET_ID,
     appCustomPrompt: '',
     image: false,
-    imagePrompt: ADVANCED_IMAGE_GENERATION_PROMPT,
+    imagePrompt: IMAGE_BENCHMARK_PROMPTS[0].id,
+    video: false,
+    videoSizeId: DEFAULT_VIDEO_SIZE_ID,
     recognize: false,
     recognizeImage: DEFAULT_VISION_TEST_IMAGE,
     listen: false,
@@ -548,6 +595,17 @@ function App() {
   const [liveBuild, setLiveBuild] = useState<{ model: string; kind: 'app' | 'image' | 'vision'; text: string; done: boolean; error?: string } | null>(null);
   // Whether the live view is expanded (true) or minimized to the mini-bar (false).
   const [liveBuildOpen, setLiveBuildOpen] = useState(true);
+  // Checkpoints ComfyUI has loaded. Image generation is the one skill that does
+  // not run on an Ollama model, so its candidates come from here.
+  const [comfyCheckpoints, setComfyCheckpoints] = useState<string[]>([]);
+  // Tracked separately: a video model without a T5 encoder cannot render, and
+  // the two are fixed by fetching two different files.
+  const [comfyTextEncoders, setComfyTextEncoders] = useState<string[]>([]);
+  // Re-read whenever the utility panel closes, so a folder chosen in Settings
+  // reaches the Models screen without a restart.
+  const [comfySettings, setComfySettings] = useState(() => readComfySettings());
+  /** The generation download in flight, so Stop can abort the right stream. */
+  const activeComfyDownloadRef = useRef<string | null>(null);
   const [closeCleanupOpen, setCloseCleanupOpen] = useState(false);
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
@@ -584,6 +642,12 @@ function App() {
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null);
   const [activity, setActivity] = useState('Contestants is your hub: browse models, run tests, manage downloads, and start Speed Dating.');
   const [activeNavId, setActiveNavId] = useState<NavId>('models');
+  useEffect(() => {
+    // Cheap re-read on navigation: choosing a folder in Settings then going to
+    // Models should not need a restart, and localStorage has no change event
+    // for same-document writes.
+    setComfySettings(readComfySettings());
+  }, [activeNavId]);
   const [modelNews, setModelNews] = useState<ModelNewsState>(() => getSavedModelNewsState());
   const [modelNewsNotificationsEnabled, setModelNewsNotificationsEnabled] = useState(() => getSavedModelNewsNotificationsEnabled());
   const [notificationPermission, setNotificationPermission] = useState<ModelNotificationPermission>(() => getNotificationPermission());
@@ -601,7 +665,27 @@ function App() {
   const [themeId, setThemeId] = useState<ThemeId>(() => getSavedThemeId());
   const [uiMode, setUiMode] = useState<UiMode>(() => getSavedUiMode());
   // First-launch splash: ask Simple vs Advanced before showing the app.
-  const [showModeSplash, setShowModeSplash] = useState(() => !hasChosenInterfaceMode());
+  /**
+   * What to ask on launch. See firstRunStep: an upgrading user has already
+   * answered the mode question, and the old gate read that as having answered
+   * the goal question too — so everyone upgrading from 0.5 would have arrived
+   * in 0.6 with the goal picker, the Matches board and the goal lens all dark.
+   */
+  const [firstRun, setFirstRun] = useState<FirstRunStep>(() => firstRunStep({
+    modeChosen: hasChosenInterfaceMode(),
+    goalsOffered: hasBeenOfferedGoals(),
+  }));
+  const showModeSplash = firstRun === 'goals-and-mode';
+  const showGoalsIntro = firstRun === 'goals-only';
+  // Settings can reopen the goals step of the splash on its own — mistakes at
+  // first run must not be permanent, and localStorage is not a settings UI.
+  const [showGoalsEditor, setShowGoalsEditor] = useState(false);
+  // The message Simple Mode is currently showing, if any. Advanced reads the
+  // same text off the Ticker and does not need it.
+  const [simpleNotice, setSimpleNotice] = useState<string | null>(null);
+  // What the person said they want to do, first pick foremost. Drives the
+  // Models lens and the wizard's opening dream — a lens, never a lock.
+  const [selectedGoals, setSelectedGoals] = useState<GoalId[]>(() => readSelectedGoals());
   const [chatOpen, setChatOpen] = useState(false);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [pendingThirdPartyDownloadRows, setPendingThirdPartyDownloadRows] = useState<ModelRow[] | null>(null);
@@ -645,8 +729,25 @@ function App() {
   );
 
   const modelRows = useMemo(
-    () => mergeModelRows(catalog, localModels),
-    [catalog, localModels],
+    () => {
+      const rows = mergeModelRows(catalog, localModels);
+      // Generation models join the same list rather than living on a screen of
+      // their own. Someone who wants to make a video searches for "makes
+      // video"; that video comes from Hugging Face and runs on ComfyUI is our
+      // problem, not a category they should have to learn.
+      const generation: ModelRow[] = generationCatalogRows([...comfyCheckpoints, ...comfyTextEncoders])
+        .map((entry) => ({
+          ...entry,
+          displayName: entry.name,
+          installed: entry.installedFile,
+          ready: entry.installedFile,
+          installLabel: entry.installedFile ? 'Installed' : 'Download',
+          canDownload: !entry.installedFile,
+          pulls: null,
+        }));
+      return [...generation, ...rows];
+    },
+    [catalog, localModels, comfyCheckpoints, comfyTextEncoders],
   );
 
   const selectedRow = modelRows.find(
@@ -673,6 +774,19 @@ function App() {
     }
   }, [modelRows, selectedRow]);
 
+  // ComfyUI is a separate program the user starts themselves, so this is a
+  // look rather than a subscription. It drops its answer if the app closed
+  // while the probe was in flight.
+  useEffect(() => {
+    let live = true;
+    void getComfyStatus().then((status) => {
+      if (!live) return;
+      setComfyCheckpoints(status.checkpoints);
+      setComfyTextEncoders(status.textEncoders ?? []);
+    });
+    return () => { live = false; };
+  }, []);
+
   useEffect(() => {
     modelNewsRef.current = modelNews;
   }, [modelNews]);
@@ -684,23 +798,22 @@ function App() {
   const canBenchmark = Boolean(selectedRow?.installed && selectedHostCanBenchmark);
   const agentName = getAgentName(selectedModel);
   const shortlistedRows = useMemo(
-    () => modelRows.filter((row) => shortlistIds.has(row.displayName)).slice(0, 5),
+    // canJoinComparison here as well as at the doors: the shortlist persists in
+    // localStorage, so names can arrive from older sessions that predate the
+    // rule. Whatever got in, nothing without a text floor reaches a run.
+    () => modelRows.filter((row) => shortlistIds.has(row.displayName) && canJoinComparison(row)).slice(0, 5),
     [modelRows, shortlistIds],
   );
   const uninstalledShortlistedCount = useMemo(
     () => shortlistedRows.filter((row) => !row.installed).length,
     [shortlistedRows],
   );
-  const installedRowsForCleanup = useMemo(
-    () => modelRows.filter((row) => row.installed && row.localProvider !== 'lm-studio'),
-    [modelRows],
-  );
-  // Installed local (Ollama) models eligible to act as the judge, largest first —
-  // a bigger model is the better grader, so it makes the best default.
+  const installedRowsForCleanup = useMemo(() => deletableRows(modelRows), [modelRows]);
+  // Installed local (Ollama) models fit to judge, most capable first. Not
+  // simply the biggest file: an embedding or OCR model is often the largest
+  // thing installed and grades prose as confident nonsense.
   const judgeModelOptions = useMemo(
-    () => [...installedRowsForCleanup]
-      .sort((a, b) => (b.sizeGb ?? 0) - (a.sizeGb ?? 0))
-      .map((row) => row.displayName),
+    () => textJudgeCandidates(installedRowsForCleanup),
     [installedRowsForCleanup],
   );
   // The judge model actually sent with a run: the user's pick if it's still
@@ -714,6 +827,26 @@ function App() {
   // The judge configuration a run actually uses, or null when judging is off /
   // not usable (cloud without a key falls back to heuristic — never silently to
   // a different judge the user didn't pick).
+  /**
+   * A local model to mark the answers the rules cannot, when judging is off.
+   *
+   * Chat and writing questions have no shape for the heuristic to match, so
+   * 0.6 stopped them crowning anyone — which left those goals graded but
+   * uncrownable unless the user found the judge setting. This hands the main
+   * process a local judge for exactly those questions. Never the cloud judge:
+   * auto-engaging something that costs money and leaves the machine would be
+   * wrong however useful the score.
+   */
+  const autoJudgeModels = useMemo(() => {
+    if (qualityMode === 'judge') return [];
+    // The whole ordered list, not just the best one: the main process drops
+    // the model it is testing and takes the next, because a model marking its
+    // own answers grades itself generously and that score then crowns a Match.
+    // A lineup makes this certain rather than unlikely — every contestant is
+    // the model under test in turn.
+    return judgeModelOptions;
+  }, [qualityMode, judgeModelOptions]);
+
   const effectiveJudge = useMemo<{ provider: 'local' | 'openrouter'; model: string; apiKey?: string } | null>(() => {
     if (qualityMode !== 'judge') return null;
     if (judgeSource === 'openrouter') {
@@ -742,6 +875,11 @@ function App() {
     () => installedRowsForCleanup.filter((row) => !getModelScore(row, modelScores)),
     [installedRowsForCleanup, modelScores],
   );
+  const exceptTopPickRowsForCleanup = useMemo(
+    () => rowsExceptTopPick(modelRows, modelScores),
+    [modelRows, modelScores],
+  );
+
   const lowScoredRowsForCleanup = useMemo(
     () => installedRowsForCleanup.filter((row) => {
       const score = getModelScore(row, modelScores);
@@ -801,6 +939,12 @@ function App() {
     const vramGb = system.gpu.vramGb;
     const fitRank: Record<string, number> = { 'sweet-spot': 0, good: 1, tight: 2 };
     const mapped = modelRows
+      // The wizard exists to seat a Speed Dating lineup, and generation models
+      // can never sit in one — showing them as pickable contestants and then
+      // silently refusing the pick was the cold walkthrough's worst finding.
+      // They live in Models and run in the Lab; the video/image dream filters
+      // say so instead of listing them.
+      .filter((row) => canJoinComparison(row))
       .filter((row) => getPlatformFit(row.displayName, system.platform).compatible)
       .map((row) => ({ row, fit: getHardwareFit(row, vramGb) }))
       .filter((entry) => entry.fit.recommend && entry.fit.tone !== 'unknown')
@@ -843,6 +987,42 @@ function App() {
       }
       : null),
     [topRigPick],
+  );
+
+  /**
+   * How the whole lineup placed, best first.
+   *
+   * The show is a comparison and the Winner screen was throwing the comparison
+   * away: it announced one model "out of the 5 you tested" and then showed
+   * nothing whatever about the other four. Every score is already here; only
+   * Advanced Mode was allowed to see them, which is exactly backwards for the
+   * mode whose users will never open Advanced.
+   */
+  const wizardLineupResults = useMemo(
+    () => shortlistedRows
+      .flatMap((row) => {
+        const score = modelScores[row.displayName];
+        return score ? [{ row, score }] : [];
+      })
+      // The app's own comparator, not a total-descending sort: the board shows
+      // the one-decimal Match value, and ranking on the rounded integer put
+      // 87.5 above 87.6 — a list that visibly contradicted its own numbers.
+      .sort((a, b) => compareTestedModelScores(a.score, b.score))
+      .map(({ row, score }) => ({
+        model: row.displayName,
+        name: getFriendlyModelName(row.displayName),
+        scoreLabel: formatMatchScore(score),
+        total: score.total,
+        grade: score.grade,
+      })),
+    [shortlistedRows, modelScores],
+  );
+
+  // Advanced's stats strip. Read once from the stored choice, falling back to
+  // a rule based on how much height this screen actually has — see
+  // scripts/measure-shell.mjs for the numbers that set the threshold.
+  const [deckExpanded, setDeckExpanded] = useState(
+    () => readDeckExpanded(typeof window === 'undefined' ? 1080 : window.innerHeight),
   );
 
   // Simple Mode needs its own share state: Advanced's lives inside the profile
@@ -1338,7 +1518,11 @@ function App() {
       setActivity(`${row.displayName} is managed by LM Studio. Delete it from LM Studio if you want to free disk space.`);
       return;
     }
-    setSelectedModel(row.displayName);
+    // Deliberately does NOT touch selectedModel. It used to, which was fine on
+    // the Models screen but wrong from the Closet in Settings: clicking Evict
+    // reassigned the app's selected model, and cancelling the confirmation left
+    // it reassigned — Top Pick and chat silently pointing somewhere new after an
+    // action the user backed out of.
     setPendingDeleteModel(row);
   }, []);
 
@@ -1499,14 +1683,55 @@ function App() {
       : 'Advanced mode selected. RigMatch will show more setup details, commands, and diagnostics.');
   }, []);
 
-  const chooseInterfaceMode = useCallback((nextMode: UiMode) => {
+  /**
+   * Say something the user genuinely needs to read, in whichever mode they are in.
+   *
+   * setActivity alone was not enough: it renders only inside <Ticker>, which is
+   * gated to Advanced, so in Simple Mode — the default — every refusal and
+   * failure was written to state nobody paints. Use this for anything a user
+   * must act on; plain setActivity remains right for running commentary.
+   */
+  const tellUser = useCallback((message: string) => {
+    setActivity(message);
+    setSimpleNotice(message);
+  }, []);
+
+  // Stamped onto every score at scoring time. Scores are relative to a rig,
+  // and Ollama tags mutate — the digest is the only durable identity for the
+  // weights that actually earned the number.
+  const rigStampForModel = useCallback((model: string): ScoreRigStamp => {
+    const installed = ollama.models.find((m) => m.name === model || m.model === model);
+    return {
+      gpu: system.gpu.model,
+      vramGb: system.gpu.vramGb,
+      driverVersion: system.gpu.driverVersion || undefined,
+      appVersion: APP_VERSION,
+      modelDigest: installed?.digest,
+      quantization: installed?.quantization,
+    };
+  }, [ollama.models, system.gpu.model, system.gpu.vramGb, system.gpu.driverVersion]);
+
+  const chooseInterfaceMode = useCallback((nextMode: UiMode, goals: GoalId[] = []) => {
     selectUiMode(nextMode);
     // Persist immediately and record that the splash choice was made so it
     // won't reappear next launch. The Simple wizard opens itself at Setup.
     writeLocal(UI_MODE_STORAGE_KEY, nextMode);
     writeLocal(MODE_SPLASH_STORAGE_KEY, 'chosen');
-    setShowModeSplash(false);
+    writeSelectedGoals(goals);
+    setSelectedGoals(goals);
+    markGoalsOffered();
+    setFirstRun('none');
   }, [selectUiMode]);
+
+  const saveGoalsFromSettings = useCallback((goals: GoalId[]) => {
+    writeSelectedGoals(goals);
+    setSelectedGoals(goals);
+    setShowGoalsEditor(false);
+    const primary = goals[0] ? goalById(goals[0]) : undefined;
+    setActivity(primary
+      ? `Goals updated. ${primary.matchLabel} now leads Models and Simple Mode.`
+      : 'Goals cleared. Models and Simple Mode show everything again.');
+  }, []);
 
   const requestBenchmarkForModel = useCallback((model: string) => {
     const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
@@ -1608,10 +1833,11 @@ function App() {
         judgeModel: effectiveJudge?.model,
         judgeProvider: effectiveJudge?.provider,
         judgeApiKey: effectiveJudge?.apiKey,
+        autoJudgeModels,
       }), modelToTest);
       setBenchmark(result);
       setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
-      setModelScores((current) => upsertModelScores(current, [result], currentSuiteName));
+      setModelScores((current) => upsertModelScores(current, [result], currentSuiteName, rigStampForModel));
       setClearedTopMatches((current) => removeSetValues(current, [result.model, modelToTest]));
       recordRuns([result]);
       setRunProgress({
@@ -1684,7 +1910,7 @@ function App() {
         percent: 0,
         message: errorMessage,
       });
-      setActivity(`Benchmark failed: ${errorMessage}`);
+      tellUser(`The test stopped: ${errorMessage}`);
       // Re-read the provider. The commonest reason a run dies is that Ollama
       // went away mid-test, and nothing here updated ollama.ready — so the app
       // kept showing "Ollama ready" and "Desktop bridge online" for a provider
@@ -1696,7 +1922,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsBenchmarking(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
     // The quick TEST button skips the full launch modal, but it still loads a
@@ -1785,6 +2011,12 @@ function App() {
       setIsPullPauseRequested(false);
       setIsPullPaused(false);
       void agentArcadeApi.abortPull(activePullProgressIdRef.current ?? undefined, 'cancel');
+      // A generation download is a file stream, not an Ollama pull, and
+      // abortPull cannot touch it — without this the multi-gigabyte fetch
+      // carried on writing after Stop and the UI said it had stopped.
+      if (activeComfyDownloadRef.current) {
+        void agentArcadeApi.comfyAbortDownload?.(activeComfyDownloadRef.current);
+      }
       setQueuedModelIds(new Set<string>());
       setPullProgressByModel((current) => {
         if (!pullingModel) return {};
@@ -1848,13 +2080,118 @@ function App() {
     setActivity(`Pausing ${pullingModel}. Start Download will resume through Ollama instead of dropping the queue.`);
   }, [isPullCancelRequested, isPullPauseRequested, isPullingModels, ollama.baseUrl, pullingModel]);
 
+  /**
+   * Fetch a generation model into ComfyUI's own folders.
+   *
+   * Needs somewhere to write, and ComfyUI never says where it lives — so
+   * without a verified folder this stops and says so rather than failing
+   * somewhere less obvious. The encoder rides along: a video checkpoint on its
+   * own renders nothing.
+   */
+  const downloadGenerationModel = useCallback(async (row: ModelRow): Promise<boolean> => {
+    /**
+     * Refusing a download must LOOK like refusing it.
+     *
+     * These early returns used to leave no progress entry behind, and
+     * getDownloadRowStatus reads "no entry" as 'queued' — so a download that
+     * was declined before it started sat in the list saying "Queued" forever,
+     * with the reason in a single Ticker line that scrolls away and never
+     * appears in Simple Mode at all. A stuck progress bar is worse than an
+     * error: it tells the user to keep waiting.
+     */
+    const refuse = (why: string): false => {
+      setPullProgressByModel((current) => ({
+        ...current,
+        [row.displayName]: {
+          id: `comfy-refused-${row.displayName}`,
+          model: row.displayName,
+          phase: 'failed',
+          status: why,
+          percent: null,
+          error: why,
+          updatedAt: new Date().toISOString(),
+        },
+      }));
+      tellUser(why);
+      return false;
+    };
+
+    const model = row.generationId ? generationModelById(row.generationId) : undefined;
+    if (!model) {
+      return refuse(`${row.displayName} is not in RigMatch's download list, so there is nothing to fetch.`);
+    }
+
+    const { folder: comfyRoot } = readComfySettings();
+    if (!comfyRoot) {
+      return refuse(
+        `${row.displayName} installs into ComfyUI, and RigMatch does not know where ComfyUI is yet. `
+        + 'Open Settings → Generation and point it at your ComfyUI folder, then try again.',
+      );
+    }
+
+    const { needed, totalBytes } = downloadPlan(model, [...comfyCheckpoints, ...comfyTextEncoders]);
+    if (needed.length === 0) return true;
+
+    setActivity(`Downloading ${needed.map((m) => m.label).join(' + ')} — ${formatBytesGb(totalBytes)} in total.`);
+    for (const item of needed) {
+      // A video model and its encoder are two files; Stop during the first
+      // must not be followed by the second starting anyway.
+      if (pullQueueCancelRef.current) return false;
+      const progressId = createRunProgressId('comfy');
+      activeComfyDownloadRef.current = progressId;
+      const unsubscribe = agentArcadeApi.onComfyDownloadProgress?.((progress) => {
+        if (progress.id !== progressId) return;
+        setPullProgressByModel((current) => ({
+          ...current,
+          [row.displayName]: {
+            id: progressId,
+            model: row.displayName,
+            phase: 'pulling',
+            status: `${item.label} — ${formatBytesGb(progress.received)} of ${formatBytesGb(progress.total)}`,
+            percent: progress.percent,
+            updatedAt: new Date().toISOString(),
+          },
+        }));
+      });
+      try {
+        await agentArcadeApi.comfyDownloadModel?.({
+          root: comfyRoot, folder: item.folder, filename: item.filename,
+          url: item.url, expectedBytes: item.bytes, progressId,
+        });
+      } catch (error) {
+        // A cancelled stream lands here too; say stopped rather than failed,
+        // since the user asked for it.
+        const message = getErrorMessage(error);
+        if (pullQueueCancelRef.current) {
+          setActivity(`${item.label} download stopped.`);
+          return false;
+        }
+        return refuse(`${item.label} could not be downloaded. ${message}`);
+      } finally {
+        activeComfyDownloadRef.current = null;
+        unsubscribe?.();
+      }
+    }
+    // ComfyUI only rescans its folders at startup, so a fresh file is invisible
+    // until it does. Better said now than discovered as a missing model later.
+    setActivity(`${row.displayName} downloaded. Restart ComfyUI so it picks up the new file.`);
+    void getComfyStatus().then((status) => {
+      setComfyCheckpoints(status.checkpoints);
+      setComfyTextEncoders(status.textEncoders ?? []);
+    });
+    return true;
+  }, [comfyCheckpoints, comfyTextEncoders, tellUser]);
+
   const pullQueuedModels = useCallback(async () => {
     if (queuedRows.length === 0) {
       setActivity('Pick a model to download before starting the queue.');
       return;
     }
 
-    if (!ollama.ready) {
+    // Only Ollama models need Ollama. A ComfyUI download is a file fetch into
+    // a folder and has nothing to do with it, so a queue of those must not be
+    // blocked by an unrelated service being off.
+    if (!ollama.ready && queuedRows.some((row) => row.runtime !== 'comfyui')) {
       setActivity('Ollama must be running before RigMatch can download models.');
       return;
     }
@@ -1875,6 +2212,16 @@ function App() {
         if (pullQueueCancelRef.current) {
           wasCancelled = true;
           break;
+        }
+
+        // A generation model is a .safetensors file for ComfyUI, not something
+        // `ollama pull` could ever fetch. Routed here rather than filtered out
+        // of the queue, so the reason is visible instead of the row silently
+        // doing nothing.
+        if (row.runtime === 'comfyui') {
+          const done = await downloadGenerationModel(row);
+          if (done) completedCount += 1;
+          continue;
         }
 
         const progressId = createRunProgressId('pull');
@@ -2032,7 +2379,10 @@ function App() {
       pullQueueCancelRef.current = false;
       pullQueuePauseRef.current = false;
     }
-  }, [ollama.baseUrl, ollama.ready, pullProgressByModel, queuedRows, refreshRig, selectedHost?.hostname]);
+    // downloadGenerationModel closes over the ComfyUI file lists; without it
+    // here a queue would write against whatever they were when this callback
+    // was last built, and re-download a file already fetched.
+  }, [ollama.baseUrl, ollama.ready, pullProgressByModel, queuedRows, refreshRig, selectedHost?.hostname, downloadGenerationModel]);
 
   const queueMissingSpeedDateModels = useCallback((rows: ModelRow[]) => {
     const missingRows = rows.filter((row) => !row.installed && !queuedModelIds.has(row.displayName));
@@ -2084,7 +2434,7 @@ function App() {
     }
 
     if (queuedRowsForDownload.length === 0) {
-      setActivity(`No missing Speed Dating contestants were queued. ${blockedReasons[0] ?? 'Check model availability first.'}`);
+      tellUser(`Nothing could be queued for download. ${blockedReasons[0] ?? 'Check model availability first.'} Go back and pick a different model.`);
       return;
     }
 
@@ -2100,7 +2450,7 @@ function App() {
 
     const blockedNote = blockedReasons.length > 0 ? ` ${blockedReasons.length} could not be queued.` : '';
     setActivity(`${queuedRowsForDownload.length} missing Speed Dating contestant${queuedRowsForDownload.length === 1 ? '' : 's'} queued for download.${blockedNote}`);
-  }, [modelRows, ollama.baseUrl, queuedModelIds, system.gpu.vramGb, system.platform, system.storage.availableGb]);
+  }, [modelRows, ollama.baseUrl, queuedModelIds, system.gpu.vramGb, system.platform, system.storage.availableGb, tellUser]);
 
   const requestThirdPartyModelDownloads = useCallback((rows: ModelRow[]) => {
     const missingRows = rows.filter((row) => !row.installed);
@@ -2143,15 +2493,19 @@ function App() {
     }).slice(0, 5);
 
     if (ranked.length === 0) {
-      setActivity('No models fit this computer yet — check your computer first, or download one.');
+      tellUser('No models fit this computer yet — run the computer check first, or download one from the list.');
       return;
     }
 
     setShortlistIds(new Set(ranked.map((row) => row.displayName)));
     setActivity(`Picked ${ranked.length} contestant${ranked.length === 1 ? '' : 's'} that fit this computer.`);
-  }, [modelRows, system.gpu.vramGb, system.platform]);
+  }, [modelRows, system.gpu.vramGb, system.platform, tellUser]);
 
   const toggleShortlist = useCallback((row: ModelRow) => {
+    if (!canJoinComparison(row)) {
+      setActivity(`${row.displayName} cannot join Speed Dating — the comparison is a conversation, and this model does not chat. Generation models race each other in the Lab, where every checkpoint gets the same prompt and seed.`);
+      return;
+    }
     const hardwareFit = getHardwareFit(row, system.gpu.vramGb);
     const platformFit = getPlatformFit(row.displayName, system.platform);
 
@@ -2198,7 +2552,7 @@ function App() {
     const hostBlocker = getLineupBenchmarkBlocker(runnableRows, selectedHost, ollama);
 
     if (missingDownloadCount > 0) {
-      setActivity(`${missingDownloadCount} Speed Dating contestant${missingDownloadCount === 1 ? '' : 's'} need downloads first. Open setup and use Download All.`);
+      setActivity(`${countWithVerb(missingDownloadCount, 'Speed Dating contestant', 'needs', 'need')} downloading first. Open setup and use Download All.`);
       return;
     }
 
@@ -2326,10 +2680,11 @@ function App() {
           judgeModel: effectiveJudge?.model,
           judgeProvider: effectiveJudge?.provider,
           judgeApiKey: effectiveJudge?.apiKey,
+        autoJudgeModels,
         }), row.displayName);
         results.push(result);
         setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
-        setModelScores((current) => upsertModelScores(current, [result], currentSuiteName));
+        setModelScores((current) => upsertModelScores(current, [result], currentSuiteName, rigStampForModel));
         setClearedTopMatches((current) => removeSetValues(current, [result.model, row.displayName]));
         recordRuns([result]);
         const isStopped = stopRunRef.current;
@@ -2443,7 +2798,7 @@ function App() {
         message: errorMessage,
         lastResult: current?.lastResult,
       }));
-      setActivity(`Speed Dating failed: ${errorMessage}`);
+      tellUser(`Speed Dating stopped: ${errorMessage}`);
       // See the note in startBenchmark's catch: without this, ollama.ready
       // stays stale-true and the reconnect poll never starts.
       void refreshProviderStatus();
@@ -2451,13 +2806,25 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels]);
+
+  /**
+   * A skill run that throws must not leave the mini bar spinning forever.
+   * These are launched with `void`, so nothing else catches them.
+   */
+  const reportSkillRunFailure = useCallback((error: unknown) => {
+    const message = getErrorMessage(error);
+    setSkillRunStatus({ phase: 'failed', label: `Skill tests stopped: ${message}`, completed: 0, total: 0 });
+    setLiveBuild(null);
+    activeSkillStreamIdRef.current = null;
+    tellUser(`Skill tests stopped: ${message}`);
+  }, [tellUser]);
 
   const runSkillTestsAfterRun = useCallback(async (models: string[]) => {
     const selection = skillTestSelection;
     const appPrompt = resolveAppBuilderPrompt(selection.appPromptId, selection.appCustomPrompt);
     const codeTask = resolveCodeTask(selection.codeTaskId, selection.codeCustomTask);
-    const jobs: Array<{ model: string; kind: 'app-builder' | 'image' | 'vision' | 'code' | 'listening' }> = [];
+    const jobs: Array<{ model: string; kind: 'app-builder' | 'image' | 'vision' | 'code' | 'listening' | 'video' }> = [];
     // Only models the provider reports as able to hear. A model without the
     // `audio` capability fails the request outright — measured on gemma3:4b,
     // which reads images happily and returns "Failed to load image or audio
@@ -2473,9 +2840,6 @@ function App() {
       if (selection.code && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
         jobs.push({ model, kind: 'code' });
       }
-      if (selection.image && isLikelyImageGenerationModel(model)) {
-        jobs.push({ model, kind: 'image' });
-      }
       if (selection.recognize && isVisionModel(model)) {
         jobs.push({ model, kind: 'vision' });
       }
@@ -2483,7 +2847,46 @@ function App() {
         jobs.push({ model, kind: 'listening' });
       }
     }
+
+    // Generation jobs do not come from this model list at all. Every other
+    // skill runs on an Ollama model; images and video run on ComfyUI
+    // checkpoints, so the candidates are whatever ComfyUI has loaded. Asking
+    // Ollama for them is what made the image checkbox silently do nothing — it
+    // looked for installed models named flux or sdxl, and Ollama has none.
+    let videoEncoder = '';
+    if (selection.image || selection.video) {
+      // One check for the whole batch. Every generation job in it shares the
+      // same ComfyUI, so if it is busy now none of them will be measuring this
+      // computer.
+      const busy = await describeComfyBusy();
+      if (busy) {
+        setActivity(busy);
+        void agentArcadeApi.appendLog({ level: 'warn', source: 'renderer', message: `Generation jobs skipped: ${busy}` });
+      }
+      const comfy = busy ? { checkpoints: [], textEncoders: [] } : await getComfyStatus();
+      if (selection.image) {
+        // A video checkpoint in a still-image graph fails deep in the sampler
+        // with a shape error, so it is never offered one.
+        for (const name of comfy.checkpoints.filter((n) => !isVideoCheckpoint(n))) {
+          jobs.push({ model: name, kind: 'image' });
+        }
+      }
+      if (selection.video) {
+        const ready = videoReadiness(comfy.checkpoints, comfy.textEncoders ?? []);
+        if (ready.kind === 'ready') {
+          videoEncoder = ready.encoders[0];
+          for (const name of ready.checkpoints) jobs.push({ model: name, kind: 'video' });
+        }
+      }
+    }
+
     if (!jobs.length) return;
+
+    // One seed for the whole batch. Every video model then renders identical
+    // input so the comparison is fair, while a later batch gets a different
+    // seed and does real work instead of being served ComfyUI's cache — which
+    // returns the previous video in about 1.5s and would read as a fast rig.
+    const videoSeed = batchSeed();
 
     // A vision recognition job needs a picture to read; load the bundled test
     // image once up front.
@@ -2503,6 +2906,7 @@ function App() {
       const label = job.kind === 'app-builder' ? `App Builder skill test — ${job.model}`
         : job.kind === 'code' ? `Code Challenge — ${job.model}`
         : job.kind === 'image' ? `Image skill test — ${job.model}`
+        : job.kind === 'video' ? `Video skill test — ${job.model}`
         : `Image recognition skill test — ${job.model}`;
       setSkillRunStatus({ phase: 'running', label, completed: index, total: jobs.length });
       setActivity(`Skill test ${index + 1}/${jobs.length}: ${label}. This can take a few minutes per model.`);
@@ -2571,14 +2975,37 @@ function App() {
         } finally {
           unsubscribe?.();
         }
+      } else if (job.kind === 'video') {
+        // job.model is a ComfyUI video checkpoint. Every model in this batch
+        // gets the same seed, so what differs between them is the model.
+        setLiveBuild({ model: job.model, kind: 'image', text: '', done: false });
+        const run = await runVideoLabChallenge({
+          checkpoint: job.model,
+          textEncoder: videoEncoder,
+          sizeId: selection.videoSizeId,
+          promptId: selection.imagePrompt,
+          judgeModel: judgeCandidates(modelRows)[0],
+          ollamaBaseUrl: ollama.baseUrl,
+          seed: videoSeed,
+        });
+        result = toVideoLabResult(run, selection.imagePrompt);
+        setLiveBuild({ model: job.model, kind: 'image', text: '', done: true, error: result.error });
       } else {
         // Image generation can't stream tokens — show a "generating" state.
+        // job.model is a ComfyUI checkpoint here, not an Ollama model.
         setLiveBuild({ model: job.model, kind: 'image', text: '', done: false });
-        result = await runAdvancedImageGenerationChallenge(job.model, ollama.baseUrl, selection.imagePrompt);
+        const run = await runImageLabChallenge({
+          checkpoint: job.model,
+          promptId: selection.imagePrompt,
+          judgeModel: judgeCandidates(modelRows)[0],
+          ollamaBaseUrl: ollama.baseUrl,
+        });
+        result = toLabResult(run, selection.imagePrompt);
         setLiveBuild({ model: job.model, kind: 'image', text: '', done: true, error: result.error });
       }
       if (!result.error) {
         const key = job.kind === 'image' ? `image:${job.model}`
+          : job.kind === 'video' ? `video:${job.model}`
           : job.kind === 'vision' ? `vision:${job.model}`
           : job.kind === 'code' ? `code:${job.model}`
           : job.model;
@@ -2608,9 +3035,12 @@ function App() {
         } else if (job.kind === 'code') {
           const code = extractCodeBlock(result.response);
           if (code) demos.push({ model: job.model, kind: 'code', code, language: result.language, note: result.checks[0]?.detail, grade: result.grade, score: result.score });
-        } else if (job.kind === 'image') {
+        } else if (job.kind === 'image' || job.kind === 'video') {
           // Carry the reason forward when nothing usable came back, so the viewer
           // can say why instead of showing an empty panel next to a grade.
+          // A video's viewable artifact is its judged frame, so it rides the
+          // image kind; without this branch the frame was produced, scored,
+          // saved — and then silently dropped from the results popup.
           demos.push({ model: job.model, kind: 'image', imageDataUrl: result.imageDataUrl, note: describeLabFailure(result), grade: result.grade, score: result.score });
         } else if (job.kind === 'vision') {
           demos.push({ model: job.model, kind: 'vision', imageDataUrl: result.imageDataUrl, description: result.response, note: describeLabFailure(result), grade: result.grade, score: result.score });
@@ -2631,7 +3061,10 @@ function App() {
     } else if (!stopSkillRef.current) {
       setActivity(`Skill tests finished (${jobs.length} run${jobs.length === 1 ? '' : 's'}). Lab Grades are saved in Settings → Advanced Lab.`);
     }
-  }, [ollama.baseUrl, skillTestSelection, effectiveJudge]);
+    // modelRows is read to pick a vision model to judge the generated image;
+    // without it here the run would judge with whatever was installed when this
+    // callback was last built.
+  }, [ollama.baseUrl, skillTestSelection, effectiveJudge, modelRows]);
 
   // One improve pass: hand the model its previous attempt (plus an optional user
   // hint), stream the rebuild into the live view, and return the new result — or
@@ -2783,19 +3216,19 @@ function App() {
     const imageOnly = skillModels.length > 0 && skillModels.every(isLikelyImageGenerationModel);
     if (anySkill && (selection.skipQuestions || imageOnly)) {
       setActivity('Running skill tests only — the question round was skipped.');
-      void runSkillTestsAfterRun(skillModels);
+      void runSkillTestsAfterRun(skillModels).catch(reportSkillRunFailure);
       return;
     }
 
     if (mode === 'single') {
-      void startBenchmark(model).then(() => runSkillTestsAfterRun(skillModels));
+      void startBenchmark(model).then(() => runSkillTestsAfterRun(skillModels)).catch(reportSkillRunFailure);
       return;
     }
 
     if (mode === 'speed-date') {
-      void runListTest().then(() => runSkillTestsAfterRun(skillModels));
+      void runListTest().then(() => runSkillTestsAfterRun(skillModels)).catch(reportSkillRunFailure);
     }
-  }, [pendingGpuContention, pendingRunMode, pendingSingleModel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, skillTestSelection, startBenchmark]);
+  }, [pendingGpuContention, pendingRunMode, pendingSingleModel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, skillTestSelection, startBenchmark, reportSkillRunFailure]);
 
   const cancelPendingRun = useCallback(() => {
     setPendingRunMode(null);
@@ -3100,7 +3533,33 @@ function App() {
           </a>
         </div>
       )}
-      {showModeSplash && <ModeSplash onPick={chooseInterfaceMode} />}
+      {showModeSplash && <FirstRunSplash vramGb={system.gpu.vramGb || 0} onDone={chooseInterfaceMode} />}
+      {/* Upgraded from a version without goals: ask the new question, leave
+          the mode they already chose alone. */}
+      {showGoalsIntro && (
+        <FirstRunSplash
+          vramGb={system.gpu.vramGb || 0}
+          onDone={chooseInterfaceMode}
+          initialGoals={selectedGoals}
+          isUpgrade
+          onSaveGoals={(goals) => {
+            writeSelectedGoals(goals);
+            setSelectedGoals(goals);
+            markGoalsOffered();
+            setFirstRun('none');
+          }}
+          onCancel={() => { markGoalsOffered(); setFirstRun('none'); }}
+        />
+      )}
+      {!showModeSplash && showGoalsEditor && (
+        <FirstRunSplash
+          vramGb={system.gpu.vramGb || 0}
+          onDone={chooseInterfaceMode}
+          initialGoals={selectedGoals}
+          onSaveGoals={saveGoalsFromSettings}
+          onCancel={() => setShowGoalsEditor(false)}
+        />
+      )}
       {uiMode === 'beginner' && (
         <SimpleWizard
           system={system}
@@ -3112,6 +3571,9 @@ function App() {
           onStartOllamaInstall={startOllamaInstall}
           onLaunchOllamaInstaller={launchOllamaInstaller}
           wizardModels={wizardModels}
+          initialDream={dreamForGoal(selectedGoals[0])}
+          notice={simpleNotice}
+          onDismissNotice={() => setSimpleNotice(null)}
           modelsLoading={modelRows.length === 0}
           shortlistIds={shortlistIds}
           shortlistedRows={shortlistedRows}
@@ -3126,12 +3588,13 @@ function App() {
           onStartShow={() => { void runListTest(); }}
           onStopShow={requestStopRun}
           winner={wizardWinner}
+          lineupResults={wizardLineupResults}
           onChatWithWinner={openChatWithWinner}
           onOpenScorecard={() => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('history'); }}
           onRunAgain={() => undefined}
           onSwitchToAdvanced={() => { setCameFromSimple(false); selectUiMode('advanced'); }}
           initialStep={wizardStep}
-          onStepChange={setWizardStep}
+          onStepChange={(next) => { setWizardStep(next); setSimpleNotice(null); }}
           onShareScore={() => setShareWinnerOpen(true)}
         />
       )}
@@ -3178,6 +3641,8 @@ function App() {
         onClearTopPick={clearTopMatch}
         onRestoreClearedTopPicks={restoreClearedTopMatches}
         clearedTopPickCount={clearedTopMatches.size}
+        deckExpanded={deckExpanded}
+        onDeckExpandedChange={(expanded) => { setDeckExpanded(expanded); writeDeckExpanded(expanded); }}
       />
 
       <SideMenu
@@ -3238,6 +3703,13 @@ function App() {
           <ModelCabinet
             active={true}
             rows={modelRows}
+            comfyFolderSet={Boolean(comfySettings.folder)}
+            goalLens={taskFilterForGoal(selectedGoals[0])}
+            onOpenLab={() => selectNav('activity')}
+            // Settings already explains ComfyUI in plain language; window.open
+            // was popup-blocked in the browser preview and the review found the
+            // button dead. In-app navigation cannot be blocked.
+            onOpenComfyHelp={() => selectNav('settings')}
             selectedModel={selectedModel}
             installedModelNames={installedModelNames}
             shortlistIds={shortlistIds}
@@ -3337,26 +3809,6 @@ function App() {
             onRunListTest={requestListTest}
           />
         )}
-        {activeNavId === 'bench' && (
-          <BenchmarkRun
-            active={true}
-            model={selectedModel}
-            benchmarkForModel={selectedBenchmark}
-            selectedScore={selectedModelScore}
-            isRunning={isBenchmarking}
-            canBenchmark={canBenchmark}
-            hostReady={selectedHostCanBenchmark}
-            system={system}
-            host={selectedHost}
-            selectedRow={selectedRow}
-            runProgress={runProgress}
-            questionCount={benchmarkQuestionCount}
-            onOpenSuiteEditor={() => setSuiteEditorOpen(true)}
-            onOpenLogs={openLogsPanel}
-            onStart={requestBenchmark}
-            onStop={requestStopRun}
-          />
-        )}
         {activeNavId === 'agent' && (
           <AgentReveal
             active={true}
@@ -3416,10 +3868,14 @@ function App() {
             updateCheck={updateCheck}
             isCheckingUpdates={isCheckingUpdates}
             uiMode={uiMode}
+            selectedGoals={selectedGoals}
+            installedRows={modelRows.filter((row) => row.installed)}
             logPath={logPath}
             isLoadingLogs={isLoadingLogs}
             onThemeChange={selectTheme}
             onUiModeChange={selectUiMode}
+            onEditGoals={() => setShowGoalsEditor(true)}
+            onDeleteModel={requestDeleteModel}
             onRefreshLogs={loadLogs}
             onCopyLogs={copyLogs}
             onClearLogs={clearLogs}
@@ -3547,6 +4003,25 @@ function App() {
         <RunWarningModal
           mode={pendingRunMode}
           selectedModel={pendingSingleModel ?? selectedModel}
+          measuredPerModelMs={(() => {
+            const hardware = toRunHardware(system);
+            if (pendingRunMode === 'speed-date') {
+              const estimate = estimateSpeedDateMs(runHistory, {
+                models: shortlistedRows.map((row) => row.displayName),
+                questionCount: benchmarkQuestionCount,
+                hardware,
+              });
+              return estimate.source === 'measured'
+                ? estimate.ms / Math.max(1, shortlistedRows.length)
+                : null;
+            }
+            const estimate = estimateBenchmarkMs(runHistory, {
+              model: pendingSingleModel ?? selectedModel,
+              questionCount: benchmarkQuestionCount,
+              hardware,
+            });
+            return estimate.source === 'measured' ? estimate.ms : null;
+          })()}
           shortlistedCount={shortlistedRows.length}
           uninstalledContestantCount={shortlistedRows.filter((r) => !r.installed).length}
           questionCount={benchmarkQuestionCount}
@@ -3558,6 +4033,9 @@ function App() {
           onDownloadMissing={() => requestThirdPartyModelDownloads(shortlistedRows)}
           onChangeQuestionCount={setBenchmarkQuestionCount}
           onLoadPreset={setBenchmarkQuestions}
+          autoJudgeModel={autoJudgeModels.find((m) => m !== (pendingSingleModel ?? selectedModel)) ?? ''}
+          goalPresetId={presetIdForGoal(selectedGoals[0])}
+          goalDesire={selectedGoals[0] ? goalById(selectedGoals[0])?.desire.toLowerCase() : undefined}
           onEditQuestions={() => { cancelPendingRun(); setSuiteEditorOpen(true); }}
           qualityMode={qualityMode}
           judgeModel={effectiveJudgeModel}
@@ -3580,6 +4058,8 @@ function App() {
             ? modelRows.filter((row) => row.displayName === (pendingSingleModel ?? selectedModel))
             : shortlistedRows.filter((row) => row.installed).slice(0, 5)
           ).some((row) => canHearAudio(row))}
+          comfyCheckpoints={comfyCheckpoints}
+          comfyTextEncoders={comfyTextEncoders}
         />
       )}
 
@@ -3691,8 +4171,12 @@ function App() {
           lowScoredRows={lowScoredRowsForCleanup}
           isDeleting={isCloseCleanupDeleting}
           message={closeCleanupMessage}
+          exceptTopPickRows={exceptTopPickRowsForCleanup}
+          topPickName={topPickToKeep(modelScores)}
           onDeleteUnscored={() => { void deleteRowsThenClose(unscoredRowsForCleanup, 'unscored'); }}
           onDeleteLowScored={() => { void deleteRowsThenClose(lowScoredRowsForCleanup, 'low-scored'); }}
+          onDeleteExceptTopPick={() => { void deleteRowsThenClose(exceptTopPickRowsForCleanup, 'all but your Top Pick'); }}
+          onDeleteEverything={() => { void deleteRowsThenClose(installedRowsForCleanup, 'installed'); }}
           onCancel={cancelCloseCleanup}
           onUnderstand={() => { void closeAppAfterCleanup(); }}
         />
@@ -3721,7 +4205,13 @@ function App() {
         </button>
       )}
 
-      {tutorialOpen && (
+      {/* Never at the same time as the mode splash. Both open on a true first
+          run: the splash sits above it at z-index 200, so the tour was invisible
+          — but it mounts second, so its focus trap won, and a keyboard user was
+          tabbing through a dialog they could not see behind the one they could.
+          The tour also walks nav items whose visibility depends on the mode the
+          splash has not been answered with yet. */}
+      {tutorialOpen && !showModeSplash && (
         <FirstRunTutorial
           stepIndex={tutorialStep}
           installedCount={ollama.models.length}
@@ -3882,6 +4372,12 @@ function FirstRunTutorial({
   const step = visibleSteps[currentIndex];
   const isLastStep = currentIndex === visibleSteps.length - 1;
 
+  // The only role="dialog" in the app that did not do this. It is the FIRST
+  // thing on screen at first run, behind a full-viewport scrim: focus stayed on
+  // <body>, Escape did nothing, and reaching its own Next button meant tabbing
+  // through the entire dimmed app behind it.
+  const tutorialRef = useDialog<HTMLElement>(onClose);
+
   const goToStep = (nextIndex: number) => {
     const boundedIndex = Math.min(Math.max(nextIndex, 0), visibleSteps.length - 1);
     onStepChange(boundedIndex);
@@ -3890,7 +4386,13 @@ function FirstRunTutorial({
 
   return (
     <div className="tutorial-backdrop" role="presentation">
-      <section className="tutorial-modal" role="dialog" aria-labelledby="tutorial-title">
+      <section
+        ref={tutorialRef}
+        className="tutorial-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tutorial-title"
+      >
         <div className="tutorial-title">
           <div className="tutorial-badge" aria-hidden="true">
             <Trophy />
@@ -4511,6 +5013,8 @@ function OllamaPrep({
 }) {
   const platformName = getPlatformName(system.platform);
   const ready = ollama.ready;
+  // A copy button that silently does nothing is worse than no button.
+  const [commandCopy, setCommandCopy] = useState<CopyState>('idle');
 
   // Ready state — compact success strip
   if (ready || !isDesktopRuntime) {
@@ -4566,9 +5070,12 @@ function OllamaPrep({
           <button
             type="button"
             className="mini-button outline"
-            onClick={() => navigator.clipboard.writeText(ip.command)}
+            onClick={() => void copyText(ip.command).then((ok) => {
+              setCommandCopy(ok ? 'copied' : 'failed');
+              window.setTimeout(() => setCommandCopy('idle'), 2400);
+            })}
           >
-            Copy
+            {commandCopy === 'copied' ? 'Copied' : commandCopy === 'failed' ? 'Select it above' : 'Copy'}
           </button>
           <p className="install-script-hint">Open a terminal, paste, and press Enter. Then click Check Again below.</p>
         </div>
@@ -4716,6 +5223,9 @@ function RunWarningModal({
   onDownloadMissing,
   onChangeQuestionCount,
   onLoadPreset,
+  autoJudgeModel,
+  goalPresetId,
+  goalDesire,
   onEditQuestions,
   lineupModels,
   skillSelection,
@@ -4734,6 +5244,9 @@ function RunWarningModal({
   onChangeOpenRouterKey,
   judgeActive,
   gpuContention,
+  measuredPerModelMs,
+  comfyCheckpoints,
+  comfyTextEncoders,
 }: {
   mode: PendingRunMode;
   selectedModel: string;
@@ -4747,6 +5260,12 @@ function RunWarningModal({
   onDownloadMissing?: () => void;
   onChangeQuestionCount: (count: BenchmarkQuestionCount) => void;
   onLoadPreset?: (questions: BenchmarkQuestion[]) => void;
+  /** A local model that will mark the prose questions, when judging is off. */
+  autoJudgeModel?: string;
+  /** The preset that measures the user's main goal, when one does. */
+  goalPresetId?: string;
+  /** That goal in the user's own words, for the copy. */
+  goalDesire?: string;
   onEditQuestions?: () => void;
   lineupModels: string[];
   skillSelection: SkillTestSelection;
@@ -4754,6 +5273,12 @@ function RunWarningModal({
   /** Whether any model in this run reports the audio capability. Computed
       where the rows are, since the dialog only receives model names. */
   listenCapable: boolean;
+  /** Checkpoints ComfyUI has loaded. Image generation is the one skill that
+      does not run on a model from the lineup, so it is offered on the strength
+      of this rather than on what was picked. */
+  comfyCheckpoints: string[];
+  /** T5 encoders ComfyUI has. A video model cannot render without one. */
+  comfyTextEncoders: string[];
   qualityMode: 'heuristic' | 'judge';
   judgeModel: string;
   judgeModelOptions: string[];
@@ -4768,10 +5293,22 @@ function RunWarningModal({
   judgeActive: boolean;
   /** Measured when this modal opened; null while the probe is still running. */
   gpuContention: GpuContention | null;
+  /**
+   * Per-model duration from this rig's own run history, when it has one.
+   * Null means no history yet — the static rule-of-thumb table applies.
+   */
+  measuredPerModelMs?: number | null;
 }) {
   const runWarnRef = useDialog<HTMLElement>(onCancel);
   const [questionsExpanded, setQuestionsExpanded] = useState(false);
   const recognizeUploadRef = useRef<HTMLInputElement>(null);
+  // Questions the rules cannot mark: chat and writing have no shape to match.
+  // Counted from the plan, not the suite: the plan repeats the suite to reach
+  // questionCount, so a ten-question Chat suite run at 50 asks 30 prose
+  // questions, not 6 — and this sentence exists to explain the extra time.
+  const proseQuestionCount = buildBenchmarkPromptPlan(questionCount, benchmarkQuestions).filter(
+    (question) => question.type === 'assistant' || question.type === 'writing',
+  ).length;
   const activePreset = BENCHMARK_PRESETS.find(
     (p) => p.questions.length === benchmarkQuestions.length &&
       p.questions.every((q, i) => q.id === benchmarkQuestions[i]?.id),
@@ -4786,16 +5323,22 @@ function RunWarningModal({
   // Skill-test capability + skip-questions state, hoisted so both the question
   // and skill sections (and the footer) can react to it.
   const appBuilderCapable = lineupModels.some((m) => !isLikelyImageGenerationModel(m) && !isEmbeddingModel(m));
-  const hasImageModel = lineupModels.some((m) => isLikelyImageGenerationModel(m));
+  // Not from the lineup: generation runs on ComfyUI checkpoints, so whether it
+  // is offered depends on ComfyUI, not on which models were picked.
+  const hasImageModel = comfyCheckpoints.some((name) => !isVideoCheckpoint(name));
+  const videoCheckpointCount = comfyCheckpoints.filter(isVideoCheckpoint).length;
+  // A video model alone is not enough — LTX cannot run without a T5 encoder,
+  // and offering the test without one produces a failure inside CLIPLoader
+  // that reads as the model being broken.
+  const videoCapable = videoCheckpointCount > 0 && comfyTextEncoders.length > 0;
   const visionCapable = lineupModels.some((m) => isVisionModel(m));
-  const isMac = system.platform === 'darwin';
   const imageCapable = hasImageModel;
   // Code Challenge needs a code-capable model AND a judge — it's the only way to
   // grade arbitrary-language code (nothing to run/preview).
   const codeCapable = appBuilderCapable && judgeActive;
   // Every model in the lineup is image-only → the Q&A round can't run at all.
   const imageOnlyLineup = lineupModels.length > 0 && lineupModels.every(isLikelyImageGenerationModel);
-  const anySkillSelected = (skillSelection.appBuilder && appBuilderCapable) || (skillSelection.code && codeCapable) || (skillSelection.image && imageCapable) || (skillSelection.recognize && visionCapable) || (skillSelection.listen && listenCapable);
+  const anySkillSelected = (skillSelection.appBuilder && appBuilderCapable) || (skillSelection.code && codeCapable) || (skillSelection.image && imageCapable) || (skillSelection.video && videoCapable) || (skillSelection.recognize && visionCapable) || (skillSelection.listen && listenCapable);
   const skipQuestions = anySkillSelected && (skillSelection.skipQuestions || imageOnlyLineup);
   // Block the doomed case: an image-only model with no skill selected would just
   // fail the questions. Require a skill (the image one) first.
@@ -4808,14 +5351,20 @@ function RunWarningModal({
     100: '100 — Full suite (30+ min per model)',
   };
 
-  // Rough minutes per model at each suite size (matches the labels above), scaled
-  // by lineup size. Not knowing how long a run takes is the biggest hesitation
-  // before the app's main action, so state it up front on the button.
+  // Not knowing how long a run takes is the biggest hesitation before the
+  // app's main action, so state it on the button. Past runs on this rig beat
+  // the static table — a measured pace is this machine's own, and it is
+  // labelled so; the table stays as the rule of thumb for a first run.
   const minutesPerModel: Record<BenchmarkQuestionCount, number> = { 10: 3, 20: 5, 50: 15, 100: 30 };
   const runModelCount = mode === 'single' ? 1 : Math.max(1, shortlistedCount);
-  const estimatedMinutes = skipQuestions ? 0 : minutesPerModel[questionCount] * runModelCount;
-  const estimateLabel = estimatedMinutes > 0
-    ? `~${estimatedMinutes} min${runModelCount > 1 ? ` total · ${runModelCount} models` : ''}`
+  const estimatedMs = skipQuestions ? 0 : (
+    typeof measuredPerModelMs === 'number' && measuredPerModelMs > 0
+      ? measuredPerModelMs * runModelCount
+      : minutesPerModel[questionCount] * 60_000 * runModelCount
+  );
+  const measured = typeof measuredPerModelMs === 'number' && measuredPerModelMs > 0;
+  const estimateLabel = estimatedMs > 0
+    ? `${formatDuration(estimatedMs)}${runModelCount > 1 ? ` total · ${runModelCount} models` : ''}${measured ? ' · measured here' : ''}`
     : null;
 
   return (
@@ -4838,6 +5387,24 @@ function RunWarningModal({
             storage bandwidth, fans, and battery until the run finishes.
           </p>
           <p>{runScope}</p>
+
+          {/* On battery, a laptop throttles its GPU hard — the same model can
+              score materially lower for a reason that has nothing to do with
+              the model, and the run still lands in the timeline as a real
+              result. Same rule as GPU contention: warn, never block. */}
+          {system.battery.hasBattery && system.battery.acConnected === false && (
+            <div className="gpu-contention-note level-busy" role="status">
+              <Activity aria-hidden="true" />
+              <div>
+                <strong>Running on battery</strong>
+                <p>
+                  Most laptops throttle the graphics card on battery, so scores measured now can come out
+                  below what this machine can really do{typeof system.battery.percent === 'number' ? ` (${system.battery.percent}% charge)` : ''}.
+                  Plug in for a fair reading, or carry on — the result is still saved either way.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Something else using the graphics card is the most common reason a
               score comes out below what a machine can really do — and since
@@ -4873,18 +5440,51 @@ function RunWarningModal({
                   <button
                     key={preset.id}
                     type="button"
-                    className={activePreset?.id === preset.id ? 'active' : ''}
+                    className={`${activePreset?.id === preset.id ? 'active' : ''}${preset.id === goalPresetId ? ' matches-goal' : ''}`}
                     onClick={() => onLoadPreset(preset.questions)}
                     aria-pressed={activePreset?.id === preset.id ? 'true' : 'false'}
-                    title={preset.description}
+                    title={preset.id === goalPresetId
+                      ? `${preset.description} This is the focus that measures your goal.`
+                      : preset.description}
                   >
                     {preset.label}
+                    {preset.id === goalPresetId && <em className="focus-goal-flag">Your goal</em>}
                   </button>
                 ))}
               </div>
+              {/* The connection the app never made: a goal was chosen at first
+                  run, and the run that would measure it had to be found
+                  separately. Offered, not forced — a suite someone tuned by
+                  hand must not be replaced without them asking. */}
+              {goalPresetId && activePreset?.id !== goalPresetId && (
+                <button
+                  type="button"
+                  className="run-focus-goal-suggest"
+                  onClick={() => {
+                    const preset = BENCHMARK_PRESETS.find((entry) => entry.id === goalPresetId);
+                    if (preset) onLoadPreset(preset.questions);
+                  }}
+                >
+                  <Sparkles aria-hidden="true" />
+                  <span>
+                    Focus on <strong>{goalDesire ?? 'your goal'}</strong> — asks more of the questions that
+                    crown a Match for it, so a shorter run still names a winner.
+                  </span>
+                </button>
+              )}
               <em className="run-focus-hint">
                 {activePreset ? activePreset.description : 'Mixed general-purpose questions covering JSON output, instruction following, and daily tasks.'}
               </em>
+              {/* Chat and writing answers have no shape for the rules to match,
+                  so they get marked by a second model instead of by length.
+                  Say so — it is why those questions take longer. */}
+              {proseQuestionCount > 0 && (
+                <em className="run-focus-hint judge-note">
+                  {autoJudgeModel
+                    ? `${proseQuestionCount} of these have no right answer to check against, so ${autoJudgeModel} reads and marks them. That is the only way chat and writing get a real score, and it is why those questions take a little longer.`
+                    : `${proseQuestionCount} of these ask for chat or writing, which nothing installed can mark — download a second model and RigMatch will use it to grade them.`}
+                </em>
+              )}
             </div>
           )}
 
@@ -5182,21 +5782,50 @@ function RunWarningModal({
                     <span>
                       <strong>Create an image</strong>
                       <em>{!hasImageModel
-                        ? 'No image-generation model in this run. Install one (like x/flux2-klein) to unlock.'
-                        : isMac
-                          ? 'Adds roughly 1–4 minutes per image model. Uses the prompt below.'
-                          : 'Adds roughly 1–4 minutes. RigMatch will try on this PC — some image models are macOS-only (MLX) and will report why if they can\'t load.'}</em>
+                        ? 'Needs ComfyUI running with at least one checkpoint. Ollama cannot generate images.'
+                        : `Runs the prompt below on ${comfyCheckpoints.length === 1 ? 'your checkpoint' : `all ${comfyCheckpoints.length} checkpoints`} in ComfyUI, separately from the Ollama models above.`}</em>
                     </span>
                   </label>
                   {imageCapable && skillSelection.image && (
-                    <input
-                      type="text"
+                    // A fixed list rather than free text: the score depends on a
+                    // judge answering checkable propositions about the picture,
+                    // and an arbitrary prompt has none to check against.
+                    <select
                       className="run-skill-image-prompt"
                       value={skillSelection.imagePrompt}
                       onChange={(event) => onSkillSelectionChange({ ...skillSelection, imagePrompt: event.target.value })}
-                      placeholder="Describe the image to generate"
                       aria-label="Image generation prompt"
+                    >
+                      {IMAGE_BENCHMARK_PROMPTS.map((prompt) => (
+                        <option key={prompt.id} value={prompt.id}>{prompt.prompt}</option>
+                      ))}
+                    </select>
+                  )}
+                  <label className={`run-skill-test-option${videoCapable ? '' : ' disabled'}`}>
+                    <input
+                      type="checkbox"
+                      checked={skillSelection.video && videoCapable}
+                      disabled={!videoCapable}
+                      onChange={(event) => onSkillSelectionChange({ ...skillSelection, video: event.target.checked })}
                     />
+                    <span>
+                      <strong>Generate a video</strong>
+                      <em>{!videoCapable
+                        ? 'Needs ComfyUI running with a video model and a T5 text encoder.'
+                        : `Renders 4 seconds on ${videoCheckpointCount === 1 ? 'your video model' : `all ${videoCheckpointCount} video models`}. Slowest test here — roughly 12s per model at the smallest size, and minutes at Full HD.`}</em>
+                    </span>
+                  </label>
+                  {videoCapable && skillSelection.video && (
+                    <select
+                      className="run-skill-image-prompt"
+                      value={skillSelection.videoSizeId}
+                      onChange={(event) => onSkillSelectionChange({ ...skillSelection, videoSizeId: event.target.value })}
+                      aria-label="Video size"
+                    >
+                      {VIDEO_SIZE_PRESETS.map((preset) => (
+                        <option key={preset.id} value={preset.id}>{preset.label}</option>
+                      ))}
+                    </select>
                   )}
                   <label className={`run-skill-test-option${visionCapable ? '' : ' disabled'}`}>
                     <input
@@ -5291,13 +5920,6 @@ function RunWarningModal({
                     </span>
                   </label>
 
-                  <label className="run-skill-test-option disabled">
-                    <input type="checkbox" checked={false} disabled />
-                    <span>
-                      <strong>Create a video</strong>
-                      <em>No local backend can generate video yet — this unlocks when one ships.</em>
-                    </span>
-                  </label>
                 </>
               );
             })()}
@@ -5570,9 +6192,13 @@ function HowWeScoreSection() {
             on a Mac Studio with 64 GB unified memory.
           </p>
           <p className="how-we-score-footer">
-            <strong>Answer quality is a heuristic proxy, not a verdict.</strong> The rule-based checks catch obvious
-            wins and failures, but they can misjudge a good answer written in an unexpected way. When a quality score
-            looks off, open the scorecard and read the saved answer transcript — that is the source of truth.
+            <strong>Answer quality is a heuristic proxy, not a verdict.</strong> The rule-based checks work by matching
+            a shape: valid JSON with the right keys, a refusal where one belongs, a list of the requested length, a
+            correct clamp function. Where a question has no such shape — everyday chat and writing — there is nothing
+            to match, so the fallback scores by answer <em>length</em>. That is not a quality measurement, and RigMatch
+            will not crown a Match on it: those goals stay uncrowned until you turn on the judge, which reads the answer
+            and marks it properly. When any quality score looks off, open the scorecard and read the saved transcript —
+            that is the source of truth.
           </p>
         </div>
       )}
@@ -5616,6 +6242,132 @@ function UiModePicker({
   );
 }
 
+
+function GoalsSummary({
+  goals,
+  onEditGoals,
+}: {
+  goals: GoalId[];
+  onEditGoals: () => void;
+}) {
+  const primary = goals[0] ? goalById(goals[0]) : undefined;
+  return (
+    <section className="ui-mode-picker" aria-label="Your goals">
+      <div>
+        <span>Your Goals</span>
+        <strong>
+          {primary
+            ? `${primary.desire}${goals.length > 1 ? ` · +${goals.length - 1} more` : ''}`
+            : 'No goal picked yet'}
+        </strong>
+      </div>
+      <div className="mode-toggle" role="group" aria-label="Edit goals">
+        <button type="button" onClick={onEditGoals}>
+          <strong>Change goals</strong>
+          <span>
+            {primary
+              ? 'Your main goal points Models and Simple Mode at the right contestants.'
+              : 'Pick a goal and RigMatch leads with the models that can do it.'}
+          </span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ClosetSection({
+  rows,
+  modelScores,
+  topModel,
+  onDeleteModel,
+}: {
+  rows: ModelRow[];
+  modelScores: Record<string, TestedModelScore>;
+  topModel?: string;
+  onDeleteModel: (row: ModelRow) => void;
+}) {
+  // The closet: what is on the shelf, how much room it takes, and whether it
+  // ever earned its place. Sorted by size because that is the question that
+  // brings someone here — the close-cleanup dialog once offered to clear
+  // 38.5 GB in one click, and this is the calm version of that moment.
+  // Who owns the file, when it is not Ollama. ComfyUI checkpoints are the
+  // biggest things on disk and the reason someone opens this screen, so they
+  // are still listed and still counted — they just cannot be deleted here.
+  const evictedBy = (row: ModelRow): string | null => {
+    if (row.runtime === 'comfyui') return 'In ComfyUI';
+    if (row.localProvider === 'lm-studio') return 'In LM Studio';
+    return null;
+  };
+  const entries = rows
+    .map((row) => ({
+      row,
+      sizeGb: row.installedModel?.sizeGb ?? row.sizeGb ?? 0,
+      score: modelScores[row.displayName],
+    }))
+    .sort((a, b) => b.sizeGb - a.sizeGb);
+  const totalGb = entries.reduce((sum, entry) => sum + entry.sizeGb, 0);
+  if (entries.length === 0) {
+    return (
+      <section className="closet-section" aria-label="Model storage">
+        <div className="closet-head">
+          <span>The Closet</span>
+          <strong>No installed models yet</strong>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="closet-section" aria-label="Model storage">
+      <div className="closet-head">
+        <span>The Closet</span>
+        <strong>{entries.length} model{entries.length === 1 ? '' : 's'} · {totalGb.toFixed(1)} GB on disk</strong>
+        <em>
+          Keep the winner; evict who never earned a callback. Deleting always asks first, and anything
+          evicted can be downloaded again. Models owned by ComfyUI or LM Studio are listed for their disk
+          size but have to be removed where they live.
+        </em>
+      </div>
+      <ul className="closet-list">
+        {entries.map(({ row, sizeGb, score }) => {
+          const isWinner = topModel !== undefined && row.displayName === topModel;
+          return (
+            <li key={row.displayName} className={isWinner ? 'closet-winner' : ''}>
+              <div className="closet-row-name">
+                <strong>{row.displayName}</strong>
+                <em>
+                  {score
+                    ? `${formatMatchScore(score)} · ${score.grade} — tested ${new Date(score.completedAt).toLocaleDateString()}`
+                    : 'Never tested — taking up space on reputation alone'}
+                </em>
+              </div>
+              <span className="closet-size">{sizeGb > 0 ? `${sizeGb.toFixed(1)} GB` : '—'}</span>
+              {isWinner ? (
+                <span className="closet-keep" title="Your current top match. Probably worth its shelf space.">WINNER</span>
+              ) : evictedBy(row) ? (
+                // A button that cannot do what it says is worse than no button.
+                // Ollama is the only thing RigMatch can delete from; ComfyUI
+                // checkpoints and LM Studio models are owned elsewhere, and
+                // routing them through Ollama's delete API just 404s.
+                <span className="closet-elsewhere" title={`RigMatch cannot delete this one. ${evictedBy(row)}`}>
+                  {evictedBy(row)}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="mini-button closet-evict"
+                  onClick={() => onDeleteModel(row)}
+                  title={`Delete ${row.displayName} from this computer (asks first)`}
+                >
+                  Evict
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
 
 function ThemePicker({
   themeId,
@@ -5740,8 +6492,11 @@ function ThirdPartyDownloadConsentModal({
             )}
           </ol>
 
+          {/* The terms for the models actually queued, not a fixed list. This
+              dialog asks for informed consent; linking Gemma's prohibited-use
+              policy while downloading DeepSeek is the opposite of informing. */}
           <div className="third-party-download-links" aria-label="Model provider terms">
-            {THIRD_PARTY_MODEL_LINKS.map((link) => (
+            {licenseLinksForModels(rows.map((row) => row.displayName)).map((link) => (
               <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer">
                 {link.label}
                 <ExternalLink aria-hidden="true" />
@@ -5784,6 +6539,8 @@ function UtilityPanel({
   system,
   themeId,
   uiMode,
+  selectedGoals,
+  installedRows,
   appLogs,
   modelScores,
   chatMessages,
@@ -5794,6 +6551,8 @@ function UtilityPanel({
   isLoadingLogs,
   onThemeChange,
   onUiModeChange,
+  onEditGoals,
+  onDeleteModel,
   onRefreshLogs,
   onCopyLogs,
   onClearLogs,
@@ -5818,6 +6577,8 @@ function UtilityPanel({
   system: SystemProfile;
   themeId: ThemeId;
   uiMode: UiMode;
+  selectedGoals: GoalId[];
+  installedRows: ModelRow[];
   appLogs: AppLogEntry[];
   modelScores: Record<string, TestedModelScore>;
   chatMessages: ChatMessage[];
@@ -5828,6 +6589,8 @@ function UtilityPanel({
   isLoadingLogs: boolean;
   onThemeChange: (themeId: ThemeId) => void;
   onUiModeChange: (mode: UiMode) => void;
+  onEditGoals: () => void;
+  onDeleteModel: (row: ModelRow) => void;
   onRefreshLogs: () => void;
   onCopyLogs: () => void;
   onClearLogs: () => void;
@@ -5845,9 +6608,22 @@ function UtilityPanel({
   onSelectTopPick?: (model: string) => void;
 }) {
   const Icon = panel === 'history' ? History : Settings;
+  const [diagnosticsCopy, setDiagnosticsCopy] = useState<CopyState>('idle');
   const recentModelScores = useMemo(() => getRecentModelScores(modelScores), [modelScores]);
   const rankedModelScores = useMemo(() => getRankedModelScores(modelScores), [modelScores]);
-  const taskPicks = useMemo(() => getTaskTopPicks(modelScores), [modelScores]);
+  const isScoreDrifted = useCallback((score: TestedModelScore) => {
+    const installed = ollama.models.find((m) => m.name === score.model || m.model === score.model);
+    return scoreDrift(score, {
+      gpuModel: system.gpu.model,
+      vramGb: system.gpu.vramGb,
+      modelDigest: installed?.digest,
+    }) !== null;
+  }, [ollama.models, system.gpu.model, system.gpu.vramGb]);
+  const taskPicks = useMemo(() => getTaskTopPicks(modelScores, isScoreDrifted), [modelScores, isScoreDrifted]);
+  const goalMatches = useMemo(
+    () => getGoalMatches(selectedGoals, modelScores, isScoreDrifted),
+    [selectedGoals, modelScores, isScoreDrifted],
+  );
   const topRankedScore = rankedModelScores[0];
   const savedChatMessageCount = Math.max(0, chatMessages.length - 1);
   const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
@@ -5971,6 +6747,21 @@ function UtilityPanel({
             <div className="utility-stat-head">
               <span>Ranking board</span>
               <div className="utility-stat-head-actions">
+                {topRankedScore && (
+                  <button
+                    type="button"
+                    className="how-we-score-trigger"
+                    onClick={() => {
+                      void downloadMatchCard({ score: topRankedScore, appVersion: APP_VERSION }).then((saved) => {
+                        if (!saved) return;
+                      });
+                    }}
+                    title={`Save a match card image of ${topRankedScore.model} — share it wherever you like; RigMatch sends nothing anywhere.`}
+                  >
+                    <Share2 aria-hidden="true" />
+                    Share card
+                  </button>
+                )}
                 {rankedModelScores.length > 0 && onSelectTopPick && (
                   <button
                     type="button"
@@ -6031,14 +6822,52 @@ function UtilityPanel({
             <strong>{topRankedScore ? topRankedScore.model : 'No saved score'}</strong>
             <em>{topRankedScore ? `${formatMatchScore(topRankedScore)} total · ${topRankedScore.grade}` : 'Run a test to save the next scorecard.'}</em>
           </div>
+          {goalMatches.length > 0 && (
+            <div className="task-picks-section goal-match-board" aria-label="Your matches by goal">
+              <span>Matches</span>
+              <div className="task-picks-grid">
+                {goalMatches.map((match) => (
+                  <div
+                    key={match.goal.id}
+                    className={`task-pick-card${match.isMainGoal ? ' main-goal-card' : ''}${match.pick ? '' : ' awaiting-card'}`}
+                  >
+                    <em>
+                      {match.isMainGoal ? 'Your Match' : match.goal.matchLabel}
+                      {match.pick && (
+                        <span
+                          className="task-pick-measured"
+                          title={`Measured here: scored ${match.pick.taskScore} on this rig's ${match.goal.label.toLowerCase()} questions. Goal crowns only ever come from measurement.`}
+                        >measured</span>
+                      )}
+                    </em>
+                    {match.isMainGoal && <span className="goal-match-sub">{match.goal.matchLabel}</span>}
+                    {match.pick ? (
+                      <>
+                        <strong title={match.pick.model}>{match.pick.model}</strong>
+                        <span className={`score-row-grade ${getScoreTone(match.pick.score.total)}`}>
+                          {match.pick.taskScore} on {match.goal.label.toLowerCase()} · {formatMatchScore(match.pick.score)} overall
+                        </span>
+                        <span className="task-pick-response-time">{getResponseEstimate(match.pick.score.speed)}</span>
+                      </>
+                    ) : (
+                      <>
+                        <strong>No crown yet</strong>
+                        <span className="goal-match-awaiting">{match.awaiting}</span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {taskPicks.length > 0 && (
             <div className="task-picks-section" aria-label="Category picks">
-              <span>Category picks</span>
+              <span>{goalMatches.length > 0 ? 'More picks' : 'Matches'}</span>
               <div className="task-picks-grid">
                 {taskPicks.map((pick) => (
                   <div key={pick.id} className="task-pick-card">
                     <em>
-                      {pick.label}
+                      {matchDisplayLabel(pick.id, pick.label)}
                       {pick.measured && (
                         <span
                           className="task-pick-measured"
@@ -6062,6 +6891,12 @@ function UtilityPanel({
               {rankedModelScores.map((score, index) => {
                 const prevScore = rankedModelScores[index - 1];
                 const isTied = prevScore !== undefined && prevScore.total === score.total;
+                const installed = ollama.models.find((m) => m.name === score.model || m.model === score.model);
+                const drift = scoreDrift(score, {
+                  gpuModel: system.gpu.model,
+                  vramGb: system.gpu.vramGb,
+                  modelDigest: installed?.digest,
+                });
                 return (
                   <li
                     key={`${score.model}-${score.completedAt}`}
@@ -6070,13 +6905,32 @@ function UtilityPanel({
                     title={onSelectTopPick ? `View ${score.model} in Top Pick` : undefined}
                     role={onSelectTopPick ? 'button' : undefined}
                     tabIndex={onSelectTopPick ? 0 : undefined}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelectTopPick?.(score.model); }}
+                    onKeyDown={(e) => {
+                      // Only when the row itself has focus. The row is a
+                      // role="button" containing a real button, so without this
+                      // test Enter on "Remove" deleted the score AND navigated
+                      // away — one keystroke, two actions, mouse users immune.
+                      if (e.target !== e.currentTarget) return;
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        // Space scrolls the page otherwise.
+                        e.preventDefault();
+                        onSelectTopPick?.(score.model);
+                      }
+                    }}
                   >
                     <b>{isTied ? '=' : index + 1}</b>
                     <div className="score-row-name">
                       <span>
                         {score.model}
                         {isLegacyScore(score) && <span className="legacy-score-badge">Retest recommended</span>}
+                        {!isLegacyScore(score) && drift && (
+                          <span
+                            className="legacy-score-badge drift-badge"
+                            title={score.rig ? `Scored on ${score.rig.gpu} (${score.rig.vramGb} GB) with RigMatch ${score.rig.appVersion}.` : undefined}
+                          >
+                            {scoreDriftLabel(drift)}
+                          </span>
+                        )}
                         <ModelDemoChips model={score.model} label="" className="inline" />
                       </span>
                       <em>{score.speed} speed · {score.sobriety} accuracy · {score.fit} fit · {getResponseEstimate(score.speed)}</em>
@@ -6189,9 +7043,18 @@ function UtilityPanel({
             <strong>RigMatch</strong>
             <em>v{APP_VERSION}</em>
           </div>
-          <SettingsSection eyebrow="Interface" title="Preferences" summary="Mode, theme, and the Simple Mode path." defaultOpen>
+          <SettingsSection eyebrow="Interface" title="Preferences" summary="Mode, theme, goals, and the Simple Mode path." defaultOpen>
           <UiModePicker uiMode={uiMode} onUiModeChange={onUiModeChange} />
+          <GoalsSummary goals={selectedGoals} onEditGoals={onEditGoals} />
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
+          </SettingsSection>
+          <SettingsSection eyebrow="Storage" title="The Closet" summary="Who is taking up shelf space, and whether they earned it.">
+            <ClosetSection
+              rows={installedRows}
+              modelScores={modelScores}
+              topModel={rankedModelScores[0]?.model}
+              onDeleteModel={onDeleteModel}
+            />
           </SettingsSection>
           <SettingsSection eyebrow="Local AI" title="Computer & Providers" summary="Runtime, Ollama, LM Studio, and local-only scope.">
           <div className="utility-stat">
@@ -6203,6 +7066,10 @@ function UtilityPanel({
             <ExternalLink aria-hidden="true" />
             Setup Guide
           </button>
+          </SettingsSection>
+
+          <SettingsSection eyebrow="Generation" title="ComfyUI" summary="Where image and video generation run, and whether RigMatch may unload models.">
+          <ComfySettings />
           </SettingsSection>
 
           <SettingsSection eyebrow="Updates" title="Versions & Release Notes" summary="RigMatch app updates, Ollama updates, and recent changes.">
@@ -6289,11 +7156,14 @@ function UtilityPanel({
               <button
                 type="button"
                 className="mini-button outline"
-                onClick={() => void navigator.clipboard?.writeText(buildDiagnosticsText(system, ollama, logPath)).catch(() => undefined)}
+                onClick={() => void copyText(buildDiagnosticsText(system, ollama, logPath)).then((ok) => {
+                  setDiagnosticsCopy(ok ? 'copied' : 'failed');
+                  window.setTimeout(() => setDiagnosticsCopy('idle'), 2400);
+                })}
                 title="Copy hardware + version info to clipboard"
               >
                 <Copy aria-hidden="true" />
-                Copy Diagnostics
+                {diagnosticsCopy === 'copied' ? 'Copied' : diagnosticsCopy === 'failed' ? 'Copy failed' : 'Copy Diagnostics'}
               </button>
             </div>
           </div>
@@ -6604,9 +7474,38 @@ function FirstModelWizard({ vramGb, onQueueModel }: { vramGb: number; onQueueMod
   );
 }
 
+/**
+ * A Match is the best model for a goal on this hardware — Dave's definition.
+ * Picks that map to a goal borrow its match label ("Best for talking");
+ * the scored qualities keep their plain names, since "Best for sticking to
+ * facts" is a quality of a chat model, not a goal someone arrives with.
+ */
+/** The wizard dream matching a goal, for opening PICK on the splash answer. */
+function dreamForGoal(goalId: string | undefined): 'talk' | 'write' | 'code' | 'image' | 'video' | undefined {
+  switch (goalId) {
+    case 'talk': return 'talk';
+    case 'write': return 'write';
+    case 'code': return 'code';
+    case 'make-images': return 'image';
+    case 'make-video':
+    case 'animate-image': return 'video';
+    default: return undefined;
+  }
+}
+
+function matchDisplayLabel(pickId: string, fallback: string): string {
+  const goalId = pickId === 'chat' ? 'talk' : pickId === 'coding' ? 'code' : undefined;
+  const goal = goalId ? GOALS.find((g) => g.id === goalId) : undefined;
+  return goal?.matchLabel ?? fallback;
+}
+
 function ModelCabinet({
   active,
   rows,
+  comfyFolderSet,
+  onOpenComfyHelp,
+  onOpenLab,
+  goalLens,
   selectedModel,
   installedModelNames,
   shortlistIds,
@@ -6647,6 +7546,14 @@ function ModelCabinet({
   newModelIds,
   onQuickCheck,
 }: {
+  /** Whether a verified ComfyUI models folder exists, so downloads can land. */
+  comfyFolderSet: boolean;
+  onOpenComfyHelp: () => void;
+  /** Generation models are run from the Lab, not from a row's Test button. */
+  onOpenLab: () => void;
+  /** The task filter implied by the user's primary goal, if any. Applied when
+      it changes and freely clearable after — a lens, never a lock. */
+  goalLens?: ModelTaskFilterId;
   active: boolean;
   rows: ModelRow[];
   selectedModel: string;
@@ -6696,7 +7603,17 @@ function ModelCabinet({
 }) {
   const [modelQuery, setModelQuery] = useState('');
   const [quickFilter, setQuickFilter] = useState<ModelQuickFilterId>('fits-vram');
-  const [taskFilter, setTaskFilter] = useState<ModelTaskFilterId | null>(null);
+  const [taskFilter, setTaskFilter] = useState<ModelTaskFilterId | null>(goalLens ?? null);
+  // Re-applied only when the goal itself changes (splash or a future goal
+  // editor) — clearing the filter afterwards sticks, so the goal steers
+  // without gripping. Adjusted during render rather than in an effect: the
+  // rerender happens before children paint, where an effect would flash the
+  // unfiltered list first.
+  const [appliedLens, setAppliedLens] = useState(goalLens);
+  if (goalLens !== appliedLens) {
+    setAppliedLens(goalLens);
+    if (goalLens) setTaskFilter(goalLens);
+  }
   const [developerFilter, setDeveloperFilter] = useState('all');
   const [sortKey, setSortKey] = useState<ModelSortKey>('status');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -6770,7 +7687,7 @@ function ModelCabinet({
     [query, queuedModelIds, modelScores],
   );
   const passesDeveloper = useCallback(
-    (row: ModelRow) => developerFilter === 'all' || getModelDeveloperKey(row.displayName) === developerFilter,
+    (row: ModelRow) => developerFilter === 'all' || getRowDeveloper(row).id === developerFilter,
     [developerFilter],
   );
   const passesQuick = useCallback(
@@ -7031,6 +7948,35 @@ function ModelCabinet({
                 <button type="button" onClick={() => setQuickFilter('all')}>Show all</button>
               </div>
             )}
+            {GENERATION_FILTERS.includes(taskFilter as string) && !comfyFolderSet && (
+              <div className="model-filter-note">
+                <ShieldCheck aria-hidden="true" />
+                {/* Shown where the Download buttons are, not buried in
+                    Settings: this is the moment someone finds out these models
+                    need something they may not have. */}
+                <span>
+                  These run on ComfyUI, a separate free program RigMatch does not install.
+                  Once it is running, point RigMatch at its folder in Settings and these become
+                  one-click downloads.
+                </span>
+                <button type="button" onClick={() => void onOpenComfyHelp()}>What is ComfyUI?</button>
+              </div>
+            )}
+            {CAPABILITY_ONLY_FILTERS.includes(taskFilter as string) && (
+              <div className="model-filter-note">
+                <ShieldCheck aria-hidden="true" />
+                {/* Now counts the library's own listing as well as installed
+                    models, but that listing returns only its top twenty per
+                    capability — /search does not paginate. So the number is
+                    still a floor, just a far less misleading one than
+                    "whatever I happen to have downloaded". */}
+                <span>
+                  Counts what your provider confirms plus what the Ollama library
+                  lists, which is its top twenty for this skill. Others may have it
+                  and not be listed — installing one always settles it.
+                </span>
+              </div>
+            )}
           </div>
         </details>
       </div>
@@ -7134,12 +8080,22 @@ function ModelCabinet({
                 >
                   <td>
                     <button type="button" className="model-name-button" onClick={() => onSelect(row.displayName)}>
-                      <AvatarBust model={row.displayName} size="tiny" />
+                      <AvatarBust generationKind={row.generationKind} model={row.displayName} size="tiny" />
                       <span>
                         {row.displayName}
                         {isNewModel && <em className="model-new-sub">New</em>}
                         {row.params && <em className="model-params-sub">{row.params}</em>}
-                        {row.localProviderLabel && <em className="model-provider-sub">{row.localProviderLabel}</em>}
+                        {row.installedModel?.quantization && (
+                          <em
+                            className="model-quant-sub"
+                            title={`Quantization ${row.installedModel.quantization}. A different quantization of the same model is a different contestant — different quality, VRAM and speed.`}
+                          >
+                            {row.installedModel.quantization}
+                          </em>
+                        )}
+                        {row.runtime === 'comfyui'
+                          ? <em className="model-provider-sub comfy">ComfyUI</em>
+                          : row.localProviderLabel && <em className="model-provider-sub">{row.localProviderLabel}</em>}
                         {row.pulls != null && (
                           <em className="model-pulls-sub" title={`${row.pulls.toLocaleString()} pulls on Ollama`}>{formatPullCount(row.pulls)} pulls</em>
                         )}
@@ -7178,8 +8134,8 @@ function ModelCabinet({
                       <span className="uncensored-badge" title="Uncensored / unrestricted model">unrestricted</span>
                     )}
                   </td>
-                  <td title={`${origin.organization} · ${origin.country}`}>
-                    <span className={`origin-pill origin-${origin.family}`}>{origin.organization}</span>
+                  <td title={`${row.publisher ?? origin.organization} · ${origin.country}`}>
+                    <span className={`origin-pill origin-${origin.family}`}>{row.publisher ?? origin.organization}</span>
                   </td>
                   <td>
                     <ModelStatusPill installed={installed} queued={queued} label={statusLabel} />
@@ -7203,6 +8159,56 @@ function ModelCabinet({
                   )}
                   <td className={showDownloadProgress ? 'action-cell has-download-progress' : 'action-cell'}>
                     <div className="row-actions">
+                      {/* A checkpoint has no chat endpoint, no Ollama entry and
+                          no Match score. Offering Test, Chat, Speed Dating or
+                          "delete from Ollama" on one is offering four buttons
+                          that cannot work — the Lab is where these are run. */}
+                      {row.runtime === 'comfyui' ? (
+                        <>
+                          {row.installed ? (
+                            <button
+                              type="button"
+                              className="mini-button"
+                              onClick={() => onOpenLab()}
+                              title={`Try ${row.displayName} in the ${row.generationKind === 'video' ? 'Video' : 'Image'} Lab`}
+                            >
+                              <Play aria-hidden="true" />
+                              <span>Open Lab</span>
+                            </button>
+                          ) : (
+                            /* Without a ComfyUI folder there is nowhere to put
+                               the file, so Download cannot work — and it used to
+                               be offered anyway, queue silently, and sit at
+                               "Queued" forever. Send people to the setting that
+                               unblocks it instead of to a dead end. The existing
+                               guidance about this lived only under the
+                               imagegen/videogen filters, so anyone who found the
+                               row by searching never saw it. */
+                            !comfyFolderSet ? (
+                              <button
+                                type="button"
+                                className="mini-button"
+                                onClick={() => void onOpenComfyHelp()}
+                                title={`${row.displayName} installs into ComfyUI. RigMatch needs to know where ComfyUI is before it can download anything.`}
+                              >
+                                <Settings aria-hidden="true" />
+                                <span>Set up ComfyUI</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="mini-button"
+                                onClick={() => onQueueModel(row)}
+                                title={`Queue ${row.displayName} — ${row.sizeGb} GB into ComfyUI`}
+                              >
+                                <Download aria-hidden="true" />
+                                <span>{queued ? 'Queued' : 'Download'}</span>
+                              </button>
+                            )
+                          )}
+                        </>
+                      ) : (
+                        <>
                       <button
                         type="button"
                         className={shortlisted ? 'slot-button speed-date-row-button active' : 'slot-button speed-date-row-button'}
@@ -7271,6 +8277,8 @@ function ModelCabinet({
                         >
                           <span>{!platformFit.compatible ? 'macOS Only' : queued ? 'Remove' : `Get ${getQueueChipModelName(row.displayName)}`}</span>
                         </button>
+                      )}
+                        </>
                       )}
                     </div>
                     {showDownloadProgress && (
@@ -7725,7 +8733,7 @@ function ModelPoolLineupStrip({
   const lineupStatus = rows.length < MIN_CONTESTANTS
     ? `Pick at least ${MIN_CONTESTANTS} contestants before the show starts.`
     : missingDownloadCount > 0
-      ? `${missingDownloadCount} contestant${missingDownloadCount === 1 ? '' : 's'} need downloads. Open setup to download the selected lineup.`
+      ? `${countWithVerb(missingDownloadCount, 'contestant', 'needs', 'need')} downloading. Open setup to download the selected lineup.`
       : full
         ? 'Lineup full. Remove a contestant to swap.'
         : 'Ready. Add more or start the show.';
@@ -7816,7 +8824,7 @@ function ModelPoolLineupStrip({
           const score = getModelScore(row, modelScores);
           return (
             <article key={row.displayName} className="model-pool-lineup-card">
-              <AvatarBust model={row.displayName} size="tiny" />
+              <AvatarBust generationKind={row.generationKind} model={row.displayName} size="tiny" />
               <div>
                 <span>Contestant {index + 1}</span>
                 <strong>{row.displayName}</strong>
@@ -7933,7 +8941,7 @@ function SelectedContestantCard({
 
   return (
     <section className="contestant-spotlight" aria-label={`Selected contestant is ${row.displayName}`}>
-      <AvatarBust model={row.displayName} size="small" />
+      <AvatarBust generationKind={row.generationKind} model={row.displayName} size="small" />
       <div className="contestant-spotlight-copy">
         <span>Selected model</span>
         <strong>{row.displayName}</strong>
@@ -8200,218 +9208,7 @@ function SortableModelHeader({
 }
 
 
-function BenchmarkRun({
-  active,
-  model,
-  benchmarkForModel,
-  selectedScore,
-  isRunning,
-  canBenchmark,
-  hostReady,
-  system,
-  host,
-  selectedRow,
-  runProgress,
-  questionCount,
-  onOpenSuiteEditor,
-  onOpenLogs,
-  onStart,
-  onStop,
-}: {
-  active: boolean;
-  model: string;
-  benchmarkForModel: BenchmarkResult | null;
-  selectedScore?: TestedModelScore;
-  isRunning: boolean;
-  canBenchmark: boolean;
-  hostReady: boolean;
-  system: SystemProfile;
-  host?: NetworkHost;
-  selectedRow?: ModelRow;
-  runProgress: RunProgress | null;
-  questionCount: BenchmarkQuestionCount;
-  onOpenSuiteEditor: () => void;
-  onOpenLogs: () => void;
-  onStart: () => void;
-  onStop: () => void;
-}) {
-  const scoreStatus = isRunning
-    ? 'Model test in progress'
-    : selectedScore
-      ? `Last test grade ${selectedScore.grade}`
-      : 'Not tested yet';
-  const runActionLabel = isRunning ? 'Running' : selectedScore ? 'Run Again' : 'Start Test';
 
-  return (
-    <section className={active ? 'panel benchmark-panel panel-focused' : 'panel benchmark-panel'}>
-      <PanelHeader
-        icon={Gauge}
-        title="Single Model Test"
-        actionLabel={runActionLabel}
-        onAction={onStart}
-        busy={isRunning}
-        meta={isRunning ? 'Running' : canBenchmark ? 'Ready' : hostReady ? 'Pick a model' : 'Computer not ready'}
-      />
-
-      <CompatibilityIntroCard
-        model={model}
-        host={host}
-        score={selectedScore}
-        benchmark={benchmarkForModel}
-        questionCount={questionCount}
-        canBenchmark={canBenchmark}
-        hostReady={hostReady}
-        isRunning={isRunning}
-        onStart={onStart}
-        onOpenSuiteEditor={onOpenSuiteEditor}
-      />
-
-      {runProgress?.mode === 'single' && (
-        <RunProgressPanel
-          progress={runProgress}
-          host={host}
-          showAnimation={false}
-          onOpenLogs={onOpenLogs}
-        />
-      )}
-
-      <div className="run-title">
-        <strong>{model}</strong>
-        <span>{scoreStatus}</span>
-      </div>
-
-      <div className="test-suite-strip">
-        <div>
-          <span>Test Questions</span>
-          <strong>{questionCount} questions</strong>
-        </div>
-        <button type="button" className="mini-button outline advanced-only" onClick={onOpenSuiteEditor}>
-          <Settings aria-hidden="true" />
-          Edit Questions
-        </button>
-      </div>
-
-      <TestProcessCard mode="single" questionCount={questionCount} />
-
-      <MatchDetails
-        benchmark={benchmarkForModel}
-        score={selectedScore}
-        host={host}
-        model={model}
-        row={selectedRow}
-        system={system}
-      />
-
-      <ScoreBars benchmark={benchmarkForModel} score={selectedScore} active={isRunning} />
-
-      <ResourceWarning cuda={system.cuda} />
-
-      <button
-        type="button"
-        className="danger-button"
-        disabled={!isRunning}
-        onClick={onStop}
-        title="Stop after the current question finishes"
-      >
-        <Zap aria-hidden="true" />
-        Stop Run
-      </button>
-    </section>
-  );
-}
-
-function CompatibilityIntroCard({
-  model,
-  host,
-  score,
-  benchmark,
-  questionCount,
-  canBenchmark,
-  hostReady,
-  isRunning,
-  onStart,
-  onOpenSuiteEditor,
-}: {
-  model: string;
-  host?: NetworkHost;
-  score?: TestedModelScore;
-  benchmark: BenchmarkResult | null;
-  questionCount: BenchmarkQuestionCount;
-  canBenchmark: boolean;
-  hostReady: boolean;
-  isRunning: boolean;
-  onStart: () => void;
-  onOpenSuiteEditor: () => void;
-}) {
-  const hostName = host?.hostname ?? 'this computer';
-  const statusLabel = isRunning
-    ? 'One-model test in progress'
-    : score
-      ? `${score.total} Match · ${score.grade}`
-      : canBenchmark
-        ? 'Ready to test'
-        : hostReady
-          ? 'Pick an installed model'
-          : 'Ollama is not ready';
-  const actionLabel = isRunning ? 'Testing' : score ? 'Run Again' : 'Start Model Test';
-
-  return (
-    <section
-      className="compatibility-intro-card"
-      style={{ backgroundImage: `url(${robotModelTest})` }}
-      aria-label="What the model test does"
-    >
-      <div className="compatibility-intro-copy">
-        <span>What this window does</span>
-        <strong>Test one AI model against this computer</strong>
-        <p>
-          RigMatch asks <b>{model}</b> the selected questions, times the answers, checks answer quality,
-          and turns that into a Match score for <b>{hostName}</b>.
-        </p>
-      </div>
-
-      <div className="compatibility-next-step" aria-label="Model test status">
-        <span>{statusLabel}</span>
-        <strong>{benchmark ? `${benchmark.prompts.length} answers saved` : `${questionCount} questions queued`}</strong>
-        <em>Scores and question transcripts appear on the Top Pick profile.</em>
-        <div>
-          <button type="button" className="primary-button compact" onClick={onStart} disabled={isRunning || !canBenchmark}>
-            <Gauge aria-hidden="true" />
-            {actionLabel}
-          </button>
-          <button type="button" className="mini-button outline advanced-only" onClick={onOpenSuiteEditor} disabled={isRunning}>
-            <Settings aria-hidden="true" />
-            Edit Questions
-          </button>
-        </div>
-      </div>
-
-      <ol className="compatibility-steps" aria-label="Model test steps">
-        <li>
-          <MessageSquare aria-hidden="true" />
-          <div>
-            <span>1. Ask</span>
-            <strong>{questionCount} test questions</strong>
-          </div>
-        </li>
-        <li>
-          <Gauge aria-hidden="true" />
-          <div>
-            <span>2. Score</span>
-            <strong>quality, speed, finish rate, fit</strong>
-          </div>
-        </li>
-        <li>
-          <Trophy aria-hidden="true" />
-          <div>
-            <span>3. Crown</span>
-            <strong>{score ? `current score ${score.total}` : 'a match score'}</strong>
-          </div>
-        </li>
-      </ol>
-    </section>
-  );
-}
 
 function TestProcessCard({ mode, questionCount }: { mode: PendingRunMode; questionCount: BenchmarkQuestionCount }) {
   const isSpeedDate = mode === 'speed-date';
@@ -8467,114 +9264,6 @@ function TestProcessCard({ mode, questionCount }: { mode: PendingRunMode; questi
   );
 }
 
-function MatchDetails({
-  benchmark,
-  score,
-  host,
-  model,
-  row,
-  system,
-}: {
-  benchmark: BenchmarkResult | null;
-  score?: TestedModelScore;
-  host?: NetworkHost;
-  model: string;
-  row?: ModelRow;
-  system: SystemProfile;
-}) {
-  const profile = getModelProfile(model);
-  const sizeGb = row?.sizeGb ?? row?.installedModel?.sizeGb ?? null;
-  const footprint = getFootprintFit(sizeGb, system);
-  const topPrompt = benchmark?.prompts
-    .slice()
-    .sort((a, b) => b.sobrietyScore - a.sobrietyScore)[0];
-  const matchScoreRows = [
-    {
-      label: 'Computer Fit',
-      value: score ? `${score.fit}%` : 'N/A',
-      detail: 'How well this model fits the computer based on model size, VRAM, RAM, and the latest test.',
-    },
-    {
-      // This row has always shown score.total. Labelling it "Chemistry" gave the
-      // Match score a second name — and a different panel used that same name for
-      // a different number. Theme words stay in headings and prose, not on metrics.
-      label: 'Match score',
-      value: score ? String(score.total) : 'N/A',
-      detail: 'Overall Match score: 34% answer quality, 32% speed, 18% finish rate, 16% computer fit.',
-    },
-    {
-      label: 'Best Proof',
-      value: score ? String(topPrompt ? topPrompt.sobrietyScore : score.sobriety) : 'N/A',
-      detail: 'Highest prompt reliability score from the latest compatibility test.',
-    },
-  ];
-  const matchRows = [
-    {
-      label: 'Computer',
-      value: host?.hostname ?? system.hostname,
-      detail: `${system.gpu.model} · ${system.gpu.vramGb || '?'} GB VRAM`,
-    },
-    {
-      label: 'Agent Style',
-      value: profile.archetype,
-      detail: profile.specialties.join(' · '),
-    },
-    {
-      label: 'Footprint',
-      value: sizeGb ? formatGb(sizeGb) : 'Size unknown',
-      detail: footprint,
-    },
-    {
-      label: 'Acceleration',
-      value: getCudaSummary(system.cuda),
-      detail: getCudaDetail(system.cuda),
-    },
-  ];
-
-  return (
-    <div className="match-details" aria-label="System and model match details">
-      <div className="match-details-head">
-        <span>Why this pairing?</span>
-        <strong>{profile.agentName} + {host?.hostname ?? system.hostname}</strong>
-      </div>
-
-      <div className="match-score-strip">
-        {matchScoreRows.map((item) => (
-          <div key={item.label} title={item.detail} aria-label={`${item.label}: ${item.value}. ${item.detail}`}>
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-          </div>
-        ))}
-      </div>
-
-      <div className="match-detail-grid">
-        {matchRows.map((item) => (
-          <div key={item.label}>
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-            <em>{item.detail}</em>
-          </div>
-        ))}
-      </div>
-
-      {benchmark?.prompts.length ? (
-        <div className="prompt-list compact" aria-label="Prompt proof points">
-          {benchmark.prompts.slice(0, 3).map((prompt) => (
-            <div className="prompt-row" key={prompt.id}>
-              <span>{prompt.label}</span>
-              <strong>{prompt.sobrietyScore}</strong>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="prompt-proof-empty">
-          <strong>{score ? 'Summary saved' : 'No test yet'}</strong>
-          <span>{score ? 'Run this model again to refresh the proof.' : 'Run a test to grade this model on this computer.'}</span>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function SpeedDatePanel({
   active,
@@ -8627,7 +9316,7 @@ function SpeedDatePanel({
   const questionLabel = `${questionCount} questions per model`;
   const runReadiness = shortlistedRows.length >= MIN_CONTESTANTS
     ? uninstalledLineupRows.length > 0
-      ? `${uninstalledLineupRows.length} contestant${uninstalledLineupRows.length === 1 ? '' : 's'} need downloads before the show starts.`
+      ? `${countWithVerb(uninstalledLineupRows.length, 'contestant', 'needs', 'need')} downloading before the show starts.`
       : `${shortlistedRows.length} contestants will answer the same ${questionCount} questions.`
     : 'Pick at least two installed contestants before the show starts.';
 
@@ -8664,7 +9353,14 @@ function SpeedDatePanel({
         className="speed-date-art-banner"
         kicker="Tonight's lineup"
         title="Five contestants, one rig, same questions"
-        body={winnerResult ? `${listTestResult?.winner} is leading with ${winnerResult.total} Match.` : 'Run the show to crown your Top Match for this computer.'}
+        // Checked against the lineup on screen, not just read from the saved
+        // result: listTestResult survives across sessions, so swapping one
+        // contestant was enough to make this announce a leader that is not in
+        // tonight's lineup at all.
+        body={standingLine(
+          lineupStanding(listTestResult?.winner, shortlistedRows.map((row) => row.displayName)),
+          winnerResult?.total,
+        )}
       />
 
       <div className="speed-date-body">
@@ -8889,13 +9585,16 @@ function SpeedDateShowAnimation({
   winner?: string;
   host?: NetworkHost;
 }) {
+  // The saved winner only counts as the current one if it is actually on this
+  // stage; otherwise the podium highlights a model the lineup does not contain.
+  const standing = lineupStanding(winner, rows.map((row) => row.displayName));
   const activeModel = runProgress?.phase === 'running'
     ? runProgress.currentModel
-    : winner ?? rows[0]?.displayName ?? '';
+    : (standing.kind === 'leading' ? standing.model : rows[0]?.displayName ?? '');
   const stageStatus = runProgress?.phase === 'running'
     ? `Now testing ${getShortModelName(runProgress.currentModel)}`
-    : winner
-      ? `${getShortModelName(winner)} is holding the top score`
+    : standing.kind === 'leading'
+      ? `${getShortModelName(standing.model)} is holding the top score`
       : rows.length >= MIN_CONTESTANTS
         ? `${rows.length} contestants ready for the same questions`
         : 'Pick at least two contestants to start the show';
@@ -8928,7 +9627,7 @@ function SpeedDateShowAnimation({
             >
               {row ? (
                 <>
-                  <AvatarBust model={row.displayName} size="tiny" />
+                  <AvatarBust generationKind={row.generationKind} model={row.displayName} size="tiny" />
                   <span>{index + 1}</span>
                 </>
               ) : (
@@ -8979,7 +9678,7 @@ function SpeedDateContestantCard({
         <X aria-hidden="true" />
       </button>
       <div className="speed-date-contestant-head">
-        <AvatarBust model={row.displayName} size="tiny" />
+        <AvatarBust generationKind={row.generationKind} model={row.displayName} size="tiny" />
         <div>
           <span>Contestant {index + 1}</span>
           <strong>{row.displayName}</strong>
@@ -9322,10 +10021,11 @@ function getPromptDiagnosticText(prompt: BenchmarkPromptResult) {
   return '';
 }
 
-const BENCHMARK_QUESTION_TYPES: BenchmarkQuestionType[] = ['assistant', 'json', 'truth', 'format', 'coding'];
+const BENCHMARK_QUESTION_TYPES: BenchmarkQuestionType[] = ['assistant', 'writing', 'json', 'truth', 'format', 'coding'];
 
 const BENCHMARK_TYPE_LABELS: Record<BenchmarkQuestionType, string> = {
   assistant: 'Assistant response',
+  writing: 'Writing task',
   json: 'JSON output',
   truth: 'Truthfulness',
   format: 'Format following',
@@ -9496,26 +10196,6 @@ function TestSuiteEditorDock({
   );
 }
 
-function ResourceWarning({ cuda }: { cuda: SystemProfile['cuda'] }) {
-  const cudaSummary = getCudaSummary(cuda);
-  const cudaDetail = getCudaDetail(cuda);
-
-  return (
-    <div className={`resource-warning ${cuda.status}`}>
-      <AlertTriangle aria-hidden="true" />
-      <div className="resource-copy">
-        <span>Resource Warning</span>
-        <strong>Tests can max CPU, GPU, VRAM, fans, and battery.</strong>
-        <em>Close games, renders, and heavy apps before a long run.</em>
-      </div>
-      <div className="cuda-status">
-        <span>CUDA Check</span>
-        <strong>{cudaSummary}</strong>
-        <em>{cudaDetail}</em>
-      </div>
-    </div>
-  );
-}
 
 function AgentReveal({
   active,
@@ -9717,7 +10397,7 @@ function AgentReveal({
                 onClick={() => onSelect(row.displayName)}
                 aria-label={`View ${row.displayName}`}
               >
-                <AvatarBust model={row.displayName} size="tiny" />
+                <AvatarBust generationKind={row.generationKind} model={row.displayName} size="tiny" />
                 <span className="roster-name">{getShortModelName(row.displayName)}</span>
                 <span className={rowScore ? `roster-score ${getScoreTone(rowScore.total)}` : 'roster-score empty'}>
                   {scoreLabel}
@@ -10195,11 +10875,35 @@ function ProfileQuestionTranscript({
   );
 }
 
-function ModeSplash({ onPick }: { onPick: (mode: UiMode) => void }) {
-  // No onClose: this is a required choice, so Escape must not dismiss it. Focus
-  // is still moved in and trapped — it is the first thing on screen at launch,
-  // and previously left focus on <body> behind a full-viewport overlay.
-  const splashRef = useDialog<HTMLDivElement>();
+function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCancel, isUpgrade }: {
+  vramGb: number;
+  onDone: (mode: UiMode, goals: GoalId[]) => void;
+  /** Set when reopened from Settings: pre-checks the saved picks. */
+  initialGoals?: GoalId[];
+  /** Set when this is an existing user meeting the goal question for the
+   *  first time — the copy should welcome them back, not greet a stranger. */
+  isUpgrade?: boolean;
+  /** Set when reopened from Settings: save picks and close, no mode step. */
+  onSaveGoals?: (goals: GoalId[]) => void;
+  onCancel?: () => void;
+}) {
+  // On first run there is no onClose: the choice is required, so Escape must
+  // not dismiss it. Reopened from Settings it is an ordinary dialog and
+  // Escape cancels. Focus is trapped either way — it previously left focus on
+  // <body> behind a full-viewport overlay.
+  const splashRef = useDialog<HTMLDivElement>(onCancel);
+  // The desire comes before the mode: "what do you want to do?" is a question
+  // about the person, "Simple or Advanced?" is a question about our UI, and
+  // the person's question goes first.
+  const [step, setStep] = useState<'goals' | 'mode'>('goals');
+  const [picked, setPicked] = useState<GoalId[]>(initialGoals ?? []);
+
+  const toggle = (id: GoalId) => {
+    setPicked((current) => (current.includes(id)
+      ? current.filter((g) => g !== id)
+      : [...current, id]));
+  };
+
   return (
     <div ref={splashRef} className="mode-splash" role="dialog" aria-modal="true" aria-label="Choose how to use RigMatch">
       <div className="mode-splash-card">
@@ -10210,6 +10914,90 @@ function ModeSplash({ onPick }: { onPick: (mode: UiMode) => void }) {
             <span>Find the best AI your PC can run — nothing leaves this computer.</span>
           </div>
         </div>
+        {step === 'goals' ? (
+          <>
+            <h2 className="mode-splash-title">
+              {isUpgrade ? 'New in this version: what would you like to do?' : 'What would you like to do?'}
+            </h2>
+            <p className="mode-splash-sub">
+              {isUpgrade
+                ? 'RigMatch can now point itself at what you actually want. Pick one and the model list, the tests and the winners all follow it. Your saved scores and settings are untouched.'
+                : 'Pick what matters most — you can add more anytime.'}
+            </p>
+            <div className="goal-splash-groups">
+              {goalsByCategory().map(({ category, goals }) => (
+                <section key={category.id} aria-label={category.label}>
+                  <h3 className="goal-splash-category">{category.label}</h3>
+                  <div className="goal-splash-grid">
+                    {goals.map((goal) => {
+                      const expectation = goalHardwareExpectation(goal, vramGb);
+                      const selected = picked.includes(goal.id);
+                      const pickOrder = picked.indexOf(goal.id) + 1;
+                      return (
+                        <button
+                          key={goal.id}
+                          type="button"
+                          className={`goal-splash-option${selected ? ' selected' : ''} tone-${expectation.tone}`}
+                          onClick={() => toggle(goal.id)}
+                          aria-pressed={selected}
+                        >
+                          <strong>{goal.desire}</strong>
+                          {goal.runtime === 'none' ? (
+                            // A missing backend is nobody's hardware's fault.
+                            <em title={goal.unsupportedReason}>Not possible locally yet</em>
+                          ) : (
+                            <em title={expectation.note}>
+                              {leagueLabel(expectation.tone)}
+                              {goal.grading === 'none' ? " · can't be graded yet" : ''}
+                            </em>
+                          )}
+                          {selected && <span className="goal-splash-order">{pickOrder === 1 ? 'Main goal' : `#${pickOrder}`}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+            {picked.length > 1 && (
+              <p className="goal-splash-nudge">
+                One goal gets you one clear answer. The best model for coding is rarely the best
+                for chatting, so each goal you add means more testing time before RigMatch can
+                crown anyone. Your first pick leads.
+              </p>
+            )}
+            <div className="goal-splash-actions">
+              {onSaveGoals ? (
+                <>
+                  {onCancel && (
+                    <button type="button" className="mini-button" onClick={onCancel}>
+                      {isUpgrade ? 'Not now' : 'Cancel'}
+                    </button>
+                  )}
+                  <button type="button" className="primary-button" onClick={() => onSaveGoals(picked)}>
+                    {isUpgrade
+                      ? (picked.length === 0 ? 'Skip for now' : 'Use these goals')
+                      : (picked.length === 0 ? 'Clear goals' : 'Save goals')}
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="primary-button" onClick={() => setStep('mode')}>
+                  {picked.length === 0 ? 'Skip for now' : 'Continue'}
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <ModeStep onPick={(mode) => onDone(mode, picked)} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ModeStep({ onPick }: { onPick: (mode: UiMode) => void }) {
+  return (
+    <>
         <h2 className="mode-splash-title">How would you like to start?</h2>
         <p className="mode-splash-sub">You can switch anytime from the header.</p>
         <div className="mode-splash-options">
@@ -10226,8 +11014,7 @@ function ModeSplash({ onPick }: { onPick: (mode: UiMode) => void }) {
             <span className="mode-splash-cta">Open the control room</span>
           </button>
         </div>
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -10395,8 +11182,8 @@ function ActivityPanel({
       if (!result || result.error || !result.completedAt) continue;
       if (result.challenge === 'app-builder') {
         jobs.push({ key: `app:${result.model}`, model: result.model, kind: 'app', label: 'App Builder', grade: result.grade, score: result.score, completedAt: result.completedAt, html: extractHtmlDocument(result.response) });
-      } else if (result.challenge === 'image-generation') {
-        jobs.push({ key: `img:${result.model}`, model: result.model, kind: 'image', label: 'Image Lab', grade: result.grade, score: result.score, completedAt: result.completedAt, imageDataUrl: result.imageDataUrl });
+      } else if (result.challenge === 'image-generation' || result.challenge === 'video-generation') {
+        jobs.push({ key: `img:${result.model}`, model: result.model, kind: 'image', label: result.challenge === 'video-generation' ? 'Video Lab' : 'Image Lab', grade: result.grade, score: result.score, completedAt: result.completedAt, imageDataUrl: result.imageDataUrl });
       }
     }
     return jobs.sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt)).slice(0, 10);
@@ -10621,21 +11408,10 @@ function ImageResultModal({ src, model, onClose }: {
   );
 }
 
-const LEARNING_TIPS: { term: string; tip: string }[] = [
-  { term: 'Match Score', tip: 'A 0–100 rating combining speed, quality, reliability, and hardware fit.' },
-  { term: 'Speed Dating', tip: 'Test multiple models with the same questions side-by-side to find your best fit.' },
-  { term: 'VRAM', tip: "Video RAM on your GPU. Models must fit here to run fast — too big means slow or won't load." },
-  { term: 'Rig Picks', tip: 'Models our algorithm recommends specifically for your GPU and hardware.' },
-  { term: 'Ollama', tip: 'The local server that downloads and runs AI models privately on your machine.' },
-  { term: 'Tokens/s', tip: 'Roughly how many words a model produces per second. Higher = faster responses.' },
-  { term: 'Parameters (3B, 7B…)', tip: 'Billions of values the model learned. Bigger = more capable but slower and heavier.' },
-  { term: 'Quantization (Q4/Q8)', tip: 'Compression that shrinks model size. Q4 = smaller and faster, Q8 = more accurate.' },
-  { term: 'Accuracy', tip: 'Whether a model follows instructions and avoids making things up (hallucinating).' },
-  { term: 'Grade (S/A/B/C)', tip: 'Overall rating: S is exceptional, A is great, B is solid, C needs improvement.' },
-  { term: 'Embedding model', tip: 'Converts text into search vectors — not for chat or generation, so filtered out here.' },
-  { term: 'Contestants', tip: 'Your shortlist of up to 5 models competing in Speed Dating. Add them from the model table.' },
-  { term: 'Context window', tip: 'How much text a model can hold in memory at once. Bigger = longer conversations without forgetting.' },
-];
+// The rotating tips, from the one place definitions live. They used to be
+// written out here, which meant the explanations existed only in Advanced Mode
+// — shown to the people who needed them least. See lib/glossary.ts.
+const LEARNING_TIPS: { term: string; tip: string }[] = tickerTips();
 
 function Ticker({
   activity,
