@@ -91,6 +91,13 @@ const PRESENT = [
   ['upgrade prompt copy', js, 'New in this version'],
   ['auto-judge note in the run dialog', js, 'no right answer to check against'],
   ['release notes mention the licence fix', js, "links that model's terms"],
+  // The share flow, from Dave's real LinkedIn test.
+  ['share text says what RigMatch is', js, 'speed-dates AI models on your own hardware'],
+  ['share text points at the download', js, 'Get it: '],
+  ['the card is copied for pasting', js, 'The card is on your clipboard'],
+  // Screen-audit fixes.
+  ['the listening test names its blocker', js, 'Record or upload audio first'],
+  ['settings rows answer to the pointer', css, 'settings-section-toggle'],
   // Main process — ships separately from the renderer bundle, so probing only
   // dist/assets would miss everything in electron/, including the permission
   // handler that is the whole of the renderer's posture toward the microphone.
@@ -104,6 +111,8 @@ const PRESENT = [
 /** Things that must NOT be in the bundle. */
 const ABSENT = [
   ['dead BenchmarkRun panel', js, 'BenchmarkRun'],
+  // LinkedIn truncated the post at this string's question mark, eating the link.
+  ['the old question-mark share text', js, 'Which local AI is your top match?'],
 ];
 
 let missing = 0;
