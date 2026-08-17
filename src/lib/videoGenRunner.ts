@@ -20,6 +20,8 @@ export type VideoChallengeOptions = {
   textEncoder: string;
   sizeId?: string;
   promptId?: string;
+  /** Free text when promptId is the custom marker; unjudged by design. */
+  customPrompt?: string;
   judgeModel?: string;
   ollamaBaseUrl: string;
   /** One per batch, so models compare fairly and reruns are not served cached. */
@@ -29,7 +31,7 @@ export type VideoChallengeOptions = {
 
 export async function runVideoLabChallenge(options: VideoChallengeOptions): Promise<VideoRunResult> {
   const {
-    checkpoint, textEncoder, sizeId, promptId, judgeModel, ollamaBaseUrl, seed, signal,
+    checkpoint, textEncoder, sizeId, promptId, customPrompt, judgeModel, ollamaBaseUrl, seed, signal,
   } = options;
   const { baseUrl, dedicated } = readComfySettings();
   const size = videoSizeById(sizeId);
@@ -42,7 +44,7 @@ export async function runVideoLabChallenge(options: VideoChallengeOptions): Prom
     judge: judgeModel ? createOllamaJudge(judgeModel, ollamaBaseUrl) : undefined,
     checkpoint,
     textEncoder,
-    imagePrompt: imagePromptById(promptId),
+    imagePrompt: imagePromptById(promptId, customPrompt),
     settings: { width: size.width, height: size.height, seed: seed ?? batchSeed() },
     dedicated,
     signal,

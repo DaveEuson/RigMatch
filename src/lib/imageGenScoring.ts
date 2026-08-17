@@ -235,3 +235,27 @@ export function scoreImageGeneration(facts: ImageRunFacts): {
 
   return { score, grade: getAdvancedLabGrade(score), judged, checks };
 }
+
+/** Marks a prompt the user typed, rather than one of the benchmark set. */
+export const CUSTOM_IMAGE_PROMPT_ID = 'custom';
+
+/**
+ * Wrap free text as a prompt with nothing to check it against.
+ *
+ * The benchmark prompts carry propositions — concrete yes/no questions a judge
+ * answers from the picture — and that is the entire basis of the adherence
+ * score. Text somebody just typed has none, and inventing them would mean
+ * grading a model against questions we made up about a scene we have not seen.
+ *
+ * So a custom prompt renders and times, and the caller is expected to say
+ * plainly that adherence is not scored for it. Returning an empty proposition
+ * list rather than a fabricated one is what makes that honest.
+ */
+export function customImagePrompt(text: string): ImagePrompt {
+  return { id: CUSTOM_IMAGE_PROMPT_ID, prompt: text.trim(), propositions: [] };
+}
+
+/** True when this prompt cannot have its adherence judged. */
+export function isUnjudgeablePrompt(prompt: ImagePrompt): boolean {
+  return prompt.propositions.length === 0;
+}

@@ -70,8 +70,8 @@ export function videoReadiness(checkpoints: string[], encoders: string[]): Video
  * localStorage would be full after a handful of runs. The judged frame stands
  * in for it, which is also the only part that was scored.
  */
-export function toVideoLabResult(run: VideoRunResult, promptId?: string): AdvancedLabResult {
-  const prompt = imagePromptById(promptId);
+export function toVideoLabResult(run: VideoRunResult, promptId?: string, customText?: string): AdvancedLabResult {
+  const prompt = imagePromptById(promptId, customText);
   return {
     model: run.checkpoint,
     challenge: 'video-generation',

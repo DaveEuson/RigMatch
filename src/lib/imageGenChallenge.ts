@@ -10,7 +10,12 @@
 
 import { getModelCapabilities, isVisionModel, type CapabilityBearing } from './modelCatalog.ts';
 import type { ImageRunResult } from './imageGenRun.ts';
-import { IMAGE_BENCHMARK_PROMPTS, type ImagePrompt } from './imageGenScoring.ts';
+import {
+  CUSTOM_IMAGE_PROMPT_ID,
+  IMAGE_BENCHMARK_PROMPTS,
+  customImagePrompt,
+  type ImagePrompt,
+} from './imageGenScoring.ts';
 import type { AdvancedLabResult } from './labResults.ts';
 
 /**
@@ -69,7 +74,18 @@ export function judgeCandidates(installed: CapabilityBearing[]): string[] {
   ];
 }
 
-export function imagePromptById(promptId?: string): ImagePrompt {
+/**
+ * The prompt for a run.
+ *
+ * `customText` wins when the id says custom: the user typed a scene, and it
+ * arrives with no propositions, so adherence cannot be judged and the caller
+ * says so. Empty custom text falls back to the first benchmark prompt rather
+ * than asking ComfyUI to render nothing.
+ */
+export function imagePromptById(promptId?: string, customText?: string): ImagePrompt {
+  if (promptId === CUSTOM_IMAGE_PROMPT_ID && customText && customText.trim()) {
+    return customImagePrompt(customText);
+  }
   return IMAGE_BENCHMARK_PROMPTS.find((p) => p.id === promptId) ?? IMAGE_BENCHMARK_PROMPTS[0];
 }
 
@@ -84,8 +100,8 @@ export function imagePromptById(promptId?: string): ImagePrompt {
  * what actually generated the picture. Recording the judge here instead would
  * credit the wrong thing entirely.
  */
-export function toLabResult(run: ImageRunResult, promptId?: string): AdvancedLabResult {
-  const prompt = imagePromptById(promptId);
+export function toLabResult(run: ImageRunResult, promptId?: string, customText?: string): AdvancedLabResult {
+  const prompt = imagePromptById(promptId, customText);
   return {
     model: run.checkpoint,
     challenge: 'image-generation',

@@ -12,7 +12,7 @@ import {
   resolveAppBuilderPrompt,
   runAdvancedAppBuilderChallenge,
 } from "../lib/labChallenges";
-import { IMAGE_BENCHMARK_PROMPTS } from "../lib/imageGenScoring";
+import { CUSTOM_IMAGE_PROMPT_ID, IMAGE_BENCHMARK_PROMPTS } from "../lib/imageGenScoring";
 import { IMAGE_RUN_SETTINGS, judgeCandidates, toLabResult } from "../lib/imageGenChallenge";
 import { runImageLabChallenge } from "../lib/imageGenRunner";
 import { comfyBridgeAvailable, describeComfyBusy, fetchComfyOutput, getComfyStatus } from "../lib/comfyTransport";
@@ -62,6 +62,77 @@ function readinessFrom(available: boolean, status: ComfyStatus | null): ImageRea
   return { kind: 'ready', checkpoints: usable };
 }
 
+/**
+ * The prompt for a generation run: one of the benchmark scenes, or your own.
+ *
+ * Two things were wrong before. The image panel offered three fixed prompts
+ * and no way to type one, and the video panel showed no prompt control at all
+ * while its own description said it "checks a frame against the prompt" — it
+ * had been quietly using whatever the image panel was set to.
+ *
+ * The honesty note matters as much as the input. Every benchmark prompt ships
+ * with propositions — concrete yes/no questions a judge answers from the
+ * picture — and those are the whole basis of the adherence score. Text somebody
+ * just typed has none. Rather than invent questions about a scene nobody has
+ * seen, a custom run renders and times, and says outright that adherence is not
+ * scored. Same rule the rest of the app follows: measure what can be measured,
+ * and say what cannot.
+ */
+function PromptPicker({
+  idPrefix,
+  value,
+  onChange,
+  customPrompt,
+  onCustomPromptChange,
+  disabled,
+}: {
+  idPrefix: string;
+  value: string;
+  onChange: (id: string) => void;
+  customPrompt: string;
+  onCustomPromptChange: (text: string) => void;
+  disabled: boolean;
+}) {
+  const custom = value === CUSTOM_IMAGE_PROMPT_ID;
+  return (
+    <>
+      <div className="advanced-lab-image-controls">
+        <label htmlFor={`${idPrefix}-prompt`}>Prompt</label>
+        <select
+          id={`${idPrefix}-prompt`}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
+        >
+          {IMAGE_BENCHMARK_PROMPTS.map((prompt) => (
+            <option key={prompt.id} value={prompt.id}>{prompt.prompt}</option>
+          ))}
+          <option value={CUSTOM_IMAGE_PROMPT_ID}>Write my own…</option>
+        </select>
+      </div>
+      {custom && (
+        <div className="advanced-lab-image-controls">
+          <label htmlFor={`${idPrefix}-custom`}>Your prompt</label>
+          <textarea
+            id={`${idPrefix}-custom`}
+            className="advanced-lab-custom-prompt"
+            value={customPrompt}
+            onChange={(event) => onCustomPromptChange(event.target.value)}
+            disabled={disabled}
+            rows={2}
+            placeholder="Describe the scene to draw"
+          />
+          <p className="advanced-lab-custom-note">
+            Your own wording renders and is timed, but adherence is not scored — the
+            built-in prompts ship with specific questions a judge checks the picture
+            against, and there are none for a scene we have not seen.
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
 export function AdvancedCapabilityLab({
   selectedModel,
   ollama,
@@ -88,6 +159,12 @@ export function AdvancedCapabilityLab({
   const [comfyChecking, setComfyChecking] = useState(true);
   const [checkpoint, setCheckpoint] = useState('');
   const [imagePromptId, setImagePromptId] = useState(IMAGE_BENCHMARK_PROMPTS[0].id);
+  // Free text for the "write my own" option. Shared by the image and video
+  // panels because they have always shared the prompt — video simply never
+  // showed which one it was using.
+  const [customPrompt, setCustomPrompt] = useState('');
+  const usingCustomPrompt = imagePromptId === CUSTOM_IMAGE_PROMPT_ID;
+  const customPromptReady = customPrompt.trim().length > 0;
   const [judgeModel, setJudgeModel] = useState('');
   const imageAbortRef = useRef<AbortController | null>(null);
   const [videoRunState, setVideoRunState] = useState<AdvancedLabRunState>({ phase: 'idle', result: null, message: '' });
@@ -173,10 +250,13 @@ export function AdvancedCapabilityLab({
   const imageRunning = imageRunState.phase === 'running';
   const videoRunning = videoRunState.phase === 'running';
   // Both share one GPU, so neither may start while the other is rendering.
+  // "Write my own" with an empty box would render whatever the fallback prompt
+  // happens to be and report it as your run, so the button waits for words.
+  const promptReady = !usingCustomPrompt || customPromptReady;
   const canRunImageTest = readiness.kind === 'ready' && Boolean(activeCheckpoint)
-    && !imageRunning && !videoRunning;
+    && promptReady && !imageRunning && !videoRunning;
   const canRunVideoTest = videoReady.kind === 'ready' && Boolean(activeVideoCheckpoint)
-    && Boolean(activeEncoder) && !imageRunning && !videoRunning;
+    && Boolean(activeEncoder) && promptReady && !imageRunning && !videoRunning;
   const visibleVideoResult = videoRunState.result?.model === activeVideoCheckpoint
     ? videoRunState.result
     : savedResults[`video:${activeVideoCheckpoint}`] ?? null;
@@ -236,6 +316,7 @@ export function AdvancedCapabilityLab({
       run = await runImageLabChallenge({
         checkpoint: activeCheckpoint,
         promptId: imagePromptId,
+        customPrompt,
         judgeModel: activeJudge || undefined,
         ollamaBaseUrl: ollama.baseUrl,
         signal: controller.signal,
@@ -243,7 +324,7 @@ export function AdvancedCapabilityLab({
     } finally {
       imageAbortRef.current = null;
     }
-    const result = toLabResult(run, imagePromptId);
+    const result = toLabResult(run, imagePromptId, customPrompt);
 
     setImageRunState({
       phase: result.error ? 'failed' : 'complete',
@@ -264,7 +345,7 @@ export function AdvancedCapabilityLab({
       writeAdvancedLabResults(merged);
       setSavedResults(merged);
     }
-  }, [activeCheckpoint, activeJudge, canRunImageTest, imagePromptId, imageResultKey, ollama.baseUrl]);
+  }, [activeCheckpoint, activeJudge, canRunImageTest, customPrompt, imagePromptId, imageResultKey, ollama.baseUrl]);
 
   const stopImageRun = useCallback(() => {
     imageAbortRef.current?.abort();
@@ -293,6 +374,7 @@ export function AdvancedCapabilityLab({
         textEncoder: activeEncoder,
         sizeId: videoSizeId,
         promptId: imagePromptId,
+        customPrompt,
         judgeModel: activeJudge || undefined,
         ollamaBaseUrl: ollama.baseUrl,
         signal: controller.signal,
@@ -300,7 +382,7 @@ export function AdvancedCapabilityLab({
     } finally {
       videoAbortRef.current = null;
     }
-    const result = toVideoLabResult(run, imagePromptId);
+    const result = toVideoLabResult(run, imagePromptId, customPrompt);
 
     setVideoRunState({
       phase: result.error ? 'failed' : 'complete',
@@ -319,7 +401,7 @@ export function AdvancedCapabilityLab({
       writeAdvancedLabResults(merged);
       setSavedResults(merged);
     }
-  }, [activeEncoder, activeJudge, activeVideoCheckpoint, canRunVideoTest, imagePromptId, ollama.baseUrl, videoSizeId]);
+  }, [activeEncoder, activeJudge, activeVideoCheckpoint, canRunVideoTest, customPrompt, imagePromptId, ollama.baseUrl, videoSizeId]);
 
   const stopVideoRun = useCallback(() => {
     videoAbortRef.current?.abort();
@@ -551,19 +633,14 @@ export function AdvancedCapabilityLab({
                   ))}
                 </select>
               </div>
-              <div className="advanced-lab-image-controls">
-                <label htmlFor="advanced-image-prompt">Prompt</label>
-                <select
-                  id="advanced-image-prompt"
-                  value={imagePromptId}
-                  onChange={(event) => setImagePromptId(event.target.value)}
-                  disabled={imageRunning}
-                >
-                  {IMAGE_BENCHMARK_PROMPTS.map((prompt) => (
-                    <option key={prompt.id} value={prompt.id}>{prompt.prompt}</option>
-                  ))}
-                </select>
-              </div>
+              <PromptPicker
+                idPrefix="advanced-image"
+                value={imagePromptId}
+                onChange={setImagePromptId}
+                customPrompt={customPrompt}
+                onCustomPromptChange={setCustomPrompt}
+                disabled={imageRunning}
+              />
               <div className="advanced-lab-image-controls">
                 <label htmlFor="advanced-image-judge">Checked by</label>
                 <select
@@ -735,6 +812,18 @@ export function AdvancedCapabilityLab({
                   ))}
                 </select>
               </div>
+              {/* This panel's own description says it "checks a frame against
+                  the prompt", and it always did — using whatever the image
+                  panel was set to, with nothing on screen to say which. Same
+                  control, same shared state, now visible where it applies. */}
+              <PromptPicker
+                idPrefix="advanced-video"
+                value={imagePromptId}
+                onChange={setImagePromptId}
+                customPrompt={customPrompt}
+                onCustomPromptChange={setCustomPrompt}
+                disabled={videoRunning}
+              />
               <div className="advanced-lab-safeguards">
                 <span>97 frames &middot; 4s</span>
                 <span>8 steps</span>

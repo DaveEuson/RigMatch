@@ -44,6 +44,8 @@ export type ImageChallengeOptions = {
   /** One per batch, so checkpoints compare fairly and reruns are not cached. */
   seed?: number;
   promptId?: string;
+  /** Free text when promptId is the custom marker; unjudged by design. */
+  customPrompt?: string;
   judgeModel?: string;
   ollamaBaseUrl: string;
   comfyBaseUrl?: string;
@@ -52,7 +54,7 @@ export type ImageChallengeOptions = {
 
 export async function runImageLabChallenge(options: ImageChallengeOptions): Promise<ImageRunResult> {
   const {
-    checkpoint, promptId, judgeModel, ollamaBaseUrl, seed,
+    checkpoint, promptId, customPrompt, judgeModel, ollamaBaseUrl, seed,
     comfyBaseUrl = COMFY_DEFAULT_URL, signal,
   } = options;
   const { dedicated } = readComfySettings();
@@ -67,7 +69,7 @@ export async function runImageLabChallenge(options: ImageChallengeOptions): Prom
     // unjudged rather than scored as if the picture were wrong.
     judge: judgeModel ? createOllamaJudge(judgeModel, ollamaBaseUrl) : undefined,
     checkpoint,
-    imagePrompt: imagePromptById(promptId),
+    imagePrompt: imagePromptById(promptId, customPrompt),
     settings: { ...IMAGE_RUN_SETTINGS, seed: seed ?? batchSeed() },
     signal,
   });

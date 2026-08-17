@@ -18135,3 +18135,34 @@ a.whats-next-support:hover {
   display: inline-flex;
   align-items: center;
 }
+
+/* ── The Lab's custom generation prompt ─────────────────────────────────────
+   The textarea sits in the same control column as the selects it replaces, so
+   the panel keeps one alignment rather than gaining a second. */
+.advanced-lab-custom-prompt {
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  resize: vertical;
+}
+.advanced-lab-custom-prompt:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+.advanced-lab-custom-prompt:disabled { opacity: 0.6; }
+
+/* Why a custom prompt scores differently. Quiet, but never hidden: it is the
+   difference between a number that means something and one that does not. */
+.advanced-lab-custom-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}

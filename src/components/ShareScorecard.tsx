@@ -7,8 +7,6 @@ import { formatThroughputValue } from '../lib/format';
 import { buildShareTexts, strongestSkill, SHARE_URL } from '../lib/shareCopy';
 import { useDialog } from '../lib/useDialog';
 
-// Where a shared scorecard sends people — the marketing landing page, which then
-// funnels to the live demo or a download.
 const CARD_W = 1200;
 const CARD_H = 675;
 
@@ -517,21 +515,4 @@ export function ShareScorecard({ model, score, system, onClose }: {
       </section>
     </div>
   );
-}
-
-/**
- * Render a card straight to a canvas, for scripts/render-card.mjs.
- *
- * Card design is iterative, and the alternative was driving five wizard steps
- * for every look at a drawing. Exported rather than duplicated so the script
- * always sees the real draw code; it is a dev tool, not app surface, and
- * nothing in the app calls it.
- */
-export function __drawForTest(
-  ctx: CanvasRenderingContext2D,
-  style: CardStyle,
-  opts: { modelName: string; score: TestedModelScore; system: SystemProfile; showHostname: boolean },
-) {
-  if (style === 'datingshow') drawDatingCard(ctx, opts);
-  else drawScorecard(ctx, opts);
 }

@@ -169,10 +169,36 @@ async function downloadModel({ root, folder, filename, url, expectedBytes }, onP
   let received = 0;
   let lastReport = 0;
   let lastReceived = 0;
+  let lastByteAt = Date.now();
 
   const source = Readable.fromWeb(response.body);
+
+  /**
+   * Give up on a connection that has stopped delivering.
+   *
+   * fetch has no inactivity timeout, so a stream that goes quiet — a dropped
+   * connection, a wifi handover, a CDN hiccup — leaves this awaiting bytes
+   * that never come. The whole download queue is sequential, so one silent
+   * stall froze every remaining model behind it with no error, no progress and
+   * nothing on screen to explain it. Dave hit exactly that: two models stuck,
+   * nothing else downloading.
+   *
+   * A big model on a slow line can legitimately go quiet for a while, so this
+   * is deliberately patient; the point is that "forever" stops being an option.
+   */
+  const STALL_TIMEOUT_MS = 90_000;
+  const watchdog = setInterval(() => {
+    if (Date.now() - lastByteAt < STALL_TIMEOUT_MS) return;
+    clearInterval(watchdog);
+    source.destroy(new Error(
+      `The download stopped receiving data for ${Math.round(STALL_TIMEOUT_MS / 1000)} seconds. `
+      + 'Check your connection and start it again — anything already downloaded is kept.',
+    ));
+  }, 5_000);
+
   source.on('data', (chunk) => {
     received += chunk.length;
+    lastByteAt = Date.now();
     // Throttled: a multi-gigabyte download fires this thousands of times a
     // second and every event crosses an IPC boundary.
     const now = Date.now();
@@ -201,6 +227,10 @@ async function downloadModel({ root, folder, filename, url, expectedBytes }, onP
   } catch (error) {
     await fs.rm(partPath, { force: true }).catch(() => {});
     throw error;
+  } finally {
+    // Always, on every path: a surviving interval keeps the process awake and
+    // can destroy a stream belonging to the next download.
+    clearInterval(watchdog);
   }
 
   if (total && received < total) {
