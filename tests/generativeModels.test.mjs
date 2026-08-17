@@ -1,21 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { readRendererSource } from '../scripts/renderer-source.mjs';
 
-/** Concatenate the renderer's sources, so a guard survives a file move. */
-function readAllRendererSource() {
-  const roots = ['src'];
-  let text = '';
-  const walk = (dir) => {
-    for (const name of fs.readdirSync(dir)) {
-      const full = `${dir}/${name}`;
-      if (fs.statSync(full).isDirectory()) { walk(full); continue; }
-      if (/\.tsx?$/.test(full)) text += fs.readFileSync(full, 'utf8');
-    }
-  };
-  for (const root of roots) walk(root);
-  return text;
-}
 
 /**
  * The "Makes images" and "Makes video" filters, checked against what actually
@@ -95,7 +82,7 @@ test('the chip is hidden by the catalogue, not deleted from the code', () => {
   // that exists somewhere in the UI, and pinning it to one file made it fail
   // the moment ModelCabinet was extracted — a false alarm about a refactor
   // rather than a real regression.
-  const app = readAllRendererSource();
+  const app = readRendererSource();
   assert.match(app, /offerableTaskFilters/, 'chips should be filtered by what exists');
   assert.match(app, /rows\.some\(\(row\) => modelMatchesTask\(row, chip\.id\)\)/);
   assert.match(app, /chip\.id === taskFilter \|\|/, 'the active chip must never disappear under the user');

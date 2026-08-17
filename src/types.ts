@@ -679,3 +679,12 @@ export type RunProgress = {
 
 /** How the Speed Dating transcript is grouped. */
 export type TranscriptViewMode = 'by-model' | 'by-question';
+
+
+/** The two nav panels that share the utility surface. */
+export type UtilityPanelId = Extract<NavId, 'history' | 'settings'>;
+
+
+/** The Advanced rail's destinations. Here rather than in SideMenu so that
+ * types.ts never has to import from a component. */
+export type NavId = 'lan' | 'models' | 'whatsNew' | 'speedDate' | 'agent' | 'history' | 'activity' | 'settings';

@@ -406,3 +406,17 @@ export function goalHardwareExpectation(goal: Goal, vramGb: number): GoalExpecta
       return { tone: 'tight', note: 'Smaller models only on this card. The test will show what that costs.', source: 'heuristic' };
   }
 }
+
+
+/**
+ * The goal's own word for a win, when there is one.
+ *
+ * The Matches board says "Best for coding" rather than "coding pick" because
+ * the goal defines how its result should be named. Falls back to whatever the
+ * caller had, so a pick with no matching goal still reads sensibly.
+ */
+export function matchDisplayLabel(pickId: string, fallback: string): string {
+  const goalId = pickId === 'chat' ? 'talk' : pickId === 'coding' ? 'code' : undefined;
+  const goal = goalId ? GOALS.find((g) => g.id === goalId) : undefined;
+  return goal?.matchLabel ?? fallback;
+}

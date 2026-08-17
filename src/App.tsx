@@ -5,17 +5,11 @@ import {
   ArrowLeft,
   Bot,
   Boxes,
-  Bug,
-  Check,
   CheckCircle,
-  ChevronDown,
   ChevronRight,
   Code2,
-  Coffee,
-  Copy,
   Download,
   ExternalLink,
-  FolderOpen,
   Gauge,
   Heart,
   HelpCircle,
@@ -27,7 +21,6 @@ import {
   Play,
   Plus,
   RefreshCw,
-  Share2,
   Settings,
   ShieldCheck,
   ShoppingCart,
@@ -88,13 +81,9 @@ import type {
   RunProgress,
 } from './types';
 import {
-  MATCH_GRADE_BANDS,
   compareBenchmarkResults,
   compareTestedModelScores,
   formatMatchScore,
-  isLegacyScore,
-  scoreDrift,
-  scoreDriftLabel,
   toTestedModelScore,
   upsertModelScores,
 } from './lib/scoring';
@@ -115,8 +104,6 @@ import { WhatsNewPanel } from './components/WhatsNewPanel';
 import { SideMenu, type NavId, type NavItem } from './components/SideMenu';
 import { GameShowHost } from './components/GameShowHost';
 import { BrandMark, PanelHeader } from './components/CommonChrome';
-import { ReleaseNotes, UpdateCenter } from './components/UpdateCenter';
-import { releaseNotes } from './data/releaseNotes';
 import { licenseLinksForModels } from './lib/modelLicenses';
 import { lineupStanding, standingLine } from './lib/lineupStanding';
 import { readDeckExpanded, writeDeckExpanded } from './lib/deckSettings';
@@ -125,15 +112,11 @@ import { TopDeck } from './components/TopDeck';
 import {
   addSetValues,
   buildBugReportUrl,
-  buildDiagnosticsText,
-  buildShareableScorecard,
   createEmptyBenchmark,
   createQueuedPullProgress,
   createRunProgressId,
   formatBenchmarkBanner,
   formatHistoryTime,
-  formatLogDetails,
-  formatLogTime,
   formatLogsForClipboard,
   getAgentName,
   getBenchmarkForModel,
@@ -157,18 +140,14 @@ import {
   getPullProgressPercent,
   getPullTrackPercent,
   getQueueChipModelName,
-  getRankedModelScores,
-  getRecentModelScores,
   getRemoteRigDetailCards,
   getRigPick,
   getSavedThemeId,
   getSavedTutorialSeen,
   getSavedUiMode,
   hasChosenInterfaceMode,
-  getScoreTimelineNote,
   getFriendlyModelName,
   getShortModelName,
-  getTaskTopPicks,
   getThemeLabel,
   isBenchmarkByModel,
   isBenchmarkForAliases,
@@ -231,7 +210,6 @@ import { estimateBenchmarkMs, estimateSpeedDateMs } from './lib/runEstimates';
 import {
   amazonUrl,
   APP_VERSION,
-  BUY_ME_A_COFFEE_URL,
   CLEARED_TOP_MATCHES_STORAGE_KEY,
   QUALITY_MODE_STORAGE_KEY,
   JUDGE_MODEL_STORAGE_KEY,
@@ -248,40 +226,27 @@ import {
   TUTORIAL_STORAGE_KEY,
   UI_MODE_STORAGE_KEY,
   MODE_SPLASH_STORAGE_KEY,
-  getThemeSwatches,
   navItems,
-  themeOptions,
   type ThemeId,
   type UiMode,
 } from './lib/appConfig';
 import { getUpdateChannelLabel } from './lib/updateLabels';
 import { AvatarBust, MachineAvatar } from './components/Avatars';
 import { AppBuilderPreviewModal } from './components/AppBuilderPreview';
-import { ComfySettings } from './components/ComfySettings';
 import { ShareScorecard } from './components/ShareScorecard';
 import { ExportHatchModal } from './components/ExportHatchModal';
 import { buildHatchProfile } from './lib/hatchProfile';
-import { } from './lib/datingProfile';
 import { UpdateAvailableToast } from './components/UpdateAvailableToast';
 import { SimpleWizard, type StepId as WizardStepId, type WizardModel } from './components/SimpleWizard';
 import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, ChoiceCruiseModal } from './components/dialogs';
 import { ChatDock } from './components/ChatDock';
-import { SkillRunMiniBar, LiveBuildModal, DemoResultModal, ModelDemoChips } from './components/SkillDemoViewers';
+import { SkillRunMiniBar, LiveBuildModal, DemoResultModal } from './components/SkillDemoViewers';
 import { AdvancedCapabilityLab } from './components/AdvancedCapabilityLab';
 import { RunWarningModal } from './components/RunWarningModal';
+import { UtilityPanel } from './components/UtilityPanel';
 import { ModelCabinet } from './components/ModelCabinet';
-import { } from './components/FirstModelWizard';
-import { } from './components/SortableModelHeader';
-import { } from './components/DiskGuard';
 import { AgentReveal } from './components/AgentReveal';
-import { } from './components/SelectedContestantCard';
 import { SpeedDateTranscriptPanel } from './components/SpeedDateTranscriptPanel';
-import { } from './lib/promptDiagnostic';
-import { } from './components/ProfileQuestionTranscript';
-import { } from './components/ProfileScoreDetails';
-import { } from './components/AgentDatingProfile';
-import { } from './components/ResultExplanationCard';
-import { } from './components/DownloadProgressInline';
 import { LiveFlirtSpotlight } from './components/LiveFlirtSpotlight';
 import { extractHtmlDocument } from './lib/labPreview';
 import {
@@ -311,16 +276,14 @@ import { batchSeed, isVideoCheckpoint } from './lib/videoGen';
 import { DEFAULT_VIDEO_SIZE_ID, toVideoLabResult, videoReadiness } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
 import { tickerTips } from './lib/glossary';
-import { GOALS, goalById, goalHardwareExpectation, goalsByCategory, leagueLabel, presetIdForGoal, type GoalId } from './lib/goals';
+import { goalById, goalHardwareExpectation, goalsByCategory, leagueLabel, presetIdForGoal, type GoalId } from './lib/goals';
 import { taskFilterForGoal } from './lib/modelCatalog';
 import {
   firstRunStep, hasBeenOfferedGoals, markGoalsOffered, readSelectedGoals, writeSelectedGoals,
   type FirstRunStep,
 } from './lib/goalSettings';
-import { getGoalMatches } from './lib/goalMatches';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { copyText, type CopyState } from './lib/clipboard';
-import { downloadMatchCard } from './lib/matchCard';
 import { runVideoLabChallenge } from './lib/videoGenRunner';
 import { runImageLabChallenge } from './lib/imageGenRunner';
 import { describeComfyBusy, getComfyStatus } from './lib/comfyTransport';
@@ -335,7 +298,6 @@ import {
   RomanceArtBanner,
 } from './components/ScoreVisuals';
 import {
-  compareVersionStrings,
   countWithVerb,
   formatGb,
   formatPullCount,
@@ -344,12 +306,10 @@ import {
   getScoreTone,
 } from './lib/format';
 import robotRigGreenroom from './assets/robot-rig-greenroom.webp';
-import robotScorecardCeremony from './assets/robot-scorecard-ceremony.webp';
 import robotSpeedDateShow from './assets/robot-speed-date-show.webp';
 import './App.css';
 
 
-type UtilityPanelId = Extract<NavId, 'history' | 'settings'>;
 
 
 // Quick TEST resource warning opt-out ('off' = user chose "don't warn again").
@@ -5290,296 +5250,7 @@ function ClearScoresModal({
   );
 }
 
-const SCORE_WEIGHTS = [
-  { label: 'Quality', pct: 34, detail: 'Average per-prompt answer quality score (0–100). Measured by rule-based heuristics: does JSON parse? Does the truth-trap get a humble answer? Does the format match? No cloud AI judge — entirely local.' },
-  { label: 'Speed', pct: 32, detail: 'Median tokens/sec across 3 timed runs on your hardware × 1.5, plus a bonus for responses under ~6 s. This reflects your machine, not some cloud baseline.' },
-  { label: 'Reliability', pct: 18, detail: 'Percentage of prompts that returned a non-empty response. A model that crashes or stalls hurts here.' },
-  { label: 'Computer Fit', pct: 16, detail: 'How well the model size matches a typical home rig. Tiny 1–3B models score highest (96); 70B+ models score lowest (38) unless you have 48 GB+ VRAM.' },
-];
 
-// Grade rows derived from the single canonical band list, so every table in the
-// UI shows exactly the grades the engine assigns. Two hand-written tables used
-// to disagree with each other and with gradeFor(), which let the app display a
-// grade ("A-") that appeared in neither.
-const GRADE_TONES: Record<string, string> = { S: 'elite', A: 'good', 'B+': 'good', B: 'good', C: 'ok', D: 'low' };
-const MATCH_GRADE_BAND_ROWS = MATCH_GRADE_BANDS.map((band, index) => {
-  const upper = index === 0 ? 100 : MATCH_GRADE_BANDS[index - 1].min - 1;
-  return {
-    grade: band.grade,
-    range: `${band.min}–${upper}`,
-    tone: GRADE_TONES[band.grade] ?? 'ok',
-  };
-});
-const GRADE_ROWS = MATCH_GRADE_BAND_ROWS;
-
-function HowWeScoreSection() {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <section className="how-we-score-section">
-      <button
-        type="button"
-        className="how-we-score-toggle"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open ? 'true' : 'false'}
-      >
-        <span>How We Score</span>
-        <ChevronDown className={open ? 'rotated' : ''} aria-hidden="true" />
-      </button>
-      {open && (
-        <div className="how-we-score-body">
-          <p className="how-we-score-intro">
-            All scoring is deterministic rule-based heuristics running locally. No cloud AI judge, no telemetry.
-            Results reflect <em>your</em> hardware.
-          </p>
-
-          <div className="score-weight-list">
-            {SCORE_WEIGHTS.map(({ label, pct, detail }) => (
-              <div key={label} className="score-weight-row">
-                <div className="score-weight-head">
-                  <strong>{label}</strong>
-                  <span className="score-weight-pct">{pct}%</span>
-                </div>
-                <div className="score-weight-bar">
-                  <div className="score-weight-fill" style={{ width: `${pct * 2}%` }} />
-                </div>
-                <p>{detail}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="score-grade-table">
-            <span className="score-grade-label">Grade scale</span>
-            <div className="score-grade-rows">
-              {GRADE_ROWS.map(({ grade, range }) => (
-                <div key={grade} className="score-grade-row">
-                  <strong>{grade}</strong>
-                  <em>{range}</em>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <p className="how-we-score-footer">
-            Scores are <em>relative to your rig</em>. A model that scores 88 on a 12 GB GPU will score differently
-            on a Mac Studio with 64 GB unified memory.
-          </p>
-          <p className="how-we-score-footer">
-            <strong>Answer quality is a heuristic proxy, not a verdict.</strong> The rule-based checks work by matching
-            a shape: valid JSON with the right keys, a refusal where one belongs, a list of the requested length, a
-            correct clamp function. Where a question has no such shape — everyday chat and writing — there is nothing
-            to match, so the fallback scores by answer <em>length</em>. That is not a quality measurement, and RigMatch
-            will not crown a Match on it: those goals stay uncrowned until you turn on the judge, which reads the answer
-            and marks it properly. When any quality score looks off, open the scorecard and read the saved transcript —
-            that is the source of truth.
-          </p>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function UiModePicker({
-  uiMode,
-  onUiModeChange,
-}: {
-  uiMode: UiMode;
-  onUiModeChange: (mode: UiMode) => void;
-}) {
-  const modes: Array<{ id: UiMode; label: string; description: string }> = [
-    { id: 'beginner', label: 'Simple', description: 'Free guided path: check, pick, compare, use the winner.' },
-    { id: 'advanced', label: 'Advanced', description: 'Power tools for deeper testing, diagnostics, and supporter experiments.' },
-  ];
-
-  return (
-    <section className="ui-mode-picker" aria-label="Interface mode">
-      <div>
-        <span>Interface Mode</span>
-        <strong>{uiMode === 'beginner' ? 'Simple Mode is on' : 'Advanced Mode is on'}</strong>
-      </div>
-      <div className="mode-toggle" role="group" aria-label="Choose interface mode">
-        {modes.map((mode) => (
-          <button
-            key={mode.id}
-            type="button"
-            className={uiMode === mode.id ? 'active' : ''}
-            onClick={() => onUiModeChange(mode.id)}
-            aria-pressed={uiMode === mode.id}
-          >
-            <strong>{mode.label}</strong>
-            <span>{mode.description}</span>
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-
-function GoalsSummary({
-  goals,
-  onEditGoals,
-}: {
-  goals: GoalId[];
-  onEditGoals: () => void;
-}) {
-  const primary = goals[0] ? goalById(goals[0]) : undefined;
-  return (
-    <section className="ui-mode-picker" aria-label="Your goals">
-      <div>
-        <span>Your Goals</span>
-        <strong>
-          {primary
-            ? `${primary.desire}${goals.length > 1 ? ` · +${goals.length - 1} more` : ''}`
-            : 'No goal picked yet'}
-        </strong>
-      </div>
-      <div className="mode-toggle" role="group" aria-label="Edit goals">
-        <button type="button" onClick={onEditGoals}>
-          <strong>Change goals</strong>
-          <span>
-            {primary
-              ? 'Your main goal points Models and Simple Mode at the right contestants.'
-              : 'Pick a goal and RigMatch leads with the models that can do it.'}
-          </span>
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function ClosetSection({
-  rows,
-  modelScores,
-  topModel,
-  onDeleteModel,
-}: {
-  rows: ModelRow[];
-  modelScores: Record<string, TestedModelScore>;
-  topModel?: string;
-  onDeleteModel: (row: ModelRow) => void;
-}) {
-  // The closet: what is on the shelf, how much room it takes, and whether it
-  // ever earned its place. Sorted by size because that is the question that
-  // brings someone here — the close-cleanup dialog once offered to clear
-  // 38.5 GB in one click, and this is the calm version of that moment.
-  // Who owns the file, when it is not Ollama. ComfyUI checkpoints are the
-  // biggest things on disk and the reason someone opens this screen, so they
-  // are still listed and still counted — they just cannot be deleted here.
-  const evictedBy = (row: ModelRow): string | null => {
-    if (row.runtime === 'comfyui') return 'In ComfyUI';
-    if (row.localProvider === 'lm-studio') return 'In LM Studio';
-    return null;
-  };
-  const entries = rows
-    .map((row) => ({
-      row,
-      sizeGb: row.installedModel?.sizeGb ?? row.sizeGb ?? 0,
-      score: modelScores[row.displayName],
-    }))
-    .sort((a, b) => b.sizeGb - a.sizeGb);
-  const totalGb = entries.reduce((sum, entry) => sum + entry.sizeGb, 0);
-  if (entries.length === 0) {
-    return (
-      <section className="closet-section" aria-label="Model storage">
-        <div className="closet-head">
-          <span>The Closet</span>
-          <strong>No installed models yet</strong>
-        </div>
-      </section>
-    );
-  }
-  return (
-    <section className="closet-section" aria-label="Model storage">
-      <div className="closet-head">
-        <span>The Closet</span>
-        <strong>{entries.length} model{entries.length === 1 ? '' : 's'} · {totalGb.toFixed(1)} GB on disk</strong>
-        <em>
-          Keep the winner; evict who never earned a callback. Deleting always asks first, and anything
-          evicted can be downloaded again. Models owned by ComfyUI or LM Studio are listed for their disk
-          size but have to be removed where they live.
-        </em>
-      </div>
-      <ul className="closet-list">
-        {entries.map(({ row, sizeGb, score }) => {
-          const isWinner = topModel !== undefined && row.displayName === topModel;
-          return (
-            <li key={row.displayName} className={isWinner ? 'closet-winner' : ''}>
-              <div className="closet-row-name">
-                <strong>{row.displayName}</strong>
-                <em>
-                  {score
-                    ? `${formatMatchScore(score)} · ${score.grade} — tested ${new Date(score.completedAt).toLocaleDateString()}`
-                    : 'Never tested — taking up space on reputation alone'}
-                </em>
-              </div>
-              <span className="closet-size">{sizeGb > 0 ? `${sizeGb.toFixed(1)} GB` : '—'}</span>
-              {isWinner ? (
-                <span className="closet-keep" title="Your current top match. Probably worth its shelf space.">WINNER</span>
-              ) : evictedBy(row) ? (
-                // A button that cannot do what it says is worse than no button.
-                // Ollama is the only thing RigMatch can delete from; ComfyUI
-                // checkpoints and LM Studio models are owned elsewhere, and
-                // routing them through Ollama's delete API just 404s.
-                <span className="closet-elsewhere" title={`RigMatch cannot delete this one. ${evictedBy(row)}`}>
-                  {evictedBy(row)}
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  className="mini-button closet-evict"
-                  onClick={() => onDeleteModel(row)}
-                  title={`Delete ${row.displayName} from this computer (asks first)`}
-                >
-                  Evict
-                </button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-function ThemePicker({
-  themeId,
-  onThemeChange,
-}: {
-  themeId: ThemeId;
-  onThemeChange: (themeId: ThemeId) => void;
-}) {
-  return (
-    <section className="theme-picker" aria-label="Theme selector">
-      <div>
-        <span>Theme</span>
-        <strong>{getThemeLabel(themeId)}</strong>
-      </div>
-      <div className="theme-grid">
-        {themeOptions.map((theme) => {
-          const selected = theme.id === themeId;
-          return (
-            <button
-              key={theme.id}
-              type="button"
-              className={selected ? 'theme-card active' : 'theme-card'}
-              onClick={() => onThemeChange(theme.id)}
-              aria-pressed={selected}
-            >
-              <span className="theme-swatches" aria-hidden="true">
-                {getThemeSwatches(theme.id).map((swatch, index) => (
-                  <i key={index} style={{ background: swatch, color: swatch }} />
-                ))}
-              </span>
-              <strong>{theme.label}</strong>
-              <em>{theme.description}</em>
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
 
 const THIRD_PARTY_MODEL_LINKS = [
   { label: 'Ollama model library', href: 'https://ollama.com/library' },
@@ -5703,777 +5374,6 @@ function ThirdPartyDownloadConsentModal({
 }
 
 
-function UtilityPanel({
-  panel,
-  listTestResult,
-  selectedHost,
-  selectedModel,
-  ollama,
-  system,
-  themeId,
-  uiMode,
-  selectedGoals,
-  installedRows,
-  appLogs,
-  modelScores,
-  chatMessages,
-  updateChannel,
-  updateCheck,
-  isCheckingUpdates,
-  logPath,
-  isLoadingLogs,
-  onThemeChange,
-  onUiModeChange,
-  onEditGoals,
-  onDeleteModel,
-  onRefreshLogs,
-  onCopyLogs,
-  onClearLogs,
-  onOpenLogsFolder,
-  onClearScore,
-  onClearAllScores,
-  onClearAllData,
-  onOpenSetupGuide,
-  onUpdateChannelChange,
-  onCheckForUpdates,
-  onOpenUpdatePage,
-  autoUpdateStatus,
-  onDownloadUpdate,
-  onInstallUpdate,
-  onSelectTopPick,
-}: {
-  panel: UtilityPanelId;
-  listTestResult: ListTestResult | null;
-  selectedHost?: NetworkHost;
-  selectedModel: string;
-  ollama: OllamaStatus;
-  system: SystemProfile;
-  themeId: ThemeId;
-  uiMode: UiMode;
-  selectedGoals: GoalId[];
-  installedRows: ModelRow[];
-  appLogs: AppLogEntry[];
-  modelScores: Record<string, TestedModelScore>;
-  chatMessages: ChatMessage[];
-  updateChannel: UpdateChannel;
-  updateCheck: UpdateCheckResponse | null;
-  isCheckingUpdates: boolean;
-  logPath: string;
-  isLoadingLogs: boolean;
-  onThemeChange: (themeId: ThemeId) => void;
-  onUiModeChange: (mode: UiMode) => void;
-  onEditGoals: () => void;
-  onDeleteModel: (row: ModelRow) => void;
-  onRefreshLogs: () => void;
-  onCopyLogs: () => void;
-  onClearLogs: () => void;
-  onOpenLogsFolder: () => void;
-  onClearScore: (model: string) => void;
-  onClearAllScores: () => void;
-  onClearAllData: () => void;
-  onOpenSetupGuide: () => void;
-  onUpdateChannelChange: (channel: UpdateChannel) => void;
-  onCheckForUpdates: () => void;
-  onOpenUpdatePage: () => void;
-  autoUpdateStatus: AutoUpdateStatus;
-  onDownloadUpdate: () => void;
-  onInstallUpdate: () => void;
-  onSelectTopPick?: (model: string) => void;
-}) {
-  const Icon = panel === 'history' ? History : Settings;
-  const [diagnosticsCopy, setDiagnosticsCopy] = useState<CopyState>('idle');
-  const recentModelScores = useMemo(() => getRecentModelScores(modelScores), [modelScores]);
-  const rankedModelScores = useMemo(() => getRankedModelScores(modelScores), [modelScores]);
-  const isScoreDrifted = useCallback((score: TestedModelScore) => {
-    const installed = ollama.models.find((m) => m.name === score.model || m.model === score.model);
-    return scoreDrift(score, {
-      gpuModel: system.gpu.model,
-      vramGb: system.gpu.vramGb,
-      modelDigest: installed?.digest,
-    }) !== null;
-  }, [ollama.models, system.gpu.model, system.gpu.vramGb]);
-  const taskPicks = useMemo(() => getTaskTopPicks(modelScores, isScoreDrifted), [modelScores, isScoreDrifted]);
-  const goalMatches = useMemo(
-    () => getGoalMatches(selectedGoals, modelScores, isScoreDrifted),
-    [selectedGoals, modelScores, isScoreDrifted],
-  );
-  const topRankedScore = rankedModelScores[0];
-  const savedChatMessageCount = Math.max(0, chatMessages.length - 1);
-  const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
-  const scoreExplainerRef = useDialog<HTMLDivElement>(() => setScoreExplainerOpen(false));
-  const [scoreCopied, setScoreCopied] = useState(false);
-  const [ollamaUpdateLatest, setOllamaUpdateLatest] = useState<string | null>(null);
-  const [isCheckingOllamaUpdate, setIsCheckingOllamaUpdate] = useState(false);
-
-  const checkOllamaUpdate = useCallback(async () => {
-    setIsCheckingOllamaUpdate(true);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
-    try {
-      const res = await fetch('https://api.github.com/repos/ollama/ollama/releases/latest', { signal: controller.signal });
-      const data = await res.json() as { tag_name: string };
-      setOllamaUpdateLatest(data.tag_name.replace(/^v/, ''));
-    } catch {
-      // network unavailable or timed out
-    } finally {
-      clearTimeout(timer);
-      setIsCheckingOllamaUpdate(false);
-    }
-  }, []);
-
-  const ollamaHasUpdate = ollamaUpdateLatest !== null && ollama.version != null
-    && compareVersionStrings(ollamaUpdateLatest, ollama.version) > 0;
-
-  const copyScorecard = useCallback(() => {
-    const text = buildShareableScorecard(rankedModelScores, taskPicks, system);
-    void navigator.clipboard.writeText(text).then(() => {
-      setScoreCopied(true);
-      setTimeout(() => setScoreCopied(false), 2500);
-    });
-  }, [rankedModelScores, taskPicks, system]);
-
-  return (
-    <section
-      className={panel === 'history' ? 'panel utility-panel history-panel panel-focused' : 'panel utility-panel panel-focused'}
-      aria-label={`${getNavLabel(panel)} panel`}
-    >
-      <div className="utility-title">
-        <div>
-          <Icon aria-hidden="true" />
-          <div>
-            <span>Panel</span>
-            <strong>{getNavLabel(panel)}</strong>
-          </div>
-        </div>
-      </div>
-
-      {scoreExplainerOpen && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setScoreExplainerOpen(false)}>
-          <div ref={scoreExplainerRef} className="run-warning-modal score-explainer-modal" role="dialog" aria-modal="true" aria-label="How we score" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">
-              <Trophy aria-hidden="true" />
-              <div>
-                <span>Scoring system</span>
-                <strong>How RigMatch scores your models</strong>
-              </div>
-              <button type="button" className="icon-action" onClick={() => setScoreExplainerOpen(false)} aria-label="Close">
-                <X aria-hidden="true" />
-              </button>
-            </div>
-            <div className="score-explainer-body">
-              {/* Four components, always — this said "three signals", silently
-                  dropping Finish Rate and 18% of the score. */}
-              <p>RigMatch runs the same set of prompts across each model on <strong>your actual computer</strong> and combines four signals into a single Match score (0–100): <strong>34% answer quality, 32% speed, 18% finish rate, 16% computer fit</strong>.</p>
-              <p className="score-explainer-weight">Answer quality matters most. Speed and hardware fit help separate close matches.</p>
-              <p className="score-explainer-note">Scored benchmarks disable hidden thinking when Ollama supports it, so models are graded on visible answers instead of internal reasoning tokens. Chat mode is not affected.</p>
-              <div className="score-explainer-grid">
-                <div>
-                  <span>Answer Quality</span>
-                  <strong>How well it follows the prompt</strong>
-                  <em>Did it follow instructions, stay on task, and give complete answers? Graded across all test prompts.</em>
-                </div>
-                <div>
-                  <span>Speed</span>
-                  <strong>How fast it responds</strong>
-                  <em>Tokens per second, measured live on your hardware. Faster = higher speed score.</em>
-                </div>
-                <div>
-                  <span>Hardware Fit</span>
-                  <strong>How well it suits your rig</strong>
-                  <em>Models that run comfortably within your VRAM and RAM get a bonus. Models that strain your hardware get penalised.</em>
-                </div>
-              </div>
-              <div className="score-explainer-grades">
-                <span>Grade bands</span>
-                <div>
-                  {/* Rendered from MATCH_GRADE_BANDS so this can't drift from the
-                      grades the app actually assigns. It previously published
-                      A 80–94 / B 65–79 while the engine used A 88–94 / B+ 80–87,
-                      so a displayed grade could match neither table. */}
-                  {MATCH_GRADE_BAND_ROWS.map(({ grade, range, tone }) => (
-                    <div key={grade} className={`grade-chip ${tone}`}>
-                      <strong>{grade}</strong>
-                      <em>{range}</em>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <p className="score-explainer-note">All tests run locally — no data leaves your machine.</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {panel === 'history' && (
-        <RomanceArtBanner
-          image={robotScorecardCeremony}
-          className="scorecard-art-banner"
-          kicker="Scorecard ceremony"
-          title="Saved tests, ranked scores, crowned matches"
-          body={rankedModelScores.length > 0 ? `${rankedModelScores.length} tested model${rankedModelScores.length === 1 ? '' : 's'} ranked by Match score.` : 'Run a model test or Speed Dating to start the ceremony.'}
-        />
-      )}
-
-      {panel === 'history' && (
-        <div className="utility-body">
-          <div className="utility-stat">
-            <div className="utility-stat-head">
-              <span>Ranking board</span>
-              <div className="utility-stat-head-actions">
-                {topRankedScore && (
-                  <button
-                    type="button"
-                    className="how-we-score-trigger"
-                    onClick={() => {
-                      void downloadMatchCard({ score: topRankedScore, appVersion: APP_VERSION }).then((saved) => {
-                        if (!saved) return;
-                      });
-                    }}
-                    title={`Save a match card image of ${topRankedScore.model} — share it wherever you like; RigMatch sends nothing anywhere.`}
-                  >
-                    <Share2 aria-hidden="true" />
-                    Share card
-                  </button>
-                )}
-                {rankedModelScores.length > 0 && onSelectTopPick && (
-                  <button
-                    type="button"
-                    className="how-we-score-trigger flow-next-trigger"
-                    onClick={() => onSelectTopPick(rankedModelScores[0].model)}
-                    title={`Open ${rankedModelScores[0].model} in Top Pick`}
-                  >
-                    <Bot aria-hidden="true" />
-                    Top Pick
-                    <ChevronRight aria-hidden="true" />
-                  </button>
-                )}
-                {rankedModelScores.length > 0 && (
-                  <button
-                    type="button"
-                    className={`how-we-score-trigger${scoreCopied ? ' copied' : ''}`}
-                    onClick={copyScorecard}
-                    title="Copy results as markdown to share on Reddit, Discord, etc."
-                    aria-label="Copy scorecard to clipboard"
-                  >
-                    {scoreCopied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-                    {scoreCopied ? 'Copied!' : 'Share results'}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="how-we-score-trigger"
-                  onClick={() => setScoreExplainerOpen(true)}
-                  title="How scores are calculated"
-                  aria-label="How we score — open explanation"
-                >
-                  <HelpCircle aria-hidden="true" />
-                  How we score
-                </button>
-                {rankedModelScores.length > 0 && (
-                  <button
-                    type="button"
-                    className="how-we-score-trigger clear-all-scores-trigger"
-                    onClick={onClearAllScores}
-                    title="Clear every saved score and transcript (asks first)"
-                    aria-label="Clear all saved scores"
-                  >
-                    <Trash2 aria-hidden="true" />
-                    Clear all
-                  </button>
-                )}
-              </div>
-            </div>
-            <strong>{rankedModelScores.length} tested model{rankedModelScores.length === 1 ? '' : 's'}</strong>
-            <em>
-              {rankedModelScores.length > 0
-                ? 'Click any row to open it in Top Pick.'
-                : 'Run a single test or Speed Dating to build the ranking.'}
-            </em>
-          </div>
-          <div className="utility-stat">
-            <span>Best saved test</span>
-            <strong>{topRankedScore ? topRankedScore.model : 'No saved score'}</strong>
-            <em>{topRankedScore ? `${formatMatchScore(topRankedScore)} total · ${topRankedScore.grade}` : 'Run a test to save the next scorecard.'}</em>
-          </div>
-          {goalMatches.length > 0 && (
-            <div className="task-picks-section goal-match-board" aria-label="Your matches by goal">
-              <span>Matches</span>
-              <div className="task-picks-grid">
-                {goalMatches.map((match) => (
-                  <div
-                    key={match.goal.id}
-                    className={`task-pick-card${match.isMainGoal ? ' main-goal-card' : ''}${match.pick ? '' : ' awaiting-card'}`}
-                  >
-                    <em>
-                      {match.isMainGoal ? 'Your Match' : match.goal.matchLabel}
-                      {match.pick && (
-                        <span
-                          className="task-pick-measured"
-                          title={`Measured here: scored ${match.pick.taskScore} on this rig's ${match.goal.label.toLowerCase()} questions. Goal crowns only ever come from measurement.`}
-                        >measured</span>
-                      )}
-                    </em>
-                    {match.isMainGoal && <span className="goal-match-sub">{match.goal.matchLabel}</span>}
-                    {match.pick ? (
-                      <>
-                        <strong title={match.pick.model}>{match.pick.model}</strong>
-                        <span className={`score-row-grade ${getScoreTone(match.pick.score.total)}`}>
-                          {match.pick.taskScore} on {match.goal.label.toLowerCase()} · {formatMatchScore(match.pick.score)} overall
-                        </span>
-                        <span className="task-pick-response-time">{getResponseEstimate(match.pick.score.speed)}</span>
-                      </>
-                    ) : (
-                      <>
-                        <strong>No crown yet</strong>
-                        <span className="goal-match-awaiting">{match.awaiting}</span>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {taskPicks.length > 0 && (
-            <div className="task-picks-section" aria-label="Category picks">
-              <span>{goalMatches.length > 0 ? 'More picks' : 'Matches'}</span>
-              <div className="task-picks-grid">
-                {taskPicks.map((pick) => (
-                  <div key={pick.id} className="task-pick-card">
-                    <em>
-                      {matchDisplayLabel(pick.id, pick.label)}
-                      {pick.measured && (
-                        <span
-                          className="task-pick-measured"
-                          title={`Measured here: scored ${pick.taskScore} on this rig's ${pick.label.toLowerCase()} questions, rather than taken from the model's description.`}
-                        >measured</span>
-                      )}
-                    </em>
-                    <strong title={pick.model}>{pick.model}</strong>
-                    <span className={`score-row-grade ${getScoreTone(pick.score.total)}`}>
-                      {formatMatchScore(pick.score)} · {pick.score.grade}
-                    </span>
-                    <span className="task-pick-response-time">{getResponseEstimate(pick.score.speed)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {rankedModelScores.length > 0 && (
-            <ol className="utility-list score-ranking-list" aria-label="Ranked model scores">
-              {rankedModelScores.map((score, index) => {
-                const prevScore = rankedModelScores[index - 1];
-                const isTied = prevScore !== undefined && prevScore.total === score.total;
-                const installed = ollama.models.find((m) => m.name === score.model || m.model === score.model);
-                const drift = scoreDrift(score, {
-                  gpuModel: system.gpu.model,
-                  vramGb: system.gpu.vramGb,
-                  modelDigest: installed?.digest,
-                });
-                return (
-                  <li
-                    key={`${score.model}-${score.completedAt}`}
-                    className={`${isTied ? 'score-row-tied' : ''}${onSelectTopPick ? ' score-row-clickable' : ''}`}
-                    onClick={() => onSelectTopPick?.(score.model)}
-                    title={onSelectTopPick ? `View ${score.model} in Top Pick` : undefined}
-                    role={onSelectTopPick ? 'button' : undefined}
-                    tabIndex={onSelectTopPick ? 0 : undefined}
-                    onKeyDown={(e) => {
-                      // Only when the row itself has focus. The row is a
-                      // role="button" containing a real button, so without this
-                      // test Enter on "Remove" deleted the score AND navigated
-                      // away — one keystroke, two actions, mouse users immune.
-                      if (e.target !== e.currentTarget) return;
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        // Space scrolls the page otherwise.
-                        e.preventDefault();
-                        onSelectTopPick?.(score.model);
-                      }
-                    }}
-                  >
-                    <b>{isTied ? '=' : index + 1}</b>
-                    <div className="score-row-name">
-                      <span>
-                        {score.model}
-                        {isLegacyScore(score) && <span className="legacy-score-badge">Retest recommended</span>}
-                        {!isLegacyScore(score) && drift && (
-                          <span
-                            className="legacy-score-badge drift-badge"
-                            title={score.rig ? `Scored on ${score.rig.gpu} (${score.rig.vramGb} GB) with RigMatch ${score.rig.appVersion}.` : undefined}
-                          >
-                            {scoreDriftLabel(drift)}
-                          </span>
-                        )}
-                        <ModelDemoChips model={score.model} label="" className="inline" />
-                      </span>
-                      <em>{score.speed} speed · {score.sobriety} accuracy · {score.fit} fit · {getResponseEstimate(score.speed)}</em>
-                    </div>
-                    <strong className={`score-row-grade ${getScoreTone(score.total)}`}>
-                      {isTied && <span className="tie-badge">TIED</span>}
-                      {formatMatchScore(score)} · {score.grade}
-                    </strong>
-                    {onSelectTopPick && <ChevronRight className="score-row-nav-arrow" aria-hidden="true" />}
-                    <button
-                      type="button"
-                      className="icon-action score-clear-button"
-                      onClick={(e) => { e.stopPropagation(); onClearScore(score.model); }}
-                      title={`Clear ${score.model} score`}
-                      aria-label={`Clear ${score.model} score`}
-                    >
-                      <Trash2 aria-hidden="true" />
-                      <span>Remove</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-          <section className="score-cleanup-panel" aria-label="Score cleanup">
-            <div>
-              <span>Score Cleanup</span>
-              <strong>Forget stale match history</strong>
-              <em>Clears scorecards and test transcripts only. Installed Ollama models stay put.</em>
-            </div>
-            <button type="button" className="danger-button compact" onClick={onClearAllScores} disabled={!rankedModelScores.length}>
-              <Trash2 aria-hidden="true" />
-              Clear All Scores
-            </button>
-          </section>
-          <HistoryTimeline scores={recentModelScores} onClearScore={onClearScore} />
-          <div className="utility-stat">
-            <span>Current match</span>
-            <strong>{selectedHost?.hostname ?? 'Local machine'}</strong>
-            <em>{selectedModel}</em>
-          </div>
-          <div className="utility-stat">
-            <span>Saved app history</span>
-            <strong>{recentModelScores.length} scorecard{recentModelScores.length === 1 ? '' : 's'}</strong>
-            <em>
-              {savedChatMessageCount > 0
-                ? `${savedChatMessageCount} chat message${savedChatMessageCount === 1 ? '' : 's'} saved locally`
-                : 'Chat starts saving locally after your first message'}
-            </em>
-          </div>
-          {listTestResult ? (
-            <ol className="utility-list" aria-label="Latest Speed Dating ranking">
-              {listTestResult.results.map((result, index) => (
-                <li key={result.model} className={result.model === listTestResult.winner ? 'winner' : ''}>
-                  <b>{index + 1}</b>
-                  <span>{result.model}</span>
-                  <strong>{formatMatchScore(result)}</strong>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <div className="utility-empty">
-              <strong>No comparison yet</strong>
-              <span>Compare two or more models to rank the best match.</span>
-            </div>
-          )}
-          <section className="log-console advanced-only" aria-label="Run logs">
-            <div className="log-console-head">
-              <div>
-                <span>Run Logs</span>
-                <strong>{isLoadingLogs ? 'Loading' : `${appLogs.length} entries`}</strong>
-                <em>{logPath || 'Log file not created yet'}</em>
-              </div>
-              <div className="log-actions">
-                <button type="button" className="mini-button outline icon-only" onClick={onRefreshLogs} title="Refresh logs" aria-label="Refresh logs">
-                  <RefreshCw className={isLoadingLogs ? 'spin' : ''} aria-hidden="true" />
-                </button>
-                <button type="button" className="mini-button outline icon-only" onClick={onCopyLogs} disabled={!appLogs.length} title="Copy logs" aria-label="Copy logs">
-                  <Copy aria-hidden="true" />
-                </button>
-                <button type="button" className="mini-button outline icon-only" onClick={onOpenLogsFolder} title="Open log folder" aria-label="Open log folder">
-                  <FolderOpen aria-hidden="true" />
-                </button>
-                <button type="button" className="mini-button outline" onClick={onClearLogs} disabled={!appLogs.length}>
-                  Clear
-                </button>
-              </div>
-            </div>
-
-            <div className="log-list">
-              {appLogs.length ? (
-                appLogs.slice(0, 12).map((entry) => (
-                  <LogEntry key={entry.id} entry={entry} />
-                ))
-              ) : (
-                <div className="utility-empty">
-                  <strong>No logs yet</strong>
-                  <span>Failed tests and desktop bridge errors will appear here.</span>
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
-      )}
-
-      {panel === 'settings' && (
-        // settings-body, not just utility-body: this column is prose-width
-        // rows, and the class other utility panels share must not inherit that.
-        <div className="utility-body settings-body">
-          <div className="utility-logo">
-            <BrandMark />
-            <strong>RigMatch</strong>
-            <em>v{APP_VERSION}</em>
-          </div>
-          <SettingsSection eyebrow="Interface" title="Preferences" summary="Mode, theme, goals, and the Simple Mode path." defaultOpen>
-          <UiModePicker uiMode={uiMode} onUiModeChange={onUiModeChange} />
-          <GoalsSummary goals={selectedGoals} onEditGoals={onEditGoals} />
-          <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
-          </SettingsSection>
-          <SettingsSection eyebrow="Storage" title="The Closet" summary="Who is taking up shelf space, and whether they earned it.">
-            <ClosetSection
-              rows={installedRows}
-              modelScores={modelScores}
-              topModel={rankedModelScores[0]?.model}
-              onDeleteModel={onDeleteModel}
-            />
-          </SettingsSection>
-          <SettingsSection eyebrow="Local AI" title="Computer & Providers" summary="Runtime, Ollama, LM Studio, and local-only scope.">
-          <div className="utility-stat">
-            <span>Computer & providers</span>
-            <strong>Full details live in Your Rig</strong>
-            <em>Hardware, CUDA, Ollama and LM Studio status all live under Your Rig. Local models run entirely on this machine — nothing leaves your computer.</em>
-          </div>
-          <button type="button" className="primary-button compact" onClick={onOpenSetupGuide}>
-            <ExternalLink aria-hidden="true" />
-            Setup Guide
-          </button>
-          </SettingsSection>
-
-          <SettingsSection eyebrow="Generation" title="ComfyUI" summary="Where image and video generation run, and whether RigMatch may unload models.">
-          <ComfySettings />
-          </SettingsSection>
-
-          <SettingsSection eyebrow="Updates" title="Versions & Release Notes" summary="RigMatch app updates, Ollama updates, and recent changes.">
-          <UpdateCenter
-            channel={updateChannel}
-            result={updateCheck}
-            isChecking={isCheckingUpdates}
-            autoUpdateStatus={autoUpdateStatus}
-            onChannelChange={onUpdateChannelChange}
-            onCheck={onCheckForUpdates}
-            onOpenPage={onOpenUpdatePage}
-            onDownload={onDownloadUpdate}
-            onInstall={onInstallUpdate}
-          />
-          <section className={`ollama-update-card ${ollamaHasUpdate ? 'has-update' : ''}`} aria-label="Ollama version">
-            <div className="ollama-update-head">
-              <div>
-                <span>Ollama Engine</span>
-                <strong>
-                  {ollama.version ? `v${ollama.version} installed` : 'Not detected'}
-                  {ollamaUpdateLatest && !ollamaHasUpdate ? ' — up to date' : ''}
-                </strong>
-                {ollamaHasUpdate && (
-                  <em className="ollama-update-badge">v{ollamaUpdateLatest} available</em>
-                )}
-              </div>
-              <button
-                type="button"
-                className="mini-button outline"
-                onClick={() => void checkOllamaUpdate()}
-                disabled={isCheckingOllamaUpdate}
-              >
-                <RefreshCw className={isCheckingOllamaUpdate ? 'spin' : ''} aria-hidden="true" />
-                {isCheckingOllamaUpdate ? 'Checking' : 'Check'}
-              </button>
-            </div>
-            {ollamaHasUpdate && (
-              <a
-                href="https://ollama.com/download"
-                target="_blank"
-                rel="noreferrer"
-                className="ollama-update-dl-btn"
-              >
-                <Download aria-hidden="true" />
-                Download Ollama v{ollamaUpdateLatest}
-                <ExternalLink aria-hidden="true" />
-              </a>
-            )}
-          </section>
-          <ReleaseNotes releases={releaseNotes} />
-          </SettingsSection>
-
-          <SettingsSection eyebrow="Support" title="Feedback & Support" summary="Donationware link, bug reports, and diagnostics.">
-          <div className="utility-stat">
-            <span>Mode</span>
-            <strong>Donationware</strong>
-            <em>Simple Mode stays free. Advanced is the natural home for future supporter tools, but this beta keeps everything open while the flow gets polished.</em>
-            <a
-              className="donation-link donation-link-prominent"
-              href={BUY_ME_A_COFFEE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Coffee aria-hidden="true" />
-              Support RigMatch — Buy Me a Coffee
-              <ExternalLink aria-hidden="true" />
-            </a>
-          </div>
-          <div className="utility-stat bug-report-stat">
-            <span>Beta feedback</span>
-            <strong>Found something broken?</strong>
-            <em>One click opens a prefilled GitHub issue with your hardware specs attached. No telemetry — this is the only way I hear about bugs.</em>
-            <div className="bug-report-actions">
-              <a
-                className="primary-button compact"
-                href={buildBugReportUrl(system, ollama, logPath)}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Bug aria-hidden="true" />
-                Report a Bug
-                <ExternalLink aria-hidden="true" />
-              </a>
-              <button
-                type="button"
-                className="mini-button outline"
-                onClick={() => void copyText(buildDiagnosticsText(system, ollama, logPath)).then((ok) => {
-                  setDiagnosticsCopy(ok ? 'copied' : 'failed');
-                  window.setTimeout(() => setDiagnosticsCopy('idle'), 2400);
-                })}
-                title="Copy hardware + version info to clipboard"
-              >
-                <Copy aria-hidden="true" />
-                {diagnosticsCopy === 'copied' ? 'Copied' : diagnosticsCopy === 'failed' ? 'Copy failed' : 'Copy Diagnostics'}
-              </button>
-            </div>
-          </div>
-          <div className="utility-stat">
-            <span>Current target</span>
-            <strong>{selectedHost?.hostname ?? 'Local machine'}</strong>
-            <em>{selectedModel}</em>
-          </div>
-          </SettingsSection>
-
-          <SettingsSection eyebrow="Advanced" title="Scoring & Reset" summary="How scoring works and destructive cleanup." advancedOnly>
-          <HowWeScoreSection />
-          <section className="danger-zone" aria-label="Data reset">
-            <div>
-              <span>Danger Zone</span>
-              <strong>Clear App Data</strong>
-              <em>Clears RigMatch logs, scores, comparison results, chat, saved theme, and custom question suite. Installed Ollama models stay put.</em>
-            </div>
-            <button type="button" className="danger-button compact" onClick={onClearAllData}>
-              <Trash2 aria-hidden="true" />
-              Clear All Data
-            </button>
-          </section>
-          </SettingsSection>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function SettingsSection({
-  eyebrow,
-  title,
-  summary,
-  defaultOpen = false,
-  advancedOnly = false,
-  children,
-}: {
-  eyebrow: string;
-  title: string;
-  summary: string;
-  defaultOpen?: boolean;
-  advancedOnly?: boolean;
-  children: ReactNode;
-}) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
-  return (
-    <section className={`settings-section${isOpen ? ' open' : ''}${advancedOnly ? ' advanced-only' : ''}`}>
-      <button
-        type="button"
-        className="settings-section-toggle"
-        onClick={() => setIsOpen((value) => !value)}
-        aria-expanded={isOpen}
-      >
-        <div>
-          <span>{eyebrow}</span>
-          <strong>{title}</strong>
-          <em>{summary}</em>
-        </div>
-        <ChevronDown aria-hidden="true" />
-      </button>
-      {isOpen && <div className="settings-section-body">{children}</div>}
-    </section>
-  );
-}
-
-function HistoryTimeline({
-  scores,
-  onClearScore,
-}: {
-  scores: TestedModelScore[];
-  onClearScore: (model: string) => void;
-}) {
-  if (!scores.length) {
-    return (
-      <div className="history-timeline empty" aria-label="Test history timeline">
-        <strong>No test timeline yet</strong>
-        <span>Run a compatibility test and RigMatch will keep the local score story here.</span>
-      </div>
-    );
-  }
-
-  return (
-    <section className="history-timeline" aria-label="Test history timeline">
-      <div className="history-timeline-head">
-        <span>Test History Timeline</span>
-        <strong>{scores.length} saved result{scores.length === 1 ? '' : 's'}</strong>
-      </div>
-      <ol>
-        {scores.slice(0, 6).map((score) => (
-          <li key={`${score.model}-${score.completedAt}`}>
-            <time>{formatHistoryTime(score.completedAt)}</time>
-            <div>
-              <strong>{score.model}</strong>
-              <span>{getScoreTimelineNote(score)}</span>
-            </div>
-            <em>{formatMatchScore(score)} · {score.grade}</em>
-            <button
-              type="button"
-              className="icon-action score-clear-button"
-              onClick={() => onClearScore(score.model)}
-              title={`Clear ${score.model} score`}
-              aria-label={`Clear ${score.model} score`}
-            >
-              <Trash2 aria-hidden="true" />
-            </button>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-function LogEntry({ entry }: { entry: AppLogEntry }) {
-  const details = formatLogDetails(entry.details);
-
-  return (
-    <article className={`log-entry ${entry.level}`}>
-      <div className="log-entry-meta">
-        <span>{formatLogTime(entry.timestamp)}</span>
-        <strong>{entry.level}</strong>
-        <em>{entry.source}</em>
-      </div>
-      <p>{entry.message}</p>
-      {details && (
-        <details>
-          <summary>Details</summary>
-          <pre>{details}</pre>
-        </details>
-      )}
-    </article>
-  );
-}
-
 
 /**
  * A Match is the best model for a goal on this hardware — Dave's definition.
@@ -6492,12 +5392,6 @@ function dreamForGoal(goalId: string | undefined): 'talk' | 'write' | 'code' | '
     case 'animate-image': return 'video';
     default: return undefined;
   }
-}
-
-function matchDisplayLabel(pickId: string, fallback: string): string {
-  const goalId = pickId === 'chat' ? 'talk' : pickId === 'coding' ? 'code' : undefined;
-  const goal = goalId ? GOALS.find((g) => g.id === goalId) : undefined;
-  return goal?.matchLabel ?? fallback;
 }
 
 // @ts-expect-error Retained prototype command deck is intentionally not mounted in the 0.1.x UI.

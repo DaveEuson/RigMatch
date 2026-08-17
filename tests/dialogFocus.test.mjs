@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { readRendererSource } from '../scripts/renderer-source.mjs';
 import path from 'node:path';
 
 /**
@@ -118,10 +119,11 @@ test('the trap installs even when the panel mounts later than the hook', () => {
   assert.match(source, /\}, \[panel\]\)/, 'the trap effect must key on the panel node');
   assert.doesNotMatch(source, /const panel = ref\.current/, 'must not read an object ref once');
 
-  // And the call site that motivates it still looks like this.
-  const app = fs.readFileSync('src/App.tsx', 'utf8');
+  // And the call site that motivates it still looks like this. Read the whole
+  // renderer: this moved from App.tsx into UtilityPanel.tsx, and the assertion
+  // is about the conditional ref existing, not about which file holds it.
   assert.match(
-    app,
+    readRendererSource(),
     /\{scoreExplainerOpen && \(/,
     'the score explainer should still attach its ref conditionally',
   );

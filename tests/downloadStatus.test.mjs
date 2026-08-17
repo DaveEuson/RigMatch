@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { readRendererSource } from '../scripts/renderer-source.mjs';
 
 import { getDownloadRowStatus, summarizeDownloadStep, MIN_CONTESTANTS } from '../src/lib/downloadStatus.ts';
 
@@ -97,7 +98,7 @@ test('every lineup gate reads the shared minimum, not a literal', () => {
   // MIN_CONTESTANTS would have let requestListTest wave a lineup through that
   // runListTest then refused as a failed run — the divergence the shared
   // constant exists to prevent.
-  const app = fs.readFileSync('src/App.tsx', 'utf8');
+  const app = readRendererSource(); // not App.tsx alone — components keep moving out
   const literals = [...app.matchAll(/\b(\w*[Rr]ows)\.length\s*[<>]=?\s*2\b/g)];
   assert.deepEqual(
     literals.map((m) => m[0]),

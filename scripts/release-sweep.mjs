@@ -1,0 +1,267 @@
+#!/usr/bin/env node
+/**
+ * The pre-release sweep.
+ *
+ * Written after a release where the serious bugs all shared one property:
+ * every single one lived in a STATE nobody had been in, and none of them were
+ * wrong logic. Unit tests, TypeScript and ESLint all passed while a download
+ * silently queued forever, the main process quietly rewrote a question type,
+ * and every upgrading user was about to lose the headline feature.
+ *
+ * So this checks the things those tools structurally cannot:
+ *
+ *   states     — the starting conditions a real machine arrives in
+ *   parity     — code that exists twice and has to agree
+ *   claims     — numbers and URLs asserted in source, checked against reality
+ *   surface    — actions offered where their preconditions are not met
+ *   security   — the Electron posture that must not regress
+ *
+ * Usage:  node scripts/release-sweep.mjs [--net]
+ *         --net also checks catalogue URLs and sizes against the servers.
+ */
+
+import { execFileSync } from 'node:child_process';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { readRendererSource } from './renderer-source.mjs';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const withNet = process.argv.includes('--net');
+const results = [];
+
+const check = (area, name, fn) => {
+  try {
+    const note = fn();
+    results.push({ area, name, ok: true, note: note || '' });
+  } catch (error) {
+    results.push({ area, name, ok: false, note: error.message });
+  }
+};
+const read = (rel) => readFileSync(join(root, rel), 'utf-8');
+const must = (cond, message) => { if (!cond) throw new Error(message); };
+
+/** Every renderer source concatenated, so guards survive a file move. */
+const readRenderer = () => readRendererSource(join(root, 'src'));
+
+
+// ── states ──────────────────────────────────────────────────────────────────
+// The upgrade path is the one starting state guaranteed to exist in the wild.
+
+check('states', 'the upgrade path is covered by tests', () => {
+  must(existsSync(join(root, 'tests/upgradePath.test.mjs')),
+    'tests/upgradePath.test.mjs is missing — the state every existing user arrives in');
+  const body = read('tests/upgradePath.test.mjs');
+  must(/goals-only/.test(body), 'the upgrade test no longer checks that upgraders are asked the new question');
+  return 'present';
+});
+
+check('states', 'a new first-run question cannot skip existing users', () => {
+  // The bug this encodes: the goals splash was gated on "has a mode been
+  // chosen?", which every upgrading user had already answered.
+  const body = read('src/lib/goalSettings.ts');
+  must(/firstRunStep/.test(body), 'firstRunStep is gone — the upgrade gate is back to a single flag');
+  must(/goalsOffered/.test(body), 'asked-and-declined is no longer distinguished from never-asked');
+  return 'gate is state-aware';
+});
+
+// ── parity ──────────────────────────────────────────────────────────────────
+// Anything maintained in two places drifts, silently, and passes every test.
+
+check('parity', 'the TS and CJS question suites agree', () => {
+  must(existsSync(join(root, 'tests/benchmarkSuiteParity.test.mjs')),
+    'the parity guard is missing; the main process can silently rewrite question types again');
+  const ts = read('src/benchmarkSuite.ts');
+  const cjs = read('electron/benchmarkSuite.cjs');
+  const types = [...ts.matchAll(/value === '(\w+)'/g)].map((m) => m[1]).sort();
+  const cjsTypes = [...cjs.matchAll(/value === '(\w+)'/g)].map((m) => m[1]).sort();
+  must(JSON.stringify(types) === JSON.stringify(cjsTypes),
+    `question types differ: TS has ${types.join(',')}, CJS has ${cjsTypes.join(',')}`);
+  return `${types.length} types, matched`;
+});
+
+check('parity', 'the version is one number everywhere', () => {
+  const pkg = JSON.parse(read('package.json')).version;
+  const app = read('src/lib/appConfig.ts').match(/APP_VERSION\s*=\s*'([^']+)'/)?.[1];
+  must(pkg === app, `package.json is ${pkg} but APP_VERSION is ${app}`);
+  must(read('src/data/releaseNotes.ts').includes(`version: '${pkg}'`),
+    `no release notes entry for ${pkg} — users meet the changes with no explanation`);
+  return pkg;
+});
+
+// ── claims ──────────────────────────────────────────────────────────────────
+// Numbers written by hand and never checked. Four of six were wrong once.
+
+check('claims', 'no literal backspace where a word boundary was meant', () => {
+  // `\b` inside a shell heredoc or a template literal becomes 0x08, and the
+  // regex then silently matches nothing. This has happened three times.
+  for (const rel of ['src/lib/modelCatalog.ts', 'src/lib/goals.ts', 'electron/benchmarkScoring.cjs']) {
+    must(!read(rel).includes(''), `${rel} contains a literal backspace byte`);
+  }
+  return 'clean';
+});
+
+check('claims', 'declared model sizes are exact, not rounded', () => {
+  // comfyModels deletes a download that falls short of the declared size, so a
+  // number rounded UP destroys a good file whenever content-length is absent.
+  const catalogue = read('src/lib/generationCatalog.ts');
+  const sizes = [...catalogue.matchAll(/bytes:\s*(\d+),/g)].map((m) => Number(m[1]));
+  must(sizes.length > 0, 'no model sizes found');
+  const rounded = sizes.filter((n) => n % 100000 === 0);
+  must(rounded.length === 0,
+    `${rounded.join(', ')} look rounded rather than measured — run scripts/check-model-sizes.mjs`);
+  return `${sizes.length} sizes, none rounded`;
+});
+
+// ── surface ─────────────────────────────────────────────────────────────────
+// Actions offered where they cannot work: the shape of this release's worst bug.
+
+check('surface', 'a refused download reports itself', () => {
+  // The whole renderer, not App.tsx alone. This failed when ModelCabinet moved
+  // into its own file — the behaviour was intact and only the address was
+  // stale, which is a false alarm a release gate cannot afford to raise.
+  const body = readRenderer();
+  must(/const refuse = /.test(body),
+    'downloadGenerationModel no longer marks refusals, so they render as "Queued" forever');
+  must(/!comfyFolderSet \? \(/.test(body),
+    'the Download button is offered again without a ComfyUI folder to download into');
+  return 'refusals are visible';
+});
+
+check('surface', 'the winner board ranks by the score it prints', () => {
+  // Shipped once as "3. 87.5 / 4. 87.6": the board sorted on the rounded
+  // integer while printing the one-decimal value, so the ranked list
+  // contradicted its own figures.
+  const body = readRenderer();
+  const board = body.match(/const wizardLineupResults = useMemo\(([\s\S]{0,1200}?)\n {2}\);/)?.[1];
+  must(board, 'wizardLineupResults is gone — the Winner screen announces one model out of five again');
+  must(/compareTestedModelScores/.test(board),
+    'the lineup board no longer sorts with the app comparator, so its order can disagree with its numbers');
+  return 'ranks by comparator';
+});
+
+check('surface', 'cleanup only targets what it can delete', () => {
+  const body = read('src/lib/modelCleanup.ts');
+  must(/lm-studio/.test(body) && /comfyui/.test(body),
+    'deletableRows no longer excludes models Ollama cannot delete');
+  return 'scoped to Ollama';
+});
+
+// ── security ────────────────────────────────────────────────────────────────
+// Cheap to check, catastrophic to regress.
+
+check('security', 'the renderer stays sandboxed', () => {
+  const main = read('electron/main.cjs');
+  must(/contextIsolation:\s*true/.test(main), 'contextIsolation is off');
+  must(/nodeIntegration:\s*false/.test(main), 'nodeIntegration is on');
+  must(/sandbox:\s*true/.test(main), 'the renderer sandbox is off');
+  const noSandbox = main.match(/.*appendSwitch\('no-sandbox'\).*/)?.[0] ?? '';
+  const gated = /isDev\(\)/.test(main.slice(Math.max(0, main.indexOf(noSandbox) - 200), main.indexOf(noSandbox)));
+  must(!noSandbox || gated, 'no-sandbox is applied outside a dev-only branch');
+  return 'isolated, sandboxed';
+});
+
+check('security', 'every IPC handler checks its sender', () => {
+  const main = read('electron/main.cjs');
+  must(/function handleLogged[\s\S]{0,200}assertTrustedIpcSender/.test(main),
+    'handleLogged no longer validates the sender, so most IPC is unguarded');
+  const bare = [...main.matchAll(/^\s*ipcMain\.handle\(/gm)].length;
+  const guarded = [...main.matchAll(/assertTrustedIpcSender/g)].length;
+  must(guarded >= bare, `${bare} bare ipcMain.handle calls but only ${guarded} sender checks`);
+  return `${guarded} checks`;
+});
+
+check('security', 'downloads stay on https and a known host', () => {
+  const body = read('electron/comfyModels.cjs');
+  must(/protocol !== 'https:'/.test(body), 'model downloads no longer require https');
+  must(/huggingface\.co/.test(body), 'the download host allowlist is gone');
+  must(/assertSafeFilename/.test(body), 'the path-traversal guard on filenames is gone');
+  return 'https + allowlist + safe names';
+});
+
+check('security', 'the renderer cannot ask for any permission it likes', () => {
+  // Electron grants every permission request unless a handler refuses, which
+  // sat oddly beside the sandbox, the CSP and the host allowlists. RigMatch
+  // needs the microphone for the listening test and nothing else.
+  const main = read('electron/main.cjs');
+  must(/setPermissionRequestHandler/.test(main), 'no permission request handler: camera, geolocation and the rest are granted by default');
+  must(/setPermissionCheckHandler/.test(main), 'no permission check handler: a denied permission still queries as granted');
+  const allowed = main.match(/ALLOWED_PERMISSIONS = new Set\(\[([^\]]*)\]\)/)?.[1] ?? '';
+  const names = [...allowed.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  must(names.length > 0, 'the permission allowlist is empty or gone');
+  const unexpected = names.filter((name) => !['media', 'audioCapture'].includes(name));
+  must(unexpected.length === 0, `unexpected permission(s) allowed: ${unexpected.join(', ')}`);
+  return names.join(' + ');
+});
+
+check('security', 'the local scores bridge stays on loopback', () => {
+  must(/listen\([^,]+,\s*'127\.0\.0\.1'/.test(read('electron/main.cjs')),
+    'the scores server is no longer bound to 127.0.0.1 — it would be reachable from the network');
+  return 'loopback only';
+});
+
+check('security', 'external links stay on an allowlist', () => {
+  const main = read('electron/main.cjs');
+  must(/ALLOWED_EXTERNAL_HOSTS/.test(main), 'the external-link allowlist is gone');
+  must(/function openExternalSafe/.test(main), 'openExternal is being called without the guard');
+  return 'allowlisted';
+});
+
+// ── the suites that already exist ───────────────────────────────────────────
+
+check('tests', 'the types actually get checked', () => {
+  // `tsc --noEmit -p tsconfig.json` reports success on code with undefined
+  // names, because the root tsconfig is a solution file with "files": [] and
+  // checks nothing at all. Only `tsc -b` walks the referenced projects. A
+  // typecheck that cannot fail is worse than none, so this asserts the real
+  // command is the one wired up, then runs it.
+  const rootConfig = JSON.parse(read("tsconfig.json"));
+  must(Array.isArray(rootConfig.references) && rootConfig.references.length > 0,
+    'the root tsconfig no longer uses project references; re-check what command actually type-checks');
+  const script = JSON.parse(read('package.json')).scripts?.typecheck;
+  must(script === 'tsc -b', `npm run typecheck is "${script}", which does not check a referenced project`);
+  execFileSync("npx", ["tsc", "-b"], { cwd: root, encoding: "utf-8", shell: true });
+  return 'tsc -b, clean';
+});
+
+check('tests', 'the full suite passes', () => {
+  const out = execFileSync('npm', ['test'], { cwd: root, encoding: 'utf-8', shell: true });
+  const fail = out.match(/^.*fail (\d+)/m)?.[1];
+  must(fail === '0', `${fail} failing test(s)`);
+  return `${out.match(/^.*pass (\d+)/m)?.[1] ?? '?'} passing`;
+});
+
+if (withNet) {
+  check('claims', 'catalogue URLs and sizes match the servers', () => {
+    execFileSync('node', ['scripts/check-model-sizes.mjs'], { cwd: root, encoding: 'utf-8' });
+    return 'all sizes verified';
+  });
+
+  check('claims', 'every licence link on the consent dialog opens', () => {
+    // Most of these are built from the model name rather than written down, so
+    // a renamed model yields a 404 on the one screen whose job is to make sure
+    // the user can read the terms before agreeing to them.
+    const out = execFileSync('node', ['--experimental-strip-types', 'scripts/check-license-links.mjs'],
+      { cwd: root, encoding: 'utf-8' });
+    return out.trim().split(/\r?\n/).pop();
+  });
+}
+
+// ── report ──────────────────────────────────────────────────────────────────
+
+const width = Math.max(...results.map((r) => r.name.length));
+let area = '';
+for (const result of results) {
+  if (result.area !== area) { area = result.area; console.log(`\n${area.toUpperCase()}`); }
+  const mark = result.ok ? 'ok  ' : 'FAIL';
+  console.log(`  ${mark} ${result.name.padEnd(width)}  ${result.note}`);
+}
+
+const failed = results.filter((r) => !r.ok);
+console.log(failed.length === 0
+  ? `\nAll ${results.length} checks passed.${withNet ? '' : ' Run with --net to also check catalogue URLs.'}`
+  : `\n${failed.length} of ${results.length} checks FAILED.`);
+console.log('\nTwo of the three things this used to leave to a human are now covered by\n'
+  + '`npm run gates`: a real download against the real server, and the provider dying\n'
+  + 'mid-run. The microphone in a packaged build still needs a person.');
+process.exit(failed.length === 0 ? 0 : 1);

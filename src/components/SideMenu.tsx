@@ -1,6 +1,9 @@
 import { Bug, type LucideIcon } from 'lucide-react';
 
-export type NavId = 'lan' | 'models' | 'whatsNew' | 'speedDate' | 'agent' | 'history' | 'activity' | 'settings';
+import type { NavId } from '../types';
+
+// Re-exported because callers have always imported it from here.
+export type { NavId };
 
 export type NavItem = {
   id: NavId;

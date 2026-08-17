@@ -57,6 +57,34 @@ function importStatements(lines) {
   return found;
 }
 
+/**
+ * Delete `import { } from './x';` husks.
+ *
+ * Removing names one at a time eventually empties the brace list, and at that
+ * point tsc goes quiet: an empty named-import list is a legal side-effect
+ * import, so there is no unused name left to report and no TS6192 either. The
+ * pruner therefore stopped one step short and left 25 of these behind across
+ * the 0.7 extractions before anyone looked.
+ *
+ * Bare `import './x';` is a real side-effect import and is left alone — only
+ * the empty-braces form, which nothing writes on purpose, is removed.
+ */
+function dropEmptyImports() {
+  const lines = readFileSync(path, 'utf-8').split('\n');
+  const kept = [];
+  const dropped = [];
+  for (const line of lines) {
+    const husk = line.match(/^\s*import\s*\{\s*\}\s*from\s*'([^']+)';\s*$/);
+    if (husk) { dropped.push(husk[1]); continue; }
+    kept.push(line);
+  }
+  if (dropped.length) {
+    writeFileSync(path, kept.join('\n'));
+    console.log(`removed ${dropped.length} empty import husk(s): ${dropped.join(', ')}`);
+  }
+  return dropped.length;
+}
+
 const skipped = [];
 
 for (let round = 1; round <= 8; round += 1) {
@@ -108,7 +136,11 @@ for (let round = 1; round <= 8; round += 1) {
   }
   writeFileSync(path, lines.filter((line) => line !== null).join('\n'));
   console.log(`round ${round}: removed ${removed.length} — ${removed.slice(0, 8).join(', ')}${removed.length > 8 ? ', …' : ''}`);
+  dropEmptyImports();
 }
+
+// Also on the clean path, so husks left by earlier runs get collected.
+dropEmptyImports();
 
 if (skipped.length) {
   console.log('\nLeft alone (not inside an import — probably wants extracting next):');
