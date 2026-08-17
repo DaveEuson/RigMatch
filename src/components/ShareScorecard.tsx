@@ -4,11 +4,11 @@ import { Check, Copy, Download, X } from 'lucide-react';
 import type { SystemProfile, TestedModelScore } from '../types';
 import { getShortModelName } from '../lib/modelCatalog';
 import { formatThroughputValue } from '../lib/format';
+import { buildShareTexts, strongestSkill, SHARE_URL } from '../lib/shareCopy';
 import { useDialog } from '../lib/useDialog';
 
 // Where a shared scorecard sends people — the marketing landing page, which then
 // funnels to the live demo or a download.
-const SHARE_URL = 'https://daveeuson.github.io/RigMatch/';
 const CARD_W = 1200;
 const CARD_H = 675;
 
@@ -285,16 +285,25 @@ function drawDatingCard(
   ctx.fillStyle = COLORS.text;
   ctx.fillText(modelName, CARD_W / 2, 300);
 
+  // Say what the match is FOR. "won your PC's heart" was charming and empty —
+  // a stranger seeing this card learned nothing about what the model is good
+  // at. The strongest graded skill comes from the score itself, so the card
+  // never claims more than the run measured.
   const whose = showHostname && system.hostname ? `${system.hostname}’s` : 'your PC’s';
+  const strongest = strongestSkill(score);
   ctx.font = '400 27px system-ui, sans-serif';
   ctx.fillStyle = COLORS.muted;
-  ctx.fillText(`won ${whose} heart on RigMatch`, CARD_W / 2, 344);
+  ctx.fillText(
+    strongest ? `won ${whose} heart · best at ${strongest.purpose}` : `won ${whose} heart on RigMatch`,
+    CARD_W / 2,
+    340,
+  );
 
   // Grade + score pill.
   const pillText = `GRADE ${score.grade}    ·    ${score.total} / 100 MATCH`;
   ctx.font = '800 26px system-ui, sans-serif';
   const pw = ctx.measureText(pillText).width + 56;
-  const px = (CARD_W - pw) / 2, py = 388, ph = 56;
+  const px = (CARD_W - pw) / 2, py = 382, ph = 56;
   ctx.fillStyle = 'rgba(255, 201, 87, 0.12)';
   ctx.beginPath();
   ctx.roundRect(px, py, pw, ph, 28);
@@ -308,7 +317,13 @@ function drawDatingCard(
   ctx.fillText(pillText, CARD_W / 2, py + 37);
 
   // Graphic stat chips — Speed / Quality / Fit, three across and centered.
-  const chipW = 220, chipH = 66, chipGap = 26, chipY = 486;
+  //
+  // The vertical rhythm here is deliberate; it was previously accidental.
+  // Chips ended at y=552 with the rig line's baseline at 556 — a 4px gap —
+  // while 85px of dead space sat between the rig line and the footer. Now:
+  // pill ends 438, chips 466..532, rig baseline 574, footer 641 — the gaps
+  // read 28 / 42 / ~50, growing gently toward the frame.
+  const chipW = 220, chipH = 66, chipGap = 26, chipY = 466;
   const groupW = chipW * 3 + chipGap * 2;
   const firstCx = (CARD_W - groupW) / 2 + chipW / 2;
   // The speed sub-score tops out at 100 tok/s, so on a capable machine almost
@@ -327,7 +342,7 @@ function drawDatingCard(
   if (rig) {
     ctx.font = '500 21px system-ui, sans-serif';
     ctx.fillStyle = COLORS.muted;
-    ctx.fillText(`on ${rig}`, CARD_W / 2, 556);
+    ctx.fillText(`on ${rig}`, CARD_W / 2, 574);
   }
 
   // Footer.
@@ -360,9 +375,11 @@ export function ShareScorecard({ model, score, system, onClose }: {
 
   const dialogRef = useDialog<HTMLElement>(onClose);
 
-  const shareText = style === 'datingshow'
-    ? `It's a match! ${modelName} won my PC's heart on RigMatch 💛 — grade ${score.grade}, ${score.total}/100. Which local AI is your top match?`
-    : `My PC's top local AI match is ${modelName} — grade ${score.grade}, ${score.total}/100 Match Score. Found with RigMatch, a 100% local model tester 🤖`;
+  // Built in shareCopy.ts under tested rules: no question marks (LinkedIn's
+  // composer truncated Dave's real post at one, eating the link), the link
+  // phrased as "Get it:", a sentence saying what RigMatch is, and the purpose
+  // the match is best for. See tests/shareCopy.test.mjs.
+  const shareTexts = useMemo(() => buildShareTexts(style, modelName, score), [style, modelName, score]);
 
   const saveImage = useCallback(() => {
     const canvas = canvasRef.current;
@@ -382,13 +399,33 @@ export function ShareScorecard({ model, score, system, onClose }: {
   }, [modelName, style]);
 
   const shareTargets: Array<{ id: string; label: string; href: string }> = [
-    // LinkedIn's feed composer opens pre-filled with the text + link; the user
-    // attaches the saved PNG (LinkedIn can't pre-load an image from a URL).
-    { id: 'linkedin', label: 'LinkedIn', href: `https://www.linkedin.com/feed/?shareActive=true&text=${encodeURIComponent(`${shareText} ${SHARE_URL}`)}` },
-    { id: 'x', label: 'X', href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(SHARE_URL)}` },
-    { id: 'reddit', label: 'Reddit', href: `https://www.reddit.com/submit?url=${encodeURIComponent(SHARE_URL)}&title=${encodeURIComponent(shareText)}` },
-    { id: 'bluesky', label: 'Bluesky', href: `https://bsky.app/intent/compose?text=${encodeURIComponent(`${shareText} ${SHARE_URL}`)}` },
+    // The full text already ends in the link, so the pointer to the app
+    // travels with the words wherever they land.
+    { id: 'linkedin', label: 'LinkedIn', href: `https://www.linkedin.com/feed/?shareActive=true&text=${encodeURIComponent(shareTexts.full)}` },
+    { id: 'x', label: 'X', href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareTexts.short)}&url=${encodeURIComponent(SHARE_URL)}` },
+    { id: 'reddit', label: 'Reddit', href: `https://www.reddit.com/submit?url=${encodeURIComponent(SHARE_URL)}&title=${encodeURIComponent(shareTexts.short)}` },
+    { id: 'bluesky', label: 'Bluesky', href: `https://bsky.app/intent/compose?text=${encodeURIComponent(shareTexts.full)}` },
   ];
+
+  /**
+   * Put the card itself on the clipboard the moment a share button is used.
+   *
+   * No social site can pre-load an image from a share URL, so Dave's post went
+   * out with the text and nothing to look at. Copying the PNG turns the manual
+   * step from save-locate-attach into paste. Fire-and-forget: if the clipboard
+   * refuses, the hint keeps describing the save-and-attach path instead.
+   */
+  const [cardCopied, setCardCopied] = useState(false);
+  const copyCardToClipboard = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || typeof ClipboardItem === 'undefined') return;
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+        .then(() => setCardCopied(true))
+        .catch(() => setCardCopied(false));
+    }, 'image/png');
+  }, []);
 
   const copyLink = useCallback(() => {
     void copyText(SHARE_URL).then((ok) => {
@@ -439,7 +476,14 @@ export function ShareScorecard({ model, score, system, onClose }: {
             Save image
           </button>
           {shareTargets.map((target) => (
-            <a key={target.id} className="mini-button share-target" href={target.href} target="_blank" rel="noopener noreferrer">
+            <a
+              key={target.id}
+              className="mini-button share-target"
+              href={target.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={copyCardToClipboard}
+            >
               {target.label}
             </a>
           ))}
@@ -448,8 +492,12 @@ export function ShareScorecard({ model, score, system, onClose }: {
             {copied === 'copied' ? 'Copied' : 'Copy link'}
           </button>
         </div>
-        <p className="share-scorecard-hint">
-          This card shows <strong>your</strong> real result. Save it, then attach it to your post — social sites can't pre-load the picture for you, so the buttons open a post with the text and link ready to go.
+        <p className="share-scorecard-hint" role="status">
+          {cardCopied ? (
+            <>The card is on your clipboard — press <strong>Ctrl+V</strong> in the post to attach it. The text and download link are already filled in.</>
+          ) : (
+            <>This card shows <strong>your</strong> real result. The buttons open a post with the text and download link filled in, and copy the card so you can paste it straight in with <strong>Ctrl+V</strong>.</>
+          )}
         </p>
       </section>
     </div>
