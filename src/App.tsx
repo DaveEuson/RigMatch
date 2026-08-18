@@ -124,7 +124,7 @@ import {
 import type {
   ListTestResult,
 } from './lib/modelCatalog';
-import { dropChat, dropTranscripts, writeLocal, writeLocalJson, writeLocalJsonWithFallback } from './lib/safeStorage';
+import { clearAppStorage, dropChat, dropTranscripts, writeLocal, writeLocalJson, writeLocalJsonWithFallback } from './lib/safeStorage';
 import { collapseModelVariants } from './lib/wizardVariants';
 // Same constant the Simple Mode download step gates on, so the wizard cannot
 // wave a lineup through that the run then refuses.
@@ -1105,16 +1105,24 @@ function App() {
   }, []);
 
   const confirmClearData = useCallback(async () => {
+    // The run log is cleared first but must not gate anything: the main process
+    // rate-limits log clearing, so clearing logs and then clearing data a moment
+    // later threw, and the single try/catch abandoned the whole wipe — the user
+    // saw "Could not clear all data" and none of it was cleared. A file lock or
+    // a permissions error would have done the same. Its failure is now reported
+    // alongside the wipe rather than instead of it.
+    let logNote = '';
     try {
-      const result = await agentArcadeApi.clearLogs();
-      window.localStorage.removeItem(TEST_SUITE_STORAGE_KEY);
-      window.localStorage.removeItem(HISTORY_STORAGE_KEY);
-      window.localStorage.removeItem(THEME_STORAGE_KEY);
-      window.localStorage.removeItem(TUTORIAL_STORAGE_KEY);
-      window.localStorage.removeItem(UI_MODE_STORAGE_KEY);
-      window.localStorage.removeItem(CLEARED_TOP_MATCHES_STORAGE_KEY);
+      adoptClearedLogs(await agentArcadeApi.clearLogs());
+    } catch (error) {
+      logNote = ` The run log could not be cleared: ${getErrorMessage(error)}`;
+    }
 
-      adoptClearedLogs(result);
+    try {
+      // Every namespaced key, not a hand-written list of six — see
+      // clearAppStorage. The state resets below then stop the save effects
+      // writing anything back, and stop the UI showing data that is gone.
+      clearAppStorage();
       // Same invariant as initialBenchmark above: on desktop the demo transcript
       // and scores must never appear as if the user ran a real test. Clearing
       // everything and then seeding sample data is the worst place to break it —
@@ -1143,8 +1151,19 @@ function App() {
       setTutorialStep(0);
       setTutorialOpen(true);
       setPendingDeleteModel(null);
+      // Persisted settings whose state outlived the old wipe: the judge setup
+      // and, worst of them, the OpenRouter API key, which stayed in the field
+      // and would be written back the next time it changed.
+      setQualityMode('heuristic');
+      setJudgeModel('');
+      setJudgeSource('local');
+      setCloudJudgeModel(DEFAULT_CLOUD_JUDGE_MODEL);
+      setOpenRouterKey('');
+      setModelNotes({});
+      setRunHistory(emptyRunHistory());
+      setSelectedGoals([]);
       setClearDataOpen(false);
-      setActivity('RigMatch app data cleared. Ollama models were left installed.');
+      setActivity(`RigMatch app data cleared. Ollama models were left installed.${logNote}`);
     } catch (error) {
       setActivity(`Could not clear all data: ${getErrorMessage(error)}`);
     }

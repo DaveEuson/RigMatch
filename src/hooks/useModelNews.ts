@@ -6,7 +6,6 @@ import {
   getSavedModelNewsNotificationsEnabled,
   getSavedModelNewsState,
   MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY,
-  MODEL_NEWS_STORAGE_KEY,
   notifyNewModelDrops,
   reconcileModelNews,
   saveModelNewsState,
@@ -72,13 +71,16 @@ export function useModelNews({ setActivity }: { setActivity: (message: string) =
     return nextNewsState;
   }, []);
 
-  /** Everything "clear all data" has to undo here, including the stored keys. */
+  /**
+   * The in-memory half of "clear all data". Storage is not touched here.
+   *
+   * This did remove its own two keys, which read as good cohesion until the
+   * wipe was audited: the app writes twenty-four keys and the wipe removed
+   * eight, precisely because each owner was trusted to remember its own. One
+   * namespace sweep in clearAppStorage() is the only version of this that can
+   * be complete, so ownership of storage moved there and this resets state.
+   */
   const resetModelNews = useCallback(() => {
-    try {
-      window.localStorage.removeItem(MODEL_NEWS_STORAGE_KEY);
-      window.localStorage.removeItem(MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY);
-    } catch { /* ignore — a blocked storage still clears the in-memory state */ }
-
     const nextModelNews = getEmptyModelNewsState();
     modelNewsRef.current = nextModelNews;
     setModelNews(nextModelNews);

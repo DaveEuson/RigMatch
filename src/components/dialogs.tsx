@@ -347,8 +347,10 @@ export function ClearDataModal({
         </div>
         <div className="modal-body">
           <p>
-            This clears local RigMatch data: logs, scores, Speed Dating results, chat, queued downloads, saved theme,
-            and custom benchmark questions. It does <strong>not</strong> delete Ollama models.
+            This clears everything RigMatch has saved on this computer: logs, scores, Speed Dating results, chat,
+            queued downloads, model notes, goals, saved theme, custom benchmark questions, and your grading
+            settings — including any saved OpenRouter API key and ComfyUI folder. It does <strong>not</strong>{' '}
+            delete Ollama models.
           </p>
           <div className="modal-warning-grid">
             <div>
@@ -359,7 +361,7 @@ export function ClearDataModal({
             <div>
               <span>Restores</span>
               <strong>Defaults</strong>
-              <em>Question suite, theme, model shortlist, and run state return to first-run defaults.</em>
+              <em>Question suite, theme, goals, grading setup, shortlist, and run state return to first-run defaults.</em>
             </div>
             <div>
               <span>Keeps</span>

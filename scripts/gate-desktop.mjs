@@ -185,6 +185,71 @@ try {
   } else {
     record('choosing a channel reports it on the status line', false, 'no channel control in .update-center');
   }
+
+  // Last on purpose: the wipe ends with setUiMode('beginner') and
+  // setTutorialOpen(true), so it drops the app back to Simple Mode with the
+  // first-run tutorial covering the screen. Running it earlier left a modal
+  // backdrop intercepting every later click.
+  // ── clear all data ────────────────────────────────────────────────────────
+  //
+  // Last on purpose: the wipe ends with setUiMode('beginner') and
+  // setTutorialOpen(true), so it drops the app back to Simple Mode with the
+  // first-run tutorial covering the screen, and any later click hits a modal
+  // backdrop. A reload first, so this starts from a clean page rather than
+  // whatever the update checks left behind.
+  //
+  // The wipe removed six hand-written keys while the app wrote twenty-four,
+  // then reported "RigMatch app data cleared." The unit tests exercise the
+  // sweep in isolation; only this shows that the button reaches it.
+  await page.reload();
+  await page.waitForSelector('.side-menu-item', { timeout: 20000 });
+  await page.getByLabel('Settings').click();
+  await page.waitForTimeout(400);
+
+  await page.evaluate(() => {
+    localStorage.setItem('rigmatch:openrouter-key:v1', 'sk-gate-should-not-survive');
+    localStorage.setItem('rigmatch:model-notes:v1', '{"llama3":"a private note"}');
+    localStorage.setItem('rigmatch:comfy-folder:v1', 'C:/comfy');
+    localStorage.setItem('rigmatch:a-key-invented-tomorrow:v9', 'canary');
+    localStorage.setItem('not-ours', 'keep');
+  });
+
+  await page.locator('.settings-section-toggle', { hasText: /Scoring & Reset/ }).first().click();
+  await page.waitForSelector('.danger-zone', { timeout: 10000 });
+  await page.getByRole('button', { name: /^Clear All Data$/ }).first().click();
+  await page.waitForSelector('.destructive-modal', { timeout: 10000 });
+  await page.locator('.destructive-modal .modal-actions').getByRole('button', { name: /^Clear All Data$/ }).click();
+  await page.waitForTimeout(1500);
+
+  // Asserted as the absence of the failure, not the presence of the success
+  // line: the wipe ends in Simple Mode with the tutorial open, so the status
+  // line is not on screen to read. This is the check that caught the real bug —
+  // clearLogs() is rate-limited in the main process, and one try/catch around
+  // the whole wipe meant its failure abandoned everything, leaving the user
+  // with "Could not clear all data" and nothing cleared.
+  const failed = await page.evaluate(() => /Could not clear all data/i.test(document.body.innerText));
+  record('the wipe does not report failure', !failed);
+
+  const after = await page.evaluate(() => Object.fromEntries(
+    Object.entries(localStorage).filter(([k]) => k.startsWith('rigmatch:')),
+  ));
+
+  // Not "no keys survive": the save effects immediately re-persist the app's
+  // fresh defaults, which is correct — the question suite, ui-mode 'beginner',
+  // an empty match list. What must not survive is anything the user put there.
+  record('the planted canary key is gone', !('rigmatch:a-key-invented-tomorrow:v9' in after), Object.keys(after).join(', ') || 'nothing left');
+  record('a saved API key does not survive', !('rigmatch:openrouter-key:v1' in after));
+  record('private model notes do not survive', !('rigmatch:model-notes:v1' in after));
+  record('the ComfyUI folder does not survive', !('rigmatch:comfy-folder:v1' in after));
+  record(
+    'nothing that survives holds planted data',
+    !Object.values(after).some((v) => /sk-gate-should-not-survive|a private note|C:\/comfy|canary/.test(String(v))),
+  );
+  record(
+    'keys belonging to other apps are untouched',
+    await page.evaluate(() => localStorage.getItem('not-ours')) === 'keep',
+  );
+
 } finally {
   if (app) await app.close().catch(() => {});
   rmSync(profile, { recursive: true, force: true });

@@ -13,6 +13,48 @@
  * Pure + browser storage only, no React.
  */
 
+/** Everything RigMatch stores is namespaced, which is what makes a full wipe possible. */
+export const APP_STORAGE_PREFIX = 'rigmatch:';
+
+/**
+ * Keys that survive "Clear Data", each needing a reason to be here.
+ *
+ * Empty on purpose. If something is ever added, the dialog has to say so —
+ * "cleared" must not quietly mean "mostly cleared".
+ */
+const KEEP_ON_CLEAR = new Set<string>([]);
+
+/**
+ * Remove every key this app has stored.
+ *
+ * "Clear Data" used to remove a hand-written list of six keys while the app
+ * wrote twenty-four, and then reported "RigMatch app data cleared." Left behind
+ * were the user's model notes, their run history, their goals, their ComfyUI
+ * paths — and their OpenRouter API key, which is the one that matters: someone
+ * clearing their data before passing the laptop on would reasonably expect a
+ * stored credential to go with it.
+ *
+ * A hand-written list is how that happened, so this does not keep one. Anything
+ * under the namespace goes, which means a key added tomorrow is covered without
+ * anyone remembering to come back here.
+ *
+ * Keys are collected before any removal: localStorage.key(i) re-indexes as
+ * entries disappear, so removing inside the loop skips every other key.
+ */
+export function clearAppStorage(): string[] {
+  const doomed: string[] = [];
+  try {
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith(APP_STORAGE_PREFIX) && !KEEP_ON_CLEAR.has(key)) doomed.push(key);
+    }
+    for (const key of doomed) window.localStorage.removeItem(key);
+  } catch {
+    // Storage blocked entirely — nothing was stored, so nothing needs removing.
+  }
+  return doomed;
+}
+
 /** Write a string, returning false instead of throwing. */
 export function writeLocal(key: string, value: string): boolean {
   if (typeof window === 'undefined') return false;
