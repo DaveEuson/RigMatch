@@ -55,6 +55,28 @@ async function main() {
 
 async function runBrowserChecks(url) {
   const browser = await chromium.launch({ headless: true });
+  /**
+   * Hold until every image on the page has actually decoded.
+   *
+   * `waitUntil: 'networkidle'` only covers the first load. Switching to
+   * Advanced mounts panels whose avatars start loading after that, so the
+   * screenshot raced them: the same commit produced a shot with 24 robot
+   * avatars or with 24 empty boxes depending on timing, a 74KB swing in the PNG.
+   *
+   * That cost an investigation. A screenshot is the evidence this script exists
+   * to produce, and one that silently omits content is worse than no screenshot
+   * — it was read as a CSS regression, and the CSS was innocent.
+   */
+  const settleImages = async (target, label) => {
+    await target.waitForFunction(() => {
+      const images = [...document.images];
+      return images.length > 0 && images.every((img) => img.complete && img.naturalWidth > 0);
+    }, null, { timeout: 15000 }).catch(() => {
+      throw new Error(`${label}: images never finished loading — the screenshot would be missing content`);
+    });
+    await target.evaluate(() => document.fonts.ready);
+  };
+
   const desktop = await browser.newContext({ viewport: { width: 1440, height: 980 }, deviceScaleFactor: 1 });
   const page = await desktop.newPage();
   const consoleIssues = collectConsoleIssues(page);
@@ -78,6 +100,7 @@ async function runBrowserChecks(url) {
   const simpleNoAdvancedChrome = (await page.locator('.top-deck, .advanced-host-bar, .ticker').count()) === 0;
   const desktopOverflowX = await hasHorizontalOverflow(page);
   const overlayCount = await page.locator('.vite-error-overlay, vite-error-overlay').count();
+  await settleImages(page, 'simple');
   await page.screenshot({ path: screenshots.simple, fullPage: false });
 
   await page.getByLabel('Advanced Mode').click();
@@ -85,6 +108,7 @@ async function runBrowserChecks(url) {
   const advancedText = await page.locator('.advanced-host-bar').innerText();
   const wizardGoneInAdvanced = !(await page.locator('.sw-shell').isVisible().catch(() => false));
   const advancedMenuVisible = await page.locator('.side-menu').isVisible();
+  await settleImages(page, 'advanced');
   await page.screenshot({ path: screenshots.advanced, fullPage: false });
 
   // The smallest window the packaged app allows: it sets minWidth 1280 and
@@ -122,6 +146,7 @@ async function runBrowserChecks(url) {
   const mobileText = await mobilePage.locator('body').innerText();
   const mobileOverflowX = await hasHorizontalOverflow(mobilePage);
   const mobileWizardVisible = await mobilePage.locator('.sw-shell').isVisible();
+  await settleImages(mobilePage, 'mobile');
   await mobilePage.screenshot({ path: screenshots.mobile, fullPage: false });
 
   await browser.close();
