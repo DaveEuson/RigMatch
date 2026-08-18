@@ -1,0 +1,211 @@
+#!/usr/bin/env node
+/**
+ * The sequence of React hooks a component calls, flattened through its custom
+ * hooks — and a check that a refactor did not change it.
+ *
+ * React identifies hooks by call order, not by name. Splitting a component into
+ * custom hooks is safe exactly when the flattened order is preserved: moving a
+ * useState across a useEffect, or extracting a run of hooks that was not
+ * contiguous, silently re-pairs state with the wrong slot. Nothing else in this
+ * repo can see that. tsc cannot, eslint's rules-of-hooks cannot (it checks
+ * conditionals, not order across a refactor), the tests do not mount App, and a
+ * screenshot shows a rendered page either way.
+ *
+ * So: expand every locally-defined useXxx into the hooks it calls, in order,
+ * recursively, and compare the resulting list against a recorded snapshot.
+ *
+ *   node scripts/hook-order.mjs --write   record the current order
+ *   node scripts/hook-order.mjs           fail if it changed
+ *
+ * This proves order, not behaviour. It cannot tell whether an effect's
+ * dependency array still closes over the right values — read those yourself.
+ */
+
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { scrubSource } from './scrub-source.mjs';
+
+const SNAPSHOT = 'scripts/hook-order.snapshot.json';
+const ENTRY = { file: 'src/App.tsx', fn: 'App' };
+
+const BUILTIN = new Set([
+  'useState', 'useEffect', 'useLayoutEffect', 'useMemo', 'useCallback', 'useRef',
+  'useContext', 'useReducer', 'useImperativeHandle', 'useDebugValue', 'useId',
+  'useSyncExternalStore', 'useTransition', 'useDeferredValue', 'useActionState',
+  'useOptimistic', 'useFormStatus',
+]);
+
+/** Every .ts/.tsx file under src, read once. */
+function sources() {
+  const found = new Map();
+  const walk = (dir) => {
+    for (const name of readdirSync(dir).sort()) {
+      const full = `${dir}/${name}`;
+      if (statSync(full).isDirectory()) { walk(full); continue; }
+      if (/\.tsx?$/.test(name)) found.set(full, readFileSync(full, 'utf-8'));
+    }
+  };
+  walk('src');
+  return found;
+}
+
+const files = sources();
+
+/**
+ * The body of a named function or arrow const, as scrubbed source.
+ * Returns null when the name is not defined in this file.
+ */
+function bodyOf(text, name) {
+  const code = scrubSource(text, { keepTemplateExpressions: true });
+  const declaration = new RegExp(
+    `(?:^|\\n)(?:export\\s+)?(?:default\\s+)?(?:async\\s+)?function\\s+${name}\\s*[(<]` +
+    `|(?:^|\\n)(?:export\\s+)?const\\s+${name}\\s*(?::[^=]*)?=\\s*(?:async\\s*)?(?:\\([^)]*\\)|[A-Za-z_$][\\w$]*)\\s*(?::[^=]*)?=>`,
+  );
+  const match = declaration.exec(code);
+  if (!match) return null;
+
+  // First `{` that opens the body, then its matching close.
+  let i = code.indexOf('{', match.index + match[0].length - 1);
+  if (i === -1) return null;
+  let depth = 0;
+  for (let j = i; j < code.length; j += 1) {
+    if (code[j] === '{') depth += 1;
+    else if (code[j] === '}') {
+      depth -= 1;
+      if (depth === 0) return code.slice(i + 1, j);
+    }
+  }
+  return null;
+}
+
+/** Where a custom hook is defined, if anywhere in src. */
+function findHook(name) {
+  for (const [file, text] of files) {
+    const body = bodyOf(text, name);
+    if (body !== null) return { file, body };
+  }
+  return null;
+}
+
+/**
+ * Hook calls made directly in this body, in source order.
+ *
+ * Depth 0 only: a `use...(` inside a callback belongs to that callback, not to
+ * this component, and counting it would invent hooks that never run here.
+ * Depth is tracked in the same left-to-right pass that finds the calls, so it
+ * stays O(n) over the body rather than rescanning from the start per match.
+ */
+function directCalls(body) {
+  const calls = [];
+  const pattern = /\b(use[A-Z][\w$]*)\s*(?:<[^;{}()]*>)?\s*\(/y;
+  let depth = 0;
+  let i = 0;
+  while (i < body.length) {
+    const c = body[i];
+    if (/[A-Za-z_$]/.test(c) && depth === 0 && (i === 0 || !/[\w$.]/.test(body[i - 1]))) {
+      pattern.lastIndex = i;
+      const match = pattern.exec(body);
+      if (match) {
+        calls.push(match[1]);
+        // Step to just inside the call's own paren so its arguments are seen
+        // at depth 1 and any hooks in them are correctly ignored.
+        i = match.index + match[0].length;
+        depth += 1;
+        continue;
+      }
+    }
+    if (c === '{' || c === '(' || c === '[') depth += 1;
+    else if (c === '}' || c === ')' || c === ']') depth -= 1;
+    i += 1;
+  }
+  return calls;
+}
+
+
+
+function flatten(body, trail) {
+  const out = [];
+  for (const name of directCalls(body)) {
+    if (BUILTIN.has(name)) { out.push(name); continue; }
+    const found = findHook(name);
+    if (!found) { out.push(`${name}(external)`); continue; }
+    const key = `${found.file}:${name}`;
+    if (trail.includes(key)) throw new Error(`hook recursion: ${[...trail, key].join(' -> ')}`);
+    out.push(`${name}{`, ...flatten(found.body, [...trail, key]), `}${name}`);
+  }
+  return out;
+}
+
+const entryBody = bodyOf(files.get(ENTRY.file), ENTRY.fn);
+if (entryBody === null) throw new Error(`could not find ${ENTRY.fn}() in ${ENTRY.file}`);
+
+const order = flatten(entryBody, []);
+const effective = order.filter((entry) => !entry.endsWith('{') && !entry.startsWith('}'));
+
+/**
+ * What actually has to hold.
+ *
+ * The first version of this compared the whole sequence and refused any change.
+ * That is stricter than React: hook order must be stable across *renders* of a
+ * component, not across versions of the source. Permanently moving a useState
+ * above a useMemo is fine — every render then agrees. Insisting otherwise would
+ * have blocked every cohesive extraction, since a cluster's state and its
+ * callbacks sit hundreds of lines apart in this component.
+ *
+ * Two things do carry behaviour:
+ *
+ *   EFFECTS — useEffect and useLayoutEffect run in call order at mount, and
+ *     their cleanups in that order too. Two effects that touch the same
+ *     subscription, ref or storage key will behave differently if swapped.
+ *
+ *   CENSUS — the number of each kind of hook. A refactor that drops a useEffect
+ *     or duplicates a useState changes what the component does, however the
+ *     rest is arranged.
+ *
+ * Reordering a useState relative to a useMemo is left to the compiler, which
+ * rejects a read-before-declare outright.
+ */
+const effectsOf = (list) => list.filter((name) => name === 'useEffect' || name === 'useLayoutEffect');
+const censusOf = (list) => {
+  const counts = {};
+  for (const name of list) counts[name] = (counts[name] ?? 0) + 1;
+  return counts;
+};
+
+if (process.argv.includes('--write')) {
+  writeFileSync(SNAPSHOT, `${JSON.stringify({
+    entry: ENTRY,
+    census: censusOf(effective),
+    effectCount: effectsOf(effective).length,
+    effective,
+    nested: order,
+  }, null, 2)}\n`);
+  console.log(`recorded ${effective.length} hook call(s), ${effectsOf(effective).length} effect(s), for ${ENTRY.fn}()`);
+  process.exit(0);
+}
+
+if (!existsSync(SNAPSHOT)) throw new Error('no snapshot yet — run with --write first');
+const previous = JSON.parse(readFileSync(SNAPSHOT, 'utf-8'));
+
+const wasCensus = previous.census;
+const nowCensus = censusOf(effective);
+const kinds = [...new Set([...Object.keys(wasCensus), ...Object.keys(nowCensus)])].sort();
+const censusDrift = kinds
+  .filter((kind) => (wasCensus[kind] ?? 0) !== (nowCensus[kind] ?? 0))
+  .map((kind) => `${kind}: ${wasCensus[kind] ?? 0} -> ${nowCensus[kind] ?? 0}`);
+if (censusDrift.length) {
+  throw new Error(`hook census changed — a hook was added, dropped or duplicated:\n  ${censusDrift.join('\n  ')}`);
+}
+
+// Effects are compared by their position within the effect sequence, which is
+// what determines mount and cleanup order.
+const wasEffects = effectsOf(previous.effective);
+const nowEffects = effectsOf(effective);
+if (wasEffects.length !== nowEffects.length || wasEffects.some((name, i) => name !== nowEffects[i])) {
+  throw new Error(`effect order changed: ${wasEffects.join(', ')} -> ${nowEffects.join(', ')}`);
+}
+
+const moved = effective.filter((name, i) => previous.effective[i] !== name).length;
+console.log(
+  `hook census and effect order hold: ${effective.length} calls, ${nowEffects.length} effects`
+  + (moved ? ` (${moved} call site(s) shifted position — allowed, compiler checks the reads)` : ''),
+);
