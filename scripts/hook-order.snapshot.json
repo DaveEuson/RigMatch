@@ -7,7 +7,7 @@
     "useMemo": 27,
     "useState": 90,
     "useRef": 13,
-    "useCallback": 82,
+    "useCallback": 85,
     "useEffect": 30
   },
   "effectCount": 30,
@@ -330,18 +330,6 @@
     },
     {
       "name": "useCallback",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useState",
       "sig": ""
     },
     {
@@ -782,6 +770,30 @@
     },
     {
       "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
       "sig": ""
     },
     {
@@ -1375,18 +1387,6 @@
       "sig": ""
     },
     {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
       "name": "useMemo",
       "sig": ""
     },
@@ -1815,12 +1815,44 @@
       "sig": ""
     },
     {
+      "name": "useGoals{",
+      "marker": true
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
       "name": "useCallback",
       "sig": ""
     },
     {
       "name": "useCallback",
       "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "}useGoals",
+      "marker": true
     },
     {
       "name": "useCallback",

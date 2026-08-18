@@ -87,7 +87,6 @@ import {
   getSavedThemeId,
   getSavedTutorialSeen,
   getSavedUiMode,
-  hasChosenInterfaceMode,
   getFriendlyModelName,
   getThemeLabel,
   isBenchmarkByModel,
@@ -152,7 +151,6 @@ import {
   THEME_STORAGE_KEY,
   TUTORIAL_STORAGE_KEY,
   UI_MODE_STORAGE_KEY,
-  MODE_SPLASH_STORAGE_KEY,
   navItems,
   type ThemeId,
   type UiMode,
@@ -210,12 +208,8 @@ import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
 import { batchSeed, isVideoCheckpoint } from './lib/videoGen';
 import { DEFAULT_VIDEO_SIZE_ID, toVideoLabResult, videoReadiness } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
-import { goalById, presetIdForGoal, type GoalId } from './lib/goals';
+import { goalById, presetIdForGoal } from './lib/goals';
 import { taskFilterForGoal } from './lib/modelCatalog';
-import {
-  firstRunStep, hasBeenOfferedGoals, markGoalsOffered, readSelectedGoals, writeSelectedGoals,
-  type FirstRunStep,
-} from './lib/goalSettings';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLabChallenge } from './lib/videoGenRunner';
 import { runImageLabChallenge } from './lib/imageGenRunner';
@@ -239,6 +233,7 @@ import { useModelNews } from './hooks/useModelNews';
 import { useJudgeSettings } from './hooks/useJudgeSettings';
 import { useComfy } from './hooks/useComfy';
 import { useChat } from './hooks/useChat';
+import { useGoals } from './hooks/useGoals';
 import './App.css';
 
 
@@ -426,21 +421,9 @@ function App() {
    * the goal question too — so everyone upgrading from 0.5 would have arrived
    * in 0.6 with the goal picker, the Matches board and the goal lens all dark.
    */
-  const [firstRun, setFirstRun] = useState<FirstRunStep>(() => firstRunStep({
-    modeChosen: hasChosenInterfaceMode(),
-    goalsOffered: hasBeenOfferedGoals(),
-  }));
-  const showModeSplash = firstRun === 'goals-and-mode';
-  const showGoalsIntro = firstRun === 'goals-only';
-  // Settings can reopen the goals step of the splash on its own — mistakes at
-  // first run must not be permanent, and localStorage is not a settings UI.
-  const [showGoalsEditor, setShowGoalsEditor] = useState(false);
   // The message Simple Mode is currently showing, if any. Advanced reads the
   // same text off the Ticker and does not need it.
   const [simpleNotice, setSimpleNotice] = useState<string | null>(null);
-  // What the person said they want to do, first pick foremost. Drives the
-  // Models lens and the wizard's opening dream — a lens, never a lock.
-  const [selectedGoals, setSelectedGoals] = useState<GoalId[]>(() => readSelectedGoals());
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [pendingThirdPartyDownloadRows, setPendingThirdPartyDownloadRows] = useState<ModelRow[] | null>(null);
   const [chosenModel, setChosenModel] = useState<string | null>(null);
@@ -1001,6 +984,18 @@ function App() {
     setActivity('Quick guide closed. Use the Matchmaker Menu to move through the app.');
   }, []);
 
+  const selectUiMode = useCallback((nextMode: UiMode) => {
+    setUiMode(nextMode);
+    setActivity(nextMode === 'beginner'
+      ? 'Simple mode selected. RigMatch will keep the interface focused on the next useful step.'
+      : 'Advanced mode selected. RigMatch will show more setup details, commands, and diagnostics.');
+  }, []);
+
+  const {
+    showModeSplash, showGoalsIntro, showGoalsEditor, setShowGoalsEditor, selectedGoals,
+    chooseInterfaceMode, saveGoalsFromIntro, dismissGoalsIntro, saveGoalsFromSettings, resetGoals,
+  } = useGoals({ selectUiMode, setActivity });
+
   const confirmClearData = useCallback(async () => {
     // The run log is cleared first but must not gate anything: the main process
     // rate-limits log clearing, so clearing logs and then clearing data a moment
@@ -1057,13 +1052,13 @@ function App() {
       resetJudgeSettings();
       setModelNotes({});
       setRunHistory(emptyRunHistory());
-      setSelectedGoals([]);
+      resetGoals();
       setClearDataOpen(false);
       setActivity(`RigMatch app data cleared. Ollama models were left installed.${logNote}`);
     } catch (error) {
       setActivity(`Could not clear all data: ${getErrorMessage(error)}`);
     }
-  }, [ollama.baseUrl, selectedModel, adoptClearedLogs, resetModelNews, resetJudgeSettings, resetChat]);
+  }, [ollama.baseUrl, selectedModel, adoptClearedLogs, resetModelNews, resetJudgeSettings, resetChat, resetGoals]);
 
   const requestDeleteModel = useCallback((row: ModelRow) => {
     if (row.localProvider === 'lm-studio') {
@@ -1228,12 +1223,6 @@ function App() {
     setActivity(`${getThemeLabel(nextThemeId)} theme selected.`);
   }, []);
 
-  const selectUiMode = useCallback((nextMode: UiMode) => {
-    setUiMode(nextMode);
-    setActivity(nextMode === 'beginner'
-      ? 'Simple mode selected. RigMatch will keep the interface focused on the next useful step.'
-      : 'Advanced mode selected. RigMatch will show more setup details, commands, and diagnostics.');
-  }, []);
 
   /**
    * Say something the user genuinely needs to read, in whichever mode they are in.
@@ -1263,27 +1252,6 @@ function App() {
     };
   }, [ollama.models, system.gpu.model, system.gpu.vramGb, system.gpu.driverVersion]);
 
-  const chooseInterfaceMode = useCallback((nextMode: UiMode, goals: GoalId[] = []) => {
-    selectUiMode(nextMode);
-    // Persist immediately and record that the splash choice was made so it
-    // won't reappear next launch. The Simple wizard opens itself at Setup.
-    writeLocal(UI_MODE_STORAGE_KEY, nextMode);
-    writeLocal(MODE_SPLASH_STORAGE_KEY, 'chosen');
-    writeSelectedGoals(goals);
-    setSelectedGoals(goals);
-    markGoalsOffered();
-    setFirstRun('none');
-  }, [selectUiMode]);
-
-  const saveGoalsFromSettings = useCallback((goals: GoalId[]) => {
-    writeSelectedGoals(goals);
-    setSelectedGoals(goals);
-    setShowGoalsEditor(false);
-    const primary = goals[0] ? goalById(goals[0]) : undefined;
-    setActivity(primary
-      ? `Goals updated. ${primary.matchLabel} now leads Models and Simple Mode.`
-      : 'Goals cleared. Models and Simple Mode show everything again.');
-  }, []);
 
   const requestBenchmarkForModel = useCallback((model: string) => {
     const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
@@ -3041,13 +3009,8 @@ function App() {
           onDone={chooseInterfaceMode}
           initialGoals={selectedGoals}
           isUpgrade
-          onSaveGoals={(goals) => {
-            writeSelectedGoals(goals);
-            setSelectedGoals(goals);
-            markGoalsOffered();
-            setFirstRun('none');
-          }}
-          onCancel={() => { markGoalsOffered(); setFirstRun('none'); }}
+          onSaveGoals={saveGoalsFromIntro}
+          onCancel={dismissGoalsIntro}
         />
       )}
       {!showModeSplash && showGoalsEditor && (
