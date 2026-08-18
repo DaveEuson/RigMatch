@@ -687,7 +687,7 @@ export function UtilityPanel({
             <div>
               <span>Danger Zone</span>
               <strong>Clear App Data</strong>
-              <em>Clears everything RigMatch saved here: logs, scores, comparison results, chat, model notes, goals, theme, question suite, and grading settings including any saved API key. Installed Ollama models stay put, and so does your Simple or Advanced choice.</em>
+              <em>Clears everything RigMatch saved here: logs, scores, comparison results, chat, model notes, goals, theme, question suite, and grading settings including any saved API key. Installed Ollama models stay put, and so does your Simple or Advanced choice; the getting-started guide is not replayed.</em>
             </div>
             <button type="button" className="danger-button compact" onClick={onClearAllData}>
               <Trash2 aria-hidden="true" />

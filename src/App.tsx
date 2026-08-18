@@ -1151,8 +1151,9 @@ function App() {
       setClearedTopMatches(new Set<string>());
       resetModelNews();
       setSuiteEditorOpen(false);
-      setTutorialStep(0);
-      setTutorialOpen(true);
+      // The guide is not reopened either. Clearing data is not the same as
+      // asking to be taught the app again, and the Matchmaker Menu title
+      // reopens it on demand for anyone who does want it.
       setPendingDeleteModel(null);
       // Persisted settings whose state outlived the old wipe: the judge setup
       // and, worst of them, the OpenRouter API key, which stayed in the field

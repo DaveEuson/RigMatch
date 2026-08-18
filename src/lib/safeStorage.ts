@@ -34,6 +34,15 @@ const KEEP_ON_CLEAR = new Set<string>([
   // hasChosenInterfaceMode() is a bare presence check, so removing it brings the
   // first-launch Simple/Advanced splash back to ask again.
   'rigmatch:mode-splash:v1',
+  // tutorialOpen initialises to !getSavedTutorialSeen(), so dropping this
+  // reopens the getting-started guide at the next launch. Having already read it
+  // is not data about your models either.
+  //
+  // The line this draws: things the user was told or chose about the app itself
+  // stay; things they made or measured go. Which is why goals are NOT here —
+  // rigmatch:goals:v1 is cleared, so the app genuinely no longer knows them and
+  // asking again is the honest consequence, not a lapse.
+  'rigmatch:first-run-tutorial:v1',
 ]);
 
 /**

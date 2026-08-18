@@ -263,12 +263,21 @@ try {
     await page.evaluate(() => localStorage.getItem('rigmatch:ui-mode:v1')) === 'advanced',
   );
 
+  // The guide used to reopen immediately, and then again at the next launch
+  // because the sweep took its "seen" flag with everything else.
+  // Matched on `.tutorial-modal`, the element itself. Matching on body text
+  // instead passed while the guide was wide open — a false green in the check
+  // written to catch exactly this, found only by breaking the code on purpose.
+  const guideShowing = async () => (await page.locator('.tutorial-modal').count()) > 0;
+  record('the getting-started guide does not reopen', !(await guideShowing()));
+
   await page.reload();
   await page.waitForTimeout(1200);
   record(
     'and it is still Advanced after reloading',
     await page.locator('.side-menu-item').count() > 0,
   );
+  record('nor does the guide return at the next launch', !(await guideShowing()));
 
 } finally {
   if (app) await app.close().catch(() => {});

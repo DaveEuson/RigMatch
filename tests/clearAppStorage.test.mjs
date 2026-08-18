@@ -79,11 +79,19 @@ test('anything kept back is named in the dialog the user reads', () => {
 
   const dialog = fs.readFileSync('src/components/dialogs.tsx', 'utf8');
   const danger = fs.readFileSync('src/components/UtilityPanel.tsx', 'utf8');
-  const modeKeys = kept.filter((k) => /ui-mode|mode-splash/.test(k));
-  assert.equal(modeKeys.length, kept.length, 'a new keep needs its own sentence in both dialogs, then add it here');
+  // Each kept key must be accounted for by a phrase the user actually reads.
+  const promised = {
+    'rigmatch:ui-mode:v1': /Simple or Advanced/,
+    'rigmatch:mode-splash:v1': /Simple or Advanced/,
+    'rigmatch:first-run-tutorial:v1': /getting-started guide/,
+  };
+  const unexplained = kept.filter((key) => !(key in promised));
+  assert.deepEqual(unexplained, [], 'a new keep needs its own sentence in both dialogs, then an entry here');
 
   for (const [file, text] of [['dialogs.tsx', dialog], ['UtilityPanel.tsx', danger]]) {
-    assert.match(text, /Simple or Advanced/, `${file} must tell the user the mode is kept`);
+    for (const key of kept) {
+      assert.match(text, promised[key], `${file} must tell the user that ${key} is kept`);
+    }
   }
 });
 

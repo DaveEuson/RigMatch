@@ -350,7 +350,8 @@ export function ClearDataModal({
             This clears everything RigMatch has saved on this computer: logs, scores, Speed Dating results, chat,
             queued downloads, model notes, goals, saved theme, custom benchmark questions, and your grading
             settings — including any saved OpenRouter API key and ComfyUI folder. It keeps your Simple or
-            Advanced choice, and it does <strong>not</strong> delete Ollama models.
+            Advanced choice and will not replay the getting-started guide, and it does <strong>not</strong>{' '}
+            delete Ollama models.
           </p>
           <div className="modal-warning-grid">
             <div>
