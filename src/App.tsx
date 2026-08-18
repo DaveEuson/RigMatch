@@ -1,16 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
-  Bot,
-  Download,
-  Gauge,
-  Heart,
   HelpCircle,
   Lightbulb,
-  Settings,
   Sparkles,
-  Trophy,
-  X,
 } from 'lucide-react';
 import { agentArcadeApi, isDesktopRuntime } from './api';
 import {
@@ -105,12 +98,10 @@ import {
   getModelEpithet,
   getModelGoodForLine,
   getModelProfile,
-  getModelProfileHighlights,
   getModelRuntime,
   getModelScore,
   getNavLabel,
   getPlatformFit,
-  getQueueChipModelName,
   getRigPick,
   getSavedThemeId,
   getSavedTutorialSeen,
@@ -150,8 +141,6 @@ import {
 } from './lib/modelCatalog';
 import type {
   ListTestResult,
-  ModelProfile,
-  RigPick,
 } from './lib/modelCatalog';
 import { dropChat, dropTranscripts, writeLocal, writeLocalJson, writeLocalJsonWithFallback } from './lib/safeStorage';
 import { collapseModelVariants } from './lib/wizardVariants';
@@ -274,15 +263,11 @@ import {
 import './App.css';
 
 
-
-
 // Quick TEST resource warning opt-out ('off' = user chose "don't warn again").
 const QUICK_CHECK_WARNING_KEY = 'rigmatch:quick-test-warning:v1';
 // The app version whose update nudge the user dismissed — so the gentle popup
 // shows once per new release, never nags for a version they've already seen.
 const UPDATE_PROMPT_DISMISSED_KEY = 'rigmatch:update-prompt-dismissed:v1';
-
-
 
 
 const initialHosts = isDesktopRuntime ? [] : demoHosts.filter((host) => host.isLocal);
@@ -4104,7 +4089,6 @@ function App() {
 }
 
 
-
 /**
  * A Match is the best model for a goal on this hardware — Dave's definition.
  * Picks that map to a goal borrow its match label ("Best for talking");
@@ -4123,292 +4107,6 @@ function dreamForGoal(goalId: string | undefined): 'talk' | 'write' | 'code' | '
     default: return undefined;
   }
 }
-
-// @ts-expect-error Retained prototype command deck is intentionally not mounted in the 0.1.x UI.
-function _ContestantsCommandDeck({
-  selectedRow,
-  selectedScore,
-  selectedInstalled,
-  selectedQueued,
-  selectedShortlisted,
-  speedDateLineupFull,
-  shortlistedRows,
-  rigPick,
-  diskGuard,
-  queuedCount,
-  isBenchmarking,
-  isListTesting,
-  isPulling,
-  isPullCancelRequested,
-  listTestResult,
-  runProgress,
-  questionCount,
-  vramGb,
-  onScoreModel,
-  onQueueModel,
-  onToggleShortlist,
-  onOpenSuiteEditor,
-  onOpenSpeedDate,
-  onPullQueued,
-  onCancelQueue,
-  onOpenTopPick,
-}: {
-  selectedRow?: ModelRow;
-  selectedScore?: TestedModelScore;
-  selectedInstalled: boolean;
-  selectedQueued: boolean;
-  selectedShortlisted: boolean;
-  speedDateLineupFull: boolean;
-  shortlistedRows: ModelRow[];
-  rigPick?: RigPick | null;
-  diskGuard: ReturnType<typeof getDiskGuard>;
-  queuedCount: number;
-  isBenchmarking: boolean;
-  isListTesting: boolean;
-  isPulling: boolean;
-  isPullCancelRequested: boolean;
-  listTestResult: ListTestResult | null;
-  runProgress: RunProgress | null;
-  questionCount: BenchmarkQuestionCount;
-  vramGb: number;
-  onScoreModel: (row: ModelRow) => void;
-  onQueueModel: (row: ModelRow) => void;
-  onToggleShortlist: (row: ModelRow) => void;
-  onOpenSuiteEditor: () => void;
-  onOpenSpeedDate: () => void;
-  onPullQueued: () => void;
-  onCancelQueue: () => void;
-  onOpenTopPick: () => void;
-}) {
-  const selectedFit = selectedRow ? getHardwareFit(selectedRow, vramGb) : null;
-  const canUseSelected = Boolean(selectedRow && selectedFit?.recommend);
-  const canRunSelectedAction = Boolean(
-    selectedRow
-    && !isBenchmarking
-    && !isListTesting
-    && (selectedInstalled ? canUseSelected : selectedQueued || canUseSelected),
-  );
-  const selectedActionLabel = selectedInstalled
-    ? 'Test Selected'
-    : selectedQueued
-      ? 'Remove Queue'
-      : 'Get Model';
-  const selectedStatus = selectedRow
-    ? selectedInstalled
-      ? selectedScore
-        ? `${formatMatchScore(selectedScore)} Match · ${selectedScore.grade}. Retest when you want fresh proof.`
-        : 'Installed and ready for a one-model test.'
-      : selectedQueued
-        ? 'Queued for download. Remove it here or clear the queue.'
-        : selectedFit?.detail ?? 'Check this model before downloading.'
-    : 'Pick a contestant from the table to test, download, or compare.';
-  const speedProgress = runProgress?.mode === 'speed-date' ? runProgress : null;
-  const speedWinner = listTestResult?.winner;
-  const speedWinnerScore = speedWinner
-    ? listTestResult?.results.find((result) => result.model === speedWinner)
-    : null;
-  const speedStatus = isListTesting && speedProgress
-    ? `${speedProgress.percent}% · testing ${getQueueChipModelName(speedProgress.currentModel)}.`
-    : speedWinner && speedWinnerScore
-      ? `${speedWinner} leads with ${speedWinnerScore.total} Match.`
-      : shortlistedRows.length >= MIN_CONTESTANTS
-        ? `${shortlistedRows.length} contestants ready for ${questionCount} questions each.`
-        : 'Pick at least two installed contestants for a fair comparison.';
-  const downloadStatus = isPullCancelRequested
-    ? 'Stopping after the current Ollama pull.'
-    : isPulling
-      ? 'Ollama pull is running. Stop Queue skips anything not started.'
-      : queuedCount > 0
-        ? `${queuedCount} queued · ${formatGb(diskGuard.queuedGb)} · ${formatGb(diskGuard.availableAfterQueue)} free after queue.`
-        : 'Queue empty. Use Get Model on a contestant to stage a download.';
-  const topPickStatus = rigPick
-    ? rigPick.score
-      ? `${rigPick.score.total} Match · ${rigPick.score.grade}.`
-      : rigPick.reason
-    : 'Run a test or Speed Dating to crown the best match.';
-
-  const runSelectedAction = () => {
-    if (!selectedRow) return;
-    if (selectedInstalled) {
-      onScoreModel(selectedRow);
-      return;
-    }
-
-    onQueueModel(selectedRow);
-  };
-
-  return (
-    <section className="contestants-command-deck" aria-label="Contestants command menu">
-      <article className="contestants-command-card featured">
-        <div className="command-card-head">
-          <Gauge aria-hidden="true" />
-          <span>Selected Test</span>
-        </div>
-        <strong>{selectedRow?.displayName ?? 'No contestant selected'}</strong>
-        <em>{selectedStatus}</em>
-        <div className="command-card-actions">
-          <button
-            type="button"
-            className="primary-button compact"
-            onClick={runSelectedAction}
-            disabled={!canRunSelectedAction}
-          >
-            {selectedInstalled ? <Gauge aria-hidden="true" /> : selectedQueued ? <X aria-hidden="true" /> : <Download aria-hidden="true" />}
-            {selectedActionLabel}
-          </button>
-          {(!speedDateLineupFull || selectedShortlisted) && (
-            <button
-              type="button"
-              className={selectedShortlisted ? 'mini-button active-soft' : 'mini-button outline'}
-              onClick={() => selectedRow && onToggleShortlist(selectedRow)}
-              disabled={!selectedRow || isBenchmarking || isListTesting || (!selectedShortlisted && (!selectedInstalled || !canUseSelected))}
-            >
-              <Heart aria-hidden="true" />
-              {selectedShortlisted ? 'Selected' : 'Add to Speed Dating'}
-            </button>
-          )}
-        </div>
-      </article>
-
-      <article className="contestants-command-card">
-        <div className="command-card-head">
-          <Trophy aria-hidden="true" />
-          <span>Speed Dating</span>
-        </div>
-        <strong>{shortlistedRows.length}/5 picked</strong>
-        <em>{speedStatus}</em>
-        <div className="command-card-actions">
-          <button type="button" className="primary-button compact" onClick={onOpenSpeedDate}>
-            <Trophy aria-hidden="true" />
-            Open comparison
-          </button>
-          <button type="button" className="mini-button outline advanced-only" onClick={onOpenSuiteEditor} disabled={isListTesting}>
-            <Settings aria-hidden="true" />
-            Questions
-          </button>
-        </div>
-      </article>
-
-      <article className="contestants-command-card">
-        <div className="command-card-head">
-          <Download aria-hidden="true" />
-          <span>Downloads</span>
-        </div>
-        <strong>{isPulling ? 'Downloading' : queuedCount > 0 ? `${queuedCount} queued` : 'Queue clear'}</strong>
-        <em>{downloadStatus}</em>
-        <div className="command-card-actions">
-          <button
-            type="button"
-            className="primary-button compact"
-            onClick={onPullQueued}
-            disabled={queuedCount === 0 || isPulling}
-          >
-            <Download aria-hidden="true" />
-            {queuedCount > 0 ? 'Start Download' : 'Download'}
-          </button>
-          <button
-            type="button"
-            className="mini-button outline queue-cancel-button"
-            onClick={onCancelQueue}
-            disabled={(queuedCount === 0 && !isPulling) || isPullCancelRequested}
-          >
-            <X aria-hidden="true" />
-            {isPulling ? 'Stop Queue' : 'Cancel Queue'}
-          </button>
-        </div>
-      </article>
-
-      <article className="contestants-command-card">
-        <div className="command-card-head">
-          <Bot aria-hidden="true" />
-          <span>Current Pick</span>
-        </div>
-        <strong>{rigPick?.row.displayName ?? 'No winner yet'}</strong>
-        <em>{topPickStatus}</em>
-        <div className="command-card-actions">
-          <button type="button" className="mini-button outline" onClick={onOpenTopPick}>
-            <Bot aria-hidden="true" />
-            Top Pick
-          </button>
-        </div>
-      </article>
-    </section>
-  );
-}
-
-
-// @ts-expect-error Retained prototype winner card is intentionally not mounted in the 0.1.x UI.
-function _CurrentWinnerCard({
-  pick,
-  onSelect,
-  onOpenTopPick,
-}: {
-  pick: RigPick;
-  onSelect: (model: string) => void;
-  onOpenTopPick: () => void;
-}) {
-  const { row, score } = pick;
-
-  return (
-    <aside className="current-winner-card" aria-label={`Top Match: ${row.displayName}`}>
-      <div className="current-winner-badge">
-        <Trophy aria-hidden="true" />
-        <span>Top Match</span>
-      </div>
-      <div>
-        <span>Your Top Match</span>
-        <strong>{row.displayName}</strong>
-        <em>{score ? `${score.total} Match · ${score.grade}` : pick.fitLabel}</em>
-      </div>
-      <p>{score ? `${row.displayName} has the highest saved score that still fits this computer.` : pick.reason}</p>
-      {/* The two most honest statements in the product were buried three levels
-          deep in Settings > Advanced > How We Score. They belong next to the
-          number they qualify, not behind it. */}
-      {score && (
-        <p className="score-caveat">
-          Measured on this computer, so scores are relative to your rig. Answer quality is a heuristic proxy, not a verdict —
-          open the scorecard to read the saved answers.
-        </p>
-      )}
-      <div className="current-winner-actions">
-        <button type="button" className="mini-button outline" onClick={() => onSelect(row.displayName)}>
-          View Here
-        </button>
-        <button type="button" className="mini-button" onClick={onOpenTopPick}>
-          <Bot aria-hidden="true" />
-          Top Pick
-        </button>
-      </div>
-    </aside>
-  );
-}
-
-// @ts-expect-error Retained prototype profile mini-card is intentionally not mounted in the 0.1.x UI.
-function _ModelProfileMini({
-  row,
-  profile,
-  score,
-  vramGb,
-}: {
-  row?: ModelRow;
-  profile: ModelProfile;
-  score?: TestedModelScore;
-  vramGb: number;
-}) {
-  const highlights = getModelProfileHighlights(row, profile, score, vramGb);
-
-  return (
-    <div className="model-profile-mini" aria-label="Selected model dating profile">
-      {highlights.map((item) => (
-        <div key={item.label}>
-          <span>{item.label}</span>
-          <strong>{item.value}</strong>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 
 
 function getSavedBenchmarkQuestions() {
@@ -4507,7 +4205,6 @@ function isChatMessage(value: unknown): value is ChatMessage {
 }
 
 
-
 // Its own component so it can hold a hook. Inline in the parent's JSX it was the
 // one dialog left claiming aria-modal with nothing behind the claim — no focus
 // moved in, no trap, no Escape — while AppBuilderPreviewModal, rendered
@@ -4515,8 +4212,6 @@ function isChatMessage(value: unknown): value is ChatMessage {
 // The rotating tips, from the one place definitions live. They used to be
 // written out here, which meant the explanations existed only in Advanced Mode
 // — shown to the people who needed them least. See lib/glossary.ts.
-
-
 
 
 export default App;
