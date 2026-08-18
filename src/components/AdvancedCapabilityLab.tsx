@@ -27,6 +27,8 @@ import {
 } from "../lib/videoGenChallenge";
 import { runVideoLabChallenge } from "../lib/videoGenRunner";
 import { ListeningLab } from "./ListeningLab";
+import { GpuContentionNote } from './GpuContentionNote';
+import { useGpuContention } from '../hooks/useGpuContention';
 import { AppBuilderPreviewModal } from "./AppBuilderPreview";
 
 type AdvancedLabRunState = {
@@ -198,6 +200,14 @@ export function AdvancedCapabilityLab({
     })();
     return () => { live = false; };
   }, []);
+
+  // Ask once when the lab opens, before anything is clicked. The benchmark flow
+  // has always checked this; the lab never did, so a run started while a game
+  // held the GPU hung for four minutes and then blamed the connection.
+  const { contention, refresh: refreshContention } = useGpuContention();
+  useEffect(() => {
+    void (async () => { await refreshContention(); })();
+  }, [refreshContention]);
 
   // readinessFrom has already removed video checkpoints: handing an LTX model
   // to a still-image graph fails deep inside the sampler with a shape error no
@@ -432,6 +442,7 @@ export function AdvancedCapabilityLab({
 
   return (
     <section className="advanced-lab" aria-label="Advanced capability lab">
+      <GpuContentionNote contention={contention} />
       <div className="advanced-lab-head">
         <div>
           <span>Advanced Lab</span>

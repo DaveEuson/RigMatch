@@ -4,6 +4,7 @@ import { CLOUD_JUDGE_PRESETS } from '../lib/appConfig';
 import { CODE_LANGUAGES, CODE_TASK_PRESETS } from '../lib/codeChallenge';
 import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
 import { APP_BUILDER_PRESETS, VISION_TEST_IMAGES } from '../lib/labChallenges';
+import { GpuContentionNote } from './GpuContentionNote';
 import { getCudaDetail, getCudaSummary, isEmbeddingModel, isLikelyImageGenerationModel, isVisionModel } from '../lib/modelCatalog';
 import { formatDuration } from '../lib/runEstimates';
 import { useDialog } from '../lib/useDialog';
@@ -213,19 +214,7 @@ export function RunWarningModal({
               score comes out below what a machine can really do — and since
               0.3.8 a contaminated run also lands in the timeline and produces a
               false delta against earlier results. Warn, never block. */}
-          {gpuContention && gpuContention.level !== 'clear' && (
-            <div className={`gpu-contention-note level-${gpuContention.level}`} role="status">
-              <Activity aria-hidden="true" />
-              <div>
-                <strong>
-                  {gpuContention.level === 'heavy' ? 'Your graphics card is busy'
-                    : gpuContention.level === 'busy' ? 'Something else is using your graphics card'
-                      : 'Graphics card not checked'}
-                </strong>
-                <p>{gpuContention.message}</p>
-              </div>
-            </div>
-          )}
+          <GpuContentionNote contention={gpuContention} />
 
           {onLoadPreset && (
             <div className="run-focus-picker">

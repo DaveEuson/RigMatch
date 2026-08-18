@@ -50,6 +50,15 @@ export function ListeningLab({ ollama, models }: { ollama: OllamaStatus; models:
   const [runState, setRunState] = useState<RunState>({ phase: 'idle', result: null, message: '' });
   const [savedResults, setSavedResults] = useState<Record<string, AdvancedLabResult>>(() => readAdvancedLabResults());
 
+  // Which microphone, and which one the user picked.
+  //
+  // getUserMedia({ audio: true }) takes whatever Windows calls the default,
+  // which on a machine with a headset, a webcam and a USB interface is a coin
+  // toss the user cannot see or change. Recording "worked" and the input was
+  // never named anywhere.
+  const [inputs, setInputs] = useState<MediaDeviceInfo[]>([]);
+  const [inputId, setInputId] = useState('');
+
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
@@ -72,10 +81,36 @@ export function ListeningLab({ ollama, models }: { ollama: OllamaStatus; models:
     recorderRef.current?.stream.getTracks().forEach((t) => t.stop());
   }, []);
 
+  /**
+   * List the microphones.
+   *
+   * Labels are empty until permission has been granted at least once — that is
+   * the browser refusing to let an unprompted page fingerprint the hardware —
+   * so this is called again after the first recording starts, when the names
+   * become readable.
+   */
+  const loadInputs = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      setInputs(devices.filter((d) => d.kind === 'audioinput'));
+    } catch {
+      // No device access at all: the picker stays hidden and the default is used.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (source === 'record') void (async () => { await loadInputs(); })();
+  }, [source, loadInputs]);
+
   const startRecording = useCallback(async () => {
     setCaptureError('');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: inputId ? { deviceId: { exact: inputId } } : true,
+      });
+      // Labels are readable now that permission has been granted, so the picker
+      // can stop saying "Microphone 1".
+      void loadInputs();
       const recorder = new MediaRecorder(stream);
       chunksRef.current = [];
       recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
@@ -97,7 +132,7 @@ export function ListeningLab({ ollama, models }: { ollama: OllamaStatus; models:
       setCaptureError('No microphone was available, or permission was declined.');
       setRecording(false);
     }
-  }, [scriptId]);
+  }, [inputId, loadInputs, scriptId]);
 
   const stopRecording = useCallback(() => {
     recorderRef.current?.stop();
@@ -193,10 +228,33 @@ export function ListeningLab({ ollama, models }: { ollama: OllamaStatus; models:
               {LISTENING_SCRIPTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </div>
+          {inputs.length > 1 && (
+            <div className="advanced-lab-image-controls">
+              <label htmlFor="listening-input">Microphone</label>
+              <select
+                id="listening-input"
+                value={inputId}
+                onChange={(e) => { setInputId(e.target.value); setCaptured(null); }}
+                disabled={running || recording}
+              >
+                <option value="">System default</option>
+                {inputs.map((device, index) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label || `Microphone ${index + 1}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="listening-script-card">
             <span>Read this aloud, clearly</span>
             <strong>{script.text}</strong>
           </div>
+          <p className="advanced-lab-message">
+            Read the script above word for word. The score compares what the model
+            heard against this text, so improvising will mark the model down for
+            hearing you correctly.
+          </p>
           <div className="advanced-lab-actions">
             {recording ? (
               <button type="button" className="primary-button compact" onClick={stopRecording}>

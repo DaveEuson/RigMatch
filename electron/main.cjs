@@ -1229,7 +1229,18 @@ async function fetchJson(url, options = {}, timeoutMs = 2500, maxBytes = JSON_RE
     return text ? JSON.parse(text) : {};
   } catch (error) {
     if (error?.name === 'AbortError') {
-      throw new Error(`Timed out reaching local AI service at ${getUrlOrigin(url)} after ${timeoutMs} ms.`);
+      // Deliberately not "reaching". A timeout here means the service accepted
+      // the request and did not finish it — which is a different problem from
+      // the "cannot reach" case below, and reads as the opposite of the truth.
+      // A ten-second clip sent to a loaded model while a game held the GPU
+      // produced this error after four minutes, sending the user off to check
+      // whether Ollama was running. It was running the whole time, and starved.
+      const seconds = Math.round(timeoutMs / 1000);
+      throw new Error(
+        `${getUrlOrigin(url)} accepted the request but did not finish within ${seconds}s. `
+        + 'The service is reachable — it is just slow. A busy graphics card (a game, '
+        + 'ComfyUI, another model) or a model too large for this computer will do this.',
+      );
     }
 
     if (error?.message === 'fetch failed' || error?.name === 'TypeError') {
