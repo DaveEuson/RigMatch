@@ -35,11 +35,8 @@ import type {
   OllamaStatus,
   PullProgressUpdate,
   SystemProfile,
-  AutoUpdateStatus,
   OllamaInstallProgress,
   TestedModelScore,
-  UpdateChannel,
-  UpdateCheckResponse,
   ChatAttachment,
   ChatMessage,
   SkillRunStatus,
@@ -181,7 +178,6 @@ import {
   type ThemeId,
   type UiMode,
 } from './lib/appConfig';
-import { getUpdateChannelLabel } from './lib/updateLabels';
 import { AvatarBust } from './components/Avatars';
 import { ShareScorecard } from './components/ShareScorecard';
 import { ExportHatchModal } from './components/ExportHatchModal';
@@ -259,16 +255,12 @@ import {
   getErrorMessage,
 } from './lib/format';
 import { useAppLogs } from './hooks/useAppLogs';
+import { useAppUpdates } from './hooks/useAppUpdates';
 import './App.css';
 
 
 // Quick TEST resource warning opt-out ('off' = user chose "don't warn again").
 const QUICK_CHECK_WARNING_KEY = 'rigmatch:quick-test-warning:v1';
-// The app version whose update nudge the user dismissed — so the gentle popup
-// shows once per new release, never nags for a version they've already seen.
-const UPDATE_PROMPT_DISMISSED_KEY = 'rigmatch:update-prompt-dismissed:v1';
-
-
 const initialHosts = isDesktopRuntime ? [] : demoHosts.filter((host) => host.isLocal);
 const initialSelectedHostId = initialHosts[0]?.id ?? 'localhost';
 const welcomeChatMessage: ChatMessage = {
@@ -480,13 +472,6 @@ function App() {
     appLogs, logPath, isLoadingLogs,
     loadLogs, openLogsPanel, clearLogs, openLogsFolder, copyLogs, adoptClearedLogs,
   } = useAppLogs({ setActivity, setActiveNavId });
-  const [updateChannel, setUpdateChannel] = useState<UpdateChannel>('release');
-  const [updateCheck, setUpdateCheck] = useState<UpdateCheckResponse | null>(null);
-  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
-  const [autoUpdateStatus, setAutoUpdateStatus] = useState<AutoUpdateStatus>({ phase: 'idle' });
-  const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | null>(() => {
-    try { return localStorage.getItem(UPDATE_PROMPT_DISMISSED_KEY); } catch { return null; }
-  });
   const [ollamaInstallProgress, setOllamaInstallProgress] = useState<OllamaInstallProgress>({ phase: 'idle' });
   const [themeId, setThemeId] = useState<ThemeId>(() => getSavedThemeId());
   const [uiMode, setUiMode] = useState<UiMode>(() => getSavedUiMode());
@@ -1091,84 +1076,11 @@ function App() {
     setActivity('Ollama setup guide opened. RigMatch v1 is focused on this computer only.');
   }, []);
 
-  useEffect(() => {
-    return agentArcadeApi.onUpdaterStatus?.((status) => setAutoUpdateStatus(status));
-  }, []);
-
-  const downloadUpdate = useCallback(async () => {
-    setAutoUpdateStatus({ phase: 'downloading', percent: 0 });
-    try { await agentArcadeApi.downloadUpdate(); } catch { /* events handle feedback */ }
-  }, []);
-
-  const installUpdate = useCallback(() => {
-    void agentArcadeApi.installUpdate();
-  }, []);
-
-  const selectUpdateChannel = useCallback((channel: UpdateChannel) => {
-    setUpdateChannel(channel);
-    setUpdateCheck(null);
-    setActivity(`${getUpdateChannelLabel(channel)} channel selected.`);
-  }, []);
-
-  const checkForUpdates = useCallback(async () => {
-    setIsCheckingUpdates(true);
-    setActivity(`Checking ${getUpdateChannelLabel(updateChannel).toLowerCase()} upgrades...`);
-    if (updateChannel === 'release') void agentArcadeApi.checkAutoUpdate();
-
-    try {
-      const result = await agentArcadeApi.checkForUpdates(updateChannel);
-      setUpdateCheck(result);
-
-      if (result.error) {
-        setActivity(`Update check finished with a note: ${result.error}`);
-      } else if (result.hasUpdate) {
-        setActivity(`${result.latestName ?? 'A newer RigMatch build'} is available on the ${getUpdateChannelLabel(result.channel)} channel.`);
-      } else {
-        setActivity(`You are on the latest ${getUpdateChannelLabel(result.channel).toLowerCase()} build RigMatch found.`);
-      }
-    } catch (error) {
-      setActivity(`Could not check for RigMatch upgrades: ${getErrorMessage(error)}`);
-    } finally {
-      setIsCheckingUpdates(false);
-    }
-  }, [updateChannel]);
-
-  const openUpdatePage = useCallback(async () => {
-    try {
-      const preferredUrl = updateCheck?.downloadKind === 'installer' ? updateCheck.downloadUrl : updateCheck?.releaseUrl;
-      const opened = await agentArcadeApi.openUpdatePage(updateChannel, preferredUrl);
-      const openedDirectInstaller = updateCheck?.downloadKind === 'installer' && opened.url === updateCheck.downloadUrl;
-      setActivity(
-        openedDirectInstaller
-          ? `Opened ${updateCheck.downloadName ?? 'the matching RigMatch installer'} for download.`
-          : `Opened RigMatch ${getUpdateChannelLabel(updateChannel).toLowerCase()} downloads.`,
-      );
-    } catch (error) {
-      setActivity(`Could not open RigMatch downloads: ${getErrorMessage(error)}`);
-    }
-  }, [updateChannel, updateCheck]);
-
-  // Quietly check for a newer release once on launch so the gentle update nudge
-  // can appear. Silent — no activity spam; if it fails, the popup just won't show.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const result = await agentArcadeApi.checkForUpdates(updateChannel);
-        if (!cancelled) setUpdateCheck(result);
-      } catch { /* ignore — the popup just won't show */ }
-    })();
-    return () => { cancelled = true; };
-    // Once on mount; the default release channel is the right nudge at launch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const dismissUpdatePrompt = useCallback(() => {
-    const version = updateCheck?.latestVersion;
-    if (!version) return;
-    setDismissedUpdateVersion(version);
-    try { localStorage.setItem(UPDATE_PROMPT_DISMISSED_KEY, version); } catch { /* ignore */ }
-  }, [updateCheck]);
+  const {
+    updateChannel, updateCheck, isCheckingUpdates, autoUpdateStatus, dismissedUpdateVersion,
+    downloadUpdate, installUpdate, selectUpdateChannel, checkForUpdates, openUpdatePage,
+    dismissUpdatePrompt,
+  } = useAppUpdates({ setActivity });
 
   const requestClearData = useCallback(() => {
     setClearDataOpen(true);

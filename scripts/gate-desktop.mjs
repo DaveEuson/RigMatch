@@ -117,16 +117,74 @@ try {
   // channel, which Electron refuses. ipcMain.eventNames() cannot answer this —
   // it lists on() channels, while handle() keeps its own map — and asking it
   // reported the handler missing when it was there all along.
-  const openFolder = await app.evaluate(({ ipcMain }) => {
+  const isRegistered = async (channel) => app.evaluate(({ ipcMain }, name) => {
     try {
-      ipcMain.handle('logs:openFolder', () => {});
-      ipcMain.removeHandler('logs:openFolder'); // nothing was there; undo ours
+      ipcMain.handle(name, () => {});
+      ipcMain.removeHandler(name); // nothing was there; undo ours
       return 'absent';
     } catch (error) {
       return /second handler/i.test(String(error?.message)) ? 'registered' : `unclear: ${error?.message}`;
     }
-  });
+  }, channel);
+
+  const openFolder = await isRegistered('logs:openFolder');
   record('logs:openFolder is registered', openFolder === 'registered', openFolder);
+
+  // ── updates (useAppUpdates) ───────────────────────────────────────────────
+  //
+  // Nothing here is invoked for real. app:installUpdate quits and relaunches
+  // the app, app:downloadUpdate pulls an installer, and app:checkForUpdates
+  // reaches the network, which would make this gate fail on a train. What can
+  // be proved offline and without side effects is that every channel the
+  // extracted callbacks reach is registered, and — the part that matters — that
+  // the effect which moved into the hook is still subscribed.
+  for (const channel of ['app:checkForUpdates', 'app:openUpdatePage', 'app:checkAutoUpdate', 'app:downloadUpdate', 'app:installUpdate']) {
+    const state = await isRegistered(channel);
+    record(`${channel} is registered`, state === 'registered', state === 'registered' ? undefined : state);
+  }
+
+  await page.getByLabel('Settings').click();
+  await page.waitForTimeout(400);
+
+  // SettingsSection renders `{isOpen && children}` and defaults to closed, so
+  // UpdateCenter is not merely hidden — it is absent from the DOM. Asserting
+  // against it while collapsed reported the updater subscription dead when it
+  // was fine, which is the kind of false alarm that gets a gate ignored.
+  await page.locator('.settings-section-toggle', { hasText: /Versions & Release Notes/ }).first().click();
+  await page.waitForSelector('.update-center', { timeout: 10000 });
+  record('the Updates section opens', await page.locator('.update-center').count() === 1);
+
+  // Push a status from the main process exactly as electron-updater would. If
+  // useAppUpdates still subscribes via onUpdaterStatus, the download button
+  // shows the percentage; if the effect was dropped in the move, nothing
+  // changes and no other check would notice.
+  await app.evaluate(({ BrowserWindow }) => {
+    const [win] = BrowserWindow.getAllWindows();
+    win.webContents.send('updater:status', { phase: 'downloading', percent: 42, version: '9.9.9' });
+  });
+  await page.waitForTimeout(600);
+
+  const centre = page.locator('.update-center');
+  const showsProgress = (await centre.innerText()).includes('42%');
+  record('the updater subscription is live (42% reaches the UI)', showsProgress);
+
+  const checkDisabled = await centre.getByRole('button', { name: /^Check(ing)?$/ }).first().isDisabled().catch(() => null);
+  record('a download in flight disables Check', checkDisabled === true, String(checkDisabled));
+
+  // selectUpdateChannel writes the shared status line — the one piece of the
+  // hook that is safe to drive for real. Scoped to the update centre: an
+  // unscoped name match hit a different button entirely and passed for the
+  // wrong reason.
+  const channelControl = centre.getByRole('button', { name: /beta|nightly/i }).first();
+  if (await channelControl.count()) {
+    const before = await page.evaluate(() => document.body.innerText);
+    await channelControl.click();
+    await page.waitForTimeout(400);
+    const after = await page.evaluate(() => document.body.innerText);
+    record('choosing a channel reports it on the status line', before !== after);
+  } else {
+    record('choosing a channel reports it on the status line', false, 'no channel control in .update-center');
+  }
 } finally {
   if (app) await app.close().catch(() => {});
   rmSync(profile, { recursive: true, force: true });
@@ -139,3 +197,8 @@ if (failed.length) {
   for (const f of failed) console.log(`  ${f.name}`);
   process.exit(1);
 }
+
+// Electron leaves a handle behind that outlives app.close(), so the run has to
+// end itself. Without this the gate hangs after every check has already passed,
+// which reads as a failure and cost a debugging round on its first outing.
+process.exit(0);

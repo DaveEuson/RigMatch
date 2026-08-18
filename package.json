@@ -37,7 +37,7 @@
     "sweep": "node scripts/release-sweep.mjs",
     "sweep:net": "node scripts/release-sweep.mjs --net",
     "gates": "node scripts/gate-download.mjs && node scripts/gate-provider.mjs && npm run gate:desktop",
-    "gate:desktop": "npm run build && node scripts/gate-desktop-logs.mjs",
+    "gate:desktop": "npm run build && node scripts/gate-desktop.mjs",
     "audit:claims": "node scripts/audit-claims.mjs",
     "audit:screens": "node scripts/audit-screens.mjs",
     "sweep:layout": "node scripts/responsive-sweep.mjs",
