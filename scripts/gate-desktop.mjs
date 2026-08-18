@@ -143,6 +143,19 @@ try {
     record(`${channel} is registered`, state === 'registered', state === 'registered' ? undefined : state);
   }
 
+  // ── ComfyUI (useComfy) ────────────────────────────────────────────────────
+  //
+  // getComfyStatus talks to a server the user starts themselves, so a real
+  // probe would report "not running" on most machines and prove nothing. What
+  // is worth pinning is that the channels the extracted methods reach are
+  // registered — comfy:abortDownload above all, because a generation download
+  // is a file stream that abortPull cannot touch, and losing that handle is how
+  // a multi-gigabyte fetch kept writing after Stop while the UI said stopped.
+  for (const channel of ['comfy:getStatus', 'comfy:downloadModel', 'comfy:abortDownload', 'comfy:pickFolder']) {
+    const state = await isRegistered(channel);
+    record(`${channel} is registered`, state === 'registered', state === 'registered' ? undefined : state);
+  }
+
   await page.getByLabel('Settings').click();
   await page.waitForTimeout(400);
 

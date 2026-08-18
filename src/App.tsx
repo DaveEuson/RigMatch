@@ -238,6 +238,7 @@ import { useAppLogs } from './hooks/useAppLogs';
 import { useAppUpdates } from './hooks/useAppUpdates';
 import { useModelNews } from './hooks/useModelNews';
 import { useJudgeSettings } from './hooks/useJudgeSettings';
+import { useComfy } from './hooks/useComfy';
 import './App.css';
 
 
@@ -394,17 +395,6 @@ function App() {
   const [liveBuild, setLiveBuild] = useState<{ model: string; kind: 'app' | 'image' | 'vision'; text: string; done: boolean; error?: string } | null>(null);
   // Whether the live view is expanded (true) or minimized to the mini-bar (false).
   const [liveBuildOpen, setLiveBuildOpen] = useState(true);
-  // Checkpoints ComfyUI has loaded. Image generation is the one skill that does
-  // not run on an Ollama model, so its candidates come from here.
-  const [comfyCheckpoints, setComfyCheckpoints] = useState<string[]>([]);
-  // Tracked separately: a video model without a T5 encoder cannot render, and
-  // the two are fixed by fetching two different files.
-  const [comfyTextEncoders, setComfyTextEncoders] = useState<string[]>([]);
-  // Re-read whenever the utility panel closes, so a folder chosen in Settings
-  // reaches the Models screen without a restart.
-  const [comfySettings, setComfySettings] = useState(() => readComfySettings());
-  /** The generation download in flight, so Stop can abort the right stream. */
-  const activeComfyDownloadRef = useRef<string | null>(null);
   const [closeCleanupOpen, setCloseCleanupOpen] = useState(false);
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
@@ -418,12 +408,10 @@ function App() {
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null);
   const [activity, setActivity] = useState('Contestants is your hub: browse models, run tests, manage downloads, and start Speed Dating.');
   const [activeNavId, setActiveNavId] = useState<NavId>('models');
-  useEffect(() => {
-    // Cheap re-read on navigation: choosing a folder in Settings then going to
-    // Models should not need a restart, and localStorage has no change event
-    // for same-document writes.
-    setComfySettings(readComfySettings());
-  }, [activeNavId]);
+  const {
+    comfyCheckpoints, comfyTextEncoders, comfySettings,
+    refreshComfyStatus, beginComfyDownload, endComfyDownload, abortComfyDownload,
+  } = useComfy({ activeNavId });
   const {
     appLogs, logPath, isLoadingLogs,
     loadLogs, openLogsPanel, clearLogs, openLogsFolder, copyLogs, adoptClearedLogs,
@@ -539,18 +527,6 @@ function App() {
     }
   }, [modelRows, selectedRow]);
 
-  // ComfyUI is a separate program the user starts themselves, so this is a
-  // look rather than a subscription. It drops its answer if the app closed
-  // while the probe was in flight.
-  useEffect(() => {
-    let live = true;
-    void getComfyStatus().then((status) => {
-      if (!live) return;
-      setComfyCheckpoints(status.checkpoints);
-      setComfyTextEncoders(status.textEncoders ?? []);
-    });
-    return () => { live = false; };
-  }, []);
 
   const {
     modelNews, modelNewsNotificationsEnabled, notificationPermission,
@@ -1587,9 +1563,7 @@ function App() {
       // A generation download is a file stream, not an Ollama pull, and
       // abortPull cannot touch it — without this the multi-gigabyte fetch
       // carried on writing after Stop and the UI said it had stopped.
-      if (activeComfyDownloadRef.current) {
-        void agentArcadeApi.comfyAbortDownload?.(activeComfyDownloadRef.current);
-      }
+      abortComfyDownload();
       setQueuedModelIds(new Set<string>());
       setPullProgressByModel((current) => {
         if (!pullingModel) return {};
@@ -1620,7 +1594,7 @@ function App() {
     setQueuedModelIds(new Set<string>());
     setPullProgressByModel((current) => removePullProgressForModels(current, queuedModelIds));
     setActivity(`Download queue canceled. Removed ${formatGb(queuedGb)} of planned downloads.`);
-  }, [isPullCancelRequested, isPullingModels, modelRows, ollama.baseUrl, pullingModel, queuedModelIds]);
+  }, [isPullCancelRequested, isPullingModels, modelRows, ollama.baseUrl, pullingModel, queuedModelIds, abortComfyDownload]);
 
   const pauseDownloadQueue = useCallback(() => {
     if (!isPullingModels || !pullingModel) {
@@ -1711,7 +1685,7 @@ function App() {
       // must not be followed by the second starting anyway.
       if (pullQueueCancelRef.current) return false;
       const progressId = createRunProgressId('comfy');
-      activeComfyDownloadRef.current = progressId;
+      beginComfyDownload(progressId);
       const unsubscribe = agentArcadeApi.onComfyDownloadProgress?.((progress) => {
         if (progress.id !== progressId) return;
         setPullProgressByModel((current) => ({
@@ -1746,19 +1720,16 @@ function App() {
         }
         return refuse(`${item.label} could not be downloaded. ${message}`);
       } finally {
-        activeComfyDownloadRef.current = null;
+        endComfyDownload();
         unsubscribe?.();
       }
     }
     // ComfyUI only rescans its folders at startup, so a fresh file is invisible
     // until it does. Better said now than discovered as a missing model later.
     setActivity(`${row.displayName} downloaded. Restart ComfyUI so it picks up the new file.`);
-    void getComfyStatus().then((status) => {
-      setComfyCheckpoints(status.checkpoints);
-      setComfyTextEncoders(status.textEncoders ?? []);
-    });
+    void refreshComfyStatus();
     return true;
-  }, [comfyCheckpoints, comfyTextEncoders, tellUser]);
+  }, [comfyCheckpoints, comfyTextEncoders, tellUser, refreshComfyStatus, beginComfyDownload, endComfyDownload]);
 
   const pullQueuedModels = useCallback(async () => {
     if (queuedRows.length === 0) {

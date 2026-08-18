@@ -152,9 +152,10 @@ function directCalls(body) {
         }
 
         if (body[j] === '(') {
-          calls.push(match[1]);
-          // Step to just inside the call's own paren so its arguments are seen
-          // at depth 1 and any hooks in them are correctly ignored.
+          // argStart is just inside the call's own paren: the arguments are
+          // then seen at depth 1 (so hooks inside them are correctly ignored),
+          // and it is where an effect's fingerprint is taken from.
+          calls.push({ name: match[1], argStart: j + 1 });
           i = j + 1;
           depth += 1;
           continue;
@@ -188,21 +189,41 @@ for (const [sample, expected, why] of [
   ['const c = useCallback((n) => n < 2 && n > 0, []);', ['useCallback'], 'comparisons in the body'],
   ['useEffect(() => { const [x] = useState(1); }, []);', ['useEffect'], 'a nested hook belongs to the callback'],
 ]) {
-  const found = directCalls(sample);
+  const found = directCalls(sample).map((c) => c.name);
   if (found.join(',') !== expected.join(',')) {
     throw new Error(`the hook scanner is broken (${why}): expected ${expected.join(',')}, found ${found.join(',') || 'nothing'}`);
   }
 }
 
+/**
+ * A short, stable identity for one effect.
+ *
+ * Every effect is called `useEffect`, so comparing the sequence of names could
+ * only ever detect a change in how many there are — two effects swapping was
+ * invisible, which is most of what "effect order" is supposed to mean. The
+ * opening of the callback is enough to tell them apart and survives a pure
+ * move, since a move does not rewrite the body.
+ */
+function fingerprint(body, argStart) {
+  return scrubSource(body.slice(argStart, argStart + 200), { keepTemplateExpressions: true })
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 70);
+}
+
 function flatten(body, trail) {
   const out = [];
-  for (const name of directCalls(body)) {
-    if (BUILTIN.has(name)) { out.push(name); continue; }
+  for (const { name, argStart } of directCalls(body)) {
+    if (BUILTIN.has(name)) {
+      const isEffect = name === 'useEffect' || name === 'useLayoutEffect';
+      out.push({ name, sig: isEffect ? fingerprint(body, argStart) : '' });
+      continue;
+    }
     const found = findHook(name);
-    if (!found) { out.push(`${name}(external)`); continue; }
+    if (!found) { out.push({ name: `${name}(external)`, sig: '' }); continue; }
     const key = `${found.file}:${name}`;
     if (trail.includes(key)) throw new Error(`hook recursion: ${[...trail, key].join(' -> ')}`);
-    out.push(`${name}{`, ...flatten(found.body, [...trail, key]), `}${name}`);
+    out.push({ name: `${name}{`, marker: true }, ...flatten(found.body, [...trail, key]), { name: `}${name}`, marker: true });
   }
   return out;
 }
@@ -211,7 +232,7 @@ const entryBody = bodyOf(files.get(ENTRY.file), ENTRY.fn);
 if (entryBody === null) throw new Error(`could not find ${ENTRY.fn}() in ${ENTRY.file}`);
 
 const order = flatten(entryBody, []);
-const effective = order.filter((entry) => !entry.endsWith('{') && !entry.startsWith('}'));
+const effective = order.filter((entry) => !entry.marker);
 
 /**
  * What actually has to hold.
@@ -228,6 +249,10 @@ const effective = order.filter((entry) => !entry.endsWith('{') && !entry.startsW
  *   EFFECTS — useEffect and useLayoutEffect run in call order at mount, and
  *     their cleanups in that order too. Two effects that touch the same
  *     subscription, ref or storage key will behave differently if swapped.
+ *     Each is compared by a fingerprint of its callback, not by its name: every
+ *     effect is called useEffect, so comparing names could only ever notice a
+ *     change in how many there are, and two effects trading places — most of
+ *     what "effect order" means — went straight through.
  *
  *   CENSUS — the number of each kind of hook. A refactor that drops a useEffect
  *     or duplicates a useState changes what the component does, however the
@@ -236,10 +261,12 @@ const effective = order.filter((entry) => !entry.endsWith('{') && !entry.startsW
  * Reordering a useState relative to a useMemo is left to the compiler, which
  * rejects a read-before-declare outright.
  */
-const effectsOf = (list) => list.filter((name) => name === 'useEffect' || name === 'useLayoutEffect');
+const effectsOf = (list) => list
+  .filter((e) => e.name === 'useEffect' || e.name === 'useLayoutEffect')
+  .map((e) => `${e.name} ${e.sig}`);
 const censusOf = (list) => {
   const counts = {};
-  for (const name of list) counts[name] = (counts[name] ?? 0) + 1;
+  for (const { name } of list) counts[name] = (counts[name] ?? 0) + 1;
   return counts;
 };
 
@@ -255,6 +282,19 @@ if (process.argv.includes('--write')) {
   process.exit(0);
 }
 
+if (process.argv.includes('--list-effects')) {
+  // For judging a move by hand: the recorded sequence beside the current one.
+  const previousSnapshot = existsSync(SNAPSHOT) ? JSON.parse(readFileSync(SNAPSHOT, 'utf-8')) : { effective: [] };
+  const was = effectsOf(previousSnapshot.effective);
+  const now = effectsOf(effective);
+  for (let i = 0; i < Math.max(was.length, now.length); i += 1) {
+    const same = was[i] === now[i];
+    console.log(`${String(i).padStart(2)} ${same ? '  ' : '->'} was: ${(was[i] ?? '(none)').slice(10, 68)}`);
+    if (!same) console.log(`      now: ${(now[i] ?? '(none)').slice(10, 68)}`);
+  }
+  process.exit(0);
+}
+
 if (!existsSync(SNAPSHOT)) throw new Error('no snapshot yet — run with --write first');
 const previous = JSON.parse(readFileSync(SNAPSHOT, 'utf-8'));
 
@@ -264,19 +304,33 @@ const kinds = [...new Set([...Object.keys(wasCensus), ...Object.keys(nowCensus)]
 const censusDrift = kinds
   .filter((kind) => (wasCensus[kind] ?? 0) !== (nowCensus[kind] ?? 0))
   .map((kind) => `${kind}: ${wasCensus[kind] ?? 0} -> ${nowCensus[kind] ?? 0}`);
+// Collected rather than thrown one at a time: a refactor that changes both is
+// exactly when you want to see both, and stopping at the first hid whether the
+// effect order had moved as well.
+const problems = [];
 if (censusDrift.length) {
-  throw new Error(`hook census changed — a hook was added, dropped or duplicated:\n  ${censusDrift.join('\n  ')}`);
+  problems.push(`hook census changed — a hook was added, dropped or duplicated:\n  ${censusDrift.join('\n  ')}`);
 }
 
 // Effects are compared by their position within the effect sequence, which is
 // what determines mount and cleanup order.
 const wasEffects = effectsOf(previous.effective);
 const nowEffects = effectsOf(effective);
-if (wasEffects.length !== nowEffects.length || wasEffects.some((name, i) => name !== nowEffects[i])) {
-  throw new Error(`effect order changed: ${wasEffects.join(', ')} -> ${nowEffects.join(', ')}`);
+if (wasEffects.length !== nowEffects.length || wasEffects.some((sig, i) => sig !== nowEffects[i])) {
+  const at = wasEffects.findIndex((sig, i) => sig !== nowEffects[i]);
+  problems.push(
+    [
+      `effect order changed at position ${at} of ${wasEffects.length}:`,
+      `  was: ${wasEffects[at] ?? '(end)'}`,
+      `  now: ${nowEffects[at] ?? '(end)'}`,
+      '  Effects run in call order at mount, and their cleanups in that order too.',
+    ].join('\n'),
+  );
 }
 
-const moved = effective.filter((name, i) => previous.effective[i] !== name).length;
+if (problems.length) throw new Error(`\n${problems.join('\n\n')}`);
+
+const moved = effective.filter((e, i) => previous.effective[i]?.name !== e.name).length;
 console.log(
   `hook census and effect order hold: ${effective.length} calls, ${nowEffects.length} effects`
   + (moved ? ` (${moved} call site(s) shifted position — allowed, compiler checks the reads)` : ''),

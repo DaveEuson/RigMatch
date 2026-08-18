@@ -4,499 +4,1983 @@
     "fn": "App"
   },
   "census": {
-    "useMemo": 26,
-    "useState": 91,
+    "useMemo": 27,
+    "useState": 90,
     "useRef": 13,
-    "useCallback": 77,
-    "useEffect": 31
+    "useCallback": 81,
+    "useEffect": 30
   },
-  "effectCount": 31,
+  "effectCount": 30,
   "effective": [
-    "useMemo",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useRef",
-    "useRef",
-    "useRef",
-    "useRef",
-    "useRef",
-    "useRef",
-    "useCallback",
-    "useCallback",
-    "useRef",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useMemo",
-    "useMemo",
-    "useState",
-    "useState",
-    "useRef",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useRef",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useEffect",
-    "useState",
-    "useState",
-    "useState",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useEffect",
-    "useEffect",
-    "useState",
-    "useState",
-    "useState",
-    "useRef",
-    "useRef",
-    "useEffect",
-    "useEffect",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useCallback",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useCallback",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useState",
-    "useMemo",
-    "useState",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useEffect",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useEffect",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useEffect",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useEffect",
-    "useCallback",
-    "useRef",
-    "useEffect",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useEffect",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useRef",
-    "useEffect",
-    "useMemo",
-    "useEffect"
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { let live = true; void getComfyStatus().then((status) => { if ("
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (modelRows.length > 0 && !selectedRow) { setSelectedModel('"
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { modelNewsRef.current = modelNews; }, [modelNews]); useEffect(("
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { modelNewsNotificationsEnabledRef.current = modelNewsNotificati"
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { try { localStorage.setItem(QUALITY_MODE_STORAGE_KEY, qualityMo"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { try { localStorage.setItem(JUDGE_MODEL_STORAGE_KEY, judgeModel"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { try { localStorage.setItem(JUDGE_SOURCE_STORAGE_KEY, judgeSour"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { try { localStorage.setItem(CLOUD_JUDGE_MODEL_STORAGE_KEY, clou"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { try { localStorage.setItem(OPENROUTER_KEY_STORAGE_KEY, openRou"
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { return agentArcadeApi.onOllamaInstallProgress?.((progress) => "
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { return agentArcadeApi.onUpdaterStatus?.((status) => setAutoUpd"
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { let cancelled = false; void (async () => { try { const result "
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!agentArcadeApi.onAppCloseRequest) return undefined; retur"
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { const wasReady = prevOllamaReadyRef.current; prevOllamaReadyRe"
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!pendingRunMode) { setPendingGpuContention(null); return; "
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { void runRigRefresh({ userInitiated: false }); }, [runRigRefres"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!isDesktopRuntime) return; if (ollama.ready) return; const"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!isDesktopRuntime) return; if (runProgress?.phase !== '') "
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { writeLocalJson(TEST_SUITE_STORAGE_KEY, benchmarkQuestions); },"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { writeLocal(THEME_STORAGE_KEY, themeId); }, [themeId]); useEffe"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { writeLocal(UI_MODE_STORAGE_KEY, uiMode); }, [uiMode]); useEffe"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { writeLocalJson(CLEARED_TOP_MATCHES_STORAGE_KEY, [...clearedTop"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { const chatForSave: Record<string, ChatMessage[]> = {}; for (co"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!isDesktopRuntime) return; void agentArcadeApi.syncScores("
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!agentArcadeApi.onBenchmarkProgress) return undefined; ret"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!agentArcadeApi.getActiveBenchmark) return undefined; let "
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!agentArcadeApi.onPullProgress) return undefined; return a"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (queuedRows.length > 0 && !isPullingModels && !isPullPaused"
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { const score = topRigPick?.score?.total ?? null; const prev = p"
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (visibleNavItems.some((item) => item.id === activeNavId)) r"
+    }
   ],
   "nested": [
-    "useMemo",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useRef",
-    "useRef",
-    "useRef",
-    "useRef",
-    "useRef",
-    "useRef",
-    "useCallback",
-    "useCallback",
-    "useRef",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useMemo",
-    "useMemo",
-    "useState",
-    "useState",
-    "useRef",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useRef",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useEffect",
-    "useAppLogs{",
-    "useState",
-    "useState",
-    "useState",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "}useAppLogs",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useEffect",
-    "useEffect",
-    "useModelNews{",
-    "useState",
-    "useState",
-    "useState",
-    "useRef",
-    "useRef",
-    "useEffect",
-    "useEffect",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "}useModelNews",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useJudgeSettings{",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useCallback",
-    "}useJudgeSettings",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useCallback",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useMemo",
-    "useState",
-    "useMemo",
-    "useState",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useEffect",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useAppUpdates{",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useState",
-    "useEffect",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useEffect",
-    "useCallback",
-    "}useAppUpdates",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useEffect",
-    "useCallback",
-    "useRef",
-    "useEffect",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useEffect",
-    "useCallback",
-    "useCallback",
-    "useCallback",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useEffect",
-    "useRef",
-    "useEffect",
-    "useMemo",
-    "useEffect"
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useComfy{",
+      "marker": true
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { let live = true; void getComfyStatus().then((status) => { if ("
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "}useComfy",
+      "marker": true
+    },
+    {
+      "name": "useAppLogs{",
+      "marker": true
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "}useAppLogs",
+      "marker": true
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (modelRows.length > 0 && !selectedRow) { setSelectedModel('"
+    },
+    {
+      "name": "useModelNews{",
+      "marker": true
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { modelNewsRef.current = modelNews; }, [modelNews]); useEffect(("
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { modelNewsNotificationsEnabledRef.current = modelNewsNotificati"
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "}useModelNews",
+      "marker": true
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useJudgeSettings{",
+      "marker": true
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { try { localStorage.setItem(QUALITY_MODE_STORAGE_KEY, qualityMo"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { try { localStorage.setItem(JUDGE_MODEL_STORAGE_KEY, judgeModel"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { try { localStorage.setItem(JUDGE_SOURCE_STORAGE_KEY, judgeSour"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { try { localStorage.setItem(CLOUD_JUDGE_MODEL_STORAGE_KEY, clou"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { try { localStorage.setItem(OPENROUTER_KEY_STORAGE_KEY, openRou"
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "}useJudgeSettings",
+      "marker": true
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { return agentArcadeApi.onOllamaInstallProgress?.((progress) => "
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useAppUpdates{",
+      "marker": true
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { return agentArcadeApi.onUpdaterStatus?.((status) => setAutoUpd"
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { let cancelled = false; void (async () => { try { const result "
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "}useAppUpdates",
+      "marker": true
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!agentArcadeApi.onAppCloseRequest) return undefined; retur"
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { const wasReady = prevOllamaReadyRef.current; prevOllamaReadyRe"
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!pendingRunMode) { setPendingGpuContention(null); return; "
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { void runRigRefresh({ userInitiated: false }); }, [runRigRefres"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!isDesktopRuntime) return; if (ollama.ready) return; const"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!isDesktopRuntime) return; if (runProgress?.phase !== '') "
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { writeLocalJson(TEST_SUITE_STORAGE_KEY, benchmarkQuestions); },"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { writeLocal(THEME_STORAGE_KEY, themeId); }, [themeId]); useEffe"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { writeLocal(UI_MODE_STORAGE_KEY, uiMode); }, [uiMode]); useEffe"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { writeLocalJson(CLEARED_TOP_MATCHES_STORAGE_KEY, [...clearedTop"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { const chatForSave: Record<string, ChatMessage[]> = {}; for (co"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!isDesktopRuntime) return; void agentArcadeApi.syncScores("
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!agentArcadeApi.onBenchmarkProgress) return undefined; ret"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!agentArcadeApi.getActiveBenchmark) return undefined; let "
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!agentArcadeApi.onPullProgress) return undefined; return a"
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (queuedRows.length > 0 && !isPullingModels && !isPullPaused"
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { const score = topRigPick?.score?.total ?? null; const prev = p"
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (visibleNavItems.some((item) => item.id === activeNavId)) r"
+    }
   ]
 }
