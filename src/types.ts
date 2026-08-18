@@ -332,7 +332,12 @@ export type ChatMessage = {
 };
 
 export type ChatAction = {
-  kind: 'generate-image';
+  /**
+   * 'stop-image' rides the same channel as the offer because it appears in the
+   * same place — on the message, in the transcript — and a Stop that lives
+   * somewhere else is a Stop nobody finds while watching a spinner.
+   */
+  kind: 'generate-image' | 'stop-image';
   /** What to draw — the user's own words, not a rewritten prompt. */
   prompt: string;
   label: string;

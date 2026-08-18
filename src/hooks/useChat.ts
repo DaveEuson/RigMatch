@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { agentArcadeApi } from '../api';
 import { getErrorMessage } from '../lib/format';
@@ -42,7 +42,7 @@ export function useChat({
    */
   imageGeneration?: {
     available: boolean;
-    run: (prompt: string) => Promise<{ dataUrl?: string; error?: string }>;
+    run: (prompt: string, signal: AbortSignal) => Promise<{ dataUrl?: string; error?: string }>;
   };
 }) {
   const [chatOpen, setChatOpen] = useState(false);
@@ -50,6 +50,8 @@ export function useChat({
   // Pending image (data URL) the user attached for the next vision-model message.
   const [chatAttachment, setChatAttachment] = useState<ChatAttachment | null>(null);
   const [chatMessagesByModel, setChatMessagesByModel] = useState<Record<string, ChatMessage[]>>(initialMessagesByModel);
+  /** The generation in flight, so Stop reaches this one and not a later one. */
+  const generationRef = useRef<AbortController | null>(null);
 
   const chatMessages = chatMessagesByModel[selectedModel] ?? [welcomeMessage];
   const chatSupportsImages = isVisionModel(selectedModel);
@@ -144,37 +146,62 @@ export function useChat({
    * not make, and they would have no way to tell.
    */
   const runChatAction = useCallback(async (action: ChatAction) => {
-    if (action.kind !== 'generate-image' || !imageGeneration) return;
     const chatModel = selectedModel;
+
+    if (action.kind === 'stop-image') {
+      generationRef.current?.abort();
+      return;
+    }
+    if (!imageGeneration) return;
+
     const runId = `${Date.now()}-gen`;
+    const controller = new AbortController();
+    generationRef.current = controller;
 
-    setChatMessagesByModel((prev) => ({
-      ...prev,
-      [chatModel]: [...(prev[chatModel] ?? [welcomeMessage]), {
-        id: runId,
-        role: 'agent',
-        content: `Generating "${action.prompt}" with ComfyUI. This takes a while on most cards.`,
-      }],
-    }));
+    /** Rewrite the one running message rather than appending another. */
+    const say = (content: string, extra: Partial<ChatMessage> = {}) => {
+      setChatMessagesByModel((prev) => {
+        const thread = prev[chatModel] ?? [welcomeMessage];
+        const at = thread.findIndex((m) => m.id === runId);
+        const next: ChatMessage = { id: runId, role: 'agent', content, ...extra };
+        return {
+          ...prev,
+          [chatModel]: at === -1 ? [...thread, next] : thread.map((m, i) => (i === at ? next : m)),
+        };
+      });
+    };
 
-    const result = await imageGeneration.run(action.prompt);
+    // Elapsed seconds, not a percentage.
+    //
+    // ComfyUI is polled for completion and reports nothing in between, so any
+    // bar would be an invented measurement — the exact thing this app refuses
+    // to do with a score. A rising count is true, and it is what tells someone
+    // the difference between "slow" and "stuck".
+    const startedAt = Date.now();
+    const stopOffer = { action: { kind: 'stop-image' as const, prompt: action.prompt, label: 'Stop' } };
+    say(`Generating "${action.prompt}" with ComfyUI...`, stopOffer);
+    const ticking = setInterval(() => {
+      const seconds = Math.round((Date.now() - startedAt) / 1000);
+      say(`Generating "${action.prompt}" with ComfyUI... ${seconds}s`, stopOffer);
+    }, 1000);
 
-    setChatMessagesByModel((prev) => ({
-      ...prev,
-      [chatModel]: [...(prev[chatModel] ?? [welcomeMessage]), result.dataUrl
-        ? {
-          id: `${runId}-done`,
-          role: 'agent' as const,
-          content: `Here it is: "${action.prompt}".`,
+    try {
+      const result = await imageGeneration.run(action.prompt, controller.signal);
+      const seconds = Math.round((Date.now() - startedAt) / 1000);
+      if (result.dataUrl) {
+        say(`Here it is: "${action.prompt}". ${seconds}s.`, {
           images: [result.dataUrl],
-          attachmentKind: 'image' as const,
-        }
-        : {
-          id: `${runId}-failed`,
-          role: 'agent' as const,
-          content: `That image could not be made: ${result.error ?? 'ComfyUI did not return a picture.'}`,
-        }],
-    }));
+          attachmentKind: 'image',
+        });
+      } else if (controller.signal.aborted) {
+        say(`Stopped after ${seconds}s. Nothing was saved.`);
+      } else {
+        say(`That image could not be made: ${result.error ?? 'ComfyUI did not return a picture.'}`);
+      }
+    } finally {
+      clearInterval(ticking);
+      if (generationRef.current === controller) generationRef.current = null;
+    }
   }, [imageGeneration, selectedModel, welcomeMessage]);
 
   /** The in-memory half of "Clear Data": every conversation, and the draft. */

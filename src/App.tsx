@@ -509,7 +509,7 @@ function App() {
     return {
       // ComfyUI answering is not the same as ComfyUI being able to draw.
       available: drawable.length > 0,
-      run: async (prompt: string) => {
+      run: async (prompt: string, signal: AbortSignal) => {
         setChatImageRunning(true);
         try {
           const result = await runImageLabChallenge({
@@ -518,6 +518,7 @@ function App() {
             customPrompt: prompt,
             ollamaBaseUrl: ollama.baseUrl,
             comfyBaseUrl: comfySettings.baseUrl,
+            signal,
           });
           return result.imageDataUrl
             ? { dataUrl: result.imageDataUrl }

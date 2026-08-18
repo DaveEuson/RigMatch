@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { ImagePlus, Mic, Sparkles, X } from 'lucide-react';
+import { ImagePlus, Mic, Sparkles, Square, X } from 'lucide-react';
 import type { ChatAction, ChatAttachment, ChatMessage } from '../types';
 
 /**
@@ -109,12 +109,20 @@ export function ChatDock({
               // where RigMatch can really do the thing it names.
               <button
                 type="button"
-                className="primary-button compact chat-action"
+                className={message.action.kind === 'stop-image'
+                  ? 'mini-button outline chat-action'
+                  : 'primary-button compact chat-action'}
                 onClick={() => { const a = message.action; if (a) void onRunAction(a); }}
-                disabled={actionRunning}
+                // Stop must stay live while a run is in flight — that is the
+                // only moment it is any use. Only the offer is disabled.
+                disabled={actionRunning && message.action.kind !== 'stop-image'}
               >
-                <Sparkles aria-hidden="true" />
-                {actionRunning ? 'Working...' : message.action.label}
+                {message.action.kind === 'stop-image'
+                  ? <Square aria-hidden="true" />
+                  : <Sparkles aria-hidden="true" />}
+                {actionRunning && message.action.kind === 'generate-image'
+                  ? 'Working...'
+                  : message.action.label}
               </button>
             )}
           </div>

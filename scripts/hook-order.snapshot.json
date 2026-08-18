@@ -6,7 +6,7 @@
   "census": {
     "useMemo": 28,
     "useState": 90,
-    "useRef": 12,
+    "useRef": 13,
     "useCallback": 92,
     "useEffect": 30
   },
@@ -434,6 +434,10 @@
     },
     {
       "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
       "sig": ""
     },
     {
@@ -1472,6 +1476,10 @@
     },
     {
       "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
       "sig": ""
     },
     {
