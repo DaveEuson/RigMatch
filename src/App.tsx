@@ -114,7 +114,6 @@ import {
   removeBenchmarkResults,
   removeListTestScores,
   removeModelScores,
-  textJudgeCandidates,
   removePullProgress,
   removePullProgressForModels,
   removeSetValues,
@@ -146,12 +145,6 @@ import { estimateBenchmarkMs, estimateSpeedDateMs } from './lib/runEstimates';
 import {
   APP_VERSION,
   CLEARED_TOP_MATCHES_STORAGE_KEY,
-  QUALITY_MODE_STORAGE_KEY,
-  JUDGE_MODEL_STORAGE_KEY,
-  JUDGE_SOURCE_STORAGE_KEY,
-  CLOUD_JUDGE_MODEL_STORAGE_KEY,
-  OPENROUTER_KEY_STORAGE_KEY,
-  DEFAULT_CLOUD_JUDGE_MODEL,
   DEFAULT_SHORTLIST_IDS,
   HISTORY_STORAGE_KEY,
   NAV_ITEM_BY_ID,
@@ -244,6 +237,7 @@ import {
 import { useAppLogs } from './hooks/useAppLogs';
 import { useAppUpdates } from './hooks/useAppUpdates';
 import { useModelNews } from './hooks/useModelNews';
+import { useJudgeSettings } from './hooks/useJudgeSettings';
 import './App.css';
 
 
@@ -417,29 +411,6 @@ function App() {
   const [benchmarkQuestionCount, setBenchmarkQuestionCount] = useState<BenchmarkQuestionCount>(10);
   // Answer-grading mode: 'heuristic' (built-in, fast, offline) or 'judge' (grade
   // answers with a local model). Off by default so existing scores don't move.
-  const [qualityMode, setQualityMode] = useState<'heuristic' | 'judge'>(() => {
-    try { return localStorage.getItem(QUALITY_MODE_STORAGE_KEY) === 'judge' ? 'judge' : 'heuristic'; }
-    catch { return 'heuristic'; }
-  });
-  const [judgeModel, setJudgeModel] = useState<string>(() => {
-    try { return localStorage.getItem(JUDGE_MODEL_STORAGE_KEY) ?? ''; }
-    catch { return ''; }
-  });
-  // Judge source: 'local' grades with an installed Ollama model (default, 100% on-
-  // device); 'openrouter' grades with a cloud model — strictly opt-in because it
-  // sends graded content off this computer and costs API credits.
-  const [judgeSource, setJudgeSource] = useState<'local' | 'openrouter'>(() => {
-    try { return localStorage.getItem(JUDGE_SOURCE_STORAGE_KEY) === 'openrouter' ? 'openrouter' : 'local'; }
-    catch { return 'local'; }
-  });
-  const [cloudJudgeModel, setCloudJudgeModel] = useState<string>(() => {
-    try { return localStorage.getItem(CLOUD_JUDGE_MODEL_STORAGE_KEY) ?? DEFAULT_CLOUD_JUDGE_MODEL; }
-    catch { return DEFAULT_CLOUD_JUDGE_MODEL; }
-  });
-  const [openRouterKey, setOpenRouterKey] = useState<string>(() => {
-    try { return localStorage.getItem(OPENROUTER_KEY_STORAGE_KEY) ?? ''; }
-    catch { return ''; }
-  });
   // How many improve passes each model has had this session (App Builder retries).
   const [improveCounts, setImproveCounts] = useState<Record<string, number>>({});
   const [benchmarkQuestions, setBenchmarkQuestions] = useState<BenchmarkQuestion[]>(() => getSavedBenchmarkQuestions());
@@ -600,68 +571,14 @@ function App() {
     [shortlistedRows],
   );
   const installedRowsForCleanup = useMemo(() => deletableRows(modelRows), [modelRows]);
-  // Installed local (Ollama) models fit to judge, most capable first. Not
-  // simply the biggest file: an embedding or OCR model is often the largest
-  // thing installed and grades prose as confident nonsense.
-  const judgeModelOptions = useMemo(
-    () => textJudgeCandidates(installedRowsForCleanup),
-    [installedRowsForCleanup],
-  );
-  // The judge model actually sent with a run: the user's pick if it's still
-  // installed, otherwise the largest installed model. Empty when judging is off
-  // or nothing is installed (backend then falls back to the heuristic).
-  const effectiveJudgeModel = useMemo(() => {
-    if (qualityMode !== 'judge') return '';
-    if (judgeModel && judgeModelOptions.includes(judgeModel)) return judgeModel;
-    return judgeModelOptions[0] ?? '';
-  }, [qualityMode, judgeModel, judgeModelOptions]);
-  // The judge configuration a run actually uses, or null when judging is off /
-  // not usable (cloud without a key falls back to heuristic — never silently to
-  // a different judge the user didn't pick).
-  /**
-   * A local model to mark the answers the rules cannot, when judging is off.
-   *
-   * Chat and writing questions have no shape for the heuristic to match, so
-   * 0.6 stopped them crowning anyone — which left those goals graded but
-   * uncrownable unless the user found the judge setting. This hands the main
-   * process a local judge for exactly those questions. Never the cloud judge:
-   * auto-engaging something that costs money and leaves the machine would be
-   * wrong however useful the score.
-   */
-  const autoJudgeModels = useMemo(() => {
-    if (qualityMode === 'judge') return [];
-    // The whole ordered list, not just the best one: the main process drops
-    // the model it is testing and takes the next, because a model marking its
-    // own answers grades itself generously and that score then crowns a Match.
-    // A lineup makes this certain rather than unlikely — every contestant is
-    // the model under test in turn.
-    return judgeModelOptions;
-  }, [qualityMode, judgeModelOptions]);
+  const {
+    qualityMode, setQualityMode, setJudgeModel,
+    judgeSource, setJudgeSource, cloudJudgeModel, setCloudJudgeModel,
+    openRouterKey, setOpenRouterKey,
+    judgeModelOptions, effectiveJudgeModel, autoJudgeModels, effectiveJudge,
+    resetJudgeSettings,
+  } = useJudgeSettings({ installedRows: installedRowsForCleanup });
 
-  const effectiveJudge = useMemo<{ provider: 'local' | 'openrouter'; model: string; apiKey?: string } | null>(() => {
-    if (qualityMode !== 'judge') return null;
-    if (judgeSource === 'openrouter') {
-      const model = cloudJudgeModel.trim();
-      const apiKey = openRouterKey.trim();
-      return model && apiKey ? { provider: 'openrouter', model, apiKey } : null;
-    }
-    return effectiveJudgeModel ? { provider: 'local', model: effectiveJudgeModel } : null;
-  }, [qualityMode, judgeSource, cloudJudgeModel, openRouterKey, effectiveJudgeModel]);
-  useEffect(() => {
-    try { localStorage.setItem(QUALITY_MODE_STORAGE_KEY, qualityMode); } catch { /* ignore */ }
-  }, [qualityMode]);
-  useEffect(() => {
-    try { localStorage.setItem(JUDGE_MODEL_STORAGE_KEY, judgeModel); } catch { /* ignore */ }
-  }, [judgeModel]);
-  useEffect(() => {
-    try { localStorage.setItem(JUDGE_SOURCE_STORAGE_KEY, judgeSource); } catch { /* ignore */ }
-  }, [judgeSource]);
-  useEffect(() => {
-    try { localStorage.setItem(CLOUD_JUDGE_MODEL_STORAGE_KEY, cloudJudgeModel); } catch { /* ignore */ }
-  }, [cloudJudgeModel]);
-  useEffect(() => {
-    try { localStorage.setItem(OPENROUTER_KEY_STORAGE_KEY, openRouterKey); } catch { /* ignore */ }
-  }, [openRouterKey]);
   const unscoredRowsForCleanup = useMemo(
     () => installedRowsForCleanup.filter((row) => !getModelScore(row, modelScores)),
     [installedRowsForCleanup, modelScores],
@@ -1158,11 +1075,7 @@ function App() {
       // Persisted settings whose state outlived the old wipe: the judge setup
       // and, worst of them, the OpenRouter API key, which stayed in the field
       // and would be written back the next time it changed.
-      setQualityMode('heuristic');
-      setJudgeModel('');
-      setJudgeSource('local');
-      setCloudJudgeModel(DEFAULT_CLOUD_JUDGE_MODEL);
-      setOpenRouterKey('');
+      resetJudgeSettings();
       setModelNotes({});
       setRunHistory(emptyRunHistory());
       setSelectedGoals([]);
@@ -1171,7 +1084,7 @@ function App() {
     } catch (error) {
       setActivity(`Could not clear all data: ${getErrorMessage(error)}`);
     }
-  }, [ollama.baseUrl, selectedModel, adoptClearedLogs, resetModelNews]);
+  }, [ollama.baseUrl, selectedModel, adoptClearedLogs, resetModelNews, resetJudgeSettings]);
 
   const requestDeleteModel = useCallback((row: ModelRow) => {
     if (row.localProvider === 'lm-studio') {

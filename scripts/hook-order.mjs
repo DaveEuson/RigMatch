@@ -107,21 +107,58 @@ function findHook(name) {
  */
 function directCalls(body) {
   const calls = [];
-  const pattern = /\b(use[A-Z][\w$]*)\s*(?:<[^;{}()]*>)?\s*\(/y;
+  const name = /\b(use[A-Z][\w$]*)/y;
   let depth = 0;
   let i = 0;
   while (i < body.length) {
     const c = body[i];
     if (/[A-Za-z_$]/.test(c) && depth === 0 && (i === 0 || !/[\w$.]/.test(body[i - 1]))) {
-      pattern.lastIndex = i;
-      const match = pattern.exec(body);
+      name.lastIndex = i;
+      const match = name.exec(body);
       if (match) {
-        calls.push(match[1]);
-        // Step to just inside the call's own paren so its arguments are seen
-        // at depth 1 and any hooks in them are correctly ignored.
-        i = match.index + match[0].length;
-        depth += 1;
-        continue;
+        let j = match.index + match[0].length;
+        while (/\s/.test(body[j])) j += 1;
+
+        // A type argument is skipped by balancing angle brackets, not by a
+        // character class. The old pattern was `<[^;{}()]*>`, which silently
+        // failed to match
+        //     useMemo<{ provider: 'local'; model: string } | null>(...)
+        // and so never counted that hook at all — a hole in a census whose
+        // entire job is noticing a missing hook. Found only because extracting
+        // the type to an alias made the count jump by one.
+        if (body[j] === '<') {
+          let angle = 0;
+          let brace = 0;
+          let paren = 0;
+          let ok = false;
+          for (; j < body.length; j += 1) {
+            const t = body[j];
+            if (t === '{') brace += 1;
+            else if (t === '}') brace -= 1;
+            else if (t === '(') paren += 1;
+            else if (t === ')') paren -= 1;
+            else if (brace === 0 && paren === 0) {
+              // Only the outermost level decides. An object type's own
+              // semicolons are structure, not statement ends — bailing on them
+              // is what kept `useMemo<{ a: string; b: number } | null>` out of
+              // the census entirely.
+              if (t === '<') angle += 1;
+              else if (t === '>') { angle -= 1; if (angle === 0) { j += 1; ok = true; break; } }
+              else if (t === ';') break;
+            }
+          }
+          if (!ok) { i += 1; continue; }
+          while (/\s/.test(body[j])) j += 1;
+        }
+
+        if (body[j] === '(') {
+          calls.push(match[1]);
+          // Step to just inside the call's own paren so its arguments are seen
+          // at depth 1 and any hooks in them are correctly ignored.
+          i = j + 1;
+          depth += 1;
+          continue;
+        }
       }
     }
     if (c === '{' || c === '(' || c === '[') depth += 1;
@@ -132,6 +169,30 @@ function directCalls(body) {
 }
 
 
+
+/**
+ * The scanner checks itself before it is trusted to check anything else.
+ *
+ * It silently missed every hook whose type argument contained braces —
+ * `useState<{ model: string; done: boolean } | null>` and
+ * `useMemo<{ provider: 'local'; model: string } | null>` were both invisible,
+ * so a census whose whole purpose is noticing a missing hook could not see two
+ * of them. That survived three extractions and surfaced only because pulling
+ * the type into an alias made the count jump by one.
+ *
+ * A miscounting guard is worse than no guard, so these run every time.
+ */
+for (const [sample, expected, why] of [
+  ['const [a, setA] = useState<{ x: string; y: boolean } | null>(null);', ['useState'], 'object type argument'],
+  ['const b = useMemo<Record<string, number>>(() => ({}), []);', ['useMemo'], 'nested generic'],
+  ['const c = useCallback((n) => n < 2 && n > 0, []);', ['useCallback'], 'comparisons in the body'],
+  ['useEffect(() => { const [x] = useState(1); }, []);', ['useEffect'], 'a nested hook belongs to the callback'],
+]) {
+  const found = directCalls(sample);
+  if (found.join(',') !== expected.join(',')) {
+    throw new Error(`the hook scanner is broken (${why}): expected ${expected.join(',')}, found ${found.join(',') || 'nothing'}`);
+  }
+}
 
 function flatten(body, trail) {
   const out = [];
