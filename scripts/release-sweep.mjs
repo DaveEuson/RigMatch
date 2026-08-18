@@ -261,7 +261,8 @@ const failed = results.filter((r) => !r.ok);
 console.log(failed.length === 0
   ? `\nAll ${results.length} checks passed.${withNet ? '' : ' Run with --net to also check catalogue URLs.'}`
   : `\n${failed.length} of ${results.length} checks FAILED.`);
-console.log('\nTwo of the three things this used to leave to a human are now covered by\n'
-  + '`npm run gates`: a real download against the real server, and the provider dying\n'
-  + 'mid-run. The microphone in a packaged build still needs a person.');
+console.log('\nWhat `npm run gates` covers without a human: a real download against the real\n'
+  + 'server, the provider dying mid-run, and the run log driven through the real desktop\n'
+  + 'app — that last one because the web preview stubs getLogs() and can prove nothing\n'
+  + 'about it. The microphone in a packaged build still needs a person.');
 process.exit(failed.length === 0 ? 0 : 1);
