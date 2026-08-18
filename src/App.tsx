@@ -54,19 +54,6 @@ import {
   toTestedModelScore,
   upsertModelScores,
 } from './lib/scoring';
-import {
-  getEmptyModelNewsState,
-  getNotificationPermission,
-  getSavedModelNewsNotificationsEnabled,
-  getSavedModelNewsState,
-  MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY,
-  MODEL_NEWS_STORAGE_KEY,
-  notifyNewModelDrops,
-  reconcileModelNews,
-  saveModelNewsState,
-  type ModelNewsState,
-  type ModelNotificationPermission,
-} from './lib/modelNews';
 import { WhatsNewPanel } from './components/WhatsNewPanel';
 import { SideMenu, type NavId, type NavItem } from './components/SideMenu';
 import { GameShowHost } from './components/GameShowHost';
@@ -256,6 +243,7 @@ import {
 } from './lib/format';
 import { useAppLogs } from './hooks/useAppLogs';
 import { useAppUpdates } from './hooks/useAppUpdates';
+import { useModelNews } from './hooks/useModelNews';
 import './App.css';
 
 
@@ -465,9 +453,6 @@ function App() {
     // for same-document writes.
     setComfySettings(readComfySettings());
   }, [activeNavId]);
-  const [modelNews, setModelNews] = useState<ModelNewsState>(() => getSavedModelNewsState());
-  const [modelNewsNotificationsEnabled, setModelNewsNotificationsEnabled] = useState(() => getSavedModelNewsNotificationsEnabled());
-  const [notificationPermission, setNotificationPermission] = useState<ModelNotificationPermission>(() => getNotificationPermission());
   const {
     appLogs, logPath, isLoadingLogs,
     loadLogs, openLogsPanel, clearLogs, openLogsFolder, copyLogs, adoptClearedLogs,
@@ -516,8 +501,6 @@ function App() {
   );
   const chatMessages = chatMessagesByModel[selectedModel] ?? [welcomeChatMessage];
   const chatSupportsImages = isVisionModel(selectedModel);
-  const modelNewsRef = useRef(modelNews);
-  const modelNewsNotificationsEnabledRef = useRef(modelNewsNotificationsEnabled);
 
   const selectedHost = hosts.find((host) => host.id === selectedHostId) ?? hosts[0];
 
@@ -598,13 +581,10 @@ function App() {
     return () => { live = false; };
   }, []);
 
-  useEffect(() => {
-    modelNewsRef.current = modelNews;
-  }, [modelNews]);
-
-  useEffect(() => {
-    modelNewsNotificationsEnabledRef.current = modelNewsNotificationsEnabled;
-  }, [modelNewsNotificationsEnabled]);
+  const {
+    modelNews, modelNewsNotificationsEnabled, notificationPermission,
+    applyCatalogNews, resetModelNews, toggleModelNewsNotifications,
+  } = useModelNews({ setActivity });
 
   const canBenchmark = Boolean(selectedRow?.installed && selectedHostCanBenchmark);
   const agentName = getAgentName(selectedModel);
@@ -921,20 +901,7 @@ function App() {
         error: catalogResponse.error,
       });
 
-      const newsUpdate = reconcileModelNews(catalogResponse.models, modelNewsRef.current);
-      const shouldNotifyAboutModels = newsUpdate.state.latestNewModelIds.length > 0
-        && modelNewsNotificationsEnabledRef.current
-        && getNotificationPermission() === 'granted';
-      const nextNewsState = shouldNotifyAboutModels
-        ? { ...newsUpdate.state, lastNotifiedAt: new Date().toISOString() }
-        : newsUpdate.state;
-      modelNewsRef.current = nextNewsState;
-      setModelNews(nextNewsState);
-      saveModelNewsState(nextNewsState);
-
-      if (shouldNotifyAboutModels) {
-        notifyNewModelDrops(catalogResponse.models, nextNewsState.latestNewModelIds);
-      }
+      const nextNewsState = applyCatalogNews(catalogResponse.models);
 
       const localHost: NetworkHost = {
         id: 'localhost',
@@ -983,8 +950,8 @@ function App() {
       const lmStudioNote = lmStudioStatus.ready
         ? ` LM Studio found ${lmStudioStatus.models.length} local model${lmStudioStatus.models.length === 1 ? '' : 's'} for testing/chat.`
         : '';
-      const modelNewsNote = newsUpdate.state.latestNewModelIds.length > 0
-        ? ` ${newsUpdate.state.latestNewModelIds.length} new model${newsUpdate.state.latestNewModelIds.length === 1 ? '' : 's'} found.`
+      const modelNewsNote = nextNewsState.latestNewModelIds.length > 0
+        ? ` ${nextNewsState.latestNewModelIds.length} new model${nextNewsState.latestNewModelIds.length === 1 ? '' : 's'} found.`
         : '';
       setActivity(
         isDesktopRuntime
@@ -996,46 +963,13 @@ function App() {
     } finally {
       setIsScanningRig(false);
     }
-  }, []);
+  }, [applyCatalogNews]);
 
   // Every control that says "check my computer" is the user asking for it, so
   // these may sync. Takes no arguments so wiring it straight to onClick cannot
   // smuggle a MouseEvent in as options.
   const refreshRig = useCallback(() => runRigRefresh({ userInitiated: true }), [runRigRefresh]);
 
-  const toggleModelNewsNotifications = useCallback(async () => {
-    const permission = getNotificationPermission();
-    setNotificationPermission(permission);
-
-    if (modelNewsNotificationsEnabled) {
-      setModelNewsNotificationsEnabled(false);
-      modelNewsNotificationsEnabledRef.current = false;
-      writeLocal(MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY, 'false');
-      setActivity('Model drop notifications are off. What\'s New will still update when RigMatch scans.');
-      return;
-    }
-
-    if (permission === 'unsupported') {
-      setActivity('This runtime does not support desktop notifications, but What\'s New will still track model drops.');
-      return;
-    }
-
-    let nextPermission = permission;
-    if (permission === 'default') {
-      nextPermission = await Notification.requestPermission();
-      setNotificationPermission(nextPermission);
-    }
-
-    if (nextPermission !== 'granted') {
-      setActivity('Notifications were not enabled. You can still check What\'s New inside RigMatch.');
-      return;
-    }
-
-    setModelNewsNotificationsEnabled(true);
-    modelNewsNotificationsEnabledRef.current = true;
-    writeLocal(MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY, 'true');
-    setActivity('Model drop notifications are on. RigMatch will alert you when a scan finds new Ollama models.');
-  }, [modelNewsNotificationsEnabled]);
 
   const openOllamaDownload = useCallback(async () => {
     setActivity('Opening Ollama official download page...');
@@ -1179,8 +1113,6 @@ function App() {
       window.localStorage.removeItem(TUTORIAL_STORAGE_KEY);
       window.localStorage.removeItem(UI_MODE_STORAGE_KEY);
       window.localStorage.removeItem(CLEARED_TOP_MATCHES_STORAGE_KEY);
-      window.localStorage.removeItem(MODEL_NEWS_STORAGE_KEY);
-      window.localStorage.removeItem(MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY);
 
       adoptClearedLogs(result);
       // Same invariant as initialBenchmark above: on desktop the demo transcript
@@ -1206,11 +1138,7 @@ function App() {
       setChatMessagesByModel({});
       setChosenModel(null);
       setClearedTopMatches(new Set<string>());
-      const nextModelNews = getEmptyModelNewsState();
-      modelNewsRef.current = nextModelNews;
-      setModelNews(nextModelNews);
-      modelNewsNotificationsEnabledRef.current = false;
-      setModelNewsNotificationsEnabled(false);
+      resetModelNews();
       setSuiteEditorOpen(false);
       setTutorialStep(0);
       setTutorialOpen(true);
@@ -1220,7 +1148,7 @@ function App() {
     } catch (error) {
       setActivity(`Could not clear all data: ${getErrorMessage(error)}`);
     }
-  }, [ollama.baseUrl, selectedModel, adoptClearedLogs]);
+  }, [ollama.baseUrl, selectedModel, adoptClearedLogs, resetModelNews]);
 
   const requestDeleteModel = useCallback((row: ModelRow) => {
     if (row.localProvider === 'lm-studio') {
