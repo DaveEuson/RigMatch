@@ -26,7 +26,6 @@ import {
   unscannedProviderStatus,
 } from './sampleData';
 import type {
-  AppLogEntry,
   BenchmarkResult,
   BenchmarkStatus,
   CatalogModel,
@@ -86,7 +85,6 @@ import {
   createRunProgressId,
   formatBenchmarkBanner,
   formatHistoryTime,
-  formatLogsForClipboard,
   getAgentName,
   getBenchmarkForModel,
   getDiskGuard,
@@ -260,6 +258,7 @@ import {
   formatPullCount,
   getErrorMessage,
 } from './lib/format';
+import { useAppLogs } from './hooks/useAppLogs';
 import './App.css';
 
 
@@ -477,9 +476,10 @@ function App() {
   const [modelNews, setModelNews] = useState<ModelNewsState>(() => getSavedModelNewsState());
   const [modelNewsNotificationsEnabled, setModelNewsNotificationsEnabled] = useState(() => getSavedModelNewsNotificationsEnabled());
   const [notificationPermission, setNotificationPermission] = useState<ModelNotificationPermission>(() => getNotificationPermission());
-  const [appLogs, setAppLogs] = useState<AppLogEntry[]>([]);
-  const [logPath, setLogPath] = useState('');
-  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const {
+    appLogs, logPath, isLoadingLogs,
+    loadLogs, openLogsPanel, clearLogs, openLogsFolder, copyLogs, adoptClearedLogs,
+  } = useAppLogs({ setActivity, setActiveNavId });
   const [updateChannel, setUpdateChannel] = useState<UpdateChannel>('release');
   const [updateCheck, setUpdateCheck] = useState<UpdateCheckResponse | null>(null);
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
@@ -1091,56 +1091,6 @@ function App() {
     setActivity('Ollama setup guide opened. RigMatch v1 is focused on this computer only.');
   }, []);
 
-  const loadLogs = useCallback(async () => {
-    setIsLoadingLogs(true);
-
-    try {
-      const result = await agentArcadeApi.getLogs(200);
-      setAppLogs(result.entries);
-      setLogPath(result.logPath);
-      setActivity(`Loaded ${result.entries.length} log entr${result.entries.length === 1 ? 'y' : 'ies'}.`);
-    } catch (error) {
-      setActivity(`Log load failed: ${getErrorMessage(error)}`);
-    } finally {
-      setIsLoadingLogs(false);
-    }
-  }, []);
-
-  const openLogsPanel = useCallback(() => {
-    setActiveNavId('history');
-    void loadLogs();
-  }, [loadLogs]);
-
-  const clearLogs = useCallback(async () => {
-    try {
-      const result = await agentArcadeApi.clearLogs();
-      setAppLogs(result.entries);
-      setLogPath(result.logPath);
-      setActivity('Run logs cleared.');
-    } catch (error) {
-      setActivity(`Could not clear logs: ${getErrorMessage(error)}`);
-    }
-  }, []);
-
-  const openLogsFolder = useCallback(async () => {
-    try {
-      const result = await agentArcadeApi.openLogsFolder();
-      setLogPath(result.logPath);
-      setActivity('Log folder opened.');
-    } catch (error) {
-      setActivity(`Could not open log folder: ${getErrorMessage(error)}`);
-    }
-  }, []);
-
-  const copyLogs = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(formatLogsForClipboard(appLogs));
-      setActivity(`Copied ${appLogs.length} log entr${appLogs.length === 1 ? 'y' : 'ies'}.`);
-    } catch (error) {
-      setActivity(`Could not copy logs: ${getErrorMessage(error)}`);
-    }
-  }, [appLogs]);
-
   useEffect(() => {
     return agentArcadeApi.onUpdaterStatus?.((status) => setAutoUpdateStatus(status));
   }, []);
@@ -1320,8 +1270,7 @@ function App() {
       window.localStorage.removeItem(MODEL_NEWS_STORAGE_KEY);
       window.localStorage.removeItem(MODEL_NEWS_NOTIFICATIONS_STORAGE_KEY);
 
-      setAppLogs(result.entries);
-      setLogPath(result.logPath);
+      adoptClearedLogs(result);
       // Same invariant as initialBenchmark above: on desktop the demo transcript
       // and scores must never appear as if the user ran a real test. Clearing
       // everything and then seeding sample data is the worst place to break it —
@@ -1359,7 +1308,7 @@ function App() {
     } catch (error) {
       setActivity(`Could not clear all data: ${getErrorMessage(error)}`);
     }
-  }, [ollama.baseUrl, selectedModel]);
+  }, [ollama.baseUrl, selectedModel, adoptClearedLogs]);
 
   const requestDeleteModel = useCallback((row: ModelRow) => {
     if (row.localProvider === 'lm-studio') {

@@ -63,8 +63,19 @@ function bodyOf(text, name) {
   const match = declaration.exec(code);
   if (!match) return null;
 
-  // First `{` that opens the body, then its matching close.
-  let i = code.indexOf('{', match.index + match[0].length - 1);
+  // Step over the parameter list first. `function useAppLogs({ a, b }: { ... })`
+  // opens a brace before the body does, and taking that one returns the
+  // destructuring pattern as the "body" — no hooks in it, so the hook expanded
+  // to nothing and the census silently dropped by everything it contained.
+  let i = match.index + match[0].length - 1;
+  if (code[i] === '(') {
+    let parens = 0;
+    for (; i < code.length; i += 1) {
+      if (code[i] === '(') parens += 1;
+      else if (code[i] === ')') { parens -= 1; if (parens === 0) { i += 1; break; } }
+    }
+  }
+  i = code.indexOf('{', i);
   if (i === -1) return null;
   let depth = 0;
   for (let j = i; j < code.length; j += 1) {
