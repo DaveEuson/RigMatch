@@ -39,7 +39,16 @@ async function decodeAudio(data: ArrayBuffer) {
 
 type RunState = { phase: 'idle' | 'running' | 'complete' | 'failed'; result: AdvancedLabResult | null; message: string };
 
-export function ListeningLab({ ollama, models }: { ollama: OllamaStatus; models: string[] }) {
+export function ListeningLab({
+  ollama,
+  models,
+  gpuNoteForRun,
+}: {
+  ollama: OllamaStatus;
+  models: string[];
+  /** Re-checks the GPU as the run starts; returns a sentence, or '' when clear. */
+  gpuNoteForRun?: () => Promise<string>;
+}) {
   const [model, setModel] = useState('');
   const [source, setSource] = useState<ListeningSource>('sample');
   const [scriptId, setScriptId] = useState(DEFAULT_LISTENING_SCRIPT_ID);
@@ -156,7 +165,8 @@ export function ListeningLab({ ollama, models }: { ollama: OllamaStatus; models:
       scriptId,
       typedReference,
     });
-    setRunState({ phase: 'running', result: null, message: `Playing the audio to ${activeModel}...` });
+    const gpuNote = gpuNoteForRun ? await gpuNoteForRun() : '';
+    setRunState({ phase: 'running', result: null, message: `Playing the audio to ${activeModel}...${gpuNote}` });
 
     const audio = source === 'sample' ? await getListeningTestAudio() : captured?.base64 ?? '';
     const result = await runAdvancedListeningChallenge(activeModel, ollama.baseUrl, audio, undefined, reference);
@@ -175,7 +185,7 @@ export function ListeningLab({ ollama, models }: { ollama: OllamaStatus; models:
       writeAdvancedLabResults(merged);
       setSavedResults(merged);
     }
-  }, [activeModel, canRun, captured, ollama.baseUrl, scriptId, source, typedReference]);
+  }, [activeModel, canRun, captured, ollama.baseUrl, scriptId, source, typedReference, gpuNoteForRun]);
 
   const visible = runState.result ?? savedResults[`listening:${activeModel}`] ?? null;
   const typedTooShort = source === 'upload' && typedReference.trim() !== '' && !isScriptLongEnough(typedReference);

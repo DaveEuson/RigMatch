@@ -29,6 +29,7 @@ import { runVideoLabChallenge } from "../lib/videoGenRunner";
 import { ListeningLab } from "./ListeningLab";
 import { GpuContentionNote } from './GpuContentionNote';
 import { useGpuContention } from '../hooks/useGpuContention';
+import { gpuBusyNote } from '../lib/gpuBusyNote';
 import { AppBuilderPreviewModal } from "./AppBuilderPreview";
 
 type AdvancedLabRunState = {
@@ -205,6 +206,15 @@ export function AdvancedCapabilityLab({
   // has always checked this; the lab never did, so a run started while a game
   // held the GPU hung for four minutes and then blamed the connection.
   const { contention, refresh: refreshContention } = useGpuContention();
+
+  /**
+   * Re-check as the run starts, and hand back a sentence for its status line.
+   *
+   * The panel note is three to five seconds late — nvidia-smi is slow on a
+   * loaded card — so clicking Run immediately still showed nothing. This closes
+   * that window: the answer lands in the message the user is already watching.
+   */
+  const gpuNoteForRun = useCallback(async () => gpuBusyNote(await refreshContention()), [refreshContention]);
   useEffect(() => {
     void (async () => { await refreshContention(); })();
   }, [refreshContention]);
@@ -275,7 +285,7 @@ export function AdvancedCapabilityLab({
     if (!activeModel || !ollama.ready) return;
     setCopied('idle');
     setPreviewOpen(false);
-    setRunState({ phase: 'running', result: null, message: `Asking ${activeModel} to build an app...` });
+    setRunState({ phase: 'running', result: null, message: `Asking ${activeModel} to build an app...${await gpuNoteForRun()}` });
     const prompt = resolveAppBuilderPrompt(appPromptId, appCustomPrompt);
     const result = await runAdvancedAppBuilderChallenge(activeModel, ollama.baseUrl, prompt);
     setRunState({
@@ -293,7 +303,7 @@ export function AdvancedCapabilityLab({
       // Pop the finished app straight into the sandbox when it's runnable.
       if (extractHtmlDocument(result.response)) setPreviewOpen(true);
     }
-  }, [activeModel, appPromptId, appCustomPrompt, ollama.baseUrl, ollama.ready]);
+  }, [activeModel, appPromptId, appCustomPrompt, ollama.baseUrl, ollama.ready, gpuNoteForRun]);
 
   const copyResult = useCallback(() => {
     if (!visibleResult?.response) return;
@@ -318,7 +328,7 @@ export function AdvancedCapabilityLab({
     setImageRunState({
       phase: 'running',
       result: null,
-      message: `Generating ${IMAGE_RUN_SETTINGS.width}x${IMAGE_RUN_SETTINGS.height} with ${activeCheckpoint}...`,
+      message: `Generating ${IMAGE_RUN_SETTINGS.width}x${IMAGE_RUN_SETTINGS.height} with ${activeCheckpoint}...${await gpuNoteForRun()}`,
     });
 
     let run;
@@ -355,7 +365,7 @@ export function AdvancedCapabilityLab({
       writeAdvancedLabResults(merged);
       setSavedResults(merged);
     }
-  }, [activeCheckpoint, activeJudge, canRunImageTest, customPrompt, imagePromptId, imageResultKey, ollama.baseUrl]);
+  }, [activeCheckpoint, activeJudge, canRunImageTest, customPrompt, imagePromptId, imageResultKey, ollama.baseUrl, gpuNoteForRun]);
 
   const stopImageRun = useCallback(() => {
     imageAbortRef.current?.abort();
@@ -374,7 +384,7 @@ export function AdvancedCapabilityLab({
     setVideoRunState({
       phase: 'running',
       result: null,
-      message: `Rendering ${size.width}x${size.height} with ${activeVideoCheckpoint}. Four seconds of video takes a while.`,
+      message: `Rendering ${size.width}x${size.height} with ${activeVideoCheckpoint}. Four seconds of video takes a while.${await gpuNoteForRun()}`,
     });
 
     let run;
@@ -411,7 +421,7 @@ export function AdvancedCapabilityLab({
       writeAdvancedLabResults(merged);
       setSavedResults(merged);
     }
-  }, [activeEncoder, activeJudge, activeVideoCheckpoint, canRunVideoTest, customPrompt, imagePromptId, ollama.baseUrl, videoSizeId]);
+  }, [activeEncoder, activeJudge, activeVideoCheckpoint, canRunVideoTest, customPrompt, imagePromptId, ollama.baseUrl, videoSizeId, gpuNoteForRun]);
 
   const stopVideoRun = useCallback(() => {
     videoAbortRef.current?.abort();
@@ -907,7 +917,7 @@ export function AdvancedCapabilityLab({
           )}
         </article>
 
-        <ListeningLab ollama={ollama} models={hearingModels} />
+        <ListeningLab ollama={ollama} models={hearingModels} gpuNoteForRun={gpuNoteForRun} />
       </div>
       {previewOpen && previewHtml && visibleResult && (
         <AppBuilderPreviewModal
