@@ -12,6 +12,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { scrubSource } from './scrub-source.mjs';
 
 const source = readFileSync('src/App.tsx', 'utf-8');
 const lines = source.split('\n');
@@ -61,26 +62,16 @@ for (const match of source.matchAll(/^import\s+([A-Za-z_$][\w$]*)\s+from/gm)) im
 const REACT_ETC = new Set(['useState', 'useEffect', 'useMemo', 'useCallback', 'useRef', 'Fragment']);
 
 /**
- * Drop comments and quoted strings before looking for identifiers.
- *
- * Without this, prose counts as code: ActivityPanel reported a dependency on
- * App purely from the words "App Builder" in a comment and a label. Template
- * literals are left intact because `${...}` inside them holds real references.
+ * Prose must not count as code: ActivityPanel reported a dependency on App
+ * purely from the words "App Builder" in a comment and a label. Template
+ * expressions are kept, because `${...}` holds real references.
  *
  * JSX text is not stripped — it cannot be told from markup by regex — so a
  * capitalized word in visible copy can still leak through. This report ranks
  * extraction cost; it is not a proof, and the compiler remains the authority.
  */
-function stripProse(text) {
-  return text
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/\/\/[^\n]*/g, ' ')
-    .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
-    .replace(/"(?:[^"\\\n]|\\.)*"/g, '""');
-}
-
 function analyze(decl) {
-  const body = stripProse(lines.slice(decl.start, decl.end + 1).join('\n'));
+  const body = scrubSource(lines.slice(decl.start, decl.end + 1).join('\n'), { keepTemplateExpressions: true });
   const used = new Set();
   for (const match of body.matchAll(/\b([A-Za-z_$][\w$]*)\b/g)) used.add(match[1]);
 

@@ -73,9 +73,16 @@ function dropEmptyImports() {
   const lines = readFileSync(path, 'utf-8').split('\n');
   const kept = [];
   const dropped = [];
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
     const husk = line.match(/^\s*import\s*\{\s*\}\s*from\s*'([^']+)';\s*$/);
     if (husk) { dropped.push(husk[1]); continue; }
+    // The multi-line form too: emptying `import {\n  Name,\n} from '...';` of
+    // its one name leaves `import {` and `} from '...';` straddling two lines,
+    // which the single-line pattern above walks straight past.
+    const openHusk = /^\s*import\s*\{\s*$/.test(line)
+      && /^\s*\}\s*from\s*'([^']+)';\s*$/.exec(lines[i + 1] ?? '');
+    if (openHusk) { dropped.push(openHusk[1]); i += 1; continue; }
     kept.push(line);
   }
   if (dropped.length) {
@@ -105,7 +112,28 @@ for (let round = 1; round <= 8; round += 1) {
       continue;
     }
 
-    const text = lines[line - 1];
+    // tsc does not always point at the line holding the name. For
+    //     import {
+    //       RomanceArtBanner,
+    //     } from './components/ScoreVisuals';
+    // it reports column 1 of the `import {` line. Every branch below then
+    // matched nothing, yet the name was still counted as removed — so the loop
+    // reported "removed 1" eight times running while the file never changed.
+    // Find the name inside the statement instead of trusting the address.
+    let at = line - 1;
+    if (name && !new RegExp(`\\b${name}\\b`).test(lines[at] ?? '')) {
+      const found = [];
+      for (let i = statement.start; i <= statement.end; i += 1) {
+        if (new RegExp(`\\b${name}\\b`).test(lines[i] ?? '')) found.push(i);
+      }
+      if (found.length !== 1) {
+        skipped.push(`${name}: ${found.length === 0 ? 'not found in' : 'ambiguous within'} its import statement`);
+        continue;
+      }
+      at = found[0];
+    }
+
+    const text = lines[at];
     const isDefault = new RegExp(`^\\s*import\\s+${name}\\s+from\\s`).test(text);
     if (whole || isDefault) {
       wholeSpans.push(statement);
@@ -114,15 +142,22 @@ for (let round = 1; round <= 8; round += 1) {
     }
 
     if (new RegExp(`^\\s*(?:type\\s+)?${name},?\\s*$`).test(text)) {
-      lines[line - 1] = null; // marked, spliced below so spans stay stable
+      lines[at] = null; // marked, spliced below so spans stay stable
       removed.push(name);
-    } else if (text.includes(`${name},`)) {
-      lines[line - 1] = text.replace(new RegExp(`\\b(?:type\\s+)?${name},\\s*`), '');
-      removed.push(name);
-    } else {
-      lines[line - 1] = text.replace(new RegExp(`,?\\s*\\b(?:type\\s+)?${name}\\b`), '');
-      removed.push(name);
+      continue;
     }
+
+    const edited = text.includes(`${name},`)
+      ? text.replace(new RegExp(`\\b(?:type\\s+)?${name},\\s*`), '')
+      : text.replace(new RegExp(`,?\\s*\\b(?:type\\s+)?${name}\\b`), '');
+    // Never claim a removal that did not happen: a no-op edit is what turned
+    // this loop into a liar in the first place.
+    if (edited === text) {
+      skipped.push(`${name}: no edit applied to ${text.trim().slice(0, 60)}`);
+      continue;
+    }
+    lines[at] = edited;
+    removed.push(name);
   }
 
   // Whole statements last and bottom-up, so no span invalidates another.

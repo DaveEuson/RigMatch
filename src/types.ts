@@ -688,3 +688,7 @@ export type UtilityPanelId = Extract<NavId, 'history' | 'settings'>;
 /** The Advanced rail's destinations. Here rather than in SideMenu so that
  * types.ts never has to import from a component. */
 export type NavId = 'lan' | 'models' | 'whatsNew' | 'speedDate' | 'agent' | 'history' | 'activity' | 'settings';
+
+/** Which scores a confirmation dialog is about to clear. Shared: App holds it
+ * as state, ClearScoresModal renders it. */
+export type PendingScoreClear = { mode: 'single'; model: string } | { mode: 'all' };
