@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 
 import { agentArcadeApi } from '../api';
 import { getErrorMessage } from '../lib/format';
+import { chatBeyondNote, classifyChatRequest } from '../lib/chatCapabilityGuard';
 import { getModelRuntime, isVisionModel } from '../lib/modelCatalog';
 import type { ChatAttachment, ChatMessage, ModelRow, OllamaStatus } from '../types';
 
@@ -66,9 +67,21 @@ export function useChat({
     // Pinned before the await: the user can select another model while the
     // response is in flight, and the reply belongs to the model that was asked.
     const chatModel = selectedModel;
+    // Said before the model answers, not after.
+    //
+    // Ollama serves text: ask any of these models for a picture and it will
+    // describe one warmly, or announce it has made one. The second is a plain
+    // untruth, and relaying it without comment made the app complicit. The note
+    // is additive — the request still goes through, because a guard that
+    // refuses on a false positive is a worse failure than a redundant sentence.
+    const beyond = chatBeyondNote(classifyChatRequest(userMessage.content), chatModel);
+    const opening: ChatMessage[] = beyond
+      ? [userMessage, { id: `${Date.now()}-limit`, role: 'agent', content: beyond }]
+      : [userMessage];
+
     setChatMessagesByModel((prev) => ({
       ...prev,
-      [chatModel]: [...(prev[chatModel] ?? [welcomeMessage]), userMessage],
+      [chatModel]: [...(prev[chatModel] ?? [welcomeMessage]), ...opening],
     }));
     setChatInput('');
     setChatAttachment(null);
