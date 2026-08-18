@@ -7,7 +7,7 @@
     "useMemo": 27,
     "useState": 90,
     "useRef": 13,
-    "useCallback": 81,
+    "useCallback": 82,
     "useEffect": 30
   },
   "effectCount": 30,
@@ -401,27 +401,35 @@
       "sig": ""
     },
     {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
       "name": "useMemo",
       "sig": ""
     },
     {
       "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
       "sig": ""
     },
     {
@@ -895,10 +903,6 @@
     {
       "name": "useEffect",
       "sig": "() => { if (!pendingRunMode) { setPendingGpuContention(null); return; "
-    },
-    {
-      "name": "useCallback",
-      "sig": ""
     },
     {
       "name": "useCallback",
@@ -1383,28 +1387,44 @@
       "sig": ""
     },
     {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
       "name": "useMemo",
       "sig": ""
     },
     {
       "name": "useMemo",
       "sig": ""
+    },
+    {
+      "name": "useChat{",
+      "marker": true
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "}useChat",
+      "marker": true
     },
     {
       "name": "useMemo",
@@ -1901,10 +1921,6 @@
     {
       "name": "useEffect",
       "sig": "() => { if (!pendingRunMode) { setPendingGpuContention(null); return; "
-    },
-    {
-      "name": "useCallback",
-      "sig": ""
     },
     {
       "name": "useCallback",

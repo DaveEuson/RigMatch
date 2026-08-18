@@ -37,7 +37,6 @@ import type {
   SystemProfile,
   OllamaInstallProgress,
   TestedModelScore,
-  ChatAttachment,
   ChatMessage,
   SkillRunStatus,
   GpuContention,
@@ -239,6 +238,7 @@ import { useAppUpdates } from './hooks/useAppUpdates';
 import { useModelNews } from './hooks/useModelNews';
 import { useJudgeSettings } from './hooks/useJudgeSettings';
 import { useComfy } from './hooks/useComfy';
+import { useChat } from './hooks/useChat';
 import './App.css';
 
 
@@ -441,7 +441,6 @@ function App() {
   // What the person said they want to do, first pick foremost. Drives the
   // Models lens and the wizard's opening dream — a lens, never a lock.
   const [selectedGoals, setSelectedGoals] = useState<GoalId[]>(() => readSelectedGoals());
-  const [chatOpen, setChatOpen] = useState(false);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [pendingThirdPartyDownloadRows, setPendingThirdPartyDownloadRows] = useState<ModelRow[] | null>(null);
   const [chosenModel, setChosenModel] = useState<string | null>(null);
@@ -452,14 +451,6 @@ function App() {
   const [pendingScoreClear, setPendingScoreClear] = useState<PendingScoreClear | null>(null);
   const [tutorialOpen, setTutorialOpen] = useState(() => !getSavedTutorialSeen());
   const [tutorialStep, setTutorialStep] = useState(0);
-  const [chatInput, setChatInput] = useState('');
-  // Pending image (data URL) the user attached for the next vision-model message.
-  const [chatAttachment, setChatAttachment] = useState<ChatAttachment | null>(null);
-  const [chatMessagesByModel, setChatMessagesByModel] = useState<Record<string, ChatMessage[]>>(
-    savedHistory?.chatMessagesByModel ?? {},
-  );
-  const chatMessages = chatMessagesByModel[selectedModel] ?? [welcomeChatMessage];
-  const chatSupportsImages = isVisionModel(selectedModel);
 
   const selectedHost = hosts.find((host) => host.id === selectedHostId) ?? hosts[0];
 
@@ -506,6 +497,19 @@ function App() {
   const selectedRow = modelRows.find(
     (row) => row.displayName === selectedModel || row.id === selectedModel,
   );
+
+  const {
+    chatOpen, setChatOpen, chatInput, setChatInput,
+    chatAttachment, setChatAttachment, chatMessagesByModel,
+    chatMessages, chatSupportsImages, sendChat, resetChat,
+  } = useChat({
+    selectedModel,
+    selectedRow,
+    ollama,
+    welcomeMessage: welcomeChatMessage,
+    initialMessagesByModel: savedHistory?.chatMessagesByModel ?? {},
+    setActivity,
+  });
   // No name fallback: a model without the audio capability rejects the request
   // outright rather than answering badly, so guessing would produce a 400.
   const chatSupportsAudio = canHearAudio(selectedRow ?? { displayName: selectedModel });
@@ -745,7 +749,7 @@ function App() {
     } else {
       setChatOpen(true);
     }
-  }, [topRigPick]);
+  }, [topRigPick, setChatOpen]);
 
   /**
    * Cheap provider-only re-check: no hardware scan, no catalog sync. Used on
@@ -1038,8 +1042,7 @@ function App() {
       // to demote an Advanced user to Simple Mode and hand them the beginner
       // wizard — they asked to clear data, not to start over. The matching keys
       // are in KEEP_ON_CLEAR, so the choice also survives a restart.
-      setChatInput('');
-      setChatMessagesByModel({});
+      resetChat();
       setChosenModel(null);
       setClearedTopMatches(new Set<string>());
       resetModelNews();
@@ -1060,7 +1063,7 @@ function App() {
     } catch (error) {
       setActivity(`Could not clear all data: ${getErrorMessage(error)}`);
     }
-  }, [ollama.baseUrl, selectedModel, adoptClearedLogs, resetModelNews, resetJudgeSettings]);
+  }, [ollama.baseUrl, selectedModel, adoptClearedLogs, resetModelNews, resetJudgeSettings, resetChat]);
 
   const requestDeleteModel = useCallback((row: ModelRow) => {
     if (row.localProvider === 'lm-studio') {
@@ -2790,64 +2793,6 @@ function App() {
     setActivity('Model test cancelled before resources were engaged.');
   }, []);
 
-  const sendChat = useCallback(async () => {
-    const message = chatInput.trim();
-    const attachment = chatAttachment;
-    // Allow an attachment-only send (e.g. "read this") but keep a default
-    // prompt so the model always gets some text to act on.
-    if (!message && !attachment) return;
-
-    // Audio and images both travel in `images` — that is how Ollama takes a
-    // recording, verified against gemma4:e2b, which transcribed a WAV sent
-    // this way.
-    const attached = attachment ? [attachment.dataUrl] : undefined;
-    const defaultPrompt = attachment?.kind === 'audio'
-      ? 'What is said in this recording?'
-      : 'What is in this image?';
-
-    const userMessage: ChatMessage = {
-      id: `${Date.now()}-user`,
-      role: 'user',
-      content: message || (attachment ? defaultPrompt : ''),
-      ...(attached ? { images: attached } : {}),
-      ...(attachment ? { attachmentKind: attachment.kind } : {}),
-    };
-    const chatModel = selectedModel;
-    setChatMessagesByModel((prev) => ({
-      ...prev,
-      [chatModel]: [...(prev[chatModel] ?? [welcomeChatMessage]), userMessage],
-    }));
-    setChatInput('');
-    setChatAttachment(null);
-
-    try {
-      const runtime = getModelRuntime(selectedRow, ollama);
-      const response = await agentArcadeApi.sendChat({
-        model: chatModel,
-        message: userMessage.content,
-        baseUrl: runtime.baseUrl,
-        provider: runtime.provider,
-        ...(attached ? { images: attached } : {}),
-      });
-      setChatMessagesByModel((prev) => ({
-        ...prev,
-        [chatModel]: [
-          ...(prev[chatModel] ?? [welcomeChatMessage]),
-          { id: `${Date.now()}-agent`, role: 'agent', content: response.message },
-        ],
-      }));
-    } catch (error) {
-      const errMsg = getErrorMessage(error);
-      setActivity(`Chat failed: ${errMsg}`);
-      setChatMessagesByModel((prev) => ({
-        ...prev,
-        [chatModel]: [
-          ...(prev[chatModel] ?? [welcomeChatMessage]),
-          { id: `${Date.now()}-error`, role: 'agent', content: `I could not reach the selected model: ${errMsg}` },
-        ],
-      }));
-    }
-  }, [chatAttachment, chatInput, ollama, selectedModel, selectedRow]);
 
   // Launch scan: reads this machine, reuses the cached catalog. Not user-initiated,
   // so it performs no version lookups.

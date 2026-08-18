@@ -111,6 +111,35 @@ async function runBrowserChecks(url) {
   await settleImages(page, 'advanced');
   await page.screenshot({ path: screenshots.advanced, fullPage: false });
 
+  /**
+   * A chat round trip, which lives here rather than in the desktop gate.
+   *
+   * The dock is unreachable in a cold desktop profile — no scan, so no scored
+   * model and no "Talk to Model" — and the ticker's Chat button launches the
+   * separate RigChat companion there, raising a blocking alert when it is not
+   * packaged. Preview has demo data and stubs sendChat below the callback, so
+   * this exercises the real composer, the real transcript keyed by model, and
+   * the real draft-clearing. The reply text is a stub; everything above it is not.
+   */
+  let chatRoundTrip = false;
+  let chatDraftCleared = false;
+  try {
+    await page.locator('.ticker-chat-link').click();
+    await page.waitForSelector('.chat-dock', { timeout: 10000 });
+    // The composer carries no type attribute, so `input[type=text]` misses it.
+    const composer = page.locator('.chat-form input:not([type=file])').first();
+    const beforeChat = await page.locator('.chat-stream').innerText();
+    await composer.fill('smoke check: are you there?');
+    await page.locator('.chat-form button[type=submit]').click();
+    await page.waitForTimeout(2000);
+    const afterChat = await page.locator('.chat-stream').innerText();
+    chatRoundTrip = afterChat.includes('smoke check') && afterChat.length > beforeChat.length + 30;
+    chatDraftCleared = (await composer.inputValue()) === '';
+    await page.locator('.chat-dock').getByRole('button', { name: /close/i }).first().click().catch(() => {});
+  } catch {
+    // Left false, which fails the run below rather than passing quietly.
+  }
+
   // The smallest window the packaged app allows: it sets minWidth 1280 and
   // minHeight 820, so this exact size is the reachable worst case rather than a
   // hypothetical one. The rail silently clipped Activity and Settings off the
@@ -159,6 +188,8 @@ async function runBrowserChecks(url) {
     simpleMenuHidden,
     simpleNoAdvancedChrome,
     advancedControlRoom: advancedText.includes('Advanced Control Room'),
+    chatRoundTrip,
+    chatDraftCleared,
     wizardGoneInAdvanced,
     advancedMenuVisible,
     desktopNoOverflow: !desktopOverflowX,

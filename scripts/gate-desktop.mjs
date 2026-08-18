@@ -143,6 +143,12 @@ try {
     record(`${channel} is registered`, state === 'registered', state === 'registered' ? undefined : state);
   }
 
+  // Chat is checked by visual-smoke against the preview, not here: a cold
+  // desktop profile has no scan, so no scored model and no "Talk to Model", and
+  // the ticker's Chat button launches the separate RigChat companion and raises
+  // a blocking alert when it is not packaged. A gate that cannot reach the
+  // thing it names is worse than one that admits where the check lives.
+
   // ── ComfyUI (useComfy) ────────────────────────────────────────────────────
   //
   // getComfyStatus talks to a server the user starts themselves, so a real
