@@ -4,10 +4,10 @@
     "fn": "App"
   },
   "census": {
-    "useMemo": 27,
-    "useState": 89,
+    "useMemo": 28,
+    "useState": 90,
     "useRef": 12,
-    "useCallback": 91,
+    "useCallback": 92,
     "useEffect": 30
   },
   "effectCount": 30,
@@ -417,6 +417,14 @@
       "sig": ""
     },
     {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
       "name": "useState",
       "sig": ""
     },
@@ -426,6 +434,10 @@
     },
     {
       "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
       "sig": ""
     },
     {
@@ -1435,6 +1447,14 @@
       "sig": ""
     },
     {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useMemo",
+      "sig": ""
+    },
+    {
       "name": "useChat{",
       "marker": true
     },
@@ -1452,6 +1472,10 @@
     },
     {
       "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
       "sig": ""
     },
     {

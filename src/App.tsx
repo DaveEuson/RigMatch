@@ -213,6 +213,7 @@ import { taskFilterForGoal } from './lib/modelCatalog';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLabChallenge } from './lib/videoGenRunner';
 import { runImageLabChallenge } from './lib/imageGenRunner';
+import { CUSTOM_IMAGE_PROMPT_ID } from './lib/imageGenScoring';
 import { describeComfyBusy, getComfyStatus } from './lib/comfyTransport';
 import { readComfySettings } from './lib/comfySettings';
 import {
@@ -487,10 +488,53 @@ function App() {
     (row) => row.displayName === selectedModel || row.id === selectedModel,
   );
 
+  const [chatImageRunning, setChatImageRunning] = useState(false);
+
+  /**
+   * Making a picture from the chat box, when this computer really can.
+   *
+   * Memoised because it is handed to useChat: an object literal rebuilt every
+   * render rebuilds every callback that depends on it, including sendChat.
+   */
+  const chatImageGeneration = useMemo(() => {
+    // Video checkpoints cannot draw a still.
+    //
+    // The first checkpoint ComfyUI reported on this machine was ltx-video-2b,
+    // and handing that to the image graph fails with "CLIPTextEncode: clip
+    // input is invalid: None" — it carries no text encoder. The offer appeared,
+    // it was pressed, and it could never have worked: exactly the empty promise
+    // this feature exists to prevent, made by the feature itself.
+    const drawable = comfyCheckpoints.filter((name) => !isVideoCheckpoint(name));
+
+    return {
+      // ComfyUI answering is not the same as ComfyUI being able to draw.
+      available: drawable.length > 0,
+      run: async (prompt: string) => {
+        setChatImageRunning(true);
+        try {
+          const result = await runImageLabChallenge({
+            checkpoint: drawable[0],
+            promptId: CUSTOM_IMAGE_PROMPT_ID,
+            customPrompt: prompt,
+            ollamaBaseUrl: ollama.baseUrl,
+            comfyBaseUrl: comfySettings.baseUrl,
+          });
+          return result.imageDataUrl
+            ? { dataUrl: result.imageDataUrl }
+            : { error: result.error || 'ComfyUI returned no image.' };
+        } catch (error) {
+          return { error: getErrorMessage(error) };
+        } finally {
+          setChatImageRunning(false);
+        }
+      },
+    };
+  }, [comfyCheckpoints, ollama.baseUrl, comfySettings.baseUrl]);
+
   const {
     chatOpen, setChatOpen, chatInput, setChatInput,
     chatAttachment, setChatAttachment, chatMessagesByModel,
-    chatMessages, chatSupportsImages, sendChat, resetChat,
+    chatMessages, chatSupportsImages, sendChat, runChatAction, resetChat,
   } = useChat({
     selectedModel,
     selectedRow,
@@ -498,6 +542,7 @@ function App() {
     welcomeMessage: welcomeChatMessage,
     initialMessagesByModel: savedHistory?.chatMessagesByModel ?? {},
     setActivity,
+    imageGeneration: chatImageGeneration,
   });
   // No name fallback: a model without the audio capability rejects the request
   // outright rather than answering badly, so guessing would produce a 400.
@@ -3410,6 +3455,8 @@ function App() {
           canSendAudio={chatSupportsAudio}
           pendingAttachment={chatAttachment}
           onAttach={setChatAttachment}
+          onRunAction={runChatAction}
+          actionRunning={chatImageRunning}
           availableModels={modelRows.filter((row) => row.installed).map((row) => row.displayName)}
           onModelChange={setSelectedModel}
         />

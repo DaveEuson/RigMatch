@@ -4,7 +4,7 @@ import { agentArcadeApi } from '../api';
 import { getErrorMessage } from '../lib/format';
 import { chatBeyondNote, classifyChatRequest } from '../lib/chatCapabilityGuard';
 import { getModelRuntime, isVisionModel } from '../lib/modelCatalog';
-import type { ChatAttachment, ChatMessage, ModelRow, OllamaStatus } from '../types';
+import type { ChatAction, ChatAttachment, ChatMessage, ModelRow, OllamaStatus } from '../types';
 
 /**
  * The conversation with the selected model.
@@ -25,6 +25,7 @@ export function useChat({
   welcomeMessage,
   initialMessagesByModel,
   setActivity,
+  imageGeneration,
 }: {
   selectedModel: string;
   selectedRow: ModelRow | undefined;
@@ -32,6 +33,17 @@ export function useChat({
   welcomeMessage: ChatMessage;
   initialMessagesByModel: Record<string, ChatMessage[]>;
   setActivity: (message: string) => void;
+  /**
+   * Making a picture, when this computer actually can.
+   *
+   * Passed in rather than reached for: whether ComfyUI is up, which checkpoint
+   * is loaded and how to drive it belong to the app, and a chat hook that knew
+   * all that would be a chat hook that could promise things on its own.
+   */
+  imageGeneration?: {
+    available: boolean;
+    run: (prompt: string) => Promise<{ dataUrl?: string; error?: string }>;
+  };
 }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
@@ -74,9 +86,18 @@ export function useChat({
     // untruth, and relaying it without comment made the app complicit. The note
     // is additive — the request still goes through, because a guard that
     // refuses on a false positive is a worse failure than a redundant sentence.
-    const beyond = chatBeyondNote(classifyChatRequest(userMessage.content), chatModel);
+    const beyondKind = classifyChatRequest(userMessage.content);
+    const canGenerateHere = beyondKind === 'image' && Boolean(imageGeneration?.available);
+    const beyond = chatBeyondNote(beyondKind, chatModel, canGenerateHere);
     const opening: ChatMessage[] = beyond
-      ? [userMessage, { id: `${Date.now()}-limit`, role: 'agent', content: beyond }]
+      ? [userMessage, {
+        id: `${Date.now()}-limit`,
+        role: 'agent',
+        content: beyond,
+        ...(canGenerateHere
+          ? { action: { kind: 'generate-image' as const, prompt: userMessage.content, label: 'Generate it here' } }
+          : {}),
+      }]
       : [userMessage];
 
     setChatMessagesByModel((prev) => ({
@@ -113,7 +134,48 @@ export function useChat({
         ],
       }));
     }
-  }, [chatAttachment, chatInput, ollama, selectedModel, selectedRow, welcomeMessage, setActivity]);
+  }, [chatAttachment, chatInput, ollama, selectedModel, selectedRow, welcomeMessage, setActivity, imageGeneration?.available]);
+
+  /**
+   * Take up the offer: generate the picture and put it in the transcript.
+   *
+   * The user's own words are the prompt. Rewriting them into something a
+   * diffusion model likes better would produce a picture of a request they did
+   * not make, and they would have no way to tell.
+   */
+  const runChatAction = useCallback(async (action: ChatAction) => {
+    if (action.kind !== 'generate-image' || !imageGeneration) return;
+    const chatModel = selectedModel;
+    const runId = `${Date.now()}-gen`;
+
+    setChatMessagesByModel((prev) => ({
+      ...prev,
+      [chatModel]: [...(prev[chatModel] ?? [welcomeMessage]), {
+        id: runId,
+        role: 'agent',
+        content: `Generating "${action.prompt}" with ComfyUI. This takes a while on most cards.`,
+      }],
+    }));
+
+    const result = await imageGeneration.run(action.prompt);
+
+    setChatMessagesByModel((prev) => ({
+      ...prev,
+      [chatModel]: [...(prev[chatModel] ?? [welcomeMessage]), result.dataUrl
+        ? {
+          id: `${runId}-done`,
+          role: 'agent' as const,
+          content: `Here it is: "${action.prompt}".`,
+          images: [result.dataUrl],
+          attachmentKind: 'image' as const,
+        }
+        : {
+          id: `${runId}-failed`,
+          role: 'agent' as const,
+          content: `That image could not be made: ${result.error ?? 'ComfyUI did not return a picture.'}`,
+        }],
+    }));
+  }, [imageGeneration, selectedModel, welcomeMessage]);
 
   /** The in-memory half of "Clear Data": every conversation, and the draft. */
   const resetChat = useCallback(() => {
@@ -132,6 +194,7 @@ export function useChat({
     chatMessages,
     chatSupportsImages,
     sendChat,
+    runChatAction,
     resetChat,
   };
 }

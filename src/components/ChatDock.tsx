@@ -1,6 +1,6 @@
 import { useRef } from 'react';
-import { ImagePlus, Mic, X } from 'lucide-react';
-import type { ChatAttachment, ChatMessage } from '../types';
+import { ImagePlus, Mic, Sparkles, X } from 'lucide-react';
+import type { ChatAction, ChatAttachment, ChatMessage } from '../types';
 
 /**
  * Floating chat panel for talking to the selected local model. Self-contained:
@@ -19,6 +19,8 @@ export function ChatDock({
   liveShowActive,
   canSendImages,
   canSendAudio,
+  onRunAction,
+  actionRunning,
   pendingAttachment,
   onAttach,
   availableModels,
@@ -35,6 +37,9 @@ export function ChatDock({
   canSendImages?: boolean;
   /** Models reporting the `audio` capability can be sent a recording. */
   canSendAudio?: boolean;
+  /** Runs an offer the app made. Absent means offers are not actionable here. */
+  onRunAction?: (action: ChatAction) => void | Promise<void>;
+  actionRunning?: boolean;
   pendingAttachment?: ChatAttachment | null;
   onAttach?: (attachment: ChatAttachment | null) => void;
   /** Installed models the user can switch to without leaving the drawer. */
@@ -99,6 +104,19 @@ export function ChatDock({
               : <img key={index} src={src} alt="Attached" className="chat-message-image" />
             ))}
             {message.content && <span>{message.content}</span>}
+            {message.action && onRunAction && (
+              // The app's own offer, never a model's. A button appears only
+              // where RigMatch can really do the thing it names.
+              <button
+                type="button"
+                className="primary-button compact chat-action"
+                onClick={() => { const a = message.action; if (a) void onRunAction(a); }}
+                disabled={actionRunning}
+              >
+                <Sparkles aria-hidden="true" />
+                {actionRunning ? 'Working...' : message.action.label}
+              </button>
+            )}
           </div>
         ))}
       </div>

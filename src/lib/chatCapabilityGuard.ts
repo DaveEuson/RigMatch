@@ -51,11 +51,19 @@ export function classifyChatRequest(message: string): ChatBeyond {
  * that" without a route is only half an answer — and RigMatch can do two of
  * these three, just not here.
  */
-export function chatBeyondNote(kind: ChatBeyond, model: string): string | null {
+export function chatBeyondNote(kind: ChatBeyond, model: string, canGenerateHere = false): string | null {
   if (!kind) return null;
   const name = model || 'This model';
 
   if (kind === 'image') {
+    // Two different truths, and the app knows which one applies. Sending
+    // someone to Advanced Mode when ComfyUI is loaded and ready is a worse
+    // answer than offering to do it, and offering when nothing can run it
+    // would be the empty promise this whole guard exists to prevent.
+    if (canGenerateHere) {
+      return `${name} writes text — it cannot make images. ComfyUI is running here, though, `
+        + 'so RigMatch can generate this one for you.';
+    }
     return `${name} writes text — it cannot make images. Anything it describes below is words, not a picture. `
       + 'Image generation lives in Advanced Mode → Activity → the Image test, and needs ComfyUI running.';
   }

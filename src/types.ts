@@ -321,6 +321,21 @@ export type ChatMessage = {
   images?: string[];
   /** What those attachments are, so the transcript renders them correctly. */
   attachmentKind?: 'image' | 'audio';
+  /**
+   * Something the app can do that the model cannot, offered in the transcript.
+   *
+   * Only ever set by RigMatch, never by a model: this is the app's own voice
+   * offering a capability it actually has, which is the whole point of it being
+   * a button rather than a sentence a model might invent.
+   */
+  action?: ChatAction;
+};
+
+export type ChatAction = {
+  kind: 'generate-image';
+  /** What to draw — the user's own words, not a rewritten prompt. */
+  prompt: string;
+  label: string;
 };
 
 /** Progress of a background skill-test run (App Builder / image / recognition). */
