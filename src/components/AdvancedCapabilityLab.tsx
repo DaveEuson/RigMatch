@@ -534,7 +534,13 @@ export function AdvancedCapabilityLab({
               <RefreshCw className={isRunning ? 'spin' : ''} aria-hidden="true" />
               {isRunning ? 'Running Lab Test' : 'Run App Builder'}
             </button>
-            <button type="button" className="mini-button outline" onClick={copyResult} disabled={!visibleResult?.response}>
+            <button
+              type="button"
+              className="mini-button outline"
+              onClick={copyResult}
+              disabled={!visibleResult?.response}
+              title={visibleResult?.response ? 'Copy the answer' : 'Run a test first — there is no output to copy'}
+            >
               {copied === 'copied' ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
               {copied === 'copied' ? 'Copied' : 'Copy Output'}
             </button>

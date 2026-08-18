@@ -53,7 +53,7 @@ const AUDIT = () => {
         + (node.getAttribute('aria-label') || '');
       const container = node.closest('section, article, div, li, form');
       const near = container ? (container.textContent || '') : '';
-      const REASON = /needs?|first|until|requires?|no |none|full|unavailable|not (yet|running|installed)|download|start|pick|choose|select|run the|set up|empty|managed by|nothing to|already/i;
+      const REASON = /needs?|first|until|requires?|no |none|full|unavailable|not (yet|running|installed)|download|start|pick|choose|select|run the|set up|empty|managed (by|in|through)|nothing to|already/i;
       return {
         label: label(node),
         reasonInControl: REASON.test(own),

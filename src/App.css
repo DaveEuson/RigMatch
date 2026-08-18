@@ -4277,7 +4277,10 @@ tbody tr.computer-row.selected {
 
 .model-params-sub {
   display: block;
-  font-size: 9px;
+  /* 10px, not 9: these sit inside the clickable model row, where anything under
+     10px is below what the screen audit will accept — and it is right, this is
+     the line that tells you whether a model is 3.8B or a text encoder. */
+  font-size: 10px;
   font-style: normal;
   font-weight: 600;
   color: var(--text);
@@ -14449,7 +14452,9 @@ td {
 
 .contestant-notes label span {
   color: var(--gold);
-  font-size: 9px;
+  /* Inside a <label>, so 10px is the floor: uppercase at 900 weight is already
+     hard on small text, and this one names the field beneath it. */
+  font-size: 10px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -17851,7 +17856,9 @@ a.whats-next-support:hover {
 
 /* Quantization on the row: q4 and q8 of one model are different contestants. */
 .model-quant-sub {
-  font-size: 0.62rem;
+  /* 0.66rem = 10.56px. Same reason as .model-params-sub: 0.62rem came out at
+     9.92px, just under the readable floor for text inside a control. */
+  font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--muted);

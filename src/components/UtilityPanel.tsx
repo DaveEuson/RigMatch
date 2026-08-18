@@ -33,7 +33,7 @@ import { ReleaseNotes, UpdateCenter } from './UpdateCenter';
 // DOM's global History constructor, which is a real value, so nothing errors
 // until it is used as a JSX component.
 import { Bot, Bug, Check, ChevronRight, Coffee, Copy, Download, ExternalLink, FolderOpen, HelpCircle, History, RefreshCw, Settings, Share2, Trash2, Trophy, X } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export function UtilityPanel({
   panel,
@@ -113,6 +113,16 @@ export function UtilityPanel({
   onSelectTopPick?: (model: string) => void;
 }) {
   const Icon = panel === 'history' ? History : Settings;
+
+  // Load the log when this panel opens.
+  //
+  // openLogsPanel() did it, but that is only the Activity screen's shortcut —
+  // arriving here from the rail left the console at "0 entries" with Copy and
+  // Clear disabled and nothing saying why. Worse, "No logs yet" was not
+  // necessarily true: the file could be full and simply unread.
+  useEffect(() => {
+    if (panel === 'history') onRefreshLogs();
+  }, [panel, onRefreshLogs]);
   const [diagnosticsCopy, setDiagnosticsCopy] = useState<CopyState>('idle');
   const recentModelScores = useMemo(() => getRecentModelScores(modelScores), [modelScores]);
   const rankedModelScores = useMemo(() => getRankedModelScores(modelScores), [modelScores]);
@@ -513,13 +523,26 @@ export function UtilityPanel({
                 <button type="button" className="mini-button outline icon-only" onClick={onRefreshLogs} title="Refresh logs" aria-label="Refresh logs">
                   <RefreshCw className={isLoadingLogs ? 'spin' : ''} aria-hidden="true" />
                 </button>
-                <button type="button" className="mini-button outline icon-only" onClick={onCopyLogs} disabled={!appLogs.length} title="Copy logs" aria-label="Copy logs">
+                <button
+                  type="button"
+                  className="mini-button outline icon-only"
+                  onClick={onCopyLogs}
+                  disabled={!appLogs.length}
+                  title={appLogs.length ? 'Copy logs' : 'Nothing to copy — the log is empty'}
+                  aria-label={appLogs.length ? 'Copy logs' : 'Copy logs — nothing to copy, the log is empty'}
+                >
                   <Copy aria-hidden="true" />
                 </button>
                 <button type="button" className="mini-button outline icon-only" onClick={onOpenLogsFolder} title="Open log folder" aria-label="Open log folder">
                   <FolderOpen aria-hidden="true" />
                 </button>
-                <button type="button" className="mini-button outline" onClick={onClearLogs} disabled={!appLogs.length}>
+                <button
+                  type="button"
+                  className="mini-button outline"
+                  onClick={onClearLogs}
+                  disabled={!appLogs.length}
+                  title={appLogs.length ? 'Clear the run log' : 'Nothing to clear — the log is empty'}
+                >
                   Clear
                 </button>
               </div>
