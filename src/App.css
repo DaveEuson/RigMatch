@@ -2847,42 +2847,6 @@ button.model-pool-empty-slot.interactive:disabled {
 }
 
 
-.model-profile-mini {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 5px;
-}
-
-.model-profile-mini div {
-  min-width: 0;
-  min-height: 42px;
-  padding: 6px;
-  border: 1px solid rgba(var(--primary-rgb), 0.22);
-  background: rgba(7, 11, 13, 0.48);
-  display: grid;
-  align-content: center;
-  gap: 2px;
-}
-
-.model-profile-mini span {
-  color: var(--pink);
-  font-size: 8px;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.model-profile-mini strong {
-  min-width: 0;
-  color: var(--text-strong);
-  font-size: 10px;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-
 .speed-date-launch em {
   color: var(--gold);
   font-style: normal;
@@ -3156,7 +3120,6 @@ tbody tr.computer-row.selected {
 }
 
 .model-panel .model-footer,
-.model-panel .contestants-command-deck,
 .model-panel .model-table {
   flex-shrink: 0;
 }
@@ -3187,103 +3150,6 @@ tbody tr.computer-row.selected {
   padding: 12px;
   border-left: 1px solid rgba(var(--gold-rgb), 0.16);
   align-self: stretch;
-}
-
-.contestants-command-deck {
-  min-width: 0;
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(var(--gold-rgb), 0.18);
-  background:
-    linear-gradient(90deg, rgba(var(--blue-rgb), 0.08), rgba(var(--gold-rgb), 0.06) 44%, rgba(227, 113, 133, 0.08)),
-    #10151a;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.contestants-command-card {
-  min-width: 0;
-  min-height: 142px;
-  padding: 10px;
-  border: 1px solid rgba(var(--blue-rgb), 0.26);
-  border-radius: 10px;
-  background: rgba(7, 11, 13, 0.62);
-  display: grid;
-  grid-template-rows: auto auto minmax(38px, 1fr) auto;
-  gap: 7px;
-}
-
-.contestants-command-card.featured {
-  border-color: rgba(var(--gold-rgb), 0.46);
-  background:
-    linear-gradient(135deg, rgba(var(--gold-rgb), 0.1), rgba(var(--blue-rgb), 0.06)),
-    rgba(7, 11, 13, 0.72);
-}
-
-.command-card-head {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--pink);
-}
-
-.command-card-head svg {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-  color: var(--gold);
-}
-
-.command-card-head span {
-  min-width: 0;
-  font-size: 9px;
-  font-weight: 950;
-  text-transform: uppercase;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.contestants-command-card > strong {
-  min-width: 0;
-  color: var(--text-strong);
-  font-size: 17px;
-  line-height: 1.1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.contestants-command-card > em {
-  color: var(--text);
-  font-size: 11px;
-  font-style: normal;
-  line-height: 1.32;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
-
-.command-card-actions {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.command-card-actions .primary-button.compact,
-.command-card-actions .mini-button {
-  margin-top: 0;
-  flex: 1 1 118px;
-  min-width: 0;
-  min-height: 31px;
-}
-
-.command-card-actions .mini-button {
-  padding-inline: 8px;
 }
 
 .mini-button.active-soft {
@@ -13315,7 +13181,6 @@ tr:focus-visible,
   }
 
   .wizard-rounds,
-  .contestants-command-deck,
   .host-actions {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -13425,7 +13290,6 @@ soften the arcade console. */
 .test-process-grid div,
 .flirt-link,
 .flirt-bubble,
-.model-profile-mini div,
 .result-explainer,
 .matchmaker-notes,
 .agent-nameplate,
@@ -14160,8 +14024,7 @@ td {
 .run-progress-main span,
 .question-status-head span,
 .flirt-bubble span,
-.match-tagline span,
-.model-profile-mini span {
+.match-tagline span {
   color: var(--pink);
 }
 
@@ -14211,7 +14074,6 @@ td {
 }
 
 .model-tools,
-.contestants-command-deck,
 .advanced-host-bar,
 .ollama-prep,
 .setup-doctor,
@@ -14303,9 +14165,7 @@ td {
 
 .contestant-spotlight-copy span,
 .contestant-spotlight-stats span,
-.contestant-spotlight-actions > span,
-.current-winner-card span,
-.current-winner-badge span {
+.contestant-spotlight-actions > span {
   color: var(--gold);
   font-size: 10px;
   font-weight: 900;
@@ -14332,22 +14192,11 @@ td {
 }
 
 .contestant-spotlight-copy p,
-.contestant-spotlight.empty em,
-.current-winner-card p {
+.contestant-spotlight.empty em {
   margin: 6px 0 0;
   color: var(--text);
   font-size: 12px;
   line-height: 1.35;
-}
-
-/* Caveats that qualify a score. Quieter than the score, but present on the same
-   surface — these used to live three levels deep in Settings. */
-.score-caveat {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.4;
-  border-top: 1px solid var(--line);
-  padding-top: 6px;
 }
 
 .contestant-spotlight.empty strong {
@@ -14679,59 +14528,6 @@ td {
   color: var(--muted);
   font-size: 10px;
   font-style: normal;
-}
-
-.current-winner-card {
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid rgba(var(--gold-rgb), 0.44);
-  border-radius: 12px;
-  background: rgba(var(--gold-rgb), 0.09);
-  display: grid;
-  grid-template-columns: 68px minmax(0, 1fr);
-  gap: 8px 10px;
-  align-content: center;
-}
-
-.current-winner-badge {
-  grid-row: 1 / 4;
-  min-height: 74px;
-  border: 1px solid rgba(var(--gold-rgb), 0.55);
-  border-radius: 10px;
-  color: var(--gold);
-  display: grid;
-  place-items: center;
-  gap: 3px;
-  text-align: center;
-}
-
-.current-winner-badge svg {
-  width: 28px;
-  height: 28px;
-}
-
-.current-winner-card strong {
-  display: block;
-  margin-top: 3px;
-  color: var(--text-strong);
-  font-size: 17px;
-  line-height: 1.08;
-  overflow-wrap: anywhere;
-}
-
-.current-winner-card em {
-  display: block;
-  margin-top: 3px;
-  color: var(--blue);
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 800;
-}
-
-.current-winner-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
 }
 
 
@@ -15695,16 +15491,6 @@ tbody tr.selected {
     justify-content: flex-start;
   }
 
-  .current-winner-card {
-    grid-template-columns: 76px minmax(0, 1fr) auto;
-    align-items: center;
-  }
-
-  .current-winner-badge {
-    grid-row: 1 / 3;
-  }
-
-  .current-winner-actions,
   .current-winner-profile {
     grid-column: 3;
   }
@@ -15882,15 +15668,6 @@ tbody tr.selected {
     grid-column: 1 / -1;
   }
 
-  .current-winner-card {
-    grid-template-columns: 62px minmax(0, 1fr);
-  }
-
-  .current-winner-badge {
-    grid-row: 1 / 4;
-  }
-
-  .current-winner-actions,
   .current-winner-profile {
     grid-column: 2;
   }
