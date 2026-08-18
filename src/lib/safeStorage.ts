@@ -17,12 +17,24 @@
 export const APP_STORAGE_PREFIX = 'rigmatch:';
 
 /**
- * Keys that survive "Clear Data", each needing a reason to be here.
+ * Keys that survive "Clear Data", each needing a reason to be here — and each
+ * needing the dialog to say so, because "cleared" must not quietly mean
+ * "mostly cleared".
  *
- * Empty on purpose. If something is ever added, the dialog has to say so —
- * "cleared" must not quietly mean "mostly cleared".
+ * Both entries are the same reason: which interface you use is not data about
+ * your models, it is how you drive the app. Clearing your scores should not
+ * demote an Advanced user to Simple Mode, and it should not re-ask a question
+ * they already answered.
  */
-const KEEP_ON_CLEAR = new Set<string>([]);
+const KEEP_ON_CLEAR = new Set<string>([
+  // getSavedUiMode() falls back to 'beginner' when this is missing, so removing
+  // it silently demotes the user on the next launch even if nothing resets the
+  // mode in memory.
+  'rigmatch:ui-mode:v1',
+  // hasChosenInterfaceMode() is a bare presence check, so removing it brings the
+  // first-launch Simple/Advanced splash back to ask again.
+  'rigmatch:mode-splash:v1',
+]);
 
 /**
  * Remove every key this app has stored.

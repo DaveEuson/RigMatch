@@ -51,6 +51,42 @@ test('the sweep removes every namespaced key, whatever it is', async () => {
   });
 });
 
+test('the interface mode survives, so clearing data does not demote the user', async () => {
+  // Two keys, one decision: which interface you drive the app with is not data
+  // about your models. getSavedUiMode() falls back to 'beginner' when its key is
+  // missing, and hasChosenInterfaceMode() is a bare presence check — so losing
+  // either one puts an Advanced user back in Simple Mode on the next launch, or
+  // re-asks a question they already answered.
+  await withStorage({
+    'rigmatch:ui-mode:v1': 'advanced',
+    'rigmatch:mode-splash:v1': 'chosen',
+    'rigmatch:history:v1': '[]',
+  }, ({ storage, clearAppStorage }) => {
+    clearAppStorage();
+    assert.deepEqual(storage.snapshot(), {
+      'rigmatch:ui-mode:v1': 'advanced',
+      'rigmatch:mode-splash:v1': 'chosen',
+    });
+  });
+});
+
+test('anything kept back is named in the dialog the user reads', () => {
+  // The keep list is only honest while the copy admits to it. Adding a key here
+  // without saying so is how "cleared" starts quietly meaning "mostly cleared".
+  const source = fs.readFileSync('src/lib/safeStorage.ts', 'utf8');
+  const kept = [...source.matchAll(/^\s*'(rigmatch:[^']+)',\s*$/gm)].map((m) => m[1]);
+  assert.ok(kept.length > 0, 'this test is meaningless if it parses nothing');
+
+  const dialog = fs.readFileSync('src/components/dialogs.tsx', 'utf8');
+  const danger = fs.readFileSync('src/components/UtilityPanel.tsx', 'utf8');
+  const modeKeys = kept.filter((k) => /ui-mode|mode-splash/.test(k));
+  assert.equal(modeKeys.length, kept.length, 'a new keep needs its own sentence in both dialogs, then add it here');
+
+  for (const [file, text] of [['dialogs.tsx', dialog], ['UtilityPanel.tsx', danger]]) {
+    assert.match(text, /Simple or Advanced/, `${file} must tell the user the mode is kept`);
+  }
+});
+
 test('a stored API key does not survive the wipe', async () => {
   // Called out on its own because it is the one with a consequence beyond
   // tidiness: someone clearing their data before passing the laptop on.

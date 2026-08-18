@@ -250,6 +250,26 @@ try {
     await page.evaluate(() => localStorage.getItem('not-ours')) === 'keep',
   );
 
+  // Clearing scores is not a reason to demote someone. The wipe used to call
+  // setUiMode('beginner') and drop the key, so an Advanced user was handed the
+  // beginner wizard immediately and again on the next launch.
+  record(
+    'an Advanced user is still in Advanced Mode',
+    await page.locator('.side-menu-item').count() > 0,
+    `${await page.locator('.side-menu-item').count()} rail item(s)`,
+  );
+  record(
+    'the mode survives a restart too',
+    await page.evaluate(() => localStorage.getItem('rigmatch:ui-mode:v1')) === 'advanced',
+  );
+
+  await page.reload();
+  await page.waitForTimeout(1200);
+  record(
+    'and it is still Advanced after reloading',
+    await page.locator('.side-menu-item').count() > 0,
+  );
+
 } finally {
   if (app) await app.close().catch(() => {});
   rmSync(profile, { recursive: true, force: true });

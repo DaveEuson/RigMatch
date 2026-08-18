@@ -1141,7 +1141,10 @@ function App() {
       setBenchmarkQuestions([...DEFAULT_BENCHMARK_QUESTIONS]);
       setRunProgress(null);
       setThemeId('orange');
-      setUiMode('beginner');
+      // Deliberately not resetting uiMode. Clearing your scores is not a reason
+      // to demote an Advanced user to Simple Mode and hand them the beginner
+      // wizard — they asked to clear data, not to start over. The matching keys
+      // are in KEEP_ON_CLEAR, so the choice also survives a restart.
       setChatInput('');
       setChatMessagesByModel({});
       setChosenModel(null);
