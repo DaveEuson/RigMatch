@@ -234,6 +234,8 @@ import { useJudgeSettings } from './hooks/useJudgeSettings';
 import { useComfy } from './hooks/useComfy';
 import { useChat } from './hooks/useChat';
 import { useGoals } from './hooks/useGoals';
+import { usePullControl } from './hooks/usePullControl';
+import { pullOutcome } from './lib/pullControl';
 import './App.css';
 
 
@@ -300,15 +302,19 @@ function App() {
   const [externalBenchmark, setExternalBenchmark] = useState<BenchmarkStatus | null>(null);
   const [isListTesting, setIsListTesting] = useState(false);
   const [isPullingModels, setIsPullingModels] = useState(false);
-  const [isPullCancelRequested, setIsPullCancelRequested] = useState(false);
-  const [isPullPauseRequested, setIsPullPauseRequested] = useState(false);
   const [isPullPaused, setIsPullPaused] = useState(false);
   const [isDeletingModel, setIsDeletingModel] = useState(false);
   const [pullingModel, setPullingModel] = useState<string | null>(null);
   const [pullProgressByModel, setPullProgressByModel] = useState<Record<string, PullProgressUpdate>>({});
-  const pullQueueCancelRef = useRef(false);
-  const pullQueuePauseRef = useRef(false);
-  const activePullProgressIdRef = useRef<string | null>(null);
+  const {
+    cancelRequested: isPullCancelRequested,
+    pauseRequested: isPullPauseRequested,
+    currentRequest: currentPullRequest,
+    shouldStop: pullQueueShouldStop,
+    ask: askPullQueue,
+    clearRequest: clearPullRequest,
+    setActiveProgressId: setActivePullProgressId,
+  } = usePullControl();
   const stopRunRef = useRef(false);
   // The benchmark progressId / skill-test streamId currently in flight, so Stop
   // can actually cancel the running generation instead of only being noticed at
@@ -1525,12 +1531,8 @@ function App() {
         return;
       }
 
-      pullQueueCancelRef.current = true;
-      pullQueuePauseRef.current = false;
-      setIsPullCancelRequested(true);
-      setIsPullPauseRequested(false);
+      askPullQueue('cancel');
       setIsPullPaused(false);
-      void agentArcadeApi.abortPull(activePullProgressIdRef.current ?? undefined, 'cancel');
       // A generation download is a file stream, not an Ollama pull, and
       // abortPull cannot touch it — without this the multi-gigabyte fetch
       // carried on writing after Stop and the UI said it had stopped.
@@ -1565,7 +1567,7 @@ function App() {
     setQueuedModelIds(new Set<string>());
     setPullProgressByModel((current) => removePullProgressForModels(current, queuedModelIds));
     setActivity(`Download queue canceled. Removed ${formatGb(queuedGb)} of planned downloads.`);
-  }, [isPullCancelRequested, isPullingModels, modelRows, ollama.baseUrl, pullingModel, queuedModelIds, abortComfyDownload]);
+  }, [isPullCancelRequested, isPullingModels, modelRows, ollama.baseUrl, pullingModel, queuedModelIds, abortComfyDownload, askPullQueue]);
 
   const pauseDownloadQueue = useCallback(() => {
     if (!isPullingModels || !pullingModel) {
@@ -1578,10 +1580,7 @@ function App() {
       return;
     }
 
-    pullQueuePauseRef.current = true;
-    pullQueueCancelRef.current = false;
-    setIsPullPauseRequested(true);
-    void agentArcadeApi.abortPull(activePullProgressIdRef.current ?? undefined, 'pause');
+    askPullQueue('pause');
     setPullProgressByModel((current) => {
       const activeProgress = current[pullingModel] ?? createQueuedPullProgress(pullingModel, ollama.baseUrl);
       return {
@@ -1596,7 +1595,7 @@ function App() {
       };
     });
     setActivity(`Pausing ${pullingModel}. Start Download will resume through Ollama instead of dropping the queue.`);
-  }, [isPullCancelRequested, isPullPauseRequested, isPullingModels, ollama.baseUrl, pullingModel]);
+  }, [isPullCancelRequested, isPullPauseRequested, isPullingModels, ollama.baseUrl, pullingModel, askPullQueue]);
 
   /**
    * Fetch a generation model into ComfyUI's own folders.
@@ -1654,7 +1653,7 @@ function App() {
     for (const item of needed) {
       // A video model and its encoder are two files; Stop during the first
       // must not be followed by the second starting anyway.
-      if (pullQueueCancelRef.current) return false;
+      if (pullQueueShouldStop()) return false;
       const progressId = createRunProgressId('comfy');
       beginComfyDownload(progressId);
       const unsubscribe = agentArcadeApi.onComfyDownloadProgress?.((progress) => {
@@ -1685,7 +1684,7 @@ function App() {
         // A cancelled stream lands here too; say stopped rather than failed,
         // since the user asked for it.
         const message = getErrorMessage(error);
-        if (pullQueueCancelRef.current) {
+        if (pullQueueShouldStop()) {
           setActivity(`${item.label} download stopped.`);
           return false;
         }
@@ -1700,7 +1699,7 @@ function App() {
     setActivity(`${row.displayName} downloaded. Restart ComfyUI so it picks up the new file.`);
     void refreshComfyStatus();
     return true;
-  }, [comfyCheckpoints, comfyTextEncoders, tellUser, refreshComfyStatus, beginComfyDownload, endComfyDownload]);
+  }, [comfyCheckpoints, comfyTextEncoders, tellUser, refreshComfyStatus, beginComfyDownload, endComfyDownload, pullQueueShouldStop]);
 
   const pullQueuedModels = useCallback(async () => {
     if (queuedRows.length === 0) {
@@ -1716,10 +1715,7 @@ function App() {
       return;
     }
 
-    pullQueueCancelRef.current = false;
-    pullQueuePauseRef.current = false;
-    setIsPullCancelRequested(false);
-    setIsPullPauseRequested(false);
+    clearPullRequest();
     setIsPullPaused(false);
     setIsPullingModels(true);
     let completedCount = 0;
@@ -1729,7 +1725,7 @@ function App() {
 
     try {
       for (const row of queuedRows) {
-        if (pullQueueCancelRef.current) {
+        if (pullQueueShouldStop()) {
           wasCancelled = true;
           break;
         }
@@ -1746,7 +1742,7 @@ function App() {
 
         const progressId = createRunProgressId('pull');
         activePullModel = row.displayName;
-        activePullProgressIdRef.current = progressId;
+        setActivePullProgressId(progressId);
         setPullingModel(row.displayName);
         setPullProgressByModel((current) => ({
           ...current,
@@ -1808,7 +1804,7 @@ function App() {
         });
       }
 
-      if (pullQueueCancelRef.current) {
+      if (pullQueueShouldStop()) {
         wasCancelled = true;
       }
 
@@ -1827,7 +1823,8 @@ function App() {
       setActivity(`${completedCount} model${completedCount === 1 ? '' : 's'} downloaded. Refreshing the model list...`);
       await refreshRig();
     } catch (error) {
-      if (pullQueuePauseRef.current && activePullModel) {
+      const outcome = pullOutcome({ request: currentPullRequest(), hasActiveModel: Boolean(activePullModel) });
+      if (outcome === 'paused' && activePullModel) {
         const pausedModel = activePullModel;
         setIsPullPaused(true);
         setQueuedModelIds((current) => {
@@ -1853,7 +1850,7 @@ function App() {
         return;
       }
 
-      if (pullQueueCancelRef.current) {
+      if (outcome === 'cancelled') {
         setPullProgressByModel({});
         setActivity('Download queue canceled. No more queued models will start.');
         return;
@@ -1891,18 +1888,14 @@ function App() {
       }
       setActivity(`Model download failed: ${getErrorMessage(error)}`);
     } finally {
-      activePullProgressIdRef.current = null;
       setPullingModel(null);
       setIsPullingModels(false);
-      setIsPullCancelRequested(false);
-      setIsPullPauseRequested(false);
-      pullQueueCancelRef.current = false;
-      pullQueuePauseRef.current = false;
+      clearPullRequest();
     }
     // downloadGenerationModel closes over the ComfyUI file lists; without it
     // here a queue would write against whatever they were when this callback
     // was last built, and re-download a file already fetched.
-  }, [ollama.baseUrl, ollama.ready, pullProgressByModel, queuedRows, refreshRig, selectedHost?.hostname, downloadGenerationModel]);
+  }, [ollama.baseUrl, ollama.ready, pullProgressByModel, queuedRows, refreshRig, selectedHost?.hostname, downloadGenerationModel, clearPullRequest, currentPullRequest, pullQueueShouldStop, setActivePullProgressId]);
 
   const queueMissingSpeedDateModels = useCallback((rows: ModelRow[]) => {
     const missingRows = rows.filter((row) => !row.installed && !queuedModelIds.has(row.displayName));

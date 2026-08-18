@@ -5,9 +5,9 @@
   },
   "census": {
     "useMemo": 27,
-    "useState": 90,
-    "useRef": 13,
-    "useCallback": 85,
+    "useState": 89,
+    "useRef": 12,
+    "useCallback": 91,
     "useEffect": 30
   },
   "effectCount": 30,
@@ -101,23 +101,39 @@
       "sig": ""
     },
     {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
       "name": "useState",
       "sig": ""
     },
     {
-      "name": "useState",
-      "sig": ""
-    },
-    {
       "name": "useRef",
       "sig": ""
     },
     {
-      "name": "useRef",
+      "name": "useCallback",
       "sig": ""
     },
     {
-      "name": "useRef",
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
       "sig": ""
     },
     {
@@ -725,6 +741,42 @@
       "sig": ""
     },
     {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
       "name": "useCallback",
       "sig": ""
     },
@@ -767,42 +819,6 @@
     {
       "name": "useEffect",
       "sig": "() => { const wasReady = prevOllamaReadyRef.current; prevOllamaReadyRe"
-    },
-    {
-      "name": "useCallback",
-      "sig": ""
-    },
-    {
-      "name": "useCallback",
-      "sig": ""
-    },
-    {
-      "name": "useCallback",
-      "sig": ""
-    },
-    {
-      "name": "useCallback",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useCallback",
-      "sig": ""
-    },
-    {
-      "name": "useCallback",
-      "sig": ""
     },
     {
       "name": "useCallback",
@@ -1083,24 +1099,48 @@
       "sig": ""
     },
     {
+      "name": "usePullControl{",
+      "marker": true
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
       "name": "useState",
       "sig": ""
     },
     {
-      "name": "useState",
-      "sig": ""
-    },
-    {
       "name": "useRef",
       "sig": ""
     },
     {
-      "name": "useRef",
+      "name": "useCallback",
       "sig": ""
     },
     {
-      "name": "useRef",
+      "name": "useCallback",
       "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "}usePullControl",
+      "marker": true
     },
     {
       "name": "useRef",
@@ -1755,6 +1795,50 @@
       "sig": ""
     },
     {
+      "name": "useGoals{",
+      "marker": true
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "}useGoals",
+      "marker": true
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
       "name": "useCallback",
       "sig": ""
     },
@@ -1809,50 +1893,6 @@
     {
       "name": "useCallback",
       "sig": ""
-    },
-    {
-      "name": "useCallback",
-      "sig": ""
-    },
-    {
-      "name": "useGoals{",
-      "marker": true
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useState",
-      "sig": ""
-    },
-    {
-      "name": "useCallback",
-      "sig": ""
-    },
-    {
-      "name": "useCallback",
-      "sig": ""
-    },
-    {
-      "name": "useCallback",
-      "sig": ""
-    },
-    {
-      "name": "useCallback",
-      "sig": ""
-    },
-    {
-      "name": "useCallback",
-      "sig": ""
-    },
-    {
-      "name": "}useGoals",
-      "marker": true
     },
     {
       "name": "useCallback",
