@@ -74,3 +74,38 @@ export function chatBeyondNote(kind: ChatBeyond, model: string, canGenerateHere 
   return `${name} writes text — it cannot produce audio. RigMatch has no text-to-speech; `
     + 'it can only listen, using a model that reports the audio capability.';
 }
+
+/**
+ * Why an attachment cannot go to the model now selected.
+ *
+ * The attach button is gated on capability, but the model can be changed
+ * afterwards and the attachment stays put. Record something for a model that
+ * hears, switch to one that does not, press Send, and the audio goes anyway —
+ * Ollama answers "Failed to load image or audio file", which reads as a broken
+ * recording rather than the wrong model.
+ *
+ * Returns null when the attachment is still fine, so the caller can treat a
+ * sentence as "there is a problem".
+ */
+export function attachmentBlockedReason({
+  kind,
+  model,
+  canSee,
+  canHear,
+}: {
+  kind: 'image' | 'audio';
+  model: string;
+  canSee: boolean;
+  canHear: boolean;
+}): string | null {
+  const name = model || 'the selected model';
+  if (kind === 'audio' && !canHear) {
+    return `${name} cannot listen to audio, so the recording was removed. `
+      + 'Pick a model that reports the audio capability, or send it in the Listening test.';
+  }
+  if (kind === 'image' && !canSee) {
+    return `${name} cannot look at images, so the attachment was removed. `
+      + 'Pick a vision model to ask about a picture.';
+  }
+  return null;
+}

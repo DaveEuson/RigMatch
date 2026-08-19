@@ -154,6 +154,30 @@ export function useChat({
   }, [chatAttachment, chatInput, ollama, selectedModel, selectedRow, welcomeMessage, setActivity, imageGeneration]);
 
   /**
+   * Drop an attachment the newly selected model cannot take, and say so.
+   *
+   * Silently clearing it would be its own small lie — the user attached
+   * something and it vanished — and silently sending it produces "Failed to
+   * load image or audio file" from Ollama, which reads as a broken recording
+   * rather than the wrong model.
+   */
+  const dropAttachment = useCallback((reason: string, intoModel: string) => {
+    setChatAttachment(null);
+    // Into the thread the user is now looking at, not the one they left.
+    // Closing over selectedModel put the explanation in the previous model's
+    // transcript — present, correct, and invisible — which is the trap a
+    // per-model transcript sets for anything that happens *during* a switch.
+    setChatMessagesByModel((prev) => ({
+      ...prev,
+      [intoModel]: [...(prev[intoModel] ?? [welcomeMessage]), {
+        id: `${Date.now()}-dropped`,
+        role: 'agent',
+        content: reason,
+      }],
+    }));
+  }, [welcomeMessage]);
+
+  /**
    * Take up the offer: generate the picture and put it in the transcript.
    *
    * The user's own words are the prompt. Rewriting them into something a
@@ -248,6 +272,7 @@ export function useChat({
     chatSupportsImages,
     sendChat,
     runChatAction,
+    dropAttachment,
     resetChat,
   };
 }

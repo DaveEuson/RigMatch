@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { chatBeyondNote, classifyChatRequest } from '../src/lib/chatCapabilityGuard.ts';
+import { attachmentBlockedReason, chatBeyondNote, classifyChatRequest } from '../src/lib/chatCapabilityGuard.ts';
 
 // Ask a text model to draw a cat and it does not refuse — it describes one, or
 // announces it has made one. The second is a straight untruth, and the app was
@@ -60,4 +60,26 @@ test('the note names the model and where the thing can really be done', () => {
 
 test('nothing is said when nothing was asked for', () => {
   assert.equal(chatBeyondNote(null, 'llama3'), null);
+});
+
+test('an attachment the new model cannot take is explained, not sent', () => {
+  // The attach button is capability-gated, but the model can change afterwards
+  // and the attachment stays. Ollama then answers "Failed to load image or
+  // audio file", which reads as a broken recording rather than the wrong model.
+  const audioToDeafModel = attachmentBlockedReason({
+    kind: 'audio', model: 'llama3', canSee: false, canHear: false,
+  });
+  assert.match(audioToDeafModel, /cannot listen/);
+  assert.match(audioToDeafModel, /llama3/, 'names the model that cannot do it');
+  assert.match(audioToDeafModel, /Listening test/, 'and where it can still be done');
+
+  assert.match(
+    attachmentBlockedReason({ kind: 'image', model: 'llama3', canSee: false, canHear: false }),
+    /cannot look at images/,
+  );
+});
+
+test('an attachment the model can take is left alone', () => {
+  assert.equal(attachmentBlockedReason({ kind: 'audio', model: 'gemma4:e2b', canSee: false, canHear: true }), null);
+  assert.equal(attachmentBlockedReason({ kind: 'image', model: 'llava', canSee: true, canHear: false }), null);
 });

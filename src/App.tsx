@@ -235,6 +235,7 @@ import { useJudgeSettings } from './hooks/useJudgeSettings';
 import { useComfy } from './hooks/useComfy';
 import { useChat } from './hooks/useChat';
 import { useGoals } from './hooks/useGoals';
+import { attachmentBlockedReason } from './lib/chatCapabilityGuard';
 import { usePullControl } from './hooks/usePullControl';
 import { useGpuContention } from './hooks/useGpuContention';
 import { gpuBusyNote } from './lib/gpuBusyNote';
@@ -540,7 +541,7 @@ function App() {
   const {
     chatOpen, setChatOpen, chatInput, setChatInput,
     chatAttachment, setChatAttachment, chatMessagesByModel,
-    chatMessages, chatSupportsImages, sendChat, runChatAction, resetChat,
+    chatMessages, chatSupportsImages, sendChat, runChatAction, dropAttachment, resetChat,
   } = useChat({
     selectedModel,
     selectedRow,
@@ -550,6 +551,27 @@ function App() {
     setActivity,
     imageGeneration: chatImageGeneration,
   });
+  /**
+   * Switch the model the chat is talking to, and keep the attachment honest.
+   *
+   * The attach button is gated on what the model can do, but nothing re-checked
+   * after the model changed — so a recording made for a listening model was
+   * still sent to a text one, and came back as "Failed to load image or audio
+   * file". That reads as a broken recording rather than the wrong model.
+   */
+  const changeChatModel = useCallback((nextModel: string) => {
+    setSelectedModel(nextModel);
+    if (!chatAttachment) return;
+    const nextRow = modelRows.find((row) => row.displayName === nextModel || row.id === nextModel);
+    const reason = attachmentBlockedReason({
+      kind: chatAttachment.kind,
+      model: nextModel,
+      canSee: isVisionModel(nextModel),
+      canHear: canHearAudio(nextRow ?? { displayName: nextModel }),
+    });
+    if (reason) dropAttachment(reason, nextModel);
+  }, [chatAttachment, modelRows, dropAttachment]);
+
   // No name fallback: a model without the audio capability rejects the request
   // outright rather than answering badly, so guessing would produce a 400.
   const chatSupportsAudio = canHearAudio(selectedRow ?? { displayName: selectedModel });
@@ -3463,8 +3485,12 @@ function App() {
           onAttach={setChatAttachment}
           onRunAction={runChatAction}
           actionRunning={chatImageRunning}
-          availableModels={modelRows.filter((row) => row.installed).map((row) => row.displayName)}
-          onModelChange={setSelectedModel}
+          // canGenerateText, not just "installed": the list offered SDXL Turbo
+          // as something to converse with. It is a ComfyUI checkpoint — asking
+          // it a question sends a chat request to a model that produces pixels,
+          // which fails in a way that reads as the app being broken.
+          availableModels={modelRows.filter((row) => row.installed && canGenerateText(row)).map((row) => row.displayName)}
+          onModelChange={changeChatModel}
         />
       )}
 

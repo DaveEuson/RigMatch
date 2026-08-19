@@ -7,7 +7,7 @@
     "useMemo": 28,
     "useState": 91,
     "useRef": 15,
-    "useCallback": 93,
+    "useCallback": 95,
     "useEffect": 31
   },
   "effectCount": 31,
@@ -458,6 +458,14 @@
     },
     {
       "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
       "sig": ""
     },
     {
@@ -1543,8 +1551,16 @@
       "sig": ""
     },
     {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
       "name": "}useChat",
       "marker": true
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
     },
     {
       "name": "useMemo",
