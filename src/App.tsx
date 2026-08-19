@@ -236,6 +236,8 @@ import { useComfy } from './hooks/useComfy';
 import { useChat } from './hooks/useChat';
 import { useGoals } from './hooks/useGoals';
 import { usePullControl } from './hooks/usePullControl';
+import { useGpuContention } from './hooks/useGpuContention';
+import { gpuBusyNote } from './lib/gpuBusyNote';
 import { pullOutcome } from './lib/pullControl';
 import './App.css';
 
@@ -496,6 +498,8 @@ function App() {
    * Memoised because it is handed to useChat: an object literal rebuilt every
    * render rebuilds every callback that depends on it, including sendChat.
    */
+  const { refresh: refreshChatGpu } = useGpuContention();
+
   const chatImageGeneration = useMemo(() => {
     // Video checkpoints cannot draw a still.
     //
@@ -529,8 +533,9 @@ function App() {
           setChatImageRunning(false);
         }
       },
+      gpuNote: async () => gpuBusyNote(await refreshChatGpu()),
     };
-  }, [comfyCheckpoints, ollama.baseUrl, comfySettings.baseUrl]);
+  }, [comfyCheckpoints, ollama.baseUrl, comfySettings.baseUrl, refreshChatGpu]);
 
   const {
     chatOpen, setChatOpen, chatInput, setChatInput,

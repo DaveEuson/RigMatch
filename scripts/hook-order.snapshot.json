@@ -5,12 +5,12 @@
   },
   "census": {
     "useMemo": 28,
-    "useState": 90,
-    "useRef": 13,
-    "useCallback": 92,
-    "useEffect": 30
+    "useState": 91,
+    "useRef": 15,
+    "useCallback": 93,
+    "useEffect": 31
   },
-  "effectCount": 30,
+  "effectCount": 31,
   "effective": [
     {
       "name": "useMemo",
@@ -417,6 +417,22 @@
       "sig": ""
     },
     {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { liveRef.current = true; return () => { liveRef.current = false"
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
       "name": "useMemo",
       "sig": ""
     },
@@ -434,6 +450,10 @@
     },
     {
       "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
       "sig": ""
     },
     {
@@ -1455,6 +1475,30 @@
       "sig": ""
     },
     {
+      "name": "useGpuContention{",
+      "marker": true
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
+      "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { liveRef.current = true; return () => { liveRef.current = false"
+    },
+    {
+      "name": "useCallback",
+      "sig": ""
+    },
+    {
+      "name": "}useGpuContention",
+      "marker": true
+    },
+    {
       "name": "useMemo",
       "sig": ""
     },
@@ -1476,6 +1520,10 @@
     },
     {
       "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useRef",
       "sig": ""
     },
     {

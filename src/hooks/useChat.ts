@@ -43,6 +43,12 @@ export function useChat({
   imageGeneration?: {
     available: boolean;
     run: (prompt: string, signal: AbortSignal) => Promise<{ dataUrl?: string; error?: string }>;
+    /**
+     * A sentence about the GPU, if it is busy. Optional, and never awaited
+     * before starting: reading the card takes three to five seconds, and making
+     * someone wait that long to be told their machine is slow is its own joke.
+     */
+    gpuNote?: () => Promise<string>;
   };
 }) {
   const [chatOpen, setChatOpen] = useState(false);
@@ -52,6 +58,8 @@ export function useChat({
   const [chatMessagesByModel, setChatMessagesByModel] = useState<Record<string, ChatMessage[]>>(initialMessagesByModel);
   /** The generation in flight, so Stop reaches this one and not a later one. */
   const generationRef = useRef<AbortController | null>(null);
+  /** How busy the card was when the offer was made — see runChatAction. */
+  const gpuNoteRef = useRef('');
 
   const chatMessages = chatMessagesByModel[selectedModel] ?? [welcomeMessage];
   const chatSupportsImages = isVisionModel(selectedModel);
@@ -90,6 +98,13 @@ export function useChat({
     // refuses on a false positive is a worse failure than a redundant sentence.
     const beyondKind = classifyChatRequest(userMessage.content);
     const canGenerateHere = beyondKind === 'image' && Boolean(imageGeneration?.available);
+    if (canGenerateHere) {
+      // Read the card now, while the offer is being made and nothing of ours is
+      // running on it. Not awaited: the answer takes three to five seconds and
+      // the message should appear at once.
+      gpuNoteRef.current = '';
+      void imageGeneration?.gpuNote?.().then((note) => { gpuNoteRef.current = note; }).catch(() => {});
+    }
     const beyond = chatBeyondNote(beyondKind, chatModel, canGenerateHere);
     const opening: ChatMessage[] = beyond
       ? [userMessage, {
@@ -136,7 +151,7 @@ export function useChat({
         ],
       }));
     }
-  }, [chatAttachment, chatInput, ollama, selectedModel, selectedRow, welcomeMessage, setActivity, imageGeneration?.available]);
+  }, [chatAttachment, chatInput, ollama, selectedModel, selectedRow, welcomeMessage, setActivity, imageGeneration]);
 
   /**
    * Take up the offer: generate the picture and put it in the transcript.
@@ -180,9 +195,20 @@ export function useChat({
     const startedAt = Date.now();
     const stopOffer = { action: { kind: 'stop-image' as const, prompt: action.prompt, label: 'Stop' } };
     say(`Generating "${action.prompt}" with ComfyUI...`, stopOffer);
+
+    // Measured when the offer was made, before ComfyUI was asked for anything.
+    //
+    // Probing during the run reported `heavy` and blamed the user's graphics
+    // card — while the only thing loading it was this generation. nvidia-smi
+    // reads the card as it is now, so asking mid-run means measuring ourselves
+    // and calling it their problem. The reading taken at offer time is of the
+    // machine before we touched it, which is the one that answers "will this be
+    // slow", and it has had the seconds since the user read the offer to land.
+    const busyNote = gpuNoteRef.current;
+
     const ticking = setInterval(() => {
       const seconds = Math.round((Date.now() - startedAt) / 1000);
-      say(`Generating "${action.prompt}" with ComfyUI... ${seconds}s`, stopOffer);
+      say(`Generating "${action.prompt}" with ComfyUI... ${seconds}s${busyNote}`, stopOffer);
     }, 1000);
 
     try {
