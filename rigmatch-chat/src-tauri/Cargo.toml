@@ -1,6 +1,6 @@
 [package]
 name = "rigmatch-chat"
-version = "0.6.0"
+version = "0.7.0"
 description = "RigMatch Chat — local AI model matchmaking companion"
 authors = ["RigMatch"]
 # Not open source. There is no LICENSE under rigmatch-chat/, so the repository
