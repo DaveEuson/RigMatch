@@ -16,6 +16,14 @@ export type StoredMessage = {
   role: "user" | "assistant";
   content: string;
   ts: number;
+  /**
+   * Where a generated picture was saved. The path is persisted; the picture is
+   * not — conversations are rewritten on every change, and a quarter-megabyte
+   * image per message is how this file grew unmanageable before.
+   */
+  imagePath?: string;
+  /** The RigMatch job it came from, for fetching the bytes to display. */
+  imageJobId?: string;
 };
 
 export type Conversation = {

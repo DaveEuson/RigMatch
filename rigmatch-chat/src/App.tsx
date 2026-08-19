@@ -81,11 +81,68 @@ type Buddy = {
   sizeGb: number;
 };
 
+/**
+ * A generated picture in the transcript.
+ *
+ * The bytes are asked for once and remembered in memory for the session; the
+ * conversation on disk holds only the path. That means a picture made last week
+ * shows as its filename rather than as an image, which is the honest trade for
+ * a history that does not grow by a quarter-megabyte per picture — and the file
+ * is still there, where the caption says it is.
+ */
+function GeneratedImage({
+  path,
+  jobId,
+  bytes,
+  onLoaded,
+}: {
+  path: string;
+  jobId?: string;
+  bytes?: string;
+  onLoaded: (jobId: string, dataUrl: string) => void;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!jobId || bytes || failed) return;
+    void (async () => {
+      try {
+        const result = await invoke<{ dataUrl?: string }>("get_rig_generation_image", { id: jobId });
+        if (result?.dataUrl) onLoaded(jobId, result.dataUrl);
+        else setFailed(true);
+      } catch {
+        setFailed(true);
+      }
+    })();
+  }, [jobId, bytes, failed, onLoaded]);
+
+  return (
+    <div className="rm-generated-image">
+      {bytes ? <img src={bytes} alt={path} /> : null}
+      <span className="rm-generated-path" title={path}>
+        {failed && !bytes ? "Saved to " : bytes ? "Saved to " : "Saving to "}
+        {path}
+      </span>
+    </div>
+  );
+}
+
 type AppMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
   ts: number;
+  /**
+   * Where a generated picture was saved, never the picture itself.
+   *
+   * Conversations are written to a file on every change; putting a
+   * quarter-megabyte image in one would grow history without limit, and this
+   * app has filled its storage once already. The bytes are fetched from
+   * RigMatch when the message is shown and kept only in memory.
+   */
+  imagePath?: string;
+  /** The job the picture came from, for asking RigMatch to hand the bytes over. */
+  imageJobId?: string;
 };
 
 type ConnectionStatus = "connected" | "disconnected" | "checking";
@@ -439,6 +496,9 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [draftSettings, setDraftSettings] = useState<AppSettings>(settings);
   const [rigScores, setRigScores] = useState<Record<string, ModelScore>>(() => loadCachedBridge().scores);
+  const [generatingImage, setGeneratingImage] = useState(false);
+  /** Fetched bytes, keyed by job — memory only, never written to history. */
+  const [imageBytes, setImageBytes] = useState<Record<string, string>>({});
   const [chosenModel, setChosenModel] = useState<string | null>(() => loadCachedBridge().chosen);
   const [profileModal, setProfileModal] = useState<Buddy | null>(null);
   const [personalityEditor, setPersonalityEditor] = useState<PersonalityDraft | null>(null);
@@ -785,6 +845,82 @@ export default function App() {
   }, [typingModel, settings.muted]);
 
   // ── Send message ──────────────────────────────────────────────────────────
+
+  /**
+   * Make a picture from what is in the box.
+   *
+   * Deliberately a button rather than something inferred from the words. This
+   * window is a tool for making images, so asking for one should be an act, not
+   * a guess that occasionally fires on "draw me a diagram in text".
+   *
+   * RigMatch does the generating. It owns ComfyUI, the graph and the
+   * checkpoints; the companion asks over the same loopback bridge it already
+   * reads scores from, and would have to be a second implementation otherwise.
+   */
+  const generateImage = useCallback(async () => {
+    const prompt = draft.trim();
+    if (!prompt || generatingImage) return;
+
+    const target = activeConversation ?? createConversation({
+      id: genId(),
+      modelName: activeBuddy ?? "",
+      personalityId: activePersonality?.id ?? DEFAULT_PERSONALITY_ID,
+      now: Date.now(),
+    });
+    const conversationId = target.id;
+    const askId = genId();
+    const replyId = genId();
+
+    const withReply = (content: string, extra: Partial<AppMessage> = {}) => {
+      setConversations((prev) => {
+        const now = Date.now();
+        const list = prev.some((c) => c.id === conversationId) ? prev : [...prev, target];
+        return list.map((c) => {
+          if (c.id !== conversationId) return c;
+          const seen = c.messages.some((m) => m.id === replyId);
+          const reply: AppMessage = { id: replyId, role: "assistant", content, ts: Date.now(), ...extra };
+          const messages = seen
+            ? c.messages.map((m) => (m.id === replyId ? reply : m))
+            : [...c.messages, { id: askId, role: "user" as const, content: prompt, ts: Date.now() }, reply];
+          return withMessages(c, messages, now);
+        });
+      });
+    };
+
+    setActiveConversationId(conversationId);
+    setDraft("");
+    setGeneratingImage(true);
+    withReply("Asking RigMatch to make this...");
+
+    try {
+      const started = await invoke<{ id: string }>("start_rig_generation", { prompt });
+      const startedAt = Date.now();
+      // Elapsed seconds, not a bar: ComfyUI reports nothing between starting and
+      // finishing, so a percentage would be invented.
+      for (let i = 0; i < 200; i += 1) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const job = await invoke<{ status: string; file?: string; error?: string }>(
+          "get_rig_generation", { id: started.id },
+        );
+        if (job.status === "done" && job.file) {
+          withReply(prompt, { imagePath: job.file, imageJobId: started.id });
+          return;
+        }
+        if (job.status === "failed") {
+          withReply(`That picture could not be made: ${job.error ?? "RigMatch did not say why."}`);
+          return;
+        }
+        withReply(`Making "${prompt}"... ${Math.round((Date.now() - startedAt) / 1000)}s`);
+      }
+      withReply("RigMatch is still working on that picture. It will be in your Pictures folder when it lands.");
+    } catch (error) {
+      // RigMatch's own words where it gave any: it knows whether ComfyUI is
+      // missing, busy, or simply has no checkpoint that can draw.
+      withReply(String(error));
+    } finally {
+      setGeneratingImage(false);
+    }
+  }, [draft, generatingImage, activeConversation, activeBuddy, activePersonality]);
 
   const sendMessage = useCallback(async () => {
     if (!activeBuddy || !draft.trim() || typingModel) return;
@@ -1712,6 +1848,14 @@ export default function App() {
                     ) : (
                       <div className="rm-message-text">{msg.content}</div>
                     )}
+                    {msg.imagePath && (
+                      <GeneratedImage
+                        path={msg.imagePath}
+                        jobId={msg.imageJobId}
+                        bytes={msg.imageJobId ? imageBytes[msg.imageJobId] : undefined}
+                        onLoaded={(id, dataUrl) => setImageBytes((prev) => ({ ...prev, [id]: dataUrl }))}
+                      />
+                    )}
                     <div className="rm-message-time">
                       {new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       {/* Nothing is remembered unless it is asked for. Shown on
@@ -1772,14 +1916,25 @@ export default function App() {
                   ■ Stop
                 </button>
               ) : (
-                <button
-                  type="button"
-                  className="rm-send-btn"
-                  onClick={() => void sendMessage()}
-                  disabled={!draft.trim()}
-                >
-                  Send
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="rm-send-btn rm-image-btn"
+                    onClick={() => void generateImage()}
+                    disabled={!draft.trim() || generatingImage}
+                    title="Make a picture from this, using ComfyUI through RigMatch"
+                  >
+                    {generatingImage ? "Making..." : "Make image"}
+                  </button>
+                  <button
+                    type="button"
+                    className="rm-send-btn"
+                    onClick={() => void sendMessage()}
+                    disabled={!draft.trim()}
+                  >
+                    Send
+                  </button>
+                </>
               )}
             </div>
           </>

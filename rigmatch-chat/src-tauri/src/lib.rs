@@ -498,6 +498,83 @@ async fn get_rig_scores() -> Result<serde_json::Value, String> {
     res.json::<serde_json::Value>().await.map_err(|e| e.to_string())
 }
 
+/// Ask RigMatch to generate a picture, and report on one already asked for.
+///
+/// The generating is RigMatch's job. It already owns the ComfyUI transport, the
+/// graph, the checkpoint filtering and the abort path, all tested; a second
+/// implementation here would be a second thing to keep correct, and it would
+/// drift.
+///
+/// Origin is set deliberately. The bridge only accepts the two WebView origins,
+/// and this is one of them — a Rust client sends no Origin unless told to, and
+/// borrowing the WebView's identity is more honest than relying on the header
+/// being absent.
+#[tauri::command]
+async fn start_rig_generation(prompt: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        // Longer than the scores fetch: this only starts the work, but RigMatch
+        // has to reach its renderer before it can answer.
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let res = client
+        .post("http://127.0.0.1:11435/generate")
+        .header("Origin", "tauri://localhost")
+        .json(&serde_json::json!({ "prompt": prompt }))
+        .send()
+        .await
+        .map_err(|_| "RigMatch is not running, so it cannot generate anything.".to_string())?;
+
+    let status = res.status();
+    let body = res.json::<serde_json::Value>().await.unwrap_or(serde_json::Value::Null);
+    if !status.is_success() {
+        // Pass RigMatch's own words through rather than inventing a message: it
+        // knows whether ComfyUI is missing, busy, or simply has no checkpoint
+        // that can draw.
+        let reason = body
+            .get("error")
+            .and_then(|e| e.as_str())
+            .unwrap_or("RigMatch refused the request.");
+        return Err(reason.to_string());
+    }
+    Ok(body)
+}
+
+#[tauri::command]
+async fn get_rig_generation(id: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let res = client
+        .get(format!("http://127.0.0.1:11435/generate/{id}"))
+        .header("Origin", "tauri://localhost")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    res.json::<serde_json::Value>().await.map_err(|e| e.to_string())
+}
+
+/// Fetch the bytes of a picture RigMatch made, for showing in the transcript.
+///
+/// RigMatch reads its own file and hands over base64. The companion never
+/// touches the filesystem for this: a "turn any path into base64" command is a
+/// file-read primitive with a chat window attached, however carefully guarded.
+#[tauri::command]
+async fn get_rig_generation_image(id: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let res = client
+        .get(format!("http://127.0.0.1:11435/generate/{id}/image"))
+        .header("Origin", "tauri://localhost")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    res.json::<serde_json::Value>().await.map_err(|e| e.to_string())
+}
+
 // Launches RigMatch from the bundled companions layout:
 //   <install-root>/companions/rigmatch-chat.exe  →  <install-root>/RigMatch.exe
 #[tauri::command]
@@ -550,6 +627,9 @@ pub fn run() {
             open_rigmatch_ai,
             get_system_stats,
             get_rig_scores,
+            start_rig_generation,
+            get_rig_generation,
+            get_rig_generation_image,
             get_ollama_vram,
             get_vram_info,
         ])

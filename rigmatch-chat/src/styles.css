@@ -1889,3 +1889,36 @@ textarea:focus {
   border-color: var(--pink);
   color: var(--pink);
 }
+
+/* Making a picture, and the picture itself.
+   ------------------------------------------------------------------------- */
+
+/* Secondary to Send: this window is a chat that can also make images, and a
+   second gold button would read as two equal choices. */
+.rm-image-btn {
+  background: transparent;
+  color: var(--gold);
+  border: 1px solid var(--gold);
+}
+
+.rm-generated-image {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rm-generated-image img {
+  max-width: 100%;
+  border-radius: 8px;
+  display: block;
+}
+
+/* The path is always shown, not only when the image fails to load: the file
+   outlives the conversation, and knowing where it went is the point of saving
+   it to a folder. */
+.rm-generated-path {
+  font-size: 11px;
+  opacity: 0.65;
+  word-break: break-all;
+}

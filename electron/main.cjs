@@ -487,6 +487,33 @@ const scoresServer = http.createServer((req, res) => {
     return;
   }
 
+  // The picture itself, for the companion to show.
+  //
+  // Served from here rather than read by the companion: RigMatch wrote the
+  // file and knows where its own folder is, so a chat app never needs a
+  // "turn any path into base64" command — which is a file-read primitive
+  // however carefully it is guarded.
+  if (req.method === 'GET' && /^\/generate\/[^/]+\/image$/.test(url.pathname)) {
+    const job = generationJobs.get(url.pathname.split('/')[2]);
+    if (!job?.file) {
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'No picture for that job.' }));
+      return;
+    }
+    fs.readFile(job.file)
+      .then((bytes) => {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ dataUrl: `data:image/png;base64,${bytes.toString('base64')}` }));
+      })
+      .catch(() => {
+        res.statusCode = 410;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'The file has been moved or deleted.' }));
+      });
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname.startsWith('/generate/')) {
     const job = generationJobs.get(url.pathname.slice('/generate/'.length));
     res.setHeader('Content-Type', 'application/json');
