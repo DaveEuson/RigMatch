@@ -200,6 +200,22 @@ check('security', 'the local scores bridge stays on loopback', () => {
   return 'loopback only';
 });
 
+check('security', 'the bridge only takes orders from the companion', () => {
+  // This server was read-only until image generation went through it. A GET
+  // that leaks scores to a stray browser tab is bad; a POST that starts a
+  // multi-minute GPU job on someone's machine is worse, and the origin
+  // allowlist is the whole boundary now.
+  const main = read('electron/main.cjs');
+  must(/BRIDGE_ALLOWED_ORIGINS/.test(main), 'the bridge origin allowlist is gone');
+  must(/if \(origin && !BRIDGE_ALLOWED_ORIGINS\.has\(origin\)\)/.test(main),
+    'the origin check no longer runs before the request is routed, so a foreign page could POST');
+  must(/req\.method === 'POST' && url\.pathname === '\/generate'/.test(main),
+    'the generate endpoint is gone, or no longer restricted to POST /generate');
+  must(/body\.length > 8192/.test(main),
+    'the prompt size cap is gone — the only unbounded allocation this server has');
+  return 'origin-locked, capped';
+});
+
 check('security', 'external links stay on an allowlist', () => {
   const main = read('electron/main.cjs');
   must(/ALLOWED_EXTERNAL_HOSTS/.test(main), 'the external-link allowlist is gone');

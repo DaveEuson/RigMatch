@@ -429,28 +429,128 @@ const closePromptPendingWindowIds = new Set();
 let latestScores = {};
 let latestChosen = null;
 
+/**
+ * Image generations asked for by RigMatch Chat, keyed by job id.
+ *
+ * The companion cannot drive ComfyUI itself and should not learn how: the
+ * transport, the graph, the checkpoint filtering and the abort path all exist
+ * here already, tested, and a second implementation in Rust would be a second
+ * thing to keep correct. So the companion asks, and this runs it.
+ *
+ * The work is done by the renderer rather than in this process, because that is
+ * where the graph is built — the same path the app's own chat uses, rather than
+ * a parallel one that could drift from it.
+ */
+const generationJobs = new Map();
+const GENERATION_JOB_LIMIT = 20;
+
+function rememberJob(id, patch) {
+  const existing = generationJobs.get(id) ?? {};
+  generationJobs.set(id, { ...existing, ...patch });
+  // Oldest out first: a long session should not accumulate finished jobs, and
+  // each one holds a file path rather than an image, so this is a small map.
+  while (generationJobs.size > GENERATION_JOB_LIMIT) {
+    generationJobs.delete(generationJobs.keys().next().value);
+  }
+}
+
 const scoresServer = http.createServer((req, res) => {
-  // Only GET is valid — reject other methods before touching CORS
+  const origin = req.headers.origin;
+
+  // The origin allowlist is the whole security boundary here, and it now has to
+  // hold for a request with side effects rather than only for a read. A browser
+  // tab must not be able to start work on this machine.
+  if (origin && !BRIDGE_ALLOWED_ORIGINS.has(origin)) {
+    res.statusCode = 403;
+    res.end();
+    return;
+  }
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+
+  // POST is a cross-origin request the browser preflights, so this has to answer
+  // OPTIONS or the companion never gets to send it.
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+
+  const url = new URL(req.url || '/', `http://127.0.0.1:${SCORES_SERVER_PORT}`);
+
+  if (req.method === 'POST' && url.pathname === '/generate') {
+    handleGenerateRequest(req, res);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname.startsWith('/generate/')) {
+    const job = generationJobs.get(url.pathname.slice('/generate/'.length));
+    res.setHeader('Content-Type', 'application/json');
+    if (!job) {
+      res.statusCode = 404;
+      res.end(JSON.stringify({ error: 'No such generation.' }));
+      return;
+    }
+    res.end(JSON.stringify(job));
+    return;
+  }
+
   if (req.method !== 'GET') {
     res.statusCode = 405;
     res.end();
     return;
   }
 
-  const origin = req.headers.origin;
-  if (origin) {
-    if (!BRIDGE_ALLOWED_ORIGINS.has(origin)) {
-      res.statusCode = 403;
-      res.end();
-      return;
-    }
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Vary', 'Origin');
-  }
-
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify({ scores: latestScores, chosen: latestChosen }));
 });
+
+function handleGenerateRequest(req, res) {
+  let body = '';
+  let tooBig = false;
+  req.on('data', (chunk) => {
+    body += chunk;
+    // A prompt is a sentence. Anything larger is not one, and reading it would
+    // be the only unbounded allocation this server has.
+    if (body.length > 8192) { tooBig = true; req.destroy(); }
+  });
+  req.on('end', () => {
+    res.setHeader('Content-Type', 'application/json');
+    if (tooBig) {
+      res.statusCode = 413;
+      res.end(JSON.stringify({ error: 'Prompt too long.' }));
+      return;
+    }
+
+    let prompt = '';
+    try { prompt = String(JSON.parse(body || '{}').prompt ?? '').trim(); } catch { /* handled below */ }
+    if (!prompt) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: 'A prompt is required.' }));
+      return;
+    }
+
+    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
+    if (!win) {
+      // Said plainly rather than left to time out: the companion can be open
+      // while RigMatch is not, and "no window" is a different problem from
+      // "ComfyUI is busy".
+      res.statusCode = 503;
+      res.end(JSON.stringify({ error: 'RigMatch is not running, so it cannot generate anything.' }));
+      return;
+    }
+
+    const id = `gen-${Date.now()}-${Math.round(process.hrtime()[1] / 1000)}`;
+    rememberJob(id, { id, status: 'running', prompt, startedAt: Date.now() });
+    win.webContents.send('bridge:generateRequest', { id, prompt });
+    res.statusCode = 202;
+    res.end(JSON.stringify({ id }));
+  });
+}
 
 scoresServer.listen(SCORES_SERVER_PORT, '127.0.0.1', () => {
   console.log(`RigMatch scores bridge listening on port ${SCORES_SERVER_PORT}`);
@@ -640,6 +740,38 @@ function registerHandlers() {
     return benchmarkStatusPayload();
   });
   handleLogged('chat:send', 'chat', (_event, request) => sendChat(request));
+  /**
+   * The renderer reporting back on a generation the bridge asked for.
+   *
+   * The image is written to disk here rather than handed back through the
+   * bridge as bytes. A conversation that stores pictures grows without limit,
+   * and the companion has been full once already — so it gets a path, and the
+   * file outlives the chat it was made in.
+   */
+  handleLogged('bridge:generateResult', 'bridge', async (_event, result) => {
+    const id = String(result?.id ?? '');
+    if (!id || !generationJobs.has(id)) return { ok: false };
+
+    if (result?.error || !result?.dataUrl) {
+      rememberJob(id, { status: 'failed', error: String(result?.error ?? 'No image was produced.'), finishedAt: Date.now() });
+      return { ok: true };
+    }
+
+    try {
+      const base64 = String(result.dataUrl).split(',')[1] ?? '';
+      const dir = path.join(app.getPath('pictures'), 'RigMatch');
+      await fs.mkdir(dir, { recursive: true });
+      const file = path.join(dir, `${id}.png`);
+      await fs.writeFile(file, Buffer.from(base64, 'base64'));
+      rememberJob(id, { status: 'done', file, finishedAt: Date.now() });
+    } catch (error) {
+      // Saving is the last step, so a failure here means the picture was made
+      // and then lost. Say which of the two happened.
+      rememberJob(id, { status: 'failed', error: `The image was generated but could not be saved: ${error?.message ?? error}`, finishedAt: Date.now() });
+    }
+    return { ok: true };
+  });
+
   handleLogged('logs:list', 'logs', (_event, limit) => readAppLogs(limit));
   handleLogged('logs:append', 'logs', (_event, entry) => appendAppLog(entry));
   handleLogged('logs:clear', 'logs', () => clearAppLogs());

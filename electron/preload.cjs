@@ -28,6 +28,19 @@ const api = {
   comfyLocateFolder: (baseUrl, serverCheckpoints) => ipcRenderer.invoke('comfy:locateFolder', baseUrl, serverCheckpoints),
   comfyDownloadModel: (request) => ipcRenderer.invoke('comfy:downloadModel', request),
   comfyAbortDownload: (progressId) => ipcRenderer.invoke('comfy:abortDownload', progressId),
+  /**
+   * RigMatch Chat asking, through the loopback bridge, for a picture.
+   *
+   * The request arrives in the renderer because that is where the graph is
+   * built — the same path the app's own chat uses, rather than a parallel one
+   * that could drift from it.
+   */
+  onBridgeGenerateRequest: (callback) => {
+    const listener = (_event, request) => callback(request);
+    ipcRenderer.on('bridge:generateRequest', listener);
+    return () => ipcRenderer.removeListener('bridge:generateRequest', listener);
+  },
+  reportBridgeGenerateResult: (result) => ipcRenderer.invoke('bridge:generateResult', result),
   onComfyDownloadProgress: (callback) => {
     const listener = (_event, progress) => callback(progress);
     ipcRenderer.on('comfy:downloadProgress', listener);

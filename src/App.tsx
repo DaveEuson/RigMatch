@@ -538,6 +538,35 @@ function App() {
     };
   }, [comfyCheckpoints, ollama.baseUrl, comfySettings.baseUrl, refreshChatGpu]);
 
+  /**
+   * Generate on behalf of RigMatch Chat.
+   *
+   * The companion cannot drive ComfyUI and should not learn how — everything
+   * needed is here already and a second implementation would be a second thing
+   * to keep right. It asks over the loopback bridge, the main process relays
+   * the request here, and this runs the very same path the app's own chat uses,
+   * so the two cannot drift apart.
+   *
+   * No AbortSignal: the bridge has no way to carry a cancel yet, and inventing
+   * one that does nothing would be worse than not offering it.
+   */
+  useEffect(() => {
+    if (!agentArcadeApi.onBridgeGenerateRequest) return undefined;
+    return agentArcadeApi.onBridgeGenerateRequest(({ id, prompt }) => {
+      void (async () => {
+        if (!chatImageGeneration.available) {
+          await agentArcadeApi.reportBridgeGenerateResult?.({
+            id,
+            error: 'No ComfyUI checkpoint that can draw is loaded, so RigMatch cannot make a picture right now.',
+          });
+          return;
+        }
+        const result = await chatImageGeneration.run(prompt, new AbortController().signal);
+        await agentArcadeApi.reportBridgeGenerateResult?.({ id, ...result });
+      })();
+    });
+  }, [chatImageGeneration]);
+
   const {
     chatOpen, setChatOpen, chatInput, setChatInput,
     chatAttachment, setChatAttachment, chatMessagesByModel,

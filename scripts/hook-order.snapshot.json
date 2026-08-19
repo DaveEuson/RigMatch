@@ -8,9 +8,9 @@
     "useState": 91,
     "useRef": 15,
     "useCallback": 95,
-    "useEffect": 31
+    "useEffect": 32
   },
-  "effectCount": 31,
+  "effectCount": 32,
   "effective": [
     {
       "name": "useMemo",
@@ -435,6 +435,10 @@
     {
       "name": "useMemo",
       "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!agentArcadeApi.onBridgeGenerateRequest) return undefined;"
     },
     {
       "name": "useState",
@@ -1509,6 +1513,10 @@
     {
       "name": "useMemo",
       "sig": ""
+    },
+    {
+      "name": "useEffect",
+      "sig": "() => { if (!agentArcadeApi.onBridgeGenerateRequest) return undefined;"
     },
     {
       "name": "useChat{",
