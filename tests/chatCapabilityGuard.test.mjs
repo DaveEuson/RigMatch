@@ -83,3 +83,23 @@ test('an attachment the model can take is left alone', () => {
   assert.equal(attachmentBlockedReason({ kind: 'audio', model: 'gemma4:e2b', canSee: false, canHear: true }), null);
   assert.equal(attachmentBlockedReason({ kind: 'image', model: 'llava', canSee: true, canHear: false }), null);
 });
+
+test('a transcription request is recognised', () => {
+  // A text model asked to transcribe does not refuse — it writes a plausible
+  // transcript of nothing, which is the most convincing untruth of the lot.
+  assert.equal(classifyChatRequest('transcribe this recording'), 'transcribe');
+  assert.equal(classifyChatRequest('write a transcript of the meeting'), 'transcribe');
+  assert.equal(classifyChatRequest('listen to this clip and tell me what it says'), 'transcribe');
+  assert.equal(classifyChatRequest('what is the capital of France'), null);
+});
+
+test('transcription is the one limit that depends on the model, not on Ollama', () => {
+  // Some local models genuinely hear. Warning one of those would be nagging,
+  // and a note that fires when it need not stops being read at all.
+  assert.equal(chatBeyondNote('transcribe', 'gemma4:e2b', { canHear: true }), null);
+
+  const deaf = chatBeyondNote('transcribe', 'llama3', { canHear: false });
+  assert.match(deaf, /cannot listen/);
+  assert.match(deaf, /transcript of nothing/, 'says what it would do instead of refusing');
+  assert.match(deaf, /Listening test/, 'and where it can be done properly');
+});

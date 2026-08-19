@@ -15,7 +15,7 @@
  * therefore kept tight enough to be worth reading when it does fire.
  */
 
-export type ChatBeyond = 'image' | 'video' | 'speech' | null;
+export type ChatBeyond = 'image' | 'video' | 'speech' | 'transcribe' | null;
 
 /**
  * What the message is asking to be produced, if it is asking for a file at all.
@@ -41,6 +41,13 @@ export function classifyChatRequest(message: string): ChatBeyond {
     'image|picture|photo|photograph|logo|illustration|artwork|drawing|painting|icon|poster|wallpaper')) return 'image';
   if (asks('say|speak|read|generate|make|produce', 'aloud|out loud|audio|voice|speech|mp3|wav|podcast')) return 'speech';
 
+  // Transcription is the one request here that some local models really can
+  // answer, so it is classified separately and only warned about when the
+  // selected model cannot hear. A text model asked to transcribe does not
+  // refuse — it writes a plausible transcript of nothing.
+  if (/\btranscri(be|ption|pt)\b/.test(text)) return 'transcribe';
+  if (/\b(listen to|subtitle|caption)\b[^.?!]{0,30}\b(this|that|it|recording|audio|clip|file)\b/.test(text)) return 'transcribe';
+
   return null;
 }
 
@@ -51,9 +58,24 @@ export function classifyChatRequest(message: string): ChatBeyond {
  * that" without a route is only half an answer — and RigMatch can do two of
  * these three, just not here.
  */
-export function chatBeyondNote(kind: ChatBeyond, model: string, canGenerateHere = false): string | null {
+export function chatBeyondNote(
+  kind: ChatBeyond,
+  model: string,
+  { canGenerateHere = false, canHear = false }: { canGenerateHere?: boolean; canHear?: boolean } = {},
+): string | null {
   if (!kind) return null;
   const name = model || 'This model';
+
+  // Unlike the rest, this one depends on the model rather than on Ollama:
+  // some local models genuinely hear. When this one does, there is nothing to
+  // say and saying something anyway would be the nagging that makes a note
+  // stop being read.
+  if (kind === 'transcribe') {
+    if (canHear) return null;
+    return `${name} cannot listen to audio, so it cannot transcribe a recording — `
+      + 'asked anyway, a text model will write a plausible transcript of nothing. '
+      + 'Pick a model that reports the audio capability, or use Advanced Mode → Activity → the Listening test.';
+  }
 
   if (kind === 'image') {
     // Two different truths, and the app knows which one applies. Sending

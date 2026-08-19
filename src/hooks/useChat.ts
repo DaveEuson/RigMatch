@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import { agentArcadeApi } from '../api';
 import { getErrorMessage } from '../lib/format';
 import { chatBeyondNote, classifyChatRequest } from '../lib/chatCapabilityGuard';
-import { getModelRuntime, isVisionModel } from '../lib/modelCatalog';
+import { canHearAudio, getModelRuntime, isVisionModel } from '../lib/modelCatalog';
 import type { ChatAction, ChatAttachment, ChatMessage, ModelRow, OllamaStatus } from '../types';
 
 /**
@@ -105,7 +105,10 @@ export function useChat({
       gpuNoteRef.current = '';
       void imageGeneration?.gpuNote?.().then((note) => { gpuNoteRef.current = note; }).catch(() => {});
     }
-    const beyond = chatBeyondNote(beyondKind, chatModel, canGenerateHere);
+    const beyond = chatBeyondNote(beyondKind, chatModel, {
+      canGenerateHere,
+      canHear: Boolean(selectedRow && canHearAudio(selectedRow)),
+    });
     const opening: ChatMessage[] = beyond
       ? [userMessage, {
         id: `${Date.now()}-limit`,
