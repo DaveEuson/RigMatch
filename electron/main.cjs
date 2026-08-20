@@ -137,7 +137,11 @@ function openExternalSafe(url) {
 let latestCudaCache = null;
 let latestCudaCacheAt = 0;
 const APP_USER_AGENT = `RigMatch/${app.getVersion()}`;
-const SCORES_SERVER_PORT = 11435;
+// 11435 in every real build; RigMatch Chat looks for it there. The override
+// exists so an automated check can run its own instance beside a RigMatch the
+// user is already using, instead of silently losing the bind and then reading
+// the other instance's answers — which is how this port collision was found.
+const SCORES_SERVER_PORT = Number(process.env.RIGMATCH_BRIDGE_PORT) || 11435;
 const BENCHMARK_REPEATS = 3; // median of 3 timed runs per prompt for a steadier speed score
 const BENCHMARK_TIMEOUT_MS = 120000;
 const BENCHMARK_KEEP_ALIVE = '10m';
@@ -428,6 +432,7 @@ const closePromptPendingWindowIds = new Set();
 
 let latestScores = {};
 let latestChosen = null;
+let latestCapabilities = {};
 
 /**
  * Image generations asked for by RigMatch Chat, keyed by job id.
@@ -533,7 +538,7 @@ const scoresServer = http.createServer((req, res) => {
   }
 
   res.setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify({ scores: latestScores, chosen: latestChosen }));
+  res.end(JSON.stringify({ scores: latestScores, chosen: latestChosen, capabilities: latestCapabilities }));
 });
 
 function handleGenerateRequest(req, res) {
@@ -579,12 +584,23 @@ function handleGenerateRequest(req, res) {
   });
 }
 
+let bridgeOwned = false;
+
 scoresServer.listen(SCORES_SERVER_PORT, '127.0.0.1', () => {
+  bridgeOwned = true;
   console.log(`RigMatch scores bridge listening on port ${SCORES_SERVER_PORT}`);
 });
 
-scoresServer.on('error', () => {
-  // Port in use — scores bridging unavailable, non-fatal
+scoresServer.on('error', (err) => {
+  // Non-fatal for this window, but never silent. Another RigMatch owns the
+  // bridge, which means RigMatch Chat is talking to *that* instance: its
+  // scores, and its image generation. Say so, or the next person to debug
+  // this reads capabilities from one process and stdout from another.
+  bridgeOwned = false;
+  const why = err && err.code === 'EADDRINUSE'
+    ? `port ${SCORES_SERVER_PORT} already in use by another RigMatch`
+    : String((err && err.message) || err);
+  console.error(`RigMatch scores bridge unavailable: ${why}. RigMatch Chat will not reach this window.`);
 });
 
 // ── App Builder preview scheme ───────────────────────────────────────────────
@@ -625,7 +641,28 @@ function publishPreviewDocument(html) {
   return `${PREVIEW_SCHEME}://app/${id}`;
 }
 
+// One RigMatch at a time. Two instances race for the loopback bridge on
+// SCORES_SERVER_PORT: the loser binds nothing, so RigMatch Chat keeps talking to
+// whichever instance won — reading its scores, and sending image generation to
+// it. The picture then lands in Pictures\RigMatch from an app the user is not
+// looking at. Rather than arbitrate that, refuse to be second and surface the
+// window that already owns the bridge.
+const gotInstanceLock = process.env.RIGMATCH_ALLOW_MULTIPLE === '1' || app.requestSingleInstanceLock();
+if (!gotInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const [existing] = BrowserWindow.getAllWindows();
+    if (!existing) return;
+    if (existing.isMinimized()) existing.restore();
+    existing.focus();
+  });
+}
+
 app.whenReady().then(() => {
+  // Lost the lock: app.quit() is already pending. Build nothing.
+  if (!gotInstanceLock) return;
+
   protocol.handle(`${PREVIEW_SCHEME}`, (request) => {
     // Only ever serve what this process put in the map. There is no filesystem
     // path here, so a crafted URL can return nothing but 404.
@@ -879,6 +916,20 @@ function registerHandlers() {
 
     latestScores = validated;
     latestChosen = typeof chosen === 'string' && chosen.length <= 200 ? chosen : null;
+
+    // What each installed model can do, for the companion's list. Validated the
+    // same way as the scores: this crosses a process boundary and arrives from
+    // the renderer, so it is checked rather than trusted.
+    const rawCaps = data.capabilities;
+    const caps = {};
+    if (rawCaps && typeof rawCaps === 'object' && !Array.isArray(rawCaps)) {
+      for (const key of Object.keys(rawCaps).slice(0, SCORES_MAX_ENTRIES)) {
+        const list = rawCaps[key];
+        if (typeof key !== 'string' || key.length > 200 || !Array.isArray(list)) continue;
+        caps[key] = list.filter((c) => typeof c === 'string' && c.length <= 32).slice(0, 8);
+      }
+    }
+    latestCapabilities = caps;
   });
   // Cloud judge bridge for the renderer (App Builder judging). Kept in the main
   // process so the renderer never needs a remote-fetch exception; strictly
@@ -902,6 +953,13 @@ function registerHandlers() {
 
   ipcMain.handle('app:openChatApp', async (event) => {
     assertTrustedIpcSender(event);
+
+    // Opening the companion from a window that does not own the bridge is the
+    // one case where it looks like it worked and does not: the companion would
+    // connect to the *other* RigMatch, list its models and save its pictures.
+    // Better to say so than to launch something quietly wired elsewhere.
+    if (!bridgeOwned) return { ok: false, reason: 'bridge-taken' };
+
     const platform = process.platform;
     const isWin = platform === 'win32';
     const isMac = platform === 'darwin';

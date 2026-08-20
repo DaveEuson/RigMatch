@@ -13,6 +13,7 @@ import { ShareScorecard } from './ShareScorecard';
 import { ModelDemoChips } from './SkillDemoViewers';
 import { Bot, MessageSquare, RefreshCw, Share2, Trash2, Upload, X } from 'lucide-react';
 import { useCallback, useState } from 'react';
+import { companionLaunchMessage } from '../lib/companionLaunch';
 
 export function AgentReveal({
   active,
@@ -274,7 +275,8 @@ export function AgentReveal({
 
         <button type="button" className="talk-button" onClick={async () => {
           const result = await agentArcadeApi.openChatApp();
-          if (!result?.ok) alert('RigMatch Chat companion not found.\n\nDownload it from the Releases page or build it from source:\n  cd rigmatch-chat && npx tauri build');
+          const problem = companionLaunchMessage(result);
+          if (problem) alert(problem);
         }}>
           <MessageSquare aria-hidden="true" />
           Chat With Match

@@ -9,6 +9,7 @@ import { playJingle } from '../lib/sound';
 import { AvatarBust, MachineAvatar } from './Avatars';
 import { ShareScorecard } from './ShareScorecard';
 import { useDialog } from '../lib/useDialog';
+import { companionLaunchMessage } from '../lib/companionLaunch';
 
 export function DeleteModelModal({
   row,
@@ -506,7 +507,8 @@ export function ChoiceCruiseModal({
               className="whats-next-item whats-next-action"
               onClick={async () => {
                 const result = await agentArcadeApi.openChatApp();
-                if (!result?.ok) alert('RigMatch Chat companion not found.\n\nDownload it from the Releases page or build it from source:\n  cd rigmatch-chat && npx tauri build');
+                const problem = companionLaunchMessage(result);
+                if (problem) alert(problem);
               }}
             >
               <MessageSquare aria-hidden="true" />

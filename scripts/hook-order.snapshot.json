@@ -1022,7 +1022,7 @@
     },
     {
       "name": "useEffect",
-      "sig": "() => { if (!isDesktopRuntime) return; void agentArcadeApi.syncScores("
+      "sig": "() => { if (!isDesktopRuntime) return; const capabilities: Record<stri"
     },
     {
       "name": "useEffect",
@@ -2140,7 +2140,7 @@
     },
     {
       "name": "useEffect",
-      "sig": "() => { if (!isDesktopRuntime) return; void agentArcadeApi.syncScores("
+      "sig": "() => { if (!isDesktopRuntime) return; const capabilities: Record<stri"
     },
     {
       "name": "useEffect",

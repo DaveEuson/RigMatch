@@ -1922,3 +1922,110 @@ textarea:focus {
   opacity: 0.65;
   word-break: break-all;
 }
+
+/* Capability chips and the filter above the model list.
+   -------------------------------------------------------------------------
+   The list showed a name and a score and nothing about what a model could do,
+   so "which of these could read a picture?" had no answer on screen. */
+
+.rm-buddy-caps {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.rm-cap {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(var(--primary-rgb, 120 160 255), 0.14);
+  color: var(--gold);
+  border: 1px solid rgba(var(--primary-rgb, 120 160 255), 0.28);
+}
+
+.rm-cap-filter {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+}
+
+.rm-cap-filter button {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.6;
+  border: 1px solid transparent;
+}
+
+.rm-cap-filter button.active {
+  opacity: 1;
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
+/* What this chat can do — the answer to "which model makes an image?", which
+   is "none of them". Sits above the model list because that is where the
+   question gets asked. */
+.rm-can-do {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+}
+
+.rm-can-do strong {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.55;
+  margin-bottom: 5px;
+}
+
+.rm-can-do ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rm-can-do li {
+  font-size: 10px;
+  line-height: 1.45;
+  opacity: 0.75;
+}
+
+.rm-can-do li span {
+  display: inline-block;
+  min-width: 74px;
+  font-weight: 700;
+  color: var(--gold);
+  opacity: 0.9;
+}
+
+.rm-can-do li em {
+  font-style: normal;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+/* The one entry that is not a model. Marked apart so the distinction reads at a
+   glance rather than needing the sentence to be finished. */
+.rm-can-do-elsewhere {
+  margin-top: 3px;
+  padding-top: 5px;
+  border-top: 1px dashed var(--line, rgba(255, 255, 255, 0.1));
+}
+
+.rm-can-do-elsewhere b {
+  font-weight: 700;
+  opacity: 0.95;
+}

@@ -2955,8 +2955,28 @@ function App() {
 
   useEffect(() => {
     if (!isDesktopRuntime) return;
-    void agentArcadeApi.syncScores({ scores: modelScores, chosen: selectedModel } as Record<string, unknown>);
-  }, [modelScores, selectedModel]);
+    // Capabilities ride along with the scores.
+    //
+    // RigMatch Chat lists models by name and score and says nothing about what
+    // any of them can do, so "which of these could read a picture?" has no
+    // answer on screen. Ollama reports this per model and RigMatch already
+    // reads it; the companion polls this bridge every fifteen seconds anyway,
+    // so sending it costs nothing and saves the companion asking Ollama itself.
+    const capabilities: Record<string, string[]> = {};
+    for (const row of modelRows) {
+      if (!row.installed) continue;
+      const able: string[] = [];
+      if (canGenerateText(row)) able.push('text');
+      if (isVisionModel(row.displayName)) able.push('vision');
+      if (canHearAudio(row)) able.push('audio');
+      if (able.length) capabilities[row.displayName] = able;
+    }
+    void agentArcadeApi.syncScores({
+      scores: modelScores,
+      chosen: selectedModel,
+      capabilities,
+    } as Record<string, unknown>);
+  }, [modelScores, selectedModel, modelRows]);
 
   useEffect(() => {
     if (!agentArcadeApi.onBenchmarkProgress) return undefined;

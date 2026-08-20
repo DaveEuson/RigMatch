@@ -497,6 +497,9 @@ export default function App() {
   const [draftSettings, setDraftSettings] = useState<AppSettings>(settings);
   const [rigScores, setRigScores] = useState<Record<string, ModelScore>>(() => loadCachedBridge().scores);
   const [generatingImage, setGeneratingImage] = useState(false);
+  const [rigCapabilities, setRigCapabilities] = useState<Record<string, string[]>>({});
+  /** Narrow the list to one ability. 'all' is the resting state. */
+  const [capabilityFilter, setCapabilityFilter] = useState<"all" | "vision" | "audio">("all");
   /** Fetched bytes, keyed by job — memory only, never written to history. */
   const [imageBytes, setImageBytes] = useState<Record<string, string>>({});
   const [chosenModel, setChosenModel] = useState<string | null>(() => loadCachedBridge().chosen);
@@ -526,7 +529,13 @@ export default function App() {
 
   // Sort: chosen model first, then top-3 by rank, then the rest alphabetically
   const visibleBuddies = useMemo(() => {
-    const filtered = buddies.filter((b) => !settings.hiddenModels.includes(b.modelName));
+    const filtered = buddies
+      .filter((b) => !settings.hiddenModels.includes(b.modelName))
+      // Narrowed by ability, when asked. Hiding a model the user chose to keep
+      // visible is only acceptable while a filter is plainly switched on, which
+      // is why the control sits directly above the list rather than in Settings.
+      .filter((b) => capabilityFilter === "all"
+        || (rigCapabilities[b.modelName] ?? []).includes(capabilityFilter));
     return [...filtered].sort((a, b) => {
       const aChosen = a.modelName === chosenModel ? 0 : 1;
       const bChosen = b.modelName === chosenModel ? 0 : 1;
@@ -535,7 +544,7 @@ export default function App() {
       const rankB = modelRankings.get(b.modelName) ?? 999;
       return rankA - rankB;
     });
-  }, [buddies, settings.hiddenModels, modelRankings, chosenModel]);
+  }, [buddies, settings.hiddenModels, modelRankings, chosenModel, capabilityFilter, rigCapabilities]);
 
   const activeBuddyObj = visibleBuddies.find((b) => b.modelName === activeBuddy) ?? null;
   // The open thread's own personality wins, falling back to the app default for
@@ -698,6 +707,9 @@ export default function App() {
           : { scores: raw as Record<string, ModelScore>, chosen: null };
         setRigScores(payload.scores);
         setChosenModel(payload.chosen);
+        // What each model can do, as RigMatch read it from Ollama. Absent on an
+        // older RigMatch, which the chips below simply do not render.
+        setRigCapabilities((raw.capabilities as Record<string, string[]> | undefined) ?? {});
         saveCachedBridge(payload);
       } catch {
         // RigMatch not running — use cached scores from last session
@@ -890,7 +902,11 @@ export default function App() {
     setActiveConversationId(conversationId);
     setDraft("");
     setGeneratingImage(true);
-    withReply("Asking RigMatch to make this...");
+    // Names the thing that will actually do it. The button sits under a
+    // composer that says "using qwen2.5:7b", and no Ollama model here makes
+    // pictures — leaving that implication standing is the same untruth the
+    // main app spends its time refusing.
+    withReply("Asking RigMatch to make this with ComfyUI. The chat model is not involved.");
 
     try {
       const started = await invoke<{ id: string }>("start_rig_generation", { prompt });
@@ -1564,6 +1580,41 @@ export default function App() {
           </div>
         )}
 
+        {/*
+          Someone opening this window and wanting a picture had no way to learn
+          that no model in the list below can make one — the only clue was a
+          tooltip on a button by the message box, and a tooltip nobody hovers
+          teaches nobody. Making pictures is ComfyUI's job, reached through
+          RigMatch; the models here write, and some of them look and listen.
+          Said once, in the open, rather than left to be discovered.
+        */}
+        <div className="rm-can-do">
+          <strong>What this chat can do</strong>
+          <ul>
+            <li><span>Write</span> every model below</li>
+            <li><span>Look</span> models marked <em>sees</em></li>
+            <li><span>Listen</span> models marked <em>hears</em></li>
+            <li className="rm-can-do-elsewhere">
+              <span>Make pictures</span> not a model — RigMatch runs ComfyUI for it.
+              Use <b>Make image</b> by the message box.
+            </li>
+          </ul>
+        </div>
+
+        {Object.keys(rigCapabilities).length > 0 && (
+          <div className="rm-cap-filter" role="group" aria-label="Filter models by what they can do">
+            {([["all", "All"], ["vision", "Sees pictures"], ["audio", "Hears audio"]] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                className={capabilityFilter === id ? "active" : ""}
+                onClick={() => setCapabilityFilter(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="rm-buddy-list">
           {visibleBuddies.length === 0 && connectionStatus === "connected" && (
             <div className="rm-buddy-empty">
@@ -1614,6 +1665,16 @@ export default function App() {
                       : <span className="rm-response-time">{buddy.sizeGb} GB · {getResponseLabel(undefined, buddy.sizeGb)}</span>
                     }
                   </span>
+                  {(rigCapabilities[buddy.modelName] ?? []).filter((c) => c !== "text").length > 0 && (
+                    <span className="rm-buddy-caps">
+                      {(rigCapabilities[buddy.modelName] ?? []).includes("vision") && (
+                        <span className="rm-cap" title="Can look at pictures you send it">sees</span>
+                      )}
+                      {(rigCapabilities[buddy.modelName] ?? []).includes("audio") && (
+                        <span className="rm-cap" title="Can listen to a recording you send it">hears</span>
+                      )}
+                    </span>
+                  )}
                   {(isTyping || lastMsg) && (
                     <span className="rm-buddy-last">
                       {isTyping
@@ -1922,9 +1983,9 @@ export default function App() {
                     className="rm-send-btn rm-image-btn"
                     onClick={() => void generateImage()}
                     disabled={!draft.trim() || generatingImage}
-                    title="Make a picture from this, using ComfyUI through RigMatch"
+                    title="Sends this to ComfyUI through RigMatch — not to the model above, which cannot make pictures"
                   >
-                    {generatingImage ? "Making..." : "Make image"}
+                    {generatingImage ? "Making..." : "Make image ↗"}
                   </button>
                   <button
                     type="button"
