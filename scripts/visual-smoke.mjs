@@ -53,12 +53,18 @@ async function main() {
   }, null, 2)}\n`);
 }
 
+// Navigations wait for `domcontentloaded`, never `networkidle`. The app polls
+// Ollama and the local providers on a timer, so with those services actually
+// running the network never goes idle and every goto times out at 30s — the
+// script failed hardest exactly when the machine was most fully set up. What the
+// screenshots depend on is the selector waits and settleImages() below, both of
+// which wait for the app rather than for silence.
 async function runBrowserChecks(url) {
   const browser = await chromium.launch({ headless: true });
   /**
    * Hold until every image on the page has actually decoded.
    *
-   * `waitUntil: 'networkidle'` only covers the first load. Switching to
+   * Navigation waits only cover the first load. Switching to
    * Advanced mounts panels whose avatars start loading after that, so the
    * screenshot raced them: the same commit produced a shot with 24 robot
    * avatars or with 24 empty boxes depending on timing, a 74KB swing in the PNG.
@@ -81,7 +87,7 @@ async function runBrowserChecks(url) {
   const page = await desktop.newPage();
   const consoleIssues = collectConsoleIssues(page);
 
-  await page.goto(url, { waitUntil: 'networkidle' });
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
   await forceSimpleMode(page);
   await page.waitForSelector('.sw-shell', { timeout: 10000 });
   await assertNoBlockingDialog(page);
@@ -149,7 +155,7 @@ async function runBrowserChecks(url) {
   // line and the items shorter.
   const shortCtx = await browser.newContext({ viewport: { width: 1280, height: 820 } });
   const shortPage = await shortCtx.newPage();
-  await shortPage.goto(url, { waitUntil: 'networkidle' });
+  await shortPage.goto(url, { waitUntil: 'domcontentloaded' });
   await forceSimpleMode(shortPage);
   await shortPage.getByLabel('Advanced Mode').click();
   await shortPage.waitForSelector('.side-menu-item', { timeout: 10000 });
@@ -169,7 +175,7 @@ async function runBrowserChecks(url) {
   const mobile = await browser.newContext({ viewport: { width: 390, height: 900 }, isMobile: true });
   const mobilePage = await mobile.newPage();
   const mobileConsoleIssues = collectConsoleIssues(mobilePage);
-  await mobilePage.goto(url, { waitUntil: 'networkidle' });
+  await mobilePage.goto(url, { waitUntil: 'domcontentloaded' });
   await forceSimpleMode(mobilePage);
   await mobilePage.waitForSelector('.sw-shell', { timeout: 10000 });
   const mobileText = await mobilePage.locator('body').innerText();
@@ -264,7 +270,7 @@ async function forceSimpleMode(page) {
     // pointer events and the script retried a click for sixty seconds.
     localStorage.setItem('rigmatch:goals-offered:v1', 'yes');
   });
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
 }
 
 // The wizard's canonical rail, from SimpleWizard.tsx's STEPS. It renders these
