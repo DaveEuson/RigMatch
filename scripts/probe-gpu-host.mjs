@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 
 /**
  * Capture everything RigMatch needs to know about an unfamiliar GPU host, and

@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { ModelRow, NetworkHost, SystemProfile, TestedModelScore } from '../types';
 import { getFootprintFit, formatHistoryTime, type ModelProfile } from './modelCatalog.ts';
 import { getModelOrigin } from './modelOrigins.ts';

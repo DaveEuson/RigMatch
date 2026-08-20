@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { getModelFamily, type ModelFamilyId } from './modelOrigins.ts';
 import machineAvatarLocal from '../assets/machine-avatar-local.webp';
 import modelAvatarCohere from '../assets/model-avatar-cohere.webp';

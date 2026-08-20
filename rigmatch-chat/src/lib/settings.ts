@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { CONTEXT_STEPS } from "./contextWindow";
 
 const SETTINGS_KEY = "rigmatch-chat-settings";

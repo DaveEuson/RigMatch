@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * Building a text-to-video graph for ComfyUI.
  *

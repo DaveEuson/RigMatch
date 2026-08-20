@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 // LLM-as-judge for App Builder results.
 //
 // Structure checks ("has a canvas, has key handlers") and the syntax check can't

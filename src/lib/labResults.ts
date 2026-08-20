@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * Advanced Lab / skill-test result layer: the shared types, localStorage
  * persistence, letter grading, and per-model artifact lookup. Extracted from

@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { Download, RefreshCw } from 'lucide-react';
 import type { AutoUpdateStatus, UpdateChannel, UpdateCheckResponse } from '../types';
 import {

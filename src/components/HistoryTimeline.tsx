@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { formatHistoryTime, getScoreTimelineNote } from '../lib/modelCatalog';
 import { formatMatchScore } from '../lib/scoring';
 import type { TestedModelScore } from '../types';

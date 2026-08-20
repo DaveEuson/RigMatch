@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 
 const DEFAULT_BASE_URL = 'http://localhost:11434';
 const DEFAULT_PROMPT = 'Write a compact JavaScript function named clampScore that accepts a number and returns it clamped between 0 and 100. Return only the function, no explanation.';

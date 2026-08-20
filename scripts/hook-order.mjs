@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * The sequence of React hooks a component calls, flattened through its custom
  * hooks — and a check that a refactor did not change it.

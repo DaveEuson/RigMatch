@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { tickerTips } from '../lib/glossary';
 import type { RigPick } from '../lib/modelCatalog';
 import { isVisiblePullProgress } from '../lib/modelCatalog';

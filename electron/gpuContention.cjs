@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * GPU contention detection: is something else already using the GPU hard enough
  * to distort a benchmark?

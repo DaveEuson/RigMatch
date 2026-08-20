@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { bestModelForTask, type TaskGroupId } from './taskScores.ts';
 import type {
   AppLogEntry,

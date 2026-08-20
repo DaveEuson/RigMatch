@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 // Code Challenge: ask a model to solve a coding task in a chosen language and grade
 // it with the LLM judge. Unlike App Builder there's nothing to run/preview, so this
 // is judge-only (see docs/code-challenge-spec.md). Pure data + prompt builders live

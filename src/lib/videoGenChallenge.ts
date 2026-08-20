@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * The Video Lab's decisions: which checkpoint can render, which encoder feeds
  * it, and what gets credited with the result.

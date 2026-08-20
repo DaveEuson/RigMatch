@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 // Runs after electron-builder packs the main app, before creating the DMG.
 // On Mac: copies RigMatch Chat.app into the DMG staging area so users can
 // drag both apps to Applications from a single disk image, then ad-hoc signs

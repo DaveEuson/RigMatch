@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { getScoreTone } from '../lib/format';
 import { extractHtmlDocument } from '../lib/labPreview';
 import { readAdvancedLabResults } from '../lib/labResults';

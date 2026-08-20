@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * Model-name normalization, kept in its own leaf module so storage layers can
  * key by model without pulling in modelCatalog's React/asset dependency graph.

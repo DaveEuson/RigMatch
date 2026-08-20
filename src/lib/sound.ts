@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /** UI jingles played on run milestones. */
 export function playJingle(type: 'speed-date-complete' | 'new-winner' | 'its-a-match') {
   try {

@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { History } from 'lucide-react';
 import robotSpeedDateShow from '../assets/robot-speed-date-show.webp';
 import type { BenchmarkQuestion, BenchmarkQuestionCount } from '../benchmarkSuite';

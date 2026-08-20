@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { findGlossaryTerms, glossaryEntry } from '../lib/glossary';
 import { InfoContext, useInfoControls } from '../lib/infoContext';

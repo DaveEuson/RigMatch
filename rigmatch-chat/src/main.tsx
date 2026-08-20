@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";

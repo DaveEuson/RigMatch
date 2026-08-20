@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 
 // Single source of truth for "what's new": src/data/releaseNotes.ts feeds the
 // in-app Update Center, the GitHub release body, and CHANGELOG.md. Before this

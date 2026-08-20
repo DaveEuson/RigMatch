@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Check, Code2, Coffee, ExternalLink, Heart, MessageSquare, Share2, ShoppingCart, Terminal, Trash2, X } from 'lucide-react';
 import { agentArcadeApi } from '../api';

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * Drive every screen and answer the mechanical half of the screen audit.
  *

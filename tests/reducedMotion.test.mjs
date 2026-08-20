@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 // In-character banter for the game-show host during a live Speed Dating run — the
 // host addressing the contestant currently on stage, tied to the question and the
 // phase of their turn. Deterministic (indexed, never random) so a line stays put

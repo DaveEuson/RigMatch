@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useState } from 'react';
 import { Download, Sparkles, X } from 'lucide-react';
 import type { UpdateCheckResponse } from '../types';

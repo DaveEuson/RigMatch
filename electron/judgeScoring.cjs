@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 // LLM-as-judge quality scoring.
 //
 // The heuristic scorer in benchmarkScoring.cjs (`scoreSobriety`) can only pattern-

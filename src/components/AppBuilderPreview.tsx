@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useRef } from 'react';
 import { ShieldCheck, X } from 'lucide-react';
 import { useSandboxedPreview } from '../lib/useSandboxedPreview';

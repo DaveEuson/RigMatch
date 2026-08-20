@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useRef } from 'react';
 import { ImagePlus, Mic, Sparkles, Square, X } from 'lucide-react';
 import type { ChatAction, ChatAttachment, ChatMessage } from '../types';

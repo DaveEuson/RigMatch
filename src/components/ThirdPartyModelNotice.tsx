@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { ExternalLink } from 'lucide-react';
 
 /** Moved out of App.tsx with ThirdPartyModelNotice, its only consumer. */

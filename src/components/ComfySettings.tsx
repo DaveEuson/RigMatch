@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useCallback, useState } from "react";
 import { AlertTriangle, Check, FolderOpen, RefreshCw, Search } from "lucide-react";
 import {

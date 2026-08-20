@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { agentArcadeApi } from '../api';
 import robotRomanceHero from '../assets/robot-romance-hero.webp';
 import { getMatchNotes } from '../lib/datingProfile';

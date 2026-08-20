@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { formatGb } from '../lib/format';
 import { useDialog } from '../lib/useDialog';
 import type { ModelRow } from '../types';

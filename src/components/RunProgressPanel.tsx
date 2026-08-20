@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { History } from 'lucide-react';
 import type { BenchmarkQuestion } from '../benchmarkSuite';
 import type { NetworkHost, RunProgress } from '../types';

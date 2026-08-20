@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 const BENCHMARK_THINK_DISABLED = true;
 
 function buildBenchmarkGenerateBody({ model, prompt, keepAlive, options }) {

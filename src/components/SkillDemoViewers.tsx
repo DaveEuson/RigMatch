@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { Code2, Image as ImageIcon, Maximize2, Play, RefreshCw, Sparkles, X } from 'lucide-react';

@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { MIN_CONTESTANTS } from '../lib/downloadStatus';
 import { lineupStanding } from '../lib/lineupStanding';
 import { getShortModelName } from '../lib/modelCatalog';

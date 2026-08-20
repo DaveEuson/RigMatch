@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getErrorMessage } from '../lib/format';
 import { copyText, type CopyState } from '../lib/clipboard';

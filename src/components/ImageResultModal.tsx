@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useDialog } from '../lib/useDialog';
 import { Lightbulb, X } from 'lucide-react';
 

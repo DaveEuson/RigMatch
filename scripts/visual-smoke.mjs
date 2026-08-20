@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -59,6 +60,21 @@ async function main() {
 // script failed hardest exactly when the machine was most fully set up. What the
 // screenshots depend on is the selector waits and settleImages() below, both of
 // which wait for the app rather than for silence.
+/**
+ * How long a first paint may take on a freshly spawned dev server.
+ *
+ * Playwright's default is 30s, which this script inherited and which is not a
+ * cold-start budget for an app this size: a newly spawned Vite transforms the
+ * whole module graph in memory on the first request, and measured here that took
+ * 96 seconds on a busy machine. The server answers HTTP in under a second, so
+ * the wait-for-server check passes and the navigation then times out — a failure
+ * that reads like a broken page and is really a stopwatch.
+ *
+ * This check is about layout, not startup speed. The budget should be far larger
+ * than the work, so a slow machine reports a layout result rather than a timeout.
+ */
+const COLD_START_MS = 180_000;
+
 async function runBrowserChecks(url) {
   const browser = await chromium.launch({ headless: true });
   /**
@@ -87,7 +103,7 @@ async function runBrowserChecks(url) {
   const page = await desktop.newPage();
   const consoleIssues = collectConsoleIssues(page);
 
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: COLD_START_MS });
   await forceSimpleMode(page);
   await page.waitForSelector('.sw-shell', { timeout: 10000 });
   await assertNoBlockingDialog(page);
@@ -155,7 +171,7 @@ async function runBrowserChecks(url) {
   // line and the items shorter.
   const shortCtx = await browser.newContext({ viewport: { width: 1280, height: 820 } });
   const shortPage = await shortCtx.newPage();
-  await shortPage.goto(url, { waitUntil: 'domcontentloaded' });
+  await shortPage.goto(url, { waitUntil: 'domcontentloaded', timeout: COLD_START_MS });
   await forceSimpleMode(shortPage);
   await shortPage.getByLabel('Advanced Mode').click();
   await shortPage.waitForSelector('.side-menu-item', { timeout: 10000 });
@@ -175,7 +191,7 @@ async function runBrowserChecks(url) {
   const mobile = await browser.newContext({ viewport: { width: 390, height: 900 }, isMobile: true });
   const mobilePage = await mobile.newPage();
   const mobileConsoleIssues = collectConsoleIssues(mobilePage);
-  await mobilePage.goto(url, { waitUntil: 'domcontentloaded' });
+  await mobilePage.goto(url, { waitUntil: 'domcontentloaded', timeout: COLD_START_MS });
   await forceSimpleMode(mobilePage);
   await mobilePage.waitForSelector('.sw-shell', { timeout: 10000 });
   const mobileText = await mobilePage.locator('body').innerText();
@@ -270,7 +286,7 @@ async function forceSimpleMode(page) {
     // pointer events and the script retried a click for sixty seconds.
     localStorage.setItem('rigmatch:goals-offered:v1', 'yes');
   });
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: COLD_START_MS });
 }
 
 // The wizard's canonical rail, from SimpleWizard.tsx's STEPS. It renders these

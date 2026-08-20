@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { UiMode } from '../lib/appConfig';
 import type { GoalId } from '../lib/goals';
 import { goalHardwareExpectation, goalsByCategory, leagueLabel } from '../lib/goals';

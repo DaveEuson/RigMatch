@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { ShieldCheck, Download } from 'lucide-react';
 import type { BenchmarkPromptResult, TestedModelScore } from '../types';
 import { formatPullCount, getPopularityPercent, getScoreTone, getScoreTooltip } from '../lib/format';

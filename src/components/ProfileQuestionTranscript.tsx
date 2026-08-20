@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { getPromptDiagnosticText } from '../lib/promptDiagnostic';
 import { formatMs } from '../lib/format';
 import { formatHistoryTime } from '../lib/modelCatalog';

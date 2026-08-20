@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 const { app, BrowserWindow, dialog, ipcMain, protocol, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');

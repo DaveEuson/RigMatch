@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 // Static validity check for App Builder results.
 //
 // The structural scorer only asks "does this LOOK like an app?" — canvas present,

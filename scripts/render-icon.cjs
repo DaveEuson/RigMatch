@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 // Renders the robot+speech-bubble icon to a 1024x1024 PNG using Playwright
 const { chromium } = require('playwright');
 const path = require('node:path');

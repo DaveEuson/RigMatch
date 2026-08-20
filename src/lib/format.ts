@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * Pure formatting and score-presentation helpers shared across the UI.
  * Extracted from App.tsx; keep this module free of React and app state.

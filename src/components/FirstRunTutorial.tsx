@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useDialog } from '../lib/useDialog';
 import type { NavId } from './SideMenu';
 import { AlertCircle, CheckCircle, ExternalLink, Trophy, X } from 'lucide-react';

@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { formatGb, formatThroughput } from '../lib/format';
 import type { ModelProfile } from '../lib/modelCatalog';
 import { getHardwareFit, getSelectedContestantBlurb, isVisiblePullProgress } from '../lib/modelCatalog';

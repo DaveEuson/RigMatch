@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { RefreshCw, type LucideIcon } from 'lucide-react';
 import rigmatchBrandIcon from '../assets/rigmatch-brand-icon.svg';
 

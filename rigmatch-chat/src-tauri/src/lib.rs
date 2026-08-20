@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
 use tauri::ipc::Channel;

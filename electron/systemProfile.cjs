@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * Pure helpers for turning raw systeminformation output into the numbers
  * RigMatch displays. Extracted so the memory-pressure fix below is unit

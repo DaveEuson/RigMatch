@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useEffect, useState } from 'react';
 import { agentArcadeApi } from '../api';
 import { buildSandboxedPreviewHtml } from './labPreview.ts';

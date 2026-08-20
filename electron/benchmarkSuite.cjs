@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 const BENCHMARK_QUESTION_LEVELS = [10, 20, 50, 100];
 
 const scenarios = [

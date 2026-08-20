@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { AlertTriangle, Bot, Boxes, ChevronDown, ChevronUp, Download, RefreshCw, ScanLine, ShieldCheck, Trophy, X } from 'lucide-react';
 import type { OllamaStatus, SystemProfile } from '../types';
 import type { UiMode } from '../lib/appConfig';

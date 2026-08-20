@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * Append-only run history: the timeline of every benchmark a model has ever
  * completed on this machine.

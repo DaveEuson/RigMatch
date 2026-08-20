@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { SCORE_WEIGHTS, MATCH_GRADE_BAND_ROWS } from '../lib/scoreReference';
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';

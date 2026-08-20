@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type { ModelContextInfo, VramInfo } from "./contextWindow";
 

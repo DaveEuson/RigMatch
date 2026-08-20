@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { BenchmarkQuestion, BenchmarkQuestionCount } from '../benchmarkSuite';
 import { BENCHMARK_PRESETS, DEFAULT_BENCHMARK_QUESTIONS, buildBenchmarkPromptPlan } from '../benchmarkSuite';
 import { CLOUD_JUDGE_PRESETS } from '../lib/appConfig';

@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * Skill-test rubrics and grading — pure functions, no assets, no React, no
  * storage. Split out of labChallenges.ts (which imports .webp art and the IPC

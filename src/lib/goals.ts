@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * What someone wants the AI to DO — the one taxonomy the whole app organizes by.
  *

@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { getPullProgressDetailLabel, getPullProgressPercent, getPullProgressStatusLabel, getPullTrackPercent } from '../lib/modelCatalog';
 import type { PullProgressUpdate } from '../types';
 import { X } from 'lucide-react';

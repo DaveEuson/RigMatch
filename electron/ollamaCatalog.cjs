@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * Pure parsing helpers for the Ollama library catalog scrape. Extracted from
  * main.cjs so they can be unit-tested without booting Electron. No Electron,

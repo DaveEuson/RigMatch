@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * Helpers for the Advanced Lab's sandboxed App Builder preview.
  *

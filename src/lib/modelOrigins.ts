@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { ModelRow } from '../types';
 
 // Families with (or awaiting) their own contestant portrait. New families map to

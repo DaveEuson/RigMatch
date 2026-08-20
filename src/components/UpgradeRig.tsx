@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { amazonUrl } from '../lib/appConfig';
 import type { SystemProfile } from '../types';
 import { ExternalLink, ShoppingCart, Zap } from 'lucide-react';

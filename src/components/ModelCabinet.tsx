@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { isDesktopRuntime } from '../api';
 import robotContestantWall from '../assets/robot-contestant-wall.webp';
 import type { BenchmarkQuestionCount } from '../benchmarkSuite';

@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { getLocalRigDetailCards, getRemoteRigDetailCards } from '../lib/modelCatalog';
 import type { NetworkHost, OllamaStatus, SystemProfile } from '../types';
 import { MachineAvatar } from './Avatars';

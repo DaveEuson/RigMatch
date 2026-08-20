@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 

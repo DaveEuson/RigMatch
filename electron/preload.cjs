@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 const { contextBridge, ipcRenderer } = require('electron');
 
 const api = {

@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { NetworkHost } from '../types';
 import { getModelFamily } from '../lib/modelOrigins';
 import { MODEL_AVATAR_ASSETS, GENERIC_MODEL_AVATAR, HOST_AVATAR_SRC, getGenerationAvatarSrc } from '../lib/modelAvatars';

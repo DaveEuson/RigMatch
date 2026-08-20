@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * The Image Lab's decisions: which model may judge, which prompt was asked,
  * and what gets credited with having drawn the picture.

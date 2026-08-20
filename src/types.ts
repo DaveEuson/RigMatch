@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { BenchmarkQuestionType } from './benchmarkSuite.ts';
 import type { TaskScores } from './lib/taskScores.ts';
 

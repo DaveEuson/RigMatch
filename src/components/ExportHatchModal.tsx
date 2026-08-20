@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useCallback, useState } from 'react';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { AlertTriangle, Check, Copy, Download, X } from 'lucide-react';

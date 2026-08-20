@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * The Advanced Lab / skill-test challenge layer: the app-builder prompts and
  * presets, the per-challenge scoring rubrics, and the runners that drive Ollama

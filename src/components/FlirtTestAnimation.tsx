@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { getShortModelName } from '../lib/modelCatalog';
 import type { NetworkHost, PendingRunMode } from '../types';
 import { AvatarBust, MachineAvatar } from './Avatars';

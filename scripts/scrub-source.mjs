@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * Remove comments and string literals from TypeScript source, so that tools
  * which read code with regexes are not fooled by prose.

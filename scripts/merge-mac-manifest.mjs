@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 
 // Merge the two Mac update manifests into the single latest-mac.yml that
 // electron-updater actually requests.

@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useMemo, type ReactNode } from 'react';
 import { Bell, CheckCircle, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
 import type { CatalogModel, ModelRow } from '../types';

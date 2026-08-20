@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { matchDisplayLabel } from '../lib/goals';
 import type { UtilityPanelId } from '../types';
 import robotScorecardCeremony from '../assets/robot-scorecard-ceremony.webp';

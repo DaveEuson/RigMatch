@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { BenchmarkQuestion } from '../benchmarkSuite';
 import { formatMs, getScoreTone } from '../lib/format';
 import { getBenchmarkForModel, getShortModelName } from '../lib/modelCatalog';

@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { BenchmarkQuestion, BenchmarkQuestionCount, BenchmarkQuestionType } from '../benchmarkSuite';
 import { BENCHMARK_PRESETS, BENCHMARK_QUESTION_LEVELS } from '../benchmarkSuite';
 import { AlertTriangle, CheckCircle, RefreshCw, X, Zap } from 'lucide-react';

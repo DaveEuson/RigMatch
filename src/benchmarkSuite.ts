@@ -1,3 +1,4 @@
+// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 export const BENCHMARK_QUESTION_LEVELS = [10, 20, 50, 100] as const;
 
 export type BenchmarkQuestionCount = (typeof BENCHMARK_QUESTION_LEVELS)[number];
