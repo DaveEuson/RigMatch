@@ -467,6 +467,7 @@ const closePromptPendingWindowIds = new Set();
 let latestScores = {};
 let latestChosen = null;
 let latestCapabilities = {};
+let latestImageMaker = { ready: false, checkpoint: null };
 
 /**
  * Image generations asked for by RigMatch Chat, keyed by job id.
@@ -609,7 +610,12 @@ const scoresServer = http.createServer((req, res) => {
   }
 
   res.setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify({ scores: latestScores, chosen: latestChosen, capabilities: latestCapabilities }));
+  res.end(JSON.stringify({
+    scores: latestScores,
+    chosen: latestChosen,
+    capabilities: latestCapabilities,
+    imageMaker: latestImageMaker,
+  }));
 });
 
 function handleGenerateRequest(req, res) {
@@ -1001,6 +1007,18 @@ function registerHandlers() {
       }
     }
     latestCapabilities = caps;
+
+    // Whether a picture can be made at all, and with what. Same treatment as
+    // the rest: it crosses a process boundary, so it is checked rather than
+    // trusted, and a malformed payload leaves the last good value alone rather
+    // than claiming the image maker vanished.
+    const rawMaker = data.imageMaker;
+    if (rawMaker && typeof rawMaker === 'object' && !Array.isArray(rawMaker)) {
+      const checkpoint = typeof rawMaker.checkpoint === 'string' && rawMaker.checkpoint.length <= 200
+        ? rawMaker.checkpoint
+        : null;
+      latestImageMaker = { ready: rawMaker.ready === true, checkpoint };
+    }
   });
   // Cloud judge bridge for the renderer (App Builder judging). Kept in the main
   // process so the renderer never needs a remote-fetch exception; strictly

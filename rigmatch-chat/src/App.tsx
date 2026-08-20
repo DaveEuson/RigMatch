@@ -499,6 +499,10 @@ export default function App() {
   const [rigScores, setRigScores] = useState<Record<string, ModelScore>>(() => loadCachedBridge().scores);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [rigCapabilities, setRigCapabilities] = useState<Record<string, string[]>>({});
+  /** What RigMatch would actually make a picture with, if asked right now. */
+  const [imageMaker, setImageMaker] = useState<{ ready: boolean; checkpoint: string | null }>(
+    { ready: false, checkpoint: null },
+  );
   /** Narrow the list to one ability. 'all' is the resting state. */
   const [capabilityFilter, setCapabilityFilter] = useState<"all" | "vision" | "audio">("all");
   /** Fetched bytes, keyed by job — memory only, never written to history. */
@@ -711,6 +715,8 @@ export default function App() {
         // What each model can do, as RigMatch read it from Ollama. Absent on an
         // older RigMatch, which the chips below simply do not render.
         setRigCapabilities((raw.capabilities as Record<string, string[]> | undefined) ?? {});
+        const maker = raw.imageMaker as { ready?: boolean; checkpoint?: string | null } | undefined;
+        setImageMaker({ ready: maker?.ready === true, checkpoint: maker?.checkpoint ?? null });
         saveCachedBridge(payload);
       } catch {
         // RigMatch not running — use cached scores from last session
@@ -1595,9 +1601,22 @@ export default function App() {
             <li><span>Write</span> every model below</li>
             <li><span>Look</span> models marked <em>sees</em></li>
             <li><span>Listen</span> models marked <em>hears</em></li>
+            {/*
+              Naming the checkpoint matters more than it looks. Someone with
+              SDXL Turbo installed went looking for it in this list, did not
+              find it, and concluded the companion could not see it — when the
+              companion had simply never been told. "Not a model" explains why
+              it is absent from the list; it does not say what will be used
+              instead, and without that, Make image is a leap of faith.
+            */}
             <li className="rm-can-do-elsewhere">
               <span>Make pictures</span> not a model — RigMatch runs ComfyUI for it.
-              Use <b>Make image</b> by the message box.
+              {imageMaker.ready ? (
+                <> Ready, using <b>{imageMaker.checkpoint?.replace(/\.(safetensors|ckpt|sft)$/i, "")}</b>.
+                  Press <b>Make image</b> by the message box.</>
+              ) : (
+                <> <b className="rm-not-ready">Not ready</b> — ComfyUI has no checkpoint loaded that can draw a still.</>
+              )}
             </li>
           </ul>
         </div>

@@ -2029,3 +2029,10 @@ textarea:focus {
   font-weight: 700;
   opacity: 0.95;
 }
+
+/* "Not ready" in the capability panel. Uses the warning colour rather than the
+   accent so a state reads as a state, not as emphasis. */
+.rm-not-ready {
+  color: var(--danger, #e08670);
+  font-weight: 700;
+}

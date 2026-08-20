@@ -515,6 +515,9 @@ function App() {
     return {
       // ComfyUI answering is not the same as ComfyUI being able to draw.
       available: drawable.length > 0,
+      // The one that would actually be used, so the companion can name it
+      // rather than leaving Make image as a leap of faith.
+      checkpoint: drawable[0] ?? null,
       run: async (prompt: string, signal: AbortSignal) => {
         setChatImageRunning(true);
         try {
@@ -2972,12 +2975,27 @@ function App() {
       if (canHearAudio(row)) able.push('audio');
       if (able.length) capabilities[row.displayName] = able;
     }
+    // Which checkpoint a picture would actually be made with, and whether one
+    // is there at all.
+    //
+    // The companion's panel could say picture-making was not a model, but not
+    // what it *was*. Someone with SDXL Turbo installed looked for it in the
+    // model list, did not find it, and reasonably concluded the companion could
+    // not see it — when in truth the companion had never been told. Pressing
+    // Make image was a leap of faith either way: ComfyUI answering is not the
+    // same as ComfyUI being able to draw.
+    const imageMaker = {
+      ready: chatImageGeneration.available,
+      checkpoint: chatImageGeneration.checkpoint ?? null,
+    };
+
     void agentArcadeApi.syncScores({
       scores: modelScores,
       chosen: selectedModel,
       capabilities,
+      imageMaker,
     } as Record<string, unknown>);
-  }, [modelScores, selectedModel, modelRows]);
+  }, [modelScores, selectedModel, modelRows, chatImageGeneration]);
 
   useEffect(() => {
     if (!agentArcadeApi.onBenchmarkProgress) return undefined;

@@ -81,6 +81,44 @@ check('parity', 'the TS and CJS question suites agree', () => {
   return `${types.length} types, matched`;
 });
 
+check('parity', 'the companion binary is newer than its source', () => {
+  // A Tauri build is slow, so it is the step that gets skipped — and nothing
+  // about a stale companion looks wrong. It launches, it connects, it just
+  // silently lacks whatever was added since. That shipped once today: the
+  // capability panel was written, committed and described to the user while
+  // the binary next to it predated the source by nine minutes, and the user
+  // reasonably reported the feature missing.
+  const exe = join(root, 'companions/rigmatch-chat.exe');
+  if (!existsSync(exe)) return 'no companion binary to check';
+
+  const newest = (dir) => {
+    let latest = 0;
+    const walk = (d) => {
+      for (const entry of readdirSync(d, { withFileTypes: true })) {
+        if (entry.name === 'node_modules' || entry.name === 'target' || entry.name === 'dist') continue;
+        const full = join(d, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else latest = Math.max(latest, statSync(full).mtimeMs);
+      }
+    };
+    if (existsSync(dir)) walk(dir);
+    return latest;
+  };
+
+  const sourceTime = Math.max(
+    newest(join(root, 'rigmatch-chat/src')),
+    newest(join(root, 'rigmatch-chat/src-tauri/src')),
+    existsSync(join(root, 'rigmatch-chat/src-tauri/tauri.conf.json'))
+      ? statSync(join(root, 'rigmatch-chat/src-tauri/tauri.conf.json')).mtimeMs
+      : 0,
+  );
+  const builtTime = statSync(exe).mtimeMs;
+  const behindMin = Math.round((sourceTime - builtTime) / 60000);
+  must(builtTime >= sourceTime,
+    `companions/rigmatch-chat.exe is ${behindMin} minute(s) older than its source — run \`cd rigmatch-chat && npx tauri build\` and copy the result, or the release ships a companion missing whatever changed`);
+  return 'built after its source';
+});
+
 check('parity', 'the version is one number everywhere', () => {
   const pkg = JSON.parse(read('package.json')).version;
   const app = read('src/lib/appConfig.ts').match(/APP_VERSION\s*=\s*'([^']+)'/)?.[1];
