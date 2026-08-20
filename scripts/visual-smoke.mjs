@@ -21,10 +21,38 @@ let devServer = null;
 // On Windows the dev server is spawned through a shell, so child.kill() only
 // reaches the shell wrapper and the Vite process keeps the port (and this
 // script's stdio) alive forever. Kill the whole process tree instead.
+/**
+ * Kill whatever is listening on the port, by port rather than by parentage.
+ *
+ * `taskkill /T` walks the tree from the shell wrapper this script spawned, and
+ * npm re-parents its children — so by the time cleanup runs the wrapper is gone
+ * and the tree is empty while npm and Vite are still very much alive. Every
+ * timeout today leaked one, and they did more than hold the port: a Vite
+ * watcher rooted at the project keeps handles under rigmatch-chat/dist, which
+ * left that directory delete-pending and broke an unrelated build with EPERM.
+ *
+ * Only ever called for a server this script started; one that was already
+ * running belongs to whoever started it.
+ */
+function killPortListeners(port) {
+  if (process.platform !== 'win32') return;
+  const out = spawnSync('netstat', ['-ano'], { encoding: 'utf8' }).stdout || '';
+  const pids = new Set();
+  for (const line of out.split('\n')) {
+    if (!line.includes(`:${port}`) || !line.includes('LISTENING')) continue;
+    const pid = line.trim().split(/\s+/).pop();
+    if (pid && pid !== '0') pids.add(pid);
+  }
+  for (const pid of pids) {
+    spawnSync('taskkill', ['/pid', pid, '/T', '/F'], { stdio: 'ignore' });
+  }
+}
+
 function stopDevServer() {
   if (!devServer || devServer.killed) return;
   if (process.platform === 'win32') {
     spawnSync('taskkill', ['/pid', String(devServer.pid), '/T', '/F'], { stdio: 'ignore' });
+    killPortListeners(new URL(targetUrl).port || '5173');
   } else {
     devServer.kill();
   }

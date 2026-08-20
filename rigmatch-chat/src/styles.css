@@ -2082,3 +2082,89 @@ textarea:focus {
   line-height: 1.45;
   opacity: 0.7;
 }
+
+/* ── the image workspace ──────────────────────────────────────────────────
+   Not a chat: no model on the other side, no reply to wait for. What comes
+   back is a picture or a reason there isn't one, so it is laid out as a
+   worklist rather than a conversation. */
+.rm-maker {
+  width: calc(100% - 16px);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.rm-maker.active {
+  border-color: var(--gold);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.rm-maker:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.rm-maker-note {
+  font-size: 10px;
+  line-height: 1.45;
+  opacity: 0.7;
+}
+
+.rm-studio-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+}
+
+.rm-studio-head strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rm-studio-head em {
+  font-style: normal;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.rm-studio-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rm-studio-blank {
+  margin: auto;
+  max-width: 32ch;
+  text-align: center;
+  opacity: 0.75;
+}
+
+.rm-studio-blank p { margin: 0 0 6px; font-size: 13px; }
+
+.rm-studio-hint { font-size: 11px; opacity: 0.7; line-height: 1.5; }
+
+/* The prompt, kept with its result rather than in a speech bubble. */
+.rm-studio-ask {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.8;
+  border-left: 2px solid var(--gold);
+  padding-left: 9px;
+}
+
+.rm-studio-out { display: flex; flex-direction: column; gap: 6px; }
+
+.rm-studio-status {
+  font-size: 11px;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}

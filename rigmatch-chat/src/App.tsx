@@ -60,6 +60,16 @@ marked.use({ breaks: true, gfm: true });
 
 const AVATAR_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
+/**
+ * The image maker's stand-in model name.
+ *
+ * Pictures need somewhere to live, and every other transcript is keyed by the
+ * Ollama model that produced it. This is not a model, so it gets a name no
+ * model can have — which keeps its history in the same store, reachable by the
+ * same lookup, without pretending it is a buddy you can talk to.
+ */
+const IMAGE_STUDIO = "__rigmatch_image_maker__";
+
 function renderMarkdown(content: string): string {
   return DOMPurify.sanitize(marked.parse(content) as string, { USE_PROFILES: { html: true } });
 }
@@ -1644,24 +1654,37 @@ export default function App() {
             it is.
           */}
           {capabilityFilter === "image" && (
-            <div className={imageMaker.ready ? "rm-maker ready" : "rm-maker"}>
-              <div className="rm-maker-head">
+            <button
+              type="button"
+              className={[
+                "rm-maker",
+                imageMaker.ready ? "ready" : "",
+                activeBuddy === IMAGE_STUDIO ? "active" : "",
+              ].filter(Boolean).join(" ")}
+              // Telling someone the maker is ready and giving them nowhere to
+              // use it is the same shape of failure as not listing it at all.
+              // Selecting it opens a workspace, the way selecting a buddy opens
+              // a conversation.
+              onClick={() => { setActiveBuddy(IMAGE_STUDIO); setActiveConversationId(null); }}
+              aria-pressed={activeBuddy === IMAGE_STUDIO}
+            >
+              <span className="rm-maker-head">
                 <span className="rm-maker-kind">Image maker</span>
                 <span className={imageMaker.ready ? "rm-maker-state on" : "rm-maker-state off"}>
                   {imageMaker.ready ? "Ready" : "Not ready"}
                 </span>
-              </div>
+              </span>
               <strong>
                 {imageMaker.ready && imageMaker.checkpoint
                   ? imageMaker.checkpoint.replace(/\.(safetensors|ckpt|sft)$/i, "")
                   : "No checkpoint that can draw"}
               </strong>
-              <p>
+              <span className="rm-maker-note">
                 {imageMaker.ready
-                  ? "Not a chat model. Type what you want and press Make image — RigMatch runs it through ComfyUI."
-                  : "ComfyUI has no still-image checkpoint loaded, so Make image cannot work yet. Load one in ComfyUI, or check RigMatch is running."}
-              </p>
-            </div>
+                  ? "Not a chat model. Open it and describe the picture you want."
+                  : "ComfyUI has no still-image checkpoint loaded, so this cannot work yet. Load one in ComfyUI, or check RigMatch is running."}
+              </span>
+            </button>
           )}
           {capabilityFilter !== "image" && visibleBuddies.length === 0 && connectionStatus === "connected" && (
             <div className="rm-buddy-empty">
@@ -2044,6 +2067,85 @@ export default function App() {
                   </button>
                 </>
               )}
+            </div>
+          </>
+        ) : activeBuddy === IMAGE_STUDIO ? (
+          /*
+            The image workspace.
+
+            Deliberately not a chat. There is no model on the other side, so
+            there is no reply to wait for and nothing to converse with — what
+            you get back is a picture or a reason there isn't one. Giving it a
+            Send button and a message bubble would dress a one-way tool up as a
+            conversation, which is the impersonation this app keeps refusing.
+          */
+          <>
+            <div className="rm-studio-head">
+              <div>
+                <strong>Image maker</strong>
+                <em>
+                  {imageMaker.checkpoint
+                    ? `${imageMaker.checkpoint.replace(/\.(safetensors|ckpt|sft)$/i, "")} through ComfyUI`
+                    : "no checkpoint loaded"}
+                </em>
+              </div>
+              <span className={imageMaker.ready ? "rm-maker-state on" : "rm-maker-state off"}>
+                {imageMaker.ready ? "Ready" : "Not ready"}
+              </span>
+            </div>
+
+            <div className="rm-studio-body">
+              {activeMessages.length === 0 && (
+                <div className="rm-studio-blank">
+                  <p>Describe a picture and press <strong>Make image</strong>.</p>
+                  <p className="rm-studio-hint">
+                    RigMatch runs it through ComfyUI on this computer. Nothing is uploaded, and
+                    finished pictures are saved to your Pictures folder.
+                  </p>
+                </div>
+              )}
+              {activeMessages.map((msg) => (
+                <div key={msg.id} className={msg.role === "user" ? "rm-studio-ask" : "rm-studio-out"}>
+                  {msg.role === "user" ? (
+                    <span>{msg.content}</span>
+                  ) : msg.imagePath ? (
+                    <GeneratedImage
+                      path={msg.imagePath}
+                      jobId={msg.imageJobId}
+                      bytes={msg.imageJobId ? imageBytes[msg.imageJobId] : undefined}
+                      onLoaded={(id, dataUrl) => setImageBytes((prev) => ({ ...prev, [id]: dataUrl }))}
+                    />
+                  ) : (
+                    <span className="rm-studio-status">{msg.content}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="rm-compose">
+              <textarea
+                className="rm-compose-input"
+                placeholder={imageMaker.ready
+                  ? "A lighthouse in a storm..."
+                  : "Load an image checkpoint in ComfyUI first..."}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void generateImage(); }
+                }}
+                rows={3}
+              />
+              <button
+                type="button"
+                className="rm-send-btn rm-image-btn"
+                onClick={() => void generateImage()}
+                disabled={!draft.trim() || generatingImage || !imageMaker.ready}
+                title={imageMaker.ready
+                  ? "Runs through ComfyUI on this computer"
+                  : "ComfyUI has no checkpoint loaded that can draw a still"}
+              >
+                {generatingImage ? "Making..." : "Make image ↗"}
+              </button>
             </div>
           </>
         ) : (
