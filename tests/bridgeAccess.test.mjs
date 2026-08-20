@@ -15,8 +15,13 @@ import assert from 'node:assert/strict';
  *
  * The logic is duplicated here rather than imported because it lives inside
  * electron/main.cjs, which pulls in `electron` at require time and cannot load
- * under plain node. Keep the two in step; the sweep fails if the source stops
- * matching.
+ * under plain node. That makes this file a statement of the intended rules, not
+ * proof the server implements them — so the same eight cases run against the
+ * real listener in scripts/gate-desktop.mjs, on a port that run owns. Those were
+ * checked by deleting each guard and confirming the gate went red.
+ *
+ * Keep the three in step: this file for the rules, the gate for the behaviour,
+ * and release-sweep for the source still containing the guards at all.
  */
 function hostIsLoopback(hostHeader) {
   if (!hostHeader) return false;

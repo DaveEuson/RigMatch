@@ -27,6 +27,8 @@
 import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import http from 'node:http';
+import net from 'node:net';
 import { _electron as electron } from 'playwright';
 
 if (!existsSync('dist/index.html')) {
@@ -34,6 +36,30 @@ if (!existsSync('dist/index.html')) {
 }
 
 const profile = mkdtempSync(join(tmpdir(), 'rigmatch-gate-'));
+
+/**
+ * A port this run can be certain belongs to it.
+ *
+ * The bridge must not be tested on 11435. A RigMatch the developer is already
+ * using owns that port, the gate's own instance would silently lose the bind,
+ * and every assertion below would then be made against the other process —
+ * which is exactly the confusion this gate exists to prevent. It happened once
+ * already: a probe read capabilities from one instance and stdout from another,
+ * and the two disagreed while both were correct.
+ */
+const freePort = async () => {
+  for (let port = 11450; port < 11470; port += 1) {
+    const available = await new Promise((resolve) => {
+      const probe = net.createServer();
+      probe.once('error', () => resolve(false));
+      probe.once('listening', () => probe.close(() => resolve(true)));
+      probe.listen(port, '127.0.0.1');
+    });
+    if (available) return port;
+  }
+  throw new Error('no free port for the bridge gate between 11450 and 11470');
+};
+const BRIDGE_PORT = await freePort();
 const results = [];
 const record = (name, ok, note) => {
   results.push({ name, ok, note });
@@ -47,7 +73,11 @@ let app = null;
 try {
   app = await electron.launch({
     args: ['electron/main.cjs', `--user-data-dir=${profile}`],
-    env: { ...process.env, RIGMATCH_FORCE_BUILT_RENDERER: '1' },
+    env: {
+      ...process.env,
+      RIGMATCH_FORCE_BUILT_RENDERER: '1',
+      RIGMATCH_BRIDGE_PORT: String(BRIDGE_PORT),
+    },
   });
 
   const userData = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'));
@@ -298,6 +328,95 @@ try {
     await page.locator('.side-menu-item').count() > 0,
   );
   record('nor does the guide return at the next launch', !(await guideShowing()));
+
+  // ── the loopback bridge ────────────────────────────────────────────────────
+  //
+  // RigMatch Chat reaches this window over HTTP on 127.0.0.1, and that listener
+  // accepts work: POST /generate starts a GPU job and writes a file. Until now
+  // its access rules were covered by a source-pattern check in release-sweep and
+  // by a unit test that *reimplements* the decision — neither of which runs the
+  // real server. A refactor could satisfy both and still let a page in.
+  //
+  // These run raw sockets rather than fetch(), because fetch forbids setting
+  // Host, and Host is what proves a rebound DNS name cannot reach a route.
+  const bridge = (opts = {}) => new Promise((resolve) => {
+    const { headers = {}, body, ...rest } = opts;
+    const req = http.request(
+      { host: '127.0.0.1', port: BRIDGE_PORT, path: '/', method: 'GET', headers, ...rest },
+      (res) => {
+        res.resume();
+        res.on('end', () => resolve(res.statusCode));
+      },
+    );
+    req.on('error', () => resolve('unreachable'));
+    if (body) req.write(body);
+    req.end();
+  });
+
+  const COMPANION = 'tauri://localhost';
+  const JSON_TYPE = { 'Content-Type': 'application/json' };
+  const PROMPT = JSON.stringify({ prompt: 'gate' });
+
+  // The allow path first. A suite that only tested refusals would pass happily
+  // against a bridge that refused everything, including the companion.
+  record(
+    'the bridge answers the companion',
+    await bridge({ headers: { Origin: COMPANION } }) === 200,
+  );
+
+  // Reaches the handler and is rejected on its contents, which proves it passed
+  // the origin and host gates — without starting a real generation, because an
+  // empty prompt is refused before any work begins.
+  record(
+    'a well-formed generate request gets through to the handler',
+    await bridge({
+      method: 'POST', path: '/generate', headers: { ...JSON_TYPE, Origin: COMPANION },
+      body: JSON.stringify({ prompt: '' }),
+    }) === 400,
+  );
+
+  record(
+    'a foreign origin cannot read the scores',
+    await bridge({ headers: { Origin: 'https://evil.example' } }) === 403,
+  );
+
+  // The bug this whole set exists for: `origin && !allowed` tests nothing at all
+  // when the header is absent, so anything on the machine could start a GPU job.
+  record(
+    'a POST with no origin cannot start work',
+    await bridge({ method: 'POST', path: '/generate', headers: JSON_TYPE, body: PROMPT }) === 403,
+  );
+
+  record(
+    'a foreign origin cannot start work either',
+    await bridge({
+      method: 'POST', path: '/generate',
+      headers: { ...JSON_TYPE, Origin: 'https://evil.example' }, body: PROMPT,
+    }) === 403,
+  );
+
+  // DNS rebinding: attacker.example resolves to 127.0.0.1, so the packet is
+  // local and only the Host header gives the client's own belief away.
+  record(
+    'a rebound host name cannot read the scores',
+    await bridge({ headers: { Host: 'evil.example' } }) === 403,
+  );
+
+  record(
+    'a rebound host name is refused even carrying a valid origin',
+    await bridge({
+      method: 'POST', path: '/generate',
+      headers: { ...JSON_TYPE, Origin: COMPANION, Host: 'evil.example' }, body: PROMPT,
+    }) === 403,
+  );
+
+  // Deliberately allowed, and asserted so it is a decision rather than a
+  // leftover: companions already installed call this without an Origin, and
+  // refusing would break them against an updated RigMatch.
+  record(
+    'an anonymous read is still allowed, on purpose',
+    await bridge() === 200,
+  );
 
 } finally {
   if (app) await app.close().catch(() => {});
