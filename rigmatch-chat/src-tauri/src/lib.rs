@@ -490,8 +490,13 @@ async fn get_rig_scores() -> Result<serde_json::Value, String> {
         .timeout(std::time::Duration::from_secs(2))
         .build()
         .map_err(|e| e.to_string())?;
+    // The other three bridge calls set this; this one did not, and so it was
+    // relying on the bridge letting an Origin-less request through. That
+    // leniency is now the documented exception rather than the rule, and this
+    // call should not be the reason it has to stay.
     let res = client
         .get("http://127.0.0.1:11435")
+        .header("Origin", "tauri://localhost")
         .send()
         .await
         .map_err(|e| e.to_string())?;

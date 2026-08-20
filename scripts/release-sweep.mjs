@@ -213,7 +213,14 @@ check('security', 'the bridge only takes orders from the companion', () => {
     'the generate endpoint is gone, or no longer restricted to POST /generate');
   must(/body\.length > 8192/.test(main),
     'the prompt size cap is gone — the only unbounded allocation this server has');
-  return 'origin-locked, capped';
+  // `origin && ...` only tests the header when it is present, so for a while
+  // anything sending no Origin at all skipped the boundary entirely and could
+  // both read the scores and start a GPU job. These two are what closed it.
+  must(/req\.method === 'POST' && !origin/.test(main),
+    'a POST with no Origin header is accepted again — that is the generate endpoint wide open');
+  must(/function hostIsLoopback/.test(main) && /!hostIsLoopback\(req\.headers\.host\)/.test(main),
+    'the Host check is gone, so a rebound DNS name reaches the bridge again');
+  return 'origin-locked, host-checked, capped';
 });
 
 check('security', 'external links stay on an allowlist', () => {

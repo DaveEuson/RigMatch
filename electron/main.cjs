@@ -1,6 +1,7 @@
 const { app, BrowserWindow, dialog, ipcMain, protocol, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
+const { fileURLToPath } = require('node:url');
 const os = require('node:os');
 const fs = require('node:fs/promises');
 const http = require('node:http');
@@ -329,6 +330,38 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // setWindowOpenHandler covers window.open and target="_blank". It does not
+  // cover the window navigating itself — location.href, or a plain <a href>
+  // with no target. Nothing in RigMatch does that today (no innerHTML anywhere,
+  // and every external anchor carries target="_blank"), so this guard has no
+  // current trigger. It is here so that stays true: a renderer that navigated
+  // away would carry the preload with it, handing the exposed API to whatever
+  // it landed on. Anything that is not the app itself is refused and, if it is
+  // a legitimate outbound link, opened in the real browser instead.
+  // In dev the renderer is http://127.0.0.1:5173; packaged it is a file: URL
+  // under dist/. Every file: URL has origin "null", so origins cannot tell the
+  // app's own files from any other file on the disk — the packaged case has to
+  // be decided on the path instead.
+  const appRoot = path.join(__dirname, '..', 'dist');
+  win.webContents.on('will-navigate', (event, url) => {
+    let allowed = false;
+    try {
+      const target = new URL(url);
+      if (target.protocol === 'file:') {
+        const targetPath = path.normalize(fileURLToPath(target));
+        // path.relative escaping upward means it is outside dist/.
+        const rel = path.relative(appRoot, targetPath);
+        allowed = Boolean(rel) && !rel.startsWith('..') && !path.isAbsolute(rel);
+      } else {
+        allowed = target.origin === new URL(win.webContents.getURL()).origin;
+      }
+    } catch { allowed = false; }
+    if (allowed) return;
+    event.preventDefault();
+    console.warn(`[navigation] refused in-window navigation to ${url.slice(0, 120)}`);
+    openExternalSafe(url);
+  });
+
   // Electron grants every permission a renderer asks for unless a handler says
   // otherwise, which sat oddly beside contextIsolation, the sandbox, the CSP
   // and the host allowlists. RigMatch needs exactly one: the microphone, for
@@ -459,15 +492,52 @@ function rememberJob(id, patch) {
   }
 }
 
+// A Host header that is not loopback means the request did not come from
+// something addressing this machine as this machine — the signature of DNS
+// rebinding, where a page on attacker.example resolves to 127.0.0.1 and then
+// talks to whatever is listening. The socket is bound to 127.0.0.1, so the
+// packet is local either way; what the Host tells us is how the *client*
+// believes it got here, and only loopback names are legitimate.
+function hostIsLoopback(hostHeader) {
+  if (!hostHeader) return false;
+  // Strip the port, and the brackets IPv6 literals arrive in.
+  const host = String(hostHeader).replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
+  return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+}
+
 const scoresServer = http.createServer((req, res) => {
   const origin = req.headers.origin;
 
-  // The origin allowlist is the whole security boundary here, and it now has to
-  // hold for a request with side effects rather than only for a read. A browser
-  // tab must not be able to start work on this machine.
+  // Checked before anything else, and for every method: a rebound name never
+  // reaches a route.
+  if (!hostIsLoopback(req.headers.host)) {
+    res.statusCode = 403;
+    res.end();
+    return;
+  }
+
+  // A present-but-wrong Origin is always refused.
   if (origin && !BRIDGE_ALLOWED_ORIGINS.has(origin)) {
     res.statusCode = 403;
     res.end();
+    return;
+  }
+
+  // An *absent* Origin used to pass, because `origin && ...` only tests the
+  // header when it is there. That was not a deliberate allowance — the comment
+  // here claimed the allowlist was the whole boundary, and for anything that
+  // sends no Origin it was not a boundary at all. Anything on this machine
+  // could read the scores and, worse, start work.
+  //
+  // POST is the half that does something, so POST now requires a real Origin.
+  // GET stays lenient on purpose: the companion's own scores call sends no
+  // Origin, so refusing would break every already-installed copy of RigMatch
+  // Chat against a freshly updated RigMatch. What GET exposes is a model list
+  // and scores, to a process already running as this user; the Host check above
+  // is what keeps a web page out of it.
+  if (req.method === 'POST' && !origin) {
+    res.statusCode = 403;
+    res.end(JSON.stringify({ error: 'Generation requires a request from RigMatch Chat.' }));
     return;
   }
   if (origin) {
