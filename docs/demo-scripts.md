@@ -1,7 +1,9 @@
 # Two demo scripts
 
-Written against the app as it stands at 0.7-dev. Every screen, label and number
+Written against the app as it stands at 0.7. Every screen, label and number
 below is one that actually exists — no invented UI, no rounded-up claims.
+Verified 2026-08-20: twelve goal tiles across five groups, and the companion
+strings quoted here are the ones in the build.
 
 Two rules for both videos, taken from the app's own principles:
 
@@ -28,7 +30,7 @@ LLM. The app itself explains "graphics card" rather than VRAM — match that.
 | # | Shot | On screen | Narration | Secs |
 |---|------|-----------|-----------|------|
 | 1 | Ollama's model list in a browser, scrolling | Names only: `qwen2.5:7b`, `llama3.2:3b`, `gemma3:4b` | "Free AI you can run at home. This is the list. None of these names tell you anything." | 0–8 |
-| 2 | Cut to RigMatch first screen | The goal picker, twelve tiles | "RigMatch starts somewhere else — with what you actually want." | 8–15 |
+| 2 | Cut to RigMatch first screen | The goal picker, twelve tiles in five groups | "RigMatch starts somewhere else — with what you actually want." | 8–15 |
 | 3 | Click **Everyday chat** | Tile highlights | "Say what you want it for." | 15–20 |
 | 4 | Setup step reading the machine | The rig card: graphics card name, memory | "It reads your computer. Not a survey — the actual card in the actual machine." | 20–28 |
 | 5 | Pick step, cards with size + fit | "Sweet spot" / size badges | "It picks a few that should fit, and says why each one might suit you." | 28–36 |
@@ -48,11 +50,22 @@ LLM. The app itself explains "graphics card" rather than VRAM — match that.
 - If the run is slow on the day, pick a small model. A 3B finishing honestly
   beats a 7B finishing in the edit.
 
+**The optional tag, and why it is optional**
+
+You can add eight seconds of RigMatch Chat making a picture after shot 9. It
+tests well with this audience and it is the most immediately impressive thing
+the app does.
+
+It also changes what the video promises. Video A sells one idea — *find out
+which AI suits your computer* — and image generation quietly turns that into
+*this app does AI stuff*, which is every other app's pitch. If you want the
+picture, consider making it its own short rather than a tail on this one.
+
 ---
 
 ## Video B — for people who already run models locally
 
-**Length:** 2:30–3:00. **Audience:** r/LocalLLaMA, people with Ollama already
+**Length:** 2:45–3:00. **Audience:** r/LocalLLaMA, people with Ollama already
 installed and opinions about it. **Where it plays:** watched deliberately, sound
 on.
 
@@ -69,24 +82,28 @@ so lead with the refusals.
 | 2 | RigMatch Advanced, Models screen | The table: size, quant, fit, status | "RigMatch runs the same models on your card and scores them there." | 10–20 |
 | 3 | Start a run, warning dialog visible | The run dialog with the GPU-contention note | "It checks the card is free first. If something else is on it, it says so — a benchmark run against a busy GPU is a fiction." | 20–32 |
 | 4 | Comparison running | Per-answer scores landing | "Same questions, same machine, one after another." | 32–42 |
-| 5 | Scorecards, one crown per goal | Multiple crowns, per goal | "One winner per goal. A coder and a painter cannot lose to each other, so it stops pretending they can." | 42–55 |
-| 6 | Hover a score with the rig stamp | Card, memory, driver, weight fingerprint | "Every score records the card, the driver and the exact weights. Change any of them and the score badges itself for a retest instead of quietly still counting." | 55–72 |
-| 7 | Settings → judge options | Local vs cloud judge | "Prose has no shape to pattern-match, so it hands those answers to a second local model to mark. Never a paid cloud one unless you say so." | 72–86 |
-| 8 | Activity → Listening test | The transcript vs the script, score | "The listening test is the one score here measured against a right answer. Word for word against a known passage." | 86–100 |
-| 9 | Chat: "draw me a picture of a lighthouse" | The honesty note appears | "And the chat will not pretend. Ask a text model for a picture and it says it cannot make one — before the model cheerfully describes one and calls it done." | 100–115 |
-| 10 | Press **Generate it here**, timer runs, image lands | Elapsed seconds, Stop button, then the picture | "If ComfyUI is running, it offers to actually make it. Elapsed time, not a fake progress bar, and a Stop that works." | 115–140 |
-| 11 | Close on the Models table | — | "Free, offline, and it will tell you when it does not know. Link below." | 140–155 |
+| 5 | Scorecards, one crown per goal | Multiple crowns, per goal | "One winner per goal. A coder and a painter cannot lose to each other, so it stops pretending they can." | 42–54 |
+| 6 | Hover a score with the rig stamp | Card, driver, weight fingerprint | "Every score records the card, the driver and the exact weights. Change any of them and the score badges itself for a retest instead of quietly still counting." | 54–70 |
+| 7 | Activity → Listening test | The transcript vs the script, score | "The listening test is the one score here measured against a right answer. Word for word against a known passage." | 70–84 |
+| 8 | Chat: "draw me a picture of a lighthouse" | The honesty note appears, model's reply beneath | "Ask a text model for a picture and it tells you it cannot make one — before the model cheerfully describes one and calls it done." | 84–100 |
+| 9 | Cut to RigMatch Chat opening | The buddy list, AIM-style, avatars per family | "Picture-making lives here. This is the companion — your models as a buddy list." | 100–110 |
+| 10 | The capability panel, held still | **What this chat can do** — write / look / listen, then below a line: *Make pictures — not a model* | "And it answers the obvious question before you ask it. Which of these makes an image? None of them. That is ComfyUI's job, and the panel says so rather than letting you find out." | 110–126 |
+| 11 | Filter to **Sees pictures**, list narrows | `sees` chips on three models, `hears` on gemma4 | "The ones that can look at a picture are marked. So are the ones that can listen." | 126–136 |
+| 12 | Type a prompt, press **Make image ↗**, timer runs, picture lands | Rising seconds, Stop button, then the image and its saved path | "Then it asks RigMatch to make it. Elapsed seconds, not a fake progress bar, a Stop that works, and a real file path underneath." | 136–160 |
+| 13 | Close on the Models table | — | "Free, offline, and it will tell you when it does not know. Link below." | 160–175 |
 
 **Notes for the edit**
 
-- Shots 3, 6 and 9 are the argument. If the video has to lose 30 seconds, take
-  it from 4 and 5, never from these.
-- Shot 9 lands hardest if you show the model's answer underneath — the note,
-  then the model enthusiastically describing a lighthouse. The contrast *is* the
-  point.
-- Shot 10 is the only "wow" shot; on sdxl-turbo it takes about 6–15 seconds,
-  which is short enough to play in full. Do not cut it — an unedited timer is
-  the proof.
+- Shots 3, 6, 8 and 10 are the argument. If the video has to lose time, take it
+  from 4, 5 and 11 — never from these four.
+- Shot 8 lands hardest with the model's answer visible underneath the note: the
+  warning, then the model enthusiastically describing a lighthouse it did not
+  draw. The contrast *is* the point, and it is the single most persuasive frame
+  in the video for this audience.
+- Shot 10 is the one most likely to be cut for pace and the one most worth
+  keeping. "None of them" is a claim no competitor's demo makes about itself.
+- Shot 12 on sdxl-turbo takes about 6–15 seconds — short enough to play in full.
+  Do not cut it. An unedited timer is the proof.
 - Expect "why not just use X?" in the comments. The answer in one line: because
   X tells you what is good, and this tells you what is good *on your machine*.
 
@@ -106,3 +123,19 @@ so lead with the refusals.
   its time refusing.
 - **A real download takes minutes.** Pre-download the models, then delete one
   small one so shot 6 of video A has something genuine to show.
+
+### Two that will ruin a companion take
+
+- **Only one RigMatch open.** RigMatch Chat connects to whichever RigMatch is
+  running, and a second window cannot serve it. Two open means the companion may
+  be listing the other one's models and saving the other one's pictures. 0.7
+  refuses to start a second window at all, but check the taskbar before rolling
+  rather than discovering it in the edit.
+- **Pictures are shown for the session, not stored in the transcript.** Reopen a
+  conversation and yesterday's image is its filename, not the picture — that is
+  deliberate, so a history does not grow by a quarter-megabyte an image. Shoot
+  shot 12 in one continuous take; do not close the companion and expect to film
+  the result again afterwards.
+- **ComfyUI must be up with an image checkpoint**, not a video one. The first
+  checkpoint on this machine is a video model with no text encoder, and asking it
+  for a picture fails with a CLIP error. Load sdxl-turbo before rolling.
