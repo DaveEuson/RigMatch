@@ -116,7 +116,49 @@ check('parity', 'the companion binary is newer than its source', () => {
   const behindMin = Math.round((sourceTime - builtTime) / 60000);
   must(builtTime >= sourceTime,
     `companions/rigmatch-chat.exe is ${behindMin} minute(s) older than its source — run \`cd rigmatch-chat && npx tauri build\` and copy the result, or the release ships a companion missing whatever changed`);
+
+  // And the copy that actually runs.
+  //
+  // RigMatch launches the companion from its own install root, so an unpacked
+  // build carries its own copy — and that one goes stale on its own schedule.
+  // Checking only the source-tree binary missed this twice in one afternoon:
+  // the feature was built, committed and described while the running companion
+  // was hours behind, and the second time the copy had been blocked by a file
+  // lock and the failure looked identical to the first.
+  const packaged = join(root, 'release/win-unpacked/companions/rigmatch-chat.exe');
+  if (existsSync(packaged)) {
+    const packagedTime = statSync(packaged).mtimeMs;
+    const gapMin = Math.round((builtTime - packagedTime) / 60000);
+    must(packagedTime >= builtTime,
+      `release/win-unpacked/companions/rigmatch-chat.exe is ${gapMin} minute(s) behind companions/ — that is the copy RigMatch launches, so testing it proves nothing about the current build. Close RigMatch Chat (it locks the file) and copy it across`);
+    return 'source-tree and packaged copies both current';
+  }
+
   return 'built after its source';
+});
+
+check('parity', 'the unpacked build is not older than the app it came from', () => {
+  // The companion is only half of it. release/win-unpacked also carries its own
+  // app.asar, and a stale one is worse than a stale companion because it fails
+  // *quietly and wrongly*: the companion asked whether a picture could be made,
+  // an old RigMatch had no answer to give, and the panel reported "Not ready"
+  // over a working ComfyUI with SDXL Turbo loaded. A confident false statement,
+  // produced by two correct programs of different ages.
+  const asar = join(root, 'release/win-unpacked/resources/app.asar');
+  if (!existsSync(asar)) return 'no unpacked build to check';
+
+  const builtTime = statSync(asar).mtimeMs;
+  const rendererTime = existsSync(join(root, 'dist'))
+    ? Math.max(...readdirSync(join(root, 'dist/assets'))
+      .map((f) => statSync(join(root, 'dist/assets', f)).mtimeMs))
+    : 0;
+  const mainTime = statSync(join(root, 'electron/main.cjs')).mtimeMs;
+  const newest = Math.max(rendererTime, mainTime);
+  const behindMin = Math.round((newest - builtTime) / 60000);
+
+  must(builtTime >= newest,
+    `release/win-unpacked is ${behindMin} minute(s) behind dist/ or electron/main.cjs — testing it exercises an old app, and anything the companion asks it will be answered by that old app. Rebuild with \`npx electron-builder --dir\``);
+  return 'unpacked build is current';
 });
 
 check('parity', 'the version is one number everywhere', () => {

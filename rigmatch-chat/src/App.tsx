@@ -504,7 +504,7 @@ export default function App() {
     { ready: false, checkpoint: null },
   );
   /** Narrow the list to one ability. 'all' is the resting state. */
-  const [capabilityFilter, setCapabilityFilter] = useState<"all" | "vision" | "audio">("all");
+  const [capabilityFilter, setCapabilityFilter] = useState<"all" | "text" | "vision" | "audio" | "image">("all");
   /** Fetched bytes, keyed by job — memory only, never written to history. */
   const [imageBytes, setImageBytes] = useState<Record<string, string>>({});
   const [chosenModel, setChosenModel] = useState<string | null>(() => loadCachedBridge().chosen);
@@ -539,8 +539,11 @@ export default function App() {
       // Narrowed by ability, when asked. Hiding a model the user chose to keep
       // visible is only acceptable while a filter is plainly switched on, which
       // is why the control sits directly above the list rather than in Settings.
-      .filter((b) => capabilityFilter === "all"
-        || (rigCapabilities[b.modelName] ?? []).includes(capabilityFilter));
+      // "Make a picture" is not something any model here does, so that filter
+      // empties the list on purpose and the maker card takes its place.
+      .filter((b) => capabilityFilter !== "image"
+        && (capabilityFilter === "all"
+          || (rigCapabilities[b.modelName] ?? []).includes(capabilityFilter)));
     return [...filtered].sort((a, b) => {
       const aChosen = a.modelName === chosenModel ? 0 : 1;
       const bChosen = b.modelName === chosenModel ? 0 : 1;
@@ -1595,38 +1598,33 @@ export default function App() {
           RigMatch; the models here write, and some of them look and listen.
           Said once, in the open, rather than left to be discovered.
         */}
-        <div className="rm-can-do">
-          <strong>What this chat can do</strong>
-          <ul>
-            <li><span>Write</span> every model below</li>
-            <li><span>Look</span> models marked <em>sees</em></li>
-            <li><span>Listen</span> models marked <em>hears</em></li>
-            {/*
-              Naming the checkpoint matters more than it looks. Someone with
-              SDXL Turbo installed went looking for it in this list, did not
-              find it, and concluded the companion could not see it — when the
-              companion had simply never been told. "Not a model" explains why
-              it is absent from the list; it does not say what will be used
-              instead, and without that, Make image is a leap of faith.
-            */}
-            <li className="rm-can-do-elsewhere">
-              <span>Make pictures</span> not a model — RigMatch runs ComfyUI for it.
-              {imageMaker.ready ? (
-                <> Ready, using <b>{imageMaker.checkpoint?.replace(/\.(safetensors|ckpt|sft)$/i, "")}</b>.
-                  Press <b>Make image</b> by the message box.</>
-              ) : (
-                <> <b className="rm-not-ready">Not ready</b> — ComfyUI has no checkpoint loaded that can draw a still.</>
-              )}
-            </li>
-          </ul>
-        </div>
+        {/*
+          A question with buttons, not a paragraph.
 
-        {Object.keys(rigCapabilities).length > 0 && (
-          <div className="rm-cap-filter" role="group" aria-label="Filter models by what they can do">
-            {([["all", "All"], ["vision", "Sees pictures"], ["audio", "Hears audio"]] as const).map(([id, label]) => (
+          This started as a written explanation of what the chat could do, which
+          was accurate, ignored, and — in the words of the person who asked for
+          it — super ugly. Nobody reads a wall of text in a sidebar; they arrive
+          wanting to do a thing. So the capabilities became the filter, and the
+          filter asks the question directly.
+
+          "Make a picture" is the reason this exists. It is the one answer that
+          is not an Ollama model, and the list below says so in its own words
+          rather than leaving the absence to be puzzled over.
+        */}
+        <div className="rm-doing">
+          <strong id="rm-doing-label">What do you want to do?</strong>
+          <div className="rm-doing-chips" role="group" aria-labelledby="rm-doing-label">
+            {([
+              ["all", "Anything"],
+              ["text", "Write"],
+              ["vision", "Read a picture"],
+              ["audio", "Hear audio"],
+              ["image", "Make a picture"],
+            ] as const).map(([id, label]) => (
               <button
                 key={id}
                 type="button"
+                aria-pressed={capabilityFilter === id}
                 className={capabilityFilter === id ? "active" : ""}
                 onClick={() => setCapabilityFilter(id)}
               >
@@ -1634,9 +1632,38 @@ export default function App() {
               </button>
             ))}
           </div>
-        )}
+        </div>
         <div className="rm-buddy-list">
-          {visibleBuddies.length === 0 && connectionStatus === "connected" && (
+          {/*
+            The picture-maker, listed where someone looks for it.
+
+            It is not an Ollama model and cannot be chatted with, so it is not a
+            buddy — but "not a buddy" was being expressed by simply not being
+            anywhere, and a person with SDXL Turbo installed read that absence as
+            the app failing to see it. Twice. It belongs in the list, saying what
+            it is.
+          */}
+          {capabilityFilter === "image" && (
+            <div className={imageMaker.ready ? "rm-maker ready" : "rm-maker"}>
+              <div className="rm-maker-head">
+                <span className="rm-maker-kind">Image maker</span>
+                <span className={imageMaker.ready ? "rm-maker-state on" : "rm-maker-state off"}>
+                  {imageMaker.ready ? "Ready" : "Not ready"}
+                </span>
+              </div>
+              <strong>
+                {imageMaker.ready && imageMaker.checkpoint
+                  ? imageMaker.checkpoint.replace(/\.(safetensors|ckpt|sft)$/i, "")
+                  : "No checkpoint that can draw"}
+              </strong>
+              <p>
+                {imageMaker.ready
+                  ? "Not a chat model. Type what you want and press Make image — RigMatch runs it through ComfyUI."
+                  : "ComfyUI has no still-image checkpoint loaded, so Make image cannot work yet. Load one in ComfyUI, or check RigMatch is running."}
+              </p>
+            </div>
+          )}
+          {capabilityFilter !== "image" && visibleBuddies.length === 0 && connectionStatus === "connected" && (
             <div className="rm-buddy-empty">
               <p>No models visible.</p>
               <p>Check Settings to unhide models, or open <strong>RigMatch</strong> to download one.</p>
