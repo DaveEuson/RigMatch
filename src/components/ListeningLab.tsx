@@ -13,7 +13,7 @@ import {
   referenceFor,
   type ListeningSource,
 } from "../lib/listeningScripts";
-import { toListeningWav } from "../lib/wavEncoder";
+import { isEffectivelySilent, toListeningWav } from "../lib/wavEncoder";
 import type { OllamaStatus } from "../types";
 
 /**
@@ -72,6 +72,62 @@ export function ListeningLab({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
+  /**
+   * The live input meter, and the quietest thing this panel needed all along.
+   *
+   * Recording gave no sign the microphone was picking anything up. You read a
+   * script, pressed Run, and the model scored zero for hearing nothing — which
+   * was true, and told you nothing about why. A meter answers the only question
+   * that matters while the light is on: is any of this reaching the app.
+   *
+   * The bar is written straight to the DOM rather than through state. It
+   * updates per animation frame, and sixty renders a second of a React tree
+   * this size to move one bar is not a trade worth making.
+   */
+  const meterRef = useRef<HTMLDivElement | null>(null);
+  const meterFrameRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  /** Loudest level seen during this take, so a silent one can be named. */
+  const takePeakRef = useRef(0);
+
+  const stopMeter = useCallback(() => {
+    if (meterFrameRef.current !== null) cancelAnimationFrame(meterFrameRef.current);
+    meterFrameRef.current = null;
+    void audioContextRef.current?.close().catch(() => undefined);
+    audioContextRef.current = null;
+    if (meterRef.current) meterRef.current.style.setProperty('--level', '0');
+  }, []);
+
+  const startMeter = useCallback((stream: MediaStream) => {
+    try {
+      const context = new AudioContext();
+      audioContextRef.current = context;
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 1024;
+      context.createMediaStreamSource(stream).connect(analyser);
+      const buffer = new Uint8Array(analyser.fftSize);
+      takePeakRef.current = 0;
+
+      const tick = () => {
+        analyser.getByteTimeDomainData(buffer);
+        // Bytes are centred on 128; distance from centre is the amplitude.
+        let peak = 0;
+        for (let i = 0; i < buffer.length; i += 1) {
+          const value = Math.abs(buffer[i] - 128) / 128;
+          if (value > peak) peak = value;
+        }
+        if (peak > takePeakRef.current) takePeakRef.current = peak;
+        // Square-rooted so ordinary speech fills a useful part of the bar
+        // rather than hugging the left end.
+        if (meterRef.current) meterRef.current.style.setProperty('--level', String(Math.sqrt(peak)));
+        meterFrameRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch {
+      // No meter is survivable; a failed recording is not. Carry on.
+    }
+  }, []);
+
   const activeModel = models.includes(model) ? model : (models[0] ?? '');
   const script = listeningScriptById(scriptId);
   const running = runState.phase === 'running';
@@ -89,7 +145,8 @@ export function ListeningLab({
   // on, which is alarming and entirely our fault.
   useEffect(() => () => {
     recorderRef.current?.stream.getTracks().forEach((t) => t.stop());
-  }, []);
+    stopMeter();
+  }, [stopMeter]);
 
   /**
    * List the microphones.
@@ -121,15 +178,36 @@ export function ListeningLab({
       // Labels are readable now that permission has been granted, so the picker
       // can stop saying "Microphone 1".
       void loadInputs();
+      startMeter(stream);
       const recorder = new MediaRecorder(stream);
       chunksRef.current = [];
       recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
+        stopMeter();
         try {
           const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
-          const base64 = await toListeningWav(await blob.arrayBuffer(), decodeAudio);
-          setCaptured({ base64, label: `recording of "${listeningScriptById(scriptId).label}"` });
+          const clip = await toListeningWav(await blob.arrayBuffer(), decodeAudio);
+          // Silence is not a recording, and scoring it would blame the model
+          // for a microphone. Say which input was used, because the usual cause
+          // is the wrong one being selected.
+          if (isEffectivelySilent(clip.peak)) {
+            // The meter watches the raw stream, before any of this app's
+            // decoding and resampling. So the two peaks disagreeing localises
+            // the fault precisely: the microphone was working and RigMatch lost
+            // the audio afterwards, which is this app's bug and should not be
+            // reported as the user's microphone.
+            const heardSomething = takePeakRef.current > 0.02;
+            const name = inputs.find((d) => d.deviceId === inputId)?.label;
+            setCaptureError(heardSomething
+              ? 'The microphone was picking you up, but the recording came through silent. '
+                + 'That is a fault in RigMatch rather than your setup — please report it.'
+              : `That recording is silent — nothing reached ${name || 'the microphone'}. `
+                + 'Check the input above, and watch the level bar while you speak.');
+            setRecording(false);
+            return;
+          }
+          setCaptured({ base64: clip.base64, label: `recording of "${listeningScriptById(scriptId).label}"` });
         } catch {
           setCaptureError('That recording could not be read. Try again, or upload a file instead.');
         }
@@ -139,10 +217,11 @@ export function ListeningLab({
       recorder.start();
       setRecording(true);
     } catch {
+      stopMeter();
       setCaptureError('No microphone was available, or permission was declined.');
       setRecording(false);
     }
-  }, [inputId, loadInputs, scriptId]);
+  }, [inputId, inputs, loadInputs, scriptId, startMeter, stopMeter]);
 
   const stopRecording = useCallback(() => {
     recorderRef.current?.stop();
@@ -152,7 +231,8 @@ export function ListeningLab({
     if (!file) return;
     setCaptureError('');
     try {
-      const base64 = await toListeningWav(await file.arrayBuffer(), decodeAudio);
+      const clip = await toListeningWav(await file.arrayBuffer(), decodeAudio);
+      const base64 = clip.base64;
       setCaptured({ base64, label: file.name });
     } catch {
       setCaptureError(`${file.name} could not be decoded. Try a WAV, MP3, or M4A.`);
@@ -277,6 +357,20 @@ export function ListeningLab({
               </button>
             )}
           </div>
+          {/*
+            Shown only while the light is on, because a meter reading zero when
+            nothing is being recorded teaches the wrong lesson. aria-hidden: a
+            moving bar is meaningless to a screen reader, and the silence
+            message after the take is what carries the same information.
+          */}
+          {recording && (
+            <div className="listening-meter" aria-hidden="true">
+              <div className="listening-meter-track">
+                <div className="listening-meter-fill" ref={meterRef} />
+              </div>
+              <span>Speak — the bar should move</span>
+            </div>
+          )}
         </>
       )}
 

@@ -116,11 +116,51 @@ export function bytesToBase64(buffer: ArrayBuffer): string {
 export async function toListeningWav(
   data: ArrayBuffer,
   decode: (data: ArrayBuffer) => Promise<{ sampleRate: number; channels: Float32Array[] }>,
-): Promise<string> {
+): Promise<ListeningClip> {
   const { sampleRate, channels } = await decode(data);
   const mono = toMono(channels);
   const resampled = resample(mono, sampleRate, TARGET_SAMPLE_RATE);
-  return bytesToBase64(encodeWav(resampled, TARGET_SAMPLE_RATE));
+  return {
+    base64: bytesToBase64(encodeWav(resampled, TARGET_SAMPLE_RATE)),
+    peak: peakAmplitude(resampled),
+    seconds: durationSeconds(resampled.length, TARGET_SAMPLE_RATE),
+  };
+}
+
+/** A finished recording, and enough about it to refuse to score a bad one. */
+export type ListeningClip = {
+  base64: string;
+  /** Loudest sample, 0 to 1. */
+  peak: number;
+  seconds: number;
+};
+
+/**
+ * Roughly -40 dBFS. Below this a clip holds line noise and nothing a model
+ * could transcribe — a muted microphone, or the wrong input selected.
+ */
+export const SILENCE_PEAK = 0.01;
+
+export function peakAmplitude(samples: Float32Array): number {
+  let peak = 0;
+  for (let i = 0; i < samples.length; i += 1) {
+    const value = Math.abs(samples[i]);
+    if (value > peak) peak = value;
+  }
+  return peak;
+}
+
+/**
+ * Whether there is anything here to hear.
+ *
+ * The listening test used to send whatever came back and report the score. A
+ * silent clip therefore scored the model 0 out of 100 for "hearing nothing",
+ * when nothing is precisely what it was given — the failure was a microphone,
+ * and the number blamed the model. Checking here means the run can decline to
+ * score rather than publish a wrong one.
+ */
+export function isEffectivelySilent(peak: number, threshold = SILENCE_PEAK): boolean {
+  return peak < threshold;
 }
 
 /** Seconds of audio, so a caller can refuse something far too short to score. */

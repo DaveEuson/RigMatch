@@ -18049,3 +18049,37 @@ a.whats-next-support:hover {
    the smallest size in the app. */
 .roster-score { font-size: 10px; }
 .speed-untested { font-size: 10px; opacity: 0.7; }
+
+/* The listening input meter.
+   Driven by a --level custom property written straight to the element each
+   animation frame; re-rendering React sixty times a second to move one bar is
+   not a trade worth making. */
+.listening-meter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.listening-meter-track {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.listening-meter-fill {
+  height: 100%;
+  width: calc(var(--level, 0) * 100%);
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--green), var(--gold));
+  /* No transition: this is an instrument, and smoothing it would show a level
+     that was true a moment ago rather than the one arriving now. */
+}
+
+.listening-meter span {
+  font-size: 11px;
+  opacity: 0.65;
+  white-space: nowrap;
+}
