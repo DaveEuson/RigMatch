@@ -14,6 +14,28 @@ This is a candid list of issues we know about going into the beta. If you hit so
 
 ## Data & Scoring
 
+**A model tested on another computer is credited to this one**
+If you point RigMatch at an Ollama running on a second machine on your network
+and benchmark a model there, the score is saved with *this* computer's graphics
+card, VRAM and driver — the run happened on the other machine. Everything else
+about the score is correct; only the hardware it names is wrong. It matters
+because that stamp exists precisely to stop a score being attributed to
+hardware that did not earn it, and because a score is only ever true of a rig.
+Testing on the machine in front of you, which is what almost everyone does, is
+unaffected. Being fixed properly rather than quickly: an honest stamp for a
+remote run has no local card to name, so the match card, the retest badge and
+the per-goal crowning rules all have to handle a score whose hardware is
+unknown.
+
+**Image scores from before 0.7 used the wrong sampler settings**
+Every image checkpoint was asked for 20 steps with guidance at 7 — correct for
+ordinary Stable Diffusion, and wrong for a distilled model like SDXL-Turbo,
+which is built to finish in a handful of steps with guidance off. Those runs
+produced oversaturated, posterised pictures, and the adherence judge then marked
+the model down for a request RigMatch had made badly. 0.7 asks each checkpoint
+for what it was built for. Image scores saved before this are not comparable
+with ones taken after it; re-run them.
+
 **Legacy scorecards need a fresh retest**
 Scorecards saved before the current scoring schema are now labeled **Retest recommended** and are excluded from category picks so old speed calibration does not crown misleading winners. Re-running a test updates that model to the current scoring schema.
 

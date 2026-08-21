@@ -6,6 +6,48 @@ Ideas parked for later. Nothing here is committed; it's a candid backlog of dire
 
 ## Backburner
 
+### Rented hardware — "what could I do with a card I do not own?"
+
+Decided 2026-08-20, after rentals came up as a way around being locked to one
+graphics card. Today's question is what *your* hardware can do; this is the
+later one, and the reasoning is recorded so it is argued with rather than
+rediscovered.
+
+The product fit is real. Today RigMatch says a 70B is out of your league and
+stops. The rental version finishes the sentence: *out of your league on this
+card — a good match on a rented 48 GB one, around $0.40 an hour.* The
+matchmaking frame already carries it: a model your rig cannot date locally is
+not unreachable, it is long-distance.
+
+The seam already exists, too. A rental is a **network host somebody else
+racks** — RigMatch already scans for remote Ollama instances, lists their
+models and manages them per host. The feature is teaching it that some hosts
+are rented, with a price per hour and a lifetime.
+
+**What has to be true first**
+
+- **A score must be stamped with the rig that produced it.** See KNOWN_ISSUES —
+  this is a live bug, not a rental one. Under rentals it would poison every
+  score.
+- **The network-host path needs its first real exercise.** It has a scanner and
+  demo data; it has likely never been driven against a genuine remote host under
+  test. A cheap pod running Ollama is exactly the rig for that.
+- **Cost honesty.** The app never invents numbers about speed and must not
+  invent them about money. Price per hour comes from the user or the provider,
+  never estimated, and a finished run should say what it cost.
+
+**Explicitly out of scope, even later:** RigMatch running *on* the rental (the
+app stays on your desk; the rental is a host it talks to), and any reselling or
+brokering of compute.
+
+### VRAM-tier simulation in the gates
+
+A dev-only profile override (`RIGMATCH_FAKE_VRAM=8/16/24`) so fit labels,
+sweet-spot copy and "out of your league" wording are swept across tiers
+automatically, instead of only ever being seen on the one card the developer
+owns. Cheap, and it closes the blind spot that being locked to a single machine
+creates. Good first task after 0.7.
+
 ### Code Challenge — multi-language, judge-graded coding test
 
 A skill test that asks a model to solve a coding task in a language you choose
