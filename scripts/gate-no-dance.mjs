@@ -16,29 +16,21 @@
  * Usage:  node scripts/gate-no-dance.mjs
  */
 
-import { spawn, spawnSync } from 'node:child_process';
+import { leaseDevServer, COLD_START_MS } from './dev-server-lease.mjs';
 import { chromium } from 'playwright';
 
 const url = process.env.RIGMATCH_TOUR_URL || 'http://127.0.0.1:5173/';
 /** More than a rounding wobble, less than a line of text. */
 const TOLERANCE_PX = 2;
 
-let dev = null;
-const reachable = async () => {
-  try { return (await fetch(url, { signal: AbortSignal.timeout(2000) })).ok; } catch { return false; }
-};
-if (!(await reachable())) {
-  dev = spawn('npm', ['run', 'dev:web', '--', '--host', '127.0.0.1'], { shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
-  const began = Date.now();
-  while (Date.now() - began < 40000 && !(await reachable())) await new Promise((r) => setTimeout(r, 500));
-}
+const lease = await leaseDevServer(url, { timeoutMs: 180_000 });
 
 const browser = await chromium.launch({ headless: true });
 const results = [];
 
 for (const step of ['setup', 'pick']) {
   const page = await (await browser.newContext({ viewport: { width: 1440, height: 980 } })).newPage();
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: COLD_START_MS });
   await page.evaluate(() => {
     localStorage.setItem('rigmatch:ui-mode:v1', 'beginner');
     localStorage.setItem('rigmatch:first-run-tutorial:v1', 'seen');
@@ -101,5 +93,5 @@ console.log(failed.length === 0
   : `\nGate OPEN: ${failed.length} of ${results.length} terms move the page.`);
 
 await browser.close();
-if (dev) spawnSync('taskkill', ['/pid', String(dev.pid), '/T', '/F'], { stdio: 'ignore' });
+lease.stop();
 process.exitCode = failed.length === 0 ? 0 : 1;

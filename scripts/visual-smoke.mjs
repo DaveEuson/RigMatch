@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { spawn, spawnSync } from 'node:child_process';
+import { leaseDevServer, COLD_START_MS } from './dev-server-lease.mjs';
 import { mkdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -16,58 +16,12 @@ const screenshots = {
 
 mkdirSync(outDir, { recursive: true });
 
-let devServer = null;
+let lease = { started: false, stop() {} };
 
-// On Windows the dev server is spawned through a shell, so child.kill() only
-// reaches the shell wrapper and the Vite process keeps the port (and this
-// script's stdio) alive forever. Kill the whole process tree instead.
-/**
- * Kill whatever is listening on the port, by port rather than by parentage.
- *
- * `taskkill /T` walks the tree from the shell wrapper this script spawned, and
- * npm re-parents its children — so by the time cleanup runs the wrapper is gone
- * and the tree is empty while npm and Vite are still very much alive. Every
- * timeout today leaked one, and they did more than hold the port: a Vite
- * watcher rooted at the project keeps handles under rigmatch-chat/dist, which
- * left that directory delete-pending and broke an unrelated build with EPERM.
- *
- * Only ever called for a server this script started; one that was already
- * running belongs to whoever started it.
- */
-function killPortListeners(port) {
-  if (process.platform !== 'win32') return;
-  const out = spawnSync('netstat', ['-ano'], { encoding: 'utf8' }).stdout || '';
-  const pids = new Set();
-  for (const line of out.split('\n')) {
-    if (!line.includes(`:${port}`) || !line.includes('LISTENING')) continue;
-    const pid = line.trim().split(/\s+/).pop();
-    if (pid && pid !== '0') pids.add(pid);
-  }
-  for (const pid of pids) {
-    spawnSync('taskkill', ['/pid', pid, '/T', '/F'], { stdio: 'ignore' });
-  }
-}
-
-function stopDevServer() {
-  if (!devServer || devServer.killed) return;
-  if (process.platform === 'win32') {
-    spawnSync('taskkill', ['/pid', String(devServer.pid), '/T', '/F'], { stdio: 'ignore' });
-    killPortListeners(new URL(targetUrl).port || '5173');
-  } else {
-    devServer.kill();
-  }
-  devServer = null;
-}
+function stopDevServer() { lease.stop(); }
 
 async function main() {
-  const serverWasRunning = await isReachable(targetUrl);
-  if (!serverWasRunning) {
-    devServer = spawn('npm', ['run', 'dev:web', '--', '--host', '127.0.0.1'], {
-      shell: process.platform === 'win32',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    await waitForUrl(targetUrl, 30000);
-  }
+  const serverWasRunning = !(lease = await leaseDevServer(targetUrl, { timeoutMs: 180_000 })).started;
 
   const result = await runBrowserChecks(targetUrl);
   stopDevServer();
@@ -88,20 +42,6 @@ async function main() {
 // script failed hardest exactly when the machine was most fully set up. What the
 // screenshots depend on is the selector waits and settleImages() below, both of
 // which wait for the app rather than for silence.
-/**
- * How long a first paint may take on a freshly spawned dev server.
- *
- * Playwright's default is 30s, which this script inherited and which is not a
- * cold-start budget for an app this size: a newly spawned Vite transforms the
- * whole module graph in memory on the first request, and measured here that took
- * 96 seconds on a busy machine. The server answers HTTP in under a second, so
- * the wait-for-server check passes and the navigation then times out — a failure
- * that reads like a broken page and is really a stopwatch.
- *
- * This check is about layout, not startup speed. The budget should be far larger
- * than the work, so a slow machine reports a layout result rather than a timeout.
- */
-const COLD_START_MS = 180_000;
 
 async function runBrowserChecks(url) {
   const browser = await chromium.launch({ headless: true });

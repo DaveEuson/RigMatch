@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { spawn, spawnSync } from 'node:child_process';
+import { leaseDevServer, COLD_START_MS } from './dev-server-lease.mjs';
 import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -35,27 +35,12 @@ const JARGON = [
 ];
 
 mkdirSync(outDir, { recursive: true });
-let devServer = null;
+let lease = { stop() {} };
 
-function stopDevServer() {
-  if (!devServer || devServer.killed) return;
-  if (process.platform === 'win32') {
-    spawnSync('taskkill', ['/pid', String(devServer.pid), '/T', '/F'], { stdio: 'ignore' });
-  } else {
-    devServer.kill();
-  }
-  devServer = null;
-}
+function stopDevServer() { lease.stop(); }
 
 async function main() {
-  const serverWasRunning = await isReachable(targetUrl);
-  if (!serverWasRunning) {
-    devServer = spawn('npm', ['run', 'dev:web', '--', '--host', '127.0.0.1'], {
-      shell: process.platform === 'win32',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    await waitForUrl(targetUrl, 30000);
-  }
+  lease = await leaseDevServer(targetUrl, { timeoutMs: 180_000 });
   const tour = await run(targetUrl);
   stopDevServer();
   process.stdout.write(`${JSON.stringify({ outDir, screens: tour }, null, 2)}\n`);
@@ -66,7 +51,7 @@ async function run(url) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 980 }, deviceScaleFactor: 1 });
   const page = await context.newPage();
 
-  await page.goto(url, { waitUntil: 'networkidle' });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: COLD_START_MS });
   await page.evaluate(() => {
     localStorage.setItem('rigmatch:ui-mode:v1', 'beginner');
     localStorage.setItem('rigmatch:first-run-tutorial:v1', 'seen');
@@ -311,23 +296,7 @@ async function capture(page, step, scope = '.sw-content') {
   };
 }
 
-async function isReachable(url) {
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
 
-async function waitForUrl(url, timeoutMs) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    if (await isReachable(url)) return;
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  throw new Error(`Timed out waiting for ${url}`);
-}
 
 process.on('exit', stopDevServer);
 main().catch((error) => {

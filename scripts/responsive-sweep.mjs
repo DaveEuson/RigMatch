@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { spawn, spawnSync } from 'node:child_process';
+import { leaseDevServer, COLD_START_MS } from './dev-server-lease.mjs';
 import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -41,26 +41,8 @@ const SIZES = [
   { w: 2560, h: 1440, note: 'wide desktop' },
 ];
 
-let devServer = null;
-const stop = () => {
-  if (!devServer || devServer.killed) return;
-  if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(devServer.pid), '/T', '/F'], { stdio: 'ignore' });
-  else devServer.kill();
-  devServer = null;
-};
-const reachable = async () => {
-  try { return (await fetch(url, { signal: AbortSignal.timeout(2500) })).ok; } catch { return false; }
-};
-
-if (!(await reachable())) {
-  devServer = spawn('npm', ['run', 'dev:web', '--', '--host', '127.0.0.1'], {
-    shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  const began = Date.now();
-  while (Date.now() - began < 40000 && !(await reachable())) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-}
+const lease = await leaseDevServer(url, { timeoutMs: 180_000 });
+const stop = () => lease.stop();
 
 const browser = await chromium.launch({ headless: true });
 const findings = [];
@@ -76,7 +58,7 @@ for (const mode of ['beginner', 'advanced']) {
     const consoleErrors = [];
     page.on('pageerror', (error) => consoleErrors.push(error.message));
 
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: COLD_START_MS });
     await page.evaluate((uiMode) => {
       localStorage.setItem('rigmatch:ui-mode:v1', uiMode);
       localStorage.setItem('rigmatch:first-run-tutorial:v1', 'seen');

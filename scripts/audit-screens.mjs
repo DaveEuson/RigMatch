@@ -12,20 +12,11 @@
  * Usage:  node scripts/audit-screens.mjs
  */
 
-import { spawn, spawnSync } from 'node:child_process';
 import { chromium } from 'playwright';
+import { leaseDevServer, COLD_START_MS } from './dev-server-lease.mjs';
 
 const url = process.env.RIGMATCH_TOUR_URL || 'http://127.0.0.1:5173/';
-
-let dev = null;
-const reachable = async () => {
-  try { return (await fetch(url, { signal: AbortSignal.timeout(2000) })).ok; } catch { return false; }
-};
-if (!(await reachable())) {
-  dev = spawn('npm', ['run', 'dev:web', '--', '--host', '127.0.0.1'], { shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
-  const began = Date.now();
-  while (Date.now() - began < 40000 && !(await reachable())) await new Promise((r) => setTimeout(r, 500));
-}
+const lease = await leaseDevServer(url, { timeoutMs: 180_000 });
 
 const browser = await chromium.launch({ headless: true });
 const findings = [];
@@ -151,7 +142,7 @@ const page = await context.newPage();
 const pageErrors = [];
 page.on('pageerror', (e) => pageErrors.push(e.message));
 
-await page.goto(url, { waitUntil: 'domcontentloaded' });
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: COLD_START_MS });
 await page.evaluate(() => {
   localStorage.setItem('rigmatch:ui-mode:v1', 'advanced');
   localStorage.setItem('rigmatch:first-run-tutorial:v1', 'seen');
@@ -193,4 +184,4 @@ if (pageErrors.length) {
 
 console.log(`\n${findings.length === 0 ? 'No mechanical findings.' : `${findings.length} screen(s) with findings.`}`);
 await browser.close();
-if (dev) spawnSync('taskkill', ['/pid', String(dev.pid), '/T', '/F'], { stdio: 'ignore' });
+lease.stop();
