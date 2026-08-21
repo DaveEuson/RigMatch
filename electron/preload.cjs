@@ -27,6 +27,8 @@ const api = {
   comfyPickFolder: () => ipcRenderer.invoke('comfy:pickFolder'),
   comfyVerifyFolder: (folder, serverCheckpoints) => ipcRenderer.invoke('comfy:verifyFolder', folder, serverCheckpoints),
   comfyLocateFolder: (baseUrl, serverCheckpoints) => ipcRenderer.invoke('comfy:locateFolder', baseUrl, serverCheckpoints),
+  comfyFindLaunchers: (folder) => ipcRenderer.invoke('comfy:findLaunchers', folder),
+  comfyLaunch: (folder, launcherPath) => ipcRenderer.invoke('comfy:launch', folder, launcherPath),
   comfyDownloadModel: (request) => ipcRenderer.invoke('comfy:downloadModel', request),
   comfyAbortDownload: (progressId) => ipcRenderer.invoke('comfy:abortDownload', progressId),
   /**

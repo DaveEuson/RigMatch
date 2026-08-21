@@ -60,6 +60,7 @@ const { summarizeMemory } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
 const { downloadModel, verifyComfyFolder } = require('./comfyModels.cjs');
 const { locateComfyRoots } = require('./comfyLocate.cjs');
+const { findComfyLaunchers, launchComfy } = require('./comfyLaunch.cjs');
 
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const LM_STUDIO_LOCAL_URL = 'http://127.0.0.1:1234/v1';
@@ -810,6 +811,22 @@ function registerHandlers() {
     });
     if (picked.canceled || !picked.filePaths.length) return { canceled: true };
     return { canceled: false, folder: picked.filePaths[0] };
+  });
+  // Starting ComfyUI, when we can honestly say we know how.
+  //
+  // Only ever launchers that exist on disk, derived from the models folder the
+  // user already verified — a Start button that cannot start anything is the
+  // same empty promise as an image offer with no checkpoint behind it. The path
+  // is checked against that list rather than trusted from the renderer, so this
+  // cannot be turned into "run any file on the machine".
+  handleLogged('comfy:findLaunchers', 'comfy', (_event, folder) => ({
+    launchers: findComfyLaunchers(typeof folder === 'string' ? folder : ''),
+  }));
+  handleLogged('comfy:launch', 'comfy', (_event, folder, launcherPath) => {
+    const allowed = findComfyLaunchers(typeof folder === 'string' ? folder : '');
+    const chosen = allowed.find((entry) => entry.path === launcherPath) ?? allowed[0];
+    if (!chosen) throw new Error('No ComfyUI launcher was found next to that folder.');
+    return launchComfy(chosen.path);
   });
   handleLogged('comfy:verifyFolder', 'comfy', (_event, folder, serverCheckpoints) =>
     verifyComfyFolder(folder, serverCheckpoints));

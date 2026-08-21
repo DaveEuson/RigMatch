@@ -29,7 +29,20 @@ import type { AdvancedLabResult } from './labResults.ts';
  * batch so checkpoints compare fairly, different between batches so the work
  * actually happens.
  */
-export const IMAGE_RUN_SETTINGS = { width: 512, height: 512, steps: 20 } as const;
+/**
+ * Size is fixed; step count is not, and deliberately so.
+ *
+ * Twenty steps used to be pinned here for every checkpoint. That is the right
+ * number for ordinary Stable Diffusion and the wrong one for a distilled model
+ * — SDXL-Turbo renders in one to four steps with guidance off, and asking it
+ * for twenty at CFG 7 returns a posterised mess. Scoring that mess for how well
+ * it matched the prompt measured RigMatch's request, not the model.
+ *
+ * So steps and cfg are left to samplingProfileFor(), which reads the family
+ * from the checkpoint name. Width and height stay fixed because those genuinely
+ * must match for two models to be compared at all.
+ */
+export const IMAGE_RUN_SETTINGS = { width: 512, height: 512 } as const;
 
 /**
  * Vision models that answer a yes/no question with something other than yes or

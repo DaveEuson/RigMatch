@@ -22,6 +22,7 @@ import {
   type Txt2ImgRequest,
 } from './comfyui.ts';
 import { getErrorMessage } from './format.ts';
+import { samplingProfileFor } from './samplingProfile.ts';
 import {
   buildJudgePrompt,
   readJudgeVerdict,
@@ -99,8 +100,23 @@ export async function runImageGeneration(options: ImageRunOptions): Promise<Imag
     now = () => Date.now(),
   } = options;
 
-  const steps = settings.steps ?? 20;
-  const graph = buildTxt2ImgWorkflow({ checkpoint, prompt: imagePrompt.prompt, ...settings });
+  // What this particular checkpoint was built to be asked for.
+  //
+  // A caller that specifies steps or cfg still wins — the benchmark suite sets
+  // them deliberately. What this replaces is the silent 20-steps-at-CFG-7
+  // default, which is right for ordinary Stable Diffusion and wrong enough for
+  // a distilled checkpoint to look like a broken model rather than a misused
+  // one. See samplingProfile.ts.
+  const profile = samplingProfileFor(checkpoint);
+  const steps = settings.steps ?? profile.steps;
+  const cfg = settings.cfg ?? profile.cfg;
+  const graph = buildTxt2ImgWorkflow({
+    checkpoint,
+    prompt: imagePrompt.prompt,
+    ...settings,
+    steps,
+    cfg,
+  });
 
   let promptId: string | undefined;
   let startedAt = now();

@@ -539,6 +539,10 @@ export type AgentArcadeApi = {
    * say where that is. Hence a picker, a verification step, and a downloader.
    */
   comfyPickFolder?: () => Promise<{ canceled: boolean; folder?: string }>;
+  /** Launchers found beside the verified ComfyUI folder, in preference order. */
+  comfyFindLaunchers?: (folder: string) => Promise<{ launchers: { path: string; label: string; file: string }[] }>;
+  /** Spawns one. Started means the process began, never that ComfyUI is ready. */
+  comfyLaunch?: (folder: string, launcherPath?: string) => Promise<{ started: boolean; launcher: string }>;
   /**
    * Where ComfyUI is, worked out from the process serving its port. The result
    * has already been verified against the running server, so a hit is safe to

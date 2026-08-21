@@ -14,6 +14,7 @@ import {
   runAdvancedAppBuilderChallenge,
 } from "../lib/labChallenges";
 import { CUSTOM_IMAGE_PROMPT_ID, IMAGE_BENCHMARK_PROMPTS } from "../lib/imageGenScoring";
+import { samplingProfileFor } from '../lib/samplingProfile';
 import { IMAGE_RUN_SETTINGS, judgeCandidates, toLabResult } from "../lib/imageGenChallenge";
 import { runImageLabChallenge } from "../lib/imageGenRunner";
 import { comfyBridgeAvailable, describeComfyBusy, fetchComfyOutput, getComfyStatus } from "../lib/comfyTransport";
@@ -686,7 +687,12 @@ export function AdvancedCapabilityLab({
               </div>
               <div className="advanced-lab-safeguards">
                 <span>{IMAGE_RUN_SETTINGS.width}x{IMAGE_RUN_SETTINGS.height}</span>
-                <span>{IMAGE_RUN_SETTINGS.steps} steps</span>
+                {/* The real number for this checkpoint, not a fixed 20 — a
+                    distilled model is run at its own step count, and the row
+                    would otherwise state a setting the run does not use. */}
+                <span title={samplingProfileFor(activeCheckpoint).reason}>
+                  {samplingProfileFor(activeCheckpoint).steps} steps
+                </span>
                 <span>fixed seed</span>
                 <span>{judges.length ? 'adherence judged' : 'unjudged'}</span>
               </div>
