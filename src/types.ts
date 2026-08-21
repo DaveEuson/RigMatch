@@ -353,6 +353,10 @@ export type SkillRunStatus = {
 };
 
 export type AdvancedGenerateRequest = {
+  /** Route through /api/chat, which is the only endpoint that understands audio. */
+  chat?: boolean;
+  /** Ollama's thinking toggle. False for tasks with nothing to reason about. */
+  think?: boolean;
   model: string;
   baseUrl?: string;
   prompt: string;

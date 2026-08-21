@@ -3959,6 +3959,47 @@ async function runAdvancedGenerate(request = {}, sender = null) {
     return streamAdvancedGenerate(`${baseUrl}/api/generate`, body, timeoutMs, sender, streamId, model);
   }
 
+  // Audio only works through /api/chat.
+  //
+  // Both endpoints accept an `images` array and both answer 200, so this was
+  // easy to get wrong and hard to see: handed a WAV, /api/generate returns
+  // fluent nonsense — the same passage came back as a Devanagari syllable
+  // repeated thirty times — while /api/chat transcribes it correctly. Nothing
+  // errors either way, which is why the listening test could report a model
+  // scoring zero for "hearing nothing" while the request itself was the fault.
+  //
+  // `think` rides along for the same reason. Gemma 4 reasons before answering,
+  // and on a transcription it spends the entire token budget in hidden thinking
+  // and returns an empty answer — 1802 characters of reasoning, nothing visible,
+  // done_reason "length". There is nothing to reason about in writing down what
+  // was said, so callers turn it off.
+  if (request.chat === true) {
+    const chatBody = {
+      model,
+      messages: [{
+        role: 'user',
+        content: prompt,
+        ...(body.images ? { images: body.images } : {}),
+      }],
+      stream: false,
+    };
+    if (body.options) chatBody.options = body.options;
+    if (body.keep_alive) chatBody.keep_alive = body.keep_alive;
+    if (typeof request.think === 'boolean') chatBody.think = request.think;
+
+    const chatResponse = await fetchJson(
+      `${baseUrl}/api/chat`,
+      { method: 'POST', body: JSON.stringify(chatBody) },
+      timeoutMs,
+      JSON_RESPONSE_MAX_BYTES,
+    );
+    return {
+      response: typeof chatResponse.message?.content === 'string' ? chatResponse.message.content : '',
+      done_reason: chatResponse.done_reason || (chatResponse.done ? 'stop' : 'unknown'),
+      error: typeof chatResponse.error === 'string' ? chatResponse.error : undefined,
+    };
+  }
+
   const response = await fetchJson(
     `${baseUrl}/api/generate`,
     {

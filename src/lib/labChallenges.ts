@@ -589,6 +589,13 @@ export async function runAdvancedListeningChallenge(
       baseUrl,
       prompt: ADVANCED_LISTENING_PROMPT,
       images: [audioBase64],
+      // Audio is only understood through /api/chat. The generate endpoint takes
+      // the same images array and answers 200 with fluent nonsense, which is
+      // how this test spent its life reporting that models could not hear.
+      chat: true,
+      // Nothing to reason about in writing down what was said, and Gemma 4
+      // otherwise spends the whole budget thinking and returns nothing.
+      think: false,
       keep_alive: '10m',
       timeoutMs: 240000,
       options: {
