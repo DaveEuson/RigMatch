@@ -56,17 +56,28 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const comfySettings = useMemo(() => readComfySettings(), [activeNavId]);
 
-  // ComfyUI is a separate program the user starts themselves, so this is a
-  // look rather than a subscription. It drops its answer if the app closed
-  // while the probe was in flight.
+  // ComfyUI is a separate program the user starts themselves — usually *after*
+  // this app, because RigMatch is the thing that told them they needed it.
+  //
+  // This used to be one look at mount, which froze the answer at whatever was
+  // true in the first second: start RigMatch before ComfyUI and the image maker
+  // read "Not ready" forever, in this app and in the companion repeating it.
+  // The other direction was worse — stop ComfyUI mid-session and the offer to
+  // generate *stayed*, which is precisely the empty promise this state exists
+  // to prevent. So it watches: the same cheap status call, every 15 seconds,
+  // the cadence the companion already uses on the bridge.
   useEffect(() => {
     let live = true;
-    void getComfyStatus().then((status) => {
-      if (!live) return;
-      setComfyCheckpoints(status.checkpoints);
-      setComfyTextEncoders(status.textEncoders ?? []);
-    });
-    return () => { live = false; };
+    const look = () => {
+      void getComfyStatus().then((status) => {
+        if (!live) return;
+        setComfyCheckpoints(status.checkpoints);
+        setComfyTextEncoders(status.textEncoders ?? []);
+      });
+    };
+    look();
+    const id = setInterval(look, 15_000);
+    return () => { live = false; clearInterval(id); };
   }, []);
 
   /**

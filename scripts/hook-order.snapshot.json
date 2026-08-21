@@ -294,7 +294,7 @@
     },
     {
       "name": "useEffect",
-      "sig": "() => { let live = true; void getComfyStatus().then((status) => { if ("
+      "sig": "() => { let live = true; const look = () => { void getComfyStatus().th"
     },
     {
       "name": "useCallback",
@@ -1352,7 +1352,7 @@
     },
     {
       "name": "useEffect",
-      "sig": "() => { let live = true; void getComfyStatus().then((status) => { if ("
+      "sig": "() => { let live = true; const look = () => { void getComfyStatus().th"
     },
     {
       "name": "useCallback",

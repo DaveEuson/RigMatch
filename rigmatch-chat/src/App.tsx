@@ -1688,8 +1688,40 @@ export default function App() {
           )}
           {capabilityFilter !== "image" && visibleBuddies.length === 0 && connectionStatus === "connected" && (
             <div className="rm-buddy-empty">
-              <p>No models visible.</p>
-              <p>Check Settings to unhide models, or open <strong>RigMatch</strong> to download one.</p>
+              {/*
+                Three different reasons the list can be empty, and they used to
+                share one message. Filtering to "Read a picture" in the first
+                seconds after opening showed "No models visible — check Settings
+                to unhide models, or download one", while three models that
+                could read pictures sat installed and unhidden. RigMatch simply
+                had not sent the capability list yet. Confidently wrong, and
+                about the one thing the filter exists to answer.
+              */}
+              {capabilityFilter !== "all" && Object.keys(rigCapabilities).length === 0 ? (
+                <>
+                  <p>Waiting for RigMatch.</p>
+                  <p>
+                    It says what each model can do, and has not answered yet. If <strong>RigMatch</strong> is
+                    not running, start it — or choose <strong>Anything</strong> to see every model meanwhile.
+                  </p>
+                </>
+              ) : capabilityFilter !== "all" ? (
+                <>
+                  <p>No model here can do that.</p>
+                  <p>
+                    None of your installed models {capabilityFilter === "vision"
+                      ? "can read pictures"
+                      : capabilityFilter === "audio"
+                        ? "can listen to audio"
+                        : "can write"}. Open <strong>RigMatch</strong> to find one that can.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p>No models visible.</p>
+                  <p>Check Settings to unhide models, or open <strong>RigMatch</strong> to download one.</p>
+                </>
+              )}
             </div>
           )}
           {visibleBuddies.map((buddy) => {
