@@ -79,6 +79,24 @@ const DOWNLOAD_SECTIONS = `## Downloads
 
 Already running an older install? It updates itself to this version automatically — nothing to re-download.
 
+## Windows first launch
+
+RigMatch for Windows is an unsigned beta, so Microsoft Defender SmartScreen will almost certainly stop it the first time. That warning means the file has no code-signing certificate yet and has not been downloaded enough times to build a reputation — not that anything is wrong with it.
+
+1. Download **RigMatch-*-win-x64.exe**.
+2. If SmartScreen says *"Windows protected your PC"*, choose **More info**, then **Run anyway**.
+3. If your browser blocks the download instead, choose **Keep** and, where asked, **Keep anyway**.
+
+Prefer not to click through a warning? Download the **\`.zip\`** instead, unpack it anywhere, and run \`RigMatch.exe\` from the folder — a portable copy that installs nothing.
+
+Either way, verify what you downloaded against \`SHA256SUMS.txt\` on this release:
+
+\`\`\`powershell
+Get-FileHash RigMatch-*-win-x64.exe -Algorithm SHA256
+\`\`\`
+
+A signing certificate is on the roadmap; until it is bought and the reputation builds, this warning is expected on every release.
+
 ## macOS first launch
 
 RigMatch for macOS is currently an unsigned beta distributed outside the App Store. On first launch, macOS may say the developer cannot be verified or that the app was downloaded from the internet.
