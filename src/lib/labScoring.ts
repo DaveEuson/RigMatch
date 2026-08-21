@@ -103,13 +103,38 @@ export function describeLabFailure(result: Partial<AdvancedLabResult>): string |
  *
  * The checks are kept as explanation rather than as the score.
  */
+/**
+ * Whether a "transcript" is really one token stuck on repeat.
+ *
+ * Gemma 4 e4b, handed the listening audio, returns "le le le le le" thirty
+ * times over — and the panel called that PASS, "returned an answer", because
+ * text had arrived. Text had arrived; an answer had not. A model that emits a
+ * single syllable until it runs out of budget has failed in a way worth naming,
+ * and calling it an answer sends people looking for a transcription problem
+ * when the model never transcribed anything.
+ *
+ * Deliberately narrow. Real speech repeats — "very, very good", a stammer, a
+ * list of the same word — so this only fires when almost the whole output is
+ * one short token, over a length no genuine passage would sustain.
+ */
+export function isDegenerateTranscript(text: string): boolean {
+  const words = (text ?? '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length < 8) return false;
+
+  const unique = new Set(words);
+  // One or two distinct short tokens filling a long output is not language.
+  if (unique.size > 2) return false;
+  return [...unique].every((word) => word.length <= 4);
+}
+
 export function scoreAdvancedListeningResponse(
   response: string,
   reference: string,
   doneReason: string,
 ): Scored {
   const heard = extractTranscript(response ?? '');
-  const answered = heard.trim().length > 0;
+  const degenerate = isDegenerateTranscript(heard);
+  const answered = heard.trim().length > 0 && !degenerate;
   const accuracy = scoreTranscription(reference, heard);
 
   const checks: AdvancedLabCheck[] = [
@@ -118,7 +143,10 @@ export function scoreAdvancedListeningResponse(
       passed: answered,
       detail: answered
         ? 'The model sent back a transcript to compare.'
-        : `Returned no text at all${doneReason ? ` (stop reason: ${doneReason})` : ''}. This model may not accept audio through Ollama.`,
+        : degenerate
+          ? 'Returned the same short token over and over rather than a transcript. '
+            + 'That is this model failing to handle the audio at all, not a mishearing — try another model that reports it can listen.'
+          : `Returned no text at all${doneReason ? ` (stop reason: ${doneReason})` : ''}. This model may not accept audio through Ollama.`,
     },
     {
       label: 'Heard the passage',
