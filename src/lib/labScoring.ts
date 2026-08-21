@@ -127,6 +127,33 @@ export function isDegenerateTranscript(text: string): boolean {
   return [...unique].every((word) => word.length <= 4);
 }
 
+/**
+ * Whether a clean transcript is simply of something else.
+ *
+ * The listening score compares what the model wrote against the script, so
+ * reading a different sentence scores near zero — correctly, and for a reason
+ * that looks exactly like the model failing. It has now caught the same person
+ * twice: a flawless transcript of "My name is Dave and I am in San Diego"
+ * scored 6/100, and every visible signal said the model had failed.
+ *
+ * Sharing almost no words with the script, while still being fluent language,
+ * is the signature. A genuine mishearing keeps most of the words and gets some
+ * wrong; a different sentence has nothing in common with the passage at all.
+ */
+export function looksOffScript(reference: string, heard: string): boolean {
+  const words = (text: string) => (text ?? '').toLowerCase().match(/[a-z0-9']+/g) ?? [];
+  const referenceWords = words(reference);
+  const heardWords = words(heard);
+  // Too little of either to draw a conclusion from.
+  if (referenceWords.length < 6 || heardWords.length < 4) return false;
+
+  const referenceSet = new Set(referenceWords);
+  const shared = heardWords.filter((word: string) => referenceSet.has(word)).length;
+  // Even a badly misheard passage keeps a good share of its words. Below a
+  // fifth, the model was almost certainly given something else to hear.
+  return shared / heardWords.length < 0.2;
+}
+
 export function scoreAdvancedListeningResponse(
   response: string,
   reference: string,
@@ -151,7 +178,14 @@ export function scoreAdvancedListeningResponse(
     {
       label: 'Heard the passage',
       passed: accuracy.score >= 50,
-      detail: `${accuracy.errors} word${accuracy.errors === 1 ? '' : 's'} wrong out of ${accuracy.referenceWords}.`,
+      // A transcript of something else is not a mishearing, and saying so
+      // spares people hunting a fault in a model that heard them perfectly.
+      detail: answered && looksOffScript(reference, heard)
+        ? `${accuracy.errors} word${accuracy.errors === 1 ? '' : 's'} wrong out of ${accuracy.referenceWords} — `
+          + 'but this transcript shares almost nothing with the script, which usually means something '
+          + 'else was said. If that is what you read, the model heard you correctly and the score is '
+          + 'measuring the difference rather than the model. Read the script word for word to score it.'
+        : `${accuracy.errors} word${accuracy.errors === 1 ? '' : 's'} wrong out of ${accuracy.referenceWords}.`,
     },
     {
       label: 'Accurate transcription',
