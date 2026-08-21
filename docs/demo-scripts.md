@@ -87,20 +87,20 @@ so lead with the refusals.
 | 7 | Activity → Listening test | The transcript vs the script, score | "The listening test is the one score here measured against a right answer. Word for word against a known passage." | 70–84 |
 | 8 | Chat: "draw me a picture of a lighthouse" | The honesty note appears, model's reply beneath | "Ask a text model for a picture and it tells you it cannot make one — before the model cheerfully describes one and calls it done." | 84–100 |
 | 9 | Cut to RigMatch Chat opening | The buddy list, AIM-style, avatars per family | "Picture-making lives here. This is the companion — your models as a buddy list." | 100–110 |
-| 10 | The capability panel, held still | **What this chat can do** — write / look / listen, then below a line: *Make pictures — not a model* | "And it answers the obvious question before you ask it. Which of these makes an image? None of them. That is ComfyUI's job, and the panel says so rather than letting you find out." | 110–126 |
-| 11 | Filter to **Sees pictures**, list narrows | `sees` chips on three models, `hears` on gemma4 | "The ones that can look at a picture are marked. So are the ones that can listen." | 126–136 |
-| 12 | Type a prompt, press **Make image ↗**, timer runs, picture lands | Rising seconds, Stop button, then the image and its saved path | "Then it asks RigMatch to make it. Elapsed seconds, not a fake progress bar, a Stop that works, and a real file path underneath." | 136–160 |
-| 13 | Close on the Models table | — | "Free, offline, and it will tell you when it does not know. Link below." | 160–175 |
+| 10 | Click **Read a picture** in "What do you want to do?" | The list narrows to three, each tagged `SEES` | "It asks what you want to do, and the list answers. These three can look at a picture. One can listen." | 110–124 |
+| 11 | Click **Make a picture** | Every buddy drops out; the **IMAGE MAKER · Ready · sdxl-turbo** card takes their place | "And this one is honest twice over. No chat model makes pictures — so none of them stay in the list, and the thing that will is named. If ComfyUI is not running it says Not ready instead of letting you find out." | 124–142 |
+| 12 | Open the maker, type a prompt, press **Make image ↗** | The workspace: prompt kept beside its result, rising seconds, then the picture | "It is not a chat — nothing is pretending to talk back. Elapsed seconds, not a fake progress bar, and the file is in your Pictures folder, path shown." | 142–166 |
+| 13 | Close on the Models table | — | "Free, offline, and it will tell you when it does not know. Link below." | 166–180 |
 
 **Notes for the edit**
 
-- Shots 3, 6, 8 and 10 are the argument. If the video has to lose time, take it
-  from 4, 5 and 11 — never from these four.
+- Shots 3, 6, 8 and 11 are the argument. If the video has to lose time, take it
+  from 4, 5 and 10 — never from these four.
 - Shot 8 lands hardest with the model's answer visible underneath the note: the
   warning, then the model enthusiastically describing a lighthouse it did not
   draw. The contrast *is* the point, and it is the single most persuasive frame
   in the video for this audience.
-- Shot 10 is the one most likely to be cut for pace and the one most worth
+- Shot 11 is the one most likely to be cut for pace and the one most worth
   keeping. "None of them" is a claim no competitor's demo makes about itself.
 - Shot 12 on sdxl-turbo takes about 6–15 seconds — short enough to play in full.
   Do not cut it. An unedited timer is the proof.
