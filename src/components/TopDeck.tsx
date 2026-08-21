@@ -5,6 +5,7 @@ import type { UiMode } from '../lib/appConfig';
 import type { RigPick } from '../lib/modelCatalog';
 import { topPickLabel } from '../lib/format';
 import { BrandMark, MetricTile } from './CommonChrome';
+import { ComfyStartButton } from './ComfyStartButton';
 import { AvatarBust, MachineAvatar } from './Avatars';
 
 export function TopDeck({
@@ -21,6 +22,8 @@ export function TopDeck({
   onClearTopPick,
   onRestoreClearedTopPicks,
   clearedTopPickCount,
+  comfyFolder,
+  comfyReachable,
   deckExpanded,
   onDeckExpandedChange,
 }: {
@@ -37,6 +40,10 @@ export function TopDeck({
   onClearTopPick: () => void;
   onRestoreClearedTopPicks: () => void;
   clearedTopPickCount: number;
+  /** The verified ComfyUI models root, empty when nobody has set one. */
+  comfyFolder: string;
+  /** Whether ComfyUI answered the last status look. */
+  comfyReachable: boolean;
   /** Advanced only: whether the stats strip is showing. */
   deckExpanded: boolean;
   onDeckExpandedChange: (expanded: boolean) => void;
@@ -177,6 +184,19 @@ export function TopDeck({
             <ScanLine aria-hidden="true" />
             Check Local
           </button>
+          {/*
+            ComfyUI, offered where its absence is noticed.
+            
+            This is the strip that reports whether things are up, so it is where
+            someone realises ComfyUI is not — the Settings button was correct and
+            three screens from the moment of noticing. Shown only when a folder
+            has been verified (so it stays out of the way for the many people who
+            never use ComfyUI), only when it is not already answering, and only
+            when a launcher genuinely exists to run.
+          */}
+          {comfyFolder && !comfyReachable && (
+            <ComfyStartButton folder={comfyFolder} variant="deck" />
+          )}
         </div>
       </section>
 

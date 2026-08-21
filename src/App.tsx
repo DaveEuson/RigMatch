@@ -415,7 +415,7 @@ function App() {
   const [activity, setActivity] = useState('Contestants is your hub: browse models, run tests, manage downloads, and start Speed Dating.');
   const [activeNavId, setActiveNavId] = useState<NavId>('models');
   const {
-    comfyCheckpoints, comfyTextEncoders, comfySettings,
+    comfyCheckpoints, comfyTextEncoders, comfyReachable, comfySettings,
     refreshComfyStatus, beginComfyDownload, endComfyDownload, abortComfyDownload,
   } = useComfy({ activeNavId });
   const {
@@ -3238,6 +3238,8 @@ function App() {
         onClearTopPick={clearTopMatch}
         onRestoreClearedTopPicks={restoreClearedTopMatches}
         clearedTopPickCount={clearedTopMatches.size}
+        comfyFolder={comfySettings.folder}
+        comfyReachable={comfyReachable}
         deckExpanded={deckExpanded}
         onDeckExpandedChange={(expanded) => { setDeckExpanded(expanded); writeDeckExpanded(expanded); }}
       />

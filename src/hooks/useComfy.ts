@@ -32,6 +32,12 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
   // Tracked separately: a video model without a T5 encoder cannot render, and
   // the two are fixed by fetching two different files.
   const [comfyTextEncoders, setComfyTextEncoders] = useState<string[]>([]);
+  /**
+   * Whether ComfyUI answered at all, which is not the same as having a model.
+   * "Not running" and "running with nothing that can draw" want different
+   * words, and only this tells them apart.
+   */
+  const [comfyReachable, setComfyReachable] = useState(false);
   /** The generation download in flight, so Stop can abort the right stream. */
   const activeComfyDownloadRef = useRef<string | null>(null);
 
@@ -71,6 +77,7 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
     const look = () => {
       void getComfyStatus().then((status) => {
         if (!live) return;
+        setComfyReachable(status.reachable === true);
         setComfyCheckpoints(status.checkpoints);
         setComfyTextEncoders(status.textEncoders ?? []);
       });
@@ -89,6 +96,7 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
    */
   const refreshComfyStatus = useCallback(async () => {
     const status = await getComfyStatus();
+    setComfyReachable(status.reachable === true);
     setComfyCheckpoints(status.checkpoints);
     setComfyTextEncoders(status.textEncoders ?? []);
   }, []);
@@ -110,6 +118,7 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
   return {
     comfyCheckpoints,
     comfyTextEncoders,
+    comfyReachable,
     comfySettings,
     refreshComfyStatus,
     beginComfyDownload,

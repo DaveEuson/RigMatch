@@ -1,6 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Check, FolderOpen, Play, RefreshCw, Search } from "lucide-react";
+import { useCallback, useState } from "react";
+import { AlertTriangle, Check, FolderOpen, RefreshCw, Search } from "lucide-react";
 import {
   COMFY_DEFAULT_BASE_URL,
   normalizeComfyUrl,
@@ -9,6 +9,7 @@ import {
 } from "../lib/comfySettings";
 import { getComfyStatus, pickAndVerifyComfyFolder } from "../lib/comfyTransport";
 import { agentArcadeApi } from "../api";
+import { ComfyStartButton } from "./ComfyStartButton";
 
 /**
  * Where ComfyUI is, and whether RigMatch may disturb it.
@@ -29,46 +30,6 @@ export function ComfySettings() {
   const [folder, setFolder] = useState(initial.folder);
   const [folderNote, setFolderNote] = useState<{ tone: 'ok' | 'bad' | 'warn'; message: string } | null>(null);
 
-  /**
-   * Launchers found beside the verified folder, and what happened if one ran.
-   *
-   * Empty is the ordinary case for a source checkout, or an install RigMatch
-   * has not been pointed at yet. An empty list means no button — better silence
-   * than a control that cannot work.
-   */
-  const [launchers, setLaunchers] = useState<{ path: string; label: string; file: string }[]>([]);
-  const [launching, setLaunching] = useState(false);
-  const [launchMessage, setLaunchMessage] = useState('');
-
-  useEffect(() => {
-    let live = true;
-    // One asynchronous path whether or not there is a folder to search, so the
-    // "nothing to offer" case does not set state synchronously inside the
-    // effect and trigger a cascading render.
-    const find = agentArcadeApi.comfyFindLaunchers;
-    const lookup = folder && find ? find(folder) : Promise.resolve({ launchers: [] });
-    void lookup
-      .then((result) => { if (live) setLaunchers(result?.launchers ?? []); })
-      .catch(() => { if (live) setLaunchers([]); });
-    return () => { live = false; };
-  }, [folder]);
-
-  const startComfy = useCallback(async () => {
-    if (!agentArcadeApi.comfyLaunch) return;
-    setLaunching(true);
-    setLaunchMessage('');
-    try {
-      await agentArcadeApi.comfyLaunch(folder, launchers[0]?.path);
-      // Deliberately not "ComfyUI is running". It has been asked to start, and
-      // loading torch and a checkpoint takes tens of seconds — the status probe
-      // is the only thing that can honestly say when it is ready.
-      setLaunchMessage('ComfyUI is starting in its own window. It takes a moment to load — Test connection will find it once it is up.');
-    } catch (error) {
-      setLaunchMessage(error instanceof Error ? error.message : 'ComfyUI could not be started.');
-    } finally {
-      setLaunching(false);
-    }
-  }, [folder, launchers]);
 
   const chooseFolder = useCallback(async () => {
     const result = await pickAndVerifyComfyFolder();
@@ -195,25 +156,8 @@ export function ComfySettings() {
           claims ComfyUI is ready: loading torch and a checkpoint takes tens of
           seconds, and the status probe says Ready when it truly is.
         */}
-        {launchers.length > 0 && probe.phase !== 'ok' && (
-          <button
-            type="button"
-            className="mini-button"
-            onClick={() => void startComfy()}
-            disabled={launching}
-            title={`Runs ${launchers[0].file}`}
-          >
-            <Play aria-hidden="true" />
-            {launching ? 'Starting ComfyUI…' : `Start ComfyUI (${launchers[0].label})`}
-          </button>
-        )}
+        {probe.phase !== 'ok' && <ComfyStartButton folder={folder} />}
       </div>
-      {launchMessage && (
-        <div className="advanced-lab-warning">
-          <AlertTriangle aria-hidden="true" />
-          <span>{launchMessage}</span>
-        </div>
-      )}
 
       <div className="utility-stat">
         <span>Models folder</span>
