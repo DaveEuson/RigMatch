@@ -3896,6 +3896,46 @@ async function sendChat(request = {}) {
     };
   }
 
+  // A recording has to go through /api/chat.
+  //
+  // Both endpoints take an `images` array and both answer 200, and for a
+  // picture /api/generate is fine — but handed audio it returns nonsense or
+  // nothing at all. The listening test hit this first; chat sends recordings
+  // the same way and was broken in the same manner, silently, while the app
+  // advertised that you could send one.
+  //
+  // The data URL still carries its type at this point, so no caller has to
+  // declare what it attached.
+  const hasAudio = images.some((item) => String(item).toLowerCase().startsWith('data:audio/'));
+
+  if (hasAudio) {
+    const chatResponse = await fetchJson(
+      `${baseUrl}/api/chat`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          model,
+          messages: [{
+            role: 'user',
+            content: safeMessage || 'What is said in this recording?',
+            images: images.map(toBareBase64),
+          }],
+          stream: false,
+          // Nothing to reason about in writing down what was said, and Gemma 4
+          // otherwise spends its whole budget thinking and answers with nothing.
+          think: false,
+          options: { temperature: 0.2, num_predict: 800 },
+        }),
+      },
+      120000,
+    );
+    return {
+      model,
+      message: typeof chatResponse.message?.content === 'string' ? chatResponse.message.content : '',
+      completedAt: new Date().toISOString(),
+    };
+  }
+
   const generateBody = {
     model,
     prompt: `You are the selected local RigMatch assistant. Be warm, concise, and honest about limits.\n\nUser: ${safeMessage || 'What is in this image?'}\nAssistant:`,
