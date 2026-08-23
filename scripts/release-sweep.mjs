@@ -228,6 +228,30 @@ check('surface', 'cleanup only targets what it can delete', () => {
   return 'scoped to Ollama';
 });
 
+check('parity', 'audio is sent to the endpoint that understands it', () => {
+  // Two bugs in one day, in two places, from the same cause: Ollama's
+  // /api/generate accepts an `images` array and answers 200 for audio while
+  // understanding none of it. The listening test reported models scoring zero
+  // for hearing nothing; chat returned an empty reply while the app advertised
+  // that you could send a recording. Nothing errored in either case.
+  //
+  // Both senders now route through /api/chat. This is here because the failure
+  // is invisible at runtime — the wrong endpoint looks exactly like a working
+  // one until a human reads the answer.
+  const main = read('electron/main.cjs');
+  must(/data:audio\//.test(main),
+    'sendChat no longer detects audio attachments, so recordings go back to /api/generate');
+  must(/\$\{baseUrl\}\/api\/chat/.test(main),
+    'nothing posts to /api/chat any more — audio cannot work through /api/generate');
+
+  const listening = read('src/lib/labChallenges.ts');
+  must(/chat: true/.test(listening),
+    'the listening test stopped asking for the chat endpoint, which is the only one that hears audio');
+  must(/think: false/.test(listening),
+    'thinking is back on for transcription — Gemma 4 spends the whole budget reasoning and answers nothing');
+  return 'both audio senders use /api/chat';
+});
+
 // ── security ────────────────────────────────────────────────────────────────
 // Cheap to check, catastrophic to regress.
 
