@@ -14,18 +14,14 @@ This is a candid list of issues we know about going into the beta. If you hit so
 
 ## Data & Scoring
 
-**A model tested on another computer is credited to this one**
-If you point RigMatch at an Ollama running on a second machine on your network
-and benchmark a model there, the score is saved with *this* computer's graphics
-card, VRAM and driver — the run happened on the other machine. Everything else
-about the score is correct; only the hardware it names is wrong. It matters
-because that stamp exists precisely to stop a score being attributed to
-hardware that did not earn it, and because a score is only ever true of a rig.
-Testing on the machine in front of you, which is what almost everyone does, is
-unaffected. Being fixed properly rather than quickly: an honest stamp for a
-remote run has no local card to name, so the match card, the retest badge and
-the per-goal crowning rules all have to handle a score whose hardware is
-unknown.
+**A model tested on another computer is no longer credited to this one**
+Fixed in 0.7. If you point RigMatch at an Ollama running on a second machine and
+benchmark a model there, the score now records that machine's name and no
+hardware at all — RigMatch cannot ask a remote computer what card it has, and
+naming this one was a falsehood produced by the very mechanism meant to stop
+scores being attributed to hardware that did not earn them. Such a score is
+marked **Measured on another computer — retest here**, and does not crown a
+winner, for the same reason a score from a swapped graphics card does not.
 
 **Image scores from before 0.7 used the wrong sampler settings**
 Every image checkpoint was asked for 20 steps with guidance at 7 — correct for

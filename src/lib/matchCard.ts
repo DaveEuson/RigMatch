@@ -48,9 +48,14 @@ export function matchCardLines({ score, matchLabel, appVersion }: MatchCardInput
     ],
     // The rig is part of the number. A card without it would invite exactly
     // the comparison the app spends so much effort refusing to fake.
-    rigLine: rig
-      ? `Measured on ${rig.gpu} · ${rig.vramGb} GB VRAM · ${new Date(score.completedAt).toLocaleDateString()}`
-      : `Measured locally · ${new Date(score.completedAt).toLocaleDateString()} · scores are relative to the rig`,
+    // Three cases, because a shared card must never name a machine it did not
+    // run on. A remote score knows the host but not its hardware; a local score
+    // knows the card; an unstamped one predates stamping entirely.
+    rigLine: rig?.host
+      ? `Measured on ${rig.host} · hardware unknown · ${new Date(score.completedAt).toLocaleDateString()}`
+      : rig?.gpu
+        ? `Measured on ${rig.gpu}${rig.vramGb ? ` · ${rig.vramGb} GB VRAM` : ''} · ${new Date(score.completedAt).toLocaleDateString()}`
+        : `Measured locally · ${new Date(score.completedAt).toLocaleDateString()} · scores are relative to the rig`,
     footer: `RigMatch ${appVersion} — AI matchmaking for your PC. Nothing leaves the computer.`,
   };
 }

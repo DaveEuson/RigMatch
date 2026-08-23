@@ -120,7 +120,7 @@ export function upsertModelScores(
  * with no stamp predates stamping and can claim neither — the schema-version
  * badge already covers genuinely old scores.
  */
-export type ScoreDrift = 'model-changed' | 'hardware-changed' | null;
+export type ScoreDrift = 'model-changed' | 'hardware-changed' | 'measured-elsewhere' | null;
 
 export function scoreDrift(
   score: TestedModelScore,
@@ -128,6 +128,10 @@ export function scoreDrift(
 ): ScoreDrift {
   const stamp = score.rig;
   if (!stamp) return null;
+  // Measured on another computer, so nothing here describes the machine the
+  // user is looking at. Reported first: it explains the score more completely
+  // than a changed digest would, and there is no card to compare against.
+  if (stamp.host) return 'measured-elsewhere';
   if (stamp.modelDigest && current.modelDigest && stamp.modelDigest !== current.modelDigest) {
     return 'model-changed';
   }
@@ -136,7 +140,9 @@ export function scoreDrift(
   }
   // VRAM shifts of a whole gigabyte mean a different card or a different
   // sharing arrangement, not measurement jitter in the profiler.
-  if (typeof current.vramGb === 'number' && current.vramGb > 0 && Math.abs(current.vramGb - stamp.vramGb) >= 1) {
+  if (typeof current.vramGb === 'number' && current.vramGb > 0
+    && typeof stamp.vramGb === 'number'
+    && Math.abs(current.vramGb - stamp.vramGb) >= 1) {
     return 'hardware-changed';
   }
   return null;
@@ -144,9 +150,9 @@ export function scoreDrift(
 
 /** The badge line for a drifted score, in words a user can act on. */
 export function scoreDriftLabel(drift: Exclude<ScoreDrift, null>): string {
-  return drift === 'model-changed'
-    ? 'Model updated since this score — retest'
-    : 'Scored on different hardware — retest';
+  if (drift === 'model-changed') return 'Model updated since this score — retest';
+  if (drift === 'measured-elsewhere') return 'Measured on another computer — retest here';
+  return 'Scored on different hardware — retest';
 }
 
 /** True when a saved score was produced by an older scoring schema. */

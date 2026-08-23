@@ -442,7 +442,7 @@ export function UtilityPanel({
                         {!isLegacyScore(score) && drift && (
                           <span
                             className="legacy-score-badge drift-badge"
-                            title={score.rig ? `Scored on ${score.rig.gpu} (${score.rig.vramGb} GB) with RigMatch ${score.rig.appVersion}.` : undefined}
+                            title={score.rig ? (score.rig.host ? `Scored on ${score.rig.host} — that computer's hardware is not known here — with RigMatch ${score.rig.appVersion}.` : `Scored on ${score.rig.gpu ?? 'this computer'}${score.rig.vramGb ? ` (${score.rig.vramGb} GB)` : ''} with RigMatch ${score.rig.appVersion}.`) : undefined}
                           >
                             {scoreDriftLabel(drift)}
                           </span>

@@ -218,9 +218,18 @@ export type BenchmarkResult = {
 
 /** What a score was measured on, stamped at scoring time. */
 export type ScoreRigStamp = {
-  /** GPU model string, e.g. "NVIDIA GeForce RTX 4070". */
-  gpu: string;
-  vramGb: number;
+  /**
+   * GPU model string, e.g. "NVIDIA GeForce RTX 4070".
+   *
+   * Absent when the benchmark ran on another computer. RigMatch can reach a
+   * remote Ollama and score a model there, and it has no way to ask that
+   * machine what card it has — so the honest stamp names no card at all rather
+   * than this one's, which is what it used to do.
+   */
+  gpu?: string;
+  vramGb?: number;
+  /** The machine that ran it, when that was not this one. */
+  host?: string;
   driverVersion?: string;
   appVersion: string;
   /** Content digest of the exact weights tested, when the provider reports one. */

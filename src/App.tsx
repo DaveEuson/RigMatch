@@ -1354,15 +1354,32 @@ function App() {
   // weights that actually earned the number.
   const rigStampForModel = useCallback((model: string): ScoreRigStamp => {
     const installed = ollama.models.find((m) => m.name === model || m.model === model);
+
+    // Where this actually ran.
+    //
+    // A benchmark can go to an Ollama on another computer — getHostBenchmarkBlocker
+    // allows a remote host that reports ready, and the request goes to that
+    // host's own baseUrl. This used to stamp the local card regardless, so a
+    // model scored on someone else's machine came back credited to this one:
+    // a false statement made by the very mechanism built to stop scores being
+    // attributed to hardware that did not earn them.
+    //
+    // RigMatch cannot ask a remote Ollama what card it has, so the honest stamp
+    // names the host and no hardware at all. Everything downstream now treats a
+    // stamp with a host as measured elsewhere and asks for a retest here.
+    const remoteHost = selectedHost && !selectedHost.isLocal && !selectedHost.isDemo
+      ? selectedHost.hostname
+      : undefined;
+
     return {
-      gpu: system.gpu.model,
-      vramGb: system.gpu.vramGb,
-      driverVersion: system.gpu.driverVersion || undefined,
+      ...(remoteHost
+        ? { host: remoteHost }
+        : { gpu: system.gpu.model, vramGb: system.gpu.vramGb, driverVersion: system.gpu.driverVersion || undefined }),
       appVersion: APP_VERSION,
       modelDigest: installed?.digest,
       quantization: installed?.quantization,
     };
-  }, [ollama.models, system.gpu.model, system.gpu.vramGb, system.gpu.driverVersion]);
+  }, [ollama.models, selectedHost, system.gpu.model, system.gpu.vramGb, system.gpu.driverVersion]);
 
 
   const requestBenchmarkForModel = useCallback((model: string) => {
