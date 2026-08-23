@@ -86,7 +86,7 @@ export function serializeStore(conversations: Conversation[]): string {
   // still say what was sent.
   const withoutBytes = conversations.map((conversation) => ({
     ...conversation,
-    messages: conversation.messages.map(({ images, ...message }) => message),
+    messages: conversation.messages.map(({ images: _bytes, ...message }) => message),
   }));
   return JSON.stringify({ version: STORE_VERSION, conversations: withoutBytes });
 }

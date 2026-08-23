@@ -897,7 +897,7 @@ function registerHandlers() {
     assertTrustedIpcSender(event);
     return benchmarkStatusPayload();
   });
-  handleLogged('chat:send', 'chat', (_event, request) => sendChat(request));
+  handleLogged('chat:send', 'chat', (event, request) => sendChat(request, event.sender));
   /**
    * The renderer reporting back on a generation the bridge asked for.
    *
@@ -3845,7 +3845,12 @@ function toImageDataUrl(value) {
   return s.startsWith('data:') ? s : `data:image/png;base64,${s}`;
 }
 
-async function sendChat(request = {}) {
+async function sendChat(request = {}, sender = null) {
+  // Streaming needs a live renderer to send tokens to, and a stream id to
+  // address the Stop button at. Without either, this behaves exactly as before.
+  const wantStream = request.stream === true
+    && typeof request.streamId === 'string' && request.streamId
+    && sender && !sender.isDestroyed();
   const model = assertValidModelName(request.model);
   const message = request.message;
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
@@ -3947,6 +3952,33 @@ async function sendChat(request = {}) {
   };
   // Ollama's /api/generate accepts an images array (bare base64) for vision models.
   if (images.length > 0) generateBody.images = images.map(toBareBase64);
+
+  // Stream the reply when the renderer asked for it.
+  //
+  // A local model can take a minute on a long answer, and the dock showed
+  // nothing at all until the whole thing arrived — no tokens, and no way to
+  // stop a model that had started rambling. The companion has streamed since it
+  // was written, so this is not a new idea, just one the dock never got.
+  //
+  // Deliberately the same body the non-streamed path would have sent, through
+  // the same function App Builder uses, so the persona prompt cannot drift
+  // between them and Stop works here for the same reason it works there.
+  if (wantStream) {
+    const streamed = await streamAdvancedGenerate(
+      `${baseUrl}/api/generate`,
+      { ...generateBody, stream: true },
+      120000,
+      sender,
+      request.streamId,
+      model,
+    );
+    return {
+      model,
+      message: streamed.response || '',
+      error: streamed.error,
+      completedAt: new Date().toISOString(),
+    };
+  }
 
   const response = await fetchJson(
     `${baseUrl}/api/generate`,

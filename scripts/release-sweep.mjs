@@ -252,6 +252,25 @@ check('parity', 'audio is sent to the endpoint that understands it', () => {
   return 'both audio senders use /api/chat';
 });
 
+check('surface', 'the chat dock streams and can be stopped', () => {
+  // Both are invisible when they break. A dock that stopped streaming would
+  // still answer — just all at once, after a silence long enough to read as a
+  // hung app — and a Stop that stopped being wired would still render, and do
+  // nothing. Neither fails a test that only checks the final text.
+  const main = read('electron/main.cjs');
+  must(/sendChat\(request, event\.sender\)/.test(main),
+    'chat:send no longer passes the sender, so there is nowhere to stream tokens to');
+  must(/if \(wantStream\) \{\s*const streamed = await streamAdvancedGenerate/.test(main),
+    'sendChat stopped streaming — replies go back to arriving in one piece after a long silence');
+
+  const hook = read('src/hooks/useChat.ts');
+  must(/onAdvancedGenerateProgress/.test(hook),
+    'the dock stopped listening for tokens, so a streamed reply would never render');
+  must(/abortAdvancedGenerate/.test(hook),
+    'Stop is no longer wired to the abort, so the button would do nothing');
+  return 'streamed, and interruptible';
+});
+
 // ── security ────────────────────────────────────────────────────────────────
 // Cheap to check, catastrophic to regress.
 

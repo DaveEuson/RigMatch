@@ -5,9 +5,9 @@
   },
   "census": {
     "useMemo": 28,
-    "useState": 92,
+    "useState": 93,
     "useRef": 15,
-    "useCallback": 95,
+    "useCallback": 96,
     "useEffect": 32
   },
   "effectCount": 32,
@@ -458,6 +458,14 @@
     },
     {
       "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
       "sig": ""
     },
     {
@@ -1544,6 +1552,14 @@
     },
     {
       "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useState",
+      "sig": ""
+    },
+    {
+      "name": "useCallback",
       "sig": ""
     },
     {

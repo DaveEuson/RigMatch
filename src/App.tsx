@@ -575,6 +575,7 @@ function App() {
     chatOpen, setChatOpen, chatInput, setChatInput,
     chatAttachment, setChatAttachment, chatMessagesByModel,
     chatMessages, chatSupportsImages, sendChat, runChatAction, dropAttachment, resetChat,
+    isReplying, stopReply,
   } = useChat({
     selectedModel,
     selectedRow,
@@ -3567,6 +3568,8 @@ function App() {
           onSend={sendChat}
           liveShowActive={uiMode === 'advanced' && runProgress?.phase === 'running'}
           canSendImages={chatSupportsImages}
+          isReplying={isReplying}
+          onStopReply={stopReply}
           canSendAudio={chatSupportsAudio}
           pendingAttachment={chatAttachment}
           onAttach={setChatAttachment}

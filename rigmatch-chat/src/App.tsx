@@ -1165,6 +1165,10 @@ export default function App() {
     activeContextLimit,
     activeConversation,
     activePersonality,
+    // Without this the send closes over the attachment as it was when the
+    // callback was last built, so a file chosen after that would be dropped —
+    // or worse, a previous one sent again.
+    attachment,
     conversations,
     draft,
     memoryNote,

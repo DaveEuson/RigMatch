@@ -57,6 +57,19 @@ export function useChat({
   // Pending image (data URL) the user attached for the next vision-model message.
   const [chatAttachment, setChatAttachment] = useState<ChatAttachment | null>(null);
   const [chatMessagesByModel, setChatMessagesByModel] = useState<Record<string, ChatMessage[]>>(initialMessagesByModel);
+  /**
+   * The reply currently being written, when one is streaming.
+   *
+   * Carries the stream id so Stop has something to address. Null the rest of
+   * the time, which is what the composer keys its button off.
+   */
+  const [streamingReply, setStreamingReply] = useState<{ id: string; model: string; streamId: string } | null>(null);
+
+  /** Abort the reply in flight. Safe to call when nothing is streaming. */
+  const stopReply = useCallback(() => {
+    if (!streamingReply) return;
+    void agentArcadeApi.abortAdvancedGenerate?.(streamingReply.streamId);
+  }, [streamingReply]);
   /** The generation in flight, so Stop reaches this one and not a later one. */
   const generationRef = useRef<AbortController | null>(null);
   /** How busy the card was when the offer was made — see runChatAction. */
@@ -130,20 +143,59 @@ export function useChat({
 
     try {
       const runtime = getModelRuntime(selectedRow, ollama);
-      const response = await agentArcadeApi.sendChat({
-        model: chatModel,
-        message: userMessage.content,
-        baseUrl: runtime.baseUrl,
-        provider: runtime.provider,
-        ...(attached ? { images: attached } : {}),
-      });
-      setChatMessagesByModel((prev) => ({
-        ...prev,
-        [chatModel]: [
-          ...(prev[chatModel] ?? [welcomeMessage]),
-          { id: `${Date.now()}-agent`, role: 'agent', content: response.message },
-        ],
-      }));
+      // Streamed, so the answer appears as it is written rather than all at
+      // once at the end. A local model can take a minute on a long reply, and
+      // an empty panel for a minute reads as a hung app.
+      //
+      // Only for Ollama text: an attachment goes down the chat-endpoint path,
+      // and LM Studio has its own request shape. Both still answer in one
+      // piece, which is correct rather than merely tolerable — neither is where
+      // the wait hurts.
+      const canStream = runtime.provider === 'ollama' && !attached;
+      const streamId = canStream ? `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` : undefined;
+      const replyId = `${Date.now()}-agent`;
+
+      let unsubscribe: (() => void) | undefined;
+      if (streamId) {
+        setStreamingReply({ id: replyId, model: chatModel, streamId });
+        unsubscribe = agentArcadeApi.onAdvancedGenerateProgress?.((event) => {
+          if (event.streamId !== streamId || typeof event.text !== 'string') return;
+          setChatMessagesByModel((prev) => {
+            const thread = prev[chatModel] ?? [welcomeMessage];
+            const last = thread[thread.length - 1];
+            const reply = { id: replyId, role: 'agent' as const, content: event.text };
+            return {
+              ...prev,
+              [chatModel]: last?.id === replyId ? [...thread.slice(0, -1), reply] : [...thread, reply],
+            };
+          });
+        });
+      }
+
+      try {
+        const response = await agentArcadeApi.sendChat({
+          model: chatModel,
+          message: userMessage.content,
+          baseUrl: runtime.baseUrl,
+          provider: runtime.provider,
+          ...(attached ? { images: attached } : {}),
+          ...(streamId ? { stream: true, streamId } : {}),
+        });
+        // The final text replaces whatever the last token left, so a stopped or
+        // truncated stream does not leave a half-word on screen.
+        setChatMessagesByModel((prev) => {
+          const thread = prev[chatModel] ?? [welcomeMessage];
+          const last = thread[thread.length - 1];
+          const reply = { id: replyId, role: 'agent' as const, content: response.message };
+          return {
+            ...prev,
+            [chatModel]: last?.id === replyId ? [...thread.slice(0, -1), reply] : [...thread, reply],
+          };
+        });
+      } finally {
+        unsubscribe?.();
+        setStreamingReply(null);
+      }
     } catch (error) {
       const errMsg = getErrorMessage(error);
       setActivity(`Chat failed: ${errMsg}`);
@@ -265,6 +317,9 @@ export function useChat({
   }, []);
 
   return {
+    isReplying: Boolean(streamingReply),
+    stopReply,
+
     chatOpen,
     setChatOpen,
     chatInput,

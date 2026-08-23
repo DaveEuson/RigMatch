@@ -19,6 +19,8 @@ export function ChatDock({
   onSend,
   liveShowActive,
   canSendImages,
+  isReplying,
+  onStopReply,
   canSendAudio,
   onRunAction,
   actionRunning,
@@ -36,6 +38,10 @@ export function ChatDock({
   onSend: () => void;
   liveShowActive?: boolean;
   canSendImages?: boolean;
+  /** True while a reply is streaming in, so Send becomes Stop. */
+  isReplying?: boolean;
+  /** Abort the reply in flight. */
+  onStopReply?: () => void;
   /** Models reporting the `audio` capability can be sent a recording. */
   canSendAudio?: boolean;
   /** Runs an offer the app made. Absent means offers are not actionable here. */
@@ -183,9 +189,18 @@ export function ChatDock({
           placeholder={canSendImages ? 'Ask about an image, or just chat...' : 'Ask the matched local agent...'}
           aria-label="Message"
         />
-        <button type="submit" className="primary-button">
-          Send
-        </button>
+        {/* Stop replaces Send while the answer is being written. A local
+            model can ramble for a minute, and until now there was no way to
+            interrupt one — the companion has had this since it was written. */}
+        {isReplying ? (
+          <button type="button" className="primary-button" onClick={onStopReply}>
+            ■ Stop
+          </button>
+        ) : (
+          <button type="submit" className="primary-button">
+            Send
+          </button>
+        )}
       </form>
     </aside>
   );
