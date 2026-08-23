@@ -115,7 +115,13 @@ export function buildContextMessages(
   summarizedCount: number,
 ): ChatMessage[] {
   const dropped = Math.max(0, Math.min(summarizedCount, messages.length));
-  const body = messages.slice(dropped).map((m) => ({ role: m.role, content: m.content }));
+  // Attachments ride along when a turn had one, so a follow-up question about
+  // the same picture or recording still has it in view.
+  const body = messages.slice(dropped).map((m) => ({
+    role: m.role,
+    content: m.content,
+    ...(m.images?.length ? { images: m.images } : {}),
+  }));
   // Whether the summary is sent depends on the summary existing, not on the
   // count: a thread branched off another one carries a summary of the *other*
   // conversation and none of its own messages yet, so a count of zero there

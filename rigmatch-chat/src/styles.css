@@ -2168,3 +2168,60 @@ textarea:focus {
   opacity: 0.65;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── attachments ──────────────────────────────────────────────────────────
+   Offered only for a model that reports it can read them, so this row is
+   absent far more often than it is present. */
+.rm-attach-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 0;
+}
+
+.rm-attach-btn {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  border: 1px dashed var(--line, rgba(255, 255, 255, 0.2));
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.rm-attach-btn:hover { opacity: 1; }
+
+.rm-attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 6px 4px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  max-width: 100%;
+}
+
+.rm-attach-chip button {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+/* On a turn that carried one. After a restart the bytes are gone and only the
+   name survives, which the wording reflects rather than hiding. */
+.rm-attach-sent {
+  font-size: 10px;
+  opacity: 0.6;
+  margin-bottom: 4px;
+  font-style: italic;
+}

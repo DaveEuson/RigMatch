@@ -25,6 +25,18 @@ export type StoredMessage = {
   imagePath?: string;
   /** The RigMatch job it came from, for fetching the bytes to display. */
   imageJobId?: string;
+  /**
+   * An attachment's bytes, base64, held for this session only.
+   *
+   * Never written to the file — see serializeStore. A recording is close to a
+   * megabyte once base64'd, the store is rewritten on every change, and this
+   * file has been grown unmanageable by exactly that once already. What
+   * persists is attachmentName, so a reopened conversation still shows that
+   * something was sent and what it was called.
+   */
+  images?: string[];
+  /** What the attachment was called, which is cheap enough to keep. */
+  attachmentName?: string;
 };
 
 export type Conversation = {
@@ -67,7 +79,16 @@ export const NEW_CHAT_TITLE = "New chat";
 const TITLE_MAX = 44;
 
 export function serializeStore(conversations: Conversation[]): string {
-  return JSON.stringify({ version: STORE_VERSION, conversations });
+  // Attachment bytes are dropped on the way to disk, deliberately and in one
+  // place. They are useful for the rest of the session — a follow-up question
+  // about the same picture needs them in context — and ruinous in a file that
+  // is rewritten on every keystroke. The name survives so the transcript can
+  // still say what was sent.
+  const withoutBytes = conversations.map((conversation) => ({
+    ...conversation,
+    messages: conversation.messages.map(({ images, ...message }) => message),
+  }));
+  return JSON.stringify({ version: STORE_VERSION, conversations: withoutBytes });
 }
 
 /**

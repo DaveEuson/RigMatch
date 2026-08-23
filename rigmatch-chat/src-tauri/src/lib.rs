@@ -14,6 +14,14 @@ pub struct OllamaModel {
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+    /// Attachments, base64 without the data-URL prefix.
+    ///
+    /// Ollama takes both pictures and recordings in this one field — it is not
+    /// only images despite the name, and a model that reports the `audio`
+    /// capability transcribes a WAV sent this way. Skipped when empty so an
+    /// ordinary text turn sends exactly what it always did.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<String>,
 }
 
 fn validate_localhost(base_url: &str) -> Result<(), String> {
@@ -258,6 +266,13 @@ async fn run_stream(
     // model supports, and drops the middle of any longer conversation silently.
     if let Some(ctx) = num_ctx {
         body["options"] = serde_json::json!({ "num_ctx": ctx });
+    }
+    // Thinking off when a recording is attached. Writing down what was said
+    // needs no reasoning, and Gemma 4 otherwise spends its whole budget on
+    // hidden thought and answers with nothing at all — measured at 1802
+    // characters of reasoning and an empty reply.
+    if messages.iter().any(|m| !m.images.is_empty()) {
+        body["think"] = serde_json::json!(false);
     }
     let client = reqwest::Client::new();
     // Selected against cancellation as well: loading a large model into VRAM

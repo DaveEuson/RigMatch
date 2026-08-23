@@ -154,6 +154,16 @@ type AppMessage = {
   imagePath?: string;
   /** The job the picture came from, for asking RigMatch to hand the bytes over. */
   imageJobId?: string;
+  /**
+   * Attachment bytes, base64, for this session only.
+   *
+   * Dropped by serializeStore on the way to disk: a recording is close to a
+   * megabyte once encoded and the store is rewritten on every change, which is
+   * how this file grew unmanageable once before.
+   */
+  images?: string[];
+  /** What was attached. Cheap enough to persist, so the turn still says so. */
+  attachmentName?: string;
 };
 
 type ConnectionStatus = "connected" | "disconnected" | "checking";
@@ -508,11 +518,74 @@ export default function App() {
   const [draftSettings, setDraftSettings] = useState<AppSettings>(settings);
   const [rigScores, setRigScores] = useState<Record<string, ModelScore>>(() => loadCachedBridge().scores);
   const [generatingImage, setGeneratingImage] = useState(false);
+
+  /**
+   * A picture or recording waiting to be sent with the next message.
+   *
+   * Held in memory and never written to the conversation file — the store is
+   * rewritten on every change, and a base64 WAV is close to a megabyte. What
+   * persists is the name.
+   */
+  const [attachment, setAttachment] = useState<{ base64: string; name: string; kind: "image" | "audio" } | null>(null);
+  const attachFileRef = useRef<HTMLInputElement | null>(null);
+
+
   const [rigCapabilities, setRigCapabilities] = useState<Record<string, string[]>>({});
   /** What RigMatch would actually make a picture with, if asked right now. */
   const [imageMaker, setImageMaker] = useState<{ ready: boolean; checkpoint: string | null }>(
     { ready: false, checkpoint: null },
   );
+
+  /**
+   * What the active model can actually be handed.
+   *
+   * Driven by the capabilities RigMatch publishes over the bridge — the same
+   * data behind the sees and hears chips — so the offer and the label match
+   * what the model reports. No capability, no button: an attach control that
+   * produces "Failed to load image or audio file" is worse than none.
+   */
+  const attachCapability = useMemo(() => {
+    const able = activeBuddy ? rigCapabilities[activeBuddy] ?? [] : [];
+    const sees = able.includes("vision");
+    const hears = able.includes("audio");
+    if (sees && hears) {
+      return { accept: "image/*,audio/*", label: "Attach picture or recording", title: "This model can read pictures and listen to recordings" };
+    }
+    if (sees) return { accept: "image/*", label: "Attach a picture", title: "This model can read pictures" };
+    if (hears) return { accept: "audio/*", label: "Attach a recording", title: "This model can listen to recordings" };
+    return null;
+  }, [activeBuddy, rigCapabilities]);
+
+  /**
+   * Read a chosen file into base64, refusing what would not survive the trip.
+   *
+   * The size cap is not arbitrary: the bytes travel through the Tauri command
+   * boundary and into a request body, and a long recording base64s to several
+   * times its own size. Better to say so at the point of choosing than to fail
+   * somewhere further in where the reason is invisible.
+   */
+  const takeAttachment = useCallback(async (file: File | undefined) => {
+    if (!file) return;
+    const kind: "image" | "audio" = file.type.startsWith("audio/") ? "audio" : "image";
+    const MAX_BYTES = 20 * 1024 * 1024;
+    if (file.size > MAX_BYTES) {
+      setAttachment(null);
+      window.alert(`That file is ${Math.round(file.size / 1024 / 1024)} MB. Attachments are limited to 20 MB — a shorter recording or a smaller picture will work.`);
+      return;
+    }
+    const dataUrl: string = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("unreadable"));
+      reader.readAsDataURL(file);
+    }).catch(() => "");
+    if (!dataUrl) {
+      window.alert("That file could not be read.");
+      return;
+    }
+    const comma = dataUrl.indexOf(",");
+    setAttachment({ base64: comma === -1 ? dataUrl : dataUrl.slice(comma + 1), name: file.name, kind });
+  }, []);
   /** Narrow the list to one ability. 'all' is the resting state. */
   const [capabilityFilter, setCapabilityFilter] = useState<"all" | "text" | "vision" | "audio" | "image">("all");
   /** Fetched bytes, keyed by job — memory only, never written to history. */
@@ -921,6 +994,7 @@ export default function App() {
 
     setActiveConversationId(conversationId);
     setDraft("");
+    setAttachment(null);
     setGeneratingImage(true);
     // Names the thing that will actually do it. The button sits under a
     // composer that says "using qwen2.5:7b", and no Ollama model here makes
@@ -972,7 +1046,13 @@ export default function App() {
       });
     const conversationId = target.id;
 
-    const userMsg: AppMessage = { id: genId(), role: "user", content: draft.trim(), ts: Date.now() };
+    const userMsg: AppMessage = {
+      id: genId(),
+      role: "user",
+      content: draft.trim(),
+      ts: Date.now(),
+      ...(attachment ? { images: [attachment.base64], attachmentName: attachment.name } : {}),
+    };
     const updatedHistory = [...target.messages, userMsg];
 
     setConversations((prev) => {
@@ -2011,6 +2091,13 @@ export default function App() {
                     ) : (
                       <div className="rm-message-text">{msg.content}</div>
                     )}
+                    {/* What was sent with this turn. The bytes are gone after a
+                        restart by design, so the name is what remains. */}
+                    {msg.attachmentName && (
+                      <div className="rm-attach-sent">
+                        {msg.images?.length ? "Sent" : "Sent earlier"}: {msg.attachmentName}
+                      </div>
+                    )}
                     {msg.imagePath && (
                       <GeneratedImage
                         path={msg.imagePath}
@@ -2058,6 +2145,40 @@ export default function App() {
               )}
             </div>
 
+            {/*
+              What this model can be handed, decided by what it reports rather
+              than by what the file dialog happens to allow. RigMatch already
+              publishes each model's capabilities over the bridge — the same
+              data behind the sees and hears chips — so the button appears only
+              for a model that can genuinely use an attachment, and offers only
+              the kinds it can read.
+            */}
+            {attachCapability && (
+              <div className="rm-attach-row">
+                <input
+                  ref={attachFileRef}
+                  type="file"
+                  accept={attachCapability.accept}
+                  hidden
+                  onChange={(event) => { void takeAttachment(event.target.files?.[0]); event.target.value = ""; }}
+                />
+                {attachment ? (
+                  <span className="rm-attach-chip">
+                    {attachment.kind === "audio" ? "Recording" : "Picture"}: {attachment.name}
+                    <button type="button" onClick={() => setAttachment(null)} aria-label="Remove attachment">×</button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="rm-attach-btn"
+                    onClick={() => attachFileRef.current?.click()}
+                    title={attachCapability.title}
+                  >
+                    {attachCapability.label}
+                  </button>
+                )}
+              </div>
+            )}
             <div className="rm-compose">
               <textarea
                 className="rm-compose-input"

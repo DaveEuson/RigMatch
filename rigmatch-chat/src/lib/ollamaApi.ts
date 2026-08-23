@@ -11,6 +11,13 @@ export type OllamaModel = {
 export type ChatMessage = {
   role: "user" | "assistant" | "system";
   content: string;
+  /**
+   * Attachments, base64 without the data-URL prefix.
+   *
+   * Ollama takes pictures and recordings in this one field despite the name —
+   * a model reporting the `audio` capability transcribes a WAV sent this way.
+   */
+  images?: string[];
 };
 
 // Valid model name: alphanumeric + limited punctuation, no path traversal
