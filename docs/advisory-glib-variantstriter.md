@@ -122,8 +122,33 @@ fail until this decision is recorded here or `--force` is given deliberately.
 
 **Windows:** accepted, no action. The code is not in the binary.
 
-**Linux:** unreachable is a weaker guarantee than fixed. Before a public Linux
-build, pick one:
+**Linux: accepted, 2026-08-21.** Recorded in `docs/accepted-advisories.json`,
+pinned to glib 0.18.5.
+
+Three things decided it, in order of weight:
+
+1. **The function is never called.** `VariantStrIter` has one public
+   constructor, and nothing outside glib itself calls it — verified when this
+   was written and re-verified against the current lockfile on the date above.
+2. **There is nowhere to move to.** gtk3-rs is published UNMAINTAINED and pins
+   glib `^0.18`; Tauri v2's Linux backend is GTK3. This will not resolve by
+   waiting, so "unreachable for now" is the permanent state of affairs rather
+   than a holding position.
+3. **The fork would cost more than it buys.** A `[patch.crates-io]` fork asks
+   anyone auditing this build to trust a private glib in place of the published
+   crate, in order to fix a function nothing calls, whose worst case is a crash
+   rather than a compromise. For an app whose case rests on being readable,
+   that is a real cost paid against a theoretical one.
+
+The acceptance is pinned to the version deliberately. If glib resolves to a
+different affected version, the reachability analysis above no longer describes
+what is being shipped, and the guard refuses again rather than treating the
+question as settled. `--force` still exists and still mutes everything; it is
+not how this was accepted.
+
+### The options as they stood
+
+Kept because the reasoning above is only meaningful against them:
 
 1. **Patch it locally.** `[patch.crates-io]` glib 0.18.5 to a fork carrying the
    one-line `&p` -> `&mut p` change. The patch is tiny and well understood; the

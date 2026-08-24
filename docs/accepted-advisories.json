@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "Advisories that have been looked at and deliberately accepted, with the",
+    "version they were accepted AT. An acceptance is not a mute: if the crate",
+    "moves to a different affected version, the analysis behind the decision no",
+    "longer describes what is being shipped, and the guard asks again.",
+    "The reasoning lives in the note file, not here — this is only the record."
+  ],
+  "accepted": [
+    {
+      "id": "RUSTSEC-2024-0429",
+      "crate": "glib",
+      "acceptedAtVersion": "0.18.5",
+      "decidedOn": "2026-08-21",
+      "decidedBy": "Dave Euson",
+      "platforms": ["linux"],
+      "summary": "VariantStrIter unsoundness: a NULL dereference crash, not steerable memory corruption.",
+      "why": [
+        "The vulnerable function is never called. VariantStrIter has one public constructor, Variant::array_iter_str, and nothing outside glib itself calls it — re-verified against the current lockfile on the date above.",
+        "There is no version to move to. gtk 0.18.2 is published carrying an UNMAINTAINED notice pointing at gtk4, it requires glib ^0.18, and Tauri v2's Linux backend is webkit2gtk, which is GTK3. No dependency bump reaches glib 0.20 while Tauri v2 runs on Linux.",
+        "The alternative is worse for this project. A [patch.crates-io] fork asks anyone auditing the build to trust a private glib in place of the published crate, to fix a function nothing calls. For an app whose case rests on being readable, that is a real cost against a theoretical one."
+      ],
+      "revisitWhen": [
+        "Tauri's Linux backend moves off gtk3-rs, or gtk publishes past 0.18.2 requiring glib 0.20+.",
+        "Anything in the dependency tree begins calling Variant::array_iter_str.",
+        "glib resolves to a different affected version, which this record does not cover and the guard will refuse."
+      ],
+      "note": "docs/advisory-glib-variantstriter.md"
+    }
+  ]
+}

@@ -80,13 +80,46 @@ if (patched) {
   process.exit(0);
 }
 
+// A recorded acceptance, pinned to the version it was decided at.
+//
+// Deliberately not --force. A flag mutes every advisory, including ones nobody
+// has read; this covers exactly the crate and version somebody looked at. If
+// glib resolves to a different affected version, the analysis behind the
+// decision no longer describes what is being shipped, and the question is asked
+// again rather than assumed answered.
+const acceptedPath = join(root, 'docs/accepted-advisories.json');
+if (existsSync(acceptedPath)) {
+  let accepted = [];
+  try {
+    accepted = JSON.parse(readFileSync(acceptedPath, 'utf-8')).accepted ?? [];
+  } catch {
+    console.error(`${acceptedPath} could not be parsed — treating it as empty.`);
+  }
+  const record = accepted.find((entry) => entry.crate === 'glib' && entry.platforms?.includes('linux'));
+  if (record && record.acceptedAtVersion === glib) {
+    console.log(`glib ${glib} carries ${record.id}, accepted on ${record.decidedOn} by ${record.decidedBy}.`);
+    console.log(`Reasoning: ${record.note}`);
+    console.log('Building. This acceptance is pinned to this exact version.');
+    process.exit(0);
+  }
+  if (record) {
+    console.error(`glib is ${glib}, but ${record.id} was accepted at ${record.acceptedAtVersion}.`);
+    console.error('The analysis behind that decision was done against a different version, so it');
+    console.error(`does not cover this one. Re-read ${record.note} and update the record.
+`);
+  }
+}
+
 console.error(`glib ${glib} is affected by the VariantStrIter unsoundness (fixed in 0.20.0),`);
 console.error('and this is a LINUX build — the GTK stack that pulls glib in is compiled here,');
 console.error('unlike on Windows where it is absent entirely.\n');
 console.error(`Read ${NOTE}. It records why this was accepted for Windows and what the`);
 console.error('two ways out are: patch glib locally, or re-check whether gtk3-rs has moved\n');
 console.error('past 0.18.2 (it was frozen there as of December 2024).\n');
-console.error('If you have decided to ship anyway, run the build with:');
+console.error('If this has been considered and accepted, record it in');
+console.error('docs/accepted-advisories.json — pinned to the version, with the reasoning in');
+console.error('the note. --force exists as a last resort but mutes every advisory, including');
+console.error('ones nobody has read:');
 console.error('  npm run dist:linux -- --force        (or set RIGMATCH_ALLOW_ADVISORIES=1)');
 
 if (forced || process.env.RIGMATCH_ALLOW_ADVISORIES === '1') {
