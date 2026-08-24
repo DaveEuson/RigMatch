@@ -6,6 +6,64 @@ Ideas parked for later. Nothing here is committed; it's a candid backlog of dire
 
 ## Backburner
 
+### A community score database — the one thing competitors have that we cannot fake
+
+Every other tool splits into "speed, measured on your machine" (LocalScore,
+llama-bench) or "quality, measured somewhere else" (whichllm, localmodel.run).
+RigMatch is alone in measuring quality *here*. What it cannot do is answer "is
+my 4070 normal?", which LocalScore answers from thousands of submissions.
+
+The tension is the whole design problem: the app's headline promise is that
+nothing leaves this computer. A careless version of this costs the thing that
+makes RigMatch distinctive.
+
+A version that strengthens it instead:
+
+- **Opt-in per upload, never a default.** A "share this result" button on one
+  scorecard, the way sharing a match card already works — not a setting flipped
+  once and forgotten.
+- **Send the rig stamp, not the machine.** ScoreRigStamp already holds exactly
+  the right row: card, VRAM, driver, app version, model digest, quantisation,
+  and the scores. No hostname, no prompts, no transcripts. The payload was built
+  for this without meaning to be.
+- **The drift machinery is the moat.** We can refuse to aggregate scores
+  measured on stale weights or mismatched hardware, because we already refuse to
+  crown them. A quality database where every row knows what it was measured on
+  is something none of the speed leaderboards can assemble.
+
+Costs: a server, moderation of junk submissions, and a privacy policy worth
+standing behind. 1.0+, and deserves its own design pass rather than being
+bolted onto a release.
+
+### Provider parity, then a third provider
+
+`LocalModelProvider` is already `'ollama' | 'lm-studio'`, `getModelRuntime`
+resolves a per-row baseUrl and provider, and sendChat has an OpenAI-compatible
+branch. The abstraction exists; LM Studio is simply second-class — `canDownload`
+is false for it, benchmark routing favours Ollama, and there is no setup path.
+
+Make LM Studio genuinely equal first, since it is the one users actually have.
+A third — llama.cpp's server — then costs mostly catalogue and detection work,
+because it speaks the same OpenAI-compatible API. Doing them in the other order
+means building the abstraction twice.
+
+### Code signing
+
+Unsigned Windows builds mean SmartScreen interrupts every download, and the
+likeliest real-world harm to users is not a competitor forking the repo but
+somebody re-uploading the .exe with adware under our name. A certificate fixes
+both. A few hundred a year, and the right time is when there are users to
+protect — before the demo video brings them.
+
+### Discoverability on the long panels
+
+Twice in one session a feature existed and could not be found: the Start ComfyUI
+button at the bottom of Settings, and the Listening panel below four stacked
+Activity panels. Both were fixed by moving one thing, which is a symptom-level
+fix. If it recurs, the answer is structural — tabs or anchors on Activity —
+rather than relocating another control.
+
+
 ### Rented hardware — "what could I do with a card I do not own?"
 
 Decided 2026-08-20, after rentals came up as a way around being locked to one
@@ -40,13 +98,16 @@ are rented, with a price per hour and a lifetime.
 app stays on your desk; the rental is a host it talks to), and any reselling or
 brokering of compute.
 
-### VRAM-tier simulation in the gates
+### ~~VRAM-tier simulation in the gates~~ — done 2026-08-21
 
-A dev-only profile override (`RIGMATCH_FAKE_VRAM=8/16/24`) so fit labels,
-sweet-spot copy and "out of your league" wording are swept across tiers
-automatically, instead of only ever being seen on the one card the developer
-owns. Cheap, and it closes the blind spot that being locked to a single machine
-creates. Good first task after 0.7.
+Shipped in `tests/vramTiers.test.mjs`, and more cheaply than planned. The
+proposed environment override turned out to be unnecessary: the fit functions
+already take VRAM as an argument, so eight tiers from 0 GB to 48 GB are
+reachable from a test with no app changes at all.
+
+What it holds is the invariant, not the wording — chiefly that a bigger card is
+never described as worse for the same goal, which hand-written thresholds get
+wrong easily and nobody testing on one card would ever see.
 
 ### Code Challenge — multi-language, judge-graded coding test
 
