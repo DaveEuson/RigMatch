@@ -271,6 +271,31 @@ check('surface', 'the chat dock streams and can be stopped', () => {
   return 'streamed, and interruptible';
 });
 
+check('parity', 'both chat windows tell the truth about what a model cannot do', () => {
+  // The guard shipped in the main app and not in the companion, which is the
+  // window people actually talk in. Asked to draw a dog there, a text model
+  // wrote two hundred words describing one and nothing warned that was coming —
+  // the release's own headline feature, missing from its most-used surface.
+  //
+  // The classifier now exists in both and must agree; the wording deliberately
+  // differs, because each window can point at different things.
+  const appGuard = read('src/lib/chatCapabilityGuard.ts');
+  const chatGuard = read('rigmatch-chat/src/lib/chatCapabilityGuard.ts');
+  must(/export function classifyChatRequest/.test(appGuard),
+    'the main app lost its capability guard');
+  must(/export function classifyChatRequest/.test(chatGuard),
+    'the companion lost its capability guard — chat goes back to passing on whatever the model claims');
+  must(existsSync(join(root, 'tests/chatGuardParity.test.mjs')),
+    'the parity test is gone, so the two copies can drift without anyone noticing');
+
+  const wired = read('rigmatch-chat/src/App.tsx');
+  must(/classifyChatRequest\(/.test(wired),
+    'the companion has the guard but no longer calls it');
+  must(/fromRigMatch/.test(read('rigmatch-chat/src/lib/compaction.ts')),
+    "RigMatch's own notes are being fed back to the model as context again");
+  return 'both windows guarded, classifier held in parity';
+});
+
 // ── security ────────────────────────────────────────────────────────────────
 // Cheap to check, catastrophic to regress.
 

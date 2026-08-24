@@ -6,6 +6,7 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, readConversationsFile, writeConversationsFile, readMemoriesFile, writeMemoriesFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
 import { createWriteScheduler } from "./lib/writeScheduler";
+import { classifyChatRequest, companionBeyondNote } from "./lib/chatCapabilityGuard";
 import {
   KEEP_RECENT_MESSAGES,
   buildContextMessages,
@@ -164,6 +165,13 @@ type AppMessage = {
   images?: string[];
   /** What was attached. Cheap enough to persist, so the turn still says so. */
   attachmentName?: string;
+  /**
+   * RigMatch speaking, not the model.
+   *
+   * Rendered differently and never sent back as context — the app's own
+   * commentary fed into the conversation would have the model answer it.
+   */
+  fromRigMatch?: boolean;
 };
 
 type ConnectionStatus = "connected" | "disconnected" | "checking";
@@ -1068,6 +1076,21 @@ export default function App() {
       });
     const conversationId = target.id;
 
+    // Said before the model answers, not after.
+    //
+    // Asked to draw a dog, a text model does not refuse — it describes one at
+    // length, or announces it has made one. Both read as success. The note goes
+    // in ahead of the reply so the description arrives already framed as words,
+    // and points at the maker in this same window rather than "somewhere else".
+    const beyond = classifyChatRequest(draft.trim());
+    const able = rigCapabilities[activeBuddy] ?? [];
+    const guardNote = companionBeyondNote(beyond, activeBuddy, {
+      canSee: able.includes("vision"),
+      canHear: able.includes("audio"),
+      makerReady: imageMaker.ready,
+      checkpoint: imageMaker.checkpoint?.replace(/\.(safetensors|ckpt|sft)$/i, ""),
+    });
+
     const userMsg: AppMessage = {
       id: genId(),
       role: "user",
@@ -1075,13 +1098,20 @@ export default function App() {
       ts: Date.now(),
       ...(usableAttachment ? { images: [usableAttachment.base64], attachmentName: usableAttachment.name } : {}),
     };
+    // Carried in the transcript but NOT in what the model is sent: it is
+    // RigMatch talking to the user, and feeding the app's own commentary back
+    // as context would have the model answer it.
+    const noteMsg: AppMessage | null = guardNote
+      ? { id: genId(), role: "assistant", content: guardNote, ts: Date.now(), fromRigMatch: true }
+      : null;
     const updatedHistory = [...target.messages, userMsg];
 
+    const visibleHistory = noteMsg ? [...updatedHistory, noteMsg] : updatedHistory;
     setConversations((prev) => {
       const now = Date.now();
       const existing = prev.some((c) => c.id === conversationId);
       const next = existing ? prev : [...prev, target];
-      return next.map((c) => (c.id === conversationId ? withMessages(c, updatedHistory, now) : c));
+      return next.map((c) => (c.id === conversationId ? withMessages(c, visibleHistory, now) : c));
     });
     setActiveConversationId(conversationId);
     setDraft("");
@@ -1191,6 +1221,11 @@ export default function App() {
     // callback was last built, so a file chosen after that would be dropped —
     // or worse, a previous one sent again.
     usableAttachment,
+    // The guard reads all three. Stale capabilities would warn about a model
+    // that can hear, or point at a maker that is no longer ready.
+    rigCapabilities,
+    imageMaker.ready,
+    imageMaker.checkpoint,
     conversations,
     draft,
     memoryNote,
@@ -2105,9 +2140,14 @@ export default function App() {
                       />
                     </div>
                   )}
-                  <div className="rm-message-bubble">
+                  <div className={msg.fromRigMatch ? "rm-message-bubble rm-from-rigmatch" : "rm-message-bubble"}>
                     <div className="rm-message-sender">
-                      {msg.role === "user" ? settings.userName : assistantDisplayName}
+                      {/* Attributed to RigMatch, not to the model. A note in the
+                          model's voice would be the app putting words in its
+                          mouth — the opposite of what this feature is for. */}
+                      {msg.fromRigMatch
+                        ? "RigMatch"
+                        : msg.role === "user" ? settings.userName : assistantDisplayName}
                     </div>
                     {msg.role === "assistant" ? (
                       <div

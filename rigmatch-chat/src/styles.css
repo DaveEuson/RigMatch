@@ -2234,3 +2234,18 @@ textarea:focus {
   color: var(--danger, #e08670);
   opacity: 0.9;
 }
+
+/* RigMatch speaking, not the model.
+   Visually apart from a reply because it is not one — a note that looked like
+   the model talking would be the app putting words in its mouth, which is the
+   opposite of what it exists to prevent. */
+.rm-from-rigmatch {
+  background: rgba(217, 164, 65, 0.08);
+  border: 1px solid var(--gold);
+  border-left-width: 3px;
+}
+
+.rm-from-rigmatch .rm-message-sender {
+  color: var(--gold);
+  font-weight: 700;
+}

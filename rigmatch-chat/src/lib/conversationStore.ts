@@ -37,6 +37,8 @@ export type StoredMessage = {
   images?: string[];
   /** What the attachment was called, which is cheap enough to keep. */
   attachmentName?: string;
+  /** RigMatch speaking rather than the model. Never sent back as context. */
+  fromRigMatch?: boolean;
 };
 
 export type Conversation = {

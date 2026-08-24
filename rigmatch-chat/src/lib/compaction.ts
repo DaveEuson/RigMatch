@@ -114,6 +114,11 @@ export function buildContextMessages(
   summary: string | undefined,
   summarizedCount: number,
 ): ChatMessage[] {
+  // RigMatch's own notes are for the reader, not the model. Left in the
+  // transcript and out of the context: a model sent "starcoder2:3b writes text —
+  // it cannot make pictures" will answer it, which is a conversation with the
+  // app rather than with the user.
+  messages = messages.filter((m) => !m.fromRigMatch);
   const dropped = Math.max(0, Math.min(summarizedCount, messages.length));
   // Attachments ride along when a turn had one, so a follow-up question about
   // the same picture or recording still has it in view.
