@@ -80,6 +80,44 @@ array, and no code in this dependency graph asks for one.
 
 So on Linux today the vulnerable function is present but never invoked.
 
+## Re-checked 2026-08-21, before the first tested Linux build
+
+Option 2 — wait for upstream — is now closed rather than merely unlikely.
+
+```
+cargo search gtk
+  gtk = "0.18.2"   # UNMAINTAINED Rust bindings for the GTK+ 3 library (use gtk4 instead)
+cargo search tauri
+  tauri = "2.11.5" # we are on 2.11.3
+```
+
+`gtk` is not simply frozen at 0.18.2; it is now published carrying an
+UNMAINTAINED notice pointing at gtk4. It requires glib `^0.18`, and Tauri v2's
+Linux backend is webkit2gtk, which is GTK3. There is no dependency bump that
+reaches glib 0.20 while Tauri v2 runs on Linux, and there will not be one — the
+crate that pins it has stopped moving.
+
+The reachability analysis above was re-verified against the current lockfile on
+the same date: nothing outside glib itself calls `array_iter_str`, the only
+public constructor of `VariantStrIter`. glib is still locked at 0.18.5.
+
+So the choice is narrower than it looked. It is now between patching a fork of
+an unmaintained crate, and accepting a documented, re-verified unreachability —
+not between fixing it and waiting.
+
+Worth weighing against option 1: a `[patch.crates-io]` fork is itself a
+supply-chain claim. It asks anyone auditing the build to trust a private fork of
+glib in place of the published crate, to fix a function that is never called.
+That is not obviously the safer of the two.
+
+## What changed in the build path
+
+The guard was wired into `npm run dist:linux` and `pack:linux`, and the GitHub
+release workflow calls `electron-builder` directly — so it never ran there. The
+Linux artifacts on v0.6.0-beta were built without it. The workflow now runs
+`check-linux-advisories.mjs` on Linux jobs, which means a Linux release will
+fail until this decision is recorded here or `--force` is given deliberately.
+
 ## The decision
 
 **Windows:** accepted, no action. The code is not in the binary.

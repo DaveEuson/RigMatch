@@ -135,6 +135,15 @@ jobs:
           fi
           # Mac: handled by afterPack hook — Chat.app is bundled into the DMG
 
+      # The Linux-only advisory guard, which the release path used to route
+      # around entirely. It is wired into `npm run dist:linux` and `pack:linux`,
+      # and this job calls electron-builder directly — so v0.6.0 shipped Linux
+      # artifacts without the check that exists to stop exactly that. Run it
+      # here, where the Linux artifacts are actually made.
+      - name: Check Linux advisories
+        if: matrix.platform == 'linux'
+        run: node scripts/check-linux-advisories.mjs
+
       - name: Build RigMatch
         run: npm run build && npm exec -- electron-builder ${{ matrix.builderArgs }} --publish never
         env:
