@@ -107,6 +107,22 @@ const PRESENT = [
   ['only the microphone is allowed', mainProcess, "ALLOWED_PERMISSIONS = new Set(['media'"],
   ['ComfyUI can be located automatically', mainProcess, 'comfy:locateFolder'],
   ['the scores bridge stays on loopback', mainProcess, "'127.0.0.1'"],
+
+  // 0.7. Everything above this line was written for an earlier release, which
+  // meant a 0.7 build could lose every feature 0.7 is about and still be
+  // reported clean. The honesty guard is the sharpest case: it is the release's
+  // headline, it lives entirely in strings, and it already shipped missing from
+  // one of the two windows once.
+  ['chat says a model cannot make an image', js, 'so RigMatch can generate this one for you.'],
+  ['chat warns before a model invents a transcript', js, 'write a plausible transcript of nothing'],
+  ['the listening test shows a level bar', js, 'watch the level bar while you speak'],
+  ['the level bar is drawn, not just described', css, 'listening-meter-fill'],
+  ['a reply in flight can be interrupted', js, '■ Stop'],
+  ['ComfyUI can be started from RigMatch', mainProcess, 'comfy:launch'],
+  ['ComfyUI launchers are found automatically', mainProcess, 'comfy:findLaunchers'],
+  // The bridge is the one place an ordinary web page could reach into RigMatch.
+  ['the bridge only answers its own companion', mainProcess, 'tauri://localhost'],
+  ['a second RigMatch does not open a second window', mainProcess, 'requestSingleInstanceLock'],
 ];
 
 /** Things that must NOT be in the bundle. */
