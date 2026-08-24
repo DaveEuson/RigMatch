@@ -564,6 +564,28 @@ export default function App() {
    * times its own size. Better to say so at the point of choosing than to fail
    * somewhere further in where the reason is invisible.
    */
+
+  /**
+   * The attachment, but only if the model in front of us can actually read it.
+   *
+   * Held for the composer rather than for a conversation, so switching buddies
+   * used to carry it along: a recording chosen for a listening model followed
+   * the user to a code model and was sent there, where Ollama refused it and
+   * the chat said "Something went wrong. Is Ollama still running?" Ollama was
+   * fine. The app had handed a WAV to starcoder.
+   *
+   * Derived rather than corrected in an effect, so there is no window in which
+   * the wrong thing could be sent — an unusable attachment is simply not an
+   * attachment. The dock has behaved this way since 0.5; the companion could
+   * not, because until today it took no attachments at all.
+   */
+  const usableAttachment = useMemo(() => {
+    if (!attachment) return null;
+    const able = activeBuddy ? rigCapabilities[activeBuddy] ?? [] : [];
+    const readable = attachment.kind === "audio" ? able.includes("audio") : able.includes("vision");
+    return readable ? attachment : null;
+  }, [attachment, activeBuddy, rigCapabilities]);
+
   const takeAttachment = useCallback(async (file: File | undefined) => {
     if (!file) return;
     const kind: "image" | "audio" = file.type.startsWith("audio/") ? "audio" : "image";
@@ -1051,7 +1073,7 @@ export default function App() {
       role: "user",
       content: draft.trim(),
       ts: Date.now(),
-      ...(attachment ? { images: [attachment.base64], attachmentName: attachment.name } : {}),
+      ...(usableAttachment ? { images: [usableAttachment.base64], attachmentName: usableAttachment.name } : {}),
     };
     const updatedHistory = [...target.messages, userMsg];
 
@@ -1168,7 +1190,7 @@ export default function App() {
     // Without this the send closes over the attachment as it was when the
     // callback was last built, so a file chosen after that would be dropped —
     // or worse, a previous one sent again.
-    attachment,
+    usableAttachment,
     conversations,
     draft,
     memoryNote,
@@ -2166,9 +2188,14 @@ export default function App() {
                   hidden
                   onChange={(event) => { void takeAttachment(event.target.files?.[0]); event.target.value = ""; }}
                 />
-                {attachment ? (
+                {attachment && !usableAttachment && (
+                  <span className="rm-attach-dropped">
+                    {attachment.name} is set aside — {activeBuddy} cannot read it. Pick a model that can, or choose another file.
+                  </span>
+                )}
+                {usableAttachment ? (
                   <span className="rm-attach-chip">
-                    {attachment.kind === "audio" ? "Recording" : "Picture"}: {attachment.name}
+                    {usableAttachment.kind === "audio" ? "Recording" : "Picture"}: {usableAttachment.name}
                     <button type="button" onClick={() => setAttachment(null)} aria-label="Remove attachment">×</button>
                   </span>
                 ) : (

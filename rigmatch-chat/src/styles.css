@@ -2225,3 +2225,12 @@ textarea:focus {
   margin-bottom: 4px;
   font-style: italic;
 }
+
+/* An attachment dropped because the model changed under it. Said rather than
+   done silently: a file that vanishes without explanation reads as a bug. */
+.rm-attach-dropped {
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--danger, #e08670);
+  opacity: 0.9;
+}
