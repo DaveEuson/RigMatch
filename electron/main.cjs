@@ -56,7 +56,7 @@ const {
   sortOllamaFamilyRows,
   parseOllamaFamilyRows,
 } = require('./ollamaCatalog.cjs');
-const { summarizeMemory } = require('./systemProfile.cjs');
+const { summarizeMemory, cleanDeviceTreeModel } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
 const { downloadModel, verifyComfyFolder } = require('./comfyModels.cjs');
 const { locateComfyRoots } = require('./comfyLocate.cjs');
@@ -1743,7 +1743,13 @@ async function getSystemProfile({ checkForUpdates = false } = {}) {
     .filter((gpu) => gpu && gpu.model && !/microsoft basic/i.test(gpu.model))
     .sort((a, b) => (b.vram || 0) - (a.vram || 0));
 
-  const primaryGpu = gpus[0] || {};
+  // A board whose graphics is not on the PCI bus leaves systeminformation with
+  // nothing to report, and everything downstream then fails together: no model
+  // string means isUnifiedMemoryGpu cannot match, so the unified-memory rescue
+  // below never fires and VRAM resolves to 0; and getCudaStatus, which decides
+  // by looking for "nvidia" in the label, reports "No NVIDIA GPU detected" on an
+  // NVIDIA board. Measured on a Jetson Orin Nano, not predicted.
+  const primaryGpu = gpus[0] || await getBoardGpu();
   const primaryFs = (fsSize || []).sort((a, b) => (b.size || 0) - (a.size || 0))[0] || {};
   const networks = getPrivateNetworkAddresses();
   const cuda = await getCudaStatus(primaryGpu, { checkForUpdates });
@@ -2066,6 +2072,40 @@ async function getLatestCudaToolkitVersion() {
 
   latestCudaCacheAt = now;
   return latestCudaCache;
+}
+
+/**
+ * The GPU of a machine that has one but does not advertise it on the PCI bus.
+ *
+ * Only reached when systeminformation found no controller at all, which on an
+ * ordinary desktop means there is genuinely nothing to find. Returns {} in that
+ * case, leaving the existing "Unknown GPU" behaviour exactly as it was.
+ *
+ * The device tree is tried first because it needs no vendor tooling and names
+ * the vendor as well as the part. nvidia-smi is second: it exists on newer
+ * JetPack and answers "Orin (nvgpu)", but is absent from older images, and
+ * answers [N/A] to every memory question on Tegra — which is why it cannot be
+ * the only source and why the unified-memory path, not nvidia-smi, is what
+ * ultimately supplies the memory figure.
+ */
+async function getBoardGpu() {
+  if (process.platform !== 'linux') return {};
+
+  try {
+    const model = cleanDeviceTreeModel(fsSync.readFileSync('/proc/device-tree/model', 'utf-8'));
+    if (model) return { model, vendor: /nvidia/i.test(model) ? 'NVIDIA' : '' };
+  } catch {
+    // No device tree: an ordinary x86 machine, or a kernel without it.
+  }
+
+  const { output, error } = await runCommand(
+    'nvidia-smi',
+    ['--query-gpu=name', '--format=csv,noheader'],
+    3500,
+  );
+  if (error) return {};
+  const name = output.split('\n').map((line) => line.trim()).find(Boolean);
+  return name ? { model: name, vendor: 'NVIDIA' } : {};
 }
 
 // systeminformation frequently reports 0 VRAM for NVIDIA GPUs on Linux (and some

@@ -35,8 +35,31 @@ function summarizeMemory(mem) {
   };
 }
 
+/**
+ * The board's name for itself, from /proc/device-tree/model.
+ *
+ * On a Jetson the graphics is not a PCI device, so lspci lists no VGA or 3D
+ * controller and systeminformation — which builds its Linux GPU list from lspci
+ * — returns an empty array. Verified on an Orin Nano running JetPack R39:
+ * si.graphics() reports zero controllers, so RigMatch had no model string, could
+ * not recognise the part as unified-memory, and fell all the way through to 0 GB
+ * on a machine with 7.4 GB to work with.
+ *
+ * The device tree answers where lspci cannot: "NVIDIA Jetson Orin Nano
+ * Engineering Reference Developer Kit Super" — vendor and part in one string,
+ * present with no vendor tooling installed at all.
+ *
+ * The value is a NUL-terminated string copied straight out of the device tree
+ * blob. Read without stripping that, the terminator survives into the UI and
+ * into every comparison made against it.
+ */
+function cleanDeviceTreeModel(raw) {
+  return String(raw ?? '').replace(/\0/g, '').trim();
+}
+
 module.exports = {
   bytesToGb,
+  cleanDeviceTreeModel,
   mbToGb,
   summarizeMemory,
 };
