@@ -48,3 +48,13 @@ RELEASE_NOTES.md
 SESSION_NOTES.md
 review-ai-handoff/
 design/
+
+# Built, not authored. CI runs `tauri build` and copies its own companion here
+# on every run, so a committed binary is never the one that ships — it was only
+# ever overwritten. Seventeen versions of it had reached 248 MB of history, and
+# because it sat in every checkout, the Linux and macOS packages picked it up
+# and shipped a Windows .exe they could never execute.
+#
+# Local builds still need it: `npm run prepare:companions` copies it from
+# rigmatch-chat/src-tauri/target/release, and says so if you have not built it.
+companions/

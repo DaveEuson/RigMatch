@@ -70,7 +70,7 @@ The owner's position on all of the following: these are **strong core concepts, 
 
 ## Evidence on Hand
 
-- **Real screenshots** of all five Simple Mode steps in `docs/images/` (`01-setup` … `05-winner`), plus a hero banner. The `Screenshots/` directory holds more.
+- **Real screenshots** of all five Simple Mode steps in `docs/images/` (`01-setup` … `05-winner`), plus a hero banner.
 - **A real outside review.** Version 0.4.1 ("The Reviewer's Cut") shipped every fix from RigMatch's first external review, credited by name in the changelog. That review — and the fixes — are documented evidence of responsiveness, not a testimonial.
 - **A detailed public changelog** back through 0.2.x, written in plain language, that doubles as the release notes shown in the app's Update Center. Single source: `src/data/releaseNotes.ts`.
 - **A candid known-issues document** (`KNOWN_ISSUES.md`) that names unresolved problems rather than hiding them.
