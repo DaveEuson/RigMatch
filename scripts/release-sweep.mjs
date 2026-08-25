@@ -271,6 +271,44 @@ check('surface', 'the chat dock streams and can be stopped', () => {
   return 'streamed, and interruptible';
 });
 
+check('parity', 'the layout is checked at the smallest window the app allows', () => {
+  // The visual smoke deliberately runs at the app's minimum window size, so
+  // that it tests a window a user can actually produce. That only holds while
+  // the two numbers agree — and they are declared in different files, so the
+  // comment asking the next person to keep them in step is worth exactly
+  // nothing on its own.
+  //
+  // Getting this wrong is quiet in the worst way: the smoke keeps passing at a
+  // size nobody has, and the size people do have goes unchecked.
+  const win = read('electron/main.cjs');
+  const smoke = read('scripts/visual-smoke.mjs');
+
+  const declared = {
+    width: Number(/minWidth:\s*(\d+)/.exec(win)?.[1]),
+    height: Number(/minHeight:\s*(\d+)/.exec(win)?.[1]),
+  };
+  must(declared.width && declared.height,
+    'could not read minWidth/minHeight from createWindow() — the smoke has nothing to match');
+
+  const short = /newContext\(\{\s*viewport:\s*\{\s*width:\s*(\d+),\s*height:\s*(\d+)\s*\}\s*\}\);\s*\n\s*const shortPage/.exec(smoke);
+  must(short, 'the short-window context in visual-smoke.mjs is no longer recognisable');
+
+  const tested = { width: Number(short[1]), height: Number(short[2]) };
+  must(tested.width === declared.width && tested.height === declared.height,
+    `the app's minimum window is ${declared.width}x${declared.height} but the visual smoke checks `
+    + `${tested.width}x${tested.height} — one of them moved and the other did not, so the smallest `
+    + 'real window is not being tested');
+
+  // And the floor has to fit the screens people own. A 1280x720 panel leaves
+  // roughly 690 once the title bar and taskbar are gone; 1366x768 leaves ~690
+  // too. This is the check that would have caught the Jetson before it shipped.
+  must(declared.height <= 700,
+    `minHeight ${declared.height} does not fit a 1366x768 or 1280x720 screen once the OS takes its `
+    + 'share — Electron clamps the window to the minimum, so it opens larger than the display and '
+    + 'the bottom of the app cannot be reached at all');
+  return `${declared.width}x${declared.height}, and the smoke checks that exact size`;
+});
+
 check('surface', 'each platform ships only the companion it can run', () => {
   // companions/rigmatch-chat.exe is tracked in git, and the CI Linux and macOS
   // jobs build their own companion into the same directory. A single top-level

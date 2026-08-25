@@ -130,14 +130,20 @@ async function runBrowserChecks(url) {
     // Left false, which fails the run below rather than passing quietly.
   }
 
-  // The smallest window the packaged app allows: it sets minWidth 1280 and
-  // minHeight 820, so this exact size is the reachable worst case rather than a
+  // The smallest window the packaged app allows: it sets minWidth 1024 and
+  // minHeight 640, so this exact size is the reachable worst case rather than a
   // hypothetical one. The rail silently clipped Activity and Settings off the
   // end here — it scrolls, which is intended, but nothing said so, and the
   // primary navigation appeared to stop before Settings existed. Checking
   // 1440x820 instead missed it, because the wider rail keeps labels on one
   // line and the items shorter.
-  const shortCtx = await browser.newContext({ viewport: { width: 1280, height: 820 } });
+  //
+  // The size dropped from 1280x820 when a Jetson on a 1280x720 panel showed
+  // that the old minimum could not fit the screen at all. Keep this in step
+  // with createWindow() in electron/main.cjs: the point of the check is that it
+  // runs at a size a user can actually produce, and a stale number here tests a
+  // window nobody has.
+  const shortCtx = await browser.newContext({ viewport: { width: 1024, height: 640 } });
   const shortPage = await shortCtx.newPage();
   await shortPage.goto(url, { waitUntil: 'domcontentloaded', timeout: COLD_START_MS });
   await forceSimpleMode(shortPage);
@@ -198,7 +204,7 @@ async function runBrowserChecks(url) {
       : '';
     if (failed.includes('navReachableOnShortScreen')) {
       throw new Error(`Visual smoke failed: the nav rail clips [${clippedNav.join(', ')}] `
-        + "at 1280x820, the app's own minimum window size");
+        + "at 1024x640, the app's own minimum window size");
     }
     throw new Error(`Visual smoke failed: ${failed.join(', ')}${railDetail}${issues.length ? `; console: ${issues.join(' | ')}` : ''}`);
   }

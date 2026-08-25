@@ -313,8 +313,23 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1800,
     height: 1020,
-    minWidth: 1280,
-    minHeight: 820,
+    // A minimum is a promise that the window can always fit on the screen, and
+    // 1280x820 could not keep it. Measured on a Jetson with a 1280x720 display:
+    // Electron clamped the window down to the minimum and produced 1308x886 —
+    // minWidth plus borders, minHeight plus decorations — so it opened 166px
+    // taller than the screen. Everything below the fold, which is the whole
+    // ticker including the button that launches RigMatch Chat, was unreachable.
+    // The window manager refused to resize or move it, because no legal size
+    // existed. That also rules out 1366x768, the commodity laptop panel for a
+    // decade, and 1280x800.
+    //
+    // The layout was never the problem: checked at 1280x820 down to 1024x650,
+    // the nav rail clips nothing, there is no sideways overflow, and the ticker
+    // simply falls below the fold and is reached by scrolling. So the floor is
+    // set from what real screens leave once the OS takes its share, and the
+    // visual smoke now holds this exact size.
+    minWidth: 1024,
+    minHeight: 640,
     backgroundColor: '#080b0d',
     title: 'RigMatch',
     icon: getWindowIconPath(),
