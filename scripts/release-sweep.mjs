@@ -271,6 +271,32 @@ check('surface', 'the chat dock streams and can be stopped', () => {
   return 'streamed, and interruptible';
 });
 
+check('surface', 'each platform ships only the companion it can run', () => {
+  // companions/rigmatch-chat.exe is tracked in git, and the CI Linux and macOS
+  // jobs build their own companion into the same directory. A single top-level
+  // extraFiles copied whatever was there, so the Jetson's .deb arrived carrying
+  // a Windows .exe it can never execute — found by listing /opt/RigMatch on the
+  // real machine, not by reading the config.
+  //
+  // Harmless, since the Linux branch of the launcher never looks for a .exe, but
+  // it is 15 MB in every non-Windows download.
+  const build = JSON.parse(read('package.json')).build;
+  must(!build.extraFiles,
+    'a top-level extraFiles is back — it copies companions/ wholesale, so every platform ships every companion');
+
+  const expected = { win: 'rigmatch-chat.exe', mac: 'rigmatch-chat', linux: 'rigmatch-chat' };
+  for (const [platform, binary] of Object.entries(expected)) {
+    const sets = build[platform]?.extraFiles;
+    must(Array.isArray(sets) && sets.length > 0,
+      `build.${platform}.extraFiles is missing — that platform would ship no companion at all, and the sidebar button would find nothing`);
+    const companions = sets.find((set) => set.from === 'companions');
+    must(companions, `build.${platform}.extraFiles no longer copies the companion`);
+    must(Array.isArray(companions.filter) && companions.filter.includes(binary),
+      `build.${platform} does not filter down to ${binary} — it will ship the other platforms' companions too`);
+  }
+  return 'win/mac/linux each filtered to their own binary';
+});
+
 check('parity', 'both chat windows tell the truth about what a model cannot do', () => {
   // The guard shipped in the main app and not in the companion, which is the
   // window people actually talk in. Asked to draw a dog there, a text model

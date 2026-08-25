@@ -53,12 +53,6 @@
       "electron/**",
       "package.json"
     ],
-    "extraFiles": [
-      {
-        "from": "companions",
-        "to": "companions"
-      }
-    ],
     "directories": {
       "output": "release"
     },
@@ -72,6 +66,15 @@
     },
     "win": {
       "icon": "build/icon.ico",
+      "extraFiles": [
+        {
+          "from": "companions",
+          "to": "companions",
+          "filter": [
+            "rigmatch-chat.exe"
+          ]
+        }
+      ],
       "target": [
         "nsis",
         "zip"
@@ -81,6 +84,15 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.png",
+      "extraFiles": [
+        {
+          "from": "companions",
+          "to": "companions",
+          "filter": [
+            "rigmatch-chat"
+          ]
+        }
+      ],
       "target": [
         "dmg",
         "zip"
@@ -110,6 +122,15 @@
     "linux": {
       "category": "Development",
       "icon": "build/icons",
+      "extraFiles": [
+        {
+          "from": "companions",
+          "to": "companions",
+          "filter": [
+            "rigmatch-chat"
+          ]
+        }
+      ],
       "target": [
         "AppImage",
         "deb"
