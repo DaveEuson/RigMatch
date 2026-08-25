@@ -17930,6 +17930,23 @@ a.whats-next-support:hover {
   .side-menu-bug-report { padding-top: 4px; padding-bottom: 4px; font-size: 10px; }
 }
 
+/* Short AND narrow, where two correct rules combine into a wrong one.
+
+   The rule above hides the number badge; the max-width:1240 rule hides the
+   icon. Each on its own leaves three children for the three declared columns
+   and behaves. Together both are hidden, so only the label and its count
+   remain — and grid auto-placement drops the label into the ~20px badge track,
+   where every destination truncates to "M..", "W..", "C..".
+
+   Nobody could reach this until the minimum window dropped to 1024x640: it
+   needs width <= 1240 and height <= 900 at once, and minWidth used to be 1280.
+   A 1280x720 panel lands here exactly, which is how a Jetson found it. */
+@media (max-width: 1240px) and (max-height: 900px) {
+  .side-menu-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
 /* The Models filter chips measured 21px tall — under the 24px minimum target
    size, and they are the main way of narrowing a thirteen-model list. */
 .model-task-filters button {

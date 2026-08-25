@@ -160,6 +160,19 @@ async function runBrowserChecks(url) {
       })
       .map((item) => item.getAttribute('aria-label') || 'unnamed');
   });
+  // Reachable is not the same as readable. Two media queries — one hiding the
+  // number badge on short windows, one hiding the icon on narrow ones — each
+  // left three children for three grid columns and behaved alone. Overlapping,
+  // both were hidden, the label fell into the 20px badge track, and every
+  // destination in the rail rendered as "M..", "W..", "C..". The nav was fully
+  // present and completely unreadable, so the clipping check above passed.
+  const truncatedNav = await shortPage.evaluate(() => {
+    return [...document.querySelectorAll('.side-menu-item')]
+      .map((item) => item.querySelector('.side-menu-copy strong'))
+      .filter((label) => label && label.scrollWidth > label.clientWidth + 1)
+      .map((label) => (label.textContent || '').trim());
+  });
+
   await shortCtx.close();
 
   const mobile = await browser.newContext({ viewport: { width: 390, height: 900 }, isMobile: true });
@@ -195,6 +208,7 @@ async function runBrowserChecks(url) {
     noConsoleIssues: issues.length === 0,
     noOldSobrietyCopy: !simpleText.includes('Sobriety') && !mobileText.includes('Sobriety'),
     navReachableOnShortScreen: clippedNav.length === 0,
+    navReadableOnShortScreen: truncatedNav.length === 0,
   };
   const failed = Object.entries(checks).filter(([, value]) => !value).map(([key]) => key);
 
@@ -202,6 +216,10 @@ async function runBrowserChecks(url) {
     const railDetail = failed.includes('simpleStepPills')
       ? `; step rail: [${simpleStepLabels.join(', ') || 'none'}]`
       : '';
+    if (failed.includes('navReadableOnShortScreen')) {
+      throw new Error(`Visual smoke failed: the nav rail truncates [${truncatedNav.join(', ')}] `
+        + "at 1024x640, the app's own minimum window size — the destinations are present but unreadable");
+    }
     if (failed.includes('navReachableOnShortScreen')) {
       throw new Error(`Visual smoke failed: the nav rail clips [${clippedNav.join(', ')}] `
         + "at 1024x640, the app's own minimum window size");
@@ -214,6 +232,7 @@ async function runBrowserChecks(url) {
     checks,
     stepRail: simpleStepLabels,
     clippedNav,
+    truncatedNav,
     consoleIssues: issues,
   };
 }
