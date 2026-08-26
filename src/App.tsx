@@ -1762,10 +1762,20 @@ function App() {
         + 'running. Start the download again and it will land there.');
       return;
     }
-    tellUser(outcome.reason === 'not-running'
-      ? 'Start ComfyUI first — RigMatch finds it by looking at what is already running.'
-      : 'RigMatch could not work out where ComfyUI keeps its models. Switch to Advanced Mode '
-        + '→ Settings → Generation, where you can pick the folder yourself.');
+    if (outcome.reason === 'not-running') {
+      // Keeps the button. "Start ComfyUI first" is an instruction the person can
+      // carry out in the next thirty seconds, and taking the control away means
+      // their reward for following it is having to trigger the whole download
+      // again to get the offer back — the same shape of dead end this replaced.
+      tellUser(
+        'Start ComfyUI first — RigMatch finds it by looking at what is already running. '
+        + 'Once it is up, try again.',
+        { label: 'Look again', run: findComfyForDownload },
+      );
+      return;
+    }
+    tellUser('RigMatch could not work out where ComfyUI keeps its models. Switch to Advanced Mode '
+      + '→ Settings → Generation, where you can pick the folder yourself.');
   }, [tellUser]);
 
   const downloadGenerationModel = useCallback(async (row: ModelRow): Promise<boolean> => {
