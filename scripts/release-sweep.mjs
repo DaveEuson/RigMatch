@@ -176,10 +176,27 @@ check('parity', 'the version is one number everywhere', () => {
 check('claims', 'no literal backspace where a word boundary was meant', () => {
   // `\b` inside a shell heredoc or a template literal becomes 0x08, and the
   // regex then silently matches nothing. This has happened three times.
-  for (const rel of ['src/lib/modelCatalog.ts', 'src/lib/goals.ts', 'electron/benchmarkScoring.cjs']) {
-    must(!read(rel).includes(''), `${rel} contains a literal backspace byte`);
-  }
-  return 'clean';
+  // Walked rather than listed. The list named three files and missed a
+  // fourth occurrence in scripts/, where a regex guarding the typecheck was
+  // written through a heredoc and silently stopped matching anything. A
+  // hand-maintained list of places a mistake can happen is itself the
+  // mistake.
+  const dirs = ['src', 'electron', 'scripts', 'tests'];
+  const suspect = [];
+  const walk = (dir) => {
+    if (!existsSync(join(root, dir))) return;
+    for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
+      if (entry.name === 'node_modules') continue;
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) { walk(rel); continue; }
+      if (!/\.(ts|tsx|mjs|cjs|js)$/.test(entry.name)) continue;
+      if (read(rel).includes('\u0008')) suspect.push(rel);
+    }
+  };
+  dirs.forEach(walk);
+  must(suspect.length === 0,
+    `literal backspace byte in ${suspect.join(', ')} — a \\b was written through a heredoc, and the regex around it now matches nothing`);
+  return `${dirs.length} trees clean`;
 });
 
 check('claims', 'declared model sizes are exact, not rounded', () => {
