@@ -4,6 +4,16 @@ Every RigMatch release, newest first. These are the same notes the app shows in
 Update Center — this file and the GitHub release pages are generated from
 `src/data/releaseNotes.ts`, so there is only one place to write them.
 
+## 0.7.1 — It Fits The Machine You Have
+_Beta build_
+
+- RigMatch can read the graphics on a Jetson. There the graphics is not a card on the PCI bus at all, so the usual hardware scan came back with nothing — no name, no memory — and RigMatch did what it does for a machine with no graphics: reported 0 GB, recommended only the smallest models, and announced that no NVIDIA GPU was detected, on NVIDIA hardware. It now reads the board’s own name from the device tree and recognises the shared memory pool for what it is. Measured on an Orin Nano: 0 GB became 7.4 GB, and five usable models became a hundred and forty.
+- The window fits the screen it opens on. RigMatch refused to be smaller than 1280 by 820, which is harmless until you meet a 1366x768 laptop — the commodity panel for a decade — or a 1280x720 monitor, where the window opened taller than the display and the bottom of the app could not be reached at all. What lives down there is the ticker, including the button that opens RigMatch Chat. Dragging it up did not help either: no legal size existed, so the window manager refused to move or resize it. The floor is now 1024 by 640, which those machines fit with room for a taskbar.
+- And the navigation stays readable once the window is small. Two rules, each sensible on its own — hide the number badge on a short window, hide the icon on a narrow one — met on a window that was both, and left every destination in the sidebar reading as “M..”, “W..”, “C..”. Present, in the right order, and unreadable. Reaching that needed a window smaller than RigMatch used to allow, which is exactly why nobody had seen it.
+- Simple Mode stops offering picture-making it cannot help you set up. Choosing “create an image from a prompt” looked no different from choosing everyday chat, with nothing to say it needs a second program. Three steps later the download refused and told you to open Settings — a panel Simple Mode does not have, so the only way forward was to find Advanced Mode. The goals that run through ComfyUI now say so on the tile, before you pick one, and the refusal offers to find ComfyUI for you rather than naming a place you cannot reach. If it is simply not started yet, RigMatch says that and keeps the button, so starting it and pressing again is the whole fix.
+- RigMatch Chat has its own icon on a Mac. If you dragged only RigMatch out of the disk image — the ordinary thing to do — the companion RigMatch opened was a bare program file rather than an app, and macOS gives those a blank icon and no name in the Dock. RigMatch now carries the whole companion app inside itself, so it looks like itself wherever it is opened from.
+- The Mac and Linux downloads are smaller by the size of a Windows program they could never run. Every package was carrying the Windows companion alongside its own — about 15 MB of executable that those systems have no way to open.
+
 ## 0.7.0 — It Tells You What It Cannot Do
 _Beta build_
 
