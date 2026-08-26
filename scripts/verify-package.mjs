@@ -86,7 +86,13 @@ const PRESENT = [
   ['winner scoreboard styling', css, 'sw-scoreboard'],
   ['answer strip styling', css, 'sw-answer-strip'],
   ['Find ComfyUI for me', js, 'Find ComfyUI for me'],
-  ['refused download states its reason', js, 'does not know where ComfyUI is yet'],
+  // Reworded once the refusal stopped naming Settings, which Simple Mode does
+  // not have. The probe follows the copy rather than the copy being kept for
+  // the probe's sake — this one failing is what caught the change.
+  ['refused download states its reason', js, 'does not know where it is yet'],
+  ['a refused download offers the fix, not a menu path', js, 'then let RigMatch look for it'],
+  ['Simple Mode can act on a notice, not just read it', js, 'sw-notice-fix'],
+  ['goals that need ComfyUI say so before they are picked', js, 'needs ComfyUI'],
   ['plain-words glossary', js, 'A free program that does the actual work'],
   ['quit cleanup: keep only my match', js, 'Keep Only My Match'],
   ['upgrade prompt copy', js, 'New in this version'],

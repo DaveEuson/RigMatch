@@ -7,9 +7,21 @@ import {
   readComfySettings,
   writeComfySettings,
 } from "../lib/comfySettings";
-import { getComfyStatus, pickAndVerifyComfyFolder } from "../lib/comfyTransport";
-import { agentArcadeApi } from "../api";
+import { getComfyStatus, locateComfyFolder, pickAndVerifyComfyFolder } from "../lib/comfyTransport";
 import { ComfyStartButton } from "./ComfyStartButton";
+
+/**
+ * What to say when the search comes back empty.
+ *
+ * Worded for this panel, which has a folder picker sitting next to the button.
+ * The Simple Mode notice runs the same search and says something different,
+ * because it has no picker to fall back to.
+ */
+const COMFY_LOCATE_FAILURE: Record<'not-running' | 'cannot-tell' | 'no-bridge', string> = {
+  'not-running': 'Start ComfyUI first — RigMatch finds it by looking at what is running.',
+  'cannot-tell': 'Could not work out where ComfyUI is from the running program. Pick the folder instead.',
+  'no-bridge': 'This build cannot look for ComfyUI. Pick the folder instead.',
+};
 
 /**
  * Where ComfyUI is, and whether RigMatch may disturb it.
@@ -58,22 +70,17 @@ export function ComfySettings() {
    */
   const findFolder = useCallback(async () => {
     setFolderNote({ tone: 'ok', message: 'Looking for ComfyUI…' });
-    const status = await getComfyStatus(normalizeComfyUrl(url) ?? undefined);
-    const result = await agentArcadeApi.comfyLocateFolder?.(
-      normalizeComfyUrl(url) ?? '', status.checkpoints ?? [],
-    );
-    if (!result?.found || !result.folder) {
-      setFolderNote({
-        tone: 'bad',
-        message: status.reachable
-          ? 'Could not work out where ComfyUI is from the running program. Pick the folder instead.'
-          : 'Start ComfyUI first — RigMatch finds it by looking at what is running.',
-      });
+    const outcome = await locateComfyFolder(normalizeComfyUrl(url) ?? undefined);
+    if (!outcome.found) {
+      setFolderNote({ tone: 'bad', message: COMFY_LOCATE_FAILURE[outcome.reason] });
       return;
     }
-    setFolder(result.folder);
-    writeComfySettings({ folder: result.folder });
-    setFolderNote({ tone: 'ok', message: `Found it, and checked it against the ComfyUI that is running. Downloads will land in ${result.folder}.` });
+    setFolder(outcome.folder);
+    setFolderNote({
+      tone: 'ok',
+      message: 'Found it, and checked it against the ComfyUI that is running. '
+        + `Downloads will land in ${outcome.folder}.`,
+    });
   }, [url]);
 
   const normalized = normalizeComfyUrl(url);

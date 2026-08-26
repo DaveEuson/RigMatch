@@ -1193,6 +1193,20 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 
 .sw-notice button:hover { background: rgba(var(--gold-rgb), 0.16); }
 
+/* The one that does something, next to the one that only dismisses.
+
+   Given weight because it is the whole point of the notice: "Got it" closes a
+   message about a blocked download, and this fixes it. Styled as a filled
+   button rather than a second outline so the difference is visible before the
+   labels are read. */
+.sw-notice-fix {
+  background: rgba(var(--gold-rgb), 0.9);
+  border-color: transparent;
+  color: #1a1206;
+}
+
+.sw-notice-fix:hover { background: var(--gold); }
+
 /* ---------------------------------------------------------------------------
    The Host as the explainer.
 

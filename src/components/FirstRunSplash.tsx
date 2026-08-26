@@ -7,6 +7,19 @@ import { BrandMark } from './CommonChrome';
 import { ModeStep } from './ModeStep';
 import { useState } from 'react';
 
+/**
+ * Said on the tile, not discovered at the download.
+ *
+ * "Making images" was offered exactly like "Everyday chat", and the difference
+ * only surfaced three steps later when the download refused and told the user to
+ * open a Settings page Simple Mode does not have. A goal that needs a program
+ * RigMatch neither installs nor bundles should say so while it is still a
+ * choice.
+ */
+const COMFY_GOAL_NOTE = 'Image, video and audio generation run through ComfyUI — a separate '
+  + 'free program RigMatch does not install or bundle. RigMatch can find it for you once it '
+  + 'is running.';
+
 export function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCancel, isUpgrade }: {
   vramGb: number;
   onDone: (mode: UiMode, goals: GoalId[]) => void;
@@ -78,8 +91,13 @@ export function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCa
                             // A missing backend is nobody's hardware's fault.
                             <em title={goal.unsupportedReason}>Not possible locally yet</em>
                           ) : (
-                            <em title={expectation.note}>
+                            <em
+                              title={goal.runtime === 'comfyui'
+                                ? `${expectation.note} ${COMFY_GOAL_NOTE}`
+                                : expectation.note}
+                            >
                               {leagueLabel(expectation.tone)}
+                              {goal.runtime === 'comfyui' ? ' · needs ComfyUI' : ''}
                               {goal.grading === 'none' ? " · can't be graded yet" : ''}
                             </em>
                           )}

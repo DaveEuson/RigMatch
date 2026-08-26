@@ -125,6 +125,14 @@ type SimpleWizardProps = {
    */
   notice?: string | null;
   onDismissNotice?: () => void;
+  /**
+   * Something the user can do about the notice, offered beside it.
+   *
+   * Without this a notice can only describe a problem, which was fine until one
+   * of them said to open Settings — a panel Simple Mode does not have. A fix
+   * named somewhere unreachable is not a fix.
+   */
+  noticeAction?: { label: string; run: () => void | Promise<void> } | null;
   /** Fills the lineup with the best-fitting models for people who can't choose. */
   onChooseForMe: () => void;
   pullProgressByModel: Record<string, PullProgressUpdate>;
@@ -369,6 +377,15 @@ export function SimpleWizard(props: SimpleWizardProps) {
           <div className="sw-notice" role="status">
             <AlertTriangle aria-hidden="true" />
             <p>{props.notice}</p>
+            {props.noticeAction && (
+              <button
+                type="button"
+                className="sw-notice-fix"
+                onClick={() => void props.noticeAction?.run()}
+              >
+                {props.noticeAction.label}
+              </button>
+            )}
             {props.onDismissNotice && (
               <button type="button" onClick={props.onDismissNotice}>Got it</button>
             )}

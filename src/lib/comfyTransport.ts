@@ -9,7 +9,7 @@
  */
 
 import { agentArcadeApi } from '../api.ts';
-import { readComfySettings } from './comfySettings.ts';
+import { readComfySettings, writeComfySettings } from './comfySettings.ts';
 import { comfyBusyCount } from './videoGen.ts';
 import type { ComfyTransport } from './imageGenRun.ts';
 import type { VideoTransport } from './videoGenRun.ts';
@@ -123,6 +123,65 @@ export async function pickAndVerifyComfyFolder(baseUrl: string = comfyBaseUrl())
   const status = await getComfyStatus(baseUrl);
   const verdict = await api.comfyVerifyFolder(picked.folder, status.checkpoints ?? []);
   return { canceled: false, ...verdict };
+}
+
+/**
+ * Work out where ComfyUI keeps its models, by asking the copy that is running.
+ *
+ * Lives here rather than in the settings panel because two surfaces need it and
+ * only one had it. Settings had the working flow; Simple Mode, which is where a
+ * beginner picks "making images" and is then refused, had no way to reach it —
+ * the refusal told them to open a Settings page that Simple Mode does not have.
+ *
+ * The folder is never taken on trust. It is checked against the checkpoints the
+ * running ComfyUI actually lists, because two installs on one machine is normal
+ * and a multi-gigabyte download landing in the unused one is not. Callers get a
+ * reason rather than a message, so each can say it in its own voice — Settings can
+ * offer a folder picker as the fallback, and Simple Mode, which has none, cannot.
+ */
+export type ComfyLocateOutcome =
+  | { found: true; folder: string }
+  | { found: false; reason: 'not-running' | 'cannot-tell' | 'no-bridge' };
+
+/**
+ * The two calls this makes, injectable so the branching can be tested.
+ *
+ * Same seam the runners use: the orchestration takes a plain object of
+ * functions and the tests drive a fake, rather than reaching for Electron. The
+ * branch that matters is "running but unrecognisable" versus "not running",
+ * because they give opposite advice and only one of them is the user's fault.
+ */
+export type ComfyLocateDeps = {
+  status: (baseUrl: string) => Promise<ComfyStatus>;
+  locate: ((baseUrl: string, checkpoints: string[]) =>
+    Promise<{ found: boolean; folder?: string } | undefined>) | undefined;
+  remember: (folder: string) => void;
+};
+
+export async function locateComfyFolder(
+  baseUrl: string = comfyBaseUrl(),
+  deps: ComfyLocateDeps = {
+    status: getComfyStatus,
+    locate: agentArcadeApi.comfyLocateFolder,
+    remember: (folder) => writeComfySettings({ folder }),
+  },
+): Promise<ComfyLocateOutcome> {
+  if (!deps.locate) return { found: false, reason: 'no-bridge' };
+
+  const status = await deps.status(baseUrl);
+  const result = await deps.locate(baseUrl, status.checkpoints ?? []);
+  if (result?.found && result.folder) {
+    // Saved here, not by the caller. Both callers want it kept, and one of them
+    // is a notice with a single button — the kind of place a follow-up write is
+    // easy to leave out and impossible to notice missing until a download lands
+    // nowhere.
+    deps.remember(result.folder);
+    return { found: true, folder: result.folder };
+  }
+
+  // Not running and running-but-unrecognisable need different advice: one is
+  // "start it first", the other is "pick the folder yourself".
+  return { found: false, reason: status.reachable ? 'cannot-tell' : 'not-running' };
 }
 
 export function createComfyTransport(baseUrl: string = comfyBaseUrl()): ComfyTransport {

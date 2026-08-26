@@ -215,7 +215,7 @@ import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelClea
 import { runVideoLabChallenge } from './lib/videoGenRunner';
 import { runImageLabChallenge } from './lib/imageGenRunner';
 import { CUSTOM_IMAGE_PROMPT_ID } from './lib/imageGenScoring';
-import { describeComfyBusy, getComfyStatus } from './lib/comfyTransport';
+import { describeComfyBusy, getComfyStatus, locateComfyFolder } from './lib/comfyTransport';
 import { readComfySettings } from './lib/comfySettings';
 import {
   CODE_TASK_PRESETS,
@@ -435,6 +435,16 @@ function App() {
   // The message Simple Mode is currently showing, if any. Advanced reads the
   // same text off the Ticker and does not need it.
   const [simpleNotice, setSimpleNotice] = useState<string | null>(null);
+  /**
+   * Something Simple Mode can do about the notice it is showing.
+   *
+   * Notices there used to be pure text, which is fine for "the run stopped" and
+   * useless for "RigMatch does not know where ComfyUI is" — that one named
+   * Settings → Generation, a place Simple Mode does not have, so the only way
+   * out was to find Advanced Mode. The fix belongs beside the problem.
+   */
+  const [simpleNoticeAction, setSimpleNoticeAction] =
+    useState<{ label: string; run: () => void | Promise<void> } | null>(null);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [pendingThirdPartyDownloadRows, setPendingThirdPartyDownloadRows] = useState<ModelRow[] | null>(null);
   const [chosenModel, setChosenModel] = useState<string | null>(null);
@@ -1345,9 +1355,12 @@ function App() {
    * failure was written to state nobody paints. Use this for anything a user
    * must act on; plain setActivity remains right for running commentary.
    */
-  const tellUser = useCallback((message: string) => {
+  const tellUser = useCallback((message: string, action?: { label: string; run: () => void | Promise<void> }) => {
     setActivity(message);
     setSimpleNotice(message);
+    // Cleared when absent, so an offer from a previous problem cannot sit under
+    // an unrelated message and appear to fix it.
+    setSimpleNoticeAction(action ?? null);
   }, []);
 
   // Stamped onto every score at scoring time. Scores are relative to a rig,
@@ -1729,6 +1742,32 @@ function App() {
    * somewhere less obvious. The encoder rides along: a video checkpoint on its
    * own renders nothing.
    */
+  /**
+   * Look for ComfyUI on the user's behalf, from wherever they were refused.
+   *
+   * Same search Settings runs, and the same verification: the folder is checked
+   * against the checkpoints the running ComfyUI lists, so a second install
+   * cannot quietly collect a multi-gigabyte download the live server never
+   * looks at.
+   *
+   * Deliberately does not restart the download. The person asked RigMatch to
+   * find a folder, not to spend their bandwidth — it reports what it found and
+   * lets them press the button again.
+   */
+  const findComfyForDownload = useCallback(async () => {
+    tellUser('Looking for ComfyUI…');
+    const outcome = await locateComfyFolder();
+    if (outcome.found) {
+      tellUser(`Found ComfyUI at ${outcome.folder}, and checked it against the copy that is `
+        + 'running. Start the download again and it will land there.');
+      return;
+    }
+    tellUser(outcome.reason === 'not-running'
+      ? 'Start ComfyUI first — RigMatch finds it by looking at what is already running.'
+      : 'RigMatch could not work out where ComfyUI keeps its models. Switch to Advanced Mode '
+        + '→ Settings → Generation, where you can pick the folder yourself.');
+  }, [tellUser]);
+
   const downloadGenerationModel = useCallback(async (row: ModelRow): Promise<boolean> => {
     /**
      * Refusing a download must LOOK like refusing it.
@@ -1740,7 +1779,7 @@ function App() {
      * appears in Simple Mode at all. A stuck progress bar is worse than an
      * error: it tells the user to keep waiting.
      */
-    const refuse = (why: string): false => {
+    const refuse = (why: string, action?: { label: string; run: () => void | Promise<void> }): false => {
       setPullProgressByModel((current) => ({
         ...current,
         [row.displayName]: {
@@ -1753,7 +1792,7 @@ function App() {
           updatedAt: new Date().toISOString(),
         },
       }));
-      tellUser(why);
+      tellUser(why, action);
       return false;
     };
 
@@ -1764,9 +1803,15 @@ function App() {
 
     const { folder: comfyRoot } = readComfySettings();
     if (!comfyRoot) {
+      // The old wording sent people to Settings → Generation, which exists only in
+      // Advanced Mode — so in Simple Mode, where a beginner most likely picked
+      // "making images" in the first place, the instruction named a place they
+      // could not reach. The search that Settings runs is offered here instead.
       return refuse(
-        `${row.displayName} installs into ComfyUI, and RigMatch does not know where ComfyUI is yet. `
-        + 'Open Settings → Generation and point it at your ComfyUI folder, then try again.',
+        `${row.displayName} installs into ComfyUI — a separate free program RigMatch does not `
+        + 'install — and RigMatch does not know where it is yet. Start ComfyUI, then let '
+        + 'RigMatch look for it.',
+        { label: 'Find ComfyUI for me', run: findComfyForDownload },
       );
     }
 
@@ -1823,7 +1868,7 @@ function App() {
     setActivity(`${row.displayName} downloaded. Restart ComfyUI so it picks up the new file.`);
     void refreshComfyStatus();
     return true;
-  }, [comfyCheckpoints, comfyTextEncoders, tellUser, refreshComfyStatus, beginComfyDownload, endComfyDownload, pullQueueShouldStop]);
+  }, [comfyCheckpoints, comfyTextEncoders, tellUser, refreshComfyStatus, beginComfyDownload, endComfyDownload, pullQueueShouldStop, findComfyForDownload]);
 
   const pullQueuedModels = useCallback(async () => {
     if (queuedRows.length === 0) {
@@ -3187,7 +3232,8 @@ function App() {
           wizardModels={wizardModels}
           initialDream={dreamForGoal(selectedGoals[0])}
           notice={simpleNotice}
-          onDismissNotice={() => setSimpleNotice(null)}
+          noticeAction={simpleNoticeAction}
+          onDismissNotice={() => { setSimpleNotice(null); setSimpleNoticeAction(null); }}
           modelsLoading={modelRows.length === 0}
           shortlistIds={shortlistIds}
           shortlistedRows={shortlistedRows}
@@ -3209,7 +3255,7 @@ function App() {
           onRunAgain={() => undefined}
           onSwitchToAdvanced={() => { setCameFromSimple(false); selectUiMode('advanced'); }}
           initialStep={wizardStep}
-          onStepChange={(next) => { setWizardStep(next); setSimpleNotice(null); }}
+          onStepChange={(next) => { setWizardStep(next); setSimpleNotice(null); setSimpleNoticeAction(null); }}
           onShareScore={() => setShareWinnerOpen(true)}
         />
       )}
