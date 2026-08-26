@@ -136,8 +136,10 @@ async function hoverCheck(page, selector, limit = 6) {
   return numb;
 }
 
-// The app's own minimum window: minWidth 1280 / minHeight 820.
-const context = await browser.newContext({ viewport: { width: 1280, height: 820 } });
+// The app's own minimum window: minWidth 1024 / minHeight 640. Audited at that
+// size on purpose — it is the worst case a user can actually produce, and the
+// number has to follow createWindow() or this audits a window nobody has.
+const context = await browser.newContext({ viewport: { width: 1024, height: 640 } });
 const page = await context.newPage();
 const pageErrors = [];
 page.on('pageerror', (e) => pageErrors.push(e.message));

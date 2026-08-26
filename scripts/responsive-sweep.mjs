@@ -31,10 +31,11 @@ mkdirSync(outDir, { recursive: true });
 const SIZES = [
   { w: 360, h: 740, note: 'phone' },
   { w: 768, h: 1024, note: 'tablet' },
-  { w: 1024, h: 640, note: 'small laptop, short' },
-  // The packaged window sets minWidth 1280 / minHeight 820, so this exact size
+  // The packaged window sets minWidth 1024 / minHeight 640, so this exact size
   // is the smallest the desktop app can ever be — the reachable worst case.
-  { w: 1280, h: 820, note: "the app's own minimum window" },
+  // It dropped from 1280x820 when a 1280x720 panel turned out not to fit it.
+  { w: 1024, h: 640, note: "the app's own minimum window" },
+  { w: 1280, h: 820, note: 'the old minimum, still a common short window' },
   { w: 1366, h: 768, note: 'the most common laptop' },
   { w: 1440, h: 820, note: 'macbook air' },
   { w: 1920, h: 1080, note: 'desktop' },

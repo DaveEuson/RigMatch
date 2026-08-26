@@ -15,7 +15,8 @@ import { chromium } from 'playwright';
 
 const url = process.env.RIGMATCH_TOUR_URL || 'http://127.0.0.1:5173/';
 const SIZES = [
-  { label: 'minimum 1280x820', width: 1280, height: 820 },
+  { label: 'minimum 1024x640', width: 1024, height: 640 },
+  { label: 'short   1280x820', width: 1280, height: 820 },
   { label: 'laptop  1440x820', width: 1440, height: 820 },
   { label: 'desktop 1440x980', width: 1440, height: 980 },
   { label: 'tall    1440x1200', width: 1440, height: 1200 },

@@ -299,6 +299,29 @@ check('parity', 'the layout is checked at the smallest window the app allows', (
     + `${tested.width}x${tested.height} — one of them moved and the other did not, so the smallest `
     + 'real window is not being tested');
 
+  // The smoke is not the only tool that runs at "the minimum". Lowering it
+  // left three others still declaring 1280x820, and one of them — the screen
+  // audit — does not merely say the number, it audits at it. So the audit
+  // quietly stopped covering the smallest window a user can produce, while
+  // continuing to report clean. Nothing failed, which is the problem.
+  const audit = read('scripts/audit-screens.mjs');
+  const auditSize = /viewport:\s*\{\s*width:\s*(\d+),\s*height:\s*(\d+)\s*\}/.exec(audit);
+  must(auditSize, 'the screen audit no longer declares a viewport this can check');
+  must(Number(auditSize[1]) === declared.width && Number(auditSize[2]) === declared.height,
+    `the screen audit runs at ${auditSize[1]}x${auditSize[2]} but the app's minimum is `
+    + `${declared.width}x${declared.height} — it is auditing a window nobody has`);
+
+  // These two only label a size, so a stale claim misleads a reader rather than
+  // mis-testing anything. Still worth failing on: the label is how the next
+  // person decides which row is the one that matters.
+  for (const rel of ['scripts/responsive-sweep.mjs', 'scripts/measure-shell.mjs']) {
+    const body = read(rel);
+    const claim = new RegExp(`\\b${declared.width}\\b[^\\n]*\\b${declared.height}\\b|\\b${declared.height}\\b[^\\n]*minimum|minimum[^\\n]*\\b${declared.width}\\b`);
+    must(claim.test(body), `${rel} no longer names ${declared.width}x${declared.height} as the minimum window`);
+    must(!/minimum[^\n]*1280x820|1280 \/ minHeight 820/.test(body),
+      `${rel} still calls 1280x820 the minimum window, which it has not been since the Jetson could not fit it`);
+  }
+
   // And the floor has to fit the screens people own. A 1280x720 panel leaves
   // roughly 690 once the title bar and taskbar are gone; 1366x768 leaves ~690
   // too. This is the check that would have caught the Jetson before it shipped.
