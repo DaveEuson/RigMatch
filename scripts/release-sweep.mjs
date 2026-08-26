@@ -332,7 +332,22 @@ check('surface', 'each platform ships only the companion it can run', () => {
     must(Array.isArray(companions.filter) && companions.filter.includes(binary),
       `build.${platform} does not filter down to ${binary} — it will ship the other platforms' companions too`);
   }
-  return 'win/mac/linux each filtered to their own binary';
+  // macOS needs one more thing than a filter. An icon and an app's name live in
+  // the .app wrapper there, so the bare binary the other platforms are happy
+  // with arrives in the Dock nameless and with a generic icon — which shipped,
+  // because dragging only RigMatch out of the DMG is the ordinary thing to do.
+  // afterPack nests the whole bundle instead, and the launcher looks for it.
+  const hook = read('scripts/afterPack.cjs');
+  must(/companions.*RigMatch Chat\.app|'RigMatch Chat\.app'/.test(hook),
+    'afterPack no longer nests RigMatch Chat.app inside the app bundle — the macOS companion goes back to a bare binary with no icon');
+  must(/Contents', 'companions'/.test(hook),
+    'afterPack no longer writes into Contents/companions, so RigMatch has nothing to launch on a Mac where only it was installed');
+
+  const launcher = read('electron/main.cjs');
+  must(/'RigMatch Chat\.app', 'Contents', 'MacOS'/.test(launcher),
+    'the macOS launcher no longer prefers the nested .app, so it falls back to the icon-less binary');
+
+  return 'win/mac/linux each filtered to their own binary, and macOS nests the bundle';
 });
 
 check('parity', 'both chat windows tell the truth about what a model cannot do', () => {

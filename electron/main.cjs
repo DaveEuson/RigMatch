@@ -1123,7 +1123,15 @@ function registerHandlers() {
       // Installed standalone: user dragged Chat.app from DMG to Applications
       '/Applications/RigMatch Chat.app/Contents/MacOS/rigmatch-chat',
       path.join(os.homedir(), 'Applications', 'RigMatch Chat.app', 'Contents', 'MacOS', 'rigmatch-chat'),
-      // Packaged fallback: extraFiles land at Contents/companions/ inside the .app bundle
+      // Packaged fallback, and it has to be the whole bundle rather than the
+      // binary sitting loose beside it. macOS keeps an app's icon and name in
+      // the .app wrapper, so launching a bare Mach-O gives a generic Dock icon
+      // and no name — which is what a user saw after dragging only RigMatch out
+      // of the DMG, the ordinary thing to do. afterPack nests the bundle here.
+      path.join(execDir, '..', 'companions', 'RigMatch Chat.app', 'Contents', 'MacOS', 'rigmatch-chat'),
+      path.join(process.resourcesPath || '', 'companions', 'RigMatch Chat.app', 'Contents', 'MacOS', 'rigmatch-chat'),
+      // Dev checkouts still have the bare binary: `npm run prepare:companions`
+      // copies it out of the Tauri target directory, where no .app is built.
       path.join(execDir, '..', 'companions', 'rigmatch-chat'),
       path.join(process.resourcesPath || '', 'companions', 'rigmatch-chat'),
       path.join(__dirname, '..', 'companions', 'rigmatch-chat'),

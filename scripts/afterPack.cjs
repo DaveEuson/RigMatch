@@ -40,6 +40,12 @@ function adhocSign(appPath, label) {
 module.exports = async function afterPack(context) {
   if (context.electronPlatformName !== 'darwin') return;
 
+  const productFilename = context.packager.appInfo.productFilename;
+  const mainApp = path.join(context.appOutDir, `${productFilename}.app`);
+  if (!fs.existsSync(mainApp)) {
+    throw new Error(`[afterPack] expected app bundle not found: ${mainApp}`);
+  }
+
   const chatApp = path.join(
     __dirname, '..', 'rigmatch-chat', 'src-tauri',
     'target', 'release', 'bundle', 'macos', 'RigMatch Chat.app'
@@ -53,14 +59,34 @@ module.exports = async function afterPack(context) {
     fs.cpSync(chatApp, dest, { recursive: true });
     console.log('[afterPack] Bundled RigMatch Chat.app into DMG staging area');
     adhocSign(dest, 'RigMatch Chat.app');
+
+    /*
+     * The copy RigMatch launches when the user did not drag both apps across.
+     *
+     * Every other platform can carry a bare executable here: a Windows .exe
+     * holds its icon in its own resources, and Linux takes the icon from the
+     * .desktop file. macOS keeps both the icon and the name in the .app
+     * wrapper, so a bundle-less Mach-O has neither — it arrives in the Dock as
+     * a generic executable, which is exactly what shipped, because dragging
+     * only RigMatch out of the DMG is the ordinary thing to do.
+     *
+     * So the fallback is the whole bundle rather than the binary inside it.
+     * Same size to within a rounding error: the .app is that binary plus an
+     * icon and a plist.
+     */
+    const nested = path.join(mainApp, 'Contents', 'companions', 'RigMatch Chat.app');
+    fs.rmSync(nested, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(nested), { recursive: true });
+    fs.cpSync(chatApp, nested, { recursive: true });
+
+    // The bare binary extraFiles used to place here. Left alongside, it is dead
+    // weight the launcher would never choose again.
+    fs.rmSync(path.join(mainApp, 'Contents', 'companions', 'rigmatch-chat'), { force: true });
+    console.log('[afterPack] Nested RigMatch Chat.app inside the app bundle');
+    adhocSign(nested, 'nested RigMatch Chat.app');
   }
 
   // Signed last, and only after every modification above — signing first and
   // then touching the bundle is how a signature silently goes stale.
-  const productFilename = context.packager.appInfo.productFilename;
-  const mainApp = path.join(context.appOutDir, `${productFilename}.app`);
-  if (!fs.existsSync(mainApp)) {
-    throw new Error(`[afterPack] expected app bundle not found: ${mainApp}`);
-  }
   adhocSign(mainApp, `${productFilename}.app`);
 };
