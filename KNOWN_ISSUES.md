@@ -1,4 +1,4 @@
-# Known Issues — RigMatch v0.3.0 Beta
+# Known Issues — RigMatch v0.7 Beta
 
 This is a candid list of issues we know about going into the beta. If you hit something not listed here, that's a genuine bug report — please share it.
 
@@ -54,14 +54,18 @@ No known chat-companion blockers at this time. The Visible Models control can no
 
 ## Linux / Jetson
 
-**Linux ARM64 / Jetson support is experimental**
-RigMatch now builds separate Linux x64 and Linux ARM64 artifacts. NVIDIA Jetson users should install the ARM64/aarch64 package only; installing the x64 package can show confusing "dependencies are not installable" errors. Jetson testing should be treated as beta-within-beta until we have more hardware coverage.
+**Linux ARM64 / Jetson — now tested on real hardware**
+RigMatch builds separate Linux x64 and Linux ARM64 artifacts. Jetson users should install the ARM64/aarch64 package only; installing the x64 package can show confusing "dependencies are not installable" errors.
+
+As of 0.7.1 this is no longer untested: a Jetson Orin Nano running JetPack R39 launches RigMatch, reads the board, scores models and runs the companion. One machine is not broad coverage, and other Jetson generations remain unverified, but it is no longer a build nobody has started.
 
 **RigMatch Chat could crash on launch with NVIDIA graphics (fixed in 0.3.3)**
 On Linux with the NVIDIA proprietary driver — most often on Wayland — the RigMatch Chat companion could segfault immediately on launch. The crash was inside WebKitGTK's GL context handling (`libnvidia-eglcore`), an upstream WebKitGTK/NVIDIA interaction, not a bug in RigMatch itself. As of 0.3.3, RigMatch Chat disables WebKitGTK's DMABUF renderer at startup, which avoids the crash. If you still hit it on an older build or an unusual driver combination, launch with the environment variable `WEBKIT_DISABLE_DMABUF_RENDERER=1` set.
 
-**VRAM could read as 0 on some Linux/NVIDIA systems (fixed in 0.3.3)**
-The hardware scan sometimes couldn't read NVIDIA graphics memory on Linux, reporting 0 VRAM. That made RigMatch recommend only the smallest models (e.g. phi3:mini even on a 4090). As of 0.3.3, RigMatch falls back to `nvidia-smi` to read total VRAM when the normal scan comes back empty. This requires `nvidia-smi` to be on your PATH, which it is with the standard NVIDIA driver install.
+**VRAM could read as 0 on some Linux/NVIDIA systems (fixed in 0.3.3, extended in 0.7.1)**
+The hardware scan sometimes couldn't read NVIDIA graphics memory on Linux, reporting 0 VRAM. That made RigMatch recommend only the smallest models (e.g. phi3:mini even on a 4090). As of 0.3.3, RigMatch falls back to `nvidia-smi` to read total VRAM when the normal scan comes back empty.
+
+That fallback was not enough on a Jetson, where the GPU is not a PCI device at all: the usual scan returns no graphics card whatsoever, and `nvidia-smi` answers `[N/A]` to every memory question. RigMatch 0.7.1 reads the board's own name from the device tree, recognises it as unified memory, and reports the shared pool — 7.4 GB on an Orin Nano, where 0.7.0 reported 0 GB and offered only the smallest models.
 
 ---
 
