@@ -10,7 +10,7 @@ Graphics are in `social/`. Suggested captions below — tweak to taste.
 >
 > No jargon. No account. 100% local, via Ollama.
 >
-> Open source — link in the comments. I'd love feedback from anyone who's tried to onboard a non-technical friend into local AI.
+> The code is public to read — link in the comments. I'd love feedback from anyone who's tried to onboard a non-technical friend into local AI.
 
 ## Reddit (use `reddit-post-1200x675.png`) — r/LocalLLaMA, r/ollama, r/selfhosted
 
@@ -23,7 +23,7 @@ Graphics are in `social/`. Suggested captions below — tweak to taste.
 >
 > The new Simple Mode is for the "I have no idea what VRAM is" crowd: check your PC → pick contestants that fit → they speed-date the same questions live → winner revealed with a grade, then chat with it right away or graduate to Advanced Mode (full sortable table, custom test suites, logs).
 >
-> Everything's local, open source. Happy to answer anything — and I'd genuinely like to know what your rig's Top Match is.
+> Everything runs local, and the code is public to read. Happy to answer anything, and I'd genuinely like to know what your rig's Top Match is.
 
 ## Square (use `square-post-1080x1080.png`)
 

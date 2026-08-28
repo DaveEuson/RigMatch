@@ -18,7 +18,7 @@ Both share one situation that defines the product: the answer is different on ev
 
 ## Product Purpose
 
-RigMatch benchmarks local LLMs on the user's actual hardware through Ollama and crowns a **Top Match** — one model, with a 0–100 Match Score. It exists because choosing a local model is a research project disguised as a download, and the correct answer depends on hardware the user cannot easily read or reason about.
+RigMatch benchmarks local LLMs on the user's actual hardware through Ollama and crowns a **Top Match**: one model, with a 0–100 Match Score. It exists because choosing a local model is a research project disguised as a download, and the correct answer depends on hardware the user cannot easily read or reason about.
 
 Success, as confirmed by the owner, pulls in three directions at once:
 
@@ -30,7 +30,7 @@ Success, as confirmed by the owner, pulls in three directions at once:
 
 RigMatch measures on *your* machine. Every published benchmark, leaderboard, and model card reports performance on hardware that is not yours, which makes them approximately useless for the decision the user is actually making. RigMatch runs the same questions against every contestant on the machine the model will live on, and folds hardware fit into the score itself.
 
-The second differentiator is framing: RigMatch is a **dating game show**. Models are contestants, benchmarks are speed dates, the winner is a Top Match. This turns an intimidating technical comparison into something a beginner can sit through and enjoy — and it is the reason the app can serve someone who does not know what a parameter is.
+The second differentiator is framing: RigMatch is a **dating game show**. Models are contestants, benchmarks are speed dates, the winner is a Top Match. This turns an intimidating technical comparison into something a beginner can sit through and enjoy, and it is the reason the app can serve someone who does not know what a parameter is.
 
 ## Operating Context
 
@@ -45,7 +45,7 @@ The second differentiator is framing: RigMatch is a **dating game show**. Models
 
 **Scoring.** The Match Score is a weighted 0–100 composite defined in `src/lib/scoring.ts`: answer quality 0.34, speed 0.32, stability 0.18, hardware fit 0.16. Speed is the median of three timed runs per question. Scores carry a schema version; scorecards saved under an older schema are flagged **Retest recommended** rather than silently compared against current ones.
 
-**Fairness rules that are load-bearing.** Each model is unloaded before the next one runs, so no contestant shares the GPU with a predecessor. Every contestant answers the same questions. These are not optimizations — they are the reason the score means anything.
+**Fairness rules that are load-bearing.** Each model is unloaded before the next one runs, so no contestant shares the GPU with a predecessor. Every contestant answers the same questions. These are the reason the score means anything, and they cost real time to honour.
 
 **Skill labs.** Beyond the core benchmark: App Builder (models write a runnable single-file web app, judged and previewed), vision tests, image generation, and a parked Code Challenge concept. An LLM judge grades what heuristics cannot.
 
@@ -53,7 +53,7 @@ The second differentiator is framing: RigMatch is a **dating game show**. Models
 
 **Stack.** Electron + React 19 + TypeScript + Vite for the main app; Tauri v2 + React + Rust for the chat companion; `systeminformation` for hardware reads; electron-builder for distribution; electron-updater for in-app updates.
 
-**Known limits.** Browser preview mode cannot read VRAM/GPU accurately, so the Fit pillar degrades to an estimate there — it is a demo, not a functional substitute. Ollama pull counts (popularity) were removed upstream by ollama.com in mid-2026 and are no longer available; the Models table shows measured speed in that slot instead.
+**Known limits.** Browser preview mode cannot read VRAM/GPU accurately, so the Fit pillar degrades to an estimate there — it is a demo, not a functional substitute. Ollama pull counts (popularity) are still published, but the scrape that reads them broke when ollama.com changed its markup, and the Popularity column silently relabels itself Speed whenever no model carries a count. That was read as the counts being withdrawn upstream; they were not. Fixed on the 0.8 branch, with a networked check so the next markup change fails loudly.
 
 **Undecided.** Whether cloud models (via OpenRouter) get a separate "Cloud Reference" track is parked, not settled — the roadmap is explicit that they must never join the local Match Score board, since a datacenter 70B would crown itself Top Match and invalidate the premise.
 
@@ -75,7 +75,7 @@ The owner's position on all of the following: these are **strong core concepts, 
 - **A detailed public changelog** back through 0.2.x, written in plain language, that doubles as the release notes shown in the app's Update Center. Single source: `src/data/releaseNotes.ts`.
 - **A candid known-issues document** (`KNOWN_ISSUES.md`) that names unresolved problems rather than hiding them.
 - **Avatar art** in `src/assets/model-avatar-*.webp`, with an art-direction doc for extending the set.
-- **Current version:** 0.4.1, distributed as beta builds.
+- **Current version:** 0.7.1, distributed as beta builds.
 
 **Absences future work must not fabricate:** there are no testimonials, no named customers, no user counts, no download numbers, no press coverage, and no benchmark comparisons against competing tools. macOS builds are unsigned. Nothing may claim otherwise.
 
@@ -85,4 +85,4 @@ The owner's position on all of the following: these are **strong core concepts, 
 2. **A fair fight, or no fight.** Same questions, same machine state, same conditions for every contestant. When fairness and convenience conflict, fairness wins — even when it makes runs three times longer.
 3. **Two doors, one product.** The beginner never has to see the control room, and the enthusiast never has to sit through the wizard. Neither path is a degraded version of the other.
 4. **Say the true thing plainly.** When something is estimated, broken, or uncertain, the interface says so in words a beginner understands. Honesty is the feature that makes the score worth trusting.
-5. **The show is how the medicine goes down.** The game-show framing is not decoration on a benchmarking tool — it is the mechanism by which a benchmarking tool becomes usable by someone who would otherwise never run one.
+5. **The show is how the medicine goes down.** The game-show framing is the mechanism by which a benchmarking tool becomes usable by someone who would otherwise never run one. Take it out and a beginner has no reason to sit through five steps.
