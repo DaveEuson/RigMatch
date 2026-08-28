@@ -902,6 +902,30 @@
   justify-content: center;
 }
 
+/* Evidence the check ran, sitting under the button that ran it.
+
+   Quiet on purpose: it is a receipt, not a status. The card above it already
+   carries the state in colour and in words, and a second green thing competing
+   for the same glance would make the strip harder to read, not easier. */
+.local-status-checked {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--muted);
+  /* The card forces nowrap on its spans to keep the strip on one line; this one
+     is the longest text in it and must be allowed to wrap on a narrow window. */
+  white-space: normal;
+}
+
+.local-status-checked svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  color: var(--green);
+}
+
 .top-deck-winner {
   padding: 10px 12px;
   display: grid;

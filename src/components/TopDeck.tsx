@@ -1,5 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { AlertTriangle, Bot, Boxes, ChevronDown, ChevronUp, Download, RefreshCw, ScanLine, ShieldCheck, Trophy, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, Bot, Boxes, Check, ChevronDown, ChevronUp, Download, RefreshCw, ScanLine, ShieldCheck, Trophy, X } from 'lucide-react';
 import type { OllamaStatus, SystemProfile } from '../types';
 import type { UiMode } from '../lib/appConfig';
 import type { RigPick } from '../lib/modelCatalog';
@@ -63,6 +64,36 @@ export function TopDeck({
   const statusDetail = localModelCount > 0
     ? `${localModelCount} local model${localModelCount === 1 ? '' : 's'} visible across ${ollama.ready && lmStudio.ready ? 'Ollama + LM Studio' : lmStudio.ready ? 'LM Studio' : 'Ollama'}. Prompts stay on this computer.`
     : 'Start Ollama or LM Studio, then check this computer again. Nothing is uploaded.';
+  /**
+   * Evidence that Check Local actually ran.
+   *
+   * It rescans, spins for a moment, and returns a card identical to the one
+   * before — so on a fast machine, with nothing changed, pressing it produces
+   * no observable effect at all. Reported as "this doesn't really tell us
+   * more", which was exactly right: it told you nothing, twice.
+   *
+   * The time is captured when the scan finishes rather than read during render.
+   * A relative "2 minutes ago" would need a clock in render, which is impure
+   * and would also go stale sitting on screen; a fixed clock time does not lie
+   * as it ages.
+   *
+   * Seconds included, which is finer than anyone needs to read. Without them
+   * two presses inside the same minute produce an identical line, and the whole
+   * point of this is that pressing the button visibly does something.
+   */
+  const [lastChecked, setLastChecked] = useState<string | null>(null);
+  const [foundAtCheck, setFoundAtCheck] = useState<number | null>(null);
+  const wasScanning = useRef(false);
+  useEffect(() => {
+    // The falling edge only. Watching `isScanning` alone would restamp on every
+    // unrelated re-render while a scan is in flight.
+    if (wasScanning.current && !isScanning) {
+      setLastChecked(new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setFoundAtCheck(localModelCount);
+    }
+    wasScanning.current = isScanning;
+  }, [isScanning, localModelCount]);
+
   const localMachine = {
     hostname: system.hostname,
     ip: system.networks[0]?.address ?? '127.0.0.1',
@@ -184,6 +215,19 @@ export function TopDeck({
             <ScanLine aria-hidden="true" />
             Check Local
           </button>
+          {/*
+            Says what the check found, not just that one happened. "Checked" on
+            its own is only marginally better than nothing — the number is what
+            makes a second press meaningful, because it either confirms or moves.
+          */}
+          {lastChecked && !isScanning && (
+            <span className="local-status-checked">
+              <Check aria-hidden="true" />
+              Checked {lastChecked} — {foundAtCheck === 0
+                ? 'no local models found'
+                : `${foundAtCheck} model${foundAtCheck === 1 ? '' : 's'} found`}
+            </span>
+          )}
           {/*
             ComfyUI, offered where its absence is noticed.
             
