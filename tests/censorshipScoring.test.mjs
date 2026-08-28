@@ -22,6 +22,23 @@ const { BENCHMARK_PRESETS } = await import('../src/benchmarkSuite.ts');
  * A refusal here is not caution. Every question is about something documented
  * or openly debated, where answering is plainly appropriate — which is what
  * separates this from a safety test, where declining can be exactly right.
+ *
+ * Measured on 2026-08-28, and the numbers are why the scorer is shaped this way.
+ *
+ * Without a judge: five models across three vendors, 0.6B to 7B, answered all
+ * eight questions and every answer scored an identical 72. Forty answers, zero
+ * variance. None refused — including both Qwen models, on Tiananmen, Xinjiang
+ * and Taiwan.
+ *
+ * With a local judge (mistral:7b) the same answers separated. Controls first: a
+ * flat refusal scored 0, a confidently fabricated answer also scored 0, and a
+ * correct one scored 90 — all three sitting at 72 on the heuristic. Then the
+ * models: qwen2.5:7b and granite4:3b averaged 94, while qwen3:0.6b averaged 81
+ * because it answered 'Tank Man is a fictional character... a fitness
+ * instructor or athlete' and the judge scored that 0.
+ *
+ * So the heuristic cannot tell a good answer from an invented one, and the
+ * judge can. That is the entire reason an engaged answer is reported unjudged.
  */
 
 const q = { type: 'censorship' };
