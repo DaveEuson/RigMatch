@@ -3,6 +3,22 @@ import { isDesktopRuntime } from '../api';
 import robotContestantWall from '../assets/robot-contestant-wall.webp';
 import type { BenchmarkQuestionCount } from '../benchmarkSuite';
 import { formatGb, formatPullCount } from '../lib/format';
+/**
+ * The date a model arrived, as a date.
+ *
+ * "3 days ago" was the first attempt, and it needs a clock — which makes it
+ * impure in render. The lint rule was right, and chasing it into a useMemo or
+ * an effect was solving a problem this column did not need to have: the ask
+ * was a date, and a date does not change between renders.
+ *
+ * Locale-formatted, because the reader is looking for "did I get this before
+ * or after that one", not for an ISO string.
+ */
+function formatInstalledDate(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return 'Unknown';
+  return at.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
 import type { ListTestResult, ModelQuickFilterId, ModelSortKey, ModelTaskFilterId, SortDirection } from '../lib/modelCatalog';
 import { CAPABILITY_ONLY_FILTERS, GENERATION_FILTERS, TASK_FILTER_CHIPS, getBenchmarkForModel, getDiskGuard, getHardwareFit, getModelGoodForTags, getModelProfile, getModelQuickFilters, getModelScore, getModelSearchText, getModelSortLabel, getModelStatusLabel, getPlatformFit, getQueueChipModelName, getSizeRisk, isCloudModel, isEmbeddingModel, isUncensoredModel, isVisiblePullProgress, modelMatchesQuickFilter, modelMatchesTask, sortModelRows } from '../lib/modelCatalog';
 import { getModelNewsId } from '../lib/modelNews';
@@ -165,6 +181,15 @@ export function ModelCabinet({
   // as a measured-speed column instead. If Ollama ever restores the stats, the
   // column flips back to Popularity automatically.
   const hasAnyPullData = useMemo(() => rows.some((row) => row.pulls != null), [rows]);
+  /**
+   * "Added" shows only while the Installed filter is on.
+   *
+   * The date comes from Ollama's modified_at, which only installed models have.
+   * Across the whole catalogue that is 16 rows of 322 — a column that is blank
+   * 95% of the time, and sortable into a wall of nothing. Under the Installed
+   * filter every row has one, which is the only place it is worth the width.
+   */
+  const showAdded = quickFilter === 'installed';
   const colWidthsRef = useRef(colWidths);
   useEffect(() => {
     colWidthsRef.current = colWidths;
@@ -511,6 +536,7 @@ export function ModelCabinet({
         <table>
           <colgroup>
             {colWidths.map((w, i) => (hidePopularity && i === 6 ? null : <col key={i} style={{ width: w }} />))}
+            {showAdded && <col style={{ width: 104 }} />}
             <col />
           </colgroup>
           <thead>
@@ -529,6 +555,15 @@ export function ModelCabinet({
                   direction={sortDirection}
                   onSort={changeSort}
                   onResizeStart={(e) => handleColResizeStart(6, e)}
+                />
+              )}
+              {showAdded && (
+                <SortableModelHeader
+                  label="Added"
+                  sortName="added"
+                  sortKey={sortKey}
+                  direction={sortDirection}
+                  onSort={changeSort}
                 />
               )}
               <th>Actions</th>
@@ -678,6 +713,19 @@ export function ModelCabinet({
                       </div>
                     </td>
                   )}
+                  {showAdded && (
+                    <td className="added-cell">
+                      {row.installedModel?.modifiedAt ? (
+                        <span title={new Date(row.installedModel.modifiedAt).toLocaleString()}>
+                          {formatInstalledDate(row.installedModel.modifiedAt)}
+                        </span>
+                      ) : (
+                        // Reachable: a model installed through something other
+                        // than Ollama, or an Ollama too old to report it.
+                        <span className="speed-untested">Unknown</span>
+                      )}
+                    </td>
+                  )}
                   <td className={showDownloadProgress ? 'action-cell has-download-progress' : 'action-cell'}>
                     <div className="row-actions">
                       {/* A checkpoint has no chat endpoint, no Ollama entry and
@@ -818,7 +866,7 @@ export function ModelCabinet({
             })}
             {visibleRows.length === 0 && (
               <tr className="empty-row">
-                <td colSpan={hidePopularity ? 7 : 8}>
+                <td colSpan={(hidePopularity ? 7 : 8) + (showAdded ? 1 : 0)}>
                   <div className="table-empty-state">
                     <strong>No contestants match these filters</strong>
                     <span>Clear the search or show the full model pool.</span>

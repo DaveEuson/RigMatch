@@ -31,7 +31,7 @@ import {
   type UiMode,
 } from './appConfig.ts';
 
-export type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'origin' | 'source' | 'status' | 'score' | 'speed' | 'pulls';
+export type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'origin' | 'source' | 'status' | 'score' | 'speed' | 'pulls' | 'added';
 export type SortDirection = 'asc' | 'desc';
 export type ModelQuickFilterId = 'all' | 'installed' | 'fits-vram' | 'scored' | 'unscored' | 'good-score' | 'low-score' | 'huge';
 export type ListTestResult = {
@@ -766,6 +766,17 @@ export function getModelSortValue(
       return getBenchmarkForModel(benchmarkByModel, row.displayName, row)?.avgTokensPerSecond ?? -1;
     case 'pulls':
       return row.pulls ?? -1;
+    case 'added':
+      // Ollama's modified_at, which is when the blob last changed on this
+      // machine — a pull, or a re-pull of the same tag. It answers "how long
+      // have I had this", which is the question the column is for; it is not a
+      // release date and does not claim to be.
+      //
+      // Only installed models have one at all, which is why the column appears
+      // only under the Installed filter. Sorting a catalogue of 322 rows by a
+      // field 16 of them carry would be a list of blanks with a few dates on
+      // the end.
+      return row.installedModel?.modifiedAt ? Date.parse(row.installedModel.modifiedAt) || -1 : -1;
     case 'name':
     default:
       return row.displayName;
@@ -866,6 +877,8 @@ export function getModelSortLabel(sortKey: ModelSortKey) {
       return 'Speed';
     case 'pulls':
       return 'Popularity';
+    case 'added':
+      return 'Added';
     case 'name':
     default:
       return 'Model';
