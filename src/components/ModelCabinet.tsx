@@ -199,7 +199,7 @@ export function ModelCabinet({
    *
    * These used to count across the whole catalog regardless of what else was
    * on, which produced chips that promised results and delivered an empty
-   * table — "Makes images 3" while Rig Picks was active, when all three image
+   * table — "Makes images 3" while the Good fit filter was active, when all three image
    * models were in the too-big-for-this-VRAM bucket.
    */
   const passesQuery = useCallback(
@@ -465,7 +465,7 @@ export function ModelCabinet({
             {quickFilter === 'fits-vram' && (
               <div className="model-filter-note">
                 <ShieldCheck aria-hidden="true" />
-                <span>Showing {vramSafeCount} rig picks for {vramLabel}, including close fits. Models too big for your VRAM stay hidden unless you show all.</span>
+                <span>Showing {vramSafeCount} models that fit {vramLabel}, including close fits. Models too big for your VRAM stay hidden unless you show all.</span>
                 <button type="button" onClick={() => setQuickFilter('all')}>Show all</button>
               </div>
             )}

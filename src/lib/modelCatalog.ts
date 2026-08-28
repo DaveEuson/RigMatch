@@ -1664,7 +1664,15 @@ export function getModelQuickFilters(
   return [
     { id: 'all', label: 'All', count: rows.length },
     { id: 'installed', label: 'Installed', count: rows.filter((row) => row.installed).length },
-    { id: 'fits-vram', label: 'Rig Picks', count: rows.filter((row) => modelFitsVram(row, vramGb)).length },
+    // Named for what it selects, like every other filter here.
+    //
+    // It was "Rig Picks", which is the app's word rather than the user's, and
+    // the cost was measurable: asked for a "Good Fit" filter, RigMatch's own
+    // author did not recognise this button with it open in front of him. The
+    // sibling filter below already does the right thing — "Too Big" selects the
+    // rows badged "Too big" — while this one selected rows badged "Good fit",
+    // "Sweet spot" and "Small pick" and named none of them.
+    { id: 'fits-vram', label: 'Good fit', count: rows.filter((row) => modelFitsVram(row, vramGb)).length },
     { id: 'scored', label: 'Scored', count: rows.filter((row) => Boolean(getModelScore(row, scores))).length },
     { id: 'unscored', label: 'Unscored', count: rows.filter((row) => row.installed && !getModelScore(row, scores)).length },
     { id: 'good-score', label: 'B or better', count: rows.filter((row) => isGoodScore(getModelScore(row, scores))).length },
