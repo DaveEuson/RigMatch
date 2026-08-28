@@ -3453,7 +3453,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       // "best for talking" on the latter.
       const scoredBy = promptJudgeScore != null
         ? 'judge'
-        : heuristicCanGrade(prompt.type, prompt.prompt) ? 'heuristic' : 'unjudged';
+        : heuristicCanGrade(prompt.type, prompt.prompt, responseText) ? 'heuristic' : 'unjudged';
       const promptStatus = getBenchmarkPromptStatus(responseText, doneReason);
       const diagnostic = buildPromptDiagnostic({
         responseText,
