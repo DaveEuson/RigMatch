@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Find the best local AI model your computer can <em>actually</em> run.</strong><br>
-  A dating game show for your PC — models are contestants, benchmarks are speed dates, and the winner is your Top Match.
+  A dating game show for your PC: models are contestants, benchmarks are speed dates, and the winner is your Top Match.
 </p>
 
 <p align="center">
@@ -26,9 +26,9 @@ Picking a local LLM is confusing: parameter counts, quantization, VRAM, context 
 
 Everything runs on your machine. No account, no cloud, no telemetry.
 
-- 🖥️ **Reads your real rig** — GPU, VRAM, RAM, and disk decide which contestants even qualify
-- 💛 **Speed Dating benchmarks** — every model answers the same questions, live on stage
-- 🏆 **Match Score (0–100)** — one honest number: speed + quality + fit on *your* PC
+- 🖥️ **Reads your real rig**. GPU, VRAM, RAM and disk decide which contestants even qualify
+- 💛 **Speed Dating benchmarks**. Every model answers the same questions, live on stage
+- 🏆 **Match Score (0–100)** — speed, quality and fit, scored on your PC
 - 🎨 **5 color themes** and illustrated contestant avatars for every model family
 
 ## Simple Mode — local AI for everyone
@@ -37,7 +37,7 @@ A five-step guided wizard for people who have never heard of VRAM and just want 
 
 ### 1 · Setup — check your computer
 
-One click detects Ollama and reads your hardware — no jargon, just "you're all set."
+One click detects Ollama and reads your hardware. No jargon, just "you're all set."
 
 <p align="center"><img src="docs/images/01-setup.png" alt="Setup step — the full RigMatch window with the five-step rail" width="100%"></p>
 
@@ -47,7 +47,7 @@ One click detects Ollama and reads your hardware — no jargon, just "you're all
 
 ### 2 · Pick — meet the contestants
 
-Tell the host who your dream model is — someone to talk with, a coding buddy, an image maker — and pick up to five contestants that fit your PC. One card per model; RigMatch picks the right size for your hardware.
+Tell the host who your dream model is (someone to talk with, a coding buddy, an image maker) and pick up to five contestants that fit your PC. One card per model; RigMatch picks the right size for your hardware.
 
 <p align="center"><img src="docs/images/02-pick.png" alt="Pick step — contestant cards with dream-model filters" width="100%"></p>
 
@@ -65,13 +65,13 @@ Every contestant answers the same questions on the game-show stage. No favorites
 
 ### 5 · Winner — your Top Match
 
-The reveal: grade, plain-language scorecard, and two doors out — start chatting right away, or graduate to Advanced Mode.
+The reveal: grade, plain-language scorecard, and two doors out. Start chatting right away, or graduate to Advanced Mode.
 
 <p align="center"><img src="docs/images/05-winner.png" alt="Winner step — Top Match reveal" width="100%"></p>
 
 ## Advanced Mode
 
-The full control room for power users: a dense sortable models table, custom test suites, diagnostics, logs, and per-run history. Your Top Match carries over.
+The full control room: a dense sortable models table, custom test suites, diagnostics, logs and per-run history. Your Top Match carries over.
 
 ## Getting started
 
@@ -80,11 +80,11 @@ The full control room for power users: a dense sortable models table, custom tes
 
 | Platform | Installer |
 |---|---|
-| Windows | `.exe` installer or `.zip` portable — [Releases](../../releases/latest) |
-| macOS (Apple Silicon) | `.dmg` for M-series Macs — [Releases](../../releases/latest) |
-| macOS (Intel) | `.dmg` for Intel Macs — [Releases](../../releases/latest) |
-| Linux x64 | `.AppImage` or `.deb` for x64 Debian/Ubuntu — [Releases](../../releases/latest) |
-| Linux ARM64 / Jetson | Experimental `.AppImage` or `.deb` for ARM64/aarch64 — [Releases](../../releases/latest) |
+| Windows | `.exe` installer or `.zip` portable · [Releases](../../releases/latest) |
+| macOS (Apple Silicon) | `.dmg` for M-series Macs · [Releases](../../releases/latest) |
+| macOS (Intel) | `.dmg` for Intel Macs · [Releases](../../releases/latest) |
+| Linux x64 | `.AppImage` or `.deb` for x64 Debian/Ubuntu · [Releases](../../releases/latest) |
+| Linux ARM64 / Jetson | `.AppImage` or `.deb` for ARM64/aarch64 · [Releases](../../releases/latest) |
 
 3. Launch it — Simple Mode will check your computer and take it from there
 
@@ -98,8 +98,8 @@ Rigmatch macOS downloads are unsigned beta builds distributed outside the App St
 3. First launch only: right-click **Rigmatch.app**, choose **Open**, then **Open** again.
 4. If macOS still blocks it, open **System Settings → Privacy & Security → Security** and choose **Open Anyway**.
 
-If macOS says the app is **"damaged and can't be opened"** — and nothing appears
-in Privacy & Security to let you open it anyway — run this once:
+If macOS says the app is **"damaged and can't be opened"**, and nothing appears
+in Privacy & Security to let you open it anyway, run this once:
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/RigMatch.app" && codesign --force --deep --sign - "/Applications/RigMatch.app"
@@ -110,7 +110,7 @@ enough: an arm64 app will not launch unless its code signature validates, and
 that is the part that was broken. The second command re-signs it locally.
 
 This affects builds up to and including 0.4.2. Later releases sign themselves
-during the build, so "damaged" should not appear at all — you may still see the
+during the build, so "damaged" should not appear at all. You may still see the
 ordinary unidentified-developer prompt covered in the steps above.
 </details>
 
@@ -148,10 +148,10 @@ Each model runs the same question set on your hardware. The score blends:
 | Ingredient | What it measures |
 |---|---|
 | ⚡ Speed | Tokens/sec and first-token latency on your rig |
-| 🎯 Quality | Answer accuracy and usefulness across the test suite |
+| 🎯 Quality | Whether answers hold up: valid JSON, followed instructions, no invented facts. Pattern checks by default; a second model grades the open-ended answers if you point RigMatch at one |
 | 🧩 Fit | How comfortably the model sits in your VRAM/RAM |
 
-The result is a 0–100 Match Score and a letter grade — one number you can trust, because it was measured on *your* machine, not a leaderboard's H100.
+The result is a 0–100 Match Score and a letter grade, measured on your machine rather than a leaderboard's H100. Speed and fit are measured directly. Quality is the softest of the three, which is why the app shows the breakdown rather than only the total.
 
 ## Privacy
 
@@ -167,4 +167,4 @@ rights to copy, modify, or redistribute it. Using the released app is fine.
 
 ---
 
-<p align="center"><sub>Made with 💛 and a retro-computer host. May your rig find its perfect match.</sub></p>
+<p align="center"><sub>Made with 💛 and a retro-computer host.</sub></p>
