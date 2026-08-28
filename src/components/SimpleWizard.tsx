@@ -116,6 +116,26 @@ type SimpleWizardProps = {
   shortlistIds: Set<string>;
   shortlistedRows: ModelRow[];
   onTogglePick: (row: ModelRow) => void;
+  /**
+   * ComfyUI's part in "is this computer ready?", when the goals need it.
+   *
+   * Setup checked Ollama, the graphics card and disk space, then said "You're
+   * all set!". For someone whose goal was making pictures that sentence was
+   * simply untrue: the program that makes them was never looked for, and the
+   * refusal did not arrive until the download three steps later.
+   *
+   * Absent when no chosen goal needs ComfyUI, because someone who only wants a
+   * chat model should not be told about a program they will never install.
+   */
+  comfySetup?: {
+    /** A chosen goal runs through ComfyUI. Nothing below renders without this. */
+    needed: boolean;
+    /** Reachable AND holding a checkpoint that can actually draw. */
+    ready: boolean;
+    checkpoint?: string | null;
+    /** Runs the same search Settings runs. */
+    onFind?: () => void | Promise<void>;
+  } | null;
   /** The dream matching the first-run goal choice, so PICK opens on it. */
   initialDream?: DreamFilterId;
   /**
@@ -489,6 +509,7 @@ function SetupScreen({
   ollamaInstallProgress,
   onStartOllamaInstall,
   onLaunchOllamaInstaller,
+  comfySetup,
 }: SimpleWizardProps) {
   const checked = ollamaReady; // a successful check makes Ollama ready
   const gpu = system.gpu.model || 'your graphics card';
@@ -500,6 +521,9 @@ function SetupScreen({
   // it used to fail in total silence.
   const [copiedCommand, setCopiedCommand] = useState<CopyState>('idle');
   const runCheck = () => { setAttempted(true); onCheckComputer(); };
+  // Only "missing" when a goal actually needs it. No goal needing ComfyUI means
+  // there is nothing missing, however absent ComfyUI happens to be.
+  const comfyMissing = Boolean(comfySetup?.needed) && !comfySetup?.ready;
 
   // Install-flow state. Linux gets a copyable one-liner (no installer binary);
   // Windows/macOS get the in-app download → launch handoff.
@@ -538,10 +562,18 @@ function SetupScreen({
       </button>
 
       {checked && !isScanning && (
-        <div className="sw-setup-result ok">
+        <div className={comfyMissing ? 'sw-setup-result partial' : 'sw-setup-result ok'}>
           <div className="sw-setup-result-head">
-            <span className="sw-check-circle" aria-hidden="true"><Check /></span>
-            <strong>You're all set!</strong>
+            <span className={comfyMissing ? 'sw-check-circle partial' : 'sw-check-circle'} aria-hidden="true">
+              {comfyMissing ? <AlertTriangle /> : <Check />}
+            </span>
+            {/*
+              The headline has to survive the one case it was wrong in. "You're
+              all set" was said to people whose goal needed a second program
+              nobody had looked for — a confident false statement of exactly the
+              kind this app exists to stop making.
+            */}
+            <strong>{comfyMissing ? 'Almost — one more program' : "You're all set!"}</strong>
             <button type="button" className="sw-link" onClick={onCheckComputer}>Check again</button>
           </div>
           <ResultRow
@@ -550,6 +582,33 @@ function SetupScreen({
           />
           <ResultRow label="Strong graphics card" detail={`${gpu} — great for local AI`} />
           <ResultRow label="Plenty of space" detail={`${freeGb} GB free for models`} />
+          {comfySetup?.needed && (
+            comfySetup.ready ? (
+              <ResultRow
+                label="Picture-making ready"
+                detail={`ComfyUI is running${comfySetup.checkpoint ? ` with ${comfySetup.checkpoint}` : ''}`}
+              />
+            ) : (
+              <div className="sw-setup-missing">
+                <strong>ComfyUI not found</strong>
+                <p>
+                  You picked something that makes pictures or video. Ollama cannot do that — it is
+                  ComfyUI's job, a separate free program RigMatch does not install. Everything else
+                  here works without it.
+                </p>
+                {comfySetup.onFind && (
+                  <button
+                    type="button"
+                    className="sw-gold-pill sw-setup-find"
+                    onClick={() => void comfySetup?.onFind?.()}
+                  >
+                    <ScanLine aria-hidden="true" />
+                    Find ComfyUI for me
+                  </button>
+                )}
+              </div>
+            )
+          )}
         </div>
       )}
 
