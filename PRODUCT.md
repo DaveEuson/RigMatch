@@ -53,7 +53,7 @@ The second differentiator is framing: RigMatch is a **dating game show**. Models
 
 **Stack.** Electron + React 19 + TypeScript + Vite for the main app; Tauri v2 + React + Rust for the chat companion; `systeminformation` for hardware reads; electron-builder for distribution; electron-updater for in-app updates.
 
-**Known limits.** Browser preview mode cannot read VRAM/GPU accurately, so the Fit pillar degrades to an estimate there — it is a demo, not a functional substitute. Ollama pull counts (popularity) are still published, but the scrape that reads them broke when ollama.com changed its markup, and the Popularity column silently relabels itself Speed whenever no model carries a count. That was read as the counts being withdrawn upstream; they were not. Fixed on the 0.8 branch, with a networked check so the next markup change fails loudly.
+**Known limits.** Browser preview mode cannot read VRAM/GPU accurately, so the Fit pillar degrades to an estimate there — it is a demo, not a functional substitute. Ollama pull counts (popularity) are still published, but the scrape that reads them broke when ollama.com changed its markup, and the Popularity column silently relabels itself Speed whenever no model carries a count. That was read as the counts being withdrawn upstream; they were not. Fixed here, with a networked check so the next markup change fails loudly rather than quietly renaming a column.
 
 **Undecided.** Whether cloud models (via OpenRouter) get a separate "Cloud Reference" track is parked, not settled — the roadmap is explicit that they must never join the local Match Score board, since a datacenter 70B would crown itself Top Match and invalidate the premise.
 
