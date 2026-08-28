@@ -2703,8 +2703,21 @@ function extractOllamaLibraryModels(html) {
     const name = decodeURIComponentSafe(nameMatch[1]);
     if (!isValidOllamaName(name) || seen.has(name)) continue;
     seen.add(name);
-    // Try x-test-pull-count attr (old Alpine.js site), then "1.2M Pulls" text pattern (Next.js site)
-    const pullMatch = section.match(/x-test-pull-count[^>]*>([^<]+)<\/span>/i)
+    // Newest first, oldest last. ollama.com has changed this markup three times
+    // now, and every time the failure is silent: names keep parsing, pulls all
+    // come back null, and the Popularity column quietly renames itself Speed
+    // because `hasAnyPullData` is false. A whole column changed meaning and
+    // nothing failed.
+    //
+    // The current shape splits the number and the word across two spans, joined
+    // by a non-breaking space — so `([\d.]+[KMBkmb])\s+Pulls` cannot reach from
+    // one to the other:
+    //
+    //   <span >39.9M</span> <span class="hidden sm:flex">&nbsp;Pulls</span>
+    //
+    // Verified against the live page: 237 of 238 models parse.
+    const pullMatch = section.match(/<span[^>]*>\s*([\d.]+\s*[KMBkmb]?)\s*<\/span>\s*<span[^>]*>(?:&nbsp;|\s)*Pulls/i)
+      || section.match(/x-test-pull-count[^>]*>([^<]+)<\/span>/i)
       || section.match(/([\d.]+[KMBkmb])\s+Pulls/i)
       || section.match(/"pullCount"\s*:\s*(\d+)/i);
     results.push({ name, pulls: pullMatch ? parsePullCount(pullMatch[1]) : null });

@@ -546,6 +546,14 @@ check('tests', 'the full suite passes', () => {
 });
 
 if (withNet) {
+  check('claims', 'ollama.com still yields the pull counts the Popularity column needs', () => {
+    // Silent every time it breaks: names keep parsing, pulls all come back
+    // null, and the Popularity column renames itself Speed. A column changed
+    // meaning and nothing failed, which is how it reached a user.
+    const out = execFileSync('node', ['scripts/check-pull-counts.mjs'], { cwd: root, encoding: 'utf-8' });
+    return out.trim();
+  });
+
   check('claims', 'catalogue URLs and sizes match the servers', () => {
     execFileSync('node', ['scripts/check-model-sizes.mjs'], { cwd: root, encoding: 'utf-8' });
     return 'all sizes verified';
