@@ -3240,6 +3240,18 @@ function App() {
           onStartOllamaInstall={startOllamaInstall}
           onLaunchOllamaInstaller={launchOllamaInstaller}
           wizardModels={wizardModels}
+          comfySetup={{
+            // Only when a chosen goal actually runs through ComfyUI. Someone
+            // who picked "everyday chat" is told nothing about a program they
+            // will never install.
+            needed: selectedGoals.some((id) => goalById(id)?.runtime === 'comfyui'),
+            // Reachable is not enough: the first checkpoint on a real machine
+            // was a video model with no text encoder, so "ComfyUI is running"
+            // and "ComfyUI can draw" are different claims.
+            ready: chatImageGeneration.available,
+            checkpoint: chatImageGeneration.checkpoint ?? null,
+            onFind: findComfyForDownload,
+          }}
           initialDream={dreamForGoal(selectedGoals[0])}
           notice={simpleNotice}
           noticeAction={simpleNoticeAction}

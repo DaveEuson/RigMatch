@@ -349,6 +349,29 @@ check('parity', 'the layout is checked at the smallest window the app allows', (
   return `${declared.width}x${declared.height}, and the smoke checks that exact size`;
 });
 
+check('surface', 'setup does not call a computer ready for a goal it cannot do', () => {
+  // "You're all set!" was said after checking Ollama, the graphics card and
+  // disk space — and nothing else. Pick a goal that runs through ComfyUI and
+  // the sentence was simply false: the program doing the work had never been
+  // looked for, and the refusal did not arrive until the download three steps
+  // later. Setup is where a person is told whether their machine is ready, so
+  // it is where the answer has to be true.
+  const wizard = read('src/components/SimpleWizard.tsx');
+  must(/comfySetup/.test(wizard),
+    'the setup screen no longer takes a ComfyUI readiness prop, so it is back to answering a narrower question than it appears to');
+  must(/Almost/.test(wizard),
+    'the headline no longer changes when something is missing — "You are all set" is unconditional again');
+
+  const app = read('src/App.tsx');
+  must(/runtime === 'comfyui'/.test(app),
+    'App no longer works out whether a chosen goal needs ComfyUI, so the setup check can never fire');
+  // Derived from the goal's runtime rather than a list of ids, so a generation
+  // goal added later is covered without anyone remembering to come back here.
+  must(/selectedGoals\.some\(/.test(app),
+    'only the leading goal is being checked — a ComfyUI goal picked second would be missed');
+  return 'setup answers for the goals actually chosen';
+});
+
 check('surface', 'each platform ships only the companion it can run', () => {
   // companions/rigmatch-chat.exe is tracked in git, and the CI Linux and macOS
   // jobs build their own companion into the same directory. A single top-level

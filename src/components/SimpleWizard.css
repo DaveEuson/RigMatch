@@ -382,6 +382,32 @@
 .sw-check-circle.error { background: color-mix(in srgb, var(--red) 22%, transparent); color: var(--red); }
 .sw-check-circle svg { width: 15px; height: 15px; }
 
+/* Ready-except-for-one-thing.
+
+   Deliberately gold rather than red: the computer passed every check RigMatch
+   can make on its own, and the missing piece is a separate program the person
+   has not installed yet. Red would read as "something is broken here", which
+   would be its own untrue statement in the opposite direction. */
+.sw-setup-result.partial { border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+.sw-setup-result.partial .sw-setup-result-head strong { color: color-mix(in srgb, var(--gold) 60%, var(--text-strong)); }
+.sw-check-circle.partial { background: color-mix(in srgb, var(--gold) 22%, transparent); color: var(--gold); }
+
+.sw-setup-missing {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
+  background: color-mix(in srgb, var(--gold) 7%, transparent);
+}
+
+.sw-setup-missing strong { font-size: 14px; color: var(--text-strong); }
+.sw-setup-missing p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.sw-setup-find { margin-top: 2px; }
+
 .sw-result-row { display: flex; flex-direction: column; gap: 1px; font-size: 13px; }
 .sw-result-row strong { color: var(--text-strong); }
 .sw-result-row span { color: var(--muted); }
