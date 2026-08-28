@@ -138,7 +138,7 @@ test('every benchmark question type is covered by exactly one group', () => {
   // two would be double-counted.
   const seen = TASK_GROUPS.flatMap((g) => g.questionTypes);
   assert.deepEqual([...seen].sort(),
-    ['assistant', 'censorship', 'coding', 'format', 'json', 'truth', 'writing']);
+    ['assistant', 'candour', 'coding', 'format', 'json', 'truth', 'writing']);
   assert.equal(new Set(seen).size, seen.length, 'no question type in two groups');
 });
 

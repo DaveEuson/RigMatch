@@ -11,7 +11,7 @@ const BENCHMARK_TYPE_LABELS: Record<BenchmarkQuestionType, string> = {
   truth: 'Truthfulness',
   format: 'Format following',
   coding: 'Coding task',
-  censorship: 'Difficult subject',
+  candour: 'Difficult subject',
 };
 
 /** Moved out of App.tsx with TestSuiteEditorDock, its only consumer. */
