@@ -195,6 +195,23 @@ type SimpleWizardProps = {
 export function SimpleWizard(props: SimpleWizardProps) {
   const { ollamaReady, shortlistedRows, winner, benchmarkActive } = props;
 
+  /**
+   * Put the notice where the click was.
+   *
+   * It renders at the top of the wizard, and the controls that raise it can be
+   * most of a screen below. Pressing "Find ComfyUI for me" in the setup card
+   * ran the search, wrote the answer into the notice, and looked from the
+   * user's seat like the button did nothing at all — the same failure the
+   * notice exists to prevent.
+   */
+  const noticeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!props.notice) return;
+    const reduced = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    noticeRef.current?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'nearest' });
+  }, [props.notice]);
+
   const setupDone = ollamaReady;
   const pickDone = shortlistedRows.length >= 1;
   const {
@@ -394,7 +411,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
         <HostStrip step={step} />
 
         {props.notice && (
-          <div className="sw-notice" role="status">
+          <div className="sw-notice" role="status" ref={noticeRef}>
             <AlertTriangle aria-hidden="true" />
             <p>{props.notice}</p>
             {props.noticeAction && (
