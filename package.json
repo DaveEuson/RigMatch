@@ -42,7 +42,8 @@
     "audit:screens": "node scripts/audit-screens.mjs",
     "sweep:layout": "node scripts/responsive-sweep.mjs",
     "sweep:shell": "node scripts/measure-shell.mjs",
-    "check:linux": "node scripts/check-linux-advisories.mjs"
+    "check:linux": "node scripts/check-linux-advisories.mjs",
+    "sweep:menus": "node scripts/menu-sweep.mjs"
   },
   "build": {
     "appId": "ai.rigmatch.app",

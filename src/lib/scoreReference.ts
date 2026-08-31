@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { MATCH_GRADE_BANDS } from './scoring';
+import { MATCH_GRADE_BANDS } from './scoring.ts';
 
 /**
  * The reference tables behind "how we score".

@@ -20,7 +20,11 @@ function formatInstalledDate(iso: string): string {
   return at.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 import type { ListTestResult, ModelQuickFilterId, ModelSortKey, ModelTaskFilterId, SortDirection } from '../lib/modelCatalog';
-import { CAPABILITY_ONLY_FILTERS, GENERATION_FILTERS, TASK_FILTER_CHIPS, getBenchmarkForModel, getDiskGuard, getHardwareFit, getModelGoodForTags, getModelProfile, getModelQuickFilters, getModelScore, getModelSearchText, getModelSortLabel, getModelStatusLabel, getPlatformFit, getQueueChipModelName, getSizeRisk, isCloudModel, isEmbeddingModel, isUncensoredModel, isVisiblePullProgress, modelMatchesQuickFilter, modelMatchesTask, sortModelRows } from '../lib/modelCatalog';
+import { CAPABILITY_ONLY_FILTERS, GENERATION_FILTERS, TASK_FILTER_CHIPS, getBenchmarkForModel, getDiskGuard, getFriendlyModelName, getHardwareFit, getModelGoodForTags, getModelProfile, getModelQuickFilters, getModelScore, getModelSearchText, getModelSortLabel, getModelStatusLabel, getPlatformFit, getQueueChipModelName, getSizeRisk, isCloudModel, isEmbeddingModel, isUncensoredModel, isVisiblePullProgress, modelMatchesQuickFilter, modelMatchesTask, sortModelRows } from '../lib/modelCatalog';
+import { buildQuickFacetGroups, buildSearchSuggestions, splitTaskFilters } from '../lib/modelFacets';
+import type { SearchSuggestion } from '../lib/modelFacets';
+import { familiesToAutoExpand, groupRowsByFamily } from '../lib/modelGroups';
+import { describeModelTag } from '../lib/modelVariants';
 import { getModelNewsId } from '../lib/modelNews';
 import { getDeveloperFilterOptions, getModelOrigin, getRowDeveloper } from '../lib/modelOrigins';
 import type { RunDelta } from '../lib/runHistory';
@@ -33,8 +37,42 @@ import { ModelScorePill, ModelStatusPill, PopularityMeter, ScoreLegend } from '.
 import { SelectedContestantCard } from './SelectedContestantCard';
 import { ModelDemoChips } from './SkillDemoViewers';
 import { SortableModelHeader } from './SortableModelHeader';
-import { ChevronDown, Download, Eraser, Gauge, MessageSquare, Pause, Play, RefreshCw, Search, Settings, ShieldCheck, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { Check, ChevronRight, Download, Eraser, Gauge, MessageSquare, Pause, Play, RefreshCw, Search, Settings, ShieldCheck, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+/**
+ * One row of the filter rail: name, tick, and the count it would leave you with.
+ *
+ * The tick is a tick and not a radio dot even though only one option per group
+ * can be on at a time, because what the reader needs from it is "is this on",
+ * and clicking an on one turns it off — which is checkbox behaviour, not radio
+ * behaviour. The count is the point of the whole rail: it is the answer to
+ * "what does this cost me" before you spend the click.
+ */
+function FacetButton({ label, count, active, onToggle }: {
+  label: string;
+  count: number;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={active ? 'model-facet active' : 'model-facet'}
+      onClick={onToggle}
+      aria-pressed={active}
+      // A zero-count facet stays clickable when it is the active one, or there
+      // would be no way to turn off the filter that emptied the table.
+      disabled={count === 0 && !active}
+    >
+      <span className="model-facet-box" aria-hidden="true">
+        {active && <Check />}
+      </span>
+      <span className="model-facet-label">{label}</span>
+      <span className="model-facet-count">{count}</span>
+    </button>
+  );
+}
 
 export function ModelCabinet({
   active,
@@ -152,6 +190,33 @@ export function ModelCabinet({
     if (goalLens) setTaskFilter(goalLens);
   }
   const [developerFilter, setDeveloperFilter] = useState('all');
+  /**
+   * The filter rail, open by default on any window wide enough to hold it.
+   *
+   * Read once, not subscribed to resize: a rail that shuts itself because the
+   * window was nudged would undo a deliberate choice. The media query in the
+   * stylesheet still hides it below 1240px, so a narrow window never has the
+   * rail eating the table — it just gets it back when it widens again.
+   */
+  const [railOpen, setRailOpen] = useState(() =>
+    typeof window === 'undefined' || window.matchMedia('(min-width: 1240px)').matches);
+  /**
+   * Newness is its own axis, not one of the eight single-select quick filters.
+   * "The ones that just appeared" is a question you ask alongside "the ones
+   * that fit", not instead of it.
+   */
+  const [newOnly, setNewOnly] = useState(false);
+  /**
+   * Families the reader has opened. Collapsed is the default because the
+   * problem being solved is thirty-five near-identical Gemma 4 rows; a table
+   * that opens everything by default has not collapsed anything.
+   */
+  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(() => new Set());
+  const [showAllTasks, setShowAllTasks] = useState(false);
+  const [showAllDevelopers, setShowAllDevelopers] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggestIndex, setSuggestIndex] = useState(-1);
+  const searchWrapRef = useRef<HTMLDivElement>(null);
   const [sortKey, setSortKey] = useState<ModelSortKey>('status');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   // Column widths: Model, Size, Good For, Origin, Status, Match, Popularity (Actions fills remainder)
@@ -240,25 +305,45 @@ export function ModelCabinet({
     (row: ModelRow) => modelMatchesQuickFilter(row, quickFilter, getModelScore(row, modelScores), vramGb),
     [quickFilter, modelScores, vramGb],
   );
+  /**
+   * A model that cannot run on this machine is not a choice, it is noise.
+   *
+   * The -mlx builds need macOS on Apple Silicon. On a Windows box they were
+   * still listed, badged "MACOS ONLY", and counted — a 4070 reporting 147
+   * models that fit was counting builds it can never load, and every Gemma 4
+   * family carried two of them.
+   *
+   * Filtered rather than badged because the badge was already there and did
+   * not help: the row still took its place in the table, still appeared in
+   * every facet count, and still had to be read and dismissed.
+   */
+  const passesPlatform = useCallback(
+    (row: ModelRow) => getPlatformFit(row.displayName, platform).compatible,
+    [platform],
+  );
+  const passesNew = useCallback(
+    (row: ModelRow) => !newOnly || newModelIds.has(getModelNewsId(row)),
+    [newOnly, newModelIds],
+  );
   const passesTask = useCallback(
     (row: ModelRow) => !taskFilter || modelMatchesTask(row, taskFilter),
     [taskFilter],
   );
 
   const quickFilters = useMemo(
-    () => getModelQuickFilters(rows.filter((row) => passesQuery(row) && passesDeveloper(row) && passesTask(row)), modelScores, vramGb),
-    [rows, modelScores, vramGb, passesQuery, passesDeveloper, passesTask],
+    () => getModelQuickFilters(rows.filter((row) => passesQuery(row) && passesDeveloper(row) && passesTask(row) && passesNew(row) && passesPlatform(row)), modelScores, vramGb),
+    [rows, modelScores, vramGb, passesQuery, passesDeveloper, passesTask, passesNew, passesPlatform],
   );
   // Headline "N models look realistic for your VRAM" is about the rig, not the
   // current filter selection, so it stays a whole-catalog figure.
   const vramSafeCount = useMemo(
-    () => getModelQuickFilters(rows, modelScores, vramGb).find((filter) => filter.id === 'fits-vram')?.count ?? 0,
-    [rows, modelScores, vramGb],
+    () => getModelQuickFilters(rows.filter(passesPlatform), modelScores, vramGb).find((filter) => filter.id === 'fits-vram')?.count ?? 0,
+    [rows, modelScores, vramGb, passesPlatform],
   );
   const taskFilterCounts = useMemo(() => {
-    const base = rows.filter((row) => passesQuery(row) && passesDeveloper(row) && passesQuick(row));
+    const base = rows.filter((row) => passesQuery(row) && passesDeveloper(row) && passesQuick(row) && passesNew(row) && passesPlatform(row));
     return Object.fromEntries(TASK_FILTER_CHIPS.map((chip) => [chip.id, base.filter((row) => modelMatchesTask(row, chip.id)).length]));
-  }, [rows, passesQuery, passesDeveloper, passesQuick]);
+  }, [rows, passesQuery, passesDeveloper, passesQuick, passesNew, passesPlatform]);
   /**
    * Only offer a use case something can actually satisfy.
    *
@@ -281,8 +366,8 @@ export function ModelCabinet({
   );
 
   const developerFilterOptions = useMemo(
-    () => getDeveloperFilterOptions(rows.filter((row) => passesQuery(row) && passesQuick(row) && passesTask(row))),
-    [rows, passesQuery, passesQuick, passesTask],
+    () => getDeveloperFilterOptions(rows.filter((row) => passesQuery(row) && passesQuick(row) && passesTask(row) && passesNew(row) && passesPlatform(row))),
+    [rows, passesQuery, passesQuick, passesTask, passesNew, passesPlatform],
   );
   const activeDeveloperFilter = developerFilterOptions.some((option) => option.id === developerFilter) ? developerFilter : 'all';
   const shortlistedRows = useMemo(
@@ -325,15 +410,45 @@ export function ModelCabinet({
     // Same predicates the chip counts use, so a chip can never promise rows the
     // table does not then show.
     const filteredRows = rows.filter(
-      (row) => passesQuery(row) && passesDeveloper(row) && passesQuick(row) && passesTask(row),
+      (row) => passesQuery(row) && passesDeveloper(row) && passesQuick(row) && passesTask(row) && passesNew(row) && passesPlatform(row),
     );
 
     return sortModelRows(filteredRows, sortKey, sortDirection, queuedModelIds, modelScores, benchmarkByModel);
-  }, [benchmarkByModel, modelScores, passesQuery, passesDeveloper, passesQuick, passesTask, queuedModelIds, rows, sortDirection, sortKey]);
+  }, [benchmarkByModel, modelScores, passesQuery, passesDeveloper, passesQuick, passesTask, passesNew, passesPlatform, queuedModelIds, rows, sortDirection, sortKey]);
+  /**
+   * One row per family, in the order the chosen sort already put them.
+   *
+   * A variant is only a fair face for its family if it can run here: an -mlx
+   * build on Windows would make an available family look unavailable.
+   */
+  const groupedRows = useMemo(
+    () => groupRowsByFamily(visibleRows, {
+      familyOf: (row) => getFriendlyModelName(row.displayName),
+      isPreferred: (row) => getPlatformFit(row.displayName, platform).compatible
+        && (installedModelNames.has(row.displayName) || row.installed),
+    }),
+    [visibleRows, platform, installedModelNames],
+  );
+  /**
+   * Searching opens what it found. Typing "e2b" and getting a shut "Gemma4"
+   * row would hide the match behind the very control meant to reveal it.
+   */
+  const searchExpandedFamilies = useMemo(
+    () => familiesToAutoExpand(groupedRows, query, (row) => getModelSearchText(
+      row,
+      queuedModelIds.has(row.displayName),
+      getModelScore(row, modelScores),
+    ).includes(query)),
+    [groupedRows, query, queuedModelIds, modelScores],
+  );
+  const openFamilies = useMemo(
+    () => new Set([...expandedFamilies, ...searchExpandedFamilies]),
+    [expandedFamilies, searchExpandedFamilies],
+  );
   // Say what each number counts — the catalog total, the installed count, and the
   // VRAM-fit count are different measures and read as contradictory when all three
   // are just "N models".
-  const modelCountLabel = query || quickFilter !== 'all' || taskFilter || activeDeveloperFilter !== 'all'
+  const modelCountLabel = query || quickFilter !== 'all' || taskFilter || activeDeveloperFilter !== 'all' || newOnly
     ? `${visibleRows.length} of ${rows.length} shown`
     : `${rows.length} in catalog`;
   const vramLabel = vramGb > 0 ? `${formatGb(vramGb)} VRAM` : 'detected VRAM';
@@ -346,12 +461,114 @@ export function ModelCabinet({
     quickFilter !== 'all' ? activeQuickFilter?.label : null,
     activeDeveloperLabel,
     activeTaskLabel,
+    newOnly ? 'New' : null,
   ].filter(Boolean).join(' · ');
   const activeFilterCount = [
     quickFilter !== 'all',
     activeDeveloperFilter !== 'all',
     Boolean(taskFilter),
+    newOnly,
   ].filter(Boolean).length;
+
+  const facetGroups = useMemo(
+    () => buildQuickFacetGroups(quickFilters, vramGb > 0 ? formatGb(vramGb) : ''),
+    [quickFilters, vramGb],
+  );
+  // Five is what fits without the rail needing a scroll on a 768-tall screen.
+  // The rest are one click away, and an active chip is never among the hidden
+  // ones or it could not be turned off.
+  const FACET_PREVIEW = 5;
+  // Uncensored is drawn under its own heading rather than as the fourth job in
+  // a list of jobs. It is not something you want a model *for*.
+  const { goodFor: goodForFilters, standalone: standaloneFilters } = splitTaskFilters(offerableTaskFilters);
+  const visibleTaskFilters = showAllTasks ? goodForFilters : goodForFilters.slice(0, FACET_PREVIEW);
+  const shownTaskFilters = taskFilter && !visibleTaskFilters.some((chip) => chip.id === taskFilter)
+    ? [...visibleTaskFilters, ...goodForFilters.filter((chip) => chip.id === taskFilter)]
+    : visibleTaskFilters;
+  const hiddenTaskCount = goodForFilters.length - shownTaskFilters.length;
+  const newModelCount = useMemo(
+    () => rows.filter((row) => newModelIds.has(getModelNewsId(row))).length,
+    [rows, newModelIds],
+  );
+  const visibleDeveloperOptions = showAllDevelopers ? developerFilterOptions : developerFilterOptions.slice(0, FACET_PREVIEW);
+  const shownDeveloperOptions = activeDeveloperFilter !== 'all' && !visibleDeveloperOptions.some((option) => option.id === activeDeveloperFilter)
+    ? [...visibleDeveloperOptions, ...developerFilterOptions.filter((option) => option.id === activeDeveloperFilter)]
+    : visibleDeveloperOptions;
+  const hiddenDeveloperCount = developerFilterOptions.length - shownDeveloperOptions.length;
+
+  const resetFilters = useCallback(() => {
+    setQuickFilter('all');
+    setDeveloperFilter('all');
+    setTaskFilter(null);
+    // Reset has to reach every filter, including the ones added after it was
+    // written, or it half-works and the table stays narrowed for no visible
+    // reason.
+    setNewOnly(false);
+  }, []);
+
+  /**
+   * Suggestions count against the whole catalogue, not the filtered view.
+   *
+   * A suggestion is an offer to change what you are looking at, so counting it
+   * inside the current selection would make it promise a number it will not
+   * deliver the moment it is clicked.
+   */
+  const suggestionQuickFilters = useMemo(
+    () => getModelQuickFilters(rows, modelScores, vramGb),
+    [rows, modelScores, vramGb],
+  );
+  const suggestionTaskCounts = useMemo(
+    () => Object.fromEntries(TASK_FILTER_CHIPS.map((chip) => [chip.id, rows.filter((row) => modelMatchesTask(row, chip.id)).length])),
+    [rows],
+  );
+  const suggestionDeveloperOptions = useMemo(() => getDeveloperFilterOptions(rows), [rows]);
+  const suggestions = useMemo(
+    () => buildSearchSuggestions({
+      query,
+      rows,
+      quickFilters: suggestionQuickFilters,
+      taskFilters: TASK_FILTER_CHIPS,
+      taskCounts: suggestionTaskCounts,
+      developerOptions: suggestionDeveloperOptions,
+    }),
+    [query, rows, suggestionQuickFilters, suggestionTaskCounts, suggestionDeveloperOptions],
+  );
+  const showSuggestions = suggestOpen && suggestions.length > 0;
+
+  /**
+   * Picking a filter suggestion clears the box.
+   *
+   * Leaving "cod" in the search while the Coding filter goes on would AND the
+   * two together, and the reader — who typed once and clicked once — would have
+   * no way to tell which of the two cut the list down.
+   */
+  const applySuggestion = useCallback((suggestion: SearchSuggestion) => {
+    setSuggestOpen(false);
+    setSuggestIndex(-1);
+    if (suggestion.kind === 'model') {
+      setModelQuery(suggestion.label);
+      onSelect(suggestion.id);
+      return;
+    }
+    setModelQuery('');
+    if (suggestion.kind === 'quick') setQuickFilter(suggestion.id);
+    else if (suggestion.kind === 'task') setTaskFilter(suggestion.id);
+    else setDeveloperFilter(suggestion.id);
+  }, [onSelect]);
+
+  // Clicking anywhere else puts the dropdown away. Without this it survives a
+  // click on the table underneath it and covers the rows it was meant to find.
+  useEffect(() => {
+    if (!showSuggestions) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!searchWrapRef.current?.contains(event.target as Node)) {
+        setSuggestOpen(false);
+        setSuggestIndex(-1);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [showSuggestions]);
 
   const changeSort = (nextKey: ModelSortKey) => {
     if (nextKey === sortKey) {
@@ -382,7 +599,104 @@ export function ModelCabinet({
           </button>
         </div>
       </header>
-      <div className="cabinet-body">
+      <div className={railOpen ? 'cabinet-body rail-open' : 'cabinet-body'}>
+      {railOpen && (
+        <aside className="model-facets" id="model-facet-rail" aria-label="Model filters">
+          <div className="model-facets-head">
+            <span>Filters</span>
+            <button type="button" onClick={resetFilters} disabled={activeFilterCount === 0}>
+              Reset
+            </button>
+          </div>
+          {facetGroups.map((group) => (
+            <div className="model-facet-group" key={group.id}>
+              <h3>{group.label}</h3>
+              {group.items.map((item) => (
+                <FacetButton
+                  key={item.id}
+                  label={item.label}
+                  count={item.count}
+                  active={quickFilter === item.id}
+                  onToggle={() => setQuickFilter(quickFilter === item.id ? 'all' : item.id as ModelQuickFilterId)}
+                />
+              ))}
+            </div>
+          ))}
+          <div className="model-facet-group">
+            <h3>Good for</h3>
+            {shownTaskFilters.map((chip) => (
+              <FacetButton
+                key={chip.id}
+                label={chip.label}
+                count={taskFilterCounts[chip.id] ?? 0}
+                active={taskFilter === chip.id}
+                onToggle={() => setTaskFilter(taskFilter === chip.id ? null : chip.id)}
+              />
+            ))}
+            {hiddenTaskCount > 0 && (
+              <button type="button" className="model-facet-more" onClick={() => setShowAllTasks(true)}>
+                Show {hiddenTaskCount} more
+              </button>
+            )}
+            {showAllTasks && goodForFilters.length > FACET_PREVIEW && (
+              <button type="button" className="model-facet-more" onClick={() => setShowAllTasks(false)}>
+                Show fewer
+              </button>
+            )}
+          </div>
+          {/* Its own group because it answers "what just appeared", which cuts
+              across every other question here rather than competing with one.
+              It is also the only facet that is not derived from the model
+              itself — it is derived from when this machine first saw it. */}
+          {newModelCount > 0 && (
+            <div className="model-facet-group">
+              <h3>Just added</h3>
+              <FacetButton
+                label="New since last check"
+                count={newModelCount}
+                active={newOnly}
+                onToggle={() => setNewOnly((on) => !on)}
+              />
+            </div>
+          )}
+          {standaloneFilters.length > 0 && (
+            <div className="model-facet-group">
+              <h3>Guardrails</h3>
+              {standaloneFilters.map((chip) => (
+                <FacetButton
+                  key={chip.id}
+                  label={chip.label}
+                  count={taskFilterCounts[chip.id] ?? 0}
+                  active={taskFilter === chip.id}
+                  onToggle={() => setTaskFilter(taskFilter === chip.id ? null : chip.id)}
+                />
+              ))}
+            </div>
+          )}
+          <div className="model-facet-group">
+            <h3>Made by</h3>
+            {shownDeveloperOptions.map((option) => (
+              <FacetButton
+                key={option.id}
+                label={option.label}
+                count={option.count}
+                active={activeDeveloperFilter === option.id}
+                onToggle={() => setDeveloperFilter(activeDeveloperFilter === option.id ? 'all' : option.id)}
+              />
+            ))}
+            {hiddenDeveloperCount > 0 && (
+              <button type="button" className="model-facet-more" onClick={() => setShowAllDevelopers(true)}>
+                Show {hiddenDeveloperCount} more
+              </button>
+            )}
+            {showAllDevelopers && developerFilterOptions.length > FACET_PREVIEW && (
+              <button type="button" className="model-facet-more" onClick={() => setShowAllDevelopers(false)}>
+                Show fewer
+              </button>
+            )}
+          </div>
+        </aside>
+      )}
       <div className="cabinet-main">
       {installedModelNames.size === 0 && isDesktopRuntime && (
         <FirstModelWizard vramGb={vramGb} onQueueModel={(modelId) => {
@@ -391,102 +705,96 @@ export function ModelCabinet({
         }} />
       )}
       <div className="model-tools">
-        <label className="model-search">
-          <Search aria-hidden="true" />
-          <span className="sr-only">Search models</span>
-          <input
-            type="search"
-            value={modelQuery}
-            onChange={(event) => setModelQuery(event.target.value)}
-            placeholder="Search models by name, strength, size, or status..."
-            aria-label="Search models"
-          />
-          {modelQuery && (
-            <button type="button" onClick={() => setModelQuery('')} aria-label="Clear model search">
-              <X aria-hidden="true" />
-            </button>
+        <div className="model-search-wrap" ref={searchWrapRef}>
+          <label className="model-search">
+            <Search aria-hidden="true" />
+            <span className="sr-only">Search models</span>
+            <input
+              type="search"
+              value={modelQuery}
+              onChange={(event) => {
+                setModelQuery(event.target.value);
+                setSuggestOpen(true);
+                setSuggestIndex(-1);
+              }}
+              onFocus={() => setSuggestOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  if (showSuggestions) {
+                    setSuggestOpen(false);
+                    setSuggestIndex(-1);
+                  } else {
+                    setModelQuery('');
+                  }
+                  return;
+                }
+                if (!showSuggestions) return;
+                if (event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  setSuggestIndex((current) => (current + 1) % suggestions.length);
+                } else if (event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  setSuggestIndex((current) => (current <= 0 ? suggestions.length : current) - 1);
+                } else if (event.key === 'Enter' && suggestIndex >= 0) {
+                  event.preventDefault();
+                  applySuggestion(suggestions[suggestIndex]);
+                }
+              }}
+              placeholder="Search models, or type what you want them for..."
+              aria-label="Search models"
+              role="combobox"
+              aria-expanded={showSuggestions}
+              aria-controls="model-search-suggestions"
+              aria-autocomplete="list"
+              aria-activedescendant={suggestIndex >= 0 ? `model-suggestion-${suggestIndex}` : undefined}
+            />
+            {modelQuery && (
+              <button type="button" onClick={() => { setModelQuery(''); setSuggestOpen(false); }} aria-label="Clear model search">
+                <X aria-hidden="true" />
+              </button>
+            )}
+          </label>
+          {showSuggestions && (
+            <ul className="model-search-suggestions" id="model-search-suggestions" role="listbox" aria-label="Search suggestions">
+              {suggestions.map((suggestion, index) => (
+                <li key={`${suggestion.kind}-${suggestion.id}`}>
+                  <button
+                    type="button"
+                    id={`model-suggestion-${index}`}
+                    role="option"
+                    aria-selected={index === suggestIndex}
+                    className={index === suggestIndex ? 'active' : ''}
+                    onMouseEnter={() => setSuggestIndex(index)}
+                    onClick={() => applySuggestion(suggestion)}
+                  >
+                    <em>{suggestion.kind === 'model' ? 'Model' : suggestion.groupLabel}</em>
+                    <span>{suggestion.label}</span>
+                    <b>{suggestion.kind === 'model' ? formatGb(suggestion.count) : suggestion.count}</b>
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
-        </label>
+        </div>
         <span className="model-sort-status advanced-only">
           Sort: {getModelSortLabel(sortKey)} / {sortDirection === 'asc' ? 'Asc' : 'Desc'}
         </span>
-        <details className="model-filter-menu">
-          <summary aria-label="Open model filters">
-            <SlidersHorizontal aria-hidden="true" />
-            <span>Filters</span>
-            <em>{activeFilterCount > 0 ? `${activeFilterCount} active` : 'Default'}</em>
-            <ChevronDown aria-hidden="true" />
-          </summary>
-          <div className="model-filter-tray">
-            <div className="model-filter-tray-head">
-              <span>{activeFilterSummary || 'All model filters are available here.'}</span>
-              <button
-                type="button"
-                className="model-filter-reset"
-                onClick={() => {
-                  setQuickFilter('all');
-                  setDeveloperFilter('all');
-                  setTaskFilter(null);
-                }}
-                disabled={activeFilterCount === 0}
-              >
-                Reset
-              </button>
-            </div>
-            <div className="model-quick-filters" aria-label="Model quick filters">
-              {quickFilters.map((filter) => (
-                <button
-                  key={filter.id}
-                  type="button"
-                  className={quickFilter === filter.id ? 'active' : ''}
-                  onClick={() => setQuickFilter(filter.id)}
-                  aria-pressed={quickFilter === filter.id}
-                >
-                  <span>{filter.label}</span>
-                  <em>{filter.count}</em>
-                </button>
-              ))}
-            </div>
-            <div className="model-task-filters model-developer-filters" aria-label="Filter by developer">
-              <span className="model-task-filters-label">By:</span>
-              <button
-                type="button"
-                className={activeDeveloperFilter === 'all' ? 'active' : ''}
-                onClick={() => setDeveloperFilter('all')}
-                aria-pressed={activeDeveloperFilter === 'all' ? 'true' : 'false'}
-              >
-                All
-                <em>{rows.length}</em>
-              </button>
-              {developerFilterOptions.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  className={activeDeveloperFilter === option.id ? 'active' : ''}
-                  onClick={() => setDeveloperFilter(activeDeveloperFilter === option.id ? 'all' : option.id)}
-                  aria-pressed={activeDeveloperFilter === option.id ? 'true' : 'false'}
-                  title={`Show models by ${option.label}`}
-                >
-                  {option.label}
-                  <em>{option.count}</em>
-                </button>
-              ))}
-            </div>
-            <div className="model-task-filters advanced-only" aria-label="Filter by use case">
-              <span className="model-task-filters-label">For:</span>
-              {offerableTaskFilters.map((chip) => (
-                <button
-                  key={chip.id}
-                  type="button"
-                  className={taskFilter === chip.id ? 'active' : ''}
-                  onClick={() => setTaskFilter(taskFilter === chip.id ? null : chip.id)}
-                  aria-pressed={taskFilter === chip.id ? 'true' : 'false'}
-                >
-                  {chip.label}
-                  <em>{taskFilterCounts[chip.id] ?? 0}</em>
-                </button>
-              ))}
-            </div>
+        <button
+          type="button"
+          className={railOpen ? 'model-filter-toggle active' : 'model-filter-toggle'}
+          onClick={() => setRailOpen((open) => !open)}
+          aria-pressed={railOpen}
+          aria-controls="model-facet-rail"
+        >
+          <SlidersHorizontal aria-hidden="true" />
+          <span>Filters</span>
+          <em>{activeFilterSummary || 'None on'}</em>
+        </button>
+      </div>
+      {/* The notes moved out of the filter tray they used to live in.
+          Every one of them explains why the table below looks the way it does,
+          and inside a panel that closed the moment you picked a filter they
+          answered somewhere the eye was not. */}
             {quickFilter === 'fits-vram' && (
               <div className="model-filter-note">
                 <ShieldCheck aria-hidden="true" />
@@ -523,9 +831,6 @@ export function ModelCabinet({
                 </span>
               </div>
             )}
-          </div>
-        </details>
-      </div>
       <ScoreLegend />
       {shortlistedCount >= 5 && (
         <div className="lineup-full-banner" role="status">
@@ -570,7 +875,11 @@ export function ModelCabinet({
             </tr>
           </thead>
           <tbody>
-            {visibleRows.map((row) => {
+            {/* An IIFE so the 300-line row renderer can be reused for both a plain
+                row and a group's children without moving it out of the table it
+                belongs to. */}
+            {(() => {
+            const renderRow = (row: ModelRow) => {
               const selected = selectedModel === row.displayName || selectedModel === row.id;
               const installed = installedModelNames.has(row.displayName) || row.installed;
               const queued = queuedModelIds.has(row.displayName);
@@ -652,7 +961,26 @@ export function ModelCabinet({
                         {row.runtime === 'comfyui'
                           ? <em className="model-provider-sub comfy">ComfyUI</em>
                           : row.localProviderLabel && <em className="model-provider-sub">{row.localProviderLabel}</em>}
-                        {row.pulls != null && (
+                        {/* Only what the row cannot already say for itself.
+                            The size is beside this already, the quantization
+                            too, and there is an Uncensored badge further along
+                            — repeating those would be three more chips saying
+                            what is on screen. What is left is the part nothing
+                            explained: that an "e2b" is an effective size, which
+                            is why the number next to it reads 5.1B and not 2B. */}
+                        {describeModelTag(row.displayName)
+                          .filter((fact) => fact.kind === 'effective' || fact.kind === 'tuning')
+                          .map((fact) => (
+                            <em key={fact.kind} className="model-variant-sub" title={fact.plain}>{fact.label}</em>
+                          ))}
+                        {/* Only when the Popularity column is not on screen.
+                            This line and that column carried the same number on
+                            the same row — twice per row, and then thirty-five
+                            times over for a family, since Ollama counts pulls
+                            per family rather than per tag. Narrow windows drop
+                            the column, and there this is the only place it
+                            appears. */}
+                        {hidePopularity && row.pulls != null && (
                           <em className="model-pulls-sub" title={`${row.pulls.toLocaleString()} pulls on Ollama`}>{formatPullCount(row.pulls)} pulls</em>
                         )}
                       </span>
@@ -863,7 +1191,51 @@ export function ModelCabinet({
                   </td>
                 </tr>
               );
-            })}
+            };
+            return groupedRows.flatMap((entry) => {
+              if (entry.kind === 'row') return [renderRow(entry.row)];
+              const { family, rows: variants, best } = entry.group;
+              const open = openFamilies.has(family);
+              const installedCount = variants.filter((v) => installedModelNames.has(v.displayName) || v.installed).length;
+              const bestScore = getModelScore(best, modelScores);
+              return [
+                <tr key={`family:${family}`} className={open ? 'model-family-row open' : 'model-family-row'}>
+                  <td colSpan={(hidePopularity ? 7 : 8) + (showAdded ? 1 : 0)}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedFamilies((current) => {
+                        const next = new Set(current);
+                        if (next.has(family)) next.delete(family);
+                        else next.add(family);
+                        return next;
+                      })}
+                      aria-expanded={open}
+                    >
+                      <ChevronRight aria-hidden="true" className={open ? 'model-family-caret open' : 'model-family-caret'} />
+                      <strong>{family}</strong>
+                      {/* A group is never smaller than two today, but the
+                          plural is one word and a "1 versions" shipped once is
+                          the kind of thing nobody goes back to fix. */}
+                      <em>{variants.length} version{variants.length === 1 ? '' : 's'}</em>
+                      {installedCount > 0 && <span className="model-family-installed">{installedCount} installed</span>}
+                      {bestScore && <span className="model-family-best">Best {bestScore.total} · {bestScore.grade}</span>}
+                      {/* Popularity is a property of the family, not of a tag:
+                          Ollama counts pulls per family, which is why every one
+                          of thirty-five Gemma 4 rows read "23.9M pulls". It
+                          belongs here, once, where that is what it means. */}
+                      {best.pulls != null && (
+                        <span className="model-family-pulls" title={`${best.pulls.toLocaleString()} pulls on Ollama, counted across the whole family`}>
+                          {formatPullCount(best.pulls)} pulls
+                        </span>
+                      )}
+                      <span className="model-family-hint">{open ? 'Hide' : 'Show'}</span>
+                    </button>
+                  </td>
+                </tr>,
+                ...(open ? variants.map(renderRow) : []),
+              ];
+            });
+            })()}
             {visibleRows.length === 0 && (
               <tr className="empty-row">
                 <td colSpan={(hidePopularity ? 7 : 8) + (showAdded ? 1 : 0)}>

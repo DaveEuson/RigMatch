@@ -1,6 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { Bug, type LucideIcon } from 'lucide-react';
 
+import { groupNavItems } from '../lib/navGroups';
 import type { NavId } from '../types';
 
 // Re-exported because callers have always imported it from here.
@@ -57,6 +58,40 @@ export function SideMenu({
     settings: 'App',
   };
 
+  /**
+   * The number stays, in both modes.
+   *
+   * It is weak information in Advanced — you do not visit these in order, and
+   * nothing is bound to the digits — but this row's grid has a scar: five
+   * responsive rules pin explicit column tracks, and a documented bug on a
+   * 1280x720 Jetson came from two of them hiding children at once, leaving
+   * auto-placement to drop every label into a 20px badge track and truncate
+   * the menu to "M..", "W..", "C..". Dropping a child here to improve a
+   * marker is not a trade worth making.
+   */
+  const renderItem = (item: NavItem, step: number) => {
+    const Icon = item.icon;
+    return (
+      <button
+        key={item.id}
+        type="button"
+        className={item.id === activeId ? 'side-menu-item active' : 'side-menu-item'}
+        onClick={() => onSelect(item.id)}
+        aria-pressed={item.id === activeId}
+        aria-label={item.label}
+        title={`${item.label}: ${item.description}`}
+      >
+        <b>{step}</b>
+        <Icon aria-hidden="true" />
+        <span className="side-menu-copy">
+          <strong>{item.label}</strong>
+          <small>{item.description}</small>
+        </span>
+        <em>{navMeta[item.id]}</em>
+      </button>
+    );
+  };
+
   return (
     <aside className="side-menu" aria-label="RigMatch menu">
       <button type="button" className="side-menu-title" onClick={onOpenTutorial} title="Re-open the getting started guide" aria-label="Open getting started guide">
@@ -65,28 +100,19 @@ export function SideMenu({
         <small>{uiMode === 'advanced' ? 'Diagnostics, logs, custom tests' : 'Guided path, fewer controls'}</small>
       </button>
       <nav className="side-menu-nav" aria-label="Primary navigation">
-        {items.map((item, index) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className={item.id === activeId ? 'side-menu-item active' : 'side-menu-item'}
-              onClick={() => onSelect(item.id)}
-              aria-pressed={item.id === activeId}
-              aria-label={item.label}
-              title={`${item.label}: ${item.description}`}
-            >
-              <b>{index + 1}</b>
-              <Icon aria-hidden="true" />
-              <span className="side-menu-copy">
-                <strong>{item.label}</strong>
-                <small>{item.description}</small>
-              </span>
-              <em>{navMeta[item.id]}</em>
-            </button>
-          );
-        })}
+        {/* Grouped in Advanced, flat in Simple.
+            Simple Mode's order is a guided path, so a sequence is the right
+            shape there. Advanced is a set of tools you dip into, and eight of
+            them in one undifferentiated column is a list you re-read every
+            time instead of aiming at. */}
+        {uiMode === 'advanced'
+          ? groupNavItems(items).map((group) => (
+              <div className="side-menu-group" key={group.id}>
+                {group.label && <h2>{group.label}</h2>}
+                {group.items.map((item) => renderItem(item, items.indexOf(item) + 1))}
+              </div>
+            ))
+          : items.map((item, index) => renderItem(item, index + 1))}
       </nav>
       <button
         type="button"

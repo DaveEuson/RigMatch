@@ -1,6 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { createContext, useContext } from 'react';
-import type { GlossaryEntry } from './glossary';
+import type { GlossaryEntry } from './glossary.ts';
 
 /**
  * The channel between a pointed-at term and the Host who explains it.

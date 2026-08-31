@@ -7,13 +7,16 @@ import type { ThemeId, UiMode } from '../lib/appConfig';
 import { APP_VERSION, BUY_ME_A_COFFEE_URL } from '../lib/appConfig';
 import type { CopyState } from '../lib/clipboard';
 import { copyText } from '../lib/clipboard';
-import { compareVersionStrings, getResponseEstimate, getScoreTone } from '../lib/format';
+import { compareVersionStrings, formatGb, getResponseEstimate, getScoreTone } from '../lib/format';
 import { getGoalMatches } from '../lib/goalMatches';
 import type { GoalId } from '../lib/goals';
 import { downloadMatchCard } from '../lib/matchCard';
 import type { ListTestResult } from '../lib/modelCatalog';
-import { buildBugReportUrl, buildDiagnosticsText, buildShareableScorecard, getNavLabel, getRankedModelScores, getRecentModelScores, getTaskTopPicks } from '../lib/modelCatalog';
+import { buildBugReportUrl, buildDiagnosticsText, buildShareableScorecard, getNavLabel, getRankedModelScores, getRecentModelScores, getTaskTopPicks, getThemeLabel } from '../lib/modelCatalog';
 import { MATCH_GRADE_BAND_ROWS } from '../lib/scoreReference';
+import type { SettingsSectionId } from '../lib/settingsSections';
+import { buildSettingsRail } from '../lib/settingsSections';
+import type { ScorePriorityId } from '../lib/scoring';
 import { formatMatchScore, isLegacyScore, scoreDrift, scoreDriftLabel } from '../lib/scoring';
 import { useDialog } from '../lib/useDialog';
 import type { AppLogEntry, AutoUpdateStatus, ChatMessage, ModelRow, NetworkHost, OllamaStatus, SystemProfile, TestedModelScore, UpdateChannel, UpdateCheckResponse } from '../types';
@@ -25,6 +28,7 @@ import { HistoryTimeline } from './HistoryTimeline';
 import { HowWeScoreSection } from './HowWeScoreSection';
 import { LogEntry } from './LogEntry';
 import { RomanceArtBanner } from './ScoreVisuals';
+import { ScorePriorityPicker } from './ScorePriorityPicker';
 import { SettingsSection } from './SettingsSection';
 import { ModelDemoChips } from './SkillDemoViewers';
 import { ThemePicker } from './ThemePicker';
@@ -34,7 +38,7 @@ import { ReleaseNotes, UpdateCenter } from './UpdateCenter';
 // DOM's global History constructor, which is a real value, so nothing errors
 // until it is used as a JSX component.
 import { Bot, Bug, Check, ChevronRight, Coffee, Copy, Download, ExternalLink, FolderOpen, HelpCircle, History, RefreshCw, Settings, Share2, Trash2, Trophy, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export function UtilityPanel({
   panel,
@@ -57,6 +61,8 @@ export function UtilityPanel({
   isLoadingLogs,
   onThemeChange,
   onUiModeChange,
+  scorePriority,
+  onScorePriorityChange,
   onEditGoals,
   onDeleteModel,
   onRefreshLogs,
@@ -95,6 +101,8 @@ export function UtilityPanel({
   isLoadingLogs: boolean;
   onThemeChange: (themeId: ThemeId) => void;
   onUiModeChange: (mode: UiMode) => void;
+  scorePriority: ScorePriorityId;
+  onScorePriorityChange: (priority: ScorePriorityId) => void;
   onEditGoals: () => void;
   onDeleteModel: (row: ModelRow) => void;
   onRefreshLogs: () => void;
@@ -147,6 +155,83 @@ export function UtilityPanel({
   const [scoreCopied, setScoreCopied] = useState(false);
   const [ollamaUpdateLatest, setOllamaUpdateLatest] = useState<string | null>(null);
   const [isCheckingOllamaUpdate, setIsCheckingOllamaUpdate] = useState(false);
+
+  /**
+   * Settings opens on Preferences and nothing else, as it always has. The rail
+   * is what makes that safe: with a contents list on screen, a closed section
+   * is no longer a section you have to remember exists.
+   */
+  const [openSections, setOpenSections] = useState<Set<SettingsSectionId>>(() => new Set(['interface']));
+  const pendingScrollRef = useRef<SettingsSectionId | null>(null);
+  const toggleSection = useCallback((id: SettingsSectionId) => {
+    setOpenSections((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  /**
+   * From the rail, a section always opens — it never toggles shut.
+   *
+   * Clicking a contents entry means "take me there". Having it close the thing
+   * you just asked for, because it happened to be open already, is the same
+   * class of bug as a button that answers off-screen: you click, and the screen
+   * moves the wrong way.
+   */
+  /**
+   * Instant, not smooth.
+   *
+   * `behavior: 'smooth'` is a no-op in the Chromium this ships on — measured:
+   * scrollIntoView and scrollTo both leave scrollTop at 0, while 'auto' lands
+   * exactly. A nicety that silently does nothing is worse than no nicety at
+   * all here, because the thing it silently fails to do is the rail's whole
+   * job. Instant also happens to be what someone who asked for reduced motion
+   * wanted, so there is nothing left to branch on.
+   */
+  const scrollToSection = useCallback((id: SettingsSectionId) => {
+    document.getElementById(`settings-${id}`)
+      ?.scrollIntoView({ behavior: 'auto', block: 'start' });
+  }, []);
+  const openSectionFromRail = useCallback((id: SettingsSectionId) => {
+    if (openSections.has(id)) {
+      // Already open, so the DOM is already the right height — scroll now
+      // rather than waiting for a render that will not happen.
+      scrollToSection(id);
+      return;
+    }
+    pendingScrollRef.current = id;
+    setOpenSections((current) => new Set(current).add(id));
+  }, [openSections, scrollToSection]);
+  /**
+   * The scroll waits for the commit, it does not race it.
+   *
+   * The first version scrolled inside a requestAnimationFrame right after
+   * setState, which fires before React has rendered the newly opened section —
+   * so the click opened the right thing and left the view exactly where it was,
+   * which is the failure the rail exists to stop. An effect runs after the DOM
+   * is updated, so the section is open and at its real height by then.
+   */
+  useEffect(() => {
+    const pending = pendingScrollRef.current;
+    if (!pending) return;
+    pendingScrollRef.current = null;
+    scrollToSection(pending);
+  }, [openSections, scrollToSection]);
+  const installedSizeGb = useMemo(
+    () => installedRows.reduce((total, row) => total + (row.sizeGb ?? 0), 0),
+    [installedRows],
+  );
+  const settingsRail = useMemo(() => buildSettingsRail({
+    interface: `${uiMode === 'beginner' ? 'Simple' : 'Advanced'} Mode · ${getThemeLabel(themeId)}`,
+    storage: installedRows.length > 0
+      ? `${installedRows.length} installed · ${formatGb(installedSizeGb)}`
+      : 'Nothing installed yet',
+    providers: ollama.version ? `Ollama v${ollama.version}` : 'Ollama not detected',
+    updates: `v${APP_VERSION}`,
+    // ComfyUI, Support and Advanced get no status line: this panel does not
+    // hold a true one for them, and a filler word would read as information.
+  }, { advanced: uiMode !== 'beginner' }), [uiMode, themeId, installedRows.length, installedSizeGb, ollama.version]);
 
   const checkOllamaUpdate = useCallback(async () => {
     setIsCheckingOllamaUpdate(true);
@@ -250,7 +335,7 @@ export function UtilityPanel({
       {panel === 'history' && (
         <RomanceArtBanner
           image={robotScorecardCeremony}
-          className="scorecard-art-banner"
+          className="scorecard-art-banner art-banner-slim"
           kicker="Scorecard ceremony"
           title="Saved tests, ranked scores, crowned matches"
           body={rankedModelScores.length > 0 ? `${rankedModelScores.length} tested model${rankedModelScores.length === 1 ? '' : 's'} ranked by Match score.` : 'Run a model test or Speed Dating to start the ceremony.'}
@@ -568,18 +653,58 @@ export function UtilityPanel({
       {panel === 'settings' && (
         // settings-body, not just utility-body: this column is prose-width
         // rows, and the class other utility panels share must not inherit that.
+        <div className="settings-layout">
+          {/* A contents list for a two-thousand-pixel column. Same argument as
+              the model rail: what is in here, and what it is set to, without
+              opening anything to find out. */}
+          <nav className="settings-rail" aria-label="Settings sections">
+            <div className="settings-rail-head">
+              <strong>Sections</strong>
+              <em>{openSections.size} open</em>
+            </div>
+            {settingsRail.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={openSections.has(item.id) ? 'settings-rail-item open' : 'settings-rail-item'}
+                onClick={() => openSectionFromRail(item.id)}
+                aria-current={openSections.has(item.id) ? 'true' : undefined}
+              >
+                <span>{item.eyebrow}</span>
+                <strong>{item.title}</strong>
+                {item.status && <em>{item.status}</em>}
+              </button>
+            ))}
+          </nav>
         <div className="utility-body settings-body">
+          {/* Stays in the column, not the rail: the rail is hidden on narrow
+              windows, and the app's own name and version should not be. */}
           <div className="utility-logo">
             <BrandMark />
             <strong>RigMatch</strong>
             <em>v{APP_VERSION}</em>
           </div>
-          <SettingsSection eyebrow="Interface" title="Preferences" summary="Mode, theme, goals, and the Simple Mode path." defaultOpen>
+          <SettingsSection
+            eyebrow="Interface"
+            title="Preferences"
+            summary="Mode, theme, goals, and the Simple Mode path."
+            open={openSections.has('interface')}
+            onToggle={() => toggleSection('interface')}
+            sectionId="interface"
+          >
           <UiModePicker uiMode={uiMode} onUiModeChange={onUiModeChange} />
+          <ScorePriorityPicker priority={scorePriority} onPriorityChange={onScorePriorityChange} />
           <GoalsSummary goals={selectedGoals} onEditGoals={onEditGoals} />
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
           </SettingsSection>
-          <SettingsSection eyebrow="Storage" title="The Closet" summary="Who is taking up shelf space, and whether they earned it.">
+          <SettingsSection
+            eyebrow="Storage"
+            title="The Closet"
+            summary="Who is taking up shelf space, and whether they earned it."
+            open={openSections.has('storage')}
+            onToggle={() => toggleSection('storage')}
+            sectionId="storage"
+          >
             <ClosetSection
               rows={installedRows}
               modelScores={modelScores}
@@ -587,7 +712,14 @@ export function UtilityPanel({
               onDeleteModel={onDeleteModel}
             />
           </SettingsSection>
-          <SettingsSection eyebrow="Local AI" title="Computer & Providers" summary="Runtime, Ollama, LM Studio, and local-only scope.">
+          <SettingsSection
+            eyebrow="Local AI"
+            title="Computer & Providers"
+            summary="Runtime, Ollama, LM Studio, and local-only scope."
+            open={openSections.has('providers')}
+            onToggle={() => toggleSection('providers')}
+            sectionId="providers"
+          >
           <div className="utility-stat">
             <span>Computer & providers</span>
             <strong>Full details live in Your Rig</strong>
@@ -599,11 +731,25 @@ export function UtilityPanel({
           </button>
           </SettingsSection>
 
-          <SettingsSection eyebrow="Generation" title="ComfyUI" summary="Where image and video generation run, and whether RigMatch may unload models.">
+          <SettingsSection
+            eyebrow="Generation"
+            title="ComfyUI"
+            summary="Where image and video generation run, and whether RigMatch may unload models."
+            open={openSections.has('generation')}
+            onToggle={() => toggleSection('generation')}
+            sectionId="generation"
+          >
           <ComfySettings />
           </SettingsSection>
 
-          <SettingsSection eyebrow="Updates" title="Versions & Release Notes" summary="RigMatch app updates, Ollama updates, and recent changes.">
+          <SettingsSection
+            eyebrow="Updates"
+            title="Versions & Release Notes"
+            summary="RigMatch app updates, Ollama updates, and recent changes."
+            open={openSections.has('updates')}
+            onToggle={() => toggleSection('updates')}
+            sectionId="updates"
+          >
           <UpdateCenter
             channel={updateChannel}
             result={updateCheck}
@@ -653,7 +799,14 @@ export function UtilityPanel({
           <ReleaseNotes releases={releaseNotes} />
           </SettingsSection>
 
-          <SettingsSection eyebrow="Support" title="Feedback & Support" summary="Donationware link, bug reports, and diagnostics.">
+          <SettingsSection
+            eyebrow="Support"
+            title="Feedback & Support"
+            summary="Donationware link, bug reports, and diagnostics."
+            open={openSections.has('support')}
+            onToggle={() => toggleSection('support')}
+            sectionId="support"
+          >
           <div className="utility-stat">
             <span>Mode</span>
             <strong>Donationware</strong>
@@ -705,7 +858,15 @@ export function UtilityPanel({
           </div>
           </SettingsSection>
 
-          <SettingsSection eyebrow="Advanced" title="Scoring & Reset" summary="How scoring works and destructive cleanup." advancedOnly>
+          <SettingsSection
+            eyebrow="Advanced"
+            title="Scoring & Reset"
+            summary="How scoring works and destructive cleanup."
+            advancedOnly
+            open={openSections.has('advanced')}
+            onToggle={() => toggleSection('advanced')}
+            sectionId="advanced"
+          >
           <HowWeScoreSection />
           <section className="danger-zone" aria-label="Data reset">
             <div>
@@ -719,6 +880,7 @@ export function UtilityPanel({
             </button>
           </section>
           </SettingsSection>
+        </div>
         </div>
       )}
     </section>

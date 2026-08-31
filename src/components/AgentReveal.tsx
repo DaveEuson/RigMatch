@@ -100,7 +100,7 @@ export function AgentReveal({
       </div>
 
       <div
-        className="agent-romance-banner"
+        className="agent-romance-banner art-banner-slim"
         style={{ backgroundImage: `url(${robotRomanceHero})` }}
         aria-label="Robot matchmaking artwork"
       >
@@ -227,32 +227,22 @@ export function AgentReveal({
         })}
       </div>
 
-      <div className="match-tagline">
-        <span>Matchmaker note</span>
-        <strong>{host?.hostname ?? 'Local machine'} + {model}</strong>
-      </div>
+      {/* The scores, the judge's reasoning and the way to use the model now sit
+          above the profile card rather than below it.
 
-      <AgentDatingProfile
-        model={model}
-        profile={activeProfile}
-        benchmark={benchmark}
-        score={selectedScore}
-        row={selectedRow}
-        host={host}
-        system={system}
-        onTalk={onTalk}
-        onEditQuestions={onEditQuestions}
-        onTalkWithPrompt={onTalkWithPrompt}
-      />
+          They were last of nine blocks, behind a 743px card, which put the
+          verdict — and the only Chat button — about 1100px down a screen whose
+          whole job is to say which model won. Same shape as the Comparison
+          ranking, which was also the answer and also came last.
 
+          Two blocks went entirely on the way past. The matchmaker tagline read
+          "Dave-PC + qwen2.5:7b", which is exactly what the pairing strip below
+          draws with avatars; and the nameplate repeated the model's name, its
+          archetype and the hostname, all three of which are already on this
+          screen — the first two in the profile head directly below, the third
+          in that same pairing strip. The model was introduced six times before
+          this; it is introduced three times now. */}
       <div className="match-hero">
-        <div className="agent-nameplate">
-          <strong>{agentName}</strong>
-          <span>Ollama model</span>
-          <span>{activeProfile.archetype}</span>
-          <span>{host?.hostname ?? 'Local machine'}</span>
-        </div>
-
         <div className="score-grid">
           <ScoreTile label="Answer Quality" value={selectedScore?.sobriety} grade={selectedScore ? gradeFor(selectedScore.sobriety) : undefined} tone="pink" />
           <ScoreTile label="Speed" value={selectedScore?.speed} grade={selectedScore ? gradeFor(selectedScore.speed) : undefined} tone="gold" />
@@ -280,9 +270,26 @@ export function AgentReveal({
           if (problem) alert(problem);
         }}>
           <MessageSquare aria-hidden="true" />
-          Chat With Match
+          {/* Named for where it takes you, because "Chat With Match" and the
+              profile card's "Talk to Model" were two different destinations
+              wearing the same words: this one launches the separate companion
+              app, that one opens the dock inside RigMatch. */}
+          Open Chat App
         </button>
       </div>
+
+      <AgentDatingProfile
+        model={model}
+        profile={activeProfile}
+        benchmark={benchmark}
+        score={selectedScore}
+        row={selectedRow}
+        host={host}
+        system={system}
+        onTalk={onTalk}
+        onEditQuestions={onEditQuestions}
+        onTalkWithPrompt={onTalkWithPrompt}
+      />
 
       <div
         className={selectedScore ? 'grade-track' : 'grade-track empty'}

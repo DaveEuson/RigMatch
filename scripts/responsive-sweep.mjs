@@ -18,6 +18,8 @@ import { chromium } from 'playwright';
  *   broken     — an <img> that resolved to nothing
  *   tiny       — interactive targets under 24px (WCAG 2.2 minimum)
  *   unreadable — text under 11px
+ *   deadTrack  — a grid column nothing sits in, which is how a menu ends up
+ *                running at half its width with the other half blank
  *
  * Usage:  node scripts/responsive-sweep.mjs [--shots]
  */
@@ -153,6 +155,62 @@ for (const mode of ['beginner', 'advanced']) {
         }
       }
 
+      // A menu running at half its width with the other half blank.
+      //
+      // The Comparison screen's contestant menu did exactly that for as long as
+      // it existed: its head declared two tracks and held three children, one
+      // of which carried `grid-column: 1 / -1`. Auto-placement dropped the menu
+      // into track one and left track two empty, so picking a contestant
+      // happened in 413px of the 929px available. Nothing about that reads as
+      // broken in a screenshot — the menu just looks small — so it needs
+      // measuring.
+      //
+      // Deliberately narrow: only containers that actually hold a menu (three
+      // or more controls in one child), only when a track of real size has
+      // nothing over its centre, and only when the menu is the squeezed one.
+      // A footer with one right-aligned button and a spacer beside it is a
+      // layout, not a bug, and an earlier version of this check flagged every
+      // screen in the app by counting those too.
+      const MENU_CONTROLS = 'button, a[href], [role="tab"]';
+      const deadTracks = all
+        .filter((node) => getComputedStyle(node).display.includes('grid'))
+        .flatMap((node) => {
+          const box = node.getBoundingClientRect();
+          if (box.width < 200 || box.height < 10) return [];
+          const kids = [...node.children].filter((kid) => {
+            const rect = kid.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          });
+          const menus = kids.filter((kid) => kid.querySelectorAll(MENU_CONTROLS).length >= 3);
+          if (menus.length === 0) return [];
+
+          const style = getComputedStyle(node);
+          const tracks = style.gridTemplateColumns.split(' ')
+            .map((value) => parseFloat(value))
+            .filter((value) => Number.isFinite(value) && value > 0);
+          if (tracks.length < 2) return [];
+
+          // A child spanning the whole row says nothing about which track is
+          // occupied, and in the bug this exists for it was the spanning child
+          // that masked the empty track.
+          const rects = kids.map((kid) => kid.getBoundingClientRect())
+            .filter((rect) => rect.width < box.width * 0.95);
+          const gap = parseFloat(style.columnGap) || 0;
+          let x = box.left + (parseFloat(style.paddingLeft) || 0);
+          let emptiest = 0;
+          for (const width of tracks) {
+            const centre = x + width / 2;
+            const covered = rects.some((rect) => rect.left <= centre && rect.right >= centre);
+            if (!covered && width > emptiest) emptiest = width;
+            x += width + gap;
+          }
+          if (emptiest < box.width * 0.3) return [];
+
+          return menus
+            .filter((menu) => menu.getBoundingClientRect().width < box.width * 0.6)
+            .map((menu) => `${label(menu)} has ${Math.round(menu.getBoundingClientRect().width)}px of ${Math.round(box.width)}px, beside a ${Math.round(emptiest)}px column nothing is in`);
+        });
+
       return {
         pageScrollsSideways: root.scrollWidth > vw + 1,
         overflowing: [...new Set(overflowing)].slice(0, 6),
@@ -160,6 +218,7 @@ for (const mode of ['beginner', 'advanced']) {
         tiny: [...new Set(tiny)].slice(0, 6),
         unreadable: [...new Set(unreadable)].slice(0, 6),
         clipped: [...new Set(clipped)].slice(0, 6),
+        deadTracks: [...new Set(deadTracks)].slice(0, 6),
       };
     });
 
@@ -177,6 +236,7 @@ for (const mode of ['beginner', 'advanced']) {
     if (report.broken.length) problems.push(`broken images: ${report.broken.join(' | ')}`);
     if (report.tiny.length) problems.push(`under 24px: ${report.tiny.join(' | ')}`);
     if (report.unreadable.length) problems.push(`under 11px: ${report.unreadable.join(' | ')}`);
+    if (report.deadTracks.length) problems.push(`empty grid column: ${report.deadTracks.join(' | ')}`);
     if (consoleErrors.length) problems.push(`page errors: ${consoleErrors.slice(0, 2).join(' | ')}`);
 
     const head = `${mode.padEnd(9)} ${String(size.w).padStart(4)}x${String(size.h).padEnd(5)} ${size.note}`;

@@ -73,6 +73,13 @@ export const GLOSSARY: GlossaryEntry[] = [
     alsoCalled: 'parameters',
   },
   {
+    id: 'effective-size',
+    term: 'Effective size (E2B, E4B)',
+    plain: 'A big model folded up to run in a small one’s space.',
+    because: 'An E2B needs about as much room as a 2B model, but there is more of it behind that number, so it can answer better than its size suggests. The E stands for effective.',
+    alsoCalled: 'effective parameters',
+  },
+  {
     id: 'match-score',
     term: 'Match Score',
     plain: 'RigMatch’s own rating out of 100, from testing the model on this computer.',

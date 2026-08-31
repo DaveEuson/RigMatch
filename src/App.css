@@ -658,6 +658,25 @@
   gap: 7px;
 }
 
+/* Advanced Mode's eight screens, split by what you go there to do. Simple Mode
+   stays a flat numbered path — there the order is the point. */
+.side-menu-group {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.side-menu-group h2 {
+  margin: 3px 0 0;
+  padding: 0 7px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
 .side-menu-item {
   min-width: 0;
   min-height: 40px;
@@ -751,9 +770,13 @@
 }
 
 
+/* 24px is the WCAG 2.2 target minimum, and this measured 23px on every screen
+   in the app — 6px of padding around an 11px line. Its sibling directly below,
+   "Report a bug", was given a min-height and this one was not. */
 .side-menu-donate {
   display: block;
   width: calc(100% - 16px);
+  min-height: 24px;
   margin: 4px 8px 8px;
   padding: 6px 10px;
   border-radius: 6px;
@@ -3157,6 +3180,387 @@ tbody tr.computer-row.selected {
   min-height: 0;
 }
 
+/* --- Family rows ----------------------------------------------------------
+   A 4070 reports 147 models that fit, thirty-five of them Gemma 4 — five
+   consecutive rows differing only in a tag, with the same maker, the same
+   tags, and the same pull count on every one. One row per family, opened on
+   demand. */
+.model-family-row > td {
+  padding: 0;
+  background: rgba(var(--gold-rgb), 0.05);
+}
+
+.model-family-row.open > td {
+  background: rgba(var(--gold-rgb), 0.1);
+}
+
+.model-family-row button {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: 13px/1.2 var(--ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.model-family-row button:hover {
+  background: var(--panel-hover);
+}
+
+.model-family-caret {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--gold);
+  transition: transform 0.12s ease;
+}
+
+.model-family-caret.open {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model-family-caret { transition: none; }
+}
+
+.model-family-row strong {
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.model-family-row em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.model-family-installed,
+.model-family-best {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.model-family-installed {
+  border: 1px solid rgba(var(--green-rgb), 0.4);
+  background: rgba(var(--green-rgb), 0.12);
+  color: var(--green);
+}
+
+.model-family-best {
+  border: 1px solid rgba(var(--blue-rgb), 0.4);
+  background: rgba(var(--blue-rgb), 0.12);
+  color: var(--blue);
+}
+
+/* The one thing the row could not say for itself: that "e2b" is an effective
+   size, which is why the number beside it reads 5.1B. */
+.model-variant-sub {
+  padding: 1px 6px;
+  border: 1px solid rgba(var(--blue-rgb), 0.42);
+  border-radius: 999px;
+  background: rgba(var(--blue-rgb), 0.14);
+  color: var(--blue);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.model-family-pulls {
+  color: var(--muted);
+  font: 11px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Says which way the click goes, because a caret alone is a convention not
+   everyone has. Pushed right so it reads as the action, not a label. */
+.model-family-hint {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* --- Filter rail -----------------------------------------------------------
+   Replaces the "Filters — 2 active" tray, which named neither of the two and
+   shut itself the moment you picked one. The rail's whole argument is that
+   what you can narrow by, and what each option would cost you, is readable
+   without spending a click to find out. */
+.cabinet-body.rail-open {
+  grid-template-columns: 232px minmax(0, 1fr) 268px;
+}
+
+.model-facets {
+  width: 232px;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 6px;
+  background: var(--panel);
+  border-right: 1px solid rgba(var(--gold-rgb), 0.16);
+  box-sizing: border-box;
+}
+
+.model-facets-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+}
+
+.model-facets-head span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+/* 24px minimum target, same rule the filter chips this replaced were held to.
+   Reset and "Show N more" are standalone controls, not words in a sentence, so
+   the WCAG 2.2 inline exception does not cover them. */
+.model-facets-head button {
+  min-height: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--pink);
+  font: 11px/1 var(--ui);
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.model-facets-head button:disabled {
+  color: var(--muted);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.model-facet-group h3 {
+  margin: 0 0 4px;
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.model-facet {
+  width: 100%;
+  min-height: 24px;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: 13px/1.2 var(--ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.model-facet:hover:not(:disabled) {
+  background: var(--panel-hover);
+}
+
+.model-facet:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.model-facet.active {
+  background: rgba(var(--pink-rgb), 0.12);
+  color: var(--text-strong);
+}
+
+.model-facet-box {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--line-bright);
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+}
+
+.model-facet.active .model-facet-box {
+  background: var(--pink);
+  border-color: var(--pink);
+}
+
+.model-facet-box svg {
+  width: 10px;
+  height: 10px;
+  color: var(--panel);
+  stroke-width: 3.4;
+}
+
+.model-facet-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-facet-count {
+  font: 11px/1 var(--mono);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.model-facet-more {
+  min-height: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font: 12px/1 var(--ui);
+  padding: 5px 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.model-facet-more:hover {
+  color: var(--text-strong);
+}
+
+.model-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font: 12px/1 var(--ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.model-filter-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.model-filter-toggle em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-filter-toggle.active {
+  border-color: var(--pink);
+  color: var(--text-strong);
+}
+
+.model-filter-toggle.active em {
+  color: var(--pink);
+}
+
+/* --- Search suggestions ----------------------------------------------------
+   Typing "cod" almost always means "coding models", which the plain box could
+   never answer — it could only match letters in a name. Offering the filter
+   above the name matches is what joins the box to the rail. */
+.model-search-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.model-search-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--panel);
+  border: 1px solid var(--blue);
+  box-shadow: var(--shadow);
+}
+
+.model-search-suggestions button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: 13px/1.2 var(--ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.model-search-suggestions button.active,
+.model-search-suggestions button:hover {
+  background: rgba(var(--blue-rgb), 0.14);
+  color: var(--text-strong);
+}
+
+.model-search-suggestions em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.model-search-suggestions span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-search-suggestions b {
+  font: 11px/1 var(--mono);
+  font-weight: 400;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The rail stays a column at every width rather than becoming an overlay.
+   The overlay version covered the search box on anything under 1240px, which
+   made filtering and searching mutually exclusive on exactly the machines with
+   the least room to spare. In flow the table just scrolls sideways as it
+   already does, and the Filters button is there to buy the width back.
+
+   Below 1240px it also starts closed, because at the 1024px minimum window the
+   app nav and the contestant panel have already spent most of the width — the
+   rail is worth opening there, but not worth having open by default. */
+@media (max-width: 1240px) {
+  .cabinet-body.rail-open {
+    grid-template-columns: 190px minmax(0, 1fr) 268px;
+  }
+
+  .model-facets {
+    width: 190px;
+  }
+}
+
+@media (max-width: 920px) {
+  .cabinet-body.rail-open {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+}
+
 .cabinet-main {
   display: flex;
   flex-direction: column;
@@ -3450,169 +3854,6 @@ tbody tr.computer-row.selected {
   color: var(--muted);
   font-size: 10px;
   font-style: normal;
-}
-
-.model-filter-menu {
-  position: relative;
-  justify-self: end;
-  z-index: 30;
-}
-
-.model-filter-menu summary {
-  min-height: 30px;
-  min-width: 132px;
-  padding: 0 9px;
-  border: 1px solid var(--line-bright);
-  border-radius: 8px;
-  background: #151d22;
-  color: var(--text-strong);
-  display: grid;
-  grid-template-columns: 16px auto 1fr 14px;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  list-style: none;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.model-filter-menu summary::-webkit-details-marker {
-  display: none;
-}
-
-.model-filter-menu summary svg {
-  width: 15px;
-  height: 15px;
-  color: var(--green);
-}
-
-.model-filter-menu summary span {
-  font-size: 11px;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.model-filter-menu summary em {
-  min-width: 0;
-  color: var(--muted);
-  font-size: 10px;
-  font-style: normal;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.model-filter-menu[open] summary {
-  border-color: rgba(var(--primary-rgb), 0.72);
-  background: rgba(var(--primary-rgb), 0.13);
-}
-
-.model-filter-menu[open] summary svg:last-child {
-  transform: rotate(180deg);
-}
-
-.model-filter-tray {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  width: min(760px, calc(100vw - 72px));
-  max-height: min(62vh, 520px);
-  overflow: auto;
-  padding: 10px;
-  border: 1px solid rgba(var(--gold-rgb), 0.38);
-  border-radius: 8px;
-  background: #10161a;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.48);
-  display: grid;
-  gap: 8px;
-}
-
-.model-filter-tray-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.model-filter-tray-head span {
-  min-width: 0;
-  flex: 1;
-  color: var(--text-strong);
-  font-size: 11px;
-  font-weight: 800;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.model-filter-reset {
-  min-height: 26px;
-  padding: 0 9px;
-  border: 1px solid var(--line-bright);
-  border-radius: 7px;
-  background: #151d22;
-  color: var(--blue);
-  font: 10px/1 var(--ui);
-  text-transform: uppercase;
-  cursor: pointer;
-}
-
-.model-filter-reset:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.model-filter-reset:not(:disabled):hover {
-  color: var(--green);
-  border-color: rgba(var(--primary-rgb), 0.62);
-}
-
-.model-quick-filters {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 5px;
-}
-
-.model-quick-filters button {
-  min-width: 0;
-  min-height: 28px;
-  border: 1px solid #3a454c;
-  color: var(--text);
-  background: #0d1215;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 4px;
-  padding: 0 7px;
-  cursor: pointer;
-}
-
-.model-quick-filters button span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10px;
-  font-weight: 800;
-  text-align: left;
-  text-transform: uppercase;
-}
-
-.model-quick-filters button em {
-  min-width: 20px;
-  color: var(--blue);
-  font-size: 10px;
-  font-style: normal;
-  text-align: right;
-}
-
-.model-quick-filters button.active,
-.model-quick-filters button:hover {
-  border-color: rgba(var(--primary-rgb), 0.62);
-  background: rgba(var(--primary-rgb), 0.12);
-}
-
-.model-quick-filters button.active span,
-.model-quick-filters button.active em {
-  color: var(--green);
 }
 
 .model-filter-note {
@@ -6365,13 +6606,141 @@ tbody tr.computer-row.selected {
   text-align: right;
 }
 
+/* Flex column, not a scrolling grid.
+   The body used to scroll as one 1575px stack; now the setup bar and the stage
+   hold their place at the top and the chosen view takes the height that is
+   left, so the transcript is read at full size instead of through a 374px
+   slot. */
 .speed-date-body {
   min-height: 0;
   padding: 14px;
-  overflow-y: auto;
-  display: grid;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
-  align-content: start;
+}
+
+/* --- Comparison rail -------------------------------------------------------
+   Seven cards stacked in a column with nothing naming what was below the fold,
+   and the ranking — the answer to the whole exercise — last of all. The cards
+   are views now, and this is the menu that says what each one holds. */
+.comparison-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 196px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.comparison-rail {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 6px;
+  background: var(--panel);
+  border: 1px solid rgba(var(--gold-rgb), 0.2);
+  border-radius: 8px;
+}
+
+.comparison-rail-item {
+  min-height: 24px;
+  width: 100%;
+  /* Flex items shrink by default, and this rail is often shorter than its own
+     contents — without this the five entries squashed to 25px each and ate
+     their own status lines. They keep their height; the rail scrolls. */
+  flex: none;
+  display: block;
+  padding: 6px 9px;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0 7px 7px 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.comparison-rail-item:hover {
+  background: var(--panel-hover);
+}
+
+.comparison-rail-item.active {
+  border-left-color: var(--pink);
+  background: rgba(var(--pink-rgb), 0.12);
+}
+
+.comparison-rail-item strong {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.comparison-rail-item.active strong {
+  color: var(--text-strong);
+}
+
+/* What the section holds, before you go there. */
+.comparison-rail-item em {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comparison-view {
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* The view is the whole column now, so the transcript stops being a fixed
+   card inside a scroller and simply fills it. */
+.comparison-view > * {
+  min-height: 0;
+}
+
+/* The rail lies down on a narrow window, where its 196px is width the
+   transcript needs more than it does. Only on width: laying it down on a
+   *short* panel was measured and is worse — the horizontal strip costs 68px of
+   vertical room the view then does not have, while standing up it costs the
+   view nothing at all. It never disappears, unlike the Settings rail: there is
+   no second way to reach these sections. */
+@media (max-width: 1100px) {
+  .comparison-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .comparison-rail {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .comparison-rail-item {
+    width: auto;
+    flex: none;
+    border-left: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 7px 7px 0 0;
+    white-space: nowrap;
+  }
+
+  .comparison-rail-item.active {
+    border-left-color: transparent;
+    border-bottom-color: var(--pink);
+  }
 }
 
 .speed-date-body .test-process-card,
@@ -6793,16 +7162,18 @@ tbody tr.computer-row.selected {
   font-size: 12px;
 }
 
+/* One column, because nothing was ever in the second one.
+   The head had two tracks and three children: the title, the view toggle —
+   which carries an explicit `grid-column: 1 / -1` — and the contestant tabs,
+   which carried nothing. So auto-placement dropped the tabs into track one and
+   left track two empty beside them: the menu you pick a contestant with ran at
+   413px of the 929px it had, permanently, with half the row blank. */
 .speed-date-transcript-head {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-items: start;
-}
-
-.speed-date-transcript-head .speed-date-view-toggle {
-  grid-column: 1 / -1;
 }
 
 .speed-date-transcript-head > div:first-child {
@@ -10243,6 +10614,21 @@ tbody tr.computer-row.selected {
   gap: 10px;
 }
 
+/* Says what switching does and does not cost, next to the switch. Someone
+   changing what "best" means needs to know it re-summarises saved results
+   rather than throwing them away — otherwise the safe move is not to touch
+   it. */
+.score-priority-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.score-priority-picker .mode-toggle {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .ui-mode-picker > div:first-child span,
 .theme-picker > div:first-child span {
   display: block;
@@ -12968,10 +13354,6 @@ tr:focus-visible,
     gap: 6px;
   }
 
-  .model-quick-filters {
-    gap: 4px;
-  }
-
   .model-filter-note {
     min-height: 27px;
     padding: 4px 7px;
@@ -14153,6 +14535,42 @@ td {
 .contestant-spotlight.empty {
   grid-template-columns: minmax(0, 1fr);
   align-content: center;
+}
+
+/* What the tag means, under the model's own name.
+   The archetype line above it is family-level — "Small-footprint helper" is
+   identical for gemma4:e2b and gemma4:12b — so the tag was the only thing
+   telling two rows apart and nothing anywhere explained it. */
+.contestant-variant-facts {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.contestant-variant-facts li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+}
+
+.contestant-variant-facts strong {
+  padding: 2px 7px;
+  border: 1px solid rgba(var(--blue-rgb), 0.4);
+  border-radius: 999px;
+  background: rgba(var(--blue-rgb), 0.12);
+  color: var(--text-strong);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.contestant-variant-facts span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .cabinet-sidebar .contestant-spotlight {
@@ -15929,11 +16347,49 @@ tbody tr.selected {
   white-space: nowrap;
 }
 
+/* A strip, not a poster. Works on any of the three banner shapes.
+   Measured at 1280x800: the shell gives a screen's panel around 475px, and a
+   full banner was taking 116px of it while the content underneath was down to
+   150px. The art and the line still set the scene; they do it lying down, the
+   way the Models header already does. Opt-in per screen — the same banner on
+   Your Rig has room it is not fighting anyone for. */
+.art-banner-slim {
+  min-height: 44px;
+  margin: 8px 16px 0;
+  padding: 7px 14px;
+  border-radius: 12px;
+  align-items: center;
+}
+
+.art-banner-slim div {
+  width: auto;
+  justify-self: end;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  text-align: right;
+}
+
+.art-banner-slim strong {
+  font-size: 15px;
+  line-height: 1.15;
+}
+
+.art-banner-slim em {
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .speed-date-art-banner {
-  min-height: 96px;
-  margin-top: 10px;
-  margin-bottom: 0;
   background-position: 21% center;
+}
+
+/* The second line is the first thing to go when the row runs out of width —
+   on both screens it restates what the panel underneath already says. */
+@media (max-width: 1240px) {
+  .art-banner-slim em {
+    display: none;
+  }
 }
 
 .rig-art-banner {
@@ -15941,7 +16397,6 @@ tbody tr.selected {
 }
 
 .scorecard-art-banner {
-  min-height: 96px;
   background-position: 22% center;
 }
 
@@ -16388,6 +16843,23 @@ a.whats-next-support:hover {
     font-size: 19px;
   }
 
+  /* These small-screen rules pre-date the slim strip and sit after it, so they
+     were winning: a banner asked to lie down stood back up to 132px on exactly
+     the screens with the least height to give it. Restated here so the strip
+     survives the cascade. */
+  .art-banner-slim {
+    min-height: 44px;
+    margin: 8px 12px 0;
+  }
+
+  .art-banner-slim div {
+    width: auto;
+  }
+
+  .art-banner-slim strong {
+    font-size: 15px;
+  }
+
   .compatibility-intro-card {
     background-position: 31% center;
   }
@@ -16519,80 +16991,6 @@ a.whats-next-support:hover {
   }
 }
 
-/* ── Task filter chips ────────────────────────────────────── */
-.model-task-filters {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding: 6px 12px 5px;
-  border-top: 1px solid #2a353c;
-}
-
-.model-task-filters-label {
-  font-size: 0.62rem;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  padding: 2px 8px;
-  border-radius: 10px;
-  border: 1px solid #3a454c;
-  background: #151d22;
-  flex-shrink: 0;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.model-task-filters button {
-  all: unset;
-  box-sizing: border-box;
-  display: inline-block;
-  cursor: pointer;
-  font-size: 0.7rem;
-  font-weight: 500;
-  padding: 2px 10px;
-  border-radius: 10px;
-  border: 1px solid #3a454c;
-  color: rgba(200, 210, 220, 0.7);
-  background: #151d22;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-  white-space: nowrap;
-}
-
-.model-task-filters button em {
-  font-style: normal;
-  color: var(--blue);
-  margin-left: 3px;
-  font-size: 0.68rem;
-}
-
-.model-task-filters button:hover {
-  border-color: rgba(var(--primary-rgb), 0.5);
-  background: rgba(var(--primary-rgb), 0.08);
-  color: var(--text);
-}
-
-.model-task-filters button.active {
-  border-color: rgba(var(--primary-rgb), 0.7);
-  background: rgba(var(--primary-rgb), 0.15);
-  color: var(--green);
-}
-
-.model-task-filters button.active em {
-  color: var(--green);
-}
-
-.model-developer-filters {
-  grid-column: 1 / -1;
-  border-top-color: rgba(var(--blue-rgb), 0.2);
-}
-
-.model-developer-filters button.active {
-  border-color: rgba(var(--blue-rgb), 0.68);
-  background: rgba(var(--blue-rgb), 0.14);
-}
-
 @media (max-width: 720px) {
   .model-tools {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -16600,31 +16998,6 @@ a.whats-next-support:hover {
 
   .model-sort-status {
     display: none;
-  }
-
-  .model-filter-menu summary {
-    min-width: 42px;
-    grid-template-columns: 16px;
-    justify-content: center;
-  }
-
-  .model-filter-menu summary span,
-  .model-filter-menu summary em,
-  .model-filter-menu summary svg:last-child {
-    display: none;
-  }
-
-  .model-filter-tray {
-    position: fixed;
-    top: 112px;
-    left: 14px;
-    right: 14px;
-    width: auto;
-    max-height: calc(100vh - 150px);
-  }
-
-  .model-quick-filters {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .model-filter-note {
@@ -17476,9 +17849,10 @@ a.whats-next-support:hover {
 .side-menu-item:active,
 .compact-nav-item:active,
 .sort-header:active,
-.model-quick-filters button:active:not(:disabled),
-.model-task-filters button:active:not(:disabled),
-.model-filter-menu summary:active {
+.model-facet:active:not(:disabled),
+.model-facet-more:active,
+.model-filter-toggle:active,
+.model-search-suggestions button:active {
   transform: translateY(1px);
   filter: brightness(0.95);
 }
@@ -17949,6 +18323,20 @@ a.whats-next-support:hover {
   .side-menu-copy small { display: none; }
   .side-menu-copy strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .side-menu-nav { gap: 4px; }
+  .side-menu-group { gap: 4px; }
+  /* 9px is the floor the responsive sweep holds non-control text to. */
+  .side-menu-group h2 { margin-top: 0; font-size: 9px; }
+  .side-menu-item { min-height: 28px; }
+
+  /* On a short window, the two screens that still carry the 172px lineup strip
+     leave the rail about 360px for eight destinations. The three group
+     headings cost roughly 48px of that, which pushed Settings off the end at
+     1280x820. So on exactly those screens, at exactly those heights, the
+     groups dissolve: display:contents drops the wrapper out of the grid and
+     the rail is the flat list it has always been. Every other screen keeps the
+     grouping, because every other screen has the room. */
+  .has-global-lineup .side-menu-group { display: contents; }
+  .has-global-lineup .side-menu-group h2 { display: none; }
   .side-menu-title { padding-top: 2px; padding-bottom: 2px; }
   .side-menu-donate,
   .side-menu-bug-report { padding-top: 4px; padding-bottom: 4px; font-size: 10px; }
@@ -17969,12 +18357,6 @@ a.whats-next-support:hover {
   .side-menu-item {
     grid-template-columns: minmax(0, 1fr) auto;
   }
-}
-
-/* The Models filter chips measured 21px tall — under the 24px minimum target
-   size, and they are the main way of narrowing a thirteen-model list. */
-.model-task-filters button {
-  min-height: 24px;
 }
 
 /* Text links that act as buttons still need a hittable box. "Check again" on
@@ -18024,6 +18406,124 @@ a.whats-next-support:hover {
    control at opposite ends of the desk. */
 .settings-body {
   width: min(920px, 100%);
+}
+
+/* --- Settings rail ---------------------------------------------------------
+   Settings is seven accordions in a column that runs past two thousand pixels.
+   Closed they name a section without saying what it is set to; open they push
+   everything under them off screen. The rail is the contents list that column
+   never had, and it carries the current value where there is a true one to
+   carry — the same bargain the model rail makes. */
+.settings-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.settings-rail {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+  background: var(--panel);
+  border-right: 1px solid rgba(var(--gold-rgb), 0.16);
+}
+
+.settings-rail-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 10px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(var(--gold-rgb), 0.16);
+}
+
+.settings-rail-head strong {
+  color: var(--text-strong);
+  font-family: var(--display);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-rail-head em {
+  margin-left: auto;
+  color: var(--muted);
+  font: 11px/1 var(--mono);
+  font-style: normal;
+}
+
+.settings-rail-item {
+  min-height: 24px;
+  display: block;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0 7px 7px 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-rail-item:hover {
+  background: var(--panel-hover);
+}
+
+.settings-rail-item.open {
+  border-left-color: var(--pink);
+  background: rgba(var(--pink-rgb), 0.1);
+}
+
+.settings-rail-item span {
+  display: block;
+  color: var(--pink);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-rail-item strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.settings-rail-item.open strong {
+  color: var(--text-strong);
+}
+
+/* The point of the rail: what this section is set to, before you open it. */
+.settings-rail-item em {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Under this the rail and a 920px prose column no longer both fit; the column
+   is the thing you came for, so the rail goes and the accordion headers carry
+   the navigation on their own, as they did before. */
+@media (max-width: 1100px) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-rail {
+    display: none;
+  }
 }
 
 /* Why a disabled action cannot run, beside the action itself. A dead primary

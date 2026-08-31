@@ -6,7 +6,9 @@ import { MIN_CONTESTANTS } from '../lib/downloadStatus';
 import { countWithVerb, getResponseEstimate } from '../lib/format';
 import { lineupStanding, standingLine } from '../lib/lineupStanding';
 import type { ListTestResult, ModelTaskFilterId } from '../lib/modelCatalog';
-import { getHardwareFit, getModelScore, modelMatchesTask } from '../lib/modelCatalog';
+import { getBenchmarkForModel, getHardwareFit, getModelScore, modelMatchesTask } from '../lib/modelCatalog';
+import type { ComparisonViewId } from '../lib/comparisonViews';
+import { buildComparisonRail, defaultComparisonView } from '../lib/comparisonViews';
 import type { BenchmarkResult, ModelRow, NetworkHost, RunProgress, TestedModelScore } from '../types';
 import { QuestionSuitePreview } from './QuestionSuitePreview';
 import { RunProgressPanel } from './RunProgressPanel';
@@ -61,7 +63,14 @@ export function SpeedDatePanel({
   onRunListTest: () => void;
   onOpenHistory: () => void;
 }) {
-  const [setupCollapsed, setSetupCollapsed] = useState(false);
+  /**
+   * null means "follow the default".
+   *
+   * So the screen keeps moving to the newest answer — finishing a run lands
+   * you on the ranking — right up until someone picks a view themselves, at
+   * which point it stops moving under them.
+   */
+  const [chosenView, setChosenView] = useState<ComparisonViewId | null>(null);
   const winnerResult = listTestResult?.results.find((result) => result.model === listTestResult.winner);
   const selectedSlots = Array.from({ length: 5 }, (_, index) => shortlistedRows[index]);
   const uninstalledLineupRows = shortlistedRows.filter((row) => !row.installed);
@@ -79,6 +88,18 @@ export function SpeedDatePanel({
     { id: 'writing', label: 'Writing' },
     { id: 'reasoning', label: 'Reasoning' },
   ];
+  const answeredCount = shortlistedRows
+    .filter((row) => getBenchmarkForModel(benchmarkByModel, row.displayName, row)).length;
+  const comparisonRail = buildComparisonRail({
+    lineupCount: shortlistedRows.length,
+    maxContestants: 5,
+    answeredCount,
+    questionCount,
+    winner: listTestResult?.winner ?? null,
+  });
+  const activeView = chosenView
+    ?? defaultComparisonView({ answeredCount, winner: listTestResult?.winner ?? null });
+
   const shortlistIds = new Set(shortlistedRows.map((r) => r.displayName));
   const lineupSuggestions = shortlistedRows.length < 5
     ? CORE_TASKS.flatMap(({ id, label }) => {
@@ -103,7 +124,7 @@ export function SpeedDatePanel({
 
       <RomanceArtBanner
         image={robotSpeedDateShow}
-        className="speed-date-art-banner"
+        className="speed-date-art-banner art-banner-slim"
         kicker="Tonight's lineup"
         title="Five contestants, one rig, same questions"
         // Checked against the lineup on screen, not just read from the saved
@@ -163,33 +184,65 @@ export function SpeedDatePanel({
               <Trophy aria-hidden="true" />
               {isListTesting ? 'Testing' : shortlistedRows.length >= MIN_CONTESTANTS ? uninstalledLineupRows.length > 0 ? 'Download First' : 'Start Speed Dating' : `Pick ${MIN_CONTESTANTS}+`}
             </button>
-            <button
-              type="button"
-              className="mini-button outline"
-              onClick={() => setSetupCollapsed((c) => !c)}
-              aria-label={setupCollapsed ? 'Expand lineup' : 'Collapse lineup'}
-              title={setupCollapsed ? 'Show lineup' : 'Hide lineup'}
-            >
-              {setupCollapsed ? '▲' : '▼'}
-            </button>
+            {/* The lineup collapse toggle used to live here. It hid one card of
+                seven and left the other six stacked, which is not the problem
+                anyone had; the rail below replaces it by making every part of
+                this screen a place you can go instead of a thing you scroll
+                past. */}
           </div>
         </div>
 
-        <SpeedDateShowAnimation
-          rows={shortlistedRows}
-          runProgress={runProgress?.mode === 'speed-date' ? runProgress : null}
-          winner={listTestResult?.winner}
-          host={host}
-        />
+        {/* The stage earns its 112px while there is a show, and not before.
+            Idle it said "Ready Check — 5 contestants ready for the same
+            questions", which is the sentence the command bar directly above it
+            was already saying, drawn as an avatar strip. On a 575px panel that
+            is 20% of the screen spent restating the line above it, while the
+            transcript underneath was down to 128px. */}
+        {(runProgress?.mode === 'speed-date' || listTestResult?.winner) && (
+          <SpeedDateShowAnimation
+            rows={shortlistedRows}
+            runProgress={runProgress?.mode === 'speed-date' ? runProgress : null}
+            winner={listTestResult?.winner}
+            host={host}
+          />
+        )}
 
-        <SpeedDateTranscriptPanel
+        {/* Above the rail, not inside it: a run in progress is the one thing on
+            this screen you should not have to navigate to. */}
+        {runProgress?.mode === 'speed-date' && (
+          <RunProgressPanel
+            progress={runProgress}
+            host={host}
+            questionPlan={questionPlan}
+            onOpenLogs={onOpenLogs}
+          />
+        )}
+
+        <div className="comparison-layout">
+          <nav className="comparison-rail" aria-label="Comparison sections">
+            {comparisonRail.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={activeView === item.id ? 'comparison-rail-item active' : 'comparison-rail-item'}
+                onClick={() => setChosenView(item.id)}
+                aria-current={activeView === item.id ? 'page' : undefined}
+              >
+                <strong>{item.label}</strong>
+                {item.status && <em>{item.status}</em>}
+              </button>
+            ))}
+          </nav>
+
+          <div className="comparison-view">
+        {activeView === 'transcript' && <SpeedDateTranscriptPanel
           rows={shortlistedRows}
           benchmarks={benchmarkByModel}
           questionPlan={questionPlan}
           runProgress={runProgress?.mode === 'speed-date' ? runProgress : null}
-        />
+        />}
 
-        {!setupCollapsed && <section className="speed-date-lineup-card" aria-label="Selected models for Speed Dating">
+        {activeView === 'lineup' && <section className="speed-date-lineup-card" aria-label="Selected models for Speed Dating">
           <div className="speed-date-lineup-head">
             <div>
               <span>Tonight's Lineup</span>
@@ -269,26 +322,17 @@ export function SpeedDatePanel({
           )}
         </section>}
 
-        {runProgress?.mode === 'speed-date' && (
-          <RunProgressPanel
-            progress={runProgress}
-            host={host}
-            questionPlan={questionPlan}
-            onOpenLogs={onOpenLogs}
-          />
-        )}
-
-        <QuestionSuitePreview
+        {activeView === 'questions' && <QuestionSuitePreview
           questionCount={questionCount}
           questions={questionPlan}
           disabled={isListTesting}
           onQuestionCountChange={onQuestionCountChange}
           onOpenSuiteEditor={onOpenSuiteEditor}
-        />
+        />}
 
-        <TestProcessCard mode="speed-date" questionCount={questionCount} />
+        {activeView === 'process' && <TestProcessCard mode="speed-date" questionCount={questionCount} />}
 
-        {listTestResult ? (
+        {activeView === 'ranking' && (listTestResult ? (
           <div className="speed-date-results">
             <div className="list-winner">
               <span>Best Match</span>
@@ -321,7 +365,9 @@ export function SpeedDatePanel({
             <strong>No head-to-head ranking yet</strong>
             <span>Scores from single tests are saved in Scorecards. Run a comparison to rank models against each other on the same questions.</span>
           </div>
-        )}
+        ))}
+          </div>
+        </div>
       </div>
     </section>
   );

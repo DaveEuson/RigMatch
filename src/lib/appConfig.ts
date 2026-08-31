@@ -31,6 +31,21 @@ export const navItems: NavItem[] = [
   { id: 'settings', label: 'Settings', description: 'Prefs, updates, support', icon: Settings },
 ];
 
+/**
+ * Screens where the Speed Dating lineup strip earns its 172px.
+ *
+ * It used to be everywhere in Advanced Mode except Comparison itself, which
+ * cost every other screen a fifth of the window for a control they cannot use.
+ * Measured at 1280x800: the shell gives the content stage 318px, and this strip
+ * was taking 172px underneath it — so Scorecards was reading 1057px of content
+ * through a 60px slot while "Dating Game Setup" sat below it, on a screen where
+ * there is nothing to set up.
+ *
+ * It stays where a lineup is actually assembled: browsing the catalogue, and
+ * reading about new drops. Comparison keeps its own copy inline.
+ */
+export const LINEUP_STRIP_SCREENS: NavId[] = ['models', 'whatsNew'];
+
 export const SIMPLE_NAV_ORDER: NavId[] = ['lan', 'models', 'speedDate', 'history', 'agent', 'activity', 'settings'];
 export const NAV_ITEM_BY_ID = new Map<NavId, NavItem>(navItems.map((item) => [item.id, item]));
 

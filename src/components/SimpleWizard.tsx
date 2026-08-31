@@ -207,9 +207,11 @@ export function SimpleWizard(props: SimpleWizardProps) {
   const noticeRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!props.notice) return;
-    const reduced = typeof window !== 'undefined'
-      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    noticeRef.current?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'nearest' });
+    // Instant, not smooth. Measured in the Chromium this ships on: a smooth
+    // scrollIntoView leaves scrollTop untouched, so the version of this fix
+    // that asked for smooth did nothing at all — it re-created the bug it was
+    // written to close. 'auto' lands, and is what reduced-motion wanted anyway.
+    noticeRef.current?.scrollIntoView({ behavior: 'auto', block: 'nearest' });
   }, [props.notice]);
 
   const setupDone = ollamaReady;

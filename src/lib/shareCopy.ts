@@ -32,6 +32,12 @@ const PURPOSE: Record<string, string> = {
   facts: 'straight answers',
   tools: 'tools & automations',
   instructions: 'following instructions',
+  // The only group that was measured and then had nowhere to land. It is
+  // already gated harder than the rest: without a judge every answer reports
+  // unjudged, so isVerdictWorthy rejects it and it cannot reach a card. With a
+  // judge it separates further than any other group — a flat refusal and a
+  // confidently invented answer both score 0 where the heuristic gave both 72.
+  candour: 'difficult subjects',
 };
 
 /**

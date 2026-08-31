@@ -28,6 +28,48 @@ export const SCORE_WEIGHTS = {
 } as const;
 
 /**
+ * What "best" means, when the reader disagrees with the default.
+ *
+ * "Which model is best" has no answer until someone says best at what: the
+ * default blend puts answer quality two points above speed, which is a real
+ * editorial choice the app was making silently. A 0.6B model that answers
+ * instantly and badly and a 7B that answers slowly and well are both "best"
+ * under some reading, and the reader knows which one they meant.
+ *
+ * This re-weights signals that are already stored, so switching costs nothing
+ * and invalidates nothing — no re-run, and no schema bump, because the
+ * measurements have not changed, only the summary of them. `balanced` is
+ * exactly the historical weighting, so the default path is bit-for-bit what it
+ * always was.
+ *
+ * Reliability and fit hold their share in every profile. Neither is what the
+ * accuracy/speed argument is about, and letting them drift would turn a
+ * two-way preference into a four-way one nobody asked for.
+ */
+export const SCORE_PRIORITIES = {
+  balanced: { label: 'Balanced', weights: SCORE_WEIGHTS },
+  accuracy: {
+    label: 'Accuracy first',
+    weights: { sobriety: 0.52, speed: 0.14, stability: 0.18, fit: 0.16 },
+  },
+  speed: {
+    label: 'Speed first',
+    weights: { sobriety: 0.14, speed: 0.52, stability: 0.18, fit: 0.16 },
+  },
+} as const;
+
+export type ScorePriorityId = keyof typeof SCORE_PRIORITIES;
+
+export const DEFAULT_SCORE_PRIORITY: ScorePriorityId = 'balanced';
+
+export const SCORE_PRIORITY_STORAGE_KEY = 'rigmatch:score-priority:v1';
+
+/** Unknown or absent stored values fall back to the historical weighting. */
+export function readScorePriority(raw: string | null | undefined): ScorePriorityId {
+  return raw && raw in SCORE_PRIORITIES ? raw as ScorePriorityId : DEFAULT_SCORE_PRIORITY;
+}
+
+/**
  * The canonical Match Score grade bands — the single source of truth for the
  * renderer. These MUST stay identical to `gradeFor()` in electron/main.cjs,
  * which grades real benchmark runs in the main process (a separate CommonJS
@@ -62,14 +104,44 @@ export type MatchScoreLike = Pick<TestedModelScore, 'speed' | 'sobriety' | 'fit'
  * One-decimal weighted Match value used for ranking and tie-breaks. When a
  * score predates the `stability` signal, it falls back to the rounded `total`.
  */
-export function calculatePreciseTotal(score: MatchScoreLike): number {
+export function calculatePreciseTotal(
+  score: MatchScoreLike,
+  priority: ScorePriorityId = DEFAULT_SCORE_PRIORITY,
+): number {
+  const weights = SCORE_PRIORITIES[priority].weights;
   const stability = typeof score.stability === 'number' ? score.stability : score.total;
   const weighted =
-    score.sobriety * SCORE_WEIGHTS.sobriety +
-    score.speed * SCORE_WEIGHTS.speed +
-    stability * SCORE_WEIGHTS.stability +
-    score.fit * SCORE_WEIGHTS.fit;
+    score.sobriety * weights.sobriety +
+    score.speed * weights.speed +
+    stability * weights.stability +
+    score.fit * weights.fit;
   return Number(weighted.toFixed(1));
+}
+
+/**
+ * Re-summarise saved scores under a chosen priority.
+ *
+ * Applied once where scores are loaded rather than threaded through the
+ * thirty-seven places that render or rank a Match. Every one of those reads
+ * `preciseTotal`, `total` or `grade`, so rewriting the three here means they
+ * cannot disagree with each other — which is the failure mode a per-call-site
+ * parameter invites: one list re-ranked, one number beside it still balanced.
+ *
+ * The four measured signals are untouched. `speed` still means what it always
+ * did; only the headline that summarises them moves.
+ */
+export function applyScorePriority<T extends MatchScoreLike & { grade?: string }>(
+  scores: Record<string, T>,
+  priority: ScorePriorityId,
+): Record<string, T> {
+  if (priority === DEFAULT_SCORE_PRIORITY) return scores;
+  const out: Record<string, T> = {};
+  for (const [key, score] of Object.entries(scores)) {
+    const preciseTotal = calculatePreciseTotal(score, priority);
+    const total = Math.round(preciseTotal);
+    out[key] = { ...score, preciseTotal, total, grade: gradeForMatchScore(total) };
+  }
+  return out;
 }
 
 /** Convert a completed benchmark run into the persisted per-model score shape. */

@@ -1887,9 +1887,15 @@ export function getShortModelName(model: string) {
 
 /**
  * A human-friendly display name for beginner surfaces: drops the namespace and
- * size tag and capitalizes. "lmstudio-community/qwen2.5-coder-7b-instruct" and
- * "qwen2.5:7b" both become "Qwen2.5". Raw tags stay available as subtext — a
- * newcomer can't pronounce, remember, or choose between `ollama pull` strings.
+ * size tag and capitalizes. "qwen2.5:7b" becomes "Qwen2.5" and
+ * "lmstudio-community/qwen2.5-coder-7b-instruct" becomes "Qwen2.5-coder". Raw
+ * tags stay available as subtext — a newcomer can't pronounce, remember, or
+ * choose between `ollama pull` strings.
+ *
+ * This comment used to claim both collapsed to "Qwen2.5". They do not, and
+ * should not: a coder build is a different model from the chat one, not
+ * another size of it. Caught when this became the grouping key for the models
+ * table, where merging those two would have hidden a real choice.
  */
 export function getFriendlyModelName(model: string): string {
   const base = String(model || '')

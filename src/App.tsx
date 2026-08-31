@@ -47,10 +47,14 @@ import type {
   RunProgress,
   PendingScoreClear,
 } from './types';
+import type { ScorePriorityId } from './lib/scoring';
 import {
+  SCORE_PRIORITY_STORAGE_KEY,
+  applyScorePriority,
   compareBenchmarkResults,
   compareTestedModelScores,
   formatMatchScore,
+  readScorePriority,
   toTestedModelScore,
   upsertModelScores,
 } from './lib/scoring';
@@ -146,6 +150,7 @@ import {
   CLEARED_TOP_MATCHES_STORAGE_KEY,
   DEFAULT_SHORTLIST_IDS,
   HISTORY_STORAGE_KEY,
+  LINEUP_STRIP_SCREENS,
   NAV_ITEM_BY_ID,
   SIMPLE_NAV_ORDER,
   TEST_SUITE_STORAGE_KEY,
@@ -339,8 +344,26 @@ function App() {
   const stopSkillRef = useRef(false);
   const [pendingDeleteModel, setPendingDeleteModel] = useState<ModelRow | null>(null);
   const [listTestResult, setListTestResult] = useState<ListTestResult | null>(savedHistory?.listTestResult ?? null);
-  const [modelScores, setModelScores] = useState<Record<string, TestedModelScore>>(() =>
+  /**
+   * The scores as measured. Everything downstream reads `modelScores` below,
+   * which is this map re-summarised under the reader's chosen priority — so
+   * what gets saved here is always the measurement, never a view of it.
+   */
+  const [savedModelScores, setModelScores] = useState<Record<string, TestedModelScore>>(() =>
     savedHistory?.modelScores ?? (isDesktopRuntime ? {} : upsertModelScores({}, [demoBenchmark])),
+  );
+  const [scorePriority, setScorePriority] = useState<ScorePriorityId>(
+    () => readScorePriority(localStorage.getItem(SCORE_PRIORITY_STORAGE_KEY)),
+  );
+  /**
+   * Applied here, once, rather than at the thirty-seven places that render or
+   * rank a Match. Those all read total, preciseTotal or grade, so rewriting the
+   * three in one spot means a re-ranked list cannot end up beside a number that
+   * was not.
+   */
+  const modelScores = useMemo(
+    () => applyScorePriority(savedModelScores, scorePriority),
+    [savedModelScores, scorePriority],
   );
   const [modelNotes, setModelNotes] = useState<Record<string, string>>(() => {
     try { return JSON.parse(localStorage.getItem('rigmatch:model-notes:v1') ?? '{}') as Record<string, string>; }
@@ -2988,6 +3011,10 @@ function App() {
   }, [themeId]);
 
   useEffect(() => {
+    writeLocal(SCORE_PRIORITY_STORAGE_KEY, scorePriority);
+  }, [scorePriority]);
+
+  useEffect(() => {
     writeLocal(UI_MODE_STORAGE_KEY, uiMode);
   }, [uiMode]);
 
@@ -3008,7 +3035,8 @@ function App() {
       benchmark,
       benchmarkByModel,
       listTestResult,
-      modelScores,
+      // The measurement, not the current view of it.
+      modelScores: savedModelScores,
       chatMessagesByModel: chatForSave,
       selectedModel,
       savedAt: new Date().toISOString(),
@@ -3028,7 +3056,7 @@ function App() {
         ? 'Saved scores, but there was not enough browser storage left for the answer transcripts.'
         : 'Storage is nearly full, so some saved answer text was dropped. Scores were kept.');
     }
-  }, [benchmark, benchmarkByModel, chatMessagesByModel, listTestResult, modelScores, selectedModel]);
+  }, [benchmark, benchmarkByModel, chatMessagesByModel, listTestResult, savedModelScores, selectedModel]);
 
   useEffect(() => {
     if (!isDesktopRuntime) return;
@@ -3174,7 +3202,7 @@ function App() {
       .filter((item) => item.id !== 'history' || hasScores)
       .filter((item) => item.id !== 'agent' || hasScores);
   }, [scoredModelCount, uiMode]);
-  const showGlobalLineup = uiMode === 'advanced' && activeNavId !== 'speedDate';
+  const showGlobalLineup = uiMode === 'advanced' && LINEUP_STRIP_SCREENS.includes(activeNavId);
 
   useEffect(() => {
     if (visibleNavItems.some((item) => item.id === activeNavId)) return;
@@ -3559,6 +3587,8 @@ function App() {
             isLoadingLogs={isLoadingLogs}
             onThemeChange={selectTheme}
             onUiModeChange={selectUiMode}
+            scorePriority={scorePriority}
+            onScorePriorityChange={setScorePriority}
             onEditGoals={() => setShowGoalsEditor(true)}
             onDeleteModel={requestDeleteModel}
             onRefreshLogs={loadLogs}

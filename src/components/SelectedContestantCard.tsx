@@ -6,6 +6,7 @@ import { getModelOrigin } from '../lib/modelOrigins';
 import type { RunDelta } from '../lib/runHistory';
 import type { ModelRow, PullProgressUpdate, TestedModelScore } from '../types';
 import { AvatarBust } from './Avatars';
+import { describeModelTag } from '../lib/modelVariants.ts';
 import { DownloadProgressInline } from './DownloadProgressInline';
 import { ScoreDeltaCell, ScoreRadar, ScoreSparkline } from './ScoreVisuals';
 import { Download, Gauge, Heart, Trophy, X, Zap } from 'lucide-react';
@@ -108,6 +109,21 @@ export function SelectedContestantCard({
         <strong>{row.displayName}</strong>
         <em>{row.params} · {profile.archetype}</em>
         <p>{getSelectedContestantBlurb(row, profile, score, hardwareFit)}</p>
+        {/* What the letters after the colon mean, next to the letters
+            themselves. The line above says "e2b · Small-footprint helper",
+            which is the family's archetype and identical for every variant —
+            so without this the tag is the only thing telling two rows apart
+            and the one thing nothing explains. */}
+        {describeModelTag(row.displayName).length > 0 && (
+          <ul className="contestant-variant-facts" aria-label="What this version means">
+            {describeModelTag(row.displayName).map((fact) => (
+              <li key={fact.kind}>
+                <strong>{fact.label}</strong>
+                <span>{fact.plain}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       <div className="contestant-spotlight-stats" aria-label="Selected model details">
         <div>

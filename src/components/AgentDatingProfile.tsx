@@ -66,6 +66,13 @@ export function AgentDatingProfile({
           <strong>{profile.agentName}</strong>
           <em>{profile.archetype}</em>
           <p>{matchLine} for {locationLabel}.</p>
+          {/* Not a duplicate of "Chat With Match" above, despite sitting close
+              to it now and reading almost the same. This opens the chat dock
+              inside RigMatch; that one launches the separate companion app,
+              which is not installed on every machine. Deleting this as a
+              duplicate would have taken the working one and left the one that
+              can fail. The labels are the thing that needs work, not the
+              count. */}
           <div className="profile-action-row" aria-label="Model profile actions">
             <button type="button" className="primary-button compact" onClick={onTalk}>
               <MessageSquare aria-hidden="true" />
