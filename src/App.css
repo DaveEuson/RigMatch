@@ -677,6 +677,14 @@
   text-transform: uppercase;
 }
 
+/* Flex, not a grid with pinned tracks.
+   This row declared its columns in eight places, and the children are
+   conditional: the number badge hides on short windows, the icon hides on
+   narrow ones, the count hides on the narrowest. Every combination needed its
+   own track list, and the one nobody wrote out — short AND narrow at once —
+   dropped every label into a 20px badge track and truncated the menu to
+   "M..", "W..", "C.." on a 1280x720 Jetson. Flex does not care how many
+   children turn up, so that class of bug is gone rather than patched. */
 .side-menu-item {
   min-width: 0;
   min-height: 40px;
@@ -684,8 +692,7 @@
   border-radius: 12px;
   background: #10161a;
   color: var(--text);
-  display: grid;
-  grid-template-columns: 16px 20px minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
   gap: 7px;
   padding: 5px 7px;
@@ -695,14 +702,20 @@
      double-spacing every row and pushing the eighth item out of view. */
 }
 
-.side-menu-item b {
-  width: 22px;
-  height: 22px;
-  color: var(--muted);
-  border: none; border-radius: 12px;
-  display: grid;
-  place-items: center;
-  font: 10px/1 var(--mono);
+.side-menu-item > svg {
+  flex: none;
+}
+
+/* Takes the slack, and may shrink — min-width:0 is what lets its label
+   ellipsise instead of forcing the row wider than the rail. */
+.side-menu-copy {
+  flex: 1 1 auto;
+}
+
+/* Pushed to the far end whatever else is present. */
+.side-menu-item > em {
+  flex: none;
+  margin-left: auto;
 }
 
 .side-menu-item svg {
@@ -756,7 +769,6 @@
   background: var(--panel);
 }
 
-.side-menu-item.active b,
 .side-menu-item.active svg,
 .side-menu-item.active .side-menu-copy strong,
 .side-menu-item:hover svg,
@@ -5987,7 +5999,6 @@ tbody tr.computer-row.selected {
   .side-menu-item {
     min-height: 58px;
     margin-bottom: 0;
-    grid-template-columns: 20px 22px minmax(0, 1fr);
     align-items: center;
   }
 
@@ -13469,7 +13480,6 @@ tr:focus-visible,
   }
 
   .side-menu-item {
-    grid-template-columns: 22px minmax(0, 1fr) auto;
   }
 
   .side-menu-item svg {
@@ -13582,7 +13592,6 @@ tr:focus-visible,
 
   .side-menu-item {
     min-height: 44px;
-    grid-template-columns: 22px minmax(0, 1fr);
   }
 
   .side-menu-item em {
@@ -14459,7 +14468,6 @@ td {
   background: rgba(var(--gold-rgb), 0.12);
 }
 
-.side-menu-item.active b,
 .side-menu-item.active svg,
 .side-menu-item.active .side-menu-copy strong,
 .side-menu-item:hover svg,
@@ -17588,7 +17596,6 @@ a.whats-next-support:hover {
   .side-menu-item {
     min-height: 58px;
     margin-bottom: 0;
-    grid-template-columns: 20px 22px minmax(0, 1fr);
     align-items: center;
   }
 
@@ -17610,7 +17617,6 @@ a.whats-next-support:hover {
   }
 
   .side-menu-item {
-    grid-template-columns: 22px minmax(0, 1fr);
     gap: 8px;
   }
 
@@ -18316,10 +18322,8 @@ a.whats-next-support:hover {
   .side-menu-item {
     min-height: 32px;
     padding: 2px 7px;
-    grid-template-columns: 20px minmax(0, 1fr) auto;
     gap: 6px;
   }
-  .side-menu-item > b { display: none; }
   .side-menu-copy small { display: none; }
   .side-menu-copy strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .side-menu-nav { gap: 4px; }
@@ -18355,7 +18359,6 @@ a.whats-next-support:hover {
    A 1280x720 panel lands here exactly, which is how a Jetson found it. */
 @media (max-width: 1240px) and (max-height: 900px) {
   .side-menu-item {
-    grid-template-columns: minmax(0, 1fr) auto;
   }
 }
 

@@ -59,17 +59,22 @@ export function SideMenu({
   };
 
   /**
-   * The number stays, in both modes.
+   * No step number, because there is no sequence and never was.
    *
-   * It is weak information in Advanced — you do not visit these in order, and
-   * nothing is bound to the digits — but this row's grid has a scar: five
-   * responsive rules pin explicit column tracks, and a documented bug on a
-   * 1280x720 Jetson came from two of them hiding children at once, leaving
-   * auto-placement to drop every label into a 20px badge track and truncate
-   * the menu to "M..", "W..", "C..". Dropping a child here to improve a
-   * marker is not a trade worth making.
+   * The rail numbered its eight destinations 1 to 8. Nothing is bound to those
+   * digits, you do not visit the screens in order, and — the part that settles
+   * it — this menu only renders inside App's `uiMode === 'advanced'` branch.
+   * Simple Mode has its own wizard rail with its own steps, which are a real
+   * sequence. So the numbering here was never the guided path it looked like;
+   * it was a marker that answered to nothing.
+   *
+   * Left alone once already, because this row pinned its grid columns in eight
+   * places and a 1280x720 Jetson had been truncated to "M..", "W..", "C.." by
+   * two of those rules hiding children at once. The row is flex now, so a
+   * missing child costs nothing, and sweep:layout and sweep:menus check 40
+   * size/screen combinations between them — the net that did not exist then.
    */
-  const renderItem = (item: NavItem, step: number) => {
+  const renderItem = (item: NavItem) => {
     const Icon = item.icon;
     return (
       <button
@@ -81,7 +86,6 @@ export function SideMenu({
         aria-label={item.label}
         title={`${item.label}: ${item.description}`}
       >
-        <b>{step}</b>
         <Icon aria-hidden="true" />
         <span className="side-menu-copy">
           <strong>{item.label}</strong>
@@ -100,19 +104,16 @@ export function SideMenu({
         <small>{uiMode === 'advanced' ? 'Diagnostics, logs, custom tests' : 'Guided path, fewer controls'}</small>
       </button>
       <nav className="side-menu-nav" aria-label="Primary navigation">
-        {/* Grouped in Advanced, flat in Simple.
-            Simple Mode's order is a guided path, so a sequence is the right
-            shape there. Advanced is a set of tools you dip into, and eight of
-            them in one undifferentiated column is a list you re-read every
-            time instead of aiming at. */}
-        {uiMode === 'advanced'
-          ? groupNavItems(items).map((group) => (
-              <div className="side-menu-group" key={group.id}>
-                {group.label && <h2>{group.label}</h2>}
-                {group.items.map((item) => renderItem(item, items.indexOf(item) + 1))}
-              </div>
-            ))
-          : items.map((item, index) => renderItem(item, index + 1))}
+        {/* Grouped by what you go there to do. Eight destinations in one
+            undifferentiated column is a list you re-read every time instead of
+            aiming at. There is no ungrouped branch because this rail only ever
+            renders in Advanced Mode — see renderItem. */}
+        {groupNavItems(items).map((group) => (
+          <div className="side-menu-group" key={group.id}>
+            {group.label && <h2>{group.label}</h2>}
+            {group.items.map(renderItem)}
+          </div>
+        ))}
       </nav>
       <button
         type="button"
