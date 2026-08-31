@@ -14581,6 +14581,123 @@ td {
   line-height: 1.35;
 }
 
+/* --- Compare two models ----------------------------------------------------
+   Sits under the selected model, because that is the one you are already
+   asking about. */
+.model-compare-card {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(var(--blue-rgb), 0.28);
+  border-radius: 12px;
+  background: rgba(var(--blue-rgb), 0.06);
+}
+
+.model-compare-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.model-compare-head svg {
+  width: 14px;
+  height: 14px;
+  color: var(--blue);
+}
+
+.model-compare-head span {
+  color: var(--text-strong);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.model-compare-head button {
+  min-width: 24px;
+  min-height: 24px;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.model-compare-head button:hover {
+  color: var(--pink);
+  background: var(--panel-hover);
+}
+
+.model-compare-picker select {
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  font: 12px/1.2 var(--ui);
+}
+
+.model-compare-verdict {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.model-compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.model-compare-table th[scope="col"] {
+  padding: 3px 4px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-compare-table th[scope="row"] {
+  padding: 3px 4px 3px 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  text-align: left;
+}
+
+.model-compare-table td {
+  padding: 3px 4px;
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The measured-better value. Only ever on rows where that is a defensible
+   claim — see compareModels, where most rows return no advantage at all. */
+.model-compare-table td.wins {
+  border-radius: 5px;
+  background: rgba(var(--green-rgb), 0.16);
+  color: var(--green);
+  font-weight: 700;
+}
+
+.model-compare-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 .cabinet-sidebar .contestant-spotlight {
   display: flex;
   flex-direction: column;

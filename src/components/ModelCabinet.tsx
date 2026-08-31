@@ -34,6 +34,7 @@ import { DiskGuard } from './DiskGuard';
 import { DownloadProgressInline } from './DownloadProgressInline';
 import { FirstModelWizard } from './FirstModelWizard';
 import { ModelScorePill, ModelStatusPill, PopularityMeter, ScoreLegend } from './ScoreVisuals';
+import { ModelCompareCard } from './ModelCompareCard';
 import { SelectedContestantCard } from './SelectedContestantCard';
 import { ModelDemoChips } from './SkillDemoViewers';
 import { SortableModelHeader } from './SortableModelHeader';
@@ -212,6 +213,8 @@ export function ModelCabinet({
    * that opens everything by default has not collapsed anything.
    */
   const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(() => new Set());
+  /** The second model in the side-by-side, when one has been picked. */
+  const [compareWith, setCompareWith] = useState<string | null>(null);
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [showAllDevelopers, setShowAllDevelopers] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
@@ -1352,6 +1355,15 @@ export function ModelCabinet({
           scoreTrend={scoreTrend}
           scoreDeltas={scoreDeltas}
           onQuickCheck={onQuickCheck}
+        />
+        <ModelCompareCard
+          subject={selectedRow}
+          rows={visibleRows}
+          modelScores={modelScores}
+          installedModelNames={installedModelNames}
+          vramGb={vramGb}
+          compareWith={compareWith}
+          onCompareWith={setCompareWith}
         />
       </div>
       </div>
