@@ -3314,6 +3314,11 @@ function App() {
       )}
       {uiMode === 'beginner' && (
         <SimpleWizard
+          // Only when there is one to open — that is what keeps the Compare
+          // step disabled rather than dead on a machine that has never run one.
+          onOpenRunReport={listTestResult || runReports.length > 0
+            ? () => { setOpenReportId(runReports[0]?.id ?? null); setReportOpen(true); }
+            : undefined}
           system={system}
           ollamaReady={ollama.ready || lmStudio.ready}
           isScanning={isScanningRig}

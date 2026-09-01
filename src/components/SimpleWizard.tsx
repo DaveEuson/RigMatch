@@ -146,6 +146,11 @@ type SimpleWizardProps = {
   notice?: string | null;
   onDismissNotice?: () => void;
   /**
+   * Reopens the report for the finished run. Absent when there is none, which
+   * is what turns the Compare step from dead into disabled.
+   */
+  onOpenRunReport?: () => void;
+  /**
    * Something the user can do about the notice, offered beside it.
    *
    * Without this a notice can only describe a problem, which was fine until one
@@ -387,14 +392,36 @@ export function SimpleWizard(props: SimpleWizardProps) {
             const isDone = stepState.done[id] && !isActive;
             const isLocked = !stepState.unlocked[id] && !isActive;
             const cls = isActive ? 'active' : isDone ? 'done' : 'locked';
-            const clickable = isDone;
+            /**
+             * Compare, once the show has crowned someone, opens the report.
+             *
+             * The step derivation auto-advances compare -> winner as soon as a
+             * match exists, which is right: after the show the winner is the
+             * point. The side effect was a button styled `done`, not disabled,
+             * that did nothing at all when clicked — setStep('compare') simply
+             * resolved back to 'winner'.
+             *
+             * Opening the report is what the word already promises, and in
+             * Simple Mode it is the only route to the transcript at all: there
+             * is no side menu here, so the Comparison screen does not exist.
+             * With no report to open it is disabled rather than dead.
+             */
+            const opensReport = id === 'compare' && compareDone;
+            const clickable = opensReport ? Boolean(props.onOpenRunReport) : isDone;
             return (
               <div className="sw-step-wrap" key={id}>
                 {index > 0 && <i className="sw-step-dash" aria-hidden="true" />}
                 <button
                   type="button"
                   className={`sw-step ${cls}`}
-                  onClick={() => clickable && setStep(id)}
+                  onClick={() => {
+                    if (!clickable) return;
+                    if (opensReport) props.onOpenRunReport?.();
+                    else setStep(id);
+                  }}
+                  title={opensReport
+                    ? (props.onOpenRunReport ? 'See how the models answered' : 'No saved report for this run')
+                    : undefined}
                   disabled={!clickable && !isActive}
                   aria-current={isActive ? 'step' : undefined}
                 >
