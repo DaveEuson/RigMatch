@@ -4,7 +4,8 @@ import { AlertTriangle, Bot, Boxes, Check, ChevronDown, ChevronUp, Download, Ref
 import type { OllamaStatus, SystemProfile } from '../types';
 import type { UiMode } from '../lib/appConfig';
 import type { RigPick } from '../lib/modelCatalog';
-import { topPickLabel } from '../lib/format';
+import { formatGb, topPickLabel } from '../lib/format';
+import { strongestSkill } from '../lib/shareCopy';
 import { BrandMark, MetricTile } from './CommonChrome';
 import { ComfyStartButton } from './ComfyStartButton';
 import { AvatarBust, MachineAvatar } from './Avatars';
@@ -248,8 +249,33 @@ export function TopDeck({
         <section className="top-deck-winner" aria-label="Current best model">
           <AvatarBust model={topPick.row.displayName} size="small" extraClass="top-deck-winner-avatar" />
           <div className="top-deck-winner-copy">
+            {/* The label gets its own row.
+                It used to share one flex row with the buttons under
+                justify-content:space-between, and only the label could shrink.
+                Measured: the actions wanted 221px inside a 218px row, so the
+                label was allotted exactly 0 and rendered as "TOP...". */}
             <div className="top-deck-winner-head">
               <span>{topPickLabel(topPick.score?.grade)}</span>
+              {/* What it is top *for*. getRigPick has always computed this
+                  sentence as `reason` and nothing ever showed it: the pick is
+                  the highest saved Match score among models that fit this
+                  computer, which is a narrower claim than "best model" and the
+                  one the badge was silently making. */}
+              <em className="top-deck-winner-basis" title={topPick.reason}>
+                best score that fits {system.gpu.vramGb > 0 ? formatGb(system.gpu.vramGb) : 'this computer'}
+              </em>
+            </div>
+            <strong>{topPick.row.displayName}</strong>
+            <em>
+              {topPick.score ? `${topPick.score.total} Match · ${topPick.score.grade}` : topPick.fitLabel}
+              {/* And what it is actually good at, when a run measured enough to
+                  say. strongestSkill returns null unless a task group has three
+                  graded answers behind it, so this stays quiet rather than
+                  crowning a skill on one question. */}
+              {topPick.score && strongestSkill(topPick.score) && (
+                <span className="top-deck-winner-skill"> · strongest at {strongestSkill(topPick.score)!.purpose}</span>
+              )}
+            </em>
               <div className="top-deck-winner-actions">
                 <button
                   type="button"
@@ -289,9 +315,6 @@ export function TopDeck({
                   </button>
                 )}
               </div>
-            </div>
-            <strong>{topPick.row.displayName}</strong>
-            <em>{topPick.score ? `${topPick.score.total} Match · ${topPick.score.grade}` : topPick.fitLabel}</em>
           </div>
         </section>
       ) : (

@@ -993,11 +993,15 @@
   white-space: nowrap;
 }
 
+/* Its own row now. Measured at 221px against a 218px head, which is what left
+   the label with exactly zero pixels. Wraps rather than clipping if it ever
+   outgrows the card again. */
 .top-deck-winner-actions {
+  margin-top: 6px;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 5px;
-  flex: 0 0 auto;
 }
 
 .top-deck-use-model-btn {
