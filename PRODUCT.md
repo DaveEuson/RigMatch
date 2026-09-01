@@ -75,7 +75,7 @@ The owner's position on all of the following: these are **strong core concepts, 
 - **A detailed public changelog** back through 0.2.x, written in plain language, that doubles as the release notes shown in the app's Update Center. Single source: `src/data/releaseNotes.ts`.
 - **A candid known-issues document** (`KNOWN_ISSUES.md`) that names unresolved problems rather than hiding them.
 - **Avatar art** in `src/assets/model-avatar-*.webp`, with an art-direction doc for extending the set.
-- **Current version:** 0.7.1, distributed as beta builds.
+- **Current version:** 0.8.0, distributed as beta builds.
 
 **Absences future work must not fabricate:** there are no testimonials, no named customers, no user counts, no download numbers, no press coverage, and no benchmark comparisons against competing tools. macOS builds are unsigned. Nothing may claim otherwise.
 
