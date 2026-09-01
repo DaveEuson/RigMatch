@@ -26,7 +26,7 @@ import type { SearchSuggestion } from '../lib/modelFacets';
 import { familiesToAutoExpand, groupRowsByFamily } from '../lib/modelGroups';
 import { describeModelTag } from '../lib/modelVariants';
 import { getModelNewsId } from '../lib/modelNews';
-import { getDeveloperFilterOptions, getModelOrigin, getRowDeveloper } from '../lib/modelOrigins';
+import { getCountryCode, getDeveloperFilterOptions, getDisplayCountry, getModelOrigin, getRowDeveloper } from '../lib/modelOrigins';
 import type { RunDelta } from '../lib/runHistory';
 import type { BenchmarkResult, ModelRow, PullProgressUpdate, RunProgress, TestedModelScore } from '../types';
 import { AvatarBust } from './Avatars';
@@ -1023,6 +1023,15 @@ export function ModelCabinet({
                   </td>
                   <td title={`${row.publisher ?? origin.organization} · ${origin.country}`}>
                     <span className={`origin-pill origin-${origin.family}`}>{row.publisher ?? origin.organization}</span>
+                    {/* Where it was made. Two letters rather than a flag emoji:
+                        Chromium on Windows has no flag glyphs and renders one as
+                        the two regional-indicator letters it is built from, so
+                        this is the same information drawn on purpose. */}
+                    {(() => {
+                      const country = getDisplayCountry(row.displayName, row.publisher);
+                      const code = country ? getCountryCode(country) : null;
+                      return code ? <span className="origin-country" title={country!}>{code}</span> : null;
+                    })()}
                   </td>
                   <td>
                     <ModelStatusPill installed={installed} queued={queued} label={statusLabel} />
@@ -1215,11 +1224,30 @@ export function ModelCabinet({
                       aria-expanded={open}
                     >
                       <ChevronRight aria-hidden="true" className={open ? 'model-family-caret open' : 'model-family-caret'} />
+                      {/* The family's face, from the version that represents it.
+                          Collapsed, this row stands in for every variant under
+                          it, and a name on its own made the closed list read as
+                          a table of contents rather than as the models
+                          themselves. */}
+                      <AvatarBust generationKind={best.generationKind} model={best.displayName} size="tiny" />
                       <strong>{family}</strong>
                       {/* A group is never smaller than two today, but the
                           plural is one word and a "1 versions" shipped once is
                           the kind of thing nobody goes back to fix. */}
                       <em>{variants.length} version{variants.length === 1 ? '' : 's'}</em>
+                      {/* Who made it and where, once per family — every version
+                          under this row shares both. */}
+                      {(() => {
+                        const maker = best.publisher ?? getModelOrigin(best.displayName).organization;
+                        const country = getDisplayCountry(best.displayName, best.publisher);
+                        const code = country ? getCountryCode(country) : null;
+                        return (
+                          <span className="model-family-maker" title={country ? `${maker} · ${country}` : maker}>
+                            {maker}
+                            {code && <b>{code}</b>}
+                          </span>
+                        );
+                      })()}
                       {installedCount > 0 && <span className="model-family-installed">{installedCount} installed</span>}
                       {bestScore && <span className="model-family-best">Best {bestScore.total} · {bestScore.grade}</span>}
                       {/* Popularity is a property of the family, not of a tag:

@@ -3237,6 +3237,14 @@ tbody tr.computer-row.selected {
   transform: rotate(90deg);
 }
 
+/* Sized to the row rather than to the table's own avatar, which sits inside a
+   taller cell. flex:none so it never gives up width to a long family name. */
+.model-family-row .avatar-bust.tiny {
+  flex: none;
+  width: 22px;
+  height: 22px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .model-family-caret { transition: none; }
 }
@@ -3284,6 +3292,28 @@ tbody tr.computer-row.selected {
   font-size: 9px;
   font-style: normal;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Where a model was made. Two letters, not a flag: Chromium on Windows has no
+   flag glyphs and renders an emoji flag as the two regional-indicator letters
+   it is built from, so this draws them on purpose instead. */
+.origin-country,
+.model-family-maker b {
+  margin-left: 5px;
+  padding: 1px 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font: 9px/1.35 var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+.model-family-maker {
+  color: var(--muted);
+  font-size: 11px;
   white-space: nowrap;
 }
 

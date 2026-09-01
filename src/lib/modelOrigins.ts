@@ -16,6 +16,89 @@ export type ModelOrigin = {
   organization: string;
 };
 
+/**
+ * The two-letter code for a country, for the badge beside a model's maker.
+ *
+ * Not a flag emoji. Measured in this app's own runtime on Windows 11:
+ * `🇺🇸🇨🇳🇫🇷🇨🇦🇰🇷🇦🇪🇸🇬` renders as "US CN FR CA KR AE SG" — Chromium has no flag
+ * glyphs there and falls back to the two regional-indicator letters the flag is
+ * built from. Emoji flags would therefore be letter pairs for most people
+ * running this, so the letters are drawn deliberately instead of arrived at by
+ * accident. The full country name rides along as the title.
+ *
+ * Null where a code would be a claim: "International" and "Unknown" are real
+ * answers here, and a made-up code for either would be worse than none.
+ */
+const COUNTRY_CODES: Record<string, string> = {
+  'United States': 'US',
+  China: 'CN',
+  France: 'FR',
+  Canada: 'CA',
+  'South Korea': 'KR',
+  'United Arab Emirates': 'AE',
+  Singapore: 'SG',
+};
+
+export function getCountryCode(country: string): string | null {
+  return COUNTRY_CODES[String(country ?? '').trim()] ?? null;
+}
+
+/**
+ * The country for a maker's name, when the model's name did not give one.
+ *
+ * The models table shows `row.publisher ?? origin.organization` as the maker
+ * but took the country from getModelOrigin(displayName) — two sources that can
+ * disagree. They did: "T5-XXL text encoder (fp8)" carries the publisher Google
+ * from the catalogue while its name matches no family, so the row said Google
+ * made it and then had nothing to say about where.
+ *
+ * Every entry here is an organisation already named in getModelOrigin above,
+ * keyed by name instead of by model. No new claims about who is where — the
+ * same facts reached the other way round.
+ */
+const ORGANIZATION_COUNTRIES: Record<string, string> = {
+  Google: 'United States',
+  Meta: 'United States',
+  Microsoft: 'United States',
+  IBM: 'United States',
+  Intel: 'United States',
+  'Hugging Face': 'United States',
+  'Nous Research': 'United States',
+  'Cognitive Computations': 'United States',
+  LLaVA: 'United States',
+  Moondream: 'United States',
+  LMSYS: 'United States',
+  'Alibaba Cloud': 'China',
+  Alibaba: 'China',
+  DeepSeek: 'China',
+  '01.AI': 'China',
+  OpenBMB: 'China',
+  'Mistral AI': 'France',
+  Cohere: 'Canada',
+  TII: 'United Arab Emirates',
+  Upstage: 'South Korea',
+  TinyLlama: 'Singapore',
+  BigCode: 'International',
+};
+
+export function getCountryForOrganization(organization: string): string | null {
+  return ORGANIZATION_COUNTRIES[String(organization ?? '').trim()] ?? null;
+}
+
+/**
+ * The country to show for a row, from whichever source actually knows it.
+ *
+ * The model's own name first, since that is the more specific match, then the
+ * maker's name. Null when neither knows — a badge invented for a publisher
+ * this file has never heard of would be a fact the app does not have.
+ */
+export function getDisplayCountry(model: string, publisher?: string): string | null {
+  const fromModel = getModelOrigin(model).country;
+  if (getCountryCode(fromModel)) return fromModel;
+  const fromPublisher = publisher ? getCountryForOrganization(publisher) : null;
+  return fromPublisher ?? (fromModel === 'Unknown' ? null : fromModel);
+}
+
 export function getModelFamily(model: string): ModelFamilyId {
   const lower = String(model || '').toLowerCase();
   if (lower.includes('deepseek')) return 'deepseek';
