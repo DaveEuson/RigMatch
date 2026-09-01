@@ -47,6 +47,9 @@ export function RunReportModal({
   // Keyed from the run's own results rather than the app-wide score map, so the
   // report describes this run even if a later test overwrites a model's score.
   const scoresByModel = Object.fromEntries(tested.map((score) => [score.model, score]));
+  // Whether this report still has answers to show. A stored report can outlive
+  // its transcript; the modal has to know the difference.
+  const answersKept = rows.some((row) => (benchmarks[row.displayName]?.prompts?.length ?? 0) > 0);
   const questionCount = rows
     .map((row) => benchmarks[row.displayName]?.prompts.length ?? 0)
     .reduce((most, count) => Math.max(most, count), 0);
@@ -86,15 +89,29 @@ export function RunReportModal({
         <TaskMatrix models={tested.map((score) => score.model)} scores={scoresByModel} />
 
         {/* The answers themselves. Same component the Comparison screen uses,
-            so the report cannot drift from the transcript it is reporting on. */}
+            so the report cannot drift from the transcript it is reporting on.
+
+            Unless they are gone: safeStorage drops answer text first when the
+            browser runs out of room, and the panel's own empty state says "Run
+            Speed Dating to see answers side by side" — which is wrong here and
+            in the worst way, because the run did happen and that sentence tells
+            the reader to repeat work they already did. */}
         <div className="run-report-transcript">
-          <SpeedDateTranscriptPanel
-            rows={rows}
-            benchmarks={benchmarks}
-            questionPlan={questionPlan}
-            runProgress={null}
-            initialViewMode="by-question"
-          />
+          {answersKept ? (
+            <SpeedDateTranscriptPanel
+              rows={rows}
+              benchmarks={benchmarks}
+              questionPlan={questionPlan}
+              runProgress={null}
+              initialViewMode="by-question"
+            />
+          ) : (
+            <p className="run-report-noanswers">
+              The answers from this run were not kept — they are dropped first when the
+              browser runs out of saved space, so newer runs keep theirs. The scores above
+              are the full result.
+            </p>
+          )}
         </div>
 
         <footer className="run-report-foot">

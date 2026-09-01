@@ -8,7 +8,9 @@ import { AdvancedCapabilityLab } from './AdvancedCapabilityLab';
 import { AppBuilderPreviewModal } from './AppBuilderPreview';
 import { AvatarBust } from './Avatars';
 import { ImageResultModal } from './ImageResultModal';
-import { Code2, Download, Gauge, History, Lightbulb, Play, RefreshCw, X } from 'lucide-react';
+import type { StoredRunReport } from '../lib/runReports';
+import { describeReport, hasTranscripts } from '../lib/runReports';
+import { Code2, Download, FileText, Gauge, History, Lightbulb, Play, RefreshCw, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 export function ActivityPanel({
@@ -25,6 +27,8 @@ export function ActivityPanel({
   onRerunTest,
   onStopBenchmark,
   onStopSkillTests,
+  runReports,
+  onOpenReport,
 }: {
   runProgress: RunProgress | null;
   skillRunStatus: SkillRunStatus;
@@ -39,6 +43,9 @@ export function ActivityPanel({
   onRerunTest: (model: string) => void;
   onStopBenchmark: () => void;
   onStopSkillTests: () => void;
+  /** Newest first. Empty until a comparison has finished at least once. */
+  runReports: StoredRunReport[];
+  onOpenReport: (id: string) => void;
 }) {
   const [previewApp, setPreviewApp] = useState<{ html: string; model: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; model: string } | null>(null);
@@ -96,6 +103,48 @@ type ActivityJob = {
           <em>Live jobs report here as they run, and recent results stay below — open the app or image a test produced.</em>
         </div>
       </div>
+
+      {runReports.length > 0 && (
+        <article className="activity-card activity-reports">
+          <div className="activity-card-head">
+            <FileText aria-hidden="true" />
+            <strong>Recent reports</strong>
+            <b className="activity-state idle">{runReports.length} kept</b>
+          </div>
+          {/* Comparisons only. A run report is a group of models that sat the
+              same exam; a single test has a scorecard, not a report. */}
+          <ul className="activity-report-list">
+            {runReports.map((report) => (
+              <li key={report.id}>
+                <button type="button" onClick={() => onOpenReport(report.id)}>
+                  <strong>{describeReport(report)}</strong>
+                  <em>
+                    {new Date(report.completedAt).toLocaleString()}
+                    {report.suiteName ? ` · ${report.suiteName}` : ''}
+                  </em>
+                  {/* safeStorage drops answer text first when the browser runs
+                      out of room, so a report can outlive its transcript. Say
+                      so on the row rather than opening an empty panel. */}
+                  {!hasTranscripts(report) && <span title="The answers were dropped to save space. The scores are still here.">scores only</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {/* Counted, not assumed: a report can be kept after its answers were
+              dropped, and claiming answers for all of them would be false the
+              first time storage got tight. */}
+          <em className="activity-report-note">
+            {(() => {
+              const withAnswers = runReports.filter(hasTranscripts).length;
+              const runs = `${runReports.length} run${runReports.length === 1 ? '' : 's'}`;
+              if (withAnswers === runReports.length) return `The last ${runs} kept here, with their answers. Older ones make room for newer.`;
+              if (withAnswers === 0) return `The last ${runs} kept here as scores. The answers were dropped to save space.`;
+              const still = withAnswers === 1 ? '1 still has its answers' : `${withAnswers} still have their answers`;
+              return `The last ${runs} kept here; ${still}. Older ones make room for newer.`;
+            })()}
+          </em>
+        </article>
+      )}
 
       <article className="activity-card">
         <div className="activity-card-head">

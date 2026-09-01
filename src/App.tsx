@@ -61,6 +61,14 @@ import {
   upsertModelScores,
 } from './lib/scoring';
 import { RunReportModal } from './components/RunReportModal';
+import type { StoredRunReport } from './lib/runReports';
+import {
+  RUN_REPORTS_STORAGE_KEY,
+  addRunReport,
+  makeReportId,
+  parseStoredReports,
+  reportStorageCandidates,
+} from './lib/runReports';
 import { WhatsNewPanel } from './components/WhatsNewPanel';
 import { SideMenu, type NavId, type NavItem } from './components/SideMenu';
 import { GameShowHost } from './components/GameShowHost';
@@ -352,6 +360,12 @@ function App() {
    * scrolls, and by quietly updating three screens the reader had to know to
    * visit. The bar says the report exists; opening it is their choice.
    */
+  const [runReports, setRunReports] = useState<StoredRunReport[]>(() => {
+    try { return parseStoredReports(JSON.parse(localStorage.getItem(RUN_REPORTS_STORAGE_KEY) ?? '[]')); }
+    catch { return []; }
+  });
+  /** Which stored report the modal is showing, or null for the newest run. */
+  const [openReportId, setOpenReportId] = useState<string | null>(null);
   const [reportReady, setReportReady] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   /**
@@ -2488,6 +2502,22 @@ function App() {
           .map((r) => toTestedModelScore(r, currentSuiteName))
           .sort(compareTestedModelScores),
       });
+      {
+        const completedAt = new Date().toISOString();
+        const stored: StoredRunReport = {
+          id: makeReportId(completedAt, winner.model),
+          completedAt,
+          winner: winner.model,
+          results: results.map((r) => toTestedModelScore(r, currentSuiteName)).sort(compareTestedModelScores),
+          questionCount: winner.prompts.length,
+          suiteName: currentSuiteName,
+          // The whole result, not just its prompts: the transcript panel reads
+          // scores off it too, and storing the shape it already expects means
+          // a reopened report renders through exactly the same component.
+          transcripts: Object.fromEntries(results.map((r) => [r.model, r])),
+        };
+        setRunReports((current) => addRunReport(current, stored));
+      }
       setReportReady(true);
       setActivity(`Best match: ${winner.model} scored ${winner.scores.total} for this setup.`);
       await agentArcadeApi.appendLog({
@@ -3028,6 +3058,17 @@ function App() {
     writeLocal(SCORE_PRIORITY_STORAGE_KEY, scorePriority);
   }, [scorePriority]);
 
+  /**
+   * Saved through the same fallback ladder the history uses. Transcripts are
+   * the bulky part, so when the browser refuses the write the answers go before
+   * the reports do — a list that says "the answers were not kept" is still the
+   * list the reader came for.
+   */
+  useEffect(() => {
+    if (runReports.length === 0) return;
+    writeLocalJsonWithFallback(RUN_REPORTS_STORAGE_KEY, reportStorageCandidates(runReports));
+  }, [runReports]);
+
   useEffect(() => {
     writeLocal(UI_MODE_STORAGE_KEY, uiMode);
   }, [uiMode]);
@@ -3564,6 +3605,8 @@ function App() {
         )}
         {activeNavId === 'activity' && (
           <ActivityPanel
+            runReports={runReports}
+            onOpenReport={(id) => { setOpenReportId(id); setReportOpen(true); }}
             runProgress={runProgress}
             skillRunStatus={skillRunStatus}
             pullProgressByModel={pullProgressByModel}
@@ -3683,16 +3726,29 @@ function App() {
           </button>
         </div>
       )}
-      {reportOpen && listTestResult && (
+      {reportOpen && (() => {
+        // A row in Activity opens that stored run; finishing a run opens the
+        // one that just happened. Both render through the same modal.
+        const stored = openReportId ? runReports.find((entry) => entry.id === openReportId) : null;
+        const result = stored ? { winner: stored.winner, results: stored.results } : listTestResult;
+        if (!result) return null;
+        const benchmarks = stored?.transcripts ?? benchmarkByModel;
+        const rows = stored
+          ? result.results
+              .map((score) => modelRows.find((row) => row.displayName === score.model))
+              .filter((row): row is typeof modelRows[number] => Boolean(row))
+          : shortlistedRows;
+        return (
         <RunReportModal
-          result={listTestResult}
-          rows={shortlistedRows}
-          benchmarks={benchmarkByModel}
+          result={result}
+          rows={rows}
+          benchmarks={benchmarks}
           questionPlan={benchmarkQuestions.slice(0, benchmarkQuestionCount)}
-          onClose={() => { setReportOpen(false); setReportReady(false); }}
-          onOpenScorecards={() => { setReportOpen(false); setReportReady(false); selectNav('history'); }}
+          onClose={() => { setReportOpen(false); setReportReady(false); setOpenReportId(null); }}
+          onOpenScorecards={() => { setReportOpen(false); setReportReady(false); setOpenReportId(null); selectNav('history'); }}
         />
-      )}
+        );
+      })()}
 
       {chatOpen && (
         <ChatDock
