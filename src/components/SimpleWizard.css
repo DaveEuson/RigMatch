@@ -518,10 +518,35 @@
 
 .sw-card > .sw-card-name { grid-area: name; }
 .sw-card > .sw-card-goodfor { grid-area: goodfor; }
-/* justify-self, not the badge's own align-self: in a grid that property runs
-   down the block axis, so the pill stretched the full width of the card and
-   read as a status bar rather than a badge. */
-.sw-card > .sw-fit-badge { grid-area: fit; justify-self: start; }
+/* "Does it fit" and "do people use it", sharing one row. Wrapping rather than
+   stacking, so the download count is free on cards whose fit line is short and
+   takes a second line only where it genuinely does not fit. */
+.sw-card > .sw-card-signals {
+  grid-area: fit;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Muted against the fit badge's green: fit is the signal that decides whether
+   a model is usable at all, popularity only breaks a tie between models that
+   already fit. */
+.sw-pop-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sw-pop-badge svg { width: 11px; height: 11px; }
 .sw-card > .sw-card-btn,
 .sw-card > .sw-card-full { grid-area: action; }
 

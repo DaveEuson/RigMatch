@@ -28,7 +28,7 @@ import { STEPS, STEP_LABELS, footerHint, nextBlockedHint, type StepId } from '..
 import { copyText, type CopyState } from '../lib/clipboard';
 import { Explain, ExplainText, InfoViewProvider } from './InfoView';
 import { useExplaining } from '../lib/infoContext';
-import { formatBytes, formatBytesPerSecond } from '../lib/format';
+import { formatBytes, formatBytesPerSecond, formatPullCount } from '../lib/format';
 import { roundLabel } from '../lib/roundLabels';
 import { formatDuration } from '../lib/runEstimates';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
@@ -939,10 +939,32 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
         <span className="sw-eyebrow">Good for</span>
         <p>{model.goodForLine}</p>
       </div>
-      <span className={`sw-fit-badge ${model.fitTier === 'slower' ? 'gold' : 'green'}`} title={model.fitDetail}>
-        <Heart aria-hidden="true" />{fitLabel}
-        {model.fitDetail && <i className="sw-fit-detail"><ExplainText text={model.fitDetail} /></i>}
-      </span>
+      {/* Does it fit, and do other people use it — the two questions a beginner
+          can actually act on, side by side. They share the row rather than
+          stacking, so popularity costs no height when it fits and wraps when it
+          does not.
+
+          Ollama counts pulls per family, which is why thirty-five Gemma 4 rows
+          all read "23.9M" in Advanced. Here that is not a caveat but the right
+          number: these cards are already collapsed to one per family, so a
+          family figure is exactly what the card stands for. */}
+      <div className="sw-card-signals">
+        <span className={`sw-fit-badge ${model.fitTier === 'slower' ? 'gold' : 'green'}`} title={model.fitDetail}>
+          <Heart aria-hidden="true" />{fitLabel}
+          {model.fitDetail && <i className="sw-fit-detail"><ExplainText text={model.fitDetail} /></i>}
+        </span>
+        {/* Absent, not "No pull data": a beginner card should not carry a slot
+            explaining a number it does not have. */}
+        {model.row.pulls != null && model.row.pulls > 0 && (
+          <span
+            className="sw-pop-badge"
+            title={`${model.row.pulls.toLocaleString()} downloads from the Ollama library. Counted across every size of this model.`}
+          >
+            <Download aria-hidden="true" />
+            {formatPullCount(model.row.pulls)} downloads
+          </span>
+        )}
+      </div>
       {/* A full lineup used to leave "Lineup full" sitting in the primary
           button — so most cards in the grid presented a dead gold control as
           their call to action. It is a status, so it reads as one, and it says
