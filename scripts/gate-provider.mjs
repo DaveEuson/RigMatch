@@ -134,9 +134,31 @@ const attempt = async (mode, timeoutMs) => {
 // ── 4. The failure actually reaches the beginner ───────────────────────────
 {
   const wizard = readFileSync('src/components/SimpleWizard.tsx', 'utf-8');
-  const carriesMessage = /message\?: string/.test(wizard);
+
+  // This used to grep SimpleWizard for the literal `message?: string`, because
+  // the file hand-copied RunProgress's fields into a local type. That copy was
+  // the very thing this check was defending against — it had already dropped
+  // `message` once, swallowing every failure reason the App handed over, and
+  // later dropped `questionType` too. SimpleWizard now uses RunProgress itself,
+  // so the copy cannot drift again and the literal is gone.
+  //
+  // Which left the gate failing on a codebase that had got strictly better:
+  // RunProgress declares `message: string`, required rather than optional. So
+  // prove the property where it is actually declared, and keep accepting a
+  // local declaration in case the type is ever narrowed again on purpose.
+  const declaredInWizard = /message\?: string/.test(wizard);
+  const usesRunProgress = /type SimpleRunProgress = RunProgress\b/.test(wizard);
+  const types = readFileSync('src/types.ts', 'utf-8');
+  const start = types.indexOf('export type RunProgress = {');
+  const runProgressBlock = start >= 0 ? types.slice(start, types.indexOf('\n};', start)) : '';
+  const runProgressCarriesMessage = /^\s*message\??: string;/m.test(runProgressBlock);
+
+  const carriesMessage = declaredInWizard || (usesRunProgress && runProgressCarriesMessage);
   const rendersMessage = /runProgress\?\.message/.test(wizard);
-  record('Simple Mode receives a failure message', carriesMessage);
+  record('Simple Mode receives a failure message', carriesMessage,
+    declaredInWizard ? 'declared on the wizard\'s own prop type'
+      : carriesMessage ? 'the wizard takes RunProgress, which declares it'
+        : 'neither SimpleWizard nor RunProgress carries a message field');
   record('Simple Mode renders it instead of the next question', rendersMessage,
     rendersMessage ? '' : 'a dead run would keep saying the host is lining up the next question');
 }
