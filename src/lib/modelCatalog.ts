@@ -15,7 +15,7 @@ import type {
   TestedModelScore,
 } from '../types';
 import type { NavId } from '../components/SideMenu';
-import { getModelFamily, getModelOrigin } from './modelOrigins.ts';
+import { getDisplayCountry, getModelFamily, getModelOrigin } from './modelOrigins.ts';
 import { normalizeModelKey } from './modelKey.ts';
 import { MATCH_GRADE_BANDS, compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore } from './scoring.ts';
 import { formatBytes, formatBytesPerSecond, formatGb, hashString, formatThroughput } from './format.ts';
@@ -31,7 +31,7 @@ import {
   type UiMode,
 } from './appConfig.ts';
 
-export type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'origin' | 'source' | 'status' | 'score' | 'speed' | 'pulls' | 'added';
+export type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'maker' | 'origin' | 'source' | 'status' | 'score' | 'speed' | 'pulls' | 'added';
 export type SortDirection = 'asc' | 'desc';
 export type ModelQuickFilterId = 'all' | 'installed' | 'fits-vram' | 'scored' | 'unscored' | 'good-score' | 'low-score' | 'huge';
 export type ListTestResult = {
@@ -747,8 +747,14 @@ export function getModelSortValue(
       return getParamSortValue(row.params);
     case 'skill':
       return getModelGoodForTags(row).join(' ');
+    // 'origin' has always sorted by country while the column showing it was
+    // labelled "By" and printed the organisation — so sorting by the maker
+    // sorted by where they are. Now that country has its own column, the two
+    // keys can mean what their headers say.
+    case 'maker':
+      return row.publisher ?? getModelOrigin(row.displayName).organization;
     case 'origin':
-      return getModelOrigin(row.displayName).country;
+      return getDisplayCountry(row.displayName, row.publisher) ?? 'zzz';
     case 'source':
       return row.source;
     case 'status':
@@ -865,8 +871,10 @@ export function getModelSortLabel(sortKey: ModelSortKey) {
       return 'Size';
     case 'skill':
       return 'Good For';
+    case 'maker':
+      return 'By';
     case 'origin':
-      return 'Origin';
+      return 'Made In';
     case 'source':
       return 'From';
     case 'status':

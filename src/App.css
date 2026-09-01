@@ -3298,9 +3298,19 @@ tbody tr.computer-row.selected {
 /* Where a model was made. Two letters, not a flag: Chromium on Windows has no
    flag glyphs and renders an emoji flag as the two regional-indicator letters
    it is built from, so this draws them on purpose instead. */
+/* On its own line in the table.
+   The By column is 86px with overflow:hidden, and the maker pill plus this
+   badge together overflowed it — the badge rendered as an empty box with its
+   letters cut off. Stacking fits both without widening a column the reader can
+   resize themselves. The family row has the whole width and keeps it inline. */
+.origin-country {
+  display: block;
+  width: fit-content;
+  margin: 3px 0 0;
+}
+
 .origin-country,
 .model-family-maker b {
-  margin-left: 5px;
   padding: 1px 4px;
   border: 1px solid var(--line);
   border-radius: 4px;

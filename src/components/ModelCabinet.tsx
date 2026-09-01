@@ -215,6 +215,8 @@ export function ModelCabinet({
   const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(() => new Set());
   /** The second model in the side-by-side, when one has been picked. */
   const [compareWith, setCompareWith] = useState<string | null>(null);
+  /** Country of origin, as its own axis — it cuts across maker and use case. */
+  const [countryFilter, setCountryFilter] = useState<string | null>(null);
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [showAllDevelopers, setShowAllDevelopers] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
@@ -226,7 +228,8 @@ export function ModelCabinet({
   // Size fits "Sweet spot", Status fits "Not Installed" (its pill needs ~81px +
   // cell padding), Match fits its header — the previous 62/80/66 defaults
   // ellipsized all three.
-  const [colWidths, setColWidths] = useState([156, 92, 126, 86, 110, 76, 96]);
+  // Eight now: "Made In" sits after "By". Narrow, because it holds two letters.
+  const [colWidths, setColWidths] = useState([156, 92, 126, 86, 68, 110, 76, 96]);
   // Popularity is the least essential column (the local Ollama API exposes no
   // pull counts), so it yields first on narrower windows instead of forcing
   // horizontal scrolling. Handled in JS because the <col> track would keep
@@ -320,6 +323,10 @@ export function ModelCabinet({
    * not help: the row still took its place in the table, still appeared in
    * every facet count, and still had to be read and dismissed.
    */
+  const passesCountry = useCallback(
+    (row: ModelRow) => !countryFilter || getDisplayCountry(row.displayName, row.publisher) === countryFilter,
+    [countryFilter],
+  );
   const passesPlatform = useCallback(
     (row: ModelRow) => getPlatformFit(row.displayName, platform).compatible,
     [platform],
@@ -334,8 +341,8 @@ export function ModelCabinet({
   );
 
   const quickFilters = useMemo(
-    () => getModelQuickFilters(rows.filter((row) => passesQuery(row) && passesDeveloper(row) && passesTask(row) && passesNew(row) && passesPlatform(row)), modelScores, vramGb),
-    [rows, modelScores, vramGb, passesQuery, passesDeveloper, passesTask, passesNew, passesPlatform],
+    () => getModelQuickFilters(rows.filter((row) => passesQuery(row) && passesDeveloper(row) && passesTask(row) && passesNew(row) && passesPlatform(row) && passesCountry(row)), modelScores, vramGb),
+    [rows, modelScores, vramGb, passesQuery, passesDeveloper, passesTask, passesNew, passesPlatform, passesCountry],
   );
   // Headline "N models look realistic for your VRAM" is about the rig, not the
   // current filter selection, so it stays a whole-catalog figure.
@@ -344,9 +351,9 @@ export function ModelCabinet({
     [rows, modelScores, vramGb, passesPlatform],
   );
   const taskFilterCounts = useMemo(() => {
-    const base = rows.filter((row) => passesQuery(row) && passesDeveloper(row) && passesQuick(row) && passesNew(row) && passesPlatform(row));
+    const base = rows.filter((row) => passesQuery(row) && passesDeveloper(row) && passesQuick(row) && passesNew(row) && passesPlatform(row) && passesCountry(row));
     return Object.fromEntries(TASK_FILTER_CHIPS.map((chip) => [chip.id, base.filter((row) => modelMatchesTask(row, chip.id)).length]));
-  }, [rows, passesQuery, passesDeveloper, passesQuick, passesNew, passesPlatform]);
+  }, [rows, passesQuery, passesDeveloper, passesQuick, passesNew, passesPlatform, passesCountry]);
   /**
    * Only offer a use case something can actually satisfy.
    *
@@ -369,8 +376,8 @@ export function ModelCabinet({
   );
 
   const developerFilterOptions = useMemo(
-    () => getDeveloperFilterOptions(rows.filter((row) => passesQuery(row) && passesQuick(row) && passesTask(row) && passesNew(row) && passesPlatform(row))),
-    [rows, passesQuery, passesQuick, passesTask, passesNew, passesPlatform],
+    () => getDeveloperFilterOptions(rows.filter((row) => passesQuery(row) && passesQuick(row) && passesTask(row) && passesNew(row) && passesPlatform(row) && passesCountry(row))),
+    [rows, passesQuery, passesQuick, passesTask, passesNew, passesPlatform, passesCountry],
   );
   const activeDeveloperFilter = developerFilterOptions.some((option) => option.id === developerFilter) ? developerFilter : 'all';
   const shortlistedRows = useMemo(
@@ -413,11 +420,11 @@ export function ModelCabinet({
     // Same predicates the chip counts use, so a chip can never promise rows the
     // table does not then show.
     const filteredRows = rows.filter(
-      (row) => passesQuery(row) && passesDeveloper(row) && passesQuick(row) && passesTask(row) && passesNew(row) && passesPlatform(row),
+      (row) => passesQuery(row) && passesDeveloper(row) && passesQuick(row) && passesTask(row) && passesNew(row) && passesPlatform(row) && passesCountry(row),
     );
 
     return sortModelRows(filteredRows, sortKey, sortDirection, queuedModelIds, modelScores, benchmarkByModel);
-  }, [benchmarkByModel, modelScores, passesQuery, passesDeveloper, passesQuick, passesTask, passesNew, passesPlatform, queuedModelIds, rows, sortDirection, sortKey]);
+  }, [benchmarkByModel, modelScores, passesQuery, passesDeveloper, passesQuick, passesTask, passesNew, passesPlatform, passesCountry, queuedModelIds, rows, sortDirection, sortKey]);
   /**
    * One row per family, in the order the chosen sort already put them.
    *
@@ -432,6 +439,41 @@ export function ModelCabinet({
     }),
     [visibleRows, platform, installedModelNames],
   );
+  /**
+   * A model opened from somewhere else has to actually be on screen.
+   *
+   * What's New, Top Pick and the goal tiles all call onOpenModel, which selects
+   * the model and switches to this screen. Three things could then hide it: the
+   * default Good-fit filter (a cloud model or a 23GB one does not pass it), the
+   * platform filter, and — added the same day as this fix — its family sitting
+   * collapsed. The click worked, the side panel updated, and the row the reader
+   * was sent to look at was nowhere.
+   *
+   * Adjusted during render rather than in an effect, following appliedLens
+   * above: the rerender happens before children paint, where an effect would
+   * show the list still hiding the model for a frame first. The lint rule that
+   * forbids setState in an effect is pointing at the same thing.
+   *
+   * Only when the model is genuinely not visible, so clicking a row already on
+   * screen never disturbs filters someone set deliberately.
+   */
+  const [openedModel, setOpenedModel] = useState(selectedModel);
+  if (selectedModel !== openedModel) {
+    setOpenedModel(selectedModel);
+    const target = rows.find((row) => row.displayName === selectedModel || row.id === selectedModel);
+    if (target) {
+      const family = getFriendlyModelName(target.displayName);
+      setExpandedFamilies((current) => (current.has(family) ? current : new Set(current).add(family)));
+      if (!visibleRows.some((row) => row.displayName === target.displayName)) {
+        setQuickFilter('all');
+        setDeveloperFilter('all');
+        setTaskFilter(null);
+        setNewOnly(false);
+        setCountryFilter(null);
+      }
+    }
+  }
+
   /**
    * Searching opens what it found. Typing "e2b" and getting a shut "Gemma4"
    * row would hide the match behind the very control meant to reveal it.
@@ -451,7 +493,7 @@ export function ModelCabinet({
   // Say what each number counts — the catalog total, the installed count, and the
   // VRAM-fit count are different measures and read as contradictory when all three
   // are just "N models".
-  const modelCountLabel = query || quickFilter !== 'all' || taskFilter || activeDeveloperFilter !== 'all' || newOnly
+  const modelCountLabel = query || quickFilter !== 'all' || taskFilter || activeDeveloperFilter !== 'all' || newOnly || countryFilter
     ? `${visibleRows.length} of ${rows.length} shown`
     : `${rows.length} in catalog`;
   const vramLabel = vramGb > 0 ? `${formatGb(vramGb)} VRAM` : 'detected VRAM';
@@ -465,12 +507,14 @@ export function ModelCabinet({
     activeDeveloperLabel,
     activeTaskLabel,
     newOnly ? 'New' : null,
+    countryFilter,
   ].filter(Boolean).join(' · ');
   const activeFilterCount = [
     quickFilter !== 'all',
     activeDeveloperFilter !== 'all',
     Boolean(taskFilter),
     newOnly,
+    Boolean(countryFilter),
   ].filter(Boolean).length;
 
   const facetGroups = useMemo(
@@ -489,6 +533,25 @@ export function ModelCabinet({
     ? [...visibleTaskFilters, ...goodForFilters.filter((chip) => chip.id === taskFilter)]
     : visibleTaskFilters;
   const hiddenTaskCount = goodForFilters.length - shownTaskFilters.length;
+  /**
+   * Countries, most-represented first, counted against the other active
+   * filters — so the number beside one is what clicking it actually shows.
+   * Only countries the app is sure of: a publisher nobody has checked has no
+   * country, and gathering those under an "Unknown" bucket would invite
+   * filtering by a fact the app does not have.
+   */
+  const countryOptions = useMemo(() => {
+    const base = rows.filter((row) => passesQuery(row) && passesDeveloper(row)
+      && passesQuick(row) && passesTask(row) && passesNew(row) && passesPlatform(row));
+    const counts = new Map<string, number>();
+    for (const row of base) {
+      const country = getDisplayCountry(row.displayName, row.publisher);
+      if (country && getCountryCode(country)) counts.set(country, (counts.get(country) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([country, count]) => ({ country, code: getCountryCode(country)!, count }))
+      .sort((left, right) => right.count - left.count || left.country.localeCompare(right.country));
+  }, [rows, passesQuery, passesDeveloper, passesQuick, passesTask, passesNew, passesPlatform]);
   const newModelCount = useMemo(
     () => rows.filter((row) => newModelIds.has(getModelNewsId(row))).length,
     [rows, newModelIds],
@@ -507,6 +570,7 @@ export function ModelCabinet({
     // written, or it half-works and the table stays narrowed for no visible
     // reason.
     setNewOnly(false);
+    setCountryFilter(null);
   }, []);
 
   /**
@@ -660,6 +724,20 @@ export function ModelCabinet({
                 active={newOnly}
                 onToggle={() => setNewOnly((on) => !on)}
               />
+            </div>
+          )}
+          {countryOptions.length > 0 && (
+            <div className="model-facet-group">
+              <h3>Made in</h3>
+              {countryOptions.map((option) => (
+                <FacetButton
+                  key={option.country}
+                  label={`${option.country} (${option.code})`}
+                  count={option.count}
+                  active={countryFilter === option.country}
+                  onToggle={() => setCountryFilter(countryFilter === option.country ? null : option.country)}
+                />
+              ))}
             </div>
           )}
           {standaloneFilters.length > 0 && (
@@ -843,7 +921,7 @@ export function ModelCabinet({
       <div className="table-wrap model-table">
         <table>
           <colgroup>
-            {colWidths.map((w, i) => (hidePopularity && i === 6 ? null : <col key={i} style={{ width: w }} />))}
+            {colWidths.map((w, i) => (hidePopularity && i === 7 ? null : <col key={i} style={{ width: w }} />))}
             {showAdded && <col style={{ width: 104 }} />}
             <col />
           </colgroup>
@@ -852,9 +930,10 @@ export function ModelCabinet({
               <SortableModelHeader label="Model" sortName="name" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(0, e)} />
               <SortableModelHeader label="Size" sortName="size" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(1, e)} />
               <SortableModelHeader label="Good For" sortName="skill" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(2, e)} />
-              <SortableModelHeader label="By" sortName="origin" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(3, e)} />
-              <SortableModelHeader label="Status" sortName="status" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(4, e)} />
-              <SortableModelHeader label="Match" sortName="score" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(5, e)} />
+              <SortableModelHeader label="By" sortName="maker" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(3, e)} />
+              <SortableModelHeader label="Made In" sortName="origin" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(4, e)} />
+              <SortableModelHeader label="Status" sortName="status" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(5, e)} />
+              <SortableModelHeader label="Match" sortName="score" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(6, e)} />
               {!hidePopularity && (
                 <SortableModelHeader
                   label={hasAnyPullData ? 'Popularity' : 'Speed'}
@@ -862,7 +941,7 @@ export function ModelCabinet({
                   sortKey={sortKey}
                   direction={sortDirection}
                   onSort={changeSort}
-                  onResizeStart={(e) => handleColResizeStart(6, e)}
+                  onResizeStart={(e) => handleColResizeStart(7, e)}
                 />
               )}
               {showAdded && (
@@ -1027,10 +1106,17 @@ export function ModelCabinet({
                         Chromium on Windows has no flag glyphs and renders one as
                         the two regional-indicator letters it is built from, so
                         this is the same information drawn on purpose. */}
+                  </td>
+                  <td className="made-in-cell">
                     {(() => {
                       const country = getDisplayCountry(row.displayName, row.publisher);
                       const code = country ? getCountryCode(country) : null;
-                      return code ? <span className="origin-country" title={country!}>{code}</span> : null;
+                      // No badge rather than a guess. Several of these are
+                      // politically sensitive and a blank is the honest answer
+                      // for a publisher nobody has checked.
+                      return code
+                        ? <span className="origin-country" title={country!}>{code}</span>
+                        : <span className="made-in-unknown" title="Country of origin not recorded for this publisher">—</span>;
                     })()}
                   </td>
                   <td>
@@ -1212,7 +1298,7 @@ export function ModelCabinet({
               const bestScore = getModelScore(best, modelScores);
               return [
                 <tr key={`family:${family}`} className={open ? 'model-family-row open' : 'model-family-row'}>
-                  <td colSpan={(hidePopularity ? 7 : 8) + (showAdded ? 1 : 0)}>
+                  <td colSpan={(hidePopularity ? 8 : 9) + (showAdded ? 1 : 0)}>
                     <button
                       type="button"
                       onClick={() => setExpandedFamilies((current) => {
@@ -1269,7 +1355,7 @@ export function ModelCabinet({
             })()}
             {visibleRows.length === 0 && (
               <tr className="empty-row">
-                <td colSpan={(hidePopularity ? 7 : 8) + (showAdded ? 1 : 0)}>
+                <td colSpan={(hidePopularity ? 8 : 9) + (showAdded ? 1 : 0)}>
                   <div className="table-empty-state">
                     <strong>No contestants match these filters</strong>
                     <span>Clear the search or show the full model pool.</span>

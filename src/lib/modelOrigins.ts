@@ -37,6 +37,10 @@ const COUNTRY_CODES: Record<string, string> = {
   'South Korea': 'KR',
   'United Arab Emirates': 'AE',
   Singapore: 'SG',
+  // UK rather than the ISO GB. Every other entry here happens to match ISO,
+  // but this badge is read at a glance by people who are not looking up
+  // country codes, and "GB" reads as a puzzle where "UK" does not.
+  'United Kingdom': 'UK',
 };
 
 export function getCountryCode(country: string): string | null {
@@ -79,6 +83,10 @@ const ORGANIZATION_COUNTRIES: Record<string, string> = {
   Upstage: 'South Korea',
   TinyLlama: 'Singapore',
   BigCode: 'International',
+  // Confirmed by Dave, 2026-09-01: Stability AI Ltd is a UK company. Added
+  // because it was checked, not because it was guessed — see the note on
+  // getDisplayCountry about what happens to publishers nobody has verified.
+  'Stability AI': 'United Kingdom',
 };
 
 export function getCountryForOrganization(organization: string): string | null {
@@ -89,8 +97,14 @@ export function getCountryForOrganization(organization: string): string | null {
  * The country to show for a row, from whichever source actually knows it.
  *
  * The model's own name first, since that is the more specific match, then the
- * maker's name. Null when neither knows — a badge invented for a publisher
- * this file has never heard of would be a fact the app does not have.
+ * maker's name. Null when neither knows, and null is where it stays until
+ * someone checks: an entry here is a public claim about where a company is
+ * from, and a plausible-looking guess is the wrong way to make one. Several
+ * of these are politically sensitive, and a badge is not the place to be
+ * approximately right.
+ *
+ * Lightricks is the standing example — a real publisher in the catalogue, left
+ * uncoded on purpose rather than filled in from memory.
  */
 export function getDisplayCountry(model: string, publisher?: string): string | null {
   const fromModel = getModelOrigin(model).country;
