@@ -14682,6 +14682,124 @@ td {
   vertical-align: middle;
 }
 
+/* --- Best at what ----------------------------------------------------------
+   Every run has measured per-task scores since task groups landed and nothing
+   rendered them. A Match score ranks models on everything at once; this is the
+   other question — which one to reach for when the job is code, or writing. */
+.task-matrix {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--blue-rgb), 0.3);
+  border-radius: 10px;
+  background: rgba(var(--blue-rgb), 0.06);
+}
+
+.task-matrix-head span {
+  display: block;
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.task-matrix-head strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* Seven task groups will not fit a narrow panel, and the page must never
+   scroll sideways because of it. */
+.task-matrix-scroll {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.task-matrix table {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.task-matrix th,
+.task-matrix td {
+  padding: 4px 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.task-matrix thead th {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.task-matrix tbody th {
+  max-width: 168px;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+.task-matrix td {
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* The best measured in its column, and only where two or more were measured —
+   see buildTaskMatrix, which declines to crown a field of one or a tie. */
+.task-matrix td.wins {
+  border-radius: 5px;
+  background: rgba(var(--green-rgb), 0.18);
+  color: var(--green);
+  font-weight: 700;
+}
+
+.task-matrix td.needs-judge {
+  color: var(--gold);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.task-matrix td.too-few,
+.task-matrix td.none {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.task-matrix-legend {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.task-matrix-legend b {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.task-matrix-judge-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* --- Run report -----------------------------------------------------------
    A finished comparison used to announce itself only in the ticker, which
    scrolls away, and by quietly updating three screens the reader had to know
@@ -14750,7 +14868,8 @@ td {
   max-height: min(88vh, 900px);
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  /* head, ranking, matrix, transcript, footer — the transcript takes the slack. */
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: 12px;
   padding: 16px;
   border: 1px solid rgba(var(--gold-rgb), 0.42);

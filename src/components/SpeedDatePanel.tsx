@@ -16,6 +16,7 @@ import { RomanceArtBanner } from './ScoreVisuals';
 import { SpeedDateContestantCard } from './SpeedDateContestantCard';
 import { SpeedDateShowAnimation } from './SpeedDateShowAnimation';
 import { SpeedDateTranscriptPanel } from './SpeedDateTranscriptPanel';
+import { TaskMatrix } from './TaskMatrix';
 import { TestProcessCard } from './TestProcessCard';
 import { Boxes, ChevronRight, Download, Plus, Settings, Trophy } from 'lucide-react';
 import { useState } from 'react';
@@ -349,6 +350,16 @@ export function SpeedDatePanel({
                 </li>
               ))}
             </ol>
+            {/* Under the ranking, not beside it: the ranking answers "which is
+                best overall" and this answers "best at what", which is the
+                question someone with several models actually has. */}
+            <TaskMatrix
+              models={listTestResult.results.map((result) => result.model)}
+              // The run's own results, not the app-wide score map. This view is
+              // showing one comparison; a later single test on one of these
+              // models would otherwise silently rewrite a cell of it.
+              scores={Object.fromEntries(listTestResult.results.map((result) => [result.model, result]))}
+            />
             <button type="button" className="primary-button compact speed-date-next-btn" onClick={onOpenHistory}>
               <History aria-hidden="true" />
               View Scorecards

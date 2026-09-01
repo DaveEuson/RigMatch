@@ -6,6 +6,7 @@ import { formatMatchScore } from '../lib/scoring';
 import { useDialog } from '../lib/useDialog';
 import type { BenchmarkResult, ModelRow } from '../types';
 import { SpeedDateTranscriptPanel } from './SpeedDateTranscriptPanel';
+import { TaskMatrix } from './TaskMatrix';
 import { Trophy, X } from 'lucide-react';
 
 /**
@@ -43,6 +44,9 @@ export function RunReportModal({
 }) {
   const dialogRef = useDialog<HTMLDivElement>(onClose);
   const tested = result.results;
+  // Keyed from the run's own results rather than the app-wide score map, so the
+  // report describes this run even if a later test overwrites a model's score.
+  const scoresByModel = Object.fromEntries(tested.map((score) => [score.model, score]));
   const questionCount = rows
     .map((row) => benchmarks[row.displayName]?.prompts.length ?? 0)
     .reduce((most, count) => Math.max(most, count), 0);
@@ -76,6 +80,10 @@ export function RunReportModal({
             </li>
           ))}
         </ol>
+
+        {/* Best at what, straight after the ranking — the two questions someone
+            with three models has, in the order they ask them. */}
+        <TaskMatrix models={tested.map((score) => score.model)} scores={scoresByModel} />
 
         {/* The answers themselves. Same component the Comparison screen uses,
             so the report cannot drift from the transcript it is reporting on. */}
