@@ -799,7 +799,11 @@ function PickScreen({
   return (
     <div className="sw-pick">
       <div className="sw-dream">
-        <span className="sw-eyebrow">Who's your dream model?</span>
+        {/* No eyebrow here. The host bubble twenty pixels above already asks
+            "So… who's your dream model?" — a second heading asking the same
+            question in the same words was a row of the viewport spent saying
+            nothing new, on the step where rows are scarcest. The group keeps
+            its aria-label, so nothing is lost to a screen reader. */}
         <div className="sw-dream-chips" role="group" aria-label="Filter contestants by what you want">
           {DREAM_CHIPS.map((chip) => {
             const Icon = chip.icon;
@@ -909,19 +913,26 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
       <img className="sw-card-avatar" src={getModelAvatarSrc(model.row.displayName)} alt="" />
       <div className="sw-card-name">
         <strong>{model.name}</strong>
-        {/* The real pull tag: friendly names strip the variant, so Qwen2.5-coder
-            and Qwen2.5 were identical cards down to the avatar and persona. */}
-        <code className="sw-card-id">{model.row.displayName}</code>
-        <em>{model.epithet}</em>
-        {/* Size and whether it's already here — so "Download 5 models" is never a
-            blind commitment, and installed picks are visibly free. */}
-        <span className="sw-card-size">
-          {model.row.installed
-            ? '✓ Already on your PC'
-            : model.row.sizeGb
-              ? <Explain id="download-size">{`${model.row.sizeGb} GB download`}</Explain>
-              : 'Size unknown'}
+        {/* The pull tag and the cost, on one line. Both are facts about the
+            same thing — which exact model this is and what taking it costs —
+            and each having its own row was 15px of a card that had none to
+            spare.
+
+            The tag matters because friendly names strip the variant, so
+            Qwen2.5-coder and Qwen2.5 were identical cards down to the avatar
+            and persona. The size matters because "Download 5 models" should
+            never be a blind commitment, and installed picks are visibly free. */}
+        <span className="sw-card-meta">
+          <code className="sw-card-id">{model.row.displayName}</code>
+          <span className="sw-card-size">
+            {model.row.installed
+              ? '✓ Already on your PC'
+              : model.row.sizeGb
+                ? <Explain id="download-size">{`${model.row.sizeGb} GB download`}</Explain>
+                : 'Size unknown'}
+          </span>
         </span>
+        <em>{model.epithet}</em>
         {/* Collapsed siblings get one honest line instead of N clone cards. */}
         {(model.variantCount ?? 0) > 1 && (
           <span className="sw-card-variants">

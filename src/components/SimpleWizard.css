@@ -490,23 +490,48 @@
 
 .sw-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 
+/* The contestant card lies across, not down.
+
+   It used to be a vertical stack with a 150px publicity photo on top, which
+   made one card 392px tall. On a 1366x768 laptop the Pick step gets a 484px
+   viewport, so a single row of contestants filled it exactly and 990px of the
+   grid — the second and third rows, the "show more" link, everything — sat
+   below a fold with nothing above it saying so. The photo is theme; choosing
+   between contestants is the job, and the job was the part off screen.
+   Same information, turned ninety degrees. */
 .sw-card {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-areas:
+    "avatar name"
+    "avatar goodfor"
+    "fit    fit"
+    "action action";
+  align-content: start;
+  gap: 8px 12px;
   padding: 14px;
   border-radius: 16px;
   border: 1px solid var(--line);
   background: var(--panel);
 }
 
+.sw-card > .sw-card-name { grid-area: name; }
+.sw-card > .sw-card-goodfor { grid-area: goodfor; }
+/* justify-self, not the badge's own align-self: in a grid that property runs
+   down the block axis, so the pill stretched the full width of the card and
+   read as a status bar rather than a badge. */
+.sw-card > .sw-fit-badge { grid-area: fit; justify-self: start; }
+.sw-card > .sw-card-btn,
+.sw-card > .sw-card-full { grid-area: action; }
+
 .sw-card.picked {
   border: 2px solid var(--pink);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--pink) 15%, transparent);
 }
 
-.sw-card-skeleton { height: 320px; opacity: 0.5; animation: sw-pulse 1.4s ease-in-out infinite; }
+/* Matches a real card, so the grid does not jump when the contestants land. */
+.sw-card-skeleton { height: 202px; opacity: 0.5; animation: sw-pulse 1.4s ease-in-out infinite; }
 @keyframes sw-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.6; } }
 
 .sw-card-pick-badge {
@@ -528,18 +553,27 @@
 
 .sw-card-pick-badge svg { width: 11px; height: 11px; }
 
+/* The badge used to float over the photo. With the photo down to a 64px
+   thumbnail it floats over the name instead, so the name row gives it room —
+   and only on cards already picked, which are the ones already decided. */
+.sw-card.picked > .sw-card-name { padding-right: 64px; }
+
 .sw-card-avatar {
-  width: 100%;
-  height: 150px;
+  grid-area: avatar;
+  width: 64px;
+  height: 64px;
   object-fit: cover;
   border-radius: 12px;
   border: 2px solid color-mix(in srgb, var(--gold) 35%, transparent);
 }
 
-.sw-card-name { display: flex; flex-direction: column; gap: 1px; }
-.sw-card-name strong { font-size: 17px; font-weight: 700; color: var(--text-strong); }
+.sw-card-name { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sw-card-name strong { font-size: 16px; font-weight: 700; color: var(--text-strong); }
 .sw-card-name em { font-size: 11px; font-style: normal; color: var(--muted); }
-.sw-card-goodfor { display: flex; flex-direction: column; gap: 3px; }
+/* "Good for" reads as a label beside the line, not a heading above it — the
+   stacked version spent a whole row on two words. */
+.sw-card-goodfor { display: flex; align-items: baseline; gap: 6px; }
+.sw-card-goodfor .sw-eyebrow { flex: none; }
 .sw-card-goodfor p { margin: 0; font-size: 13px; }
 
 .sw-fit-badge {
@@ -1068,6 +1102,11 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 
 .sw-setup-safety { font-size: 12px; margin-top: -10px; }
 .sw-card-size { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
+/* Tag and cost share a row, wrapping to two only when the tag is long enough
+   to need it. The margins above are for any other place a size line appears. */
+.sw-card-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; margin-top: 2px; }
+.sw-card-meta .sw-card-id,
+.sw-card-meta .sw-card-size { margin-top: 0; }
 /* Note under the size line when one card stands in for several size variants. */
 .sw-card-variants { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); opacity: 0.8; font-style: italic; }
 /* The real pull tag. Monospace so a variant like "-coder" is scannable against
