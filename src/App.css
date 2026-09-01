@@ -14625,6 +14625,63 @@ td {
   line-height: 1.35;
 }
 
+/* What this run sends off the machine, said before it starts.
+   Deliberately not styled as an alarm: for a local model graded locally the
+   answer is "nothing leaves this computer", which is reassurance, not a
+   warning. The same box carries both because the difference is a setting. */
+.run-warning-candour {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--blue-rgb), 0.4);
+  border-radius: 10px;
+  background: rgba(var(--blue-rgb), 0.08);
+}
+
+.run-warning-candour > svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 1px;
+  color: var(--blue);
+}
+
+.run-warning-candour strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.run-warning-candour p {
+  margin: 5px 0 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* A score nothing could actually check.
+   On Difficult Subjects the local scorer sees only refused / thin / engaged,
+   so every engaged answer scores the same 72 — including one that describes an
+   event accurately and omits its central fact. Without this the number read as
+   a verdict. */
+.prompt-unjudged {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid rgba(var(--gold-rgb), 0.5);
+  border-radius: 999px;
+  background: rgba(var(--gold-rgb), 0.12);
+  color: var(--gold);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
 /* --- Run report -----------------------------------------------------------
    A finished comparison used to announce itself only in the ticker, which
    scrolls away, and by quietly updating three screens the reader had to know

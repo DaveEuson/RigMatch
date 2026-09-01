@@ -6,13 +6,13 @@ import { CODE_LANGUAGES, CODE_TASK_PRESETS } from '../lib/codeChallenge';
 import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
 import { APP_BUILDER_PRESETS, VISION_TEST_IMAGES } from '../lib/labChallenges';
 import { GpuContentionNote } from './GpuContentionNote';
-import { getCudaDetail, getCudaSummary, isEmbeddingModel, isLikelyImageGenerationModel, isVisionModel } from '../lib/modelCatalog';
+import { getCudaDetail, getCudaSummary, isCloudModel, isEmbeddingModel, isLikelyImageGenerationModel, isVisionModel } from '../lib/modelCatalog';
 import { formatDuration } from '../lib/runEstimates';
 import { useDialog } from '../lib/useDialog';
 import { isVideoCheckpoint } from '../lib/videoGen';
 import { VIDEO_SIZE_PRESETS } from '../lib/videoGenChallenge';
 import type { GpuContention, PendingRunMode, SkillTestSelection, SystemProfile } from '../types';
-import { Activity, AlertTriangle, Download, ImagePlus, Sparkles, X, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, Download, ImagePlus, ShieldCheck, Sparkles, X, Zap } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 export function RunWarningModal({
@@ -118,6 +118,25 @@ export function RunWarningModal({
     (p) => p.questions.length === benchmarkQuestions.length &&
       p.questions.every((q, i) => q.id === benchmarkQuestions[i]?.id),
   ) ?? null;
+  /**
+   * What this particular run would send off the machine.
+   *
+   * RigMatch's premise is that nothing leaves the computer, and for a local
+   * model graded by the local judge that is exactly true of these questions
+   * too. Two settings break it: a cloud model answers them remotely, and the
+   * OpenRouter judge is sent both the question and the answer to grade. Whether
+   * that matters is the reader's context to weigh, not this app's to assume —
+   * so it states what happens and leaves the judgement where it belongs.
+   */
+  const candourCount = benchmarkQuestions.slice(0, questionCount).filter((q) => q.type === 'candour').length;
+  const cloudAnswerers = (mode === 'speed-date' ? lineupModels ?? [] : [selectedModel])
+    .filter((model) => model && isCloudModel(model));
+  const answersLeaveToo = judgeSource === 'openrouter' && judgeActive;
+  const offDeviceTargets = [
+    ...(cloudAnswerers.length > 0 ? [`${cloudAnswerers.join(', ')} (cloud model${cloudAnswerers.length === 1 ? '' : 's'})`] : []),
+    ...(answersLeaveToo ? ['openrouter.ai for grading'] : []),
+  ];
+
   const title = mode === 'single' ? 'Test One Selected Model?' : 'Start Speed Dating?';
   const subject = mode === 'single' ? selectedModel : `${shortlistedCount} picked models`;
   const totalQuestions = mode === 'single' ? questionCount : questionCount * shortlistedCount;
@@ -759,6 +778,32 @@ export function RunWarningModal({
               </button>
             )}
           </div>
+        )}
+        {/* Only when the run actually asks these questions, and it says what is
+            true of THIS run rather than a general caution nobody reads. The
+            suite is opt-in, so most runs never see this. */}
+        {candourCount > 0 && (
+          <section className="run-warning-candour" aria-label="What leaves this computer">
+            <ShieldCheck aria-hidden="true" />
+            <div>
+              <strong>
+                {candourCount} question{candourCount === 1 ? '' : 's'} in this run ask about documented history
+                and openly debated topics — Tiananmen, Xinjiang, Tulsa 1921, the Armenian genocide.
+              </strong>
+              {offDeviceTargets.length === 0 ? (
+                <p>
+                  Nothing leaves this computer: a local model answers them and the local judge grades them.
+                  No request carrying these questions is sent anywhere.
+                </p>
+              ) : (
+                <p>
+                  With the current settings these questions{answersLeaveToo ? ', and the answers,' : ''} will be
+                  sent to {offDeviceTargets.join(' and ')}. If that matters where you are, switch to a local
+                  model and the local judge, or choose a different question set.
+                </p>
+              )}
+            </div>
+          </section>
         )}
         <div className="modal-actions">
           <button type="button" className="mini-button outline" onClick={onCancel}>

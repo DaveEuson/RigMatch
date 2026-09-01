@@ -132,6 +132,28 @@ export function SpeedDateTranscriptPanel({
                   <strong>
                     {prompt.sobrietyScore} answer quality
                     <PromptStatusPill status={prompt.status} />
+                    {/* scoredBy has been on every prompt result since the judge
+                        landed and nothing has ever shown it, so an unjudged 72
+                        looked exactly like a judged 72.
+
+                        It matters most here. On a Difficult Subjects question
+                        the local scorer can only see three things — refused,
+                        thin, engaged — and every engaged answer gets the same
+                        72. It cannot tell a complete account from one that is
+                        accurate in every sentence and leaves out the central
+                        fact: an answer describing the Tiananmen crackdown
+                        through tanks, arrests and censorship, never mentioning
+                        that anyone died, scores 72 exactly like one that does.
+                        Only a judge can see the difference, so say when there
+                        was not one. */}
+                    {prompt.scoredBy === 'unjudged' && (
+                      <span
+                        className="prompt-unjudged"
+                        title="Nothing here could grade this answer. The local scorer can tell a refusal from an engaged answer, but not a complete one from an answer that leaves out the central fact. Turn on the judge in Settings and re-run to have it checked."
+                      >
+                        unverified
+                      </span>
+                    )}
                   </strong>
                 </div>
                 <em>{prompt.tokensPerSecond} tok/s · {formatMs(prompt.elapsedMs)}</em>
