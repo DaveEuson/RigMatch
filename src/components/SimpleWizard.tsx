@@ -557,28 +557,43 @@ function SetupScreen({
   return (
     <div className="sw-setup">
       <div className="sw-setup-hero" style={{ backgroundImage: `url(${rigGreenroom})` }} aria-hidden="true" />
-      {/* Say what the thing IS before asking to scan for it. Without this the
-          first screen a newcomer meets is a hardware check for something they
-          have not been told the purpose of. */}
-      <p className="sw-setup-lede">
-        An <Explain id="model">AI model</Explain> is a program that runs on your own computer — it can hold a
-        conversation, help you write, explain code, or make pictures. They're free, there are hundreds,
-        and which one is best depends entirely on the machine you have.
-      </p>
+      {/* The action first, the reading under it.
+
+          Measured at 1366x768, the most common laptop: this step put 933px of
+          content in a 497px window and left "Check my computer" 182px below the
+          fold. The host line promises "one click — I'll handle the rest" and the
+          click was the one thing a newcomer could not see.
+
+          Nothing is cut. Saying what a model IS still matters — it was added
+          because a hardware scan for an unexplained thing is a strange first
+          screen — it just no longer stands between the reader and the button. */}
       <h2>So let's check your computer</h2>
+      {/* Gone once the check has passed. It used to render unconditionally
+          while the result below it was gated on `checked`, so a finished setup
+          showed a big gold "Check my computer" sitting directly above "You're
+          all set! · Check again" — two controls for one job, the louder of them
+          already satisfied. The results block carries its own "Check again",
+          which is the only version of this that still has something to do. */}
+      {(!checked || isScanning) && (
+        <button type="button" className="sw-gold-pill sw-cta" onClick={runCheck} disabled={isScanning}>
+          {isScanning ? <RefreshCw className="sw-spin" aria-hidden="true" /> : <ScanLine aria-hidden="true" />}
+          {isScanning ? 'Checking your computer…' : 'Check my computer'}
+        </button>
+      )}
       <p className="sw-muted">
         RigMatch looks at your <Explain id="graphics-card">graphics card</Explain> and memory, works out which
         models will actually run well here, then has them compete so you can crown a winner.
         Everything stays on your PC — no account, no cloud.
       </p>
+      <p className="sw-setup-lede">
+        An <Explain id="model">AI model</Explain> is a program that runs on your own computer — it can hold a
+        conversation, help you write, explain code, or make pictures. They're free, there are hundreds,
+        and which one is best depends entirely on the machine you have.
+      </p>
       {/* Beginners' real fear is "will this break my computer." Name it once, here. */}
       <p className="sw-muted sw-setup-safety">
         Models download into a folder RigMatch manages — nothing is installed system-wide, and you can delete them any time.
       </p>
-      <button type="button" className="sw-gold-pill sw-cta" onClick={runCheck} disabled={isScanning}>
-        {isScanning ? <RefreshCw className="sw-spin" aria-hidden="true" /> : <ScanLine aria-hidden="true" />}
-        {isScanning ? 'Checking your computer…' : 'Check my computer'}
-      </button>
 
       {checked && !isScanning && (
         <div className={comfyMissing ? 'sw-setup-result partial' : 'sw-setup-result ok'}>
