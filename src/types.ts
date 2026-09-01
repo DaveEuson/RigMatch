@@ -282,6 +282,13 @@ export type BenchmarkProgressUpdate = {
   runTotal?: number;
   promptId?: string;
   promptLabel?: string;
+  /**
+   * What the question tests. The run log already recorded this; the progress
+   * updates dropped it, so the UI was left inferring the category from the
+   * label — and captioned a live Tiananmen Square question "Everyday
+   * questions". See lib/roundLabels.ts.
+   */
+  promptType?: BenchmarkQuestionType;
   prompt?: string;
   elapsedMs?: number;
   tokensPerSecond?: number;
@@ -710,6 +717,8 @@ export type RunProgress = {
   questionIndex?: number;
   questionTotal?: number;
   questionLabel?: string;
+  /** The question's own category, so no screen has to guess it from the label. */
+  questionType?: BenchmarkQuestionType;
   questionPrompt?: string;
   questionPhase?: BenchmarkProgressUpdate['phase'];
   questionRunIndex?: number;

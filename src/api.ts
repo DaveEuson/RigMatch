@@ -271,6 +271,7 @@ const fallbackApi: AgentArcadeApi = {
           promptTotal: promptPlan.length,
           promptId: prompt.id,
           promptLabel: prompt.label,
+          promptType: prompt.type,
           prompt: prompt.prompt,
           message: `Asking ${prompt.label}.`,
         });
@@ -283,6 +284,7 @@ const fallbackApi: AgentArcadeApi = {
           promptTotal: promptPlan.length,
           promptId: prompt.id,
           promptLabel: prompt.label,
+          promptType: prompt.type,
           prompt: prompt.prompt,
           elapsedMs: 650 + index * 35,
           tokensPerSecond: Math.max(22, scores.speed + 12 - index * 7),

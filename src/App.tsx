@@ -3187,6 +3187,10 @@ function App() {
           questionIndex: Math.min(Math.max(0, update.promptIndex), Math.max(0, promptTotal - 1)),
           questionTotal: promptTotal,
           questionLabel: update.promptLabel ?? current.questionLabel,
+          // Carried alongside the label, and kept in step with it: a stale type
+          // over a fresh label is how a caption ends up describing the previous
+          // question, which is the failure this field exists to prevent.
+          questionType: update.promptType ?? (update.promptLabel ? undefined : current.questionType),
           questionPrompt: update.prompt ?? current.questionPrompt,
           questionPhase: update.phase,
           questionRunIndex: typeof update.runIndex === 'number' ? update.runIndex : current.questionRunIndex,

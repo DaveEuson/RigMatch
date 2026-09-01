@@ -23,12 +23,13 @@ import {
   Video,
   X,
 } from 'lucide-react';
-import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, SystemProfile } from '../types';
+import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, RunProgress, SystemProfile } from '../types';
 import { STEPS, STEP_LABELS, footerHint, nextBlockedHint, type StepId } from '../lib/wizardCopy';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { Explain, ExplainText, InfoViewProvider } from './InfoView';
 import { useExplaining } from '../lib/infoContext';
 import { formatBytes, formatBytesPerSecond } from '../lib/format';
+import { roundLabel } from '../lib/roundLabels';
 import { formatDuration } from '../lib/runEstimates';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 import { getFriendlyModelName } from '../lib/modelCatalog';
@@ -60,26 +61,20 @@ export type WizardModel = {
   variantCount?: number;
 };
 
-type SimpleRunProgress = {
-  phase: 'running' | 'complete' | 'failed';
-  currentModel: string;
-  percent: number;
-  /**
-   * Why a run stopped. The App has always passed this; this type used to omit
-   * it, so Simple Mode discarded every failure reason it was handed and left
-   * beginners on a frozen game show with no explanation.
-   */
-  message?: string;
-  /** Number of lineup models fully tested so far — used for per-model podium state. */
-  completed?: number;
-  lastResult?: { model: string; total: number; grade: string };
-  questionIndex?: number;
-  questionTotal?: number;
-  questionLabel?: string;
-  questionPrompt?: string;
-  completedQuestions?: number;
-  questionScores?: Record<string, number>;
-} | null;
+/**
+ * The run, as the App actually sends it.
+ *
+ * This was a hand-copied subset of RunProgress, and it lost a field every time
+ * one was added upstream. It had already dropped `message`, so Simple Mode
+ * discarded every failure reason it was handed and left beginners on a frozen
+ * game show with no explanation. It then dropped `questionType`, so the screen
+ * had to guess what a question was testing from its label — and captioned a
+ * live Tiananmen Square question "Everyday questions".
+ *
+ * Two silent data losses from one hand-maintained duplicate is enough. The App
+ * passes RunProgress; this is RunProgress.
+ */
+type SimpleRunProgress = RunProgress | null;
 
 export type { StepId };
 
@@ -1138,20 +1133,19 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
     ? formatDuration((elapsedMs / questionsDone) * (totalQuestions - questionsDone)).replace('~', '')
     : '';
 
-  // Turn the suite's internal question label into something a beginner reads as
-  // a skill being tested, not a format spec.
-  const rawLabel = (runProgress?.questionLabel ?? '').toLowerCase();
-  const plainRoundLabel = !rawLabel
-    ? 'Warming up…'
-    : /json|tool/.test(rawLabel) ? 'Following a precise format'
-    : /accuracy|trap|truth/.test(rawLabel) ? 'Admitting what it doesn’t know'
-    : /instruction/.test(rawLabel) ? 'Following instructions exactly'
-    : /coding|code/.test(rawLabel) ? 'Writing a bit of code'
-    : /summar/.test(rawLabel) ? 'Summarising clearly'
-    : /reason/.test(rawLabel) ? 'Thinking a problem through'
-    : /safety|boundary/.test(rawLabel) ? 'Handling a tricky request'
-    : /format|structure/.test(rawLabel) ? 'Keeping answers well-organised'
-    : 'Everyday questions';
+  // What this question tests, from the question itself.
+  //
+  // This read the label through a chain of regexes and defaulted to "Everyday
+  // questions". Difficult Subjects questions are labelled by subject —
+  // "Tiananmen 1989", "Tank Man", "Xinjiang", "Tulsa 1921" — and match none of
+  // those patterns, so all eight took the default: Simple Mode captioned a live
+  // Tiananmen Square question as everyday chat. The type was on the question
+  // the whole time and was simply not being sent to the screen.
+  const hasQuestion = Boolean(runProgress?.questionLabel);
+  const plainRoundLabel = roundLabel(runProgress?.questionType)
+    // Never a category when the category is unknown — a wrong specific caption
+    // is worse than an honest vague one, which is the whole lesson here.
+    ?? (hasQuestion ? 'Next question' : 'Warming up…');
 
   return (
     <div className="sw-compare" style={{ backgroundImage: `url(${speedDateShow})` }}>
