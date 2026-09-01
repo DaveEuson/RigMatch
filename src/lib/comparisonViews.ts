@@ -33,6 +33,15 @@ export function buildComparisonRail(input: ComparisonRailInput): ComparisonRailI
   const { lineupCount, maxContestants, answeredCount, questionCount, winner } = input;
   return [
     {
+      // First, because it is the answer. The nav entry that leads here promises
+      // "Ranked results & details" and the rail used to open with the details;
+      // defaultComparisonView already lands on the ranking after a run, so the
+      // list was disagreeing with the screen's own choice of where to start.
+      id: 'ranking',
+      label: 'Ranking',
+      status: winner ? `${winner} leads` : 'Not run yet',
+    },
+    {
       id: 'transcript',
       label: 'Questions & Answers',
       // "0 of 5 tested" is a truer empty state than a blank: it says the
@@ -40,13 +49,8 @@ export function buildComparisonRail(input: ComparisonRailInput): ComparisonRailI
       status: `${answeredCount} of ${lineupCount} tested`,
     },
     {
-      id: 'ranking',
-      label: 'Ranking',
-      status: winner ? `${winner} leads` : 'Not run yet',
-    },
-    {
       id: 'lineup',
-      label: "Tonight's Lineup",
+      label: 'Lineup',
       status: `${lineupCount}/${maxContestants} picked`,
     },
     {
@@ -60,6 +64,50 @@ export function buildComparisonRail(input: ComparisonRailInput): ComparisonRailI
       status: null,
     },
   ];
+}
+
+/**
+ * What the ranking is a ranking of.
+ *
+ * The screen crowned a Best Match and never said how much of the lineup that
+ * verdict rested on. The rail's "1 of 5 tested" was the only coverage figure
+ * anywhere, and it describes the transcript, so a ranking of three models sat
+ * under a banner reading "Five contestants, one rig, same questions" with
+ * nothing on screen reconciling the two.
+ *
+ * Two ways a ranking drifts from the lineup, and both matter to the reader:
+ * models in the lineup that never answered, and models in the ranking that
+ * have since been swapped out. A stale ranking is worth reading — it just is
+ * not a verdict on the lineup in front of you.
+ */
+export function describeRankingCoverage(input: {
+  ranked: string[];
+  lineup: string[];
+  questionCount: number;
+}): string {
+  const { ranked, lineup, questionCount } = input;
+  if (ranked.length === 0) return '';
+
+  const inLineup = ranked.filter((model) => lineup.includes(model)).length;
+  const untested = lineup.length - inLineup;
+  const dropped = ranked.length - inLineup;
+  // Silent about the questions when there are none to name, rather than
+  // claiming "the same 0 questions".
+  const sameQuestions = questionCount > 0
+    ? ` the same ${questionCount} question${questionCount === 1 ? '' : 's'}`
+    : ' the same questions';
+
+  if (untested === 0 && dropped === 0) {
+    return lineup.length === 1
+      ? `Your one model answered${sameQuestions}.`
+      : `All ${lineup.length} models in your lineup answered${sameQuestions}.`;
+  }
+
+  const clauses = [`${inLineup} of ${lineup.length} in your lineup ranked on${sameQuestions}`];
+  if (dropped > 0) {
+    clauses.push(`${dropped} ranked model${dropped === 1 ? '' : 's'} ${dropped === 1 ? 'is' : 'are'} no longer in it`);
+  }
+  return `${clauses.join(' — ')}.`;
 }
 
 /**

@@ -8,7 +8,7 @@ import { lineupStanding, standingLine } from '../lib/lineupStanding';
 import type { ListTestResult, ModelTaskFilterId } from '../lib/modelCatalog';
 import { getBenchmarkForModel, getHardwareFit, getModelScore, modelMatchesTask } from '../lib/modelCatalog';
 import type { ComparisonViewId } from '../lib/comparisonViews';
-import { buildComparisonRail, defaultComparisonView } from '../lib/comparisonViews';
+import { buildComparisonRail, defaultComparisonView, describeRankingCoverage } from '../lib/comparisonViews';
 import type { BenchmarkResult, ModelRow, NetworkHost, RunProgress, TestedModelScore } from '../types';
 import { QuestionSuitePreview } from './QuestionSuitePreview';
 import { RunProgressPanel } from './RunProgressPanel';
@@ -115,9 +115,14 @@ export function SpeedDatePanel({
 
   return (
     <section className={active ? 'panel speed-date-panel panel-focused' : 'panel speed-date-panel'} aria-label="Speed Dating">
+      {/* The eyebrow said "Round 3". There is no Round 1 or Round 2 anywhere in
+          the app — it was the only "Round N" in the codebase, promising a
+          sequence that does not exist. It says the word in the nav instead, so
+          clicking "Comparison" lands somewhere that confirms you arrived; the
+          feature keeps its name on the line below. */}
       <div className="speed-date-title">
         <div>
-          <span>Round 3</span>
+          <span>Comparison</span>
           <strong>Speed Dating</strong>
         </div>
         <em>Compare up to five picked models with the same questions.</em>
@@ -127,7 +132,9 @@ export function SpeedDatePanel({
         image={robotSpeedDateShow}
         className="speed-date-art-banner art-banner-slim"
         kicker="Tonight's lineup"
-        title="Five contestants, one rig, same questions"
+        // Was the fixed string "Five contestants, one rig, same questions",
+        // which a three-model lineup made false in its first word.
+        title={`${shortlistedRows.length} contestant${shortlistedRows.length === 1 ? '' : 's'}, one rig, same questions`}
         // Checked against the lineup on screen, not just read from the saved
         // result: listTestResult survives across sessions, so swapping one
         // contestant was enough to make this announce a leader that is not in
@@ -141,7 +148,11 @@ export function SpeedDatePanel({
       <div className="speed-date-body">
         <div className="speed-date-command-bar">
           <div>
-            <span>Dating Game Setup</span>
+            {/* "Dating Game Setup" was the third themed heading in the top
+                200px, after the title and the banner kicker. This one labels
+                the row of controls that actually runs the thing, so it says
+                what the row is. */}
+            <span>Setup</span>
             <strong>{shortlistedRows.length}/5 contestants picked</strong>
             <em>{runReadiness}</em>
           </div>
@@ -340,6 +351,17 @@ export function SpeedDatePanel({
               <strong>{listTestResult.winner}</strong>
               <em>{winnerResult ? `${winnerResult.total} · ${winnerResult.grade}` : 'Ranked'}</em>
             </div>
+            {/* Directly under the crown, because it is the caveat on the crown.
+                A Best Match drawn from three of your five models is a different
+                claim from one drawn from all five, and the screen used to make
+                both of them in the same words. */}
+            <p className="ranking-coverage">
+              {describeRankingCoverage({
+                ranked: listTestResult.results.map((result) => result.model),
+                lineup: shortlistedRows.map((row) => row.displayName),
+                questionCount,
+              })}
+            </p>
             <ol aria-label="Speed Dating ranking">
               {listTestResult.results.map((result, index) => (
                 <li key={result.model} className={result.model === listTestResult.winner ? 'winner' : ''}>

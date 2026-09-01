@@ -6614,6 +6614,18 @@ tbody tr.computer-row.selected {
   white-space: nowrap;
 }
 
+/* The caveat on the crown: how much of the lineup this ranking covers. Muted
+   and small because it qualifies the claim above rather than competing with
+   it, but never hidden — it is the difference between a verdict on five models
+   and a verdict on three. */
+.ranking-coverage {
+  margin: 0;
+  padding: 0 2px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 
 .speed-date-panel {
   min-height: 0;
