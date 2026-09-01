@@ -124,3 +124,82 @@ test('searching the family name itself does not open it', () => {
   const open = familiesToAutoExpand(out, 'gemma', (r, q) => r.displayName.split(':')[1]?.includes(q) ?? false);
   assert.equal(open.size, 0);
 });
+
+// --- which variant fronts the family ----------------------------------------
+
+/**
+ * Measured on a real machine before this existed: of three families with more
+ * than one installed variant, two put their weakest member forward. Qwen2.5,
+ * scoring 92 on its 7B, introduced itself to the list as a 0.4 GB model.
+ *
+ * The cause was not the grouping but what it deferred to. isPreferred asks
+ * whether a variant is a *fair* face — installed and runnable — and every
+ * installed variant answers yes, so the choice fell through to the order the
+ * caller passed. That order is the table's sort, whose default key is status;
+ * getModelStatusRank returns 3 for every installed model, so they all tie and
+ * the tie-break decides. The tie-break is displayName.localeCompare, and for
+ * size-suffixed tags alphabetical means smallest: "0.5b" < "7b", "e2b" < "e4b".
+ */
+
+const installedRow = (displayName, brains) => row(displayName, { installed: true, brains });
+const byBrains = { isPreferred: (r) => r.installed, faceRank: (r) => r.brains ?? 0 };
+
+test('the family shows its most capable installed version', () => {
+  // The real case, in the order the default sort actually produces.
+  const out = group([installedRow('qwen2.5:0.5b', 0.494), installedRow('qwen2.5:7b', 7.6)], byBrains);
+  assert.equal(out[0].group.best.displayName, 'qwen2.5:7b');
+});
+
+test('the alphabetically-first variant no longer wins by default', () => {
+  // Without faceRank this is the old behaviour, kept deliberately so callers
+  // that pass no ranking are unchanged.
+  const rows = [installedRow('qwen2.5:0.5b', 0.494), installedRow('qwen2.5:7b', 7.6)];
+  assert.equal(group(rows, { isPreferred: (r) => r.installed }).best?.displayName, undefined);
+  assert.equal(group(rows, { isPreferred: (r) => r.installed })[0].group.best.displayName, 'qwen2.5:0.5b');
+  assert.equal(group(rows, byBrains)[0].group.best.displayName, 'qwen2.5:7b');
+});
+
+test('effective-parameter tags rank by what they actually are', () => {
+  // gemma4:e2b is 5.1B and e4b is 8.0B, so "e4b" is the stronger face even
+  // though "e2b" sorts first.
+  const out = group([installedRow('gemma4:e2b', 5.1), installedRow('gemma4:e4b', 8.0)], byBrains);
+  assert.equal(out[0].group.best.displayName, 'gemma4:e4b');
+});
+
+test('a variant that cannot run here never fronts its family, however big', () => {
+  // The -mlx rule this option was introduced for still wins: eligibility is
+  // asked first, and ranking only chooses among those that pass.
+  const out = group([
+    row('gemma4:27b-mlx', { installed: true, brains: 27, macOnly: true }),
+    installedRow('gemma4:4b', 4),
+  ], { isPreferred: (r) => r.installed && !r.macOnly, faceRank: (r) => r.brains ?? 0 });
+  assert.equal(out[0].group.best.displayName, 'gemma4:4b');
+});
+
+test('equal capability keeps the reader\'s sort order', () => {
+  const out = group([installedRow('a:7b', 7), installedRow('a:7b-q8', 7)], byBrains);
+  assert.equal(out[0].group.best.displayName, 'a:7b');
+});
+
+test('a score separates variants of the same size, and only then', () => {
+  // capability * 1000 + score, the shape the Models list passes.
+  const rank = (r) => (r.brains ?? 0) * 1000 + (r.score ?? 0);
+  const sameSize = group([
+    row('a:7b', { installed: true, brains: 7, score: 60 }),
+    row('a:7b-tuned', { installed: true, brains: 7, score: 88 }),
+  ], { isPreferred: (r) => r.installed, faceRank: rank });
+  assert.equal(sameSize[0].group.best.displayName, 'a:7b-tuned');
+
+  // And a tested small model still does not outrank an untested large one —
+  // that would be the same defect wearing a different key.
+  const mixed = group([
+    row('b:0.5b', { installed: true, brains: 0.5, score: 92 }),
+    row('b:7b', { installed: true, brains: 7 }),
+  ], { isPreferred: (r) => r.installed, faceRank: rank });
+  assert.equal(mixed[0].group.best.displayName, 'b:7b');
+});
+
+test('an entirely uninstalled family still gets a face', () => {
+  const out = group([row('mistral:7b'), row('mistral:latest')], byBrains);
+  assert.equal(out[0].group.best.displayName, 'mistral:7b');
+});

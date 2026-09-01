@@ -20,7 +20,7 @@ function formatInstalledDate(iso: string): string {
   return at.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 import type { ListTestResult, ModelQuickFilterId, ModelSortKey, ModelTaskFilterId, SortDirection } from '../lib/modelCatalog';
-import { CAPABILITY_ONLY_FILTERS, GENERATION_FILTERS, TASK_FILTER_CHIPS, getBenchmarkForModel, getDiskGuard, getFriendlyModelName, getHardwareFit, getModelGoodForTags, getModelProfile, getModelQuickFilters, getModelScore, getModelSearchText, getModelSortLabel, getModelStatusLabel, getPlatformFit, getQueueChipModelName, getSizeRisk, isCloudModel, isEmbeddingModel, isUncensoredModel, isVisiblePullProgress, modelMatchesQuickFilter, modelMatchesTask, sortModelRows } from '../lib/modelCatalog';
+import { CAPABILITY_ONLY_FILTERS, GENERATION_FILTERS, TASK_FILTER_CHIPS, getBenchmarkForModel, getDiskGuard, getFriendlyModelName, getHardwareFit, getModelGoodForTags, getModelProfile, getModelQuickFilters, getModelScore, getModelSearchText, getModelSortLabel, getModelStatusLabel, getParamSortValue, getPlatformFit, getQueueChipModelName, getSizeRisk, isCloudModel, isEmbeddingModel, isUncensoredModel, isVisiblePullProgress, modelMatchesQuickFilter, modelMatchesTask, sortModelRows } from '../lib/modelCatalog';
 import { buildQuickFacetGroups, buildSearchSuggestions, splitTaskFilters } from '../lib/modelFacets';
 import type { SearchSuggestion } from '../lib/modelFacets';
 import { familiesToAutoExpand, groupRowsByFamily } from '../lib/modelGroups';
@@ -436,8 +436,18 @@ export function ModelCabinet({
       familyOf: (row) => getFriendlyModelName(row.displayName),
       isPreferred: (row) => getPlatformFit(row.displayName, platform).compatible
         && (installedModelNames.has(row.displayName) || row.installed),
+      // Capability decides, and a score only separates variants of the same
+      // size. Ranking by score first would repeat the bug in another key: a
+      // tested 0.5B would front a family whose untested 7B is the reason
+      // anyone installed it. Brains are on a 0-1000ish scale in B, so the
+      // multiplier keeps a 0-100 score strictly below one step of size.
+      faceRank: (row) => {
+        const brains = getParamSortValue(row.params);
+        const capability = brains >= 0 ? brains : (row.sizeGb ?? 0);
+        return capability * 1000 + (getModelScore(row, modelScores)?.total ?? 0);
+      },
     }),
-    [visibleRows, platform, installedModelNames],
+    [visibleRows, platform, installedModelNames, modelScores],
   );
   /**
    * A model opened from somewhere else has to actually be on screen.

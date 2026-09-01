@@ -58,6 +58,21 @@ export function groupRowsByFamily<T>(
      * looks unavailable when it is not.
      */
     isPreferred?: (row: T) => boolean;
+    /**
+     * How good a face this member is, among those isPreferred allows. Highest
+     * wins; equal ranks keep the reader's sort order.
+     *
+     * Without this the face was simply the first eligible member, on the
+     * reasoning that the reader's sort had already put the best one there.
+     * That holds only while the sort discriminates. The default sort is by
+     * status, and every installed model ties at the same rank, so the tie-break
+     * decided — and the tie-break is displayName.localeCompare, which for
+     * size-suffixed tags means the smallest: "0.5b" sorts before "7b", "e2b"
+     * before "e4b". Measured on a real machine, two of three multi-variant
+     * families put their weakest member forward, so Qwen2.5 — scoring 92 on
+     * its 7B — introduced itself to the list as a 0.4 GB model.
+     */
+    faceRank?: (row: T) => number;
     minToGroup?: number;
   },
 ): Array<GroupedRow<T>> {
@@ -79,11 +94,32 @@ export function groupRowsByFamily<T>(
   return order.map((family): GroupedRow<T> => {
     const members = byFamily.get(family)!;
     if (members.length < minToGroup) return { kind: 'row', row: members[0] };
-    // First preferred member, else the first — which is already the best one
-    // under the reader's chosen sort.
-    const best = (options.isPreferred && members.find(options.isPreferred)) || members[0];
-    return { kind: 'group', group: { family, rows: members, best } };
+    return { kind: 'group', group: { family, rows: members, best: pickFace(members, options) } };
   });
+}
+
+/**
+ * The member that stands for the family on the collapsed row.
+ *
+ * Two questions, deliberately separate. isPreferred asks whether a variant is a
+ * *fair* face — installed, and able to run here. faceRank asks which of the
+ * fair ones is the *best* face. Eligibility was answering both, and could not:
+ * every installed variant is equally eligible, so the choice fell through to
+ * whatever order the caller happened to pass.
+ */
+function pickFace<T>(
+  members: T[],
+  options: { isPreferred?: (row: T) => boolean; faceRank?: (row: T) => number },
+): T {
+  const eligible = options.isPreferred ? members.filter(options.isPreferred) : members;
+  // Nothing here is installed or runnable — an entirely uninstalled family
+  // still needs a face, and the reader's own sort put its best guess first.
+  const pool = eligible.length > 0 ? eligible : members;
+  const rank = options.faceRank;
+  if (!rank) return pool[0];
+  // Strictly greater, so an equal rank keeps the earlier member and the
+  // reader's sort still decides where nothing else can.
+  return pool.reduce((champion, row) => (rank(row) > rank(champion) ? row : champion), pool[0]);
 }
 
 /** How many table rows a grouping will actually draw, with these families open. */
