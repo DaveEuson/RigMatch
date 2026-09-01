@@ -203,3 +203,19 @@ test('an entirely uninstalled family still gets a face', () => {
   const out = group([row('mistral:7b'), row('mistral:latest')], byBrains);
   assert.equal(out[0].group.best.displayName, 'mistral:7b');
 });
+
+test('a tag that says nothing loses to one that says something', () => {
+  // deepseek-ocr:latest and deepseek-ocr:3b are the same 3.3B model, so they
+  // tie on capability and used to swap places whenever the column was toggled.
+  // ":latest" names no size, so the collapsed row said less than either row it
+  // stood for.
+  const rank = (r) => (r.brains ?? 0) * 1000 - (r.vagueTag ? 0.5 : 0);
+  const rows = [
+    row('deepseek-ocr:latest', { installed: true, brains: 3.3, vagueTag: true }),
+    row('deepseek-ocr:3b', { installed: true, brains: 3.3 }),
+  ];
+  const opts = { isPreferred: (r) => r.installed, faceRank: rank };
+  assert.equal(group(rows, opts)[0].group.best.displayName, 'deepseek-ocr:3b');
+  // And the other way round the list can arrive, which is the actual bug:
+  assert.equal(group([...rows].reverse(), opts)[0].group.best.displayName, 'deepseek-ocr:3b');
+});

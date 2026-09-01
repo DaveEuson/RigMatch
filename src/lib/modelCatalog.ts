@@ -707,17 +707,32 @@ export function sortModelRows(
 ) {
   const directionFactor = direction === 'asc' ? 1 : -1;
 
+  /**
+   * Ties break by name, and the tie-break turns with the column.
+   *
+   * Every real comparison here is multiplied by directionFactor and the
+   * tie-break was not, so it always resolved a-to-z whichever way the header
+   * arrow pointed. On a column where most rows tie that is most of the
+   * ordering: the default sort is by status, and getModelStatusRank returns 3
+   * for every installed model, so toggling Status reversed the groups and left
+   * the rows inside them alone. Clicking a header did not reverse the list it
+   * was pointing at.
+   */
+  const byName = (left: ModelRow, right: ModelRow) =>
+    left.displayName.localeCompare(right.displayName) * directionFactor;
+
   return [...rows].sort((left, right) => {
     if (sortKey === 'size') {
-      if (left.sizeGb == null && right.sizeGb == null) {
-        return left.displayName.localeCompare(right.displayName);
-      }
+      if (left.sizeGb == null && right.sizeGb == null) return byName(left, right);
 
+      // Unknown size sorts last in both directions, deliberately: it is absent
+      // data rather than a small number, and floating it to the top of the
+      // ascending list would read as "these are the smallest".
       if (left.sizeGb == null) return 1;
       if (right.sizeGb == null) return -1;
 
       const sizeDelta = left.sizeGb - right.sizeGb;
-      return sizeDelta === 0 ? left.displayName.localeCompare(right.displayName) : sizeDelta * directionFactor;
+      return sizeDelta === 0 ? byName(left, right) : sizeDelta * directionFactor;
     }
 
     const leftValue = getModelSortValue(left, sortKey, queuedModelIds.has(left.displayName), modelScores, benchmarkByModel);
@@ -725,13 +740,16 @@ export function sortModelRows(
 
     if (typeof leftValue === 'number' && typeof rightValue === 'number') {
       const delta = leftValue - rightValue;
-      return delta === 0 ? left.displayName.localeCompare(right.displayName) : delta * directionFactor;
+      return delta === 0 ? byName(left, right) : delta * directionFactor;
     }
 
-    return String(leftValue).localeCompare(String(rightValue), undefined, {
+    const textDelta = String(leftValue).localeCompare(String(rightValue), undefined, {
       numeric: true,
       sensitivity: 'base',
-    }) * directionFactor;
+    });
+    // Two rows with the same maker, country or skill list still need an order,
+    // and leaving it to input order made the table shuffle as rows arrived.
+    return textDelta === 0 ? byName(left, right) : textDelta * directionFactor;
   });
 }
 

@@ -444,7 +444,17 @@ export function ModelCabinet({
       faceRank: (row) => {
         const brains = getParamSortValue(row.params);
         const capability = brains >= 0 ? brains : (row.sizeGb ?? 0);
-        return capability * 1000 + (getModelScore(row, modelScores)?.total ?? 0);
+        // A tag that decodes to nothing — ":latest" and friends — is the worst
+        // face a family can wear: it names no size, so the collapsed row says
+        // less than any of the rows it stands for. Deepseek-ocr:latest and
+        // deepseek-ocr:3b are the same 3.3B model, tie on every other measure,
+        // and used to swap places whenever the column was toggled. Half a point
+        // sits below the integer score, so this separates exact ties and
+        // nothing else.
+        // .length, not truthiness: describeModelTag returns an array, and an
+        // empty one is truthy, so the plain check would never have fired.
+        const informative = describeModelTag(row.displayName).length > 0 ? 0 : 0.5;
+        return capability * 1000 + (getModelScore(row, modelScores)?.total ?? 0) - informative;
       },
     }),
     [visibleRows, platform, installedModelNames, modelScores],
