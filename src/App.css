@@ -14625,6 +14625,213 @@ td {
   line-height: 1.35;
 }
 
+/* --- Run report -----------------------------------------------------------
+   A finished comparison used to announce itself only in the ticker, which
+   scrolls away, and by quietly updating three screens the reader had to know
+   to visit. Reported verbatim: "I just did a sensitivity review with three
+   models and I have no clue where to find the result of that test." */
+.report-ready-bar {
+  position: fixed;
+  right: 18px;
+  bottom: 62px;
+  z-index: 60;
+  max-width: min(560px, calc(100vw - 36px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--gold);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.report-ready-bar > svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--gold);
+}
+
+.report-ready-bar span {
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.report-ready-dismiss {
+  min-width: 24px;
+  min-height: 24px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.report-ready-dismiss:hover {
+  color: var(--pink);
+  background: var(--panel-hover);
+}
+
+.run-report-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(7, 5, 12, 0.62);
+}
+
+.run-report {
+  width: min(1040px, 100%);
+  max-height: min(88vh, 900px);
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(var(--gold-rgb), 0.42);
+  border-radius: 16px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+.run-report-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.run-report-head > svg {
+  width: 22px;
+  height: 22px;
+  color: var(--gold);
+}
+
+.run-report-head span {
+  display: block;
+  color: var(--pink);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.run-report-head strong {
+  display: block;
+  color: var(--text-strong);
+  font-family: var(--display);
+  font-size: 18px;
+}
+
+.run-report-head button {
+  min-width: 28px;
+  min-height: 28px;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.run-report-head button:hover {
+  color: var(--pink);
+  background: var(--panel-hover);
+}
+
+/* The run's own sorted results, not a re-ranking — a report that recalculated
+   could disagree with the screens it is reporting on. */
+.run-report-ranking {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.run-report-ranking li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.run-report-ranking li.winner {
+  border-color: var(--gold);
+  background: rgba(var(--gold-rgb), 0.1);
+}
+
+.run-report-ranking b {
+  color: var(--muted);
+  font: 11px/1 var(--mono);
+}
+
+.run-report-ranking li > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-report-ranking em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.run-report-ranking li > strong {
+  color: var(--text-strong);
+  font: 12px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.run-report-transcript {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.run-report-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.run-report-foot span {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.run-report-foot button:first-of-type {
+  margin-left: auto;
+}
+
+@media (max-width: 860px) {
+  .run-report-ranking li {
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+  }
+
+  .run-report-ranking em {
+    display: none;
+  }
+}
+
 /* --- Compare two models ----------------------------------------------------
    Sits under the selected model, because that is the one you are already
    asking about. */

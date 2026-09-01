@@ -13,11 +13,18 @@ export function SpeedDateTranscriptPanel({
   benchmarks,
   questionPlan,
   runProgress,
+  initialViewMode = 'by-model',
 }: {
   rows: ModelRow[];
   benchmarks: Record<string, BenchmarkResult>;
   questionPlan: BenchmarkQuestion[];
   runProgress: RunProgress | null;
+  /**
+   * Which view to open on. The run report asks for side-by-side, because the
+   * question it exists to answer is "how did these three differ on the same
+   * question" — reading one transcript at a time is the wrong shape for that.
+   */
+  initialViewMode?: TranscriptViewMode;
 }) {
   const liveRow = runProgress?.currentModel
     ? rows.find((row) => row.displayName === runProgress.currentModel)
@@ -25,7 +32,7 @@ export function SpeedDateTranscriptPanel({
   const firstAnswered = rows.find((row) => getBenchmarkForModel(benchmarks, row.displayName, row));
   const defaultModel = liveRow?.displayName ?? firstAnswered?.displayName ?? rows[0]?.displayName ?? '';
   const [requestedModel, setRequestedModel] = useState('');
-  const [viewMode, setViewMode] = useState<TranscriptViewMode>('by-model');
+  const [viewMode, setViewMode] = useState<TranscriptViewMode>(initialViewMode);
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0);
 
   const activeModel = rows.some((row) => row.displayName === requestedModel) ? requestedModel : defaultModel;

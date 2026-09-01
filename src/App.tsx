@@ -5,6 +5,8 @@ import {
   HelpCircle,
   Lightbulb,
   Sparkles,
+  Trophy,
+  X,
 } from 'lucide-react';
 import { agentArcadeApi, isDesktopRuntime } from './api';
 import {
@@ -58,6 +60,7 @@ import {
   toTestedModelScore,
   upsertModelScores,
 } from './lib/scoring';
+import { RunReportModal } from './components/RunReportModal';
 import { WhatsNewPanel } from './components/WhatsNewPanel';
 import { SideMenu, type NavId, type NavItem } from './components/SideMenu';
 import { GameShowHost } from './components/GameShowHost';
@@ -344,6 +347,13 @@ function App() {
   const stopSkillRef = useRef(false);
   const [pendingDeleteModel, setPendingDeleteModel] = useState<ModelRow | null>(null);
   const [listTestResult, setListTestResult] = useState<ListTestResult | null>(savedHistory?.listTestResult ?? null);
+  /**
+   * A finished comparison used to announce itself only in the ticker, which
+   * scrolls, and by quietly updating three screens the reader had to know to
+   * visit. The bar says the report exists; opening it is their choice.
+   */
+  const [reportReady, setReportReady] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   /**
    * The scores as measured. Everything downstream reads `modelScores` below,
    * which is this map re-summarised under the reader's chosen priority — so
@@ -1082,6 +1092,7 @@ function App() {
       setModelScores({});
       setBenchmarkByModel({});
       setListTestResult(null);
+    setReportReady(false);
       setClearedTopMatches(new Set<string>());
       setBenchmark(createEmptyBenchmark(selectedModel, ollama.baseUrl));
       setRunProgress(null);
@@ -1171,6 +1182,7 @@ function App() {
       setBenchmarkByModel(isDesktopRuntime ? {} : upsertBenchmarkResults({}, [demoBenchmark]));
       setModelScores({});
       setListTestResult(null);
+    setReportReady(false);
       setQueuedModelIds(new Set<string>());
       setShortlistIds(new Set(DEFAULT_SHORTLIST_IDS));
       setPendingRunMode(null);
@@ -2345,6 +2357,7 @@ function App() {
     stopRunRef.current = false;
     setIsListTesting(true);
     setListTestResult(null);
+    setReportReady(false);
     setRunProgress({
       progressId: firstProgressId,
       mode: 'speed-date',
@@ -2475,6 +2488,7 @@ function App() {
           .map((r) => toTestedModelScore(r, currentSuiteName))
           .sort(compareTestedModelScores),
       });
+      setReportReady(true);
       setActivity(`Best match: ${winner.model} scored ${winner.scores.total} for this setup.`);
       await agentArcadeApi.appendLog({
         level: 'info',
@@ -3629,7 +3643,7 @@ function App() {
       )}
 
       {uiMode === 'advanced' && (
-      <Ticker
+        <Ticker
         activity={activity}
         isDesktopRuntime={isDesktopRuntime}
         topPick={topRigPick}
@@ -3653,6 +3667,31 @@ function App() {
           }
         }}
       />
+      )}
+      {reportReady && !reportOpen && listTestResult && (
+        <div className="report-ready-bar" role="status">
+          <Trophy aria-hidden="true" />
+          <span>
+            Report ready — {listTestResult.results.length} model{listTestResult.results.length === 1 ? '' : 's'} compared,
+            {' '}{listTestResult.winner} came first
+          </span>
+          <button type="button" className="primary-button compact" onClick={() => setReportOpen(true)}>
+            See the report
+          </button>
+          <button type="button" className="report-ready-dismiss" onClick={() => setReportReady(false)} aria-label="Dismiss report notice">
+            <X aria-hidden="true" />
+          </button>
+        </div>
+      )}
+      {reportOpen && listTestResult && (
+        <RunReportModal
+          result={listTestResult}
+          rows={shortlistedRows}
+          benchmarks={benchmarkByModel}
+          questionPlan={benchmarkQuestions.slice(0, benchmarkQuestionCount)}
+          onClose={() => { setReportOpen(false); setReportReady(false); }}
+          onOpenScorecards={() => { setReportOpen(false); setReportReady(false); selectNav('history'); }}
+        />
       )}
 
       {chatOpen && (
