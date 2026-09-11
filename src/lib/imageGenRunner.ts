@@ -32,6 +32,11 @@ export function createOllamaJudge(model: string, baseUrl: string): JudgeFn {
       prompt: question,
       images: [imageDataUrl],
       keep_alive: '10m',
+      // A thinking model spends a 24-token budget thinking and answers with
+      // nothing: qwen3.5:9b returned an empty response, done_reason "length",
+      // on every frame of a lineup, and every run came back unjudged. There is
+      // nothing to reason about in a yes or a no.
+      think: false,
       timeoutMs: 120000,
       options: { temperature: 0, num_ctx: 4096, num_predict: 24 },
     });

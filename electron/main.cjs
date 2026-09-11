@@ -4109,6 +4109,12 @@ async function runAdvancedGenerate(request = {}, sender = null) {
     const imgs = normalizeChatImages(request.images).map(toBareBase64);
     if (imgs.length) body.images = imgs;
   }
+  // The thinking toggle, on /api/generate as well as /api/chat. It reached chat
+  // only, so the frame judge — which asks for one word through generate — let a
+  // thinking model spend its whole 24-token budget thinking: qwen3.5:9b answered
+  // an empty string with done_reason "length" on every frame, and every image
+  // and video run came back unjudged.
+  if (typeof request.think === 'boolean') body.think = request.think;
 
   if (wantStream) {
     return streamAdvancedGenerate(`${baseUrl}/api/generate`, body, timeoutMs, sender, streamId, model);
@@ -4155,15 +4161,28 @@ async function runAdvancedGenerate(request = {}, sender = null) {
     };
   }
 
-  const response = await fetchJson(
+  const generate = (payload) => fetchJson(
     `${baseUrl}/api/generate`,
     {
       method: 'POST',
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     },
     timeoutMs,
     JSON_RESPONSE_MAX_BYTES,
   );
+
+  let response;
+  try {
+    response = await generate(body);
+  } catch (error) {
+    // An Ollama that does not know the thinking toggle refuses the whole
+    // request. The question is still worth asking without it, as the
+    // benchmark already does.
+    if (!('think' in body) || !isUnsupportedThinkError(error)) throw error;
+    const withoutThink = { ...body };
+    delete withoutThink.think;
+    response = await generate(withoutThink);
+  }
 
   return {
     response: typeof response.response === 'string' ? response.response : '',

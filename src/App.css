@@ -12364,6 +12364,10 @@ tbody tr.computer-row.selected {
   color: var(--text-strong);
 }
 
+.video-lineup-clip .video-lineup-error {
+  text-align: left;
+}
+
 @media (max-width: 900px) {
   .video-lineup-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

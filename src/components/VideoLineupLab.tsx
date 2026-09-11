@@ -2,8 +2,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Check, Download, Film, Play, RefreshCw, Sparkles } from 'lucide-react';
 import type { PullProgressUpdate, SystemProfile } from '../types';
-import { getScoreTone } from '../lib/format';
+import { getErrorMessage, getScoreTone } from '../lib/format';
 import { fetchComfyOutput } from '../lib/comfyTransport';
+import { dataUrlToBlob } from '../lib/dataUrl';
 import { readComfySettings } from '../lib/comfySettings';
 import { formatBytesGb, generationModelById, type ComfyFolderListing } from '../lib/generationCatalog';
 import { readHuggingFaceToken } from '../lib/huggingFaceToken';
@@ -135,6 +136,7 @@ export function VideoLineupLab({
   // megabytes, and the scored artifact is the frame.
   const [playback, setPlayback] = useState<Record<string, string>>({});
   const [loadingClips, setLoadingClips] = useState<ReadonlySet<string>>(() => new Set());
+  const [clipErrors, setClipErrors] = useState<Record<string, string>>({});
   const clipUrls = useRef(new Map<string, string>());
   // Read again whenever the lineup moves: a finished model replaces its own
   // estimate with its time, and LTX-Video 2B recalibrates every other.
@@ -295,15 +297,23 @@ export function VideoLineupLab({
     try {
       const dataUrl = await fetchComfyOutput(ref);
       // A blob costs one copy and then behaves like a file; a multi-megabyte
-      // data: URL sitting in the DOM does not.
-      const url = URL.createObjectURL(await (await fetch(dataUrl)).blob());
+      // data: URL sitting in the DOM does not. Decoded in place, because
+      // fetch() on a data: URL is refused by the app's own security policy.
+      const url = URL.createObjectURL(dataUrlToBlob(dataUrl));
       const previous = clipUrls.current.get(key);
       if (previous) URL.revokeObjectURL(previous);
       clipUrls.current.set(key, url);
       setPlayback((current) => ({ ...current, [key]: url }));
-    } catch {
-      // Cleared from ComfyUI's output folder since the run. The frame and the
-      // time are still here, so this stays quiet.
+      setClipErrors((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    } catch (error) {
+      // Usually the clip was cleared from ComfyUI's output folder since the
+      // run. Said rather than swallowed: staying quiet here once hid a player
+      // that could not play anything at all.
+      setClipErrors((current) => ({ ...current, [key]: getErrorMessage(error) }));
     } finally {
       setLoadingClips((current) => {
         const next = new Set(current);
@@ -597,6 +607,9 @@ export function VideoLineupLab({
                           <Play aria-hidden="true" />
                           {loadingClips.has(key) ? 'Loading' : 'Play'}
                         </button>
+                      )}
+                      {clipErrors[key] && (
+                        <em className="video-lineup-error">Could not load this clip. {clipErrors[key]}</em>
                       )}
                     </figcaption>
                   </figure>
