@@ -583,6 +583,10 @@ export type AgentArcadeApi = {
   comfyDownloadModel?: (request: {
     root: string; folder: string; filename: string; url: string;
     expectedBytes?: number; progressId?: string;
+    /** Checked before the file is renamed into place; absent where none is published. */
+    sha256?: string;
+    /** Sent only to huggingface.co, and only for a gated repository. */
+    token?: string;
   }) => Promise<{ path: string; alreadyPresent: boolean; bytes: number }>;
   comfyAbortDownload?: (progressId: string) => Promise<boolean>;
   onComfyDownloadProgress?: (

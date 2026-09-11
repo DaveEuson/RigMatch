@@ -225,6 +225,7 @@ import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
 import { batchSeed, isVideoCheckpoint } from './lib/videoGen';
 import { DEFAULT_VIDEO_SIZE_ID, toVideoLabResult, videoReadiness } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
+import { readHuggingFaceToken } from './lib/huggingFaceToken';
 import { goalById, presetIdForGoal } from './lib/goals';
 import { taskFilterForGoal } from './lib/modelCatalog';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
@@ -1907,6 +1908,10 @@ function App() {
         await agentArcadeApi.comfyDownloadModel?.({
           root: comfyRoot, folder: item.folder, filename: item.filename,
           url: item.url, expectedBytes: item.bytes, progressId,
+          // Checked before ComfyUI can see the file. The token goes only with a
+          // gated file, and the downloader keeps it off the CDN.
+          sha256: item.sha256,
+          token: item.gated ? readHuggingFaceToken() || undefined : undefined,
         });
       } catch (error) {
         // A cancelled stream lands here too; say stopped rather than failed,

@@ -42,8 +42,10 @@ console.log('Generation download gate\n');
 // ── 0. The API is the shape this script thinks it is ───────────────────────
 {
   const source = comfy.downloadModel.toString();
-  const shaped = /\{\s*root,\s*folder,\s*filename,\s*url,\s*expectedBytes\s*\}/.test(source);
-  record('downloadModel still takes ({root, folder, filename, url, expectedBytes}, onProgress, signal)', shaped,
+  // Fields may be added after expectedBytes (the video lineup added sha256 and
+  // token); the five this script relies on must still come first, in order.
+  const shaped = /\{\s*root,\s*folder,\s*filename,\s*url,\s*expectedBytes(?:,\s*\w+)*\s*\}/.test(source);
+  record('downloadModel still takes ({root, folder, filename, url, expectedBytes, ...}, onProgress, signal)', shaped,
     shaped ? '' : 'signature changed — every result below would be meaningless');
   if (!shaped) process.exit(1);
 }
@@ -142,6 +144,24 @@ if (!root) {
   record('an aborted download leaves no partial file behind', leftovers.length === 0,
     leftovers.length ? `left ${leftovers.join(', ')}` : 'models/checkpoints is clean');
   for (const name of leftovers) rmSync(join(dir, name), { force: true });
+}
+
+// ── 4. Resuming depends on Hugging Face honouring Range ────────────────────
+// A 50 GB lineup file survives a dropped connection only because the CDN
+// answers a Range request with the rest of the file. If that ever stops, every
+// resume silently becomes a restart from zero — the tests cannot see it,
+// because they drive a fake server.
+{
+  const name = 'Hugging Face still resumes a download from the middle';
+  try {
+    const response = await fetch(CATALOGUE_URL, { headers: { Range: 'bytes=0-15' }, redirect: 'follow' });
+    const range = response.headers.get('content-range') ?? '';
+    await response.body?.cancel?.().catch(() => {});
+    record(name, response.status === 206 && /^bytes 0-15\//.test(range),
+      `${response.status}${range ? `, ${range}` : ''}`);
+  } catch (error) {
+    record(name, false, error instanceof Error ? error.message : String(error));
+  }
 }
 
 const failed = results.filter((r) => !r.ok);
