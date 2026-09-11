@@ -915,7 +915,10 @@ function App() {
    */
   const generationSummary = useMemo(() => {
     const summarize = (kind: 'image' | 'video') => {
-      const rows = modelRows.filter((row) => row.generationKind === kind);
+      // Only the ones that run here: Simple Mode says "N run on this PC", and
+      // counting every catalogue row made that true of models too big for it.
+      const rows = modelRows.filter((row) => row.generationKind === kind
+        && getHardwareFit(row, system.gpu.vramGb).recommend);
       return {
         total: rows.length,
         installed: rows.filter((row) => row.installed).length,
@@ -923,7 +926,7 @@ function App() {
       };
     };
     return { image: summarize('image'), video: summarize('video') };
-  }, [modelRows]);
+  }, [modelRows, system.gpu.vramGb]);
 
   // Simple Mode needs its own share state: Advanced's lives inside the profile
   // panel, which is not mounted in the guided path.
@@ -3467,6 +3470,15 @@ function App() {
           winner={wizardWinner}
           lineupResults={wizardLineupResults}
           generation={generationSummary}
+          videoLineup={{
+            comfyReachable,
+            comfyFolders,
+            judgeModel: judgeCandidates(modelRows)[0] ?? '',
+            ollamaBaseUrl: ollama.baseUrl,
+            onCheckComfy: () => { void refreshComfyStatus(); },
+            onDownloadModel: requestLabDownload,
+            onStopDownload: stopLabDownload,
+          }}
           onChatWithWinner={openChatWithWinner}
           onOpenScorecard={() => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('history'); }}
           onRunAgain={() => undefined}

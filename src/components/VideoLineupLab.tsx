@@ -1,11 +1,11 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Check, Download, Film, Play, RefreshCw } from 'lucide-react';
-import type { ComfyStatus, PullProgressUpdate, SystemProfile } from '../types';
+import { AlertTriangle, Check, Download, Film, Play, RefreshCw, Sparkles } from 'lucide-react';
+import type { PullProgressUpdate, SystemProfile } from '../types';
 import { getScoreTone } from '../lib/format';
 import { fetchComfyOutput } from '../lib/comfyTransport';
 import { readComfySettings } from '../lib/comfySettings';
-import { formatBytesGb, generationModelById } from '../lib/generationCatalog';
+import { formatBytesGb, generationModelById, type ComfyFolderListing } from '../lib/generationCatalog';
 import { readHuggingFaceToken } from '../lib/huggingFaceToken';
 import { CUSTOM_IMAGE_PROMPT_ID } from '../lib/imageGenScoring';
 import { readAdvancedLabResults, type AdvancedLabResult } from '../lib/labResults';
@@ -26,6 +26,7 @@ import {
 } from '../lib/videoLineup';
 import { startVideoLineup, stopVideoLineup, subscribeLineupSession } from '../lib/videoLineupSession';
 import { useVideoLineupSession } from '../hooks/useVideoLineupSession';
+import { ComfyStartButton } from './ComfyStartButton';
 import { PromptPicker } from './PromptPicker';
 
 type Card = { entry: VideoLineupEntry; facts: LineupCardFacts };
@@ -52,6 +53,11 @@ const BASIS_NOTE: Record<VideoEstimate['basis'], string> = {
   rough: 'The reference RTX 4070’s time, until this machine has been timed.',
 };
 
+/** How many the "pick for me" button chooses: enough to be a race, few enough to finish tonight. */
+const PICK_FOR_ME = 3;
+
+const noGpuNote = async () => '';
+
 const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 
 function describeOutput(entry: VideoLineupEntry): string {
@@ -77,10 +83,13 @@ function Elapsed({ since }: { since: number }) {
  * fetch — from this machine's own numbers, before anything is downloaded. Then
  * the picked models render the same prompt and seed one at a time, fastest
  * first, and the result is a leaderboard by time with the clips side by side.
+ *
+ * Simple Mode shows the same race with less to read: only the models that can
+ * run here, and a button that picks the fastest few.
  */
 export function VideoLineupLab({
   comfyStatus,
-  comfyChecking,
+  comfyChecking = false,
   onCheckComfy,
   system,
   judgeModel,
@@ -90,13 +99,15 @@ export function VideoLineupLab({
   onCustomPromptChange,
   otherRunActive,
   ollamaBaseUrl,
-  gpuNoteForRun,
+  gpuNoteForRun = noGpuNote,
   onDownloadModel,
   onStopDownload,
   pullProgressByModel,
+  variant = 'advanced',
 }: {
-  comfyStatus: ComfyStatus | null;
-  comfyChecking: boolean;
+  /** What ComfyUI reported. Any status with the folders it lists will do. */
+  comfyStatus: { reachable: boolean; checkpoints?: string[]; textEncoders?: string[]; folders?: ComfyFolderListing } | null;
+  comfyChecking?: boolean;
   onCheckComfy: () => void;
   system: SystemProfile;
   /** The vision model that checks each clip's middle frame; empty when none is installed. */
@@ -105,14 +116,17 @@ export function VideoLineupLab({
   onPromptIdChange: (id: string) => void;
   customPrompt: string;
   onCustomPromptChange: (text: string) => void;
-  /** The Image test is rendering, and the GPU is taken. */
+  /** Something else is using the GPU, so a race now would time the contention. */
   otherRunActive: boolean;
   ollamaBaseUrl: string;
-  gpuNoteForRun: () => Promise<string>;
+  /** A sentence about anything else holding the GPU, for the first status line. */
+  gpuNoteForRun?: () => Promise<string>;
   onDownloadModel?: (generationId: string) => void;
   onStopDownload?: () => void;
   pullProgressByModel?: Record<string, PullProgressUpdate>;
+  variant?: 'advanced' | 'simple';
 }) {
+  const simple = variant === 'simple';
   const session = useVideoLineupSession();
   const [picks, setPicks] = useState<ReadonlySet<string>>(() => new Set());
   const [confirmUnload, setConfirmUnload] = useState(false);
@@ -160,9 +174,13 @@ export function VideoLineupLab({
 
   const picked = cards.filter((card) => picks.has(card.entry.key) && card.facts.runnable);
   const total = estimateLineup(picked.map((card) => card.entry), machine, { calibration, saved });
-  const readyCount = cards.filter((card) => card.facts.runnable).length;
+  const runnable = cards.filter((card) => card.facts.runnable);
   const tooBigCount = cards.filter((card) => cardGroup(card) === 3).length;
-  const visible = showAll ? cards : cards.filter((card) => cardGroup(card) < 3);
+  // Simple Mode lists what can run here and nothing else: a model needing a
+  // token or a bigger machine is a question a beginner did not ask.
+  const visible = simple
+    ? cards.filter((card) => cardGroup(card) <= 1)
+    : showAll ? cards : cards.filter((card) => cardGroup(card) < 3);
   const rough = machineKnown && cards.some((card) => card.facts.estimate.basis === 'rough');
   const calibrator = cards.find((card) => card.entry.key === CALIBRATION_MODEL);
   const promptReady = promptId !== CUSTOM_IMAGE_PROMPT_ID || customPrompt.trim().length > 0;
@@ -174,6 +192,10 @@ export function VideoLineupLab({
     else next.add(key);
     return next;
   });
+
+  // The list is already fastest first, so the first few runnable are the
+  // quickest race this machine can finish.
+  const pickForMe = () => setPicks(new Set(runnable.slice(0, PICK_FOR_ME).map((card) => card.entry.key)));
 
   const begin = async () => {
     setConfirmUnload(false);
@@ -298,43 +320,57 @@ export function VideoLineupLab({
     }
   };
 
+  const startNote = otherRunActive && !session.running
+    ? 'Another test is using the graphics card. The race can start when it finishes.'
+    : picked.length > 0
+      ? `${picked.length} picked · ${lowerFirst(formatVideoEstimate(total, { roughNote: false }))} in total`
+      : runnable.length > 0
+        ? 'Tick the models to race.'
+        : 'Download a model that fits, and it can race here.';
+
   return (
-    <article className="advanced-lab-card video-lineup" aria-label="Video lineup">
+    <article className={`advanced-lab-card video-lineup${simple ? ' simple' : ''}`} aria-label="Video lineup">
       <div className="advanced-lab-card-head">
         <Film aria-hidden="true" />
         <div>
-          <span>Extra beta creative test</span>
+          <span>{simple ? 'Video makers' : 'Extra beta creative test'}</span>
           <strong>Video Lineup</strong>
         </div>
         <b className="advanced-lab-grade locked">
-          {machineKnown && reachable ? `${readyCount} ready to race` : 'Extra beta'}
+          {machineKnown && reachable ? `${runnable.length} ready to race` : 'Extra beta'}
         </b>
       </div>
       <p>
-        Pick video models, give them all the same prompt and seed, and see which renders fastest on
-        this computer — then watch the clips side by side. Whether each one fits, how long a clip
-        takes, and how much is left to download are worked out for this machine before anything is
-        downloaded.
+        {simple
+          ? 'Video makers cannot join Speed Dating — they render instead of chatting — so they get a race of their own. Give them all the same idea, see which finishes first on this PC, then play the clips side by side.'
+          : 'Pick video models, give them all the same prompt and seed, and see which renders fastest on this computer — then watch the clips side by side.'}
+        {' '}Whether each one fits, how long a clip takes, and how much is left to download are worked out
+        for this machine before anything is downloaded.
       </p>
 
       {!reachable && (
         <div className="utility-empty compact">
           <strong>{comfyChecking ? 'Looking for ComfyUI...' : 'ComfyUI is not running'}</strong>
           <span>
-            Fit and time below come from this machine and need nothing running. Seeing which models
-            you already have, downloading them, and racing them all need ComfyUI — start it and it
-            will be found on port 8188.
+            Video makers run on ComfyUI, a separate free program RigMatch does not install. Fit and
+            time below come from this machine and need nothing running; seeing which models you
+            already have, downloading them, and racing them all need ComfyUI. Start it and it will be
+            found on port 8188.
           </span>
-          <button type="button" className="mini-button outline" onClick={onCheckComfy} disabled={comfyChecking}>
-            <RefreshCw className={comfyChecking ? 'spin' : ''} aria-hidden="true" />
-            Check again
-          </button>
+          <div className="advanced-lab-actions">
+            <button type="button" className="mini-button outline" onClick={onCheckComfy} disabled={comfyChecking}>
+              <RefreshCw className={comfyChecking ? 'spin' : ''} aria-hidden="true" />
+              Check again
+            </button>
+            {/* Offered only when a launcher really exists beside the saved folder. */}
+            <ComfyStartButton folder={readComfySettings().folder} onStarted={onCheckComfy} />
+          </div>
         </div>
       )}
 
       <div className="video-lineup-setup">
         <PromptPicker
-          idPrefix="video-lineup"
+          idPrefix={`video-lineup-${variant}`}
           value={promptId}
           onChange={onPromptIdChange}
           customPrompt={customPrompt}
@@ -364,6 +400,13 @@ export function VideoLineupLab({
             </button>
           )}
         </div>
+      )}
+
+      {runnable.length > 1 && picks.size === 0 && !session.running && (
+        <button type="button" className="mini-button video-lineup-more" onClick={pickForMe}>
+          <Sparkles aria-hidden="true" />
+          Pick the {Math.min(PICK_FOR_ME, runnable.length)} fastest for me
+        </button>
       )}
 
       <div className="video-lineup-list" role="list" aria-label="Video models">
@@ -412,7 +455,7 @@ export function VideoLineupLab({
           );
         })}
       </div>
-      {tooBigCount > 0 && (
+      {!simple && tooBigCount > 0 && (
         <button type="button" className="mini-button outline video-lineup-more" onClick={() => setShowAll((value) => !value)}>
           {showAll ? 'Hide the models too big for this machine' : `Show ${tooBigCount} too big for this machine`}
         </button>
@@ -440,11 +483,7 @@ export function VideoLineupLab({
       )}
 
       <div className="video-lineup-start">
-        <span>
-          {picked.length > 0
-            ? `${picked.length} picked · ${lowerFirst(formatVideoEstimate(total, { roughNote: false }))} in total`
-            : readyCount > 0 ? 'Tick the models to race.' : 'Download a model that fits, and it can race here.'}
-        </span>
+        <span>{startNote}</span>
         {session.running ? (
           <button type="button" className="mini-button outline" onClick={stopVideoLineup}>
             Stop

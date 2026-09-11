@@ -34,6 +34,9 @@ import { formatDuration } from '../lib/runEstimates';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 import { getFriendlyModelName } from '../lib/modelCatalog';
 import { getDownloadRowStatus, summarizeDownloadStep } from '../lib/downloadStatus';
+import type { ComfyFolderListing } from '../lib/generationCatalog';
+import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
+import { VideoLineupLab } from './VideoLineupLab';
 import rigGreenroom from '../assets/robot-rig-greenroom.webp';
 import speedDateShow from '../assets/robot-speed-date-show.webp';
 import romanceHero from '../assets/robot-romance-hero.webp';
@@ -190,6 +193,23 @@ type SimpleWizardProps = {
    *  back used to unmount this component and drop the user at step 1. */
   initialStep?: StepId;
   onStepChange?: (step: StepId) => void;
+  /**
+   * The video race, for the "A video maker" chip.
+   *
+   * Video makers cannot join Speed Dating — they render instead of chatting —
+   * and the chip used to end there, sending a beginner to Advanced Mode to find
+   * out what their PC could make. The same race runs here instead: one idea for
+   * every model, fastest first, the clips side by side.
+   */
+  videoLineup?: {
+    comfyReachable: boolean;
+    comfyFolders: ComfyFolderListing;
+    judgeModel: string;
+    ollamaBaseUrl: string;
+    onCheckComfy: () => void;
+    onDownloadModel: (generationId: string) => void;
+    onStopDownload: () => void;
+  };
 };
 
 export function SimpleWizard(props: SimpleWizardProps) {
@@ -756,11 +776,15 @@ function listNames(names: string[]): string {
 }
 
 function PickScreen({
-  generation, wizardModels, modelsLoading, shortlistIds, shortlistedRows, onTogglePick, onChooseForMe, initialDream }: SimpleWizardProps) {
+  generation, wizardModels, modelsLoading, shortlistIds, shortlistedRows, onTogglePick, onChooseForMe, initialDream,
+  videoLineup, system, pullProgressByModel, benchmarkActive }: SimpleWizardProps) {
   // Opens on the dream matching the splash's primary goal, when there is one
   // — the person already answered this question once.
   const [dream, setDream] = useState<DreamFilterId>(initialDream ?? 'all');
   const [showAll, setShowAll] = useState(false);
+  // The video race's idea, kept here so switching chips and back keeps it.
+  const [videoPromptId, setVideoPromptId] = useState(IMAGE_BENCHMARK_PROMPTS[0].id);
+  const [videoCustomPrompt, setVideoCustomPrompt] = useState('');
   const lineupFull = shortlistedRows.length >= 5;
 
   const filtered = useMemo(() => {
@@ -787,7 +811,7 @@ function PickScreen({
     ? `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} fit your PC`
     : filtered.length === 0
       ? (makers && makers.total > 0
-        ? `${makers.total} ${makerNoun}${makers.total === 1 ? '' : 's'} run on this PC — they just don't compete here`
+        ? `${makers.total} ${makerNoun}${makers.total === 1 ? '' : 's'} run on this PC — ${dream === 'video' && videoLineup ? 'race them below' : "they just don't compete here"}`
         : `No contestants ${dreamNoun[dream]} on this PC`)
       : `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} ${dreamNoun[dream]} · all of them fit your PC`;
 
@@ -836,6 +860,25 @@ function PickScreen({
         <div className="sw-card-grid">
           {Array.from({ length: 6 }).map((_, i) => <div key={i} className="sw-card sw-card-skeleton" aria-hidden="true" />)}
         </div>
+      ) : filtered.length === 0 && dream === 'video' && videoLineup ? (
+        // They cannot join Speed Dating, so they get a race of their own, here,
+        // rather than directions to a mode a beginner has not opened.
+        <VideoLineupLab
+          variant="simple"
+          comfyStatus={{ reachable: videoLineup.comfyReachable, folders: videoLineup.comfyFolders }}
+          onCheckComfy={videoLineup.onCheckComfy}
+          system={system}
+          judgeModel={videoLineup.judgeModel}
+          promptId={videoPromptId}
+          onPromptIdChange={setVideoPromptId}
+          customPrompt={videoCustomPrompt}
+          onCustomPromptChange={setVideoCustomPrompt}
+          otherRunActive={benchmarkActive}
+          ollamaBaseUrl={videoLineup.ollamaBaseUrl}
+          onDownloadModel={videoLineup.onDownloadModel}
+          onStopDownload={videoLineup.onStopDownload}
+          pullProgressByModel={pullProgressByModel}
+        />
       ) : filtered.length === 0 ? (
         <div className="sw-pick-empty">
           {dream === 'image' || dream === 'video' ? (
