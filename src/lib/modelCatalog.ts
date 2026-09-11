@@ -1768,7 +1768,10 @@ export function getPlatformFit(displayName: string, platform: string): { compati
   return { compatible: true, reason: '' };
 }
 
-export function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb'>, vramGb: number): HardwareFit {
+export function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fitOverride'>, vramGb: number): HardwareFit {
+  // A video model is sized by the Video Lab's rules, which know ComfyUI
+  // offloads what VRAM cannot hold (asHardwareFit in videoLineup.ts).
+  if (row.fitOverride) return row.fitOverride;
   const sizeGb = row.sizeGb ?? null;
   const paramsB = getParamSortValue(row.params);
   const vramLabel = vramGb > 0 ? formatGb(vramGb) : 'detected VRAM';

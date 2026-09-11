@@ -3,7 +3,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { licenseLinksForModels, modelFamilyName } from '../src/lib/modelLicenses.ts';
+import {
+  huggingFaceRepoPage,
+  licenceConditionsForRows,
+  licenseLinksForModels,
+  licenseLinksForRows,
+  modelFamilyName,
+} from '../src/lib/modelLicenses.ts';
+import { GENERATION_MODELS } from '../src/lib/generationCatalog.ts';
 
 /**
  * The download consent dialog is the app's only legal gate: it asks the user to
@@ -89,4 +96,76 @@ test('labels name the thing being linked', () => {
   // "Gemma terms" next to a DeepSeek download was readable and wrong; a label
   // that does not name its model is how that happens.
   assert.ok(labels(['deepseek-r1:7b']).some((label) => label.toLowerCase().includes('deepseek-r1')));
+});
+
+// ── image and video models, which come from Hugging Face ────────────────────
+
+const WAN = { displayName: 'Wan 2.1 1.3B', runtime: 'comfyui', generationId: 'wan-2.1-1.3b' };
+
+test('a video model links the Hugging Face pages its files come from, and not Ollama’s', () => {
+  // The dialog said Ollama was downloading it and linked Ollama's terms. It is
+  // not, and they do not apply.
+  const shown = licenseLinksForRows([WAN]).map((link) => link.href);
+  assert.ok(shown.includes('https://huggingface.co/terms-of-service'));
+  assert.ok(shown.some((href) => /^https:\/\/huggingface\.co\/[\w.-]+\/[\w.-]+$/.test(href)), 'a repository page');
+  assert.ok(!shown.some((href) => href.includes('ollama.com')));
+});
+
+test('a mixed download names both providers', () => {
+  const shown = licenseLinksForRows([{ displayName: 'gemma3:4b' }, WAN]).map((link) => link.href);
+  assert.ok(shown.includes('https://ollama.com/terms'));
+  assert.ok(shown.includes('https://ai.google.dev/gemma/terms'));
+  assert.ok(shown.includes('https://huggingface.co/terms-of-service'));
+  assert.equal(new Set(shown).size, shown.length);
+});
+
+test('a repository page is read from a Hugging Face download URL, and from nothing else', () => {
+  assert.equal(
+    huggingFaceRepoPage('https://huggingface.co/Lightricks/LTX-Video/resolve/main/x.safetensors'),
+    'https://huggingface.co/Lightricks/LTX-Video',
+  );
+  assert.equal(huggingFaceRepoPage('https://example.com/Lightricks/LTX-Video/resolve/main/x'), null);
+  assert.equal(huggingFaceRepoPage('https://huggingface.co.example.com/a/b/resolve/main/x'), null);
+});
+
+const row = (generationId, displayName = generationId) => ({ displayName, runtime: 'comfyui', generationId });
+
+test('a licence that excludes places says so before the download, naming them', () => {
+  // MiniMax H3's licence excludes the United States, among others. RigMatch
+  // does not know where anyone is, so the only honest thing is to say it.
+  const [minimax] = licenceConditionsForRows([row('minimax-h3', 'MiniMax H3')]);
+  assert.match(minimax.condition, /United States/);
+  assert.match(minimax.condition, /European Union/);
+  assert.deepEqual(minimax.models, ['MiniMax H3']);
+});
+
+test('a model is held to the licence of every file it downloads, not only its own', () => {
+  // Kandinsky 5 is MIT; its VAE and text encoder come from Tencent-licensed
+  // repositories, and those decide where it may be used.
+  const conditions = licenceConditionsForRows([row('kandinsky-5', 'Kandinsky 5.0 Lite 2B')]);
+  assert.equal(conditions.length, 1);
+  assert.match(conditions[0].condition, /Tencent/);
+});
+
+test('one condition covering several models is said once, naming them all', () => {
+  const conditions = licenceConditionsForRows([row('hunyuan-1.5', 'HunyuanVideo 1.5'), row('kandinsky-5', 'Kandinsky 5')]);
+  assert.equal(conditions.length, 1);
+  assert.deepEqual(conditions[0].models.sort(), ['HunyuanVideo 1.5', 'Kandinsky 5']);
+});
+
+test('a model whose licences carry no such condition adds nothing to read', () => {
+  assert.deepEqual(licenceConditionsForRows([row('wan-2.1-1.3b'), row('mochi-1'), { displayName: 'gemma3:4b' }]), []);
+});
+
+test('every image and video model links only to hosts the app may open', () => {
+  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
+  const allowlist = main.match(/ALLOWED_EXTERNAL_HOSTS = new Set\(\[([\s\S]*?)\]\)/)?.[1] ?? '';
+  const allowed = [...allowlist.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+  const rows = GENERATION_MODELS
+    .filter((model) => model.kind === 'image' || model.kind === 'video')
+    .map((model) => ({ displayName: model.label, runtime: 'comfyui', generationId: model.id }));
+  for (const link of licenseLinksForRows(rows)) {
+    const host = new URL(link.href).hostname;
+    assert.ok(allowed.includes(host), `${host} is not in ALLOWED_EXTERNAL_HOSTS, so "${link.label}" is a dead link`);
+  }
 });

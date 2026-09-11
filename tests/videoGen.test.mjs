@@ -7,11 +7,10 @@ import {
   batchSeed,
   buildTxt2VideoWorkflow,
   comfyBusyCount,
-  isTextEncoder,
   isVideoCheckpoint,
   middleFrameIndex,
 } from '../src/lib/videoGen.ts';
-import { videoReadiness } from '../src/lib/videoGenChallenge.ts';
+import { strayLtxEntries } from '../src/lib/videoLineup.ts';
 import {
   COMFORTABLE_COST,
   realtimeCost,
@@ -66,10 +65,18 @@ test('a video checkpoint is told apart from an image one', () => {
   assert.ok(!isVideoCheckpoint('sdxl_base_1.0.safetensors'));
 });
 
-test('a text encoder is recognised', () => {
-  assert.ok(isTextEncoder('t5xxl_fp8_e4m3fn.safetensors'));
-  assert.ok(isTextEncoder('umt5_xxl_fp8.safetensors'));
-  assert.ok(!isTextEncoder('ltxv-2b-distilled.safetensors'));
+test('an LTX checkpoint found in ComfyUI is paired with a T5-XXL encoder, never Wan’s UMT5', () => {
+  // LTX-Video reads prompts with T5-XXL. The old rule took the first encoder
+  // whose name contained "t5", which a Wan user's umt5 file also does.
+  const [entry] = strayLtxEntries({
+    checkpoints: ['ltx-video-2b-v0.9.5.safetensors'],
+    text_encoders: ['umt5_xxl_fp8_e4m3fn_scaled.safetensors', 't5xxl_fp8_e4m3fn.safetensors'],
+  });
+  assert.equal(entry.legacy.textEncoder, 't5xxl_fp8_e4m3fn.safetensors');
+  assert.deepEqual(strayLtxEntries({
+    checkpoints: ['ltx-video-2b-v0.9.5.safetensors'],
+    text_encoders: ['umt5_xxl_fp8_e4m3fn_scaled.safetensors'],
+  }), [], 'with only UMT5 there is nothing an LTX graph can read prompts with');
 });
 
 test('realtime cost matches what was measured on the 4070', () => {
@@ -170,15 +177,21 @@ test('a ComfyUI holding only a video model is not ready for images', () => {
 });
 
 test('the same ComfyUI IS ready for video, given an encoder', () => {
-  const ready = videoReadiness(['ltx-video-2b-v0.9.5.safetensors'], ['t5xxl_fp8_e4m3fn_scaled.safetensors']);
-  assert.equal(ready.kind, 'ready');
-  assert.deepEqual(ready.checkpoints, ['ltx-video-2b-v0.9.5.safetensors']);
+  const found = strayLtxEntries({
+    checkpoints: ['ltx-video-2b-v0.9.5.safetensors'],
+    text_encoders: ['t5xxl_fp8_e4m3fn_scaled.safetensors'],
+  });
+  assert.deepEqual(found.map((entry) => entry.legacy.checkpoint), ['ltx-video-2b-v0.9.5.safetensors']);
 });
 
 test('a scaled fp8 encoder filename is still recognised as an encoder', () => {
   // The real folder held t5xxl_fp8_e4m3fn_scaled.safetensors, not the exact
   // name the docs use.
-  assert.ok(isTextEncoder('t5xxl_fp8_e4m3fn_scaled.safetensors'));
+  const [entry] = strayLtxEntries({
+    checkpoints: ['ltx-video-2b-v0.9.5.safetensors'],
+    text_encoders: ['t5xxl_fp8_e4m3fn_scaled.safetensors'],
+  });
+  assert.equal(entry.legacy.textEncoder, 't5xxl_fp8_e4m3fn_scaled.safetensors');
 });
 
 test('the 0.9.5 point release is recognised as a video checkpoint', () => {
@@ -190,12 +203,11 @@ test('a ComfyUI with only a video model is ready for video, whatever images thin
   // video checkpoints — so the one setup video exists for (a video checkpoint
   // and nothing else) declared itself unavailable. Caught by clicking Run in
   // the live app and finding no button.
-  const ready = videoReadiness(['ltx-video-2b-v0.9.5.safetensors'], ['t5xxl_fp8_e4m3fn_scaled.safetensors']);
-  assert.equal(ready.kind, 'ready');
+  const found = strayLtxEntries({
+    checkpoints: ['ltx-video-2b-v0.9.5.safetensors'],
+    text_encoders: ['t5xxl_fp8_e4m3fn_scaled.safetensors'],
+  });
+  assert.equal(found.length, 1);
   const imagePickerOffers = ['ltx-video-2b-v0.9.5.safetensors'].filter((n) => !isVideoCheckpoint(n));
   assert.deepEqual(imagePickerOffers, [], 'images have nothing, and that must not stop video');
-});
-
-test('a umt5 encoder is recognised, as WAN models need one', () => {
-  assert.ok(isTextEncoder('umt5_xxl_fp8_e4m3fn_scaled.safetensors'));
 });

@@ -61,6 +61,14 @@ export type AdvancedLabResult = {
   height?: number;
   language?: string;
   error?: string;
+  /**
+   * The GPU a video result was measured on. A lineup model's time replaces its
+   * estimate on this machine only, since a time from another card is not this
+   * machine's.
+   */
+  gpu?: string;
+  /** Results from one lineup share this, so its leaderboard can be shown again. */
+  lineupId?: string;
 };
 
 export function readAdvancedLabResults(): Record<string, AdvancedLabResult> {

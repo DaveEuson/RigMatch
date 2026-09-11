@@ -716,19 +716,27 @@ export function generationCatalogRows(installed: ComfyFolderListing): Array<{
     // they exist to serve. Each appears in its model's download plan instead.
     .filter((model): model is GenerationModel & { kind: 'image' | 'video' } =>
       model.kind === 'image' || model.kind === 'video')
-    .map((model) => ({
-      id: `comfyui/${model.id}`,
-      name: model.label,
-      tag: model.kind,
-      params: model.kind === 'video' ? 'Video model' : 'Image model',
-      sizeGb: Number((model.bytes / 1e9).toFixed(2)),
-      pack: 'Generation',
-      source: 'Hugging Face',
-      live: true,
-      runtime: 'comfyui' as const,
-      publisher: model.publisher,
-      generationId: model.id,
-      generationKind: model.kind,
-      installedFile: downloadPlan(model, installed).needed.length === 0,
-    }));
+    .map((model) => {
+      const plan = downloadPlan(model, installed);
+      const parts = [model, ...(model.requires ?? []).map(generationModelById).filter(Boolean) as GenerationModel[]];
+      // What the download costs while anything is missing, and what the model
+      // occupies once nothing is. The main file alone left out everything it
+      // cannot run without — a second expert, an encoder, a VAE.
+      const bytes = plan.needed.length > 0 ? plan.totalBytes : parts.reduce((sum, part) => sum + part.bytes, 0);
+      return {
+        id: `comfyui/${model.id}`,
+        name: model.label,
+        tag: model.kind,
+        params: model.kind === 'video' ? 'Video model' : 'Image model',
+        sizeGb: Number((bytes / 1e9).toFixed(2)),
+        pack: 'Generation',
+        source: 'Hugging Face',
+        live: true,
+        runtime: 'comfyui' as const,
+        publisher: model.publisher,
+        generationId: model.id,
+        generationKind: model.kind,
+        installedFile: plan.needed.length === 0,
+      };
+    });
 }

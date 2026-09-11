@@ -181,11 +181,6 @@ export function isVideoCheckpoint(name: string): boolean {
     .test(name || '');
 }
 
-/** T5 text encoders, which an LTX graph needs and cannot run without. */
-export function isTextEncoder(name: string): boolean {
-  return /t5|umt5|text_encoder/i.test(name || '');
-}
-
 /**
  * One seed per batch of runs, not one per run.
  *

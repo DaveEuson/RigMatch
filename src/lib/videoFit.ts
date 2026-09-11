@@ -18,6 +18,9 @@
 
 import { videoModelSpec, type VideoModelSpec } from './videoCatalog.ts';
 
+/** What fit and time are worked out from — a catalogue spec has it, and so does any other model sized by hand. */
+export type VideoSizing = Pick<VideoModelSpec, 'ditGb' | 'teGb' | 'refSeconds' | 'gated'>;
+
 export type VideoMachine = {
   vramGb: number;
   ramGb: number;
@@ -54,7 +57,7 @@ const gb = (value: number) => (Math.round(value * 10) / 10).toString();
  * finished a clip in under two minutes that way on a 12 GB card.
  */
 export function videoFit(
-  spec: VideoModelSpec,
+  spec: VideoSizing,
   machine: VideoMachine,
   { hasToken = false }: { hasToken?: boolean } = {},
 ): VideoFit {
@@ -166,7 +169,7 @@ export type VideoEstimate = {
  * machine has actually measured for the model replaces the estimate outright.
  */
 export function estimateVideoSeconds(
-  spec: VideoModelSpec,
+  spec: VideoSizing,
   machine: VideoMachine,
   {
     calibration,
@@ -209,14 +212,26 @@ export function formatVideoDuration(seconds: number): string {
   return minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`;
 }
 
-/** The card's time line: a measured time as it was, an estimate as a range. */
-export function formatVideoEstimate(estimate: VideoEstimate): string {
+/**
+ * The card's time line: a measured time as it was, an estimate as a range.
+ *
+ * `roughNote: false` drops the explanation for a list of eighteen models,
+ * which says it once above the list rather than on every row.
+ */
+export function formatVideoEstimate(
+  estimate: VideoEstimate,
+  { roughNote = true }: { roughNote?: boolean } = {},
+): string {
   if (estimate.basis === 'measured') return `Took ${formatVideoDuration(estimate.seconds)} here`;
   const { low, high } = estimate;
+  // A lineup of measured models sums to a range with no width; "6–6 min" says it twice.
+  const span = (from: string, to: string, unit: string) => (from === to ? `${from} ${unit}` : `${from}–${to} ${unit}`);
   const range = high < 90
-    ? `${Math.round(low)}–${Math.round(high)} s`
+    ? span(String(Math.round(low)), String(Math.round(high)), 's')
     : high < 5400
-      ? `${Math.max(1, Math.round(low / 60))}–${Math.max(1, Math.round(high / 60))} min`
-      : `${(low / 3600).toFixed(1)}–${(high / 3600).toFixed(1)} h`;
-  return estimate.basis === 'rough' ? `About ${range} (rough until RigMatch has timed this machine)` : `About ${range}`;
+      ? span(String(Math.max(1, Math.round(low / 60))), String(Math.max(1, Math.round(high / 60))), 'min')
+      : span((low / 3600).toFixed(1), (high / 3600).toFixed(1), 'h');
+  return estimate.basis === 'rough' && roughNote
+    ? `About ${range} (rough until RigMatch has timed this machine)`
+    : `About ${range}`;
 }

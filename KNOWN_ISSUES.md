@@ -95,11 +95,16 @@ If you find something not on this list, please open an issue or drop it in the b
 
 RigMatch should grow beyond the core quick-question benchmark with optional lab-style tests that produce separate grades instead of changing the main Match score.
 
-Status as of 0.2.6:
+Status as of 0.9:
 
 - **App Builder** (shipped): asks a model to create a complete single-file Tetris-style HTML game and grades structure, controls, scoring, game loop, collision logic, line clearing, restart/game-over handling, and truncation risk. As of 0.2.6 the output is also playable through an explicit **Play It** sandboxed preview (isolated iframe, network/storage/file access blocked); RigMatch never runs generated code automatically.
-- **Image Generation** (shipped, extra-beta): Ollama Image Lab with explicit platform/model-size warnings, opt-in pulls, and separate image grades. As of 0.2.6 it also detects image-generation models already installed in the local Ollama library. Future hardening should add richer quality checks and optional ComfyUI/Stable Diffusion backend support.
-- **Video Generation** (still a later research item): no local backend RigMatch supports can generate video yet, so 0.2.6 shows an honest locked research card with the unlock requirements. It needs a real backend, stronger hardware checks, longer runtimes, and much larger storage/VRAM safeguards before it can be a test.
+- **Image Generation** (shipped, extra-beta): runs on the user's own ComfyUI, not Ollama — Ollama hosts no image models. Checkpoints download from Hugging Face only on request, and a local vision model, when one is installed, judges whether the picture matches the prompt.
+- **Video Generation** (shipped in 0.9, extra-beta): the Video Lineup races any of the seventeen catalogue video models — LTX-Video, LTX-2, Wan, HunyuanVideo, Kandinsky 5, Mochi and MiniMax H3 — on the user's own ComfyUI, with the same prompt and seed, unloading ComfyUI between models so each starts cold. Before anything downloads, every model shows whether it fits this machine, how long a clip should take here, and how much is left to download. Known limits:
+  - Time estimates are rough until RigMatch has timed LTX-Video 2B on this GPU; that one run calibrates every other estimate.
+  - Motion quality is not scored. The middle frame is judged against the prompt; flicker and temporal consistency have no right answer and no local model judges them reliably.
+  - A Jetson runs none of the lineup. Video there needs low-memory GGUF builds, which need a custom node RigMatch does not install.
+  - LTX-2.5 is gated: it needs the user's own Hugging Face token, and its terms accepted on its Hugging Face page.
+  - ComfyUI only looks for new model files when it starts, so a model downloaded while it runs needs a ComfyUI restart before it can race.
 
 Safeguards required before expanding these tests:
 

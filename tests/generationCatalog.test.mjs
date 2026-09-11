@@ -187,3 +187,15 @@ test('a row is installed only when ComfyUI lists every file it needs, where it n
   }).find((r) => r.generationId === 'wan-2.1-1.3b');
   assert.equal(noVae.installedFile, false);
 });
+
+test('a row’s size is what the download costs: every file it needs, and none it already has', () => {
+  // The main file alone left out the encoder and VAE a video model cannot run
+  // without, so the size on the Download button was a fraction of the download.
+  const wan = (installed) => generationCatalogRows(installed).find((r) => r.generationId === 'wan-2.1-1.3b');
+  const bytes = (...ids) => ids.map(generationModelById).reduce((sum, m) => sum + m.bytes, 0);
+  assert.equal(wan({}).sizeGb, Number((bytes('wan-2.1-1.3b', 'umt5-fp8', 'vae-wan21') / 1e9).toFixed(2)));
+  assert.equal(
+    wan({ text_encoders: ['umt5_xxl_fp8_e4m3fn_scaled.safetensors'] }).sizeGb,
+    Number((bytes('wan-2.1-1.3b', 'vae-wan21') / 1e9).toFixed(2)),
+  );
+});

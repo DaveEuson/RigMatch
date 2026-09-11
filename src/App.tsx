@@ -223,13 +223,24 @@ import {
 import { IMAGE_BENCHMARK_PROMPTS } from './lib/imageGenScoring';
 import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
 import { batchSeed, isVideoCheckpoint } from './lib/videoGen';
-import { DEFAULT_VIDEO_SIZE_ID, toVideoLabResult, videoReadiness } from './lib/videoGenChallenge';
+import { toVideoLabResult } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
 import { readHuggingFaceToken } from './lib/huggingFaceToken';
 import { goalById, presetIdForGoal } from './lib/goals';
 import { taskFilterForGoal } from './lib/modelCatalog';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
-import { runVideoLabChallenge } from './lib/videoGenRunner';
+import { runVideoLineupLive } from './lib/videoGenRunner';
+import {
+  asHardwareFit,
+  comfyListing,
+  estimateLineup,
+  lineupEntry,
+  runnableLineup,
+  videoMachineFrom,
+  type VideoLineupEntry,
+} from './lib/videoLineup';
+import { formatVideoEstimate, videoFit } from './lib/videoFit';
+import { readVideoCalibration } from './lib/videoCalibrationStore';
 import { runImageLabChallenge } from './lib/imageGenRunner';
 import { CUSTOM_IMAGE_PROMPT_ID } from './lib/imageGenScoring';
 import { describeComfyBusy, getComfyStatus, locateComfyFolder } from './lib/comfyTransport';
@@ -433,7 +444,6 @@ function App() {
     image: false,
     imagePrompt: IMAGE_BENCHMARK_PROMPTS[0].id,
     video: false,
-    videoSizeId: DEFAULT_VIDEO_SIZE_ID,
     recognize: false,
     recognizeImage: DEFAULT_VISION_TEST_IMAGE,
     listen: false,
@@ -463,7 +473,7 @@ function App() {
   const [activity, setActivity] = useState('Contestants is your hub: browse models, run tests, manage downloads, and start Speed Dating.');
   const [activeNavId, setActiveNavId] = useState<NavId>('models');
   const {
-    comfyCheckpoints, comfyTextEncoders, comfyFolders, comfyReachable, comfySettings,
+    comfyCheckpoints, comfyFolders, comfyReachable, comfySettings,
     refreshComfyStatus, beginComfyDownload, endComfyDownload, abortComfyDownload,
   } = useComfy({ activeNavId });
   const {
@@ -495,6 +505,10 @@ function App() {
     useState<{ label: string; run: () => void | Promise<void> } | null>(null);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [pendingThirdPartyDownloadRows, setPendingThirdPartyDownloadRows] = useState<ModelRow[] | null>(null);
+  // A download the Video Lab asked for, waiting on the same consent dialog,
+  // and the one in flight once it is agreed to.
+  const [pendingLabDownload, setPendingLabDownload] = useState<ModelRow | null>(null);
+  const [labDownloadName, setLabDownloadName] = useState<string | null>(null);
   const [chosenModel, setChosenModel] = useState<string | null>(null);
   const [exportHatchOpen, setExportHatchOpen] = useState(false);
   const [clearedTopMatches, setClearedTopMatches] = useState<Set<string>>(() => getSavedClearedTopMatches());
@@ -524,6 +538,18 @@ function App() {
     [lmStudio.baseUrl, lmStudio.models, ollama.baseUrl, ollama.models],
   );
 
+  // The machine a video model is sized against, rebuilt only when the hardware
+  // changes: the profile refreshes its live load every few seconds, and every
+  // model row would be rebuilt with it.
+  const videoMachine = useMemo(
+    () => videoMachineFrom({
+      platform: system.platform,
+      memory: { totalGb: system.memory.totalGb },
+      gpu: { vramGb: system.gpu.vramGb, model: system.gpu.model, isUnifiedMemory: system.gpu.isUnifiedMemory },
+    }),
+    [system.platform, system.memory.totalGb, system.gpu.vramGb, system.gpu.model, system.gpu.isUnifiedMemory],
+  );
+
   const modelRows = useMemo(
     () => {
       const rows = mergeModelRows(catalog, localModels);
@@ -531,19 +557,29 @@ function App() {
       // their own. Someone who wants to make a video searches for "makes
       // video"; that video comes from Hugging Face and runs on ComfyUI is our
       // problem, not a category they should have to learn.
+      const hasToken = Boolean(readHuggingFaceToken());
       const generation: ModelRow[] = generationCatalogRows(comfyFolders)
-        .map((entry) => ({
-          ...entry,
-          displayName: entry.name,
-          installed: entry.installedFile,
-          ready: entry.installedFile,
-          installLabel: entry.installedFile ? 'Installed' : 'Download',
-          canDownload: !entry.installedFile,
-          pulls: null,
-        }));
+        .map((entry) => {
+          // Sized the way the Video Lab sizes it: ComfyUI offloads what VRAM
+          // cannot hold, so VRAM alone called runnable models too big and the
+          // download queue refused them.
+          const lineup = entry.generationKind === 'video' ? lineupEntry(entry.generationId) : undefined;
+          return {
+            ...entry,
+            displayName: entry.name,
+            installed: entry.installedFile,
+            ready: entry.installedFile,
+            installLabel: entry.installedFile ? 'Installed' : 'Download',
+            canDownload: !entry.installedFile,
+            pulls: null,
+            ...(lineup
+              ? { fitOverride: asHardwareFit(videoFit(lineup.sizing, videoMachine, { hasToken: hasToken || entry.installedFile })) }
+              : {}),
+          };
+        });
       return [...generation, ...rows];
     },
-    [catalog, localModels, comfyFolders],
+    [catalog, localModels, comfyFolders, videoMachine],
   );
 
   const selectedRow = modelRows.find(
@@ -1934,6 +1970,61 @@ function App() {
     return true;
   }, [comfyFolders, tellUser, refreshComfyStatus, beginComfyDownload, endComfyDownload, pullQueueShouldStop, findComfyForDownload]);
 
+  /**
+   * A generation download the Video Lab asked for, rather than the queue.
+   *
+   * The queue sizes every row against VRAM and waits on Ollama, and neither
+   * belongs to a video model: the Lab has already said whether it fits, and a
+   * ComfyUI download has nothing to do with Ollama. It still goes through the
+   * same consent dialog and the same downloader, one at a time, so Stop always
+   * reaches the download it names.
+   */
+  const requestLabDownload = useCallback((generationId: string) => {
+    const row = modelRows.find((candidate) => candidate.generationId === generationId);
+    if (!row || row.installed) return;
+    if (isPullingModels || labDownloadName) {
+      tellUser('Another download is running. Let it finish, or stop it, before starting this one.');
+      return;
+    }
+    setPendingLabDownload(row);
+  }, [modelRows, isPullingModels, labDownloadName, tellUser]);
+
+  const confirmLabDownload = useCallback(async () => {
+    const row = pendingLabDownload;
+    setPendingLabDownload(null);
+    if (!row) return;
+    setLabDownloadName(row.displayName);
+    clearPullRequest();
+    try {
+      const downloaded = await downloadGenerationModel(row);
+      setPullProgressByModel((current) => {
+        const entry = current[row.displayName];
+        if (downloaded) {
+          return {
+            ...current,
+            [row.displayName]: {
+              ...(entry ?? createQueuedPullProgress(row.displayName, ollama.baseUrl)),
+              phase: 'complete',
+              status: 'Downloaded. Restart ComfyUI so it can see the new files.',
+              percent: 100,
+              updatedAt: new Date().toISOString(),
+            },
+          };
+        }
+        // A refusal has already said why; a stopped download leaves nothing to show.
+        return entry?.phase === 'failed' ? current : removePullProgress(current, row.displayName);
+      });
+    } finally {
+      clearPullRequest();
+      setLabDownloadName(null);
+    }
+  }, [pendingLabDownload, downloadGenerationModel, clearPullRequest, ollama.baseUrl]);
+
+  const stopLabDownload = useCallback(() => {
+    askPullQueue('cancel');
+    abortComfyDownload();
+  }, [askPullQueue, abortComfyDownload]);
+
   const pullQueuedModels = useCallback(async () => {
     if (queuedRows.length === 0) {
       setActivity('Pick a model to download before starting the queue.');
@@ -2622,7 +2713,7 @@ function App() {
     // checkpoints, so the candidates are whatever ComfyUI has loaded. Asking
     // Ollama for them is what made the image checkbox silently do nothing — it
     // looked for installed models named flux or sdxl, and Ollama has none.
-    let videoEncoder = '';
+    let videoEntries: VideoLineupEntry[] = [];
     if (selection.image || selection.video) {
       // One check for the whole batch. Every generation job in it shares the
       // same ComfyUI, so if it is busy now none of them will be measuring this
@@ -2641,11 +2732,11 @@ function App() {
         }
       }
       if (selection.video) {
-        const ready = videoReadiness(comfy.checkpoints, comfy.textEncoders ?? []);
-        if (ready.kind === 'ready') {
-          videoEncoder = ready.encoders[0];
-          for (const name of ready.checkpoints) jobs.push({ model: name, kind: 'video' });
-        }
+        // Every video model on disk that runs here, each with its own files
+        // and graph. A checkpoint name and the first encoder in the folder was
+        // how an LTX-2 file reached the LTX-Video 0.9 graph.
+        videoEntries = runnableLineup(comfyListing(comfy), videoMachine, { calibration: readVideoCalibration() });
+        for (const entry of videoEntries) jobs.push({ model: entry.key, kind: 'video' });
       }
     }
 
@@ -2675,7 +2766,7 @@ function App() {
       const label = job.kind === 'app-builder' ? `App Builder skill test — ${job.model}`
         : job.kind === 'code' ? `Code Challenge — ${job.model}`
         : job.kind === 'image' ? `Image skill test — ${job.model}`
-        : job.kind === 'video' ? `Video skill test — ${job.model}`
+        : job.kind === 'video' ? `Video skill test — ${videoEntries.find((entry) => entry.key === job.model)?.name ?? job.model}`
         : `Image recognition skill test — ${job.model}`;
       setSkillRunStatus({ phase: 'running', label, completed: index, total: jobs.length });
       setActivity(`Skill test ${index + 1}/${jobs.length}: ${label}. This can take a few minutes per model.`);
@@ -2745,20 +2836,23 @@ function App() {
           unsubscribe?.();
         }
       } else if (job.kind === 'video') {
-        // job.model is a ComfyUI video checkpoint. Every model in this batch
-        // gets the same seed, so what differs between them is the model.
-        setLiveBuild({ model: job.model, kind: 'image', text: '', done: false });
-        const run = await runVideoLabChallenge({
-          checkpoint: job.model,
-          textEncoder: videoEncoder,
-          sizeId: selection.videoSizeId,
+        // job.model is a lineup key. Every model in this batch gets the same
+        // seed, so what differs between them is the model — and it runs as a
+        // lineup of one, so it renders the graph the Video Lab would.
+        const entry = videoEntries.find((candidate) => candidate.key === job.model)!;
+        setLiveBuild({ model: entry.name, kind: 'image', text: '', done: false });
+        const [outcome] = await runVideoLineupLive({
+          entries: [entry],
           promptId: selection.imagePrompt,
           judgeModel: judgeCandidates(modelRows)[0],
           ollamaBaseUrl: ollama.baseUrl,
           seed: videoSeed,
         });
-        result = toVideoLabResult(run, selection.imagePrompt);
-        setLiveBuild({ model: job.model, kind: 'image', text: '', done: true, error: result.error });
+        result = toVideoLabResult(outcome.result, selection.imagePrompt, undefined, {
+          model: entry.name,
+          gpu: videoMachine.gpuName,
+        });
+        setLiveBuild({ model: entry.name, kind: 'image', text: '', done: true, error: result.error });
       } else {
         // Image generation can't stream tokens — show a "generating" state.
         // job.model is a ComfyUI checkpoint here, not an Ollama model.
@@ -2810,7 +2904,9 @@ function App() {
           // A video's viewable artifact is its judged frame, so it rides the
           // image kind; without this branch the frame was produced, scored,
           // saved — and then silently dropped from the results popup.
-          demos.push({ model: job.model, kind: 'image', imageDataUrl: result.imageDataUrl, note: describeLabFailure(result), grade: result.grade, score: result.score });
+          // result.model rather than job.model: a video job's key is an id,
+          // and its result carries the name a person reads.
+          demos.push({ model: result.model, kind: 'image', imageDataUrl: result.imageDataUrl, note: describeLabFailure(result), grade: result.grade, score: result.score });
         } else if (job.kind === 'vision') {
           demos.push({ model: job.model, kind: 'vision', imageDataUrl: result.imageDataUrl, description: result.response, note: describeLabFailure(result), grade: result.grade, score: result.score });
         }
@@ -2833,7 +2929,7 @@ function App() {
     // modelRows is read to pick a vision model to judge the generated image;
     // without it here the run would judge with whatever was installed when this
     // callback was last built.
-  }, [ollama.baseUrl, skillTestSelection, effectiveJudge, modelRows]);
+  }, [ollama.baseUrl, skillTestSelection, effectiveJudge, modelRows, videoMachine]);
 
   // One improve pass: hand the model its previous attempt (plus an optional user
   // hint), stream the rebuild into the live view, and return the new result — or
@@ -3238,10 +3334,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (queuedRows.length > 0 && !isPullingModels && !isPullPaused && ollama.ready) {
+    // Not while the Video Lab's own download runs: two file streams would
+    // share one Stop, and it would reach only the newer.
+    if (queuedRows.length > 0 && !isPullingModels && !isPullPaused && ollama.ready && !labDownloadName) {
       void pullQueuedModels();
     }
-  }, [isPullPaused, isPullingModels, ollama.ready, pullQueuedModels, queuedRows.length]);
+  }, [isPullPaused, isPullingModels, ollama.ready, pullQueuedModels, queuedRows.length, labDownloadName]);
 
   const prevTopScoreRef = useRef<number | null>(null);
   useEffect(() => {
@@ -3634,6 +3732,8 @@ function App() {
             onRerunTest={requestBenchmarkForModel}
             onStopBenchmark={requestStopRun}
             onStopSkillTests={requestStopSkills}
+            onDownloadGenerationModel={requestLabDownload}
+            onStopGenerationDownload={stopLabDownload}
           />
         )}
         {(activeNavId === 'history' || activeNavId === 'settings') && (
@@ -3891,7 +3991,13 @@ function App() {
             : shortlistedRows.filter((row) => row.installed).slice(0, 5)
           ).some((row) => canHearAudio(row))}
           comfyCheckpoints={comfyCheckpoints}
-          comfyTextEncoders={comfyTextEncoders}
+          videoLineup={(() => {
+            // Worked out only while this dialog is open, which is the one place that asks.
+            const calibration = readVideoCalibration();
+            const entries = runnableLineup(comfyFolders, videoMachine, { calibration });
+            const text = formatVideoEstimate(estimateLineup(entries, videoMachine, { calibration }), { roughNote: false });
+            return { count: entries.length, estimate: text.charAt(0).toLowerCase() + text.slice(1) };
+          })()}
         />
       )}
 
@@ -3933,6 +4039,14 @@ function App() {
           rows={pendingThirdPartyDownloadRows}
           onCancel={() => setPendingThirdPartyDownloadRows(null)}
           onConfirm={confirmThirdPartyModelDownloads}
+        />
+      )}
+
+      {pendingLabDownload && (
+        <ThirdPartyDownloadConsentModal
+          rows={[pendingLabDownload]}
+          onCancel={() => setPendingLabDownload(null)}
+          onConfirm={() => void confirmLabDownload()}
         />
       )}
 

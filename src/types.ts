@@ -1,6 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { BenchmarkQuestionType } from './benchmarkSuite.ts';
 import type { TaskScores } from './lib/taskScores.ts';
+import type { HardwareFit } from './lib/modelCatalog.ts';
 
 export type SystemProfile = {
   hostname: string;
@@ -672,6 +673,12 @@ export type ModelRow = CatalogModel & {
   localProviderLabel?: string;
   localBaseUrl?: string;
   canDownload?: boolean;
+  /**
+   * The fit to show instead of sizing this row against VRAM. Set for video
+   * models, which ComfyUI offloads into system memory: VRAM alone called
+   * models too big that run fine.
+   */
+  fitOverride?: HardwareFit;
 };
 
 /**
@@ -691,7 +698,6 @@ export type SkillTestSelection = {
   image: boolean;
   imagePrompt: string;
   video: boolean;
-  videoSizeId: string;
   recognize: boolean;
   recognizeImage: string;
   listen: boolean;

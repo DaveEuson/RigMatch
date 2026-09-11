@@ -29,6 +29,8 @@ export function ActivityPanel({
   onStopSkillTests,
   runReports,
   onOpenReport,
+  onDownloadGenerationModel,
+  onStopGenerationDownload,
 }: {
   runProgress: RunProgress | null;
   skillRunStatus: SkillRunStatus;
@@ -46,6 +48,9 @@ export function ActivityPanel({
   /** Newest first. Empty until a comparison has finished at least once. */
   runReports: StoredRunReport[];
   onOpenReport: (id: string) => void;
+  /** Starts an image or video model's download, after the consent dialog. */
+  onDownloadGenerationModel?: (generationId: string) => void;
+  onStopGenerationDownload?: () => void;
 }) {
   const [previewApp, setPreviewApp] = useState<{ html: string; model: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; model: string } | null>(null);
@@ -301,6 +306,9 @@ type ActivityJob = {
         selectedModel={selectedModel}
         ollama={ollama}
         system={system}
+        onDownloadVideoModel={onDownloadGenerationModel}
+        onStopVideoDownload={onStopGenerationDownload}
+        pullProgressByModel={pullProgressByModel}
       />
 
       {previewApp && (

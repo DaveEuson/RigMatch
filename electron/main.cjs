@@ -104,6 +104,9 @@ const ALLOWED_EXTERNAL_HOSTS = new Set([
   // Cloud judge: "what's OpenRouter / get an API key" links in the run dialog.
   'openrouter.ai',
   'www.openrouter.ai',
+  // Model licences: the download consent dialog links each image and video
+  // model's Hugging Face page, which is where its licence is stated.
+  'huggingface.co',
   // Scorecard sharing: the social compose intents opened from the share modal.
   // Every host used by ShareScorecard.tsx must be listed here or the button is
   // silently dead. tests/shareLinks.test.mjs cross-checks the two.
