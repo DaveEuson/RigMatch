@@ -41,9 +41,16 @@ function createComfyBridge({ fetchJson, assertLocalhostUrl }) {
         return [];
       }
     };
-    const [checkpoints, textEncoders] = await Promise.all([
+    // Every folder a model is loaded from. The video lineup keeps its models in
+    // diffusion_models with separate VAEs and LoRAs, and a model only counts as
+    // installed when each file sits in the folder its loader reads — so all five
+    // are listed, not just the two the image and LTX tests needed.
+    const [checkpoints, textEncoders, diffusionModels, vae, loras] = await Promise.all([
       listStrings('/models/checkpoints'),
       listStrings('/models/text_encoders'),
+      listStrings('/models/diffusion_models'),
+      listStrings('/models/vae'),
+      listStrings('/models/loras'),
     ]);
 
     // Queue depth, so a run can refuse rather than share a GPU with whatever
@@ -55,7 +62,15 @@ function createComfyBridge({ fetchJson, assertLocalhostUrl }) {
       // Treated as idle: failing to read the queue must not block a run.
     }
 
-    return { reachable: true, stats, checkpoints, textEncoders, execInfo };
+    return {
+      reachable: true,
+      stats,
+      // Kept by name for the Image Lab and the LTX path, which read them.
+      checkpoints,
+      textEncoders,
+      folders: { checkpoints, text_encoders: textEncoders, diffusion_models: diffusionModels, vae, loras },
+      execInfo,
+    };
   }
 
   async function submit(baseUrl, graph, clientId) {

@@ -462,7 +462,7 @@ function App() {
   const [activity, setActivity] = useState('Contestants is your hub: browse models, run tests, manage downloads, and start Speed Dating.');
   const [activeNavId, setActiveNavId] = useState<NavId>('models');
   const {
-    comfyCheckpoints, comfyTextEncoders, comfyReachable, comfySettings,
+    comfyCheckpoints, comfyTextEncoders, comfyFolders, comfyReachable, comfySettings,
     refreshComfyStatus, beginComfyDownload, endComfyDownload, abortComfyDownload,
   } = useComfy({ activeNavId });
   const {
@@ -530,7 +530,7 @@ function App() {
       // their own. Someone who wants to make a video searches for "makes
       // video"; that video comes from Hugging Face and runs on ComfyUI is our
       // problem, not a category they should have to learn.
-      const generation: ModelRow[] = generationCatalogRows([...comfyCheckpoints, ...comfyTextEncoders])
+      const generation: ModelRow[] = generationCatalogRows(comfyFolders)
         .map((entry) => ({
           ...entry,
           displayName: entry.name,
@@ -542,7 +542,7 @@ function App() {
         }));
       return [...generation, ...rows];
     },
-    [catalog, localModels, comfyCheckpoints, comfyTextEncoders],
+    [catalog, localModels, comfyFolders],
   );
 
   const selectedRow = modelRows.find(
@@ -1874,7 +1874,7 @@ function App() {
       );
     }
 
-    const { needed, totalBytes } = downloadPlan(model, [...comfyCheckpoints, ...comfyTextEncoders]);
+    const { needed, totalBytes } = downloadPlan(model, comfyFolders);
     if (needed.length === 0) return true;
 
     setActivity(`Downloading ${needed.map((m) => m.label).join(' + ')} — ${formatBytesGb(totalBytes)} in total.`);
@@ -1927,7 +1927,7 @@ function App() {
     setActivity(`${row.displayName} downloaded. Restart ComfyUI so it picks up the new file.`);
     void refreshComfyStatus();
     return true;
-  }, [comfyCheckpoints, comfyTextEncoders, tellUser, refreshComfyStatus, beginComfyDownload, endComfyDownload, pullQueueShouldStop, findComfyForDownload]);
+  }, [comfyFolders, tellUser, refreshComfyStatus, beginComfyDownload, endComfyDownload, pullQueueShouldStop, findComfyForDownload]);
 
   const pullQueuedModels = useCallback(async () => {
     if (queuedRows.length === 0) {

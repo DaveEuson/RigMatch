@@ -22,8 +22,15 @@ const path = require('node:path');
 const { pipeline } = require('node:stream/promises');
 const { Readable } = require('node:stream');
 
-/** Subfolders a download is ever allowed to target. */
-const ALLOWED_FOLDERS = new Set(['checkpoints', 'text_encoders']);
+/**
+ * Subfolders a download is ever allowed to target.
+ *
+ * The video lineup needs three more than the image and LTX tests did: modern
+ * video models ship as a bare diffusion model (UNETLoader reads
+ * diffusion_models), with their VAE and any speed-up LoRA as separate files.
+ * Each name here is a folder ComfyUI itself reads; nothing else is writable.
+ */
+const ALLOWED_FOLDERS = new Set(['checkpoints', 'text_encoders', 'diffusion_models', 'vae', 'loras']);
 
 /** Only Hugging Face, and only over TLS. */
 function assertModelUrl(url) {

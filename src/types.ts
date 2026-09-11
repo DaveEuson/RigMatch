@@ -511,6 +511,12 @@ export type ComfyStatus = {
   checkpoints: string[];
   /** T5 encoders from /models/text_encoders. An LTX graph cannot run without one. */
   textEncoders?: string[];
+  /**
+   * Every folder a model loads from, by ComfyUI's own folder name. A video
+   * lineup model is installed only when each of its files is listed in the
+   * folder its loader reads: a Wan model sitting in checkpoints/ loads nowhere.
+   */
+  folders?: Partial<Record<'checkpoints' | 'text_encoders' | 'diffusion_models' | 'vae' | 'loras', string[]>>;
   /** /prompt's reply, carrying queue_remaining — how busy this instance is. */
   execInfo?: unknown;
 };
