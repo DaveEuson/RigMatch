@@ -150,8 +150,17 @@ export async function startVideoLineup(options: StartLineupOptions): Promise<voi
           });
           return;
         }
+        if (progress.phase === 'judging') {
+          update({
+            current: null,
+            message: `Every model has rendered. Checking the middle frame of ${progress.entry.name}`
+              + `${options.judgeModel ? ` with ${options.judgeModel}` : ''}.`,
+          });
+          return;
+        }
         // Saved as each model finishes, not at the end: a lineup stopped or
-        // crashed at hour two keeps what it had already rendered.
+        // crashed at hour two keeps what it had already rendered. A judged
+        // result then replaces its unjudged one in place.
         if (!progress.result.error) {
           const result = toVideoLabResult(progress.result, promptId, customPrompt, {
             model: progress.entry.name,
@@ -160,9 +169,12 @@ export async function startVideoLineup(options: StartLineupOptions): Promise<voi
           });
           writeAdvancedLabResults({ ...readAdvancedLabResults(), [`video:${progress.entry.key}`]: result });
         }
+        const entry = lineupRecordEntry(progress.entry, progress.result, expected[progress.entry.key]);
         record = {
           ...record,
-          entries: [...record.entries, lineupRecordEntry(progress.entry, progress.result, expected[progress.entry.key])],
+          entries: progress.phase === 'judged'
+            ? record.entries.map((item) => (item.key === entry.key ? entry : item))
+            : [...record.entries, entry],
         };
         saveLastLineup(record);
         update({ record, current: null });

@@ -312,6 +312,57 @@ test('Stop ends the lineup with the model in flight', async () => {
   assert.equal(outcomes.length, 1);
 });
 
+test('the frames are judged once every model has rendered, never between renders', async () => {
+  // The judge stays in Ollama's VRAM for ten minutes after it answers, and
+  // ComfyUI's unload cannot reach it. Judged between renders, every model
+  // after the first was timed with gigabytes of the card taken.
+  const { transport, calls } = fakeComfy();
+  const judge = async () => { calls.events.push('judge'); return 'Yes'; };
+  await runVideoLineup({ entries: three, transport, judge, imagePrompt: PROMPT, seed: 1, unloadBetweenRuns: true, ...fakeClock() });
+  const firstJudge = calls.events.indexOf('judge');
+  assert.ok(firstJudge > calls.events.indexOf('submit:3'), calls.events.join(' '));
+});
+
+test('a judged frame is scored with its answer, and progress says so in place', async () => {
+  const phases = [];
+  const run = (judge, onProgress) => runVideoLineup({
+    entries: [lineupEntry('wan-2.1-1.3b')],
+    transport: fakeComfy().transport,
+    judge,
+    imagePrompt: PROMPT,
+    seed: 1,
+    unloadBetweenRuns: false,
+    onProgress,
+    ...fakeClock(),
+  });
+  const [unjudged] = await run(undefined);
+  // "Yes" to everything is not all right: a prompt can ask whether something
+  // is absent, so this judge earns less than full marks, and should.
+  const [judged] = await run(async () => 'Yes', (p) => phases.push(p.phase));
+  assert.equal(unjudged.result.judged, false);
+  assert.equal(judged.result.judged, true);
+  assert.ok(judged.result.adherence > 0);
+  assert.ok(judged.result.score > unjudged.result.score, 'the answer counts toward the score');
+  assert.deepEqual(phases, ['rendering', 'done', 'judging', 'judged']);
+});
+
+test('Stop skips the judging too', async () => {
+  const controller = new AbortController();
+  const { transport, calls } = fakeComfy();
+  await runVideoLineup({
+    entries: three,
+    transport,
+    judge: async () => { calls.events.push('judge'); return 'Yes'; },
+    imagePrompt: PROMPT,
+    seed: 1,
+    unloadBetweenRuns: false,
+    signal: controller.signal,
+    onProgress: (p) => { if (p.phase === 'done') controller.abort(); },
+    ...fakeClock(),
+  });
+  assert.ok(!calls.events.includes('judge'));
+});
+
 test('the leaderboard is fastest first, with every failure after the last finisher', () => {
   const ranked = rankLineup([
     { key: 'kandinsky-5', elapsedMs: 1278000 },

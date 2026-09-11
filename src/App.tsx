@@ -237,6 +237,7 @@ import {
   lineupEntry,
   runnableLineup,
   videoMachineFrom,
+  type LineupOutcome,
   type VideoLineupEntry,
 } from './lib/videoLineup';
 import { formatVideoEstimate, videoFit } from './lib/videoFit';
@@ -2759,6 +2760,8 @@ function App() {
     const listeningAudio = jobs.some((job) => job.kind === 'listening') ? await getListeningTestAudio() : '';
 
     const demos: DemoArtifact[] = [];
+    // Filled by the first video job, which renders every video model at once.
+    let videoOutcomes: LineupOutcome[] | null = null;
     stopSkillRef.current = false;
     for (const [index, job] of jobs.entries()) {
       if (stopSkillRef.current) {
@@ -2839,18 +2842,39 @@ function App() {
           unsubscribe?.();
         }
       } else if (job.kind === 'video') {
-        // job.model is a lineup key. Every model in this batch gets the same
-        // seed, so what differs between them is the model — and it runs as a
-        // lineup of one, so it renders the graph the Video Lab would.
+        // job.model is a lineup key. The batch's video models all render as
+        // one lineup the first time a video job comes up — the same seed and
+        // graph the Video Lab would use, and the frames judged only once every
+        // model has rendered, so none is timed while the judge sits in VRAM.
+        // Each later video job then reads its own result from it.
         const entry = videoEntries.find((candidate) => candidate.key === job.model)!;
-        setLiveBuild({ model: entry.name, kind: 'image', text: '', done: false });
-        const [outcome] = await runVideoLineupLive({
-          entries: [entry],
-          promptId: selection.imagePrompt,
-          judgeModel: judgeCandidates(modelRows)[0],
-          ollamaBaseUrl: ollama.baseUrl,
-          seed: videoSeed,
-        });
+        if (!videoOutcomes) {
+          const firstVideo = index;
+          const stopVideo = new AbortController();
+          videoOutcomes = await runVideoLineupLive({
+            entries: videoEntries,
+            promptId: selection.imagePrompt,
+            judgeModel: judgeCandidates(modelRows)[0],
+            ollamaBaseUrl: ollama.baseUrl,
+            seed: videoSeed,
+            signal: stopVideo.signal,
+            onProgress: (progress) => {
+              // Stop is honoured between models, as it is between other jobs.
+              if (stopSkillRef.current) stopVideo.abort();
+              if (progress.phase !== 'rendering') return;
+              setSkillRunStatus({
+                phase: 'running',
+                label: `Video skill test — ${progress.entry.name}`,
+                completed: firstVideo + progress.index,
+                total: jobs.length,
+              });
+              setLiveBuild({ model: progress.entry.name, kind: 'image', text: '', done: false });
+            },
+          });
+        }
+        const outcome = videoOutcomes.find((candidate) => candidate.entry.key === job.model);
+        // Stopped before this model's turn: there is nothing to record.
+        if (!outcome) continue;
         result = toVideoLabResult(outcome.result, selection.imagePrompt, undefined, {
           model: entry.name,
           gpu: videoMachine.gpuName,

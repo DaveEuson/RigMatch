@@ -35,7 +35,13 @@ import {
   type VideoMachine,
   type VideoSizing,
 } from './videoFit.ts';
-import { DEFAULT_VIDEO_TIMEOUT_MS, runVideoGeneration, type VideoRunResult, type VideoTransport } from './videoGenRun.ts';
+import {
+  DEFAULT_VIDEO_TIMEOUT_MS,
+  judgeVideoResult,
+  runVideoGeneration,
+  type VideoRunResult,
+  type VideoTransport,
+} from './videoGenRun.ts';
 import type { ImagePrompt } from './imageGenScoring.ts';
 import type { JudgeFn } from './imageGenRun.ts';
 import type { AdvancedLabResult } from './labResults.ts';
@@ -334,15 +340,24 @@ export function lineupTimeoutMs(entry: VideoLineupEntry): number {
 
 export type LineupOutcome = { entry: VideoLineupEntry; result: VideoRunResult };
 
+// One member per phase that carries no result, so a handler that returns on
+// 'rendering' and then on 'judging' is left holding one with a result.
 export type LineupProgress =
   | { index: number; total: number; entry: VideoLineupEntry; phase: 'rendering' }
-  | { index: number; total: number; entry: VideoLineupEntry; phase: 'done' | 'failed'; result: VideoRunResult };
+  | { index: number; total: number; entry: VideoLineupEntry; phase: 'judging' }
+  | { index: number; total: number; entry: VideoLineupEntry; phase: 'done' | 'failed' | 'judged'; result: VideoRunResult };
 
 /**
- * Run each model in turn with the same prompt and seed.
+ * Run each model in turn with the same prompt and seed, then judge the frames.
  *
  * Failures are results, not exceptions: runVideoGeneration returns one with
- * its reason, and the lineup moves on. Stop ends it with the model in flight.
+ * its reason, and the lineup moves on. Stop ends it with the model in flight,
+ * and skips the judging.
+ *
+ * The frames are judged only once every model has rendered. The judge is a
+ * vision model in Ollama, which keeps it in VRAM for ten minutes after it
+ * answers, and ComfyUI's unload cannot reach it: judged between renders, every
+ * model after the first was timed with several gigabytes of the card taken.
  */
 export async function runVideoLineup({
   entries,
@@ -376,7 +391,6 @@ export async function runVideoLineup({
     onProgress?.({ index, total: entries.length, entry, phase: 'rendering' });
     const result = await runVideoGeneration({
       transport,
-      judge,
       imagePrompt,
       graph: lineupGraph(entry, { prompt: imagePrompt.prompt, seed }),
       model: entry.key,
@@ -389,6 +403,17 @@ export async function runVideoLineup({
     });
     outcomes.push({ entry, result });
     onProgress?.({ index, total: entries.length, entry, phase: result.error ? 'failed' : 'done', result });
+  }
+
+  if (judge && !signal?.aborted) {
+    for (const [index, outcome] of outcomes.entries()) {
+      if (signal?.aborted) break;
+      if (outcome.result.error || !outcome.result.frameDataUrl) continue;
+      onProgress?.({ index, total: entries.length, entry: outcome.entry, phase: 'judging' });
+      const judged = await judgeVideoResult(outcome.result, judge, imagePrompt);
+      outcomes[index] = { entry: outcome.entry, result: judged };
+      onProgress?.({ index, total: entries.length, entry: outcome.entry, phase: 'judged', result: judged });
+    }
   }
   return outcomes;
 }

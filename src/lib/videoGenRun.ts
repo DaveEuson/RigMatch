@@ -205,6 +205,33 @@ async function waitForOutputs({
   }
 }
 
+/**
+ * Judge a finished render's frame, and score it again with the answer.
+ *
+ * Kept apart from the render so a lineup can judge after every model has
+ * rendered. The judge is a vision model in Ollama, which stays in VRAM for ten
+ * minutes after it answers; judged between renders, it sat on the GPU while the
+ * next model was being timed, and that model's time said so.
+ */
+export async function judgeVideoResult(
+  result: VideoRunResult,
+  judge: JudgeFn,
+  imagePrompt: ImagePrompt,
+): Promise<VideoRunResult> {
+  if (result.error || !result.frameDataUrl) return result;
+  const { adherence } = await judgeFrame(judge, result.frameDataUrl, imagePrompt);
+  const scored = scoreVideoGeneration({
+    produced: true,
+    elapsedMs: result.elapsedMs,
+    frames: result.frames,
+    fps: result.fps,
+    width: result.width,
+    height: result.height,
+    adherence,
+  });
+  return { ...result, adherence, ...scored };
+}
+
 async function judgeFrame(judge: JudgeFn, frameDataUrl: string, imagePrompt: ImagePrompt) {
   const verdicts: (boolean | null)[] = [];
   for (const proposition of imagePrompt.propositions) {
