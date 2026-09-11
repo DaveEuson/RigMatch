@@ -46,6 +46,7 @@ import type { ImagePrompt } from './imageGenScoring.ts';
 import type { JudgeFn } from './imageGenRun.ts';
 import type { AdvancedLabResult } from './labResults.ts';
 import type { HardwareFit } from './modelCatalog.ts';
+import { JUDGE_PASS, rankByBalance, type Contender } from './balance.ts';
 
 export type VideoLineupEntry = {
   /** The GENERATION_MODELS id of the model's main file, or `file:` and its name for one found on disk. */
@@ -451,6 +452,8 @@ export type LineupRecordEntry = {
   score: number;
   grade: string;
   judged: boolean;
+  /** How much of the prompt the judge confirmed in the middle frame, 0 to 1. */
+  adherence?: number | null;
   expected?: LineupExpectation;
   error?: string;
 };
@@ -468,6 +471,11 @@ export type LineupRecord = {
   stopped: boolean;
   /** Every model picked, in the order they run. */
   planned: Array<{ key: string; name: string }>;
+  /**
+   * Where the Balance fader stood when the race started. The leaderboard can be
+   * re-ranked afterwards; this says what the person asked for going in.
+   */
+  balance?: number;
   /** One per model that has finished, rendered or failed. */
   entries: LineupRecordEntry[];
 };
@@ -485,9 +493,25 @@ export function lineupRecordEntry(
     score: result.score,
     grade: result.grade,
     judged: result.judged,
+    adherence: result.adherence,
     ...(expected ? { expected } : {}),
     ...(result.error ? { error: result.error } : {}),
   };
+}
+
+/**
+ * A lineup's leaderboard at a fader position.
+ *
+ * Accuracy is the judge's check of each clip's middle frame; a clip that fell
+ * short of the pass line, or produced nothing, cannot win at any position.
+ */
+export function rankLineupByBalance(entries: LineupRecordEntry[], balance: number) {
+  return rankByBalance(entries.map((entry): Contender<LineupRecordEntry> => ({
+    item: entry,
+    pace: entry.elapsedMs > 0 ? 1000 / entry.elapsedMs : 0,
+    accuracy: typeof entry.adherence === 'number' ? entry.adherence : null,
+    failed: Boolean(entry.error) || (typeof entry.adherence === 'number' && entry.adherence < JUDGE_PASS),
+  })), balance);
 }
 
 /**

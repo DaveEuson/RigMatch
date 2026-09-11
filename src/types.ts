@@ -271,6 +271,12 @@ export type TestedModelScore = {
    * Absent for runs recorded before question types were kept.
    */
   taskScores?: TaskScores;
+  /**
+   * Where the Balance fader stood when this run started, 0 (speed) to 100
+   * (accuracy). The headline can be re-weighted later; this is what the person
+   * asked for going in. Absent on runs from before the fader.
+   */
+  balance?: number;
 };
 
 export type BenchmarkProgressUpdate = {

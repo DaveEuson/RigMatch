@@ -1,11 +1,18 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Bot, Boxes, Check, ChevronDown, ChevronUp, Download, RefreshCw, ScanLine, ShieldCheck, Trophy, X } from 'lucide-react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  AlertTriangle, Bot, Boxes, Check, ChevronDown, ChevronUp, Code2, Download, Eye, Film, Image as ImageIcon,
+  LayoutGrid, MessageSquare, Mic, RefreshCw, ScanLine, ShieldCheck, Trophy, X, type LucideIcon,
+} from 'lucide-react';
 import type { OllamaStatus, SystemProfile } from '../types';
 import type { UiMode } from '../lib/appConfig';
+import { balanceLabel } from '../lib/balance';
+import type { ChannelWinner } from '../lib/channelWinners';
 import type { RigPick } from '../lib/modelCatalog';
 import { formatGb, topPickLabel } from '../lib/format';
 import { strongestSkill } from '../lib/shareCopy';
+import { WORKBENCHES, workbenchById, type Workbench, type WorkbenchId } from '../lib/workbench';
+import { BalanceFader } from './BalanceFader';
 import { BrandMark, MetricTile } from './CommonChrome';
 import { ComfyStartButton } from './ComfyStartButton';
 import { AvatarBust, MachineAvatar } from './Avatars';
@@ -28,6 +35,13 @@ export function TopDeck({
   comfyReachable,
   deckExpanded,
   onDeckExpandedChange,
+  workbench,
+  onWorkbenchChange,
+  channelWinner,
+  balance,
+  onBalanceChange,
+  balanceLocked = null,
+  onOpenChannel,
 }: {
   system: SystemProfile;
   ollama: OllamaStatus;
@@ -49,6 +63,18 @@ export function TopDeck({
   /** Advanced only: whether the stats strip is showing. */
   deckExpanded: boolean;
   onDeckExpandedChange: (expanded: boolean) => void;
+  /** Advanced only: what is being tested, which scopes the screens and the winner. */
+  workbench: WorkbenchId;
+  onWorkbenchChange: (id: WorkbenchId) => void;
+  /** The winner for a channel other than chat and All, which keep the Top Match. */
+  channelWinner: ChannelWinner | null;
+  /** The active channel's Balance fader. */
+  balance: number;
+  onBalanceChange: (value: number) => void;
+  /** Why the fader is held at Speed, when nothing can judge accuracy here. */
+  balanceLocked?: string | null;
+  /** Opens the screen where this channel's test starts. */
+  onOpenChannel: () => void;
 }) {
   const gpuLabel = system.gpu.isUnifiedMemory
     ? `${system.gpu.model} · Unified Memory`
@@ -102,6 +128,20 @@ export function TopDeck({
   };
 
   const modeClass = uiMode === 'advanced' ? 'top-deck mode-advanced' : 'top-deck mode-simple';
+  // Simple Mode has no channels: its winner is always the Top Match.
+  const channel = workbenchById(uiMode === 'advanced' ? workbench : 'all');
+  const chatLike = channel.id === 'all' || channel.id === 'chat';
+  const rankedAt = balanceLabel(balanceLocked ? 0 : balance);
+  const fader = (
+    <BalanceFader
+      variant="mini"
+      value={balance}
+      onChange={onBalanceChange}
+      accuracyMeans={channel.accuracyMeans}
+      lockedReason={balanceLocked}
+      label={`${channel.matchLabel}: accuracy or speed?`}
+    />
+  );
   return (
     <header className={deckExpanded ? modeClass : `${modeClass} collapsed`}>
       {/* Advanced only: on a 1440x820 laptop this strip is 122px of permanent
@@ -245,8 +285,17 @@ export function TopDeck({
         </div>
       </section>
 
-      {topPick ? (
-        <section className="top-deck-winner" aria-label="Current best model">
+      {!chatLike ? (
+        <ChannelWinnerCard
+          channel={channel}
+          winner={channelWinner}
+          rankedAt={rankedAt}
+          fader={fader}
+          onUse={onUseTopPick}
+          onOpen={onOpenChannel}
+        />
+      ) : topPick ? (
+        <section className={`top-deck-winner${topPick.score ? ' with-fader' : ''}`} aria-label="Current best model">
           <AvatarBust model={topPick.row.displayName} size="small" extraClass="top-deck-winner-avatar" />
           <div className="top-deck-winner-copy">
             {/* The label gets its own row.
@@ -255,7 +304,7 @@ export function TopDeck({
                 Measured: the actions wanted 221px inside a 218px row, so the
                 label was allotted exactly 0 and rendered as "TOP...". */}
             <div className="top-deck-winner-head">
-              <span>{topPickLabel(topPick.score?.grade)}</span>
+              <span>{channel.id === 'chat' ? channel.shortLabel : topPickLabel(topPick.score?.grade)}</span>
               {/* What it is top *for*. getRigPick has always computed this
                   sentence as `reason` and nothing ever showed it: the pick is
                   the highest saved Match score among models that fit this
@@ -267,7 +316,9 @@ export function TopDeck({
             </div>
             <strong>{topPick.row.displayName}</strong>
             <em>
-              {topPick.score ? `${topPick.score.total} Match · ${topPick.score.grade}` : topPick.fitLabel}
+              {/* With what it was ranked at: the same model can win at one fader
+                  position and not another, so a bare score overclaims. */}
+              {topPick.score ? `${topPick.score.total} Match · ${topPick.score.grade} · ${rankedAt}` : topPick.fitLabel}
               {/* And what it is actually good at, when a run measured enough to
                   say. strongestSkill returns null unless a task group has three
                   graded answers behind it, so this stays quiet rather than
@@ -316,12 +367,13 @@ export function TopDeck({
                 )}
               </div>
           </div>
+          {topPick.score && fader}
         </section>
       ) : (
         <section className="top-deck-winner empty" aria-label="No winner yet">
           <Trophy aria-hidden="true" />
           <div>
-            <span>Best Match</span>
+            <span>{channel.id === 'chat' ? channel.shortLabel : 'Best Match'}</span>
             <strong>No tests yet</strong>
             <em>{clearedTopPickCount > 0 ? `${clearedTopPickCount} cleared. Restore when needed.` : 'Test a model to crown the winner.'}</em>
             {clearedTopPickCount > 0 && (
@@ -336,6 +388,141 @@ export function TopDeck({
           </div>
         </section>
       )}
+      {uiMode === 'advanced' && <ChannelSwitch value={workbench} onChange={onWorkbenchChange} />}
     </header>
+  );
+}
+
+const CHANNEL_ICONS: Record<WorkbenchId, LucideIcon> = {
+  all: LayoutGrid,
+  chat: MessageSquare,
+  code: Code2,
+  images: ImageIcon,
+  video: Film,
+  listening: Mic,
+  reading: Eye,
+};
+
+/**
+ * "What are you testing?": the channel switch.
+ *
+ * A radio group, so it is one Tab stop and the arrow keys move between
+ * channels, the way seven answers to one question should behave. The active
+ * channel is the accent, never gold: gold is the verdict, and choosing what to
+ * look at is not one.
+ */
+function ChannelSwitch({ value, onChange }: { value: WorkbenchId; onChange: (id: WorkbenchId) => void }) {
+  const buttons = useRef<Array<HTMLButtonElement | null>>([]);
+  const move = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const last = WORKBENCHES.length - 1;
+    const targets: Partial<Record<string, number>> = {
+      ArrowRight: index === last ? 0 : index + 1,
+      ArrowDown: index === last ? 0 : index + 1,
+      ArrowLeft: index === 0 ? last : index - 1,
+      ArrowUp: index === 0 ? last : index - 1,
+      Home: 0,
+      End: last,
+    };
+    const target = targets[event.key];
+    if (target === undefined) return;
+    event.preventDefault();
+    onChange(WORKBENCHES[target].id);
+    buttons.current[target]?.focus();
+  };
+
+  return (
+    <div className="channel-switch" role="radiogroup" aria-labelledby="channel-switch-label">
+      <span id="channel-switch-label">What are you testing?</span>
+      {WORKBENCHES.map((workbench, index) => {
+        const Icon = CHANNEL_ICONS[workbench.id];
+        const active = workbench.id === value;
+        return (
+          <button
+            key={workbench.id}
+            ref={(node) => { buttons.current[index] = node; }}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            tabIndex={active ? 0 : -1}
+            className={active ? 'active' : undefined}
+            onClick={() => onChange(workbench.id)}
+            onKeyDown={(event) => move(event, index)}
+            title={workbench.id === 'all'
+              ? 'Every kind of test at once'
+              : `Models, the Lab and the winner show ${workbench.label.toLowerCase()} only`}
+          >
+            <Icon aria-hidden="true" />
+            {workbench.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The winner card for a channel with a measurement of its own.
+ *
+ * Chat and All keep the Top Match card; every other channel is crowned by its
+ * own test, at its own fader, from results measured on this computer.
+ */
+function ChannelWinnerCard({
+  channel,
+  winner,
+  rankedAt,
+  fader,
+  onUse,
+  onOpen,
+}: {
+  channel: Workbench;
+  winner: ChannelWinner | null;
+  /** "balanced", "70% accuracy". */
+  rankedAt: string;
+  fader: ReactNode;
+  onUse: (model: string) => void;
+  onOpen: () => void;
+}) {
+  if (!winner) {
+    return (
+      <section className="top-deck-winner empty" aria-label={`${channel.matchLabel}: nothing crowned yet`}>
+        <Trophy aria-hidden="true" />
+        <div>
+          <span>{channel.shortLabel}</span>
+          <strong>Nothing crowned yet</strong>
+          <em>{channel.emptyHint}</em>
+          <button type="button" className="top-deck-see-btn" onClick={onOpen}>{channel.startLabel}</button>
+        </div>
+      </section>
+    );
+  }
+  const Icon = CHANNEL_ICONS[channel.id];
+  return (
+    <section className="top-deck-winner with-fader channel" aria-label={channel.matchLabel}>
+      <Icon aria-hidden="true" />
+      <div className="top-deck-winner-copy">
+        {/* The short label on its own: with "measured on this PC" beside it the
+            card had room for neither, and the detail line below already says
+            what was measured. */}
+        <div className="top-deck-winner-head">
+          <span title={`${channel.matchLabel}, measured on this PC`}>{channel.shortLabel}</span>
+        </div>
+        <strong title={winner.model}>{winner.model}</strong>
+        <em>{winner.detail} · {winner.speedOnly ? 'speed only' : rankedAt}</em>
+        <div className="top-deck-winner-actions">
+          {winner.usable && (
+            <button
+              type="button"
+              className="top-deck-use-model-btn"
+              onClick={() => onUse(winner.model)}
+              title="Set this as your active model"
+            >
+              Use this model
+            </button>
+          )}
+          <button type="button" className="top-deck-see-btn" onClick={onOpen}>See results</button>
+        </div>
+      </div>
+      {fader}
+    </section>
   );
 }

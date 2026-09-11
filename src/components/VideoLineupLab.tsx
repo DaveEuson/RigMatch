@@ -9,7 +9,10 @@ import { readComfySettings } from '../lib/comfySettings';
 import { formatBytesGb, generationModelById, type ComfyFolderListing } from '../lib/generationCatalog';
 import { readHuggingFaceToken } from '../lib/huggingFaceToken';
 import { CUSTOM_IMAGE_PROMPT_ID } from '../lib/imageGenScoring';
-import { readAdvancedLabResults, type AdvancedLabResult } from '../lib/labResults';
+import type { AdvancedLabResult } from '../lib/labResults';
+import { accuracyCounted, balanceLabel, balanceSplit } from '../lib/balance';
+import { workbenchById } from '../lib/workbench';
+import { useLabResults } from '../hooks/useLabResults';
 import { readVideoCalibration } from '../lib/videoCalibrationStore';
 import { CALIBRATION_MODEL, formatVideoDuration, formatVideoEstimate, type VideoEstimate } from '../lib/videoFit';
 import {
@@ -19,7 +22,7 @@ import {
   estimateLineup,
   lineupCardFacts,
   measuredSecondsFor,
-  rankLineup,
+  rankLineupByBalance,
   videoMachineFrom,
   type LineupCardFacts,
   type LineupRecordEntry,
@@ -29,6 +32,7 @@ import { startVideoLineup, stopVideoLineup, subscribeLineupSession } from '../li
 import { useVideoLineupSession } from '../hooks/useVideoLineupSession';
 import { ComfyStartButton } from './ComfyStartButton';
 import { PromptPicker } from './PromptPicker';
+import { BalanceFader } from './BalanceFader';
 
 type Card = { entry: VideoLineupEntry; facts: LineupCardFacts };
 
@@ -57,6 +61,9 @@ const BASIS_NOTE: Record<VideoEstimate['basis'], string> = {
 /** How many the "pick for me" button chooses: enough to be a race, few enough to finish tonight. */
 const PICK_FOR_ME = 3;
 
+/** What the Video fader weighs against render time. */
+const VIDEO_ACCURACY = workbenchById('video').accuracyMeans;
+
 const noGpuNote = async () => '';
 
 const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
@@ -83,7 +90,8 @@ function Elapsed({ since }: { since: number }) {
  * download — will it run here, how long will a clip take, how much is left to
  * fetch — from this machine's own numbers, before anything is downloaded. Then
  * the picked models render the same prompt and seed one at a time, fastest
- * first, and the result is a leaderboard by time with the clips side by side.
+ * first, and the result is a leaderboard ranked by what the person values —
+ * the Balance fader — with the clips side by side.
  *
  * Simple Mode shows the same race with less to read: only the models that can
  * run here, and a button that picks the fastest few.
@@ -105,6 +113,8 @@ export function VideoLineupLab({
   onStopDownload,
   pullProgressByModel,
   variant = 'advanced',
+  balance,
+  onBalanceChange,
 }: {
   /** What ComfyUI reported. Any status with the folders it lists will do. */
   comfyStatus: { reachable: boolean; checkpoints?: string[]; textEncoders?: string[]; folders?: ComfyFolderListing } | null;
@@ -126,6 +136,9 @@ export function VideoLineupLab({
   onStopDownload?: () => void;
   pullProgressByModel?: Record<string, PullProgressUpdate>;
   variant?: 'advanced' | 'simple';
+  /** The Video channel's Balance fader, asked before the race and moving the leaderboard after. */
+  balance: number;
+  onBalanceChange: (value: number) => void;
 }) {
   const simple = variant === 'simple';
   const session = useVideoLineupSession();
@@ -138,14 +151,11 @@ export function VideoLineupLab({
   const [loadingClips, setLoadingClips] = useState<ReadonlySet<string>>(() => new Set());
   const [clipErrors, setClipErrors] = useState<Record<string, string>>({});
   const clipUrls = useRef(new Map<string, string>());
-  // Read again whenever the lineup moves: a finished model replaces its own
-  // estimate with its time, and LTX-Video 2B recalibrates every other.
-  const [saved, setSaved] = useState(() => readAdvancedLabResults());
+  // Both move as the lineup does: a finished model replaces its own estimate
+  // with its time, and LTX-Video 2B recalibrates every other.
+  const saved = useLabResults();
   const [calibration, setCalibration] = useState(() => readVideoCalibration());
-  useEffect(() => subscribeLineupSession(() => {
-    setSaved(readAdvancedLabResults());
-    setCalibration(readVideoCalibration());
-  }), []);
+  useEffect(() => subscribeLineupSession(() => setCalibration(readVideoCalibration())), []);
   // Object URLs outlive the component unless revoked, and each pins a clip in memory.
   useEffect(() => {
     const urls = clipUrls.current;
@@ -187,6 +197,12 @@ export function VideoLineupLab({
   const calibrator = cards.find((card) => card.entry.key === CALIBRATION_MODEL);
   const promptReady = promptId !== CUSTOM_IMAGE_PROMPT_ID || customPrompt.trim().length > 0;
   const canStart = reachable && machineKnown && picked.length > 0 && promptReady && !session.running && !otherRunActive;
+  // With nothing to check the frames, accuracy cannot be measured: the fader
+  // holds at speed, says why, and the board ranks on time alone.
+  const lockedReason = judgeModel
+    ? null
+    : 'No model that can check pictures is available right now, so only speed can be measured. Install one, or start Ollama, and accuracy counts again.';
+  const rankAt = lockedReason ? 0 : balance;
 
   const togglePick = (key: string) => setPicks((current) => {
     const next = new Set(current);
@@ -217,6 +233,7 @@ export function VideoLineupLab({
       unloadBetweenRuns: true,
       gpuName: machine.gpuName,
       note,
+      balance: rankAt,
     });
   };
 
@@ -280,14 +297,21 @@ export function VideoLineupLab({
   };
 
   const record = session.record;
-  const ranked = record ? rankLineup(record.entries) : [];
+  // Ranked at the fader, not by time alone: a quick clip of the wrong scene is
+  // not what anyone raced for, and a failed check can never win.
+  const ranked = record ? rankLineupByBalance(record.entries, rankAt) : [];
+  const places = ranked.filter((entry) => entry.standing === 'ranked').map((entry) => entry.item.key);
+  // With no clip judged the list is in time order whatever the fader says, and
+  // the label must say so rather than claim a weighting that never applied.
+  const judgedRace = accuracyCounted(ranked);
+  const rankLabel = judgedRace ? balanceLabel(rankAt) : 'speed only';
   const finished = new Set(record?.entries.map((item) => item.key));
   const unfinished = record ? record.planned.filter((item) => !finished.has(item.key) && item.key !== session.current?.key) : [];
   const currentCard = session.current ? cards.find((card) => card.entry.key === session.current?.key) : undefined;
   const clips = record
     ? ranked
-      .filter((item) => !item.error)
-      .map((item) => ({ item, result: saved[`video:${item.key}`] }))
+      .filter(({ item }) => !item.error)
+      .map(({ item }) => ({ item, result: saved[`video:${item.key}`] }))
       .filter((clip): clip is { item: LineupRecordEntry; result: AdvancedLabResult } => clip.result?.lineupId === record.id)
     : [];
   const clipKey = (key: string) => `${record?.id ?? ''}:${key}`;
@@ -352,8 +376,8 @@ export function VideoLineupLab({
       </div>
       <p>
         {simple
-          ? 'Video makers cannot join Speed Dating — they render instead of chatting — so they get a race of their own. Give them all the same idea, see which finishes first on this PC, then play the clips side by side.'
-          : 'Pick video models, give them all the same prompt and seed, and see which renders fastest on this computer — then watch the clips side by side.'}
+          ? 'Video makers cannot join Speed Dating — they render instead of chatting — so they get a race of their own. Give them all the same idea, rank them by what matters to you, then play the clips side by side.'
+          : 'Pick video models, give them all the same prompt and seed, and rank them on this computer by what matters to you: how fast they render, how well the clip matches the prompt, or a mix. Then watch the clips side by side.'}
         {' '}Whether each one fits, how long a clip takes, and how much is left to download are worked out
         for this machine before anything is downloaded.
       </p>
@@ -492,6 +516,13 @@ export function VideoLineupLab({
         </div>
       )}
 
+      <BalanceFader
+        value={balance}
+        onChange={onBalanceChange}
+        accuracyMeans={VIDEO_ACCURACY}
+        lockedReason={lockedReason}
+      />
+
       <div className="video-lineup-start">
         <span>{startNote}</span>
         {session.running ? (
@@ -521,9 +552,18 @@ export function VideoLineupLab({
               {record.unloaded ? 'every model started cold' : 'models were not unloaded between runs'}
               {record.gpu ? ` · ${record.gpu}` : ''}
             </span>
+            <span>
+              {judgedRace
+                ? `Ranked at ${balanceSplit(rankAt)}`
+                : 'Ranked on speed alone: nothing checked these clips, so accuracy cannot count'}
+              {typeof record.balance === 'number' && Math.round(record.balance) !== Math.round(rankAt)
+                ? `; the race started at ${balanceLabel(record.balance)}`
+                : ''}
+            </span>
           </div>
           <ol className="video-lineup-board">
-            {ranked.map((item, index) => {
+            {ranked.map((entry) => {
+              const item = entry.item;
               if (item.error) {
                 return (
                   <li key={item.key} className="failed">
@@ -537,20 +577,41 @@ export function VideoLineupLab({
                   </li>
                 );
               }
+              const time = formatVideoDuration(item.elapsedMs / 1000);
+              const matched = typeof item.adherence === 'number'
+                ? `${Math.round(item.adherence * 100)}% of the prompt`
+                : 'unjudged';
+              if (entry.standing === 'failed') {
+                return (
+                  <li key={item.key} className="short">
+                    <b>—</b>
+                    <span>
+                      <strong>{item.name}</strong>
+                      <em>{matched}: below the pass line, so it cannot win</em>
+                    </span>
+                    <span className="video-lineup-board-time">{time}</span>
+                    <span />
+                  </li>
+                );
+              }
               const verdict = againstEstimate(item);
+              // Both measures scored against this race — the fastest clip gets
+              // full marks for speed — so a fixed scale built for one model
+              // family cannot sink another.
+              const value = Math.round(entry.value * 100);
               return (
-                <li key={item.key}>
-                  <b>{index + 1}</b>
+                <li key={item.key} className={entry.standing === 'unjudged' ? 'unjudged' : undefined}>
+                  <b>{entry.standing === 'ranked' ? places.indexOf(item.key) + 1 : '·'}</b>
                   <span>
                     <strong>{item.name}</strong>
                     <em>
-                      {`${item.realtimeCost.toFixed(1)}× realtime`}
-                      {item.judged ? '' : ' · unjudged'}
+                      {entry.standing === 'unjudged' ? 'unjudged, so it ranks after judged clips' : matched}
+                      {` · ${item.realtimeCost.toFixed(1)}× realtime`}
                       {verdict ? ` · ${AGAINST_ESTIMATE[verdict]}` : ''}
                     </em>
                   </span>
-                  <span className="video-lineup-board-time">{formatVideoDuration(item.elapsedMs / 1000)}</span>
-                  <b className={`advanced-lab-grade ${getScoreTone(item.score)}`}>{item.score} · {item.grade}</b>
+                  <span className="video-lineup-board-time">{time}</span>
+                  <b className={`advanced-lab-grade ${getScoreTone(value)}`}>{value} · {rankLabel}</b>
                 </li>
               );
             })}

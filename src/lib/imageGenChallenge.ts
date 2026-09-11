@@ -126,6 +126,7 @@ export function toLabResult(run: ImageRunResult, promptId?: string, customText?:
     checks: run.checks,
     completedAt: new Date().toISOString(),
     imageDataUrl: run.imageDataUrl,
+    adherence: run.adherence,
     width: IMAGE_RUN_SETTINGS.width,
     height: IMAGE_RUN_SETTINGS.height,
     error: run.error,

@@ -49,17 +49,27 @@ import type {
   RunProgress,
   PendingScoreClear,
 } from './types';
-import type { ScorePriorityId } from './lib/scoring';
 import {
   SCORE_PRIORITY_STORAGE_KEY,
-  applyScorePriority,
   compareBenchmarkResults,
   compareTestedModelScores,
   formatMatchScore,
-  readScorePriority,
   toTestedModelScore,
   upsertModelScores,
 } from './lib/scoring';
+import { BALANCE_STORAGE_KEY, applyBalance, readBalances, type Balances } from './lib/balance';
+import { codeWinner, labWinner, videoWinner } from './lib/channelWinners';
+import {
+  WORKBENCH_STORAGE_KEY,
+  balanceChannel,
+  readWorkbench,
+  workbenchById,
+  workbenchForGoal,
+  type ChannelId,
+  type WorkbenchId,
+} from './lib/workbench';
+import { useLabResults } from './hooks/useLabResults';
+import { useVideoLineupSession } from './hooks/useVideoLineupSession';
 import { RunReportModal } from './components/RunReportModal';
 import type { StoredRunReport } from './lib/runReports';
 import {
@@ -227,7 +237,7 @@ import { toVideoLabResult } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
 import { readHuggingFaceToken } from './lib/huggingFaceToken';
 import { goalById, presetIdForGoal } from './lib/goals';
-import { taskFilterForGoal } from './lib/modelCatalog';
+import { modelMatchesTask } from './lib/modelCatalog';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLineupLive } from './lib/videoGenRunner';
 import {
@@ -383,14 +393,28 @@ function App() {
   const [reportOpen, setReportOpen] = useState(false);
   /**
    * The scores as measured. Everything downstream reads `modelScores` below,
-   * which is this map re-summarised under the reader's chosen priority — so
+   * which is this map re-summarised at the chat Balance fader — so
    * what gets saved here is always the measurement, never a view of it.
    */
   const [savedModelScores, setModelScores] = useState<Record<string, TestedModelScore>>(() =>
     savedHistory?.modelScores ?? (isDesktopRuntime ? {} : upsertModelScores({}, [demoBenchmark])),
   );
-  const [scorePriority, setScorePriority] = useState<ScorePriorityId>(
-    () => readScorePriority(localStorage.getItem(SCORE_PRIORITY_STORAGE_KEY)),
+  /**
+   * How much accuracy counts against speed: one Balance fader per channel,
+   * asked before every test. The Match Score is the chat measurement, so the
+   * chat fader is the one that re-summarises it below.
+   */
+  const [balances, setBalances] = useState<Balances>(() => readBalances(
+    localStorage.getItem(BALANCE_STORAGE_KEY),
+    // The old three-way "Best Match Means" setting, carried over once.
+    localStorage.getItem(SCORE_PRIORITY_STORAGE_KEY),
+  ));
+  const setBalance = useCallback((channel: ChannelId, value: number) => {
+    setBalances((current) => (current[channel] === value ? current : { ...current, [channel]: value }));
+  }, []);
+  /** The channel picked in Advanced Mode; until someone picks, the first-run goal decides. */
+  const [workbenchPick, setWorkbenchPick] = useState<WorkbenchId | null>(
+    () => readWorkbench(localStorage.getItem(WORKBENCH_STORAGE_KEY)),
   );
   /**
    * Applied here, once, rather than at the thirty-seven places that render or
@@ -399,8 +423,8 @@ function App() {
    * was not.
    */
   const modelScores = useMemo(
-    () => applyScorePriority(savedModelScores, scorePriority),
-    [savedModelScores, scorePriority],
+    () => applyBalance(savedModelScores, balances.chat),
+    [savedModelScores, balances.chat],
   );
   const [modelNotes, setModelNotes] = useState<Record<string, string>>(() => {
     try { return JSON.parse(localStorage.getItem('rigmatch:model-notes:v1') ?? '{}') as Record<string, string>; }
@@ -431,6 +455,8 @@ function App() {
   // from that run. A ref rather than state: it must not trigger a re-render, and
   // it is read inside async run loops that would otherwise close over a stale value.
   const runGpuContentionRef = useRef<GpuContention['level'] | undefined>(undefined);
+  /** Where the Balance fader stood when the current run started; every score from it records that. */
+  const runBalanceRef = useRef<number | undefined>(undefined);
   // Re-measured every time the pre-flight modal opens: whether the GPU is busy
   // is a right-now fact, and a reading from earlier in the session would be
   // worse than none.
@@ -1208,6 +1234,47 @@ function App() {
     chooseInterfaceMode, saveGoalsFromIntro, dismissGoalsIntro, saveGoalsFromSettings, resetGoals,
   } = useGoals({ selectUiMode, setActivity });
 
+  /**
+   * What Advanced Mode is testing. It follows the first-run goal until someone
+   * picks a channel, then remembers the pick. Simple Mode has no channels, and
+   * everything it shows is ranked as chat.
+   */
+  const workbench: WorkbenchId = workbenchPick ?? workbenchForGoal(selectedGoals[0]);
+  const workbenchInfo = workbenchById(uiMode === 'advanced' ? workbench : 'all');
+  const activeChannel = balanceChannel(workbenchInfo.id);
+  const chooseWorkbench = useCallback((id: WorkbenchId) => {
+    setWorkbenchPick(id);
+    writeLocal(WORKBENCH_STORAGE_KEY, id);
+  }, []);
+  /** The Run dialog asks the fader of the channel it serves: code and reading pictures have their own. */
+  const runChannel: ChannelId = workbenchInfo.id === 'code' || workbenchInfo.id === 'reading' ? workbenchInfo.id : 'chat';
+
+  const labResults = useLabResults();
+  const lineupSession = useVideoLineupSession();
+  // Images and video are judged by a model that can see. With none installed,
+  // accuracy cannot be measured there, so those faders hold at speed.
+  const pictureJudged = useMemo(() => judgeCandidates(ollama.models).length > 0, [ollama.models]);
+  const balanceLock = (channel: ChannelId) => ((channel === 'images' || channel === 'video') && !pictureJudged
+    ? 'No model that can check pictures is available right now, so only speed can be measured. Install one, or start Ollama, and accuracy counts again.'
+    : null);
+  /** One winner per channel, from its own measurement at its own fader. Chat and All keep the Top Match. */
+  const channelWinner = useMemo(() => {
+    const judged = (value: number) => (pictureJudged ? value : 0);
+    switch (workbenchInfo.id) {
+      case 'code': return codeWinner(savedModelScores, balances.code);
+      case 'images': return labWinner(labResults, 'images', judged(balances.images));
+      case 'listening': return labWinner(labResults, 'listening', balances.listening);
+      case 'reading': return labWinner(labResults, 'reading', balances.reading);
+      case 'video': return videoWinner(lineupSession.record, judged(balances.video));
+      default: return null;
+    }
+  }, [workbenchInfo.id, savedModelScores, labResults, lineupSession.record, balances, pictureJudged]);
+  /** The side menu's Models count follows the channel, as the Models screen does. */
+  const channelModelCount = useMemo(() => {
+    const filter = workbenchInfo.taskFilter;
+    return filter ? modelRows.filter((row) => modelMatchesTask(row, filter)).length : modelRows.length;
+  }, [workbenchInfo.taskFilter, modelRows]);
+
   const confirmClearData = useCallback(async () => {
     // The run log is cleared first but must not gate anything: the main process
     // rate-limits log clearing, so clearing logs and then clearing data a moment
@@ -1266,6 +1333,9 @@ function App() {
       setModelNotes({});
       setRunHistory(emptyRunHistory());
       resetGoals();
+      // The faders and the channel are preferences about data that is gone.
+      setBalances(readBalances(null, null));
+      setWorkbenchPick(null);
       setClearDataOpen(false);
       setActivity(`RigMatch app data cleared. Ollama models were left installed.${logNote}`);
     } catch (error) {
@@ -1590,7 +1660,8 @@ function App() {
       }), modelToTest);
       setBenchmark(result);
       setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
-      setModelScores((current) => upsertModelScores(current, [result], currentSuiteName, rigStampForModel));
+      const runBalance = runBalanceRef.current;
+      setModelScores((current) => upsertModelScores(current, [result], currentSuiteName, rigStampForModel, runBalance));
       setClearedTopMatches((current) => removeSetValues(current, [result.model, modelToTest]));
       recordRuns([result]);
       setRunProgress({
@@ -2531,7 +2602,8 @@ function App() {
         }), row.displayName);
         results.push(result);
         setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
-        setModelScores((current) => upsertModelScores(current, [result], currentSuiteName, rigStampForModel));
+        const runBalance = runBalanceRef.current;
+        setModelScores((current) => upsertModelScores(current, [result], currentSuiteName, rigStampForModel, runBalance));
         setClearedTopMatches((current) => removeSetValues(current, [result.model, row.displayName]));
         recordRuns([result]);
         const isStopped = stopRunRef.current;
@@ -3098,6 +3170,8 @@ function App() {
     // Captured before the modal closes: every result from this run carries the
     // contention that was measured when the user chose to start it.
     runGpuContentionRef.current = pendingGpuContention?.level;
+    // And where the fader stood when they chose to start.
+    runBalanceRef.current = balances[runChannel];
     setPendingRunMode(null);
     setPendingSingleModel(null);
 
@@ -3120,7 +3194,7 @@ function App() {
     if (mode === 'speed-date') {
       void runListTest().then(() => runSkillTestsAfterRun(skillModels)).catch(reportSkillRunFailure);
     }
-  }, [pendingGpuContention, pendingRunMode, pendingSingleModel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, skillTestSelection, startBenchmark, reportSkillRunFailure]);
+  }, [balances, pendingGpuContention, pendingRunMode, pendingSingleModel, runChannel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, skillTestSelection, startBenchmark, reportSkillRunFailure]);
 
   const cancelPendingRun = useCallback(() => {
     setPendingRunMode(null);
@@ -3183,8 +3257,8 @@ function App() {
   }, [themeId]);
 
   useEffect(() => {
-    writeLocal(SCORE_PRIORITY_STORAGE_KEY, scorePriority);
-  }, [scorePriority]);
+    writeLocalJson(BALANCE_STORAGE_KEY, balances);
+  }, [balances]);
 
   /**
    * Saved through the same fallback ladder the history uses. Transcripts are
@@ -3489,7 +3563,13 @@ function App() {
           isListTesting={isListTesting}
           benchmarkActive={isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running)}
           runProgress={runProgress}
-          onStartShow={() => { void runListTest(); }}
+          onStartShow={() => {
+            // Every score this show produces records where the fader stood.
+            runBalanceRef.current = balances.chat;
+            void runListTest();
+          }}
+          balance={balances.chat}
+          onBalanceChange={(value) => setBalance('chat', value)}
           onStopShow={requestStopRun}
           winner={wizardWinner}
           lineupResults={wizardLineupResults}
@@ -3502,6 +3582,8 @@ function App() {
             onCheckComfy: () => { void refreshComfyStatus(); },
             onDownloadModel: requestLabDownload,
             onStopDownload: stopLabDownload,
+            balance: balances.video,
+            onBalanceChange: (value) => setBalance('video', value),
           }}
           onChatWithWinner={openChatWithWinner}
           onOpenScorecard={() => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('history'); }}
@@ -3559,12 +3641,19 @@ function App() {
         comfyReachable={comfyReachable}
         deckExpanded={deckExpanded}
         onDeckExpandedChange={(expanded) => { setDeckExpanded(expanded); writeDeckExpanded(expanded); }}
+        workbench={workbench}
+        onWorkbenchChange={chooseWorkbench}
+        channelWinner={channelWinner}
+        balance={balances[activeChannel]}
+        onBalanceChange={(value) => setBalance(activeChannel, value)}
+        balanceLocked={balanceLock(activeChannel)}
+        onOpenChannel={() => selectNav(workbenchInfo.home)}
       />
 
       <SideMenu
         items={visibleNavItems}
         ollamaReady={ollama.ready || lmStudio.ready}
-        modelCount={modelRows.length}
+        modelCount={channelModelCount}
         shortlistCount={shortlistedRows.length}
         newModelDropCount={modelNews.latestNewModelIds.length}
         isRunning={isBenchmarking || isListTesting}
@@ -3617,10 +3706,13 @@ function App() {
         )}
         {activeNavId === 'models' && (
           <ModelCabinet
+            // Keyed by channel, so switching re-applies the channel's filter and
+            // All starts unfiltered instead of keeping the last channel's.
+            key={workbenchInfo.id}
             active={true}
             rows={modelRows}
             comfyFolderSet={Boolean(comfySettings.folder)}
-            goalLens={taskFilterForGoal(selectedGoals[0])}
+            goalLens={workbenchInfo.taskFilter ?? undefined}
             onOpenLab={() => selectNav('activity')}
             // Settings already explains ComfyUI in plain language; window.open
             // was popup-blocked in the browser preview and the review found the
@@ -3770,6 +3862,10 @@ function App() {
             onStopSkillTests={requestStopSkills}
             onDownloadGenerationModel={requestLabDownload}
             onStopGenerationDownload={stopLabDownload}
+            workbench={workbenchInfo}
+            balances={balances}
+            onBalanceChange={setBalance}
+            onOpenComparison={() => selectNav('speedDate')}
           />
         )}
         {(activeNavId === 'history' || activeNavId === 'settings') && (
@@ -3794,8 +3890,6 @@ function App() {
             isLoadingLogs={isLoadingLogs}
             onThemeChange={selectTheme}
             onUiModeChange={selectUiMode}
-            scorePriority={scorePriority}
-            onScorePriorityChange={setScorePriority}
             onEditGoals={() => setShowGoalsEditor(true)}
             onDeleteModel={requestDeleteModel}
             onRefreshLogs={loadLogs}
@@ -4034,6 +4128,12 @@ function App() {
             const text = formatVideoEstimate(estimateLineup(entries, videoMachine, { calibration }), { roughNote: false });
             return { count: entries.length, estimate: text.charAt(0).toLowerCase() + text.slice(1) };
           })()}
+          balance={{
+            value: balances[runChannel],
+            onChange: (value) => setBalance(runChannel, value),
+            channel: workbenchById(runChannel).label,
+            accuracyMeans: workbenchById(runChannel).accuracyMeans,
+          }}
         />
       )}
 

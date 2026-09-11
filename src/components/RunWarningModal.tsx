@@ -6,6 +6,7 @@ import { CODE_LANGUAGES, CODE_TASK_PRESETS } from '../lib/codeChallenge';
 import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
 import { APP_BUILDER_PRESETS, VISION_TEST_IMAGES } from '../lib/labChallenges';
 import { GpuContentionNote } from './GpuContentionNote';
+import { BalanceFader } from './BalanceFader';
 import { getCudaDetail, getCudaSummary, isCloudModel, isEmbeddingModel, isLikelyImageGenerationModel, isVisionModel } from '../lib/modelCatalog';
 import { formatDuration } from '../lib/runEstimates';
 import { useDialog } from '../lib/useDialog';
@@ -51,6 +52,7 @@ export function RunWarningModal({
   measuredPerModelMs,
   comfyCheckpoints,
   videoLineup,
+  balance,
 }: {
   mode: PendingRunMode;
   selectedModel: string;
@@ -83,6 +85,11 @@ export function RunWarningModal({
   comfyCheckpoints: string[];
   /** The video models that can render here now, and roughly how long all of them take. */
   videoLineup: { count: number; estimate: string };
+  /**
+   * The Balance fader for this run's channel, asked before it starts. Only how
+   * the results are ranked depends on it; the run itself is the same.
+   */
+  balance: { value: number; onChange: (value: number) => void; channel: string; accuracyMeans: string };
   qualityMode: 'heuristic' | 'judge';
   judgeModel: string;
   judgeModelOptions: string[];
@@ -209,6 +216,15 @@ export function RunWarningModal({
             storage bandwidth, fans, and battery until the run finishes.
           </p>
           <p>{runScope}</p>
+
+          {/* First, above the settings: what someone values decides which of
+              these results wins, so it is the question before the test. */}
+          <BalanceFader
+            value={balance.value}
+            onChange={balance.onChange}
+            accuracyMeans={balance.accuracyMeans}
+            label={`What matters more for ${balance.channel.toLowerCase()}?`}
+          />
 
           {/* On battery, a laptop throttles its GPU hard — the same model can
               score materially lower for a reason that has nothing to do with

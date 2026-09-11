@@ -1,7 +1,9 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { getScoreTone } from '../lib/format';
 import { extractHtmlDocument } from '../lib/labPreview';
-import { readAdvancedLabResults } from '../lib/labResults';
+import { useLabResults } from '../hooks/useLabResults';
+import type { Balances } from '../lib/balance';
+import { workbenchById, type ChannelId, type Workbench } from '../lib/workbench';
 import { formatHistoryTime } from '../lib/modelCatalog';
 import type { OllamaStatus, PullProgressUpdate, RunProgress, SkillRunStatus, SystemProfile, TestedModelScore } from '../types';
 import { AdvancedCapabilityLab } from './AdvancedCapabilityLab';
@@ -31,6 +33,10 @@ export function ActivityPanel({
   onOpenReport,
   onDownloadGenerationModel,
   onStopGenerationDownload,
+  workbench = workbenchById('all'),
+  balances,
+  onBalanceChange,
+  onOpenComparison,
 }: {
   runProgress: RunProgress | null;
   skillRunStatus: SkillRunStatus;
@@ -51,6 +57,12 @@ export function ActivityPanel({
   /** Starts an image or video model's download, after the consent dialog. */
   onDownloadGenerationModel?: (generationId: string) => void;
   onStopGenerationDownload?: () => void;
+  /** The channel Advanced Mode is on: its Lab cards and its results are the ones shown. */
+  workbench?: Workbench;
+  balances: Balances;
+  onBalanceChange: (channel: ChannelId, value: number) => void;
+  /** Where a channel with no Lab card sends people instead. */
+  onOpenComparison?: () => void;
 }) {
   const [previewApp, setPreviewApp] = useState<{ html: string; model: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; model: string } | null>(null);
@@ -64,6 +76,8 @@ type ActivityJob = {
   key: string;
   model: string;
   kind: 'benchmark' | 'app' | 'image';
+  /** The channel whose results this belongs with. */
+  channel: ChannelId;
   label: string;
   grade: string;
   score: number;
@@ -74,30 +88,35 @@ type ActivityJob = {
 
   const anythingRunning = benchmarkActive || skillActive || activePulls.length > 0 || isListTesting;
 
-  // Re-read saved lab results whenever a skill run advances so freshly
-  // finished App Builder / image jobs appear in the monitor.
-  const labResults = useMemo(
-    () => readAdvancedLabResults(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [skillRunStatus.phase, skillRunStatus.completed],
-  );
+  // Every saved lab result, re-read the moment any test writes one, so a
+  // finished App Builder, image or video job appears here straight away.
+  const labResults = useLabResults();
 
   const recentJobs = useMemo<ActivityJob[]>(() => {
+    // A comparison also carries the coding answers and the picture-reading
+    // skill, so its results belong with those channels too.
+    const shows = (channel: ChannelId) => workbench.id === 'all'
+      || channel === workbench.id
+      || (channel === 'chat' && (workbench.id === 'code' || workbench.id === 'reading'));
     const jobs: ActivityJob[] = [];
     for (const score of Object.values(modelScores)) {
       if (!score?.completedAt) continue;
-      jobs.push({ key: `bench:${score.model}`, model: score.model, kind: 'benchmark', label: 'Compatibility test', grade: score.grade, score: score.total, completedAt: score.completedAt });
+      jobs.push({ key: `bench:${score.model}`, model: score.model, kind: 'benchmark', channel: 'chat', label: 'Compatibility test', grade: score.grade, score: score.total, completedAt: score.completedAt });
     }
     for (const result of Object.values(labResults)) {
       if (!result || result.error || !result.completedAt) continue;
       if (result.challenge === 'app-builder') {
-        jobs.push({ key: `app:${result.model}`, model: result.model, kind: 'app', label: 'App Builder', grade: result.grade, score: result.score, completedAt: result.completedAt, html: extractHtmlDocument(result.response) });
+        jobs.push({ key: `app:${result.model}`, model: result.model, kind: 'app', channel: 'code', label: 'App Builder', grade: result.grade, score: result.score, completedAt: result.completedAt, html: extractHtmlDocument(result.response) });
       } else if (result.challenge === 'image-generation' || result.challenge === 'video-generation') {
-        jobs.push({ key: `img:${result.model}`, model: result.model, kind: 'image', label: result.challenge === 'video-generation' ? 'Video Lab' : 'Image Lab', grade: result.grade, score: result.score, completedAt: result.completedAt, imageDataUrl: result.imageDataUrl });
+        const video = result.challenge === 'video-generation';
+        jobs.push({ key: `img:${result.model}`, model: result.model, kind: 'image', channel: video ? 'video' : 'images', label: video ? 'Video Lab' : 'Image Lab', grade: result.grade, score: result.score, completedAt: result.completedAt, imageDataUrl: result.imageDataUrl });
       }
     }
-    return jobs.sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt)).slice(0, 10);
-  }, [modelScores, labResults]);
+    return jobs
+      .filter((job) => shows(job.channel))
+      .sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt))
+      .slice(0, 10);
+  }, [modelScores, labResults, workbench.id]);
 
   return (
     <section className="activity-panel" aria-label="Running tests and downloads">
@@ -309,6 +328,10 @@ type ActivityJob = {
         onDownloadVideoModel={onDownloadGenerationModel}
         onStopVideoDownload={onStopGenerationDownload}
         pullProgressByModel={pullProgressByModel}
+        workbench={workbench}
+        balances={balances}
+        onBalanceChange={onBalanceChange}
+        onOpenComparison={onOpenComparison}
       />
 
       {previewApp && (

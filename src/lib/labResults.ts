@@ -69,6 +69,14 @@ export type AdvancedLabResult = {
   gpu?: string;
   /** Results from one lineup share this, so its leaderboard can be shown again. */
   lineupId?: string;
+  /**
+   * How much of the prompt the judge confirmed in a generated picture or a
+   * video's middle frame, 0 to 1; null when nothing could judge it. Kept apart
+   * from the score so the Balance fader can weigh it against time directly.
+   */
+  adherence?: number | null;
+  /** Where the Balance fader stood when this test started, 0 (speed) to 100 (accuracy). */
+  balance?: number;
 };
 
 export function readAdvancedLabResults(): Record<string, AdvancedLabResult> {
@@ -90,6 +98,34 @@ export function writeAdvancedLabResults(results: Record<string, AdvancedLabResul
   } catch {
     // local storage may be unavailable in preview contexts
   }
+  resultsVersion += 1;
+  for (const listener of resultListeners) listener();
+}
+
+/*
+ * Lab results as something a screen can watch.
+ *
+ * Five places write results — the Lab cards, the lineup, the Run dialog's
+ * skill tests — and the per-channel Top Match has to move the moment any of
+ * them lands a new one. A counter bumped on every write says "changed", and the
+ * parsed map is cached against it, so watching costs one parse per write rather
+ * than one per render.
+ */
+let resultsVersion = 0;
+const resultListeners = new Set<() => void>();
+let resultsCache: { version: number; results: Record<string, AdvancedLabResult> } | null = null;
+
+export function subscribeLabResults(listener: () => void): () => void {
+  resultListeners.add(listener);
+  return () => { resultListeners.delete(listener); };
+}
+
+/** The same object until the next write, as useSyncExternalStore requires. */
+export function labResultsSnapshot(): Record<string, AdvancedLabResult> {
+  if (!resultsCache || resultsCache.version !== resultsVersion) {
+    resultsCache = { version: resultsVersion, results: readAdvancedLabResults() };
+  }
+  return resultsCache.results;
 }
 
 /**

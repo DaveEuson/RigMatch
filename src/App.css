@@ -10681,21 +10681,6 @@ tbody tr.computer-row.selected {
   gap: 10px;
 }
 
-/* Says what switching does and does not cost, next to the switch. Someone
-   changing what "best" means needs to know it re-summarises saved results
-   rather than throwing them away — otherwise the safe move is not to touch
-   it. */
-.score-priority-note {
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.score-priority-picker .mode-toggle {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .ui-mode-picker > div:first-child span,
 .theme-picker > div:first-child span {
   display: block;
@@ -19682,4 +19667,533 @@ a.whats-next-support:hover {
   font-size: 11px;
   opacity: 0.65;
   white-space: nowrap;
+}
+
+/* ── Channels and the Balance fader ──────────────────────────────────────
+   What Advanced Mode is testing, and how much accuracy counts against speed.
+   The active channel is the accent, never gold: gold is the verdict, and
+   choosing what to look at is not one. The fader is console hardware: a plum
+   slot, a cream cap, detents at the three old presets. */
+
+.channel-switch {
+  grid-column: 1 / -1;
+  /* As wide as its seven answers, not as wide as the tracks it spans: the
+     deck's five tracks are wider than a 1280px window, which an empty last
+     track hid until something spanned it. */
+  justify-self: start;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 249, 239, 0.1);
+  border-radius: 10px;
+  background: rgba(7, 11, 13, 0.42);
+}
+
+.channel-switch > span {
+  padding: 0 8px 0 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.channel-switch button {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.12s ease-out, background-color 0.12s ease-out, border-color 0.12s ease-out;
+}
+
+.channel-switch button svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.channel-switch button:not(.active):hover {
+  color: var(--text-strong);
+  border-color: rgba(255, 249, 239, 0.16);
+  background: var(--panel-hover);
+}
+
+.channel-switch button:active {
+  transform: translateY(1px);
+}
+
+.channel-switch button.active {
+  color: var(--text-strong);
+  border-color: rgba(var(--primary-rgb), 0.62);
+  background: rgba(var(--primary-rgb), 0.18);
+  box-shadow: inset 0 -2px 0 rgba(var(--primary-rgb), 0.9);
+}
+
+.channel-switch button:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+/* The winner card makes room for its fader on the right. */
+.top-deck-winner.with-fader {
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+}
+
+.top-deck-winner.with-fader.channel {
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+}
+
+/* An empty card with something to press is not disabled, so it should not look it. */
+.top-deck-winner.empty:has(button) {
+  opacity: 0.82;
+}
+
+.top-deck-see-btn {
+  width: fit-content;
+  min-height: 24px;
+  margin-top: 4px;
+  padding: 4px 9px;
+  border: 1px solid rgba(255, 249, 239, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 249, 239, 0.06);
+  color: var(--text);
+  /* A button's label has to be read to be used: 10px, like Use this model. */
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.top-deck-winner-actions .top-deck-see-btn {
+  margin-top: 0;
+}
+
+.top-deck-see-btn:hover {
+  color: var(--text-strong);
+  border-color: rgba(255, 249, 239, 0.3);
+  background: var(--panel-hover);
+}
+
+.balance-fader {
+  --fader-slot-h: 128px;
+  --fader-slot-w: 34px;
+  --fader-cap-w: 28px;
+  --fader-cap-h: 14px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 249, 239, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 249, 239, 0.03);
+}
+
+.balance-fader.mini {
+  --fader-slot-h: 52px;
+  /* 24px wide, the smallest target WCAG 2.2 allows, though the cap is narrower. */
+  --fader-slot-w: 24px;
+  --fader-cap-w: 16px;
+  --fader-cap-h: 8px;
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.balance-fader-console {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 8px 9px;
+  border-radius: 9px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  box-shadow: inset 0 0 0 1px rgba(255, 249, 239, 0.06), 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.balance-fader.mini .balance-fader-console {
+  padding: 4px 3px;
+  border-radius: 7px;
+}
+
+.balance-fader-end {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.balance-fader-slot {
+  position: relative;
+  box-sizing: border-box;
+  width: var(--fader-slot-w);
+  height: var(--fader-slot-h);
+  padding: calc(var(--fader-cap-h) / 2) 0;
+  border-radius: 6px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.balance-fader-slot:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.balance-fader-rail {
+  position: relative;
+  display: block;
+  height: 100%;
+}
+
+.balance-fader-tick {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 249, 239, 0.22);
+  transform: translateY(50%);
+}
+
+.balance-fader-tick.on {
+  height: 2px;
+  background: rgba(var(--primary-rgb), 0.95);
+}
+
+.balance-fader-groove {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 6px;
+  transform: translateX(-50%);
+  border-radius: 3px;
+  background: var(--bg);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 249, 239, 0.06);
+}
+
+.balance-fader.mini .balance-fader-groove {
+  width: 4px;
+}
+
+.balance-fader-cap {
+  position: absolute;
+  left: 50%;
+  bottom: var(--balance, 50%);
+  width: var(--fader-cap-w);
+  height: var(--fader-cap-h);
+  transform: translate(-50%, 50%);
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--text-strong), var(--text) 55%, color-mix(in srgb, var(--text) 76%, black));
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5), inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  transition: bottom 0.14s ease-out;
+}
+
+.balance-fader-cap::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+}
+
+.balance-fader.mini .balance-fader-cap::after {
+  left: 2px;
+  right: 2px;
+  height: 1px;
+}
+
+.balance-fader-slot.dragging .balance-fader-cap {
+  transition: none;
+}
+
+.balance-fader.locked .balance-fader-slot,
+.balance-fader.disabled .balance-fader-slot {
+  cursor: not-allowed;
+}
+
+.balance-fader.locked .balance-fader-console {
+  opacity: 0.55;
+}
+
+.balance-fader-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  align-content: center;
+}
+
+.balance-fader-question {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.balance-fader-readout {
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.balance-fader-readout em {
+  margin-left: 4px;
+  color: var(--text);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.balance-fader-notches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.balance-fader-notches button {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 249, 239, 0.16);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color 0.12s ease-out, background-color 0.12s ease-out, border-color 0.12s ease-out;
+}
+
+.balance-fader-notches button:not(.active):not(:disabled):hover {
+  color: var(--text-strong);
+  border-color: rgba(255, 249, 239, 0.28);
+  background: var(--panel-hover);
+}
+
+.balance-fader-notches button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.balance-fader-notches button.active {
+  color: var(--text-strong);
+  border-color: rgba(var(--primary-rgb), 0.62);
+  background: rgba(var(--primary-rgb), 0.18);
+}
+
+.balance-fader-notches button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.balance-fader-notches button:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.balance-fader-means {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.balance-fader.locked .balance-fader-means {
+  color: var(--text);
+}
+
+/* Ranked results the fader re-orders: the image and listening standings. */
+.lab-standings {
+  display: grid;
+  gap: 6px;
+}
+
+.lab-standings-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+}
+
+.lab-standings-head strong {
+  color: var(--text-strong);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.lab-standings-head span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.lab-standings ol {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  list-style: none;
+}
+
+.lab-standings li {
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 249, 239, 0.07);
+  border-radius: 10px;
+  background: rgba(255, 249, 239, 0.03);
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 11px;
+}
+
+.lab-standings li > b:first-child {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* Gold for the winner only: the thing that won. */
+.lab-standings li.ranked:first-child > b:first-child {
+  color: var(--gold);
+}
+
+.lab-standings li > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.lab-standings strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lab-standings em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.lab-standings li.unjudged {
+  opacity: 0.8;
+}
+
+.lab-standings li.failed,
+.video-lineup-board li.short {
+  border-color: rgba(var(--red-rgb), 0.24);
+  background: rgba(var(--red-rgb), 0.06);
+}
+
+.lab-standings li.failed em,
+.video-lineup-board li.short em {
+  color: var(--red);
+}
+
+.video-lineup-board li.unjudged {
+  opacity: 0.85;
+}
+
+.lab-standings-more {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+/* A channel tested somewhere else: a signpost, not a card to run. */
+.lab-channel-note {
+  border-style: dashed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .balance-fader-cap,
+  .channel-switch button,
+  .balance-fader-notches button {
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .balance-fader {
+    --fader-slot-h: 104px;
+    gap: 10px;
+    padding: 8px;
+  }
+
+  .channel-switch > span {
+    flex-basis: 100%;
+    padding: 2px 4px;
+  }
+}
+
+/* Collapsed, the deck hides its readouts and keeps its cards on one row, which
+   frees a track. The switch takes that track instead of adding a row, so
+   collapsing still gives the height back: on a 1280x820 window a second row
+   cost the side menu its last three items. The winner card's fader goes with
+   the readouts; its balance stays in the score line, and every test still asks
+   with the full fader. */
+.top-deck.collapsed .top-deck-winner > .balance-fader.mini {
+  display: none;
+}
+
+.top-deck.collapsed .top-deck-winner.with-fader {
+  grid-template-columns: 42px minmax(0, 1fr);
+}
+
+.top-deck.collapsed .top-deck-winner.with-fader.channel {
+  grid-template-columns: 28px minmax(0, 1fr);
+}
+
+@media (min-width: 1241px) {
+  /* Five tracks that fit a 1280px window, the last one wide enough for the
+     switch to wrap into three short lines. */
+  .top-deck.collapsed {
+    grid-template-columns:
+      minmax(210px, 0.85fr)
+      minmax(190px, 0.75fr)
+      minmax(230px, 0.95fr)
+      minmax(230px, 0.95fr)
+      minmax(300px, 1.2fr);
+  }
+
+  /* Clear of the expand button, which sits in this corner at 26px. */
+  .top-deck.collapsed > .channel-switch {
+    grid-column: 5;
+    grid-row: 1;
+    align-self: center;
+    justify-self: stretch;
+    width: auto;
+    margin-right: 20px;
+  }
+
+  .top-deck.collapsed > .channel-switch > span {
+    flex-basis: 100%;
+    padding: 0 4px 2px;
+  }
 }

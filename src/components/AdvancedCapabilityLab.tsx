@@ -28,6 +28,17 @@ import { GpuContentionNote } from './GpuContentionNote';
 import { useGpuContention } from '../hooks/useGpuContention';
 import { gpuBusyNote } from '../lib/gpuBusyNote';
 import { AppBuilderPreviewModal } from "./AppBuilderPreview";
+import { BalanceFader } from "./BalanceFader";
+import { LabStandings } from "./LabStandings";
+import { useLabResults } from "../hooks/useLabResults";
+import type { Balances } from "../lib/balance";
+import { describeLabAccuracy, rankLabResults } from "../lib/channelWinners";
+import { workbenchById, type ChannelId, type LabCardId, type Workbench } from "../lib/workbench";
+
+/** Every Lab card: the All channel, and any caller from before channels. */
+const ALL_CHANNELS = workbenchById('all');
+/** What the Image fader weighs against render time. */
+const IMAGE_ACCURACY = workbenchById('images').accuracyMeans;
 
 type AdvancedLabRunState = {
   phase: 'idle' | 'running' | 'complete' | 'failed';
@@ -69,6 +80,10 @@ export function AdvancedCapabilityLab({
   onDownloadVideoModel,
   onStopVideoDownload,
   pullProgressByModel,
+  workbench = ALL_CHANNELS,
+  balances,
+  onBalanceChange,
+  onOpenComparison,
 }: {
   selectedModel: string;
   ollama: OllamaStatus;
@@ -78,6 +93,13 @@ export function AdvancedCapabilityLab({
   onStopVideoDownload?: () => void;
   /** Download progress by model name, so a video model's row can show its own. */
   pullProgressByModel?: Record<string, PullProgressUpdate>;
+  /** The channel Advanced Mode is on. Only its Lab cards are shown. */
+  workbench?: Workbench;
+  /** Each channel's Balance fader. */
+  balances: Balances;
+  onBalanceChange: (channel: ChannelId, value: number) => void;
+  /** Where a channel with no Lab card sends people instead. */
+  onOpenComparison?: () => void;
 }) {
   const installedModels = useMemo(
     () => ollama.models.map((model) => model.name || model.model).filter(Boolean),
@@ -85,7 +107,7 @@ export function AdvancedCapabilityLab({
   );
   const defaultModel = installedModels.includes(selectedModel) ? selectedModel : (installedModels[0] ?? '');
   const [labModel, setLabModel] = useState(defaultModel);
-  const [savedResults, setSavedResults] = useState<Record<string, AdvancedLabResult>>(() => readAdvancedLabResults());
+  const savedResults = useLabResults();
   const [runState, setRunState] = useState<AdvancedLabRunState>({ phase: 'idle', result: null, message: '' });
   const [copied, setCopied] = useState<CopyState>('idle');
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -165,6 +187,17 @@ export function AdvancedCapabilityLab({
     [ollama.models],
   );
   const activeJudge = judges.includes(judgeModel) ? judgeModel : (judges[0] ?? '');
+  const cards = workbench.labCards;
+  const shows = (card: LabCardId) => cards.includes(card);
+  const gridCards = cards.filter((card) => card !== 'video');
+  // Nothing installed can check a picture, so accuracy cannot count here.
+  const imageLock = judges.length
+    ? null
+    : 'No model that can check pictures is available right now, so only speed can be measured. Install one, or start Ollama, and accuracy counts again.';
+  const imageStandings = useMemo(
+    () => rankLabResults(savedResults, 'images', imageLock ? 0 : balances.images),
+    [savedResults, imageLock, balances.images],
+  );
 
   const activeModel = installedModels.includes(labModel) ? labModel : defaultModel;
   const activeModelInfo = ollama.models.find((model) => model.name === activeModel || model.model === activeModel);
@@ -206,9 +239,7 @@ export function AdvancedCapabilityLab({
       // Read-modify-write against live storage, matching App.tsx. Writing a
       // mount-time snapshot back would erase any lab result the skill-test
       // runner saved for another model while this panel was open.
-      const merged = { ...readAdvancedLabResults(), [activeModel]: result };
-      writeAdvancedLabResults(merged);
-      setSavedResults(merged);
+      writeAdvancedLabResults({ ...readAdvancedLabResults(), [activeModel]: result });
       // Pop the finished app straight into the sandbox when it's runnable.
       if (extractHtmlDocument(result.response)) setPreviewOpen(true);
     }
@@ -253,7 +284,8 @@ export function AdvancedCapabilityLab({
     } finally {
       imageAbortRef.current = null;
     }
-    const result = toLabResult(run, imagePromptId, customPrompt);
+    // With where the fader stood as it started, like every other test.
+    const result = { ...toLabResult(run, imagePromptId, customPrompt), balance: imageLock ? 0 : balances.images };
 
     setImageRunState({
       phase: result.error ? 'failed' : 'complete',
@@ -270,11 +302,9 @@ export function AdvancedCapabilityLab({
     });
 
     if (!result.error) {
-      const merged = { ...readAdvancedLabResults(), [imageResultKey]: result };
-      writeAdvancedLabResults(merged);
-      setSavedResults(merged);
+      writeAdvancedLabResults({ ...readAdvancedLabResults(), [imageResultKey]: result });
     }
-  }, [activeCheckpoint, activeJudge, canRunImageTest, customPrompt, imagePromptId, imageResultKey, ollama.baseUrl, gpuNoteForRun]);
+  }, [activeCheckpoint, activeJudge, balances.images, canRunImageTest, customPrompt, imageLock, imagePromptId, imageResultKey, ollama.baseUrl, gpuNoteForRun]);
 
   const stopImageRun = useCallback(() => {
     imageAbortRef.current?.abort();
@@ -285,10 +315,11 @@ export function AdvancedCapabilityLab({
       <GpuContentionNote contention={contention} />
       <div className="advanced-lab-head">
         <div>
-          <span>Advanced Lab</span>
+          <span>{workbench.id === 'all' ? 'Advanced Lab' : `Advanced Lab · ${workbench.label}`}</span>
           <strong>Optional skill tests beyond quick questions</strong>
           <em>Separate Lab Grades. They do not affect the core RigMatch score.</em>
         </div>
+        {shows('app-builder') && (
         <div className="advanced-lab-model">
           <label htmlFor="advanced-lab-model">Installed model</label>
           <select
@@ -304,9 +335,12 @@ export function AdvancedCapabilityLab({
             )}
           </select>
         </div>
+        )}
       </div>
 
+      {gridCards.length > 0 && (
       <div className="advanced-lab-grid">
+        {shows('app-builder') && (
         <article className="advanced-lab-card runnable">
           <div className="advanced-lab-card-head">
             <Code2 aria-hidden="true" />
@@ -428,7 +462,9 @@ export function AdvancedCapabilityLab({
             </div>
           )}
         </article>
+        )}
 
+        {shows('image') && (
         <article className="advanced-lab-card image-beta">
           <div className="advanced-lab-card-head">
             <Lightbulb aria-hidden="true" />
@@ -534,6 +570,12 @@ export function AdvancedCapabilityLab({
                   </span>
                 </div>
               )}
+              <BalanceFader
+                value={balances.images}
+                onChange={(value) => onBalanceChange('images', value)}
+                accuracyMeans={IMAGE_ACCURACY}
+                lockedReason={imageLock}
+              />
               <div className="advanced-lab-actions">
                 <button type="button" className="primary-button compact" onClick={() => void startImageChallenge().catch((error: unknown) => {
                   // Without this a throw before the run's own try — requireBridge,
@@ -588,13 +630,54 @@ export function AdvancedCapabilityLab({
               )}
             </div>
           )}
+          {imageStandings.length > 1 && (
+            <LabStandings
+              ranked={imageStandings}
+              balance={imageLock ? 0 : balances.images}
+              heading="Every image test on this PC"
+              describeAccuracy={(accuracy) => describeLabAccuracy('images', accuracy)}
+            />
+          )}
         </article>
+        )}
 
-        <ListeningLab ollama={ollama} models={hearingModels} gpuNoteForRun={gpuNoteForRun} />
+        {shows('listening') && (
+          <ListeningLab
+            ollama={ollama}
+            models={hearingModels}
+            gpuNoteForRun={gpuNoteForRun}
+            balance={balances.listening}
+            onBalanceChange={(value) => onBalanceChange('listening', value)}
+          />
+        )}
       </div>
+      )}
+
+      {/* A channel tested somewhere else says where, rather than showing an
+          empty Lab or someone else's cards. */}
+      {cards.length === 0 && (
+        <article className="advanced-lab-card lab-channel-note">
+          <div className="advanced-lab-card-head">
+            <Lightbulb aria-hidden="true" />
+            <div>
+              <span>{workbench.label}</span>
+              <strong>Tested in Comparison</strong>
+            </div>
+          </div>
+          <p>{workbench.labNote}</p>
+          {onOpenComparison && (
+            <div className="advanced-lab-actions">
+              <button type="button" className="primary-button compact" onClick={onOpenComparison}>
+                Open Comparison
+              </button>
+            </div>
+          )}
+        </article>
+      )}
 
       {/* Full width: eighteen models with five facts each do not fit half a
           grid, and the leaderboard and the clips side by side want the room. */}
+      {shows('video') && (
       <VideoLineupLab
         comfyStatus={comfyStatus}
         comfyChecking={comfyChecking}
@@ -611,7 +694,10 @@ export function AdvancedCapabilityLab({
         onDownloadModel={onDownloadVideoModel}
         onStopDownload={onStopVideoDownload}
         pullProgressByModel={pullProgressByModel}
+        balance={balances.video}
+        onBalanceChange={(value) => onBalanceChange('video', value)}
       />
+      )}
       {previewOpen && previewHtml && visibleResult && (
         <AppBuilderPreviewModal
           html={previewHtml}

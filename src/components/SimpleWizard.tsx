@@ -37,6 +37,10 @@ import { getDownloadRowStatus, summarizeDownloadStep } from '../lib/downloadStat
 import type { ComfyFolderListing } from '../lib/generationCatalog';
 import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
 import { VideoLineupLab } from './VideoLineupLab';
+import { BalanceFader } from './BalanceFader';
+import { balanceLabel } from '../lib/balance';
+import { useDialog } from '../lib/useDialog';
+import { workbenchById } from '../lib/workbench';
 import rigGreenroom from '../assets/robot-rig-greenroom.webp';
 import speedDateShow from '../assets/robot-speed-date-show.webp';
 import romanceHero from '../assets/robot-romance-hero.webp';
@@ -171,6 +175,12 @@ type SimpleWizardProps = {
   runProgress: SimpleRunProgress;
   onStartShow: () => void;
   onStopShow: () => void;
+  /**
+   * How much accuracy counts against speed in the show: asked as it starts,
+   * and shown beside the result.
+   */
+  balance: number;
+  onBalanceChange: (value: number) => void;
   winner: { model: string; score: number; scoreLabel: string; grade: string } | null;
   /**
    * What this PC can generate, which the Pick grid deliberately excludes.
@@ -209,6 +219,9 @@ type SimpleWizardProps = {
     onCheckComfy: () => void;
     onDownloadModel: (generationId: string) => void;
     onStopDownload: () => void;
+    /** The Video fader, asked before the race and moving the leaderboard after. */
+    balance: number;
+    onBalanceChange: (value: number) => void;
   };
 };
 
@@ -252,6 +265,10 @@ export function SimpleWizard(props: SimpleWizardProps) {
   // "Meet the winner" button stayed enabled and would declare a result from
   // partial data.
   const [awaitingRun, setAwaitingRun] = useState(false);
+  // The show is a test, and every test first asks what matters more. Asked as
+  // the show starts rather than on a screen of its own: a sixth step in a
+  // five-step wizard is a step people skip.
+  const [askingBalance, setAskingBalance] = useState(false);
   const sawRunActive = useRef(false);
   useEffect(() => {
     if (!awaitingRun) { sawRunActive.current = false; return; }
@@ -327,12 +344,18 @@ export function SimpleWizard(props: SimpleWizardProps) {
     setAwaitingRun(true);
   };
 
+  const beginShow = () => {
+    setAskingBalance(false);
+    startShow();
+    setStep('compare');
+  };
+
   const goNext = () => {
     if (step === 'pick') {
-      if (skipDownload) { startShow(); setStep('compare'); return; }
+      if (skipDownload) { setAskingBalance(true); return; }
       props.onStartDownloads();
     }
-    if (step === 'download') startShow();
+    if (step === 'download') { setAskingBalance(true); return; }
     if (stepIndex < STEPS.length - 1) setStep(STEPS[stepIndex + 1]);
   };
   const goBack = () => {
@@ -516,8 +539,70 @@ export function SimpleWizard(props: SimpleWizardProps) {
           )}
         </div>
       </footer>
+      {askingBalance && (
+        <PreShowQuestion
+          balance={props.balance}
+          onBalanceChange={props.onBalanceChange}
+          contestants={shortlistedRows.length}
+          onStart={beginShow}
+          onCancel={() => setAskingBalance(false)}
+        />
+      )}
     </div>
     </InfoViewProvider>
+  );
+}
+
+/**
+ * Before the show: what matters more, a quick answer or the best one?
+ *
+ * The same question every test asks, with the same fader, put where the show
+ * starts. A beginner has never been asked it, and it changes who wins.
+ */
+function PreShowQuestion({
+  balance,
+  onBalanceChange,
+  contestants,
+  onStart,
+  onCancel,
+}: {
+  balance: number;
+  onBalanceChange: (value: number) => void;
+  contestants: number;
+  onStart: () => void;
+  onCancel: () => void;
+}) {
+  const panelRef = useDialog<HTMLElement>(onCancel);
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section
+        ref={panelRef}
+        className="sw-balance-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sw-balance-title"
+      >
+        <span className="sw-eyebrow">Before the show</span>
+        <h2 id="sw-balance-title">What matters more to you?</h2>
+        <p>
+          Some people want a quick answer, some want the best one. Set it to what you want, and
+          your {contestants} contestants are ranked that way.
+        </p>
+        <BalanceFader
+          value={balance}
+          onChange={onBalanceChange}
+          accuracyMeans={workbenchById('chat').accuracyMeans}
+          label="Accuracy or speed?"
+        />
+        <div className="sw-balance-actions">
+          <button type="button" className="sw-ghost-pill" onClick={onCancel}>Not yet</button>
+          <button type="button" className="sw-gold-pill" onClick={onStart}>
+            Start the show
+            <ArrowRight aria-hidden="true" />
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -878,6 +963,8 @@ function PickScreen({
           onDownloadModel={videoLineup.onDownloadModel}
           onStopDownload={videoLineup.onStopDownload}
           pullProgressByModel={pullProgressByModel}
+          balance={videoLineup.balance}
+          onBalanceChange={videoLineup.onBalanceChange}
         />
       ) : filtered.length === 0 ? (
         <div className="sw-pick-empty">
@@ -1314,7 +1401,7 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
 // ---------------------------------------------------------------------------
 // Winner
 
-function WinnerScreen({ winner, shortlistedRows, lineupResults, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
+function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
   if (!winner) {
     return <div className="sw-winner"><p className="sw-muted">Run the show to crown your Top Match.</p></div>;
   }
@@ -1338,7 +1425,7 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, onChatWithWinner
           <em className="sw-winner-tag">{winner.model}</em>
           <span className="sw-winner-grade">
             <b>{winner.scoreLabel}</b>
-            <em>Match · Grade {winner.grade}</em>
+            <em>Match · Grade {winner.grade} · {balanceLabel(balance)}</em>
           </span>
           {/* Say what the number means — a beginner has never seen either scale. */}
           <p className="sw-winner-why">

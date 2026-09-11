@@ -92,6 +92,8 @@ export type StartLineupOptions = {
   gpuName?: string;
   /** A sentence about anything else holding the GPU, for the first status line. */
   note?: string;
+  /** Where the Balance fader stood when the race was started. */
+  balance?: number;
 };
 
 export async function startVideoLineup(options: StartLineupOptions): Promise<void> {
@@ -120,6 +122,7 @@ export async function startVideoLineup(options: StartLineupOptions): Promise<voi
     stopped: false,
     planned: entries.map((entry) => ({ key: entry.key, name: entry.name })),
     entries: [],
+    ...(typeof options.balance === 'number' ? { balance: options.balance } : {}),
   };
   const abort = new AbortController();
   controller = abort;

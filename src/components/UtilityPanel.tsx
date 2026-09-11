@@ -16,7 +16,6 @@ import { buildBugReportUrl, buildDiagnosticsText, buildShareableScorecard, getNa
 import { MATCH_GRADE_BAND_ROWS } from '../lib/scoreReference';
 import type { SettingsSectionId } from '../lib/settingsSections';
 import { buildSettingsRail } from '../lib/settingsSections';
-import type { ScorePriorityId } from '../lib/scoring';
 import { formatMatchScore, isLegacyScore, scoreDrift, scoreDriftLabel } from '../lib/scoring';
 import { useDialog } from '../lib/useDialog';
 import type { AppLogEntry, AutoUpdateStatus, ChatMessage, ModelRow, NetworkHost, OllamaStatus, SystemProfile, TestedModelScore, UpdateChannel, UpdateCheckResponse } from '../types';
@@ -28,7 +27,6 @@ import { HistoryTimeline } from './HistoryTimeline';
 import { HowWeScoreSection } from './HowWeScoreSection';
 import { LogEntry } from './LogEntry';
 import { RomanceArtBanner } from './ScoreVisuals';
-import { ScorePriorityPicker } from './ScorePriorityPicker';
 import { SettingsSection } from './SettingsSection';
 import { ModelDemoChips } from './SkillDemoViewers';
 import { ThemePicker } from './ThemePicker';
@@ -61,8 +59,6 @@ export function UtilityPanel({
   isLoadingLogs,
   onThemeChange,
   onUiModeChange,
-  scorePriority,
-  onScorePriorityChange,
   onEditGoals,
   onDeleteModel,
   onRefreshLogs,
@@ -101,8 +97,6 @@ export function UtilityPanel({
   isLoadingLogs: boolean;
   onThemeChange: (themeId: ThemeId) => void;
   onUiModeChange: (mode: UiMode) => void;
-  scorePriority: ScorePriorityId;
-  onScorePriorityChange: (priority: ScorePriorityId) => void;
   onEditGoals: () => void;
   onDeleteModel: (row: ModelRow) => void;
   onRefreshLogs: () => void;
@@ -693,7 +687,6 @@ export function UtilityPanel({
             sectionId="interface"
           >
           <UiModePicker uiMode={uiMode} onUiModeChange={onUiModeChange} />
-          <ScorePriorityPicker priority={scorePriority} onPriorityChange={onScorePriorityChange} />
           <GoalsSummary goals={selectedGoals} onEditGoals={onEditGoals} />
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
           </SettingsSection>

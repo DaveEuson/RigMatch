@@ -46,6 +46,7 @@ export function toVideoLabResult(
     width: run.width,
     height: run.height,
     error: run.error,
+    adherence: run.adherence,
     ...(extra.gpu ? { gpu: extra.gpu } : {}),
     ...(extra.lineupId ? { lineupId: extra.lineupId } : {}),
   };
