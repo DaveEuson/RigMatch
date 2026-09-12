@@ -82,7 +82,14 @@ function fakeClock() {
   return { now: () => t, sleep: async (ms) => { t += ms; } };
 }
 
-const listenInto = (events, answer = 'Yes') => async () => { events.push('listen'); return answer; };
+/** Answers each of a prompt's questions truly, as a listener that hears the clip would. */
+const truthfully = (prompt) => (question) =>
+  (prompt.propositions.find((proposition) => question.startsWith(proposition.question))?.expected ? 'Yes' : 'No');
+
+const listenInto = (events, answer = truthfully(PROMPT)) => async (_wav, question) => {
+  events.push('listen');
+  return answer(question);
+};
 
 const lineup = (overrides) => runAudioLineup({
   entries: ENTRIES,
@@ -143,7 +150,7 @@ test('the listener hears each clip the way the listening test sends audio: a 16 
 });
 
 test('a clip checked afterwards scores exactly as one checked on the spot', async () => {
-  const yes = async () => 'Yes';
+  const yes = async (_wav, question) => truthfully(PROMPT)(question);
   const spec = audioModelSpec('stable-audio-open-1.0');
   const base = {
     graph: buildAudioWorkflow(spec, { prompt: PROMPT.prompt, seed: 1, seconds: AUDIO_CLIP_SECONDS }),
@@ -251,6 +258,24 @@ test('a listener that cannot answer leaves the clip unjudged, not wrong', async 
     assert.equal(outcome.result.judged, false);
     assert.equal(outcome.result.error, undefined);
   }
+});
+
+test('a listener that gives every question the same answer tells nothing, so the clip is unjudged', async () => {
+  // Both Gemma 4 models answered No to every question about real music and
+  // rain, which scored every clip one in three: the questions No happens to fit.
+  for (const answer of ['No', 'Yes']) {
+    const outcomes = await lineup({ transport: fakeComfy().transport, listen: async () => answer });
+    for (const outcome of outcomes) {
+      assert.equal(outcome.result.adherence, null, `${answer} to everything`);
+      assert.equal(outcome.result.judged, false);
+      assert.match(outcome.result.unjudgedReason ?? '', /same answer/);
+      const check = outcome.result.checks.find((item) => item.label === 'Matches the prompt');
+      assert.match(check.detail, /same answer/);
+    }
+  }
+  // One that hears, and says so, is still scored.
+  const [heard] = await lineup({ transport: fakeComfy().transport, entries: [ENTRIES[0]], listen: async (_wav, question) => truthfully(PROMPT)(question) });
+  assert.equal(heard.result.adherence, 1);
 });
 
 test('a clip is scored on the length it turned out to be', async () => {

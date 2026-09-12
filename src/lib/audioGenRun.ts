@@ -15,7 +15,7 @@ import { dataUrlToBytes } from './dataUrl.ts';
 import { getErrorMessage } from './format.ts';
 import type { ComfyTransport } from './imageGenRun.ts';
 import { askPropositions } from './imageGenScoring.ts';
-import { scoreAudioGeneration, type AudioPrompt } from './audioGenScoring.ts';
+import { listenerTellsApart, scoreAudioGeneration, type AudioPrompt } from './audioGenScoring.ts';
 import { isEffectivelySilent, toListeningWav, type ListeningClip } from './wavEncoder.ts';
 
 const POLL_INTERVAL_MS = 1000;
@@ -70,6 +70,8 @@ export type AudioRunResult = {
   grade: string;
   judged: boolean;
   adherence: number | null;
+  /** Why a clip that was listened to is still unjudged, when it is. */
+  unjudgedReason?: string;
   realtimeCost: number;
   elapsedMs: number;
   checks: { label: string; passed: boolean; detail: string }[];
@@ -120,12 +122,14 @@ export async function runAudioGeneration(options: AudioRunOptions): Promise<Audi
     return audioRunFailure(model, measured, 'The clip came back silent.', { promptId, elapsedMs, audioRef });
   }
 
-  const adherence = listen && audioPrompt.propositions.length > 0
-    ? (await listenFor(listen, clip, audioPrompt)).adherence
-    : null;
+  const heard: Heard = listen && audioPrompt.propositions.length > 0
+    ? await listenFor(listen, clip, audioPrompt)
+    : { adherence: null };
   return {
-    model, promptId, audioRef, clip, seconds: measured, adherence, elapsedMs,
-    ...scoreAudioGeneration({ produced: true, elapsedMs, seconds: measured, adherence }),
+    model, promptId, audioRef, clip, seconds: measured, elapsedMs,
+    adherence: heard.adherence,
+    ...(heard.unjudgedReason ? { unjudgedReason: heard.unjudgedReason } : {}),
+    ...scoreAudioGeneration({ produced: true, elapsedMs, seconds: measured, ...heard }),
   };
 }
 
@@ -143,11 +147,12 @@ export async function judgeAudioResult(
   audioPrompt: AudioPrompt,
 ): Promise<AudioRunResult> {
   if (result.error || !result.clip || audioPrompt.propositions.length === 0) return result;
-  const { adherence } = await listenFor(listen, result.clip, audioPrompt);
+  const heard = await listenFor(listen, result.clip, audioPrompt);
   return {
     ...result,
-    adherence,
-    ...scoreAudioGeneration({ produced: true, elapsedMs: result.elapsedMs, seconds: result.seconds, adherence }),
+    adherence: heard.adherence,
+    unjudgedReason: heard.unjudgedReason,
+    ...scoreAudioGeneration({ produced: true, elapsedMs: result.elapsedMs, seconds: result.seconds, ...heard }),
   };
 }
 
@@ -171,8 +176,23 @@ export function audioRunFailure(
   };
 }
 
-function listenFor(listen: ListenFn, clip: ListeningClip, audioPrompt: AudioPrompt) {
-  return askPropositions((question) => listen(clip.base64, question), audioPrompt);
+type Heard = { adherence: number | null; unjudgedReason?: string };
+
+/**
+ * Ask the listener the prompt's questions about a clip. A listener that gives
+ * every question the same answer has not told this clip from any other (see
+ * listenerTellsApart), so its answers leave the clip unjudged rather than
+ * scoring it on the questions its one answer happens to fit.
+ */
+async function listenFor(listen: ListenFn, clip: ListeningClip, audioPrompt: AudioPrompt): Promise<Heard> {
+  const { adherence, verdicts } = await askPropositions((question) => listen(clip.base64, question), audioPrompt);
+  if (adherence !== null && !listenerTellsApart(verdicts)) {
+    return {
+      adherence: null,
+      unjudgedReason: 'The listener gave every question the same answer, so it could not tell what is in the clip. Unjudged.',
+    };
+  }
+  return { adherence };
 }
 
 async function waitForHistory({

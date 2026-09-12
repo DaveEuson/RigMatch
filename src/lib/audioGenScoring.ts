@@ -73,6 +73,21 @@ export function audioPromptById(promptId?: string, customText?: string): AudioPr
 }
 
 /**
+ * Whether a listener's answers say anything about this clip.
+ *
+ * Every benchmark prompt mixes questions whose answer is yes with ones whose
+ * answer is no, so a listener that gives them all the same answer has not told
+ * this clip from any other. Both Gemma 4 models Ollama offers did exactly that
+ * with real music and rain, answering No throughout: each clip scored one in
+ * three, for the questions to which No happens to be right. That is a listener
+ * that cannot tell, and the clip is unjudged rather than scored.
+ */
+export function listenerTellsApart(verdicts: (boolean | null)[]): boolean {
+  const answers = verdicts.filter((verdict): verdict is boolean => verdict !== null);
+  return answers.length < 2 || answers.some((answer) => answer !== answers[0]);
+}
+
+/**
  * Seconds of compute per second of audio.
  *
  * At one or less the model renders as fast as the clip plays, which is a tool
@@ -100,6 +115,8 @@ export type AudioRunFacts = {
   seconds: number;
   /** How much of the prompt the listener confirmed, or null when nothing could judge it. */
   adherence: number | null;
+  /** Why a clip that was listened to is still unjudged, when it is. */
+  unjudgedReason?: string;
 };
 
 /**
@@ -137,7 +154,7 @@ export function scoreAudioGeneration(facts: AudioRunFacts): {
       passed: judged && (facts.adherence ?? 0) >= 0.8,
       detail: judged
         ? `A listening model confirmed ${Math.round((facts.adherence ?? 0) * 100)}% of the prompt in the clip.`
-        : 'Nothing that can hear checked the clip, so this run is unjudged.',
+        : facts.unjudgedReason ?? 'Nothing that can hear checked the clip, so this run is unjudged.',
     },
     {
       label: 'Usable speed',

@@ -7,6 +7,7 @@ import {
   COMFORTABLE_AUDIO_COST,
   PAINFUL_AUDIO_COST,
   audioPromptById,
+  listenerTellsApart,
   scoreAudioGeneration,
   scoreAudioSpeed,
 } from '../src/lib/audioGenScoring.ts';
@@ -52,6 +53,19 @@ test('every benchmark prompt catches a listener that says yes to everything', ()
     assert.ok(yes > 0 && yes < prompt.propositions.length, `${prompt.id} needs a question whose answer is no`);
     assert.ok(yes / prompt.propositions.length < JUDGE_PASS, `${prompt.id}: saying yes to everything would pass`);
   }
+});
+
+test('a listener that answers every question alike has not told one clip from another', () => {
+  assert.equal(listenerTellsApart([false, false, false]), false, 'No to everything');
+  assert.equal(listenerTellsApart([true, true, true]), false, 'Yes to everything');
+  assert.equal(listenerTellsApart([null, false, false]), false, 'the answers it gave were all alike');
+  assert.equal(listenerTellsApart([true, false, false]), true);
+  // Too few answers to say; the adherence rule already leaves that unjudged.
+  assert.equal(listenerTellsApart([null, null, false]), true);
+  const reason = 'The listener gave every question the same answer, so it could not tell what is in the clip. Unjudged.';
+  const scored = scoreAudioGeneration({ produced: true, elapsedMs: 9000, seconds: 30, adherence: null, unjudgedReason: reason });
+  assert.equal(scored.judged, false);
+  assert.equal(scored.checks.find((check) => check.label === 'Matches the prompt').detail, reason);
 });
 
 test('a tempo, where a prompt names one, is one ACE-Step 1.5 accepts', () => {

@@ -155,7 +155,7 @@ export function scoreAdherence(
 export async function askPropositions(
   ask: (question: string) => Promise<string>,
   prompt: ImagePrompt,
-): Promise<{ adherence: number | null; answered: number; correct: number }> {
+): Promise<{ adherence: number | null; answered: number; correct: number; verdicts: (boolean | null)[] }> {
   const verdicts: (boolean | null)[] = [];
   for (const proposition of prompt.propositions) {
     try {
@@ -164,7 +164,7 @@ export async function askPropositions(
       verdicts.push(null);
     }
   }
-  return scoreAdherence(prompt.propositions, verdicts);
+  return { ...scoreAdherence(prompt.propositions, verdicts), verdicts };
 }
 
 export type ImageRunFacts = {

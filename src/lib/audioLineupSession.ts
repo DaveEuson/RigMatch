@@ -101,9 +101,12 @@ export type StartAudioLineupOptions = {
 };
 
 /** Why a clip that was made carries no accuracy. */
-function unjudgedReason(audioPrompt: AudioPrompt, listener: string | undefined): string {
+function unjudgedReason(audioPrompt: AudioPrompt, listener: string | undefined, result: AudioRunResult): string {
   if (audioPrompt.propositions.length === 0) return 'Your own prompt has nothing to check it against, so it is unjudged.';
   if (!listener) return 'Nothing installed can listen to it, so it is unjudged.';
+  if (result.unjudgedReason) {
+    return `${listener} gave every question the same answer, so it could not tell what is in the clip. Unjudged.`;
+  }
   return `${listener} could not answer enough questions about it, so it is unjudged.`;
 }
 
@@ -122,7 +125,7 @@ function soloVerdict(
   if (typeof result.adherence === 'number') {
     return `${made}, and ${listener} heard ${Math.round(result.adherence * 100)}% of the prompt in it.`;
   }
-  return stopped ? `${made}. Stopped before the clip was checked.` : `${made}. ${unjudgedReason(audioPrompt, listener)}`;
+  return stopped ? `${made}. Stopped before the clip was checked.` : `${made}. ${unjudgedReason(audioPrompt, listener, result)}`;
 }
 
 export async function startAudioLineup(options: StartAudioLineupOptions): Promise<void> {
