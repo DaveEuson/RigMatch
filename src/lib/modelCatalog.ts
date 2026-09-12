@@ -838,6 +838,7 @@ function describeCapabilitiesForSearch(row: ModelRow): string[] {
   if (row.runtime === 'comfyui') words.push('comfyui generation');
   if (row.generationKind === 'image') words.push('image generation makes images');
   if (row.generationKind === 'video') words.push('video generation makes video');
+  if (row.generationKind === 'audio') words.push('audio generation makes audio music sound');
   if (row.generationKind === 'text-encoder') words.push('text encoder');
   if (row.publisher) words.push(row.publisher);
   return words;
@@ -1076,8 +1077,8 @@ export function getSelectedContestantBlurb(
   if (row.generationKind) {
     const makes = row.generationKind === 'text-encoder'
       ? 'reads prompts for image and video models'
-      : `makes ${row.generationKind}s`;
-    return `${row.displayName} ${makes} on ComfyUI. It does not chat, so it skips Speed Dating — run it from the Lab instead.`;
+      : row.generationKind === 'audio' ? 'makes audio' : `makes ${row.generationKind}s`;
+    return `${row.displayName} ${makes} on ComfyUI. It does not chat, so it skips Speed Dating — test it from its own row instead.`;
   }
 
   if (score) {
@@ -1476,6 +1477,7 @@ export function getModelGoodForTags(row: ModelRow): string[] {
   if (row.generationKind) {
     return row.generationKind === 'image' ? ['makes images']
       : row.generationKind === 'video' ? ['makes video']
+      : row.generationKind === 'audio' ? ['makes audio']
       : ['reads prompts for image and video models'];
   }
   const profile = getModelProfile(row.displayName);
@@ -1580,6 +1582,7 @@ export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolea
   if (row.generationKind) {
     if (task === 'imagegen') return row.generationKind === 'image';
     if (task === 'videogen') return row.generationKind === 'video';
+    if (task === 'audiogen') return row.generationKind === 'audio';
     // A checkpoint is not a chat model; it matches none of the text tasks.
     return false;
   }
@@ -2229,4 +2232,4 @@ export const CAPABILITY_ONLY_FILTERS = ['hears', 'videoread'];
  * Download buttons are, rather than being something to discover in Settings
  * after clicking one.
  */
-export const GENERATION_FILTERS = ['imagegen', 'videogen'];
+export const GENERATION_FILTERS = ['imagegen', 'videogen', 'audiogen'];

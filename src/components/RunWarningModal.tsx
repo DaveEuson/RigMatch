@@ -10,7 +10,7 @@ import { BalanceFader } from './BalanceFader';
 import { getCudaDetail, getCudaSummary, isCloudModel, isEmbeddingModel, isLikelyImageGenerationModel, isVisionModel } from '../lib/modelCatalog';
 import { formatDuration } from '../lib/runEstimates';
 import { useDialog } from '../lib/useDialog';
-import { isVideoCheckpoint } from '../lib/videoGen';
+import { isPictureCheckpoint } from '../lib/checkpointKinds';
 import type { GpuContention, PendingRunMode, SkillTestSelection, SystemProfile } from '../types';
 import { Activity, AlertTriangle, Download, ImagePlus, ShieldCheck, Sparkles, X, Zap } from 'lucide-react';
 import { useRef, useState } from 'react';
@@ -155,7 +155,7 @@ export function RunWarningModal({
   const appBuilderCapable = lineupModels.some((m) => !isLikelyImageGenerationModel(m) && !isEmbeddingModel(m));
   // Not from the lineup: generation runs on ComfyUI checkpoints, so whether it
   // is offered depends on ComfyUI, not on which models were picked.
-  const hasImageModel = comfyCheckpoints.some((name) => !isVideoCheckpoint(name));
+  const hasImageModel = comfyCheckpoints.some(isPictureCheckpoint);
   // Counted by the lineup, which knows every file each model needs and the
   // graph it runs: a video checkpoint and any encoder in the folder was how an
   // LTX-2 file reached the LTX-Video 0.9 graph.

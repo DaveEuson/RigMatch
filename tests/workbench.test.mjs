@@ -30,8 +30,7 @@ test('a first-run goal opens its channel', () => {
   assert.equal(workbenchForGoal('animate-image'), 'video');
   assert.equal(workbenchForGoal('transcribe-file'), 'listening');
   assert.equal(workbenchForGoal('describe-image'), 'reading');
-  // Nothing grades made audio yet, so it has no channel of its own to open.
-  assert.equal(workbenchForGoal('make-audio'), 'all');
+  assert.equal(workbenchForGoal('make-audio'), 'audio');
   assert.equal(workbenchForGoal(undefined), 'all');
 });
 
@@ -51,14 +50,17 @@ test('every channel filter is a Models filter people can see and clear', () => {
 });
 
 test('each channel has its own fader, and All ranks the way chat does', () => {
-  assert.deepEqual([...CHANNEL_IDS].sort(), ['chat', 'code', 'images', 'listening', 'reading', 'video']);
+  assert.deepEqual([...CHANNEL_IDS].sort(), ['audio', 'chat', 'code', 'images', 'listening', 'reading', 'video']);
   assert.equal(balanceChannel('all'), 'chat');
   assert.equal(balanceChannel('video'), 'video');
 });
 
 test('only the channels Speed Dating cannot test compare their own results', () => {
   // Speed Dating asks questions; these make something instead of answering.
-  assert.deepEqual(WORKBENCHES.map((workbench) => workbench.id).filter(isComparedChannel), ['images', 'video', 'listening']);
+  assert.deepEqual(
+    WORKBENCHES.map((workbench) => workbench.id).filter(isComparedChannel),
+    ['images', 'video', 'listening', 'audio'],
+  );
 });
 
 test('a channel with no Lab card says where its test runs instead', () => {
@@ -74,9 +76,11 @@ test('a media channel says which way the media goes', () => {
   assert.equal(label('reading'), 'Reads images');
   assert.equal(label('video'), 'Makes video');
   assert.equal(label('listening'), 'Listens to audio');
-  // Making and reading images sit side by side on the switch.
+  assert.equal(label('audio'), 'Makes audio');
+  // Making and reading images sit side by side on the switch, and so do the two audio channels.
   const order = WORKBENCHES.map((workbench) => workbench.id);
   assert.equal(order.indexOf('reading'), order.indexOf('images') + 1);
+  assert.equal(order.indexOf('audio'), order.indexOf('listening') + 1);
 });
 
 test('every channel finishes a sentence in lower case', () => {

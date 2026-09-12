@@ -105,6 +105,12 @@ Status as of 0.9:
   - A Jetson runs none of the lineup. Video there needs low-memory GGUF builds, which need a custom node RigMatch does not install.
   - LTX-2.5 is gated: it needs the user's own Hugging Face token, and its terms accepted on its Hugging Face page.
   - ComfyUI only looks for new model files when it starts, so a model downloaded while it runs needs a ComfyUI restart before it can race.
+- **Audio Generation** (new in 0.9, extra-beta): the Makes audio channel runs ACE-Step 1.5 Turbo, ACE-Step v1 3.5B and Stable Audio Open 1.0 on the user's own ComfyUI, using only nodes ComfyUI ships. Every model gets the same prompt, seed and 30-second length and starts cold, and once every model has made its clip, a local model that can hear checks each one against the prompt's yes/no questions. A model can be tested from its own row on the Models screen, or several at once on the Comparison screen. Known limits:
+  - Only music and sound effects are tested. ACE-Step is asked for instrumentals, since the prompts have no words to sing, and no core ComfyUI node makes speech.
+  - The listener answers three questions about what it hears. Sound quality — clarity, mixing, artefacts — is not scored.
+  - With nothing installed that can hear, clips are made and timed but not judged, and the fader holds at speed.
+  - How much VRAM each model needs is a rule of thumb from its file size until one has been run on this machine.
+  - Stable Audio Open is under Stability AI's community licence: commercial use needs registering, and a business earning over US$1 million a year needs an enterprise licence.
 
 Safeguards required before expanding these tests:
 

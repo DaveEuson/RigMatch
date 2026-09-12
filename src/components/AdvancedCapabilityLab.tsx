@@ -21,7 +21,7 @@ import { comfyBridgeAvailable, describeComfyBusy, getComfyStatus } from "../lib/
 import { readComfySettings } from "../lib/comfySettings";
 import { onComfyStarted } from "../lib/comfyStarter";
 import { canHearAudio } from "../lib/modelCatalog";
-import { isVideoCheckpoint } from "../lib/videoGen";
+import { isPictureCheckpoint } from "../lib/checkpointKinds";
 import { useVideoLineupSession } from "../hooks/useVideoLineupSession";
 import { ListeningLab } from "./ListeningLab";
 import { PromptPicker } from "./PromptPicker";
@@ -73,7 +73,7 @@ function readinessFrom(available: boolean, status: ComfyStatus | null): ImageRea
   // an LTX checkpoint is not ready for *images* — judging readiness on the
   // raw list rendered the ready branch with an empty picker and a dead Run
   // button, explaining nothing.
-  const usable = status.checkpoints.filter((name) => !isVideoCheckpoint(name));
+  const usable = status.checkpoints.filter(isPictureCheckpoint);
   if (!usable.length) return { kind: 'no-checkpoints' };
   return { kind: 'ready', checkpoints: usable };
 }

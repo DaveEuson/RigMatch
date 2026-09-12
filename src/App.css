@@ -12631,6 +12631,25 @@ tbody tr.computer-row.selected {
   aspect-ratio: 16 / 10;
 }
 
+/* A clip of audio has nothing to look at, so the player stands where the picture would. */
+.generation-test.audio .generation-test-empty {
+  aspect-ratio: auto;
+  min-height: 48px;
+}
+
+/* Every theme is dark, so the browser's own controls are drawn dark to match. */
+.audio-clip-player {
+  width: 100%;
+  height: 40px;
+  color-scheme: dark;
+}
+
+.audio-clip-load {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+
 .generation-test-empty {
   display: grid;
   place-items: center;
@@ -20047,7 +20066,7 @@ a.whats-next-support:hover {
 
 .channel-switch {
   grid-column: 1 / -1;
-  /* As wide as its seven answers, not as wide as the tracks it spans: the
+  /* As wide as its answers, not as wide as the tracks it spans: the
      deck's five tracks are wider than a 1280px window, which an empty last
      track hid until something spanned it. */
   justify-self: start;
@@ -20542,7 +20561,7 @@ a.whats-next-support:hover {
 
 @media (min-width: 1241px) {
   /* Five tracks that fit a 1280px window, the last one wide enough for the
-     switch to wrap into three short lines. */
+     switch to wrap into four short lines. */
   .top-deck.collapsed {
     grid-template-columns:
       minmax(210px, 0.85fr)
@@ -20560,11 +20579,20 @@ a.whats-next-support:hover {
     justify-self: stretch;
     width: auto;
     margin-right: 20px;
+    gap: 3px 4px;
   }
 
+  /* Eight answers take four lines in this track, one more than seven did. The
+     question steps aside here and the answers sit a little closer, which is the
+     height three lines and the question took before: at 1280x820 the extra line
+     pushed Settings off the end of the side menu. The group keeps its name for
+     screen readers, since aria-labelledby reads a hidden label. */
   .top-deck.collapsed > .channel-switch > span {
-    flex-basis: 100%;
-    padding: 0 4px 2px;
+    display: none;
+  }
+
+  .top-deck.collapsed > .channel-switch button {
+    min-height: 24px;
   }
 }
 
@@ -20733,6 +20761,7 @@ a.whats-next-support:hover {
 }
 
 .comparison-run-progress li.drawing,
+.comparison-run-progress li.making,
 .comparison-run-progress li.checking {
   background: rgba(var(--gold-rgb), 0.08);
   color: var(--text-strong);
@@ -20799,7 +20828,8 @@ a.whats-next-support:hover {
 }
 
 .lab-comparison-cards.listening,
-.lab-comparison-cards.reading {
+.lab-comparison-cards.reading,
+.lab-comparison-cards.audio {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 

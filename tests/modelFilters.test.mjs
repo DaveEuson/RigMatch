@@ -58,6 +58,21 @@ test('Makes audio finds speakers, not listeners', () => {
   assert.ok(!isLikelyAudioGenerationModel('llama3.2:3b'));
 });
 
+test('Makes audio lists the audio models RigMatch can run, by what they say they make', () => {
+  const ace = {
+    displayName: 'ACE-Step 1.5 Turbo',
+    name: 'ACE-Step 1.5 Turbo',
+    runtime: 'comfyui',
+    generationKind: 'audio',
+    generationId: 'ace-step-1.5-turbo',
+    installed: false,
+  };
+  assert.ok(modelMatchesTask(ace, 'audiogen'));
+  assert.ok(!modelMatchesTask(ace, 'imagegen'));
+  assert.ok(!modelMatchesTask(ace, 'hears'), 'making audio is not hearing it');
+  assert.ok(!modelMatchesTask({ ...ace, generationKind: 'image' }, 'audiogen'));
+});
+
 test('the word-boundary alternatives really are word boundaries', () => {
   // These specific branches shipped once as literal backspace characters —
   // the escaping collapsed in tooling — and every other test still passed,

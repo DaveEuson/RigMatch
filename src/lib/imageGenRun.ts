@@ -23,13 +23,7 @@ import {
 } from './comfyui.ts';
 import { getErrorMessage } from './format.ts';
 import { samplingProfileFor } from './samplingProfile.ts';
-import {
-  buildJudgePrompt,
-  readJudgeVerdict,
-  scoreAdherence,
-  scoreImageGeneration,
-  type ImagePrompt,
-} from './imageGenScoring.ts';
+import { askPropositions, scoreImageGeneration, type ImagePrompt } from './imageGenScoring.ts';
 
 /** How often to ask whether the image is ready. */
 const POLL_INTERVAL_MS = 750;
@@ -231,22 +225,7 @@ async function waitForImages({
   }
 }
 
-/**
- * Ask the judge every proposition and total the verdicts.
- *
- * A judge that throws on one question does not sink the run — that answer
- * becomes unreadable, and if enough of them are unreadable the adherence score
- * reports as unavailable rather than as a low number.
- */
-async function judgeAdherence(judge: JudgeFn, imageDataUrl: string, imagePrompt: ImagePrompt) {
-  const verdicts: (boolean | null)[] = [];
-  for (const proposition of imagePrompt.propositions) {
-    try {
-      const answer = await judge(imageDataUrl, buildJudgePrompt(proposition.question));
-      verdicts.push(readJudgeVerdict(answer));
-    } catch {
-      verdicts.push(null);
-    }
-  }
-  return scoreAdherence(imagePrompt.propositions, verdicts);
+/** Ask the judge every proposition about the picture; see askPropositions. */
+function judgeAdherence(judge: JudgeFn, imageDataUrl: string, imagePrompt: ImagePrompt) {
+  return askPropositions((question) => judge(imageDataUrl, question), imagePrompt);
 }

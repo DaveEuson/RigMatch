@@ -234,7 +234,9 @@ import {
 } from './lib/labChallenges';
 import { IMAGE_BENCHMARK_PROMPTS } from './lib/imageGenScoring';
 import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
-import { batchSeed, isVideoCheckpoint } from './lib/videoGen';
+import { listenerCandidates } from './lib/audioGenChallenge';
+import { isPictureCheckpoint } from './lib/checkpointKinds';
+import { batchSeed } from './lib/videoGen';
 import { toVideoLabResult } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
 import { readHuggingFaceToken } from './lib/huggingFaceToken';
@@ -627,14 +629,14 @@ function App() {
   const { refresh: refreshChatGpu } = useGpuContention();
 
   const chatImageGeneration = useMemo(() => {
-    // Video checkpoints cannot draw a still.
+    // Video and audio checkpoints cannot draw a still.
     //
     // The first checkpoint ComfyUI reported on this machine was ltx-video-2b,
     // and handing that to the image graph fails with "CLIPTextEncode: clip
     // input is invalid: None" — it carries no text encoder. The offer appeared,
     // it was pressed, and it could never have worked: exactly the empty promise
     // this feature exists to prevent, made by the feature itself.
-    const drawable = comfyCheckpoints.filter((name) => !isVideoCheckpoint(name));
+    const drawable = comfyCheckpoints.filter(isPictureCheckpoint);
 
     return {
       // ComfyUI answering is not the same as ComfyUI being able to draw.
@@ -1249,10 +1251,11 @@ function App() {
     setWorkbenchPick(id);
     writeLocal(WORKBENCH_STORAGE_KEY, id);
   }, []);
-  // Images and Video run on ComfyUI, so choosing either is the moment to start
-  // it: loading by the time anything is tested, and nobody leaves RigMatch to
-  // find a .bat file. Once a session, and only while Settings allows it.
-  const wantsComfy = workbenchInfo.id === 'images' || workbenchInfo.id === 'video';
+  // Images, Video and Audio run on ComfyUI, so choosing any of them is the
+  // moment to start it: loading by the time anything is tested, and nobody
+  // leaves RigMatch to find a .bat file. Once a session, and only while
+  // Settings allows it.
+  const wantsComfy = workbenchInfo.id === 'images' || workbenchInfo.id === 'video' || workbenchInfo.id === 'audio';
   useEffect(() => {
     if (wantsComfy) void ensureComfyRunning('auto');
   }, [wantsComfy]);
@@ -1261,12 +1264,21 @@ function App() {
 
   const labResults = useLabResults();
   const lineupSession = useVideoLineupSession();
-  // Images and video are judged by a model that can see. With none installed,
-  // accuracy cannot be measured there, so those faders hold at speed.
+  // Images and video are judged by a model that can see, made audio by one that
+  // can hear. With none installed, accuracy cannot be measured there, so those
+  // faders hold at speed.
   const pictureJudged = useMemo(() => judgeCandidates(ollama.models).length > 0, [ollama.models]);
-  const balanceLock = (channel: ChannelId) => ((channel === 'images' || channel === 'video') && !pictureJudged
-    ? 'No model that can check pictures is available right now, so only speed can be measured. Install one, or start Ollama, and accuracy counts again.'
-    : null);
+  /** The model that listens to made audio, from what is installed. */
+  const audioListener = useMemo(() => listenerCandidates(ollama.models)[0] ?? '', [ollama.models]);
+  const balanceLock = (channel: ChannelId) => {
+    if ((channel === 'images' || channel === 'video') && !pictureJudged) {
+      return 'No model that can check pictures is available right now, so only speed can be measured. Install one, or start Ollama, and accuracy counts again.';
+    }
+    if (channel === 'audio' && !audioListener) {
+      return 'No model that can hear is available right now, so only speed can be measured. Install one that listens to audio, or start Ollama, and accuracy counts again.';
+    }
+    return null;
+  };
   /** The vision model that checks pictures and clips, from what is installed. */
   const pictureJudge = useMemo(() => judgeCandidates(ollama.models)[0] ?? '', [ollama.models]);
   /** Something else holds the graphics card, so a render timed now would measure the contention. */
@@ -1280,9 +1292,10 @@ function App() {
       case 'listening': return labWinner(labResults, 'listening', balances.listening);
       case 'reading': return labWinner(labResults, 'reading', balances.reading);
       case 'video': return videoWinner(lineupSession.record, judged(balances.video));
+      case 'audio': return labWinner(labResults, 'audio', audioListener ? balances.audio : 0);
       default: return null;
     }
-  }, [workbenchInfo.id, savedModelScores, labResults, lineupSession.record, balances, pictureJudged]);
+  }, [workbenchInfo.id, savedModelScores, labResults, lineupSession.record, balances, pictureJudged, audioListener]);
   /** The side menu's Models count follows the channel, as the Models screen does. */
   const channelModelCount = useMemo(() => {
     const filter = workbenchInfo.taskFilter;
@@ -1303,6 +1316,7 @@ function App() {
       case 'video': return { comparison: tally(lineupSession.record?.entries.length ?? 0, 'clip'), scorecards: kept(count('video-generation')) };
       case 'listening': return { comparison: tally(count('listening'), 'test'), scorecards: kept(count('listening')) };
       case 'reading': return { comparison: undefined, scorecards: kept(count('image-recognition')) };
+      case 'audio': return { comparison: tally(count('audio-generation'), 'clip'), scorecards: kept(count('audio-generation')) };
       case 'code': return { comparison: undefined, scorecards: kept(rankCoding(Object.values(modelScores), balances.code).ranked.length) };
       default: return { comparison: undefined, scorecards: undefined };
     }
@@ -2834,9 +2848,9 @@ function App() {
       }
       const comfy = busy ? { checkpoints: [], textEncoders: [] } : await getComfyStatus();
       if (selection.image) {
-        // A video checkpoint in a still-image graph fails deep in the sampler
-        // with a shape error, so it is never offered one.
-        for (const name of comfy.checkpoints.filter((n) => !isVideoCheckpoint(n))) {
+        // A video or audio checkpoint in a still-image graph fails deep in the
+        // sampler with a shape error, so it is never offered one.
+        for (const name of comfy.checkpoints.filter(isPictureCheckpoint)) {
           jobs.push({ model: name, kind: 'image' });
         }
       }
@@ -3753,11 +3767,12 @@ function App() {
               comfyReachable,
               comfyFolders,
               judgeModel: pictureJudge,
+              listenerModel: audioListener,
               ollamaBaseUrl: ollama.baseUrl,
               machine: videoMachine,
               balances,
               onBalanceChange: setBalance,
-              lockedReason: balanceLock('images'),
+              lockedReason: balanceLock,
               gpuBusy,
               onCheckComfy: () => { void refreshComfyStatus(); },
               // From the All channel too: comparing pictures is the Images
@@ -3871,6 +3886,7 @@ function App() {
               comfyReachable,
               comfyFolders,
               judgeModel: pictureJudge,
+              listenerModel: audioListener,
               ollamaBaseUrl: ollama.baseUrl,
               machine: videoMachine,
               gpuBusy,

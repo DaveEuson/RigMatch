@@ -157,12 +157,19 @@ test('a model whose licences carry no such condition adds nothing to read', () =
   assert.deepEqual(licenceConditionsForRows([row('wan-2.1-1.3b'), row('mochi-1'), { displayName: 'gemma3:4b' }]), []);
 });
 
-test('every image and video model links only to hosts the app may open', () => {
+test('Stable Audio Open carries Stability AI’s community licence, and ACE-Step adds nothing to read', () => {
+  const [stable] = licenceConditionsForRows([row('stable-audio-open-1.0', 'Stable Audio Open 1.0')]);
+  assert.match(stable.condition, /Stability AI/);
+  assert.deepEqual(stable.models, ['Stable Audio Open 1.0']);
+  assert.deepEqual(licenceConditionsForRows([row('ace-step-1.5-turbo'), row('ace-step-v1-3.5b')]), []);
+});
+
+test('every image, video and audio model links only to hosts the app may open', () => {
   const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
   const allowlist = main.match(/ALLOWED_EXTERNAL_HOSTS = new Set\(\[([\s\S]*?)\]\)/)?.[1] ?? '';
   const allowed = [...allowlist.matchAll(/'([^']+)'/g)].map((match) => match[1]);
   const rows = GENERATION_MODELS
-    .filter((model) => model.kind === 'image' || model.kind === 'video')
+    .filter((model) => model.kind === 'image' || model.kind === 'video' || model.kind === 'audio')
     .map((model) => ({ displayName: model.label, runtime: 'comfyui', generationId: model.id }));
   for (const link of licenseLinksForRows(rows)) {
     const host = new URL(link.href).hostname;

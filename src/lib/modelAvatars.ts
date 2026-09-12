@@ -63,7 +63,7 @@ export function getModelAvatarSrc(model: string): string {
  * Both light up the moment art with those names is added; see
  * docs/avatar-art-direction.md.
  */
-export function getGenerationAvatarSrc(kind: 'image' | 'video' | 'text-encoder'): string {
+export function getGenerationAvatarSrc(kind: 'image' | 'video' | 'audio' | 'text-encoder'): string {
   if (kind === 'text-encoder') return modelAvatarGeneric;
   return modelAvatarImageGen;
 }

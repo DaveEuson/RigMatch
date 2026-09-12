@@ -131,7 +131,7 @@ export type CatalogModel = {
       family and would otherwise read "Unknown model family". */
   publisher?: string;
   /** What this produces, for the capability filters. */
-  generationKind?: 'image' | 'video' | 'text-encoder';
+  generationKind?: 'image' | 'video' | 'audio' | 'text-encoder';
 };
 
 export type CatalogResponse = {

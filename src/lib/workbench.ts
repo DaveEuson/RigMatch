@@ -14,13 +14,14 @@
  *
  * A media channel says which way the media goes. "Images" alone could be a
  * model that draws them or one that reads them, and those are different models
- * with different tests, so the names say "Makes images" and "Reads images".
+ * with different tests, so the names say "Makes images" and "Reads images",
+ * and "Listens to audio" and "Makes audio".
  */
 
 import type { GoalId } from './goals.ts';
 import type { ModelTaskFilterId } from './modelCatalog.ts';
 
-export type WorkbenchId = 'all' | 'chat' | 'code' | 'images' | 'video' | 'listening' | 'reading';
+export type WorkbenchId = 'all' | 'chat' | 'code' | 'images' | 'video' | 'listening' | 'reading' | 'audio';
 /** A channel with a fader of its own. All ranks the way chat does. */
 export type ChannelId = Exclude<WorkbenchId, 'all'>;
 export type LabCardId = 'app-builder' | 'image' | 'listening' | 'video';
@@ -57,8 +58,7 @@ export const WORKBENCHES: Workbench[] = [
     activity: 'every kind of test',
     matchLabel: 'Best Match',
     shortLabel: 'Best Match',
-    // Making audio has no channel of its own until something can grade it.
-    goals: ['make-audio'],
+    goals: [],
     taskFilter: null,
     labCards: ['app-builder', 'image', 'listening', 'video'],
     accuracyMeans: 'how good the answers are',
@@ -152,6 +152,21 @@ export const WORKBENCHES: Workbench[] = [
     emptyHint: 'Run the Listening test to crown one.',
     startLabel: 'Open the Listening test',
   },
+  {
+    id: 'audio',
+    label: 'Makes audio',
+    activity: 'making audio',
+    matchLabel: 'Best for making audio',
+    shortLabel: 'Best audio maker',
+    goals: ['make-audio'],
+    taskFilter: 'audiogen',
+    labCards: [],
+    accuracyMeans: 'how much of the prompt a model that can hear finds in the clip',
+    home: 'speedDate',
+    emptyHint: 'Test an audio model to crown one.',
+    startLabel: 'Open Comparison',
+    labNote: 'Making audio is tested from a model’s own Test on the Models screen, or for several at once on the Comparison screen. Music and sound effects are tested; nothing here makes speech yet.',
+  },
 ];
 
 export const WORKBENCH_IDS = WORKBENCHES.map((workbench) => workbench.id);
@@ -186,13 +201,13 @@ export function balanceChannel(id: WorkbenchId): ChannelId {
 /**
  * The channels Speed Dating cannot test.
  *
- * Speed Dating asks questions, and an image, video or transcription model does
- * not answer questions: it makes something. On these channels the Comparison
- * screen puts what each model made side by side instead, and the Speed Dating
- * lineup strip stays out of the way.
+ * Speed Dating asks questions, and an image, video, audio or transcription
+ * model does not answer questions: it makes something. On these channels the
+ * Comparison screen puts what each model made side by side instead, and the
+ * Speed Dating lineup strip stays out of the way.
  */
-export type ComparedChannel = 'images' | 'video' | 'listening';
+export type ComparedChannel = 'images' | 'video' | 'listening' | 'audio';
 
 export function isComparedChannel(id: WorkbenchId): id is ComparedChannel {
-  return id === 'images' || id === 'video' || id === 'listening';
+  return id === 'images' || id === 'video' || id === 'listening' || id === 'audio';
 }

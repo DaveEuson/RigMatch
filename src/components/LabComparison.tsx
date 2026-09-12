@@ -6,8 +6,9 @@ import { VISION_TEST_IMAGES } from '../lib/labChallenges';
 import type { AdvancedLabResult } from '../lib/labResults';
 import { formatHistoryTime } from '../lib/modelCatalog';
 import { formatVideoDuration } from '../lib/videoFit';
+import { AudioClipPlayer } from './AudioClipPlayer';
 
-type Channel = 'images' | 'listening' | 'reading';
+type Channel = 'images' | 'listening' | 'reading' | 'audio';
 
 /** Enough to compare at a glance; everything older is in Scorecards. */
 const GROUPS_SHOWN = 3;
@@ -16,10 +17,11 @@ const NOUN: Record<Channel, string> = {
   images: 'checkpoint',
   listening: 'model',
   reading: 'model',
+  audio: 'model',
 };
 
 function heading(channel: Channel, key: string): string {
-  if (channel === 'images') return `“${key}”`;
+  if (channel === 'images' || channel === 'audio') return `“${key}”`;
   if (channel === 'listening') return 'Each model’s latest listening test';
   const known = VISION_TEST_IMAGES.find((image) => image.src === key);
   if (known) return known.label;
@@ -27,7 +29,7 @@ function heading(channel: Channel, key: string): string {
 }
 
 /**
- * Lab results side by side: the pictures, transcripts or descriptions
+ * Lab results side by side: the pictures, clips, transcripts or descriptions
  * themselves, ranked at the fader.
  *
  * A ranking says which won; this shows why, which is what someone deciding
@@ -57,6 +59,9 @@ export function LabComparison({
       {groups.map((group) => {
         const ranked = rankLabList(group.results, channel, balance);
         const counted = accuracyCounted(ranked);
+        // Every one failed its run or its check, so nothing ranks at all. "Nothing
+        // was judged" would be false of results that were judged and fell short.
+        const noneStanding = ranked.every((entry) => entry.standing === 'failed');
         const label = counted ? balanceLabel(balance) : 'speed only';
         const places = ranked.filter((entry) => entry.standing === 'ranked').map((entry) => entry.item);
         const count = group.results.length;
@@ -70,7 +75,11 @@ export function LabComparison({
                 <strong>{heading(channel, group.key)}</strong>
                 <span>
                   {count} {NOUN[channel]}{count === 1 ? '' : 's'} · newest {formatHistoryTime(group.latest)} ·{' '}
-                  {counted ? `ranked at ${label}` : 'ranked on speed alone: nothing was judged'}
+                  {counted
+                    ? `ranked at ${label}`
+                    : noneStanding
+                      ? (count === 1 ? 'it did not pass' : 'none of them passed')
+                      : 'ranked on speed alone: nothing was judged'}
                 </span>
                 {channel === 'listening' && (
                   <em>RigMatch does not keep which audio each test heard, so compare runs made on the same clip.</em>
@@ -98,6 +107,9 @@ export function LabComparison({
                     ) : (
                       <div className="lab-comparison-missing">No picture came back</div>
                     ))}
+                    {channel === 'audio' && result.audioRef && (
+                      <AudioClipPlayer audioRef={result.audioRef} label={`Play the clip ${result.model} made`} />
+                    )}
                     <div className="lab-comparison-card-head">
                       <b>{entry.standing === 'ranked' ? place : entry.standing === 'failed' ? '—' : '·'}</b>
                       <strong title={result.model}>{result.model}</strong>
@@ -109,7 +121,7 @@ export function LabComparison({
                       {time} · {measured}
                       {entry.standing === 'failed' && !result.error ? ', below the pass line, so it cannot win' : ''}
                     </em>
-                    {channel !== 'images' && (
+                    {channel !== 'images' && channel !== 'audio' && (
                       <p className="lab-comparison-text">{result.response || '(nothing came back)'}</p>
                     )}
                   </li>

@@ -33,6 +33,7 @@ const LAB_FOR_GOAL: Partial<Record<GoalId, string>> = {
   'describe-image': 'Image Recognition Lab',
   'make-images': 'Image Lab',
   'make-video': 'Video Lab',
+  'make-audio': 'Audio test',
 };
 
 export type GoalMatch = {

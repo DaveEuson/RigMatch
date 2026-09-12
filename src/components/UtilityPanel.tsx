@@ -54,6 +54,7 @@ const LAB_NOUN: Record<LabChannel, string> = {
   video: 'video test',
   listening: 'listening test',
   reading: 'picture reading',
+  audio: 'audio test',
 };
 
 export function UtilityPanel({
@@ -177,7 +178,8 @@ export function UtilityPanel({
   // Scorecards follows the channel. Chat and All keep the Match Score board,
   // Code ranks the coding answers, and each Lab channel lists its own results.
   const channel = workbench.id;
-  const labChannel: LabChannel | null = channel === 'images' || channel === 'video' || channel === 'listening' || channel === 'reading'
+  const labChannel: LabChannel | null = channel === 'images' || channel === 'video' || channel === 'listening'
+    || channel === 'reading' || channel === 'audio'
     ? channel
     : null;
   const channelRankAt = channelBalanceLock ? 0 : channelBalance;

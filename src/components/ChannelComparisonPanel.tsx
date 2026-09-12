@@ -28,16 +28,22 @@ const COPY: Record<ComparedChannel, { title: string; subtitle: string; empty: st
     empty: 'Nothing to compare yet',
     emptyBody: 'Run the Listening test on two or more models that can hear, and their transcripts line up here.',
   },
+  audio: {
+    title: 'Sounds side by side',
+    subtitle: 'Every audio model given the same prompt, ranked by what matters to you.',
+    empty: 'Nothing to compare yet',
+    emptyBody: 'Tick two or more audio models above and make the same prompt with each, and their clips line up here to play.',
+  },
 };
 
 /**
  * The Comparison screen for a channel Speed Dating cannot test.
  *
- * Speed Dating asks questions, and an image, video or transcription model does
- * not answer questions: it makes something. So on those channels Comparison
- * puts what each model made side by side, and the fader ranks them. Pictures
- * and video can be run from here too, several models on one prompt; listening
- * is still tested in the Lab, and its empty state says so.
+ * Speed Dating asks questions, and an image, video, audio or transcription
+ * model does not answer questions: it makes something. So on those channels
+ * Comparison puts what each model made side by side, and the fader ranks them.
+ * Pictures, video and audio can be run from here too, several models on one
+ * prompt; listening is still tested in the Lab, and its empty state says so.
  */
 export function ChannelComparisonPanel({
   workbench,
@@ -96,7 +102,7 @@ export function ChannelComparisonPanel({
         />
 
         {run && channel !== 'listening' && (
-          // Keyed so switching between Images and Video starts from a clean pick.
+          // Keyed so switching channels starts from a clean pick.
           <ComparisonRunCard key={channel} channel={channel} context={run} balance={rankAt} />
         )}
 

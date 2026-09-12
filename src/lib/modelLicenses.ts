@@ -89,6 +89,8 @@ export function huggingFaceRepoPage(url: string): string | null {
 }
 
 const HUNYUAN_TERRITORY = 'Tencent’s Hunyuan licence does not cover use in the European Union, the United Kingdom or South Korea.';
+const STABILITY_COMMUNITY = 'Stability AI’s community licence requires registering for commercial use, and an '
+  + 'enterprise licence for a business earning over US$1 million a year.';
 
 /**
  * Conditions to read before downloading, by the repository a file comes from,
@@ -107,8 +109,8 @@ const REPOSITORY_CONDITIONS: Record<string, string> = {
   'Kijai/HunyuanVideo_comfy': HUNYUAN_TERRITORY,
   'Lightricks/LTX-2.5': 'Lightricks’ LTX-2.x licence requires a paid commercial licence for a business with annual '
     + 'revenue of US$10 million or more.',
-  'stabilityai/sdxl-turbo': 'Stability AI’s community licence requires registering for commercial use, and an '
-    + 'enterprise licence for a business earning over US$1 million a year.',
+  'stabilityai/sdxl-turbo': STABILITY_COMMUNITY,
+  'Comfy-Org/stable-audio-open-1.0_repackaged': STABILITY_COMMUNITY,
 };
 
 export type LicenceCondition = { condition: string; models: string[] };

@@ -19,6 +19,7 @@ import { formatVideoDuration, formatVideoEstimate, type VideoMachine } from '../
 import { lineupCardFacts, lineupEntry, measuredSecondsFor } from '../lib/videoLineup';
 import { startVideoLineup, stopVideoLineup } from '../lib/videoLineupSession';
 import { workbenchById } from '../lib/workbench';
+import { useAudioLineupSession } from '../hooks/useAudioLineupSession';
 import { useImageLineupSession } from '../hooks/useImageLineupSession';
 import { useRowPanel } from '../hooks/useRowPanel';
 import { useLabResults } from '../hooks/useLabResults';
@@ -28,23 +29,28 @@ import { ComfyNeeded } from './ComfyNeeded';
 import { Elapsed } from './Elapsed';
 import { PromptPicker } from './PromptPicker';
 
+/** The channels a ComfyUI model's own test belongs to. */
+export type GenerationChannel = 'images' | 'video' | 'audio';
+
 /** What a model's own test needs from the rest of the app. */
 export type GenerationTestContext = {
   comfyReachable: boolean;
   comfyFolders: ComfyFolderListing;
-  /** The vision model that checks the result; empty when none is installed. */
+  /** The vision model that checks pictures and clips; empty when none is installed. */
   judgeModel: string;
+  /** The model that listens to made audio; empty when nothing installed can hear. */
+  listenerModel: string;
   ollamaBaseUrl: string;
   machine: VideoMachine;
   balances: Balances;
-  onBalanceChange: (channel: 'images' | 'video', value: number) => void;
-  /** Why accuracy cannot count on pictures right now, or null when it can. */
-  lockedReason: string | null;
+  onBalanceChange: (channel: GenerationChannel, value: number) => void;
+  /** Why accuracy cannot count on a channel right now, or null when it can. */
+  lockedReason: (channel: GenerationChannel) => string | null;
   /** Another test holds the graphics card, so a time taken now would measure the contention. */
   gpuBusy: boolean;
   onCheckComfy: () => void;
   /** Comparison, where several models take the same prompt side by side. */
-  onOpenComparison: (channel: 'images' | 'video') => void;
+  onOpenComparison: (channel: GenerationChannel) => void;
 };
 
 type ImageRun = { phase: 'idle' | 'running' | 'complete' | 'failed'; message: string };
@@ -80,6 +86,7 @@ export function GenerationTestPanel({
   const saved = useLabResults();
   const session = useVideoLineupSession();
   const imageLineup = useImageLineupSession();
+  const audioSession = useAudioLineupSession();
   const [promptId, setPromptId] = useState(IMAGE_BENCHMARK_PROMPTS[0].id);
   const [customPrompt, setCustomPrompt] = useState('');
   const [confirmUnload, setConfirmUnload] = useState(false);
@@ -126,8 +133,9 @@ export function GenerationTestPanel({
   const sampling = checkpoint ? samplingProfileFor(checkpoint) : null;
 
   const balance = context.balances[channel];
+  const lockedReason = context.lockedReason(channel);
   // Nothing can check a picture, so the run counts speed alone, and says so.
-  const rankAt = context.lockedReason ? 0 : balance;
+  const rankAt = lockedReason ? 0 : balance;
   const mine = Boolean(entry && session.solo?.key === entry.key);
   const running = video ? mine && session.running : imageRun.phase === 'running';
   const promptReady = promptId !== CUSTOM_IMAGE_PROMPT_ID || customPrompt.trim().length > 0;
@@ -138,6 +146,8 @@ export function GenerationTestPanel({
       ? 'Another test is using the graphics card. This can run when it finishes.'
       : imageLineup.running
         ? 'Pictures are being compared. This can run when they finish.'
+        : audioSession.running
+        ? 'Audio is being made. This can run when it finishes.'
         : session.running && !mine
         ? 'Another video is rendering. This can run when it finishes.'
         : video
@@ -374,7 +384,7 @@ export function GenerationTestPanel({
         value={balance}
         onChange={(value) => context.onBalanceChange(channel, value)}
         accuracyMeans={workbenchById(channel).accuracyMeans}
-        lockedReason={context.lockedReason}
+        lockedReason={lockedReason}
         disabled={running}
       />
 

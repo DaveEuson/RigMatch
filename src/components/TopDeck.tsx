@@ -1,7 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import {
-  AlertTriangle, Bot, Boxes, Check, ChevronDown, ChevronUp, Code2, Download, Eye, Film, Image as ImageIcon,
+  AlertTriangle, AudioLines, Bot, Boxes, Check, ChevronDown, ChevronUp, Code2, Download, Eye, Film, Image as ImageIcon,
   LayoutGrid, MessageSquare, Mic, RefreshCw, ScanLine, ShieldCheck, Trophy, X, type LucideIcon,
 } from 'lucide-react';
 import type { OllamaStatus, SystemProfile } from '../types';
@@ -401,13 +401,14 @@ const CHANNEL_ICONS: Record<WorkbenchId, LucideIcon> = {
   video: Film,
   listening: Mic,
   reading: Eye,
+  audio: AudioLines,
 };
 
 /**
  * "What are you testing?": the channel switch.
  *
  * A radio group, so it is one Tab stop and the arrow keys move between
- * channels, the way seven answers to one question should behave. The active
+ * channels, the way eight answers to one question should behave. The active
  * channel is the accent, never gold: gold is the verdict, and choosing what to
  * look at is not one.
  */

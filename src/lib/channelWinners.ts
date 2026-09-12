@@ -3,8 +3,9 @@
  * Each channel's results, ranked at that channel's fader, and its winner.
  *
  * Each channel is decided by its own measurement: coding answers for Code, the
- * judge's check of the picture for Images and Video, word accuracy for
- * Listening, the description score for Reading pictures. Chat keeps the Top
+ * judge's check of the picture for Images and Video, a listening model's check
+ * of the clip for Audio, word accuracy for Listening, the description score for
+ * Reading pictures. Chat keeps the Top
  * Match it always had (getRigPick), since the Match Score already is the chat
  * measurement. Every ranking here comes from results measured on this machine;
  * nothing is inferred from a model's name.
@@ -88,25 +89,26 @@ export function codeWinner(
   };
 }
 
-export type LabChannel = 'images' | 'video' | 'listening' | 'reading';
+export type LabChannel = 'images' | 'video' | 'listening' | 'reading' | 'audio';
 
 const LAB_CHALLENGE: Record<LabChannel, AdvancedLabResult['challenge']> = {
   images: 'image-generation',
   video: 'video-generation',
   listening: 'listening',
   reading: 'image-recognition',
+  audio: 'audio-generation',
 };
 
-/** Pictures and clips are judged against the prompt, and that check can fail. */
-const checkedAgainstPrompt = (channel: LabChannel) => channel === 'images' || channel === 'video';
+/** Pictures, clips and made audio are judged against the prompt, and that check can fail. */
+const checkedAgainstPrompt = (channel: LabChannel) => channel === 'images' || channel === 'video' || channel === 'audio';
 
 /**
  * Lab results for one channel, ranked at the fader.
  *
- * For images and video, accuracy is the judge's check of the picture or the
- * clip's middle frame, and one that fell short of the pass line has failed its
- * check. Listening and reading are scored 0-100 against a right answer, so
- * their score is their accuracy.
+ * For images, video and audio, accuracy is the judge's check of the picture,
+ * the clip's middle frame or the sound itself, and one that fell short of the
+ * pass line has failed its check. Listening and reading are scored 0-100
+ * against a right answer, so their score is their accuracy.
  */
 export function rankLabList(
   results: AdvancedLabResult[],
@@ -157,19 +159,21 @@ export type ComparisonGroup = {
  * Results that can fairly be put side by side, grouped, newest first.
  *
  * Only results given the same thing are compared: the same prompt for
- * pictures, the same test picture for reading. A checkpoint that drew a
- * lighthouse is not beaten by one that drew a cat because the cat was quicker.
- * Listening keeps no record of what it heard, so its one group is every model's
- * latest test, and the screen says so.
+ * pictures and made audio, the same test picture for reading. A checkpoint that
+ * drew a lighthouse is not beaten by one that drew a cat because the cat was
+ * quicker. Listening keeps no record of what it heard, so its one group is
+ * every model's latest test, and the screen says so.
  */
 export function comparisonGroups(
   results: AdvancedLabResult[],
-  channel: 'images' | 'listening' | 'reading',
+  channel: 'images' | 'listening' | 'reading' | 'audio',
 ): ComparisonGroup[] {
   const groups = new Map<string, AdvancedLabResult[]>();
   for (const result of results) {
     if (result?.challenge !== LAB_CHALLENGE[channel]) continue;
-    const key = channel === 'images' ? result.response : channel === 'reading' ? (result.imageDataUrl ?? '') : 'latest';
+    const key = channel === 'images' || channel === 'audio'
+      ? result.response
+      : channel === 'reading' ? (result.imageDataUrl ?? '') : 'latest';
     groups.set(key, [...(groups.get(key) ?? []), result]);
   }
   return [...groups.entries()]
@@ -184,7 +188,7 @@ export function comparisonGroups(
 /** Best for a Lab-tested channel: the Lab's own accuracy against how long it took. */
 export function labWinner(
   results: Record<string, AdvancedLabResult>,
-  channel: 'images' | 'listening' | 'reading',
+  channel: 'images' | 'listening' | 'reading' | 'audio',
   balance: number,
 ): ChannelWinner | null {
   const ranked = rankLabResults(results, channel, balance);
@@ -194,8 +198,8 @@ export function labWinner(
   return {
     model: top.item.model,
     detail: `${seconds(top.item.elapsedMs)} · ${accuracy}`,
-    // A checkpoint draws; it cannot be chatted with.
-    usable: channel !== 'images',
+    // A checkpoint draws or plays; it cannot be chatted with.
+    usable: channel !== 'images' && channel !== 'audio',
     speedOnly: !accuracyCounted(ranked),
   };
 }

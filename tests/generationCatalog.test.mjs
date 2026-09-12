@@ -46,6 +46,7 @@ test('each kind lands in a folder ComfyUI reads that kind from', () => {
   const FOLDERS = {
     image: ['checkpoints'],
     video: ['checkpoints', 'diffusion_models'],
+    audio: ['checkpoints'],
     'text-encoder': ['text_encoders'],
     vae: ['vae'],
     lora: ['loras'],
@@ -169,9 +170,12 @@ test('only models are rows; the parts they need are not', () => {
   // Two encoder rows were tolerable. Twenty-five encoders, VAEs and LoRAs would
   // bury the seventeen models they exist to serve.
   const rows = generationCatalogRows({});
-  assert.ok(rows.every((r) => r.generationKind === 'image' || r.generationKind === 'video'));
+  assert.ok(rows.every((r) => ['image', 'video', 'audio'].includes(r.generationKind)));
   assert.ok(rows.some((r) => r.generationId === 'kandinsky-5'));
+  assert.ok(rows.some((r) => r.generationId === 'stable-audio-open-1.0'));
   assert.ok(!rows.some((r) => r.generationId === 'vae-wan21'));
+  // Stable Audio's text encoder is part of its download, not a model to pick.
+  assert.ok(!rows.some((r) => r.generationId === 't5-base'));
 });
 
 test('a row is installed only when ComfyUI lists every file it needs, where it needs it', () => {

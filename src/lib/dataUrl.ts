@@ -10,6 +10,12 @@
  * Decoding the base64 here needs no permission at all.
  */
 export function dataUrlToBlob(dataUrl: string): Blob {
+  const { bytes, type } = dataUrlToBytes(dataUrl);
+  return new Blob([bytes], { type });
+}
+
+/** The bytes a data: URL carries, and the type it says they are. */
+export function dataUrlToBytes(dataUrl: string): { bytes: Uint8Array<ArrayBuffer>; type: string } {
   const comma = dataUrl.indexOf(',');
   if (!dataUrl.startsWith('data:') || comma < 0) throw new Error('Not a data URL.');
   const header = dataUrl.slice(5, comma);
@@ -17,10 +23,10 @@ export function dataUrlToBlob(dataUrl: string): Blob {
   const body = dataUrl.slice(comma + 1);
 
   if (!/;base64$/i.test(header)) {
-    return new Blob([decodeURIComponent(body)], { type });
+    return { bytes: new TextEncoder().encode(decodeURIComponent(body)), type };
   }
   const binary = atob(body);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], { type });
+  return { bytes, type };
 }

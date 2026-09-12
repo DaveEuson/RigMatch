@@ -36,6 +36,9 @@ export function LabStandings({
   if (ranked.length === 0) return null;
   // Nothing judged means time order, whatever the fader says.
   const counted = accuracyCounted(ranked);
+  // Every one failed its run or its check, so nothing ranks at all. "Nothing
+  // was judged" would be false of results that were judged and fell short.
+  const noneStanding = ranked.every((entry) => entry.standing === 'failed');
   const label = counted ? balanceLabel(balance) : 'speed only';
   const hidden = ranked.length - limit;
   const when = (completedAt: string) => (showDates ? ` · ${formatHistoryTime(completedAt)}` : '');
@@ -45,7 +48,13 @@ export function LabStandings({
     <section className="lab-standings" aria-label={heading}>
       <div className="lab-standings-head">
         <strong>{heading}</strong>
-        <span>{counted ? `Ranked at ${label}` : 'Ranked on speed alone: nothing was judged'}</span>
+        <span>
+          {counted
+            ? `Ranked at ${label}`
+            : noneStanding
+              ? (ranked.length === 1 ? 'It did not pass' : 'None of them passed')
+              : 'Ranked on speed alone: nothing was judged'}
+        </span>
       </div>
       <ol>
         {ranked.slice(0, limit).map((entry) => {

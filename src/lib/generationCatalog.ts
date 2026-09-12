@@ -37,7 +37,7 @@ export type ComfyFolderListing = Partial<Record<ComfyModelFolder, string[]>>;
  * expert is half of a two-model video model — Wan 2.2 A14B's low-noise stage —
  * and renders nothing alone.
  */
-export type GenerationModelKind = 'image' | 'video' | 'text-encoder' | 'vae' | 'lora' | 'expert';
+export type GenerationModelKind = 'image' | 'video' | 'audio' | 'text-encoder' | 'vae' | 'lora' | 'expert';
 
 export type GenerationModel = {
   id: string;
@@ -629,6 +629,58 @@ export const GENERATION_MODELS: GenerationModel[] = [
     note: 'The second half of Wan 2.2 A14B. It finishes what the high-noise model starts, and renders nothing alone.',
     publisher: 'Alibaba',
   },
+  // Audio. The files ComfyUI's own templates for these models download, into
+  // the folders those templates read. Sizes and checksums fetched from each
+  // repository's tree in September 2026; see audioCatalog.ts for how they run.
+  {
+    id: 'ace-step-1.5-turbo',
+    label: 'ACE-Step 1.5 Turbo',
+    kind: 'audio',
+    folder: 'checkpoints',
+    filename: 'ace_step_1.5_turbo_aio.safetensors',
+    url: 'https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/checkpoints/ace_step_1.5_turbo_aio.safetensors',
+    bytes: 10025478736,
+    sha256: '67b0f43aa5c51c840bd0228e6a935d8ff416ec87e5df2fc0637da17a561252bc',
+    note: 'Songs and instrumentals from a description, in eight steps. One file carries everything it needs.',
+    publisher: 'ACE-Step',
+  },
+  {
+    id: 'ace-step-v1-3.5b',
+    label: 'ACE-Step v1 3.5B',
+    kind: 'audio',
+    folder: 'checkpoints',
+    filename: 'ace_step_v1_3.5b.safetensors',
+    url: 'https://huggingface.co/Comfy-Org/ACE-Step_ComfyUI_repackaged/resolve/main/all_in_one/ace_step_v1_3.5b.safetensors',
+    bytes: 7699743341,
+    sha256: 'f07cad74c4adce52ca14ca1bdf74cf3c14cbafb0823b95eca4459467fa369f40',
+    note: 'The first ACE-Step: music from a list of styles, in fifty steps. A smaller download than 1.5.',
+    publisher: 'ACE-Step',
+  },
+  {
+    id: 'stable-audio-open-1.0',
+    label: 'Stable Audio Open 1.0',
+    kind: 'audio',
+    folder: 'checkpoints',
+    filename: 'stable-audio-open-1.0.safetensors',
+    url: 'https://huggingface.co/Comfy-Org/stable-audio-open-1.0_repackaged/resolve/main/stable-audio-open-1.0.safetensors',
+    bytes: 4853889016,
+    sha256: '7b20458a071231aaf32613b6fbc7945f28f34dbba4f295bb49bad56f5f66b57e',
+    note: 'Sound effects, textures and short pieces of music, up to 47 seconds.',
+    requires: ['t5-base'],
+    publisher: 'Stability AI',
+  },
+  {
+    id: 't5-base',
+    label: 'T5-Base text encoder',
+    kind: 'text-encoder',
+    folder: 'text_encoders',
+    filename: 't5-base.safetensors',
+    url: 'https://huggingface.co/ComfyUI-Wiki/t5-base/resolve/main/t5-base.safetensors',
+    bytes: 891646390,
+    sha256: 'a90903540cc02cbeb7ff9f823f1a80eb778c7e22426a0e620b01c77a5ec8f5b4',
+    note: 'Reads the prompt for Stable Audio Open.',
+    publisher: 'Google',
+  },
 ];
 
 export function generationModelById(id: string): GenerationModel | undefined {
@@ -707,15 +759,15 @@ export function generationCatalogRows(installed: ComfyFolderListing): Array<{
   runtime: 'comfyui';
   publisher: string;
   generationId: string;
-  generationKind: 'image' | 'video';
+  generationKind: 'image' | 'video' | 'audio';
   installedFile: boolean;
 }> {
   return GENERATION_MODELS
     // Encoders, VAEs and LoRAs are parts, not models anyone picks. Two encoder
     // rows were tolerable; twenty-five parts would bury the seventeen models
     // they exist to serve. Each appears in its model's download plan instead.
-    .filter((model): model is GenerationModel & { kind: 'image' | 'video' } =>
-      model.kind === 'image' || model.kind === 'video')
+    .filter((model): model is GenerationModel & { kind: 'image' | 'video' | 'audio' } =>
+      model.kind === 'image' || model.kind === 'video' || model.kind === 'audio')
     .map((model) => {
       const plan = downloadPlan(model, installed);
       const parts = [model, ...(model.requires ?? []).map(generationModelById).filter(Boolean) as GenerationModel[]];
@@ -727,7 +779,7 @@ export function generationCatalogRows(installed: ComfyFolderListing): Array<{
         id: `comfyui/${model.id}`,
         name: model.label,
         tag: model.kind,
-        params: model.kind === 'video' ? 'Video model' : 'Image model',
+        params: model.kind === 'video' ? 'Video model' : model.kind === 'audio' ? 'Audio model' : 'Image model',
         sizeGb: Number((bytes / 1e9).toFixed(2)),
         pack: 'Generation',
         source: 'Hugging Face',

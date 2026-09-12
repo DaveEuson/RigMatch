@@ -206,12 +206,10 @@ export const GOALS: Goal[] = [
     label: 'Making audio',
     matchLabel: 'Best for making audio',
     runtime: 'comfyui',
-    // The nodes exist — ACE-Step and Stable Audio were verified present in
-    // ComfyUI 0.32 — but no audio lab exists to grade the output yet.
-    grading: 'none',
-    unsupportedReason:
-      'ComfyUI can run audio models, but RigMatch has no listening-back test '
-      + 'to grade them with yet.',
+    // ACE-Step and Stable Audio run on nodes ComfyUI ships, and a model that
+    // can hear checks each clip against the prompt's questions. Music and
+    // sound effects are graded; no core ComfyUI node makes speech yet.
+    grading: 'lab',
     questionTypes: [],
   },
   {
@@ -390,6 +388,16 @@ export function goalHardwareExpectation(goal: Goal, vramGb: number): GoalExpecta
         return { tone: 'ready', note: 'Stable Diffusion 1.5 renders in seconds on this class of card.', source: 'measured' };
       }
       return { tone: 'tight', note: 'Small image models should run; larger ones will be slow. The test shows the real speed.', source: 'heuristic' };
+    case 'make-audio':
+      // A rule of thumb from the files, not a measurement yet: the audio models
+      // are 5 to 10 GB, and ComfyUI moves what does not fit into system memory.
+      if (vramGb >= 8) {
+        return { tone: 'ready', note: 'The audio models here are 5 to 10 GB, which this card holds. Rule of thumb — the test decides.', source: 'heuristic' };
+      }
+      if (vramGb >= 6) {
+        return { tone: 'tight', note: 'The smaller audio models fit; the larger ones may spill into system memory and slow down. The test shows how much.', source: 'heuristic' };
+      }
+      return { tone: 'unlikely', note: 'The audio models here are 5 GB and up. Expect slow renders on this card — the test will give the real number.', source: 'heuristic' };
     case 'code':
       // Rule of thumb, and labelled as one: small models write plausible-
       // looking code that often does not run. VRAM decides which sizes fit.

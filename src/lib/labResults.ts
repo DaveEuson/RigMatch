@@ -43,7 +43,7 @@ export type AdvancedLabCheck = {
 /** A stored skill-test result for one model + challenge. */
 export type AdvancedLabResult = {
   model: string;
-  challenge: 'app-builder' | 'image-generation' | 'video-generation' | 'image-recognition' | 'code' | 'listening';
+  challenge: 'app-builder' | 'image-generation' | 'video-generation' | 'audio-generation' | 'image-recognition' | 'code' | 'listening';
   score: number;
   grade: string;
   elapsedMs: number;
@@ -57,6 +57,10 @@ export type AdvancedLabResult = {
    * localStorage would be full after a handful of runs.
    */
   videoRef?: { filename: string; subfolder: string; type: string };
+  /** Where ComfyUI wrote a generated clip of audio, fetched only when it is played. */
+  audioRef?: { filename: string; subfolder: string; type: string };
+  /** Seconds of audio a made clip holds, which its speed is measured against. */
+  seconds?: number;
   width?: number;
   height?: number;
   language?: string;

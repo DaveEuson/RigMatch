@@ -38,6 +38,7 @@ import { DiskGuard } from './DiskGuard';
 import { DownloadProgressInline } from './DownloadProgressInline';
 import { FirstModelWizard } from './FirstModelWizard';
 import { GenerationTestPanel, type GenerationTestContext } from './GenerationTestPanel';
+import { AudioTestPanel } from './AudioTestPanel';
 import { SkillTestPanel, type SkillTestContext } from './SkillTestPanel';
 import { ModelScorePill, ModelStatusPill, PopularityMeter, ScoreLegend } from './ScoreVisuals';
 import { ModelCompareCard } from './ModelCompareCard';
@@ -1234,7 +1235,11 @@ export function ModelCabinet({
                               aria-controls={testing ? testPanelId : undefined}
                               title={testing
                                 ? `Close the test of ${row.displayName}`
-                                : `Give ${row.displayName} a prompt and ${row.generationKind === 'video' ? 'render a clip' : 'draw a picture'}, right here`}
+                                : `Give ${row.displayName} a prompt and ${
+                                  row.generationKind === 'video' ? 'render a clip'
+                                    : row.generationKind === 'audio' ? 'make a clip of audio'
+                                    : 'draw a picture'
+                                }, right here`}
                             >
                               <Gauge aria-hidden="true" />
                               <span>{testing ? 'Close' : 'Test'}</span>
@@ -1375,6 +1380,8 @@ export function ModelCabinet({
                           context={skillTest}
                           onClose={closeTest}
                         />
+                      ) : row.generationKind === 'audio' ? (
+                        <AudioTestPanel id={testPanelId} row={row} context={generationTest} onClose={closeTest} />
                       ) : (
                         <GenerationTestPanel id={testPanelId} row={row} context={generationTest} onClose={closeTest} />
                       )}

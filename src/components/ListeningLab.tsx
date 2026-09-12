@@ -14,6 +14,7 @@ import {
   type ListeningSource,
 } from "../lib/listeningScripts";
 import { isEffectivelySilent, toListeningWav } from "../lib/wavEncoder";
+import { decodeAudio } from "../lib/browserAudio";
 import type { OllamaStatus } from "../types";
 import { useLabResults } from "../hooks/useLabResults";
 import { describeLabAccuracy, rankLabResults } from "../lib/channelWinners";
@@ -23,28 +24,6 @@ import { LabStandings } from "./LabStandings";
 
 /** What the Listening fader weighs against time. */
 const LISTENING_ACCURACY = workbenchById('listening').accuracyMeans;
-
-/**
- * Decode whatever the browser can read into raw channels.
- *
- * A microphone gives webm/opus and an upload could be anything; both are
- * decoded here and re-encoded to the 16 kHz mono WAV the bundled reference
- * uses, so no model is ever handed a container it might refuse. A refusal
- * would land on that model's scorecard as if it could not hear.
- */
-async function decodeAudio(data: ArrayBuffer) {
-  const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  const ctx = new Ctor();
-  try {
-    const buffer = await ctx.decodeAudioData(data.slice(0));
-    return {
-      sampleRate: buffer.sampleRate,
-      channels: Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i)),
-    };
-  } finally {
-    void ctx.close();
-  }
-}
 
 type RunState = { phase: 'idle' | 'running' | 'complete' | 'failed'; result: AdvancedLabResult | null; message: string };
 

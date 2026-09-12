@@ -143,6 +143,30 @@ export function scoreAdherence(
   return { adherence: correct / answered, answered, correct };
 }
 
+/**
+ * Ask a judge every proposition, one at a time, and total the verdicts.
+ *
+ * A judge that throws on one question does not sink the run: that answer
+ * becomes unreadable, and if enough of them are unreadable the adherence
+ * reports as unavailable rather than as a low number. A picture, a clip's
+ * middle frame and a clip of audio are all judged this way; they differ only
+ * in what `ask` hands the judge.
+ */
+export async function askPropositions(
+  ask: (question: string) => Promise<string>,
+  prompt: ImagePrompt,
+): Promise<{ adherence: number | null; answered: number; correct: number }> {
+  const verdicts: (boolean | null)[] = [];
+  for (const proposition of prompt.propositions) {
+    try {
+      verdicts.push(readJudgeVerdict(await ask(buildJudgePrompt(proposition.question))));
+    } catch {
+      verdicts.push(null);
+    }
+  }
+  return scoreAdherence(prompt.propositions, verdicts);
+}
+
 export type ImageRunFacts = {
   /** False when nothing came back, which caps the whole run at zero. */
   produced: boolean;

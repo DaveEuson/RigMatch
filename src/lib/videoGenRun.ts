@@ -25,7 +25,7 @@ import { extractImages, readStatus, type ComfyImageRef } from './comfyui.ts';
 import { getErrorMessage } from './format.ts';
 import { buildTxt2VideoWorkflow, LTX_DEFAULTS, VIDEO_FRAME_NODE, VIDEO_OUTPUT_NODE } from './videoGen.ts';
 import { scoreVideoGeneration } from './videoGenScoring.ts';
-import { buildJudgePrompt, readJudgeVerdict, scoreAdherence, type ImagePrompt } from './imageGenScoring.ts';
+import { askPropositions, type ImagePrompt } from './imageGenScoring.ts';
 import type { JudgeFn } from './imageGenRun.ts';
 
 const POLL_INTERVAL_MS = 1500;
@@ -232,16 +232,8 @@ export async function judgeVideoResult(
   return { ...result, adherence, ...scored };
 }
 
-async function judgeFrame(judge: JudgeFn, frameDataUrl: string, imagePrompt: ImagePrompt) {
-  const verdicts: (boolean | null)[] = [];
-  for (const proposition of imagePrompt.propositions) {
-    try {
-      verdicts.push(readJudgeVerdict(await judge(frameDataUrl, buildJudgePrompt(proposition.question))));
-    } catch {
-      verdicts.push(null);
-    }
-  }
-  return scoreAdherence(imagePrompt.propositions, verdicts);
+function judgeFrame(judge: JudgeFn, frameDataUrl: string, imagePrompt: ImagePrompt) {
+  return askPropositions((question) => judge(frameDataUrl, question), imagePrompt);
 }
 
 /** Node ids the graph saves to, exported so callers can reason about outputs. */

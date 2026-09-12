@@ -77,6 +77,32 @@ test('a winner from results nothing judged says it won on speed alone', () => {
   assert.equal(winner?.speedOnly, true);
 });
 
+test('a clip that fell short of the prompt is never the best audio maker, and nobody chats with the winner', () => {
+  const results = {
+    'audio:quick': lab('audio-generation', 'Stable Audio Open 1.0', 12, { adherence: 0.33 }),
+    'audio:heard': lab('audio-generation', 'ACE-Step 1.5 Turbo', 20, { adherence: 1 }),
+    'image:sdxl': lab('image-generation', 'sdxl', 2, { adherence: 1 }),
+  };
+  const winner = labWinner(results, 'audio', 0);
+  assert.equal(winner?.model, 'ACE-Step 1.5 Turbo');
+  assert.equal(winner?.usable, false);
+  assert.match(winner?.detail ?? '', /100% of the prompt/);
+  assert.deepEqual(rankLabResults(results, 'audio', 0).map((entry) => entry.standing), ['ranked', 'failed']);
+});
+
+test('made audio is compared only with audio made from the same prompt', () => {
+  const results = [
+    lab('audio-generation', 'a', 10, { response: 'rain on a tin roof', completedAt: '2026-09-11T10:00:00.000Z' }),
+    lab('audio-generation', 'b', 12, { response: 'rain on a tin roof', completedAt: '2026-09-11T11:00:00.000Z' }),
+    lab('audio-generation', 'c', 9, { response: 'dance music', completedAt: '2026-09-10T11:00:00.000Z' }),
+    lab('listening', 'd', 5),
+  ];
+  assert.deepEqual(
+    comparisonGroups(results, 'audio').map((group) => [group.key, group.results.length]),
+    [['rain on a tin roof', 2], ['dance music', 1]],
+  );
+});
+
 const matchScore = (model, over = {}) => ({
   model, total: 50, grade: 'D', speed: 50, sobriety: 50, stability: 80, fit: 80,
   completedAt: '2026-09-11T00:00:00.000Z', scoreSchemaVersion: CURRENT_SCORE_SCHEMA_VERSION, ...over,
