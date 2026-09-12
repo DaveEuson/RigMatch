@@ -20522,6 +20522,164 @@ a.whats-next-support:hover {
   gap: 16px;
 }
 
+/* Several models on one prompt, run from the screen that shows them side by
+   side: pick, prompt, run, and the board below fills in. */
+.comparison-run {
+  padding: 12px 14px;
+  border: 1px solid rgba(var(--gold-rgb), 0.28);
+  border-radius: 12px;
+  background: rgba(5, 9, 12, 0.58);
+  display: grid;
+  gap: 10px;
+}
+
+.comparison-run-head {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.comparison-run-head > svg {
+  width: 22px;
+  height: 22px;
+  color: var(--gold);
+}
+
+.comparison-run-head span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.comparison-run-head strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-strong);
+  font-size: 14px;
+  text-wrap: balance;
+}
+
+.comparison-run > p {
+  max-width: 78ch;
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.comparison-run-models {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px;
+  list-style: none;
+}
+
+.comparison-run-models label {
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid rgba(255, 249, 239, 0.08);
+  border-radius: 10px;
+  background: var(--panel-2);
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  cursor: pointer;
+}
+
+.comparison-run-models label:has(input:checked) {
+  border-color: rgba(var(--gold-rgb), 0.55);
+  background: rgba(var(--gold-rgb), 0.08);
+}
+
+.comparison-run-models label:has(input:focus-visible) {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.comparison-run-models label:has(input:disabled) {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.comparison-run-models input {
+  margin: 2px 0 0;
+  accent-color: var(--gold);
+}
+
+.comparison-run-models strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.comparison-run-models em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.comparison-run-bar,
+.comparison-run-short {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.comparison-run-short {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.comparison-run-progress {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  list-style: none;
+}
+
+.comparison-run-progress li {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.comparison-run-progress li.drawing,
+.comparison-run-progress li.checking {
+  background: rgba(var(--gold-rgb), 0.08);
+  color: var(--text-strong);
+}
+
+.comparison-run-progress li.failed {
+  background: rgba(var(--red-rgb), 0.06);
+  color: var(--red);
+}
+
+.comparison-run-progress em {
+  color: inherit;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+  text-align: right;
+}
+
 .lab-comparison-group {
   display: grid;
   gap: 8px;

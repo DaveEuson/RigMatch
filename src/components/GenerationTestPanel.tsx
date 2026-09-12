@@ -1,6 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Film, Lightbulb, Play, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, Film, Lightbulb, Play, X } from 'lucide-react';
 import type { ModelRow } from '../types';
 import { JUDGE_PASS, type Balances } from '../lib/balance';
 import { readComfySettings } from '../lib/comfySettings';
@@ -19,11 +19,11 @@ import { formatVideoDuration, formatVideoEstimate, type VideoMachine } from '../
 import { lineupCardFacts, lineupEntry, measuredSecondsFor } from '../lib/videoLineup';
 import { startVideoLineup, stopVideoLineup } from '../lib/videoLineupSession';
 import { workbenchById } from '../lib/workbench';
-import { useComfyStart } from '../hooks/useComfyStart';
+import { useImageLineupSession } from '../hooks/useImageLineupSession';
 import { useLabResults } from '../hooks/useLabResults';
 import { useVideoLineupSession } from '../hooks/useVideoLineupSession';
 import { BalanceFader } from './BalanceFader';
-import { ComfyStartButton } from './ComfyStartButton';
+import { ComfyNeeded } from './ComfyNeeded';
 import { Elapsed } from './Elapsed';
 import { PromptPicker } from './PromptPicker';
 
@@ -42,8 +42,8 @@ export type GenerationTestContext = {
   /** Another test holds the graphics card, so a time taken now would measure the contention. */
   gpuBusy: boolean;
   onCheckComfy: () => void;
-  /** The Lab, where several models take the same prompt. */
-  onOpenLab: () => void;
+  /** Comparison, where several models take the same prompt side by side. */
+  onOpenComparison: (channel: 'images' | 'video') => void;
 };
 
 type ImageRun = { phase: 'idle' | 'running' | 'complete' | 'failed'; message: string };
@@ -67,7 +67,7 @@ function formatWhen(iso: string): string {
  * under the row instead: a prompt, the question of what matters more, and the
  * result. It runs what the Lab runs, the same graph, settings and judge, and
  * saves the result where the Lab does, so Scorecards and Comparison see it too.
- * The Lab stays the place to give several models the same prompt.
+ * Comparison is where several models take the same prompt, one link away.
  *
  * Asking to test a ComfyUI model is asking for ComfyUI, so opening this starts
  * it when it is not running and Settings allows it.
@@ -87,7 +87,7 @@ export function GenerationTestPanel({
   const channel = video ? 'video' : 'images';
   const saved = useLabResults();
   const session = useVideoLineupSession();
-  const comfyStart = useComfyStart();
+  const imageLineup = useImageLineupSession();
   const [promptId, setPromptId] = useState(IMAGE_BENCHMARK_PROMPTS[0].id);
   const [customPrompt, setCustomPrompt] = useState('');
   const [confirmUnload, setConfirmUnload] = useState(false);
@@ -162,7 +162,9 @@ export function GenerationTestPanel({
     ? null
     : context.gpuBusy
       ? 'Another test is using the graphics card. This can run when it finishes.'
-      : session.running && !mine
+      : imageLineup.running
+        ? 'Pictures are being compared. This can run when they finish.'
+        : session.running && !mine
         ? 'Another video is rendering. This can run when it finishes.'
         : video
           ? (entry ? facts?.blocked ?? null : 'RigMatch has no graph for this model yet.')
@@ -345,21 +347,7 @@ export function GenerationTestPanel({
         </div>
 
         {!context.comfyReachable ? (
-          <div className="utility-empty compact">
-            <strong>{comfyStart.phase === 'starting' ? 'Starting ComfyUI…' : 'ComfyUI is not running'}</strong>
-            <span>
-              {comfyStart.phase === 'starting'
-                ? 'Loading takes a moment. The test can run as soon as ComfyUI answers.'
-                : `${row.displayName} runs on ComfyUI, a separate free program. Start it here, or let Settings start it whenever a test needs it.`}
-            </span>
-            <div className="advanced-lab-actions">
-              <ComfyStartButton folder={readComfySettings().folder} onStarted={context.onCheckComfy} />
-              <button type="button" className="mini-button outline" onClick={context.onCheckComfy}>
-                <RefreshCw aria-hidden="true" />
-                Check again
-              </button>
-            </div>
-          </div>
+          <ComfyNeeded runs={`${row.displayName} runs on ComfyUI`} onCheck={context.onCheckComfy} />
         ) : (
           <>
             {confirmUnload && (
@@ -405,8 +393,8 @@ export function GenerationTestPanel({
 
         {message && <p className={`advanced-lab-message ${tone}`} role="status">{message}</p>}
 
-        <button type="button" className="generation-test-lab-link" onClick={context.onOpenLab}>
-          {video ? 'Race it against other video models in the Lab' : 'Compare it with other image models in the Lab'}
+        <button type="button" className="generation-test-lab-link" onClick={() => context.onOpenComparison(channel)}>
+          {video ? 'Race it against other video models' : 'Compare it with other picture models'}
         </button>
       </div>
 

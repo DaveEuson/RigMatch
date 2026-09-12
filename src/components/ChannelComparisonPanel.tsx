@@ -5,6 +5,7 @@ import type { AdvancedLabResult } from '../lib/labResults';
 import type { LineupRecord } from '../lib/videoLineup';
 import type { ComparedChannel, Workbench } from '../lib/workbench';
 import { BalanceFader } from './BalanceFader';
+import { ComparisonRunCard, type ComparisonRunContext } from './ComparisonRunCard';
 import { LabComparison } from './LabComparison';
 import { VideoLineupResults } from './VideoLineupResults';
 
@@ -13,13 +14,13 @@ const COPY: Record<ComparedChannel, { title: string; subtitle: string; empty: st
     title: 'Pictures side by side',
     subtitle: 'Every checkpoint given the same prompt, ranked by what matters to you.',
     empty: 'Nothing to compare yet',
-    emptyBody: 'Run the Image test on two or more checkpoints with the same prompt, and their pictures line up here.',
+    emptyBody: 'Tick two or more picture models above and draw the same prompt with each, and their pictures line up here.',
   },
   video: {
     title: 'Clips side by side',
     subtitle: 'The last lineup: one prompt, one seed, ranked by what matters to you.',
     empty: 'No race yet',
-    emptyBody: 'Race two or more video models in the Lab, and their clips line up here.',
+    emptyBody: 'Tick two or more video models above and race them on one prompt, and their clips line up here.',
   },
   listening: {
     title: 'Transcripts side by side',
@@ -34,8 +35,9 @@ const COPY: Record<ComparedChannel, { title: string; subtitle: string; empty: st
  *
  * Speed Dating asks questions, and an image, video or transcription model does
  * not answer questions: it makes something. So on those channels Comparison
- * puts what each model made side by side, from the tests the Lab ran, and the
- * fader ranks them. Nothing here runs a test; the empty state says where to.
+ * puts what each model made side by side, and the fader ranks them. Pictures
+ * and video can be run from here too, several models on one prompt; listening
+ * is still tested in the Lab, and its empty state says so.
  */
 export function ChannelComparisonPanel({
   workbench,
@@ -45,6 +47,7 @@ export function ChannelComparisonPanel({
   onBalanceChange,
   lockedReason = null,
   onOpenLab,
+  run,
 }: {
   workbench: Workbench & { id: ComparedChannel };
   labResults: Record<string, AdvancedLabResult>;
@@ -58,6 +61,8 @@ export function ChannelComparisonPanel({
   onBalanceChange: (value: number) => void;
   lockedReason?: string | null;
   onOpenLab: () => void;
+  /** What running several picture or video models on one prompt needs. */
+  run?: ComparisonRunContext;
 }) {
   const channel = workbench.id;
   const copy = COPY[channel];
@@ -90,14 +95,21 @@ export function ChannelComparisonPanel({
           label={`What matters more for ${workbench.label.toLowerCase()}?`}
         />
 
+        {run && channel !== 'listening' && (
+          // Keyed so switching between Images and Video starts from a clean pick.
+          <ComparisonRunCard key={channel} channel={channel} context={run} balance={rankAt} />
+        )}
+
         {!hasResults ? (
           <div className="speed-date-empty">
             <Trophy aria-hidden="true" />
             <strong>{copy.empty}</strong>
             <span>{copy.emptyBody}</span>
-            <button type="button" className="primary-button compact" onClick={onOpenLab}>
-              {workbench.startLabel}
-            </button>
+            {(!run || channel === 'listening') && (
+              <button type="button" className="primary-button compact" onClick={onOpenLab}>
+                {workbench.startLabel}
+              </button>
+            )}
           </div>
         ) : channel === 'video' && record ? (
           <VideoLineupResults

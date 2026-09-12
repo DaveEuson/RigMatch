@@ -35,6 +35,7 @@ import { BalanceFader } from "./BalanceFader";
 import { LabStandings } from "./LabStandings";
 import { useLabResults } from "../hooks/useLabResults";
 import { useComfyStart } from "../hooks/useComfyStart";
+import { useImageLineupSession } from "../hooks/useImageLineupSession";
 import type { Balances } from "../lib/balance";
 import { describeLabAccuracy, rankLabResults } from "../lib/channelWinners";
 import { workbenchById, type ChannelId, type LabCardId, type Workbench } from "../lib/workbench";
@@ -132,6 +133,8 @@ export function AdvancedCapabilityLab({
   const imageAbortRef = useRef<AbortController | null>(null);
   // Held outside this panel, so a lineup survives leaving the Activity screen.
   const lineup = useVideoLineupSession();
+  // A picture comparison started on the Comparison screen holds the same card.
+  const imageLineup = useImageLineupSession();
 
   /** For the Check again button, where setting state synchronously is fine. */
   const checkComfy = useCallback(async () => {
@@ -230,7 +233,7 @@ export function AdvancedCapabilityLab({
   // waits for words.
   const promptReady = !usingCustomPrompt || customPromptReady;
   const canRunImageTest = readiness.kind === 'ready' && Boolean(activeCheckpoint)
-    && promptReady && !imageRunning && !lineup.running;
+    && promptReady && !imageRunning && !lineup.running && !imageLineup.running;
 
   const startChallenge = useCallback(async () => {
     if (!activeModel || !ollama.ready) return;
@@ -702,7 +705,7 @@ export function AdvancedCapabilityLab({
         onPromptIdChange={setImagePromptId}
         customPrompt={customPrompt}
         onCustomPromptChange={setCustomPrompt}
-        otherRunActive={imageRunning}
+        otherRunActive={imageRunning || imageLineup.running}
         ollamaBaseUrl={ollama.baseUrl}
         gpuNoteForRun={gpuNoteForRun}
         onDownloadModel={onDownloadVideoModel}

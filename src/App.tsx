@@ -1267,6 +1267,10 @@ function App() {
   const balanceLock = (channel: ChannelId) => ((channel === 'images' || channel === 'video') && !pictureJudged
     ? 'No model that can check pictures is available right now, so only speed can be measured. Install one, or start Ollama, and accuracy counts again.'
     : null);
+  /** The vision model that checks pictures and clips, from what is installed. */
+  const pictureJudge = useMemo(() => judgeCandidates(ollama.models)[0] ?? '', [ollama.models]);
+  /** Something else holds the graphics card, so a render timed now would measure the contention. */
+  const gpuBusy = isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running);
   /** One winner per channel, from its own measurement at its own fader. Chat and All keep the Top Match. */
   const channelWinner = useMemo(() => {
     const judged = (value: number) => (pictureJudged ? value : 0);
@@ -3748,15 +3752,17 @@ function App() {
             generationTest={{
               comfyReachable,
               comfyFolders,
-              judgeModel: judgeCandidates(ollama.models)[0] ?? '',
+              judgeModel: pictureJudge,
               ollamaBaseUrl: ollama.baseUrl,
               machine: videoMachine,
               balances,
               onBalanceChange: setBalance,
               lockedReason: balanceLock('images'),
-              gpuBusy: isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running),
+              gpuBusy,
               onCheckComfy: () => { void refreshComfyStatus(); },
-              onOpenLab: () => selectNav('activity'),
+              // From the All channel too: comparing pictures is the Images
+              // channel's Comparison, not chat's Speed Dating.
+              onOpenComparison: (channel) => { chooseWorkbench(channel); selectNav('speedDate'); },
             }}
             // Settings already explains ComfyUI in plain language; window.open
             // was popup-blocked in the browser preview and the review found the
@@ -3851,6 +3857,16 @@ function App() {
             onBalanceChange={(value) => setBalance(activeChannel, value)}
             lockedReason={balanceLock(activeChannel)}
             onOpenLab={() => selectNav('activity')}
+            run={{
+              comfyReachable,
+              comfyFolders,
+              judgeModel: pictureJudge,
+              ollamaBaseUrl: ollama.baseUrl,
+              machine: videoMachine,
+              gpuBusy,
+              onCheckComfy: () => { void refreshComfyStatus(); },
+              onOpenModels: () => selectNav('models'),
+            }}
           />
         )}
         {activeNavId === 'speedDate' && !comparedWorkbench && (

@@ -175,6 +175,25 @@ export async function runImageGeneration(options: ImageRunOptions): Promise<Imag
   }
 }
 
+/**
+ * Judge a finished picture, and score it again with the answer.
+ *
+ * Kept apart from the render so a comparison can check its pictures after
+ * every model has drawn. The judge is a vision model in Ollama, which stays in
+ * VRAM for ten minutes after it answers; checked between renders, it would sit
+ * on the GPU while the next checkpoint was being timed.
+ */
+export async function judgeImageResult(
+  result: ImageRunResult,
+  judge: JudgeFn,
+  imagePrompt: ImagePrompt,
+): Promise<ImageRunResult> {
+  if (result.error || !result.imageDataUrl) return result;
+  const { adherence } = await judgeAdherence(judge, result.imageDataUrl, imagePrompt);
+  const scored = scoreImageGeneration({ produced: true, elapsedMs: result.elapsedMs, steps: result.steps, adherence });
+  return { ...result, adherence, ...scored };
+}
+
 function failed(
   checkpoint: string,
   promptId: string | undefined,
