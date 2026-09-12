@@ -17,6 +17,10 @@ import { MATCH_GRADE_BAND_ROWS } from '../lib/scoreReference';
 import type { SettingsSectionId } from '../lib/settingsSections';
 import { buildSettingsRail } from '../lib/settingsSections';
 import { formatMatchScore, isLegacyScore, scoreDrift, scoreDriftLabel } from '../lib/scoring';
+import { balanceLabel, balanceSplit } from '../lib/balance';
+import { describeLabAccuracy, rankCoding, rankLabList, type LabChannel } from '../lib/channelWinners';
+import type { AdvancedLabResult } from '../lib/labResults';
+import { workbenchById, type Workbench } from '../lib/workbench';
 import { useDialog } from '../lib/useDialog';
 import type { AppLogEntry, AutoUpdateStatus, ChatMessage, ModelRow, NetworkHost, OllamaStatus, SystemProfile, TestedModelScore, UpdateChannel, UpdateCheckResponse } from '../types';
 import { ClosetSection } from './ClosetSection';
@@ -31,12 +35,26 @@ import { SettingsSection } from './SettingsSection';
 import { ModelDemoChips } from './SkillDemoViewers';
 import { ThemePicker } from './ThemePicker';
 import { UiModePicker } from './UiModePicker';
+import { BalanceFader } from './BalanceFader';
+import { CodingBoard } from './CodingBoard';
+import { LabStandings } from './LabStandings';
 import { ReleaseNotes, UpdateCenter } from './UpdateCenter';
 // `History` must be imported explicitly: without it the name resolves to the
 // DOM's global History constructor, which is a real value, so nothing errors
 // until it is used as a JSX component.
 import { Bot, Bug, Check, ChevronRight, Coffee, Copy, Download, ExternalLink, FolderOpen, HelpCircle, History, RefreshCw, Settings, Share2, Trash2, Trophy, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+/** Every kind of test: the All channel, and any caller from before channels. */
+const ALL_CHANNELS = workbenchById('all');
+
+/** What one saved result is called on each Lab channel's scorecards. */
+const LAB_NOUN: Record<LabChannel, string> = {
+  images: 'image test',
+  video: 'video test',
+  listening: 'listening test',
+  reading: 'picture reading',
+};
 
 export function UtilityPanel({
   panel,
@@ -76,6 +94,11 @@ export function UtilityPanel({
   onDownloadUpdate,
   onInstallUpdate,
   onSelectTopPick,
+  workbench = ALL_CHANNELS,
+  channelBalance,
+  onChannelBalanceChange,
+  channelBalanceLock = null,
+  labResults,
 }: {
   panel: UtilityPanelId;
   listTestResult: ListTestResult | null;
@@ -114,6 +137,14 @@ export function UtilityPanel({
   onDownloadUpdate: () => void;
   onInstallUpdate: () => void;
   onSelectTopPick?: (model: string) => void;
+  /** The channel Advanced Mode is on: Scorecards ranks its results. */
+  workbench?: Workbench;
+  /** That channel's Balance fader. */
+  channelBalance: number;
+  onChannelBalanceChange: (value: number) => void;
+  /** Why that fader is held at speed, when nothing can judge accuracy. */
+  channelBalanceLock?: string | null;
+  labResults: Record<string, AdvancedLabResult>;
 }) {
   const Icon = panel === 'history' ? History : Settings;
 
@@ -143,6 +174,21 @@ export function UtilityPanel({
     [selectedGoals, modelScores, isScoreDrifted],
   );
   const topRankedScore = rankedModelScores[0];
+  // Scorecards follows the channel. Chat and All keep the Match Score board,
+  // Code ranks the coding answers, and each Lab channel lists its own results.
+  const channel = workbench.id;
+  const labChannel: LabChannel | null = channel === 'images' || channel === 'video' || channel === 'listening' || channel === 'reading'
+    ? channel
+    : null;
+  const channelRankAt = channelBalanceLock ? 0 : channelBalance;
+  const labBoard = useMemo(
+    () => (labChannel ? rankLabList(Object.values(labResults), labChannel, channelRankAt) : []),
+    [labChannel, labResults, channelRankAt],
+  );
+  const codingRanked = useMemo(
+    () => (channel === 'code' ? rankCoding(rankedModelScores, channelBalance).ranked.length : 0),
+    [channel, rankedModelScores, channelBalance],
+  );
   const savedChatMessageCount = Math.max(0, chatMessages.length - 1);
   const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
   const scoreExplainerRef = useDialog<HTMLDivElement>(() => setScoreExplainerOpen(false));
@@ -254,6 +300,60 @@ export function UtilityPanel({
     });
   }, [rankedModelScores, taskPicks, system]);
 
+  // The run log belongs to every channel: a failed test is a failed test
+  // whatever it was testing.
+  const logConsole = (
+    <section className="log-console advanced-only" aria-label="Run logs">
+      <div className="log-console-head">
+        <div>
+          <span>Run Logs</span>
+          <strong>{isLoadingLogs ? 'Loading' : `${appLogs.length} entries`}</strong>
+          <em>{logPath || 'Log file not created yet'}</em>
+        </div>
+        <div className="log-actions">
+          <button type="button" className="mini-button outline icon-only" onClick={onRefreshLogs} title="Refresh logs" aria-label="Refresh logs">
+            <RefreshCw className={isLoadingLogs ? 'spin' : ''} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="mini-button outline icon-only"
+            onClick={onCopyLogs}
+            disabled={!appLogs.length}
+            title={appLogs.length ? 'Copy logs' : 'Nothing to copy — the log is empty'}
+            aria-label={appLogs.length ? 'Copy logs' : 'Copy logs — nothing to copy, the log is empty'}
+          >
+            <Copy aria-hidden="true" />
+          </button>
+          <button type="button" className="mini-button outline icon-only" onClick={onOpenLogsFolder} title="Open log folder" aria-label="Open log folder">
+            <FolderOpen aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="mini-button outline"
+            onClick={onClearLogs}
+            disabled={!appLogs.length}
+            title={appLogs.length ? 'Clear the run log' : 'Nothing to clear — the log is empty'}
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div className="log-list">
+        {appLogs.length ? (
+          appLogs.slice(0, 12).map((entry) => (
+            <LogEntry key={entry.id} entry={entry} />
+          ))
+        ) : (
+          <div className="utility-empty">
+            <strong>No logs yet</strong>
+            <span>Failed tests and desktop bridge errors will appear here.</span>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+
   return (
     <section
       className={panel === 'history' ? 'panel utility-panel history-panel panel-focused' : 'panel utility-panel panel-focused'}
@@ -332,11 +432,54 @@ export function UtilityPanel({
           className="scorecard-art-banner art-banner-slim"
           kicker="Scorecard ceremony"
           title="Saved tests, ranked scores, crowned matches"
-          body={rankedModelScores.length > 0 ? `${rankedModelScores.length} tested model${rankedModelScores.length === 1 ? '' : 's'} ranked by Match score.` : 'Run a model test or Speed Dating to start the ceremony.'}
+          body={labChannel
+            ? (labBoard.length > 0
+              ? `${labBoard.length} ${LAB_NOUN[labChannel]}${labBoard.length === 1 ? '' : 's'} ranked at ${balanceLabel(channelRankAt)}.`
+              : workbench.emptyHint)
+            : channel === 'code'
+              ? (codingRanked > 0
+                ? `${codingRanked} model${codingRanked === 1 ? '' : 's'} ranked on coding answers at ${balanceLabel(channelBalance)}.`
+                : workbench.emptyHint)
+              : rankedModelScores.length > 0
+                ? `${rankedModelScores.length} tested model${rankedModelScores.length === 1 ? '' : 's'} ranked by Match score at ${balanceLabel(channelBalance)}.`
+                : 'Run a model test or Speed Dating to start the ceremony.'}
         />
       )}
 
-      {panel === 'history' && (
+      {panel === 'history' && labChannel && (
+        <div className="utility-body">
+          <div className="utility-stat">
+            <span>{workbench.label} scorecards</span>
+            <strong>{labBoard.length} saved result{labBoard.length === 1 ? '' : 's'}</strong>
+            <em>Every {LAB_NOUN[labChannel]} this PC has run, ranked by what matters to you. Moving the fader runs nothing again.</em>
+          </div>
+          <BalanceFader
+            value={channelBalance}
+            onChange={onChannelBalanceChange}
+            accuracyMeans={workbench.accuracyMeans}
+            lockedReason={channelBalanceLock}
+            label={`What matters more for ${workbench.label.toLowerCase()}?`}
+          />
+          {labBoard.length > 0 ? (
+            <LabStandings
+              ranked={labBoard}
+              balance={channelRankAt}
+              heading={`Every ${LAB_NOUN[labChannel]} on this PC`}
+              describeAccuracy={(accuracy) => describeLabAccuracy(labChannel, accuracy)}
+              limit={labBoard.length}
+              showDates
+            />
+          ) : (
+            <div className="utility-empty">
+              <strong>No {LAB_NOUN[labChannel]}s yet</strong>
+              <span>{workbench.emptyHint}</span>
+            </div>
+          )}
+          {logConsole}
+        </div>
+      )}
+
+      {panel === 'history' && !labChannel && (
         <div className="utility-body">
           <div className="utility-stat">
             <div className="utility-stat-head">
@@ -408,16 +551,29 @@ export function UtilityPanel({
             <strong>{rankedModelScores.length} tested model{rankedModelScores.length === 1 ? '' : 's'}</strong>
             <em>
               {rankedModelScores.length > 0
-                ? 'Click any row to open it in Top Pick.'
+                ? `Click any row to open it in Top Pick. Ranked at ${balanceSplit(channelBalance)}.`
                 : 'Run a single test or Speed Dating to build the ranking.'}
             </em>
           </div>
+          <BalanceFader
+            value={channelBalance}
+            onChange={onChannelBalanceChange}
+            accuracyMeans={workbench.accuracyMeans}
+            label={`What matters more for ${channel === 'code' ? 'code' : 'chat and writing'}?`}
+          />
+          {/* Code's own board, first: the coding answers alone, at the Code
+              fader. The Match ranking below still blends every kind of question. */}
+          {channel === 'code' && (
+            <section className="speed-date-results coding-board" aria-label="Coding board">
+              <CodingBoard scores={rankedModelScores} balance={channelBalance} label={workbench.shortLabel} />
+            </section>
+          )}
           <div className="utility-stat">
             <span>Best saved test</span>
             <strong>{topRankedScore ? topRankedScore.model : 'No saved score'}</strong>
             <em>{topRankedScore ? `${formatMatchScore(topRankedScore)} total · ${topRankedScore.grade}` : 'Run a test to save the next scorecard.'}</em>
           </div>
-          {goalMatches.length > 0 && (
+          {channel !== 'code' && goalMatches.length > 0 && (
             <div className="task-picks-section goal-match-board" aria-label="Your matches by goal">
               <span>Matches</span>
               <div className="task-picks-grid">
@@ -455,7 +611,7 @@ export function UtilityPanel({
               </div>
             </div>
           )}
-          {taskPicks.length > 0 && (
+          {channel !== 'code' && taskPicks.length > 0 && (
             <div className="task-picks-section" aria-label="Category picks">
               <span>{goalMatches.length > 0 ? 'More picks' : 'Matches'}</span>
               <div className="task-picks-grid">
@@ -592,55 +748,7 @@ export function UtilityPanel({
               <span>Compare two or more models to rank the best match.</span>
             </div>
           )}
-          <section className="log-console advanced-only" aria-label="Run logs">
-            <div className="log-console-head">
-              <div>
-                <span>Run Logs</span>
-                <strong>{isLoadingLogs ? 'Loading' : `${appLogs.length} entries`}</strong>
-                <em>{logPath || 'Log file not created yet'}</em>
-              </div>
-              <div className="log-actions">
-                <button type="button" className="mini-button outline icon-only" onClick={onRefreshLogs} title="Refresh logs" aria-label="Refresh logs">
-                  <RefreshCw className={isLoadingLogs ? 'spin' : ''} aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className="mini-button outline icon-only"
-                  onClick={onCopyLogs}
-                  disabled={!appLogs.length}
-                  title={appLogs.length ? 'Copy logs' : 'Nothing to copy — the log is empty'}
-                  aria-label={appLogs.length ? 'Copy logs' : 'Copy logs — nothing to copy, the log is empty'}
-                >
-                  <Copy aria-hidden="true" />
-                </button>
-                <button type="button" className="mini-button outline icon-only" onClick={onOpenLogsFolder} title="Open log folder" aria-label="Open log folder">
-                  <FolderOpen aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className="mini-button outline"
-                  onClick={onClearLogs}
-                  disabled={!appLogs.length}
-                  title={appLogs.length ? 'Clear the run log' : 'Nothing to clear — the log is empty'}
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-
-            <div className="log-list">
-              {appLogs.length ? (
-                appLogs.slice(0, 12).map((entry) => (
-                  <LogEntry key={entry.id} entry={entry} />
-                ))
-              ) : (
-                <div className="utility-empty">
-                  <strong>No logs yet</strong>
-                  <span>Failed tests and desktop bridge errors will appear here.</span>
-                </div>
-              )}
-            </div>
-          </section>
+          {logConsole}
         </div>
       )}
 

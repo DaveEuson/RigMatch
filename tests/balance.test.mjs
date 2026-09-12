@@ -131,6 +131,15 @@ test('Speed first crowns the fastest that passed; Accuracy first the most accura
   assert.equal(crowned(rankByBalance(field, 100))?.item, 'careful');
 });
 
+test('a notch ranks the same wherever the fader sits inside it', () => {
+  // The default Balanced is 51.5...; clicking Balanced stores 52. Seen on the
+  // RTX 4070 race: one label read 73 on the board and 74 in Scorecards.
+  const field = [run('Wan 2.2 A14B', 160.6, 1), run('Wan 2.1 1.3B', 358.1, 1)];
+  const values = (position) => rankByBalance(field, position).map((entry) => Math.round(entry.value * 100));
+  assert.deepEqual(values(52), values(BALANCED));
+  assert.deepEqual(values(21), values(BALANCE_NOTCHES[0].value));
+});
+
 test('speed is scored against the race, not a fixed scale', () => {
   const ranked = rankByBalance([run('a', 160, 1), run('b', 320, 1)], 50);
   assert.equal(ranked[0].speed, 1);

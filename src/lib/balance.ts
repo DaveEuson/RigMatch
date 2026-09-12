@@ -174,7 +174,11 @@ export function rankByBalance<T>(contenders: Contender<T>[], balance: number): R
   const alive = contenders.filter((contender) => !contender.failed && contender.pace > 0);
   const fastest = alive.reduce((max, contender) => Math.max(max, contender.pace), 0);
   const anyJudged = alive.some((contender) => contender.accuracy !== null);
-  const share = anyJudged ? clampBalance(balance) / 100 : 0;
+  // A notch is one position, wherever inside its half step the fader sits:
+  // the default Balanced (51.5...) and a click on Balanced (52) must score the
+  // same, or one label shows two numbers for the same result.
+  const position = notchAt(balance)?.value ?? clampBalance(balance);
+  const share = anyJudged ? position / 100 : 0;
 
   const ranked = alive
     .map((contender): RankedContender<T> => {

@@ -169,3 +169,17 @@ export function readWorkbench(raw: string | null | undefined): WorkbenchId | nul
 export function balanceChannel(id: WorkbenchId): ChannelId {
   return id === 'all' ? 'chat' : id;
 }
+
+/**
+ * The channels Speed Dating cannot test.
+ *
+ * Speed Dating asks questions, and an image, video or transcription model does
+ * not answer questions: it makes something. On these channels the Comparison
+ * screen puts what each model made side by side instead, and the Speed Dating
+ * lineup strip stays out of the way.
+ */
+export type ComparedChannel = 'images' | 'video' | 'listening';
+
+export function isComparedChannel(id: WorkbenchId): id is ComparedChannel {
+  return id === 'images' || id === 'video' || id === 'listening';
+}

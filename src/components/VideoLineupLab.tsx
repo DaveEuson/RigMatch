@@ -1,31 +1,23 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check, Download, Film, Play, RefreshCw, Sparkles } from 'lucide-react';
 import type { PullProgressUpdate, SystemProfile } from '../types';
-import { getErrorMessage, getScoreTone } from '../lib/format';
-import { fetchComfyOutput } from '../lib/comfyTransport';
-import { dataUrlToBlob } from '../lib/dataUrl';
 import { readComfySettings } from '../lib/comfySettings';
 import { formatBytesGb, generationModelById, type ComfyFolderListing } from '../lib/generationCatalog';
 import { readHuggingFaceToken } from '../lib/huggingFaceToken';
 import { CUSTOM_IMAGE_PROMPT_ID } from '../lib/imageGenScoring';
-import type { AdvancedLabResult } from '../lib/labResults';
-import { accuracyCounted, balanceLabel, balanceSplit } from '../lib/balance';
 import { workbenchById } from '../lib/workbench';
 import { useLabResults } from '../hooks/useLabResults';
 import { readVideoCalibration } from '../lib/videoCalibrationStore';
 import { CALIBRATION_MODEL, formatVideoDuration, formatVideoEstimate, type VideoEstimate } from '../lib/videoFit';
 import {
-  againstEstimate,
   allLineupEntries,
   comfyListing,
   estimateLineup,
   lineupCardFacts,
   measuredSecondsFor,
-  rankLineupByBalance,
   videoMachineFrom,
   type LineupCardFacts,
-  type LineupRecordEntry,
   type VideoLineupEntry,
 } from '../lib/videoLineup';
 import { startVideoLineup, stopVideoLineup, subscribeLineupSession } from '../lib/videoLineupSession';
@@ -33,6 +25,7 @@ import { useVideoLineupSession } from '../hooks/useVideoLineupSession';
 import { ComfyStartButton } from './ComfyStartButton';
 import { PromptPicker } from './PromptPicker';
 import { BalanceFader } from './BalanceFader';
+import { VideoLineupResults } from './VideoLineupResults';
 
 type Card = { entry: VideoLineupEntry; facts: LineupCardFacts };
 
@@ -45,12 +38,6 @@ function cardGroup({ facts }: Card): number {
 }
 
 const DOWNLOADING: ReadonlySet<string> = new Set(['queued', 'started', 'pulling', 'paused']);
-
-const AGAINST_ESTIMATE = {
-  inside: 'inside its estimate',
-  faster: 'faster than estimated',
-  slower: 'slower than estimated',
-} as const;
 
 const BASIS_NOTE: Record<VideoEstimate['basis'], string> = {
   measured: 'Timed on this GPU.',
@@ -71,16 +58,6 @@ const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1
 function describeOutput(entry: VideoLineupEntry): string {
   const { width, height, seconds, sound } = entry.output;
   return `${width}×${height} · ${Math.round(seconds)} s${sound ? ' · sound' : ''}`;
-}
-
-/** Its own clock, so the list does not re-render every second of a three-hour render. */
-function Elapsed({ since }: { since: number }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-  return <>{formatVideoDuration(Math.max(0, (now - since) / 1000))}</>;
 }
 
 /**
@@ -145,22 +122,11 @@ export function VideoLineupLab({
   const [picks, setPicks] = useState<ReadonlySet<string>>(() => new Set());
   const [confirmUnload, setConfirmUnload] = useState(false);
   const [showAll, setShowAll] = useState(false);
-  // Clips are fetched only when asked for: a few seconds of footage is
-  // megabytes, and the scored artifact is the frame.
-  const [playback, setPlayback] = useState<Record<string, string>>({});
-  const [loadingClips, setLoadingClips] = useState<ReadonlySet<string>>(() => new Set());
-  const [clipErrors, setClipErrors] = useState<Record<string, string>>({});
-  const clipUrls = useRef(new Map<string, string>());
   // Both move as the lineup does: a finished model replaces its own estimate
   // with its time, and LTX-Video 2B recalibrates every other.
   const saved = useLabResults();
   const [calibration, setCalibration] = useState(() => readVideoCalibration());
   useEffect(() => subscribeLineupSession(() => setCalibration(readVideoCalibration())), []);
-  // Object URLs outlive the component unless revoked, and each pins a clip in memory.
-  useEffect(() => {
-    const urls = clipUrls.current;
-    return () => { for (const url of urls.values()) URL.revokeObjectURL(url); };
-  }, []);
 
   const machine = useMemo(() => videoMachineFrom(system), [system]);
   const machineKnown = system.memory.totalGb > 0;
@@ -297,62 +263,9 @@ export function VideoLineupLab({
   };
 
   const record = session.record;
-  // Ranked at the fader, not by time alone: a quick clip of the wrong scene is
-  // not what anyone raced for, and a failed check can never win.
-  const ranked = record ? rankLineupByBalance(record.entries, rankAt) : [];
-  const places = ranked.filter((entry) => entry.standing === 'ranked').map((entry) => entry.item.key);
-  // With no clip judged the list is in time order whatever the fader says, and
-  // the label must say so rather than claim a weighting that never applied.
-  const judgedRace = accuracyCounted(ranked);
-  const rankLabel = judgedRace ? balanceLabel(rankAt) : 'speed only';
   const finished = new Set(record?.entries.map((item) => item.key));
   const unfinished = record ? record.planned.filter((item) => !finished.has(item.key) && item.key !== session.current?.key) : [];
   const currentCard = session.current ? cards.find((card) => card.entry.key === session.current?.key) : undefined;
-  const clips = record
-    ? ranked
-      .filter(({ item }) => !item.error)
-      .map(({ item }) => ({ item, result: saved[`video:${item.key}`] }))
-      .filter((clip): clip is { item: LineupRecordEntry; result: AdvancedLabResult } => clip.result?.lineupId === record.id)
-    : [];
-  const clipKey = (key: string) => `${record?.id ?? ''}:${key}`;
-
-  const loadClip = async (key: string, ref: { filename: string; subfolder: string; type: string }) => {
-    setLoadingClips((current) => new Set(current).add(key));
-    try {
-      const dataUrl = await fetchComfyOutput(ref);
-      // A blob costs one copy and then behaves like a file; a multi-megabyte
-      // data: URL sitting in the DOM does not. Decoded in place, because
-      // fetch() on a data: URL is refused by the app's own security policy.
-      const url = URL.createObjectURL(dataUrlToBlob(dataUrl));
-      const previous = clipUrls.current.get(key);
-      if (previous) URL.revokeObjectURL(previous);
-      clipUrls.current.set(key, url);
-      setPlayback((current) => ({ ...current, [key]: url }));
-      setClipErrors((current) => {
-        const next = { ...current };
-        delete next[key];
-        return next;
-      });
-    } catch (error) {
-      // Usually the clip was cleared from ComfyUI's output folder since the
-      // run. Said rather than swallowed: staying quiet here once hid a player
-      // that could not play anything at all.
-      setClipErrors((current) => ({ ...current, [key]: getErrorMessage(error) }));
-    } finally {
-      setLoadingClips((current) => {
-        const next = new Set(current);
-        next.delete(key);
-        return next;
-      });
-    }
-  };
-
-  const playAll = () => {
-    for (const { item, result } of clips) {
-      const key = clipKey(item.key);
-      if (result.videoRef && !playback[key]) void loadClip(key, result.videoRef);
-    }
-  };
 
   const startNote = otherRunActive && !session.running
     ? 'Another test is using the graphics card. The race can start when it finishes.'
@@ -544,149 +457,20 @@ export function VideoLineupLab({
       )}
 
       {record && (
-        <section className="video-lineup-results" aria-label={session.running ? 'This lineup so far' : 'Last lineup'}>
-          <div className="video-lineup-results-head">
-            <strong>{session.running ? 'This lineup so far' : 'Last lineup'}</strong>
-            <span>
-              “{record.prompt}” · seed {record.seed} ·{' '}
-              {record.unloaded ? 'every model started cold' : 'models were not unloaded between runs'}
-              {record.gpu ? ` · ${record.gpu}` : ''}
-            </span>
-            <span>
-              {judgedRace
-                ? `Ranked at ${balanceSplit(rankAt)}`
-                : 'Ranked on speed alone: nothing checked these clips, so accuracy cannot count'}
-              {typeof record.balance === 'number' && Math.round(record.balance) !== Math.round(rankAt)
-                ? `; the race started at ${balanceLabel(record.balance)}`
-                : ''}
-            </span>
-          </div>
-          <ol className="video-lineup-board">
-            {ranked.map((entry) => {
-              const item = entry.item;
-              if (item.error) {
-                return (
-                  <li key={item.key} className="failed">
-                    <b>—</b>
-                    <span>
-                      <strong>{item.name}</strong>
-                      <em>{item.error}</em>
-                    </span>
-                    <span className="video-lineup-board-time">failed</span>
-                    <span />
-                  </li>
-                );
-              }
-              const time = formatVideoDuration(item.elapsedMs / 1000);
-              const matched = typeof item.adherence === 'number'
-                ? `${Math.round(item.adherence * 100)}% of the prompt`
-                : 'unjudged';
-              if (entry.standing === 'failed') {
-                return (
-                  <li key={item.key} className="short">
-                    <b>—</b>
-                    <span>
-                      <strong>{item.name}</strong>
-                      <em>{matched}: below the pass line, so it cannot win</em>
-                    </span>
-                    <span className="video-lineup-board-time">{time}</span>
-                    <span />
-                  </li>
-                );
-              }
-              const verdict = againstEstimate(item);
-              // Both measures scored against this race — the fastest clip gets
-              // full marks for speed — so a fixed scale built for one model
-              // family cannot sink another.
-              const value = Math.round(entry.value * 100);
-              return (
-                <li key={item.key} className={entry.standing === 'unjudged' ? 'unjudged' : undefined}>
-                  <b>{entry.standing === 'ranked' ? places.indexOf(item.key) + 1 : '·'}</b>
-                  <span>
-                    <strong>{item.name}</strong>
-                    <em>
-                      {entry.standing === 'unjudged' ? 'unjudged, so it ranks after judged clips' : matched}
-                      {` · ${item.realtimeCost.toFixed(1)}× realtime`}
-                      {verdict ? ` · ${AGAINST_ESTIMATE[verdict]}` : ''}
-                    </em>
-                  </span>
-                  <span className="video-lineup-board-time">{time}</span>
-                  <b className={`advanced-lab-grade ${getScoreTone(value)}`}>{value} · {rankLabel}</b>
-                </li>
-              );
-            })}
-            {session.current && (
-              <li className="rendering">
-                <b><RefreshCw className="spin" aria-hidden="true" /></b>
-                <span>
-                  <strong>{session.current.name}</strong>
-                  <em>
-                    {currentCard ? `rendering — ${lowerFirst(formatVideoEstimate(currentCard.facts.estimate, { roughNote: false }))}` : 'rendering'}
-                  </em>
-                </span>
-                <span className="video-lineup-board-time"><Elapsed since={session.current.startedAt} /></span>
-                <span />
-              </li>
-            )}
-            {unfinished.map((item) => (
-              <li key={item.key} className="waiting">
-                <b>·</b>
-                <span>
-                  <strong>{item.name}</strong>
-                  <em>{session.running ? 'waiting its turn' : 'not run'}</em>
-                </span>
-                <span />
-                <span />
-              </li>
-            ))}
-          </ol>
-
-          {clips.length > 0 && (
-            <div className="video-lineup-clips">
-              {clips.map(({ item, result }) => {
-                const key = clipKey(item.key);
-                const ref = result.videoRef;
-                return (
-                  <figure key={key} className="video-lineup-clip">
-                    {playback[key] ? (
-                      <video src={playback[key]} controls autoPlay loop muted />
-                    ) : result.imageDataUrl ? (
-                      <img src={result.imageDataUrl} alt={`Middle frame of the clip ${item.name} rendered`} />
-                    ) : (
-                      <div className="video-lineup-clip-empty">No frame came back</div>
-                    )}
-                    <figcaption>
-                      <strong>{item.name}</strong>
-                      <span>{formatVideoDuration(item.elapsedMs / 1000)}</span>
-                      {!playback[key] && ref && (
-                        <button
-                          type="button"
-                          className="mini-button outline"
-                          onClick={() => void loadClip(key, ref)}
-                          disabled={loadingClips.has(key)}
-                        >
-                          <Play aria-hidden="true" />
-                          {loadingClips.has(key) ? 'Loading' : 'Play'}
-                        </button>
-                      )}
-                      {clipErrors[key] && (
-                        <em className="video-lineup-error">Could not load this clip. {clipErrors[key]}</em>
-                      )}
-                    </figcaption>
-                  </figure>
-                );
-              })}
-            </div>
-          )}
-          {clips.length > 1 && clips.some(({ item, result }) => result.videoRef && !playback[clipKey(item.key)]) && (
-            <div className="advanced-lab-actions">
-              <button type="button" className="mini-button" onClick={playAll}>
-                <Play aria-hidden="true" />
-                Play them all side by side
-              </button>
-            </div>
-          )}
-        </section>
+        <VideoLineupResults
+          record={record}
+          saved={saved}
+          rankAt={rankAt}
+          running={session.running}
+          current={session.current
+            ? {
+              name: session.current.name,
+              startedAt: session.current.startedAt,
+              note: currentCard ? lowerFirst(formatVideoEstimate(currentCard.facts.estimate, { roughNote: false })) : undefined,
+            }
+            : null}
+          unfinished={unfinished}
+        />
       )}
     </article>
   );

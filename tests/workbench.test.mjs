@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const {
-  WORKBENCHES, CHANNEL_IDS, balanceChannel, readWorkbench, workbenchById, workbenchForGoal,
+  WORKBENCHES, CHANNEL_IDS, balanceChannel, isComparedChannel, readWorkbench, workbenchById, workbenchForGoal,
 } = await import('../src/lib/workbench.ts');
 const { GOALS } = await import('../src/lib/goals.ts');
 const { TASK_FILTER_CHIPS } = await import('../src/lib/modelCatalog.ts');
@@ -54,6 +54,11 @@ test('each channel has its own fader, and All ranks the way chat does', () => {
   assert.deepEqual([...CHANNEL_IDS].sort(), ['chat', 'code', 'images', 'listening', 'reading', 'video']);
   assert.equal(balanceChannel('all'), 'chat');
   assert.equal(balanceChannel('video'), 'video');
+});
+
+test('only the channels Speed Dating cannot test compare their own results', () => {
+  // Speed Dating asks questions; these make something instead of answering.
+  assert.deepEqual(WORKBENCHES.map((workbench) => workbench.id).filter(isComparedChannel), ['images', 'video', 'listening']);
 });
 
 test('a channel with no Lab card says where its test runs instead', () => {

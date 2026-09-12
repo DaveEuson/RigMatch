@@ -58,10 +58,12 @@ import {
   upsertModelScores,
 } from './lib/scoring';
 import { BALANCE_STORAGE_KEY, applyBalance, readBalances, type Balances } from './lib/balance';
-import { codeWinner, labWinner, videoWinner } from './lib/channelWinners';
+import { codeWinner, labWinner, rankCoding, videoWinner } from './lib/channelWinners';
+import { ChannelComparisonPanel } from './components/ChannelComparisonPanel';
 import {
   WORKBENCH_STORAGE_KEY,
   balanceChannel,
+  isComparedChannel,
   readWorkbench,
   workbenchById,
   workbenchForGoal,
@@ -1274,6 +1276,25 @@ function App() {
     const filter = workbenchInfo.taskFilter;
     return filter ? modelRows.filter((row) => modelMatchesTask(row, filter)).length : modelRows.length;
   }, [workbenchInfo.taskFilter, modelRows]);
+  /** Images, Video and Listening compare their own results; Speed Dating cannot test them. */
+  const comparedWorkbench = isComparedChannel(workbenchInfo.id) ? { ...workbenchInfo, id: workbenchInfo.id } : null;
+  /** The goal the Run dialog's focus suggestion answers: the channel's, on a channel. */
+  const runGoal: string | undefined = workbenchInfo.id === 'all' ? selectedGoals[0] : workbenchInfo.goals[0];
+  /** What the side menu counts for Comparison and Scorecards on this channel. */
+  const channelMetas = useMemo(() => {
+    const count = (challenge: string) => Object.values(labResults).filter((result) => result?.challenge === challenge).length;
+    // "None" rather than "0 pictures", as What's New says it.
+    const tally = (amount: number, noun: string) => (amount > 0 ? `${amount} ${noun}${amount === 1 ? '' : 's'}` : 'None');
+    const kept = (amount: number) => (amount > 0 ? `${amount}` : 'New');
+    switch (workbenchInfo.id) {
+      case 'images': return { comparison: tally(count('image-generation'), 'picture'), scorecards: kept(count('image-generation')) };
+      case 'video': return { comparison: tally(lineupSession.record?.entries.length ?? 0, 'clip'), scorecards: kept(count('video-generation')) };
+      case 'listening': return { comparison: tally(count('listening'), 'test'), scorecards: kept(count('listening')) };
+      case 'reading': return { comparison: undefined, scorecards: kept(count('image-recognition')) };
+      case 'code': return { comparison: undefined, scorecards: kept(rankCoding(Object.values(modelScores), balances.code).ranked.length) };
+      default: return { comparison: undefined, scorecards: undefined };
+    }
+  }, [workbenchInfo.id, labResults, lineupSession.record, modelScores, balances.code]);
 
   const confirmClearData = useCallback(async () => {
     // The run log is cleared first but must not gate anything: the main process
@@ -3465,7 +3486,8 @@ function App() {
       .filter((item) => item.id !== 'history' || hasScores)
       .filter((item) => item.id !== 'agent' || hasScores);
   }, [scoredModelCount, uiMode]);
-  const showGlobalLineup = uiMode === 'advanced' && LINEUP_STRIP_SCREENS.includes(activeNavId);
+  // The Speed Dating lineup means nothing on a channel Speed Dating cannot test.
+  const showGlobalLineup = uiMode === 'advanced' && LINEUP_STRIP_SCREENS.includes(activeNavId) && !comparedWorkbench;
 
   useEffect(() => {
     if (visibleNavItems.some((item) => item.id === activeNavId)) return;
@@ -3660,6 +3682,8 @@ function App() {
         activeId={activeNavId}
         scoredCount={scoredModelCount}
         topPickMeta={topRigPick?.score ? topRigPick.score.grade : (scoredModelCount > 0 ? 'Ready' : 'Wait')}
+        comparisonMeta={channelMetas.comparison}
+        scorecardMeta={channelMetas.scorecards}
         uiMode={uiMode}
         onSelect={selectNav}
         onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
@@ -3793,7 +3817,18 @@ function App() {
             onOpenModel={(model) => { setSelectedModel(model); selectNav('models'); }}
           />
         )}
-        {activeNavId === 'speedDate' && (
+        {activeNavId === 'speedDate' && comparedWorkbench && (
+          <ChannelComparisonPanel
+            workbench={comparedWorkbench}
+            labResults={labResults}
+            lineup={{ record: lineupSession.record, running: lineupSession.running, current: lineupSession.current }}
+            balance={balances[activeChannel]}
+            onBalanceChange={(value) => setBalance(activeChannel, value)}
+            lockedReason={balanceLock(activeChannel)}
+            onOpenLab={() => selectNav('activity')}
+          />
+        )}
+        {activeNavId === 'speedDate' && !comparedWorkbench && (
           <SpeedDatePanel
             active={true}
             host={selectedHost}
@@ -3815,6 +3850,10 @@ function App() {
             onRemoveCandidate={toggleShortlist}
             onQueueMissingModels={requestThirdPartyModelDownloads}
             onRunListTest={requestListTest}
+            workbench={workbenchInfo}
+            balance={balances[activeChannel]}
+            onBalanceChange={(value) => setBalance(activeChannel, value)}
+            labResults={labResults}
           />
         )}
         {activeNavId === 'agent' && (
@@ -3907,6 +3946,11 @@ function App() {
             onDownloadUpdate={downloadUpdate}
             onInstallUpdate={installUpdate}
             onSelectTopPick={(model) => { setSelectedModel(model); selectNav('agent'); }}
+            workbench={workbenchInfo}
+            channelBalance={balances[activeChannel]}
+            onChannelBalanceChange={(value) => setBalance(activeChannel, value)}
+            channelBalanceLock={balanceLock(activeChannel)}
+            labResults={labResults}
           />
         )}
       </main>
@@ -4096,8 +4140,8 @@ function App() {
           onChangeQuestionCount={setBenchmarkQuestionCount}
           onLoadPreset={setBenchmarkQuestions}
           autoJudgeModel={autoJudgeModels.find((m) => m !== (pendingSingleModel ?? selectedModel)) ?? ''}
-          goalPresetId={presetIdForGoal(selectedGoals[0])}
-          goalDesire={selectedGoals[0] ? goalById(selectedGoals[0])?.desire.toLowerCase() : undefined}
+          goalPresetId={presetIdForGoal(runGoal)}
+          goalDesire={runGoal ? goalById(runGoal)?.desire.toLowerCase() : undefined}
           onEditQuestions={() => { cancelPendingRun(); setSuiteEditorOpen(true); }}
           qualityMode={qualityMode}
           judgeModel={effectiveJudgeModel}

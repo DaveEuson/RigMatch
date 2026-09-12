@@ -2,6 +2,7 @@
 import { accuracyCounted, balanceLabel, type RankedContender } from '../lib/balance';
 import { getScoreTone } from '../lib/format';
 import type { AdvancedLabResult } from '../lib/labResults';
+import { formatHistoryTime } from '../lib/modelCatalog';
 import { formatVideoDuration } from '../lib/videoFit';
 
 /** Enough to see who leads and why; the rest are one click away in Scorecards. */
@@ -19,18 +20,25 @@ export function LabStandings({
   balance,
   describeAccuracy,
   heading,
+  limit = SHOWN,
+  showDates = false,
 }: {
   ranked: RankedContender<AdvancedLabResult>[];
   balance: number;
   /** "82% of the prompt", "score 91". */
   describeAccuracy: (accuracy: number) => string;
   heading: string;
+  /** Rows before "N more below the line". Scorecards shows them all. */
+  limit?: number;
+  /** When each test ran, for a list that is a record rather than a race. */
+  showDates?: boolean;
 }) {
   if (ranked.length === 0) return null;
   // Nothing judged means time order, whatever the fader says.
   const counted = accuracyCounted(ranked);
   const label = counted ? balanceLabel(balance) : 'speed only';
-  const hidden = ranked.length - SHOWN;
+  const hidden = ranked.length - limit;
+  const when = (completedAt: string) => (showDates ? ` · ${formatHistoryTime(completedAt)}` : '');
   const places = ranked.filter((entry) => entry.standing === 'ranked').map((entry) => entry.item);
 
   return (
@@ -40,7 +48,7 @@ export function LabStandings({
         <span>{counted ? `Ranked at ${label}` : 'Ranked on speed alone: nothing was judged'}</span>
       </div>
       <ol>
-        {ranked.slice(0, SHOWN).map((entry) => {
+        {ranked.slice(0, limit).map((entry) => {
           const result = entry.item;
           const time = formatVideoDuration(result.elapsedMs / 1000);
           if (entry.standing === 'failed') {
@@ -53,6 +61,7 @@ export function LabStandings({
                     {result.error
                       ? result.error
                       : `${time} · ${describeAccuracy(entry.accuracy ?? 0)}, below the pass line, so it cannot win`}
+                    {when(result.completedAt)}
                   </em>
                 </span>
                 <span />
@@ -69,6 +78,7 @@ export function LabStandings({
                   {time}
                   {' · '}
                   {entry.accuracy === null ? 'unjudged, so it ranks after judged results' : describeAccuracy(entry.accuracy)}
+                  {when(result.completedAt)}
                 </em>
               </span>
               <b className={`advanced-lab-grade ${getScoreTone(value)}`}>{value} · {label}</b>

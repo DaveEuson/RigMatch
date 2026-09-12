@@ -20197,3 +20197,184 @@ a.whats-next-support:hover {
     padding: 0 4px 2px;
   }
 }
+
+/* ── Comparison and Scorecards per channel ───────────────────────────────
+   Images, Video and Listening compare what each model made, side by side;
+   Code ranks the coding answers alone. */
+
+.channel-comparison {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.channel-comparison-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 14px 14px;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.lab-comparison {
+  display: grid;
+  gap: 16px;
+}
+
+.lab-comparison-group {
+  display: grid;
+  gap: 8px;
+}
+
+.lab-comparison-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lab-comparison-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.lab-comparison-head strong {
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.lab-comparison-head span,
+.lab-comparison-head em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.lab-comparison-picture {
+  width: 96px;
+  height: 64px;
+  flex: none;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: inset 0 0 0 1px rgba(255, 249, 239, 0.08);
+}
+
+.lab-comparison-cards {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  list-style: none;
+}
+
+.lab-comparison-cards.listening,
+.lab-comparison-cards.reading {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.lab-comparison-card {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(255, 249, 239, 0.07);
+  border-radius: 10px;
+  background: var(--panel-2);
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+/* Gold for the one that won, and nothing else. */
+.lab-comparison-card.leads {
+  border-color: rgba(var(--gold-rgb), 0.55);
+}
+
+.lab-comparison-card.unjudged {
+  opacity: 0.85;
+}
+
+.lab-comparison-card.failed {
+  border-color: rgba(var(--red-rgb), 0.24);
+  background: rgba(var(--red-rgb), 0.06);
+}
+
+.lab-comparison-card.failed > em {
+  color: var(--red);
+}
+
+.lab-comparison-card img,
+.lab-comparison-missing {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  background: var(--bg);
+  object-fit: cover;
+}
+
+.lab-comparison-missing {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.lab-comparison-card-head {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.lab-comparison-card-head b {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.lab-comparison-card.leads .lab-comparison-card-head b {
+  color: var(--gold);
+}
+
+.lab-comparison-card-head strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lab-comparison-card-head .advanced-lab-grade {
+  padding: 3px 7px;
+  font-size: 11px;
+}
+
+.lab-comparison-card > em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.lab-comparison-text {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.speed-date-results li.unmeasured {
+  opacity: 0.7;
+}
+
+.coding-board {
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 249, 239, 0.03);
+}

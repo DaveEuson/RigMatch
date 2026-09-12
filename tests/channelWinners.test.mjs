@@ -2,7 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { codeWinner, labWinner, rankLabResults, videoWinner } = await import('../src/lib/channelWinners.ts');
+const {
+  codeWinner, comparisonGroups, labWinner, rankCoding, rankLabList, rankLabResults, rankMatchResults, videoWinner,
+} = await import('../src/lib/channelWinners.ts');
 const { CURRENT_SCORE_SCHEMA_VERSION } = await import('../src/lib/scoring.ts');
 
 /**
@@ -73,6 +75,52 @@ test('a winner from results nothing judged says it won on speed alone', () => {
   const winner = labWinner(results, 'images', 90);
   assert.equal(winner?.model, 'quick');
   assert.equal(winner?.speedOnly, true);
+});
+
+const matchScore = (model, over = {}) => ({
+  model, total: 50, grade: 'D', speed: 50, sobriety: 50, stability: 80, fit: 80,
+  completedAt: '2026-09-11T00:00:00.000Z', scoreSchemaVersion: CURRENT_SCORE_SCHEMA_VERSION, ...over,
+});
+
+test('a comparison re-ranks at the chat fader without running again', () => {
+  const results = [matchScore('careful:7b', { sobriety: 95, speed: 30 }), matchScore('quick:1b', { sobriety: 50, speed: 100 })];
+  assert.deepEqual(rankMatchResults(results, 100).map((score) => score.model), ['careful:7b', 'quick:1b']);
+  assert.deepEqual(rankMatchResults(results, 0).map((score) => score.model), ['quick:1b', 'careful:7b']);
+  // The measurements are the run's; only the headline moves.
+  assert.equal(rankMatchResults(results, 0)[1].sobriety, 95);
+});
+
+test('the code board keeps the models it cannot rank, and says which', () => {
+  const { ranked, unmeasured } = rankCoding([
+    { ...coder(80, 90), model: 'graded:7b' },
+    { ...coder(100, 70, 1), model: 'ungraded:1b' },
+  ], 50);
+  assert.deepEqual(ranked.map((entry) => entry.item.model), ['graded:7b']);
+  assert.deepEqual(unmeasured.map((score) => score.model), ['ungraded:1b']);
+});
+
+test('video results rank on the frame check, like pictures', () => {
+  const ranked = rankLabList([
+    lab('video-generation', 'Wan 2.2 5B', 161, { adherence: 0.6 }),
+    lab('video-generation', 'Wan 2.2 A14B', 160, { adherence: 1 }),
+    lab('image-generation', 'sdxl', 2, { adherence: 1 }),
+  ], 'video', 0);
+  assert.deepEqual(ranked.map((entry) => [entry.item.model, entry.standing]), [['Wan 2.2 A14B', 'ranked'], ['Wan 2.2 5B', 'failed']]);
+});
+
+test('only results given the same thing are put side by side', () => {
+  const results = [
+    lab('image-generation', 'a', 2, { response: 'a lighthouse', completedAt: '2026-09-10T10:00:00.000Z' }),
+    lab('image-generation', 'b', 3, { response: 'a lighthouse', completedAt: '2026-09-11T10:00:00.000Z' }),
+    lab('image-generation', 'c', 4, { response: 'a cat', completedAt: '2026-09-09T10:00:00.000Z' }),
+    lab('image-recognition', 'd', 5, { imageDataUrl: '/cat.webp' }),
+    lab('image-recognition', 'e', 5, { imageDataUrl: '/dog.webp', completedAt: '2026-09-12T00:00:00.000Z' }),
+    lab('listening', 'f', 5),
+  ];
+  assert.deepEqual(comparisonGroups(results, 'images').map((group) => [group.key, group.results.length]), [['a lighthouse', 2], ['a cat', 1]]);
+  assert.deepEqual(comparisonGroups(results, 'reading').map((group) => group.key), ['/dog.webp', '/cat.webp']);
+  // Listening keeps no record of what it heard, so it is one group.
+  assert.equal(comparisonGroups(results, 'listening').length, 1);
 });
 
 test('the video winner moves with the fader without re-running anything', () => {
