@@ -10,7 +10,6 @@
  */
 
 import { agentArcadeApi } from '../api.ts';
-import { COMFY_DEFAULT_URL } from './comfyui.ts';
 import { createVideoTransport } from './comfyTransport.ts';
 import { readComfySettings } from './comfySettings.ts';
 import { batchSeed } from './videoGen.ts';
@@ -59,11 +58,16 @@ export type ImageChallengeOptions = {
 };
 
 export async function runImageLabChallenge(options: ImageChallengeOptions): Promise<ImageRunResult> {
+  const settings = readComfySettings();
   const {
     checkpoint, promptId, customPrompt, judgeModel, ollamaBaseUrl, seed,
-    comfyBaseUrl = COMFY_DEFAULT_URL, signal,
+    // The ComfyUI that Settings points at, as every other test uses. This was
+    // ComfyUI's usual port, so with any other address a row's picture test
+    // asked one ComfyUI whether it was free and then unloaded and drew on
+    // another.
+    comfyBaseUrl = settings.baseUrl, signal,
   } = options;
-  const { dedicated } = readComfySettings();
+  const { dedicated } = settings;
 
   return runImageGeneration({
     // The video transport, because it carries free() — needed when this

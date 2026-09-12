@@ -12,7 +12,9 @@ import { AvatarBust } from './Avatars';
 import { ImageResultModal } from './ImageResultModal';
 import type { StoredRunReport } from '../lib/runReports';
 import { describeReport, hasTranscripts } from '../lib/runReports';
-import { Code2, Download, FileText, Gauge, History, Lightbulb, Play, RefreshCw, X } from 'lucide-react';
+import { renderLabel, type RenderActivity, type RenderOutcome } from '../lib/renderActivity';
+import { Elapsed } from './Elapsed';
+import { Code2, Download, FileText, Film, Gauge, History, Lightbulb, Play, RefreshCw, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 export function ActivityPanel({
@@ -37,6 +39,9 @@ export function ActivityPanel({
   balances,
   onBalanceChange,
   onOpenComparison,
+  render = null,
+  onOpenRender,
+  lastRender = null,
 }: {
   runProgress: RunProgress | null;
   skillRunStatus: SkillRunStatus;
@@ -63,6 +68,12 @@ export function ActivityPanel({
   onBalanceChange: (channel: ChannelId, value: number) => void;
   /** Where a channel with no Lab card sends people instead. */
   onOpenComparison?: () => void;
+  /** What ComfyUI is rendering for RigMatch, wherever it was started. */
+  render?: RenderActivity | null;
+  /** Where the render is shown in full: its model's row, or the comparison. */
+  onOpenRender?: (render: RenderActivity) => void;
+  /** How the last render ended, until another one does. */
+  lastRender?: RenderOutcome | null;
 }) {
   const [previewApp, setPreviewApp] = useState<{ html: string; model: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; model: string } | null>(null);
@@ -86,7 +97,7 @@ type ActivityJob = {
   imageDataUrl?: string;
 };
 
-  const anythingRunning = benchmarkActive || skillActive || activePulls.length > 0 || isListTesting;
+  const anythingRunning = benchmarkActive || skillActive || activePulls.length > 0 || isListTesting || Boolean(render);
 
   // Every saved lab result, re-read the moment any test writes one, so a
   // finished App Builder, image or video job appears here straight away.
@@ -228,6 +239,52 @@ type ActivityJob = {
               </button>
             )}
           </>
+        )}
+      </article>
+
+      <article className="activity-card">
+        <div className="activity-card-head">
+          <Film aria-hidden="true" />
+          <strong>Renders</strong>
+          <b className={render ? 'activity-state running' : 'activity-state idle'}>
+            {render ? renderLabel(render) : lastRender ? (lastRender.failed ? 'Failed' : 'Finished') : 'Idle'}
+          </b>
+        </div>
+        {render ? (
+          <>
+            <p>
+              <strong>{render.model ?? 'ComfyUI'}</strong>
+              {render.step ? ` · ${render.step.index + 1} of ${render.step.total}` : ''}
+              {render.startedAt !== null ? <> · <Elapsed since={render.startedAt} /> so far</> : null}
+            </p>
+            <em>{render.message}</em>
+            <div className="activity-render-actions">
+              {onOpenRender && (
+                <button type="button" className="mini-button outline" onClick={() => onOpenRender(render)}>
+                  {render.solo ? 'Show its row' : 'Show the comparison'}
+                </button>
+              )}
+              <button
+                type="button"
+                className="mini-button outline"
+                onClick={render.stop}
+                title="ComfyUI cancels what it is rendering"
+              >
+                <X aria-hidden="true" />
+                Stop
+              </button>
+            </div>
+          </>
+        ) : lastRender ? (
+          <>
+            <p className={lastRender.failed ? 'activity-render-last failed' : 'activity-render-last'}>{lastRender.message}</p>
+            <em>
+              Ended {formatHistoryTime(new Date(lastRender.endedAt).toISOString())}. Picture, video and audio
+              tests show here while they run, wherever they were started.
+            </em>
+          </>
+        ) : (
+          <em>Picture, video and audio tests on ComfyUI show here while they run, wherever they were started.</em>
         )}
       </article>
 

@@ -90,6 +90,7 @@ export function ModelCabinet({
   generationTest,
   skillTest,
   channel,
+  renderingModelId = null,
   goalLens,
   selectedModel,
   installedModelNames,
@@ -140,6 +141,11 @@ export function ModelCabinet({
   skillTest: SkillTestContext;
   /** The channel Advanced Mode is on, which decides what a row's Test runs. */
   channel: WorkbenchId;
+  /**
+   * The catalogue id of a model being tested on its own right now. Its Test
+   * says so even with its panel closed, which is where people look for it.
+   */
+  renderingModelId?: string | null;
   /** The task filter implied by the user's primary goal, if any. Applied when
       it changes and freely clearable after — a lens, never a lock. */
   goalLens?: ModelTaskFilterId;
@@ -225,7 +231,12 @@ export function ModelCabinet({
    * problem being solved is thirty-five near-identical Gemma 4 rows; a table
    * that opens everything by default has not collapsed anything.
    */
-  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(() => new Set());
+  // A model being tested on its own opens with its family, so "Show its row"
+  // from the status bar lands on a row that says Testing, not a closed family.
+  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(() => {
+    const rendering = renderingModelId ? rows.find((row) => row.generationId === renderingModelId) : undefined;
+    return rendering ? new Set([getFriendlyModelName(rendering.displayName)]) : new Set();
+  });
   /** The second model in the side-by-side, when one has been picked. */
   const [compareWith, setCompareWith] = useState<string | null>(null);
   /** The picture or video model whose Test is open under its row. */
@@ -1074,6 +1085,7 @@ export function ModelCabinet({
               // Open under its own row. A picture or video test stays open if
               // ComfyUI stops mid-test, so it can say so instead of vanishing.
               const testing = testingId === row.id && (row.runtime === 'comfyui' || skill !== null);
+              const renderingHere = Boolean(row.generationId) && row.generationId === renderingModelId;
               const testPanelId = `row-test-${row.generationId ?? row.id}`;
               const closeTest = () => {
                 setTestingId(null);
@@ -1228,21 +1240,23 @@ export function ModelCabinet({
                           {row.installed ? (
                             <button
                               type="button"
-                              className="mini-button"
+                              className={renderingHere && !testing ? 'mini-button rendering' : 'mini-button'}
                               onClick={() => setTestingId(testing ? null : row.id)}
                               data-row-test={row.id}
                               aria-expanded={testing}
                               aria-controls={testing ? testPanelId : undefined}
                               title={testing
                                 ? `Close the test of ${row.displayName}`
-                                : `Give ${row.displayName} a prompt and ${
-                                  row.generationKind === 'video' ? 'render a clip'
-                                    : row.generationKind === 'audio' ? 'make a clip of audio'
-                                    : 'draw a picture'
-                                }, right here`}
+                                : renderingHere
+                                  ? `${row.displayName} is being tested now. Open it to see how it is going, or to stop it.`
+                                  : `Give ${row.displayName} a prompt and ${
+                                    row.generationKind === 'video' ? 'render a clip'
+                                      : row.generationKind === 'audio' ? 'make a clip of audio'
+                                      : 'draw a picture'
+                                  }, right here`}
                             >
                               <Gauge aria-hidden="true" />
-                              <span>{testing ? 'Close' : 'Test'}</span>
+                              <span>{testing ? 'Close' : renderingHere ? 'Testing' : 'Test'}</span>
                             </button>
                           ) : (
                             /* Without a ComfyUI folder there is nowhere to put

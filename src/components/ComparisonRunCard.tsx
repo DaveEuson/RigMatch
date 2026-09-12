@@ -18,6 +18,7 @@ import { startVideoLineup, stopVideoLineup } from '../lib/videoLineupSession';
 import { useAudioLineupSession } from '../hooks/useAudioLineupSession';
 import { useImageLineupSession } from '../hooks/useImageLineupSession';
 import { useLabResults } from '../hooks/useLabResults';
+import { useImageTest } from '../hooks/useRenderActivity';
 import { useVideoLineupSession } from '../hooks/useVideoLineupSession';
 import { ComfyNeeded } from './ComfyNeeded';
 import { Elapsed } from './Elapsed';
@@ -131,6 +132,7 @@ export function ComparisonRunCard({
   const videoSession = useVideoLineupSession();
   const imageSession = useImageLineupSession();
   const audioSession = useAudioLineupSession();
+  const imageTest = useImageTest();
   const [picks, setPicks] = useState<ReadonlySet<string>>(() => new Set());
   const [promptId, setPromptId] = useState((audio ? AUDIO_BENCHMARK_PROMPTS : IMAGE_BENCHMARK_PROMPTS)[0].id);
   const [customPrompt, setCustomPrompt] = useState('');
@@ -198,6 +200,8 @@ export function ComparisonRunCard({
     ? 'Another test is using the graphics card. This can run when it finishes.'
     : soloRunning
       ? 'A model is being tested on its own. This can run when it finishes.'
+      : imageTest
+        ? `${imageTest.name} is drawing a picture from its row. This can run when it finishes.`
       : channel !== 'images' && imageSession.running
         ? 'Pictures are being compared. This can run when they finish.'
         : channel !== 'video' && videoSession.running

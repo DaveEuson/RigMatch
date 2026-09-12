@@ -19,7 +19,9 @@ import { formatVideoDuration, formatVideoEstimate, type VideoMachine } from '../
 import { lineupCardFacts, lineupEntry, measuredSecondsFor } from '../lib/videoLineup';
 import { startVideoLineup, stopVideoLineup } from '../lib/videoLineupSession';
 import { workbenchById } from '../lib/workbench';
+import { describeImageTest, endImageTest, startImageTest } from '../lib/renderActivity';
 import { useAudioLineupSession } from '../hooks/useAudioLineupSession';
+import { useImageTest } from '../hooks/useRenderActivity';
 import { useImageLineupSession } from '../hooks/useImageLineupSession';
 import { useRowPanel } from '../hooks/useRowPanel';
 import { useLabResults } from '../hooks/useLabResults';
@@ -87,6 +89,9 @@ export function GenerationTestPanel({
   const session = useVideoLineupSession();
   const imageLineup = useImageLineupSession();
   const audioSession = useAudioLineupSession();
+  // A picture drawn from a row, still drawing after its panel closed and
+  // opened again, or drawn from another model's row.
+  const imageTest = useImageTest();
   const [promptId, setPromptId] = useState(IMAGE_BENCHMARK_PROMPTS[0].id);
   const [customPrompt, setCustomPrompt] = useState('');
   const [confirmUnload, setConfirmUnload] = useState(false);
@@ -122,6 +127,9 @@ export function GenerationTestPanel({
   // The keys the Lab saves under, so a test here and one there are the same record.
   const resultKey = entry ? `video:${entry.key}` : checkpoint ? `image:${checkpoint}` : '';
   const last: AdvancedLabResult | undefined = resultKey ? saved[resultKey] : undefined;
+  /** What a picture drawn from this row is known by while it draws. */
+  const imageKey = row.generationId ?? checkpoint;
+  const drawingAway = !video && imageTest?.key === imageKey;
   const facts = entry
     ? lineupCardFacts(entry, {
       machine: context.machine,
@@ -137,13 +145,15 @@ export function GenerationTestPanel({
   // Nothing can check a picture, so the run counts speed alone, and says so.
   const rankAt = lockedReason ? 0 : balance;
   const mine = Boolean(entry && session.solo?.key === entry.key);
-  const running = video ? mine && session.running : imageRun.phase === 'running';
+  const running = video ? mine && session.running : imageRun.phase === 'running' || drawingAway;
   const promptReady = promptId !== CUSTOM_IMAGE_PROMPT_ID || customPrompt.trim().length > 0;
   // Why it cannot run right now, in a sentence. ComfyUI not answering has a box of its own.
   const blocked = !context.comfyReachable
     ? null
     : context.gpuBusy
       ? 'Another test is using the graphics card. This can run when it finishes.'
+      : imageTest && imageTest.key !== imageKey
+        ? `${imageTest.name} is drawing a picture. This can run when it finishes.`
       : imageLineup.running
         ? 'Pictures are being compared. This can run when they finish.'
         : audioSession.running
@@ -161,19 +171,29 @@ export function GenerationTestPanel({
     // Claimed before the first await, so a second click cannot draw a second picture.
     const controller = new AbortController();
     imageAbort.current = controller;
-    setImageRun({ phase: 'running', message: 'Checking that ComfyUI is free…' });
+    const checking = 'Checking that ComfyUI is free…';
+    setImageRun({ phase: 'running', message: checking });
+    // Reported beyond this panel, which can close while the picture draws.
+    startImageTest({
+      key: imageKey,
+      name: row.displayName,
+      message: checking,
+      stop: () => controller.abort(),
+    });
+    // How it ended, for the status bar and Activity once this panel may be gone.
+    let outcome: { message: string; failed: boolean } | undefined;
     try {
       // Asked before anything is submitted: queuing behind someone else's render
       // produces a time that measures the queue.
       const busy = await describeComfyBusy();
       if (busy || controller.signal.aborted) {
         setImageRun(busy ? { phase: 'failed', message: busy } : { phase: 'idle', message: '' });
+        if (busy) outcome = { message: busy, failed: true };
         return;
       }
-      setImageRun({
-        phase: 'running',
-        message: `Drawing ${IMAGE_RUN_SETTINGS.width}×${IMAGE_RUN_SETTINGS.height} with ${row.displayName}…`,
-      });
+      const drawing = `Drawing ${IMAGE_RUN_SETTINGS.width}×${IMAGE_RUN_SETTINGS.height} with ${row.displayName}…`;
+      setImageRun({ phase: 'running', message: drawing });
+      describeImageTest(imageKey, drawing);
       const drawn = await runImageLabChallenge({
         checkpoint,
         promptId,
@@ -184,25 +204,34 @@ export function GenerationTestPanel({
       });
       // With where the fader stood as it started, like every other test.
       const result = { ...toLabResult(drawn, promptId, customPrompt), balance: rankAt };
+      if (controller.signal.aborted) {
+        // Stopped on purpose, which is not the model failing.
+        setImageRun({ phase: 'idle', message: '' });
+        outcome = { message: `Stopped before ${row.displayName} finished.`, failed: false };
+        return;
+      }
       if (result.error) {
         setImageRun({ phase: 'failed', message: result.error });
+        outcome = { message: `${row.displayName} failed: ${result.error}`, failed: true };
         return;
       }
       // Read-modify-write against live storage, as the Lab does, so a result
       // saved elsewhere while this one drew is not erased.
       writeAdvancedLabResults({ ...readAdvancedLabResults(), [resultKey]: result });
-      setImageRun({
-        phase: 'complete',
-        message: `${row.displayName} drew it in ${(drawn.elapsedMs / 1000).toFixed(1)} s${
-          drawn.judged
-            ? `, and ${context.judgeModel} confirmed ${Math.round((drawn.adherence ?? 0) * 100)}% of the prompt.`
-            : '. Nothing could check the picture, so it is unjudged.'
-        }`,
-      });
+      const done = `${row.displayName} drew it in ${(drawn.elapsedMs / 1000).toFixed(1)} s${
+        drawn.judged
+          ? `, and ${context.judgeModel} confirmed ${Math.round((drawn.adherence ?? 0) * 100)}% of the prompt.`
+          : '. Nothing could check the picture, so it is unjudged.'
+      }`;
+      setImageRun({ phase: 'complete', message: done });
+      outcome = { message: done, failed: false };
     } catch (error) {
-      setImageRun({ phase: 'failed', message: getErrorMessage(error) });
+      const message = getErrorMessage(error);
+      setImageRun({ phase: 'failed', message });
+      outcome = { message: `${row.displayName} failed: ${message}`, failed: true };
     } finally {
       imageAbort.current = null;
+      endImageTest(imageKey, outcome);
     }
   };
 
@@ -233,7 +262,10 @@ export function GenerationTestPanel({
 
   const stop = () => {
     if (video) stopVideoLineup();
-    else imageAbort.current?.abort();
+    // This panel's own controller is gone once it has closed and opened again;
+    // the drawing still carries its stop.
+    else if (imageAbort.current) imageAbort.current.abort();
+    else if (drawingAway) imageTest?.stop();
   };
 
   const playClip = async (result: AdvancedLabResult) => {
@@ -262,8 +294,13 @@ export function GenerationTestPanel({
 
   const shownClip = clip && last && clip.of === last.completedAt ? clip.url : null;
   const share = typeof last?.adherence === 'number' ? last.adherence : null;
-  const message = video ? (mine ? session.message : '') : imageRun.message;
-  const tone = video ? (session.failed ? 'failed' : session.running ? 'running' : 'complete') : imageRun.phase;
+  const drawingHere = imageRun.phase === 'running';
+  const message = video
+    ? (mine ? session.message : '')
+    : drawingAway && !drawingHere ? imageTest?.message ?? '' : imageRun.message;
+  const tone = video
+    ? (session.failed ? 'failed' : session.running ? 'running' : 'complete')
+    : drawingAway ? 'running' : imageRun.phase;
   const idleNote = facts
     ? facts.estimate.basis === 'measured'
       ? `One clip took ${formatVideoDuration(facts.estimate.seconds)} here last time.`
@@ -367,7 +404,9 @@ export function GenerationTestPanel({
               <span>
                 {running && video && session.current
                   ? <>Rendering, <Elapsed since={session.current.startedAt} /> so far.</>
-                  : blocked ?? (running ? '' : idleNote)}
+                  : running && drawingAway && imageTest
+                    ? <>Drawing, <Elapsed since={imageTest.startedAt} /> so far.</>
+                    : blocked ?? (running ? '' : idleNote)}
               </span>
             </div>
           </>

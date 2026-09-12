@@ -9204,6 +9204,89 @@ tbody tr.computer-row.selected {
   height: 11px;
 }
 
+/* A render in flight, wherever it was started, takes the tip's place until it
+   ends: what is rendering, for how long, and a way to stop it, on every screen.
+   It shares the tip's flexible track, so it never adds a column. */
+.ticker-learn.rendering {
+  align-items: center;
+}
+
+.ticker-label-render {
+  color: var(--gold);
+  background: rgba(var(--gold-rgb), 0.12);
+  border: 1px solid rgba(var(--gold-rgb), 0.3);
+}
+
+.ticker-render-open {
+  all: unset;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.ticker-render-open:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.ticker-render-open strong {
+  flex-shrink: 0;
+  color: var(--text-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.ticker-render-clock {
+  flex-shrink: 0;
+  color: var(--gold);
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ticker-render-stop {
+  flex: none;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 105, 180, 0.28);
+  border-radius: 8px;
+  color: var(--pink);
+  background: rgba(238, 0, 85, 0.08);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.6rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.ticker-render-stop svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* A model being tested with its panel closed says so on its own row. */
+.model-table .mini-button.rendering {
+  border-color: rgba(var(--gold-rgb), 0.6);
+  color: var(--gold);
+}
+
+.activity-render-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.activity-render-last.failed {
+  color: var(--red);
+}
+
 @media (max-width: 1320px) {
   .ticker.has-download-dock {
     grid-template-columns: max-content minmax(0, 1fr) minmax(260px, 360px) max-content;

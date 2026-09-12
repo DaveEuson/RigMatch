@@ -47,6 +47,8 @@ export type AudioLineupSession = {
   current: { key: string; name: string; startedAt: number } | null;
   message: string;
   failed: boolean;
+  /** When the last run ended, which tells its outcome from an older one's. */
+  endedAt: number | null;
   /**
    * A model tested on its own from its row, from the moment it is started until
    * the next start. Its message is the row's to show; a comparison is not.
@@ -62,6 +64,7 @@ let session: AudioLineupSession = {
   current: null,
   message: '',
   failed: false,
+  endedAt: null,
   solo: null,
 };
 const listeners = new Set<() => void>();
@@ -112,7 +115,8 @@ function soloVerdict(
   audioPrompt: AudioPrompt,
   listener: string | undefined,
 ): string {
-  if (!result) return stopped ? `Stopped before ${name} finished.` : `${name} made nothing.`;
+  // Stopping mid-render leaves an error behind, but it is not a failure of the model's.
+  if (!result || (stopped && result.error)) return stopped ? `Stopped before ${name} finished.` : `${name} made nothing.`;
   if (result.error) return `${name} failed: ${result.error}`;
   const made = `${name} made ${Math.round(result.seconds)} s of audio in ${formatVideoDuration(result.elapsedMs / 1000)}`;
   if (typeof result.adherence === 'number') {
@@ -139,14 +143,14 @@ export async function startAudioLineup(options: StartAudioLineupOptions): Promis
 
   // One render at a time on one graphics card.
   if (lineupSessionSnapshot().running || imageLineupSnapshot().running) {
-    update({ running: false, failed: true, message: 'Another model is rendering. Make audio when it finishes.' });
+    update({ running: false, failed: true, message: 'Another model is rendering. Make audio when it finishes.', endedAt: Date.now() });
     return;
   }
   // Asked before anything is submitted: queuing behind someone else's render
   // produces times that measure the queue.
   const busy = await describeComfyBusy().catch(() => null);
   if (busy) {
-    update({ running: false, failed: true, message: busy });
+    update({ running: false, failed: true, message: busy, endedAt: Date.now() });
     return;
   }
 
@@ -223,7 +227,7 @@ export async function startAudioLineup(options: StartAudioLineupOptions): Promis
     });
   } catch (error) {
     controller = null;
-    update({ running: false, current: null, failed: true, message: getErrorMessage(error) });
+    update({ running: false, current: null, failed: true, message: getErrorMessage(error), endedAt: Date.now() });
     return;
   }
 
@@ -235,7 +239,8 @@ export async function startAudioLineup(options: StartAudioLineupOptions): Promis
     running: false,
     current: null,
     run: { ...run, stopped, finished: true },
-    failed: Boolean(solo && outcomes[0]?.result.error),
+    failed: Boolean(solo && !stopped && outcomes[0]?.result.error),
+    endedAt: Date.now(),
     message: solo
       ? soloVerdict(entries[0].name, outcomes[0]?.result, stopped, audioPrompt, listener)
       : stopped

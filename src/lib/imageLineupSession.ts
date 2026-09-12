@@ -33,6 +33,8 @@ export type ImageLineupSession = {
   current: { checkpoint: string; name: string; startedAt: number } | null;
   message: string;
   failed: boolean;
+  /** When the last comparison ended, which tells its outcome from an older one's. */
+  endedAt: number | null;
 };
 
 let session: ImageLineupSession = {
@@ -43,6 +45,7 @@ let session: ImageLineupSession = {
   current: null,
   message: '',
   failed: false,
+  endedAt: null,
 };
 const listeners = new Set<() => void>();
 let controller: AbortController | null = null;
@@ -90,14 +93,14 @@ export async function startImageLineup(options: StartImageLineupOptions): Promis
 
   // One render at a time on one graphics card, and a video race shares it.
   if (lineupSessionSnapshot().running) {
-    update({ running: false, failed: true, message: 'A video is rendering. Compare pictures when it finishes.' });
+    update({ running: false, failed: true, message: 'A video is rendering. Compare pictures when it finishes.', endedAt: Date.now() });
     return;
   }
   // Asked before anything is submitted: queuing behind someone else's render
   // produces times that measure the queue.
   const busy = await describeComfyBusy().catch(() => null);
   if (busy) {
-    update({ running: false, failed: true, message: busy });
+    update({ running: false, failed: true, message: busy, endedAt: Date.now() });
     return;
   }
 
@@ -170,7 +173,7 @@ export async function startImageLineup(options: StartImageLineupOptions): Promis
     });
   } catch (error) {
     controller = null;
-    update({ running: false, current: null, failed: true, message: getErrorMessage(error) });
+    update({ running: false, current: null, failed: true, message: getErrorMessage(error), endedAt: Date.now() });
     return;
   }
 
@@ -183,6 +186,7 @@ export async function startImageLineup(options: StartImageLineupOptions): Promis
     current: null,
     run: { ...run, stopped, finished: true },
     failed: false,
+    endedAt: Date.now(),
     message: stopped
       ? `Stopped. ${drawn} of ${entries.length} drawn.`
       : `Compared ${drawn} picture${drawn === 1 ? '' : 's'}${failedCount ? `; ${failedCount} failed` : ''}. They are side by side below.`,

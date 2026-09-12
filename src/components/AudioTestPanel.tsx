@@ -17,6 +17,7 @@ import { workbenchById } from '../lib/workbench';
 import { useAudioLineupSession } from '../hooks/useAudioLineupSession';
 import { useImageLineupSession } from '../hooks/useImageLineupSession';
 import { useLabResults } from '../hooks/useLabResults';
+import { useImageTest } from '../hooks/useRenderActivity';
 import { useRowPanel } from '../hooks/useRowPanel';
 import { useVideoLineupSession } from '../hooks/useVideoLineupSession';
 import { AudioClipPlayer } from './AudioClipPlayer';
@@ -53,6 +54,7 @@ export function AudioTestPanel({
   const session = useAudioLineupSession();
   const imageLineup = useImageLineupSession();
   const videoSession = useVideoLineupSession();
+  const imageTest = useImageTest();
   const [promptId, setPromptId] = useState(AUDIO_BENCHMARK_PROMPTS[0].id);
   const [customPrompt, setCustomPrompt] = useState('');
   const [confirmUnload, setConfirmUnload] = useState(false);
@@ -78,6 +80,8 @@ export function AudioTestPanel({
     ? null
     : context.gpuBusy
       ? 'Another test is using the graphics card. This can run when it finishes.'
+      : imageTest
+        ? `${imageTest.name} is drawing a picture. This can run when it finishes.`
       : imageLineup.running
         ? 'Pictures are being compared. This can run when they finish.'
         : videoSession.running

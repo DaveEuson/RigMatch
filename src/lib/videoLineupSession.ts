@@ -42,6 +42,8 @@ export type LineupSession = {
   current: { key: string; name: string; index: number; total: number; startedAt: number } | null;
   message: string;
   failed: boolean;
+  /** When the last test or race ended, which tells its outcome from an older one's. */
+  endedAt: number | null;
   /**
    * A model tested on its own from its row on the Models screen, while it
    * renders and after, until the next start. Kept out of `record`: one model is
@@ -75,6 +77,7 @@ let session: LineupSession = {
   current: null,
   message: '',
   failed: false,
+  endedAt: null,
   solo: null,
 };
 const listeners = new Set<() => void>();
@@ -119,7 +122,8 @@ export type StartLineupOptions = {
 
 /** How a test of one model reads when it ends. */
 function soloVerdict(name: string, entry: LineupRecordEntry | undefined, stopped: boolean): string {
-  if (!entry) return stopped ? `Stopped before ${name} finished.` : `${name} did not render.`;
+  // Stopping mid-render leaves an error behind, but it is not a failure of the model's.
+  if (!entry || (stopped && entry.error)) return stopped ? `Stopped before ${name} finished.` : `${name} did not render.`;
   if (entry.error) return `${name} failed: ${entry.error}`;
   const time = formatVideoDuration(entry.elapsedMs / 1000);
   if (typeof entry.adherence === 'number') {
@@ -142,7 +146,7 @@ export async function startVideoLineup(options: StartLineupOptions): Promise<voi
   // produces times that measure the queue.
   const busy = await describeComfyBusy().catch(() => null);
   if (busy) {
-    update({ running: false, failed: true, message: busy });
+    update({ running: false, failed: true, message: busy, endedAt: Date.now() });
     return;
   }
 
@@ -234,7 +238,7 @@ export async function startVideoLineup(options: StartLineupOptions): Promise<voi
     });
   } catch (error) {
     controller = null;
-    update({ running: false, current: null, failed: true, message: getErrorMessage(error) });
+    update({ running: false, current: null, failed: true, message: getErrorMessage(error), endedAt: Date.now() });
     return;
   }
 
@@ -250,8 +254,9 @@ export async function startVideoLineup(options: StartLineupOptions): Promise<voi
     update({
       running: false,
       current: null,
-      failed: Boolean(entry?.error),
+      failed: Boolean(entry?.error) && !stopped,
       message: soloVerdict(solo.name, entry, stopped),
+      endedAt: Date.now(),
     });
     return;
   }
@@ -263,6 +268,7 @@ export async function startVideoLineup(options: StartLineupOptions): Promise<voi
     current: null,
     record,
     failed: false,
+    endedAt: Date.now(),
     message: stopped
       ? `Stopped. ${rendered} of ${record.planned.length} rendered.`
       : `Lineup finished: ${rendered} rendered${failedCount ? `, ${failedCount} failed` : ''}.`,

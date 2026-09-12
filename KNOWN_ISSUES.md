@@ -104,7 +104,8 @@ Status as of 0.9:
   - Motion quality is not scored. The middle frame is judged against the prompt; flicker and temporal consistency have no right answer and no local model judges them reliably.
   - A Jetson runs none of the lineup. Video there needs low-memory GGUF builds, which need a custom node RigMatch does not install.
   - LTX-2.5 is gated: it needs the user's own Hugging Face token, and its terms accepted on its Hugging Face page.
-  - ComfyUI only looks for new model files when it starts, so a model downloaded while it runs needs a ComfyUI restart before it can race.
+  - ComfyUI 0.32 lists a model downloaded while it runs straight away; an older ComfyUI may need a restart before it can race.
+  - Mochi 1 ran out of GPU memory at its last step, the tiled VAE decode, after 24½ minutes on a 12 GB RTX 4070, although its fit check says it fits. The decode tile sizes every family shares may need to shrink for it.
 - **Audio Generation** (new in 0.9, extra-beta): the Makes audio channel runs ACE-Step 1.5 Turbo, ACE-Step v1 3.5B and Stable Audio Open 1.0 on the user's own ComfyUI, using only nodes ComfyUI ships. Every model gets the same prompt, seed and 30-second length and starts cold, and once every model has made its clip, a local model that can hear checks each one against the prompt's yes/no questions. A model can be tested from its own row on the Models screen, or several at once on the Comparison screen. Known limits:
   - Only music and sound effects are tested. ACE-Step is asked for instrumentals, since the prompts have no words to sing, and no core ComfyUI node makes speech.
   - The listener answers three questions about what it hears. Sound quality — clarity, mixing, artefacts — is not scored.

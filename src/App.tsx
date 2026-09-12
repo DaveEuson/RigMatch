@@ -72,6 +72,8 @@ import {
 } from './lib/workbench';
 import { useLabResults } from './hooks/useLabResults';
 import { useVideoLineupSession } from './hooks/useVideoLineupSession';
+import { useRenderActivity, useRenderOutcome } from './hooks/useRenderActivity';
+import { renderChannel, type RenderActivity } from './lib/renderActivity';
 import { RunReportModal } from './components/RunReportModal';
 import type { StoredRunReport } from './lib/runReports';
 import {
@@ -1264,6 +1266,16 @@ function App() {
 
   const labResults = useLabResults();
   const lineupSession = useVideoLineupSession();
+  /** Whatever ComfyUI is rendering for RigMatch now, wherever it was started. */
+  const renderActivity = useRenderActivity();
+  /** How the last render ended: announced in the status bar, and kept in Activity. */
+  const renderOutcome = useRenderOutcome();
+  const renderEndedAt = renderOutcome?.endedAt ?? null;
+  const [announcedRenderEnd, setAnnouncedRenderEnd] = useState(renderEndedAt);
+  if (renderEndedAt !== announcedRenderEnd) {
+    setAnnouncedRenderEnd(renderEndedAt);
+    if (renderOutcome) setActivity(renderOutcome.message);
+  }
   // Images and video are judged by a model that can see, made audio by one that
   // can hear. With none installed, accuracy cannot be measured there, so those
   // faders hold at speed.
@@ -1533,6 +1545,16 @@ function App() {
 
     setActivity(`${getNavLabel(id)} selected.`);
   }, [loadLogs]);
+
+  /** Where a render in flight is shown in full: its model's row for a test of one, Comparison for a race. */
+  const openRender = useCallback((render: RenderActivity) => {
+    chooseWorkbench(renderChannel(render.kind));
+    const row = render.solo && render.key
+      ? modelRows.find((candidate) => candidate.generationId === render.key)
+      : undefined;
+    if (row) setSelectedModel(row.displayName);
+    selectNav(render.solo ? 'models' : 'speedDate');
+  }, [chooseWorkbench, modelRows, selectNav]);
 
   // Simple Mode runs as a wizard: when the rig check passes while the user is
   // on the setup round, move them to the pick round instead of waiting for a
@@ -3704,7 +3726,7 @@ function App() {
         modelCount={channelModelCount}
         shortlistCount={shortlistedRows.length}
         newModelDropCount={modelNews.latestNewModelIds.length}
-        isRunning={isBenchmarking || isListTesting}
+        isRunning={isBenchmarking || isListTesting || Boolean(renderActivity)}
         activeId={activeNavId}
         scoredCount={scoredModelCount}
         topPickMeta={topRigPick?.score ? topRigPick.score.grade : (scoredModelCount > 0 ? 'Ready' : 'Wait')}
@@ -3780,6 +3802,7 @@ function App() {
               onOpenComparison: (channel) => { chooseWorkbench(channel); selectNav('speedDate'); },
             }}
             channel={workbenchInfo.id}
+            renderingModelId={renderActivity?.solo ? renderActivity.key : null}
             skillTest={{
               ollamaBaseUrl: ollama.baseUrl,
               ollamaReady: ollama.ready,
@@ -3972,6 +3995,9 @@ function App() {
             balances={balances}
             onBalanceChange={setBalance}
             onOpenComparison={() => selectNav('speedDate')}
+            render={renderActivity}
+            onOpenRender={openRender}
+            lastRender={renderOutcome}
           />
         )}
         {(activeNavId === 'history' || activeNavId === 'settings') && (
@@ -4056,6 +4082,8 @@ function App() {
         onPauseQueue={pauseDownloadQueue}
         onCancelQueue={cancelDownloadQueue}
         onOpenDownloads={() => selectNav('models')}
+        render={renderActivity}
+        onOpenRender={openRender}
         onOpenChat={async () => {
           if (isDesktopRuntime) {
             const result = await agentArcadeApi.openChatApp();
