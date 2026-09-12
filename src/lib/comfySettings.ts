@@ -15,6 +15,7 @@ export const COMFY_URL_STORAGE_KEY = 'rigmatch:comfy-url:v1';
 export const COMFY_DEDICATED_STORAGE_KEY = 'rigmatch:comfy-dedicated:v1';
 /** The verified models root, needed to write a download where ComfyUI reads it. */
 export const COMFY_FOLDER_STORAGE_KEY = 'rigmatch:comfy-folder:v1';
+export const COMFY_AUTOSTART_STORAGE_KEY = 'rigmatch:comfy-autostart:v1';
 
 export const COMFY_DEFAULT_BASE_URL = 'http://127.0.0.1:8188';
 
@@ -32,6 +33,12 @@ export type ComfySettings = {
    * whatever the user had loaded, every run.
    */
   dedicated: boolean;
+  /**
+   * Whether RigMatch may start ComfyUI itself when an image or video test
+   * needs it, with the launcher beside `folder`. On unless someone turns it
+   * off: the alternative is leaving RigMatch to find a .bat file every time.
+   */
+  autoStart: boolean;
 };
 
 /**
@@ -74,20 +81,25 @@ export function normalizeComfyUrl(input: string): string | null {
 }
 
 export function readComfySettings(): ComfySettings {
-  if (typeof window === 'undefined') return { baseUrl: COMFY_DEFAULT_BASE_URL, dedicated: false, folder: '' };
+  if (typeof window === 'undefined') {
+    return { baseUrl: COMFY_DEFAULT_BASE_URL, dedicated: false, folder: '', autoStart: true };
+  }
   let baseUrl = COMFY_DEFAULT_BASE_URL;
   let dedicated = false;
   let folder = '';
+  let autoStart = true;
   try {
     baseUrl = normalizeComfyUrl(window.localStorage.getItem(COMFY_URL_STORAGE_KEY) ?? '')
       ?? COMFY_DEFAULT_BASE_URL;
     dedicated = window.localStorage.getItem(COMFY_DEDICATED_STORAGE_KEY) === 'true';
     folder = window.localStorage.getItem(COMFY_FOLDER_STORAGE_KEY) ?? '';
+    autoStart = window.localStorage.getItem(COMFY_AUTOSTART_STORAGE_KEY) !== 'false';
   } catch {
-    // Storage disabled. The defaults are the safe ones: the usual port, and
-    // not permitted to unload anyone's models.
+    // Storage disabled. The defaults are the safe ones: the usual port, not
+    // permitted to unload anyone's models, and starting ComfyUI only when a
+    // test needs it, which is what the person would otherwise do by hand.
   }
-  return { baseUrl, dedicated, folder };
+  return { baseUrl, dedicated, folder, autoStart };
 }
 
 export function writeComfySettings(settings: Partial<ComfySettings>): void {
@@ -99,6 +111,9 @@ export function writeComfySettings(settings: Partial<ComfySettings>): void {
     }
     if (settings.dedicated !== undefined) {
       window.localStorage.setItem(COMFY_DEDICATED_STORAGE_KEY, settings.dedicated ? 'true' : 'false');
+    }
+    if (settings.autoStart !== undefined) {
+      window.localStorage.setItem(COMFY_AUTOSTART_STORAGE_KEY, settings.autoStart ? 'true' : 'false');
     }
     // Only ever written after verifyComfyFolder accepted it, so a stored
     // folder is one the running server was proven to read.

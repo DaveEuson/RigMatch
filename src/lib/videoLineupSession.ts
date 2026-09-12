@@ -21,12 +21,14 @@ import { batchSeed } from './videoGen.ts';
 import { toVideoLabResult } from './videoGenChallenge.ts';
 import { runVideoLineupLive } from './videoGenRunner.ts';
 import { readVideoCalibration, saveVideoCalibration } from './videoCalibrationStore.ts';
+import { formatVideoDuration } from './videoFit.ts';
 import {
   calibrationFrom,
   lineupRecordEntry,
   type LineupExpectation,
   type LineupOutcome,
   type LineupRecord,
+  type LineupRecordEntry,
   type VideoLineupEntry,
 } from './videoLineup.ts';
 
@@ -34,12 +36,18 @@ export const VIDEO_LINEUP_STORAGE_KEY = 'rigmatch:video-lineup:v1';
 
 export type LineupSession = {
   running: boolean;
-  /** The lineup in flight, or the last one to finish. */
+  /** The lineup in flight, or the last one to finish. Never a model tested on its own. */
   record: LineupRecord | null;
   /** The model rendering now, and since when. */
   current: { key: string; name: string; index: number; total: number; startedAt: number } | null;
   message: string;
   failed: boolean;
+  /**
+   * A model tested on its own from its row on the Models screen, while it
+   * renders and after, until the next start. Kept out of `record`: one model is
+   * not a race, and its test must not replace the last race's leaderboard.
+   */
+  solo: { key: string; name: string } | null;
 };
 
 export function readLastLineup(): LineupRecord | null {
@@ -61,7 +69,14 @@ function saveLastLineup(record: LineupRecord): void {
   }
 }
 
-let session: LineupSession = { running: false, record: readLastLineup(), current: null, message: '', failed: false };
+let session: LineupSession = {
+  running: false,
+  record: readLastLineup(),
+  current: null,
+  message: '',
+  failed: false,
+  solo: null,
+};
 const listeners = new Set<() => void>();
 let controller: AbortController | null = null;
 
@@ -94,12 +109,34 @@ export type StartLineupOptions = {
   note?: string;
   /** Where the Balance fader stood when the race was started. */
   balance?: number;
+  /**
+   * One model tested on its own, from its row on the Models screen. It renders
+   * exactly as in a lineup and its result is saved the same way, but the last
+   * race keeps its place on the leaderboard.
+   */
+  solo?: boolean;
 };
+
+/** How a test of one model reads when it ends. */
+function soloVerdict(name: string, entry: LineupRecordEntry | undefined, stopped: boolean): string {
+  if (!entry) return stopped ? `Stopped before ${name} finished.` : `${name} did not render.`;
+  if (entry.error) return `${name} failed: ${entry.error}`;
+  const time = formatVideoDuration(entry.elapsedMs / 1000);
+  if (typeof entry.adherence === 'number') {
+    return `${name} rendered in ${time}, and its middle frame matched ${Math.round(entry.adherence * 100)}% of the prompt.`;
+  }
+  return stopped
+    ? `${name} rendered in ${time}. Stopped before the clip was checked.`
+    : `${name} rendered in ${time}. Nothing checked the clip, so it is unjudged.`;
+}
 
 export async function startVideoLineup(options: StartLineupOptions): Promise<void> {
   if (session.running || options.entries.length === 0) return;
+  const solo = options.solo && options.entries.length === 1
+    ? { key: options.entries[0].key, name: options.entries[0].name }
+    : null;
   // Claimed before the first await, so a second click cannot start a second lineup.
-  update({ running: true, current: null, failed: false, message: 'Checking that ComfyUI is free…' });
+  update({ running: true, current: null, failed: false, solo, message: 'Checking that ComfyUI is free…' });
 
   // Asked before anything is submitted: queuing behind someone else's render
   // produces times that measure the queue.
@@ -126,7 +163,15 @@ export async function startVideoLineup(options: StartLineupOptions): Promise<voi
   };
   const abort = new AbortController();
   controller = abort;
-  update({ record, message: `Starting ${entries.length} model${entries.length === 1 ? '' : 's'}.${options.note ?? ''}` });
+  // A test of one shows where it was started, and in its model's saved result.
+  // The leaderboard keeps the last race.
+  const show = (next: LineupRecord): Partial<LineupSession> => (solo ? {} : { record: next });
+  update({
+    ...show(record),
+    message: solo
+      ? `Starting ${solo.name}.${options.note ?? ''}`
+      : `Starting ${entries.length} model${entries.length === 1 ? '' : 's'}.${options.note ?? ''}`,
+  });
 
   let outcomes: LineupOutcome[];
   try {
@@ -149,15 +194,19 @@ export async function startVideoLineup(options: StartLineupOptions): Promise<voi
               total: progress.total,
               startedAt: Date.now(),
             },
-            message: `Rendering ${progress.index + 1} of ${progress.total}: ${progress.entry.name}.`,
+            message: solo
+              ? `Rendering ${progress.entry.name} on its own.`
+              : `Rendering ${progress.index + 1} of ${progress.total}: ${progress.entry.name}.`,
           });
           return;
         }
         if (progress.phase === 'judging') {
+          const judge = options.judgeModel ? ` with ${options.judgeModel}` : '';
           update({
             current: null,
-            message: `Every model has rendered. Checking the middle frame of ${progress.entry.name}`
-              + `${options.judgeModel ? ` with ${options.judgeModel}` : ''}.`,
+            message: solo
+              ? `${progress.entry.name} rendered. Checking its middle frame${judge}.`
+              : `Every model has rendered. Checking the middle frame of ${progress.entry.name}${judge}.`,
           });
           return;
         }
@@ -179,8 +228,8 @@ export async function startVideoLineup(options: StartLineupOptions): Promise<voi
             ? record.entries.map((item) => (item.key === entry.key ? entry : item))
             : [...record.entries, entry],
         };
-        saveLastLineup(record);
-        update({ record, current: null });
+        if (!solo) saveLastLineup(record);
+        update({ ...show(record), current: null });
       },
     });
   } catch (error) {
@@ -195,8 +244,18 @@ export async function startVideoLineup(options: StartLineupOptions): Promise<voi
 
   const stopped = abort.signal.aborted;
   record = { ...record, finishedAt: new Date().toISOString(), stopped };
-  saveLastLineup(record);
   controller = null;
+  if (solo) {
+    const entry = record.entries[0];
+    update({
+      running: false,
+      current: null,
+      failed: Boolean(entry?.error),
+      message: soloVerdict(solo.name, entry, stopped),
+    });
+    return;
+  }
+  saveLastLineup(record);
   const rendered = record.entries.filter((entry) => !entry.error).length;
   const failedCount = record.entries.length - rendered;
   update({

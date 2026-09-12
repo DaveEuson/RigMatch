@@ -18,12 +18,15 @@ import { samplingProfileFor } from '../lib/samplingProfile';
 import { IMAGE_RUN_SETTINGS, judgeCandidates, toLabResult } from "../lib/imageGenChallenge";
 import { runImageLabChallenge } from "../lib/imageGenRunner";
 import { comfyBridgeAvailable, describeComfyBusy, getComfyStatus } from "../lib/comfyTransport";
+import { readComfySettings } from "../lib/comfySettings";
+import { onComfyStarted } from "../lib/comfyStarter";
 import { canHearAudio } from "../lib/modelCatalog";
 import { isVideoCheckpoint } from "../lib/videoGen";
 import { useVideoLineupSession } from "../hooks/useVideoLineupSession";
 import { ListeningLab } from "./ListeningLab";
 import { PromptPicker } from "./PromptPicker";
 import { VideoLineupLab } from "./VideoLineupLab";
+import { ComfyStartButton } from "./ComfyStartButton";
 import { GpuContentionNote } from './GpuContentionNote';
 import { useGpuContention } from '../hooks/useGpuContention';
 import { gpuBusyNote } from '../lib/gpuBusyNote';
@@ -31,6 +34,7 @@ import { AppBuilderPreviewModal } from "./AppBuilderPreview";
 import { BalanceFader } from "./BalanceFader";
 import { LabStandings } from "./LabStandings";
 import { useLabResults } from "../hooks/useLabResults";
+import { useComfyStart } from "../hooks/useComfyStart";
 import type { Balances } from "../lib/balance";
 import { describeLabAccuracy, rankLabResults } from "../lib/channelWinners";
 import { workbenchById, type ChannelId, type LabCardId, type Workbench } from "../lib/workbench";
@@ -136,6 +140,11 @@ export function AdvancedCapabilityLab({
     setComfyStatus(status);
     setComfyChecking(false);
   }, []);
+
+  // A start RigMatch made is watched until ComfyUI answers. Look again then,
+  // rather than leaving this panel saying it is not running.
+  useEffect(() => onComfyStarted(() => { void checkComfy(); }), [checkComfy]);
+  const comfyStart = useComfyStart();
 
   // ComfyUI is a separate program the user starts themselves, so it may not be
   // up when this panel opens. The initial look does not set state on the way in
@@ -499,17 +508,22 @@ export function AdvancedCapabilityLab({
                 </>
               ) : (
                 <>
-                  <strong>{comfyChecking ? 'Looking for ComfyUI...' : 'ComfyUI is not running'}</strong>
+                  <strong>
+                    {comfyChecking ? 'Looking for ComfyUI...' : comfyStart.phase === 'starting' ? 'Starting ComfyUI…' : 'ComfyUI is not running'}
+                  </strong>
                   <span>
                     Start ComfyUI and it will be found on port 8188. It is a separate free program —
-                    RigMatch does not install or bundle it.
+                    RigMatch does not install or bundle it, but it can start the copy you have.
                   </span>
                 </>
               )}
-              <button type="button" className="mini-button outline" onClick={() => void checkComfy()} disabled={comfyChecking}>
-                <RefreshCw className={comfyChecking ? 'spin' : ''} aria-hidden="true" />
-                Check again
-              </button>
+              <div className="advanced-lab-actions">
+                <button type="button" className="mini-button outline" onClick={() => void checkComfy()} disabled={comfyChecking}>
+                  <RefreshCw className={comfyChecking ? 'spin' : ''} aria-hidden="true" />
+                  Check again
+                </button>
+                {readiness.kind === 'not-running' && <ComfyStartButton folder={readComfySettings().folder} />}
+              </div>
             </div>
           ) : (
             <>

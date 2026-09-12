@@ -257,6 +257,7 @@ import { readVideoCalibration } from './lib/videoCalibrationStore';
 import { runImageLabChallenge } from './lib/imageGenRunner';
 import { CUSTOM_IMAGE_PROMPT_ID } from './lib/imageGenScoring';
 import { describeComfyBusy, getComfyStatus, locateComfyFolder } from './lib/comfyTransport';
+import { ensureComfyRunning } from './lib/comfyStarter';
 import { readComfySettings } from './lib/comfySettings';
 import {
   CODE_TASK_PRESETS,
@@ -1248,6 +1249,13 @@ function App() {
     setWorkbenchPick(id);
     writeLocal(WORKBENCH_STORAGE_KEY, id);
   }, []);
+  // Images and Video run on ComfyUI, so choosing either is the moment to start
+  // it: loading by the time anything is tested, and nobody leaves RigMatch to
+  // find a .bat file. Once a session, and only while Settings allows it.
+  const wantsComfy = workbenchInfo.id === 'images' || workbenchInfo.id === 'video';
+  useEffect(() => {
+    if (wantsComfy) void ensureComfyRunning('auto');
+  }, [wantsComfy]);
   /** The Run dialog asks the fader of the channel it serves: code and reading pictures have their own. */
   const runChannel: ChannelId = workbenchInfo.id === 'code' || workbenchInfo.id === 'reading' ? workbenchInfo.id : 'chat';
 
@@ -3737,7 +3745,19 @@ function App() {
             rows={modelRows}
             comfyFolderSet={Boolean(comfySettings.folder)}
             goalLens={workbenchInfo.taskFilter ?? undefined}
-            onOpenLab={() => selectNav('activity')}
+            generationTest={{
+              comfyReachable,
+              comfyFolders,
+              judgeModel: judgeCandidates(ollama.models)[0] ?? '',
+              ollamaBaseUrl: ollama.baseUrl,
+              machine: videoMachine,
+              balances,
+              onBalanceChange: setBalance,
+              lockedReason: balanceLock('images'),
+              gpuBusy: isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running),
+              onCheckComfy: () => { void refreshComfyStatus(); },
+              onOpenLab: () => selectNav('activity'),
+            }}
             // Settings already explains ComfyUI in plain language; window.open
             // was popup-blocked in the browser preview and the review found the
             // button dead. In-app navigation cannot be blocked.
@@ -3821,7 +3841,12 @@ function App() {
           <ChannelComparisonPanel
             workbench={comparedWorkbench}
             labResults={labResults}
-            lineup={{ record: lineupSession.record, running: lineupSession.running, current: lineupSession.current }}
+            // A model tested on its own from the Models screen is not part of the race.
+            lineup={{
+              record: lineupSession.record,
+              running: lineupSession.running && !lineupSession.solo,
+              current: lineupSession.solo ? null : lineupSession.current,
+            }}
             balance={balances[activeChannel]}
             onBalanceChange={(value) => setBalance(activeChannel, value)}
             lockedReason={balanceLock(activeChannel)}

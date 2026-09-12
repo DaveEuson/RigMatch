@@ -37,6 +37,7 @@ export function ComfySettings() {
   const initial = readComfySettings();
   const [url, setUrl] = useState(initial.baseUrl);
   const [dedicated, setDedicated] = useState(initial.dedicated);
+  const [autoStart, setAutoStart] = useState(initial.autoStart);
   const [probe, setProbe] = useState<{ phase: 'idle' | 'checking' | 'ok' | 'bad'; message: string }>({
     phase: 'idle', message: '',
   });
@@ -89,9 +90,10 @@ export function ComfySettings() {
   const normalized = normalizeComfyUrl(url);
   const urlValid = normalized !== null;
 
-  const save = useCallback((next: { baseUrl?: string; dedicated?: boolean }) => {
+  const save = useCallback((next: { baseUrl?: string; dedicated?: boolean; autoStart?: boolean }) => {
     writeComfySettings(next);
     if (next.dedicated !== undefined) setDedicated(next.dedicated);
+    if (next.autoStart !== undefined) setAutoStart(next.autoStart);
   }, []);
 
   const testConnection = useCallback(async () => {
@@ -210,6 +212,19 @@ export function ComfySettings() {
           </span>
         )}
       </div>
+
+      <label className="advanced-lab-consent">
+        <input
+          type="checkbox"
+          checked={autoStart}
+          onChange={(event) => save({ autoStart: event.target.checked })}
+        />
+        <span>
+          Start ComfyUI for me when an image or video test needs it. RigMatch runs the launcher it
+          found beside this folder, the same file you would double-click, and leaves ComfyUI running
+          afterwards. Turn this off to start it yourself.
+        </span>
+      </label>
 
       <label className="advanced-lab-consent">
         <input

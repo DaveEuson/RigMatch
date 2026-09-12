@@ -12353,6 +12353,305 @@ tbody tr.computer-row.selected {
   text-align: left;
 }
 
+/* ComfyUI starting, shown wherever a Start button would be: one start, seen
+   on every screen that offers it. */
+.comfy-start-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.comfy-start-status svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--gold);
+}
+
+.comfy-start-status.ready svg {
+  color: var(--green);
+}
+
+/* Empty-state boxes set their spans as paragraphs; this one stays a line. */
+.utility-empty .comfy-start-status {
+  display: inline-flex;
+  margin-top: 0;
+  font-size: 11px;
+}
+
+.comfy-start-status > span,
+.utility-empty .comfy-start-status > span {
+  display: inline;
+  margin: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+/* In a note it sits where the note's button would, on one line. */
+.model-filter-note .comfy-start-status {
+  flex: none;
+  margin-left: auto;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+/* A picture or video model's Test, opened under its own row on the Models
+   screen. The cell spans the table and holds a layout of its own, so it
+   undoes the table's one-line, clipped cells. */
+.model-table tr.testing > td {
+  background: rgba(var(--gold-rgb), 0.08);
+}
+
+.model-table tr.generation-test-row > td {
+  padding: 2px 8px 12px;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  background: rgba(var(--gold-rgb), 0.04);
+}
+
+.row-actions .mini-button[aria-expanded='true'] {
+  border-color: rgba(var(--gold-rgb), 0.62);
+  color: var(--gold);
+}
+
+/* Sticky and sized to the visible part of the table (set from the component),
+   so a table that scrolls sideways does not carry the result off screen. */
+.generation-test {
+  position: sticky;
+  left: 8px;
+  box-sizing: border-box;
+  scroll-margin-top: 48px;
+  display: grid;
+  grid-template-columns: minmax(250px, 1fr) minmax(230px, 290px) minmax(240px, 1fr);
+  grid-template-areas:
+    "head head head"
+    "setup fader result";
+  gap: 14px 18px;
+  align-items: start;
+  padding: 12px 14px 14px;
+  border: 1px solid rgba(var(--gold-rgb), 0.32);
+  border-radius: 12px;
+  background: rgba(5, 9, 12, 0.72);
+}
+
+.generation-test:focus {
+  outline: none;
+}
+
+.generation-test:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.generation-test-head {
+  grid-area: head;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.generation-test-head > svg {
+  width: 22px;
+  height: 22px;
+  color: var(--gold);
+}
+
+.generation-test-head span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.generation-test-head strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-strong);
+  font-size: 14px;
+  text-wrap: balance;
+}
+
+.generation-test-setup,
+.generation-test-result {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.generation-test-setup {
+  grid-area: setup;
+}
+
+.generation-test > .balance-fader {
+  grid-area: fader;
+}
+
+.generation-test-result {
+  grid-area: result;
+}
+
+.generation-test-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.generation-test-lab-link {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font: 11px/1.3 var(--ui);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.generation-test-lab-link:hover,
+.generation-test-lab-link:focus-visible {
+  color: var(--green);
+}
+
+.generation-test-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.generation-test-picture {
+  margin: 0;
+  padding: 6px;
+  border: 1px solid rgba(var(--gold-rgb), 0.26);
+  border-radius: 12px;
+  background: #080d10;
+  display: grid;
+  gap: 6px;
+}
+
+.generation-test-picture img,
+.generation-test-picture video,
+.generation-test-empty {
+  width: 100%;
+  max-height: 300px;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  background: #05080a;
+  object-fit: contain;
+}
+
+.generation-test.video .generation-test-picture img,
+.generation-test.video .generation-test-picture video,
+.generation-test.video .generation-test-empty {
+  aspect-ratio: 16 / 10;
+}
+
+.generation-test-empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.generation-test-picture figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.generation-test-picture figcaption strong {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.generation-test-picture figcaption .passed {
+  color: var(--green);
+}
+
+.generation-test-picture figcaption .short {
+  color: var(--red);
+}
+
+.generation-test-picture figcaption .unjudged {
+  color: var(--muted);
+}
+
+.generation-test-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.generation-test-placeholder {
+  min-height: 180px;
+  padding: 16px;
+  border: 1px dashed rgba(var(--gold-rgb), 0.28);
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.generation-test-placeholder svg {
+  width: 26px;
+  height: 26px;
+  color: rgba(var(--gold-rgb), 0.6);
+}
+
+.generation-test .advanced-lab-checks {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.generation-test .advanced-lab-checks div {
+  padding: 6px 8px;
+}
+
+/* Laid out for the part of the table that shows, not the window: the filter
+   rail, the side menu and the model card take their share first. The result
+   keeps its place beside the Run button for as long as two columns fit, so a
+   finished test is seen without scrolling. */
+.generation-test.medium {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "head head"
+    "setup result"
+    "fader result";
+}
+
+.generation-test.narrow {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "head"
+    "setup"
+    "fader"
+    "result";
+}
+
 @media (max-width: 900px) {
   .video-lineup-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

@@ -8,22 +8,14 @@ import { getErrorMessage, getScoreTone } from '../lib/format';
 import type { AdvancedLabResult } from '../lib/labResults';
 import { formatVideoDuration } from '../lib/videoFit';
 import { againstEstimate, rankLineupByBalance, type LineupRecord, type LineupRecordEntry } from '../lib/videoLineup';
+// Its own clock, so the list does not re-render every second of a three-hour render.
+import { Elapsed } from './Elapsed';
 
 const AGAINST_ESTIMATE = {
   inside: 'inside its estimate',
   faster: 'faster than estimated',
   slower: 'slower than estimated',
 } as const;
-
-/** Its own clock, so the list does not re-render every second of a three-hour render. */
-function Elapsed({ since }: { since: number }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-  return <>{formatVideoDuration(Math.max(0, (now - since) / 1000))}</>;
-}
 
 /**
  * A lineup's leaderboard and its clips, ranked at the Balance fader.

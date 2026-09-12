@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { agentArcadeApi } from '../api';
 import { readComfySettings } from '../lib/comfySettings';
+import { onComfyStarted } from '../lib/comfyStarter';
 import { getComfyStatus } from '../lib/comfyTransport';
 import type { ComfyStatus } from '../types';
 
@@ -105,6 +106,12 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
     const id = setInterval(look, 15_000);
     return () => { live = false; clearInterval(id); };
   }, [applyStatus]);
+
+  // A start RigMatch made is watched until ComfyUI answers. Hearing about it
+  // here updates every screen then, not at the next fifteen-second look.
+  useEffect(() => onComfyStarted(() => {
+    void getComfyStatus().then(applyStatus);
+  }), [applyStatus]);
 
   /**
    * Look again — after a download, or after the user has restarted ComfyUI.

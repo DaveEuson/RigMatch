@@ -22,6 +22,8 @@ import {
 } from '../lib/videoLineup';
 import { startVideoLineup, stopVideoLineup, subscribeLineupSession } from '../lib/videoLineupSession';
 import { useVideoLineupSession } from '../hooks/useVideoLineupSession';
+import { useComfyStart } from '../hooks/useComfyStart';
+import { ensureComfyRunning } from '../lib/comfyStarter';
 import { ComfyStartButton } from './ComfyStartButton';
 import { PromptPicker } from './PromptPicker';
 import { BalanceFader } from './BalanceFader';
@@ -119,6 +121,7 @@ export function VideoLineupLab({
 }) {
   const simple = variant === 'simple';
   const session = useVideoLineupSession();
+  const comfyStart = useComfyStart();
   const [picks, setPicks] = useState<ReadonlySet<string>>(() => new Set());
   const [confirmUnload, setConfirmUnload] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -134,6 +137,12 @@ export function VideoLineupLab({
   // Only a running ComfyUI can say what is on disk. Without it every model
   // reads as missing, and the sizes are whole downloads.
   const installed = useMemo(() => comfyListing(reachable ? comfyStatus : null), [comfyStatus, reachable]);
+  // Simple Mode reaches this with ComfyUI off more often than not, and a
+  // beginner should not be sent to find a .bat file. Advanced Mode starts it
+  // when the Video channel is chosen.
+  useEffect(() => {
+    if (simple && !reachable) void ensureComfyRunning('auto');
+  }, [simple, reachable]);
   const hasToken = Boolean(readHuggingFaceToken());
 
   const cards = useMemo<Card[]>(() => allLineupEntries(installed)
@@ -263,9 +272,13 @@ export function VideoLineupLab({
   };
 
   const record = session.record;
+  // A model tested on its own from the Models screen renders through the same
+  // session, but it is not part of the race on this board.
+  const raceRunning = session.running && !session.solo;
+  const raceCurrent = session.solo ? null : session.current;
   const finished = new Set(record?.entries.map((item) => item.key));
-  const unfinished = record ? record.planned.filter((item) => !finished.has(item.key) && item.key !== session.current?.key) : [];
-  const currentCard = session.current ? cards.find((card) => card.entry.key === session.current?.key) : undefined;
+  const unfinished = record ? record.planned.filter((item) => !finished.has(item.key) && item.key !== raceCurrent?.key) : [];
+  const currentCard = raceCurrent ? cards.find((card) => card.entry.key === raceCurrent.key) : undefined;
 
   const startNote = otherRunActive && !session.running
     ? 'Another test is using the graphics card. The race can start when it finishes.'
@@ -297,7 +310,9 @@ export function VideoLineupLab({
 
       {!reachable && (
         <div className="utility-empty compact">
-          <strong>{comfyChecking ? 'Looking for ComfyUI...' : 'ComfyUI is not running'}</strong>
+          <strong>
+            {comfyChecking ? 'Looking for ComfyUI...' : comfyStart.phase === 'starting' ? 'Starting ComfyUI…' : 'ComfyUI is not running'}
+          </strong>
           <span>
             Video makers run on ComfyUI, a separate free program RigMatch does not install. Fit and
             time below come from this machine and need nothing running; seeing which models you
@@ -461,11 +476,11 @@ export function VideoLineupLab({
           record={record}
           saved={saved}
           rankAt={rankAt}
-          running={session.running}
-          current={session.current
+          running={raceRunning}
+          current={raceCurrent
             ? {
-              name: session.current.name,
-              startedAt: session.current.startedAt,
+              name: raceCurrent.name,
+              startedAt: raceCurrent.startedAt,
               note: currentCard ? lowerFirst(formatVideoEstimate(currentCard.facts.estimate, { roughNote: false })) : undefined,
             }
             : null}
