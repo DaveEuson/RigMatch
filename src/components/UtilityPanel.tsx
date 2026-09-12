@@ -449,7 +449,7 @@ export function UtilityPanel({
       {panel === 'history' && labChannel && (
         <div className="utility-body">
           <div className="utility-stat">
-            <span>{workbench.label} scorecards</span>
+            <span>Scorecards · {workbench.label}</span>
             <strong>{labBoard.length} saved result{labBoard.length === 1 ? '' : 's'}</strong>
             <em>Every {LAB_NOUN[labChannel]} this PC has run, ranked by what matters to you. Moving the fader runs nothing again.</em>
           </div>
@@ -458,7 +458,7 @@ export function UtilityPanel({
             onChange={onChannelBalanceChange}
             accuracyMeans={workbench.accuracyMeans}
             lockedReason={channelBalanceLock}
-            label={`What matters more for ${workbench.label.toLowerCase()}?`}
+            label={`What matters more for ${workbench.activity}?`}
           />
           {labBoard.length > 0 ? (
             <LabStandings

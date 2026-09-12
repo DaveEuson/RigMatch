@@ -66,3 +66,23 @@ test('a channel with no Lab card says where its test runs instead', () => {
     if (workbench.labCards.length === 0) assert.ok(workbench.labNote, `${workbench.id} has neither cards nor a note`);
   }
 });
+
+test('a media channel says which way the media goes', () => {
+  // "Images" alone could be a model that draws them or one that reads them.
+  const label = (id) => workbenchById(id).label;
+  assert.equal(label('images'), 'Makes images');
+  assert.equal(label('reading'), 'Reads images');
+  assert.equal(label('video'), 'Makes video');
+  assert.equal(label('listening'), 'Listens to audio');
+  // Making and reading images sit side by side on the switch.
+  const order = WORKBENCHES.map((workbench) => workbench.id);
+  assert.equal(order.indexOf('reading'), order.indexOf('images') + 1);
+});
+
+test('every channel finishes a sentence in lower case', () => {
+  // "What matters more for making images?", not "for makes images?".
+  for (const workbench of WORKBENCHES) {
+    assert.ok(workbench.activity, `${workbench.id} has no activity`);
+    assert.equal(workbench.activity, workbench.activity.toLowerCase(), workbench.id);
+  }
+});

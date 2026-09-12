@@ -52,6 +52,23 @@ test('the reported capability beats the name', () => {
   assert.deepEqual(judgeCandidates([{ name: 'llava:7b', capabilities: ['completion'] }]), []);
 });
 
+test('a model that is not on this machine is never the judge', () => {
+  // The Models list carries the Ollama website's capabilities for models that
+  // are not downloaded. Judging with one failed every question, so pictures and
+  // clips came back unjudged while the fader said a judge was there.
+  const catalogue = {
+    name: 'llama3.2-vision', displayName: 'llama3.2-vision:latest', installed: false,
+    capabilities: ['completion', 'vision'],
+  };
+  const onDisk = {
+    name: 'gemma3', displayName: 'gemma3:4b', installed: true,
+    capabilities: ['completion', 'vision'],
+    installedModel: { name: 'gemma3:4b', model: 'gemma3:4b', capabilities: ['completion', 'vision'] },
+  };
+  // Named by the installed tag, not the bare family Ollama would read as :latest.
+  assert.deepEqual(judgeCandidates([catalogue, onDisk]), ['gemma3:4b']);
+});
+
 test('an unknown prompt id falls back rather than crashing a run', () => {
   assert.equal(imagePromptById('nonsense').id, IMAGE_BENCHMARK_PROMPTS[0].id);
   assert.equal(imagePromptById(undefined).id, IMAGE_BENCHMARK_PROMPTS[0].id);

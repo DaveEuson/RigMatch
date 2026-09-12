@@ -27,6 +27,8 @@ import { familiesToAutoExpand, groupRowsByFamily } from '../lib/modelGroups';
 import { describeModelTag } from '../lib/modelVariants';
 import { readComfySettings } from '../lib/comfySettings';
 import { getModelNewsId } from '../lib/modelNews';
+import { rowSkillTest } from '../lib/rowTests';
+import type { WorkbenchId } from '../lib/workbench';
 import { getCountryCode, getDeveloperFilterOptions, getDisplayCountry, getModelOrigin, getRowDeveloper } from '../lib/modelOrigins';
 import type { RunDelta } from '../lib/runHistory';
 import type { BenchmarkResult, ModelRow, PullProgressUpdate, RunProgress, TestedModelScore } from '../types';
@@ -36,6 +38,7 @@ import { DiskGuard } from './DiskGuard';
 import { DownloadProgressInline } from './DownloadProgressInline';
 import { FirstModelWizard } from './FirstModelWizard';
 import { GenerationTestPanel, type GenerationTestContext } from './GenerationTestPanel';
+import { SkillTestPanel, type SkillTestContext } from './SkillTestPanel';
 import { ModelScorePill, ModelStatusPill, PopularityMeter, ScoreLegend } from './ScoreVisuals';
 import { ModelCompareCard } from './ModelCompareCard';
 import { SelectedContestantCard } from './SelectedContestantCard';
@@ -84,6 +87,8 @@ export function ModelCabinet({
   comfyFolderSet,
   onOpenComfyHelp,
   generationTest,
+  skillTest,
+  channel,
   goalLens,
   selectedModel,
   installedModelNames,
@@ -130,6 +135,10 @@ export function ModelCabinet({
   onOpenComfyHelp: () => void;
   /** What a picture or video model's own Test needs: ComfyUI, the judge, the fader. */
   generationTest: GenerationTestContext;
+  /** What a listening or picture-reading test from a model's own row needs. */
+  skillTest: SkillTestContext;
+  /** The channel Advanced Mode is on, which decides what a row's Test runs. */
+  channel: WorkbenchId;
   /** The task filter implied by the user's primary goal, if any. Applied when
       it changes and freely clearable after — a lens, never a lock. */
   goalLens?: ModelTaskFilterId;
@@ -1058,10 +1067,21 @@ export function ModelCabinet({
                 hardwareFit.tone === 'out-of-league' ? 'out-of-league' : '',
               ].filter(Boolean).join(' ');
               const showDownloadProgress = !installed && (queued || isPullingRow || isVisiblePullProgress(rowPullProgress));
-              // Open under its own row. It stays open if ComfyUI stops mid-test,
-              // so the test can say so instead of vanishing with the listing.
-              const testing = testingId === row.id && row.runtime === 'comfyui';
-              const testPanelId = `generation-test-${row.generationId ?? row.id}`;
+              // The test this channel is about, when the model can take it: the
+              // listening test on Listens to audio, a test picture on Reads images.
+              const skill = rowSkillTest(channel, row, installed);
+              // Open under its own row. A picture or video test stays open if
+              // ComfyUI stops mid-test, so it can say so instead of vanishing.
+              const testing = testingId === row.id && (row.runtime === 'comfyui' || skill !== null);
+              const testPanelId = `row-test-${row.generationId ?? row.id}`;
+              const closeTest = () => {
+                setTestingId(null);
+                // Back to the button that opened it, or keyboard focus falls to
+                // the top of the page with the panel gone.
+                requestAnimationFrame(() => {
+                  document.querySelector<HTMLButtonElement>(`[data-row-test="${CSS.escape(row.id)}"]`)?.focus();
+                });
+              };
               return (
                 <Fragment key={row.id}>
                 <tr
@@ -1209,7 +1229,7 @@ export function ModelCabinet({
                               type="button"
                               className="mini-button"
                               onClick={() => setTestingId(testing ? null : row.id)}
-                              data-generation-test={row.id}
+                              data-row-test={row.id}
                               aria-expanded={testing}
                               aria-controls={testing ? testPanelId : undefined}
                               title={testing
@@ -1271,12 +1291,19 @@ export function ModelCabinet({
                           <button
                             type="button"
                             className={`mini-button score-row-button${!hardwareFit.recommend ? ' warn' : ''}`}
-                            onClick={() => onScoreModel(row)}
+                            onClick={() => (skill ? setTestingId(testing ? null : row.id) : onScoreModel(row))}
                             disabled={isBenchmarking}
-                            title={hardwareFit.recommend ? `Test ${row.displayName} on this computer` : hardwareFit.tone === 'unknown' ? `⚠ Size unknown — RigMatch can't gauge fit yet, test anyway?` : `⚠ Too big for your VRAM — will be slow, test anyway?`}
+                            data-row-test={row.id}
+                            aria-expanded={skill ? testing : undefined}
+                            aria-controls={skill && testing ? testPanelId : undefined}
+                            title={skill === 'listening'
+                              ? `Play ${row.displayName} the listening test`
+                              : skill === 'reading'
+                                ? `Show ${row.displayName} a test picture to describe`
+                                : hardwareFit.recommend ? `Test ${row.displayName} on this computer` : hardwareFit.tone === 'unknown' ? `⚠ Size unknown — RigMatch can't gauge fit yet, test anyway?` : `⚠ Too big for your VRAM — will be slow, test anyway?`}
                           >
                             <Gauge aria-hidden="true" />
-                            Test
+                            {skill && testing ? 'Close' : 'Test'}
                           </button>
                           <button
                             type="button"
@@ -1340,19 +1367,17 @@ export function ModelCabinet({
                 {testing && (
                   <tr className="generation-test-row">
                     <td colSpan={columnCount}>
-                      <GenerationTestPanel
-                        id={testPanelId}
-                        row={row}
-                        context={generationTest}
-                        onClose={() => {
-                          setTestingId(null);
-                          // Back to the button that opened it, or keyboard focus
-                          // falls to the top of the page with the panel gone.
-                          requestAnimationFrame(() => {
-                            document.querySelector<HTMLButtonElement>(`[data-generation-test="${CSS.escape(row.id)}"]`)?.focus();
-                          });
-                        }}
-                      />
+                      {skill ? (
+                        <SkillTestPanel
+                          id={testPanelId}
+                          kind={skill}
+                          model={row.displayName}
+                          context={skillTest}
+                          onClose={closeTest}
+                        />
+                      ) : (
+                        <GenerationTestPanel id={testPanelId} row={row} context={generationTest} onClose={closeTest} />
+                      )}
                     </td>
                   </tr>
                 )}

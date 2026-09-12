@@ -72,9 +72,11 @@ export type HardwareFit = {
  */
 export type CapabilityBearing = {
   capabilities?: string[];
-  installedModel?: { capabilities?: string[] };
+  installedModel?: { capabilities?: string[]; name?: string; model?: string };
   displayName?: string;
   name?: string;
+  /** False for a catalogue row that is not on this machine. */
+  installed?: boolean;
 };
 
 /**
@@ -186,6 +188,19 @@ export function canJoinComparison(row: ModelRow): boolean {
  */
 export function canHearAudio(row: CapabilityBearing): boolean {
   return getModelCapabilities(row)?.includes('audio') ?? false;
+}
+
+/**
+ * Models that can be shown a picture.
+ *
+ * What the provider reports wins, as with hearing, and the name is only the
+ * fallback for a model it will not describe. A model that cannot see does not
+ * fail loudly: it answers questions about a picture it never looked at.
+ */
+export function canReadImages(row: CapabilityBearing): boolean {
+  const capabilities = getModelCapabilities(row);
+  if (capabilities) return capabilities.includes('vision');
+  return isVisionModel(row.displayName ?? row.name ?? '');
 }
 
 /**
@@ -1398,8 +1413,8 @@ export const TASK_FILTER_CHIPS: Array<{ id: ModelTaskFilterId; label: string }> 
   { id: 'imagegen',   label: 'Makes images' },
   { id: 'videogen',   label: 'Makes video' },
   { id: 'audiogen',   label: 'Makes audio' },
-  { id: 'vision',     label: 'Reads images/OCR' },
-  { id: 'hears',      label: 'Hears audio' },
+  { id: 'vision',     label: 'Reads images' },
+  { id: 'hears',      label: 'Listens to audio' },
   { id: 'videoread',  label: 'Watches video' },
   { id: 'search',     label: 'Search' },
   { id: 'uncensored', label: 'Uncensored' },
@@ -1575,6 +1590,11 @@ export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolea
   // a model can hear, and matching one that cannot guarantees the "Failed to
   // load image or audio file" error on its scorecard.
   if (task === 'hears') return canHearAudio(row);
+  // What the provider reports decides, as for hearing. gemma4 reads images and
+  // its profile says "low memory, quick chat", so the keyword rule below left it
+  // off Reads images while Ollama said it could see. The keywords remain only
+  // for a model nothing describes.
+  if (task === 'vision' && getModelCapabilities(row)) return canReadImages(row);
   if (task === 'videoread') return canWatchVideo(row);
   if (task === 'audiogen') return isLikelyAudioGenerationModel(row.displayName);
   const category = TASK_CATEGORIES.find((c) => c.id === task);

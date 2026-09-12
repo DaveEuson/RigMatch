@@ -29,6 +29,15 @@ test('Hears audio matches only what the provider reports, never the name', () =>
   assert.ok(!modelMatchesTask(row('audio-sounding-name:7b', undefined), 'hears'));
 });
 
+test('Reads images believes the provider, as Listens to audio does', () => {
+  // gemma4 reads images, and its profile says "low memory, quick chat": the
+  // keyword rule left it off the Reads images channel while Ollama said it
+  // could see.
+  assert.ok(modelMatchesTask(row('gemma4:e2b', ['completion', 'vision', 'audio']), 'vision'));
+  // And a model the provider says cannot see is not listed on its name.
+  assert.ok(!modelMatchesTask(row('llava:7b', ['completion']), 'vision'));
+});
+
 test('Watches video lights up on a provider capability the day it exists', () => {
   assert.ok(canWatchVideo(row('some-model', ['completion', 'video'])));
 });

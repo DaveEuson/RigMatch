@@ -12419,6 +12419,77 @@ tbody tr.computer-row.selected {
   color: var(--gold);
 }
 
+/* The channel's own test from a model's row: listening, or reading a picture.
+   It shares the picture and video test's frame and layout below. */
+.skill-test-about {
+  max-width: 70ch;
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* One row for the four bundled pictures at every panel width: auto-fill laid
+   them out three and one inside the panel's content-sized column. */
+.skill-test-pictures {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.skill-test-pictures button {
+  min-width: 0;
+  padding: 4px;
+  border: 1px solid rgba(255, 249, 239, 0.1);
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  display: grid;
+  gap: 4px;
+  font: 11px/1.2 var(--ui);
+  cursor: pointer;
+}
+
+.skill-test-pictures button[aria-pressed='true'] {
+  border-color: rgba(var(--gold-rgb), 0.6);
+  background: rgba(var(--gold-rgb), 0.1);
+  color: var(--text-strong);
+}
+
+.skill-test-pictures button:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.skill-test-pictures img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+/* The test pictures are wide scenes, not square renders: shown at their own shape. */
+.skill-test.reading .generation-test-picture img {
+  height: auto;
+  max-height: 220px;
+  aspect-ratio: auto;
+}
+
+.skill-test-answer {
+  margin-bottom: 0;
+}
+
+.skill-test-answer > strong {
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.generation-test-meta b {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Sticky and sized to the visible part of the table (set from the component),
    so a table that scrolls sideways does not carry the result off screen. */
 .generation-test {

@@ -2959,7 +2959,7 @@ function App() {
           videoOutcomes = await runVideoLineupLive({
             entries: videoEntries,
             promptId: selection.imagePrompt,
-            judgeModel: judgeCandidates(modelRows)[0],
+            judgeModel: pictureJudge || undefined,
             ollamaBaseUrl: ollama.baseUrl,
             seed: videoSeed,
             signal: stopVideo.signal,
@@ -2992,7 +2992,7 @@ function App() {
         const run = await runImageLabChallenge({
           checkpoint: job.model,
           promptId: selection.imagePrompt,
-          judgeModel: judgeCandidates(modelRows)[0],
+          judgeModel: pictureJudge || undefined,
           ollamaBaseUrl: ollama.baseUrl,
         });
         result = toLabResult(run, selection.imagePrompt);
@@ -3058,10 +3058,10 @@ function App() {
     } else if (!stopSkillRef.current) {
       setActivity(`Skill tests finished (${jobs.length} run${jobs.length === 1 ? '' : 's'}). Lab Grades are saved in Settings → Advanced Lab.`);
     }
-    // modelRows is read to pick a vision model to judge the generated image;
-    // without it here the run would judge with whatever was installed when this
-    // callback was last built.
-  }, [ollama.baseUrl, skillTestSelection, effectiveJudge, modelRows, videoMachine]);
+    // pictureJudge checks the pictures and clips, and modelRows says which
+    // models can hear; without them here the run would use whatever was
+    // installed when this callback was last built.
+  }, [ollama.baseUrl, skillTestSelection, effectiveJudge, modelRows, videoMachine, pictureJudge]);
 
   // One improve pass: hand the model its previous attempt (plus an optional user
   // hint), stream the rebuild into the live view, and return the new result — or
@@ -3611,7 +3611,7 @@ function App() {
           videoLineup={{
             comfyReachable,
             comfyFolders,
-            judgeModel: judgeCandidates(modelRows)[0] ?? '',
+            judgeModel: pictureJudge,
             ollamaBaseUrl: ollama.baseUrl,
             onCheckComfy: () => { void refreshComfyStatus(); },
             onDownloadModel: requestLabDownload,
@@ -3763,6 +3763,16 @@ function App() {
               // From the All channel too: comparing pictures is the Images
               // channel's Comparison, not chat's Speed Dating.
               onOpenComparison: (channel) => { chooseWorkbench(channel); selectNav('speedDate'); },
+            }}
+            channel={workbenchInfo.id}
+            skillTest={{
+              ollamaBaseUrl: ollama.baseUrl,
+              ollamaReady: ollama.ready,
+              balances,
+              onBalanceChange: setBalance,
+              gpuBusy,
+              onOpenListeningLab: () => selectNav('activity'),
+              onOpenComparison: () => selectNav('speedDate'),
             }}
             // Settings already explains ComfyUI in plain language; window.open
             // was popup-blocked in the browser preview and the review found the

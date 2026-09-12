@@ -449,7 +449,7 @@ function ChannelSwitch({ value, onChange }: { value: WorkbenchId; onChange: (id:
             onKeyDown={(event) => move(event, index)}
             title={workbench.id === 'all'
               ? 'Every kind of test at once'
-              : `Models, the Lab and the winner show ${workbench.label.toLowerCase()} only`}
+              : `Models, the Lab and the winner cover ${workbench.activity} only`}
           >
             <Icon aria-hidden="true" />
             {workbench.label}

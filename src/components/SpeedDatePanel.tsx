@@ -35,7 +35,7 @@ const ALL_CHANNELS = workbenchById('all');
 const LINEUP_TASKS: Partial<Record<WorkbenchId, Array<{ id: ModelTaskFilterId; label: string }>>> = {
   chat: [{ id: 'assistant', label: 'Chat' }, { id: 'writing', label: 'Writing' }],
   code: [{ id: 'coding', label: 'Coding' }],
-  reading: [{ id: 'vision', label: 'Reading pictures' }],
+  reading: [{ id: 'vision', label: 'Reads images' }],
 };
 
 export function SpeedDatePanel({
@@ -401,7 +401,7 @@ export function SpeedDatePanel({
             value={balance}
             onChange={onBalanceChange}
             accuracyMeans={workbench.accuracyMeans}
-            label={`What matters more for ${(channel === 'all' ? 'chat and writing' : workbench.label).toLowerCase()}?`}
+            label={`What matters more for ${channel === 'all' ? 'chat and writing' : workbench.activity}?`}
           />
         )}
 

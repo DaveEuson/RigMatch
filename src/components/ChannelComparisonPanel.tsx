@@ -92,7 +92,7 @@ export function ChannelComparisonPanel({
           onChange={onBalanceChange}
           accuracyMeans={workbench.accuracyMeans}
           lockedReason={lockedReason}
-          label={`What matters more for ${workbench.label.toLowerCase()}?`}
+          label={`What matters more for ${workbench.activity}?`}
         />
 
         {run && channel !== 'listening' && (

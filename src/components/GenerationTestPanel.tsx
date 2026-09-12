@@ -7,7 +7,7 @@ import { readComfySettings } from '../lib/comfySettings';
 import { ensureComfyRunning } from '../lib/comfyStarter';
 import { describeComfyBusy, fetchComfyOutput } from '../lib/comfyTransport';
 import { dataUrlToBlob } from '../lib/dataUrl';
-import { getErrorMessage } from '../lib/format';
+import { formatDateTime, getErrorMessage } from '../lib/format';
 import { generationModelById, type ComfyFolderListing } from '../lib/generationCatalog';
 import { IMAGE_RUN_SETTINGS, toLabResult } from '../lib/imageGenChallenge';
 import { runImageLabChallenge } from '../lib/imageGenRunner';
@@ -20,6 +20,7 @@ import { lineupCardFacts, lineupEntry, measuredSecondsFor } from '../lib/videoLi
 import { startVideoLineup, stopVideoLineup } from '../lib/videoLineupSession';
 import { workbenchById } from '../lib/workbench';
 import { useImageLineupSession } from '../hooks/useImageLineupSession';
+import { useRowPanel } from '../hooks/useRowPanel';
 import { useLabResults } from '../hooks/useLabResults';
 import { useVideoLineupSession } from '../hooks/useVideoLineupSession';
 import { BalanceFader } from './BalanceFader';
@@ -48,16 +49,7 @@ export type GenerationTestContext = {
 
 type ImageRun = { phase: 'idle' | 'running' | 'complete' | 'failed'; message: string };
 
-/** The table cell's own padding, left and right. */
-const CELL_PADDING = 16;
-
 const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
-
-/** When a result was made, as a date and a time: "is this the one from last night". */
-function formatWhen(iso: string): string {
-  const at = new Date(iso);
-  return Number.isNaN(at.getTime()) ? '' : at.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
 
 /**
  * Test a picture or video model where it is listed.
@@ -93,23 +85,13 @@ export function GenerationTestPanel({
   const [confirmUnload, setConfirmUnload] = useState(false);
   const [imageRun, setImageRun] = useState<ImageRun>({ phase: 'idle', message: '' });
   const imageAbort = useRef<AbortController | null>(null);
-  const panelRef = useRef<HTMLElement>(null);
-  // The table scrolls sideways on a narrow window, and a test as wide as the
-  // table put its result off screen. It is held to the part of the table that
-  // shows, and laid out for that width rather than the table's.
-  const [visibleWidth, setVisibleWidth] = useState<number | null>(null);
+  const { ref: panelRef, size, style } = useRowPanel();
   // Clips are fetched only when asked for: a few seconds of footage is
   // megabytes, and the scored artifact is the frame.
   const [clip, setClip] = useState<{ url: string; of: string } | null>(null);
   const [clipLoading, setClipLoading] = useState(false);
   const [clipError, setClipError] = useState('');
   const clipUrls = useRef(new Set<string>());
-
-  // Opened by a click in a long table: bring it into view, and put focus in it.
-  useEffect(() => {
-    panelRef.current?.scrollIntoView({ block: 'nearest' });
-    panelRef.current?.focus({ preventScroll: true });
-  }, []);
 
   // Asking to test a ComfyUI model is asking for ComfyUI: start it now, so it
   // loads while the prompt is picked. Settings can turn this off.
@@ -121,14 +103,6 @@ export function GenerationTestPanel({
   useEffect(() => {
     const urls = clipUrls.current;
     return () => { for (const url of urls) URL.revokeObjectURL(url); };
-  }, []);
-
-  useEffect(() => {
-    const table = panelRef.current?.closest('.table-wrap');
-    if (!table || typeof ResizeObserver === 'undefined') return undefined;
-    const observer = new ResizeObserver(() => setVisibleWidth(table.clientWidth));
-    observer.observe(table);
-    return () => observer.disconnect();
   }, []);
 
   const entry = video && row.generationId ? lineupEntry(row.generationId) : undefined;
@@ -285,15 +259,13 @@ export function GenerationTestPanel({
       ? `One clip took ${formatVideoDuration(facts.estimate.seconds)} here last time.`
       : `One clip: ${lowerFirst(formatVideoEstimate(facts.estimate, { roughNote: false }))}.`
     : '';
-  const width = visibleWidth ? Math.max(0, visibleWidth - CELL_PADDING) : null;
-  const size = width === null || width > 900 ? 'wide' : width > 560 ? 'medium' : 'narrow';
 
   return (
     <section
       ref={panelRef}
       id={id}
       className={`generation-test ${video ? 'video' : 'image'} ${size}`}
-      style={width ? { width } : undefined}
+      style={style}
       aria-label={`Test ${row.displayName}`}
       tabIndex={-1}
     >
@@ -442,7 +414,7 @@ export function GenerationTestPanel({
               </figcaption>
             </figure>
             <p className="generation-test-meta">
-              “{last.response}” · {formatWhen(last.completedAt)}{last.gpu ? ` · ${last.gpu}` : ''}
+              “{last.response}” · {formatDateTime(last.completedAt)}{last.gpu ? ` · ${last.gpu}` : ''}
             </p>
             {clipError && <em className="video-lineup-error">Could not load the clip. {clipError}</em>}
             {/* A picture's checks are the prompt's own questions. A clip's are

@@ -11,6 +11,10 @@
  * Built on the goal taxonomy rather than beside it (goals.ts): every goal lives
  * in exactly one channel, and channels are named for the kind of test RigMatch
  * can actually run, so goals graded by the same test share a channel.
+ *
+ * A media channel says which way the media goes. "Images" alone could be a
+ * model that draws them or one that reads them, and those are different models
+ * with different tests, so the names say "Makes images" and "Reads images".
  */
 
 import type { GoalId } from './goals.ts';
@@ -24,6 +28,8 @@ export type LabCardId = 'app-builder' | 'image' | 'listening' | 'video';
 export type Workbench = {
   id: WorkbenchId;
   label: string;
+  /** What the channel is about, to finish a sentence: "What matters more for making images?" */
+  activity: string;
   /** What winning here is called: "Best for making video". */
   matchLabel: string;
   /** The same, short enough for the winner card in the top deck: "Best video maker". */
@@ -48,6 +54,7 @@ export const WORKBENCHES: Workbench[] = [
   {
     id: 'all',
     label: 'All',
+    activity: 'every kind of test',
     matchLabel: 'Best Match',
     shortLabel: 'Best Match',
     // Making audio has no channel of its own until something can grade it.
@@ -62,6 +69,7 @@ export const WORKBENCHES: Workbench[] = [
   {
     id: 'chat',
     label: 'Chat and writing',
+    activity: 'chat and writing',
     matchLabel: 'Best for chat and writing',
     shortLabel: 'Best for chat',
     goals: ['talk', 'write', 'use-tools', 'ask-documents'],
@@ -76,6 +84,7 @@ export const WORKBENCHES: Workbench[] = [
   {
     id: 'code',
     label: 'Code',
+    activity: 'code',
     matchLabel: 'Best for coding',
     shortLabel: 'Best for code',
     goals: ['code'],
@@ -88,7 +97,8 @@ export const WORKBENCHES: Workbench[] = [
   },
   {
     id: 'images',
-    label: 'Images',
+    label: 'Makes images',
+    activity: 'making images',
     matchLabel: 'Best for making images',
     shortLabel: 'Best image maker',
     goals: ['make-images'],
@@ -100,8 +110,24 @@ export const WORKBENCHES: Workbench[] = [
     startLabel: 'Open the Image test',
   },
   {
+    id: 'reading',
+    label: 'Reads images',
+    activity: 'reading images',
+    matchLabel: 'Best for reading images',
+    shortLabel: 'Best image reader',
+    goals: ['describe-image'],
+    taskFilter: 'vision',
+    labCards: [],
+    accuracyMeans: 'how well it describes the test picture',
+    home: 'speedDate',
+    emptyHint: 'A comparison with the picture-reading test crowns one.',
+    startLabel: 'Open Comparison',
+    labNote: 'Reading images is tested from a model’s own Test on the Models screen, or for several at once from the Run dialog: put models that can see in Comparison and tick “Recognize an image”.',
+  },
+  {
     id: 'video',
-    label: 'Video',
+    label: 'Makes video',
+    activity: 'making video',
     matchLabel: 'Best for making video',
     shortLabel: 'Best video maker',
     goals: ['make-video', 'animate-image'],
@@ -114,7 +140,8 @@ export const WORKBENCHES: Workbench[] = [
   },
   {
     id: 'listening',
-    label: 'Listening',
+    label: 'Listens to audio',
+    activity: 'listening to audio',
     matchLabel: 'Best for transcription',
     shortLabel: 'Best listener',
     goals: ['transcribe-file', 'transcribe-live'],
@@ -124,20 +151,6 @@ export const WORKBENCHES: Workbench[] = [
     home: 'activity',
     emptyHint: 'Run the Listening test to crown one.',
     startLabel: 'Open the Listening test',
-  },
-  {
-    id: 'reading',
-    label: 'Reading pictures',
-    matchLabel: 'Best for reading images',
-    shortLabel: 'Best picture reader',
-    goals: ['describe-image'],
-    taskFilter: 'vision',
-    labCards: [],
-    accuracyMeans: 'how well it describes the test picture',
-    home: 'speedDate',
-    emptyHint: 'A comparison with the picture-reading test crowns one.',
-    startLabel: 'Open Comparison',
-    labNote: 'Reading pictures runs from the Run dialog: put a model that can see in Comparison, tick “Recognize an image”, and it describes a test picture.',
   },
 ];
 
