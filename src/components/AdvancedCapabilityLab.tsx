@@ -32,6 +32,7 @@ import { useGpuContention } from '../hooks/useGpuContention';
 import { gpuBusyNote } from '../lib/gpuBusyNote';
 import { AppBuilderPreviewModal } from "./AppBuilderPreview";
 import { BalanceFader } from "./BalanceFader";
+import { LabChecks } from "./LabChecks";
 import { LabStandings } from "./LabStandings";
 import { useLabResults } from "../hooks/useLabResults";
 import { useComfyStart } from "../hooks/useComfyStart";
@@ -460,14 +461,7 @@ export function AdvancedCapabilityLab({
                 </div>
               ) : (
                 <>
-                  <div className="advanced-lab-checks">
-                    {visibleResult.checks.map((check) => (
-                      <div key={check.label} className={check.passed ? 'passed' : 'failed'} title={check.detail}>
-                        <span>{check.passed ? 'Pass' : 'Miss'}</span>
-                        <strong>{check.label}</strong>
-                      </div>
-                    ))}
-                  </div>
+                  <LabChecks checks={visibleResult.checks} />
                   <pre className="advanced-lab-output">{visibleResult.response || 'No response returned.'}</pre>
                 </>
               )}
@@ -635,14 +629,7 @@ export function AdvancedCapabilityLab({
                       <span>Ollama completed, but RigMatch did not receive an image payload.</span>
                     </div>
                   )}
-                  <div className="advanced-lab-checks">
-                    {visibleImageResult.checks.map((check) => (
-                      <div key={check.label} className={check.passed ? 'passed' : 'failed'} title={check.detail}>
-                        <span>{check.passed ? 'Pass' : 'Miss'}</span>
-                        <strong>{check.label}</strong>
-                      </div>
-                    ))}
-                  </div>
+                  <LabChecks checks={visibleImageResult.checks} />
                 </>
               )}
             </div>

@@ -29,6 +29,7 @@ import { useVideoLineupSession } from '../hooks/useVideoLineupSession';
 import { BalanceFader } from './BalanceFader';
 import { ComfyNeeded } from './ComfyNeeded';
 import { Elapsed } from './Elapsed';
+import { LabChecks } from './LabChecks';
 import { PromptPicker } from './PromptPicker';
 
 /** The channels a ComfyUI model's own test belongs to. */
@@ -469,16 +470,7 @@ export function GenerationTestPanel({
             {/* A picture's checks are the prompt's own questions. A clip's are
                 a speed rubric the leaderboard does not use: its standing is its
                 time and its frame's match, both shown above. */}
-            {!video && last.checks.length > 0 && (
-              <div className="advanced-lab-checks">
-                {last.checks.map((check) => (
-                  <div key={check.label} className={check.passed ? 'passed' : 'failed'} title={check.detail}>
-                    <span>{check.passed ? 'Pass' : 'Miss'}</span>
-                    <strong>{check.label}</strong>
-                  </div>
-                ))}
-              </div>
-            )}
+            {!video && last.checks.length > 0 && <LabChecks checks={last.checks} />}
           </>
         ) : (
           <div className="generation-test-placeholder">

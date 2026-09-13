@@ -52,6 +52,7 @@ test('saying it does not sound right fails the clip on the prompt', () => {
   assert.equal(judged.score, 50, 'speed still counts');
   assert.equal(matchCheck(judged).passed, false);
   assert.equal(matchCheck(judged).detail, 'You listened, and it does not sound like the prompt.');
+  assert.equal(matchCheck(judged).unchecked, false, 'your No is a miss, not a line nobody checked');
 });
 
 test('taking your verdict back returns the result to what the run said', () => {
@@ -60,6 +61,7 @@ test('taking your verdict back returns the result to what the run said', () => {
   assert.equal(back.score, 50);
   assert.equal(matchCheck(back).passed, false);
   assert.equal(matchCheck(back).detail, UNJUDGED);
+  assert.equal(matchCheck(back).unchecked, true, 'back to Not checked, as the run left it');
 });
 
 test('it reads as yours beside a result', () => {

@@ -11942,6 +11942,16 @@ tbody tr.computer-row.selected {
   color: var(--red);
 }
 
+/* Nothing measured this line, so neither green nor red, and dashed. */
+.advanced-lab-checks div.unchecked {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.advanced-lab-checks div.unchecked span {
+  color: var(--muted);
+}
+
 .advanced-lab-checks strong {
   display: block;
   margin-top: 3px;

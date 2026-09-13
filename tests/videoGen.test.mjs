@@ -109,8 +109,9 @@ test('motion quality is reported as unmeasured rather than scored', () => {
   const motion = scored.checks.find((c) => c.label === 'Motion quality');
   assert.ok(motion, 'motion must be listed so nobody reads the total as covering it');
   assert.match(motion.detail, /not measured/i);
-  // And a perfect fast run still reaches full marks despite that check failing,
-  // because it is a statement rather than a penalty.
+  assert.equal(motion.unchecked, true, 'it reads Not checked, not Miss');
+  // And a perfect fast run still reaches full marks despite that line, because
+  // it is a statement rather than a penalty.
   assert.equal(scored.score, 100);
 });
 
@@ -118,6 +119,7 @@ test('an unjudged video cannot reach full marks on speed alone', () => {
   const scored = scoreVideoGeneration({ produced: true, elapsedMs: 4000, frames: 97, fps: 24, width: 768, height: 512, adherence: null });
   assert.equal(scored.judged, false);
   assert.ok(scored.score <= 60, `unjudged run scored ${scored.score}`);
+  assert.equal(scored.checks.find((c) => c.label === 'Frame matches prompt').unchecked, true, 'unjudged reads Not checked, not Miss');
 });
 
 test('a slow Full HD run scores far below a fast small one', () => {

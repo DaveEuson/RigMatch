@@ -27,6 +27,7 @@ import { ComfyNeeded } from './ComfyNeeded';
 import { EarVerdict } from './EarVerdict';
 import { Elapsed } from './Elapsed';
 import type { GenerationTestContext } from './GenerationTestPanel';
+import { LabChecks } from './LabChecks';
 import { PromptPicker } from './PromptPicker';
 
 /**
@@ -261,16 +262,7 @@ export function AudioTestPanel({
             <p className="generation-test-meta">
               “{last.response}” · {formatDateTime(last.completedAt)}
             </p>
-            {last.checks.length > 0 && (
-              <div className="advanced-lab-checks">
-                {last.checks.map((check) => (
-                  <div key={check.label} className={check.passed ? 'passed' : 'failed'} title={check.detail}>
-                    <span>{check.passed ? 'Pass' : 'Miss'}</span>
-                    <strong>{check.label}</strong>
-                  </div>
-                ))}
-              </div>
-            )}
+            {last.checks.length > 0 && <LabChecks checks={last.checks} />}
           </>
         ) : (
           <div className="generation-test-placeholder">

@@ -13,6 +13,7 @@
 import { extractAudio, readStatus, type ComfyImageRef } from './comfyui.ts';
 import { dataUrlToBytes } from './dataUrl.ts';
 import { getErrorMessage } from './format.ts';
+import type { AdvancedLabCheck } from './labResults.ts';
 import type { ComfyTransport } from './imageGenRun.ts';
 import { askPropositions } from './imageGenScoring.ts';
 import { listenerTellsApart, scoreAudioGeneration, type AudioPrompt } from './audioGenScoring.ts';
@@ -74,7 +75,7 @@ export type AudioRunResult = {
   unjudgedReason?: string;
   realtimeCost: number;
   elapsedMs: number;
-  checks: { label: string; passed: boolean; detail: string }[];
+  checks: AdvancedLabCheck[];
   error?: string;
 };
 

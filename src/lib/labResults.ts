@@ -34,11 +34,17 @@ export function wasJudged(result: AdvancedLabResult): boolean {
   return (result.checks ?? []).some((check) => check.label.startsWith('Judged'));
 }
 
-/** One pass/fail line in a skill-test rubric. */
+/** One line in a result's rubric: a pass, a miss, or not checked at all. */
 export type AdvancedLabCheck = {
   label: string;
   passed: boolean;
   detail: string;
+  /**
+   * Nothing measured this line: no judge or listener could answer, or it is
+   * stated rather than scored. It reads Not checked, never Miss, and passed
+   * stays false so nothing counts it as a pass.
+   */
+  unchecked?: boolean;
 };
 
 /** A stored skill-test result for one model + challenge. */
@@ -188,4 +194,4 @@ export function recordEarVerdict(target: AdvancedLabResult, matches: boolean | n
 // Rubrics and grading live in labScoring.ts, a leaf module with no assets or
 // storage so the grading logic stays directly testable. Re-exported so existing
 // importers are unaffected.
-export { describeLabFailure, getAdvancedLabGrade } from './labScoring.ts';
+export { checkState, describeLabFailure, getAdvancedLabGrade } from './labScoring.ts';

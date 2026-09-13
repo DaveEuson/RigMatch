@@ -23,6 +23,7 @@
 
 import { extractImages, readStatus, type ComfyImageRef } from './comfyui.ts';
 import { getErrorMessage } from './format.ts';
+import type { AdvancedLabCheck } from './labResults.ts';
 import { buildTxt2VideoWorkflow, LTX_DEFAULTS, VIDEO_FRAME_NODE, VIDEO_OUTPUT_NODE } from './videoGen.ts';
 import { scoreVideoGeneration } from './videoGenScoring.ts';
 import { askPropositions, type ImagePrompt } from './imageGenScoring.ts';
@@ -97,7 +98,7 @@ export type VideoRunResult = {
   fps: number;
   width: number;
   height: number;
-  checks: { label: string; passed: boolean; detail: string }[];
+  checks: AdvancedLabCheck[];
   error?: string;
 };
 

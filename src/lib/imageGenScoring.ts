@@ -24,6 +24,7 @@
  */
 
 import { getAdvancedLabGrade } from './labScoring.ts';
+import type { AdvancedLabCheck } from './labResults.ts';
 
 export type Proposition = { id: string; question: string; expected: boolean };
 
@@ -213,14 +214,14 @@ export function scoreImageGeneration(facts: ImageRunFacts): {
   score: number;
   grade: string;
   judged: boolean;
-  checks: { label: string; passed: boolean; detail: string }[];
+  checks: AdvancedLabCheck[];
 } {
   const speed = scoreSpeed(facts.elapsedMs, facts.steps);
   const fit = facts.spilledVram ? 0 : 1;
   const judged = facts.adherence !== null;
 
   const perStep = facts.steps ? facts.elapsedMs / 1000 / facts.steps : 0;
-  const checks = [
+  const checks: AdvancedLabCheck[] = [
     {
       label: 'Image produced',
       passed: facts.produced,
@@ -231,6 +232,7 @@ export function scoreImageGeneration(facts: ImageRunFacts): {
     {
       label: 'Prompt followed',
       passed: judged && (facts.adherence ?? 0) >= 0.8,
+      unchecked: !judged,
       detail: judged
         ? `The judge confirmed ${Math.round((facts.adherence ?? 0) * 100)}% of what the prompt asked for.`
         : 'The judge could not answer enough questions to score adherence, so this run is unjudged.',

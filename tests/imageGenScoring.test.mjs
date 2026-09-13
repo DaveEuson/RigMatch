@@ -86,3 +86,12 @@ test('producing no image scores zero however fast it failed', () => {
   assert.equal(nothing.score, 0);
   assert.equal(nothing.grade, 'F');
 });
+
+test('an unjudged run says its prompt line was not checked, rather than missed', () => {
+  const unjudged = scoreImageGeneration({ produced: true, elapsedMs: 4000, steps: 20, adherence: null });
+  const line = unjudged.checks.find((check) => check.label === 'Prompt followed');
+  assert.equal(line.unchecked, true);
+  assert.equal(line.passed, false, 'not checked never counts as a pass');
+  const missed = scoreImageGeneration({ produced: true, elapsedMs: 4000, steps: 20, adherence: 0.4 });
+  assert.equal(missed.checks.find((check) => check.label === 'Prompt followed').unchecked, false, 'a judged miss is a miss');
+});

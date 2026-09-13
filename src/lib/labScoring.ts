@@ -87,8 +87,18 @@ export function scoreAdvancedVisionResponse(response: string, doneReason: string
  */
 export function describeLabFailure(result: Partial<AdvancedLabResult>): string | undefined {
   if (result?.error) return result.error;
-  const failed = (result?.checks ?? []).find((check) => !check.passed);
+  const failed = (result?.checks ?? []).find((check) => checkState(check) === 'failed');
   return failed ? failed.detail : undefined;
+}
+
+/**
+ * Whether a check passed, missed, or was never checked. A line nothing could
+ * judge read Miss beside a board that called the same result unjudged, and it
+ * is neither: nobody looked.
+ */
+export function checkState(check: AdvancedLabCheck): 'passed' | 'failed' | 'unchecked' {
+  if (check.unchecked) return 'unchecked';
+  return check.passed ? 'passed' : 'failed';
 }
 
 /**

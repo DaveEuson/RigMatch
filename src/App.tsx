@@ -218,6 +218,7 @@ import {
   readAdvancedLabResults,
   writeAdvancedLabResults,
   wasJudged,
+  checkState,
   type DemoArtifact,
   type AdvancedLabResult,
 } from './lib/labResults';
@@ -3055,7 +3056,8 @@ function App() {
             responseChars: result.response?.length ?? 0,
             producedImage: Boolean(result.imageDataUrl),
             error: result.error ?? null,
-            failedChecks: (result.checks ?? []).filter((check) => !check.passed).map((check) => `${check.label}: ${check.detail}`),
+            failedChecks: (result.checks ?? []).filter((check) => checkState(check) === 'failed').map((check) => `${check.label}: ${check.detail}`),
+            notChecked: (result.checks ?? []).filter((check) => checkState(check) === 'unchecked').map((check) => check.label),
           },
         });
         if (job.kind === 'app-builder') {

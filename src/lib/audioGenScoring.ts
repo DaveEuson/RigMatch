@@ -14,6 +14,7 @@
 
 import { customImagePrompt, CUSTOM_IMAGE_PROMPT_ID, type ImagePrompt } from './imageGenScoring.ts';
 import { getAdvancedLabGrade } from './labScoring.ts';
+import type { AdvancedLabCheck } from './labResults.ts';
 
 /**
  * A prompt and the questions a listening model answers about the clip.
@@ -137,13 +138,13 @@ export function scoreAudioGeneration(facts: AudioRunFacts): {
   grade: string;
   judged: boolean;
   realtimeCost: number;
-  checks: { label: string; passed: boolean; detail: string }[];
+  checks: AdvancedLabCheck[];
 } {
   const speed = scoreAudioSpeed(facts.elapsedMs, facts.seconds);
   const cost = audioRealtimeCost(facts.elapsedMs, facts.seconds);
   const judged = facts.adherence !== null;
 
-  const checks = [
+  const checks: AdvancedLabCheck[] = [
     {
       label: 'Audio produced',
       passed: facts.produced,
@@ -154,6 +155,7 @@ export function scoreAudioGeneration(facts: AudioRunFacts): {
     {
       label: 'Matches the prompt',
       passed: judged && (facts.adherence ?? 0) >= 0.8,
+      unchecked: !judged,
       detail: !judged
         ? facts.unjudgedReason ?? 'Nothing that can hear checked the clip, so this run is unjudged.'
         : facts.byEar

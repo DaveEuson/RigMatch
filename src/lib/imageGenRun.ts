@@ -22,6 +22,7 @@ import {
   type Txt2ImgRequest,
 } from './comfyui.ts';
 import { getErrorMessage } from './format.ts';
+import type { AdvancedLabCheck } from './labResults.ts';
 import { samplingProfileFor } from './samplingProfile.ts';
 import { askPropositions, scoreImageGeneration, type ImagePrompt } from './imageGenScoring.ts';
 
@@ -74,7 +75,7 @@ export type ImageRunResult = {
   adherence: number | null;
   elapsedMs: number;
   steps: number;
-  checks: { label: string; passed: boolean; detail: string }[];
+  checks: AdvancedLabCheck[];
   error?: string;
 };
 

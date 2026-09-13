@@ -66,6 +66,7 @@ test('a listener that answers every question alike has not told one clip from an
   const scored = scoreAudioGeneration({ produced: true, elapsedMs: 9000, seconds: 30, adherence: null, unjudgedReason: reason });
   assert.equal(scored.judged, false);
   assert.equal(scored.checks.find((check) => check.label === 'Matches the prompt').detail, reason);
+  assert.equal(scored.checks.find((check) => check.label === 'Matches the prompt').unchecked, true, 'unjudged reads Not checked, not Miss');
 });
 
 test('a tempo, where a prompt names one, is one ACE-Step 1.5 accepts', () => {

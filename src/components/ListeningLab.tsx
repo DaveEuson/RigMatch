@@ -20,6 +20,7 @@ import { useLabResults } from "../hooks/useLabResults";
 import { describeLabAccuracy, rankLabResults } from "../lib/channelWinners";
 import { workbenchById } from "../lib/workbench";
 import { BalanceFader } from "./BalanceFader";
+import { LabChecks } from "./LabChecks";
 import { LabStandings } from "./LabStandings";
 
 /** What the Listening fader weighs against time. */
@@ -423,14 +424,7 @@ export function ListeningLab({
             <span>What the model heard</span>
             <strong>{visible.response || '(nothing)'}</strong>
           </div>
-          <div className="advanced-lab-checks">
-            {visible.checks.map((check) => (
-              <div key={check.label} className={check.passed ? 'passed' : 'failed'} title={check.detail}>
-                <span>{check.passed ? 'Pass' : 'Miss'}</span>
-                <strong>{check.label}</strong>
-              </div>
-            ))}
-          </div>
+          <LabChecks checks={visible.checks} />
         </div>
       )}
       {standings.length > 1 && (

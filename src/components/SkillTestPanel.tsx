@@ -17,6 +17,7 @@ import { useLabResults } from '../hooks/useLabResults';
 import { useRowPanel } from '../hooks/useRowPanel';
 import { BalanceFader } from './BalanceFader';
 import { Elapsed } from './Elapsed';
+import { LabChecks } from './LabChecks';
 
 /** What a listening or picture-reading test run from a model's own row needs. */
 export type SkillTestContext = {
@@ -217,16 +218,7 @@ export function SkillTestPanel({
             <p className="generation-test-meta">
               <b>{last.score}/100 · {last.grade}</b> · {(last.elapsedMs / 1000).toFixed(1)} s · {formatDateTime(last.completedAt)}
             </p>
-            {last.checks.length > 0 && (
-              <div className="advanced-lab-checks">
-                {last.checks.map((check) => (
-                  <div key={check.label} className={check.passed ? 'passed' : 'failed'} title={check.detail}>
-                    <span>{check.passed ? 'Pass' : 'Miss'}</span>
-                    <strong>{check.label}</strong>
-                  </div>
-                ))}
-              </div>
-            )}
+            {last.checks.length > 0 && <LabChecks checks={last.checks} />}
           </>
         ) : (
           <div className="generation-test-placeholder">
