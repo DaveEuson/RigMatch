@@ -117,6 +117,8 @@ export type AudioRunFacts = {
   adherence: number | null;
   /** Why a clip that was listened to is still unjudged, when it is. */
   unjudgedReason?: string;
+  /** The accuracy is your verdict on hearing it, not a listener's. */
+  byEar?: boolean;
 };
 
 /**
@@ -152,9 +154,13 @@ export function scoreAudioGeneration(facts: AudioRunFacts): {
     {
       label: 'Matches the prompt',
       passed: judged && (facts.adherence ?? 0) >= 0.8,
-      detail: judged
-        ? `A listening model confirmed ${Math.round((facts.adherence ?? 0) * 100)}% of the prompt in the clip.`
-        : facts.unjudgedReason ?? 'Nothing that can hear checked the clip, so this run is unjudged.',
+      detail: !judged
+        ? facts.unjudgedReason ?? 'Nothing that can hear checked the clip, so this run is unjudged.'
+        : facts.byEar
+          ? (facts.adherence ?? 0) >= 0.8
+            ? 'You listened, and it sounds like the prompt.'
+            : 'You listened, and it does not sound like the prompt.'
+          : `A listening model confirmed ${Math.round((facts.adherence ?? 0) * 100)}% of the prompt in the clip.`,
     },
     {
       label: 'Usable speed',

@@ -16,6 +16,7 @@
 
 import type { TestedModelScore } from '../types';
 import type { AdvancedLabResult } from './labResults.ts';
+import { describeEarVerdict, promptAccuracy } from './earVerdict.ts';
 import { accuracyCounted, applyBalance, crowned, rankByBalance, JUDGE_PASS, type Contender, type RankedContender } from './balance.ts';
 import { CURRENT_SCORE_SCHEMA_VERSION, compareTestedModelScores } from './scoring.ts';
 import { isVerdictWorthy, type TaskScores } from './taskScores.ts';
@@ -118,9 +119,8 @@ export function rankLabList(
   const contenders = results
     .filter((result) => result?.challenge === LAB_CHALLENGE[channel])
     .map((result): Contender<AdvancedLabResult> => {
-      const accuracy = checkedAgainstPrompt(channel)
-        ? (typeof result.adherence === 'number' ? result.adherence : null)
-        : result.score / 100;
+      // A made clip's accuracy is your ear's when you gave a verdict.
+      const accuracy = checkedAgainstPrompt(channel) ? promptAccuracy(result) : result.score / 100;
       return {
         item: result,
         pace: result.elapsedMs > 0 ? 1000 / result.elapsedMs : 0,
@@ -140,8 +140,13 @@ export function rankLabResults(
   return rankLabList(Object.values(results), channel, balance);
 }
 
-/** How a channel's accuracy reads beside a result. */
-export function describeLabAccuracy(channel: LabChannel, accuracy: number): string {
+/** How a channel's accuracy reads beside a result: as yours, when it was your verdict. */
+export function describeLabAccuracy(
+  channel: LabChannel,
+  accuracy: number,
+  result?: Pick<AdvancedLabResult, 'verdict'>,
+): string {
+  if (result?.verdict) return describeEarVerdict(result.verdict);
   if (checkedAgainstPrompt(channel)) return `${percent(accuracy)} of the prompt`;
   if (channel === 'listening') return `listening score ${Math.round(accuracy * 100)}`;
   return `description score ${Math.round(accuracy * 100)}`;
@@ -194,7 +199,7 @@ export function labWinner(
   const ranked = rankLabResults(results, channel, balance);
   const top = crowned(ranked);
   if (!top) return null;
-  const accuracy = top.accuracy === null ? 'unjudged' : describeLabAccuracy(channel, top.accuracy);
+  const accuracy = top.accuracy === null ? 'unjudged' : describeLabAccuracy(channel, top.accuracy, top.item);
   return {
     model: top.item.model,
     detail: `${seconds(top.item.elapsedMs)} · ${accuracy}`,

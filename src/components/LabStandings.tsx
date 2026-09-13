@@ -25,8 +25,8 @@ export function LabStandings({
 }: {
   ranked: RankedContender<AdvancedLabResult>[];
   balance: number;
-  /** "82% of the prompt", "score 91". */
-  describeAccuracy: (accuracy: number) => string;
+  /** "82% of the prompt", "score 91", "sounds right to you". */
+  describeAccuracy: (accuracy: number, result: AdvancedLabResult) => string;
   heading: string;
   /** Rows before "N more below the line". Scorecards shows them all. */
   limit?: number;
@@ -69,7 +69,7 @@ export function LabStandings({
                   <em>
                     {result.error
                       ? result.error
-                      : `${time} · ${describeAccuracy(entry.accuracy ?? 0)}, below the pass line, so it cannot win`}
+                      : `${time} · ${describeAccuracy(entry.accuracy ?? 0, result)}, below the pass line, so it cannot win`}
                     {when(result.completedAt)}
                   </em>
                 </span>
@@ -86,7 +86,7 @@ export function LabStandings({
                 <em>
                   {time}
                   {' · '}
-                  {entry.accuracy === null ? 'unjudged, so it ranks after judged results' : describeAccuracy(entry.accuracy)}
+                  {entry.accuracy === null ? 'unjudged, so it ranks after judged results' : describeAccuracy(entry.accuracy, result)}
                   {when(result.completedAt)}
                 </em>
               </span>

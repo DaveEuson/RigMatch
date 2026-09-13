@@ -90,6 +90,23 @@ test('a clip that fell short of the prompt is never the best audio maker, and no
   assert.deepEqual(rankLabResults(results, 'audio', 0).map((entry) => entry.standing), ['ranked', 'failed']);
 });
 
+test('your ear can crown an audio maker the listener could not judge, and fail one', () => {
+  const results = {
+    'audio:ace': lab('audio-generation', 'ACE-Step 1.5 Turbo', 8, { adherence: null }),
+    'audio:stable': lab('audio-generation', 'Stable Audio Open 1.0', 9, { adherence: null, verdict: { matches: true, at: 'T' } }),
+  };
+  const winner = labWinner(results, 'audio', 50);
+  assert.equal(winner?.model, 'Stable Audio Open 1.0', 'the slower clip wins on what you heard');
+  assert.equal(winner?.speedOnly, false);
+  assert.match(winner?.detail ?? '', /sounds right to you/);
+  // "Doesn't" fails it, as a judge's miss would.
+  const doesnt = { ...results, 'audio:stable': { ...results['audio:stable'], verdict: { matches: false, at: 'T' } } };
+  assert.deepEqual(
+    rankLabResults(doesnt, 'audio', 50).map((entry) => [entry.item.model, entry.standing]),
+    [['ACE-Step 1.5 Turbo', 'ranked'], ['Stable Audio Open 1.0', 'failed']],
+  );
+});
+
 test('made audio is compared only with audio made from the same prompt', () => {
   const results = [
     lab('audio-generation', 'a', 10, { response: 'rain on a tin roof', completedAt: '2026-09-11T10:00:00.000Z' }),

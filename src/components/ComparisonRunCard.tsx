@@ -286,7 +286,7 @@ export function ComparisonRunCard({
       : imageSession.message;
   const failed = video ? videoSession.failed : audio ? audioSession.failed : imageSession.failed;
   const checker = audio
-    ? (context.listenerModel ? `checked by ${context.listenerModel}` : 'unjudged: nothing installed can hear')
+    ? (context.listenerModel ? `checked by ${context.listenerModel}` : 'judged by your ear')
     : (context.judgeModel ? `checked by ${context.judgeModel}` : 'unjudged: no vision model');
 
   // Where each model in this comparison has got to. Video shows its own race below.

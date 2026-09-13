@@ -1286,9 +1286,7 @@ function App() {
     if ((channel === 'images' || channel === 'video') && !pictureJudged) {
       return 'No model that can check pictures is available right now, so only speed can be measured. Install one, or start Ollama, and accuracy counts again.';
     }
-    if (channel === 'audio' && !audioListener) {
-      return 'No model that can hear is available right now, so only speed can be measured. Install one that listens to audio, or start Ollama, and accuracy counts again.';
-    }
+    // Audio is never held at speed: when no model can hear, your ear can judge a clip.
     return null;
   };
   /** The vision model that checks pictures and clips, from what is installed. */
@@ -1304,10 +1302,10 @@ function App() {
       case 'listening': return labWinner(labResults, 'listening', balances.listening);
       case 'reading': return labWinner(labResults, 'reading', balances.reading);
       case 'video': return videoWinner(lineupSession.record, judged(balances.video));
-      case 'audio': return labWinner(labResults, 'audio', audioListener ? balances.audio : 0);
+      case 'audio': return labWinner(labResults, 'audio', balances.audio);
       default: return null;
     }
-  }, [workbenchInfo.id, savedModelScores, labResults, lineupSession.record, balances, pictureJudged, audioListener]);
+  }, [workbenchInfo.id, savedModelScores, labResults, lineupSession.record, balances, pictureJudged]);
   /** The side menu's Models count follows the channel, as the Models screen does. */
   const channelModelCount = useMemo(() => {
     const filter = workbenchInfo.taskFilter;

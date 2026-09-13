@@ -467,7 +467,7 @@ export function UtilityPanel({
               ranked={labBoard}
               balance={channelRankAt}
               heading={`Every ${LAB_NOUN[labChannel]} on this PC`}
-              describeAccuracy={(accuracy) => describeLabAccuracy(labChannel, accuracy)}
+              describeAccuracy={(accuracy, result) => describeLabAccuracy(labChannel, accuracy, result)}
               limit={labBoard.length}
               showDates
             />

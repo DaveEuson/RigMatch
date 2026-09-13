@@ -6,6 +6,7 @@ import { AUDIO_CLIP_SECONDS, audioModelSpec } from '../lib/audioCatalog';
 import { AUDIO_BENCHMARK_PROMPTS, audioRealtimeCost } from '../lib/audioGenScoring';
 import { startAudioLineup, stopAudioLineup } from '../lib/audioLineupSession';
 import { asksForInstrumental } from '../lib/audioWorkflows';
+import { describeEarVerdict, promptAccuracy } from '../lib/earVerdict';
 import { JUDGE_PASS } from '../lib/balance';
 import { readComfySettings } from '../lib/comfySettings';
 import { ensureComfyRunning } from '../lib/comfyStarter';
@@ -23,6 +24,7 @@ import { useVideoLineupSession } from '../hooks/useVideoLineupSession';
 import { AudioClipPlayer } from './AudioClipPlayer';
 import { BalanceFader } from './BalanceFader';
 import { ComfyNeeded } from './ComfyNeeded';
+import { EarVerdict } from './EarVerdict';
 import { Elapsed } from './Elapsed';
 import type { GenerationTestContext } from './GenerationTestPanel';
 import { PromptPicker } from './PromptPicker';
@@ -118,7 +120,8 @@ export function AudioTestPanel({
     else setConfirmUnload(true);
   };
 
-  const share = typeof last?.adherence === 'number' ? last.adherence : null;
+  // Your verdict when you gave one, the listener's check when not.
+  const share = last ? promptAccuracy(last) : null;
   const message = mine ? session.message : '';
   const tone = session.failed ? 'failed' : session.running ? 'running' : 'complete';
   const lastSeconds = last?.seconds ?? AUDIO_CLIP_SECONDS;
@@ -169,7 +172,7 @@ export function AudioTestPanel({
               instrumental
             </span>
           )}
-          <span>{context.listenerModel ? `checked by ${context.listenerModel}` : 'unjudged: nothing installed can hear'}</span>
+          <span>{context.listenerModel ? `checked by ${context.listenerModel}` : 'judged by your ear'}</span>
           {spec && <span>made for {spec.makes}</span>}
         </div>
 
@@ -246,12 +249,15 @@ export function AudioTestPanel({
                 <strong>{formatVideoDuration(last.elapsedMs / 1000)}</strong>
                 <span>{audioRealtimeCost(last.elapsedMs, lastSeconds).toFixed(1)}× realtime</span>
                 <span className={share === null ? 'unjudged' : share >= JUDGE_PASS ? 'passed' : 'short'}>
-                  {share === null
-                    ? 'unjudged'
-                    : `${Math.round(share * 100)}% of the prompt heard${share < JUDGE_PASS ? ', below the pass line' : ''}`}
+                  {last.verdict
+                    ? describeEarVerdict(last.verdict)
+                    : share === null
+                      ? 'unjudged'
+                      : `${Math.round(share * 100)}% of the prompt heard${share < JUDGE_PASS ? ', below the pass line' : ''}`}
                 </span>
               </figcaption>
             </figure>
+            <EarVerdict result={last} />
             <p className="generation-test-meta">
               “{last.response}” · {formatDateTime(last.completedAt)}
             </p>
@@ -269,7 +275,7 @@ export function AudioTestPanel({
         ) : (
           <div className="generation-test-placeholder">
             <AudioLines aria-hidden="true" />
-            <span>The clip appears here, ready to play, with how much of the prompt was heard in it.</span>
+            <span>The clip appears here, ready to play, and for you to say whether it sounds right.</span>
           </div>
         )}
       </div>

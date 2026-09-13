@@ -7,6 +7,7 @@ import type { AdvancedLabResult } from '../lib/labResults';
 import { formatHistoryTime } from '../lib/modelCatalog';
 import { formatVideoDuration } from '../lib/videoFit';
 import { AudioClipPlayer } from './AudioClipPlayer';
+import { EarVerdict } from './EarVerdict';
 
 type Channel = 'images' | 'listening' | 'reading' | 'audio';
 
@@ -96,7 +97,7 @@ export function LabComparison({
                   ? result.error
                   : entry.accuracy === null
                     ? 'unjudged, so it ranks after judged results'
-                    : describeLabAccuracy(channel, entry.accuracy);
+                    : describeLabAccuracy(channel, entry.accuracy, result);
                 return (
                   <li
                     key={`${result.challenge}:${result.model}`}
@@ -124,6 +125,7 @@ export function LabComparison({
                     {channel !== 'images' && channel !== 'audio' && (
                       <p className="lab-comparison-text">{result.response || '(nothing came back)'}</p>
                     )}
+                    {channel === 'audio' && <EarVerdict result={result} />}
                   </li>
                 );
               })}

@@ -10,6 +10,7 @@ import { ADVANCED_LAB_STORAGE_KEY } from './appConfig.ts';
 import { extractHtmlDocument } from './labPreview.ts';
 import { extractCodeBlock } from './codeChallenge.ts';
 import { describeLabFailure } from './labScoring.ts';
+import { withEarVerdict } from './earVerdict.ts';
 
 /** A viewable thing a model produced during a skill test. */
 export type DemoArtifact = {
@@ -61,6 +62,10 @@ export type AdvancedLabResult = {
   audioRef?: { filename: string; subfolder: string; type: string };
   /** Seconds of audio a made clip holds, which its speed is measured against. */
   seconds?: number;
+  /** What you said on listening to a made clip. Once given, it is the clip's accuracy. */
+  verdict?: { matches: boolean; at: string };
+  /** Why a clip that was listened to is still unjudged. */
+  unjudgedReason?: string;
   width?: number;
   height?: number;
   language?: string;
@@ -160,6 +165,24 @@ export function getModelDemoArtifacts(model: string): DemoArtifact[] {
     }
   }
   return out;
+}
+
+/**
+ * Record what you heard in a made clip, or take it back with null, on the saved
+ * result it belongs to. Found by what identifies one run rather than by a key,
+ * which the boards that show results do not have.
+ */
+export function recordEarVerdict(target: AdvancedLabResult, matches: boolean | null): void {
+  if (target.challenge !== 'audio-generation') return;
+  const results = readAdvancedLabResults();
+  const key = Object.keys(results).find((candidate) => {
+    const result = results[candidate];
+    return result?.challenge === target.challenge
+      && result.model === target.model
+      && result.completedAt === target.completedAt;
+  });
+  if (!key) return;
+  writeAdvancedLabResults({ ...results, [key]: withEarVerdict(results[key], matches) });
 }
 
 // Rubrics and grading live in labScoring.ts, a leaf module with no assets or

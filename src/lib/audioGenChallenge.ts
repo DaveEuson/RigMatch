@@ -48,6 +48,7 @@ export function toAudioLabResult(
     completedAt: new Date().toISOString(),
     audioRef: run.audioRef,
     seconds: run.seconds,
+    ...(run.unjudgedReason ? { unjudgedReason: run.unjudgedReason } : {}),
     adherence: run.adherence,
     error: run.error,
     ...(extra.lineupId ? { lineupId: extra.lineupId } : {}),

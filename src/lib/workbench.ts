@@ -161,7 +161,7 @@ export const WORKBENCHES: Workbench[] = [
     goals: ['make-audio'],
     taskFilter: 'audiogen',
     labCards: [],
-    accuracyMeans: 'how much of the prompt a model that can hear finds in the clip',
+    accuracyMeans: 'whether the clip sounds like the prompt, to your ear or to a model that can hear',
     home: 'speedDate',
     emptyHint: 'Test an audio model to crown one.',
     startLabel: 'Open Comparison',

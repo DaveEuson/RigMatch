@@ -9287,6 +9287,39 @@ tbody tr.computer-row.selected {
   color: var(--red);
 }
 
+/* Your ear as the judge, under a made clip: the pressed answer is the clip's accuracy. */
+.ear-verdict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ear-verdict .mini-button svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* A comparison card is too narrow for the question and both answers on one
+   line, and one answer wrapping alone reads as a separate control. */
+.lab-comparison-card .ear-verdict > span {
+  flex-basis: 100%;
+}
+
+.ear-verdict .sounds-right[aria-pressed='true'] {
+  border-color: rgba(var(--green-rgb), 0.7);
+  background: rgba(var(--green-rgb), 0.16);
+  color: var(--green);
+}
+
+.ear-verdict .sounds-wrong[aria-pressed='true'] {
+  border-color: rgba(var(--red-rgb), 0.7);
+  background: rgba(var(--red-rgb), 0.14);
+  color: var(--red);
+}
+
 @media (max-width: 1320px) {
   .ticker.has-download-dock {
     grid-template-columns: max-content minmax(0, 1fr) minmax(260px, 360px) max-content;

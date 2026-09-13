@@ -125,7 +125,9 @@ function soloVerdict(
   if (typeof result.adherence === 'number') {
     return `${made}, and ${listener} heard ${Math.round(result.adherence * 100)}% of the prompt in it.`;
   }
-  return stopped ? `${made}. Stopped before the clip was checked.` : `${made}. ${unjudgedReason(audioPrompt, listener, result)}`;
+  return stopped
+    ? `${made}. Stopped before the clip was checked.`
+    : `${made}. ${unjudgedReason(audioPrompt, listener, result)} Listen to it, and say whether it sounds right.`;
 }
 
 export async function startAudioLineup(options: StartAudioLineupOptions): Promise<void> {
@@ -238,6 +240,7 @@ export async function startAudioLineup(options: StartAudioLineupOptions): Promis
   controller = null;
   const made = outcomes.filter((outcome) => !outcome.result.error).length;
   const failedCount = outcomes.length - made;
+  const judgedCount = outcomes.filter((outcome) => typeof outcome.result.adherence === 'number').length;
   update({
     running: false,
     current: null,
@@ -248,7 +251,10 @@ export async function startAudioLineup(options: StartAudioLineupOptions): Promis
       ? soloVerdict(entries[0].name, outcomes[0]?.result, stopped, audioPrompt, listener)
       : stopped
         ? `Stopped. ${made} of ${entries.length} made.`
-        : `Compared ${made} clip${made === 1 ? '' : 's'}${failedCount ? `; ${failedCount} failed` : ''}. They are side by side below.`,
+        : `Compared ${made} clip${made === 1 ? '' : 's'}${failedCount ? `; ${failedCount} failed` : ''}. `
+          + (made > 0 && judgedCount === 0
+            ? 'They are side by side below: listen to each, and say whether it sounds right.'
+            : 'They are side by side below.'),
   });
 }
 
