@@ -26,6 +26,7 @@
  */
 
 import { getAdvancedLabGrade } from './labScoring.ts';
+import type { AdvancedLabCheck } from './labResults.ts';
 
 /**
  * Seconds of compute per second of footage.
@@ -80,14 +81,14 @@ export function scoreVideoGeneration(facts: VideoRunFacts): {
   grade: string;
   judged: boolean;
   realtimeCost: number;
-  checks: { label: string; passed: boolean; detail: string }[];
+  checks: AdvancedLabCheck[];
 } {
   const speed = scoreVideoSpeed(facts.elapsedMs, facts.frames, facts.fps);
   const cost = realtimeCost(facts.elapsedMs, facts.frames, facts.fps);
   const judged = facts.adherence !== null;
   const seconds = facts.frames / Math.max(1, facts.fps);
 
-  const checks = [
+  const checks: AdvancedLabCheck[] = [
     {
       label: 'Video produced',
       passed: facts.produced,
@@ -98,6 +99,7 @@ export function scoreVideoGeneration(facts: VideoRunFacts): {
     {
       label: 'Frame matches prompt',
       passed: judged && (facts.adherence ?? 0) >= 0.8,
+      unchecked: !judged,
       detail: judged
         ? `The judge confirmed ${Math.round((facts.adherence ?? 0) * 100)}% of the prompt in the middle frame.`
         : 'No judge could read the frame, so this run is unjudged.',
@@ -111,6 +113,7 @@ export function scoreVideoGeneration(facts: VideoRunFacts): {
       // Stated rather than scored, so nobody reads the total as covering it.
       label: 'Motion quality',
       passed: false,
+      unchecked: true,
       detail: 'Not measured. Temporal consistency and flicker have no ground truth, and no local judge assesses them reliably.',
     },
   ];

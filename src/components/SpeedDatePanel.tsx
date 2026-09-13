@@ -3,6 +3,10 @@ import { History } from 'lucide-react';
 import robotSpeedDateShow from '../assets/robot-speed-date-show.webp';
 import type { BenchmarkQuestion, BenchmarkQuestionCount } from '../benchmarkSuite';
 import { MIN_CONTESTANTS } from '../lib/downloadStatus';
+import { balanceLabel, balanceSplit, crowned } from '../lib/balance';
+import { comparisonGroups, rankCoding, rankLabList, rankMatchResults } from '../lib/channelWinners';
+import type { AdvancedLabResult } from '../lib/labResults';
+import { workbenchById, type Workbench, type WorkbenchId } from '../lib/workbench';
 import { countWithVerb, getResponseEstimate } from '../lib/format';
 import { lineupStanding, standingLine } from '../lib/lineupStanding';
 import type { ListTestResult, ModelTaskFilterId } from '../lib/modelCatalog';
@@ -18,8 +22,21 @@ import { SpeedDateShowAnimation } from './SpeedDateShowAnimation';
 import { SpeedDateTranscriptPanel } from './SpeedDateTranscriptPanel';
 import { TaskMatrix } from './TaskMatrix';
 import { TestProcessCard } from './TestProcessCard';
+import { BalanceFader } from './BalanceFader';
+import { CodingBoard } from './CodingBoard';
+import { LabComparison } from './LabComparison';
 import { Boxes, ChevronRight, Download, Plus, Settings, Trophy } from 'lucide-react';
 import { useState } from 'react';
+
+/** Every kind of test: the All channel, and any caller from before channels. */
+const ALL_CHANNELS = workbenchById('all');
+
+/** What a lineup on each channel should cover, for the "complete your lineup" nudge. */
+const LINEUP_TASKS: Partial<Record<WorkbenchId, Array<{ id: ModelTaskFilterId; label: string }>>> = {
+  chat: [{ id: 'assistant', label: 'Chat' }, { id: 'writing', label: 'Writing' }],
+  code: [{ id: 'coding', label: 'Coding' }],
+  reading: [{ id: 'vision', label: 'Reads images' }],
+};
 
 export function SpeedDatePanel({
   active,
@@ -42,6 +59,10 @@ export function SpeedDatePanel({
   onQueueMissingModels,
   onRunListTest,
   onOpenHistory,
+  workbench = ALL_CHANNELS,
+  balance,
+  onBalanceChange,
+  labResults,
 }: {
   active: boolean;
   host?: NetworkHost;
@@ -63,6 +84,13 @@ export function SpeedDatePanel({
   onQueueMissingModels: (rows: ModelRow[]) => void;
   onRunListTest: () => void;
   onOpenHistory: () => void;
+  /** The channel Advanced Mode is on: it decides what the ranking ranks. */
+  workbench?: Workbench;
+  /** That channel's Balance fader. */
+  balance: number;
+  onBalanceChange: (value: number) => void;
+  /** Saved Lab results: Reading pictures ranks the lineup's own descriptions. */
+  labResults: Record<string, AdvancedLabResult>;
 }) {
   /**
    * null means "follow the default".
@@ -72,7 +100,28 @@ export function SpeedDatePanel({
    * which point it stops moving under them.
    */
   const [chosenView, setChosenView] = useState<ComparisonViewId | null>(null);
-  const winnerResult = listTestResult?.results.find((result) => result.model === listTestResult.winner);
+  const channel = workbench.id;
+  const lineupNames = shortlistedRows.map((row) => row.displayName);
+  // The run's own results, re-ranked at this channel's fader: nothing runs
+  // again, so the ranking follows the fader the moment it moves. Chat ranks the
+  // Match Score, Code the coding answers alone.
+  const matchRanking = listTestResult ? rankMatchResults(listTestResult.results, balance) : [];
+  const codeLeader = channel === 'code' && listTestResult
+    ? crowned(rankCoding(listTestResult.results, balance).ranked)
+    : null;
+  // Reading pictures is judged on the descriptions the lineup gave in the Run
+  // dialog's picture test, not on the question round.
+  const readingGroups = channel === 'reading'
+    ? comparisonGroups(Object.values(labResults).filter((result) => result && lineupNames.includes(result.model)), 'reading')
+    : [];
+  const readingLeader = readingGroups[0] ? crowned(rankLabList(readingGroups[0].results, 'reading', balance)) : null;
+  const leader = channel === 'code'
+    ? codeLeader?.item.model ?? null
+    : channel === 'reading'
+      ? readingLeader?.item.model ?? null
+      : matchRanking[0]?.model ?? null;
+  const winnerResult = channel === 'code' || channel === 'reading' ? undefined : matchRanking[0];
+  const hasRanking = channel === 'reading' ? readingGroups.length > 0 : Boolean(listTestResult);
   const selectedSlots = Array.from({ length: 5 }, (_, index) => shortlistedRows[index]);
   const uninstalledLineupRows = shortlistedRows.filter((row) => !row.installed);
   const canRunListTest = shortlistedRows.length >= MIN_CONTESTANTS && uninstalledLineupRows.length === 0 && !isListTesting;
@@ -89,6 +138,7 @@ export function SpeedDatePanel({
     { id: 'writing', label: 'Writing' },
     { id: 'reasoning', label: 'Reasoning' },
   ];
+  const lineupTasks = LINEUP_TASKS[channel] ?? CORE_TASKS;
   const answeredCount = shortlistedRows
     .filter((row) => getBenchmarkForModel(benchmarkByModel, row.displayName, row)).length;
   const comparisonRail = buildComparisonRail({
@@ -96,14 +146,14 @@ export function SpeedDatePanel({
     maxContestants: 5,
     answeredCount,
     questionCount,
-    winner: listTestResult?.winner ?? null,
+    winner: leader,
   });
   const activeView = chosenView
-    ?? defaultComparisonView({ answeredCount, winner: listTestResult?.winner ?? null });
+    ?? defaultComparisonView({ answeredCount, winner: leader });
 
   const shortlistIds = new Set(shortlistedRows.map((r) => r.displayName));
   const lineupSuggestions = shortlistedRows.length < 5
-    ? CORE_TASKS.flatMap(({ id, label }) => {
+    ? lineupTasks.flatMap(({ id, label }) => {
         const covered = shortlistedRows.some((r) => modelMatchesTask(r, id));
         if (covered) return [];
         const candidate = allModelRows
@@ -122,7 +172,7 @@ export function SpeedDatePanel({
           feature keeps its name on the line below. */}
       <div className="speed-date-title">
         <div>
-          <span>Comparison</span>
+          <span>{channel === 'all' ? 'Comparison' : `Comparison · ${workbench.label}`}</span>
           <strong>Speed Dating</strong>
         </div>
         <em>Compare up to five picked models with the same questions.</em>
@@ -139,8 +189,10 @@ export function SpeedDatePanel({
         // result: listTestResult survives across sessions, so swapping one
         // contestant was enough to make this announce a leader that is not in
         // tonight's lineup at all.
+        // The leader at the fader, not the one crowned when the run ended: move
+        // the fader and a different model can lead.
         body={standingLine(
-          lineupStanding(listTestResult?.winner, shortlistedRows.map((row) => row.displayName)),
+          lineupStanding(leader ?? undefined, lineupNames),
           winnerResult?.total,
         )}
       />
@@ -214,7 +266,7 @@ export function SpeedDatePanel({
           <SpeedDateShowAnimation
             rows={shortlistedRows}
             runProgress={runProgress?.mode === 'speed-date' ? runProgress : null}
-            winner={listTestResult?.winner}
+            winner={leader ?? undefined}
             host={host}
           />
         )}
@@ -344,34 +396,63 @@ export function SpeedDatePanel({
 
         {activeView === 'process' && <TestProcessCard mode="speed-date" questionCount={questionCount} />}
 
-        {activeView === 'ranking' && (listTestResult ? (
+        {activeView === 'ranking' && hasRanking && (
+          <BalanceFader
+            value={balance}
+            onChange={onBalanceChange}
+            accuracyMeans={workbench.accuracyMeans}
+            label={`What matters more for ${channel === 'all' ? 'chat and writing' : workbench.activity}?`}
+          />
+        )}
+
+        {activeView === 'ranking' && channel === 'reading' && (readingGroups.length > 0 ? (
+          <LabComparison channel="reading" results={labResults} balance={balance} models={lineupNames} />
+        ) : (
+          <div className="speed-date-empty">
+            <Trophy aria-hidden="true" />
+            <strong>No pictures read yet</strong>
+            <span>
+              Start Speed Dating and tick “Recognize an image” in the Run dialog: every model in the lineup
+              describes the same picture, and the descriptions line up here.
+            </span>
+          </div>
+        ))}
+
+        {activeView === 'ranking' && channel !== 'reading' && (listTestResult ? (
           <div className="speed-date-results">
-            <div className="list-winner">
-              <span>Best Match</span>
-              <strong>{listTestResult.winner}</strong>
-              <em>{winnerResult ? `${winnerResult.total} · ${winnerResult.grade}` : 'Ranked'}</em>
-            </div>
-            {/* Directly under the crown, because it is the caveat on the crown.
-                A Best Match drawn from three of your five models is a different
-                claim from one drawn from all five, and the screen used to make
-                both of them in the same words. */}
-            <p className="ranking-coverage">
-              {describeRankingCoverage({
-                ranked: listTestResult.results.map((result) => result.model),
-                lineup: shortlistedRows.map((row) => row.displayName),
-                questionCount,
-              })}
-            </p>
-            <ol aria-label="Speed Dating ranking">
-              {listTestResult.results.map((result, index) => (
-                <li key={result.model} className={result.model === listTestResult.winner ? 'winner' : ''}>
-                  <b>{index + 1}</b>
-                  <span>{result.model}</span>
-                  <em>{result.speed} speed · {result.sobriety} accuracy · {getResponseEstimate(result.speed)}</em>
-                  <strong>{result.total}</strong>
-                </li>
-              ))}
-            </ol>
+            {channel === 'code' ? (
+              <CodingBoard scores={listTestResult.results} balance={balance} label={workbench.shortLabel} />
+            ) : (
+              <>
+                <div className="list-winner">
+                  <span>{channel === 'all' ? 'Best Match' : workbench.shortLabel}</span>
+                  <strong>{leader}</strong>
+                  <em>{winnerResult ? `${winnerResult.total} · ${winnerResult.grade} · ${balanceLabel(balance)}` : 'Ranked'}</em>
+                </div>
+                {/* Directly under the crown, because it is the caveat on the crown.
+                    A Best Match drawn from three of your five models is a different
+                    claim from one drawn from all five, and the screen used to make
+                    both of them in the same words. */}
+                <p className="ranking-coverage">
+                  {describeRankingCoverage({
+                    ranked: matchRanking.map((result) => result.model),
+                    lineup: lineupNames,
+                    questionCount,
+                  })}
+                  {' '}Ranked at {balanceSplit(balance)}.
+                </p>
+                <ol aria-label="Speed Dating ranking">
+                  {matchRanking.map((result, index) => (
+                    <li key={result.model} className={result.model === leader ? 'winner' : ''}>
+                      <b>{index + 1}</b>
+                      <span>{result.model}</span>
+                      <em>{result.speed} speed · {result.sobriety} accuracy · {getResponseEstimate(result.speed)}</em>
+                      <strong>{result.total}</strong>
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
             {/* Under the ranking, not beside it: the ranking answers "which is
                 best overall" and this answers "best at what", which is the
                 question someone with several models actually has. */}

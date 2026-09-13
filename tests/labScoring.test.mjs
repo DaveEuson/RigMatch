@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  checkState,
   describeLabFailure,
   scoreAdvancedVisionResponse,
 } from '../src/lib/labScoring.ts';
@@ -87,5 +88,15 @@ test('a failed vision run carries a usable explanation end to end', () => {
   const note = describeLabFailure({ ...scored, error: undefined });
   assert.ok(note, 'the viewer must have something to show instead of a blank panel');
   assert.match(note, /no text at all/i);
+});
+
+test('a line nothing could check is neither a pass nor a miss', () => {
+  assert.equal(checkState({ label: 'a', passed: true, detail: '' }), 'passed');
+  assert.equal(checkState({ label: 'b', passed: false, detail: '' }), 'failed');
+  assert.equal(checkState({ label: 'c', passed: false, detail: '', unchecked: true }), 'unchecked');
+  // Nor is it given as the reason a run failed.
+  const nobodyLooked = { label: 'Prompt followed', passed: false, detail: 'No judge could answer.', unchecked: true };
+  assert.equal(describeLabFailure({ checks: [nobodyLooked, { label: 'Usable speed', passed: false, detail: 'too slow' }] }), 'too slow');
+  assert.equal(describeLabFailure({ checks: [nobodyLooked] }), undefined);
 });
 

@@ -25,21 +25,28 @@ import { buildQuickFacetGroups, buildSearchSuggestions, splitTaskFilters } from 
 import type { SearchSuggestion } from '../lib/modelFacets';
 import { familiesToAutoExpand, groupRowsByFamily } from '../lib/modelGroups';
 import { describeModelTag } from '../lib/modelVariants';
+import { readComfySettings } from '../lib/comfySettings';
 import { getModelNewsId } from '../lib/modelNews';
+import { rowSkillTest } from '../lib/rowTests';
+import type { WorkbenchId } from '../lib/workbench';
 import { getCountryCode, getDeveloperFilterOptions, getDisplayCountry, getModelOrigin, getRowDeveloper } from '../lib/modelOrigins';
 import type { RunDelta } from '../lib/runHistory';
 import type { BenchmarkResult, ModelRow, PullProgressUpdate, RunProgress, TestedModelScore } from '../types';
 import { AvatarBust } from './Avatars';
+import { ComfyStartButton } from './ComfyStartButton';
 import { DiskGuard } from './DiskGuard';
 import { DownloadProgressInline } from './DownloadProgressInline';
 import { FirstModelWizard } from './FirstModelWizard';
+import { GenerationTestPanel, type GenerationTestContext } from './GenerationTestPanel';
+import { AudioTestPanel } from './AudioTestPanel';
+import { SkillTestPanel, type SkillTestContext } from './SkillTestPanel';
 import { ModelScorePill, ModelStatusPill, PopularityMeter, ScoreLegend } from './ScoreVisuals';
 import { ModelCompareCard } from './ModelCompareCard';
 import { SelectedContestantCard } from './SelectedContestantCard';
 import { ModelDemoChips } from './SkillDemoViewers';
 import { SortableModelHeader } from './SortableModelHeader';
-import { Check, ChevronRight, Download, Eraser, Gauge, MessageSquare, Pause, Play, RefreshCw, Search, Settings, ShieldCheck, SlidersHorizontal, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Check, ChevronRight, Download, Eraser, Gauge, MessageSquare, Pause, RefreshCw, Search, Settings, ShieldCheck, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /**
  * One row of the filter rail: name, tick, and the count it would leave you with.
@@ -80,7 +87,10 @@ export function ModelCabinet({
   rows,
   comfyFolderSet,
   onOpenComfyHelp,
-  onOpenLab,
+  generationTest,
+  skillTest,
+  channel,
+  renderingModelId = null,
   goalLens,
   selectedModel,
   installedModelNames,
@@ -125,8 +135,17 @@ export function ModelCabinet({
   /** Whether a verified ComfyUI models folder exists, so downloads can land. */
   comfyFolderSet: boolean;
   onOpenComfyHelp: () => void;
-  /** Generation models are run from the Lab, not from a row's Test button. */
-  onOpenLab: () => void;
+  /** What a picture or video model's own Test needs: ComfyUI, the judge, the fader. */
+  generationTest: GenerationTestContext;
+  /** What a listening or picture-reading test from a model's own row needs. */
+  skillTest: SkillTestContext;
+  /** The channel Advanced Mode is on, which decides what a row's Test runs. */
+  channel: WorkbenchId;
+  /**
+   * The catalogue id of a model being tested on its own right now. Its Test
+   * says so even with its panel closed, which is where people look for it.
+   */
+  renderingModelId?: string | null;
   /** The task filter implied by the user's primary goal, if any. Applied when
       it changes and freely clearable after — a lens, never a lock. */
   goalLens?: ModelTaskFilterId;
@@ -212,9 +231,16 @@ export function ModelCabinet({
    * problem being solved is thirty-five near-identical Gemma 4 rows; a table
    * that opens everything by default has not collapsed anything.
    */
-  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(() => new Set());
+  // A model being tested on its own opens with its family, so "Show its row"
+  // from the status bar lands on a row that says Testing, not a closed family.
+  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(() => {
+    const rendering = renderingModelId ? rows.find((row) => row.generationId === renderingModelId) : undefined;
+    return rendering ? new Set([getFriendlyModelName(rendering.displayName)]) : new Set();
+  });
   /** The second model in the side-by-side, when one has been picked. */
   const [compareWith, setCompareWith] = useState<string | null>(null);
+  /** The picture or video model whose Test is open under its row. */
+  const [testingId, setTestingId] = useState<string | null>(null);
   /** Country of origin, as its own axis — it cuts across maker and use case. */
   const [countryFilter, setCountryFilter] = useState<string | null>(null);
   const [showAllTasks, setShowAllTasks] = useState(false);
@@ -261,6 +287,8 @@ export function ModelCabinet({
    * filter every row has one, which is the only place it is worth the width.
    */
   const showAdded = quickFilter === 'installed';
+  /** Every column, for a row that spans the table: a family, an open Test, the empty state. */
+  const columnCount = (hidePopularity ? 8 : 9) + (showAdded ? 1 : 0);
   const colWidthsRef = useRef(colWidths);
   useEffect(() => {
     colWidthsRef.current = colWidths;
@@ -917,6 +945,19 @@ export function ModelCabinet({
                 <button type="button" onClick={() => void onOpenComfyHelp()}>What is ComfyUI?</button>
               </div>
             )}
+            {GENERATION_FILTERS.includes(taskFilter as string) && comfyFolderSet && !generationTest.comfyReachable && (
+              <div className="model-filter-note">
+                <ShieldCheck aria-hidden="true" />
+                {/* Until ComfyUI answers nothing can say which of these are on
+                    disk, so every one reads as a download. Said where the
+                    Download buttons are, with the way out beside it. */}
+                <span>
+                  ComfyUI is not running, so RigMatch cannot see which of these you already have.
+                  They show as installed, with a Test button, once it answers.
+                </span>
+                <ComfyStartButton folder={readComfySettings().folder} variant="deck" onStarted={generationTest.onCheckComfy} />
+              </div>
+            )}
             {CAPABILITY_ONLY_FILTERS.includes(taskFilter as string) && (
               <div className="model-filter-note">
                 <ShieldCheck aria-hidden="true" />
@@ -1038,10 +1079,26 @@ export function ModelCabinet({
                 hardwareFit.tone === 'out-of-league' ? 'out-of-league' : '',
               ].filter(Boolean).join(' ');
               const showDownloadProgress = !installed && (queued || isPullingRow || isVisiblePullProgress(rowPullProgress));
+              // The test this channel is about, when the model can take it: the
+              // listening test on Listens to audio, a test picture on Reads images.
+              const skill = rowSkillTest(channel, row, installed);
+              // Open under its own row. A picture or video test stays open if
+              // ComfyUI stops mid-test, so it can say so instead of vanishing.
+              const testing = testingId === row.id && (row.runtime === 'comfyui' || skill !== null);
+              const renderingHere = Boolean(row.generationId) && row.generationId === renderingModelId;
+              const testPanelId = `row-test-${row.generationId ?? row.id}`;
+              const closeTest = () => {
+                setTestingId(null);
+                // Back to the button that opened it, or keyboard focus falls to
+                // the top of the page with the panel gone.
+                requestAnimationFrame(() => {
+                  document.querySelector<HTMLButtonElement>(`[data-row-test="${CSS.escape(row.id)}"]`)?.focus();
+                });
+              };
               return (
+                <Fragment key={row.id}>
                 <tr
-                  key={row.id}
-                  className={rowClassName}
+                  className={[rowClassName, testing ? 'testing' : ''].filter(Boolean).join(' ')}
                   onDoubleClick={() => { onSelect(row.displayName); onOpenTopPick(); }}
                   title="Double-click to open profile"
                 >
@@ -1175,20 +1232,31 @@ export function ModelCabinet({
                   <td className={showDownloadProgress ? 'action-cell has-download-progress' : 'action-cell'}>
                     <div className="row-actions">
                       {/* A checkpoint has no chat endpoint, no Ollama entry and
-                          no Match score. Offering Test, Chat, Speed Dating or
-                          "delete from Ollama" on one is offering four buttons
-                          that cannot work — the Lab is where these are run. */}
+                          no Match score, so Chat, Speed Dating and "delete from
+                          Ollama" cannot work on one. Its Test opens under the
+                          row and runs exactly what the Lab runs. */}
                       {row.runtime === 'comfyui' ? (
                         <>
                           {row.installed ? (
                             <button
                               type="button"
-                              className="mini-button"
-                              onClick={() => onOpenLab()}
-                              title={`Try ${row.displayName} in the ${row.generationKind === 'video' ? 'Video' : 'Image'} Lab`}
+                              className={renderingHere && !testing ? 'mini-button rendering' : 'mini-button'}
+                              onClick={() => setTestingId(testing ? null : row.id)}
+                              data-row-test={row.id}
+                              aria-expanded={testing}
+                              aria-controls={testing ? testPanelId : undefined}
+                              title={testing
+                                ? `Close the test of ${row.displayName}`
+                                : renderingHere
+                                  ? `${row.displayName} is being tested now. Open it to see how it is going, or to stop it.`
+                                  : `Give ${row.displayName} a prompt and ${
+                                    row.generationKind === 'video' ? 'render a clip'
+                                      : row.generationKind === 'audio' ? 'make a clip of audio'
+                                      : 'draw a picture'
+                                  }, right here`}
                             >
-                              <Play aria-hidden="true" />
-                              <span>Open Lab</span>
+                              <Gauge aria-hidden="true" />
+                              <span>{testing ? 'Close' : renderingHere ? 'Testing' : 'Test'}</span>
                             </button>
                           ) : (
                             /* Without a ComfyUI folder there is nowhere to put
@@ -1242,12 +1310,19 @@ export function ModelCabinet({
                           <button
                             type="button"
                             className={`mini-button score-row-button${!hardwareFit.recommend ? ' warn' : ''}`}
-                            onClick={() => onScoreModel(row)}
+                            onClick={() => (skill ? setTestingId(testing ? null : row.id) : onScoreModel(row))}
                             disabled={isBenchmarking}
-                            title={hardwareFit.recommend ? `Test ${row.displayName} on this computer` : hardwareFit.tone === 'unknown' ? `⚠ Size unknown — RigMatch can't gauge fit yet, test anyway?` : `⚠ Too big for your VRAM — will be slow, test anyway?`}
+                            data-row-test={row.id}
+                            aria-expanded={skill ? testing : undefined}
+                            aria-controls={skill && testing ? testPanelId : undefined}
+                            title={skill === 'listening'
+                              ? `Play ${row.displayName} the listening test`
+                              : skill === 'reading'
+                                ? `Show ${row.displayName} a test picture to describe`
+                                : hardwareFit.recommend ? `Test ${row.displayName} on this computer` : hardwareFit.tone === 'unknown' ? `⚠ Size unknown — RigMatch can't gauge fit yet, test anyway?` : `⚠ Too big for your VRAM — will be slow, test anyway?`}
                           >
                             <Gauge aria-hidden="true" />
-                            Test
+                            {skill && testing ? 'Close' : 'Test'}
                           </button>
                           <button
                             type="button"
@@ -1308,6 +1383,26 @@ export function ModelCabinet({
                     )}
                   </td>
                 </tr>
+                {testing && (
+                  <tr className="generation-test-row">
+                    <td colSpan={columnCount}>
+                      {skill ? (
+                        <SkillTestPanel
+                          id={testPanelId}
+                          kind={skill}
+                          model={row.displayName}
+                          context={skillTest}
+                          onClose={closeTest}
+                        />
+                      ) : row.generationKind === 'audio' ? (
+                        <AudioTestPanel id={testPanelId} row={row} context={generationTest} onClose={closeTest} />
+                      ) : (
+                        <GenerationTestPanel id={testPanelId} row={row} context={generationTest} onClose={closeTest} />
+                      )}
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             };
             return groupedRows.flatMap((entry) => {
@@ -1318,7 +1413,7 @@ export function ModelCabinet({
               const bestScore = getModelScore(best, modelScores);
               return [
                 <tr key={`family:${family}`} className={open ? 'model-family-row open' : 'model-family-row'}>
-                  <td colSpan={(hidePopularity ? 8 : 9) + (showAdded ? 1 : 0)}>
+                  <td colSpan={columnCount}>
                     <button
                       type="button"
                       onClick={() => setExpandedFamilies((current) => {
@@ -1375,7 +1470,7 @@ export function ModelCabinet({
             })()}
             {visibleRows.length === 0 && (
               <tr className="empty-row">
-                <td colSpan={(hidePopularity ? 8 : 9) + (showAdded ? 1 : 0)}>
+                <td colSpan={columnCount}>
                   <div className="table-empty-state">
                     <strong>No contestants match these filters</strong>
                     <span>Clear the search or show the full model pool.</span>

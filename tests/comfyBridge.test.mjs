@@ -108,3 +108,28 @@ test('history is looked up by the prompt id, url-escaped', async () => {
   await bridge.getHistory(LOCAL, 'a b/c');
   assert.equal(calls[0].url, 'http://127.0.0.1:8188/history/a%20b%2Fc');
 });
+
+test('every folder a lineup model loads from is listed, by ComfyUI\'s own name', async () => {
+  // The video lineup keeps models in diffusion_models with separate VAEs and
+  // LoRAs. Listing only checkpoints and text encoders made every one of them
+  // read as missing, and offered to download files already on disk.
+  const { bridge } = harness({
+    '/system_stats': { system: {} },
+    '/models/checkpoints': ['ltx-2.3-22b-dev-fp8.safetensors'],
+    '/models/text_encoders': ['umt5_xxl_fp8_e4m3fn_scaled.safetensors'],
+    '/models/diffusion_models': ['wan2.1_t2v_1.3B_fp16.safetensors'],
+    '/models/vae': ['wan_2.1_vae.safetensors'],
+    '/models/loras': [],
+  });
+  const status = await bridge.getStatus(LOCAL);
+  assert.deepEqual(status.folders, {
+    checkpoints: ['ltx-2.3-22b-dev-fp8.safetensors'],
+    text_encoders: ['umt5_xxl_fp8_e4m3fn_scaled.safetensors'],
+    diffusion_models: ['wan2.1_t2v_1.3B_fp16.safetensors'],
+    vae: ['wan_2.1_vae.safetensors'],
+    loras: [],
+  });
+  // The Image Lab and the LTX path still read these two by name.
+  assert.deepEqual(status.checkpoints, ['ltx-2.3-22b-dev-fp8.safetensors']);
+  assert.deepEqual(status.textEncoders, ['umt5_xxl_fp8_e4m3fn_scaled.safetensors']);
+});

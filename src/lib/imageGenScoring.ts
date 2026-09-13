@@ -24,6 +24,7 @@
  */
 
 import { getAdvancedLabGrade } from './labScoring.ts';
+import type { AdvancedLabCheck } from './labResults.ts';
 
 export type Proposition = { id: string; question: string; expected: boolean };
 
@@ -143,6 +144,30 @@ export function scoreAdherence(
   return { adherence: correct / answered, answered, correct };
 }
 
+/**
+ * Ask a judge every proposition, one at a time, and total the verdicts.
+ *
+ * A judge that throws on one question does not sink the run: that answer
+ * becomes unreadable, and if enough of them are unreadable the adherence
+ * reports as unavailable rather than as a low number. A picture, a clip's
+ * middle frame and a clip of audio are all judged this way; they differ only
+ * in what `ask` hands the judge.
+ */
+export async function askPropositions(
+  ask: (question: string) => Promise<string>,
+  prompt: ImagePrompt,
+): Promise<{ adherence: number | null; answered: number; correct: number; verdicts: (boolean | null)[] }> {
+  const verdicts: (boolean | null)[] = [];
+  for (const proposition of prompt.propositions) {
+    try {
+      verdicts.push(readJudgeVerdict(await ask(buildJudgePrompt(proposition.question))));
+    } catch {
+      verdicts.push(null);
+    }
+  }
+  return { ...scoreAdherence(prompt.propositions, verdicts), verdicts };
+}
+
 export type ImageRunFacts = {
   /** False when nothing came back, which caps the whole run at zero. */
   produced: boolean;
@@ -189,14 +214,14 @@ export function scoreImageGeneration(facts: ImageRunFacts): {
   score: number;
   grade: string;
   judged: boolean;
-  checks: { label: string; passed: boolean; detail: string }[];
+  checks: AdvancedLabCheck[];
 } {
   const speed = scoreSpeed(facts.elapsedMs, facts.steps);
   const fit = facts.spilledVram ? 0 : 1;
   const judged = facts.adherence !== null;
 
   const perStep = facts.steps ? facts.elapsedMs / 1000 / facts.steps : 0;
-  const checks = [
+  const checks: AdvancedLabCheck[] = [
     {
       label: 'Image produced',
       passed: facts.produced,
@@ -207,6 +232,7 @@ export function scoreImageGeneration(facts: ImageRunFacts): {
     {
       label: 'Prompt followed',
       passed: judged && (facts.adherence ?? 0) >= 0.8,
+      unchecked: !judged,
       detail: judged
         ? `The judge confirmed ${Math.round((facts.adherence ?? 0) * 100)}% of what the prompt asked for.`
         : 'The judge could not answer enough questions to score adherence, so this run is unjudged.',

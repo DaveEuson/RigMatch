@@ -22,14 +22,9 @@ import {
   type Txt2ImgRequest,
 } from './comfyui.ts';
 import { getErrorMessage } from './format.ts';
+import type { AdvancedLabCheck } from './labResults.ts';
 import { samplingProfileFor } from './samplingProfile.ts';
-import {
-  buildJudgePrompt,
-  readJudgeVerdict,
-  scoreAdherence,
-  scoreImageGeneration,
-  type ImagePrompt,
-} from './imageGenScoring.ts';
+import { askPropositions, scoreImageGeneration, type ImagePrompt } from './imageGenScoring.ts';
 
 /** How often to ask whether the image is ready. */
 const POLL_INTERVAL_MS = 750;
@@ -80,7 +75,7 @@ export type ImageRunResult = {
   adherence: number | null;
   elapsedMs: number;
   steps: number;
-  checks: { label: string; passed: boolean; detail: string }[];
+  checks: AdvancedLabCheck[];
   error?: string;
 };
 
@@ -175,6 +170,25 @@ export async function runImageGeneration(options: ImageRunOptions): Promise<Imag
   }
 }
 
+/**
+ * Judge a finished picture, and score it again with the answer.
+ *
+ * Kept apart from the render so a comparison can check its pictures after
+ * every model has drawn. The judge is a vision model in Ollama, which stays in
+ * VRAM for ten minutes after it answers; checked between renders, it would sit
+ * on the GPU while the next checkpoint was being timed.
+ */
+export async function judgeImageResult(
+  result: ImageRunResult,
+  judge: JudgeFn,
+  imagePrompt: ImagePrompt,
+): Promise<ImageRunResult> {
+  if (result.error || !result.imageDataUrl) return result;
+  const { adherence } = await judgeAdherence(judge, result.imageDataUrl, imagePrompt);
+  const scored = scoreImageGeneration({ produced: true, elapsedMs: result.elapsedMs, steps: result.steps, adherence });
+  return { ...result, adherence, ...scored };
+}
+
 function failed(
   checkpoint: string,
   promptId: string | undefined,
@@ -212,22 +226,7 @@ async function waitForImages({
   }
 }
 
-/**
- * Ask the judge every proposition and total the verdicts.
- *
- * A judge that throws on one question does not sink the run — that answer
- * becomes unreadable, and if enough of them are unreadable the adherence score
- * reports as unavailable rather than as a low number.
- */
-async function judgeAdherence(judge: JudgeFn, imageDataUrl: string, imagePrompt: ImagePrompt) {
-  const verdicts: (boolean | null)[] = [];
-  for (const proposition of imagePrompt.propositions) {
-    try {
-      const answer = await judge(imageDataUrl, buildJudgePrompt(proposition.question));
-      verdicts.push(readJudgeVerdict(answer));
-    } catch {
-      verdicts.push(null);
-    }
-  }
-  return scoreAdherence(imagePrompt.propositions, verdicts);
+/** Ask the judge every proposition about the picture; see askPropositions. */
+function judgeAdherence(judge: JudgeFn, imageDataUrl: string, imagePrompt: ImagePrompt) {
+  return askPropositions((question) => judge(imageDataUrl, question), imagePrompt);
 }

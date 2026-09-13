@@ -72,9 +72,11 @@ export type HardwareFit = {
  */
 export type CapabilityBearing = {
   capabilities?: string[];
-  installedModel?: { capabilities?: string[] };
+  installedModel?: { capabilities?: string[]; name?: string; model?: string };
   displayName?: string;
   name?: string;
+  /** False for a catalogue row that is not on this machine. */
+  installed?: boolean;
 };
 
 /**
@@ -186,6 +188,19 @@ export function canJoinComparison(row: ModelRow): boolean {
  */
 export function canHearAudio(row: CapabilityBearing): boolean {
   return getModelCapabilities(row)?.includes('audio') ?? false;
+}
+
+/**
+ * Models that can be shown a picture.
+ *
+ * What the provider reports wins, as with hearing, and the name is only the
+ * fallback for a model it will not describe. A model that cannot see does not
+ * fail loudly: it answers questions about a picture it never looked at.
+ */
+export function canReadImages(row: CapabilityBearing): boolean {
+  const capabilities = getModelCapabilities(row);
+  if (capabilities) return capabilities.includes('vision');
+  return isVisionModel(row.displayName ?? row.name ?? '');
 }
 
 /**
@@ -823,6 +838,7 @@ function describeCapabilitiesForSearch(row: ModelRow): string[] {
   if (row.runtime === 'comfyui') words.push('comfyui generation');
   if (row.generationKind === 'image') words.push('image generation makes images');
   if (row.generationKind === 'video') words.push('video generation makes video');
+  if (row.generationKind === 'audio') words.push('audio generation makes audio music sound');
   if (row.generationKind === 'text-encoder') words.push('text encoder');
   if (row.publisher) words.push(row.publisher);
   return words;
@@ -1061,8 +1077,8 @@ export function getSelectedContestantBlurb(
   if (row.generationKind) {
     const makes = row.generationKind === 'text-encoder'
       ? 'reads prompts for image and video models'
-      : `makes ${row.generationKind}s`;
-    return `${row.displayName} ${makes} on ComfyUI. It does not chat, so it skips Speed Dating — run it from the Lab instead.`;
+      : row.generationKind === 'audio' ? 'makes audio' : `makes ${row.generationKind}s`;
+    return `${row.displayName} ${makes} on ComfyUI. It does not chat, so it skips Speed Dating — test it from its own row instead.`;
   }
 
   if (score) {
@@ -1398,8 +1414,8 @@ export const TASK_FILTER_CHIPS: Array<{ id: ModelTaskFilterId; label: string }> 
   { id: 'imagegen',   label: 'Makes images' },
   { id: 'videogen',   label: 'Makes video' },
   { id: 'audiogen',   label: 'Makes audio' },
-  { id: 'vision',     label: 'Reads images/OCR' },
-  { id: 'hears',      label: 'Hears audio' },
+  { id: 'vision',     label: 'Reads images' },
+  { id: 'hears',      label: 'Listens to audio' },
   { id: 'videoread',  label: 'Watches video' },
   { id: 'search',     label: 'Search' },
   { id: 'uncensored', label: 'Uncensored' },
@@ -1461,6 +1477,7 @@ export function getModelGoodForTags(row: ModelRow): string[] {
   if (row.generationKind) {
     return row.generationKind === 'image' ? ['makes images']
       : row.generationKind === 'video' ? ['makes video']
+      : row.generationKind === 'audio' ? ['makes audio']
       : ['reads prompts for image and video models'];
   }
   const profile = getModelProfile(row.displayName);
@@ -1565,6 +1582,7 @@ export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolea
   if (row.generationKind) {
     if (task === 'imagegen') return row.generationKind === 'image';
     if (task === 'videogen') return row.generationKind === 'video';
+    if (task === 'audiogen') return row.generationKind === 'audio';
     // A checkpoint is not a chat model; it matches none of the text tasks.
     return false;
   }
@@ -1575,6 +1593,11 @@ export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolea
   // a model can hear, and matching one that cannot guarantees the "Failed to
   // load image or audio file" error on its scorecard.
   if (task === 'hears') return canHearAudio(row);
+  // What the provider reports decides, as for hearing. gemma4 reads images and
+  // its profile says "low memory, quick chat", so the keyword rule below left it
+  // off Reads images while Ollama said it could see. The keywords remain only
+  // for a model nothing describes.
+  if (task === 'vision' && getModelCapabilities(row)) return canReadImages(row);
   if (task === 'videoread') return canWatchVideo(row);
   if (task === 'audiogen') return isLikelyAudioGenerationModel(row.displayName);
   const category = TASK_CATEGORIES.find((c) => c.id === task);
@@ -1768,7 +1791,10 @@ export function getPlatformFit(displayName: string, platform: string): { compati
   return { compatible: true, reason: '' };
 }
 
-export function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb'>, vramGb: number): HardwareFit {
+export function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fitOverride'>, vramGb: number): HardwareFit {
+  // A video model is sized by the Video Lab's rules, which know ComfyUI
+  // offloads what VRAM cannot hold (asHardwareFit in videoLineup.ts).
+  if (row.fitOverride) return row.fitOverride;
   const sizeGb = row.sizeGb ?? null;
   const paramsB = getParamSortValue(row.params);
   const vramLabel = vramGb > 0 ? formatGb(vramGb) : 'detected VRAM';
@@ -2206,4 +2232,4 @@ export const CAPABILITY_ONLY_FILTERS = ['hears', 'videoread'];
  * Download buttons are, rather than being something to discover in Settings
  * after clicking one.
  */
-export const GENERATION_FILTERS = ['imagegen', 'videogen'];
+export const GENERATION_FILTERS = ['imagegen', 'videogen', 'audiogen'];

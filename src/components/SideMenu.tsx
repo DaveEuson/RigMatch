@@ -24,6 +24,10 @@ type SideMenuProps = {
   scoredCount: number;
   isRunning: boolean;
   topPickMeta: string;
+  /** What Comparison counts on this channel, when it is not the Speed Dating lineup. */
+  comparisonMeta?: string;
+  /** What Scorecards counts on this channel, when it is not the scored chat models. */
+  scorecardMeta?: string;
   uiMode: 'beginner' | 'advanced';
   onSelect: (id: NavId) => void;
   onOpenTutorial: () => void;
@@ -41,6 +45,8 @@ export function SideMenu({
   scoredCount,
   isRunning,
   topPickMeta,
+  comparisonMeta,
+  scorecardMeta,
   uiMode,
   onSelect,
   onOpenTutorial,
@@ -51,9 +57,9 @@ export function SideMenu({
     lan: ollamaReady ? 'Ready' : 'Setup',
     models: `${modelCount}`,
     whatsNew: newModelDropCount > 0 ? `${newModelDropCount} new` : 'None',
-    speedDate: `${shortlistCount}/5`,
+    speedDate: comparisonMeta ?? `${shortlistCount}/5`,
     agent: topPickMeta,
-    history: scoredCount > 0 ? `${scoredCount}` : 'New',
+    history: scorecardMeta ?? (scoredCount > 0 ? `${scoredCount}` : 'New'),
     activity: isRunning ? 'Live' : 'Idle',
     settings: 'App',
   };

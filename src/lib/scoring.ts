@@ -108,7 +108,13 @@ export function calculatePreciseTotal(
   score: MatchScoreLike,
   priority: ScorePriorityId = DEFAULT_SCORE_PRIORITY,
 ): number {
-  const weights = SCORE_PRIORITIES[priority].weights;
+  return calculateWeightedTotal(score, SCORE_PRIORITIES[priority].weights);
+}
+
+export type ScoreWeights = { sobriety: number; speed: number; stability: number; fit: number };
+
+/** The same sum at any weights: the Balance fader's positions between the presets. */
+export function calculateWeightedTotal(score: MatchScoreLike, weights: ScoreWeights): number {
   const stability = typeof score.stability === 'number' ? score.stability : score.total;
   const weighted =
     score.sobriety * weights.sobriety +
@@ -149,8 +155,10 @@ export function toTestedModelScore(
   result: BenchmarkResult,
   suiteName?: string,
   rig?: ScoreRigStamp,
+  balance?: number,
 ): TestedModelScore {
   return {
+    ...(typeof balance === 'number' ? { balance } : {}),
     model: result.model,
     total: result.scores.total,
     grade: result.scores.grade,
@@ -174,9 +182,11 @@ export function upsertModelScores(
   results: BenchmarkResult[],
   suiteName?: string,
   rigForModel?: (model: string) => ScoreRigStamp | undefined,
+  /** Where the Balance fader stood when the run started. */
+  balance?: number,
 ): Record<string, TestedModelScore> {
   return results.reduce<Record<string, TestedModelScore>>((next, result) => {
-    const score = toTestedModelScore(result, suiteName, rigForModel?.(result.model));
+    const score = toTestedModelScore(result, suiteName, rigForModel?.(result.model), balance);
     next[score.model] = score;
     return next;
   }, { ...current });

@@ -15,13 +15,18 @@
  *
  * It scores on cost per second of footage, not wall time, so eight seconds of
  * video is not penalised against four for being twice the work.
+ *
+ * The graph is either the original LTX checkpoint graph, built here from a
+ * checkpoint and its text encoder, or one built elsewhere — a lineup model's,
+ * from its family's builder. Everything after submitting is the same for both.
  */
 
 import { extractImages, readStatus, type ComfyImageRef } from './comfyui.ts';
 import { getErrorMessage } from './format.ts';
+import type { AdvancedLabCheck } from './labResults.ts';
 import { buildTxt2VideoWorkflow, LTX_DEFAULTS, VIDEO_FRAME_NODE, VIDEO_OUTPUT_NODE } from './videoGen.ts';
 import { scoreVideoGeneration } from './videoGenScoring.ts';
-import { buildJudgePrompt, readJudgeVerdict, scoreAdherence, type ImagePrompt } from './imageGenScoring.ts';
+import { askPropositions, type ImagePrompt } from './imageGenScoring.ts';
 import type { JudgeFn } from './imageGenRun.ts';
 
 const POLL_INTERVAL_MS = 1500;
@@ -39,12 +44,23 @@ export type VideoTransport = {
 export type VideoRunOptions = {
   transport: VideoTransport;
   judge?: JudgeFn;
-  checkpoint: string;
-  textEncoder: string;
+  /**
+   * A graph built elsewhere — a lineup model's. It must save the judged frame
+   * with a RigMatchFrame prefix and the clip as a video, as every builder in
+   * videoWorkflows.ts does. When absent, the LTX checkpoint graph is built from
+   * `checkpoint` and `textEncoder`.
+   */
+  graph?: Record<string, unknown>;
+  /** What the result is recorded under. Defaults to the checkpoint. */
+  model?: string;
+  /** The clip a prebuilt graph renders, which the score is worked out from. */
+  output?: { width: number; height: number; frames: number; fps: number };
+  checkpoint?: string;
+  textEncoder?: string;
   imagePrompt: ImagePrompt;
   settings?: { width?: number; height?: number; frames?: number; steps?: number; fps?: number; seed?: number };
   /**
-   * Whether RigMatch owns this ComfyUI.
+   * Whether RigMatch may unload what ComfyUI has loaded before this run.
    *
    * False by default, and the default matters. ComfyUI's /free unloads every
    * resident model, and the people most likely to have ComfyUI already
@@ -54,8 +70,9 @@ export type VideoRunOptions = {
    * defeated by varying the seed instead, which was measured to work: the same
    * seed twice returns in 1.5s where a new seed takes 9-11s.
    *
-   * Set true only for an instance started for RigMatch, where freeing buys a
-   * VRAM reading attributable to this run.
+   * Set true for an instance started for RigMatch, where freeing buys a VRAM
+   * reading attributable to this run — or for a lineup the user was told would
+   * unload, where every model starting cold is what makes it a fair race.
    */
   dedicated?: boolean;
   signal?: AbortSignal;
@@ -81,7 +98,7 @@ export type VideoRunResult = {
   fps: number;
   width: number;
   height: number;
-  checks: { label: string; passed: boolean; detail: string }[];
+  checks: AdvancedLabCheck[];
   error?: string;
 };
 
@@ -89,35 +106,40 @@ const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(r
 
 export async function runVideoGeneration(options: VideoRunOptions): Promise<VideoRunResult> {
   const {
-    transport, judge, checkpoint, textEncoder, imagePrompt, settings = {},
+    transport, judge, graph: prebuilt, model, output, checkpoint, textEncoder, imagePrompt, settings = {},
     dedicated = false,
     signal, timeoutMs = DEFAULT_VIDEO_TIMEOUT_MS, sleep = defaultSleep, now = () => Date.now(),
   } = options;
 
-  const width = settings.width ?? LTX_DEFAULTS.width;
-  const height = settings.height ?? LTX_DEFAULTS.height;
-  const frames = settings.frames ?? LTX_DEFAULTS.frames;
-  const fps = settings.fps ?? LTX_DEFAULTS.fps;
+  const width = output?.width ?? settings.width ?? LTX_DEFAULTS.width;
+  const height = output?.height ?? settings.height ?? LTX_DEFAULTS.height;
+  const frames = output?.frames ?? settings.frames ?? LTX_DEFAULTS.frames;
+  const fps = output?.fps ?? settings.fps ?? LTX_DEFAULTS.fps;
 
   const base = {
-    checkpoint, frames, fps, width, height,
+    checkpoint: model ?? checkpoint ?? '',
+    frames, fps, width, height,
     adherence: null as number | null, realtimeCost: 0, elapsedMs: 0,
   };
 
   let promptId: string | undefined;
   try {
-    // Only on an instance RigMatch owns, and before the clock starts either
-    // way, since freeing is not part of what is being measured.
+    // Only on an instance RigMatch may disturb, and before the clock starts
+    // either way, since freeing is not part of what is being measured.
     if (dedicated) await transport.free().catch(() => undefined);
 
-    const graph = buildTxt2VideoWorkflow({
-      checkpoint,
-      textEncoder,
-      prompt: imagePrompt.prompt,
-      width, height, frames, fps,
-      steps: settings.steps ?? LTX_DEFAULTS.steps,
-      seed: settings.seed ?? LTX_DEFAULTS.seed,
-    });
+    let graph = prebuilt;
+    if (!graph) {
+      if (!checkpoint || !textEncoder) throw new Error('No video graph to run: a checkpoint and its text encoder are needed.');
+      graph = buildTxt2VideoWorkflow({
+        checkpoint,
+        textEncoder,
+        prompt: imagePrompt.prompt,
+        width, height, frames, fps,
+        steps: settings.steps ?? LTX_DEFAULTS.steps,
+        seed: settings.seed ?? LTX_DEFAULTS.seed,
+      });
+    }
 
     const startedAt = now();
     ({ promptId } = await transport.submit(graph));
@@ -184,16 +206,35 @@ async function waitForOutputs({
   }
 }
 
-async function judgeFrame(judge: JudgeFn, frameDataUrl: string, imagePrompt: ImagePrompt) {
-  const verdicts: (boolean | null)[] = [];
-  for (const proposition of imagePrompt.propositions) {
-    try {
-      verdicts.push(readJudgeVerdict(await judge(frameDataUrl, buildJudgePrompt(proposition.question))));
-    } catch {
-      verdicts.push(null);
-    }
-  }
-  return scoreAdherence(imagePrompt.propositions, verdicts);
+/**
+ * Judge a finished render's frame, and score it again with the answer.
+ *
+ * Kept apart from the render so a lineup can judge after every model has
+ * rendered. The judge is a vision model in Ollama, which stays in VRAM for ten
+ * minutes after it answers; judged between renders, it sat on the GPU while the
+ * next model was being timed, and that model's time said so.
+ */
+export async function judgeVideoResult(
+  result: VideoRunResult,
+  judge: JudgeFn,
+  imagePrompt: ImagePrompt,
+): Promise<VideoRunResult> {
+  if (result.error || !result.frameDataUrl) return result;
+  const { adherence } = await judgeFrame(judge, result.frameDataUrl, imagePrompt);
+  const scored = scoreVideoGeneration({
+    produced: true,
+    elapsedMs: result.elapsedMs,
+    frames: result.frames,
+    fps: result.fps,
+    width: result.width,
+    height: result.height,
+    adherence,
+  });
+  return { ...result, adherence, ...scored };
+}
+
+function judgeFrame(judge: JudgeFn, frameDataUrl: string, imagePrompt: ImagePrompt) {
+  return askPropositions((question) => judge(frameDataUrl, question), imagePrompt);
 }
 
 /** Node ids the graph saves to, exported so callers can reason about outputs. */

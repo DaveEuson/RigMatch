@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Mic, RefreshCw, Square, Upload } from "lucide-react";
 import { getScoreTone } from "../lib/format";
 import { listeningBlockedReason } from "../lib/wizardCopy";
@@ -14,29 +14,17 @@ import {
   type ListeningSource,
 } from "../lib/listeningScripts";
 import { isEffectivelySilent, toListeningWav } from "../lib/wavEncoder";
+import { decodeAudio } from "../lib/browserAudio";
 import type { OllamaStatus } from "../types";
+import { useLabResults } from "../hooks/useLabResults";
+import { describeLabAccuracy, rankLabResults } from "../lib/channelWinners";
+import { workbenchById } from "../lib/workbench";
+import { BalanceFader } from "./BalanceFader";
+import { LabChecks } from "./LabChecks";
+import { LabStandings } from "./LabStandings";
 
-/**
- * Decode whatever the browser can read into raw channels.
- *
- * A microphone gives webm/opus and an upload could be anything; both are
- * decoded here and re-encoded to the 16 kHz mono WAV the bundled reference
- * uses, so no model is ever handed a container it might refuse. A refusal
- * would land on that model's scorecard as if it could not hear.
- */
-async function decodeAudio(data: ArrayBuffer) {
-  const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  const ctx = new Ctor();
-  try {
-    const buffer = await ctx.decodeAudioData(data.slice(0));
-    return {
-      sampleRate: buffer.sampleRate,
-      channels: Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i)),
-    };
-  } finally {
-    void ctx.close();
-  }
-}
+/** What the Listening fader weighs against time. */
+const LISTENING_ACCURACY = workbenchById('listening').accuracyMeans;
 
 type RunState = { phase: 'idle' | 'running' | 'complete' | 'failed'; result: AdvancedLabResult | null; message: string };
 
@@ -44,11 +32,16 @@ export function ListeningLab({
   ollama,
   models,
   gpuNoteForRun,
+  balance,
+  onBalanceChange,
 }: {
   ollama: OllamaStatus;
   models: string[];
   /** Re-checks the GPU as the run starts; returns a sentence, or '' when clear. */
   gpuNoteForRun?: () => Promise<string>;
+  /** The Listening channel's Balance fader: word accuracy against time. */
+  balance: number;
+  onBalanceChange: (value: number) => void;
 }) {
   const [model, setModel] = useState('');
   const [source, setSource] = useState<ListeningSource>('sample');
@@ -58,7 +51,8 @@ export function ListeningLab({
   const [recording, setRecording] = useState(false);
   const [captureError, setCaptureError] = useState('');
   const [runState, setRunState] = useState<RunState>({ phase: 'idle', result: null, message: '' });
-  const [savedResults, setSavedResults] = useState<Record<string, AdvancedLabResult>>(() => readAdvancedLabResults());
+  const savedResults = useLabResults();
+  const standings = useMemo(() => rankLabResults(savedResults, 'listening', balance), [savedResults, balance]);
 
   // Which microphone, and which one the user picked.
   //
@@ -262,11 +256,10 @@ export function ListeningLab({
           : `${activeModel} scored ${result.score}/100 against the ${source === 'sample' ? 'reference passage' : 'script'}.`,
     });
     if (!result.error && reference !== null) {
-      const merged = { ...readAdvancedLabResults(), [`listening:${activeModel}`]: result };
-      writeAdvancedLabResults(merged);
-      setSavedResults(merged);
+      // With where the fader stood as it started, like every other test.
+      writeAdvancedLabResults({ ...readAdvancedLabResults(), [`listening:${activeModel}`]: { ...result, balance } });
     }
-  }, [activeModel, canRun, captured, ollama.baseUrl, scriptId, source, typedReference, gpuNoteForRun]);
+  }, [activeModel, balance, canRun, captured, ollama.baseUrl, scriptId, source, typedReference, gpuNoteForRun]);
 
   const visible = runState.result ?? savedResults[`listening:${activeModel}`] ?? null;
   const typedTooShort = source === 'upload' && typedReference.trim() !== '' && !isScriptLongEnough(typedReference);
@@ -412,6 +405,8 @@ export function ListeningLab({
       {captured && <p className="advanced-lab-message complete">Ready: {captured.label}</p>}
       {captureError && <p className="advanced-lab-message failed">{captureError}</p>}
 
+      <BalanceFader value={balance} onChange={onBalanceChange} accuracyMeans={LISTENING_ACCURACY} />
+
       <div className="advanced-lab-actions">
         <button type="button" className="primary-button compact" onClick={() => void start()} disabled={!canRun}>
           <RefreshCw className={running ? 'spin' : ''} aria-hidden="true" />
@@ -429,15 +424,16 @@ export function ListeningLab({
             <span>What the model heard</span>
             <strong>{visible.response || '(nothing)'}</strong>
           </div>
-          <div className="advanced-lab-checks">
-            {visible.checks.map((check) => (
-              <div key={check.label} className={check.passed ? 'passed' : 'failed'} title={check.detail}>
-                <span>{check.passed ? 'Pass' : 'Miss'}</span>
-                <strong>{check.label}</strong>
-              </div>
-            ))}
-          </div>
+          <LabChecks checks={visible.checks} />
         </div>
+      )}
+      {standings.length > 1 && (
+        <LabStandings
+          ranked={standings}
+          balance={balance}
+          heading="Every listening test on this PC"
+          describeAccuracy={(accuracy) => describeLabAccuracy('listening', accuracy)}
+        />
       )}
     </article>
   );

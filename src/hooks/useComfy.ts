@@ -3,7 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { agentArcadeApi } from '../api';
 import { readComfySettings } from '../lib/comfySettings';
+import { onComfyStarted } from '../lib/comfyStarter';
 import { getComfyStatus } from '../lib/comfyTransport';
+import type { ComfyStatus } from '../types';
+
+export type ComfyFolderListing = NonNullable<ComfyStatus['folders']>;
 
 /**
  * What ComfyUI has on disk, and the one download that can be in flight to it.
@@ -32,6 +36,12 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
   // Tracked separately: a video model without a T5 encoder cannot render, and
   // the two are fixed by fetching two different files.
   const [comfyTextEncoders, setComfyTextEncoders] = useState<string[]>([]);
+  /**
+   * Every model folder, by ComfyUI's folder name. The video lineup needs all
+   * five: its models live in diffusion_models beside separate VAEs and LoRAs,
+   * and one is only installed when every file is where its loader looks.
+   */
+  const [comfyFolders, setComfyFolders] = useState<ComfyFolderListing>({});
   /**
    * Whether ComfyUI answered at all, which is not the same as having a model.
    * "Not running" and "running with nothing that can draw" want different
@@ -62,6 +72,19 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const comfySettings = useMemo(() => readComfySettings(), [activeNavId]);
 
+  /** One reply, applied the same way whether it came from the poll or a refresh. */
+  const applyStatus = useCallback((status: ComfyStatus) => {
+    setComfyReachable(status.reachable === true);
+    setComfyCheckpoints(status.checkpoints);
+    setComfyTextEncoders(status.textEncoders ?? []);
+    // An older bridge reports only the first two folders; fill those in so a
+    // model whose files are all checkpoints and encoders still reads installed.
+    setComfyFolders(status.folders ?? {
+      checkpoints: status.checkpoints,
+      text_encoders: status.textEncoders ?? [],
+    });
+  }, []);
+
   // ComfyUI is a separate program the user starts themselves — usually *after*
   // this app, because RigMatch is the thing that told them they needed it.
   //
@@ -76,16 +99,19 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
     let live = true;
     const look = () => {
       void getComfyStatus().then((status) => {
-        if (!live) return;
-        setComfyReachable(status.reachable === true);
-        setComfyCheckpoints(status.checkpoints);
-        setComfyTextEncoders(status.textEncoders ?? []);
+        if (live) applyStatus(status);
       });
     };
     look();
     const id = setInterval(look, 15_000);
     return () => { live = false; clearInterval(id); };
-  }, []);
+  }, [applyStatus]);
+
+  // A start RigMatch made is watched until ComfyUI answers. Hearing about it
+  // here updates every screen then, not at the next fifteen-second look.
+  useEffect(() => onComfyStarted(() => {
+    void getComfyStatus().then(applyStatus);
+  }), [applyStatus]);
 
   /**
    * Look again — after a download, or after the user has restarted ComfyUI.
@@ -95,11 +121,8 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
    * no-op React warns about at worst.
    */
   const refreshComfyStatus = useCallback(async () => {
-    const status = await getComfyStatus();
-    setComfyReachable(status.reachable === true);
-    setComfyCheckpoints(status.checkpoints);
-    setComfyTextEncoders(status.textEncoders ?? []);
-  }, []);
+    applyStatus(await getComfyStatus());
+  }, [applyStatus]);
 
   const beginComfyDownload = useCallback((progressId: string) => {
     activeComfyDownloadRef.current = progressId;
@@ -118,6 +141,7 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
   return {
     comfyCheckpoints,
     comfyTextEncoders,
+    comfyFolders,
     comfyReachable,
     comfySettings,
     refreshComfyStatus,

@@ -9,7 +9,7 @@
  * was an error dressed up as a score of zero.
  */
 
-import { getModelCapabilities, isVisionModel, type CapabilityBearing } from './modelCatalog.ts';
+import { canReadImages, type CapabilityBearing } from './modelCatalog.ts';
 import type { ImageRunResult } from './imageGenRun.ts';
 import {
   CUSTOM_IMAGE_PROMPT_ID,
@@ -74,12 +74,13 @@ const WEAK_JUDGE = /\bocr\b|deepseek-ocr|got-ocr|olmocr|bakllava|^llava|\/llava/
  */
 export function judgeCandidates(installed: CapabilityBearing[]): string[] {
   const names = installed
-    .filter((row) => {
-      const capabilities = getModelCapabilities(row);
-      if (capabilities) return capabilities.includes('vision');
-      return isVisionModel(row.displayName ?? row.name ?? '');
-    })
-    .map((row) => row.name ?? row.displayName ?? '')
+    // The Models list carries what the Ollama website says a model can do,
+    // downloaded or not. Only a model on this machine can answer, so a row
+    // that says it is not installed is never a judge.
+    .filter((row) => row.installed !== false && canReadImages(row))
+    // The installed tag rather than the family: a catalogue row's name is the
+    // bare family, which Ollama reads as ":latest" whatever is on disk.
+    .map((row) => row.installedModel?.name ?? row.installedModel?.model ?? row.name ?? row.displayName ?? '')
     .filter(Boolean);
 
   return [
@@ -126,6 +127,7 @@ export function toLabResult(run: ImageRunResult, promptId?: string, customText?:
     checks: run.checks,
     completedAt: new Date().toISOString(),
     imageDataUrl: run.imageDataUrl,
+    adherence: run.adherence,
     width: IMAGE_RUN_SETTINGS.width,
     height: IMAGE_RUN_SETTINGS.height,
     error: run.error,

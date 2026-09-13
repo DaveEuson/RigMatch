@@ -145,6 +145,12 @@ export function formatMs(value: number) {
   return `${Math.round(value)} ms`;
 }
 
+/** A date and a time as a person reads them, "12 Sept 2026, 08:54"; empty when unreadable. */
+export function formatDateTime(iso: string): string {
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime()) ? '' : at.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
 export function hashString(value: string) {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {

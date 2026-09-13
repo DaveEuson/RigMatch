@@ -9,6 +9,7 @@ import {
   formatBytesGb,
   generationModelById,
   isCatalogFile,
+  isListed,
 } from '../src/lib/generationCatalog.ts';
 
 test('every entry has a Hugging Face URL and a real byte size', () => {
@@ -21,42 +22,61 @@ test('every entry has a Hugging Face URL and a real byte size', () => {
   }
 });
 
-test('a video checkpoint always declares the encoder it cannot run without', () => {
+test('a video model always declares the text encoder it cannot run without', () => {
   // An LTX file alone fails inside CLIPLoader, which reads as a broken model
-  // rather than a missing file.
+  // rather than a missing file. Lineup models need more besides — a VAE, a
+  // LoRA, a second expert — and the graph tests hold those to their graphs.
+  // This holds the part every video model shares, and that nothing it requires
+  // is a model someone would pick on its own.
   for (const m of GENERATION_MODELS.filter((x) => x.kind === 'video')) {
-    assert.ok(m.requires?.length, `${m.id} declares no text encoder`);
-    for (const id of m.requires) {
-      const dep = generationModelById(id);
-      assert.ok(dep, `${m.id} requires unknown model ${id}`);
-      assert.equal(dep.kind, 'text-encoder', `${m.id} requires a non-encoder`);
+    assert.ok(m.requires?.length, `${m.id} declares nothing it needs`);
+    const deps = m.requires.map(generationModelById);
+    deps.forEach((dep, i) => assert.ok(dep, `${m.id} requires unknown model ${m.requires[i]}`));
+    assert.ok(deps.some((dep) => dep.kind === 'text-encoder'), `${m.id} declares no text encoder`);
+    for (const dep of deps) {
+      assert.ok(['text-encoder', 'vae', 'lora', 'expert'].includes(dep.kind),
+        `${m.id} requires ${dep.id}, which is a model in its own right`);
     }
   }
 });
 
-test('each kind lands in the folder ComfyUI reads it from', () => {
+test('each kind lands in a folder ComfyUI reads that kind from', () => {
+  // LTX-2 and LTX-2.3 ship as whole checkpoints; every other video model is a
+  // bare diffusion model. The graph tests pin each file to its exact loader.
+  const FOLDERS = {
+    image: ['checkpoints'],
+    video: ['checkpoints', 'diffusion_models'],
+    audio: ['checkpoints'],
+    'text-encoder': ['text_encoders'],
+    vae: ['vae'],
+    lora: ['loras'],
+    expert: ['diffusion_models'],
+  };
   for (const m of GENERATION_MODELS) {
-    const expected = m.kind === 'text-encoder' ? 'text_encoders' : 'checkpoints';
-    assert.equal(m.folder, expected, `${m.id} would be written to the wrong folder`);
+    assert.ok(FOLDERS[m.kind]?.includes(m.folder), `${m.id} (${m.kind}) would be written to ${m.folder}/`);
   }
 });
 
 test('a download plan includes the encoder, and totals the real cost', () => {
   const ltx = generationModelById('ltxv-distilled');
-  const plan = downloadPlan(ltx, []);
+  const plan = downloadPlan(ltx, {});
   assert.equal(plan.needed.length, 2, 'the encoder must be part of the offer');
   assert.ok(plan.needed.some((m) => m.id === 't5xxl-fp8'));
   assert.equal(plan.totalBytes, ltx.bytes + generationModelById('t5xxl-fp8').bytes);
 });
 
 test('a plan skips what is already on disk', () => {
-  const plan = downloadPlan(generationModelById('ltxv-distilled'), ['t5xxl_fp8_e4m3fn.safetensors']);
+  const plan = downloadPlan(generationModelById('ltxv-distilled'), {
+    text_encoders: ['t5xxl_fp8_e4m3fn.safetensors'],
+  });
   assert.deepEqual(plan.needed.map((m) => m.id), ['ltxv-distilled']);
 });
 
 test('an already-complete plan asks for nothing', () => {
-  const plan = downloadPlan(generationModelById('ltxv-distilled'),
-    ['ltxv-2b-distilled.safetensors', 't5xxl_fp8_e4m3fn.safetensors']);
+  const plan = downloadPlan(generationModelById('ltxv-distilled'), {
+    checkpoints: ['ltxv-2b-distilled.safetensors'],
+    text_encoders: ['t5xxl_fp8_e4m3fn.safetensors'],
+  });
   assert.equal(plan.needed.length, 0);
   assert.equal(plan.totalBytes, 0);
 });
@@ -64,8 +84,29 @@ test('an already-complete plan asks for nothing', () => {
 test('installed filenames match case-insensitively', () => {
   // ComfyUI lists whatever the filesystem gives it, and Windows does not care
   // about case.
-  const plan = downloadPlan(generationModelById('ltxv-distilled'), ['T5XXL_FP8_E4M3FN.SafeTensors']);
+  const plan = downloadPlan(generationModelById('ltxv-distilled'), {
+    text_encoders: ['T5XXL_FP8_E4M3FN.SafeTensors'],
+  });
   assert.deepEqual(plan.needed.map((m) => m.id), ['ltxv-distilled']);
+});
+
+test('a file in the wrong folder is not installed, whatever the disk says', () => {
+  // A real machine had the LTX-Video 2B 0.9.8 file in checkpoints/. UNETLoader
+  // reads diffusion_models/, so nothing could have loaded it from there.
+  const ltxv = generationModelById('ltxv-2b');
+  assert.equal(isListed(ltxv, { checkpoints: [ltxv.filename] }), false);
+  assert.equal(isListed(ltxv, { diffusion_models: [ltxv.filename] }), true);
+});
+
+test('a lineup model plans every file it needs, and then only the missing ones', () => {
+  const wan = generationModelById('wan-2.1-1.3b');
+  assert.deepEqual(downloadPlan(wan, {}).needed.map((m) => m.id).sort(), ['umt5-fp8', 'vae-wan21', 'wan-2.1-1.3b']);
+  const partial = downloadPlan(wan, {
+    text_encoders: ['umt5_xxl_fp8_e4m3fn_scaled.safetensors'],
+    vae: ['wan_2.1_vae.safetensors'],
+  });
+  assert.deepEqual(partial.needed.map((m) => m.id), ['wan-2.1-1.3b']);
+  assert.equal(partial.totalBytes, wan.bytes);
 });
 
 test('files RigMatch did not put there are simply not ours', () => {
@@ -83,7 +124,8 @@ test('sizes read as gigabytes a person can weigh', () => {
 
 test('the proven entries are the ones actually run on this machine', () => {
   // Marked separately from "the URL resolves" — these three were downloaded
-  // and rendered with during this work.
+  // and rendered with during this work. videobench timing six of the lineup
+  // models is not RigMatch running them, so none of those is proven yet.
   const proven = GENERATION_MODELS.filter((m) => m.proven).map((m) => m.id).sort();
   assert.deepEqual(proven, ['ltxv-distilled', 'sd15', 't5xxl-fp8']);
 });
@@ -95,6 +137,19 @@ test('ids are unique, since downloads are keyed on them', () => {
   assert.equal(new Set(files).size, files.length, 'two entries would overwrite each other');
 });
 
+test('a checksum, where one is declared, is a real SHA-256', () => {
+  // Every lineup file carries one; the graph tests check each against the export.
+  for (const m of GENERATION_MODELS.filter((x) => x.sha256 !== undefined)) {
+    assert.match(m.sha256, /^[0-9a-f]{64}$/, `${m.id} has a malformed sha256`);
+  }
+});
+
+test('only files from a gated repository are marked gated', () => {
+  const gated = GENERATION_MODELS.filter((m) => m.gated);
+  assert.ok(gated.length > 0, 'LTX-2.5 lives in a gated repository');
+  for (const m of gated) assert.match(m.url, /^https:\/\/huggingface\.co\/Lightricks\/LTX-2\.5\//, m.id);
+});
+
 test('every entry names its publisher', () => {
   // These labels match no Ollama family, so without this the By column read
   // "Unknown model family" for all of them.
@@ -104,17 +159,47 @@ test('every entry names its publisher', () => {
 });
 
 test('a row says what it makes rather than leaving it to be inferred', () => {
-  const rows = generationCatalogRows([]);
+  const rows = generationCatalogRows({});
   const ltx = rows.find((r) => r.generationId === 'ltxv-distilled');
   assert.equal(ltx.generationKind, 'video');
   assert.equal(ltx.runtime, 'comfyui');
   assert.equal(ltx.publisher, 'Lightricks');
 });
 
-test('a row is installed only when ComfyUI is listing the file', () => {
-  // A file on disk the running server cannot see may as well not exist.
-  const absent = generationCatalogRows([]).find((r) => r.generationId === 'sd15');
+test('only models are rows; the parts they need are not', () => {
+  // Two encoder rows were tolerable. Twenty-five encoders, VAEs and LoRAs would
+  // bury the seventeen models they exist to serve.
+  const rows = generationCatalogRows({});
+  assert.ok(rows.every((r) => ['image', 'video', 'audio'].includes(r.generationKind)));
+  assert.ok(rows.some((r) => r.generationId === 'kandinsky-5'));
+  assert.ok(rows.some((r) => r.generationId === 'stable-audio-open-1.0'));
+  assert.ok(!rows.some((r) => r.generationId === 'vae-wan21'));
+  // Stable Audio's text encoder is part of its download, not a model to pick.
+  assert.ok(!rows.some((r) => r.generationId === 't5-base'));
+});
+
+test('a row is installed only when ComfyUI lists every file it needs, where it needs it', () => {
+  // A file on disk the running server cannot see may as well not exist, and a
+  // video model missing its VAE cannot render.
+  const absent = generationCatalogRows({}).find((r) => r.generationId === 'sd15');
   assert.equal(absent.installedFile, false);
-  const present = generationCatalogRows(['sd15.safetensors']).find((r) => r.generationId === 'sd15');
+  const present = generationCatalogRows({ checkpoints: ['sd15.safetensors'] }).find((r) => r.generationId === 'sd15');
   assert.equal(present.installedFile, true);
+  const noVae = generationCatalogRows({
+    diffusion_models: ['wan2.1_t2v_1.3B_fp16.safetensors'],
+    text_encoders: ['umt5_xxl_fp8_e4m3fn_scaled.safetensors'],
+  }).find((r) => r.generationId === 'wan-2.1-1.3b');
+  assert.equal(noVae.installedFile, false);
+});
+
+test('a row’s size is what the download costs: every file it needs, and none it already has', () => {
+  // The main file alone left out the encoder and VAE a video model cannot run
+  // without, so the size on the Download button was a fraction of the download.
+  const wan = (installed) => generationCatalogRows(installed).find((r) => r.generationId === 'wan-2.1-1.3b');
+  const bytes = (...ids) => ids.map(generationModelById).reduce((sum, m) => sum + m.bytes, 0);
+  assert.equal(wan({}).sizeGb, Number((bytes('wan-2.1-1.3b', 'umt5-fp8', 'vae-wan21') / 1e9).toFixed(2)));
+  assert.equal(
+    wan({ text_encoders: ['umt5_xxl_fp8_e4m3fn_scaled.safetensors'] }).sizeGb,
+    Number((bytes('wan-2.1-1.3b', 'vae-wan21') / 1e9).toFixed(2)),
+  );
 });

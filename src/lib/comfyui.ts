@@ -119,15 +119,24 @@ export type ComfyImageRef = { filename: string; subfolder: string; type: string 
  * save nodes returns both, in node order.
  */
 export function extractImages(history: unknown, promptId: string): ComfyImageRef[] {
+  return extractSaved(history, promptId, 'images');
+}
+
+/** The same for sound, which ComfyUI's audio save nodes report under `audio`. */
+export function extractAudio(history: unknown, promptId: string): ComfyImageRef[] {
+  return extractSaved(history, promptId, 'audio');
+}
+
+function extractSaved(history: unknown, promptId: string, kind: 'images' | 'audio'): ComfyImageRef[] {
   const entry = (history as Record<string, unknown> | null)?.[promptId];
   const outputs = (entry as { outputs?: Record<string, unknown> } | undefined)?.outputs;
   if (!outputs) return [];
 
   const found: ComfyImageRef[] = [];
   for (const nodeId of Object.keys(outputs).sort()) {
-    const images = (outputs[nodeId] as { images?: unknown[] } | undefined)?.images;
-    if (!Array.isArray(images)) continue;
-    for (const image of images) {
+    const files = (outputs[nodeId] as Partial<Record<typeof kind, unknown[]>> | undefined)?.[kind];
+    if (!Array.isArray(files)) continue;
+    for (const image of files) {
       const ref = image as Partial<ComfyImageRef>;
       if (typeof ref?.filename !== 'string') continue;
       found.push({

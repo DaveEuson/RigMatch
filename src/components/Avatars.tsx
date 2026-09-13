@@ -12,7 +12,7 @@ export function AvatarBust({ model, size, extraClass, generationKind }: {
    * video model wears the generic chat robot and the image-generation portrait
    * that already exists never appears.
    */
-  generationKind?: 'image' | 'video' | 'text-encoder';
+  generationKind?: 'image' | 'video' | 'audio' | 'text-encoder';
 }) {
   const family = generationKind ? `gen-${generationKind}` : getModelFamily(model);
   const avatarSrc = generationKind

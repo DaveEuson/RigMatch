@@ -1,6 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { BenchmarkQuestionType } from './benchmarkSuite.ts';
 import type { TaskScores } from './lib/taskScores.ts';
+import type { HardwareFit } from './lib/modelCatalog.ts';
 
 export type SystemProfile = {
   hostname: string;
@@ -130,7 +131,7 @@ export type CatalogModel = {
       family and would otherwise read "Unknown model family". */
   publisher?: string;
   /** What this produces, for the capability filters. */
-  generationKind?: 'image' | 'video' | 'text-encoder';
+  generationKind?: 'image' | 'video' | 'audio' | 'text-encoder';
 };
 
 export type CatalogResponse = {
@@ -270,6 +271,12 @@ export type TestedModelScore = {
    * Absent for runs recorded before question types were kept.
    */
   taskScores?: TaskScores;
+  /**
+   * Where the Balance fader stood when this run started, 0 (speed) to 100
+   * (accuracy). The headline can be re-weighted later; this is what the person
+   * asked for going in. Absent on runs from before the fader.
+   */
+  balance?: number;
 };
 
 export type BenchmarkProgressUpdate = {
@@ -511,6 +518,12 @@ export type ComfyStatus = {
   checkpoints: string[];
   /** T5 encoders from /models/text_encoders. An LTX graph cannot run without one. */
   textEncoders?: string[];
+  /**
+   * Every folder a model loads from, by ComfyUI's own folder name. A video
+   * lineup model is installed only when each of its files is listed in the
+   * folder its loader reads: a Wan model sitting in checkpoints/ loads nowhere.
+   */
+  folders?: Partial<Record<'checkpoints' | 'text_encoders' | 'diffusion_models' | 'vae' | 'loras', string[]>>;
   /** /prompt's reply, carrying queue_remaining — how busy this instance is. */
   execInfo?: unknown;
 };
@@ -577,6 +590,10 @@ export type AgentArcadeApi = {
   comfyDownloadModel?: (request: {
     root: string; folder: string; filename: string; url: string;
     expectedBytes?: number; progressId?: string;
+    /** Checked before the file is renamed into place; absent where none is published. */
+    sha256?: string;
+    /** Sent only to huggingface.co, and only for a gated repository. */
+    token?: string;
   }) => Promise<{ path: string; alreadyPresent: boolean; bytes: number }>;
   comfyAbortDownload?: (progressId: string) => Promise<boolean>;
   onComfyDownloadProgress?: (
@@ -662,6 +679,12 @@ export type ModelRow = CatalogModel & {
   localProviderLabel?: string;
   localBaseUrl?: string;
   canDownload?: boolean;
+  /**
+   * The fit to show instead of sizing this row against VRAM. Set for video
+   * models, which ComfyUI offloads into system memory: VRAM alone called
+   * models too big that run fine.
+   */
+  fitOverride?: HardwareFit;
 };
 
 /**
@@ -681,7 +704,6 @@ export type SkillTestSelection = {
   image: boolean;
   imagePrompt: string;
   video: boolean;
-  videoSizeId: string;
   recognize: boolean;
   recognizeImage: string;
   listen: boolean;

@@ -6,11 +6,11 @@ import { CODE_LANGUAGES, CODE_TASK_PRESETS } from '../lib/codeChallenge';
 import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
 import { APP_BUILDER_PRESETS, VISION_TEST_IMAGES } from '../lib/labChallenges';
 import { GpuContentionNote } from './GpuContentionNote';
+import { BalanceFader } from './BalanceFader';
 import { getCudaDetail, getCudaSummary, isCloudModel, isEmbeddingModel, isLikelyImageGenerationModel, isVisionModel } from '../lib/modelCatalog';
 import { formatDuration } from '../lib/runEstimates';
 import { useDialog } from '../lib/useDialog';
-import { isVideoCheckpoint } from '../lib/videoGen';
-import { VIDEO_SIZE_PRESETS } from '../lib/videoGenChallenge';
+import { isPictureCheckpoint } from '../lib/checkpointKinds';
 import type { GpuContention, PendingRunMode, SkillTestSelection, SystemProfile } from '../types';
 import { Activity, AlertTriangle, Download, ImagePlus, ShieldCheck, Sparkles, X, Zap } from 'lucide-react';
 import { useRef, useState } from 'react';
@@ -51,7 +51,8 @@ export function RunWarningModal({
   gpuContention,
   measuredPerModelMs,
   comfyCheckpoints,
-  comfyTextEncoders,
+  videoLineup,
+  balance,
 }: {
   mode: PendingRunMode;
   selectedModel: string;
@@ -82,8 +83,13 @@ export function RunWarningModal({
       does not run on a model from the lineup, so it is offered on the strength
       of this rather than on what was picked. */
   comfyCheckpoints: string[];
-  /** T5 encoders ComfyUI has. A video model cannot render without one. */
-  comfyTextEncoders: string[];
+  /** The video models that can render here now, and roughly how long all of them take. */
+  videoLineup: { count: number; estimate: string };
+  /**
+   * The Balance fader for this run's channel, asked before it starts. Only how
+   * the results are ranked depends on it; the run itself is the same.
+   */
+  balance: { value: number; onChange: (value: number) => void; channel: string; accuracyMeans: string };
   qualityMode: 'heuristic' | 'judge';
   judgeModel: string;
   judgeModelOptions: string[];
@@ -149,12 +155,11 @@ export function RunWarningModal({
   const appBuilderCapable = lineupModels.some((m) => !isLikelyImageGenerationModel(m) && !isEmbeddingModel(m));
   // Not from the lineup: generation runs on ComfyUI checkpoints, so whether it
   // is offered depends on ComfyUI, not on which models were picked.
-  const hasImageModel = comfyCheckpoints.some((name) => !isVideoCheckpoint(name));
-  const videoCheckpointCount = comfyCheckpoints.filter(isVideoCheckpoint).length;
-  // A video model alone is not enough — LTX cannot run without a T5 encoder,
-  // and offering the test without one produces a failure inside CLIPLoader
-  // that reads as the model being broken.
-  const videoCapable = videoCheckpointCount > 0 && comfyTextEncoders.length > 0;
+  const hasImageModel = comfyCheckpoints.some(isPictureCheckpoint);
+  // Counted by the lineup, which knows every file each model needs and the
+  // graph it runs: a video checkpoint and any encoder in the folder was how an
+  // LTX-2 file reached the LTX-Video 0.9 graph.
+  const videoCapable = videoLineup.count > 0;
   const visionCapable = lineupModels.some((m) => isVisionModel(m));
   const imageCapable = hasImageModel;
   // Code Challenge needs a code-capable model AND a judge — it's the only way to
@@ -211,6 +216,15 @@ export function RunWarningModal({
             storage bandwidth, fans, and battery until the run finishes.
           </p>
           <p>{runScope}</p>
+
+          {/* First, above the settings: what someone values decides which of
+              these results wins, so it is the question before the test. */}
+          <BalanceFader
+            value={balance.value}
+            onChange={balance.onChange}
+            accuracyMeans={balance.accuracyMeans}
+            label={`What matters more for ${balance.channel.toLowerCase()}?`}
+          />
 
           {/* On battery, a laptop throttles its GPU hard — the same model can
               score materially lower for a reason that has nothing to do with
@@ -623,22 +637,10 @@ export function RunWarningModal({
                     <span>
                       <strong>Generate a video</strong>
                       <em>{!videoCapable
-                        ? 'Needs ComfyUI running with a video model and a T5 text encoder.'
-                        : `Renders 4 seconds on ${videoCheckpointCount === 1 ? 'your video model' : `all ${videoCheckpointCount} video models`}. Slowest test here — roughly 12s per model at the smallest size, and minutes at Full HD.`}</em>
+                        ? 'Needs ComfyUI running with a video model from the Video Lab that fits this computer.'
+                        : `Renders the same prompt on ${videoLineup.count === 1 ? 'your video model' : `each of your ${videoLineup.count} video models`}, one at a time — ${videoLineup.estimate} in total. The slowest test here.`}</em>
                     </span>
                   </label>
-                  {videoCapable && skillSelection.video && (
-                    <select
-                      className="run-skill-image-prompt"
-                      value={skillSelection.videoSizeId}
-                      onChange={(event) => onSkillSelectionChange({ ...skillSelection, videoSizeId: event.target.value })}
-                      aria-label="Video size"
-                    >
-                      {VIDEO_SIZE_PRESETS.map((preset) => (
-                        <option key={preset.id} value={preset.id}>{preset.label}</option>
-                      ))}
-                    </select>
-                  )}
                   <label className={`run-skill-test-option${visionCapable ? '' : ' disabled'}`}>
                     <input
                       type="checkbox"

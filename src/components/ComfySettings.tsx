@@ -1,6 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useCallback, useState } from "react";
-import { AlertTriangle, Check, FolderOpen, RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, Check, FolderOpen, RefreshCw, Search, X } from "lucide-react";
+import { readHuggingFaceToken, writeHuggingFaceToken } from "../lib/huggingFaceToken";
 import {
   COMFY_DEFAULT_BASE_URL,
   normalizeComfyUrl,
@@ -36,11 +37,14 @@ export function ComfySettings() {
   const initial = readComfySettings();
   const [url, setUrl] = useState(initial.baseUrl);
   const [dedicated, setDedicated] = useState(initial.dedicated);
+  const [autoStart, setAutoStart] = useState(initial.autoStart);
   const [probe, setProbe] = useState<{ phase: 'idle' | 'checking' | 'ok' | 'bad'; message: string }>({
     phase: 'idle', message: '',
   });
   const [folder, setFolder] = useState(initial.folder);
   const [folderNote, setFolderNote] = useState<{ tone: 'ok' | 'bad' | 'warn'; message: string } | null>(null);
+  const [token, setToken] = useState(() => readHuggingFaceToken());
+  const [savedToken, setSavedToken] = useState(() => readHuggingFaceToken());
 
 
   const chooseFolder = useCallback(async () => {
@@ -86,9 +90,10 @@ export function ComfySettings() {
   const normalized = normalizeComfyUrl(url);
   const urlValid = normalized !== null;
 
-  const save = useCallback((next: { baseUrl?: string; dedicated?: boolean }) => {
+  const save = useCallback((next: { baseUrl?: string; dedicated?: boolean; autoStart?: boolean }) => {
     writeComfySettings(next);
     if (next.dedicated !== undefined) setDedicated(next.dedicated);
+    if (next.autoStart !== undefined) setAutoStart(next.autoStart);
   }, []);
 
   const testConnection = useCallback(async () => {
@@ -107,6 +112,21 @@ export function ComfySettings() {
       message: `Connected — ${models} checkpoint${models === 1 ? '' : 's'}, ${encoders} text encoder${encoders === 1 ? '' : 's'}.`,
     });
   }, [normalized]);
+
+  const saveToken = useCallback(() => {
+    writeHuggingFaceToken(token);
+    setSavedToken(token.trim());
+  }, [token]);
+
+  const removeToken = useCallback(() => {
+    writeHuggingFaceToken('');
+    setToken('');
+    setSavedToken('');
+  }, []);
+
+  // Hugging Face tokens are hf_ and about 34 more characters. Another shape is
+  // worth a warning, not a refusal: the format is theirs to change.
+  const tokenLooksWrong = token.trim() !== '' && !/^hf_[A-Za-z0-9]{30,}$/.test(token.trim());
 
   return (
     <>
@@ -196,6 +216,19 @@ export function ComfySettings() {
       <label className="advanced-lab-consent">
         <input
           type="checkbox"
+          checked={autoStart}
+          onChange={(event) => save({ autoStart: event.target.checked })}
+        />
+        <span>
+          Start ComfyUI for me when an image or video test needs it. RigMatch runs the launcher it
+          found beside this folder, the same file you would double-click, and leaves ComfyUI running
+          afterwards. Turn this off to start it yourself.
+        </span>
+      </label>
+
+      <label className="advanced-lab-consent">
+        <input
+          type="checkbox"
           checked={dedicated}
           onChange={(event) => save({ dedicated: event.target.checked })}
         />
@@ -205,6 +238,54 @@ export function ComfySettings() {
           benchmark would evict whatever you had loaded.
         </span>
       </label>
+
+      <div className="utility-stat">
+        <span>Hugging Face token</span>
+        <strong>{savedToken ? 'Saved — gated models can download' : 'Only needed for gated models'}</strong>
+        <em>
+          Most models download without one. A few publishers gate theirs — LTX-2.5 today — and ask you
+          to accept their terms on Hugging Face first, after which the download needs your own access
+          token. A read-only token from huggingface.co/settings/tokens is enough. RigMatch keeps it on
+          this computer, unencrypted like the OpenRouter key, and sends it only to huggingface.co for a
+          gated file — never to the download mirror Hugging Face redirects to.
+        </em>
+      </div>
+      <label className="settings-field">
+        <span>Token</span>
+        <input
+          type="password"
+          value={token}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(event) => setToken(event.target.value)}
+          placeholder="hf_…"
+          aria-label="Hugging Face access token"
+          aria-invalid={tokenLooksWrong}
+        />
+      </label>
+      {tokenLooksWrong && (
+        <div className="advanced-lab-warning">
+          <AlertTriangle aria-hidden="true" />
+          <span>Hugging Face tokens start with hf_ and run to about 37 characters. This one may not work.</span>
+        </div>
+      )}
+      <div className="advanced-lab-actions">
+        <button
+          type="button"
+          className="mini-button outline"
+          onClick={saveToken}
+          disabled={!token.trim() || token.trim() === savedToken}
+        >
+          <Check aria-hidden="true" />
+          Save token
+        </button>
+        {savedToken && (
+          <button type="button" className="mini-button outline" onClick={removeToken}>
+            <X aria-hidden="true" />
+            Remove it
+          </button>
+        )}
+      </div>
     </>
   );
 }

@@ -49,17 +49,31 @@ import type {
   RunProgress,
   PendingScoreClear,
 } from './types';
-import type { ScorePriorityId } from './lib/scoring';
 import {
   SCORE_PRIORITY_STORAGE_KEY,
-  applyScorePriority,
   compareBenchmarkResults,
   compareTestedModelScores,
   formatMatchScore,
-  readScorePriority,
   toTestedModelScore,
   upsertModelScores,
 } from './lib/scoring';
+import { BALANCE_STORAGE_KEY, applyBalance, readBalances, type Balances } from './lib/balance';
+import { codeWinner, labWinner, rankCoding, videoWinner } from './lib/channelWinners';
+import { ChannelComparisonPanel } from './components/ChannelComparisonPanel';
+import {
+  WORKBENCH_STORAGE_KEY,
+  balanceChannel,
+  isComparedChannel,
+  readWorkbench,
+  workbenchById,
+  workbenchForGoal,
+  type ChannelId,
+  type WorkbenchId,
+} from './lib/workbench';
+import { useLabResults } from './hooks/useLabResults';
+import { useVideoLineupSession } from './hooks/useVideoLineupSession';
+import { useRenderActivity, useRenderOutcome } from './hooks/useRenderActivity';
+import { renderChannel, type RenderActivity } from './lib/renderActivity';
 import { RunReportModal } from './components/RunReportModal';
 import type { StoredRunReport } from './lib/runReports';
 import {
@@ -204,6 +218,7 @@ import {
   readAdvancedLabResults,
   writeAdvancedLabResults,
   wasJudged,
+  checkState,
   type DemoArtifact,
   type AdvancedLabResult,
 } from './lib/labResults';
@@ -222,16 +237,32 @@ import {
 } from './lib/labChallenges';
 import { IMAGE_BENCHMARK_PROMPTS } from './lib/imageGenScoring';
 import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
-import { batchSeed, isVideoCheckpoint } from './lib/videoGen';
-import { DEFAULT_VIDEO_SIZE_ID, toVideoLabResult, videoReadiness } from './lib/videoGenChallenge';
+import { listenerCandidates } from './lib/audioGenChallenge';
+import { isPictureCheckpoint } from './lib/checkpointKinds';
+import { batchSeed } from './lib/videoGen';
+import { toVideoLabResult } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
+import { readHuggingFaceToken } from './lib/huggingFaceToken';
 import { goalById, presetIdForGoal } from './lib/goals';
-import { taskFilterForGoal } from './lib/modelCatalog';
+import { modelMatchesTask } from './lib/modelCatalog';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
-import { runVideoLabChallenge } from './lib/videoGenRunner';
+import { runVideoLineupLive } from './lib/videoGenRunner';
+import {
+  asHardwareFit,
+  comfyListing,
+  estimateLineup,
+  lineupEntry,
+  runnableLineup,
+  videoMachineFrom,
+  type LineupOutcome,
+  type VideoLineupEntry,
+} from './lib/videoLineup';
+import { formatVideoEstimate, videoFit } from './lib/videoFit';
+import { readVideoCalibration } from './lib/videoCalibrationStore';
 import { runImageLabChallenge } from './lib/imageGenRunner';
 import { CUSTOM_IMAGE_PROMPT_ID } from './lib/imageGenScoring';
 import { describeComfyBusy, getComfyStatus, locateComfyFolder } from './lib/comfyTransport';
+import { ensureComfyRunning } from './lib/comfyStarter';
 import { readComfySettings } from './lib/comfySettings';
 import {
   CODE_TASK_PRESETS,
@@ -370,14 +401,28 @@ function App() {
   const [reportOpen, setReportOpen] = useState(false);
   /**
    * The scores as measured. Everything downstream reads `modelScores` below,
-   * which is this map re-summarised under the reader's chosen priority — so
+   * which is this map re-summarised at the chat Balance fader — so
    * what gets saved here is always the measurement, never a view of it.
    */
   const [savedModelScores, setModelScores] = useState<Record<string, TestedModelScore>>(() =>
     savedHistory?.modelScores ?? (isDesktopRuntime ? {} : upsertModelScores({}, [demoBenchmark])),
   );
-  const [scorePriority, setScorePriority] = useState<ScorePriorityId>(
-    () => readScorePriority(localStorage.getItem(SCORE_PRIORITY_STORAGE_KEY)),
+  /**
+   * How much accuracy counts against speed: one Balance fader per channel,
+   * asked before every test. The Match Score is the chat measurement, so the
+   * chat fader is the one that re-summarises it below.
+   */
+  const [balances, setBalances] = useState<Balances>(() => readBalances(
+    localStorage.getItem(BALANCE_STORAGE_KEY),
+    // The old three-way "Best Match Means" setting, carried over once.
+    localStorage.getItem(SCORE_PRIORITY_STORAGE_KEY),
+  ));
+  const setBalance = useCallback((channel: ChannelId, value: number) => {
+    setBalances((current) => (current[channel] === value ? current : { ...current, [channel]: value }));
+  }, []);
+  /** The channel picked in Advanced Mode; until someone picks, the first-run goal decides. */
+  const [workbenchPick, setWorkbenchPick] = useState<WorkbenchId | null>(
+    () => readWorkbench(localStorage.getItem(WORKBENCH_STORAGE_KEY)),
   );
   /**
    * Applied here, once, rather than at the thirty-seven places that render or
@@ -386,8 +431,8 @@ function App() {
    * was not.
    */
   const modelScores = useMemo(
-    () => applyScorePriority(savedModelScores, scorePriority),
-    [savedModelScores, scorePriority],
+    () => applyBalance(savedModelScores, balances.chat),
+    [savedModelScores, balances.chat],
   );
   const [modelNotes, setModelNotes] = useState<Record<string, string>>(() => {
     try { return JSON.parse(localStorage.getItem('rigmatch:model-notes:v1') ?? '{}') as Record<string, string>; }
@@ -418,6 +463,8 @@ function App() {
   // from that run. A ref rather than state: it must not trigger a re-render, and
   // it is read inside async run loops that would otherwise close over a stale value.
   const runGpuContentionRef = useRef<GpuContention['level'] | undefined>(undefined);
+  /** Where the Balance fader stood when the current run started; every score from it records that. */
+  const runBalanceRef = useRef<number | undefined>(undefined);
   // Re-measured every time the pre-flight modal opens: whether the GPU is busy
   // is a right-now fact, and a reading from earlier in the session would be
   // worse than none.
@@ -432,7 +479,6 @@ function App() {
     image: false,
     imagePrompt: IMAGE_BENCHMARK_PROMPTS[0].id,
     video: false,
-    videoSizeId: DEFAULT_VIDEO_SIZE_ID,
     recognize: false,
     recognizeImage: DEFAULT_VISION_TEST_IMAGE,
     listen: false,
@@ -462,7 +508,7 @@ function App() {
   const [activity, setActivity] = useState('Contestants is your hub: browse models, run tests, manage downloads, and start Speed Dating.');
   const [activeNavId, setActiveNavId] = useState<NavId>('models');
   const {
-    comfyCheckpoints, comfyTextEncoders, comfyReachable, comfySettings,
+    comfyCheckpoints, comfyFolders, comfyReachable, comfySettings,
     refreshComfyStatus, beginComfyDownload, endComfyDownload, abortComfyDownload,
   } = useComfy({ activeNavId });
   const {
@@ -494,6 +540,10 @@ function App() {
     useState<{ label: string; run: () => void | Promise<void> } | null>(null);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [pendingThirdPartyDownloadRows, setPendingThirdPartyDownloadRows] = useState<ModelRow[] | null>(null);
+  // A download the Video Lab asked for, waiting on the same consent dialog,
+  // and the one in flight once it is agreed to.
+  const [pendingLabDownload, setPendingLabDownload] = useState<ModelRow | null>(null);
+  const [labDownloadName, setLabDownloadName] = useState<string | null>(null);
   const [chosenModel, setChosenModel] = useState<string | null>(null);
   const [exportHatchOpen, setExportHatchOpen] = useState(false);
   const [clearedTopMatches, setClearedTopMatches] = useState<Set<string>>(() => getSavedClearedTopMatches());
@@ -523,6 +573,18 @@ function App() {
     [lmStudio.baseUrl, lmStudio.models, ollama.baseUrl, ollama.models],
   );
 
+  // The machine a video model is sized against, rebuilt only when the hardware
+  // changes: the profile refreshes its live load every few seconds, and every
+  // model row would be rebuilt with it.
+  const videoMachine = useMemo(
+    () => videoMachineFrom({
+      platform: system.platform,
+      memory: { totalGb: system.memory.totalGb },
+      gpu: { vramGb: system.gpu.vramGb, model: system.gpu.model, isUnifiedMemory: system.gpu.isUnifiedMemory },
+    }),
+    [system.platform, system.memory.totalGb, system.gpu.vramGb, system.gpu.model, system.gpu.isUnifiedMemory],
+  );
+
   const modelRows = useMemo(
     () => {
       const rows = mergeModelRows(catalog, localModels);
@@ -530,19 +592,29 @@ function App() {
       // their own. Someone who wants to make a video searches for "makes
       // video"; that video comes from Hugging Face and runs on ComfyUI is our
       // problem, not a category they should have to learn.
-      const generation: ModelRow[] = generationCatalogRows([...comfyCheckpoints, ...comfyTextEncoders])
-        .map((entry) => ({
-          ...entry,
-          displayName: entry.name,
-          installed: entry.installedFile,
-          ready: entry.installedFile,
-          installLabel: entry.installedFile ? 'Installed' : 'Download',
-          canDownload: !entry.installedFile,
-          pulls: null,
-        }));
+      const hasToken = Boolean(readHuggingFaceToken());
+      const generation: ModelRow[] = generationCatalogRows(comfyFolders)
+        .map((entry) => {
+          // Sized the way the Video Lab sizes it: ComfyUI offloads what VRAM
+          // cannot hold, so VRAM alone called runnable models too big and the
+          // download queue refused them.
+          const lineup = entry.generationKind === 'video' ? lineupEntry(entry.generationId) : undefined;
+          return {
+            ...entry,
+            displayName: entry.name,
+            installed: entry.installedFile,
+            ready: entry.installedFile,
+            installLabel: entry.installedFile ? 'Installed' : 'Download',
+            canDownload: !entry.installedFile,
+            pulls: null,
+            ...(lineup
+              ? { fitOverride: asHardwareFit(videoFit(lineup.sizing, videoMachine, { hasToken: hasToken || entry.installedFile })) }
+              : {}),
+          };
+        });
       return [...generation, ...rows];
     },
-    [catalog, localModels, comfyCheckpoints, comfyTextEncoders],
+    [catalog, localModels, comfyFolders, videoMachine],
   );
 
   const selectedRow = modelRows.find(
@@ -560,14 +632,14 @@ function App() {
   const { refresh: refreshChatGpu } = useGpuContention();
 
   const chatImageGeneration = useMemo(() => {
-    // Video checkpoints cannot draw a still.
+    // Video and audio checkpoints cannot draw a still.
     //
     // The first checkpoint ComfyUI reported on this machine was ltx-video-2b,
     // and handing that to the image graph fails with "CLIPTextEncode: clip
     // input is invalid: None" — it carries no text encoder. The offer appeared,
     // it was pressed, and it could never have worked: exactly the empty promise
     // this feature exists to prevent, made by the feature itself.
-    const drawable = comfyCheckpoints.filter((name) => !isVideoCheckpoint(name));
+    const drawable = comfyCheckpoints.filter(isPictureCheckpoint);
 
     return {
       // ComfyUI answering is not the same as ComfyUI being able to draw.
@@ -878,7 +950,10 @@ function App() {
    */
   const generationSummary = useMemo(() => {
     const summarize = (kind: 'image' | 'video') => {
-      const rows = modelRows.filter((row) => row.generationKind === kind);
+      // Only the ones that run here: Simple Mode says "N run on this PC", and
+      // counting every catalogue row made that true of models too big for it.
+      const rows = modelRows.filter((row) => row.generationKind === kind
+        && getHardwareFit(row, system.gpu.vramGb).recommend);
       return {
         total: rows.length,
         installed: rows.filter((row) => row.installed).length,
@@ -886,7 +961,7 @@ function App() {
       };
     };
     return { image: summarize('image'), video: summarize('video') };
-  }, [modelRows]);
+  }, [modelRows, system.gpu.vramGb]);
 
   // Simple Mode needs its own share state: Advanced's lives inside the profile
   // panel, which is not mounted in the guided path.
@@ -1167,6 +1242,97 @@ function App() {
     chooseInterfaceMode, saveGoalsFromIntro, dismissGoalsIntro, saveGoalsFromSettings, resetGoals,
   } = useGoals({ selectUiMode, setActivity });
 
+  /**
+   * What Advanced Mode is testing. It follows the first-run goal until someone
+   * picks a channel, then remembers the pick. Simple Mode has no channels, and
+   * everything it shows is ranked as chat.
+   */
+  const workbench: WorkbenchId = workbenchPick ?? workbenchForGoal(selectedGoals[0]);
+  const workbenchInfo = workbenchById(uiMode === 'advanced' ? workbench : 'all');
+  const activeChannel = balanceChannel(workbenchInfo.id);
+  const chooseWorkbench = useCallback((id: WorkbenchId) => {
+    setWorkbenchPick(id);
+    writeLocal(WORKBENCH_STORAGE_KEY, id);
+  }, []);
+  // Images, Video and Audio run on ComfyUI, so choosing any of them is the
+  // moment to start it: loading by the time anything is tested, and nobody
+  // leaves RigMatch to find a .bat file. Once a session, and only while
+  // Settings allows it.
+  const wantsComfy = workbenchInfo.id === 'images' || workbenchInfo.id === 'video' || workbenchInfo.id === 'audio';
+  useEffect(() => {
+    if (wantsComfy) void ensureComfyRunning('auto');
+  }, [wantsComfy]);
+  /** The Run dialog asks the fader of the channel it serves: code and reading pictures have their own. */
+  const runChannel: ChannelId = workbenchInfo.id === 'code' || workbenchInfo.id === 'reading' ? workbenchInfo.id : 'chat';
+
+  const labResults = useLabResults();
+  const lineupSession = useVideoLineupSession();
+  /** Whatever ComfyUI is rendering for RigMatch now, wherever it was started. */
+  const renderActivity = useRenderActivity();
+  /** How the last render ended: announced in the status bar, and kept in Activity. */
+  const renderOutcome = useRenderOutcome();
+  const renderEndedAt = renderOutcome?.endedAt ?? null;
+  const [announcedRenderEnd, setAnnouncedRenderEnd] = useState(renderEndedAt);
+  if (renderEndedAt !== announcedRenderEnd) {
+    setAnnouncedRenderEnd(renderEndedAt);
+    if (renderOutcome) setActivity(renderOutcome.message);
+  }
+  // Images and video are judged by a model that can see, made audio by one that
+  // can hear. With none installed, accuracy cannot be measured there, so those
+  // faders hold at speed.
+  const pictureJudged = useMemo(() => judgeCandidates(ollama.models).length > 0, [ollama.models]);
+  /** The model that listens to made audio, from what is installed. */
+  const audioListener = useMemo(() => listenerCandidates(ollama.models)[0] ?? '', [ollama.models]);
+  const balanceLock = (channel: ChannelId) => {
+    if ((channel === 'images' || channel === 'video') && !pictureJudged) {
+      return 'No model that can check pictures is available right now, so only speed can be measured. Install one, or start Ollama, and accuracy counts again.';
+    }
+    // Audio is never held at speed: when no model can hear, your ear can judge a clip.
+    return null;
+  };
+  /** The vision model that checks pictures and clips, from what is installed. */
+  const pictureJudge = useMemo(() => judgeCandidates(ollama.models)[0] ?? '', [ollama.models]);
+  /** Something else holds the graphics card, so a render timed now would measure the contention. */
+  const gpuBusy = isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running);
+  /** One winner per channel, from its own measurement at its own fader. Chat and All keep the Top Match. */
+  const channelWinner = useMemo(() => {
+    const judged = (value: number) => (pictureJudged ? value : 0);
+    switch (workbenchInfo.id) {
+      case 'code': return codeWinner(savedModelScores, balances.code);
+      case 'images': return labWinner(labResults, 'images', judged(balances.images));
+      case 'listening': return labWinner(labResults, 'listening', balances.listening);
+      case 'reading': return labWinner(labResults, 'reading', balances.reading);
+      case 'video': return videoWinner(lineupSession.record, judged(balances.video));
+      case 'audio': return labWinner(labResults, 'audio', balances.audio);
+      default: return null;
+    }
+  }, [workbenchInfo.id, savedModelScores, labResults, lineupSession.record, balances, pictureJudged]);
+  /** The side menu's Models count follows the channel, as the Models screen does. */
+  const channelModelCount = useMemo(() => {
+    const filter = workbenchInfo.taskFilter;
+    return filter ? modelRows.filter((row) => modelMatchesTask(row, filter)).length : modelRows.length;
+  }, [workbenchInfo.taskFilter, modelRows]);
+  /** Images, Video and Listening compare their own results; Speed Dating cannot test them. */
+  const comparedWorkbench = isComparedChannel(workbenchInfo.id) ? { ...workbenchInfo, id: workbenchInfo.id } : null;
+  /** The goal the Run dialog's focus suggestion answers: the channel's, on a channel. */
+  const runGoal: string | undefined = workbenchInfo.id === 'all' ? selectedGoals[0] : workbenchInfo.goals[0];
+  /** What the side menu counts for Comparison and Scorecards on this channel. */
+  const channelMetas = useMemo(() => {
+    const count = (challenge: string) => Object.values(labResults).filter((result) => result?.challenge === challenge).length;
+    // "None" rather than "0 pictures", as What's New says it.
+    const tally = (amount: number, noun: string) => (amount > 0 ? `${amount} ${noun}${amount === 1 ? '' : 's'}` : 'None');
+    const kept = (amount: number) => (amount > 0 ? `${amount}` : 'New');
+    switch (workbenchInfo.id) {
+      case 'images': return { comparison: tally(count('image-generation'), 'picture'), scorecards: kept(count('image-generation')) };
+      case 'video': return { comparison: tally(lineupSession.record?.entries.length ?? 0, 'clip'), scorecards: kept(count('video-generation')) };
+      case 'listening': return { comparison: tally(count('listening'), 'test'), scorecards: kept(count('listening')) };
+      case 'reading': return { comparison: undefined, scorecards: kept(count('image-recognition')) };
+      case 'audio': return { comparison: tally(count('audio-generation'), 'clip'), scorecards: kept(count('audio-generation')) };
+      case 'code': return { comparison: undefined, scorecards: kept(rankCoding(Object.values(modelScores), balances.code).ranked.length) };
+      default: return { comparison: undefined, scorecards: undefined };
+    }
+  }, [workbenchInfo.id, labResults, lineupSession.record, modelScores, balances.code]);
+
   const confirmClearData = useCallback(async () => {
     // The run log is cleared first but must not gate anything: the main process
     // rate-limits log clearing, so clearing logs and then clearing data a moment
@@ -1225,6 +1391,9 @@ function App() {
       setModelNotes({});
       setRunHistory(emptyRunHistory());
       resetGoals();
+      // The faders and the channel are preferences about data that is gone.
+      setBalances(readBalances(null, null));
+      setWorkbenchPick(null);
       setClearDataOpen(false);
       setActivity(`RigMatch app data cleared. Ollama models were left installed.${logNote}`);
     } catch (error) {
@@ -1375,6 +1544,16 @@ function App() {
 
     setActivity(`${getNavLabel(id)} selected.`);
   }, [loadLogs]);
+
+  /** Where a render in flight is shown in full: its model's row for a test of one, Comparison for a race. */
+  const openRender = useCallback((render: RenderActivity) => {
+    chooseWorkbench(renderChannel(render.kind));
+    const row = render.solo && render.key
+      ? modelRows.find((candidate) => candidate.generationId === render.key)
+      : undefined;
+    if (row) setSelectedModel(row.displayName);
+    selectNav(render.solo ? 'models' : 'speedDate');
+  }, [chooseWorkbench, modelRows, selectNav]);
 
   // Simple Mode runs as a wizard: when the rig check passes while the user is
   // on the setup round, move them to the pick round instead of waiting for a
@@ -1549,7 +1728,8 @@ function App() {
       }), modelToTest);
       setBenchmark(result);
       setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
-      setModelScores((current) => upsertModelScores(current, [result], currentSuiteName, rigStampForModel));
+      const runBalance = runBalanceRef.current;
+      setModelScores((current) => upsertModelScores(current, [result], currentSuiteName, rigStampForModel, runBalance));
       setClearedTopMatches((current) => removeSetValues(current, [result.model, modelToTest]));
       recordRuns([result]);
       setRunProgress({
@@ -1874,7 +2054,7 @@ function App() {
       );
     }
 
-    const { needed, totalBytes } = downloadPlan(model, [...comfyCheckpoints, ...comfyTextEncoders]);
+    const { needed, totalBytes } = downloadPlan(model, comfyFolders);
     if (needed.length === 0) return true;
 
     setActivity(`Downloading ${needed.map((m) => m.label).join(' + ')} — ${formatBytesGb(totalBytes)} in total.`);
@@ -1907,6 +2087,10 @@ function App() {
         await agentArcadeApi.comfyDownloadModel?.({
           root: comfyRoot, folder: item.folder, filename: item.filename,
           url: item.url, expectedBytes: item.bytes, progressId,
+          // Checked before ComfyUI can see the file. The token goes only with a
+          // gated file, and the downloader keeps it off the CDN.
+          sha256: item.sha256,
+          token: item.gated ? readHuggingFaceToken() || undefined : undefined,
         });
       } catch (error) {
         // A cancelled stream lands here too; say stopped rather than failed,
@@ -1927,7 +2111,62 @@ function App() {
     setActivity(`${row.displayName} downloaded. Restart ComfyUI so it picks up the new file.`);
     void refreshComfyStatus();
     return true;
-  }, [comfyCheckpoints, comfyTextEncoders, tellUser, refreshComfyStatus, beginComfyDownload, endComfyDownload, pullQueueShouldStop, findComfyForDownload]);
+  }, [comfyFolders, tellUser, refreshComfyStatus, beginComfyDownload, endComfyDownload, pullQueueShouldStop, findComfyForDownload]);
+
+  /**
+   * A generation download the Video Lab asked for, rather than the queue.
+   *
+   * The queue sizes every row against VRAM and waits on Ollama, and neither
+   * belongs to a video model: the Lab has already said whether it fits, and a
+   * ComfyUI download has nothing to do with Ollama. It still goes through the
+   * same consent dialog and the same downloader, one at a time, so Stop always
+   * reaches the download it names.
+   */
+  const requestLabDownload = useCallback((generationId: string) => {
+    const row = modelRows.find((candidate) => candidate.generationId === generationId);
+    if (!row || row.installed) return;
+    if (isPullingModels || labDownloadName) {
+      tellUser('Another download is running. Let it finish, or stop it, before starting this one.');
+      return;
+    }
+    setPendingLabDownload(row);
+  }, [modelRows, isPullingModels, labDownloadName, tellUser]);
+
+  const confirmLabDownload = useCallback(async () => {
+    const row = pendingLabDownload;
+    setPendingLabDownload(null);
+    if (!row) return;
+    setLabDownloadName(row.displayName);
+    clearPullRequest();
+    try {
+      const downloaded = await downloadGenerationModel(row);
+      setPullProgressByModel((current) => {
+        const entry = current[row.displayName];
+        if (downloaded) {
+          return {
+            ...current,
+            [row.displayName]: {
+              ...(entry ?? createQueuedPullProgress(row.displayName, ollama.baseUrl)),
+              phase: 'complete',
+              status: 'Downloaded. Restart ComfyUI so it can see the new files.',
+              percent: 100,
+              updatedAt: new Date().toISOString(),
+            },
+          };
+        }
+        // A refusal has already said why; a stopped download leaves nothing to show.
+        return entry?.phase === 'failed' ? current : removePullProgress(current, row.displayName);
+      });
+    } finally {
+      clearPullRequest();
+      setLabDownloadName(null);
+    }
+  }, [pendingLabDownload, downloadGenerationModel, clearPullRequest, ollama.baseUrl]);
+
+  const stopLabDownload = useCallback(() => {
+    askPullQueue('cancel');
+    abortComfyDownload();
+  }, [askPullQueue, abortComfyDownload]);
 
   const pullQueuedModels = useCallback(async () => {
     if (queuedRows.length === 0) {
@@ -2431,7 +2670,8 @@ function App() {
         }), row.displayName);
         results.push(result);
         setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
-        setModelScores((current) => upsertModelScores(current, [result], currentSuiteName, rigStampForModel));
+        const runBalance = runBalanceRef.current;
+        setModelScores((current) => upsertModelScores(current, [result], currentSuiteName, rigStampForModel, runBalance));
         setClearedTopMatches((current) => removeSetValues(current, [result.model, row.displayName]));
         recordRuns([result]);
         const isStopped = stopRunRef.current;
@@ -2617,7 +2857,7 @@ function App() {
     // checkpoints, so the candidates are whatever ComfyUI has loaded. Asking
     // Ollama for them is what made the image checkbox silently do nothing — it
     // looked for installed models named flux or sdxl, and Ollama has none.
-    let videoEncoder = '';
+    let videoEntries: VideoLineupEntry[] = [];
     if (selection.image || selection.video) {
       // One check for the whole batch. Every generation job in it shares the
       // same ComfyUI, so if it is busy now none of them will be measuring this
@@ -2629,18 +2869,18 @@ function App() {
       }
       const comfy = busy ? { checkpoints: [], textEncoders: [] } : await getComfyStatus();
       if (selection.image) {
-        // A video checkpoint in a still-image graph fails deep in the sampler
-        // with a shape error, so it is never offered one.
-        for (const name of comfy.checkpoints.filter((n) => !isVideoCheckpoint(n))) {
+        // A video or audio checkpoint in a still-image graph fails deep in the
+        // sampler with a shape error, so it is never offered one.
+        for (const name of comfy.checkpoints.filter(isPictureCheckpoint)) {
           jobs.push({ model: name, kind: 'image' });
         }
       }
       if (selection.video) {
-        const ready = videoReadiness(comfy.checkpoints, comfy.textEncoders ?? []);
-        if (ready.kind === 'ready') {
-          videoEncoder = ready.encoders[0];
-          for (const name of ready.checkpoints) jobs.push({ model: name, kind: 'video' });
-        }
+        // Every video model on disk that runs here, each with its own files
+        // and graph. A checkpoint name and the first encoder in the folder was
+        // how an LTX-2 file reached the LTX-Video 0.9 graph.
+        videoEntries = runnableLineup(comfyListing(comfy), videoMachine, { calibration: readVideoCalibration() });
+        for (const entry of videoEntries) jobs.push({ model: entry.key, kind: 'video' });
       }
     }
 
@@ -2660,6 +2900,8 @@ function App() {
     const listeningAudio = jobs.some((job) => job.kind === 'listening') ? await getListeningTestAudio() : '';
 
     const demos: DemoArtifact[] = [];
+    // Filled by the first video job, which renders every video model at once.
+    let videoOutcomes: LineupOutcome[] | null = null;
     stopSkillRef.current = false;
     for (const [index, job] of jobs.entries()) {
       if (stopSkillRef.current) {
@@ -2670,7 +2912,7 @@ function App() {
       const label = job.kind === 'app-builder' ? `App Builder skill test — ${job.model}`
         : job.kind === 'code' ? `Code Challenge — ${job.model}`
         : job.kind === 'image' ? `Image skill test — ${job.model}`
-        : job.kind === 'video' ? `Video skill test — ${job.model}`
+        : job.kind === 'video' ? `Video skill test — ${videoEntries.find((entry) => entry.key === job.model)?.name ?? job.model}`
         : `Image recognition skill test — ${job.model}`;
       setSkillRunStatus({ phase: 'running', label, completed: index, total: jobs.length });
       setActivity(`Skill test ${index + 1}/${jobs.length}: ${label}. This can take a few minutes per model.`);
@@ -2740,20 +2982,44 @@ function App() {
           unsubscribe?.();
         }
       } else if (job.kind === 'video') {
-        // job.model is a ComfyUI video checkpoint. Every model in this batch
-        // gets the same seed, so what differs between them is the model.
-        setLiveBuild({ model: job.model, kind: 'image', text: '', done: false });
-        const run = await runVideoLabChallenge({
-          checkpoint: job.model,
-          textEncoder: videoEncoder,
-          sizeId: selection.videoSizeId,
-          promptId: selection.imagePrompt,
-          judgeModel: judgeCandidates(modelRows)[0],
-          ollamaBaseUrl: ollama.baseUrl,
-          seed: videoSeed,
+        // job.model is a lineup key. The batch's video models all render as
+        // one lineup the first time a video job comes up — the same seed and
+        // graph the Video Lab would use, and the frames judged only once every
+        // model has rendered, so none is timed while the judge sits in VRAM.
+        // Each later video job then reads its own result from it.
+        const entry = videoEntries.find((candidate) => candidate.key === job.model)!;
+        if (!videoOutcomes) {
+          const firstVideo = index;
+          const stopVideo = new AbortController();
+          videoOutcomes = await runVideoLineupLive({
+            entries: videoEntries,
+            promptId: selection.imagePrompt,
+            judgeModel: pictureJudge || undefined,
+            ollamaBaseUrl: ollama.baseUrl,
+            seed: videoSeed,
+            signal: stopVideo.signal,
+            onProgress: (progress) => {
+              // Stop is honoured between models, as it is between other jobs.
+              if (stopSkillRef.current) stopVideo.abort();
+              if (progress.phase !== 'rendering') return;
+              setSkillRunStatus({
+                phase: 'running',
+                label: `Video skill test — ${progress.entry.name}`,
+                completed: firstVideo + progress.index,
+                total: jobs.length,
+              });
+              setLiveBuild({ model: progress.entry.name, kind: 'image', text: '', done: false });
+            },
+          });
+        }
+        const outcome = videoOutcomes.find((candidate) => candidate.entry.key === job.model);
+        // Stopped before this model's turn: there is nothing to record.
+        if (!outcome) continue;
+        result = toVideoLabResult(outcome.result, selection.imagePrompt, undefined, {
+          model: entry.name,
+          gpu: videoMachine.gpuName,
         });
-        result = toVideoLabResult(run, selection.imagePrompt);
-        setLiveBuild({ model: job.model, kind: 'image', text: '', done: true, error: result.error });
+        setLiveBuild({ model: entry.name, kind: 'image', text: '', done: true, error: result.error });
       } else {
         // Image generation can't stream tokens — show a "generating" state.
         // job.model is a ComfyUI checkpoint here, not an Ollama model.
@@ -2761,7 +3027,7 @@ function App() {
         const run = await runImageLabChallenge({
           checkpoint: job.model,
           promptId: selection.imagePrompt,
-          judgeModel: judgeCandidates(modelRows)[0],
+          judgeModel: pictureJudge || undefined,
           ollamaBaseUrl: ollama.baseUrl,
         });
         result = toLabResult(run, selection.imagePrompt);
@@ -2790,7 +3056,8 @@ function App() {
             responseChars: result.response?.length ?? 0,
             producedImage: Boolean(result.imageDataUrl),
             error: result.error ?? null,
-            failedChecks: (result.checks ?? []).filter((check) => !check.passed).map((check) => `${check.label}: ${check.detail}`),
+            failedChecks: (result.checks ?? []).filter((check) => checkState(check) === 'failed').map((check) => `${check.label}: ${check.detail}`),
+            notChecked: (result.checks ?? []).filter((check) => checkState(check) === 'unchecked').map((check) => check.label),
           },
         });
         if (job.kind === 'app-builder') {
@@ -2805,7 +3072,9 @@ function App() {
           // A video's viewable artifact is its judged frame, so it rides the
           // image kind; without this branch the frame was produced, scored,
           // saved — and then silently dropped from the results popup.
-          demos.push({ model: job.model, kind: 'image', imageDataUrl: result.imageDataUrl, note: describeLabFailure(result), grade: result.grade, score: result.score });
+          // result.model rather than job.model: a video job's key is an id,
+          // and its result carries the name a person reads.
+          demos.push({ model: result.model, kind: 'image', imageDataUrl: result.imageDataUrl, note: describeLabFailure(result), grade: result.grade, score: result.score });
         } else if (job.kind === 'vision') {
           demos.push({ model: job.model, kind: 'vision', imageDataUrl: result.imageDataUrl, description: result.response, note: describeLabFailure(result), grade: result.grade, score: result.score });
         }
@@ -2825,10 +3094,10 @@ function App() {
     } else if (!stopSkillRef.current) {
       setActivity(`Skill tests finished (${jobs.length} run${jobs.length === 1 ? '' : 's'}). Lab Grades are saved in Settings → Advanced Lab.`);
     }
-    // modelRows is read to pick a vision model to judge the generated image;
-    // without it here the run would judge with whatever was installed when this
-    // callback was last built.
-  }, [ollama.baseUrl, skillTestSelection, effectiveJudge, modelRows]);
+    // pictureJudge checks the pictures and clips, and modelRows says which
+    // models can hear; without them here the run would use whatever was
+    // installed when this callback was last built.
+  }, [ollama.baseUrl, skillTestSelection, effectiveJudge, modelRows, videoMachine, pictureJudge]);
 
   // One improve pass: hand the model its previous attempt (plus an optional user
   // hint), stream the rebuild into the live view, and return the new result — or
@@ -2970,6 +3239,8 @@ function App() {
     // Captured before the modal closes: every result from this run carries the
     // contention that was measured when the user chose to start it.
     runGpuContentionRef.current = pendingGpuContention?.level;
+    // And where the fader stood when they chose to start.
+    runBalanceRef.current = balances[runChannel];
     setPendingRunMode(null);
     setPendingSingleModel(null);
 
@@ -2992,7 +3263,7 @@ function App() {
     if (mode === 'speed-date') {
       void runListTest().then(() => runSkillTestsAfterRun(skillModels)).catch(reportSkillRunFailure);
     }
-  }, [pendingGpuContention, pendingRunMode, pendingSingleModel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, skillTestSelection, startBenchmark, reportSkillRunFailure]);
+  }, [balances, pendingGpuContention, pendingRunMode, pendingSingleModel, runChannel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, skillTestSelection, startBenchmark, reportSkillRunFailure]);
 
   const cancelPendingRun = useCallback(() => {
     setPendingRunMode(null);
@@ -3055,8 +3326,8 @@ function App() {
   }, [themeId]);
 
   useEffect(() => {
-    writeLocal(SCORE_PRIORITY_STORAGE_KEY, scorePriority);
-  }, [scorePriority]);
+    writeLocalJson(BALANCE_STORAGE_KEY, balances);
+  }, [balances]);
 
   /**
    * Saved through the same fallback ladder the history uses. Transcripts are
@@ -3233,10 +3504,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (queuedRows.length > 0 && !isPullingModels && !isPullPaused && ollama.ready) {
+    // Not while the Video Lab's own download runs: two file streams would
+    // share one Stop, and it would reach only the newer.
+    if (queuedRows.length > 0 && !isPullingModels && !isPullPaused && ollama.ready && !labDownloadName) {
       void pullQueuedModels();
     }
-  }, [isPullPaused, isPullingModels, ollama.ready, pullQueuedModels, queuedRows.length]);
+  }, [isPullPaused, isPullingModels, ollama.ready, pullQueuedModels, queuedRows.length, labDownloadName]);
 
   const prevTopScoreRef = useRef<number | null>(null);
   useEffect(() => {
@@ -3261,7 +3534,8 @@ function App() {
       .filter((item) => item.id !== 'history' || hasScores)
       .filter((item) => item.id !== 'agent' || hasScores);
   }, [scoredModelCount, uiMode]);
-  const showGlobalLineup = uiMode === 'advanced' && LINEUP_STRIP_SCREENS.includes(activeNavId);
+  // The Speed Dating lineup means nothing on a channel Speed Dating cannot test.
+  const showGlobalLineup = uiMode === 'advanced' && LINEUP_STRIP_SCREENS.includes(activeNavId) && !comparedWorkbench;
 
   useEffect(() => {
     if (visibleNavItems.some((item) => item.id === activeNavId)) return;
@@ -3359,11 +3633,28 @@ function App() {
           isListTesting={isListTesting}
           benchmarkActive={isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running)}
           runProgress={runProgress}
-          onStartShow={() => { void runListTest(); }}
+          onStartShow={() => {
+            // Every score this show produces records where the fader stood.
+            runBalanceRef.current = balances.chat;
+            void runListTest();
+          }}
+          balance={balances.chat}
+          onBalanceChange={(value) => setBalance('chat', value)}
           onStopShow={requestStopRun}
           winner={wizardWinner}
           lineupResults={wizardLineupResults}
           generation={generationSummary}
+          videoLineup={{
+            comfyReachable,
+            comfyFolders,
+            judgeModel: pictureJudge,
+            ollamaBaseUrl: ollama.baseUrl,
+            onCheckComfy: () => { void refreshComfyStatus(); },
+            onDownloadModel: requestLabDownload,
+            onStopDownload: stopLabDownload,
+            balance: balances.video,
+            onBalanceChange: (value) => setBalance('video', value),
+          }}
           onChatWithWinner={openChatWithWinner}
           onOpenScorecard={() => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('history'); }}
           onRunAgain={() => undefined}
@@ -3420,18 +3711,27 @@ function App() {
         comfyReachable={comfyReachable}
         deckExpanded={deckExpanded}
         onDeckExpandedChange={(expanded) => { setDeckExpanded(expanded); writeDeckExpanded(expanded); }}
+        workbench={workbench}
+        onWorkbenchChange={chooseWorkbench}
+        channelWinner={channelWinner}
+        balance={balances[activeChannel]}
+        onBalanceChange={(value) => setBalance(activeChannel, value)}
+        balanceLocked={balanceLock(activeChannel)}
+        onOpenChannel={() => selectNav(workbenchInfo.home)}
       />
 
       <SideMenu
         items={visibleNavItems}
         ollamaReady={ollama.ready || lmStudio.ready}
-        modelCount={modelRows.length}
+        modelCount={channelModelCount}
         shortlistCount={shortlistedRows.length}
         newModelDropCount={modelNews.latestNewModelIds.length}
-        isRunning={isBenchmarking || isListTesting}
+        isRunning={isBenchmarking || isListTesting || Boolean(renderActivity)}
         activeId={activeNavId}
         scoredCount={scoredModelCount}
         topPickMeta={topRigPick?.score ? topRigPick.score.grade : (scoredModelCount > 0 ? 'Ready' : 'Wait')}
+        comparisonMeta={channelMetas.comparison}
+        scorecardMeta={channelMetas.scorecards}
         uiMode={uiMode}
         onSelect={selectNav}
         onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
@@ -3478,11 +3778,40 @@ function App() {
         )}
         {activeNavId === 'models' && (
           <ModelCabinet
+            // Keyed by channel, so switching re-applies the channel's filter and
+            // All starts unfiltered instead of keeping the last channel's.
+            key={workbenchInfo.id}
             active={true}
             rows={modelRows}
             comfyFolderSet={Boolean(comfySettings.folder)}
-            goalLens={taskFilterForGoal(selectedGoals[0])}
-            onOpenLab={() => selectNav('activity')}
+            goalLens={workbenchInfo.taskFilter ?? undefined}
+            generationTest={{
+              comfyReachable,
+              comfyFolders,
+              judgeModel: pictureJudge,
+              listenerModel: audioListener,
+              ollamaBaseUrl: ollama.baseUrl,
+              machine: videoMachine,
+              balances,
+              onBalanceChange: setBalance,
+              lockedReason: balanceLock,
+              gpuBusy,
+              onCheckComfy: () => { void refreshComfyStatus(); },
+              // From the All channel too: comparing pictures is the Images
+              // channel's Comparison, not chat's Speed Dating.
+              onOpenComparison: (channel) => { chooseWorkbench(channel); selectNav('speedDate'); },
+            }}
+            channel={workbenchInfo.id}
+            renderingModelId={renderActivity?.solo ? renderActivity.key : null}
+            skillTest={{
+              ollamaBaseUrl: ollama.baseUrl,
+              ollamaReady: ollama.ready,
+              balances,
+              onBalanceChange: setBalance,
+              gpuBusy,
+              onOpenListeningLab: () => selectNav('activity'),
+              onOpenComparison: () => selectNav('speedDate'),
+            }}
             // Settings already explains ComfyUI in plain language; window.open
             // was popup-blocked in the browser preview and the review found the
             // button dead. In-app navigation cannot be blocked.
@@ -3562,7 +3891,34 @@ function App() {
             onOpenModel={(model) => { setSelectedModel(model); selectNav('models'); }}
           />
         )}
-        {activeNavId === 'speedDate' && (
+        {activeNavId === 'speedDate' && comparedWorkbench && (
+          <ChannelComparisonPanel
+            workbench={comparedWorkbench}
+            labResults={labResults}
+            // A model tested on its own from the Models screen is not part of the race.
+            lineup={{
+              record: lineupSession.record,
+              running: lineupSession.running && !lineupSession.solo,
+              current: lineupSession.solo ? null : lineupSession.current,
+            }}
+            balance={balances[activeChannel]}
+            onBalanceChange={(value) => setBalance(activeChannel, value)}
+            lockedReason={balanceLock(activeChannel)}
+            onOpenLab={() => selectNav('activity')}
+            run={{
+              comfyReachable,
+              comfyFolders,
+              judgeModel: pictureJudge,
+              listenerModel: audioListener,
+              ollamaBaseUrl: ollama.baseUrl,
+              machine: videoMachine,
+              gpuBusy,
+              onCheckComfy: () => { void refreshComfyStatus(); },
+              onOpenModels: () => selectNav('models'),
+            }}
+          />
+        )}
+        {activeNavId === 'speedDate' && !comparedWorkbench && (
           <SpeedDatePanel
             active={true}
             host={selectedHost}
@@ -3584,6 +3940,10 @@ function App() {
             onRemoveCandidate={toggleShortlist}
             onQueueMissingModels={requestThirdPartyModelDownloads}
             onRunListTest={requestListTest}
+            workbench={workbenchInfo}
+            balance={balances[activeChannel]}
+            onBalanceChange={(value) => setBalance(activeChannel, value)}
+            labResults={labResults}
           />
         )}
         {activeNavId === 'agent' && (
@@ -3629,6 +3989,15 @@ function App() {
             onRerunTest={requestBenchmarkForModel}
             onStopBenchmark={requestStopRun}
             onStopSkillTests={requestStopSkills}
+            onDownloadGenerationModel={requestLabDownload}
+            onStopGenerationDownload={stopLabDownload}
+            workbench={workbenchInfo}
+            balances={balances}
+            onBalanceChange={setBalance}
+            onOpenComparison={() => selectNav('speedDate')}
+            render={renderActivity}
+            onOpenRender={openRender}
+            lastRender={renderOutcome}
           />
         )}
         {(activeNavId === 'history' || activeNavId === 'settings') && (
@@ -3653,8 +4022,6 @@ function App() {
             isLoadingLogs={isLoadingLogs}
             onThemeChange={selectTheme}
             onUiModeChange={selectUiMode}
-            scorePriority={scorePriority}
-            onScorePriorityChange={setScorePriority}
             onEditGoals={() => setShowGoalsEditor(true)}
             onDeleteModel={requestDeleteModel}
             onRefreshLogs={loadLogs}
@@ -3672,6 +4039,11 @@ function App() {
             onDownloadUpdate={downloadUpdate}
             onInstallUpdate={installUpdate}
             onSelectTopPick={(model) => { setSelectedModel(model); selectNav('agent'); }}
+            workbench={workbenchInfo}
+            channelBalance={balances[activeChannel]}
+            onChannelBalanceChange={(value) => setBalance(activeChannel, value)}
+            channelBalanceLock={balanceLock(activeChannel)}
+            labResults={labResults}
           />
         )}
       </main>
@@ -3710,6 +4082,8 @@ function App() {
         onPauseQueue={pauseDownloadQueue}
         onCancelQueue={cancelDownloadQueue}
         onOpenDownloads={() => selectNav('models')}
+        render={renderActivity}
+        onOpenRender={openRender}
         onOpenChat={async () => {
           if (isDesktopRuntime) {
             const result = await agentArcadeApi.openChatApp();
@@ -3861,8 +4235,8 @@ function App() {
           onChangeQuestionCount={setBenchmarkQuestionCount}
           onLoadPreset={setBenchmarkQuestions}
           autoJudgeModel={autoJudgeModels.find((m) => m !== (pendingSingleModel ?? selectedModel)) ?? ''}
-          goalPresetId={presetIdForGoal(selectedGoals[0])}
-          goalDesire={selectedGoals[0] ? goalById(selectedGoals[0])?.desire.toLowerCase() : undefined}
+          goalPresetId={presetIdForGoal(runGoal)}
+          goalDesire={runGoal ? goalById(runGoal)?.desire.toLowerCase() : undefined}
           onEditQuestions={() => { cancelPendingRun(); setSuiteEditorOpen(true); }}
           qualityMode={qualityMode}
           judgeModel={effectiveJudgeModel}
@@ -3886,7 +4260,19 @@ function App() {
             : shortlistedRows.filter((row) => row.installed).slice(0, 5)
           ).some((row) => canHearAudio(row))}
           comfyCheckpoints={comfyCheckpoints}
-          comfyTextEncoders={comfyTextEncoders}
+          videoLineup={(() => {
+            // Worked out only while this dialog is open, which is the one place that asks.
+            const calibration = readVideoCalibration();
+            const entries = runnableLineup(comfyFolders, videoMachine, { calibration });
+            const text = formatVideoEstimate(estimateLineup(entries, videoMachine, { calibration }), { roughNote: false });
+            return { count: entries.length, estimate: text.charAt(0).toLowerCase() + text.slice(1) };
+          })()}
+          balance={{
+            value: balances[runChannel],
+            onChange: (value) => setBalance(runChannel, value),
+            channel: workbenchById(runChannel).label,
+            accuracyMeans: workbenchById(runChannel).accuracyMeans,
+          }}
         />
       )}
 
@@ -3928,6 +4314,14 @@ function App() {
           rows={pendingThirdPartyDownloadRows}
           onCancel={() => setPendingThirdPartyDownloadRows(null)}
           onConfirm={confirmThirdPartyModelDownloads}
+        />
+      )}
+
+      {pendingLabDownload && (
+        <ThirdPartyDownloadConsentModal
+          rows={[pendingLabDownload]}
+          onCancel={() => setPendingLabDownload(null)}
+          onConfirm={() => void confirmLabDownload()}
         />
       )}
 

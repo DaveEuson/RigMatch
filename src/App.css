@@ -9204,6 +9204,122 @@ tbody tr.computer-row.selected {
   height: 11px;
 }
 
+/* A render in flight, wherever it was started, takes the tip's place until it
+   ends: what is rendering, for how long, and a way to stop it, on every screen.
+   It shares the tip's flexible track, so it never adds a column. */
+.ticker-learn.rendering {
+  align-items: center;
+}
+
+.ticker-label-render {
+  color: var(--gold);
+  background: rgba(var(--gold-rgb), 0.12);
+  border: 1px solid rgba(var(--gold-rgb), 0.3);
+}
+
+.ticker-render-open {
+  all: unset;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.ticker-render-open:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.ticker-render-open strong {
+  flex-shrink: 0;
+  color: var(--text-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.ticker-render-clock {
+  flex-shrink: 0;
+  color: var(--gold);
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ticker-render-stop {
+  flex: none;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 105, 180, 0.28);
+  border-radius: 8px;
+  color: var(--pink);
+  background: rgba(238, 0, 85, 0.08);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.6rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.ticker-render-stop svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* A model being tested with its panel closed says so on its own row. */
+.model-table .mini-button.rendering {
+  border-color: rgba(var(--gold-rgb), 0.6);
+  color: var(--gold);
+}
+
+.activity-render-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.activity-render-last.failed {
+  color: var(--red);
+}
+
+/* Your ear as the judge, under a made clip: the pressed answer is the clip's accuracy. */
+.ear-verdict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ear-verdict .mini-button svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* A comparison card is too narrow for the question and both answers on one
+   line, and one answer wrapping alone reads as a separate control. */
+.lab-comparison-card .ear-verdict > span {
+  flex-basis: 100%;
+}
+
+.ear-verdict .sounds-right[aria-pressed='true'] {
+  border-color: rgba(var(--green-rgb), 0.7);
+  background: rgba(var(--green-rgb), 0.16);
+  color: var(--green);
+}
+
+.ear-verdict .sounds-wrong[aria-pressed='true'] {
+  border-color: rgba(var(--red-rgb), 0.7);
+  background: rgba(var(--red-rgb), 0.14);
+  color: var(--red);
+}
+
 @media (max-width: 1320px) {
   .ticker.has-download-dock {
     grid-template-columns: max-content minmax(0, 1fr) minmax(260px, 360px) max-content;
@@ -10681,21 +10797,6 @@ tbody tr.computer-row.selected {
   gap: 10px;
 }
 
-/* Says what switching does and does not cost, next to the switch. Someone
-   changing what "best" means needs to know it re-summarises saved results
-   rather than throwing them away — otherwise the safe move is not to touch
-   it. */
-.score-priority-note {
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.score-priority-picker .mode-toggle {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .ui-mode-picker > div:first-child span,
 .theme-picker > div:first-child span {
   display: block;
@@ -11129,6 +11230,11 @@ tbody tr.computer-row.selected {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
   gap: 10px;
+}
+
+/* A lone last card spans the grid rather than leaving half a row empty. */
+.advanced-lab-grid > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
 }
 
 .advanced-lab-card {
@@ -11836,6 +11942,16 @@ tbody tr.computer-row.selected {
   color: var(--red);
 }
 
+/* Nothing measured this line, so neither green nor red, and dashed. */
+.advanced-lab-checks div.unchecked {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.advanced-lab-checks div.unchecked span {
+  color: var(--muted);
+}
+
 .advanced-lab-checks strong {
   display: block;
   margin-top: 3px;
@@ -11958,6 +12074,812 @@ tbody tr.computer-row.selected {
   border-radius: 12px;
   background: #080d10;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
+}
+
+/* A licence condition that decides whether someone may use a model at all. */
+.third-party-download-conditions {
+  padding: 8px 10px;
+  border: 1px solid rgba(var(--gold-rgb), 0.3);
+  border-radius: 10px;
+  background: rgba(var(--gold-rgb), 0.08);
+  color: var(--text);
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.third-party-download-conditions strong {
+  color: var(--gold);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.third-party-download-conditions ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.third-party-download-conditions em {
+  color: var(--text-strong);
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* ── Video lineup ─────────────────────────────────────────────────────────── */
+
+.video-lineup-setup {
+  display: grid;
+  gap: 8px;
+}
+
+.video-lineup-note {
+  padding: 8px 10px;
+  border: 1px solid rgba(114, 181, 202, 0.28);
+  border-radius: 10px;
+  background: rgba(114, 181, 202, 0.08);
+  color: var(--text);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.video-lineup-note > span {
+  flex: 1 1 320px;
+}
+
+.video-lineup-list {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.video-lineup-row {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 2.3fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(118px, auto);
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 11px;
+}
+
+.video-lineup-row:first-child {
+  border-top: 0;
+}
+
+.video-lineup-row-head {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.video-lineup-row.picked {
+  background: rgba(var(--primary-rgb), 0.08);
+}
+
+.video-lineup-name {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.video-lineup-row.unavailable .video-lineup-name {
+  cursor: default;
+}
+
+.video-lineup-name input {
+  margin: 0;
+  accent-color: var(--gold);
+}
+
+.video-lineup-name > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.video-lineup-name strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-lineup-name em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.video-lineup-fit {
+  justify-self: start;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.video-lineup-fit.fits {
+  background: rgba(143, 192, 103, 0.14);
+  color: var(--green);
+}
+
+.video-lineup-fit.offload {
+  background: rgba(var(--gold-rgb), 0.14);
+  color: var(--gold);
+}
+
+.video-lineup-fit.too-big {
+  background: rgba(255, 90, 90, 0.1);
+  color: var(--red);
+}
+
+.video-lineup-fit.needs-token {
+  background: rgba(114, 181, 202, 0.13);
+  color: var(--blue);
+}
+
+.video-lineup-time,
+.video-lineup-output {
+  font-variant-numeric: tabular-nums;
+}
+
+.video-lineup-output {
+  color: var(--muted);
+}
+
+.video-lineup-action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.video-lineup-ondisk {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--green);
+  font-weight: 800;
+}
+
+.video-lineup-ondisk svg {
+  width: 13px;
+  height: 13px;
+}
+
+.video-lineup-na {
+  color: var(--muted);
+}
+
+.video-lineup-downloading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--blue);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.video-lineup-error {
+  flex-basis: 100%;
+  color: var(--red);
+  font-size: 10px;
+  font-style: normal;
+  text-align: right;
+}
+
+.video-lineup-more {
+  justify-self: start;
+}
+
+.video-lineup-start {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.video-lineup-confirm {
+  padding: 10px;
+  border: 1px solid rgba(var(--gold-rgb), 0.34);
+  border-radius: 10px;
+  background: rgba(var(--gold-rgb), 0.08);
+  color: var(--text);
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.video-lineup-confirm > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--gold);
+}
+
+.video-lineup-confirm > div {
+  display: grid;
+  gap: 6px;
+}
+
+.video-lineup-confirm strong {
+  color: var(--text-strong);
+  font-size: 12px;
+}
+
+.video-lineup-results {
+  display: grid;
+  gap: 10px;
+}
+
+.video-lineup-results-head {
+  display: grid;
+  gap: 3px;
+}
+
+.video-lineup-results-head strong {
+  color: var(--text-strong);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.video-lineup-results-head span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.video-lineup-board {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  list-style: none;
+}
+
+.video-lineup-board li {
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 11px;
+}
+
+.video-lineup-board li > b:first-child {
+  color: var(--gold);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.video-lineup-board li > b:first-child svg {
+  width: 14px;
+  height: 14px;
+}
+
+.video-lineup-board li > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.video-lineup-board strong {
+  color: var(--text-strong);
+  font-size: 12px;
+}
+
+.video-lineup-board em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.video-lineup-board li.failed {
+  border-color: rgba(255, 90, 90, 0.24);
+  background: rgba(255, 90, 90, 0.06);
+}
+
+.video-lineup-board li.failed em {
+  color: var(--red);
+}
+
+.video-lineup-board li.rendering {
+  border-color: rgba(var(--primary-rgb), 0.3);
+}
+
+.video-lineup-board li.waiting {
+  opacity: 0.7;
+}
+
+.video-lineup-board-time {
+  color: var(--text-strong);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.video-lineup-clips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.video-lineup-clip {
+  margin: 0;
+  padding: 6px;
+  border: 1px solid rgba(var(--gold-rgb), 0.24);
+  border-radius: 12px;
+  background: #080d10;
+  display: grid;
+  gap: 6px;
+}
+
+.video-lineup-clip img,
+.video-lineup-clip video,
+.video-lineup-clip-empty {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 8px;
+  background: #05080a;
+  object-fit: contain;
+}
+
+.video-lineup-clip-empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.video-lineup-clip figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.video-lineup-clip figcaption strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-strong);
+}
+
+.video-lineup-clip .video-lineup-error {
+  text-align: left;
+}
+
+/* ComfyUI starting, shown wherever a Start button would be: one start, seen
+   on every screen that offers it. */
+.comfy-start-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.comfy-start-status svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--gold);
+}
+
+.comfy-start-status.ready svg {
+  color: var(--green);
+}
+
+/* Empty-state boxes set their spans as paragraphs; this one stays a line. */
+.utility-empty .comfy-start-status {
+  display: inline-flex;
+  margin-top: 0;
+  font-size: 11px;
+}
+
+.comfy-start-status > span,
+.utility-empty .comfy-start-status > span {
+  display: inline;
+  margin: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+/* In a note it sits where the note's button would, on one line. */
+.model-filter-note .comfy-start-status {
+  flex: none;
+  margin-left: auto;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+/* A picture or video model's Test, opened under its own row on the Models
+   screen. The cell spans the table and holds a layout of its own, so it
+   undoes the table's one-line, clipped cells. */
+.model-table tr.testing > td {
+  background: rgba(var(--gold-rgb), 0.08);
+}
+
+.model-table tr.generation-test-row > td {
+  padding: 2px 8px 12px;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  background: rgba(var(--gold-rgb), 0.04);
+}
+
+.row-actions .mini-button[aria-expanded='true'] {
+  border-color: rgba(var(--gold-rgb), 0.62);
+  color: var(--gold);
+}
+
+/* The channel's own test from a model's row: listening, or reading a picture.
+   It shares the picture and video test's frame and layout below. */
+.skill-test-about {
+  max-width: 70ch;
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* One row for the four bundled pictures at every panel width: auto-fill laid
+   them out three and one inside the panel's content-sized column. */
+.skill-test-pictures {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.skill-test-pictures button {
+  min-width: 0;
+  padding: 4px;
+  border: 1px solid rgba(255, 249, 239, 0.1);
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  display: grid;
+  gap: 4px;
+  font: 11px/1.2 var(--ui);
+  cursor: pointer;
+}
+
+.skill-test-pictures button[aria-pressed='true'] {
+  border-color: rgba(var(--gold-rgb), 0.6);
+  background: rgba(var(--gold-rgb), 0.1);
+  color: var(--text-strong);
+}
+
+.skill-test-pictures button:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.skill-test-pictures img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+/* The test pictures are wide scenes, not square renders: shown at their own shape. */
+.skill-test.reading .generation-test-picture img {
+  height: auto;
+  max-height: 220px;
+  aspect-ratio: auto;
+}
+
+.skill-test-answer {
+  margin-bottom: 0;
+}
+
+.skill-test-answer > strong {
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.generation-test-meta b {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sticky and sized to the visible part of the table (set from the component),
+   so a table that scrolls sideways does not carry the result off screen. */
+.generation-test {
+  position: sticky;
+  left: 8px;
+  box-sizing: border-box;
+  scroll-margin-top: 48px;
+  display: grid;
+  grid-template-columns: minmax(250px, 1fr) minmax(230px, 290px) minmax(240px, 1fr);
+  grid-template-areas:
+    "head head head"
+    "setup fader result";
+  gap: 14px 18px;
+  align-items: start;
+  padding: 12px 14px 14px;
+  border: 1px solid rgba(var(--gold-rgb), 0.32);
+  border-radius: 12px;
+  background: rgba(5, 9, 12, 0.72);
+}
+
+.generation-test:focus {
+  outline: none;
+}
+
+.generation-test:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.generation-test-head {
+  grid-area: head;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.generation-test-head > svg {
+  width: 22px;
+  height: 22px;
+  color: var(--gold);
+}
+
+.generation-test-head span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.generation-test-head strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-strong);
+  font-size: 14px;
+  text-wrap: balance;
+}
+
+.generation-test-setup,
+.generation-test-result {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.generation-test-setup {
+  grid-area: setup;
+}
+
+.generation-test > .balance-fader {
+  grid-area: fader;
+}
+
+.generation-test-result {
+  grid-area: result;
+}
+
+.generation-test-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.generation-test-lab-link {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font: 11px/1.3 var(--ui);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.generation-test-lab-link:hover,
+.generation-test-lab-link:focus-visible {
+  color: var(--green);
+}
+
+.generation-test-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.generation-test-picture {
+  margin: 0;
+  padding: 6px;
+  border: 1px solid rgba(var(--gold-rgb), 0.26);
+  border-radius: 12px;
+  background: #080d10;
+  display: grid;
+  gap: 6px;
+}
+
+.generation-test-picture img,
+.generation-test-picture video,
+.generation-test-empty {
+  width: 100%;
+  max-height: 300px;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  background: #05080a;
+  object-fit: contain;
+}
+
+.generation-test.video .generation-test-picture img,
+.generation-test.video .generation-test-picture video,
+.generation-test.video .generation-test-empty {
+  aspect-ratio: 16 / 10;
+}
+
+/* A clip of audio has nothing to look at, so the player stands where the picture would. */
+.generation-test.audio .generation-test-empty {
+  aspect-ratio: auto;
+  min-height: 48px;
+}
+
+/* Every theme is dark, so the browser's own controls are drawn dark to match. */
+.audio-clip-player {
+  width: 100%;
+  height: 40px;
+  color-scheme: dark;
+}
+
+.audio-clip-load {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+
+.generation-test-empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.generation-test-picture figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.generation-test-picture figcaption strong {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.generation-test-picture figcaption .passed {
+  color: var(--green);
+}
+
+.generation-test-picture figcaption .short {
+  color: var(--red);
+}
+
+.generation-test-picture figcaption .unjudged {
+  color: var(--muted);
+}
+
+.generation-test-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.generation-test-placeholder {
+  min-height: 180px;
+  padding: 16px;
+  border: 1px dashed rgba(var(--gold-rgb), 0.28);
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.generation-test-placeholder svg {
+  width: 26px;
+  height: 26px;
+  color: rgba(var(--gold-rgb), 0.6);
+}
+
+.generation-test .advanced-lab-checks {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.generation-test .advanced-lab-checks div {
+  padding: 6px 8px;
+}
+
+/* Laid out for the part of the table that shows, not the window: the filter
+   rail, the side menu and the model card take their share first. The result
+   keeps its place beside the Run button for as long as two columns fit, so a
+   finished test is seen without scrolling. */
+.generation-test.medium {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "head head"
+    "setup result"
+    "fader result";
+}
+
+.generation-test.narrow {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "head"
+    "setup"
+    "fader"
+    "result";
+}
+
+@media (max-width: 900px) {
+  .video-lineup-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .video-lineup-row-head {
+    display: none;
+  }
+
+  .video-lineup-name {
+    grid-column: 1 / -1;
+  }
 }
 
 .utility-empty.compact {
@@ -19260,4 +20182,883 @@ a.whats-next-support:hover {
   font-size: 11px;
   opacity: 0.65;
   white-space: nowrap;
+}
+
+/* ── Channels and the Balance fader ──────────────────────────────────────
+   What Advanced Mode is testing, and how much accuracy counts against speed.
+   The active channel is the accent, never gold: gold is the verdict, and
+   choosing what to look at is not one. The fader is console hardware: a plum
+   slot, a cream cap, detents at the three old presets. */
+
+.channel-switch {
+  grid-column: 1 / -1;
+  /* As wide as its answers, not as wide as the tracks it spans: the
+     deck's five tracks are wider than a 1280px window, which an empty last
+     track hid until something spanned it. */
+  justify-self: start;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 249, 239, 0.1);
+  border-radius: 10px;
+  background: rgba(7, 11, 13, 0.42);
+}
+
+.channel-switch > span {
+  padding: 0 8px 0 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.channel-switch button {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.12s ease-out, background-color 0.12s ease-out, border-color 0.12s ease-out;
+}
+
+.channel-switch button svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.channel-switch button:not(.active):hover {
+  color: var(--text-strong);
+  border-color: rgba(255, 249, 239, 0.16);
+  background: var(--panel-hover);
+}
+
+.channel-switch button:active {
+  transform: translateY(1px);
+}
+
+.channel-switch button.active {
+  color: var(--text-strong);
+  border-color: rgba(var(--primary-rgb), 0.62);
+  background: rgba(var(--primary-rgb), 0.18);
+  box-shadow: inset 0 -2px 0 rgba(var(--primary-rgb), 0.9);
+}
+
+.channel-switch button:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+/* The winner card makes room for its fader on the right. */
+.top-deck-winner.with-fader {
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+}
+
+.top-deck-winner.with-fader.channel {
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+}
+
+/* An empty card with something to press is not disabled, so it should not look it. */
+.top-deck-winner.empty:has(button) {
+  opacity: 0.82;
+}
+
+.top-deck-see-btn {
+  width: fit-content;
+  min-height: 24px;
+  margin-top: 4px;
+  padding: 4px 9px;
+  border: 1px solid rgba(255, 249, 239, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 249, 239, 0.06);
+  color: var(--text);
+  /* A button's label has to be read to be used: 10px, like Use this model. */
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.top-deck-winner-actions .top-deck-see-btn {
+  margin-top: 0;
+}
+
+.top-deck-see-btn:hover {
+  color: var(--text-strong);
+  border-color: rgba(255, 249, 239, 0.3);
+  background: var(--panel-hover);
+}
+
+.balance-fader {
+  --fader-slot-h: 128px;
+  --fader-slot-w: 34px;
+  --fader-cap-w: 28px;
+  --fader-cap-h: 14px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 249, 239, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 249, 239, 0.03);
+}
+
+.balance-fader.mini {
+  --fader-slot-h: 52px;
+  /* 24px wide, the smallest target WCAG 2.2 allows, though the cap is narrower. */
+  --fader-slot-w: 24px;
+  --fader-cap-w: 16px;
+  --fader-cap-h: 8px;
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.balance-fader-console {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 8px 9px;
+  border-radius: 9px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  box-shadow: inset 0 0 0 1px rgba(255, 249, 239, 0.06), 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.balance-fader.mini .balance-fader-console {
+  padding: 4px 3px;
+  border-radius: 7px;
+}
+
+.balance-fader-end {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.balance-fader-slot {
+  position: relative;
+  box-sizing: border-box;
+  width: var(--fader-slot-w);
+  height: var(--fader-slot-h);
+  padding: calc(var(--fader-cap-h) / 2) 0;
+  border-radius: 6px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.balance-fader-slot:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.balance-fader-rail {
+  position: relative;
+  display: block;
+  height: 100%;
+}
+
+.balance-fader-tick {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 249, 239, 0.22);
+  transform: translateY(50%);
+}
+
+.balance-fader-tick.on {
+  height: 2px;
+  background: rgba(var(--primary-rgb), 0.95);
+}
+
+.balance-fader-groove {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 6px;
+  transform: translateX(-50%);
+  border-radius: 3px;
+  background: var(--bg);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 249, 239, 0.06);
+}
+
+.balance-fader.mini .balance-fader-groove {
+  width: 4px;
+}
+
+.balance-fader-cap {
+  position: absolute;
+  left: 50%;
+  bottom: var(--balance, 50%);
+  width: var(--fader-cap-w);
+  height: var(--fader-cap-h);
+  transform: translate(-50%, 50%);
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--text-strong), var(--text) 55%, color-mix(in srgb, var(--text) 76%, black));
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5), inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  transition: bottom 0.14s ease-out;
+}
+
+.balance-fader-cap::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+}
+
+.balance-fader.mini .balance-fader-cap::after {
+  left: 2px;
+  right: 2px;
+  height: 1px;
+}
+
+.balance-fader-slot.dragging .balance-fader-cap {
+  transition: none;
+}
+
+.balance-fader.locked .balance-fader-slot,
+.balance-fader.disabled .balance-fader-slot {
+  cursor: not-allowed;
+}
+
+.balance-fader.locked .balance-fader-console {
+  opacity: 0.55;
+}
+
+.balance-fader-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  align-content: center;
+}
+
+.balance-fader-question {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.balance-fader-readout {
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.balance-fader-readout em {
+  margin-left: 4px;
+  color: var(--text);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.balance-fader-notches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.balance-fader-notches button {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 249, 239, 0.16);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color 0.12s ease-out, background-color 0.12s ease-out, border-color 0.12s ease-out;
+}
+
+.balance-fader-notches button:not(.active):not(:disabled):hover {
+  color: var(--text-strong);
+  border-color: rgba(255, 249, 239, 0.28);
+  background: var(--panel-hover);
+}
+
+.balance-fader-notches button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.balance-fader-notches button.active {
+  color: var(--text-strong);
+  border-color: rgba(var(--primary-rgb), 0.62);
+  background: rgba(var(--primary-rgb), 0.18);
+}
+
+.balance-fader-notches button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.balance-fader-notches button:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.balance-fader-means {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.balance-fader.locked .balance-fader-means {
+  color: var(--text);
+}
+
+/* Ranked results the fader re-orders: the image and listening standings. */
+.lab-standings {
+  display: grid;
+  gap: 6px;
+}
+
+.lab-standings-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+}
+
+.lab-standings-head strong {
+  color: var(--text-strong);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.lab-standings-head span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.lab-standings ol {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  list-style: none;
+}
+
+.lab-standings li {
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 249, 239, 0.07);
+  border-radius: 10px;
+  background: rgba(255, 249, 239, 0.03);
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 11px;
+}
+
+.lab-standings li > b:first-child {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* Gold for the winner only: the thing that won. */
+.lab-standings li.ranked:first-child > b:first-child {
+  color: var(--gold);
+}
+
+.lab-standings li > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.lab-standings strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lab-standings em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.lab-standings li.unjudged {
+  opacity: 0.8;
+}
+
+.lab-standings li.failed,
+.video-lineup-board li.short {
+  border-color: rgba(var(--red-rgb), 0.24);
+  background: rgba(var(--red-rgb), 0.06);
+}
+
+.lab-standings li.failed em,
+.video-lineup-board li.short em {
+  color: var(--red);
+}
+
+.video-lineup-board li.unjudged {
+  opacity: 0.85;
+}
+
+.lab-standings-more {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+/* A channel tested somewhere else: a signpost, not a card to run. */
+.lab-channel-note {
+  border-style: dashed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .balance-fader-cap,
+  .channel-switch button,
+  .balance-fader-notches button {
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .balance-fader {
+    --fader-slot-h: 104px;
+    gap: 10px;
+    padding: 8px;
+  }
+
+  .channel-switch > span {
+    flex-basis: 100%;
+    padding: 2px 4px;
+  }
+}
+
+/* Collapsed, the deck hides its readouts and keeps its cards on one row, which
+   frees a track. The switch takes that track instead of adding a row, so
+   collapsing still gives the height back: on a 1280x820 window a second row
+   cost the side menu its last three items. The winner card's fader goes with
+   the readouts; its balance stays in the score line, and every test still asks
+   with the full fader. */
+.top-deck.collapsed .top-deck-winner > .balance-fader.mini {
+  display: none;
+}
+
+.top-deck.collapsed .top-deck-winner.with-fader {
+  grid-template-columns: 42px minmax(0, 1fr);
+}
+
+.top-deck.collapsed .top-deck-winner.with-fader.channel {
+  grid-template-columns: 28px minmax(0, 1fr);
+}
+
+@media (min-width: 1241px) {
+  /* Five tracks that fit a 1280px window, the last one wide enough for the
+     switch to wrap into four short lines. */
+  .top-deck.collapsed {
+    grid-template-columns:
+      minmax(210px, 0.85fr)
+      minmax(190px, 0.75fr)
+      minmax(230px, 0.95fr)
+      minmax(230px, 0.95fr)
+      minmax(300px, 1.2fr);
+  }
+
+  /* Clear of the expand button, which sits in this corner at 26px. */
+  .top-deck.collapsed > .channel-switch {
+    grid-column: 5;
+    grid-row: 1;
+    align-self: center;
+    justify-self: stretch;
+    width: auto;
+    margin-right: 20px;
+    gap: 3px 4px;
+  }
+
+  /* Eight answers take four lines in this track, one more than seven did. The
+     question steps aside here and the answers sit a little closer, which is the
+     height three lines and the question took before: at 1280x820 the extra line
+     pushed Settings off the end of the side menu. The group keeps its name for
+     screen readers, since aria-labelledby reads a hidden label. */
+  .top-deck.collapsed > .channel-switch > span {
+    display: none;
+  }
+
+  .top-deck.collapsed > .channel-switch button {
+    min-height: 24px;
+  }
+}
+
+/* ── Comparison and Scorecards per channel ───────────────────────────────
+   Images, Video and Listening compare what each model made, side by side;
+   Code ranks the coding answers alone. */
+
+.channel-comparison {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.channel-comparison-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 14px 14px;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.lab-comparison {
+  display: grid;
+  gap: 16px;
+}
+
+/* Several models on one prompt, run from the screen that shows them side by
+   side: pick, prompt, run, and the board below fills in. */
+.comparison-run {
+  padding: 12px 14px;
+  border: 1px solid rgba(var(--gold-rgb), 0.28);
+  border-radius: 12px;
+  background: rgba(5, 9, 12, 0.58);
+  display: grid;
+  gap: 10px;
+}
+
+.comparison-run-head {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.comparison-run-head > svg {
+  width: 22px;
+  height: 22px;
+  color: var(--gold);
+}
+
+.comparison-run-head span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.comparison-run-head strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-strong);
+  font-size: 14px;
+  text-wrap: balance;
+}
+
+.comparison-run > p {
+  max-width: 78ch;
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.comparison-run-models {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px;
+  list-style: none;
+}
+
+.comparison-run-models label {
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid rgba(255, 249, 239, 0.08);
+  border-radius: 10px;
+  background: var(--panel-2);
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  cursor: pointer;
+}
+
+.comparison-run-models label:has(input:checked) {
+  border-color: rgba(var(--gold-rgb), 0.55);
+  background: rgba(var(--gold-rgb), 0.08);
+}
+
+.comparison-run-models label:has(input:focus-visible) {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.comparison-run-models label:has(input:disabled) {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.comparison-run-models input {
+  margin: 2px 0 0;
+  accent-color: var(--gold);
+}
+
+.comparison-run-models strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.comparison-run-models em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.comparison-run-bar,
+.comparison-run-short {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.comparison-run-short {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.comparison-run-progress {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  list-style: none;
+}
+
+.comparison-run-progress li {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.comparison-run-progress li.drawing,
+.comparison-run-progress li.making,
+.comparison-run-progress li.checking {
+  background: rgba(var(--gold-rgb), 0.08);
+  color: var(--text-strong);
+}
+
+.comparison-run-progress li.failed {
+  background: rgba(var(--red-rgb), 0.06);
+  color: var(--red);
+}
+
+.comparison-run-progress em {
+  color: inherit;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+  text-align: right;
+}
+
+.lab-comparison-group {
+  display: grid;
+  gap: 8px;
+}
+
+.lab-comparison-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lab-comparison-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.lab-comparison-head strong {
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.lab-comparison-head span,
+.lab-comparison-head em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.lab-comparison-picture {
+  width: 96px;
+  height: 64px;
+  flex: none;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: inset 0 0 0 1px rgba(255, 249, 239, 0.08);
+}
+
+.lab-comparison-cards {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  list-style: none;
+}
+
+.lab-comparison-cards.listening,
+.lab-comparison-cards.reading,
+.lab-comparison-cards.audio {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.lab-comparison-card {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(255, 249, 239, 0.07);
+  border-radius: 10px;
+  background: var(--panel-2);
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+/* Gold for the one that won, and nothing else. */
+.lab-comparison-card.leads {
+  border-color: rgba(var(--gold-rgb), 0.55);
+}
+
+.lab-comparison-card.unjudged {
+  opacity: 0.85;
+}
+
+.lab-comparison-card.failed {
+  border-color: rgba(var(--red-rgb), 0.24);
+  background: rgba(var(--red-rgb), 0.06);
+}
+
+.lab-comparison-card.failed > em {
+  color: var(--red);
+}
+
+.lab-comparison-card img,
+.lab-comparison-missing {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  background: var(--bg);
+  object-fit: cover;
+}
+
+.lab-comparison-missing {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.lab-comparison-card-head {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.lab-comparison-card-head b {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.lab-comparison-card.leads .lab-comparison-card-head b {
+  color: var(--gold);
+}
+
+.lab-comparison-card-head strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lab-comparison-card-head .advanced-lab-grade {
+  padding: 3px 7px;
+  font-size: 11px;
+}
+
+.lab-comparison-card > em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.lab-comparison-text {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.speed-date-results li.unmeasured {
+  opacity: 0.7;
+}
+
+.coding-board {
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 249, 239, 0.03);
 }

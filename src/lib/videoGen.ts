@@ -174,13 +174,11 @@ export const VIDEO_OUTPUT_NODE = SAVE_VIDEO;
  * shape error no user could act on.
  */
 export function isVideoCheckpoint(name: string): boolean {
-  return /ltxv|ltx-video|\bwan\b|wan2|hunyuanvideo|mochi|cogvideo|svd|stable-video/i
+  // `ltx-2` because LTX-2 and LTX-2.3 ship as checkpoints named
+  // ltx-2-19b-… and ltx-2.3-22b-…, which match neither `ltxv` nor
+  // `ltx-video` — so the Image Lab offered them as picture models.
+  return /ltxv|ltx-video|ltx-2\b|\bwan\b|wan2|hunyuan_?video|mochi|cogvideo|svd|stable-video/i
     .test(name || '');
-}
-
-/** T5 text encoders, which an LTX graph needs and cannot run without. */
-export function isTextEncoder(name: string): boolean {
-  return /t5|umt5|text_encoder/i.test(name || '');
 }
 
 /**

@@ -193,7 +193,9 @@ try {
     record(`${channel} is registered`, state === 'registered', state === 'registered' ? undefined : state);
   }
 
-  await page.getByLabel('Settings').click();
+  // Exact: a label match is a substring match, and the Balance fader on the
+  // Scorecards screen labels its presets "Quick settings".
+  await page.getByLabel('Settings', { exact: true }).click();
   await page.waitForTimeout(400);
 
   // SettingsSection renders `{isOpen && children}` and defaults to closed, so
@@ -253,7 +255,7 @@ try {
   // sweep in isolation; only this shows that the button reaches it.
   await page.reload();
   await page.waitForSelector('.side-menu-item', { timeout: 20000 });
-  await page.getByLabel('Settings').click();
+  await page.getByLabel('Settings', { exact: true }).click();
   await page.waitForTimeout(400);
 
   await page.evaluate(() => {

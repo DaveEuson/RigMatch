@@ -29,6 +29,15 @@ test('Hears audio matches only what the provider reports, never the name', () =>
   assert.ok(!modelMatchesTask(row('audio-sounding-name:7b', undefined), 'hears'));
 });
 
+test('Reads images believes the provider, as Listens to audio does', () => {
+  // gemma4 reads images, and its profile says "low memory, quick chat": the
+  // keyword rule left it off the Reads images channel while Ollama said it
+  // could see.
+  assert.ok(modelMatchesTask(row('gemma4:e2b', ['completion', 'vision', 'audio']), 'vision'));
+  // And a model the provider says cannot see is not listed on its name.
+  assert.ok(!modelMatchesTask(row('llava:7b', ['completion']), 'vision'));
+});
+
 test('Watches video lights up on a provider capability the day it exists', () => {
   assert.ok(canWatchVideo(row('some-model', ['completion', 'video'])));
 });
@@ -47,6 +56,21 @@ test('Makes audio finds speakers, not listeners', () => {
   assert.ok(isLikelyAudioGenerationModel('orpheus:3b'));
   assert.ok(!isLikelyAudioGenerationModel('whisper-large-v3'));
   assert.ok(!isLikelyAudioGenerationModel('llama3.2:3b'));
+});
+
+test('Makes audio lists the audio models RigMatch can run, by what they say they make', () => {
+  const ace = {
+    displayName: 'ACE-Step 1.5 Turbo',
+    name: 'ACE-Step 1.5 Turbo',
+    runtime: 'comfyui',
+    generationKind: 'audio',
+    generationId: 'ace-step-1.5-turbo',
+    installed: false,
+  };
+  assert.ok(modelMatchesTask(ace, 'audiogen'));
+  assert.ok(!modelMatchesTask(ace, 'imagegen'));
+  assert.ok(!modelMatchesTask(ace, 'hears'), 'making audio is not hearing it');
+  assert.ok(!modelMatchesTask({ ...ace, generationKind: 'image' }, 'audiogen'));
 });
 
 test('the word-boundary alternatives really are word boundaries', () => {

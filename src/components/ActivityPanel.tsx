@@ -1,7 +1,9 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { getScoreTone } from '../lib/format';
 import { extractHtmlDocument } from '../lib/labPreview';
-import { readAdvancedLabResults } from '../lib/labResults';
+import { useLabResults } from '../hooks/useLabResults';
+import type { Balances } from '../lib/balance';
+import { workbenchById, type ChannelId, type Workbench } from '../lib/workbench';
 import { formatHistoryTime } from '../lib/modelCatalog';
 import type { OllamaStatus, PullProgressUpdate, RunProgress, SkillRunStatus, SystemProfile, TestedModelScore } from '../types';
 import { AdvancedCapabilityLab } from './AdvancedCapabilityLab';
@@ -10,7 +12,9 @@ import { AvatarBust } from './Avatars';
 import { ImageResultModal } from './ImageResultModal';
 import type { StoredRunReport } from '../lib/runReports';
 import { describeReport, hasTranscripts } from '../lib/runReports';
-import { Code2, Download, FileText, Gauge, History, Lightbulb, Play, RefreshCw, X } from 'lucide-react';
+import { renderLabel, type RenderActivity, type RenderOutcome } from '../lib/renderActivity';
+import { Elapsed } from './Elapsed';
+import { Code2, Download, FileText, Film, Gauge, History, Lightbulb, Play, RefreshCw, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 export function ActivityPanel({
@@ -29,6 +33,15 @@ export function ActivityPanel({
   onStopSkillTests,
   runReports,
   onOpenReport,
+  onDownloadGenerationModel,
+  onStopGenerationDownload,
+  workbench = workbenchById('all'),
+  balances,
+  onBalanceChange,
+  onOpenComparison,
+  render = null,
+  onOpenRender,
+  lastRender = null,
 }: {
   runProgress: RunProgress | null;
   skillRunStatus: SkillRunStatus;
@@ -46,6 +59,21 @@ export function ActivityPanel({
   /** Newest first. Empty until a comparison has finished at least once. */
   runReports: StoredRunReport[];
   onOpenReport: (id: string) => void;
+  /** Starts an image or video model's download, after the consent dialog. */
+  onDownloadGenerationModel?: (generationId: string) => void;
+  onStopGenerationDownload?: () => void;
+  /** The channel Advanced Mode is on: its Lab cards and its results are the ones shown. */
+  workbench?: Workbench;
+  balances: Balances;
+  onBalanceChange: (channel: ChannelId, value: number) => void;
+  /** Where a channel with no Lab card sends people instead. */
+  onOpenComparison?: () => void;
+  /** What ComfyUI is rendering for RigMatch, wherever it was started. */
+  render?: RenderActivity | null;
+  /** Where the render is shown in full: its model's row, or the comparison. */
+  onOpenRender?: (render: RenderActivity) => void;
+  /** How the last render ended, until another one does. */
+  lastRender?: RenderOutcome | null;
 }) {
   const [previewApp, setPreviewApp] = useState<{ html: string; model: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; model: string } | null>(null);
@@ -59,6 +87,8 @@ type ActivityJob = {
   key: string;
   model: string;
   kind: 'benchmark' | 'app' | 'image';
+  /** The channel whose results this belongs with. */
+  channel: ChannelId;
   label: string;
   grade: string;
   score: number;
@@ -67,32 +97,37 @@ type ActivityJob = {
   imageDataUrl?: string;
 };
 
-  const anythingRunning = benchmarkActive || skillActive || activePulls.length > 0 || isListTesting;
+  const anythingRunning = benchmarkActive || skillActive || activePulls.length > 0 || isListTesting || Boolean(render);
 
-  // Re-read saved lab results whenever a skill run advances so freshly
-  // finished App Builder / image jobs appear in the monitor.
-  const labResults = useMemo(
-    () => readAdvancedLabResults(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [skillRunStatus.phase, skillRunStatus.completed],
-  );
+  // Every saved lab result, re-read the moment any test writes one, so a
+  // finished App Builder, image or video job appears here straight away.
+  const labResults = useLabResults();
 
   const recentJobs = useMemo<ActivityJob[]>(() => {
+    // A comparison also carries the coding answers and the picture-reading
+    // skill, so its results belong with those channels too.
+    const shows = (channel: ChannelId) => workbench.id === 'all'
+      || channel === workbench.id
+      || (channel === 'chat' && (workbench.id === 'code' || workbench.id === 'reading'));
     const jobs: ActivityJob[] = [];
     for (const score of Object.values(modelScores)) {
       if (!score?.completedAt) continue;
-      jobs.push({ key: `bench:${score.model}`, model: score.model, kind: 'benchmark', label: 'Compatibility test', grade: score.grade, score: score.total, completedAt: score.completedAt });
+      jobs.push({ key: `bench:${score.model}`, model: score.model, kind: 'benchmark', channel: 'chat', label: 'Compatibility test', grade: score.grade, score: score.total, completedAt: score.completedAt });
     }
     for (const result of Object.values(labResults)) {
       if (!result || result.error || !result.completedAt) continue;
       if (result.challenge === 'app-builder') {
-        jobs.push({ key: `app:${result.model}`, model: result.model, kind: 'app', label: 'App Builder', grade: result.grade, score: result.score, completedAt: result.completedAt, html: extractHtmlDocument(result.response) });
+        jobs.push({ key: `app:${result.model}`, model: result.model, kind: 'app', channel: 'code', label: 'App Builder', grade: result.grade, score: result.score, completedAt: result.completedAt, html: extractHtmlDocument(result.response) });
       } else if (result.challenge === 'image-generation' || result.challenge === 'video-generation') {
-        jobs.push({ key: `img:${result.model}`, model: result.model, kind: 'image', label: result.challenge === 'video-generation' ? 'Video Lab' : 'Image Lab', grade: result.grade, score: result.score, completedAt: result.completedAt, imageDataUrl: result.imageDataUrl });
+        const video = result.challenge === 'video-generation';
+        jobs.push({ key: `img:${result.model}`, model: result.model, kind: 'image', channel: video ? 'video' : 'images', label: video ? 'Video Lab' : 'Image Lab', grade: result.grade, score: result.score, completedAt: result.completedAt, imageDataUrl: result.imageDataUrl });
       }
     }
-    return jobs.sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt)).slice(0, 10);
-  }, [modelScores, labResults]);
+    return jobs
+      .filter((job) => shows(job.channel))
+      .sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt))
+      .slice(0, 10);
+  }, [modelScores, labResults, workbench.id]);
 
   return (
     <section className="activity-panel" aria-label="Running tests and downloads">
@@ -209,6 +244,52 @@ type ActivityJob = {
 
       <article className="activity-card">
         <div className="activity-card-head">
+          <Film aria-hidden="true" />
+          <strong>Renders</strong>
+          <b className={render ? 'activity-state running' : 'activity-state idle'}>
+            {render ? renderLabel(render) : lastRender ? (lastRender.failed ? 'Failed' : 'Finished') : 'Idle'}
+          </b>
+        </div>
+        {render ? (
+          <>
+            <p>
+              <strong>{render.model ?? 'ComfyUI'}</strong>
+              {render.step ? ` · ${render.step.index + 1} of ${render.step.total}` : ''}
+              {render.startedAt !== null ? <> · <Elapsed since={render.startedAt} /> so far</> : null}
+            </p>
+            <em>{render.message}</em>
+            <div className="activity-render-actions">
+              {onOpenRender && (
+                <button type="button" className="mini-button outline" onClick={() => onOpenRender(render)}>
+                  {render.solo ? 'Show its row' : 'Show the comparison'}
+                </button>
+              )}
+              <button
+                type="button"
+                className="mini-button outline"
+                onClick={render.stop}
+                title="ComfyUI cancels what it is rendering"
+              >
+                <X aria-hidden="true" />
+                Stop
+              </button>
+            </div>
+          </>
+        ) : lastRender ? (
+          <>
+            <p className={lastRender.failed ? 'activity-render-last failed' : 'activity-render-last'}>{lastRender.message}</p>
+            <em>
+              Ended {formatHistoryTime(new Date(lastRender.endedAt).toISOString())}. Picture, video and audio
+              tests show here while they run, wherever they were started.
+            </em>
+          </>
+        ) : (
+          <em>Picture, video and audio tests on ComfyUI show here while they run, wherever they were started.</em>
+        )}
+      </article>
+
+      <article className="activity-card">
+        <div className="activity-card-head">
           <Download aria-hidden="true" />
           <strong>Downloads</strong>
           <b className={activePulls.length ? 'activity-state running' : 'activity-state idle'}>
@@ -301,6 +382,13 @@ type ActivityJob = {
         selectedModel={selectedModel}
         ollama={ollama}
         system={system}
+        onDownloadVideoModel={onDownloadGenerationModel}
+        onStopVideoDownload={onStopGenerationDownload}
+        pullProgressByModel={pullProgressByModel}
+        workbench={workbench}
+        balances={balances}
+        onBalanceChange={onBalanceChange}
+        onOpenComparison={onOpenComparison}
       />
 
       {previewApp && (
