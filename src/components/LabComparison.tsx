@@ -24,7 +24,10 @@ const NOUN: Record<Channel, string> = {
 function heading(channel: Channel, key: string): string {
   if (channel === 'images' || channel === 'audio') return `“${key}”`;
   if (channel === 'listening') return 'Each model’s latest listening test';
-  const known = VISION_TEST_IMAGES.find((image) => image.src === key);
+  // Grouped by the test picture's id (see comparisonGroups). Matching the key
+  // against the asset's address never worked: the key was the picture drawn to
+  // a data: URL, so every test picture was headed "Your uploaded picture".
+  const known = VISION_TEST_IMAGES.find((image) => image.id === key);
   if (known) return known.label;
   return key.startsWith('data:') ? 'Your uploaded picture' : 'The same test picture';
 }

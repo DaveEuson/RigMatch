@@ -61,7 +61,8 @@ const PREVIEW_APP_BUILDER_SAMPLE = `Let me plan this out. I'll write a single-fi
 That gives a self-contained interactive canvas app that runs entirely offline.`;
 
 // Sample vision/OCR "reading" used to simulate streaming in preview mode.
-const PREVIEW_VISION_SAMPLE = `Looking at the image, I can see a stylized retro robot character rendered in a warm, illustrated style. It has a boxy head with two round eyes and an antenna, set against a soft gradient background. The color palette leans on oranges and greens, giving it a friendly game-show feel. There's no readable text in the image, so this is a picture-description task rather than OCR. Overall: a single cartoon robot mascot, centered, with no other objects present.`;
+// It describes the default test picture, the robot host, as a good answer would.
+const PREVIEW_VISION_SAMPLE = `Looking at the image, I can see two cute retro robots on a date at a round table with a pink tablecloth. On the left, a beige computer with a pixel heart on its screen writes on heart-shaped cards with a pen; on the right, a small white robot in pink headphones rests its chin on its hand beside a clipboard checklist. Hearts are everywhere: a glowing heart sign, a heart lamp overhead and pink hearts floating in the air, all in warm pink and red light. There's no readable text in the image.`;
 // Sample image-generation output used in preview mode — a small, clearly
 // labeled placeholder (not real model output) so the "show off your work"
 // image-gen flow can be exercised without a real Ollama image model.

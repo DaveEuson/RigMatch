@@ -4,8 +4,8 @@
  *
  * Each channel is decided by its own measurement: coding answers for Code, the
  * judge's check of the picture for Images and Video, a listening model's check
- * of the clip for Audio, word accuracy for Listening, the description score for
- * Reading pictures. Chat keeps the Top
+ * of the clip for Audio, word accuracy for Listening, and for Reading pictures
+ * how much of the test picture a description named. Chat keeps the Top
  * Match it always had (getRigPick), since the Match Score already is the chat
  * measurement. Every ranking here comes from results measured on this machine;
  * nothing is inferred from a model's name.
@@ -100,16 +100,23 @@ const LAB_CHALLENGE: Record<LabChannel, AdvancedLabResult['challenge']> = {
   audio: 'audio-generation',
 };
 
-/** Pictures, clips and made audio are judged against the prompt, and that check can fail. */
-const checkedAgainstPrompt = (channel: LabChannel) => channel === 'images' || channel === 'video' || channel === 'audio';
+/**
+ * Pictures, clips and made audio are judged against the prompt, and a
+ * description against the test picture it describes. Each check can fail.
+ */
+const matchChecked = (channel: LabChannel) =>
+  channel === 'images' || channel === 'video' || channel === 'audio' || channel === 'reading';
 
 /**
  * Lab results for one channel, ranked at the fader.
  *
  * For images, video and audio, accuracy is the judge's check of the picture,
- * the clip's middle frame or the sound itself, and one that fell short of the
- * pass line has failed its check. Listening and reading are scored 0-100
- * against a right answer, so their score is their accuracy.
+ * the clip's middle frame or the sound itself; for reading, how much of the
+ * test picture the description named. One that fell short of the pass line has
+ * failed its check. Listening is scored 0-100 against the words spoken, so its
+ * score is its accuracy. A description saved before descriptions were checked
+ * against the picture has no accuracy, and ranks as unjudged: the old rubric
+ * measured the answer's shape, and gave a description of Java code 100.
  */
 export function rankLabList(
   results: AdvancedLabResult[],
@@ -120,12 +127,12 @@ export function rankLabList(
     .filter((result) => result?.challenge === LAB_CHALLENGE[channel])
     .map((result): Contender<AdvancedLabResult> => {
       // A made clip's accuracy is your ear's when you gave a verdict.
-      const accuracy = checkedAgainstPrompt(channel) ? promptAccuracy(result) : result.score / 100;
+      const accuracy = matchChecked(channel) ? promptAccuracy(result) : result.score / 100;
       return {
         item: result,
         pace: result.elapsedMs > 0 ? 1000 / result.elapsedMs : 0,
         accuracy,
-        failed: Boolean(result.error) || (checkedAgainstPrompt(channel) && accuracy !== null && accuracy < JUDGE_PASS),
+        failed: Boolean(result.error) || (matchChecked(channel) && accuracy !== null && accuracy < JUDGE_PASS),
       };
     });
   return rankByBalance(contenders, balance);
@@ -147,9 +154,9 @@ export function describeLabAccuracy(
   result?: Pick<AdvancedLabResult, 'verdict'>,
 ): string {
   if (result?.verdict) return describeEarVerdict(result.verdict);
-  if (checkedAgainstPrompt(channel)) return `${percent(accuracy)} of the prompt`;
-  if (channel === 'listening') return `listening score ${Math.round(accuracy * 100)}`;
-  return `description score ${Math.round(accuracy * 100)}`;
+  if (channel === 'reading') return `named ${percent(accuracy)} of the picture`;
+  if (matchChecked(channel)) return `${percent(accuracy)} of the prompt`;
+  return `listening score ${Math.round(accuracy * 100)}`;
 }
 
 export type ComparisonGroup = {
@@ -178,7 +185,8 @@ export function comparisonGroups(
     if (result?.challenge !== LAB_CHALLENGE[channel]) continue;
     const key = channel === 'images' || channel === 'audio'
       ? result.response
-      : channel === 'reading' ? (result.imageDataUrl ?? '') : 'latest';
+      // A test picture by its id; an uploaded one by the picture itself.
+      : channel === 'reading' ? (result.picture ?? result.imageDataUrl ?? '') : 'latest';
     groups.set(key, [...(groups.get(key) ?? []), result]);
   }
   return [...groups.entries()]

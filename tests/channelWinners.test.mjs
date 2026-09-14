@@ -54,17 +54,38 @@ test('an image that fell short of the prompt is never the best image model', () 
   assert.equal(labWinner(results, 'images', 0)?.usable, false);
 });
 
-test('listening and reading rank on their own scores against time', () => {
+test('listening ranks on its own score against time, and reading on how much of the picture it named', () => {
   const results = {
     'listening:a': lab('listening', 'gemma4:e2b', 20, { score: 96 }),
     'listening:b': lab('listening', 'gemma4:e4b', 8, { score: 70 }),
-    'vision:c': lab('image-recognition', 'qwen2.5vl:7b', 9, { score: 88 }),
+    'vision:c': lab('image-recognition', 'qwen2.5vl:7b', 9, { score: 80, adherence: 0.8, picture: 'lineup' }),
   };
   assert.equal(labWinner(results, 'listening', 100)?.model, 'gemma4:e2b');
   assert.equal(labWinner(results, 'listening', 0)?.model, 'gemma4:e4b');
   assert.equal(labWinner(results, 'reading', 50)?.model, 'qwen2.5vl:7b');
+  assert.match(labWinner(results, 'reading', 50)?.detail ?? '', /named 80% of the picture/);
   assert.equal(labWinner(results, 'listening', 50)?.usable, true);
   assert.equal(labWinner(results, 'listening', 50)?.speedOnly, false);
+});
+
+test('a description that missed the picture never wins, and one scored by the old rubric is unjudged', () => {
+  const results = {
+    // Gemma 4 on the contestant wall: Java code on a white background, quickly.
+    'vision:quick': lab('image-recognition', 'gemma4:e2b', 3, { score: 0, adherence: 0, picture: 'lineup' }),
+    'vision:right': lab('image-recognition', 'qwen2.5vl:7b', 11, { score: 100, adherence: 1, picture: 'lineup' }),
+    // Scored 100 by the old rubric, whatever it said.
+    'vision:old': lab('image-recognition', 'llava:7b', 2, { score: 100 }),
+  };
+  // With any weight on accuracy, only a description that passed can win.
+  assert.equal(labWinner(results, 'reading', 1)?.model, 'qwen2.5vl:7b');
+  assert.equal(labWinner(results, 'reading', 100)?.model, 'qwen2.5vl:7b');
+  const ranked = rankLabResults(results, 'reading', 50);
+  const entry = (model) => ranked.find((item) => item.item.model === model);
+  assert.equal(entry('gemma4:e2b')?.standing, 'failed', 'fast, and it described code');
+  assert.equal(entry('llava:7b')?.standing, 'unjudged', 'the old rubric measured the answer, not the picture');
+  // Speed alone weighs nothing but time, so the old result is fastest there;
+  // the one that failed its check still cannot win.
+  assert.equal(labWinner(results, 'reading', 0)?.model, 'llava:7b');
 });
 
 test('a winner from results nothing judged says it won on speed alone', () => {
@@ -158,10 +179,16 @@ test('only results given the same thing are put side by side', () => {
     lab('image-generation', 'c', 4, { response: 'a cat', completedAt: '2026-09-09T10:00:00.000Z' }),
     lab('image-recognition', 'd', 5, { imageDataUrl: '/cat.webp' }),
     lab('image-recognition', 'e', 5, { imageDataUrl: '/dog.webp', completedAt: '2026-09-12T00:00:00.000Z' }),
+    // A test picture groups by its id, whatever it was drawn to.
+    lab('image-recognition', 'g', 5, { imageDataUrl: 'data:image/png;base64,AA', picture: 'lineup', completedAt: '2026-09-13T00:00:00.000Z' }),
+    lab('image-recognition', 'h', 5, { imageDataUrl: 'data:image/png;base64,BB', picture: 'lineup', completedAt: '2026-09-13T01:00:00.000Z' }),
     lab('listening', 'f', 5),
   ];
   assert.deepEqual(comparisonGroups(results, 'images').map((group) => [group.key, group.results.length]), [['a lighthouse', 2], ['a cat', 1]]);
-  assert.deepEqual(comparisonGroups(results, 'reading').map((group) => group.key), ['/dog.webp', '/cat.webp']);
+  assert.deepEqual(
+    comparisonGroups(results, 'reading').map((group) => [group.key, group.results.length]),
+    [['lineup', 2], ['/dog.webp', 1], ['/cat.webp', 1]],
+  );
   // Listening keeps no record of what it heard, so it is one group.
   assert.equal(comparisonGroups(results, 'listening').length, 1);
 });

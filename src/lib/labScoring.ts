@@ -11,6 +11,7 @@
  */
 
 import type { AdvancedLabCheck, AdvancedLabResult } from './labResults.ts';
+import { NOT_IN_ANY_PICTURE, PICTURE_PASS, checkDescription, listThings, type PictureCheck } from './pictureContents.ts';
 import { extractTranscript, scoreTranscription } from './transcription.ts';
 
 export function getAdvancedLabGrade(score: number) {
@@ -29,47 +30,119 @@ function tally(checks: AdvancedLabCheck[]): Scored {
   return { score, grade: getAdvancedLabGrade(score), checks };
 }
 
+type VisionScored = Scored & {
+  /**
+   * How much of the test picture the description named, 0 to 1, or null for a
+   * picture RigMatch did not choose and so cannot check.
+   */
+  adherence: number | null;
+};
+
+/** What the "Named what is in the picture" line says. */
+function describeNamed(check: PictureCheck): string {
+  const total = check.things.length;
+  if (check.named.length === 0) return `Named none of the ${total} things in it: ${listThings(check.things)}.`;
+  const said = check.named.length === total
+    ? `Named all ${total}: ${listThings(check.named)}.`
+    : `Named ${check.named.length} of ${total}: ${listThings(check.named)}. Missed ${listThings(check.missed)}.`;
+  const made = check.madeUp.length;
+  if (made === 0) return said;
+  return `${said} ${made === 1 ? 'The one thing it made up takes one back.' : `The ${made} things it made up take ${made} back.`}`;
+}
+
 /**
  * Grade a vision answer.
  *
  * "Engaged with the picture" and "Completed cleanly" both passed on an empty
  * string — no refusal wording present, no truncation stop — so a model that
  * returned nothing scored 2 of 4 and was presented as "50 · D".
+ *
+ * Shape alone let Gemma 4 score 100 for describing Java code on a white
+ * background when it was shown a wall of robots. For one of RigMatch's own test
+ * pictures the score is a measurement, as listening's is: the share of the
+ * picture's five things the description names, less one for anything it made
+ * up (pictureContents.ts). The checks explain the number. A picture someone
+ * uploaded has nothing to check against, so it keeps the shape checks and its
+ * description is unjudged.
  */
-export function scoreAdvancedVisionResponse(response: string, doneReason: string): Scored {
+export function scoreAdvancedVisionResponse(response: string, doneReason: string, picture?: string): VisionScored {
   const text = (response ?? '').trim();
   const answered = text.length > 0;
   const wordCount = text.split(/\s+/).filter(Boolean).length;
 
-  return tally([
-    {
-      label: 'Returned an answer',
-      passed: answered,
-      detail: answered
-        ? 'The model sent back text to grade.'
-        : `Returned no text at all${doneReason ? ` (stop reason: ${doneReason})` : ''}. This model may not accept images through Ollama's vision API.`,
-    },
-    {
-      label: 'Described the image',
-      passed: answered && wordCount >= 12,
-      detail: 'Returned a substantive description, not a one-liner or refusal.',
-    },
-    {
-      label: 'Concrete visual detail',
-      passed: answered && /\b(color|colour|robot|text|background|left|right|top|bottom|blue|green|orange|red|yellow|character|shape|screen|button|face|eye|logo)\b/i.test(text),
-      detail: 'Names specific objects, colors, or layout instead of staying vague.',
-    },
-    {
-      label: 'Engaged with the picture',
-      passed: answered && !/\b(can'?t|cannot|unable to|no image|don'?t see)\b/i.test(text),
-      detail: 'Actually read the image rather than declining or claiming no image.',
-    },
-    {
-      label: 'Completed cleanly',
-      passed: answered && doneReason !== 'length' && doneReason !== 'error',
-      detail: 'Did not truncate or error mid-answer.',
-    },
-  ]);
+  const returned: AdvancedLabCheck = {
+    label: 'Returned an answer',
+    passed: answered,
+    detail: answered
+      ? 'The model sent back text to grade.'
+      : `Returned no text at all${doneReason ? ` (stop reason: ${doneReason})` : ''}. This model may not accept images through Ollama's vision API.`,
+  };
+  const engaged: AdvancedLabCheck = {
+    label: 'Engaged with the picture',
+    passed: answered && !/\b(can'?t|cannot|unable to|no image|don'?t see)\b/i.test(text),
+    detail: 'Actually read the image rather than declining or claiming no image.',
+  };
+  const clean: AdvancedLabCheck = {
+    label: 'Completed cleanly',
+    passed: answered && doneReason !== 'length' && doneReason !== 'error',
+    detail: 'Did not truncate or error mid-answer.',
+  };
+
+  const check = picture ? checkDescription(picture, text) : null;
+  if (!check) {
+    const shaped = tally([
+      returned,
+      {
+        label: 'Described the image',
+        passed: answered && wordCount >= 12,
+        detail: 'Returned a substantive description, not a one-liner or refusal.',
+      },
+      {
+        label: 'Concrete visual detail',
+        passed: answered && /\b(color|colour|robot|text|background|left|right|top|bottom|blue|green|orange|red|yellow|character|shape|screen|button|face|eye|logo)\b/i.test(text),
+        detail: 'Names specific objects, colors, or layout instead of staying vague.',
+      },
+      engaged,
+      clean,
+    ]);
+    return {
+      ...shaped,
+      checks: [...shaped.checks, {
+        label: 'Named what is in the picture',
+        passed: false,
+        unchecked: true,
+        detail: 'RigMatch knows what is in its own test pictures, not in one you chose, so it cannot say whether this description is right.',
+      }],
+      adherence: null,
+    };
+  }
+
+  const share = answered ? check.share : 0;
+  const score = Math.round(share * 100);
+  return {
+    score,
+    grade: getAdvancedLabGrade(score),
+    adherence: share,
+    checks: [
+      returned,
+      {
+        label: 'Named what is in the picture',
+        passed: answered && share >= PICTURE_PASS,
+        detail: answered ? describeNamed(check) : 'There was no description to check.',
+      },
+      {
+        label: 'Said nothing that is not there',
+        passed: answered && check.madeUp.length === 0,
+        detail: !answered
+          ? 'There was no description to check.'
+          : check.madeUp.length > 0
+            ? `Described ${listThings(check.madeUp)}, which the picture does not have.`
+            : `Mentioned none of the things these pictures never show: ${listThings(NOT_IN_ANY_PICTURE, 'or')}.`,
+      },
+      engaged,
+      clean,
+    ],
+  };
 }
 
 // Image generation is scored in imageGenScoring.ts now. What stood here only

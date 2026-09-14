@@ -89,7 +89,7 @@ export function SkillTestPanel({
     try {
       const result = listening
         ? await runAdvancedListeningChallenge(model, context.ollamaBaseUrl, await getListeningTestAudio())
-        : await runAdvancedVisionChallenge(model, context.ollamaBaseUrl, await getVisionTestImageDataUrl(picture.src));
+        : await runAdvancedVisionChallenge(model, context.ollamaBaseUrl, await getVisionTestImageDataUrl(picture.src), { picture: picture.id });
       if (result.error) {
         setRun({ phase: 'failed', message: result.error });
         return;
