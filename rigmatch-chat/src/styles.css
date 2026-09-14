@@ -1923,6 +1923,26 @@ textarea:focus {
   word-break: break-all;
 }
 
+.rm-generated-image video {
+  max-width: 100%;
+  border-radius: 8px;
+  display: block;
+  background: #000;
+}
+
+.rm-generated-image audio {
+  width: 100%;
+}
+
+/* What RigMatch's own tests crowned for the choice above the list. */
+.rm-pick-line {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--gold);
+  letter-spacing: 0.02em;
+}
+
 /* Capability chips and the filter above the model list.
    -------------------------------------------------------------------------
    The list showed a name and a score and nothing about what a model could do,

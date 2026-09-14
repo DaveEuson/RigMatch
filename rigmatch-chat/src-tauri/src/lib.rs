@@ -500,6 +500,23 @@ async fn get_ollama_vram(base_url: String) -> Option<f32> {
     Some(total_bytes as f32 / 1_073_741_824.0)
 }
 
+/// Where RigMatch's bridge listens. RigMatch reads RIGMATCH_BRIDGE_PORT when it
+/// starts, so a copy started on another port for testing can be reached; every
+/// installed copy uses the default.
+fn bridge_url(path: &str) -> String {
+    let port = std::env::var("RIGMATCH_BRIDGE_PORT")
+        .ok()
+        .and_then(|value| value.trim().parse::<u16>().ok())
+        .unwrap_or(11435);
+    format!("http://127.0.0.1:{port}{path}")
+}
+
+/// A job id as RigMatch hands them out, "gen-" and digits. Anything else is
+/// refused before it reaches a URL, so an id can never walk to another route.
+fn valid_job_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
 #[tauri::command]
 async fn get_rig_scores() -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
@@ -511,7 +528,7 @@ async fn get_rig_scores() -> Result<serde_json::Value, String> {
     // leniency is now the documented exception rather than the rule, and this
     // call should not be the reason it has to stay.
     let res = client
-        .get("http://127.0.0.1:11435")
+        .get(bridge_url(""))
         .header("Origin", "tauri://localhost")
         .send()
         .await
@@ -531,7 +548,10 @@ async fn get_rig_scores() -> Result<serde_json::Value, String> {
 /// borrowing the WebView's identity is more honest than relying on the header
 /// being absent.
 #[tauri::command]
-async fn start_rig_generation(prompt: String) -> Result<serde_json::Value, String> {
+async fn start_rig_generation(prompt: String, kind: Option<String>) -> Result<serde_json::Value, String> {
+    // A picture, a clip or a sound; RigMatch refuses anything else. Naming none
+    // asks for a picture, as every Chat before this one did.
+    let kind = kind.unwrap_or_else(|| "image".to_string());
     let client = reqwest::Client::builder()
         // Longer than the scores fetch: this only starts the work, but RigMatch
         // has to reach its renderer before it can answer.
@@ -539,9 +559,9 @@ async fn start_rig_generation(prompt: String) -> Result<serde_json::Value, Strin
         .build()
         .map_err(|e| e.to_string())?;
     let res = client
-        .post("http://127.0.0.1:11435/generate")
+        .post(bridge_url("/generate"))
         .header("Origin", "tauri://localhost")
-        .json(&serde_json::json!({ "prompt": prompt }))
+        .json(&serde_json::json!({ "prompt": prompt, "kind": kind }))
         .send()
         .await
         .map_err(|_| "RigMatch is not running, so it cannot generate anything.".to_string())?;
@@ -563,12 +583,15 @@ async fn start_rig_generation(prompt: String) -> Result<serde_json::Value, Strin
 
 #[tauri::command]
 async fn get_rig_generation(id: String) -> Result<serde_json::Value, String> {
+    if !valid_job_id(&id) {
+        return Err("Not a RigMatch job.".to_string());
+    }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| e.to_string())?;
     let res = client
-        .get(format!("http://127.0.0.1:11435/generate/{id}"))
+        .get(bridge_url(&format!("/generate/{id}")))
         .header("Origin", "tauri://localhost")
         .send()
         .await
@@ -583,17 +606,60 @@ async fn get_rig_generation(id: String) -> Result<serde_json::Value, String> {
 /// file-read primitive with a chat window attached, however carefully guarded.
 #[tauri::command]
 async fn get_rig_generation_image(id: String) -> Result<serde_json::Value, String> {
+    if !valid_job_id(&id) {
+        return Err("Not a RigMatch job.".to_string());
+    }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| e.to_string())?;
     let res = client
-        .get(format!("http://127.0.0.1:11435/generate/{id}/image"))
+        .get(bridge_url(&format!("/generate/{id}/image")))
         .header("Origin", "tauri://localhost")
         .send()
         .await
         .map_err(|e| e.to_string())?;
     res.json::<serde_json::Value>().await.map_err(|e| e.to_string())
+}
+
+/// Fetch a clip or a sound RigMatch made, the way a picture is fetched: RigMatch
+/// reads its own file and hands over base64, typed by what the file is.
+#[tauri::command]
+async fn get_rig_generation_media(id: String) -> Result<serde_json::Value, String> {
+    if !valid_job_id(&id) {
+        return Err("Not a RigMatch job.".to_string());
+    }
+    let client = reqwest::Client::builder()
+        // A clip is megabytes, where a picture is kilobytes.
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let res = client
+        .get(bridge_url(&format!("/generate/{id}/media")))
+        .header("Origin", "tauri://localhost")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    res.json::<serde_json::Value>().await.map_err(|e| e.to_string())
+}
+
+/// Ask RigMatch to stop something this window started.
+#[tauri::command]
+async fn stop_rig_generation(id: String) -> Result<(), String> {
+    if !valid_job_id(&id) {
+        return Err("Not a RigMatch job.".to_string());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| e.to_string())?;
+    client
+        .post(bridge_url(&format!("/generate/{id}/stop")))
+        .header("Origin", "tauri://localhost")
+        .send()
+        .await
+        .map_err(|_| "RigMatch is not running, so there is nothing to stop.".to_string())?;
+    Ok(())
 }
 
 // Launches RigMatch from the bundled companions layout:
@@ -651,6 +717,8 @@ pub fn run() {
             start_rig_generation,
             get_rig_generation,
             get_rig_generation_image,
+            get_rig_generation_media,
+            stop_rig_generation,
             get_ollama_vram,
             get_vram_info,
         ])
@@ -681,6 +749,16 @@ mod tests {
         assert_eq!(info.head_count_kv, 8);
         assert_eq!(info.key_length, 128);
         assert_eq!(info.value_length, 128);
+    }
+
+    #[test]
+    fn a_job_id_is_refused_unless_it_is_one_rigmatch_hands_out() {
+        assert!(valid_job_id("gen-1726300000000-123456"));
+        assert!(!valid_job_id(""));
+        assert!(!valid_job_id("../scores"));
+        assert!(!valid_job_id("gen-1/stop"));
+        assert!(!valid_job_id("gen-1?x=1"));
+        assert!(!valid_job_id(&"a".repeat(65)));
     }
 
     #[test]
