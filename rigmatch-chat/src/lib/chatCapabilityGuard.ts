@@ -70,7 +70,16 @@ export function classifyChatRequest(message: string): ChatBeyond {
 export function companionBeyondNote(
   kind: ChatBeyond,
   model: string,
-  able: { canSee: boolean; canHear: boolean; makerReady: boolean; checkpoint?: string | null },
+  able: {
+    canSee: boolean;
+    canHear: boolean;
+    makerReady: boolean;
+    checkpoint?: string | null;
+    /** The video maker, when one can run here: what Make a video would use. */
+    videoModel?: string | null;
+    /** The audio maker, when one is installed: what Make audio would use. */
+    audioModel?: string | null;
+  },
 ): string | null {
   if (!kind) return null;
   const name = model || 'This model';
@@ -88,13 +97,20 @@ export function companionBeyondNote(
   }
 
   if (kind === 'video') {
-    return `${name} writes text — it cannot make video, and this window does not make video at all. `
-      + `RigMatch has a Video test in Advanced Mode → Activity, which is the only place that renders one.`;
+    return able.videoModel
+      ? `${name} writes text — it cannot make video, and anything it describes below will be words. `
+        + `To make a real clip, choose **Make a video** above the model list; ${able.videoModel} is ready and will do it.`
+      : `${name} writes text — it cannot make video, and anything it describes below will be words. `
+        + `Video-making is ComfyUI's job, reached through **Make a video** above the model list — it is not ready `
+        + `right now: no video model that runs on this PC is installed, or ComfyUI is not running.`;
   }
 
   if (kind === 'speech') {
-    return `${name} writes text — it cannot speak or produce audio. `
-      + `Nothing in RigMatch does yet, so there is no elsewhere to point you at.`;
+    // Music and sound effects, yes; a voice, no. No model ComfyUI ships speaks.
+    return `${name} writes text — it cannot speak or produce audio, and RigMatch has no text-to-speech. `
+      + (able.audioModel
+        ? `For music or a sound effect, choose **Make audio** above the model list; ${able.audioModel} is ready.`
+        : `Music and sound effects come from **Make audio** above the model list, which is not ready right now.`);
   }
 
   // transcribe — the only kind where the model may genuinely be able to.

@@ -59,6 +59,10 @@ import {
 } from './lib/scoring';
 import { BALANCE_STORAGE_KEY, applyBalance, readBalances, type Balances } from './lib/balance';
 import { codeWinner, labWinner, rankCoding, videoWinner } from './lib/channelWinners';
+import { chatPicks, pickAudioMaker, pickVideoMaker } from './lib/chatMakers';
+import { renderChatAudio, renderChatVideo, type ChatRender } from './lib/chatRenders';
+import { installedAudioEntries } from './lib/audioLineup';
+import { audioModelSpec } from './lib/audioCatalog';
 import { ChannelComparisonPanel } from './components/ChannelComparisonPanel';
 import {
   WORKBENCH_STORAGE_KEY,
@@ -73,7 +77,7 @@ import {
 import { useLabResults } from './hooks/useLabResults';
 import { useVideoLineupSession } from './hooks/useVideoLineupSession';
 import { useRenderActivity, useRenderOutcome } from './hooks/useRenderActivity';
-import { renderChannel, type RenderActivity } from './lib/renderActivity';
+import { endImageTest, renderChannel, startImageTest, type RenderActivity } from './lib/renderActivity';
 import { RunReportModal } from './components/RunReportModal';
 import type { StoredRunReport } from './lib/runReports';
 import {
@@ -680,12 +684,15 @@ function App() {
    * the request here, and this runs the very same path the app's own chat uses,
    * so the two cannot drift apart.
    *
-   * No AbortSignal: the bridge has no way to carry a cancel yet, and inventing
-   * one that does nothing would be worse than not offering it.
+   * Chat can stop what it asked for: the bridge passes its Stop on, and the
+   * job's AbortController, kept below, is what it reaches.
    */
+  const chatRenderStops = useRef(new Map<string, AbortController>());
   useEffect(() => {
     if (!agentArcadeApi.onBridgeGenerateRequest) return undefined;
-    return agentArcadeApi.onBridgeGenerateRequest(({ id, prompt }) => {
+    return agentArcadeApi.onBridgeGenerateRequest(({ id, prompt, kind }) => {
+      // Clips and sounds have their own path, further down.
+      if (kind && kind !== 'image') return;
       void (async () => {
         if (!chatImageGeneration.available) {
           await agentArcadeApi.reportBridgeGenerateResult?.({
@@ -694,8 +701,14 @@ function App() {
           });
           return;
         }
-        const result = await chatImageGeneration.run(prompt, new AbortController().signal);
-        await agentArcadeApi.reportBridgeGenerateResult?.({ id, ...result });
+        const controller = new AbortController();
+        chatRenderStops.current.set(id, controller);
+        try {
+          const result = await chatImageGeneration.run(prompt, controller.signal);
+          await agentArcadeApi.reportBridgeGenerateResult?.({ id, ...result, ...(controller.signal.aborted ? { stopped: true } : {}) });
+        } finally {
+          chatRenderStops.current.delete(id);
+        }
       })();
     });
   }, [chatImageGeneration]);
@@ -1307,6 +1320,96 @@ function App() {
       default: return null;
     }
   }, [workbenchInfo.id, savedModelScores, labResults, lineupSession.record, balances, pictureJudged]);
+
+  /**
+   * What RigMatch Chat is offered for each thing RigMatch tests.
+   *
+   * Each chat choice opens on the model that channel's own tests crowned, and a
+   * clip or a sound is made by the channel winner when it can run here, else by
+   * the fastest that can (chatMakers.ts). Worked out here, where the rankings
+   * are, and sent to Chat with the scores.
+   */
+  const chatModelPicks = useMemo(() => chatPicks({
+    chosen: selectedModel || null,
+    scores: savedModelScores,
+    results: labResults,
+    balances: { code: balances.code, reading: balances.reading, listening: balances.listening },
+  }), [selectedModel, savedModelScores, labResults, balances.code, balances.reading, balances.listening]);
+  const chatListing = useMemo(
+    () => comfyListing({ checkpoints: comfyCheckpoints, folders: comfyFolders ?? undefined }),
+    [comfyCheckpoints, comfyFolders],
+  );
+  const chatVideoMaker = useMemo(() => {
+    if (!comfyReachable) return null;
+    const options = { calibration: readVideoCalibration(), saved: labResults };
+    return pickVideoMaker(runnableLineup(chatListing, videoMachine, options), lineupSession.record, pictureJudged ? balances.video : 0);
+  }, [comfyReachable, chatListing, videoMachine, labResults, lineupSession.record, pictureJudged, balances.video]);
+  const chatVideoSeconds = useMemo(
+    () => (chatVideoMaker
+      ? estimateLineup([chatVideoMaker], videoMachine, { calibration: readVideoCalibration(), saved: labResults }).seconds
+      : null),
+    [chatVideoMaker, videoMachine, labResults],
+  );
+  const chatAudioMaker = useMemo(() => {
+    if (!comfyReachable) return null;
+    const entry = pickAudioMaker(installedAudioEntries(chatListing), labResults, balances.audio);
+    return entry ? audioModelSpec(entry.key) ?? null : null;
+  }, [comfyReachable, chatListing, labResults, balances.audio]);
+
+  // Chat asking for a clip or a sound. Pictures keep their own path, above.
+  useEffect(() => {
+    if (!agentArcadeApi.onBridgeGenerateRequest) return undefined;
+    return agentArcadeApi.onBridgeGenerateRequest(({ id, prompt, kind }) => {
+      if (kind !== 'video' && kind !== 'audio') return;
+      void (async () => {
+        const report = (result: ChatRender) => agentArcadeApi.reportBridgeGenerateResult?.({ id, ...result });
+        const noun = kind === 'video' ? 'a clip' : 'audio';
+        const name = kind === 'video' ? chatVideoMaker?.name : chatAudioMaker?.name;
+        if (!name) {
+          await report({
+            error: kind === 'video'
+              ? 'No video model that can run on this PC is installed, or ComfyUI is not running.'
+              : 'No audio model is installed, or ComfyUI is not running.',
+          });
+          return;
+        }
+        // One render at a time: a second would slow both, and time neither honestly.
+        if (renderActivity) {
+          await report({ error: `RigMatch is busy with ${renderActivity.model ?? 'another render'}. Try again when it finishes.` });
+          return;
+        }
+        const controller = new AbortController();
+        chatRenderStops.current.set(id, controller);
+        const key = `chat:${id}`;
+        startImageTest({ key, kind, name, message: `Making ${noun} for RigMatch Chat: “${prompt}”`, stop: () => controller.abort() });
+        try {
+          const baseUrl = comfySettings.baseUrl;
+          const result: ChatRender = kind === 'video' && chatVideoMaker
+            ? await renderChatVideo({ entry: chatVideoMaker, prompt, baseUrl, signal: controller.signal })
+            : chatAudioMaker
+              ? await renderChatAudio({ spec: chatAudioMaker, prompt, baseUrl, signal: controller.signal })
+              : { error: 'Nothing is installed to make it with.' };
+          endImageTest(key, result.stopped
+            ? { message: `Stopped making ${noun} for RigMatch Chat.`, failed: false }
+            : result.error
+              ? { message: `${name} could not make ${noun} for RigMatch Chat: ${result.error}`, failed: true }
+              : { message: `${name} made ${noun} for RigMatch Chat.`, failed: false });
+          await report(result);
+        } catch (error) {
+          endImageTest(key, { message: `${name} could not make ${noun} for RigMatch Chat: ${getErrorMessage(error)}`, failed: true });
+          await report({ error: getErrorMessage(error) });
+        } finally {
+          chatRenderStops.current.delete(id);
+        }
+      })();
+    });
+  }, [chatVideoMaker, chatAudioMaker, comfySettings.baseUrl, renderActivity]);
+
+  // Chat's Stop, for whichever of its jobs is still running.
+  useEffect(() => {
+    if (!agentArcadeApi.onBridgeGenerateStop) return undefined;
+    return agentArcadeApi.onBridgeGenerateStop(({ id }) => chatRenderStops.current.get(id)?.abort());
+  }, []);
   /** The side menu's Models count follows the channel, as the Models screen does. */
   const channelModelCount = useMemo(() => {
     const filter = workbenchInfo.taskFilter;
@@ -3421,8 +3524,13 @@ function App() {
       chosen: selectedModel,
       capabilities,
       imageMaker,
+      // What a clip or a sound would be made with, and how long a clip should take here.
+      videoMaker: { ready: Boolean(chatVideoMaker), model: chatVideoMaker?.name ?? null, seconds: chatVideoSeconds },
+      audioMaker: { ready: Boolean(chatAudioMaker), model: chatAudioMaker?.name ?? null },
+      // The model each chat choice opens on.
+      picks: chatModelPicks,
     } as Record<string, unknown>);
-  }, [modelScores, selectedModel, modelRows, chatImageGeneration]);
+  }, [modelScores, selectedModel, modelRows, chatImageGeneration, chatVideoMaker, chatVideoSeconds, chatAudioMaker, chatModelPicks]);
 
   useEffect(() => {
     if (!agentArcadeApi.onBenchmarkProgress) return undefined;

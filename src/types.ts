@@ -661,9 +661,11 @@ export type AgentArcadeApi = {
   downloadUpdate: () => Promise<void>;
   installUpdate: () => Promise<void>;
   onUpdaterStatus?: (callback: (status: AutoUpdateStatus) => void) => () => void;
-  /** RigMatch Chat asking for a picture, relayed by the loopback bridge. */
-  onBridgeGenerateRequest?: (callback: (request: { id: string; prompt: string }) => void) => () => void;
-  reportBridgeGenerateResult?: (result: { id: string; dataUrl?: string; error?: string }) => Promise<{ ok: boolean }>;
+  /** RigMatch Chat asking for a picture, a clip or a sound, relayed by the loopback bridge. */
+  onBridgeGenerateRequest?: (callback: (request: { id: string; prompt: string; kind?: 'image' | 'video' | 'audio' }) => void) => () => void;
+  reportBridgeGenerateResult?: (result: { id: string; dataUrl?: string; error?: string; stopped?: boolean }) => Promise<{ ok: boolean }>;
+  /** RigMatch Chat asking to stop something it started. */
+  onBridgeGenerateStop?: (callback: (request: { id: string }) => void) => () => void;
   startOllamaInstall: () => Promise<void>;
   launchOllamaInstaller: (installerPath: string) => Promise<void>;
   onOllamaInstallProgress?: (callback: (progress: OllamaInstallProgress) => void) => () => void;

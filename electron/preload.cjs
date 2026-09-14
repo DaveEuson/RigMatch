@@ -44,6 +44,12 @@ const api = {
     return () => ipcRenderer.removeListener('bridge:generateRequest', listener);
   },
   reportBridgeGenerateResult: (result) => ipcRenderer.invoke('bridge:generateResult', result),
+  /** RigMatch Chat asking to stop something it started. */
+  onBridgeGenerateStop: (callback) => {
+    const listener = (_event, request) => callback(request);
+    ipcRenderer.on('bridge:generateStop', listener);
+    return () => ipcRenderer.removeListener('bridge:generateStop', listener);
+  },
   onComfyDownloadProgress: (callback) => {
     const listener = (_event, progress) => callback(progress);
     ipcRenderer.on('comfy:downloadProgress', listener);
