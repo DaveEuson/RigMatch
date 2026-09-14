@@ -91,11 +91,11 @@ export function chatBeyondNote(
       + 'Image generation lives in Advanced Mode → Activity → the Image test, and needs ComfyUI running.';
   }
   if (kind === 'video') {
-    return `${name} writes text — it cannot make video. Video generation lives in Advanced Mode → Activity → `
-      + 'the Video test, and needs ComfyUI with a video checkpoint and a text encoder.';
+    return `${name} writes text — it cannot make video. RigMatch makes video through ComfyUI: `
+      + 'Make a video in RigMatch Chat, or Advanced Mode → Makes video to race the models.';
   }
-  return `${name} writes text — it cannot produce audio. RigMatch has no text-to-speech; `
-    + 'it can only listen, using a model that reports the audio capability.';
+  return `${name} writes text — it cannot produce audio, and RigMatch has no text-to-speech. `
+    + 'It can make music and sound effects through ComfyUI: Make audio in RigMatch Chat, or Advanced Mode → Makes audio.';
 }
 
 /**

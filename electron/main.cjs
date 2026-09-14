@@ -487,9 +487,16 @@ let latestScores = {};
 let latestChosen = null;
 let latestCapabilities = {};
 let latestImageMaker = { ready: false, checkpoint: null };
+/** What a clip or a sound would be made with for Chat, and whether it can be. */
+let latestVideoMaker = { ready: false, model: null, seconds: null };
+let latestAudioMaker = { ready: false, model: null };
+/** RigMatch's crowned model for each thing Chat does with a chat model: chat, code, reading, listening. */
+let latestPicks = {};
+
+const { generationKind, mimeForFile, savePlan } = require('./bridgeMedia.cjs');
 
 /**
- * Image generations asked for by RigMatch Chat, keyed by job id.
+ * Pictures, clips and sounds asked for by RigMatch Chat, keyed by job id.
  *
  * The companion cannot drive ComfyUI itself and should not learn how: the
  * transport, the graph, the checkpoint filtering and the abort path all exist
@@ -583,24 +590,43 @@ const scoresServer = http.createServer((req, res) => {
     return;
   }
 
-  // The picture itself, for the companion to show.
+  // Chat asking to stop something it started. The renderer holds the work, so
+  // this passes the word on, and the job reports how it ended as any other does.
+  const stopping = req.method === 'POST' ? /^\/generate\/([^/]+)\/stop$/.exec(url.pathname) : null;
+  if (stopping) {
+    res.setHeader('Content-Type', 'application/json');
+    const job = generationJobs.get(stopping[1]);
+    if (!job) {
+      res.statusCode = 404;
+      res.end(JSON.stringify({ error: 'No such generation.' }));
+      return;
+    }
+    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
+    if (job.status === 'running') win?.webContents.send('bridge:generateStop', { id: stopping[1] });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  // What was made, for the companion to show or play: /image for any Chat,
+  // /media for one that also asks for clips and sounds.
   //
   // Served from here rather than read by the companion: RigMatch wrote the
   // file and knows where its own folder is, so a chat app never needs a
   // "turn any path into base64" command — which is a file-read primitive
   // however carefully it is guarded.
-  if (req.method === 'GET' && /^\/generate\/[^/]+\/image$/.test(url.pathname)) {
-    const job = generationJobs.get(url.pathname.split('/')[2]);
+  const served = req.method === 'GET' ? /^\/generate\/([^/]+)\/(?:image|media)$/.exec(url.pathname) : null;
+  if (served) {
+    const job = generationJobs.get(served[1]);
     if (!job?.file) {
       res.statusCode = 404;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ error: 'No picture for that job.' }));
+      res.end(JSON.stringify({ error: 'Nothing was made for that job.' }));
       return;
     }
     fs.readFile(job.file)
       .then((bytes) => {
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ dataUrl: `data:image/png;base64,${bytes.toString('base64')}` }));
+        res.end(JSON.stringify({ dataUrl: `data:${mimeForFile(job.file)};base64,${bytes.toString('base64')}` }));
       })
       .catch(() => {
         res.statusCode = 410;
@@ -634,6 +660,9 @@ const scoresServer = http.createServer((req, res) => {
     chosen: latestChosen,
     capabilities: latestCapabilities,
     imageMaker: latestImageMaker,
+    videoMaker: latestVideoMaker,
+    audioMaker: latestAudioMaker,
+    picks: latestPicks,
   }));
 });
 
@@ -655,10 +684,20 @@ function handleGenerateRequest(req, res) {
     }
 
     let prompt = '';
-    try { prompt = String(JSON.parse(body || '{}').prompt ?? '').trim(); } catch { /* handled below */ }
+    let kind = null;
+    try {
+      const request = JSON.parse(body || '{}');
+      prompt = String(request.prompt ?? '').trim();
+      kind = generationKind(request.kind);
+    } catch { /* handled below */ }
     if (!prompt) {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: 'A prompt is required.' }));
+      return;
+    }
+    if (!kind) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: 'RigMatch can make a picture, a video or audio, and nothing else.' }));
       return;
     }
 
@@ -673,8 +712,8 @@ function handleGenerateRequest(req, res) {
     }
 
     const id = `gen-${Date.now()}-${Math.round(process.hrtime()[1] / 1000)}`;
-    rememberJob(id, { id, status: 'running', prompt, startedAt: Date.now() });
-    win.webContents.send('bridge:generateRequest', { id, prompt });
+    rememberJob(id, { id, status: 'running', kind, prompt, startedAt: Date.now() });
+    win.webContents.send('bridge:generateRequest', { id, prompt, kind });
     res.statusCode = 202;
     res.end(JSON.stringify({ id }));
   });
@@ -919,31 +958,46 @@ function registerHandlers() {
   /**
    * The renderer reporting back on a generation the bridge asked for.
    *
-   * The image is written to disk here rather than handed back through the
+   * What was made is written to disk here rather than handed back through the
    * bridge as bytes. A conversation that stores pictures grows without limit,
    * and the companion has been full once already — so it gets a path, and the
-   * file outlives the chat it was made in.
+   * file outlives the chat it was made in. Pictures go to Pictures\RigMatch,
+   * clips to Videos\RigMatch and sounds to Music\RigMatch, and only what the
+   * job asked for is kept.
    */
   handleLogged('bridge:generateResult', 'bridge', async (_event, result) => {
     const id = String(result?.id ?? '');
-    if (!id || !generationJobs.has(id)) return { ok: false };
+    const job = id ? generationJobs.get(id) : undefined;
+    if (!job) return { ok: false };
+    const kind = job.kind ?? 'image';
+    const what = kind === 'image' ? 'picture' : kind === 'video' ? 'clip' : 'audio';
 
+    // A Chat from before 0.9 knows no ending but done and failed, so stopped
+    // reads as failed there; this one also says it was stopped.
+    if (result?.stopped) {
+      rememberJob(id, { status: 'failed', stopped: true, error: 'Stopped before it finished.', finishedAt: Date.now() });
+      return { ok: true };
+    }
     if (result?.error || !result?.dataUrl) {
-      rememberJob(id, { status: 'failed', error: String(result?.error ?? 'No image was produced.'), finishedAt: Date.now() });
+      rememberJob(id, { status: 'failed', error: String(result?.error ?? `No ${what} was produced.`), finishedAt: Date.now() });
+      return { ok: true };
+    }
+    const plan = savePlan(kind, result.dataUrl);
+    if (!plan) {
+      rememberJob(id, { status: 'failed', error: `ComfyUI returned something other than the ${what} that was asked for.`, finishedAt: Date.now() });
       return { ok: true };
     }
 
     try {
-      const base64 = String(result.dataUrl).split(',')[1] ?? '';
-      const dir = path.join(app.getPath('pictures'), 'RigMatch');
+      const dir = path.join(app.getPath(plan.folder), 'RigMatch');
       await fs.mkdir(dir, { recursive: true });
-      const file = path.join(dir, `${id}.png`);
-      await fs.writeFile(file, Buffer.from(base64, 'base64'));
+      const file = path.join(dir, `${id}.${plan.ext}`);
+      await fs.writeFile(file, Buffer.from(plan.base64, 'base64'));
       rememberJob(id, { status: 'done', file, finishedAt: Date.now() });
     } catch (error) {
-      // Saving is the last step, so a failure here means the picture was made
-      // and then lost. Say which of the two happened.
-      rememberJob(id, { status: 'failed', error: `The image was generated but could not be saved: ${error?.message ?? error}`, finishedAt: Date.now() });
+      // Saving is the last step, so a failure here means it was made and then
+      // lost. Say which of the two happened.
+      rememberJob(id, { status: 'failed', error: `The ${what} was made but could not be saved: ${error?.message ?? error}`, finishedAt: Date.now() });
     }
     return { ok: true };
   });
@@ -1053,6 +1107,30 @@ function registerHandlers() {
         ? rawMaker.checkpoint
         : null;
       latestImageMaker = { ready: rawMaker.ready === true, checkpoint };
+    }
+
+    // What a clip or a sound would be made with, checked the same way. A maker
+    // with no model named is not ready, whatever its flag says.
+    const makerFrom = (raw) => {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+      const model = typeof raw.model === 'string' && raw.model.length <= 200 ? raw.model : null;
+      const seconds = Number.isFinite(raw.seconds) && raw.seconds > 0 && raw.seconds < 1e6 ? raw.seconds : null;
+      return { ready: raw.ready === true && Boolean(model), model, seconds };
+    };
+    const videoMaker = makerFrom(data.videoMaker);
+    if (videoMaker) latestVideoMaker = videoMaker;
+    const audioMaker = makerFrom(data.audioMaker);
+    if (audioMaker) latestAudioMaker = { ready: audioMaker.ready, model: audioMaker.model };
+
+    // RigMatch's crowned chat model for each use, by name.
+    const rawPicks = data.picks;
+    if (rawPicks && typeof rawPicks === 'object' && !Array.isArray(rawPicks)) {
+      const picks = {};
+      for (const use of ['chat', 'code', 'reading', 'listening']) {
+        const name = rawPicks[use];
+        if (typeof name === 'string' && name.length <= 200) picks[use] = name;
+      }
+      latestPicks = picks;
     }
   });
   // Cloud judge bridge for the renderer (App Builder judging). Kept in the main

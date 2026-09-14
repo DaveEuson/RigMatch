@@ -50,13 +50,18 @@ export type RenderOutcome = {
   endedAt: number;
 };
 
-/** A picture being drawn from a model's row. The panel can close; the drawing carries on. */
+/**
+ * A picture being drawn from a model's row, or a picture, clip or sound made
+ * for RigMatch Chat. The panel or the Chat window can close; the work carries on.
+ */
 export type ImageTestActivity = {
   key: string;
   name: string;
   startedAt: number;
   message: string;
   stop: () => void;
+  /** What is being made: a picture unless said otherwise. */
+  kind?: RenderKind;
 };
 
 let imageTest: ImageTestActivity | null = null;
@@ -96,8 +101,9 @@ export function endImageTest(
   endedAt: number = Date.now(),
 ): void {
   if (imageTest?.key !== key) return;
+  const kind = imageTest.kind ?? 'image';
   imageTest = null;
-  if (outcome) imageTestOutcome = { kind: 'image', ...outcome, endedAt };
+  if (outcome) imageTestOutcome = { kind, ...outcome, endedAt };
   emitImageTest();
 }
 
@@ -166,7 +172,7 @@ export function renderActivityFrom(
   }
   if (drawing) {
     return {
-      kind: 'image',
+      kind: drawing.kind ?? 'image',
       key: drawing.key,
       model: drawing.name,
       phase: 'rendering',
