@@ -86,10 +86,17 @@ export type AdvancedLabResult = {
   lineupId?: string;
   /**
    * How much of the prompt the judge confirmed in a generated picture or a
-   * video's middle frame, 0 to 1; null when nothing could judge it. Kept apart
-   * from the score so the Balance fader can weigh it against time directly.
+   * video's middle frame, or how much of a test picture a description named,
+   * 0 to 1; null when nothing could judge it. Kept apart from the score so the
+   * Balance fader can weigh it against time directly.
    */
   adherence?: number | null;
+  /**
+   * Which of RigMatch's test pictures a reading test showed, so its
+   * description is checked against what is in it and compared only with others
+   * given the same picture. Absent for a picture you uploaded.
+   */
+  picture?: string;
   /** Where the Balance fader stood when this test started, 0 (speed) to 100 (accuracy). */
   balance?: number;
 };
