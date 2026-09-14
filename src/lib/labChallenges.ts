@@ -486,6 +486,10 @@ export async function runAdvancedVisionChallenge(
       baseUrl,
       prompt: ADVANCED_VISION_PROMPT,
       images: [imageDataUrl],
+      // Saying what a picture shows needs no reasoning, and the budget is for
+      // the answer. Shown the contestant wall, qwen3.5:9b spent all 600 tokens
+      // thinking and answered nothing; with thinking off it described it in 7 s.
+      think: false,
       keep_alive: '10m',
       timeoutMs: 180000,
       options: {
