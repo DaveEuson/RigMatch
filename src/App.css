@@ -27,6 +27,13 @@
 
 .app-shell {
   height: 100vh;
+  /* A control room, not a billboard. On a 2560px monitor every strip stretched
+     the full width of the glass: the header's eight cards spread until the
+     readouts were islands, and a table row ran a metre from its name to its
+     actions. The room behind it is the page's own background, which is what
+     the margins show. */
+  max-width: 1920px;
+  margin-inline: auto;
   padding: 24px;
   color: var(--text);
   background: var(--panel);
