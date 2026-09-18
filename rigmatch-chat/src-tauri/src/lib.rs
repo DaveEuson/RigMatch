@@ -548,10 +548,17 @@ async fn get_rig_scores() -> Result<serde_json::Value, String> {
 /// borrowing the WebView's identity is more honest than relying on the header
 /// being absent.
 #[tauri::command]
-async fn start_rig_generation(prompt: String, kind: Option<String>) -> Result<serde_json::Value, String> {
+async fn start_rig_generation(
+    prompt: String,
+    kind: Option<String>,
+    model: Option<String>,
+) -> Result<serde_json::Value, String> {
     // A picture, a clip or a sound; RigMatch refuses anything else. Naming none
     // asks for a picture, as every Chat before this one did.
     let kind = kind.unwrap_or_else(|| "image".to_string());
+    // Which of the models RigMatch offered to use. Naming none leaves the
+    // choice to RigMatch, which takes the one it ranked first.
+    let model = model.unwrap_or_default();
     let client = reqwest::Client::builder()
         // Longer than the scores fetch: this only starts the work, but RigMatch
         // has to reach its renderer before it can answer.
@@ -561,7 +568,7 @@ async fn start_rig_generation(prompt: String, kind: Option<String>) -> Result<se
     let res = client
         .post(bridge_url("/generate"))
         .header("Origin", "tauri://localhost")
-        .json(&serde_json::json!({ "prompt": prompt, "kind": kind }))
+        .json(&serde_json::json!({ "prompt": prompt, "kind": kind, "model": model }))
         .send()
         .await
         .map_err(|_| "RigMatch is not running, so it cannot generate anything.".to_string())?;
