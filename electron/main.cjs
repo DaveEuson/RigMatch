@@ -685,10 +685,14 @@ function handleGenerateRequest(req, res) {
 
     let prompt = '';
     let kind = null;
+    // Which model to make it with, out of the list RigMatch sent Chat. The
+    // renderer refuses a key it never offered, so this only has to be a string.
+    let model = null;
     try {
       const request = JSON.parse(body || '{}');
       prompt = String(request.prompt ?? '').trim();
       kind = generationKind(request.kind);
+      if (typeof request.model === 'string' && request.model.length <= 200) model = request.model;
     } catch { /* handled below */ }
     if (!prompt) {
       res.statusCode = 400;
@@ -712,8 +716,8 @@ function handleGenerateRequest(req, res) {
     }
 
     const id = `gen-${Date.now()}-${Math.round(process.hrtime()[1] / 1000)}`;
-    rememberJob(id, { id, status: 'running', kind, prompt, startedAt: Date.now() });
-    win.webContents.send('bridge:generateRequest', { id, prompt, kind });
+    rememberJob(id, { id, status: 'running', kind, prompt, model, startedAt: Date.now() });
+    win.webContents.send('bridge:generateRequest', { id, prompt, kind, model });
     res.statusCode = 202;
     res.end(JSON.stringify({ id }));
   });
@@ -1111,16 +1115,35 @@ function registerHandlers() {
 
     // What a clip or a sound would be made with, checked the same way. A maker
     // with no model named is not ready, whatever its flag says.
+    const text = (value, limit = 200) => (typeof value === 'string' && value.length <= limit ? value : null);
+    /** Every model the maker offers, in the order RigMatch ranked them. */
+    const choicesFrom = (raw) => (Array.isArray(raw) ? raw : [])
+      .map((choice) => {
+        if (!choice || typeof choice !== 'object') return null;
+        const key = text(choice.key);
+        const name = text(choice.name);
+        if (!key || !name) return null;
+        return {
+          key,
+          name,
+          seconds: Number.isFinite(choice.seconds) && choice.seconds > 0 && choice.seconds < 1e6 ? choice.seconds : null,
+          tested: text(choice.tested, 120),
+          crowned: choice.crowned === true,
+        };
+      })
+      .filter(Boolean)
+      // One screenful of models; a listing longer than this is not a choice.
+      .slice(0, 40);
     const makerFrom = (raw) => {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-      const model = typeof raw.model === 'string' && raw.model.length <= 200 ? raw.model : null;
+      const model = text(raw.model);
       const seconds = Number.isFinite(raw.seconds) && raw.seconds > 0 && raw.seconds < 1e6 ? raw.seconds : null;
-      return { ready: raw.ready === true && Boolean(model), model, seconds };
+      return { ready: raw.ready === true && Boolean(model), model, seconds, choices: choicesFrom(raw.choices) };
     };
     const videoMaker = makerFrom(data.videoMaker);
     if (videoMaker) latestVideoMaker = videoMaker;
     const audioMaker = makerFrom(data.audioMaker);
-    if (audioMaker) latestAudioMaker = { ready: audioMaker.ready, model: audioMaker.model };
+    if (audioMaker) latestAudioMaker = { ready: audioMaker.ready, model: audioMaker.model, choices: audioMaker.choices };
 
     // RigMatch's crowned chat model for each use, by name.
     const rawPicks = data.picks;

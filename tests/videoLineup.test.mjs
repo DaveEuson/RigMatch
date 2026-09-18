@@ -23,6 +23,7 @@ import {
   runVideoLineup,
   runnableLineup,
   strayLtxEntries,
+  strayLtxName,
   videoMachineFrom,
 } from '../src/lib/videoLineup.ts';
 import { VIDEO_MODEL_SPECS } from '../src/lib/videoCatalog.ts';
@@ -155,6 +156,14 @@ test('an LTX-Video 0.9 file RigMatch never downloaded still races, and nothing e
   assert.ok(found.every((entry) => entry.found && isLineupInstalled(entry, {}) && lineupDownloadBytes(entry, {}) === 0));
   assert.equal(found[1].sizing.ditGb, lineupEntry('ltxv-13b').sizing.ditGb, 'a 13B file is sized as one');
   assert.equal(found[0].refMeasured, false, 'its time stays rough until this machine renders it');
+  // The maker card in Chat offered "ltx-video-2b-v0.9.5.safetensors" as the name
+  // of the model about to make your clip. A filename is not a name.
+  assert.deepEqual(found.map((entry) => entry.name), [
+    'LTX-Video 2B 0.9.5 (your own file)',
+    'LTX-Video 13B 0.9.7 (your own file)',
+  ]);
+  assert.equal(found[0].legacy.checkpoint, 'ltx-video-2b-v0.9.5.safetensors', 'the graph still loads the file itself');
+  assert.equal(strayLtxName('mystery.safetensors'), 'mystery', 'a name with nothing to read keeps its own');
   assert.equal(allLineupEntries({ checkpoints: ['ltx-video-2b-v0.9.5.safetensors'], text_encoders: ['t5xxl_fp8_e4m3fn.safetensors'] }).length, VIDEO_LINEUP.length + 1);
 });
 

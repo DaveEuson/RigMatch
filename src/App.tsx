@@ -59,7 +59,7 @@ import {
 } from './lib/scoring';
 import { BALANCE_STORAGE_KEY, applyBalance, readBalances, type Balances } from './lib/balance';
 import { codeWinner, labWinner, rankCoding, videoWinner } from './lib/channelWinners';
-import { chatPicks, pickAudioMaker, pickVideoMaker } from './lib/chatMakers';
+import { audioMakerChoices, chatPicks, videoMakerChoices } from './lib/chatMakers';
 import { renderChatAudio, renderChatVideo, type ChatRender } from './lib/chatRenders';
 import { installedAudioEntries } from './lib/audioLineup';
 import { audioModelSpec } from './lib/audioCatalog';
@@ -253,6 +253,7 @@ import { modelMatchesTask } from './lib/modelCatalog';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLineupLive } from './lib/videoGenRunner';
 import {
+  allLineupEntries,
   asHardwareFit,
   comfyListing,
   estimateLineup,
@@ -1340,37 +1341,55 @@ function App() {
     () => comfyListing({ checkpoints: comfyCheckpoints, folders: comfyFolders ?? undefined }),
     [comfyCheckpoints, comfyFolders],
   );
-  const chatVideoMaker = useMemo(() => {
-    if (!comfyReachable) return null;
+  /** Every video model that can run here, as Chat lists them: tested first. */
+  const chatVideoChoices = useMemo(() => {
+    if (!comfyReachable) return [];
     const options = { calibration: readVideoCalibration(), saved: labResults };
-    return pickVideoMaker(runnableLineup(chatListing, videoMachine, options), lineupSession.record, pictureJudged ? balances.video : 0);
+    return videoMakerChoices({
+      runnable: runnableLineup(chatListing, videoMachine, options),
+      catalogue: allLineupEntries(chatListing),
+      record: lineupSession.record,
+      balance: pictureJudged ? balances.video : 0,
+      secondsFor: (entry) => estimateLineup([entry], videoMachine, options).seconds,
+    });
   }, [comfyReachable, chatListing, videoMachine, labResults, lineupSession.record, pictureJudged, balances.video]);
-  const chatVideoSeconds = useMemo(
-    () => (chatVideoMaker
-      ? estimateLineup([chatVideoMaker], videoMachine, { calibration: readVideoCalibration(), saved: labResults }).seconds
-      : null),
-    [chatVideoMaker, videoMachine, labResults],
-  );
-  const chatAudioMaker = useMemo(() => {
-    if (!comfyReachable) return null;
-    const entry = pickAudioMaker(installedAudioEntries(chatListing), labResults, balances.audio);
-    return entry ? audioModelSpec(entry.key) ?? null : null;
-  }, [comfyReachable, chatListing, labResults, balances.audio]);
+  const chatAudioChoices = useMemo(() => (comfyReachable
+    ? audioMakerChoices({ installed: installedAudioEntries(chatListing), results: labResults, balance: balances.audio })
+    : []), [comfyReachable, chatListing, labResults, balances.audio]);
+  /**
+   * The model a Chat request runs on: the one it asked for, else the first
+   * offered. A key Chat was never offered is refused rather than guessed at,
+   * since the only sender that can name one is a Chat reading this same list.
+   */
+  const chatVideoEntry = useCallback((key?: string | null) => {
+    const wanted = key || chatVideoChoices[0]?.key;
+    if (!wanted || !chatVideoChoices.some((choice) => choice.key === wanted)) return null;
+    return allLineupEntries(chatListing).find((entry) => entry.key === wanted) ?? null;
+  }, [chatVideoChoices, chatListing]);
+  const chatAudioEntry = useCallback((key?: string | null) => {
+    const wanted = key || chatAudioChoices[0]?.key;
+    if (!wanted || !chatAudioChoices.some((choice) => choice.key === wanted)) return null;
+    return audioModelSpec(wanted) ?? null;
+  }, [chatAudioChoices]);
 
   // Chat asking for a clip or a sound. Pictures keep their own path, above.
   useEffect(() => {
     if (!agentArcadeApi.onBridgeGenerateRequest) return undefined;
-    return agentArcadeApi.onBridgeGenerateRequest(({ id, prompt, kind }) => {
+    return agentArcadeApi.onBridgeGenerateRequest(({ id, prompt, kind, model }) => {
       if (kind !== 'video' && kind !== 'audio') return;
       void (async () => {
         const report = (result: ChatRender) => agentArcadeApi.reportBridgeGenerateResult?.({ id, ...result });
         const noun = kind === 'video' ? 'a clip' : 'audio';
-        const name = kind === 'video' ? chatVideoMaker?.name : chatAudioMaker?.name;
+        const entry = kind === 'video' ? chatVideoEntry(model) : null;
+        const spec = kind === 'audio' ? chatAudioEntry(model) : null;
+        const name = entry?.name ?? spec?.name;
         if (!name) {
           await report({
-            error: kind === 'video'
-              ? 'No video model that can run on this PC is installed, or ComfyUI is not running.'
-              : 'No audio model is installed, or ComfyUI is not running.',
+            error: model
+              ? `RigMatch cannot make ${noun} with that model here. Pick another one.`
+              : kind === 'video'
+                ? 'No video model that can run on this PC is installed, or ComfyUI is not running.'
+                : 'No audio model is installed, or ComfyUI is not running.',
           });
           return;
         }
@@ -1385,10 +1404,10 @@ function App() {
         startImageTest({ key, kind, name, message: `Making ${noun} for RigMatch Chat: “${prompt}”`, stop: () => controller.abort() });
         try {
           const baseUrl = comfySettings.baseUrl;
-          const result: ChatRender = kind === 'video' && chatVideoMaker
-            ? await renderChatVideo({ entry: chatVideoMaker, prompt, baseUrl, signal: controller.signal })
-            : chatAudioMaker
-              ? await renderChatAudio({ spec: chatAudioMaker, prompt, baseUrl, signal: controller.signal })
+          const result: ChatRender = entry
+            ? await renderChatVideo({ entry, prompt, baseUrl, signal: controller.signal })
+            : spec
+              ? await renderChatAudio({ spec, prompt, baseUrl, signal: controller.signal })
               : { error: 'Nothing is installed to make it with.' };
           endImageTest(key, result.stopped
             ? { message: `Stopped making ${noun} for RigMatch Chat.`, failed: false }
@@ -1404,7 +1423,7 @@ function App() {
         }
       })();
     });
-  }, [chatVideoMaker, chatAudioMaker, comfySettings.baseUrl, renderActivity]);
+  }, [chatVideoEntry, chatAudioEntry, comfySettings.baseUrl, renderActivity]);
 
   // Chat's Stop, for whichever of its jobs is still running.
   useEffect(() => {
@@ -3529,13 +3548,23 @@ function App() {
       chosen: selectedModel,
       capabilities,
       imageMaker,
-      // What a clip or a sound would be made with, and how long a clip should take here.
-      videoMaker: { ready: Boolean(chatVideoMaker), model: chatVideoMaker?.name ?? null, seconds: chatVideoSeconds },
-      audioMaker: { ready: Boolean(chatAudioMaker), model: chatAudioMaker?.name ?? null },
+      // Every model a clip or a sound could be made with, tested first, with how
+      // long a clip should take here. The first is what Chat uses unless you pick.
+      videoMaker: {
+        ready: chatVideoChoices.length > 0,
+        model: chatVideoChoices[0]?.name ?? null,
+        seconds: chatVideoChoices[0]?.seconds ?? null,
+        choices: chatVideoChoices,
+      },
+      audioMaker: {
+        ready: chatAudioChoices.length > 0,
+        model: chatAudioChoices[0]?.name ?? null,
+        choices: chatAudioChoices,
+      },
       // The model each chat choice opens on.
       picks: chatModelPicks,
     } as Record<string, unknown>);
-  }, [modelScores, selectedModel, modelRows, chatImageGeneration, chatVideoMaker, chatVideoSeconds, chatAudioMaker, chatModelPicks]);
+  }, [modelScores, selectedModel, modelRows, chatImageGeneration, chatVideoChoices, chatAudioChoices, chatModelPicks]);
 
   useEffect(() => {
     if (!agentArcadeApi.onBenchmarkProgress) return undefined;

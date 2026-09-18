@@ -106,6 +106,23 @@ const LTX_2_NAME = /ltx-?2(?:\.\d+)?[-_.]/i;
 const T5_XXL_NAME = /t5xxl/i;
 
 /**
+ * The file said the way a person would say it.
+ *
+ * "ltx-video-2b-v0.9.5.safetensors" is a filename, and every screen that
+ * offered the model showed it as though it were the model's name — the maker
+ * card in Chat worst of all, where it sat under "Video maker" as the thing
+ * about to make your clip. Where the name carries neither a size nor a version
+ * there is nothing to improve on, so the file keeps its own name, minus the
+ * extension.
+ */
+export function strayLtxName(file: string): string {
+  const size = file.match(/(\d+(?:\.\d+)?)b\b/i)?.[1];
+  const version = file.match(/0\.9(?:\.\d+)?/)?.[0];
+  if (!size && !version) return file.replace(/\.[^.]+$/, '');
+  return `LTX-Video${size ? ` ${size}B` : ''}${version ? ` ${version}` : ''} (your own file)`;
+}
+
+/**
  * LTX-Video 0.9 checkpoints ComfyUI lists that did not come from the catalogue.
  *
  * Until 0.9 the Lab ran any LTX checkpoint in models/checkpoints and told people
@@ -125,7 +142,7 @@ export function strayLtxEntries(installed: ComfyFolderListing): VideoLineupEntry
     .filter((name) => LTX_09_NAME.test(name) && !LTX_2_NAME.test(name) && !isCatalogFile(name))
     .map((name) => ({
       key: `file:${name}`,
-      name,
+      name: strayLtxName(name),
       publisher: LEGACY_LTX.publisher,
       sizing: /13b/i.test(name) && big ? big.sizing : LEGACY_LTX.sizing,
       refMeasured: false,
