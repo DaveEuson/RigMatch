@@ -54,9 +54,12 @@ test('the note names the model and where the thing can really be done', () => {
   assert.match(image, /cannot make images/);
   assert.match(image, /ComfyUI/, 'a refusal without a route is half an answer');
 
-  assert.match(chatBeyondNote('video', 'llama3'), /video checkpoint|Video test/);
-  // Honest about the one RigMatch genuinely cannot do anywhere.
+  // Video is made in RigMatch Chat, and raced in Advanced Mode.
+  assert.match(chatBeyondNote('video', 'llama3'), /Make a video/);
+  assert.match(chatBeyondNote('video', 'llama3'), /Makes video/);
+  // Honest about the one RigMatch genuinely cannot do anywhere, and says where music and sound are made.
   assert.match(chatBeyondNote('speech', 'llama3'), /no text-to-speech/);
+  assert.match(chatBeyondNote('speech', 'llama3'), /Make audio/);
 });
 
 test('nothing is said when nothing was asked for', () => {

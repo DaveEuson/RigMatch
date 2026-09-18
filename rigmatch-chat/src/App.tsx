@@ -70,6 +70,82 @@ const AVATAR_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "im
  * same lookup, without pretending it is a buddy you can talk to.
  */
 const IMAGE_STUDIO = "__rigmatch_image_maker__";
+/** The video and audio makers' stand-in names, for the same reason. */
+const VIDEO_STUDIO = "__rigmatch_video_maker__";
+const AUDIO_STUDIO = "__rigmatch_audio_maker__";
+
+type MakeKind = "image" | "video" | "audio";
+
+/** What each maker is called, and what it asks for and says. */
+const STUDIOS: Record<MakeKind, {
+  id: string;
+  title: string;
+  verb: string;
+  noun: string;
+  plural: string;
+  folder: string;
+  /** "Describe … and press …", on an empty workspace. */
+  blank: string;
+  /** "Open it and describe … you want." */
+  ask: string;
+  placeholder: string;
+  missing: string;
+  notReady: string;
+}> = {
+  image: {
+    id: IMAGE_STUDIO, title: "Image maker", verb: "Make image", noun: "picture", plural: "pictures", folder: "Pictures",
+    blank: "a picture", ask: "the picture", placeholder: "A lighthouse in a storm...",
+    missing: "No checkpoint that can draw",
+    notReady: "ComfyUI has no still-image checkpoint loaded, so this cannot work yet. Load one in ComfyUI, or check RigMatch is running.",
+  },
+  video: {
+    id: VIDEO_STUDIO, title: "Video maker", verb: "Make video", noun: "clip", plural: "clips", folder: "Videos",
+    blank: "a clip", ask: "the clip", placeholder: "A lighthouse in a storm, waves breaking over the rocks...",
+    missing: "No video model that runs here",
+    notReady: "No video model that runs on this PC is installed, or ComfyUI is not running. RigMatch → Makes video lists them, with each one's size and time here.",
+  },
+  audio: {
+    id: AUDIO_STUDIO, title: "Audio maker", verb: "Make audio", noun: "sound", plural: "sounds", folder: "Music",
+    blank: "some music or a sound", ask: "the music or sound", placeholder: "Heavy rain on a tin roof, with distant thunder...",
+    missing: "No audio model installed",
+    notReady: "No audio model is installed, or ComfyUI is not running. RigMatch → Makes audio lists them, with their sizes.",
+  },
+};
+
+const studioKind = (name: string | null): MakeKind | null =>
+  name === IMAGE_STUDIO ? "image" : name === VIDEO_STUDIO ? "video" : name === AUDIO_STUDIO ? "audio" : null;
+
+/**
+ * One choice for each thing RigMatch tests. Writing, code, reading pictures and
+ * listening are done by the models in the list; making a picture, a clip or a
+ * sound opens a maker instead.
+ */
+type CapabilityFilter = "all" | "text" | "code" | "vision" | "audio" | "image" | "video" | "sound";
+
+const MAKER_FOR: Partial<Record<CapabilityFilter, MakeKind>> = { image: "image", video: "video", sound: "audio" };
+
+type PickUse = "chat" | "code" | "reading" | "listening";
+
+/** Which of RigMatch's crowned models each choice opens on. */
+const PICK_FOR: Partial<Record<CapabilityFilter, PickUse>> = { text: "chat", code: "code", vision: "reading", audio: "listening" };
+
+const PICK_LABEL: Record<PickUse, string> = {
+  chat: "RigMatch's Top Match",
+  code: "Best at coding on this PC",
+  reading: "Best at reading pictures on this PC",
+  listening: "Best at listening on this PC",
+};
+
+/** 42s, or 3m 05s. */
+function formatElapsed(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+/** "under a minute", or "about 3 min": an estimate should not read as a measurement. */
+function aboutHowLong(seconds: number): string {
+  return seconds < 60 ? "under a minute" : `about ${Math.round(seconds / 60)} min`;
+}
 
 function renderMarkdown(content: string): string {
   return DOMPurify.sanitize(marked.parse(content) as string, { USE_PROFILES: { html: true } });
@@ -94,7 +170,7 @@ type Buddy = {
 };
 
 /**
- * A generated picture in the transcript.
+ * A generated picture, clip or sound in the transcript.
  *
  * The bytes are asked for once and remembered in memory for the session; the
  * conversation on disk holds only the path. That means a picture made last week
@@ -114,23 +190,34 @@ function GeneratedImage({
   onLoaded: (jobId: string, dataUrl: string) => void;
 }) {
   const [failed, setFailed] = useState(false);
+  const isVideo = /\.(mp4|webm)$/i.test(path);
+  const isAudio = /\.(mp3|wav|flac|ogg)$/i.test(path);
 
   useEffect(() => {
     if (!jobId || bytes || failed) return;
     void (async () => {
       try {
-        const result = await invoke<{ dataUrl?: string }>("get_rig_generation_image", { id: jobId });
+        // Pictures keep the route every RigMatch has. Clips and sounds come
+        // from /media, which only a RigMatch that can make them has.
+        const command = isVideo || isAudio ? "get_rig_generation_media" : "get_rig_generation_image";
+        const result = await invoke<{ dataUrl?: string }>(command, { id: jobId });
         if (result?.dataUrl) onLoaded(jobId, result.dataUrl);
         else setFailed(true);
       } catch {
         setFailed(true);
       }
     })();
-  }, [jobId, bytes, failed, onLoaded]);
+  }, [jobId, bytes, failed, onLoaded, isVideo, isAudio]);
 
   return (
     <div className="rm-generated-image">
-      {bytes ? <img src={bytes} alt={path} /> : null}
+      {bytes
+        ? isVideo
+          ? <video src={bytes} controls loop playsInline />
+          : isAudio
+            ? <audio src={bytes} controls />
+            : <img src={bytes} alt={path} />
+        : null}
       <span className="rm-generated-path" title={path}>
         {failed && !bytes ? "Saved to " : bytes ? "Saved to " : "Saving to "}
         {path}
@@ -145,7 +232,7 @@ type AppMessage = {
   content: string;
   ts: number;
   /**
-   * Where a generated picture was saved, never the picture itself.
+   * Where a generated picture, clip or sound was saved, never the file itself.
    *
    * Conversations are written to a file on every change; putting a
    * quarter-megabyte image in one would grow history without limit, and this
@@ -525,7 +612,9 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [draftSettings, setDraftSettings] = useState<AppSettings>(settings);
   const [rigScores, setRigScores] = useState<Record<string, ModelScore>>(() => loadCachedBridge().scores);
-  const [generatingImage, setGeneratingImage] = useState(false);
+  /** What is being made for this window, and RigMatch's job for it once there is one, so Stop can reach it. */
+  const [making, setMaking] = useState<{ kind: MakeKind; jobId: string | null } | null>(null);
+  const generatingImage = making !== null;
 
   /**
    * A picture or recording waiting to be sent with the next message.
@@ -543,6 +632,14 @@ export default function App() {
   const [imageMaker, setImageMaker] = useState<{ ready: boolean; checkpoint: string | null }>(
     { ready: false, checkpoint: null },
   );
+  /** What RigMatch would make a clip with, and roughly how long one takes on this PC. */
+  const [videoMaker, setVideoMaker] = useState<{ ready: boolean; model: string | null; seconds: number | null }>(
+    { ready: false, model: null, seconds: null },
+  );
+  /** What RigMatch would make music or a sound with. */
+  const [audioMaker, setAudioMaker] = useState<{ ready: boolean; model: string | null }>({ ready: false, model: null });
+  /** The model RigMatch's own tests crowned for each thing this window does with a chat model. */
+  const [picks, setPicks] = useState<Partial<Record<PickUse, string>>>({});
 
   /**
    * What the active model can actually be handed.
@@ -617,7 +714,7 @@ export default function App() {
     setAttachment({ base64: comma === -1 ? dataUrl : dataUrl.slice(comma + 1), name: file.name, kind });
   }, []);
   /** Narrow the list to one ability. 'all' is the resting state. */
-  const [capabilityFilter, setCapabilityFilter] = useState<"all" | "text" | "vision" | "audio" | "image">("all");
+  const [capabilityFilter, setCapabilityFilter] = useState<CapabilityFilter>("all");
   /** Fetched bytes, keyed by job — memory only, never written to history. */
   const [imageBytes, setImageBytes] = useState<Record<string, string>>({});
   const [chosenModel, setChosenModel] = useState<string | null>(() => loadCachedBridge().chosen);
@@ -645,27 +742,55 @@ export default function App() {
     return map;
   }, [rigScores]);
 
-  // Sort: chosen model first, then top-3 by rank, then the rest alphabetically
+  /**
+   * The model RigMatch's own tests crowned for the choice in view, which the
+   * list opens on: the Top Match for anything and writing, the Code winner for
+   * code, the best reader and the best listener. Null where nothing has won.
+   */
+  const pickUse = PICK_FOR[capabilityFilter];
+  const pickedModel = capabilityFilter === "all"
+    ? chosenModel
+    : pickUse ? picks[pickUse] ?? (pickUse === "chat" ? chosenModel : null) : null;
+
+  // Sort: RigMatch's pick for the choice first, then top-3 by rank, then the rest alphabetically
   const visibleBuddies = useMemo(() => {
     const filtered = buddies
       .filter((b) => !settings.hiddenModels.includes(b.modelName))
       // Narrowed by ability, when asked. Hiding a model the user chose to keep
       // visible is only acceptable while a filter is plainly switched on, which
       // is why the control sits directly above the list rather than in Settings.
-      // "Make a picture" is not something any model here does, so that filter
-      // empties the list on purpose and the maker card takes its place.
-      .filter((b) => capabilityFilter !== "image"
-        && (capabilityFilter === "all"
-          || (rigCapabilities[b.modelName] ?? []).includes(capabilityFilter)));
+      // Making a picture, a clip or a sound is not something any model here
+      // does, so those choices empty the list on purpose and a maker card takes
+      // its place. Code is written by the models that write.
+      .filter((b) => {
+        if (MAKER_FOR[capabilityFilter]) return false;
+        if (capabilityFilter === "all") return true;
+        const need = capabilityFilter === "code" ? "text" : capabilityFilter;
+        return (rigCapabilities[b.modelName] ?? []).includes(need);
+      });
     return [...filtered].sort((a, b) => {
-      const aChosen = a.modelName === chosenModel ? 0 : 1;
-      const bChosen = b.modelName === chosenModel ? 0 : 1;
-      if (aChosen !== bChosen) return aChosen - bChosen;
+      const aPicked = a.modelName === pickedModel ? 0 : 1;
+      const bPicked = b.modelName === pickedModel ? 0 : 1;
+      if (aPicked !== bPicked) return aPicked - bPicked;
       const rankA = modelRankings.get(a.modelName) ?? 999;
       const rankB = modelRankings.get(b.modelName) ?? 999;
       return rankA - rankB;
     });
-  }, [buddies, settings.hiddenModels, modelRankings, chosenModel, capabilityFilter, rigCapabilities]);
+  }, [buddies, settings.hiddenModels, modelRankings, pickedModel, capabilityFilter, rigCapabilities]);
+
+  /** Whether each maker can work now, and the model it would use. */
+  const makerStatus = (kind: MakeKind): { ready: boolean; model: string | null } => {
+    if (kind === "image") {
+      return { ready: imageMaker.ready, model: imageMaker.checkpoint?.replace(/\.(safetensors|ckpt|sft)$/i, "") ?? null };
+    }
+    return kind === "video"
+      ? { ready: videoMaker.ready, model: videoMaker.model }
+      : { ready: audioMaker.ready, model: audioMaker.model };
+  };
+  /** The maker the choice above the list opens, if it opens one. */
+  const makerKind = MAKER_FOR[capabilityFilter] ?? null;
+  /** The maker whose workspace is open, if one is. */
+  const openStudio = studioKind(activeBuddy);
 
   const activeBuddyObj = visibleBuddies.find((b) => b.modelName === activeBuddy) ?? null;
   // The open thread's own personality wins, falling back to the app default for
@@ -697,6 +822,40 @@ export default function App() {
   }, [conversations, activeConversationId, activeBuddy]);
   const activeConversationKey = activeConversation?.id ?? null;
   const activeMessages = activeConversation?.messages ?? EMPTY_MESSAGES;
+
+  /**
+   * A maker's workspace keeps its newest result in view. A clip's player is
+   * tall, so the next one's progress landed below the fold, where Making… and
+   * Stopped were said to nobody. A player or picture only takes its height
+   * once it has loaded, after the scroll that made room for it, so that is
+   * followed too. Scrolled up to an older one, you are left there.
+   */
+  const studioBodyRef = useRef<HTMLDivElement | null>(null);
+  const studioAtEndRef = useRef(true);
+  // Opening a maker starts at its newest result.
+  useEffect(() => {
+    studioAtEndRef.current = true;
+  }, [openStudio]);
+  useEffect(() => {
+    const body = studioBodyRef.current;
+    if (!openStudio || !body) return undefined;
+    const follow = () => {
+      if (studioAtEndRef.current) body.scrollTop = body.scrollHeight;
+    };
+    const onScroll = () => {
+      studioAtEndRef.current = body.scrollHeight - body.scrollTop - body.clientHeight < 48;
+    };
+    follow();
+    body.addEventListener("scroll", onScroll, { passive: true });
+    // Load events do not bubble, but an ancestor hears them on the way down.
+    body.addEventListener("loadedmetadata", follow, true);
+    body.addEventListener("load", follow, true);
+    return () => {
+      body.removeEventListener("scroll", onScroll);
+      body.removeEventListener("loadedmetadata", follow, true);
+      body.removeEventListener("load", follow, true);
+    };
+  }, [openStudio, activeMessages, imageBytes]);
   // How much memory the active model is actually being given. "auto" sizes it
   // from the model's own limit against a KV budget; a pinned number is still
   // clamped to what the model declares, since asking beyond that does nothing.
@@ -833,6 +992,17 @@ export default function App() {
         setRigCapabilities((raw.capabilities as Record<string, string[]> | undefined) ?? {});
         const maker = raw.imageMaker as { ready?: boolean; checkpoint?: string | null } | undefined;
         setImageMaker({ ready: maker?.ready === true, checkpoint: maker?.checkpoint ?? null });
+        // What a clip or a sound would be made with. Absent from a RigMatch that
+        // cannot make them, which leaves both makers not ready.
+        const video = raw.videoMaker as { ready?: boolean; model?: string | null; seconds?: number | null } | undefined;
+        setVideoMaker({
+          ready: video?.ready === true,
+          model: video?.model ?? null,
+          seconds: typeof video?.seconds === "number" ? video.seconds : null,
+        });
+        const audio = raw.audioMaker as { ready?: boolean; model?: string | null } | undefined;
+        setAudioMaker({ ready: audio?.ready === true, model: audio?.model ?? null });
+        setPicks((raw.picks as Partial<Record<PickUse, string>> | undefined) ?? {});
         saveCachedBridge(payload);
       } catch {
         // RigMatch not running — use cached scores from last session
@@ -982,19 +1152,20 @@ export default function App() {
   // ── Send message ──────────────────────────────────────────────────────────
 
   /**
-   * Make a picture from what is in the box.
+   * Make a picture, a clip or a sound from what is in the box.
    *
    * Deliberately a button rather than something inferred from the words. This
-   * window is a tool for making images, so asking for one should be an act, not
+   * window is a tool for making them, so asking for one should be an act, not
    * a guess that occasionally fires on "draw me a diagram in text".
    *
-   * RigMatch does the generating. It owns ComfyUI, the graph and the
-   * checkpoints; the companion asks over the same loopback bridge it already
-   * reads scores from, and would have to be a second implementation otherwise.
+   * RigMatch does the making. It owns ComfyUI, the graphs and the models; the
+   * companion asks over the same loopback bridge it already reads scores from,
+   * and would have to be a second implementation otherwise.
    */
-  const generateImage = useCallback(async () => {
+  const makeWithRigMatch = useCallback(async (kind: MakeKind) => {
     const prompt = draft.trim();
-    if (!prompt || generatingImage) return;
+    if (!prompt || making) return;
+    const studio = STUDIOS[kind];
 
     const target = activeConversation ?? createConversation({
       id: genId(),
@@ -1025,21 +1196,29 @@ export default function App() {
     setActiveConversationId(conversationId);
     setDraft("");
     setAttachment(null);
-    setGeneratingImage(true);
+    setMaking({ kind, jobId: null });
+    // Asking for another brings the workspace back to the newest, to watch it.
+    studioAtEndRef.current = true;
     // Names the thing that will actually do it. The button sits under a
     // composer that says "using qwen2.5:7b", and no Ollama model here makes
     // pictures — leaving that implication standing is the same untruth the
     // main app spends its time refusing.
-    withReply("Asking RigMatch to make this with ComfyUI. The chat model is not involved.");
+    withReply(`Asking RigMatch to make this ${studio.noun} with ComfyUI. The chat model is not involved.`);
 
     try {
-      const started = await invoke<{ id: string }>("start_rig_generation", { prompt });
+      const started = await invoke<{ id: string }>("start_rig_generation", { prompt, kind });
+      setMaking({ kind, jobId: started.id });
       const startedAt = Date.now();
-      // Elapsed seconds, not a bar: ComfyUI reports nothing between starting and
+      // How long to keep asking. A picture takes seconds and a sound under a
+      // minute, but a clip can take an hour on a slow model; RigMatch has its
+      // own limit for each, and this only has to outlast it.
+      const giveUpAfterMs = kind === "video" ? 4 * 3600_000 : kind === "audio" ? 15 * 60_000 : 5 * 60_000;
+      const usually = kind === "video" && videoMaker.seconds ? ` · usually ${aboutHowLong(videoMaker.seconds)} here` : "";
+      // Elapsed time, not a bar: ComfyUI reports nothing between starting and
       // finishing, so a percentage would be invented.
-      for (let i = 0; i < 200; i += 1) {
+      while (Date.now() - startedAt < giveUpAfterMs) {
         await new Promise((r) => setTimeout(r, 1500));
-        const job = await invoke<{ status: string; file?: string; error?: string }>(
+        const job = await invoke<{ status: string; file?: string; error?: string; stopped?: boolean }>(
           "get_rig_generation", { id: started.id },
         );
         if (job.status === "done" && job.file) {
@@ -1047,20 +1226,29 @@ export default function App() {
           return;
         }
         if (job.status === "failed") {
-          withReply(`That picture could not be made: ${job.error ?? "RigMatch did not say why."}`);
+          withReply(job.stopped
+            ? "Stopped. Nothing was saved."
+            : `That ${studio.noun} could not be made: ${job.error ?? "RigMatch did not say why."}`);
           return;
         }
-        withReply(`Making "${prompt}"... ${Math.round((Date.now() - startedAt) / 1000)}s`);
+        withReply(`Making "${prompt}"... ${formatElapsed(Date.now() - startedAt)}${usually}`);
       }
-      withReply("RigMatch is still working on that picture. It will be in your Pictures folder when it lands.");
+      withReply(`RigMatch is still working on that ${studio.noun}. It will be in your ${studio.folder} folder when it lands.`);
     } catch (error) {
       // RigMatch's own words where it gave any: it knows whether ComfyUI is
-      // missing, busy, or simply has no checkpoint that can draw.
+      // missing, busy, or simply has nothing installed that can make it.
       withReply(String(error));
     } finally {
-      setGeneratingImage(false);
+      setMaking(null);
     }
-  }, [draft, generatingImage, activeConversation, activeBuddy, activePersonality]);
+  }, [draft, making, activeConversation, activeBuddy, activePersonality, videoMaker.seconds]);
+
+  const generateImage = useCallback(() => makeWithRigMatch("image"), [makeWithRigMatch]);
+
+  /** Stop what this window asked RigMatch to make. */
+  const stopMaking = useCallback(() => {
+    if (making?.jobId) void invoke("stop_rig_generation", { id: making.jobId }).catch(() => undefined);
+  }, [making]);
 
   const sendMessage = useCallback(async () => {
     if (!activeBuddy || !draft.trim() || typingModel) return;
@@ -1089,6 +1277,8 @@ export default function App() {
       canHear: able.includes("audio"),
       makerReady: imageMaker.ready,
       checkpoint: imageMaker.checkpoint?.replace(/\.(safetensors|ckpt|sft)$/i, ""),
+      videoModel: videoMaker.ready ? videoMaker.model : null,
+      audioModel: audioMaker.ready ? audioMaker.model : null,
     });
 
     const userMsg: AppMessage = {
@@ -1226,6 +1416,10 @@ export default function App() {
     rigCapabilities,
     imageMaker.ready,
     imageMaker.checkpoint,
+    videoMaker.ready,
+    videoMaker.model,
+    audioMaker.ready,
+    audioMaker.model,
     conversations,
     draft,
     memoryNote,
@@ -1768,9 +1962,12 @@ export default function App() {
             {([
               ["all", "Anything"],
               ["text", "Write"],
+              ["code", "Code"],
               ["vision", "Read a picture"],
-              ["audio", "Hear audio"],
+              ["audio", "Listen to audio"],
               ["image", "Make a picture"],
+              ["video", "Make a video"],
+              ["sound", "Make audio"],
             ] as const).map(([id, label]) => (
               <button
                 key={id}
@@ -1794,40 +1991,42 @@ export default function App() {
             the app failing to see it. Twice. It belongs in the list, saying what
             it is.
           */}
-          {capabilityFilter === "image" && (
+          {makerKind && (
             <button
               type="button"
               className={[
                 "rm-maker",
-                imageMaker.ready ? "ready" : "",
-                activeBuddy === IMAGE_STUDIO ? "active" : "",
+                makerStatus(makerKind).ready ? "ready" : "",
+                activeBuddy === STUDIOS[makerKind].id ? "active" : "",
               ].filter(Boolean).join(" ")}
               // Telling someone the maker is ready and giving them nowhere to
               // use it is the same shape of failure as not listing it at all.
               // Selecting it opens a workspace, the way selecting a buddy opens
               // a conversation.
-              onClick={() => { setActiveBuddy(IMAGE_STUDIO); setActiveConversationId(null); }}
-              aria-pressed={activeBuddy === IMAGE_STUDIO}
+              onClick={() => { setActiveBuddy(STUDIOS[makerKind].id); setActiveConversationId(null); }}
+              aria-pressed={activeBuddy === STUDIOS[makerKind].id}
             >
               <span className="rm-maker-head">
-                <span className="rm-maker-kind">Image maker</span>
-                <span className={imageMaker.ready ? "rm-maker-state on" : "rm-maker-state off"}>
-                  {imageMaker.ready ? "Ready" : "Not ready"}
+                <span className="rm-maker-kind">{STUDIOS[makerKind].title}</span>
+                <span className={makerStatus(makerKind).ready ? "rm-maker-state on" : "rm-maker-state off"}>
+                  {makerStatus(makerKind).ready ? "Ready" : "Not ready"}
                 </span>
               </span>
               <strong>
-                {imageMaker.ready && imageMaker.checkpoint
-                  ? imageMaker.checkpoint.replace(/\.(safetensors|ckpt|sft)$/i, "")
-                  : "No checkpoint that can draw"}
+                {makerStatus(makerKind).ready && makerStatus(makerKind).model
+                  ? makerStatus(makerKind).model
+                  : STUDIOS[makerKind].missing}
               </strong>
               <span className="rm-maker-note">
-                {imageMaker.ready
-                  ? "Not a chat model. Open it and describe the picture you want."
-                  : "ComfyUI has no still-image checkpoint loaded, so this cannot work yet. Load one in ComfyUI, or check RigMatch is running."}
+                {makerStatus(makerKind).ready
+                  ? `Not a chat model. Open it and describe ${STUDIOS[makerKind].ask} you want.`
+                    + (makerKind === "video" && videoMaker.seconds ? ` A clip takes ${aboutHowLong(videoMaker.seconds)} on this PC.` : "")
+                    + (makerKind === "audio" ? " Each one is 30 seconds long." : "")
+                  : STUDIOS[makerKind].notReady}
               </span>
             </button>
           )}
-          {capabilityFilter !== "image" && visibleBuddies.length === 0 && connectionStatus === "connected" && (
+          {!makerKind && visibleBuddies.length === 0 && connectionStatus === "connected" && (
             <div className="rm-buddy-empty">
               {/*
                 Three different reasons the list can be empty, and they used to
@@ -1908,6 +2107,9 @@ export default function App() {
                       : <span className="rm-response-time">{buddy.sizeGb} GB · {getResponseLabel(undefined, buddy.sizeGb)}</span>
                     }
                   </span>
+                  {pickUse && buddy.modelName === pickedModel && (
+                    <span className="rm-pick-line">{PICK_LABEL[pickUse]}</span>
+                  )}
                   {(rigCapabilities[buddy.modelName] ?? []).filter((c) => c !== "text").length > 0 && (
                     <span className="rm-buddy-caps">
                       {(rigCapabilities[buddy.modelName] ?? []).includes("vision") && (
@@ -2293,38 +2495,40 @@ export default function App() {
               )}
             </div>
           </>
-        ) : activeBuddy === IMAGE_STUDIO ? (
+        ) : openStudio ? (
           /*
-            The image workspace.
+            A maker's workspace: pictures, clips or sounds.
 
             Deliberately not a chat. There is no model on the other side, so
             there is no reply to wait for and nothing to converse with — what
-            you get back is a picture or a reason there isn't one. Giving it a
-            Send button and a message bubble would dress a one-way tool up as a
-            conversation, which is the impersonation this app keeps refusing.
+            you get back is a picture, a clip or a sound, or a reason there
+            isn't one. Giving it a Send button and a message bubble would dress
+            a one-way tool up as a conversation, which is the impersonation this
+            app keeps refusing.
           */
           <>
             <div className="rm-studio-head">
               <div>
-                <strong>Image maker</strong>
+                <strong>{STUDIOS[openStudio].title}</strong>
                 <em>
-                  {imageMaker.checkpoint
-                    ? `${imageMaker.checkpoint.replace(/\.(safetensors|ckpt|sft)$/i, "")} through ComfyUI`
-                    : "no checkpoint loaded"}
+                  {makerStatus(openStudio).model
+                    ? `${makerStatus(openStudio).model} through ComfyUI`
+                    : STUDIOS[openStudio].missing}
                 </em>
               </div>
-              <span className={imageMaker.ready ? "rm-maker-state on" : "rm-maker-state off"}>
-                {imageMaker.ready ? "Ready" : "Not ready"}
+              <span className={makerStatus(openStudio).ready ? "rm-maker-state on" : "rm-maker-state off"}>
+                {makerStatus(openStudio).ready ? "Ready" : "Not ready"}
               </span>
             </div>
 
-            <div className="rm-studio-body">
+            <div className="rm-studio-body" ref={studioBodyRef}>
               {activeMessages.length === 0 && (
                 <div className="rm-studio-blank">
-                  <p>Describe a picture and press <strong>Make image</strong>.</p>
+                  <p>Describe {STUDIOS[openStudio].blank} and press <strong>{STUDIOS[openStudio].verb}</strong>.</p>
                   <p className="rm-studio-hint">
-                    RigMatch runs it through ComfyUI on this computer. Nothing is uploaded, and
-                    finished pictures are saved to your Pictures folder.
+                    RigMatch makes it with ComfyUI on this computer. Nothing is uploaded, and
+                    finished {STUDIOS[openStudio].plural} are saved to your {STUDIOS[openStudio].folder} folder.
+                    {openStudio === "video" && videoMaker.seconds ? ` A clip takes ${aboutHowLong(videoMaker.seconds)} here.` : ""}
                   </p>
                 </div>
               )}
@@ -2349,27 +2553,36 @@ export default function App() {
             <div className="rm-compose">
               <textarea
                 className="rm-compose-input"
-                placeholder={imageMaker.ready
-                  ? "A lighthouse in a storm..."
-                  : "Load an image checkpoint in ComfyUI first..."}
+                placeholder={makerStatus(openStudio).ready ? STUDIOS[openStudio].placeholder : `${STUDIOS[openStudio].missing}...`}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void generateImage(); }
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void makeWithRigMatch(openStudio); }
                 }}
                 rows={3}
               />
-              <button
-                type="button"
-                className="rm-send-btn rm-image-btn"
-                onClick={() => void generateImage()}
-                disabled={!draft.trim() || generatingImage || !imageMaker.ready}
-                title={imageMaker.ready
-                  ? "Runs through ComfyUI on this computer"
-                  : "ComfyUI has no checkpoint loaded that can draw a still"}
-              >
-                {generatingImage ? "Making..." : "Make image ↗"}
-              </button>
+              {making?.kind === openStudio && making.jobId ? (
+                <button
+                  type="button"
+                  className="rm-send-btn rm-stop-btn"
+                  onClick={stopMaking}
+                  title={`Stop this ${STUDIOS[openStudio].noun} and free the graphics card`}
+                >
+                  ■ Stop
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="rm-send-btn rm-image-btn"
+                  onClick={() => void makeWithRigMatch(openStudio)}
+                  disabled={!draft.trim() || making !== null || !makerStatus(openStudio).ready}
+                  title={makerStatus(openStudio).ready
+                    ? "Runs through ComfyUI on this computer"
+                    : STUDIOS[openStudio].notReady}
+                >
+                  {making?.kind === openStudio ? "Making..." : `${STUDIOS[openStudio].verb} ↗`}
+                </button>
+              )}
             </div>
           </>
         ) : (

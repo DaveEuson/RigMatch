@@ -58,6 +58,15 @@ export function Ticker({
   const [tipIndex, setTipIndex] = useState(0);
   const [showActivity, setShowActivity] = useState(false);
   const activityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A render that begins while an announcement is up takes the bar at once:
+  // the announcement is about what came before it. A clip asked for from Chat
+  // seconds after its last sound finished stayed hidden behind "made audio".
+  const rendering = Boolean(render);
+  const [wasRendering, setWasRendering] = useState(rendering);
+  if (rendering !== wasRendering) {
+    setWasRendering(rendering);
+    if (rendering) setShowActivity(false);
+  }
 
   useEffect(() => {
     if (!activity) return;

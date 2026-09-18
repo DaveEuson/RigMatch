@@ -176,3 +176,19 @@ test('a picture drawn from a row leaves its verdict behind, even with its panel 
   assert.equal(outcome.message, 'Stable Diffusion 1.5 drew it in 4.2 s.');
   assert.equal(outcome.endedAt, 20);
 });
+
+test('a clip made for RigMatch Chat shows as a video on every screen, with a Stop that reaches it', () => {
+  let stopped = false;
+  startImageTest({
+    key: 'chat:gen-1', kind: 'video', name: 'Wan 2.2 5B',
+    message: 'Making a clip for RigMatch Chat: “a lighthouse”', stop: () => { stopped = true; },
+  }, 100);
+  const activity = renderActivityFrom({ ...IDLE, imageTest: imageTestSnapshot() }, STOPS);
+  assert.equal(activity.kind, 'video');
+  assert.equal(renderLabel(activity), 'Rendering');
+  assert.equal(renderChannel(activity.kind), 'video');
+  activity.stop();
+  assert.equal(stopped, true);
+  endImageTest('chat:gen-1', { message: 'Wan 2.2 5B made a clip for RigMatch Chat.', failed: false }, 200);
+  assert.equal(imageTestOutcomeSnapshot().kind, 'video', 'its verdict is a video’s, not a picture’s');
+});
