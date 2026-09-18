@@ -472,7 +472,11 @@ export async function runAdvancedVisionChallenge(
   model: string,
   baseUrl: string,
   imageDataUrl: string,
-  streamId?: string,
+  { streamId, picture }: {
+    streamId?: string;
+    /** Which of VISION_TEST_IMAGES this is, so the description is checked against what is in it. */
+    picture?: string;
+  } = {},
 ): Promise<AdvancedLabResult> {
   const startedAt = performance.now();
   try {
@@ -482,6 +486,10 @@ export async function runAdvancedVisionChallenge(
       baseUrl,
       prompt: ADVANCED_VISION_PROMPT,
       images: [imageDataUrl],
+      // Saying what a picture shows needs no reasoning, and the budget is for
+      // the answer. Shown the contestant wall, qwen3.5:9b spent all 600 tokens
+      // thinking and answered nothing; with thinking off it described it in 7 s.
+      think: false,
       keep_alive: '10m',
       timeoutMs: 180000,
       options: {
@@ -493,7 +501,7 @@ export async function runAdvancedVisionChallenge(
     });
     if (data.error) throw new Error(data.error);
     const raw = data.response ?? '';
-    const scored = scoreAdvancedVisionResponse(raw, data.done_reason ?? '');
+    const scored = scoreAdvancedVisionResponse(raw, data.done_reason ?? '', picture);
     return {
       model,
       challenge: 'image-recognition',
@@ -501,6 +509,7 @@ export async function runAdvancedVisionChallenge(
       elapsedMs: Math.round(performance.now() - startedAt),
       response: raw,
       imageDataUrl,
+      ...(picture ? { picture } : {}),
       completedAt: new Date().toISOString(),
     };
   } catch (error) {

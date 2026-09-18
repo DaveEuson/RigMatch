@@ -234,6 +234,7 @@ import {
   runAdvancedListeningChallenge,
   runAdvancedVisionChallenge,
   DEFAULT_VISION_TEST_IMAGE,
+  VISION_TEST_IMAGES,
 } from './lib/labChallenges';
 import { IMAGE_BENCHMARK_PROMPTS } from './lib/imageGenScoring';
 import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
@@ -2962,7 +2963,11 @@ function App() {
           setLiveBuild({ model: payload.model ?? job.model, kind: 'vision', text: payload.text, done: payload.done, error: payload.error });
         });
         try {
-          result = await runAdvancedVisionChallenge(job.model, ollama.baseUrl, visionImage, streamId);
+          result = await runAdvancedVisionChallenge(job.model, ollama.baseUrl, visionImage, {
+            streamId,
+            // Checked against what is in it only when it is one of RigMatch's own pictures.
+            picture: VISION_TEST_IMAGES.find((image) => image.src === selection.recognizeImage)?.id,
+          });
         } finally {
           unsubscribe?.();
         }

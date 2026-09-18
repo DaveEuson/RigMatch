@@ -118,7 +118,7 @@ export const WORKBENCHES: Workbench[] = [
     goals: ['describe-image'],
     taskFilter: 'vision',
     labCards: [],
-    accuracyMeans: 'how well it describes the test picture',
+    accuracyMeans: 'how much of the test picture its description names',
     home: 'speedDate',
     emptyHint: 'A comparison with the picture-reading test crowns one.',
     startLabel: 'Open Comparison',
