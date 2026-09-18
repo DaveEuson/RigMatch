@@ -38,7 +38,16 @@ export function ModelPoolLineupStrip({
   const full = rows.length >= 5;
   const missingDownloadCount = rows.filter((row) => !row.installed).length;
   const canUsePrimaryAction = rows.length >= MIN_CONTESTANTS && !disabled;
-  const classNames = ['model-pool-lineup', full ? 'full' : '', className].filter(Boolean).join(' ');
+  /**
+   * Nothing picked yet: one line, not a shelf of five empty slots.
+   *
+   * The empty lineup was 140px of permanent furniture under every Advanced
+   * screen, five identical Add buttons wide, on a screen whose own job was
+   * showing models. The slots arrive with the first contestant, which is also
+   * when they start meaning something.
+   */
+  const empty = rows.length === 0;
+  const classNames = ['model-pool-lineup', full ? 'full' : '', empty ? 'empty' : '', className].filter(Boolean).join(' ');
   const startLabel = isListTesting
     ? 'Testing...'
     : rows.length < MIN_CONTESTANTS
@@ -79,6 +88,7 @@ export function ModelPoolLineupStrip({
           </button>
         </div>
       </div>
+      {!empty && (
       <div className="model-pool-lineup-slots">
         {slots.map((row, index) => {
           if (!row) {
@@ -160,6 +170,7 @@ export function ModelPoolLineupStrip({
           );
         })}
       </div>
+      )}
     </section>
   );
 }

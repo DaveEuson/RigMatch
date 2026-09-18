@@ -36,7 +36,6 @@ export function TopDeck({
   deckExpanded,
   onDeckExpandedChange,
   workbench,
-  onWorkbenchChange,
   channelWinner,
   balance,
   onBalanceChange,
@@ -65,7 +64,6 @@ export function TopDeck({
   onDeckExpandedChange: (expanded: boolean) => void;
   /** Advanced only: what is being tested, which scopes the screens and the winner. */
   workbench: WorkbenchId;
-  onWorkbenchChange: (id: WorkbenchId) => void;
   /** The winner for a channel other than chat and All, which keep the Top Match. */
   channelWinner: ChannelWinner | null;
   /** The active channel's Balance fader. */
@@ -388,7 +386,6 @@ export function TopDeck({
           </div>
         </section>
       )}
-      {uiMode === 'advanced' && <ChannelSwitch value={workbench} onChange={onWorkbenchChange} />}
     </header>
   );
 }
@@ -411,8 +408,12 @@ const CHANNEL_ICONS: Record<WorkbenchId, LucideIcon> = {
  * channels, the way eight answers to one question should behave. The active
  * channel is the accent, never gold: gold is the verdict, and choosing what to
  * look at is not one.
+ *
+ * It sits above the panel rather than inside this header, because it filters
+ * what the panel shows and because the header collapses. Folded away, it took
+ * the channels with it.
  */
-function ChannelSwitch({ value, onChange }: { value: WorkbenchId; onChange: (id: WorkbenchId) => void }) {
+export function ChannelSwitch({ value, onChange }: { value: WorkbenchId; onChange: (id: WorkbenchId) => void }) {
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
   const move = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const last = WORKBENCHES.length - 1;

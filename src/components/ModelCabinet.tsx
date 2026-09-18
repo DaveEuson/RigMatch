@@ -1,6 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { isDesktopRuntime } from '../api';
-import robotContestantWall from '../assets/robot-contestant-wall.webp';
 import type { BenchmarkQuestionCount } from '../benchmarkSuite';
 import { formatGb, formatPullCount } from '../lib/format';
 /**
@@ -733,14 +732,12 @@ export function ModelCabinet({
 
   return (
     <section className={active ? 'panel model-panel panel-focused' : 'panel model-panel'}>
-      <header
-        className="model-hub-header"
-        style={{ backgroundImage: `url(${robotContestantWall})` }}
-        aria-label="Models"
-      >
+      {/* No stage light on a data surface. This header carried a photographic
+          backdrop and a sentence restating the filter chip below it, and
+          together they cost 90px above a table that had room for one row. */}
+      <header className="model-hub-header" aria-label="Models">
         <div className="model-hub-header-copy">
           <h2>Models</h2>
-          <em>{vramSafeCount} models look realistic for {vramLabel}. Test one model or run Speed Dating from here.</em>
         </div>
         <div className="model-hub-header-side">
           <span>{modelCountLabel}</span>
@@ -860,6 +857,11 @@ export function ModelCabinet({
               </button>
             )}
           </div>
+          {/* What the Match column means, beside the filters rather than in a
+              strip above the table. It explained the score to someone who
+              could not see a score yet, because the explanation was one of
+              four blocks between the screen's title and its first row. */}
+          <ScoreLegend />
         </aside>
       )}
       <div className="cabinet-main">
@@ -1009,7 +1011,6 @@ export function ModelCabinet({
                 </span>
               </div>
             )}
-      <ScoreLegend />
       {shortlistedCount >= 5 && (
         <div className="lineup-full-banner" role="status">
           <span>⚡ Speed Dating lineup is full — 5/5 contestants selected. Remove one to swap in another.</span>

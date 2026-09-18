@@ -93,7 +93,7 @@ import { GameShowHost } from './components/GameShowHost';
 import { PanelHeader } from './components/CommonChrome';
 import { readDeckExpanded, writeDeckExpanded } from './lib/deckSettings';
 import { playJingle } from './lib/sound';
-import { TopDeck } from './components/TopDeck';
+import { ChannelSwitch, TopDeck } from './components/TopDeck';
 import {
   addSetValues,
   buildBugReportUrl,
@@ -953,7 +953,7 @@ function App() {
   // a rule based on how much height this screen actually has — see
   // scripts/measure-shell.mjs for the numbers that set the threshold.
   const [deckExpanded, setDeckExpanded] = useState(
-    () => readDeckExpanded(typeof window === 'undefined' ? 1080 : window.innerHeight),
+    () => readDeckExpanded(typeof window === 'undefined' ? 1080 : window.innerHeight, getSavedUiMode()),
   );
 
   /**
@@ -4013,7 +4013,6 @@ function App() {
         deckExpanded={deckExpanded}
         onDeckExpandedChange={(expanded) => { setDeckExpanded(expanded); writeDeckExpanded(expanded); }}
         workbench={workbench}
-        onWorkbenchChange={chooseWorkbench}
         channelWinner={channelWinner}
         balance={balances[activeChannel]}
         onBalanceChange={(value) => setBalance(activeChannel, value)}
@@ -4041,22 +4040,32 @@ function App() {
       />
 
       <main className="stage-content">
-        <GameShowHost
-          uiMode={uiMode}
-          activeNavLabel={getNavLabel(activeNavId)}
-          ollamaReady={ollama.ready || lmStudio.ready}
-          installedCount={localModels.length}
-          modelCount={modelRows.length}
-          shortlistedCount={shortlistedRows.length}
-          uninstalledShortlistedCount={uninstalledShortlistedCount}
-          queuedCount={queuedRows.length}
-          scoredCount={scoredModelCount}
-          topPick={topRigPick}
-          isBusy={isScanningRig || isBenchmarking || isListTesting}
-          onSelectNav={selectNav}
-          onCheckRig={refreshRig}
-          onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
-        />
+        {/* The host narrates Simple Mode. In Advanced he announced which screen
+            was open, how many models were installed and how many were picked —
+            all of it already in the side menu and the lineup strip — above the
+            table that screen exists to show. The channels take that line
+            instead: they filter the panel below them, so they belong there and
+            not folded inside a header that collapses. */}
+        {uiMode === 'advanced'
+          ? <ChannelSwitch value={workbench} onChange={chooseWorkbench} />
+          : (
+            <GameShowHost
+              uiMode={uiMode}
+              activeNavLabel={getNavLabel(activeNavId)}
+              ollamaReady={ollama.ready || lmStudio.ready}
+              installedCount={localModels.length}
+              modelCount={modelRows.length}
+              shortlistedCount={shortlistedRows.length}
+              uninstalledShortlistedCount={uninstalledShortlistedCount}
+              queuedCount={queuedRows.length}
+              scoredCount={scoredModelCount}
+              topPick={topRigPick}
+              isBusy={isScanningRig || isBenchmarking || isListTesting}
+              onSelectNav={selectNav}
+              onCheckRig={refreshRig}
+              onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
+            />
+          )}
         {activeNavId === 'lan' && (
           <LanBrowser
             active={true}

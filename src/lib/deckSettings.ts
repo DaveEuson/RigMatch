@@ -21,12 +21,22 @@ export const DECK_STORAGE_KEY = 'rigmatch:top-deck:v1';
  */
 export const SHORT_VIEWPORT_PX = 900;
 
-export function defaultDeckExpanded(viewportHeight: number): boolean {
+/**
+ * Advanced Mode starts folded, whatever the height.
+ *
+ * The screen it sits above is a table, and on a 1024x640 window — the smallest
+ * the app allows — the deck and the blocks under it filled the viewport so
+ * completely that the table showed no rows at all. Simple Mode keeps the full
+ * header on a tall screen: it has no table to squeeze, and the stats are the
+ * reassurance that round is made of.
+ */
+export function defaultDeckExpanded(viewportHeight: number, uiMode: 'advanced' | 'beginner' = 'beginner'): boolean {
+  if (uiMode === 'advanced') return false;
   return viewportHeight >= SHORT_VIEWPORT_PX;
 }
 
-/** The stored choice, or the height-based default when there isn't one. */
-export function readDeckExpanded(viewportHeight: number): boolean {
+/** The stored choice, or the default when there isn't one. */
+export function readDeckExpanded(viewportHeight: number, uiMode: 'advanced' | 'beginner' = 'beginner'): boolean {
   try {
     const stored = localStorage.getItem(DECK_STORAGE_KEY);
     if (stored === 'expanded') return true;
@@ -35,7 +45,7 @@ export function readDeckExpanded(viewportHeight: number): boolean {
     // Private mode or a blocked store: fall back to the height rule rather
     // than failing to render the header at all.
   }
-  return defaultDeckExpanded(viewportHeight);
+  return defaultDeckExpanded(viewportHeight, uiMode);
 }
 
 export function writeDeckExpanded(expanded: boolean): void {
