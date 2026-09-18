@@ -90,7 +90,7 @@ export function codeWinner(
   };
 }
 
-export type LabChannel = 'images' | 'video' | 'listening' | 'reading' | 'audio';
+export type LabChannel = 'images' | 'video' | 'listening' | 'reading' | 'audio' | 'code';
 
 const LAB_CHALLENGE: Record<LabChannel, AdvancedLabResult['challenge']> = {
   images: 'image-generation',
@@ -98,6 +98,9 @@ const LAB_CHALLENGE: Record<LabChannel, AdvancedLabResult['challenge']> = {
   listening: 'listening',
   reading: 'image-recognition',
   audio: 'audio-generation',
+  // The written-and-run coding job, not the coding questions inside the
+  // benchmark: Simple Mode crowns a coding buddy on work it actually did.
+  code: 'code',
 };
 
 /**
@@ -155,6 +158,7 @@ export function describeLabAccuracy(
 ): string {
   if (result?.verdict) return describeEarVerdict(result.verdict);
   if (channel === 'reading') return `named ${percent(accuracy)} of the picture`;
+  if (channel === 'code') return `scored ${Math.round(accuracy * 100)} on the coding job`;
   if (matchChecked(channel)) return `${percent(accuracy)} of the prompt`;
   return `listening score ${Math.round(accuracy * 100)}`;
 }

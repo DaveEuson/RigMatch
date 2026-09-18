@@ -55,6 +55,7 @@ const LAB_NOUN: Record<LabChannel, string> = {
   listening: 'listening test',
   reading: 'picture reading',
   audio: 'audio test',
+  code: 'coding job',
 };
 
 export function UtilityPanel({

@@ -89,6 +89,25 @@ type SimpleRunProgress = RunProgress | null;
 
 export type { StepId };
 
+/** The host's line, the progress noun and the board's note, per round. */
+const ROUND_LINES: Record<'code' | 'vision' | 'listening', { host: string; unit: string; note: string }> = {
+  code: {
+    host: 'Coding round! Each contestant writes the same program, and the checks run against what comes back. No favourites.',
+    unit: 'coding jobs',
+    note: 'Every one of these wrote the same program on your PC, and the score is what the checks made of it.',
+  },
+  vision: {
+    host: 'Picture round! Everyone sees the same picture and tells me what is in it — no peeking at each other.',
+    unit: 'pictures',
+    note: 'Every one of these was shown the same picture on your PC, and the score is how much of it they named.',
+  },
+  listening: {
+    host: 'Listening round! Everyone hears the same recording, and they all get the same questions about it.',
+    unit: 'recordings',
+    note: 'Every one of these heard the same recording on your PC.',
+  },
+};
+
 const HOST_COPY: Record<StepId, string> = {
   setup: "Welcome to RigMatch! First, let's take a quick peek at your computer. One click — I'll handle the rest.",
   pick: "So… who's your dream model? Tell me what you're looking for, and I'll bring out the right contestants.",
@@ -155,6 +174,10 @@ type SimpleWizardProps = {
   } | null;
   /** The dream matching the first-run goal choice, so PICK opens on it. */
   initialDream?: DreamFilterId;
+  /** What the show should test: the chip the Pick step is standing on. */
+  onDreamChange?: (dream: DreamFilterId) => void;
+  /** What this show is measuring, which is what the host announces. */
+  round?: 'chat' | 'code' | 'vision' | 'listening';
   /**
    * Something the app needs this user to read — a refusal, a blocked queue, a
    * failed run. Advanced Mode shows these in the Ticker, which is Advanced-only,
@@ -491,7 +514,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
       </header>
 
       <div className="sw-content">
-        <HostStrip step={step} />
+        <HostStrip step={step} round={props.round} />
 
         {props.notice && (
           <div className="sw-notice" role="status" ref={noticeRef}>
@@ -630,7 +653,7 @@ function PreShowQuestion({
  * thing to notice, and the whole problem is that a beginner does not know what
  * to look for.
  */
-function HostStrip({ step }: { step: StepId }) {
+function HostStrip({ step, round }: { step: StepId; round?: 'chat' | 'code' | 'vision' | 'listening' }) {
   const explaining = useExplaining();
   return (
     <div className={`sw-host-strip${explaining ? ' explaining' : ''}`}>
@@ -643,7 +666,11 @@ function HostStrip({ step }: { step: StepId }) {
           whole screen danced. Nothing below the host may move. */}
       <div className="sw-host-bubble">
         <span>The host</span>
-        <p>{HOST_COPY[step]}</p>
+        {/* The host announces the round that is actually running: a coding
+            job is not "the same questions". */}
+        {/* The host announces the round that is actually running: a coding
+            job is not "the same questions". */}
+        <p>{step === 'compare' && round && round !== 'chat' ? ROUND_LINES[round].host : HOST_COPY[step]}</p>
         {explaining && (
           <div className="sw-host-explain" role="status">
             <span>{explaining.term}</span>
@@ -878,10 +905,13 @@ function listNames(names: string[]): string {
 
 function PickScreen({
   generation, wizardModels, modelsLoading, shortlistIds, shortlistedRows, onTogglePick, onChooseForMe, initialDream,
-  videoLineup, system, pullProgressByModel, benchmarkActive }: SimpleWizardProps) {
+  onDreamChange, videoLineup, system, pullProgressByModel, benchmarkActive }: SimpleWizardProps) {
   // Opens on the dream matching the splash's primary goal, when there is one
   // — the person already answered this question once.
   const [dream, setDream] = useState<DreamFilterId>(initialDream ?? 'all');
+  // Told once on arrival and on every change, so the round that follows tests
+  // the thing that was asked for rather than always asking questions.
+  useEffect(() => { onDreamChange?.(dream); }, [dream, onDreamChange]);
   const [showAll, setShowAll] = useState(false);
   // The video race's idea, kept here so switching chips and back keeps it.
   const [videoPromptId, setVideoPromptId] = useState(IMAGE_BENCHMARK_PROMPTS[0].id);
@@ -1264,7 +1294,7 @@ function getEtaLabel(pull?: PullProgressUpdate): string {
 // ---------------------------------------------------------------------------
 // Compare
 
-function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
+function CompareScreen({ shortlistedRows, runProgress, round: showRound }: SimpleWizardProps) {
   const failed = runProgress?.phase === 'failed';
   const activeModel = runProgress?.currentModel ?? '';
   const round = (runProgress?.questionIndex ?? 0) + 1;
@@ -1400,7 +1430,7 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
                 bar move together and neither ever goes backwards. */}
             <span>
               {totalQuestions > 0
-                ? `${questionsDone} of ${totalQuestions} questions`
+                ? `${questionsDone} of ${totalQuestions} ${showRound && showRound !== 'chat' ? ROUND_LINES[showRound].unit : 'questions'}`
                 : `${overallPercent}%`}
               {remainingLabel && <em className="sw-eta">· about {remainingLabel} left</em>}
             </span>
@@ -1448,7 +1478,7 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
 // ---------------------------------------------------------------------------
 // Winner
 
-function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
+function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
   if (!winner) {
     return <div className="sw-winner"><p className="sw-muted">Run the show to crown your Top Match.</p></div>;
   }
@@ -1511,7 +1541,9 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, onChatW
             ))}
           </ol>
           <p className="sw-muted sw-scoreboard-note">
-            Every one of these ran the same questions on your PC. A close second may still
+            {round && round !== 'chat'
+              ? ROUND_LINES[round].note
+              : 'Every one of these ran the same questions on your PC.'} A close second may still
             suit you better — try chatting with either.
           </p>
         </div>

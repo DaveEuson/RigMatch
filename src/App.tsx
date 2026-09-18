@@ -58,7 +58,7 @@ import {
   upsertModelScores,
 } from './lib/scoring';
 import { BALANCE_STORAGE_KEY, applyBalance, readBalances, type Balances } from './lib/balance';
-import { codeWinner, labWinner, rankCoding, videoWinner } from './lib/channelWinners';
+import { codeWinner, labWinner, rankCoding, rankLabList, videoWinner } from './lib/channelWinners';
 import { audioMakerChoices, chatPicks, videoMakerChoices } from './lib/chatMakers';
 import { renderChatAudio, renderChatVideo, type ChatRender } from './lib/chatRenders';
 import { installedAudioEntries } from './lib/audioLineup';
@@ -197,7 +197,7 @@ import { ShareScorecard } from './components/ShareScorecard';
 import { ExportHatchModal } from './components/ExportHatchModal';
 import { buildHatchProfile } from './lib/hatchProfile';
 import { UpdateAvailableToast } from './components/UpdateAvailableToast';
-import { SimpleWizard, type StepId as WizardStepId, type WizardModel } from './components/SimpleWizard';
+import { SimpleWizard, type DreamFilterId, type StepId as WizardStepId, type WizardModel } from './components/SimpleWizard';
 import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, ChoiceCruiseModal } from './components/dialogs';
 import { ChatDock } from './components/ChatDock';
 import { SkillRunMiniBar, LiveBuildModal, DemoResultModal } from './components/SkillDemoViewers';
@@ -910,48 +910,24 @@ function App() {
     return collapseModelVariants(mapped, shortlistIds);
   }, [modelRows, shortlistIds, system.gpu.vramGb, system.platform]);
 
-  const wizardWinner = useMemo(
-    () => (topRigPick?.score
-      ? {
-        model: topRigPick.row.displayName,
-        score: topRigPick.score.total,
-        // The winner screen was printing the raw integer, so the app's most-seen
-        // score was the one surface still disagreeing with the decimal policy.
-        scoreLabel: formatMatchScore(topRigPick.score),
-        grade: topRigPick.score.grade,
-      }
-      : null),
-    [topRigPick],
-  );
-
   /**
-   * How the whole lineup placed, best first.
+   * What Simple Mode's show should measure.
    *
-   * The show is a comparison and the Winner screen was throwing the comparison
-   * away: it announced one model "out of the 5 you tested" and then showed
-   * nothing whatever about the other four. Every score is already here; only
-   * Advanced Mode was allowed to see them, which is exactly backwards for the
-   * mode whose users will never open Advanced.
+   * The wizard asks who your dream model is and then ran the same question
+   * round whatever the answer, so a coding buddy and a picture reader were
+   * both crowned on chat. The three answers Ollama can settle on its own now
+   * run their own test; makers need ComfyUI and still fall back to the
+   * questions, which is the next thing to fix rather than a thing to pretend
+   * about.
    */
-  const wizardLineupResults = useMemo(
-    () => shortlistedRows
-      .flatMap((row) => {
-        const score = modelScores[row.displayName];
-        return score ? [{ row, score }] : [];
-      })
-      // The app's own comparator, not a total-descending sort: the board shows
-      // the one-decimal Match value, and ranking on the rounded integer put
-      // 87.5 above 87.6 — a list that visibly contradicted its own numbers.
-      .sort((a, b) => compareTestedModelScores(a.score, b.score))
-      .map(({ row, score }) => ({
-        model: row.displayName,
-        name: getFriendlyModelName(row.displayName),
-        scoreLabel: formatMatchScore(score),
-        total: score.total,
-        grade: score.grade,
-      })),
-    [shortlistedRows, modelScores],
-  );
+  const [wizardDream, setWizardDream] = useState<DreamFilterId>('all');
+  const wizardRound: 'chat' | 'code' | 'vision' | 'listening' = wizardDream === 'code' ? 'code'
+    : wizardDream === 'read-image' ? 'vision'
+      : wizardDream === 'hear' ? 'listening'
+        : 'chat';
+  /** The channel whose fader and results that round belongs to. */
+  const wizardChannel: 'chat' | 'code' | 'reading' | 'listening' = wizardRound === 'vision' ? 'reading' : wizardRound;
+
 
   // Advanced's stats strip. Read once from the stored choice, falling back to
   // a rule based on how much height this screen actually has — see
@@ -1288,6 +1264,84 @@ function App() {
   const runChannel: ChannelId = workbenchInfo.id === 'code' || workbenchInfo.id === 'reading' ? workbenchInfo.id : 'chat';
 
   const labResults = useLabResults();
+
+  /**
+   * The show's results, from whichever round it ran.
+   *
+   * A skill round writes Lab results rather than Match scores, so the Winner
+   * screen reads those when the show was a coding job, a picture test or a
+   * listening test — ranked at that channel's fader, among the models that
+   * were actually picked, so the board on the last screen is the show that
+   * just happened and not a different one.
+   */
+  const wizardSkillBoard = useMemo(() => {
+    if (wizardRound === 'chat') return null;
+    const picked = new Set(shortlistedRows.map((row) => row.displayName));
+    const mine = Object.values(labResults).filter((result) => result && picked.has(result.model));
+    return rankLabList(mine, wizardChannel as Exclude<typeof wizardChannel, 'chat'>, balances[wizardChannel])
+      .filter((ranked) => !ranked.failed)
+      .map((ranked) => ranked.item);
+  }, [wizardRound, wizardChannel, shortlistedRows, labResults, balances]);
+
+  const wizardWinner = useMemo(
+    () => (wizardSkillBoard
+      ? (wizardSkillBoard[0]
+        ? {
+          model: wizardSkillBoard[0].model,
+          score: wizardSkillBoard[0].score,
+          scoreLabel: String(wizardSkillBoard[0].score),
+          grade: wizardSkillBoard[0].grade,
+        }
+        : null)
+      : topRigPick?.score
+      ? {
+        model: topRigPick.row.displayName,
+        score: topRigPick.score.total,
+        // The winner screen was printing the raw integer, so the app's most-seen
+        // score was the one surface still disagreeing with the decimal policy.
+        scoreLabel: formatMatchScore(topRigPick.score),
+        grade: topRigPick.score.grade,
+      }
+      : null),
+    [topRigPick, wizardSkillBoard],
+  );
+
+  /**
+   * How the whole lineup placed, best first.
+   *
+   * The show is a comparison and the Winner screen was throwing the comparison
+   * away: it announced one model "out of the 5 you tested" and then showed
+   * nothing whatever about the other four. Every score is already here; only
+   * Advanced Mode was allowed to see them, which is exactly backwards for the
+   * mode whose users will never open Advanced.
+   */
+  const wizardLineupResults = useMemo(
+    () => (wizardSkillBoard
+      ? wizardSkillBoard.map((result) => ({
+        model: result.model,
+        name: getFriendlyModelName(result.model),
+        scoreLabel: String(result.score),
+        total: result.score,
+        grade: result.grade,
+      }))
+      : shortlistedRows
+      .flatMap((row) => {
+        const score = modelScores[row.displayName];
+        return score ? [{ row, score }] : [];
+      })
+      // The app's own comparator, not a total-descending sort: the board shows
+      // the one-decimal Match value, and ranking on the rounded integer put
+      // 87.5 above 87.6 — a list that visibly contradicted its own numbers.
+      .sort((a, b) => compareTestedModelScores(a.score, b.score))
+      .map(({ row, score }) => ({
+        model: row.displayName,
+        name: getFriendlyModelName(row.displayName),
+        scoreLabel: formatMatchScore(score),
+        total: score.total,
+        grade: score.grade,
+      }))),
+    [shortlistedRows, modelScores, wizardSkillBoard],
+  );
   const lineupSession = useVideoLineupSession();
   /** Whatever ComfyUI is rendering for RigMatch now, wherever it was started. */
   const renderActivity = useRenderActivity();
@@ -3111,8 +3165,19 @@ function App() {
     tellUser(`Skill tests stopped: ${message}`);
   }, [tellUser]);
 
-  const runSkillTestsAfterRun = useCallback(async (models: string[]) => {
-    const selection = skillTestSelection;
+  /**
+   * `only` runs one skill across the models given, whatever the Skill Tests
+   * checkboxes say. Simple Mode's show uses it: someone who asked for a coding
+   * buddy gets the coding job, and someone who asked for a picture reader gets
+   * the picture test, rather than the question round every answer used to get.
+   */
+  const runSkillTestsAfterRun = useCallback(async (
+    models: string[],
+    only?: 'code' | 'vision' | 'listening',
+  ) => {
+    const selection = only
+      ? { ...skillTestSelection, appBuilder: false, code: only === 'code', recognize: only === 'vision', listen: only === 'listening', image: false, video: false }
+      : skillTestSelection;
     const appPrompt = resolveAppBuilderPrompt(selection.appPromptId, selection.appCustomPrompt);
     const codeTask = resolveCodeTask(selection.codeTaskId, selection.codeCustomTask);
     const jobs: Array<{ model: string; kind: 'app-builder' | 'image' | 'vision' | 'code' | 'listening' | 'video' }> = [];
@@ -3954,13 +4019,18 @@ function App() {
           isListTesting={isListTesting}
           benchmarkActive={isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running)}
           runProgress={runProgress}
+          onDreamChange={setWizardDream}
+          round={wizardRound}
           onStartShow={() => {
             // Every score this show produces records where the fader stood.
-            runBalanceRef.current = balances.chat;
-            void runListTest();
+            runBalanceRef.current = balances[wizardChannel];
+            if (wizardRound === 'chat') { void runListTest(); return; }
+            // The models picked for the show, in the order they were picked.
+            const models = shortlistedRows.filter((row) => row.installed).map((row) => row.displayName);
+            void runSkillTestsAfterRun(models, wizardRound).catch(reportSkillRunFailure);
           }}
-          balance={balances.chat}
-          onBalanceChange={(value) => setBalance('chat', value)}
+          balance={balances[wizardChannel]}
+          onBalanceChange={(value) => setBalance(wizardChannel, value)}
           onStopShow={requestStopRun}
           winner={wizardWinner}
           lineupResults={wizardLineupResults}
