@@ -1405,6 +1405,9 @@ export const TASK_CATEGORIES = [
 export type TaskCategoryId = typeof TASK_CATEGORIES[number]['id'];
 export type ModelTaskFilterId = TaskCategoryId | 'uncensored' | 'imagegen' | 'videogen' | 'hears' | 'videoread' | 'audiogen';
 
+/** The seven things the wizard can ask for, one per thing RigMatch measures. */
+export type DreamTag = 'talk' | 'write' | 'code' | 'read-image' | 'hear' | 'image' | 'video' | 'audio';
+
 export const TASK_FILTER_CHIPS: Array<{ id: ModelTaskFilterId; label: string }> = [
   { id: 'coding',     label: 'Coding' },
   { id: 'assistant',  label: 'Chat' },
@@ -1539,13 +1542,24 @@ export function getModelGoodForLine(row: ModelRow): string {
 }
 
 /** Which Simple Mode "dream" filters a model matches. */
-export function getModelDreamTags(row: ModelRow): Array<'talk' | 'write' | 'code' | 'image' | 'video'> {
-  const tags: Array<'talk' | 'write' | 'code' | 'image' | 'video'> = [];
+/**
+ * What a model could be someone's dream for, in the wizard's own words.
+ *
+ * All seven things RigMatch measures, not the five the wizard used to ask
+ * about: reading a picture, listening to audio and making audio were tested
+ * in Advanced Mode and unaskable in Simple, so a beginner who wanted one had
+ * no way to say so.
+ */
+export function getModelDreamTags(row: ModelRow): DreamTag[] {
+  const tags: DreamTag[] = [];
   if (modelMatchesTask(row, 'assistant')) tags.push('talk');
   if (modelMatchesTask(row, 'writing')) tags.push('write');
   if (modelMatchesTask(row, 'coding')) tags.push('code');
+  if (modelMatchesTask(row, 'vision')) tags.push('read-image');
+  if (modelMatchesTask(row, 'hears')) tags.push('hear');
   if (isLikelyImageGenerationModel(row.displayName)) tags.push('image');
   if (isLikelyVideoGenerationModel(row.displayName)) tags.push('video');
+  if (modelMatchesTask(row, 'audiogen')) tags.push('audio');
   return tags;
 }
 

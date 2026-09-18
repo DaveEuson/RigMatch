@@ -4,14 +4,17 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  AudioLines,
   Check,
   Code2,
+  Eye,
   Download,
   ExternalLink,
   Heart,
   Image as ImageIcon,
   Info,
   Lock,
+  Mic,
   MessageSquare,
   PenLine,
   Plus,
@@ -32,7 +35,7 @@ import { formatBytes, formatBytesPerSecond, formatPullCount } from '../lib/forma
 import { roundLabel } from '../lib/roundLabels';
 import { formatDuration } from '../lib/runEstimates';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
-import { getFriendlyModelName } from '../lib/modelCatalog';
+import { getFriendlyModelName, type DreamTag } from '../lib/modelCatalog';
 import { getCountryCode, getModelOrigin } from '../lib/modelOrigins';
 import { getDownloadRowStatus, summarizeDownloadStep } from '../lib/downloadStatus';
 import type { ComfyFolderListing } from '../lib/generationCatalog';
@@ -49,7 +52,7 @@ import modelTestArt from '../assets/robot-model-test.webp';
 import brandIcon from '../assets/rigmatch-brand-icon.svg';
 import './SimpleWizard.css';
 
-export type DreamFilterId = 'talk' | 'write' | 'code' | 'image' | 'video' | 'all';
+export type DreamFilterId = DreamTag | 'all';
 
 /** A model prepared for the wizard's Pick grid (App computes fit/copy). */
 export type WizardModel = {
@@ -61,7 +64,7 @@ export type WizardModel = {
   /** Concrete fit, e.g. "4.7 GB of your 12 GB VRAM" — the grid is pre-filtered to
    *  models that fit, so the tier alone reads identically on every card. */
   fitDetail: string;
-  dreamTags: Array<Exclude<DreamFilterId, 'all'>>;
+  dreamTags: DreamTag[];
   /** How many size/quant variants this card is standing in for (> 1 only when
    *  siblings were collapsed). Beginners were shown every variant as its own
    *  near-identical card — "many versions of Gemma 4... I don't know how these
@@ -94,12 +97,23 @@ const HOST_COPY: Record<StepId, string> = {
   winner: "We have a match! Now — go get to know each other. And when you're ready for the control room, Advanced Mode is all yours.",
 };
 
+/**
+ * One chip per thing RigMatch measures.
+ *
+ * It asked about five and tested seven: reading a picture, listening to a
+ * recording and making music or sound effects were only reachable in Advanced
+ * Mode, so a beginner who wanted one of those had no way to say so and no
+ * reason to think the app could do it.
+ */
 const DREAM_CHIPS: Array<{ id: DreamFilterId; label: string; icon: typeof MessageSquare }> = [
   { id: 'talk', label: 'Someone to talk with', icon: MessageSquare },
   { id: 'write', label: 'A writing partner', icon: PenLine },
   { id: 'code', label: 'A coding buddy', icon: Code2 },
+  { id: 'read-image', label: 'Something that reads pictures', icon: Eye },
+  { id: 'hear', label: 'Something that listens', icon: Mic },
   { id: 'image', label: 'An image maker', icon: ImageIcon },
   { id: 'video', label: 'A video maker', icon: Video },
+  { id: 'audio', label: 'A music and sound maker', icon: AudioLines },
   { id: 'all', label: 'Surprise me — show everyone', icon: Sparkles },
 ];
 
@@ -191,6 +205,7 @@ type SimpleWizardProps = {
   generation?: {
     image: { total: number; installed: number; names: string[] };
     video: { total: number; installed: number; names: string[] };
+    audio: { total: number; installed: number; names: string[] };
   };
   /** Every model in the lineup that has a score, best first. */
   lineupResults?: Array<{ model: string; name: string; scoreLabel: string; total: number; grade: string }>;
@@ -879,20 +894,26 @@ function PickScreen({
   }, [wizardModels, dream]);
 
   const visible = showAll ? filtered : filtered.slice(0, 9);
-  const dreamNoun: Record<Exclude<DreamFilterId, 'all'>, string> = {
+  const dreamNoun: Record<DreamTag, string> = {
     talk: 'love a good conversation',
     write: 'are great writing partners',
     code: 'are handy coding buddies',
+    'read-image': 'can read a picture you give them',
+    hear: 'can listen to a recording',
     image: 'can make images',
     video: 'can make video',
+    audio: 'can make music and sound',
   };
   // Image and video makers are deliberately absent from this grid — they
   // cannot be benchmarked — so an empty grid here says nothing about whether
   // this PC can make images or video. It said "No contestants can make video
   // on this PC", which was simply false: the models exist, ship in the
   // catalogue, and run. Report what is actually true of the machine.
-  const makers = dream === 'video' ? generation?.video : dream === 'image' ? generation?.image : undefined;
-  const makerNoun = dream === 'video' ? 'video maker' : 'image maker';
+  const makers = dream === 'video' ? generation?.video
+    : dream === 'image' ? generation?.image
+      : dream === 'audio' ? generation?.audio
+        : undefined;
+  const makerNoun = dream === 'video' ? 'video maker' : dream === 'audio' ? 'music and sound maker' : 'image maker';
   const countLine = dream === 'all'
     ? `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} fit your PC`
     : filtered.length === 0

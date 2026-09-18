@@ -971,7 +971,7 @@ function App() {
    * discouraging someone away from a feature that works.
    */
   const generationSummary = useMemo(() => {
-    const summarize = (kind: 'image' | 'video') => {
+    const summarize = (kind: 'image' | 'video' | 'audio') => {
       // Only the ones that run here: Simple Mode says "N run on this PC", and
       // counting every catalogue row made that true of models too big for it.
       const rows = modelRows.filter((row) => row.generationKind === kind
@@ -982,7 +982,7 @@ function App() {
         names: rows.map((row) => row.displayName),
       };
     };
-    return { image: summarize('image'), video: summarize('video') };
+    return { image: summarize('image'), video: summarize('video'), audio: summarize('audio') };
   }, [modelRows, system.gpu.vramGb]);
 
   // Simple Mode needs its own share state: Advanced's lives inside the profile
