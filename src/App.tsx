@@ -240,6 +240,9 @@ import {
   DEFAULT_VISION_TEST_IMAGE,
   VISION_TEST_IMAGES,
 } from './lib/labChallenges';
+import { AUDIO_BENCHMARK_PROMPTS } from './lib/audioGenScoring';
+import { startAudioLineup } from './lib/audioLineupSession';
+import { startVideoLineup } from './lib/videoLineupSession';
 import { IMAGE_BENCHMARK_PROMPTS } from './lib/imageGenScoring';
 import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
 import { listenerCandidates } from './lib/audioGenChallenge';
@@ -1780,6 +1783,136 @@ function App() {
   const requestBenchmarkRow = useCallback((row: ModelRow) => {
     requestBenchmarkForModel(row.displayName);
   }, [requestBenchmarkForModel]);
+
+  /**
+   * The picture test for one checkpoint, as the Images screen runs it: the same
+   * benchmark prompt, the same judge, and the result kept where every other
+   * picture result is kept, so a test started from Chat counts for the same
+   * crown as one started here.
+   */
+  const runPictureTest = useCallback(async (checkpoint: string) => {
+    const key = `picture-test:${checkpoint}`;
+    const promptId = IMAGE_BENCHMARK_PROMPTS[0].id;
+    const controller = new AbortController();
+    startImageTest({ key, kind: 'image', name: checkpoint, message: `Testing ${checkpoint}`, stop: () => controller.abort() });
+    try {
+      const run = await runImageLabChallenge({
+        checkpoint,
+        promptId,
+        judgeModel: pictureJudge || undefined,
+        ollamaBaseUrl: ollama.baseUrl,
+        comfyBaseUrl: comfySettings.baseUrl,
+        signal: controller.signal,
+      });
+      const result = toLabResult(run, promptId);
+      if (!result.error) writeAdvancedLabResults({ ...readAdvancedLabResults(), [`image:${checkpoint}`]: result });
+      endImageTest(key, result.error
+        ? { message: `${checkpoint} could not be tested: ${result.error}`, failed: true }
+        : { message: `${checkpoint} scored ${result.score} (${result.grade}).`, failed: false });
+    } catch (error) {
+      endImageTest(key, { message: `${checkpoint} could not be tested: ${getErrorMessage(error)}`, failed: true });
+    }
+  }, [pictureJudge, ollama.baseUrl, comfySettings.baseUrl]);
+
+  /**
+   * Chat asking RigMatch to test a model.
+   *
+   * Every choice in Chat names a model RigMatch has an opinion about, and until
+   * now the only way to earn that opinion was to find the model in RigMatch and
+   * start its test there. The test itself is RigMatch's own — the same solo run
+   * its screens start, with the same prompt, the same judge and the same
+   * unload — so what Chat triggers and what Advanced Mode triggers cannot
+   * drift apart. Chat hears whether it started; the run itself is watched in
+   * RigMatch, where the status bar and Activity already show it.
+   */
+  useEffect(() => {
+    if (!agentArcadeApi.onBridgeTestRequest) return undefined;
+    return agentArcadeApi.onBridgeTestRequest(({ id, kind, model }) => {
+      void (async () => {
+        const answer = (result: { started: boolean; message?: string; error?: string }) =>
+          agentArcadeApi.reportBridgeTestResult?.({ id, ...result });
+        // One render at a time, as every other path here refuses.
+        if (kind !== 'chat' && renderActivity) {
+          await answer({ started: false, error: `RigMatch is busy with ${renderActivity.model ?? 'another render'}.` });
+          return;
+        }
+        try {
+          if (kind === 'video') {
+            const entry = chatVideoEntry(model);
+            if (!entry) {
+              await answer({ started: false, error: 'RigMatch cannot test that video model here.' });
+              return;
+            }
+            await answer({ started: true, message: `Testing ${entry.name} in RigMatch.` });
+            const estimate = estimateLineup([entry], videoMachine, { calibration: readVideoCalibration(), saved: labResults });
+            void startVideoLineup({
+              entries: [entry],
+              // What its time will be read against, as the Video Lab reads it.
+              expected: { [entry.key]: { low: estimate.low, high: estimate.high, basis: estimate.basis } },
+              promptId: IMAGE_BENCHMARK_PROMPTS[0].id,
+              customPrompt: '',
+              judgeModel: pictureJudge || undefined,
+              ollamaBaseUrl: ollama.baseUrl,
+              // Cold, the way every other time on the board was measured.
+              unloadBetweenRuns: true,
+              gpuName: videoMachine.gpuName,
+              balance: pictureJudged ? balances.video : 0,
+              solo: true,
+            });
+            return;
+          }
+          if (kind === 'audio') {
+            const spec = chatAudioEntry(model);
+            if (!spec) {
+              await answer({ started: false, error: 'RigMatch cannot test that audio model here.' });
+              return;
+            }
+            await answer({ started: true, message: `Testing ${spec.name} in RigMatch.` });
+            void startAudioLineup({
+              entries: [{ key: spec.key, name: spec.name }],
+              promptId: AUDIO_BENCHMARK_PROMPTS[0].id,
+              customPrompt: '',
+              listenerModel: audioListener || undefined,
+              ollamaBaseUrl: ollama.baseUrl,
+              unloadBetweenRuns: true,
+              balance: balances.audio,
+              solo: true,
+            });
+            return;
+          }
+          if (kind === 'image') {
+            const checkpoint = chatImageGeneration.checkpoint;
+            if (!checkpoint) {
+              await answer({ started: false, error: 'No checkpoint that can draw is installed in ComfyUI.' });
+              return;
+            }
+            await answer({ started: true, message: `Testing ${checkpoint} in RigMatch.` });
+            void runPictureTest(checkpoint);
+            return;
+          }
+          const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
+          const blocker = getModelBenchmarkBlocker(row, selectedHost, ollama);
+          if (!row?.installed && !installedModelNames.has(model)) {
+            await answer({ started: false, error: `${model} is not installed here.` });
+            return;
+          }
+          if (blocker) {
+            await answer({ started: false, error: blocker });
+            return;
+          }
+          await answer({ started: true, message: `Testing ${model} in RigMatch.` });
+          requestBenchmarkForModel(model);
+        } catch (error) {
+          await answer({ started: false, error: getErrorMessage(error) });
+        }
+      })();
+    });
+  }, [
+    chatVideoEntry, chatAudioEntry, chatImageGeneration.checkpoint, renderActivity, pictureJudge, pictureJudged,
+    ollama, audioListener, videoMachine, labResults, balances.video, balances.audio, modelRows, selectedHost,
+    installedModelNames, requestBenchmarkForModel, runPictureTest,
+  ]);
+
 
   const saveModelNote = useCallback((model: string, note: string) => {
     setModelNotes((current) => {

@@ -63,4 +63,18 @@ function mimeForFile(file) {
   return found ? found[0] : 'application/octet-stream';
 }
 
-module.exports = { FOLDER, generationKind, mimeForFile, parseMediaDataUrl, savePlan };
+/**
+ * What a test Chat asked for names, or null when it names nothing RigMatch tests.
+ *
+ * Four kinds, because RigMatch tests a chat model one way and each maker
+ * another. The renderer decides whether it can test the model named; this only
+ * says the request is one.
+ */
+function testRequest(raw) {
+  const kind = ['chat', 'image', 'video', 'audio'].includes(raw?.kind) ? raw.kind : null;
+  const model = typeof raw?.model === 'string' ? raw.model.trim() : '';
+  if (!kind || !model || model.length > 200) return null;
+  return { kind, model };
+}
+
+module.exports = { FOLDER, generationKind, mimeForFile, parseMediaDataUrl, savePlan, testRequest };

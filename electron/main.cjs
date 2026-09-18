@@ -493,7 +493,7 @@ let latestAudioMaker = { ready: false, model: null };
 /** RigMatch's crowned model for each thing Chat does with a chat model: chat, code, reading, listening. */
 let latestPicks = {};
 
-const { generationKind, mimeForFile, savePlan } = require('./bridgeMedia.cjs');
+const { generationKind, mimeForFile, savePlan, testRequest } = require('./bridgeMedia.cjs');
 
 /**
  * Pictures, clips and sounds asked for by RigMatch Chat, keyed by job id.
@@ -587,6 +587,14 @@ const scoresServer = http.createServer((req, res) => {
 
   if (req.method === 'POST' && url.pathname === '/generate') {
     handleGenerateRequest(req, res);
+    return;
+  }
+
+  // Chat asking RigMatch to test a model, rather than use it. The renderer owns
+  // every test, so this asks and waits for its word: what comes back is whether
+  // the test started, which is the only part Chat can act on.
+  if (req.method === 'POST' && url.pathname === '/test') {
+    handleTestRequest(req, res);
     return;
   }
 
@@ -720,6 +728,65 @@ function handleGenerateRequest(req, res) {
     win.webContents.send('bridge:generateRequest', { id, prompt, kind, model });
     res.statusCode = 202;
     res.end(JSON.stringify({ id }));
+  });
+}
+
+/** Tests Chat asked for and the renderer has not answered yet, by id. */
+const pendingTests = new Map();
+
+function handleTestRequest(req, res) {
+  let body = '';
+  let tooBig = false;
+  req.on('data', (chunk) => {
+    body += chunk;
+    if (body.length > 4096) { tooBig = true; req.destroy(); }
+  });
+  req.on('end', () => {
+    res.setHeader('Content-Type', 'application/json');
+    if (tooBig) {
+      res.statusCode = 413;
+      res.end(JSON.stringify({ error: 'Request too long.' }));
+      return;
+    }
+    let asked = null;
+    try {
+      // A chat model, or one of the three makers. RigMatch tests each its own way.
+      asked = testRequest(JSON.parse(body || '{}'));
+    } catch { /* handled below */ }
+    if (!asked) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: 'Name a model and what it is for: chat, image, video or audio.' }));
+      return;
+    }
+
+    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
+    if (!win) {
+      res.statusCode = 503;
+      res.end(JSON.stringify({ error: 'RigMatch is not running, so it cannot test anything.' }));
+      return;
+    }
+
+    const id = `test-${Date.now()}-${Math.round(process.hrtime()[1] / 1000)}`;
+    // A test can run for half an hour; what this waits for is the renderer
+    // saying it began, which takes a moment or never comes.
+    const timer = setTimeout(() => {
+      if (!pendingTests.delete(id)) return;
+      res.statusCode = 504;
+      res.end(JSON.stringify({ error: 'RigMatch did not answer. Is its window open?' }));
+    }, 15000);
+    pendingTests.set(id, (answer) => {
+      clearTimeout(timer);
+      if (answer?.started) {
+        res.statusCode = 202;
+        res.end(JSON.stringify({ started: true, message: answer.message ?? null }));
+        return;
+      }
+      // RigMatch's own words: it knows whether ComfyUI is busy, the model is not
+      // one it can test, or nothing is installed to test it with.
+      res.statusCode = 409;
+      res.end(JSON.stringify({ error: answer?.error ?? 'RigMatch could not start that test.' }));
+    });
+    win.webContents.send('bridge:testRequest', { id, ...asked });
   });
 }
 
@@ -969,6 +1036,19 @@ function registerHandlers() {
    * clips to Videos\RigMatch and sounds to Music\RigMatch, and only what the
    * job asked for is kept.
    */
+  /** The renderer saying whether a test Chat asked for has started. */
+  handleLogged('bridge:testResult', 'bridge', async (_event, result) => {
+    const answer = pendingTests.get(String(result?.id ?? ''));
+    if (!answer) return { ok: false };
+    pendingTests.delete(String(result.id));
+    answer({
+      started: result?.started === true,
+      message: typeof result?.message === 'string' ? result.message.slice(0, 300) : null,
+      error: typeof result?.error === 'string' ? result.error.slice(0, 300) : null,
+    });
+    return { ok: true };
+  });
+
   handleLogged('bridge:generateResult', 'bridge', async (_event, result) => {
     const id = String(result?.id ?? '');
     const job = id ? generationJobs.get(id) : undefined;

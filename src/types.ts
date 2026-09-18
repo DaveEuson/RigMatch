@@ -670,6 +670,13 @@ export type AgentArcadeApi = {
     model?: string;
   }) => void) => () => void;
   reportBridgeGenerateResult?: (result: { id: string; dataUrl?: string; error?: string; stopped?: boolean }) => Promise<{ ok: boolean }>;
+  /** RigMatch Chat asking RigMatch to test a model, rather than use it. */
+  onBridgeTestRequest?: (callback: (request: {
+    id: string;
+    kind: 'chat' | 'image' | 'video' | 'audio';
+    model: string;
+  }) => void) => () => void;
+  reportBridgeTestResult?: (result: { id: string; started: boolean; message?: string; error?: string }) => Promise<{ ok: boolean }>;
   /** RigMatch Chat asking to stop something it started. */
   onBridgeGenerateStop?: (callback: (request: { id: string }) => void) => () => void;
   startOllamaInstall: () => Promise<void>;

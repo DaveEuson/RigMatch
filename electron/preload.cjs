@@ -44,6 +44,13 @@ const api = {
     return () => ipcRenderer.removeListener('bridge:generateRequest', listener);
   },
   reportBridgeGenerateResult: (result) => ipcRenderer.invoke('bridge:generateResult', result),
+  /** RigMatch Chat asking RigMatch to test a model, rather than use it. */
+  onBridgeTestRequest: (callback) => {
+    const listener = (_event, request) => callback(request);
+    ipcRenderer.on('bridge:testRequest', listener);
+    return () => ipcRenderer.removeListener('bridge:testRequest', listener);
+  },
+  reportBridgeTestResult: (result) => ipcRenderer.invoke('bridge:testResult', result),
   /** RigMatch Chat asking to stop something it started. */
   onBridgeGenerateStop: (callback) => {
     const listener = (_event, request) => callback(request);
