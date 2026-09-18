@@ -93,6 +93,7 @@ export function ModelCabinet({
   renderingModelId = null,
   goalLens,
   selectedModel,
+  reveal = null,
   installedModelNames,
   shortlistIds,
   queuedModelIds,
@@ -152,6 +153,8 @@ export function ModelCabinet({
   active: boolean;
   rows: ModelRow[];
   selectedModel: string;
+  /** A model opened from another screen, and when: the list brings it into view. */
+  reveal?: { model: string; at: number } | null;
   installedModelNames: Set<string>;
   shortlistIds: Set<string>;
   queuedModelIds: Set<string>;
@@ -504,11 +507,18 @@ export function ModelCabinet({
    *
    * Only when the model is genuinely not visible, so clicking a row already on
    * screen never disturbs filters someone set deliberately.
+   *
+   * Driven by `reveal`, which carries the moment the model was opened rather
+   * than the model's name. Opening a model the channel would hide switches the
+   * channel, and that remounts this whole screen — a name compared with the
+   * last name seen is equal again on the new mount, so the row was left
+   * collapsed and off screen, which is what Open looked like it was doing:
+   * nothing.
    */
-  const [openedModel, setOpenedModel] = useState(selectedModel);
-  if (selectedModel !== openedModel) {
-    setOpenedModel(selectedModel);
-    const target = rows.find((row) => row.displayName === selectedModel || row.id === selectedModel);
+  const [revealedAt, setRevealedAt] = useState(0);
+  if (reveal && reveal.at !== revealedAt) {
+    setRevealedAt(reveal.at);
+    const target = rows.find((row) => row.displayName === reveal.model || row.id === reveal.model);
     if (target) {
       const family = getFriendlyModelName(target.displayName);
       setExpandedFamilies((current) => (current.has(family) ? current : new Set(current).add(family)));
@@ -521,6 +531,32 @@ export function ModelCabinet({
       }
     }
   }
+
+  /**
+   * And the row is scrolled to, which is the other half of being shown it.
+   *
+   * Clearing the filters and opening the family still left the reader at the
+   * top of a list of 355 rows to find it themselves. Only when the row is off
+   * screen: a row already in view must not shift under the cursor.
+   */
+  const tableRef = useRef<HTMLTableElement | null>(null);
+  useEffect(() => {
+    // Watched while the click is recent, rather than measured once. The list
+    // settles in two passes: a fifth of a second after Open the model's row was
+    // the only one rendered and sat in plain view, and a second later — the
+    // rest of its family drawn, the rows reordered — the same row was 4,629
+    // pixels below the bottom of the screen. Measured once, it had arrived.
+    if (!reveal?.model || Date.now() - reveal.at > 5000) return undefined;
+    const frame = requestAnimationFrame(() => {
+      const row = tableRef.current?.querySelector(`tr[data-model="${CSS.escape(reveal.model)}"]`);
+      if (!row) return;
+      const box = row.getBoundingClientRect();
+      // A row already in view must not shift under the cursor.
+      if (box.top >= 0 && box.bottom <= window.innerHeight) return;
+      row.scrollIntoView({ block: 'center' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [reveal?.model, reveal?.at, visibleRows]);
 
   /**
    * Searching opens what it found. Typing "e2b" and getting a shut "Gemma4"
@@ -980,7 +1016,7 @@ export function ModelCabinet({
         </div>
       )}
       <div className="table-wrap model-table">
-        <table>
+        <table ref={tableRef}>
           <colgroup>
             {colWidths.map((w, i) => (hidePopularity && i === 7 ? null : <col key={i} style={{ width: w }} />))}
             {showAdded && <col style={{ width: 104 }} />}
@@ -1099,6 +1135,8 @@ export function ModelCabinet({
                 <Fragment key={row.id}>
                 <tr
                   className={[rowClassName, testing ? 'testing' : ''].filter(Boolean).join(' ')}
+                  // How a model opened from another screen is found again below.
+                  data-model={row.displayName}
                   onDoubleClick={() => { onSelect(row.displayName); onOpenTopPick(); }}
                   title="Double-click to open profile"
                 >

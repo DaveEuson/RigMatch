@@ -1672,12 +1672,38 @@ function App() {
   }, [loadLogs]);
 
   /** Where a render in flight is shown in full: its model's row for a test of one, Comparison for a race. */
+  /**
+   * Open a model from another screen, and actually land on it.
+   *
+   * What's New sent the reader to the Models screen with the model selected and
+   * the channel left as it was. Opening a new cloud model while the channel was
+   * Reads images put them in front of an empty table: the model cannot read
+   * pictures, so the channel's lens filtered it out, and Open looked broken. A
+   * model the channel would hide moves to All, where every model is; a model the
+   * channel already shows leaves the channel alone.
+   */
+  /** A model opened from another screen, and when, so the list can bring it into view. */
+  const [revealModel, setRevealModel] = useState<{ model: string; at: number } | null>(null);
+  const openModelRow = useCallback((model: string) => {
+    setSelectedModel(model);
+    const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
+    const lens = workbenchInfo.taskFilter;
+    if (!row || (lens && !modelMatchesTask(row, lens))) chooseWorkbench('all');
+    // The moment, not the name: switching channel remounts the list, and a name
+    // it has already seen would leave the row collapsed and off screen.
+    setRevealModel({ model, at: Date.now() });
+    selectNav('models');
+  }, [modelRows, workbenchInfo.taskFilter, chooseWorkbench, selectNav]);
+
   const openRender = useCallback((render: RenderActivity) => {
     chooseWorkbench(renderChannel(render.kind));
     const row = render.solo && render.key
       ? modelRows.find((candidate) => candidate.generationId === render.key)
       : undefined;
-    if (row) setSelectedModel(row.displayName);
+    if (row) {
+      setSelectedModel(row.displayName);
+      setRevealModel({ model: row.displayName, at: Date.now() });
+    }
     selectNav(render.solo ? 'models' : 'speedDate');
   }, [chooseWorkbench, modelRows, selectNav]);
 
@@ -4058,6 +4084,7 @@ function App() {
             key={workbenchInfo.id}
             active={true}
             rows={modelRows}
+            reveal={revealModel}
             comfyFolderSet={Boolean(comfySettings.folder)}
             goalLens={workbenchInfo.taskFilter ?? undefined}
             generationTest={{
@@ -4163,7 +4190,7 @@ function App() {
             formatPullCount={formatPullCount}
             onRefresh={refreshRig}
             onToggleNotifications={toggleModelNewsNotifications}
-            onOpenModel={(model) => { setSelectedModel(model); selectNav('models'); }}
+            onOpenModel={openModelRow}
           />
         )}
         {activeNavId === 'speedDate' && comparedWorkbench && (
