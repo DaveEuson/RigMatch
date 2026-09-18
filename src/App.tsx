@@ -3817,12 +3817,27 @@ function App() {
     }
   }, [isPullPaused, isPullingModels, ollama.ready, pullQueuedModels, queuedRows.length, labDownloadName]);
 
+  /**
+   * The winner's jingle belongs to a result, not to a re-ranking.
+   *
+   * It fired on any rise in the Top Match's score, and the Balance fader
+   * re-ranks what has already been measured: dragging it from speed towards
+   * accuracy handed the crown to a different model every few notches, and the
+   * app sang each time. Nothing was being measured; the same numbers were
+   * being sorted differently. So the jingle now needs a run behind it — during
+   * one, or in the moments after it, while the scores settle.
+   */
+  const runActiveAtRef = useRef(0);
+  useEffect(() => {
+    if (isBenchmarking || isListTesting) runActiveAtRef.current = Date.now();
+  }, [isBenchmarking, isListTesting]);
+
   const prevTopScoreRef = useRef<number | null>(null);
   useEffect(() => {
     const score = topRigPick?.score?.total ?? null;
     const prev = prevTopScoreRef.current;
     if (score !== null && score !== prev) {
-      if (prev !== null && score > prev) {
+      if (prev !== null && score > prev && Date.now() - runActiveAtRef.current < 10_000) {
         playJingle('new-winner');
       }
       prevTopScoreRef.current = score;
