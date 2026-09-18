@@ -669,6 +669,38 @@ async fn stop_rig_generation(id: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Ask RigMatch to test a model — its own test, run in its own window.
+///
+/// What comes back is whether it started. The run itself takes minutes and is
+/// watched in RigMatch, where the status bar and Activity already show it.
+#[tauri::command]
+async fn test_rig_model(kind: String, model: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let res = client
+        .post(bridge_url("/test"))
+        .header("Origin", "tauri://localhost")
+        .json(&serde_json::json!({ "kind": kind, "model": model }))
+        .send()
+        .await
+        .map_err(|_| "RigMatch is not running, so it cannot test anything.".to_string())?;
+
+    let status = res.status();
+    let body = res.json::<serde_json::Value>().await.unwrap_or(serde_json::Value::Null);
+    if !status.is_success() {
+        // RigMatch's own words: it knows whether ComfyUI is busy, the model is
+        // not one it can test, or nothing is installed to test it with.
+        let reason = body
+            .get("error")
+            .and_then(|e| e.as_str())
+            .unwrap_or("RigMatch could not start that test.");
+        return Err(reason.to_string());
+    }
+    Ok(body)
+}
+
 // Launches RigMatch from the bundled companions layout:
 //   <install-root>/companions/rigmatch-chat.exe  →  <install-root>/RigMatch.exe
 #[tauri::command]
@@ -726,6 +758,7 @@ pub fn run() {
             get_rig_generation_image,
             get_rig_generation_media,
             stop_rig_generation,
+            test_rig_model,
             get_ollama_vram,
             get_vram_info,
         ])

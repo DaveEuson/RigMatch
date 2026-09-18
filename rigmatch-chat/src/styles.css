@@ -2152,6 +2152,36 @@ textarea:focus {
   opacity: 0.6;
 }
 
+/* Hand a model back to RigMatch to be tested, from wherever Chat shows one. */
+.rm-test-btn {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.16));
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.rm-test-btn:hover:not(:disabled) {
+  border-color: var(--accent, #ffb347);
+  color: var(--accent, #ffb347);
+}
+
+.rm-test-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.rm-test-note {
+  margin: 0;
+  padding: 6px 14px;
+  font-size: 11px;
+  opacity: 0.75;
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+}
+
 /* Which model makes it: every one that runs here, tested first. */
 .rm-maker-pick {
   display: flex;

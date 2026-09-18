@@ -672,6 +672,13 @@ export default function App() {
    * installed is not always the one you want a clip from.
    */
   const [makerModel, setMakerModel] = useState<Partial<Record<MakeKind, string>>>(readChosenMakers);
+  /** What RigMatch said about the last test asked for here; cleared after a while. */
+  const [testNote, setTestNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!testNote) return undefined;
+    const id = setTimeout(() => setTestNote(null), 12_000);
+    return () => clearTimeout(id);
+  }, [testNote]);
   /** The model RigMatch's own tests crowned for each thing this window does with a chat model. */
   const [picks, setPicks] = useState<Partial<Record<PickUse, string>>>({});
 
@@ -821,6 +828,25 @@ export default function App() {
     const choices = makerChoices(kind);
     return choices.find((choice) => choice.key === makerModel[kind]) ?? choices[0] ?? null;
   }, [makerChoices, makerModel]);
+  /**
+   * Asking RigMatch to test a model, from wherever Chat is showing one.
+   *
+   * Every choice here names a model RigMatch has an opinion about, and earning
+   * that opinion used to mean finding the model in RigMatch and starting its
+   * test there. RigMatch runs its own test — the same one its own screens run —
+   * and this says whether it began. The run is watched in RigMatch, which
+   * already shows it in the status bar.
+   */
+  const testModel = useCallback(async (kind: "chat" | MakeKind, model: string, label = model) => {
+    setTestNote(`Asking RigMatch to test ${label}…`);
+    try {
+      const answer = await invoke<{ message?: string | null }>("test_rig_model", { kind, model });
+      setTestNote(answer?.message ?? `RigMatch is testing ${model}. Watch it there.`);
+    } catch (error) {
+      setTestNote(String(error));
+    }
+  }, []);
+
   const chooseMaker = (kind: MakeKind, key: string) => {
     setMakerModel((current) => {
       const next = { ...current, [kind]: key };
@@ -2325,7 +2351,18 @@ export default function App() {
               <span className="rm-chat-header-model" title="Actual local Ollama model">
                 MODEL {activeBuddyObj.modelName}
               </span>
+              <button
+                type="button"
+                className="rm-test-btn"
+                onClick={() => void testModel("chat", activeBuddyObj.modelName)}
+                disabled={typingModel === activeBuddy}
+                title="RigMatch runs its own test on this model and scores it"
+              >
+                Test
+              </button>
             </div>
+
+            {testNote && <p className="rm-test-note">{testNote}</p>}
 
             <div className="rm-personality-bar">
               <div className="rm-personality-select-wrap">
@@ -2588,6 +2625,17 @@ export default function App() {
                     : STUDIOS[openStudio].missing}
                 </em>
               </div>
+              {makerStatus(openStudio).ready && chosenMaker(openStudio) && (
+                <button
+                  type="button"
+                  className="rm-test-btn"
+                  onClick={() => void testModel(openStudio, chosenMaker(openStudio)!.key, chosenMaker(openStudio)!.name)}
+                  disabled={Boolean(making)}
+                  title="RigMatch times this model and scores what it makes"
+                >
+                  Test this model
+                </button>
+              )}
               {makerChoices(openStudio).length > 1 && (
                 <label className="rm-maker-pick">
                   <span>Model</span>
@@ -2606,6 +2654,8 @@ export default function App() {
                 {makerStatus(openStudio).ready ? "Ready" : "Not ready"}
               </span>
             </div>
+
+            {testNote && <p className="rm-test-note">{testNote}</p>}
 
             <div className="rm-studio-body" ref={studioBodyRef}>
               {activeMessages.length === 0 && (
