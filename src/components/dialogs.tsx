@@ -92,6 +92,8 @@ export function CloseCleanupModal({
   onDeleteEverything,
   onCancel,
   onUnderstand,
+  askAgain,
+  onAskAgainChange,
 }: {
   installedRows: ModelRow[];
   unscoredRows: ModelRow[];
@@ -108,6 +110,9 @@ export function CloseCleanupModal({
   onDeleteEverything: () => void;
   onCancel: () => void;
   onUnderstand: () => void;
+  /** Whether this offer appears on the next close. */
+  askAgain: boolean;
+  onAskAgainChange: (ask: boolean) => void;
 }) {
   const cleanupDialogRef = useDialog<HTMLElement>(isDeleting ? undefined : onCancel);
   const installedGb = sumModelRowGb(installedRows);
@@ -127,40 +132,92 @@ export function CloseCleanupModal({
           <Trash2 aria-hidden="true" />
           <div>
             <span>Before You Close</span>
-            <strong id="close-cleanup-title">Unused Ollama models can take up a lot of space</strong>
+            <strong id="close-cleanup-title">Free up disk space?</strong>
           </div>
         </div>
         <div className="modal-body">
           <p>
-            RigMatch leaves downloaded Ollama models on this computer so you can test or chat later.
-            If you are not using some of them, deleting those models can free meaningful disk space.
+            {installedRows.length} models are on this computer, about {formatGb(installedGb)}.
+            RigMatch keeps them so you can test or chat later. Delete what you are not using, or close and keep them all.
           </p>
-          <div className="modal-warning-grid model-cleanup-summary">
-            <div>
-              <span>Installed Models</span>
-              <strong>{installedRows.length}</strong>
-              <em>{formatGb(installedGb)} estimated on disk.</em>
-            </div>
-            <div>
-              <span>Not Scored</span>
-              <strong>{unscoredRows.length}</strong>
-              <em>{formatGb(unscoredGb)} that RigMatch has not benchmarked.</em>
-            </div>
-            <div>
-              <span>Scored 80 or Below</span>
-              <strong>{lowScoredRows.length}</strong>
-              <em>{formatGb(lowScoredGb)} from lower-ranked matches.</em>
-            </div>
-            <div>
-              <span>{topPickName ? 'All But Your Match' : 'Everything Installed'}</span>
-              <strong>{exceptTopPickRows.length}</strong>
-              <em>
-                {topPickName
-                  ? `${formatGb(exceptTopPickGb)}, keeping ${getShortModelName(topPickName)}.`
-                  : `${formatGb(exceptTopPickGb)} — nothing scored yet, so there is no match to keep.`}
-              </em>
-            </div>
-          </div>
+          {/* One row per choice: what it deletes, what it frees, and the button
+              that does it. The four counts used to sit in a grid of cards above
+              a row of four red buttons that described the same four things, and
+              reading the dialog meant matching them up. */}
+          <ul className="model-cleanup-choices">
+            <li>
+              <div>
+                <strong>Models RigMatch never scored</strong>
+                <em>{unscoredRows.length} of {installedRows.length} · frees {formatGb(unscoredGb)}</em>
+              </div>
+              <button
+                type="button"
+                className="danger-button compact"
+                onClick={onDeleteUnscored}
+                disabled={isDeleting || unscoredRows.length === 0}
+              >
+                <Trash2 aria-hidden="true" />
+                {isDeleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </li>
+            <li>
+              <div>
+                <strong>Models that scored 80 or below</strong>
+                <em>{lowScoredRows.length} of {installedRows.length} · frees {formatGb(lowScoredGb)}</em>
+              </div>
+              <button
+                type="button"
+                className="danger-button compact"
+                onClick={onDeleteLowScored}
+                disabled={isDeleting || lowScoredRows.length === 0}
+              >
+                <Trash2 aria-hidden="true" />
+                {isDeleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </li>
+            <li>
+              <div>
+                <strong>{topPickName ? `Everything except ${getShortModelName(topPickName)}` : 'Every installed model'}</strong>
+                <em>
+                  {topPickName
+                    ? `${exceptTopPickRows.length} of ${installedRows.length} · frees ${formatGb(exceptTopPickGb)}, keeping your match`
+                    : `${exceptTopPickRows.length} of ${installedRows.length} · frees ${formatGb(exceptTopPickGb)} — nothing is scored yet, so there is no match to keep`}
+                </em>
+              </div>
+              <button
+                type="button"
+                className="danger-button compact"
+                onClick={onDeleteExceptTopPick}
+                disabled={isDeleting || exceptTopPickRows.length === 0}
+              >
+                <Trash2 aria-hidden="true" />
+                {isDeleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </li>
+            {topPickName && (
+              <li>
+                <div>
+                  <strong>Everything, including {getShortModelName(topPickName)}</strong>
+                  <em>{installedRows.length} of {installedRows.length} · frees {formatGb(installedGb)}, leaving nothing behind</em>
+                </div>
+                <button
+                  type="button"
+                  className={`danger-button compact${armedForEverything ? ' armed' : ''}`}
+                  onClick={() => {
+                    // Two taps, on purpose: this is the only option that leaves
+                    // nothing behind, including the model just crowned.
+                    if (!armedForEverything) { setArmedForEverything(true); return; }
+                    onDeleteEverything();
+                  }}
+                  disabled={isDeleting || installedRows.length === 0}
+                  title={`Delete all ${installedRows.length} installed models, including ${topPickName}`}
+                >
+                  <Trash2 aria-hidden="true" />
+                  {isDeleting ? 'Deleting…' : armedForEverything ? 'Really?' : 'Delete'}
+                </button>
+              </li>
+            )}
+          </ul>
           {message && (
             <div className="run-download-warning model-cleanup-message">
               <AlertTriangle size={14} aria-hidden="true" />
@@ -169,64 +226,23 @@ export function CloseCleanupModal({
           )}
         </div>
         <div className="model-cleanup-actions" aria-label="Model cleanup options">
+          {/* Asked once is an offer; asked on every close is an obstacle. */}
+          <label className="model-cleanup-remember">
+            <input
+              type="checkbox"
+              checked={!askAgain}
+              onChange={(event) => onAskAgainChange(!event.target.checked)}
+              disabled={isDeleting}
+            />
+            <span>Don't ask me again</span>
+          </label>
           <button type="button" className="mini-button outline model-cleanup-cancel" onClick={onCancel} disabled={isDeleting}>
             <X aria-hidden="true" />
-            Cancel
+            Back to RigMatch
           </button>
-          <button
-            type="button"
-            className="danger-button compact"
-            onClick={onDeleteUnscored}
-            disabled={isDeleting || unscoredRows.length === 0}
-          >
-            <Trash2 aria-hidden="true" />
-            {isDeleting ? 'Deleting...' : `Delete Not Scored (${unscoredRows.length})`}
-          </button>
-          <button
-            type="button"
-            className="danger-button compact"
-            onClick={onDeleteLowScored}
-            disabled={isDeleting || lowScoredRows.length === 0}
-          >
-            <Trash2 aria-hidden="true" />
-            {isDeleting ? 'Deleting...' : `Delete 80 or Below (${lowScoredRows.length})`}
-          </button>
-          <button
-            type="button"
-            className="danger-button compact"
-            onClick={onDeleteExceptTopPick}
-            disabled={isDeleting || exceptTopPickRows.length === 0}
-            title={topPickName
-              ? `Delete every other model and keep ${topPickName}`
-              : 'Delete every installed model — nothing has been scored, so there is no match to keep'}
-          >
-            <Trash2 aria-hidden="true" />
-            {isDeleting ? 'Deleting...' : topPickName
-              ? `Keep Only My Match (${exceptTopPickRows.length})`
-              : `Delete All (${exceptTopPickRows.length})`}
-          </button>
-          {topPickName && (
-            <button
-              type="button"
-              className={`danger-button compact${armedForEverything ? ' armed' : ''}`}
-              onClick={() => {
-                // Two taps, on purpose: this is the only option that leaves
-                // nothing behind, including the model the user just crowned.
-                if (!armedForEverything) { setArmedForEverything(true); return; }
-                onDeleteEverything();
-              }}
-              disabled={isDeleting || installedRows.length === 0}
-              title={`Delete all ${installedRows.length} installed models, including ${topPickName}`}
-            >
-              <Trash2 aria-hidden="true" />
-              {isDeleting ? 'Deleting...' : armedForEverything
-                ? `Really delete all ${installedRows.length}?`
-                : `Delete All Including Match (${installedRows.length})`}
-            </button>
-          )}
-          <button type="button" className="mini-button outline" onClick={onUnderstand} disabled={isDeleting}>
+          <button type="button" className="primary-button compact" onClick={onUnderstand} disabled={isDeleting}>
             <Check aria-hidden="true" />
-            I Understand
+            Close and keep them
           </button>
         </div>
       </section>

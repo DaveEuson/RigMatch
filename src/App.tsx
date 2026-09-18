@@ -187,6 +187,8 @@ import {
   TUTORIAL_STORAGE_KEY,
   UI_MODE_STORAGE_KEY,
   navItems,
+  readCloseCleanupAsk,
+  writeCloseCleanupAsk,
   type ThemeId,
   type UiMode,
 } from './lib/appConfig';
@@ -504,6 +506,8 @@ function App() {
   // Whether the live view is expanded (true) or minimized to the mini-bar (false).
   const [liveBuildOpen, setLiveBuildOpen] = useState(true);
   const [closeCleanupOpen, setCloseCleanupOpen] = useState(false);
+  /** Whether the disk-space offer still appears on the way out. */
+  const [closeCleanupAsk, setCloseCleanupAsk] = useState(() => readCloseCleanupAsk());
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
   const [benchmarkQuestionCount, setBenchmarkQuestionCount] = useState<BenchmarkQuestionCount>(10);
@@ -1649,7 +1653,8 @@ function App() {
     if (!agentArcadeApi.onAppCloseRequest) return undefined;
 
     return agentArcadeApi.onAppCloseRequest(() => {
-      if (installedRowsForCleanup.length === 0) {
+      // Nothing to offer, or the offer was declined for good.
+      if (installedRowsForCleanup.length === 0 || !closeCleanupAsk) {
         void agentArcadeApi.closeApp();
         return;
       }
@@ -1657,7 +1662,7 @@ function App() {
       setCloseCleanupMessage(null);
       setCloseCleanupOpen(true);
     });
-  }, [installedRowsForCleanup.length]);
+  }, [installedRowsForCleanup.length, closeCleanupAsk]);
 
   const selectNav = useCallback((id: NavId) => {
     setActiveNavId(id);
@@ -4711,6 +4716,8 @@ function App() {
           onDeleteEverything={() => { void deleteRowsThenClose(installedRowsForCleanup, 'installed'); }}
           onCancel={cancelCloseCleanup}
           onUnderstand={() => { void closeAppAfterCleanup(); }}
+          askAgain={closeCleanupAsk}
+          onAskAgainChange={(ask) => { setCloseCleanupAsk(ask); writeCloseCleanupAsk(ask); }}
         />
       )}
       {supportModalOpen && (

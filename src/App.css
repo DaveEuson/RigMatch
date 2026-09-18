@@ -183,6 +183,83 @@ textarea {
    one, above a table that had shown no models at all. A strip is what a folded
    header should be: the room's name, whether local AI is running, and what has
    won so far, on one line, with the cards' own chrome stood down. */
+/* A question, not a klaxon: this dialog's own title stays in sentence case at
+   headline size. Shouted across two lines it read as an error, and it is an
+   offer you are free to refuse on the way out. */
+.model-cleanup-modal .modal-title strong {
+  font-family: var(--ui);
+  font-size: 19px;
+  text-transform: none;
+}
+
+.model-cleanup-modal .model-cleanup-remember span {
+  white-space: nowrap;
+}
+
+/* The footer is one line of three: the choice about next time, the way back,
+   and the way out. */
+.model-cleanup-modal .model-cleanup-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.model-cleanup-modal .model-cleanup-actions button {
+  white-space: nowrap;
+}
+
+/* The close-time disk-space offer: one row per choice. */
+.model-cleanup-choices {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.model-cleanup-choices li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.model-cleanup-choices strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.model-cleanup-choices em {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.model-cleanup-remember {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.model-cleanup-remember input {
+  width: 15px;
+  height: 15px;
+  accent-color: rgb(var(--primary-rgb));
+}
+
 /* An empty lineup is one line. The slots, and the height they need, arrive
    with the first contestant. */
 .model-pool-lineup.empty {
@@ -20429,8 +20506,17 @@ a.whats-next-support:hover {
 }
 
 .balance-fader.mini .balance-fader-console {
-  padding: 4px 3px;
+  padding: 3px 4px 4px;
   border-radius: 7px;
+}
+
+/* Small enough to sit either side of a 24px slot, still a label: the eyebrow
+   voice at its smallest, tracked so uppercase stays readable. */
+.balance-fader.mini .balance-fader-end {
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  opacity: 0.85;
 }
 
 .balance-fader-end {

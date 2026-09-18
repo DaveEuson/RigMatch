@@ -33,6 +33,7 @@ import { roundLabel } from '../lib/roundLabels';
 import { formatDuration } from '../lib/runEstimates';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 import { getFriendlyModelName } from '../lib/modelCatalog';
+import { getCountryCode, getModelOrigin } from '../lib/modelOrigins';
 import { getDownloadRowStatus, summarizeDownloadStep } from '../lib/downloadStatus';
 import type { ComfyFolderListing } from '../lib/generationCatalog';
 import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
@@ -1032,9 +1033,26 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
   onToggle: () => void;
 }) {
   const fitLabel = model.fitTier === 'great' ? 'Runs great on your PC' : model.fitTier === 'well' ? 'Runs well on your PC' : 'Good fit — a little slower';
+  /**
+   * Who made it, in the name someone would recognise.
+   *
+   * Gemma4, Codegemma, Translategemma and Functiongemma are four cards from
+   * one company and nothing on them said Google; Llama says nothing about
+   * Meta, Qwen nothing about Alibaba. The Advanced table has carried a By
+   * column all along — beginners are the ones who need it most.
+   */
+  const origin = getModelOrigin(model.row.displayName);
+  const countryCode = origin.country ? getCountryCode(origin.country) : null;
   return (
-    <article className={`sw-card${picked ? ' picked' : ''}`}>
+    <article className={`sw-card${picked ? ' picked' : ''}${model.row.installed ? ' installed' : ''}`}>
       {picked && <span className="sw-card-pick-badge"><Heart aria-hidden="true" />Pick {pickIndex}</span>}
+      {!picked && model.row.installed && (
+        /* Downloaded already. It was a grey tick beside the model id, reading
+           as small print next to a bright download size on the card beside it;
+           the one thing a beginner picking five models most wants to know is
+           which ones cost nothing. */
+        <span className="sw-card-installed-badge"><Check aria-hidden="true" />On your PC</span>
+      )}
       <img className="sw-card-avatar" src={getModelAvatarSrc(model.row.displayName)} alt="" />
       <div className="sw-card-name">
         <strong>{model.name}</strong>
@@ -1051,12 +1069,20 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
           <code className="sw-card-id">{model.row.displayName}</code>
           <span className="sw-card-size">
             {model.row.installed
-              ? '✓ Already on your PC'
+              ? 'No download needed'
               : model.row.sizeGb
                 ? <Explain id="download-size">{`${model.row.sizeGb} GB download`}</Explain>
                 : 'Size unknown'}
           </span>
         </span>
+        {/* Only where the maker is actually known: "by Unknown model family"
+            is a worse answer than saying nothing. */}
+        {origin.organization !== 'Unknown model family' && (
+          <span className="sw-card-maker">
+            by {origin.organization}
+            {countryCode && <em title={origin.country}>{countryCode}</em>}
+          </span>
+        )}
         <em>{model.epithet}</em>
         {/* Collapsed siblings get one honest line instead of N clone cards. */}
         {(model.variantCount ?? 0) > 1 && (

@@ -103,8 +103,12 @@ export function BalanceFader({
       className={`balance-fader ${variant}${locked ? ' locked' : ''}${disabled ? ' disabled' : ''}`}
       aria-labelledby={`${id}-label`}
     >
+      {/* Both ends are named on the mini fader too. Without them it is an
+          unlabelled meter on a card: a slider with a cap, nothing saying what
+          moving it would trade for what. The tooltip said so only to a mouse
+          that stopped on it. */}
       <div className="balance-fader-console">
-        {variant === 'full' && <span className="balance-fader-end" aria-hidden="true">Accuracy</span>}
+        <span className="balance-fader-end" aria-hidden="true">Accuracy</span>
         <div
           className={`balance-fader-slot${dragging ? ' dragging' : ''}`}
           role="slider"
@@ -138,7 +142,7 @@ export function BalanceFader({
             <span className="balance-fader-cap" />
           </span>
         </div>
-        {variant === 'full' && <span className="balance-fader-end" aria-hidden="true">Speed</span>}
+        <span className="balance-fader-end" aria-hidden="true">Speed</span>
       </div>
 
       {variant === 'full' ? (
