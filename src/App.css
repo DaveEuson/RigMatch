@@ -342,10 +342,27 @@ textarea {
 }
 
 /* The winner's line ends the strip, right-aligned, so the eye lands on the
-   one piece of the header that is a verdict. */
+   one piece of the header that is a verdict.
+
+   Right-aligned by its content, not by shrinking its box: `justify-self: end`
+   left the card 271px wide in a 966px track, so the model name — the whole
+   point of the strip — ellipsized with 700px of nothing beside it. The box
+   takes the track and the content hugs the right, which looks identical and
+   truncates far later. */
 .top-deck.mode-advanced.collapsed .top-deck-winner {
-  justify-self: end;
+  justify-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 6px;
+}
+
+/* Expanded, the copy fills the card; in the strip it has a whole track behind
+   it, and a growing copy would drag the verdict back to the left edge of that
+   track. Content-sized, it stays at the right and still has the track to grow
+   into before anything truncates. */
+.top-deck.mode-advanced.collapsed .top-deck-winner-copy {
+  flex: 0 1 auto;
 }
 
 .top-deck.mode-advanced.collapsed .local-status-card {
