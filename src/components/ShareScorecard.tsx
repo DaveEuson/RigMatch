@@ -19,8 +19,10 @@ type CardStyle = 'datingshow' | 'scorecard';
 // The surfaces are warm on purpose. The Scorecard style used to be built on
 // #0d1117 / #1d2533 / #2c3b4d — a cold blue-black the palette allows in no
 // theme — so the card that went out to strangers was the one thing about
-// RigMatch that did not look like RigMatch. These are the plum end of
-// index.css: --bg #171523, --panel #211b2b, --line #5b4e62.
+// RigMatch that did not look like RigMatch. These are darkened from the plum
+// end of index.css (--bg #171523, --panel #211b2b, --line #5b4e62): a card is
+// read at thumbnail size on someone else's feed, so its ground sits a shade
+// deeper than the app's.
 const COLORS = {
   bgTop: '#17121f',
   bgBottom: '#221b2b',

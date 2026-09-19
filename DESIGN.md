@@ -223,7 +223,7 @@ The plum ladder, three steps from the auditorium to the riser:
 
 ## Layout
 
-**The app shell** is a CSS grid with named areas — `top / menu stage / lineup / ticker` — at `height: 100vh`, `padding: 18px`, `gap: 16px`, with a `minmax(172px, 196px)` sidebar. Simple Mode collapses the whole shell to a single `stage` area and fills it. There is no global max-width wrapper; the app is full-bleed and constrains width per surface with `width: min(Npx, calc(100vw - Npx))`.
+**The app shell** is a CSS grid with named areas — `top / menu stage / lineup / ticker` — at `height: 100vh`, `padding: 18px`, `gap: 16px`, with a `minmax(172px, 196px)` sidebar. Simple Mode collapses the whole shell to a single `stage` area and fills it. The shell is capped at **1920px and centered** — on a 2560px monitor every strip ran the full width of the glass, and a table row a yard long is not a table anyone reads. Inside that cap the app is full-bleed and constrains width per surface with `width: min(Npx, calc(100vw - Npx))`.
 
 **Spacing** runs on a dense 2px-step scale rather than a 4pt or 8pt grid: **4 / 6 / 8 / 10 / 12 / 14 / 16**, with 8px and 10px dominant. The odd steps (3, 5, 7, 9) are systematic, not accidental — recurring pairs like `5px 7px` and `9px 14px` appear throughout Advanced Mode. The wizard uses the top of the scale plus a 28px page gutter.
 

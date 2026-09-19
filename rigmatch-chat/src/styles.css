@@ -2199,11 +2199,13 @@ textarea:focus {
   max-width: 150px;
   min-width: 76px;
   width: 100%;
-  text-overflow: ellipsis;
   padding: 4px 8px;
+  text-overflow: ellipsis;
   border-radius: 999px;
-  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
-  background: var(--panel, rgba(255, 255, 255, 0.04));
+  /* This app's own tokens, not the desktop app's: --line and --panel do not
+     exist here, so every rule that named them painted its hex fallback. */
+  border: 1px solid var(--border);
+  background: var(--bg-card);
   color: inherit;
   font-size: 11px;
 }

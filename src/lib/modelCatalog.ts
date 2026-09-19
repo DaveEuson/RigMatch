@@ -1405,7 +1405,11 @@ export const TASK_CATEGORIES = [
 export type TaskCategoryId = typeof TASK_CATEGORIES[number]['id'];
 export type ModelTaskFilterId = TaskCategoryId | 'uncensored' | 'imagegen' | 'videogen' | 'hears' | 'videoread' | 'audiogen';
 
-/** The seven things the wizard can ask for, one per thing RigMatch measures. */
+/**
+ * What the wizard can be asked for. Eight, for the seven things RigMatch
+ * measures: talking and writing are two ways of asking for the one channel,
+ * because a beginner looking for a writing partner does not read "chat".
+ */
 export type DreamTag = 'talk' | 'write' | 'code' | 'read-image' | 'hear' | 'image' | 'video' | 'audio';
 
 export const TASK_FILTER_CHIPS: Array<{ id: ModelTaskFilterId; label: string }> = [
@@ -1541,7 +1545,6 @@ export function getModelGoodForLine(row: ModelRow): string {
   }
 }
 
-/** Which Simple Mode "dream" filters a model matches. */
 /**
  * What a model could be someone's dream for, in the wizard's own words.
  *

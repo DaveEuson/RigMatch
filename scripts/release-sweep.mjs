@@ -231,7 +231,12 @@ check('surface', 'the winner board ranks by the score it prints', () => {
   // integer while printing the one-decimal value, so the ranked list
   // contradicted its own figures.
   const body = readRenderer();
-  const board = body.match(/const wizardLineupResults = useMemo\(([\s\S]{0,1200}?)\n {2}\);/)?.[1];
+  // The window has to hold the whole memo. At 1,200 it stopped doing so the
+  // moment the wizard's skill rounds added their own branch, and the check
+  // reported the board as *gone* — a false alarm on a board that was still
+  // there and still sorting correctly. 3,000 is room to grow; a memo past
+  // that wants splitting anyway.
+  const board = body.match(/const wizardLineupResults = useMemo\(([\s\S]{0,3000}?)\n {2}\);/)?.[1];
   must(board, 'wizardLineupResults is gone — the Winner screen announces one model out of five again');
   must(/compareTestedModelScores/.test(board),
     'the lineup board no longer sorts with the app comparator, so its order can disagree with its numbers');

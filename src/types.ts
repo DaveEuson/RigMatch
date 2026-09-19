@@ -673,7 +673,13 @@ export type AgentArcadeApi = {
   /** RigMatch Chat asking RigMatch to test a model, rather than use it. */
   onBridgeTestRequest?: (callback: (request: {
     id: string;
-    kind: 'chat' | 'image' | 'video' | 'audio';
+    /**
+     * Everything RigMatch measures, in the words Chat asks for it. Kept in
+     * step with `testRequest` in electron/bridgeMedia.cjs: while this said
+     * four and the validator accepted eight, the handler's branch for the
+     * other four narrowed to `never` and tsc checked it vacuously.
+     */
+    kind: 'chat' | 'image' | 'video' | 'audio' | 'reading' | 'listening' | 'code' | 'app';
     model: string;
   }) => void) => () => void;
   reportBridgeTestResult?: (result: { id: string; started: boolean; message?: string; error?: string }) => Promise<{ ok: boolean }>;

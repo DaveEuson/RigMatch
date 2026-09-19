@@ -11716,6 +11716,15 @@ tbody tr.computer-row.selected {
 }
 
 /* Vision recognition result: the image the model read + its description. */
+/* A made clip, in the viewer that holds everything else a model made. The
+   player brings its own chrome; this only gives it room to sit in. */
+.demo-audio-result {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 16px;
+}
+
 .demo-vision-result {
   display: grid;
   grid-template-columns: minmax(0, 200px) minmax(0, 1fr);

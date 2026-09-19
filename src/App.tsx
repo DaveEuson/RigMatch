@@ -135,7 +135,6 @@ import {
   canHearAudio,
   canReadImages,
   isLikelyImageGenerationModel,
-  isVisionModel,
   isListTestResult,
   isModelScores,
   isRecord,
@@ -324,6 +323,20 @@ type PersistedHistory = {
   chatMessages?: ChatMessage[]; // kept for migrating old saves
   selectedModel?: string;
   savedAt: string;
+};
+
+/**
+ * The skill each test Chat can ask for runs, by the name Chat uses for it.
+ *
+ * Chat speaks in what a person would ask for — a picture it reads, an app it
+ * builds — and the run flow speaks in the skill's own name. One map, so the
+ * two vocabularies meet in exactly one place.
+ */
+const SKILL_FOR_TEST: Record<'reading' | 'listening' | 'code' | 'app', 'vision' | 'listening' | 'code' | 'app-builder'> = {
+  reading: 'vision',
+  listening: 'listening',
+  code: 'code',
+  app: 'app-builder',
 };
 
 function App() {
@@ -752,7 +765,7 @@ function App() {
     const reason = attachmentBlockedReason({
       kind: chatAttachment.kind,
       model: nextModel,
-      canSee: isVisionModel(nextModel),
+      canSee: canReadImages(nextRow ?? { displayName: nextModel }),
       canHear: canHearAudio(nextRow ?? { displayName: nextModel }),
     });
     if (reason) dropAttachment(reason, nextModel);
@@ -939,6 +952,34 @@ function App() {
   /** The skill each round runs, and the fader it is ranked at. */
   const wizardSkill = wizardRound === 'code' ? 'app-builder' : wizardRound;
   const wizardBalance = wizardChannel === 'app' ? balances.code : balances[wizardChannel];
+
+  /**
+   * What the wizard's Compare screen watches while a skill round runs.
+   *
+   * The picture, listening and app rounds report through `skillRunStatus`,
+   * which the wizard has never seen: its progress bar reads `RunProgress`, and
+   * its "the show is over" latch waits for a run to go active and then idle. So
+   * a picture round ran invisibly — Compare sat at 0% with Meet the winner
+   * disabled for as long as anyone waited — and where an earlier chat run had
+   * left `phase: 'complete'` behind, the latch released on the spot and crowned
+   * the previous board while the round was still going.
+   */
+  const wizardRunProgress: RunProgress | null = useMemo(() => {
+    if (wizardRound === 'chat') return runProgress;
+    if (skillRunStatus.phase === 'idle') return null;
+    const total = Math.max(skillRunStatus.total, 1);
+    return {
+      mode: 'speed-date',
+      phase: skillRunStatus.phase,
+      label: skillRunStatus.label,
+      // The label ends "… — <model>"; the screen names who is up now.
+      currentModel: skillRunStatus.label.split(' — ')[1] ?? '',
+      completed: skillRunStatus.completed,
+      total: skillRunStatus.total,
+      percent: Math.round((skillRunStatus.completed / total) * 100),
+      message: skillRunStatus.label,
+    };
+  }, [wizardRound, runProgress, skillRunStatus]);
 
 
   // Advanced's stats strip. Read once from the stored choice, falling back to
@@ -1290,25 +1331,25 @@ function App() {
     if (wizardRound === 'chat') return null;
     const picked = new Set(shortlistedRows.map((row) => row.displayName));
     const mine = Object.values(labResults).filter((result) => result && picked.has(result.model));
-    const board = rankLabList(mine, wizardChannel as Exclude<typeof wizardChannel, 'chat'>, wizardBalance)
-      .filter((ranked) => !ranked.failed)
-      .map((ranked) => ranked.item);
-    // Nothing finished: the show still happened, and the questions behind a
-    // coding round still crowned someone. An empty board must not read as an
-    // empty show.
+    // Failures stay on the board. Dropping them made a round where nobody
+    // passed indistinguishable from a round that never ran — and since the
+    // winner screen unlocks on having a winner, five models that all fell short
+    // left the show with no way forward and nothing said. They are listed,
+    // last, and none of them is crowned.
+    const board = rankLabList(mine, wizardChannel as Exclude<typeof wizardChannel, 'chat'>, wizardBalance);
     return board.length > 0 ? board : null;
   }, [wizardRound, wizardChannel, shortlistedRows, labResults, wizardBalance]);
 
   const wizardWinner = useMemo(
     () => (wizardSkillBoard
-      ? (wizardSkillBoard[0]
-        ? {
-          model: wizardSkillBoard[0].model,
-          score: wizardSkillBoard[0].score,
-          scoreLabel: String(wizardSkillBoard[0].score),
-          grade: wizardSkillBoard[0].grade,
-        }
-        : null)
+      // The first one that actually passed. A result that failed its check is
+      // never crowned, at any fader position.
+      ? (() => {
+        const top = wizardSkillBoard.find((ranked) => ranked.standing !== 'failed')?.item;
+        return top
+          ? { model: top.model, score: top.score, scoreLabel: String(top.score), grade: top.grade }
+          : null;
+      })()
       : topRigPick?.score
       ? {
         model: topRigPick.row.displayName,
@@ -1333,7 +1374,7 @@ function App() {
    */
   const wizardLineupResults = useMemo(
     () => (wizardSkillBoard
-      ? wizardSkillBoard.map((result) => {
+      ? wizardSkillBoard.map(({ item: result, standing }) => {
         // The coding round also asked questions, and that score is this
         // model's Match: shown beside the app's, never instead of it.
         const asked = wizardChannel === 'app' ? modelScores[result.model] : undefined;
@@ -1343,7 +1384,9 @@ function App() {
           scoreLabel: String(result.score),
           total: result.score,
           grade: result.grade,
-          note: asked ? `${formatMatchScore(asked)} Match on the questions` : undefined,
+          note: standing === 'failed'
+            ? 'did not pass the check'
+            : asked ? `${formatMatchScore(asked)} Match on the questions` : undefined,
         };
       })
       : shortlistedRows
@@ -3175,7 +3218,17 @@ function App() {
       }
     }
 
-    if (!jobs.length) return;
+    if (!jobs.length) {
+      // Silence here stranded the wizard: it waits for a run to start and then
+      // stop, and a round where nothing was eligible never did either. Say what
+      // happened, in the terms of what was asked for.
+      const nothing = selection.recognize ? 'None of these models can read pictures.'
+        : selection.listen ? 'None of these models can listen to audio.'
+        : 'None of these models can be tested that way.';
+      setSkillRunStatus({ phase: 'complete', label: nothing, completed: 0, total: 0 });
+      setActivity(nothing);
+      return;
+    }
 
     // One seed for the whole batch. Every video model then renders identical
     // input so the comparison is fair, while a later batch gets a different
@@ -3494,12 +3547,22 @@ function App() {
               await answer({ started: false, error: `${model} cannot listen to audio, so there is nothing to measure.` });
               return;
             }
-            const skill = kind === 'reading' ? 'vision' : kind === 'app' ? 'app-builder' : 'listening';
+            // One test at a time. These share the graphics card, the run
+            // status and the Stop flag with every other run, so a second one
+            // started while the first is going measures the contention and
+            // leaves two runs writing over each other's progress.
+            if (gpuBusy || skillRunStatus.phase === 'running') {
+              await answer({ started: false, error: 'RigMatch is already running a test. This can start when that one finishes.' });
+              return;
+            }
             await answer({ started: true, message: `Testing ${model} in RigMatch.` });
-            void runSkillTestsAfterRun([model], kind === 'code' ? 'code' : skill).catch(reportSkillRunFailure);
+            void runSkillTestsAfterRun([model], SKILL_FOR_TEST[kind]).catch(reportSkillRunFailure);
             return;
           }
-          await answer({ started: true, message: `Testing ${model} in RigMatch.` });
+          // Not "Testing …": this one opens the resource warning and waits for
+          // a person. Chat said a run had begun while RigMatch sat on a dialog
+          // nobody had looked at yet.
+          await answer({ started: true, message: `RigMatch has ${model} ready — confirm the run there and it starts.` });
           requestBenchmarkForModel(model);
         } catch (error) {
           await answer({ started: false, error: getErrorMessage(error) });
@@ -3510,7 +3573,7 @@ function App() {
     chatVideoEntry, chatAudioEntry, chatImageGeneration.checkpoint, renderActivity, pictureJudge, pictureJudged,
     ollama, audioListener, videoMachine, labResults, balances.video, balances.audio, modelRows, selectedHost,
     installedModelNames, requestBenchmarkForModel, runPictureTest,
-    runSkillTestsAfterRun, reportSkillRunFailure,
+    runSkillTestsAfterRun, reportSkillRunFailure, gpuBusy, skillRunStatus.phase,
   ]);
 
   // One improve pass: hand the model its previous attempt (plus an optional user
@@ -3812,7 +3875,7 @@ function App() {
       if (!row.installed) continue;
       const able: string[] = [];
       if (canGenerateText(row)) able.push('text');
-      if (isVisionModel(row.displayName)) able.push('vision');
+      if (canReadImages(row)) able.push('vision');
       if (canHearAudio(row)) able.push('audio');
       if (able.length) capabilities[row.displayName] = able;
     }
@@ -4075,13 +4138,18 @@ function App() {
           onStartDownloads={() => requestThirdPartyModelDownloads(shortlistedRows)}
           onCancelDownloads={cancelDownloadQueue}
           isListTesting={isListTesting}
-          benchmarkActive={isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running)}
-          runProgress={runProgress}
+          benchmarkActive={isListTesting || isBenchmarking || runProgress?.phase === 'running' || skillRunStatus.phase === 'running' || Boolean(externalBenchmark?.running)}
+          runProgress={wizardRunProgress}
           onDreamChange={setWizardDream}
           round={wizardRound}
           onStartShow={() => {
             // Every score this show produces records where the fader stood.
             runBalanceRef.current = wizardBalance;
+            // Clear the last round's ending before starting this one: the
+            // wizard releases its Compare step when the run it is watching goes
+            // from running to finished, and a 'complete' left over from the
+            // previous show is finished the instant this one begins.
+            setSkillRunStatus({ phase: 'idle', label: '', completed: 0, total: 0 });
             if (wizardRound === 'chat') { void runListTest(); return; }
             // The models picked for the show, in the order they were picked.
             const models = shortlistedRows.filter((row) => row.installed).map((row) => row.displayName);

@@ -345,7 +345,11 @@ export function SimpleWizard(props: SimpleWizardProps) {
     if (sawRunActive.current || phase === 'complete' || phase === 'failed') setAwaitingRun(false);
   }, [awaitingRun, benchmarkActive, props.runProgress?.phase]);
 
-  const compareDone = !awaitingRun && Boolean(winner) && !benchmarkActive;
+  // A finished show, whether or not it crowned anyone. Rounds can end with
+  // every contestant short of the pass line — and gating the last step on a
+  // winner left that show with Meet the winner locked, forever, saying nothing.
+  const showEnded = props.runProgress?.phase === 'complete' || props.runProgress?.phase === 'failed';
+  const compareDone = !awaitingRun && !benchmarkActive && (Boolean(winner) || showEnded);
   const winnerDone = compareDone;
 
   // Not manually memoized: React Compiler handles this, and a hand-written
@@ -1529,7 +1533,46 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound }: Simpl
 
 function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
   if (!winner) {
-    return <div className="sw-winner"><p className="sw-muted">Run the show to crown your Top Match.</p></div>;
+    // Two different nothings: a show that has not run, and a show where nobody
+    // passed. The second one has a board to show and a reason to give.
+    const board = lineupResults ?? [];
+    if (board.length === 0) {
+      return <div className="sw-winner"><p className="sw-muted">Run the show to crown your Top Match.</p></div>;
+    }
+    return (
+      <div className="sw-winner">
+        <h2 className="sw-winner-none">Nobody passed this round</h2>
+        <p className="sw-muted">
+          {board.length === 1 ? 'The one contestant' : `All ${board.length} contestants`} answered, and none of them
+          got close enough to what was asked for to be crowned. That is a real result about this PC and these models
+          — not a failed show.
+        </p>
+        <div className="sw-scoreboard">
+          <span className="sw-eyebrow">How the lineup finished</span>
+          <ol>
+            {board.map((result, index) => (
+              <li key={result.model}>
+                <b className="sw-place">{index + 1}</b>
+                <img src={getModelAvatarSrc(result.model)} alt="" />
+                <span className="sw-scoreboard-name">
+                  {result.name}
+                  <em>{result.model}</em>
+                  <ModelDemoChips model={result.model} label="" className="sw-scoreboard-demos" />
+                </span>
+                <span className="sw-scoreboard-score">
+                  {result.scoreLabel}
+                  <em>Grade {result.grade}{result.note ? ` · ${result.note}` : ''}</em>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div className="sw-winner-actions-row">
+          <button type="button" className="sw-gold-pill" onClick={onRunAgain}>Run it again</button>
+          <button type="button" className="sw-ghost-pill" onClick={onSwitchToAdvanced}>Open the control room</button>
+        </div>
+      </div>
+    );
   }
   const shortName = winner.model.split(':')[0];
   const capName = shortName.charAt(0).toUpperCase() + shortName.slice(1);

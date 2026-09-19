@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import { agentArcadeApi } from '../api';
 import { getErrorMessage } from '../lib/format';
 import { chatBeyondNote, classifyChatRequest } from '../lib/chatCapabilityGuard';
-import { canHearAudio, getModelRuntime, isVisionModel } from '../lib/modelCatalog';
+import { canHearAudio, canReadImages, getModelRuntime } from '../lib/modelCatalog';
 import type { ChatAction, ChatAttachment, ChatMessage, ModelRow, OllamaStatus } from '../types';
 
 /**
@@ -76,7 +76,10 @@ export function useChat({
   const gpuNoteRef = useRef('');
 
   const chatMessages = chatMessagesByModel[selectedModel] ?? [welcomeMessage];
-  const chatSupportsImages = isVisionModel(selectedModel);
+  // The row's reported capabilities first, the name only as the fallback:
+  // the name rule knows `gemma3` and not `gemma4`, and a model that reads
+  // pictures was being refused the attach button.
+  const chatSupportsImages = canReadImages(selectedRow ?? { displayName: selectedModel });
 
   const sendChat = useCallback(async () => {
     const message = chatInput.trim();

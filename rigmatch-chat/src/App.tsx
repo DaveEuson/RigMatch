@@ -2658,11 +2658,20 @@ export default function App() {
                     : STUDIOS[openStudio].missing}
                 </em>
               </div>
-              {makerStatus(openStudio).ready && chosenMaker(openStudio) && (
+              {/* The picture studio has no list to choose from — RigMatch picks the
+                  checkpoint — so a button gated on a chosen model never appeared
+                  there, and the one maker you cannot test from Chat was the one
+                  most people try first. Falls back to the model this studio says
+                  it is set to. */}
+              {makerStatus(openStudio).ready && (chosenMaker(openStudio) || makerStatus(openStudio).model) && (
                 <button
                   type="button"
                   className="rm-test-btn"
-                  onClick={() => void testModel(openStudio, chosenMaker(openStudio)!.key, chosenMaker(openStudio)!.name)}
+                  onClick={() => {
+                    const chosen = chosenMaker(openStudio);
+                    const model = chosen?.key ?? makerStatus(openStudio).model ?? "";
+                    void testModel(openStudio, model, chosen?.name ?? model);
+                  }}
                   disabled={Boolean(making)}
                   title="RigMatch times this model and scores what it makes"
                 >

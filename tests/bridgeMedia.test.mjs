@@ -46,7 +46,7 @@ test('a saved file is served back as what it is', () => {
   assert.equal(mimeForFile('gen-4.exe'), 'application/octet-stream');
 });
 
-test('a test Chat asks for names a model and one of the four things RigMatch tests', () => {
+test('a test Chat asks for names a model and one of the things RigMatch tests', () => {
   assert.deepEqual(testRequest({ kind: 'video', model: 'file:ltx-video-2b-v0.9.5.safetensors' }),
     { kind: 'video', model: 'file:ltx-video-2b-v0.9.5.safetensors' });
   assert.deepEqual(testRequest({ kind: 'chat', model: '  qwen2.5:7b  ' }), { kind: 'chat', model: 'qwen2.5:7b' });

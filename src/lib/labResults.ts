@@ -15,9 +15,11 @@ import { withEarVerdict } from './earVerdict.ts';
 /** A viewable thing a model produced during a skill test. */
 export type DemoArtifact = {
   model: string;
-  kind: 'app' | 'image' | 'vision' | 'code';
+  kind: 'app' | 'image' | 'vision' | 'code' | 'audio';
   html?: string | null;
   imageDataUrl?: string;
+  /** Where ComfyUI left a made clip, fetched only when someone plays it. */
+  audioRef?: { filename: string; subfolder: string; type: string };
   description?: string;
   code?: string;
   language?: string;
@@ -151,12 +153,6 @@ export function labResultsSnapshot(): Record<string, AdvancedLabResult> {
 }
 
 /**
- * Saved skill-test artifacts (built app, generated image, …) for one model, so
- * "what this model made" can be surfaced anywhere the model appears — Top Pick,
- * Scorecards, the models table, etc. Matches on result.model so it works
- * regardless of how each result was keyed in storage.
- */
-/**
  * Everything every model has made here, newest first.
  *
  * The artifacts existed per model and could only be found if you already knew
@@ -202,29 +198,30 @@ function demoArtifactsFor(result: AdvancedLabResult): DemoArtifact[] {
       ? [{ model, kind: 'code', code, language: result.language, note: result.checks?.[0]?.detail, judged: true, grade: result.grade, score: result.score }]
       : [];
   }
+  // Sound was the one thing a model could make here that the gallery did not
+  // hold, so "everything they made" quietly meant everything but the clips.
+  if (result.challenge === 'audio-generation' && result.audioRef) {
+    return [{ model, kind: 'audio', audioRef: result.audioRef, grade: result.grade, score: result.score }];
+  }
   return [];
 }
 
+/**
+ * Saved skill-test artifacts (built app, generated image, …) for one model, so
+ * "what this model made" can be surfaced anywhere the model appears — Top Pick,
+ * Scorecards, the models table, etc. Matches on result.model so it works
+ * regardless of how each result was keyed in storage.
+ */
 export function getModelDemoArtifacts(model: string): DemoArtifact[] {
   if (!model) return [];
   const out: DemoArtifact[] = [];
   for (const result of Object.values(readAdvancedLabResults())) {
     if (!result || result.error || result.model !== model) continue;
-    if (result.challenge === 'app-builder') {
-      const html = extractHtmlDocument(result.response);
-      if (html) out.push({ model, kind: 'app', html, judged: wasJudged(result), grade: result.grade, score: result.score });
-    } else if ((result.challenge === 'image-generation' || result.challenge === 'video-generation') && result.imageDataUrl) {
-      // A video result's viewable artifact is its judged frame, so it rides the
-      // image path; the label below still says which lab produced it.
-      out.push({ model, kind: 'image', imageDataUrl: result.imageDataUrl, grade: result.grade, score: result.score });
-    } else if (result.challenge === 'image-recognition') {
-      // Kept even with no description: a failed vision run is exactly what a
-      // user needs to inspect, and hiding it left the grade unexplained.
-      out.push({ model, kind: 'vision', imageDataUrl: result.imageDataUrl, description: result.response, note: describeLabFailure(result), grade: result.grade, score: result.score });
-    } else if (result.challenge === 'code') {
-      const code = extractCodeBlock(result.response);
-      if (code) out.push({ model, kind: 'code', code, language: result.language, note: result.checks?.[0]?.detail, judged: true, grade: result.grade, score: result.score });
-    }
+    // One extractor, not two. This was a line-for-line copy of demoArtifactsFor
+    // and had already drifted: the gallery learned about made clips and the
+    // per-model chips did not, so the same run was visible in one place and
+    // missing from the other.
+    out.push(...demoArtifactsFor(result));
   }
   return out;
 }
