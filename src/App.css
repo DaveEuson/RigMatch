@@ -215,6 +215,12 @@ textarea {
   white-space: nowrap;
 }
 
+/* What the winner made, on the last screen of the show. */
+.sw-winner-demos {
+  margin-top: 10px;
+  justify-content: center;
+}
+
 /* The close-time disk-space offer: one row per choice. */
 .model-cleanup-choices {
   display: grid;

@@ -40,6 +40,7 @@ import { getCountryCode, getModelOrigin } from '../lib/modelOrigins';
 import { getDownloadRowStatus, summarizeDownloadStep } from '../lib/downloadStatus';
 import type { ComfyFolderListing } from '../lib/generationCatalog';
 import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
+import { ModelDemoChips } from './SkillDemoViewers';
 import { VideoLineupLab } from './VideoLineupLab';
 import { BalanceFader } from './BalanceFader';
 import { balanceLabel } from '../lib/balance';
@@ -92,9 +93,9 @@ export type { StepId };
 /** The host's line, the progress noun and the board's note, per round. */
 const ROUND_LINES: Record<'code' | 'vision' | 'listening', { host: string; unit: string; note: string }> = {
   code: {
-    host: 'Coding round! Each contestant writes the same program, and the checks run against what comes back. No favourites.',
-    unit: 'coding jobs',
-    note: 'Every one of these wrote the same program on your PC, and the score is what the checks made of it.',
+    host: 'Coding round! Everyone builds the same small app, right here on your PC — and you can open what they hand in.',
+    unit: 'apps',
+    note: 'Every one of these built the same app on your PC. Open the winner and click around: that is the test.',
   },
   vision: {
     host: 'Picture round! Everyone sees the same picture and tells me what is in it — no peeking at each other.',
@@ -1506,9 +1507,19 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, 
           </span>
           {/* Say what the number means — a beginner has never seen either scale. */}
           <p className="sw-winner-why">
-            Best combination of speed, answer quality, and fit for your PC out of the {shortlistedRows.length} you
-            tested — this is its <Explain id="match-score">Match Score</Explain>.
+            {round === 'code'
+              ? <>Best app built out of the {shortlistedRows.length} you tested, on your PC, judged on whether it runs and does what was asked.</>
+              : round === 'vision'
+                ? <>Named the most of the test picture out of the {shortlistedRows.length} you tested, and did it fastest on your PC.</>
+                : round === 'listening'
+                  ? <>Heard the test recording best out of the {shortlistedRows.length} you tested on your PC.</>
+                  : <>Best combination of speed, answer quality, and fit for your PC out of the {shortlistedRows.length} you
+                    tested — this is its <Explain id="match-score">Match Score</Explain>.</>}
           </p>
+          {/* Whatever it made is one click away. The app a coding round built is
+              the whole point of having run one: a beginner can open it, click
+              it, and judge the winner without knowing what a score is. */}
+          <ModelDemoChips model={winner.model} label="What it made" className="sw-winner-demos" />
           {/* Sharing belongs at the moment of the result, not three clicks away
               in Advanced Mode where a Simple Mode user will never find it. */}
           <button type="button" className="sw-winner-share" onClick={onShareScore}>

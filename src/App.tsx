@@ -925,8 +925,19 @@ function App() {
     : wizardDream === 'read-image' ? 'vision'
       : wizardDream === 'hear' ? 'listening'
         : 'chat';
-  /** The channel whose fader and results that round belongs to. */
-  const wizardChannel: 'chat' | 'code' | 'reading' | 'listening' = wizardRound === 'vision' ? 'reading' : wizardRound;
+  /**
+   * The channel whose results that round is ranked on.
+   *
+   * A coding buddy builds the small app rather than answering a code snippet
+   * question: it is the one round whose result a beginner can open, click and
+   * judge for themselves, which is worth more here than a number alone.
+   */
+  const wizardChannel: 'chat' | 'app' | 'reading' | 'listening' = wizardRound === 'vision' ? 'reading'
+    : wizardRound === 'code' ? 'app'
+      : wizardRound;
+  /** The skill each round runs, and the fader it is ranked at. */
+  const wizardSkill = wizardRound === 'code' ? 'app-builder' : wizardRound;
+  const wizardBalance = wizardChannel === 'app' ? balances.code : balances[wizardChannel];
 
 
   // Advanced's stats strip. Read once from the stored choice, falling back to
@@ -1278,10 +1289,10 @@ function App() {
     if (wizardRound === 'chat') return null;
     const picked = new Set(shortlistedRows.map((row) => row.displayName));
     const mine = Object.values(labResults).filter((result) => result && picked.has(result.model));
-    return rankLabList(mine, wizardChannel as Exclude<typeof wizardChannel, 'chat'>, balances[wizardChannel])
+    return rankLabList(mine, wizardChannel as Exclude<typeof wizardChannel, 'chat'>, wizardBalance)
       .filter((ranked) => !ranked.failed)
       .map((ranked) => ranked.item);
-  }, [wizardRound, wizardChannel, shortlistedRows, labResults, balances]);
+  }, [wizardRound, wizardChannel, shortlistedRows, labResults, wizardBalance]);
 
   const wizardWinner = useMemo(
     () => (wizardSkillBoard
@@ -3173,10 +3184,18 @@ function App() {
    */
   const runSkillTestsAfterRun = useCallback(async (
     models: string[],
-    only?: 'code' | 'vision' | 'listening',
+    only?: 'app-builder' | 'code' | 'vision' | 'listening',
   ) => {
     const selection = only
-      ? { ...skillTestSelection, appBuilder: false, code: only === 'code', recognize: only === 'vision', listen: only === 'listening', image: false, video: false }
+      ? {
+        ...skillTestSelection,
+        appBuilder: only === 'app-builder',
+        code: only === 'code',
+        recognize: only === 'vision',
+        listen: only === 'listening',
+        image: false,
+        video: false,
+      }
       : skillTestSelection;
     const appPrompt = resolveAppBuilderPrompt(selection.appPromptId, selection.appCustomPrompt);
     const codeTask = resolveCodeTask(selection.codeTaskId, selection.codeCustomTask);
@@ -4023,14 +4042,14 @@ function App() {
           round={wizardRound}
           onStartShow={() => {
             // Every score this show produces records where the fader stood.
-            runBalanceRef.current = balances[wizardChannel];
+            runBalanceRef.current = wizardBalance;
             if (wizardRound === 'chat') { void runListTest(); return; }
             // The models picked for the show, in the order they were picked.
             const models = shortlistedRows.filter((row) => row.installed).map((row) => row.displayName);
-            void runSkillTestsAfterRun(models, wizardRound).catch(reportSkillRunFailure);
+            void runSkillTestsAfterRun(models, wizardSkill as 'app-builder' | 'vision' | 'listening').catch(reportSkillRunFailure);
           }}
-          balance={balances[wizardChannel]}
-          onBalanceChange={(value) => setBalance(wizardChannel, value)}
+          balance={wizardBalance}
+          onBalanceChange={(value) => setBalance(wizardChannel === 'app' ? 'code' : wizardChannel, value)}
           onStopShow={requestStopRun}
           winner={wizardWinner}
           lineupResults={wizardLineupResults}
