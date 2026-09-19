@@ -4,6 +4,7 @@ import { copyText, type CopyState } from '../lib/clipboard';
 import { Check, Copy, Download, X } from 'lucide-react';
 import type { SystemProfile, TestedModelScore } from '../types';
 import { getShortModelName } from '../lib/modelCatalog';
+import { getModelAvatarSrc } from '../lib/modelAvatars';
 import { formatThroughputValue } from '../lib/format';
 import { buildShareTexts, strongestSkill, SHARE_URL } from '../lib/shareCopy';
 import { useDialog } from '../lib/useDialog';
@@ -14,18 +15,24 @@ const CARD_H = 675;
 type CardStyle = 'datingshow' | 'scorecard';
 
 // Card palette (canvas can't read CSS vars). Mirrors the app's dark + gold look.
+//
+// The surfaces are warm on purpose. The Scorecard style used to be built on
+// #0d1117 / #1d2533 / #2c3b4d — a cold blue-black the palette allows in no
+// theme — so the card that went out to strangers was the one thing about
+// RigMatch that did not look like RigMatch. These are the plum end of
+// index.css: --bg #171523, --panel #211b2b, --line #5b4e62.
 const COLORS = {
-  bgTop: '#0d1117',
-  bgBottom: '#161b22',
+  bgTop: '#17121f',
+  bgBottom: '#221b2b',
   datingBg: '#0e0b12',
-  panel: '#1d2533',
-  panel2: '#151c28',
-  line: '#2c3b4d',
+  panel: '#2a2233',
+  panel2: '#1e1826',
+  line: '#53465c',
   gold: '#ffc957',
   coral: '#ff6f86',
   text: '#f7f0df',
   muted: '#b9b1a3',
-  quiet: '#7d8793',
+  quiet: '#8d8393',
   speed: '#69d1c8',
   quality: '#ffc957',
   fit: '#9bc278',
@@ -137,9 +144,15 @@ function rigParts(system: SystemProfile, showHostname: boolean): string[] {
 // look for people who want to show the measurement.
 function drawScorecard(
   ctx: CanvasRenderingContext2D,
-  opts: { modelName: string; score: TestedModelScore; system: SystemProfile; showHostname: boolean },
+  opts: {
+    modelName: string;
+    score: TestedModelScore;
+    system: SystemProfile;
+    showHostname: boolean;
+    avatar?: HTMLImageElement | null;
+  },
 ) {
-  const { modelName, score, system, showHostname } = opts;
+  const { modelName, score, system, showHostname, avatar } = opts;
   const bg = ctx.createLinearGradient(0, 0, 0, CARD_H);
   bg.addColorStop(0, COLORS.bgTop);
   bg.addColorStop(1, COLORS.bgBottom);
@@ -164,20 +177,31 @@ function drawScorecard(
   ctx.lineTo(CARD_W - 60, 130);
   ctx.stroke();
 
+  // The contestant, then the grade sitting on their shoulder. A 175px slate
+  // square holding one enormous letter told a reader nothing about which model
+  // this is — the portrait says that in the moment before any of the numbers
+  // are read, and the badge keeps the grade as the loudest thing on it.
   const bx = 60, by = 165, bs = 175;
-  ctx.fillStyle = COLORS.panel;
+  const pcx = bx + bs / 2, pcy = by + bs / 2;
+  drawPortrait(ctx, avatar, pcx, pcy, 78);
+
+  const grade = score.grade;
+  const gcx = pcx + 60, gcy = pcy + 60, gr = 34;
+  ctx.fillStyle = COLORS.panel2;
   ctx.beginPath();
-  ctx.roundRect(bx, by, bs, bs, 22);
+  ctx.arc(gcx, gcy, gr, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = gradeColor(score.grade);
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = gradeColor(grade);
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.roundRect(bx, by, bs, bs, 22);
+  ctx.arc(gcx, gcy, gr, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.fillStyle = gradeColor(score.grade);
-  ctx.font = '800 104px system-ui, sans-serif';
+  ctx.fillStyle = gradeColor(grade);
+  // "B+" is two glyphs where "A" is one; size it to the badge rather than
+  // letting the plus hang over the ring.
+  ctx.font = `800 ${grade.length > 1 ? 32 : 40}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
-  ctx.fillText(score.grade, bx + bs / 2, by + bs / 2 + 38);
+  ctx.fillText(grade, gcx, gcy + (grade.length > 1 ? 11 : 14));
   ctx.textAlign = 'left';
 
   const tx = bx + bs + 44;
@@ -200,7 +224,7 @@ function drawScorecard(
     { label: 'Quality', value: score.sobriety, shown: String(Math.round(score.sobriety)), color: COLORS.quality },
     { label: 'Fit', value: score.fit, shown: String(Math.round(score.fit)), color: COLORS.fit },
   ];
-  const barX = 200, barW = 820, barTop = 400, barGap = 54, barH = 20;
+  const barX = 200, barW = 820, barTop = 382, barGap = 54, barH = 20;
   bars.forEach((bar, i) => {
     const y = barTop + i * barGap;
     ctx.font = '600 22px system-ui, sans-serif';
@@ -222,7 +246,11 @@ function drawScorecard(
     ctx.textAlign = 'left';
   });
 
-  const rigY = 580, rigH = 60;
+  // The bottom third was two crowded edges and one hole: the rig strip sat at
+  // 580..640 with the footer's baseline at 653 — 13px apart, the footer's
+  // descenders ran into the frame at 657, and 52px of nothing sat above the
+  // strip. Bars end 510, strip 542..602, footer 624..642, frame 657.
+  const rigY = 542, rigH = 60;
   ctx.fillStyle = COLORS.panel;
   ctx.beginPath();
   ctx.roundRect(60, rigY, CARD_W - 120, rigH, 12);
@@ -233,20 +261,99 @@ function drawScorecard(
 
   ctx.font = '500 18px system-ui, sans-serif';
   ctx.fillStyle = COLORS.quiet;
-  ctx.fillText('100% local · no cloud · no account', 60, CARD_H - 22);
+  ctx.fillText('100% local · no cloud · no account', 60, CARD_H - 38);
   ctx.textAlign = 'right';
   ctx.fillStyle = COLORS.gold;
-  ctx.fillText('daveeuson.github.io/RigMatch', CARD_W - 60, CARD_H - 22);
+  ctx.fillText('daveeuson.github.io/RigMatch', CARD_W - 60, CARD_H - 38);
   ctx.textAlign = 'left';
 }
 
 // On-brand "It's a Match!" card: the dating-show reveal. Same real data, playful
 // framing — the model that won this PC's heart.
+/**
+ * A contestant's portrait, round, in the gold hairline.
+ *
+ * Falls back to a drawn heart rather than an emoji one: the card is a single
+ * image shared onto other people's screens, and an emoji glyph renders in
+ * whatever font the sharing platform has, which was never the card's.
+ */
+function drawPortrait(
+  ctx: CanvasRenderingContext2D,
+  avatar: HTMLImageElement | null | undefined,
+  cx: number,
+  cy: number,
+  radius: number,
+) {
+  ctx.save();
+  if (avatar && avatar.naturalWidth > 0) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    // Square source, drawn to cover: the avatars are square, and letting one
+    // stretch would distort a face that people recognise.
+    const side = Math.min(avatar.naturalWidth, avatar.naturalHeight);
+    ctx.drawImage(
+      avatar,
+      (avatar.naturalWidth - side) / 2,
+      (avatar.naturalHeight - side) / 2,
+      side,
+      side,
+      cx - radius,
+      cy - radius,
+      radius * 2,
+      radius * 2,
+    );
+  } else {
+    ctx.fillStyle = 'rgba(255, 111, 134, 0.16)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+    drawHeart(ctx, cx, cy + 4, radius * 0.62, COLORS.coral);
+  }
+  ctx.restore();
+
+  // The hairline, and a second ring further out for the stage-light feel.
+  ctx.save();
+  ctx.strokeStyle = COLORS.gold;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius + 2, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 0.34;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius + 11, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** A heart, drawn rather than typed. */
+function drawHeart(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, color: string) {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  const top = cy - size * 0.5;
+  ctx.moveTo(cx, cy + size * 0.62);
+  ctx.bezierCurveTo(cx - size * 1.1, cy - size * 0.2, cx - size * 0.55, top - size * 0.62, cx, top + size * 0.1);
+  ctx.bezierCurveTo(cx + size * 0.55, top - size * 0.62, cx + size * 1.1, cy - size * 0.2, cx, cy + size * 0.62);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawDatingCard(
   ctx: CanvasRenderingContext2D,
-  opts: { modelName: string; score: TestedModelScore; system: SystemProfile; showHostname: boolean },
+  opts: {
+    modelName: string;
+    score: TestedModelScore;
+    system: SystemProfile;
+    showHostname: boolean;
+    /** The winner's own portrait, when it loaded. */
+    avatar?: HTMLImageElement | null;
+  },
 ) {
-  const { modelName, score, system, showHostname } = opts;
+  const { modelName, score, system, showHostname, avatar } = opts;
   ctx.fillStyle = COLORS.datingBg;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
   const glow = ctx.createRadialGradient(CARD_W / 2, -40, 60, CARD_W / 2, 300, 760);
@@ -292,12 +399,15 @@ function drawDatingCard(
   ctx.fillStyle = spot;
   ctx.fillRect(CARD_W / 2 - 180, 15, 360, 360);
 
-  ctx.font = '84px system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
-  ctx.fillText('\u{1F49B}', CARD_W / 2, 210);
+  // The contestant's own portrait, in the gold hairline that makes a model
+  // read as a publicity still from the show. The centrepiece was a yellow
+  // heart drawn from the platform's emoji font: another typeface, another era,
+  // and nothing whatever about which model won.
+  drawPortrait(ctx, avatar, CARD_W / 2, 196, 78);
 
-  ctx.font = '800 62px system-ui, sans-serif';
+  ctx.font = '800 58px system-ui, sans-serif';
   ctx.fillStyle = COLORS.text;
-  ctx.fillText(modelName, CARD_W / 2, 300);
+  ctx.fillText(modelName, CARD_W / 2, 340);
 
   // Say what the match is FOR. "won your PC's heart" was charming and empty —
   // a stranger seeing this card learned nothing about what the model is good
@@ -310,14 +420,14 @@ function drawDatingCard(
   ctx.fillText(
     strongest ? `won ${whose} heart · best at ${strongest.purpose}` : `won ${whose} heart on RigMatch`,
     CARD_W / 2,
-    340,
+    376,
   );
 
   // Grade + score pill.
   const pillText = `GRADE ${score.grade}  ·  ${score.total}/100 MATCH`;
   ctx.font = '800 26px system-ui, sans-serif';
   const pw = ctx.measureText(pillText).width + 56;
-  const px = (CARD_W - pw) / 2, py = 382, ph = 56;
+  const px = (CARD_W - pw) / 2, py = 402, ph = 56;
   ctx.fillStyle = 'rgba(255, 201, 87, 0.12)';
   ctx.beginPath();
   ctx.roundRect(px, py, pw, ph, 28);
@@ -333,11 +443,12 @@ function drawDatingCard(
   // Graphic stat chips — Speed / Quality / Fit, three across and centered.
   //
   // The vertical rhythm here is deliberate; it was previously accidental.
-  // Chips ended at y=552 with the rig line's baseline at 556 — a 4px gap —
-  // while 85px of dead space sat between the rig line and the footer. Now:
-  // pill ends 438, chips 466..532, rig baseline 574, footer 641 — the gaps
-  // read 28 / 42 / ~50, growing gently toward the frame.
-  const chipW = 220, chipH = 66, chipGap = 26, chipY = 466;
+  // Chips once ended at y=552 with the rig line's baseline at 556 — a 4px gap
+  // — while 85px of dead space sat between the rig line and the footer. The
+  // column, measured from the portrait down: ring ends 285, name cap 299,
+  // sub-line 376, pill 402..458, chips 484..550, rig baseline 592, footer 641.
+  // Every gap is 24px or more, and they grow gently toward the frame.
+  const chipW = 220, chipH = 66, chipGap = 26, chipY = 517;
   const groupW = chipW * 3 + chipGap * 2;
   const firstCx = (CARD_W - groupW) / 2 + chipW / 2;
   // The speed sub-score tops out at 100 tok/s, so on a capable machine almost
@@ -356,7 +467,7 @@ function drawDatingCard(
   if (rig) {
     ctx.font = '500 21px system-ui, sans-serif';
     ctx.fillStyle = COLORS.muted;
-    ctx.fillText(`on ${rig}`, CARD_W / 2, 574);
+    ctx.fillText(`on ${rig}`, CARD_W / 2, 592);
   }
 
   // Footer.
@@ -381,11 +492,25 @@ export function ShareScorecard({ model, score, system, onClose }: {
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
-    const opts = { modelName, score, system, showHostname };
-    if (style === 'datingshow') drawDatingCard(ctx, opts);
-    else drawScorecard(ctx, opts);
-  }, [style, modelName, score, system, showHostname]);
+    if (!canvas || !ctx) return undefined;
+    let stale = false;
+    // Drawn twice: once immediately so the card is never blank, and again when
+    // the portrait has decoded. Waiting for the image before the first draw
+    // would leave an empty canvas on a cold cache, and the file is local.
+    const paint = (avatar?: HTMLImageElement | null) => {
+      if (stale) return;
+      const opts = { modelName, score, system, showHostname, avatar };
+      if (style === 'datingshow') drawDatingCard(ctx, opts);
+      else drawScorecard(ctx, opts);
+    };
+    paint(null);
+    const portrait = new Image();
+    portrait.src = getModelAvatarSrc(model);
+    portrait.decode().then(() => paint(portrait)).catch(() => {
+      // No portrait: the card keeps the drawn heart rather than a hole.
+    });
+    return () => { stale = true; };
+  }, [style, model, modelName, score, system, showHostname]);
 
   const dialogRef = useDialog<HTMLElement>(onClose);
 
