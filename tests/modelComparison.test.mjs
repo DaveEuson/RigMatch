@@ -2,13 +2,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { compareModels, summariseComparison, orderComparisonCandidates } =
+const { compareModels, summarizeComparison, orderComparisonCandidates } =
   await import('../src/lib/modelComparison.ts');
 const { getFriendlyModelName } = await import('../src/lib/modelCatalog.ts');
 
 /**
  * "Why is gemma4:e2b better than gemma4:e4b" was unanswerable: getModelProfile
- * matches on the family name, so both returned the same archetype and colour.
+ * matches on the family name, so both returned the same archetype and color.
  *
  * Most of what follows is about restraint. Laying two numbers side by side is
  * easy; the work is knowing which differences are a verdict and which are a
@@ -90,31 +90,31 @@ test('rows both sides agree on are left out entirely', () => {
 // --- the sentence at the top -------------------------------------------------
 
 test('with nothing tested it asks for a test rather than shrugging', () => {
-  const line = summariseComparison(side('a:7b'), side('b:7b'));
+  const line = summarizeComparison(side('a:7b'), side('b:7b'));
   assert.match(line, /Neither has been tested/);
   assert.match(line, /Test both/);
 });
 
 test('with one tested it names the one that is missing', () => {
-  const line = summariseComparison(side('a:7b', { score: scored(92) }), side('b:7b'));
+  const line = summarizeComparison(side('a:7b', { score: scored(92) }), side('b:7b'));
   assert.match(line, /Only a:7b has been tested/);
   assert.match(line, /Test b:7b/);
 });
 
 test('a clear win is stated with both numbers', () => {
-  const line = summariseComparison(side('a:7b', { score: scored(92) }), side('b:7b', { score: scored(80) }));
+  const line = summarizeComparison(side('a:7b', { score: scored(92) }), side('b:7b', { score: scored(80) }));
   assert.match(line, /a:7b scored 92 against 80/);
 });
 
 test('a one-point gap is called what it is, not a win', () => {
   // Inside the noise of a re-run. Calling it a win invites someone to choose on
   // a difference that will not survive running the test again.
-  const line = summariseComparison(side('a:7b', { score: scored(91) }), side('b:7b', { score: scored(90) }));
+  const line = summarizeComparison(side('a:7b', { score: scored(91) }), side('b:7b', { score: scored(90) }));
   assert.match(line, /could swap them/);
 });
 
 test('a dead heat says so', () => {
-  const line = summariseComparison(side('a:7b', { score: scored(88) }), side('b:7b', { score: scored(88) }));
+  const line = summarizeComparison(side('a:7b', { score: scored(88) }), side('b:7b', { score: scored(88) }));
   assert.match(line, /Dead heat/);
 });
 

@@ -49,7 +49,7 @@ test('the option still means something for a caller that wants plain rows', () =
 
 test('families keep the position of their best-sorted member', () => {
   // Rows arrive in the table's chosen sort order. A family must not jump the
-  // queue by having more variants than its neighbours.
+  // queue by having more variants than its neighbors.
   const out = group([row('alpha:1b'), ...gemmas, row('zeta:9b')]);
   assert.deepEqual(out.map((e) => (e.kind === 'row' ? familyOf(e.row) : e.group.family)),
     ['Alpha', 'Gemma4', 'Zeta']);
@@ -151,7 +151,7 @@ test('the family shows its most capable installed version', () => {
 });
 
 test('the alphabetically-first variant no longer wins by default', () => {
-  // Without faceRank this is the old behaviour, kept deliberately so callers
+  // Without faceRank this is the old behavior, kept deliberately so callers
   // that pass no ranking are unchanged.
   const rows = [installedRow('qwen2.5:0.5b', 0.494), installedRow('qwen2.5:7b', 7.6)];
   assert.equal(group(rows, { isPreferred: (r) => r.installed }).best?.displayName, undefined);

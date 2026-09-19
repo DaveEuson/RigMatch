@@ -152,7 +152,7 @@ async function main() {
     results.push(run);
   }
 
-  // Release the model before reporting. Ollama honours keep_alive for 10 minutes
+  // Release the model before reporting. Ollama honors keep_alive for 10 minutes
   // by default, so back-to-back invocations against different models would leave
   // the earlier one resident and force the later one to share (or spill out of)
   // VRAM -- the measured speed would then partly reflect the previous run rather

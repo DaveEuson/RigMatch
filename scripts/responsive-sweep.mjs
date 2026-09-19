@@ -167,7 +167,7 @@ for (const mode of ['beginner', 'advanced']) {
       //
       // Deliberately narrow: only containers that actually hold a menu (three
       // or more controls in one child), only when a track of real size has
-      // nothing over its centre, and only when the menu is the squeezed one.
+      // nothing over its center, and only when the menu is the squeezed one.
       // A footer with one right-aligned button and a spacer beside it is a
       // layout, not a bug, and an earlier version of this check flagged every
       // screen in the app by counting those too.
@@ -199,8 +199,8 @@ for (const mode of ['beginner', 'advanced']) {
           let x = box.left + (parseFloat(style.paddingLeft) || 0);
           let emptiest = 0;
           for (const width of tracks) {
-            const centre = x + width / 2;
-            const covered = rects.some((rect) => rect.left <= centre && rect.right >= centre);
+            const center = x + width / 2;
+            const covered = rects.some((rect) => rect.left <= center && rect.right >= center);
             if (!covered && width > emptiest) emptiest = width;
             x += width + gap;
           }

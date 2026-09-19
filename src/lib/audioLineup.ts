@@ -45,7 +45,7 @@ export function audioModelInstalled(spec: AudioModelSpec, installed: ComfyFolder
   });
 }
 
-/** The audio models that can run here, in catalogue order. */
+/** The audio models that can run here, in catalog order. */
 export function installedAudioEntries(installed: ComfyFolderListing): AudioLineupEntry[] {
   return AUDIO_MODEL_SPECS
     .filter((spec) => audioModelInstalled(spec, installed))

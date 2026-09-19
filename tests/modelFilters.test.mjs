@@ -109,10 +109,10 @@ test('the score filters read through modelMatchesQuickFilter', () => {
   assert.ok(modelMatchesQuickFilter(r, 'low-score', scored(50), 12));
 });
 
-test('a catalogue model carries the library listing, so uninstalled models count', () => {
+test('a catalog model carries the library listing, so uninstalled models count', () => {
   // The chips previously matched installed models only — /api/show answers
   // about downloads and nothing else — so "Hears audio" read 1 against a
-  // 317-model catalogue and looked like a claim about the world.
+  // 317-model catalog and looked like a claim about the world.
   const notInstalled = { displayName: 'gemma4:e2b', name: 'gemma4:e2b', capabilities: ['completion', 'audio'], installed: false };
   assert.ok(modelMatchesTask(notInstalled, 'hears'));
 });
@@ -135,7 +135,7 @@ test('a model with neither source still matches nothing rather than guessing', (
 
 test('a generation checkpoint can never qualify for a text benchmark', () => {
   // canGenerateText assumes unknown capabilities are runnable so that Ollama
-  // catalogue entries are not excluded — and a ComfyUI row has no capabilities
+  // catalog entries are not excluded — and a ComfyUI row has no capabilities
   // field, so that default quietly qualified Stable Diffusion for a
   // conversation benchmark. "Choose for me" would then have seated it, and the
   // run would have asked Ollama for a model it has never heard of.

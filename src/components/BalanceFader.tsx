@@ -104,7 +104,7 @@ export function BalanceFader({
       aria-labelledby={`${id}-label`}
     >
       {/* Both ends are named on the mini fader too. Without them it is an
-          unlabelled meter on a card: a slider with a cap, nothing saying what
+          unlabeled meter on a card: a slider with a cap, nothing saying what
           moving it would trade for what. The tooltip said so only to a mouse
           that stopped on it. */}
       <div className="balance-fader-console">

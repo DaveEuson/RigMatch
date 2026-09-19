@@ -61,7 +61,7 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
    * a second render pass to arrive at the same values. Reading storage is a
    * pure lookup, so it belongs in the render rather than after it.
    *
-   * This is the one deliberate behaviour change in the extraction: 31 effects
+   * This is the one deliberate behavior change in the extraction: 31 effects
    * become 30, and the values are read before paint instead of after, which
    * also removes a frame where a freshly chosen folder still read as unset.
    */

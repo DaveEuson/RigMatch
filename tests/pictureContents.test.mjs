@@ -20,7 +20,7 @@ const FAITHFUL = {
   robot: 'Two cute retro robots sit at a round table with a pink tablecloth. On the left, a beige computer with a pixel heart on its screen writes on heart-shaped cards; on the right, a small robot in pink headphones rests its chin on its hand.',
   lineup: 'A boxy robot types at a keyboard in front of a wall of old television monitors, each showing a different cartoon robot and a heart. A pink rotary telephone and a coffee mug sit on the desk, and the room glows red and purple.',
   greenroom: 'An old beige computer with heart eyes on its screen wears a bow tie, beside a small robot holding a clipboard. A graphics card, memory sticks and a screwdriver lie on the table in a pink room full of hearts.',
-  ceremony: 'Four colourful robots stand on round pedestals on a stage, each holding a card with hearts, while a host robot in a top hat speaks into a microphone. Giant glowing hearts and red curtains fill the background.',
+  ceremony: 'Four colorful robots stand on round pedestals on a stage, each holding a card with hearts, while a host robot in a top hat speaks into a microphone. Giant glowing hearts and red curtains fill the background.',
 };
 
 const names = (things) => things.map((thing) => thing.name);
@@ -61,7 +61,7 @@ test('the answer that scored 100 describes nothing in the contestant wall', () =
   assert.match(line('Said nothing that is not there').detail, /Described code, text and a white background, which the picture does not have/);
 });
 
-test('its second try, a picture of the word "red", names a colour and scores nothing for it', () => {
+test('its second try, a picture of the word "red", names a color and scores nothing for it', () => {
   // gemma4:e2b on the contestant wall in the fixed build, 14 September 2026.
   const answer = 'This image is dominated by a vibrant, textured background composed of various shades of red and orange. The overall appearance is highly saturated and warm. There is a large block of text overlaid on the image, written in a bold, red font. The text consists almost entirely of the word "red" repeated multiple times, filling the majority of the frame.';
   const check = checkDescription('lineup', answer);

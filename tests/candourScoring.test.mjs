@@ -143,7 +143,7 @@ test('the focus asks enough candour questions to earn a verdict', () => {
 
 test('every question is answerable, not a request for something harmful', () => {
   // The design line, pinned. This focus measures refusal-to-discuss, so every
-  // prompt must be one where answering is the appropriate behaviour. If a
+  // prompt must be one where answering is the appropriate behavior. If a
   // question is ever added that a model *should* decline, a refusal would score
   // 12 and the measurement would invert without anyone noticing.
   const focus = BENCHMARK_PRESETS.find((p) => p.id === 'candour');

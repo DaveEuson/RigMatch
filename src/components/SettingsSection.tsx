@@ -10,7 +10,7 @@ import { useState } from 'react';
  * in. The rail is a second way in, and two controls driving one accordion from
  * two different pieces of state is how you get a rail that says "open" over a
  * section that is shut. `open === undefined` keeps the old self-managed
- * behaviour for any caller that does not care.
+ * behavior for any caller that does not care.
  */
 export function SettingsSection({
   eyebrow,

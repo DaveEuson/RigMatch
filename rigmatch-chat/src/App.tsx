@@ -578,7 +578,7 @@ function SummaryMarker({ conversation }: { conversation: Conversation }) {
         <span className="rm-summary-rule" aria-hidden="true" />
         <span className="rm-summary-label">
           {count > 0
-            ? `${count} earlier message${count === 1 ? "" : "s"} summarised`
+            ? `${count} earlier message${count === 1 ? "" : "s"} summarized`
             : "Continued from an earlier chat"}
           {conversation.summaryBy ? ` · by ${getDisplayName(conversation.summaryBy)}` : ""}
           {open ? " ▴" : " ▾"}
@@ -995,7 +995,7 @@ export default function App() {
     return getContextUsage(used + estimateTokens(draft), activeContextLimit);
   }, [activeConversationKey, tokenMarkByKey, activeMessages, activeConversation, draft, activeContextLimit, memoryNote]);
 
-  /** Enough conversation to be worth summarising, and not already done. */
+  /** Enough conversation to be worth summarizing, and not already done. */
   const canCompact = activeConversation !== null
     && compactionSplit(activeConversation.messages, activeConversation.summarizedCount ?? 0) !== null;
 
@@ -1143,23 +1143,23 @@ export default function App() {
 
   useEffect(() => {
     if (!activeBuddy || activeBuddy in contextInfo) return;
-    let cancelled = false;
+    let canceled = false;
     void getModelContextInfo(settings.ollamaUrl, activeBuddy).then((info) => {
-      if (!cancelled) setContextInfo((prev) => ({ ...prev, [activeBuddy]: info }));
+      if (!canceled) setContextInfo((prev) => ({ ...prev, [activeBuddy]: info }));
     });
-    return () => { cancelled = true; };
+    return () => { canceled = true; };
   }, [activeBuddy, contextInfo, settings.ollamaUrl]);
 
   // ── Persist conversations ────────────────────────────────────────────────
 
   useEffect(() => {
-    let cancelled = false;
+    let canceled = false;
     void loadConversations().then((loaded) => {
-      if (cancelled) return;
+      if (canceled) return;
       setConversations(loaded);
       setHistoryLoaded(true);
     });
-    return () => { cancelled = true; };
+    return () => { canceled = true; };
   }, []);
 
   // One writer for the life of the app. Updates arrive once per streamed token;
@@ -1185,16 +1185,16 @@ export default function App() {
   // Memory is loaded and written separately from conversations, so clearing
   // chat history does not silently take it with it.
   useEffect(() => {
-    let cancelled = false;
+    let canceled = false;
     void readMemoriesFile()
       .then((raw) => parseMemories(raw) ?? [])
       .catch(() => [])
       .then((loaded) => {
-        if (cancelled) return;
+        if (canceled) return;
         setMemories(loaded);
         setMemoriesLoaded(true);
       });
-    return () => { cancelled = true; };
+    return () => { canceled = true; };
   }, []);
 
   const memoryWriterRef = useRef<ReturnType<typeof createWriteScheduler<Memory[]>> | null>(null);
@@ -1664,7 +1664,7 @@ export default function App() {
   }, []);
 
   /**
-   * Summarise the older turns of the open thread.
+   * Summarize the older turns of the open thread.
    *
    * Nothing is applied here — the summary is shown first, because a bad one
    * quietly poisons every later reply and the user is the only one who can
@@ -1691,7 +1691,7 @@ export default function App() {
         buildSummaryRequest(activeConversation.messages, upTo, activeConversation.summary),
         (token) => { text += token; },
         undefined,
-        // Summarising is the one call that must not be truncated: it is reading
+        // Summarizing is the one call that must not be truncated: it is reading
         // the whole of the history that no longer fits.
         { numCtx: activeContextLimit },
       );
@@ -1916,7 +1916,7 @@ export default function App() {
           >
             <strong>Here is what it kept</strong>
             <p>
-              The first {compactPlan.upTo} message{compactPlan.upTo === 1 ? "" : "s"} summarised into these notes
+              The first {compactPlan.upTo} message{compactPlan.upTo === 1 ? "" : "s"} summarized into these notes
               {compactPlan.by.borrowed
                 ? ` by ${getDisplayName(compactPlan.by.model)}, which scores higher on your rig than the model you are chatting with`
                 : ""}
@@ -2399,13 +2399,13 @@ export default function App() {
                     : "This chat is filling up the model's memory."}
                 </span>
                 <button type="button" className="rm-btn-sm" onClick={() => void runCompaction()} disabled={compacting}>
-                  {compacting ? "Summarising…" : "Free up room"}
+                  {compacting ? "Summarizing…" : "Free up room"}
                 </button>
               </div>
             )}
             {compactError && (
               <div className="rm-compact-bar urgent">
-                <span>Could not summarise: {compactError}</span>
+                <span>Could not summarize: {compactError}</span>
                 <button type="button" className="rm-btn-sm" onClick={() => setCompactError(null)}>Dismiss</button>
               </div>
             )}

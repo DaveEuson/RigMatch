@@ -10,7 +10,7 @@ const { getModelQuickFilters, getHardwareFit } = await import('../src/lib/modelC
  * "Rig Picks" was not. It gathered every model badged "Sweet spot", "Good fit"
  * or "Small pick" and named none of them, while the filter directly beneath it
  * — "Too Big" — named its badge exactly. The cost was measurable: asked for a
- * "Good Fit" filter, RigMatch's own author did not recognise this button with a
+ * "Good Fit" filter, RigMatch's own author did not recognize this button with a
  * screenshot of it open. If the person who wrote it cannot name it, nobody can.
  */
 
@@ -49,7 +49,7 @@ test('the fit filter is named with the word its own badges use', () => {
 test('it still selects every model the hardware check recommends', () => {
   // Renaming must not narrow it. "Good fit" is the label; the set is unchanged
   // — sweet-spot and small-pick models are good fits too, and dropping them
-  // would turn a naming fix into a behaviour change nobody asked for.
+  // would turn a naming fix into a behavior change nobody asked for.
   const rows = [
     row('tiny:1b', 1),
     row('mid:7b', 4),
@@ -70,7 +70,7 @@ test('no filter is named after an internal concept', () => {
   for (const { id, label } of filters) {
     assert.ok(
       !/\brig\b|\bvram-safe\b|\bpicks\b/i.test(label),
-      `filter "${id}" is labelled "${label}", which names RigMatch's idea rather than the user's`,
+      `filter "${id}" is labeled "${label}", which names RigMatch's idea rather than the user's`,
     );
   }
 });

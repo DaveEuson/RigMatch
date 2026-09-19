@@ -166,7 +166,7 @@ export function findTaskWinners(
 
 /**
  * The best model for one task, for callers that want to route work to it —
- * summarising a conversation, answering a coding question — rather than display
+ * summarizing a conversation, answering a coding question — rather than display
  * a league table.
  */
 export function bestModelForTask(

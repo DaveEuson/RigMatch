@@ -45,12 +45,12 @@ const CASES = [
   // Must NOT warn — ordinary questions that mention the words.
   'how do I draw a flowchart in mermaid',
   'what is the capital of France',
-  'summarise the picture this data paints of Q4',
+  'summarize the picture this data paints of Q4',
   'explain how image compression works',
   'write me a function that renders a chart',
   'what does the word illustration mean',
   'my video card is slow, why',
-  'read the docs and summarise them',
+  'read the docs and summarize them',
 
   // Shapes a broken caller can produce.
   '',
@@ -82,7 +82,7 @@ test('an ordinary question is never classified as a request for a file', () => {
   const ordinary = [
     'how do I draw a flowchart in mermaid',
     'what is the capital of France',
-    'summarise the picture this data paints of Q4',
+    'summarize the picture this data paints of Q4',
     'explain how image compression works',
   ];
   for (const message of ordinary) {

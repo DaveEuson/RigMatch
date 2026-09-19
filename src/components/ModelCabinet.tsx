@@ -52,8 +52,8 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
  *
  * The tick is a tick and not a radio dot even though only one option per group
  * can be on at a time, because what the reader needs from it is "is this on",
- * and clicking an on one turns it off — which is checkbox behaviour, not radio
- * behaviour. The count is the point of the whole rail: it is the answer to
+ * and clicking an on one turns it off — which is checkbox behavior, not radio
+ * behavior. The count is the point of the whole rail: it is the answer to
  * "what does this cost me" before you spend the click.
  */
 function FacetButton({ label, count, active, onToggle }: {
@@ -142,7 +142,7 @@ export function ModelCabinet({
   /** The channel Advanced Mode is on, which decides what a row's Test runs. */
   channel: WorkbenchId;
   /**
-   * The catalogue id of a model being tested on its own right now. Its Test
+   * The catalog id of a model being tested on its own right now. Its Test
    * says so even with its panel closed, which is where people look for it.
    */
   renderingModelId?: string | null;
@@ -284,7 +284,7 @@ export function ModelCabinet({
    * "Added" shows only while the Installed filter is on.
    *
    * The date comes from Ollama's modified_at, which only installed models have.
-   * Across the whole catalogue that is 16 rows of 322 — a column that is blank
+   * Across the whole catalog that is 16 rows of 322 — a column that is blank
    * 95% of the time, and sortable into a wall of nothing. Under the Installed
    * filter every row has one, which is the only place it is worth the width.
    */
@@ -390,7 +390,7 @@ export function ModelCabinet({
    * "Makes video" matched nothing at all — not one of the models installed
    * here, none of the 233 in Ollama's library, and nothing in the community
    * namespace. There is no video generation on Ollama to find, so the filter
-   * promised a category it could never fill. Deciding this from the catalogue
+   * promised a category it could never fill. Deciding this from the catalog
    * rather than deleting the chip means it comes back on its own the day a
    * video model appears.
    *
@@ -657,7 +657,7 @@ export function ModelCabinet({
   }, []);
 
   /**
-   * Suggestions count against the whole catalogue, not the filtered view.
+   * Suggestions count against the whole catalog, not the filtered view.
    *
    * A suggestion is an offer to change what you are looking at, so counting it
    * inside the current selection would make it promise a number it will not

@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { buildTaskMatrix, isEmptyMatrix, summariseMatrix } from '../lib/taskMatrix';
+import { buildTaskMatrix, isEmptyMatrix, summarizeMatrix } from '../lib/taskMatrix';
 import type { TestedModelScore } from '../types';
 
 /**
@@ -28,7 +28,7 @@ export function TaskMatrix({
   const matrix = buildTaskMatrix(models, scores);
   if (isEmptyMatrix(matrix)) return null;
 
-  const summary = summariseMatrix(matrix);
+  const summary = summarizeMatrix(matrix);
   const anyNeedsJudge = matrix.rows.some((row) => row.cells.some((cell) => cell.state === 'needs-judge'));
 
   return (

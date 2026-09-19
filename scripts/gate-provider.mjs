@@ -44,7 +44,7 @@ const main = readFileSync('electron/main.cjs', 'utf-8');
   record('the benchmark passes its own timeout, not the 2.5s default', passesBenchmarkTimeout);
 }
 
-/** The app's own helper, reproduced exactly enough to exercise the behaviour. */
+/** The app's own helper, reproduced exactly enough to exercise the behavior. */
 async function appFetchJson(url, options = {}, timeoutMs = 2500) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

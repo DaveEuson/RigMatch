@@ -38,7 +38,7 @@ test('parseOllamaFamilyRows: each tag keeps its own size (issue #6 regression)',
   assert.equal(byTag['30b'], 22, '30b must not inherit the 4b tag size — it is 22 GB');
 });
 
-test('parseOllamaFamilyRows: does not bleed a neighbour size when a row lacks its own size', () => {
+test('parseOllamaFamilyRows: does not bleed a neighbor size when a row lacks its own size', () => {
   // The 30b row has no size text of its own; it must resolve to null rather than
   // borrowing the following tag's 2.8 GB.
   const html = [

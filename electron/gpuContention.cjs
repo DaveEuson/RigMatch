@@ -76,8 +76,8 @@ const KNOWN_GPU_HEAVY_APPS = [
  * only utilization is used.
  *
  * Detection is by known part name plus Apple Silicon. It is a heuristic and
- * will not name every unified part; an unrecognised one simply keeps the
- * discrete behaviour, which is the pre-existing state rather than a regression.
+ * will not name every unified part; an unrecognized one simply keeps the
+ * discrete behavior, which is the pre-existing state rather than a regression.
  */
 const UNIFIED_MEMORY_GPU_PATTERNS = [
   /apple\s+m\d/i,          // Apple M1/M2/M3/M4…
@@ -133,7 +133,7 @@ const HEAVY_VRAM_SHARE = 0.55;
  * Real captured output (RTX 4070, Windows):
  *   "0, NVIDIA GeForce RTX 4070, 2521, 12282, 31"
  *
- * Also tolerates the unit-bearing form, since `nounits` is not honoured by every
+ * Also tolerates the unit-bearing form, since `nounits` is not honored by every
  * driver version:
  *   "2521 MiB, 12282 MiB, 31 %"
  */
@@ -246,7 +246,7 @@ function parseIoregGpuStats(output) {
     : Math.max(renderer ?? 0, tiler ?? 0));
   if (utilizationPercent === null || utilizationPercent < 0 || utilizationPercent > 100) return null;
 
-  // The trailing quote before "=" is what separates this from the neighbouring
+  // The trailing quote before "=" is what separates this from the neighboring
   // "In use system memory (driver)" key, which is a different (and usually zero)
   // figure.
   const inUseBytes = num(/"In use system memory"\s*=\s*(\d+)/);

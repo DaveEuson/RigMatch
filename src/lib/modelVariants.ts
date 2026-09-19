@@ -5,7 +5,7 @@
  * `gemma4:e2b` and `gemma4:12b` arrive as two rows that differ only in a
  * string, and the app had nothing to say about the difference:
  * `getModelProfile` matches on the family name, so both return the same
- * archetype, the same specialties and the same colour. Simple Mode's
+ * archetype, the same specialties and the same color. Simple Mode's
  * `collapseModelVariants` does not explain the choice either — it makes it for
  * you and moves on. So the first question a real user asks, "why is this one
  * better than that one, and what does e2b even stand for", had no answer
@@ -52,7 +52,7 @@ export function getModelTag(displayName: string): string {
  * The whole name, lowercased — not just the tag.
  *
  * The first version read only what followed the colon, which was wrong about
- * the catalogue as it actually is. Measured against the real list:
+ * the catalog as it actually is. Measured against the real list:
  * `lmstudio-community/qwen2.5-coder-7b-instruct` has no colon and says both its
  * size and its tuning in the name; `T5-XXL text encoder (fp8)` says its
  * compression in brackets; `phi3:mini` sizes itself in a word. All three
@@ -169,7 +169,7 @@ export function describeModelTag(displayName: string): VariantFact[] {
 }
 
 /** One line for a table cell or tooltip. Null when the name says nothing useful. */
-export function summariseModelTag(displayName: string): string | null {
+export function summarizeModelTag(displayName: string): string | null {
   const facts = describeModelTag(displayName);
   return facts.length > 0 ? facts.map((fact) => fact.label).join(' · ') : null;
 }

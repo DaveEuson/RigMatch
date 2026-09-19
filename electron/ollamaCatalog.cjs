@@ -118,7 +118,7 @@ function parseOllamaFamilyRows(name, html) {
 
     // Scope the size lookup to THIS tag's own row: from just after its link to
     // the start of the next tag's link. The previous ±window bled into
-    // neighbouring rows, so a large tag could pick up a smaller tag's size
+    // neighboring rows, so a large tag could pick up a smaller tag's size
     // (e.g. a 30b tag reported as 2.8 GB — issue #6). Cap the window so a final
     // row with no following link doesn't scan the rest of the page.
     const rowStart = (match.index || 0) + match[0].length;

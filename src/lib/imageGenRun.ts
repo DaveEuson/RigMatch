@@ -158,7 +158,7 @@ export async function runImageGeneration(options: ImageRunOptions): Promise<Imag
       ...scored,
     };
   } catch (error) {
-    // A cancelled run must not leave ComfyUI generating an image nobody will
+    // A canceled run must not leave ComfyUI generating an image nobody will
     // see; the GPU stays pinned for the rest of the job otherwise.
     if (promptId) await transport.interrupt(promptId).catch(() => undefined);
     // getErrorMessage, not error.message: the raw form leaks the Electron IPC

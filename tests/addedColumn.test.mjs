@@ -9,7 +9,7 @@ const { getModelSortValue, getModelSortLabel } = await import('../src/lib/modelC
  * The "Added" column: how long a model has been on this machine.
  *
  * It reads Ollama's modified_at, which only installed models have. Across the
- * whole catalogue that is a field 16 rows of 322 carry, so the column is shown
+ * whole catalog that is a field 16 rows of 322 carry, so the column is shown
  * only under the Installed filter — a column blank 95% of the time, sortable
  * into a wall of nothing, is worse than no column.
  */

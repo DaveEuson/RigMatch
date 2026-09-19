@@ -99,7 +99,7 @@ export function scoreAdvancedVisionResponse(response: string, doneReason: string
       },
       {
         label: 'Concrete visual detail',
-        passed: answered && /\b(color|colour|robot|text|background|left|right|top|bottom|blue|green|orange|red|yellow|character|shape|screen|button|face|eye|logo)\b/i.test(text),
+        passed: answered && /\b(color|color|robot|text|background|left|right|top|bottom|blue|green|orange|red|yellow|character|shape|screen|button|face|eye|logo)\b/i.test(text),
         detail: 'Names specific objects, colors, or layout instead of staying vague.',
       },
       engaged,

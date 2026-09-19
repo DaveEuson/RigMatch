@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
- * Every licence link the download consent dialog can produce, checked against
+ * Every license link the download consent dialog can produce, checked against
  * the real servers.
  *
  * That dialog is the app's only legal gate: it asks the user to confirm they
@@ -21,13 +21,13 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 /**
  * The models to check.
  *
- * The catalogue is populated from Ollama's live tag list, so there is no static
+ * The catalog is populated from Ollama's live tag list, so there is no static
  * set to enumerate and the generated links are pattern-based. What can be
  * verified is the pattern itself against the models RigMatch actually ships as
  * its default lineup, plus the fixed provider and Gemma links that every
  * download shows.
  */
-function catalogueModels() {
+function catalogModels() {
   const source = readFileSync(join(root, 'src/lib/appConfig.ts'), 'utf-8');
   const literal = source.match(/DEFAULT_SHORTLIST_IDS\s*=\s*\[([^\]]+)\]/)?.[1] ?? '';
   const names = [...literal.matchAll(/'([^']+)'/g)].map((match) => match[1]);
@@ -38,14 +38,14 @@ function catalogueModels() {
 
 const { licenseLinksForModels } = await import('../src/lib/modelLicenses.ts');
 
-const models = catalogueModels();
+const models = catalogModels();
 if (models.length === 0) {
   console.error('found no model names in appConfig.ts — DEFAULT_SHORTLIST_IDS probably moved');
   process.exit(1);
 }
 
 const links = licenseLinksForModels(models);
-console.log(`${models.length} catalogue models produce ${links.length} distinct links\n`);
+console.log(`${models.length} catalog models produce ${links.length} distinct links\n`);
 
 let bad = 0;
 for (const link of links) {
@@ -67,6 +67,6 @@ for (const link of links) {
 }
 
 console.log(bad === 0
-  ? `\nAll ${links.length} licence links resolve.`
-  : `\n${bad} of ${links.length} licence links are dead — the consent dialog would cite terms nobody can open.`);
+  ? `\nAll ${links.length} license links resolve.`
+  : `\n${bad} of ${links.length} license links are dead — the consent dialog would cite terms nobody can open.`);
 process.exit(bad === 0 ? 0 : 1);

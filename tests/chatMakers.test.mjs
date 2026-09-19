@@ -59,11 +59,11 @@ const wanSmall = video('wan-1.3b', 'Wan 2.1 1.3B');
 const stray = video('file:ltx-video-2b-v0.9.5.safetensors', 'LTX-Video 2B 0.9.5 (your own file)');
 // Wan 2.2 5B was quicker and drew a red barn for a lighthouse; Wan 2.1 1.3B drew the lighthouse.
 const record = raced([finished('wan-5b', 'Wan 2.2 5B', 161, 0.6), finished('wan-1.3b', 'Wan 2.1 1.3B', 358, 1)]);
-/** The catalogue's own order, best first, and the seconds a machine would take. */
-const catalogue = [wan, wanSmall, ltx, stray];
+/** The catalog's own order, best first, and the seconds a machine would take. */
+const catalog = [wan, wanSmall, ltx, stray];
 const seconds = { ltx: 12, 'wan-5b': 161, 'wan-1.3b': 358, 'file:ltx-video-2b-v0.9.5.safetensors': 12 };
 const offered = (runnable, useRecord, balance = 100) => videoMakerChoices({
-  runnable, catalogue, record: useRecord, balance, secondsFor: (entry) => seconds[entry.key] ?? null,
+  runnable, catalog, record: useRecord, balance, secondsFor: (entry) => seconds[entry.key] ?? null,
 }).map((choice) => choice.key);
 
 test('a clip is made by the model the race crowned, and every model that runs here is offered', () => {
@@ -72,7 +72,7 @@ test('a clip is made by the model the race crowned, and every model that runs he
   assert.deepEqual(offered([ltx, wan], record), ['wan-5b', 'ltx'], 'a winner that cannot run here is not offered');
 });
 
-test('with no race run, the catalogue order stands and a stray file goes last', () => {
+test('with no race run, the catalog order stands and a stray file goes last', () => {
   // The first real clip came from the stray 0.9.5 checkpoint, because it was the
   // fastest thing installed. Fastest is not best, and a file RigMatch never
   // downloaded runs the oldest graph it keeps.
@@ -82,7 +82,7 @@ test('with no race run, the catalogue order stands and a stray file goes last', 
 
 test('a video choice says what was measured here, and which model was crowned', () => {
   const choices = videoMakerChoices({
-    runnable: [ltx, wan, wanSmall], catalogue, record, balance: 100, secondsFor: (entry) => seconds[entry.key] ?? null,
+    runnable: [ltx, wan, wanSmall], catalog, record, balance: 100, secondsFor: (entry) => seconds[entry.key] ?? null,
   });
   assert.deepEqual(choices[0], {
     key: 'wan-1.3b', name: 'Wan 2.1 1.3B', seconds: 358, tested: '6.0 min · 100% of the prompt', crowned: true,

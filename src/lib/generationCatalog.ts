@@ -129,7 +129,7 @@ export const GENERATION_MODELS: GenerationModel[] = [
     publisher: 'Google',
   },
   // ── Video lineup: one entry per model, named for the model ─────────────────
-  // Generated from videobench's catalogue (tests/fixtures/rigmatch-video-catalog.json).
+  // Generated from videobench's catalog (tests/fixtures/rigmatch-video-catalog.json).
   // Bytes, URLs and SHA-256 come from each repository's tree at export time.
   {
     id: 'minimax-h3',
@@ -725,7 +725,7 @@ export function downloadPlan(model: GenerationModel, installed: ComfyFolderListi
 /**
  * Whether a file already sitting in ComfyUI is one of ours.
  *
- * Matched on filename, which is what both sides have: the catalogue names the
+ * Matched on filename, which is what both sides have: the catalog names the
  * file it writes, and ComfyUI lists what it can see. A user who renamed a file
  * or downloaded it themselves simply shows as not-installed, which offers a
  * redundant download rather than claiming something false.
@@ -735,7 +735,7 @@ export function isCatalogFile(filename: string): boolean {
 }
 
 /**
- * The generation catalogue as catalogue rows, so these models appear in the
+ * The generation catalog as catalog rows, so these models appear in the
  * Models screen beside everything else.
  *
  * They are not Ollama models and never will be, but that is a fact about how

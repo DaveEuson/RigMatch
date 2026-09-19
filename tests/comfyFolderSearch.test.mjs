@@ -19,7 +19,7 @@ const { locateComfyFolder } = await import('../src/lib/comfyTransport.ts');
  * than copied, so this is the one place the branching is checked.
  *
  * What matters is the reason, not the message. "Not running" and "running but
- * unrecognisable" lead to opposite advice — start the program, versus pick the
+ * unrecognizable" lead to opposite advice — start the program, versus pick the
  * folder yourself — and each caller words it for the controls it can offer.
  */
 
@@ -58,7 +58,7 @@ test('nothing is remembered when the search comes back empty', async () => {
   assert.deepEqual(remembered, [], 'a failed search must not leave a folder behind');
 });
 
-test('not running and unrecognisable are told apart', async () => {
+test('not running and unrecognizable are told apart', async () => {
   // The whole point of returning a reason. Telling someone to pick the folder
   // when ComfyUI simply is not started sends them looking for a directory that
   // the search would have found on its own a moment later.

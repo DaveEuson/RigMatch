@@ -43,7 +43,7 @@ const withoutComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, ' ');
  * Comments come out first. A prelude like `/* Each item, and its badge *​/
  * .side-menu-item` splits on the comma *inside the comment* otherwise, and the
  * fragment "and its badge *​/ .side-menu-item" is then neither a valid selector
- * nor recognisable as the one it came from. The control run caught this by
+ * nor recognizable as the one it came from. The control run caught this by
  * reporting "its badge value" as a live selector about to be lost.
  */
 function splitSelectors(rawPrelude) {

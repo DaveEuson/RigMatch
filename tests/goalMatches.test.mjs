@@ -51,7 +51,7 @@ test('ungradable goals say why instead of wearing a fake crown', () => {
     getGoalMatches(['write', 'transcribe-file', 'transcribe-live'], scores).map((m) => [m.goal.id, m]),
   );
   // Writing is now scored on writing questions, so it awaits a measurement
-  // like any other question-graded goal rather than apologising for itself.
+  // like any other question-graded goal rather than apologizing for itself.
   assert.match(byId['write'].awaiting, /no measured winner|mark them/i);
   assert.match(byId['transcribe-file'].awaiting, /Listening Lab/);
   assert.match(byId['transcribe-live'].awaiting, /not possible locally/i);

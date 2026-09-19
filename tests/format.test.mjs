@@ -44,6 +44,6 @@ test('the macOS/MLX rule still fires', () => {
   assert.match(describeRunError('llama runner failed: mlx not supported'), /Apple Silicon/i);
 });
 
-test('an unrecognised error is passed through rather than mangled', () => {
+test('an unrecognized error is passed through rather than mangled', () => {
   assert.equal(describeRunError('Something specific and unusual happened'), 'Something specific and unusual happened');
 });

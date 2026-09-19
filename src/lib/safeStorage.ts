@@ -35,7 +35,7 @@ const KEEP_ON_CLEAR = new Set<string>([
   // hasChosenInterfaceMode() is a bare presence check, so removing it brings the
   // first-launch Simple/Advanced splash back to ask again.
   'rigmatch:mode-splash:v1',
-  // tutorialOpen initialises to !getSavedTutorialSeen(), so dropping this
+  // tutorialOpen initializes to !getSavedTutorialSeen(), so dropping this
   // reopens the getting-started guide at the next launch. Having already read it
   // is not data about your models either.
   //

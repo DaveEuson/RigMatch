@@ -9,7 +9,7 @@ const { BENCHMARK_PRESETS } = await import('../src/benchmarkSuite.ts');
  * Simple Mode captioned a live Tiananmen Square question "Everyday questions".
  * The caption came from a chain of regexes over the question's *label*, with
  * 'Everyday questions' as the catch-all, and every Difficult Subjects question
- * is labelled by its subject rather than its kind.
+ * is labeled by its subject rather than its kind.
  */
 
 test('a difficult subject is named as one, not as everyday chat', () => {
@@ -48,10 +48,10 @@ const OLD_GUESS = (label) => {
   if (/accuracy|trap|truth/.test(raw)) return 'Admitting what it doesn’t know';
   if (/instruction/.test(raw)) return 'Following instructions exactly';
   if (/coding|code/.test(raw)) return 'Writing a bit of code';
-  if (/summar/.test(raw)) return 'Summarising clearly';
+  if (/summar/.test(raw)) return 'Summarizing clearly';
   if (/reason/.test(raw)) return 'Thinking a problem through';
   if (/safety|boundary/.test(raw)) return 'Handling a tricky request';
-  if (/format|structure/.test(raw)) return 'Keeping answers well-organised';
+  if (/format|structure/.test(raw)) return 'Keeping answers well-organized';
   return 'Everyday questions';
 };
 
@@ -90,7 +90,7 @@ test('the old label-guessing captioned all eight subjects as everyday chat', () 
 });
 
 test('the two controls are exactly the ones the old guess got right', () => {
-  // Not luck: they are labelled "Format: …" and "Truth: …", so the regexes
+  // Not luck: they are labeled "Format: …" and "Truth: …", so the regexes
   // matched the words in their names. Every question named after its subject
   // rather than its kind was wrong — which is the shape of the whole bug.
   for (const question of difficultSuite.questions.filter((q) => q.type !== 'candour')) {

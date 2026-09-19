@@ -8,7 +8,7 @@
  * Match", and the rest are secondary crowns.
  *
  * Goal crowns are measured-only. The older category picks fall back to
- * catalogue keywords — what a model is generally for — but a crown named
+ * catalog keywords — what a model is generally for — but a crown named
  * after YOUR goal on YOUR rig must come from questions actually asked here,
  * or say plainly why it cannot yet. The test is the determination.
  */

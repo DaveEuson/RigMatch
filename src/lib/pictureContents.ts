@@ -4,7 +4,7 @@
  * be checked against it.
  *
  * The reading test used to grade a description by its shape: an answer came
- * back, it ran to twelve words, it named a colour or an object, and it did not
+ * back, it ran to twelve words, it named a color or an object, and it did not
  * refuse. Shown the contestant wall, Gemma 4 described a Java "Hello, World!"
  * on a plain white background, and that scored 100. RigMatch chose these
  * pictures, so it knows what is in them. Each lists the five things a good

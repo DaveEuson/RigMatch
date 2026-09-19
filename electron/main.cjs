@@ -104,8 +104,8 @@ const ALLOWED_EXTERNAL_HOSTS = new Set([
   // Cloud judge: "what's OpenRouter / get an API key" links in the run dialog.
   'openrouter.ai',
   'www.openrouter.ai',
-  // Model licences: the download consent dialog links each image and video
-  // model's Hugging Face page, which is where its licence is stated.
+  // Model licenses: the download consent dialog links each image and video
+  // model's Hugging Face page, which is where its license is stated.
   'huggingface.co',
   // Scorecard sharing: the social compose intents opened from the share modal.
   // Every host used by ShareScorecard.tsx must be listed here or the button is
@@ -2286,7 +2286,7 @@ async function getLatestCudaToolkitVersion() {
  *
  * Only reached when systeminformation found no controller at all, which on an
  * ordinary desktop means there is genuinely nothing to find. Returns {} in that
- * case, leaving the existing "Unknown GPU" behaviour exactly as it was.
+ * case, leaving the existing "Unknown GPU" behavior exactly as it was.
  *
  * The device tree is tried first because it needs no vendor tooling and names
  * the vendor as well as the part. nvidia-smi is second: it exists on newer
@@ -2538,7 +2538,7 @@ function assertValidModelName(model) {
  * The vocabulary observed on 0.32.9: `completion` (can answer at all), `vision`
  * (can read an image it is sent), `tools`, and `image` (generates images — and
  * notably arrives *without* `completion`). This replaces guessing from the
- * model's name, which mislabelled anything published under Ollama's `x/`
+ * model's name, which mislabeled anything published under Ollama's `x/`
  * community namespace as an image generator.
  *
  * It also settles a question the name could never answer. An image model can be
@@ -2778,9 +2778,9 @@ async function getOllamaCatalog(options = {}) {
  *
  * Without this the capability chips could only ever count installed models —
  * /api/show answers about downloads and nothing else — so "Hears audio" read
- * "1" against a 317-model catalogue and looked like a fact about the world.
+ * "1" against a 317-model catalog and looked like a fact about the world.
  *
- * /search?c=<capability> is the only endpoint that honours the filter:
+ * /search?c=<capability> is the only endpoint that honors the filter:
  * /library?c= silently ignores it and returns everything, which would mark
  * every model as having every capability. There is no pagination — p= is
  * ignored too — so this is the top twenty per capability, the same set the
@@ -2807,7 +2807,7 @@ async function fetchLibraryCapabilityIndex() {
   return index;
 }
 
-/** Attach library-reported capabilities to catalogue entries, by family. */
+/** Attach library-reported capabilities to catalog entries, by family. */
 function applyCapabilityIndex(models, index) {
   if (!index || index.size === 0) return models;
   return models.map((entry) => {
@@ -3384,7 +3384,7 @@ async function runBenchmark(request = {}, sender) {
         request.model,
       );
     } catch {
-      // Best effort: the unload is an optimisation, not a correctness
+      // Best effort: the unload is an optimization, not a correctness
       // requirement. Ollama releases the model on its own keep-alive timer.
     }
     benchmarkRunning = false;

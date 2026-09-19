@@ -99,7 +99,7 @@ export async function runAudioGeneration(options: AudioRunOptions): Promise<Audi
     // Stopped before the clip is fetched and checked: neither is the model's time.
     elapsedMs = now() - startedAt;
   } catch (error) {
-    // A cancelled run must not leave ComfyUI making a clip nobody will hear.
+    // A canceled run must not leave ComfyUI making a clip nobody will hear.
     if (promptId) await transport.interrupt(promptId).catch(() => undefined);
     return audioRunFailure(model, seconds, error ? getErrorMessage(error) : 'Audio generation failed.', { promptId, elapsedMs });
   }

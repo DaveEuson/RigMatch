@@ -382,7 +382,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
 
   // Nothing to fetch means Download is a no-op: it rendered full green progress
   // bars, claimed a download was happening, and quoted an ETA for work that had
-  // already been done. Skip it in both directions rather than showing theatre.
+  // already been done. Skip it in both directions rather than showing theater.
   const skipDownload = downloadAllInstalled;
 
   const startShow = () => {
@@ -947,7 +947,7 @@ function PickScreen({
   // cannot be benchmarked — so an empty grid here says nothing about whether
   // this PC can make images or video. It said "No contestants can make video
   // on this PC", which was simply false: the models exist, ship in the
-  // catalogue, and run. Report what is actually true of the machine.
+  // catalog, and run. Report what is actually true of the machine.
   const makers = dream === 'video' ? generation?.video
     : dream === 'image' ? generation?.image
       : dream === 'audio' ? generation?.audio
@@ -1094,7 +1094,7 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
 }) {
   const fitLabel = model.fitTier === 'great' ? 'Runs great on your PC' : model.fitTier === 'well' ? 'Runs well on your PC' : 'Good fit — a little slower';
   /**
-   * Who made it, in the name someone would recognise.
+   * Who made it, in the name someone would recognize.
    *
    * Gemma4, Codegemma, Translategemma and Functiongemma are four cards from
    * one company and nothing on them said Google; Llama says nothing about
@@ -1107,7 +1107,7 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
     <article className={`sw-card${picked ? ' picked' : ''}${model.row.installed ? ' installed' : ''}`}>
       {picked && <span className="sw-card-pick-badge"><Heart aria-hidden="true" />Pick {pickIndex}</span>}
       {!picked && model.row.installed && (
-        /* Downloaded already. It was a grey tick beside the model id, reading
+        /* Downloaded already. It was a gray tick beside the model id, reading
            as small print next to a bright download size on the card beside it;
            the one thing a beginner picking five models most wants to know is
            which ones cost nothing. */
@@ -1374,7 +1374,7 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound }: Simpl
   // What this question tests, from the question itself.
   //
   // This read the label through a chain of regexes and defaulted to "Everyday
-  // questions". Difficult Subjects questions are labelled by subject —
+  // questions". Difficult Subjects questions are labeled by subject —
   // "Tiananmen 1989", "Tank Man", "Xinjiang", "Tulsa 1921" — and match none of
   // those patterns, so all eight took the default: Simple Mode captioned a live
   // Tiananmen Square question as everyday chat. The type was on the question

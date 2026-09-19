@@ -56,11 +56,11 @@ export type VideoLineupEntry = {
   sizing: VideoSizing;
   refMeasured: boolean;
   output: VideoModelSpec['output'];
-  /** A catalogue model, built by its family's graph. */
+  /** A catalog model, built by its family's graph. */
   spec?: VideoModelSpec;
   /** An LTX-Video 0.9 checkpoint, built by the graph RigMatch shipped in 0.6. */
   legacy?: { checkpoint: string; textEncoder: string };
-  /** Found in ComfyUI rather than downloaded from the catalogue, so on disk by definition. */
+  /** Found in ComfyUI rather than downloaded from the catalog, so on disk by definition. */
   found?: boolean;
 };
 
@@ -123,7 +123,7 @@ export function strayLtxName(file: string): string {
 }
 
 /**
- * LTX-Video 0.9 checkpoints ComfyUI lists that did not come from the catalogue.
+ * LTX-Video 0.9 checkpoints ComfyUI lists that did not come from the catalog.
  *
  * Until 0.9 the Lab ran any LTX checkpoint in models/checkpoints and told people
  * to put one there, so some have files RigMatch never downloaded. Those still
@@ -152,7 +152,7 @@ export function strayLtxEntries(installed: ComfyFolderListing): VideoLineupEntry
     }));
 }
 
-/** The catalogue lineup, and whatever LTX-Video 0.9 checkpoints ComfyUI already has. */
+/** The catalog lineup, and whatever LTX-Video 0.9 checkpoints ComfyUI already has. */
 export function allLineupEntries(installed: ComfyFolderListing): VideoLineupEntry[] {
   return [...VIDEO_LINEUP, ...strayLtxEntries(installed)];
 }

@@ -60,7 +60,7 @@ const auditScript = (rails) => {
     if (box.width < 2 || box.height < 2) continue;
     const flags = [];
 
-    // Starved: the parent grid has a real track with nothing over its centre,
+    // Starved: the parent grid has a real track with nothing over its center,
     // and this menu is not the thing filling the row.
     const parent = menu.parentElement;
     if (parent) {
@@ -74,7 +74,7 @@ const auditScript = (rails) => {
           // track is occupied — and in the bug this check exists for, the
           // spanning child was the very thing masking the empty track: the
           // view toggle carried `grid-column: 1 / -1`, so its rect sat over
-          // both centres while the menu below it was stuck in track one.
+          // both centers while the menu below it was stuck in track one.
           const rects = [...parent.children].map((kid) => kid.getBoundingClientRect())
             .filter((rect) => rect.width > 0 && rect.height > 0)
             .filter((rect) => rect.width < pbox.width * 0.95);
@@ -82,8 +82,8 @@ const auditScript = (rails) => {
           let x = pbox.left + (parseFloat(style.paddingLeft) || 0);
           let emptiest = 0;
           for (const width of tracks) {
-            const centre = x + width / 2;
-            if (!rects.some((rect) => rect.left <= centre && rect.right >= centre) && width > emptiest) emptiest = width;
+            const center = x + width / 2;
+            if (!rects.some((rect) => rect.left <= center && rect.right >= center) && width > emptiest) emptiest = width;
             x += width + gap;
           }
           if (emptiest >= pbox.width * 0.3 && box.width < pbox.width * 0.6) {

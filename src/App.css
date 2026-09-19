@@ -29,7 +29,7 @@
   height: 100vh;
   /* A control room, not a billboard. On a 2560px monitor every strip stretched
      the full width of the glass: the header's eight cards spread until the
-     readouts were islands, and a table row ran a metre from its name to its
+     readouts were islands, and a table row ran a meter from its name to its
      actions. The room behind it is the page's own background, which is what
      the margins show. */
   max-width: 1920px;
@@ -135,7 +135,7 @@
    controls rather than readouts) and drops the per-metric tiles.
 
    scripts/measure-shell.mjs prints these numbers again on demand. */
-/* Browser surfaces wear the room's colours too. Text selection, the caret and
+/* Browser surfaces wear the room's colors too. Text selection, the caret and
    the numerals in a column of scores all ship with defaults that belong to no
    design system, and a plum auditorium with a Windows-blue selection is a room
    with one wall missing. */
@@ -1160,7 +1160,7 @@ textarea {
 /* Evidence the check ran, sitting under the button that ran it.
 
    Quiet on purpose: it is a receipt, not a status. The card above it already
-   carries the state in colour and in words, and a second green thing competing
+   carries the state in color and in words, and a second green thing competing
    for the same glance would make the strip harder to read, not easier. */
 .local-status-checked {
   display: flex;
@@ -12296,7 +12296,7 @@ tbody tr.computer-row.selected {
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
 }
 
-/* A licence condition that decides whether someone may use a model at all. */
+/* A license condition that decides whether someone may use a model at all. */
 .third-party-download-conditions {
   padding: 8px 10px;
   border: 1px solid rgba(var(--gold-rgb), 0.3);
@@ -15300,7 +15300,7 @@ td {
      grid area, and an `auto` row compresses inside one — the row stayed at
      239px against 417px of items, so the nav overflowed it and painted over the
      donate button below. max-content refuses to compress, so the RAIL overflows
-     and scrolls instead, which is the behaviour this layout wants. */
+     and scrolls instead, which is the behavior this layout wants. */
   grid-template-rows: auto max-content auto auto;
   align-content: start;
   border: 1px solid rgba(var(--gold-rgb), 0.3);
@@ -19484,7 +19484,7 @@ a.whats-next-support:hover {
    before this rule: side menu 18px tall, nav 0px, 0 of 8 items visible.
 
    Below the threshold the shell grows to its content and the document scrolls,
-   which is the normal behaviour for a window too small for a fixed layout.
+   which is the normal behavior for a window too small for a fixed layout.
    Advanced Mode only — Simple Mode is a single full-height wizard column.
    --------------------------------------------------------------------------- */
 @media (max-width: 1200px), (max-height: 780px) {
@@ -19709,7 +19709,7 @@ a.whats-next-support:hover {
 }
 
 /* Marks a category pick that came from questions of that kind actually being
-   asked on this machine, rather than from the catalogue describing what the
+   asked on this machine, rather than from the catalog describing what the
    model is generally for. The distinction is the point of benchmarking. */
 .task-pick-measured {
   margin-left: 5px;

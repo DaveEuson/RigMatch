@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 
 import {
   huggingFaceRepoPage,
-  licenceConditionsForRows,
+  licenseConditionsForRows,
   licenseLinksForModels,
   licenseLinksForRows,
   modelFamilyName,
@@ -17,7 +17,7 @@ import { GENERATION_MODELS } from '../src/lib/generationCatalog.ts';
  * confirm they understand the models' terms, and links to them.
  *
  * It shipped with a fixed list, so downloading DeepSeek showed Gemma's terms,
- * Gemma's prohibited-use policy and the Gemma 3 licence — three documents that
+ * Gemma's prohibited-use policy and the Gemma 3 license — three documents that
  * do not apply, and none that do. These tests are about that dialog telling the
  * truth about what is being downloaded.
  */
@@ -28,7 +28,7 @@ const labels = (models) => licenseLinksForModels(models).map((link) => link.labe
 test('a model gets its own terms, not another family’s', () => {
   const shown = hrefs(['deepseek-r1:7b']);
   assert.ok(shown.includes('https://ollama.com/library/deepseek-r1'),
-    'DeepSeek should link to its own licence');
+    'DeepSeek should link to its own license');
   assert.ok(!shown.some((href) => href.includes('gemma')),
     'Gemma terms must not appear when Gemma is not being downloaded');
 });
@@ -62,7 +62,7 @@ test('tags and registry prefixes resolve to the same family', () => {
 });
 
 test('a model name cannot break out of the library URL', () => {
-  // Model names arrive from a remote catalogue and from Ollama's own tag list,
+  // Model names arrive from a remote catalog and from Ollama's own tag list,
   // so a name with a slash or a space must not build a link to somewhere else.
   const shown = hrefs(['../../evil:7b', 'weird name:1b']);
   for (const href of shown) {
@@ -130,38 +130,38 @@ test('a repository page is read from a Hugging Face download URL, and from nothi
 
 const row = (generationId, displayName = generationId) => ({ displayName, runtime: 'comfyui', generationId });
 
-test('a licence that excludes places says so before the download, naming them', () => {
-  // MiniMax H3's licence excludes the United States, among others. RigMatch
+test('a license that excludes places says so before the download, naming them', () => {
+  // MiniMax H3's license excludes the United States, among others. RigMatch
   // does not know where anyone is, so the only honest thing is to say it.
-  const [minimax] = licenceConditionsForRows([row('minimax-h3', 'MiniMax H3')]);
+  const [minimax] = licenseConditionsForRows([row('minimax-h3', 'MiniMax H3')]);
   assert.match(minimax.condition, /United States/);
   assert.match(minimax.condition, /European Union/);
   assert.deepEqual(minimax.models, ['MiniMax H3']);
 });
 
-test('a model is held to the licence of every file it downloads, not only its own', () => {
+test('a model is held to the license of every file it downloads, not only its own', () => {
   // Kandinsky 5 is MIT; its VAE and text encoder come from Tencent-licensed
   // repositories, and those decide where it may be used.
-  const conditions = licenceConditionsForRows([row('kandinsky-5', 'Kandinsky 5.0 Lite 2B')]);
+  const conditions = licenseConditionsForRows([row('kandinsky-5', 'Kandinsky 5.0 Lite 2B')]);
   assert.equal(conditions.length, 1);
   assert.match(conditions[0].condition, /Tencent/);
 });
 
 test('one condition covering several models is said once, naming them all', () => {
-  const conditions = licenceConditionsForRows([row('hunyuan-1.5', 'HunyuanVideo 1.5'), row('kandinsky-5', 'Kandinsky 5')]);
+  const conditions = licenseConditionsForRows([row('hunyuan-1.5', 'HunyuanVideo 1.5'), row('kandinsky-5', 'Kandinsky 5')]);
   assert.equal(conditions.length, 1);
   assert.deepEqual(conditions[0].models.sort(), ['HunyuanVideo 1.5', 'Kandinsky 5']);
 });
 
-test('a model whose licences carry no such condition adds nothing to read', () => {
-  assert.deepEqual(licenceConditionsForRows([row('wan-2.1-1.3b'), row('mochi-1'), { displayName: 'gemma3:4b' }]), []);
+test('a model whose licenses carry no such condition adds nothing to read', () => {
+  assert.deepEqual(licenseConditionsForRows([row('wan-2.1-1.3b'), row('mochi-1'), { displayName: 'gemma3:4b' }]), []);
 });
 
-test('Stable Audio Open carries Stability AI’s community licence, and ACE-Step adds nothing to read', () => {
-  const [stable] = licenceConditionsForRows([row('stable-audio-open-1.0', 'Stable Audio Open 1.0')]);
+test('Stable Audio Open carries Stability AI’s community license, and ACE-Step adds nothing to read', () => {
+  const [stable] = licenseConditionsForRows([row('stable-audio-open-1.0', 'Stable Audio Open 1.0')]);
   assert.match(stable.condition, /Stability AI/);
   assert.deepEqual(stable.models, ['Stable Audio Open 1.0']);
-  assert.deepEqual(licenceConditionsForRows([row('ace-step-1.5-turbo'), row('ace-step-v1-3.5b')]), []);
+  assert.deepEqual(licenseConditionsForRows([row('ace-step-1.5-turbo'), row('ace-step-v1-3.5b')]), []);
 });
 
 test('every image, video and audio model links only to hosts the app may open', () => {

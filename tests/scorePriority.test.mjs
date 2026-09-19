@@ -12,7 +12,7 @@ const { SCORE_WEIGHTS: DISPLAY_ROWS } = await import('../src/lib/scoreReference.
 /**
  * "Which model is best" had no stated answer: the app weighted answer quality
  * two points above speed and never said so. These lock the three profiles, and
- * the promise that switching between them re-summarises saved measurements
+ * the promise that switching between them re-summarizes saved measurements
  * rather than changing what was measured.
  */
 

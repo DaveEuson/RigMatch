@@ -74,8 +74,8 @@ const PRESENT = [
   ['winner board shows the whole lineup', js, 'How the lineup finished'],
   ['live answer scores on Compare', js, 'answers so far'],
   ['lineup-full is a note, not a dead button', js, 'drop one from your lineup'],
-  ['stale winner is labelled as previous', js, "not in tonight's lineup"],
-  ['licence links are built per model', js, 'ollama.com/library/'],
+  ['stale winner is labeled as previous', js, "not in tonight's lineup"],
+  ['license links are built per model', js, 'ollama.com/library/'],
   ['Gemma keeps its prohibited-use policy', js, 'prohibited_use_policy'],
   ['collapsible stats strip', css, 'top-deck-collapse'],
   // The minifier rewrites media queries to modern range syntax, so
@@ -97,7 +97,7 @@ const PRESENT = [
   ['quit cleanup: keep only my match', js, 'Keep Only My Match'],
   ['upgrade prompt copy', js, 'New in this version'],
   ['auto-judge note in the run dialog', js, 'no right answer to check against'],
-  ['release notes mention the licence fix', js, "links that model's terms"],
+  ['release notes mention the license fix', js, "links that model's terms"],
   // The share flow, from Dave's real LinkedIn test.
   ['share text says what RigMatch is', js, 'speed-dates AI models on your own hardware'],
   ['share text points at the download', js, 'Get it: '],

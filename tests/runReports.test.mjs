@@ -99,7 +99,7 @@ test('corrupt storage reads as no reports, not as a crash', () => {
   assert.deepEqual(parseStoredReports([null, 42, 'x']), []);
 });
 
-test('a half-written entry is dropped and its neighbours survive', () => {
+test('a half-written entry is dropped and its neighbors survive', () => {
   const good = at('2026-09-01T10:00:00.000Z');
   const parsed = parseStoredReports([good, { id: 'x' }, { completedAt: 'y', results: [] }]);
   assert.deepEqual(parsed.map((entry) => entry.id), [good.id]);

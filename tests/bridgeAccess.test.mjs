@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
  * real listener in scripts/gate-desktop.mjs, on a port that run owns. Those were
  * checked by deleting each guard and confirming the gate went red.
  *
- * Keep the three in step: this file for the rules, the gate for the behaviour,
+ * Keep the three in step: this file for the rules, the gate for the behavior,
  * and release-sweep for the source still containing the guards at all.
  */
 function hostIsLoopback(hostHeader) {

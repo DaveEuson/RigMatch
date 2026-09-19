@@ -6,7 +6,7 @@ import type { BenchmarkQuestionType } from '../benchmarkSuite';
  *
  * This existed as a chain of regexes over the question's *label* with
  * 'Everyday questions' as the catch-all. Every question in the Difficult
- * Subjects suite is labelled by its subject — "Tiananmen 1989", "Tank Man",
+ * Subjects suite is labeled by its subject — "Tiananmen 1989", "Tank Man",
  * "Xinjiang", "Tulsa 1921", "Armenian genocide" — and not one of those matches
  * /json|tool|accuracy|trap|truth|instruction|coding|code|summar|reason|safety|
  * boundary|format|structure/. So all eight fell through, and Simple Mode
@@ -23,7 +23,7 @@ import type { BenchmarkQuestionType } from '../benchmarkSuite';
  */
 export const ROUND_LABELS: Record<BenchmarkQuestionType, string> = {
   json: 'Following a precise format',
-  format: 'Keeping answers well-organised',
+  format: 'Keeping answers well-organized',
   truth: 'Admitting what it doesn’t know',
   assistant: 'Everyday questions',
   coding: 'Writing a bit of code',

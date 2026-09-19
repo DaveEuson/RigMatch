@@ -24,12 +24,12 @@ export function useSandboxedPreview(html: string | null | undefined): string | n
 
   useEffect(() => {
     if (!html) return;
-    let cancelled = false;
+    let canceled = false;
     void agentArcadeApi
       .publishAppPreview(buildSandboxedPreviewHtml(html))
-      .then((url) => { if (!cancelled && url) setPublished({ html, url }); })
+      .then((url) => { if (!canceled && url) setPublished({ html, url }); })
       .catch(() => { /* falls through to the "preparing" state */ });
-    return () => { cancelled = true; };
+    return () => { canceled = true; };
   }, [html]);
 
   return published && published.html === html ? published.url : null;

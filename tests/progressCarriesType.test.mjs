@@ -34,8 +34,8 @@ test('every progress update that names a question also names its type', () => {
     assert.ok(labelLines.length > 0, `${file} no longer emits promptLabel — has the shape changed?`);
 
     for (const { index } of labelLines) {
-      const neighbourhood = lines.slice(Math.max(0, index - 6), index + 7).join('\n');
-      assert.match(neighbourhood, /promptType: prompt\.type,/,
+      const neighborhood = lines.slice(Math.max(0, index - 6), index + 7).join('\n');
+      assert.match(neighborhood, /promptType: prompt\.type,/,
         `${file}:${index + 1} sends a question's label without its type`);
     }
   }

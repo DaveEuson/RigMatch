@@ -47,7 +47,7 @@ test('writing is scored on writing questions, and only on those', () => {
   const write = goalById('write');
   assert.equal(write.grading, 'questions');
   assert.deepEqual([...write.questionTypes], ['writing']);
-  assert.equal(write.unsupportedReason, undefined, 'nothing left to apologise for');
+  assert.equal(write.unsupportedReason, undefined, 'nothing left to apologize for');
 });
 
 test('tools is scoreable on day one, using the json questions', () => {
@@ -98,7 +98,7 @@ test('animating an image is supportable but honestly ungraded', () => {
 
 test('making audio is graded by listening back to it', () => {
   // A model that can hear checks every clip against the prompt's questions, so
-  // the goal no longer apologises for having no test.
+  // the goal no longer apologizes for having no test.
   const audio = goalById('make-audio');
   assert.equal(audio.runtime, 'comfyui');
   assert.equal(audio.grading, 'lab');

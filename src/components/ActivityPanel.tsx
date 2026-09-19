@@ -78,7 +78,7 @@ export function ActivityPanel({
   const [previewApp, setPreviewApp] = useState<{ html: string; model: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; model: string } | null>(null);
   const activePulls = Object.values(pullProgressByModel)
-    .filter((update) => update && !['complete', 'failed', 'cancelled'].includes(update.phase));
+    .filter((update) => update && !['complete', 'failed', 'canceled'].includes(update.phase));
   const benchmarkActive = runProgress?.phase === 'running';
   const skillActive = skillRunStatus.phase === 'running';
 

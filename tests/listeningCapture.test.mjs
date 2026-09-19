@@ -107,10 +107,10 @@ test('a clipped recording does not wrap into a crack', () => {
   assert.equal(view.getInt16(46, true), -32768);
 });
 
-test('the themed scripts survive the transcript normaliser intact', () => {
-  // A script whose words vanish in normalisation would score every model down.
+test('the themed scripts survive the transcript normalizer intact', () => {
+  // A script whose words vanish in normalization would score every model down.
   for (const script of LISTENING_SCRIPTS) {
     const words = normalizeTranscript(script.text);
-    assert.ok(words.length >= MIN_SCRIPT_WORDS, `${script.id} normalises to ${words.length} words`);
+    assert.ok(words.length >= MIN_SCRIPT_WORDS, `${script.id} normalizes to ${words.length} words`);
   }
 });

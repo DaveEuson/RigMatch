@@ -52,10 +52,10 @@ function bodyOf(buffer, dropAt) {
 
 /**
  * Hugging Face, as far as the downloader can tell. `cdnHits` counts requests
- * to the CDN, 1-based, so a behaviour can differ between the first attempt
+ * to the CDN, 1-based, so a behavior can differ between the first attempt
  * and a retry.
  */
-function fakeHub(behaviour = {}) {
+function fakeHub(behavior = {}) {
   const calls = [];
   let cdnHits = 0;
   const fetchImpl = async (url, init = {}) => {
@@ -63,22 +63,22 @@ function fakeHub(behaviour = {}) {
     calls.push({ host: new URL(url).hostname, range: headers.Range ?? null, auth: headers.Authorization ?? null });
 
     if (new URL(url).hostname === 'huggingface.co') {
-      if (behaviour.gatedToken && !headers.Authorization) {
+      if (behavior.gatedToken && !headers.Authorization) {
         return new Response('gated', { status: 401, headers: { 'x-error-code': 'GatedRepo' } });
       }
-      if (behaviour.gatedToken && headers.Authorization !== `Bearer ${behaviour.gatedToken}`) {
+      if (behavior.gatedToken && headers.Authorization !== `Bearer ${behavior.gatedToken}`) {
         return new Response('no access', { status: 403, headers: { 'x-error-code': 'GatedRepo' } });
       }
-      return new Response(null, { status: 302, headers: { location: behaviour.redirectTo ?? CDN } });
+      return new Response(null, { status: 302, headers: { location: behavior.redirectTo ?? CDN } });
     }
 
     cdnHits += 1;
-    const file = behaviour.corruptOn?.(cdnHits) ? corrupted(PAYLOAD) : PAYLOAD;
+    const file = behavior.corruptOn?.(cdnHits) ? corrupted(PAYLOAD) : PAYLOAD;
     const match = /^bytes=(\d+)-$/.exec(headers.Range ?? '');
     let start = 0;
     const responseHeaders = {};
     let status = 200;
-    if (match && !behaviour.ignoreRange) {
+    if (match && !behavior.ignoreRange) {
       start = Number(match[1]);
       if (start >= file.length) {
         return new Response(null, { status: 416, headers: { 'content-range': `bytes */${file.length}` } });
@@ -88,7 +88,7 @@ function fakeHub(behaviour = {}) {
     }
     const slice = file.subarray(start);
     responseHeaders['content-length'] = String(slice.length);
-    return new Response(bodyOf(slice, behaviour.dropOn?.(cdnHits)), { status, headers: responseHeaders });
+    return new Response(bodyOf(slice, behavior.dropOn?.(cdnHits)), { status, headers: responseHeaders });
   };
   return { fetchImpl, calls, cdnCalls: () => calls.filter((c) => c.host !== 'huggingface.co') };
 }
@@ -175,7 +175,7 @@ test('a source that is wrong twice is refused, and nothing is left for ComfyUI t
   assert.equal(await exists(`${target(root)}.part`), false);
 });
 
-test('a file whose size disagrees with the catalogue is refused', async () => {
+test('a file whose size disagrees with the catalog is refused', async () => {
   const root = await comfyRoot();
   const hub = fakeHub();
   await assert.rejects(

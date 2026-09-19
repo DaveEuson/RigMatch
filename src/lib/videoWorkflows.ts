@@ -3,7 +3,7 @@
  * One ComfyUI graph builder per video model family.
  *
  * Ported from videobench's export and held to it by a test: for every model in
- * the catalogue, building with the export's placeholder prompt and seed
+ * the catalog, building with the export's placeholder prompt and seed
  * reproduces the exported graph exactly, and every graph passes a check against
  * /object_info from the ComfyUI build those graphs were validated on. A porting
  * mistake fails a test, not a 50 GB download.

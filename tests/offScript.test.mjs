@@ -14,7 +14,7 @@ const SCRIPT = 'Bachelor number one, if we went on a date, where would you take 
   + 'And be honest, because I have heard every answer twice already. '
   + 'Bachelor number two, same question, but you only get seven words.';
 
-test('a clean transcript of something else is recognised', () => {
+test('a clean transcript of something else is recognized', () => {
   assert.equal(looksOffScript(SCRIPT, "My name is Dave and I'm in San Diego."), true);
 });
 

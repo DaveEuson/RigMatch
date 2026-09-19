@@ -21,7 +21,7 @@ const source = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'u
 /** Every `section.match(/.../i)` in the pull-count fallback chain, in order. */
 function shippedPullPatterns() {
   const block = source.match(/const pullMatch = ([\s\S]*?);\n/)?.[1];
-  assert.ok(block, 'the pull-count fallback chain is no longer recognisable in main.cjs');
+  assert.ok(block, 'the pull-count fallback chain is no longer recognizable in main.cjs');
   const literals = [...block.matchAll(/section\.match\((\/(?:\\.|[^/\\])+\/[a-z]*)\)/g)].map((m) => m[1]);
   assert.ok(literals.length >= 1, 'no pull-count patterns found');
   return literals.map((literal) => {
@@ -66,7 +66,7 @@ test('the older shapes still parse, so a revert does not break it again', () => 
 });
 
 test('a card with no pull count yields nothing rather than a wrong number', () => {
-  // Better a blank cell than a number belonging to a neighbouring model.
+  // Better a blank cell than a number belonging to a neighboring model.
   assert.equal(firstMatch('<li><a href="/library/thing">thing</a></li>'), null);
   assert.equal(firstMatch(''), null);
 });

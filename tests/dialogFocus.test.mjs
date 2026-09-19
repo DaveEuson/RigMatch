@@ -7,9 +7,9 @@ import path from 'node:path';
 
 /**
  * `aria-modal="true"` is a promise to assistive tech that the rest of the page
- * is inert. Honouring it takes focus-in, a Tab trap, and restore on close, which
+ * is inert. Honoring it takes focus-in, a Tab trap, and restore on close, which
  * is what lib/useDialog.ts does — but nothing stopped a new dialog being added
- * with the attribute and none of the behaviour. That is how the Image Lab result
+ * with the attribute and none of the behavior. That is how the Image Lab result
  * dialog came to be the only one left untrapped, sitting two lines below one
  * that was.
  *
@@ -79,7 +79,7 @@ test('only the topmost dialog handles the keyboard', () => {
     'topmost must be decided by document position, not registration order',
   );
 
-  // The nesting this guards is real — keep it that way, or this test is theatre.
+  // The nesting this guards is real — keep it that way, or this test is theater.
   const dialogs = fs.readFileSync('src/components/dialogs.tsx', 'utf8');
   assert.ok(
     dialogs.includes('<ShareScorecard'),

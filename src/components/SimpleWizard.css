@@ -950,7 +950,7 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 }
 
 /* Below roughly 500px the brand column's 168px mode switch leaves the step rail
-   too little room. The rail centres its pills, so they overflowed their track
+   too little room. The rail centers its pills, so they overflowed their track
    in both directions: the first pill landed on top of the mode switch and stole
    its clicks, and the last was clipped away entirely by .sw-shell's
    overflow: hidden — invisible rather than scrollable. Give the rail its own
@@ -983,7 +983,7 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   line-height: 1.55;
   color: var(--text);
 }
-/* A full lineup is a status, not an action. Sized and coloured to sit where
+/* A full lineup is a status, not an action. Sized and colored to sit where
    the Pick button was without impersonating it. */
 .sw-card-full {
   margin: 0;
@@ -1123,8 +1123,8 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   color: var(--muted);
   background: color-mix(in srgb, var(--panel) 88%, transparent);
 }
-/* Tone follows the podium colours already used on this screen, and never
-   carries meaning on colour alone — the number is always the number. */
+/* Tone follows the podium colors already used on this screen, and never
+   carries meaning on color alone — the number is always the number. */
 .sw-answer-strip li.good { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
 .sw-answer-strip li.fair { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
 .sw-answer-strip li.poor { color: var(--muted); }
@@ -1423,7 +1423,7 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 }
 
 /* Who made it, and whether it is already here. Four Gemma cards said nothing
-   about Google, and "already on your PC" was grey small print beside a bright
+   about Google, and "already on your PC" was gray small print beside a bright
    download size on the next card along. */
 .sw-card-maker {
   display: inline-flex;

@@ -10,7 +10,7 @@
  * is enough to produce it.
  *
  * A result from a previous lineup is not wrong, it is just not about tonight,
- * so it is labelled rather than hidden — a beginner who ran a show yesterday
+ * so it is labeled rather than hidden — a beginner who ran a show yesterday
  * should still see that it happened.
  */
 

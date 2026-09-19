@@ -18,7 +18,7 @@
 
 import { videoModelSpec, type VideoModelSpec } from './videoCatalog.ts';
 
-/** What fit and time are worked out from — a catalogue spec has it, and so does any other model sized by hand. */
+/** What fit and time are worked out from — a catalog spec has it, and so does any other model sized by hand. */
 export type VideoSizing = Pick<VideoModelSpec, 'ditGb' | 'teGb' | 'refSeconds' | 'gated'>;
 
 export type VideoMachine = {

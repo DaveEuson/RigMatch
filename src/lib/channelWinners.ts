@@ -37,7 +37,7 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
 const seconds = (ms: number) => formatVideoDuration(ms / 1000);
 
 /**
- * A comparison's results re-summarised at the chat fader, best first.
+ * A comparison's results re-summarized at the chat fader, best first.
  *
  * The run kept its results at the weighting it ran with. Moving the fader
  * afterwards re-ranks them the way every other Match Score is re-ranked, with

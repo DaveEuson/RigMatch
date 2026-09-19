@@ -353,7 +353,7 @@ function App() {
   );
   const [queuedModelIds, setQueuedModelIds] = useState<Set<string>>(() => new Set());
   // Start empty on desktop: pre-picking five models made the wizard tick "Pick"
-  // as done before the user chose anything, showed the alternatives greyed out
+  // as done before the user chose anything, showed the alternatives grayed out
   // as "Lineup full", and told people to pick while having already picked for
   // them. Simple Mode offers an explicit "Choose for me" instead. The browser
   // demo keeps a filled lineup so the flow can be explored without setup.
@@ -412,7 +412,7 @@ function App() {
   const [reportOpen, setReportOpen] = useState(false);
   /**
    * The scores as measured. Everything downstream reads `modelScores` below,
-   * which is this map re-summarised at the chat Balance fader — so
+   * which is this map re-summarized at the chat Balance fader — so
    * what gets saved here is always the measurement, never a view of it.
    */
   const [savedModelScores, setModelScores] = useState<Record<string, TestedModelScore>>(() =>
@@ -421,7 +421,7 @@ function App() {
   /**
    * How much accuracy counts against speed: one Balance fader per channel,
    * asked before every test. The Match Score is the chat measurement, so the
-   * chat fader is the one that re-summarises it below.
+   * chat fader is the one that re-summarizes it below.
    */
   const [balances, setBalances] = useState<Balances>(() => readBalances(
     localStorage.getItem(BALANCE_STORAGE_KEY),
@@ -953,14 +953,14 @@ function App() {
    * The Pick screen filters generation models out of the Speed Dating lineup —
    * correctly, they cannot be benchmarked — and then had to describe the empty
    * grid. It said "No contestants can make video on this PC", which is not
-   * true: LTX-Video and WAN both ship in the catalogue and run here. Handing
+   * true: LTX-Video and WAN both ship in the catalog and run here. Handing
    * the wizard the real figures lets it say something true instead of
    * discouraging someone away from a feature that works.
    */
   const generationSummary = useMemo(() => {
     const summarize = (kind: 'image' | 'video' | 'audio') => {
       // Only the ones that run here: Simple Mode says "N run on this PC", and
-      // counting every catalogue row made that true of models too big for it.
+      // counting every catalog row made that true of models too big for it.
       const rows = modelRows.filter((row) => row.generationKind === kind
         && getHardwareFit(row, system.gpu.vramGb).recommend);
       return {
@@ -1429,7 +1429,7 @@ function App() {
     const options = { calibration: readVideoCalibration(), saved: labResults };
     return videoMakerChoices({
       runnable: runnableLineup(chatListing, videoMachine, options),
-      catalogue: allLineupEntries(chatListing),
+      catalog: allLineupEntries(chatListing),
       record: lineupSession.record,
       balance: pictureJudged ? balances.video : 0,
       secondsFor: (entry) => estimateLineup([entry], videoMachine, options).seconds,
@@ -1613,7 +1613,7 @@ function App() {
     }
     // Deliberately does NOT touch selectedModel. It used to, which was fine on
     // the Models screen but wrong from the Closet in Settings: clicking Evict
-    // reassigned the app's selected model, and cancelling the confirmation left
+    // reassigned the app's selected model, and canceling the confirmation left
     // it reassigned — Top Pick and chat silently pointing somewhere new after an
     // action the user backed out of.
     setPendingDeleteModel(row);
@@ -2455,7 +2455,7 @@ function App() {
           token: item.gated ? readHuggingFaceToken() || undefined : undefined,
         });
       } catch (error) {
-        // A cancelled stream lands here too; say stopped rather than failed,
+        // A canceled stream lands here too; say stopped rather than failed,
         // since the user asked for it.
         const message = getErrorMessage(error);
         if (pullQueueShouldStop()) {
@@ -2548,14 +2548,14 @@ function App() {
     setIsPullPaused(false);
     setIsPullingModels(true);
     let completedCount = 0;
-    let wasCancelled = false;
+    let wasCanceled = false;
     let activePullModel: string | null = null;
     const startingCount = queuedRows.length;
 
     try {
       for (const row of queuedRows) {
         if (pullQueueShouldStop()) {
-          wasCancelled = true;
+          wasCanceled = true;
           break;
         }
 
@@ -2634,10 +2634,10 @@ function App() {
       }
 
       if (pullQueueShouldStop()) {
-        wasCancelled = true;
+        wasCanceled = true;
       }
 
-      if (wasCancelled) {
+      if (wasCanceled) {
         const finishedLabel = completedCount === 0
           ? 'No models finished downloading.'
           : `${completedCount} of ${startingCount} model${startingCount === 1 ? '' : 's'} finished. Refreshing the model list...`;
@@ -2679,7 +2679,7 @@ function App() {
         return;
       }
 
-      if (outcome === 'cancelled') {
+      if (outcome === 'canceled') {
         setPullProgressByModel({});
         setActivity('Download queue canceled. No more queued models will start.');
         return;
@@ -2692,7 +2692,7 @@ function App() {
         // auto-start effect below restarts the queue the moment isPullingModels
         // goes false. A bad tag, a 404, or a full disk therefore produced a
         // tight retry loop against Ollama with the ticker flickering the same
-        // error forever, and no way out but cancelling the whole queue. The
+        // error forever, and no way out but canceling the whole queue. The
         // failed entry stays in pullProgressByModel so the UI can show what
         // happened and offer a retry.
         setQueuedModelIds((current) => {
@@ -3384,7 +3384,7 @@ function App() {
             seed: videoSeed,
             signal: stopVideo.signal,
             onProgress: (progress) => {
-              // Stop is honoured between models, as it is between other jobs.
+              // Stop is honored between models, as it is between other jobs.
               if (stopSkillRef.current) stopVideo.abort();
               if (progress.phase !== 'rendering') return;
               setSkillRunStatus({
@@ -3605,14 +3605,14 @@ function App() {
 
   useEffect(() => {
     if (!pendingRunMode) { setPendingGpuContention(null); return; }
-    let cancelled = false;
+    let canceled = false;
     void agentArcadeApi.getGpuContention()
-      .then((result) => { if (!cancelled) setPendingGpuContention(result); })
+      .then((result) => { if (!canceled) setPendingGpuContention(result); })
       // A failed probe means the same thing as "could not check", which the
       // assessment already reports as `unknown` — so stay silent rather than
       // surfacing an error the user cannot act on.
       .catch(() => undefined);
-    return () => { cancelled = true; };
+    return () => { canceled = true; };
   }, [pendingRunMode]);
 
   const confirmPendingRun = useCallback(() => {
@@ -3653,7 +3653,7 @@ function App() {
   const cancelPendingRun = useCallback(() => {
     setPendingRunMode(null);
     setPendingSingleModel(null);
-    setActivity('Model test cancelled before resources were engaged.');
+    setActivity('Model test canceled before resources were engaged.');
   }, []);
 
 
@@ -3693,13 +3693,13 @@ function App() {
   useEffect(() => {
     if (!isDesktopRuntime) return;
     if (runProgress?.phase !== 'running') return;
-    let cancelled = false;
+    let canceled = false;
     const id = setInterval(() => {
       void agentArcadeApi.getSystemProfile()
-        .then((profile) => { if (!cancelled) setSystem(profile); })
+        .then((profile) => { if (!canceled) setSystem(profile); })
         .catch(() => { /* ignore transient poll errors */ });
     }, 1600);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => { canceled = true; clearInterval(id); };
   }, [runProgress?.phase]);
 
   useEffect(() => {
@@ -3880,13 +3880,13 @@ function App() {
   // visible in the UI — even after a renderer reload or a non-UI trigger.
   useEffect(() => {
     if (!agentArcadeApi.getActiveBenchmark) return undefined;
-    let cancelled = false;
+    let canceled = false;
     const apply = (status: BenchmarkStatus | undefined) => {
-      if (!cancelled) setExternalBenchmark(status?.running ? status : null);
+      if (!canceled) setExternalBenchmark(status?.running ? status : null);
     };
     agentArcadeApi.getActiveBenchmark().then(apply).catch(() => {});
     const off = agentArcadeApi.onBenchmarkStatus?.(apply);
-    return () => { cancelled = true; off?.(); };
+    return () => { canceled = true; off?.(); };
   }, []);
 
   useEffect(() => {
@@ -4719,7 +4719,7 @@ function App() {
         <QuickCheckWarningModal
           row={pendingQuickCheck}
           questionCount={QUICK_CHECK_QUESTIONS.length}
-          onCancel={() => { setPendingQuickCheck(null); setActivity('Quick test cancelled before resources were engaged.'); }}
+          onCancel={() => { setPendingQuickCheck(null); setActivity('Quick test canceled before resources were engaged.'); }}
           onConfirm={confirmQuickCheck}
         />
       )}

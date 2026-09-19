@@ -59,12 +59,12 @@ function drawFrame(ctx: CanvasRenderingContext2D, color: string) {
 }
 
 /**
- * A stat chip: the value large in its accent colour, the label small beneath.
+ * A stat chip: the value large in its accent color, the label small beneath.
  *
  * No emoji. The old chips led each value with ⚡🎯🧩, which rendered in the
  * platform's emoji font next to the numerals' text font — two typefaces
  * fighting inside a 66px box was a good part of why the card read as rough.
- * The accent colour already distinguishes the three; the label names them.
+ * The accent color already distinguishes the three; the label names them.
  */
 function drawStatChip(
   ctx: CanvasRenderingContext2D,
@@ -113,7 +113,7 @@ function drawSparkle(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: n
 /**
  * A row of marquee bulbs under the gold strip — the one decorative idea the
  * card commits to, instead of scattered rectangles and smudged hearts. Evenly
- * spaced, alternating bright and dim like a theatre sign.
+ * spaced, alternating bright and dim like a theater sign.
  */
 function drawMarqueeBulbs(ctx: CanvasRenderingContext2D) {
   const count = 33;
@@ -291,7 +291,7 @@ function drawPortrait(
     ctx.closePath();
     ctx.clip();
     // Square source, drawn to cover: the avatars are square, and letting one
-    // stretch would distort a face that people recognise.
+    // stretch would distort a face that people recognize.
     const side = Math.min(avatar.naturalWidth, avatar.naturalHeight);
     ctx.drawImage(
       avatar,
@@ -363,7 +363,7 @@ function drawDatingCard(
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
 
-  // Decorative layer, behind the content. One committed idea — a theatre
+  // Decorative layer, behind the content. One committed idea — a theater
   // marquee — instead of the previous scatter: random rectangles that read as
   // accidents and bezier hearts that rendered as dark smudges. The corners
   // keep two drawn sparkles each, small and dim, so the frame isn't sterile.
@@ -391,7 +391,7 @@ function drawDatingCard(
   drawSparkle(ctx, CARD_W / 2 - titleHalf - 42, 84, 12, COLORS.gold);
   drawSparkle(ctx, CARD_W / 2 + titleHalf + 42, 84, 12, COLORS.gold);
 
-  // A soft spotlight behind the heart, so the centrepiece sits in light
+  // A soft spotlight behind the heart, so the centerpiece sits in light
   // rather than floating on flat brown.
   const spot = ctx.createRadialGradient(CARD_W / 2, 185, 10, CARD_W / 2, 185, 170);
   spot.addColorStop(0, 'rgba(255, 201, 87, 0.18)');
@@ -400,7 +400,7 @@ function drawDatingCard(
   ctx.fillRect(CARD_W / 2 - 180, 15, 360, 360);
 
   // The contestant's own portrait, in the gold hairline that makes a model
-  // read as a publicity still from the show. The centrepiece was a yellow
+  // read as a publicity still from the show. The centerpiece was a yellow
   // heart drawn from the platform's emoji font: another typeface, another era,
   // and nothing whatever about which model won.
   drawPortrait(ctx, avatar, CARD_W / 2, 196, 78);

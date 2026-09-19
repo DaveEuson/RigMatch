@@ -197,5 +197,5 @@ export async function startImageLineup(options: StartImageLineupOptions): Promis
 export function stopImageLineup(): void {
   if (!controller) return;
   controller.abort();
-  update({ message: 'Stopping — ComfyUI is cancelling the picture in flight.' });
+  update({ message: 'Stopping — ComfyUI is canceling the picture in flight.' });
 }

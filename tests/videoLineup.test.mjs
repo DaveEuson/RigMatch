@@ -61,7 +61,7 @@ function onDisk(...keys) {
   return listing;
 }
 
-test('every catalogue model is in the lineup, and so is the 0.6 checkpoint people already have', () => {
+test('every catalog model is in the lineup, and so is the 0.6 checkpoint people already have', () => {
   const keys = VIDEO_LINEUP.map((entry) => entry.key);
   assert.equal(new Set(keys).size, keys.length);
   for (const spec of VIDEO_MODEL_SPECS) assert.ok(keys.includes(spec.key), spec.key);
@@ -121,7 +121,7 @@ test('the 0.6 checkpoint runs the graph it always ran', () => {
   );
 });
 
-test('a catalogue model runs its family graph, with the frame the judge reads', () => {
+test('a catalog model runs its family graph, with the frame the judge reads', () => {
   const graph = lineupGraph(lineupEntry('kandinsky-5'), { prompt: 'a lighthouse', seed: 42 });
   const classes = Object.values(graph).map((node) => node.class_type);
   assert.ok(classes.includes('Kandinsky5ImageToVideo'));
@@ -144,7 +144,7 @@ test('an LTX-Video 0.9 file RigMatch never downloaded still races, and nothing e
       'ltxv-13b-0.9.7-dev.safetensors', // LTX 0.9, 13B
       'ltx-2-19b-distilled-fp8.safetensors', // LTX-2: a different graph
       'wan2.1_t2v_1.3B_fp16.safetensors', // Wan, in the wrong folder
-      'ltxv-2b-distilled.safetensors', // the catalogue's own file
+      'ltxv-2b-distilled.safetensors', // the catalog's own file
       'sd15.safetensors',
     ],
     text_encoders: ['t5xxl_fp8_e4m3fn.safetensors'],

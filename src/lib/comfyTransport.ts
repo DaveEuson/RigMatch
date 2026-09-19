@@ -148,7 +148,7 @@ export type ComfyLocateOutcome =
  *
  * Same seam the runners use: the orchestration takes a plain object of
  * functions and the tests drive a fake, rather than reaching for Electron. The
- * branch that matters is "running but unrecognisable" versus "not running",
+ * branch that matters is "running but unrecognizable" versus "not running",
  * because they give opposite advice and only one of them is the user's fault.
  */
 export type ComfyLocateDeps = {
@@ -179,7 +179,7 @@ export async function locateComfyFolder(
     return { found: true, folder: result.folder };
   }
 
-  // Not running and running-but-unrecognisable need different advice: one is
+  // Not running and running-but-unrecognizable need different advice: one is
   // "start it first", the other is "pick the folder yourself".
   return { found: false, reason: status.reachable ? 'cannot-tell' : 'not-running' };
 }

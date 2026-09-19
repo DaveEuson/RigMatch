@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { buildTaskMatrix, isEmptyMatrix, summariseMatrix } = await import('../src/lib/taskMatrix.ts');
+const { buildTaskMatrix, isEmptyMatrix, summarizeMatrix } = await import('../src/lib/taskMatrix.ts');
 const { MIN_QUESTIONS_FOR_VERDICT } = await import('../src/lib/taskScores.ts');
 
 /**
@@ -107,7 +107,7 @@ test('the summary names who leads what', () => {
     'a:7b': { coding: graded(90), writing: graded(60) },
     'b:7b': { coding: graded(70), writing: graded(95) },
   });
-  const line = summariseMatrix(m);
+  const line = summarizeMatrix(m);
   assert.match(line, /a:7b leads on coding/);
   assert.match(line, /b:7b leads on writing/);
 });
@@ -117,10 +117,10 @@ test('one model leading several is said once, not repeated', () => {
     'a:7b': { coding: graded(90), writing: graded(90) },
     'b:7b': { coding: graded(70), writing: graded(70) },
   });
-  assert.equal(summariseMatrix(m), 'a:7b leads on coding, writing.');
+  assert.equal(summarizeMatrix(m), 'a:7b leads on coding, writing.');
 });
 
 test('with no winners there is no summary rather than an invented one', () => {
   const m = build({ 'a:7b': { coding: graded(90) } });
-  assert.equal(summariseMatrix(m), null);
+  assert.equal(summarizeMatrix(m), null);
 });

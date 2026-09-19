@@ -47,7 +47,7 @@ test('no definition leans on a word it has not explained', () => {
       if (!pattern.test(body)) continue;
       assert.equal(EXPLAINS[word], entry.id,
         `"${entry.id}" explains itself using "${word}", which a newcomer does not know. `
-        + 'Say it in plain words, or move the term to alsoCalled where it is labelled as the technical name.');
+        + 'Say it in plain words, or move the term to alsoCalled where it is labeled as the technical name.');
     }
   }
 });

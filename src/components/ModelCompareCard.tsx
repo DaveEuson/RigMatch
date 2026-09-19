@@ -2,7 +2,7 @@
 import { formatGb } from '../lib/format';
 import { getFriendlyModelName, getHardwareFit, getModelScore } from '../lib/modelCatalog';
 import { getModelOrigin } from '../lib/modelOrigins';
-import { compareModels, orderComparisonCandidates, summariseComparison } from '../lib/modelComparison';
+import { compareModels, orderComparisonCandidates, summarizeComparison } from '../lib/modelComparison';
 import type { ComparisonSide } from '../lib/modelComparison';
 import type { ModelRow, TestedModelScore } from '../types';
 import { ArrowLeftRight, X } from 'lucide-react';
@@ -13,7 +13,7 @@ import { ArrowLeftRight, X } from 'lucide-react';
  * The question this exists for is "why is gemma4:e2b better than gemma4:e4b",
  * which the app could not answer at all: getModelProfile matches on the family
  * name, so every variant of a model returned the same archetype, the same
- * specialties and the same colour. The only things separating two rows were a
+ * specialties and the same color. The only things separating two rows were a
  * tag nobody could decode and a score most models do not have yet.
  *
  * Sibling versions are offered first, because that is nearly always the
@@ -99,7 +99,7 @@ export function ModelCompareCard({
         <>
           {/* The verdict first, in a sentence, because a table of numbers is
               not an answer to "which one should I use". */}
-          <p className="model-compare-verdict">{summariseComparison(left, right)}</p>
+          <p className="model-compare-verdict">{summarizeComparison(left, right)}</p>
           <table className="model-compare-table">
             <thead>
               <tr>

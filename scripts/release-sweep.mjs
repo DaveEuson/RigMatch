@@ -18,7 +18,7 @@
  *   security   — the Electron posture that must not regress
  *
  * Usage:  node scripts/release-sweep.mjs [--net]
- *         --net also checks catalogue URLs and sizes against the servers.
+ *         --net also checks catalog URLs and sizes against the servers.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -202,8 +202,8 @@ check('claims', 'no literal backspace where a word boundary was meant', () => {
 check('claims', 'declared model sizes are exact, not rounded', () => {
   // comfyModels deletes a download that falls short of the declared size, so a
   // number rounded UP destroys a good file whenever content-length is absent.
-  const catalogue = read('src/lib/generationCatalog.ts');
-  const sizes = [...catalogue.matchAll(/bytes:\s*(\d+),/g)].map((m) => Number(m[1]));
+  const catalog = read('src/lib/generationCatalog.ts');
+  const sizes = [...catalog.matchAll(/bytes:\s*(\d+),/g)].map((m) => Number(m[1]));
   must(sizes.length > 0, 'no model sizes found');
   const rounded = sizes.filter((n) => n % 100000 === 0);
   must(rounded.length === 0,
@@ -216,7 +216,7 @@ check('claims', 'declared model sizes are exact, not rounded', () => {
 
 check('surface', 'a refused download reports itself', () => {
   // The whole renderer, not App.tsx alone. This failed when ModelCabinet moved
-  // into its own file — the behaviour was intact and only the address was
+  // into its own file — the behavior was intact and only the address was
   // stale, which is a false alarm a release gate cannot afford to raise.
   const body = readRenderer();
   must(/const refuse = /.test(body),
@@ -308,7 +308,7 @@ check('parity', 'the layout is checked at the smallest window the app allows', (
     'could not read minWidth/minHeight from createWindow() — the smoke has nothing to match');
 
   const short = /newContext\(\{\s*viewport:\s*\{\s*width:\s*(\d+),\s*height:\s*(\d+)\s*\}\s*\}\);\s*\n\s*const shortPage/.exec(smoke);
-  must(short, 'the short-window context in visual-smoke.mjs is no longer recognisable');
+  must(short, 'the short-window context in visual-smoke.mjs is no longer recognizable');
 
   const tested = { width: Number(short[1]), height: Number(short[2]) };
   must(tested.width === declared.width && tested.height === declared.height,
@@ -554,12 +554,12 @@ if (withNet) {
     return out.trim();
   });
 
-  check('claims', 'catalogue URLs and sizes match the servers', () => {
+  check('claims', 'catalog URLs and sizes match the servers', () => {
     execFileSync('node', ['scripts/check-model-sizes.mjs'], { cwd: root, encoding: 'utf-8' });
     return 'all sizes verified';
   });
 
-  check('claims', 'every licence link on the consent dialog opens', () => {
+  check('claims', 'every license link on the consent dialog opens', () => {
     // Most of these are built from the model name rather than written down, so
     // a renamed model yields a 404 on the one screen whose job is to make sure
     // the user can read the terms before agreeing to them.
@@ -581,7 +581,7 @@ for (const result of results) {
 
 const failed = results.filter((r) => !r.ok);
 console.log(failed.length === 0
-  ? `\nAll ${results.length} checks passed.${withNet ? '' : ' Run with --net to also check catalogue URLs.'}`
+  ? `\nAll ${results.length} checks passed.${withNet ? '' : ' Run with --net to also check catalog URLs.'}`
   : `\n${failed.length} of ${results.length} checks FAILED.`);
 console.log('\nWhat `npm run gates` covers without a human: a real download against the real\n'
   + 'server, the provider dying mid-run, and the run log driven through the real desktop\n'

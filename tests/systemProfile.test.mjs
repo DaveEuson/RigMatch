@@ -64,7 +64,7 @@ test('a missing or unreadable device tree yields nothing, not "undefined"', () =
   }
 });
 
-test('the cleaned Jetson name is one the unified-memory check recognises', () => {
+test('the cleaned Jetson name is one the unified-memory check recognizes', () => {
   // The two halves of this fix are in different files and only matter together:
   // reading the name is pointless if the name does not then match, and the
   // shipped 0.7.0 matched /orin/ perfectly while never being handed a string.

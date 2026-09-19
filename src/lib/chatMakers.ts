@@ -71,11 +71,11 @@ function saySeconds(seconds: number): string {
 }
 
 /**
- * Crowned first, then tested, then the catalogue's order, and a stray file last.
+ * Crowned first, then tested, then the catalog's order, and a stray file last.
  *
  * A model RigMatch has timed here beats one it has only estimated, because an
  * estimate is a guess about this computer and a measurement is not. Among
- * models nothing has tested the catalogue order stands, which runs best first.
+ * models nothing has tested the catalog order stands, which runs best first.
  * A file RigMatch never downloaded goes last whatever its speed: it runs the
  * oldest graph the app still keeps.
  */
@@ -99,19 +99,19 @@ function rankChoices<T>(
 /**
  * Every video model that can run here, in the order Chat should offer them.
  *
- * `runnable` is fastest first, as runnableLineup returns it; `catalogue` is the
+ * `runnable` is fastest first, as runnableLineup returns it; `catalog` is the
  * whole lineup in its own order, which is how models nothing has tested here
  * are placed.
  */
 export function videoMakerChoices({
   runnable,
-  catalogue,
+  catalog,
   record,
   balance,
   secondsFor,
 }: {
   runnable: VideoLineupEntry[];
-  catalogue: VideoLineupEntry[];
+  catalog: VideoLineupEntry[];
   record: LineupRecord | null | undefined;
   balance: number;
   secondsFor: (entry: VideoLineupEntry) => number | null;
@@ -125,12 +125,12 @@ export function videoMakerChoices({
       : 'unjudged';
     measured.set(entry.name, `${saySeconds(entry.elapsedMs / 1000)} · ${accuracy}`);
   }
-  const place = new Map(catalogue.map((entry, index) => [entry.key, index]));
+  const place = new Map(catalog.map((entry, index) => [entry.key, index]));
   return rankChoices(runnable, {
     keyOf: (entry) => entry.key,
     crowned: (entry) => entry.name === crownedName,
     tested: (entry) => measured.has(entry.name),
-    place: (entry) => place.get(entry.key) ?? catalogue.length,
+    place: (entry) => place.get(entry.key) ?? catalog.length,
   }).map((entry) => ({
     key: entry.key,
     name: entry.name,

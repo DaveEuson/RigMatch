@@ -76,9 +76,9 @@ export function balanceWeights(balance: number): ScoreWeights {
 }
 
 /**
- * Saved Match scores re-summarised at a fader position.
+ * Saved Match scores re-summarized at a fader position.
  *
- * The four measured signals are untouched; only the headline that summarises
+ * The four measured signals are untouched; only the headline that summarizes
  * them moves. At Balanced nothing is rewritten at all.
  */
 export function applyBalance<T extends MatchScoreLike & { grade?: string }>(

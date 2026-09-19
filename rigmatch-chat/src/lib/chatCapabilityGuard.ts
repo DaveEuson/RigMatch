@@ -36,7 +36,7 @@ export function classifyChatRequest(message: string): ChatBeyond {
 
   // An action *and* an object, with no verbless fallback. A "the picture ... of"
   // branch seemed a cheap way to catch "a picture of a cat please", and it also
-  // caught "summarise the picture this data paints of Q4" — an ordinary
+  // caught "summarize the picture this data paints of Q4" — an ordinary
   // question about a spreadsheet. Missing the rare verbless request is the
   // better failure: a note that fires on prose stops being read.
   const asks = (verbs: string, nouns: string) =>
@@ -63,7 +63,7 @@ export function classifyChatRequest(message: string): ChatBeyond {
  * The note this window shows, or null when there is nothing worth saying.
  *
  * Returns null generously. A model that genuinely hears must not be warned
- * about transcription, and a request this window can honour outright — a
+ * about transcription, and a request this window can honor outright — a
  * picture, when the maker is ready — gets a pointer rather than a refusal. A
  * warning that fires when it need not is how people learn to ignore warnings.
  */

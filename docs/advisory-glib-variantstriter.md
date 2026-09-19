@@ -10,7 +10,7 @@ and Tauri 2.11.3.
 `VariantStrIter::impl_get` — used by the `Iterator` and `DoubleEndedIterator`
 impls for that type — passes an immutable `&p` to a C function that writes
 through it as an out-parameter. Recent Rust compilers discard those writes under
-optimisation, so `CStr::from_ptr` then receives NULL and dereferences it.
+optimization, so `CStr::from_ptr` then receives NULL and dereferences it.
 
 Affected: glib `>= 0.15.0, < 0.20.0`. Fixed in 0.20.0.
 

@@ -111,7 +111,7 @@ export function isEmptyMatrix(matrix: TaskMatrix): boolean {
  * Silent when nothing was measured well enough to say — a summary that
  * invented a strength would be worse than no summary.
  */
-export function summariseMatrix(matrix: TaskMatrix): string | null {
+export function summarizeMatrix(matrix: TaskMatrix): string | null {
   const entries = Object.entries(matrix.winners) as Array<[TaskGroupId, string]>;
   if (entries.length === 0) return null;
 

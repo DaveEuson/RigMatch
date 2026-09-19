@@ -98,7 +98,7 @@ const COPY: Record<GenerationChannel, {
 
 const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 
-/** The name a person knows a checkpoint by: the catalogue's, or the file's own. */
+/** The name a person knows a checkpoint by: the catalog's, or the file's own. */
 function checkpointName(file: string): string {
   return GENERATION_MODELS.find((model) => model.filename.toLowerCase() === file.toLowerCase())?.label ?? file;
 }

@@ -216,18 +216,18 @@ try {
   });
   await page.waitForTimeout(600);
 
-  const centre = page.locator('.update-center');
-  const showsProgress = (await centre.innerText()).includes('42%');
+  const center = page.locator('.update-center');
+  const showsProgress = (await center.innerText()).includes('42%');
   record('the updater subscription is live (42% reaches the UI)', showsProgress);
 
-  const checkDisabled = await centre.getByRole('button', { name: /^Check(ing)?$/ }).first().isDisabled().catch(() => null);
+  const checkDisabled = await center.getByRole('button', { name: /^Check(ing)?$/ }).first().isDisabled().catch(() => null);
   record('a download in flight disables Check', checkDisabled === true, String(checkDisabled));
 
   // selectUpdateChannel writes the shared status line — the one piece of the
-  // hook that is safe to drive for real. Scoped to the update centre: an
+  // hook that is safe to drive for real. Scoped to the update center: an
   // unscoped name match hit a different button entirely and passed for the
   // wrong reason.
-  const channelControl = centre.getByRole('button', { name: /beta|nightly/i }).first();
+  const channelControl = center.getByRole('button', { name: /beta|nightly/i }).first();
   if (await channelControl.count()) {
     const before = await page.evaluate(() => document.body.innerText);
     await channelControl.click();

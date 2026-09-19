@@ -19,8 +19,8 @@
  *
  * And its file pickers list what that machine had on disk: one diffusion
  * model, three VAEs. Those lists say nothing about what another machine may
- * load, so a picker is recognised by its contents and its value left alone.
- * Which files a graph loads is checked against RigMatch's own catalogue
+ * load, so a picker is recognized by its contents and its value left alone.
+ * Which files a graph loads is checked against RigMatch's own catalog
  * instead.
  *
  * /object_info describes an input three ways, and this reads all three: a

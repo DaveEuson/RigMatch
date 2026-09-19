@@ -18,7 +18,7 @@
  *   node scripts/hook-order.mjs --write   record the current order
  *   node scripts/hook-order.mjs           fail if it changed
  *
- * This proves order, not behaviour. It cannot tell whether an effect's
+ * This proves order, not behavior. It cannot tell whether an effect's
  * dependency array still closes over the right values — read those yourself.
  */
 
@@ -245,7 +245,7 @@ const effective = order.filter((entry) => !entry.marker);
  * have blocked every cohesive extraction, since a cluster's state and its
  * callbacks sit hundreds of lines apart in this component.
  *
- * Two things do carry behaviour:
+ * Two things do carry behavior:
  *
  *   EFFECTS — useEffect and useLayoutEffect run in call order at mount, and
  *     their cleanups in that order too. Two effects that touch the same

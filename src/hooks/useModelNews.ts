@@ -48,7 +48,7 @@ export function useModelNews({ setActivity }: { setActivity: (message: string) =
   }, [modelNewsNotificationsEnabled]);
 
   /**
-   * Fold a fresh catalogue into the news, notifying if that is wanted and
+   * Fold a fresh catalog into the news, notifying if that is wanted and
    * allowed. Returns the state it settled on so the caller can word its own
    * "N new models found" note.
    */

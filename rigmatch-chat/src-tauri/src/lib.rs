@@ -412,7 +412,7 @@ pub struct VramInfo {
 
 /// Parse `nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits`.
 ///
-/// Real captured output on this machine, both forms — `nounits` is not honoured
+/// Real captured output on this machine, both forms — `nounits` is not honored
 /// by every driver version, so the unit-bearing one has to parse too:
 ///   "12282"
 ///   "12282 MiB"
@@ -874,7 +874,7 @@ mod tests {
 
     #[test]
     fn writing_replaces_an_existing_store_and_leaves_no_temp_behind() {
-        // Rename-over-existing is platform specific; this is the behaviour the
+        // Rename-over-existing is platform specific; this is the behavior the
         // atomic write depends on, so it gets checked rather than assumed.
         let dir = std::env::temp_dir().join("rigmatch-store-replace");
         let _ = std::fs::remove_dir_all(&dir);
@@ -925,7 +925,7 @@ mod tests {
     }
 
     #[test]
-    fn cancelling_an_unknown_stream_is_harmless() {
+    fn canceling_an_unknown_stream_is_harmless() {
         // Stop can arrive after a reply has already finished and deregistered.
         let streams = ActiveStreams::default();
         let notify = std::sync::Arc::new(tokio::sync::Notify::new());
@@ -941,7 +941,7 @@ mod tests {
 
     #[test]
     fn nvidia_total_parses_both_output_forms() {
-        // Captured from the RTX 4070 on this machine. `nounits` is not honoured
+        // Captured from the RTX 4070 on this machine. `nounits` is not honored
         // by every driver version, so the unit-bearing form has to parse too.
         assert_eq!(parse_nvidia_total_mb("12282"), Some(12282));
         assert_eq!(parse_nvidia_total_mb("12282 MiB"), Some(12282));
