@@ -1049,6 +1049,13 @@ function PickScreen({
             results={labResults}
             balance={dream === 'image' ? makerRun.balances.images : makerRun.balances.audio}
           />
+          {/* The same door as the winner screen's. A maker run never reaches
+              that screen — the race happens here — so without this the clips
+              and pictures made in Simple Mode were the one thing "everything
+              they made" could not be opened from. */}
+          <div className="sw-maker-gallery">
+            <AllDemosButton />
+          </div>
         </>
       ) : filtered.length === 0 && dream === 'video' && videoLineup ? (
         // They cannot join Speed Dating, so they get a race of their own, here,

@@ -1470,3 +1470,10 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 .sw-card.installed {
   border-color: rgba(var(--green-rgb), 0.34);
 }
+
+/* The door to everything made here, under the board that shows the last run. */
+.sw-maker-gallery {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 8px;
+}
