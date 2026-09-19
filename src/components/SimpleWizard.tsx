@@ -42,6 +42,9 @@ import type { ComfyFolderListing } from '../lib/generationCatalog';
 import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
 import { AllDemosButton, ModelDemoChips } from './SkillDemoViewers';
 import { VideoLineupLab } from './VideoLineupLab';
+import { ComparisonRunCard, type ComparisonRunContext } from './ComparisonRunCard';
+import { LabComparison } from './LabComparison';
+import { useLabResults } from '../hooks/useLabResults';
 import { BalanceFader } from './BalanceFader';
 import { balanceLabel } from '../lib/balance';
 import { useDialog } from '../lib/useDialog';
@@ -270,6 +273,20 @@ type SimpleWizardProps = {
     /** The Video fader, asked before the race and moving the leaderboard after. */
     balance: number;
     onBalanceChange: (value: number) => void;
+  };
+  /**
+   * The image and sound makers' run, for their two chips.
+   *
+   * Same reason as the video race above, and the same card Advanced Mode's
+   * Comparison screen runs, so the two can never measure differently. Simple
+   * Mode's copy of it accepts a single maker: one installed checkpoint is the
+   * ordinary first install, and refusing to measure it is the dead end these
+   * chips used to be.
+   */
+  makerRun?: {
+    context: ComparisonRunContext;
+    /** Each maker channel's fader, already 0 where nothing can judge. */
+    balances: { images: number; audio: number };
   };
 };
 
@@ -914,7 +931,7 @@ function listNames(names: string[]): string {
 
 function PickScreen({
   generation, wizardModels, modelsLoading, shortlistIds, shortlistedRows, onTogglePick, onChooseForMe, initialDream,
-  onDreamChange, videoLineup, system, pullProgressByModel, benchmarkActive }: SimpleWizardProps) {
+  onDreamChange, videoLineup, makerRun, system, pullProgressByModel, benchmarkActive }: SimpleWizardProps) {
   // Opens on the dream matching the splash's primary goal, when there is one
   // — the person already answered this question once.
   const [dream, setDream] = useState<DreamFilterId>(initialDream ?? 'all');
@@ -922,6 +939,8 @@ function PickScreen({
   // the thing that was asked for rather than always asking questions.
   useEffect(() => { onDreamChange?.(dream); }, [dream, onDreamChange]);
   const [showAll, setShowAll] = useState(false);
+  // Everything measured here, for the maker boards below their run.
+  const labResults = useLabResults();
   // The video race's idea, kept here so switching chips and back keeps it.
   const [videoPromptId, setVideoPromptId] = useState(IMAGE_BENCHMARK_PROMPTS[0].id);
   const [videoCustomPrompt, setVideoCustomPrompt] = useState('');
@@ -957,7 +976,7 @@ function PickScreen({
     ? `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} fit your PC`
     : filtered.length === 0
       ? (makers && makers.total > 0
-        ? `${makers.total} ${makerNoun}${makers.total === 1 ? '' : 's'} run on this PC — ${dream === 'video' && videoLineup ? 'race them below' : "they just don't compete here"}`
+        ? `${makers.total} ${makerNoun}${makers.total === 1 ? '' : 's'} run on this PC — ${(dream === 'video' && videoLineup) || ((dream === 'image' || dream === 'audio') && makerRun) ? 'try them below' : "they just don't compete here"}`
         : `No contestants ${dreamNoun[dream]} on this PC`)
       : `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} ${dreamNoun[dream]} · all of them fit your PC`;
 
@@ -1006,6 +1025,27 @@ function PickScreen({
         <div className="sw-card-grid">
           {Array.from({ length: 6 }).map((_, i) => <div key={i} className="sw-card sw-card-skeleton" aria-hidden="true" />)}
         </div>
+      ) : filtered.length === 0 && (dream === 'image' || dream === 'audio') && makerRun ? (
+        // The same answer video gets: a run, here, rather than directions to a
+        // mode a beginner has not opened. "A music and sound maker" was the
+        // last chip that ended in the generic "nobody fits that bill" line,
+        // which was false — the makers exist, they just do not chat.
+        <>
+          <ComparisonRunCard
+            channel={dream === 'image' ? 'images' : 'audio'}
+            context={makerRun.context}
+            balance={dream === 'image' ? makerRun.balances.images : makerRun.balances.audio}
+            variant="simple"
+          />
+          {/* What they made, playable, right under the run that made it. The
+              card's own closing line says the results are "side by side
+              below", which in Simple Mode was true of nothing at all. */}
+          <LabComparison
+            channel={dream === 'image' ? 'images' : 'audio'}
+            results={labResults}
+            balance={dream === 'image' ? makerRun.balances.images : makerRun.balances.audio}
+          />
+        </>
       ) : filtered.length === 0 && dream === 'video' && videoLineup ? (
         // They cannot join Speed Dating, so they get a race of their own, here,
         // rather than directions to a mode a beginner has not opened.

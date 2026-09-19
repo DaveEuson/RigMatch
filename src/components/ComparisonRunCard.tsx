@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, Play, Sparkles } from 'lucide-react';
 import { AUDIO_CLIP_SECONDS } from '../lib/audioCatalog';
 import { AUDIO_BENCHMARK_PROMPTS } from '../lib/audioGenScoring';
@@ -7,6 +7,7 @@ import { installedAudioEntries } from '../lib/audioLineup';
 import { startAudioLineup, stopAudioLineup, type AudioLineupStage } from '../lib/audioLineupSession';
 import { isPictureCheckpoint } from '../lib/checkpointKinds';
 import { readComfySettings } from '../lib/comfySettings';
+import { ensureComfyRunning } from '../lib/comfyStarter';
 import { GENERATION_MODELS, type ComfyFolderListing } from '../lib/generationCatalog';
 import { CUSTOM_IMAGE_PROMPT_ID, IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
 import type { ImageLineupEntry } from '../lib/imageLineup';
@@ -69,7 +70,7 @@ const COPY: Record<GenerationChannel, {
     heading: 'Draw the same prompt with several models',
     runsOn: 'Picture models run on ComfyUI',
     listLabel: 'Picture models that can run here',
-    start: (count) => `Draw ${count} pictures`,
+    start: (count) => `Draw ${count} picture${count === 1 ? '' : 's'}`,
     startIdle: 'Draw them',
     doing: 'drawing',
     notDone: 'not drawn',
@@ -79,7 +80,7 @@ const COPY: Record<GenerationChannel, {
     heading: 'Race video models on the same prompt',
     runsOn: 'Video models run on ComfyUI',
     listLabel: 'Video models that can run here',
-    start: (count) => `Race ${count} models`,
+    start: (count) => (count === 1 ? 'Time this model' : `Race ${count} models`),
     startIdle: 'Race them',
     doing: 'rendering',
     notDone: 'not rendered',
@@ -89,7 +90,7 @@ const COPY: Record<GenerationChannel, {
     heading: 'Make the same sound with several models',
     runsOn: 'Audio models run on ComfyUI',
     listLabel: 'Audio models that can run here',
-    start: (count) => `Make ${count} clips`,
+    start: (count) => `Make ${count} clip${count === 1 ? '' : 's'}`,
     startIdle: 'Make them',
     doing: 'making its clip',
     notDone: 'not made',
@@ -119,12 +120,23 @@ export function ComparisonRunCard({
   channel,
   context,
   balance,
+  variant = 'advanced',
 }: {
   channel: GenerationChannel;
   context: ComparisonRunContext;
   /** Where the fader stands, already 0 when nothing can judge. */
   balance: number;
+  /**
+   * Simple Mode runs this card too — it is how a beginner who asked for an
+   * image or sound maker gets a real measurement instead of a pointer to a
+   * mode they have not opened. There, one model is a run: a lone maker is the
+   * common case on a first install, and refusing to measure it is the whole
+   * dead end the chip used to be.
+   */
+  variant?: 'advanced' | 'simple';
 }) {
+  const simple = variant === 'simple';
+  const minPicks = simple ? 1 : 2;
   const video = channel === 'video';
   const audio = channel === 'audio';
   const copy = COPY[channel];
@@ -137,6 +149,13 @@ export function ComparisonRunCard({
   const [promptId, setPromptId] = useState((audio ? AUDIO_BENCHMARK_PROMPTS : IMAGE_BENCHMARK_PROMPTS)[0].id);
   const [customPrompt, setCustomPrompt] = useState('');
   const [confirmUnload, setConfirmUnload] = useState(false);
+
+  // Simple Mode reaches this with ComfyUI off more often than not, and a
+  // beginner should not be sent to find a .bat file. Advanced Mode starts it
+  // when the channel is chosen, so it only needs doing here.
+  useEffect(() => {
+    if (simple && !context.comfyReachable) void ensureComfyRunning('auto');
+  }, [simple, context.comfyReachable]);
 
   const calibration = readVideoCalibration();
   // What can race now: on disk, and able to run on this machine. Fastest
@@ -209,7 +228,7 @@ export function ComparisonRunCard({
           : channel !== 'audio' && audioSession.running
             ? 'Audio is being made. This can run when it finishes.'
             : null;
-  const canRun = context.comfyReachable && !blocked && !running && picked.length >= 2 && promptReady && !confirmUnload;
+  const canRun = context.comfyReachable && !blocked && !running && picked.length >= minPicks && promptReady && !confirmUnload;
 
   const toggle = (key: string) => setPicks((current) => {
     const next = new Set(current);
@@ -272,8 +291,8 @@ export function ComparisonRunCard({
     ? estimateLineup(pickedVideo.map(({ entry }) => entry), context.machine, { calibration, saved })
     : null;
   const note = blocked
-    ?? (picked.length < 2
-      ? 'Tick two or more to compare.'
+    ?? (picked.length < minPicks
+      ? (simple ? 'Tick the ones you want to try.' : 'Tick two or more to compare.')
       : total
         ? `${picked.length} picked · ${lowerFirst(formatVideoEstimate(total, { roughNote: false }))} in total`
         : audio
@@ -323,19 +342,24 @@ export function ComparisonRunCard({
         </div>
       </div>
       <p>
-        Tick the models and pick a prompt. They run one after another with the same seed, every one
-        renders before any is checked, and the results land below, ranked by the fader.
+        {simple
+          ? 'Tick the makers you want to try and pick what they should make. They go one at a time'
+            + ' with the same idea and the same seed, so what comes back is comparable.'
+          : 'Tick the models and pick a prompt. They run one after another with the same seed, every'
+            + ' one renders before any is checked, and the results land below, ranked by the fader.'}
       </p>
 
       {!context.comfyReachable ? (
         <ComfyNeeded runs={copy.runsOn} onCheck={context.onCheckComfy} />
-      ) : options.length < 2 ? (
+      ) : options.length < minPicks ? (
         <div className="comparison-run-short">
           <span>
             {options.length === 0
               ? `No ${copy.noun} model that can run here is installed yet.`
               : `Only one ${copy.noun} model can run here: ${options[0].name}.`}
-            {' '}Download another from the Models screen, and they can be compared here.
+            {simple
+              ? ' The Models screen in Advanced Mode lists the ones this PC can run, with their download sizes.'
+              : ' Download another from the Models screen, and they can be compared here.'}
           </span>
           <button type="button" className="mini-button outline" onClick={context.onOpenModels}>
             Open Models
@@ -416,7 +440,7 @@ export function ComparisonRunCard({
             ) : (
               <button type="button" className="primary-button compact" onClick={requestStart} disabled={!canRun}>
                 <Play aria-hidden="true" />
-                {picked.length >= 2 ? copy.start(picked.length) : copy.startIdle}
+                {picked.length >= minPicks ? copy.start(picked.length) : copy.startIdle}
               </button>
             )}
             {!running && <span>{note}</span>}

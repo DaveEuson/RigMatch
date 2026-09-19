@@ -4084,6 +4084,27 @@ function App() {
             balance: balances.video,
             onBalanceChange: (value) => setBalance('video', value),
           }}
+          makerRun={{
+            context: {
+              comfyReachable,
+              comfyFolders,
+              judgeModel: pictureJudge,
+              listenerModel: audioListener,
+              ollamaBaseUrl: ollama.baseUrl,
+              machine: videoMachine,
+              gpuBusy,
+              onCheckComfy: () => { void refreshComfyStatus(); },
+              // No Models screen in Simple Mode: this is the trip to Advanced,
+              // and the banner there says why the interface changed.
+              onOpenModels: () => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('models'); },
+            },
+            // Ranked where the channel's own fader stands, and flat on speed
+            // where nothing installed can judge what came out.
+            balances: {
+              images: pictureJudged ? balances.images : 0,
+              audio: audioListener ? balances.audio : 0,
+            },
+          }}
           onChatWithWinner={openChatWithWinner}
           onOpenScorecard={() => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('history'); }}
           onRunAgain={() => undefined}
