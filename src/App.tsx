@@ -1289,9 +1289,13 @@ function App() {
     if (wizardRound === 'chat') return null;
     const picked = new Set(shortlistedRows.map((row) => row.displayName));
     const mine = Object.values(labResults).filter((result) => result && picked.has(result.model));
-    return rankLabList(mine, wizardChannel as Exclude<typeof wizardChannel, 'chat'>, wizardBalance)
+    const board = rankLabList(mine, wizardChannel as Exclude<typeof wizardChannel, 'chat'>, wizardBalance)
       .filter((ranked) => !ranked.failed)
       .map((ranked) => ranked.item);
+    // Nothing finished: the show still happened, and the questions behind a
+    // coding round still crowned someone. An empty board must not read as an
+    // empty show.
+    return board.length > 0 ? board : null;
   }, [wizardRound, wizardChannel, shortlistedRows, labResults, wizardBalance]);
 
   const wizardWinner = useMemo(
@@ -1328,13 +1332,19 @@ function App() {
    */
   const wizardLineupResults = useMemo(
     () => (wizardSkillBoard
-      ? wizardSkillBoard.map((result) => ({
-        model: result.model,
-        name: getFriendlyModelName(result.model),
-        scoreLabel: String(result.score),
-        total: result.score,
-        grade: result.grade,
-      }))
+      ? wizardSkillBoard.map((result) => {
+        // The coding round also asked questions, and that score is this
+        // model's Match: shown beside the app's, never instead of it.
+        const asked = wizardChannel === 'app' ? modelScores[result.model] : undefined;
+        return {
+          model: result.model,
+          name: getFriendlyModelName(result.model),
+          scoreLabel: String(result.score),
+          total: result.score,
+          grade: result.grade,
+          note: asked ? `${formatMatchScore(asked)} Match on the questions` : undefined,
+        };
+      })
       : shortlistedRows
       .flatMap((row) => {
         const score = modelScores[row.displayName];
@@ -1351,7 +1361,7 @@ function App() {
         total: score.total,
         grade: score.grade,
       }))),
-    [shortlistedRows, modelScores, wizardSkillBoard],
+    [shortlistedRows, modelScores, wizardSkillBoard, wizardChannel],
   );
   const lineupSession = useVideoLineupSession();
   /** Whatever ComfyUI is rendering for RigMatch now, wherever it was started. */
@@ -4046,6 +4056,15 @@ function App() {
             if (wizardRound === 'chat') { void runListTest(); return; }
             // The models picked for the show, in the order they were picked.
             const models = shortlistedRows.filter((row) => row.installed).map((row) => row.displayName);
+            if (wizardRound === 'code') {
+              // A coding buddy is asked and then made to build: the questions
+              // measure how it answers, the app measures whether what it writes
+              // runs. Either alone crowns a model on half the job.
+              void runListTest()
+                .then(() => runSkillTestsAfterRun(models, 'app-builder'))
+                .catch(reportSkillRunFailure);
+              return;
+            }
             void runSkillTestsAfterRun(models, wizardSkill as 'app-builder' | 'vision' | 'listening').catch(reportSkillRunFailure);
           }}
           balance={wizardBalance}

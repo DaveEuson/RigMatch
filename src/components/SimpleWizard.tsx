@@ -93,9 +93,9 @@ export type { StepId };
 /** The host's line, the progress noun and the board's note, per round. */
 const ROUND_LINES: Record<'code' | 'vision' | 'listening', { host: string; unit: string; note: string }> = {
   code: {
-    host: 'Coding round! Everyone builds the same small app, right here on your PC — and you can open what they hand in.',
-    unit: 'apps',
-    note: 'Every one of these built the same app on your PC. Open the winner and click around: that is the test.',
+    host: 'Coding round! Everyone answers the same questions first, then builds the same small app — and you can open what they hand in.',
+    unit: 'questions',
+    note: 'Every one of these answered the same questions and built the same app on your PC. Open the winner and click around: that is the other half of the test.',
   },
   vision: {
     host: 'Picture round! Everyone sees the same picture and tells me what is in it — no peeking at each other.',
@@ -232,7 +232,15 @@ type SimpleWizardProps = {
     audio: { total: number; installed: number; names: string[] };
   };
   /** Every model in the lineup that has a score, best first. */
-  lineupResults?: Array<{ model: string; name: string; scoreLabel: string; total: number; grade: string }>;
+  lineupResults?: Array<{
+    model: string;
+    name: string;
+    scoreLabel: string;
+    total: number;
+    grade: string;
+    /** A second measurement from the same show, e.g. the questions behind an app score. */
+    note?: string;
+  }>;
   onChatWithWinner: () => void;
   onOpenScorecard: () => void;
   /** Opens the shareable scorecard image for the winning model. */
@@ -1508,7 +1516,7 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, 
           {/* Say what the number means — a beginner has never seen either scale. */}
           <p className="sw-winner-why">
             {round === 'code'
-              ? <>Best app built out of the {shortlistedRows.length} you tested, on your PC, judged on whether it runs and does what was asked.</>
+              ? <>Answered the same questions as the rest and built the best app of the {shortlistedRows.length} you tested, on your PC — judged on whether it runs and does what was asked.</>
               : round === 'vision'
                 ? <>Named the most of the test picture out of the {shortlistedRows.length} you tested, and did it fastest on your PC.</>
                 : round === 'listening'
@@ -1546,7 +1554,7 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, 
                 </span>
                 <span className="sw-scoreboard-score">
                   {result.scoreLabel}
-                  <em>Grade {result.grade}</em>
+                  <em>Grade {result.grade}{result.note ? ` · ${result.note}` : ''}</em>
                 </span>
               </li>
             ))}
