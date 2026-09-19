@@ -50,7 +50,13 @@ test('a test Chat asks for names a model and one of the four things RigMatch tes
   assert.deepEqual(testRequest({ kind: 'video', model: 'file:ltx-video-2b-v0.9.5.safetensors' }),
     { kind: 'video', model: 'file:ltx-video-2b-v0.9.5.safetensors' });
   assert.deepEqual(testRequest({ kind: 'chat', model: '  qwen2.5:7b  ' }), { kind: 'chat', model: 'qwen2.5:7b' });
-  assert.equal(testRequest({ kind: 'listening', model: 'gemma4:e2b' }), null, 'a kind RigMatch does not test this way');
+  // Every skill RigMatch measures can be asked for by name, including the four
+  // that run on the chat model itself.
+  assert.deepEqual(testRequest({ kind: 'listening', model: 'gemma4:e2b' }), { kind: 'listening', model: 'gemma4:e2b' });
+  assert.deepEqual(testRequest({ kind: 'reading', model: 'gemma4:e2b' }), { kind: 'reading', model: 'gemma4:e2b' });
+  assert.deepEqual(testRequest({ kind: 'code', model: 'qwen3.5:9b' }), { kind: 'code', model: 'qwen3.5:9b' });
+  assert.deepEqual(testRequest({ kind: 'app', model: 'qwen3.5:9b' }), { kind: 'app', model: 'qwen3.5:9b' });
+  assert.equal(testRequest({ kind: 'embedding', model: 'nomic-embed-text' }), null, 'a kind RigMatch does not test');
   assert.equal(testRequest({ kind: 'video' }), null, 'a kind with no model is not a request');
   assert.equal(testRequest({ kind: 'video', model: '   ' }), null);
   assert.equal(testRequest({ kind: 'video', model: 'x'.repeat(201) }), null);

@@ -76,6 +76,26 @@ const AUDIO_STUDIO = "__rigmatch_audio_maker__";
 
 type MakeKind = "image" | "video" | "audio";
 
+/**
+ * What RigMatch can be asked to measure about a model.
+ *
+ * A maker is tested on what it makes. A chat model has five: the answers it
+ * gives, the code it writes, an app it builds, a picture it reads and a
+ * recording it hears. RigMatch refuses the ones this model cannot do — a model
+ * with no eyes asked to read a picture would take an F for the question rather
+ * than the answer — and says so in its own words.
+ */
+type TestKind = "chat" | MakeKind | "reading" | "listening" | "code" | "app";
+
+/** The five, in the order the picker offers them. */
+const CHAT_TESTS: Array<{ id: TestKind; label: string }> = [
+  { id: "chat", label: "its answers" },
+  { id: "code", label: "the code it writes" },
+  { id: "app", label: "an app it builds" },
+  { id: "reading", label: "a picture it reads" },
+  { id: "listening", label: "a recording it hears" },
+];
+
 /** What each maker is called, and what it asks for and says. */
 const STUDIOS: Record<MakeKind, {
   id: string;
@@ -674,6 +694,7 @@ export default function App() {
   const [makerModel, setMakerModel] = useState<Partial<Record<MakeKind, string>>>(readChosenMakers);
   /** What RigMatch said about the last test asked for here; cleared after a while. */
   const [testNote, setTestNote] = useState<string | null>(null);
+  const [chatTest, setChatTest] = useState<TestKind>("chat");
   useEffect(() => {
     if (!testNote) return undefined;
     const id = setTimeout(() => setTestNote(null), 12_000);
@@ -837,7 +858,7 @@ export default function App() {
    * and this says whether it began. The run is watched in RigMatch, which
    * already shows it in the status bar.
    */
-  const testModel = useCallback(async (kind: "chat" | MakeKind, model: string, label = model) => {
+  const testModel = useCallback(async (kind: TestKind, model: string, label = model) => {
     setTestNote(`Asking RigMatch to test ${label}…`);
     try {
       const answer = await invoke<{ message?: string | null }>("test_rig_model", { kind, model });
@@ -2351,10 +2372,22 @@ export default function App() {
               <span className="rm-chat-header-model" title="Actual local Ollama model">
                 MODEL {activeBuddyObj.modelName}
               </span>
+              <label className="rm-test-pick">
+                <span className="rm-sr-only">What to test</span>
+                <select
+                  value={chatTest}
+                  onChange={(event) => setChatTest(event.target.value as TestKind)}
+                  disabled={typingModel === activeBuddy}
+                >
+                  {CHAT_TESTS.map((test) => (
+                    <option key={test.id} value={test.id}>Test {test.label}</option>
+                  ))}
+                </select>
+              </label>
               <button
                 type="button"
                 className="rm-test-btn"
-                onClick={() => void testModel("chat", activeBuddyObj.modelName)}
+                onClick={() => void testModel(chatTest, activeBuddyObj.modelName)}
                 disabled={typingModel === activeBuddy}
                 title="RigMatch runs its own test on this model and scores it"
               >

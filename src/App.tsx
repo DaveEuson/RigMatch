@@ -133,6 +133,7 @@ import {
   canGenerateText,
   canJoinComparison,
   canHearAudio,
+  canReadImages,
   isLikelyImageGenerationModel,
   isVisionModel,
   isListTestResult,
@@ -1920,104 +1921,6 @@ function App() {
     }
   }, [pictureJudge, ollama.baseUrl, comfySettings.baseUrl]);
 
-  /**
-   * Chat asking RigMatch to test a model.
-   *
-   * Every choice in Chat names a model RigMatch has an opinion about, and until
-   * now the only way to earn that opinion was to find the model in RigMatch and
-   * start its test there. The test itself is RigMatch's own — the same solo run
-   * its screens start, with the same prompt, the same judge and the same
-   * unload — so what Chat triggers and what Advanced Mode triggers cannot
-   * drift apart. Chat hears whether it started; the run itself is watched in
-   * RigMatch, where the status bar and Activity already show it.
-   */
-  useEffect(() => {
-    if (!agentArcadeApi.onBridgeTestRequest) return undefined;
-    return agentArcadeApi.onBridgeTestRequest(({ id, kind, model }) => {
-      void (async () => {
-        const answer = (result: { started: boolean; message?: string; error?: string }) =>
-          agentArcadeApi.reportBridgeTestResult?.({ id, ...result });
-        // One render at a time, as every other path here refuses.
-        if (kind !== 'chat' && renderActivity) {
-          await answer({ started: false, error: `RigMatch is busy with ${renderActivity.model ?? 'another render'}.` });
-          return;
-        }
-        try {
-          if (kind === 'video') {
-            const entry = chatVideoEntry(model);
-            if (!entry) {
-              await answer({ started: false, error: 'RigMatch cannot test that video model here.' });
-              return;
-            }
-            await answer({ started: true, message: `Testing ${entry.name} in RigMatch.` });
-            const estimate = estimateLineup([entry], videoMachine, { calibration: readVideoCalibration(), saved: labResults });
-            void startVideoLineup({
-              entries: [entry],
-              // What its time will be read against, as the Video Lab reads it.
-              expected: { [entry.key]: { low: estimate.low, high: estimate.high, basis: estimate.basis } },
-              promptId: IMAGE_BENCHMARK_PROMPTS[0].id,
-              customPrompt: '',
-              judgeModel: pictureJudge || undefined,
-              ollamaBaseUrl: ollama.baseUrl,
-              // Cold, the way every other time on the board was measured.
-              unloadBetweenRuns: true,
-              gpuName: videoMachine.gpuName,
-              balance: pictureJudged ? balances.video : 0,
-              solo: true,
-            });
-            return;
-          }
-          if (kind === 'audio') {
-            const spec = chatAudioEntry(model);
-            if (!spec) {
-              await answer({ started: false, error: 'RigMatch cannot test that audio model here.' });
-              return;
-            }
-            await answer({ started: true, message: `Testing ${spec.name} in RigMatch.` });
-            void startAudioLineup({
-              entries: [{ key: spec.key, name: spec.name }],
-              promptId: AUDIO_BENCHMARK_PROMPTS[0].id,
-              customPrompt: '',
-              listenerModel: audioListener || undefined,
-              ollamaBaseUrl: ollama.baseUrl,
-              unloadBetweenRuns: true,
-              balance: balances.audio,
-              solo: true,
-            });
-            return;
-          }
-          if (kind === 'image') {
-            const checkpoint = chatImageGeneration.checkpoint;
-            if (!checkpoint) {
-              await answer({ started: false, error: 'No checkpoint that can draw is installed in ComfyUI.' });
-              return;
-            }
-            await answer({ started: true, message: `Testing ${checkpoint} in RigMatch.` });
-            void runPictureTest(checkpoint);
-            return;
-          }
-          const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
-          const blocker = getModelBenchmarkBlocker(row, selectedHost, ollama);
-          if (!row?.installed && !installedModelNames.has(model)) {
-            await answer({ started: false, error: `${model} is not installed here.` });
-            return;
-          }
-          if (blocker) {
-            await answer({ started: false, error: blocker });
-            return;
-          }
-          await answer({ started: true, message: `Testing ${model} in RigMatch.` });
-          requestBenchmarkForModel(model);
-        } catch (error) {
-          await answer({ started: false, error: getErrorMessage(error) });
-        }
-      })();
-    });
-  }, [
-    chatVideoEntry, chatAudioEntry, chatImageGeneration.checkpoint, renderActivity, pictureJudge, pictureJudged,
-    ollama, audioListener, videoMachine, labResults, balances.video, balances.audio, modelRows, selectedHost,
-    installedModelNames, requestBenchmarkForModel, runPictureTest,
-  ]);
 
 
   const saveModelNote = useCallback((model: string, note: string) => {
@@ -3218,6 +3121,13 @@ function App() {
     const canHear = (model: string) => canHearAudio(
       modelRows.find((row) => row.displayName === model) ?? { displayName: model },
     );
+    // Same rule for eyes as for ears: what the provider reports about this
+    // model, with the name only as the fallback for one it will not describe.
+    // The name rule alone knows `gemma3` and not `gemma4`, so a model that
+    // reports `vision` was dropped from the picture round without a word.
+    const canSee = (model: string) => canReadImages(
+      modelRows.find((row) => row.displayName === model) ?? { displayName: model },
+    );
     for (const model of models) {
       if (selection.appBuilder && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
         jobs.push({ model, kind: 'app-builder' });
@@ -3225,7 +3135,7 @@ function App() {
       if (selection.code && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
         jobs.push({ model, kind: 'code' });
       }
-      if (selection.recognize && isVisionModel(model)) {
+      if (selection.recognize && canSee(model)) {
         jobs.push({ model, kind: 'vision' });
       }
       if (selection.listen && canHear(model)) {
@@ -3483,6 +3393,125 @@ function App() {
     // models can hear; without them here the run would use whatever was
     // installed when this callback was last built.
   }, [ollama.baseUrl, skillTestSelection, effectiveJudge, modelRows, videoMachine, pictureJudge]);
+
+  /**
+   * Chat asking RigMatch to test a model.
+   *
+   * Every choice in Chat names a model RigMatch has an opinion about, and until
+   * now the only way to earn that opinion was to find the model in RigMatch and
+   * start its test there. The test itself is RigMatch's own — the same solo run
+   * its screens start, with the same prompt, the same judge and the same
+   * unload — so what Chat triggers and what Advanced Mode triggers cannot
+   * drift apart. Chat hears whether it started; the run itself is watched in
+   * RigMatch, where the status bar and Activity already show it.
+   */
+  useEffect(() => {
+    if (!agentArcadeApi.onBridgeTestRequest) return undefined;
+    return agentArcadeApi.onBridgeTestRequest(({ id, kind, model }) => {
+      void (async () => {
+        const answer = (result: { started: boolean; message?: string; error?: string }) =>
+          agentArcadeApi.reportBridgeTestResult?.({ id, ...result });
+        // One render at a time, as every other path here refuses.
+        if (kind !== 'chat' && renderActivity) {
+          await answer({ started: false, error: `RigMatch is busy with ${renderActivity.model ?? 'another render'}.` });
+          return;
+        }
+        try {
+          if (kind === 'video') {
+            const entry = chatVideoEntry(model);
+            if (!entry) {
+              await answer({ started: false, error: 'RigMatch cannot test that video model here.' });
+              return;
+            }
+            await answer({ started: true, message: `Testing ${entry.name} in RigMatch.` });
+            const estimate = estimateLineup([entry], videoMachine, { calibration: readVideoCalibration(), saved: labResults });
+            void startVideoLineup({
+              entries: [entry],
+              // What its time will be read against, as the Video Lab reads it.
+              expected: { [entry.key]: { low: estimate.low, high: estimate.high, basis: estimate.basis } },
+              promptId: IMAGE_BENCHMARK_PROMPTS[0].id,
+              customPrompt: '',
+              judgeModel: pictureJudge || undefined,
+              ollamaBaseUrl: ollama.baseUrl,
+              // Cold, the way every other time on the board was measured.
+              unloadBetweenRuns: true,
+              gpuName: videoMachine.gpuName,
+              balance: pictureJudged ? balances.video : 0,
+              solo: true,
+            });
+            return;
+          }
+          if (kind === 'audio') {
+            const spec = chatAudioEntry(model);
+            if (!spec) {
+              await answer({ started: false, error: 'RigMatch cannot test that audio model here.' });
+              return;
+            }
+            await answer({ started: true, message: `Testing ${spec.name} in RigMatch.` });
+            void startAudioLineup({
+              entries: [{ key: spec.key, name: spec.name }],
+              promptId: AUDIO_BENCHMARK_PROMPTS[0].id,
+              customPrompt: '',
+              listenerModel: audioListener || undefined,
+              ollamaBaseUrl: ollama.baseUrl,
+              unloadBetweenRuns: true,
+              balance: balances.audio,
+              solo: true,
+            });
+            return;
+          }
+          if (kind === 'image') {
+            const checkpoint = chatImageGeneration.checkpoint;
+            if (!checkpoint) {
+              await answer({ started: false, error: 'No checkpoint that can draw is installed in ComfyUI.' });
+              return;
+            }
+            await answer({ started: true, message: `Testing ${checkpoint} in RigMatch.` });
+            void runPictureTest(checkpoint);
+            return;
+          }
+          const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
+          const blocker = getModelBenchmarkBlocker(row, selectedHost, ollama);
+          if (!row?.installed && !installedModelNames.has(model)) {
+            await answer({ started: false, error: `${model} is not installed here.` });
+            return;
+          }
+          if (blocker) {
+            await answer({ started: false, error: blocker });
+            return;
+          }
+          // The four skills a chat model is measured on beyond its answers.
+          // Each is the same run its own screen starts, on this one model, so a
+          // test begun from Chat and one begun in Advanced cannot disagree.
+          // A model is never asked to do what it cannot: an eyeless model asked
+          // to read a picture would take an F for the question, not the answer.
+          if (kind !== 'chat') {
+            if (kind === 'reading' && !canReadImages(row ?? { displayName: model })) {
+              await answer({ started: false, error: `${model} cannot read pictures, so there is nothing to measure.` });
+              return;
+            }
+            if (kind === 'listening' && !canHearAudio(row ?? { displayName: model })) {
+              await answer({ started: false, error: `${model} cannot listen to audio, so there is nothing to measure.` });
+              return;
+            }
+            const skill = kind === 'reading' ? 'vision' : kind === 'app' ? 'app-builder' : 'listening';
+            await answer({ started: true, message: `Testing ${model} in RigMatch.` });
+            void runSkillTestsAfterRun([model], kind === 'code' ? 'code' : skill).catch(reportSkillRunFailure);
+            return;
+          }
+          await answer({ started: true, message: `Testing ${model} in RigMatch.` });
+          requestBenchmarkForModel(model);
+        } catch (error) {
+          await answer({ started: false, error: getErrorMessage(error) });
+        }
+      })();
+    });
+  }, [
+    chatVideoEntry, chatAudioEntry, chatImageGeneration.checkpoint, renderActivity, pictureJudge, pictureJudged,
+    ollama, audioListener, videoMachine, labResults, balances.video, balances.audio, modelRows, selectedHost,
+    installedModelNames, requestBenchmarkForModel, runPictureTest,
+    runSkillTestsAfterRun, reportSkillRunFailure,
+  ]);
 
   // One improve pass: hand the model its previous attempt (plus an optional user
   // hint), stream the rebuild into the live view, and return the new result — or

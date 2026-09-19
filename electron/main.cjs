@@ -755,7 +755,7 @@ function handleTestRequest(req, res) {
     } catch { /* handled below */ }
     if (!asked) {
       res.statusCode = 400;
-      res.end(JSON.stringify({ error: 'Name a model and what it is for: chat, image, video or audio.' }));
+      res.end(JSON.stringify({ error: 'Name a model and what to test: chat, code, app, reading, listening, image, video or audio.' }));
       return;
     }
 
