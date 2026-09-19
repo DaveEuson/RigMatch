@@ -45,7 +45,7 @@ The second differentiator is framing: RigMatch is a **dating game show**. Models
 
 **Scoring.** The Match Score is a weighted 0–100 composite defined in `src/lib/scoring.ts`: answer quality 0.34, speed 0.32, stability 0.18, hardware fit 0.16. Speed is the median of three timed runs per question. Scores carry a schema version; scorecards saved under an older schema are flagged **Retest recommended** rather than silently compared against current ones.
 
-**Fairness rules that are load-bearing.** Each model is unloaded before the next one runs, so no contestant shares the GPU with a predecessor. Every contestant answers the same questions. These are the reason the score means anything, and they cost real time to honour.
+**Fairness rules that are load-bearing.** Each model is unloaded before the next one runs, so no contestant shares the GPU with a predecessor. Every contestant answers the same questions. These are the reason the score means anything, and they cost real time to honor.
 
 **Skill labs.** Beyond the core benchmark: App Builder (models write a runnable single-file web app, judged and previewed), vision tests, image generation, and a parked Code Challenge concept. An LLM judge grades what heuristics cannot.
 

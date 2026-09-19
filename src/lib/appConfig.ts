@@ -41,7 +41,7 @@ export const navItems: NavItem[] = [
  * through a 60px slot while "Dating Game Setup" sat below it, on a screen where
  * there is nothing to set up.
  *
- * It stays where a lineup is actually assembled: browsing the catalogue, and
+ * It stays where a lineup is actually assembled: browsing the catalog, and
  * reading about new drops. Comparison keeps its own copy inline.
  */
 export const LINEUP_STRIP_SCREENS: NavId[] = ['models', 'whatsNew'];
