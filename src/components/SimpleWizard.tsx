@@ -40,7 +40,7 @@ import { getCountryCode, getModelOrigin } from '../lib/modelOrigins';
 import { getDownloadRowStatus, summarizeDownloadStep } from '../lib/downloadStatus';
 import type { ComfyFolderListing } from '../lib/generationCatalog';
 import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
-import { ModelDemoChips } from './SkillDemoViewers';
+import { AllDemosButton, ModelDemoChips } from './SkillDemoViewers';
 import { VideoLineupLab } from './VideoLineupLab';
 import { BalanceFader } from './BalanceFader';
 import { balanceLabel } from '../lib/balance';
@@ -1530,10 +1530,15 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, 
           <ModelDemoChips model={winner.model} label="What it made" className="sw-winner-demos" />
           {/* Sharing belongs at the moment of the result, not three clicks away
               in Advanced Mode where a Simple Mode user will never find it. */}
-          <button type="button" className="sw-winner-share" onClick={onShareScore}>
-            <Share2 aria-hidden="true" />
-            Share your score
-          </button>
+          <div className="sw-winner-actions-row">
+            <button type="button" className="sw-winner-share" onClick={onShareScore}>
+              <Share2 aria-hidden="true" />
+              Share your score
+            </button>
+            {/* Everything made here, from the screen people are standing on
+                when they ask where it went. */}
+            <AllDemosButton className="sw-winner-share" />
+          </div>
         </div>
       </div>
 
@@ -1551,6 +1556,10 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, 
                 <span className="sw-scoreboard-name">
                   {result.name}
                   <em>{result.model}</em>
+                  {/* Everything this contestant made, from its own row. The
+                      winner's was reachable and the rest were not, which is
+                      the same as not having them. */}
+                  <ModelDemoChips model={result.model} label="" className="sw-scoreboard-demos" />
                 </span>
                 <span className="sw-scoreboard-score">
                   {result.scoreLabel}

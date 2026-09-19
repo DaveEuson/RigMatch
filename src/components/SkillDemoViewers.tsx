@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { Code2, Image as ImageIcon, Maximize2, Play, RefreshCw, Sparkles, X } from 'lucide-react';
 import type { SkillRunStatus } from '../types';
-import { getModelDemoArtifacts, type DemoArtifact } from '../lib/labResults';
+import { getAllDemoArtifacts, getModelDemoArtifacts, type DemoArtifact } from '../lib/labResults';
 import { useSandboxedPreview } from '../lib/useSandboxedPreview';
 import { getShortModelName } from '../lib/modelCatalog';
 import { AvatarBust } from './Avatars';
@@ -357,6 +357,32 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
  * artifacts itself and opens them in the shared DemoResultModal, so no prop
  * threading is needed. Renders nothing when the model has no artifacts.
  */
+/**
+ * One door to everything every model has made here.
+ *
+ * The artifacts were only ever reachable from the model that produced them —
+ * "where do I find the apps they built" is the question that followed every
+ * run. This opens the same viewer over the whole gallery, newest first, with
+ * its own next and previous.
+ */
+export function AllDemosButton({ label = 'See everything they made', className }: { label?: string; className?: string }) {
+  const [open, setOpen] = useState(false);
+  // Read on every render: a run that finishes while this screen is open adds
+  // to the gallery, and a memo keyed on nothing would still be showing the
+  // list as it was when the screen mounted.
+  const made = getAllDemoArtifacts();
+  if (made.length === 0) return null;
+  return (
+    <>
+      <button type="button" className={className ?? 'mini-button outline'} onClick={() => setOpen(true)}>
+        <Play aria-hidden="true" />
+        {label} ({made.length})
+      </button>
+      {open && <DemoResultModal demos={made} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
 export function ModelDemoChips({ model, label = 'Made by this model', className }: { model: string; label?: string; className?: string }) {
   const [openDemos, setOpenDemos] = useState<DemoArtifact[] | null>(null);
   const artifacts = useMemo(() => getModelDemoArtifacts(model), [model]);

@@ -823,7 +823,11 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 /* Winner ------------------------------------------------------------------ */
 .sw-winner {
   position: relative;
-  flex: 1;
+  /* Not flex: 1. Stretched to the height of the scroll box, everything past
+     that height — the scoreboard's last rows, the two cards under it — was
+     clipped by this element rather than scrolled by its parent, and the step
+     simply ended mid-card with no way down. */
+  flex: 0 0 auto;
   margin: 0 20px;
   border-radius: 16px;
   padding: 30px 28px;

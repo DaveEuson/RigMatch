@@ -44,6 +44,7 @@ import { ReleaseNotes, UpdateCenter } from './UpdateCenter';
 // until it is used as a JSX component.
 import { Bot, Bug, Check, ChevronRight, Coffee, Copy, Download, ExternalLink, FolderOpen, HelpCircle, History, RefreshCw, Settings, Share2, Trash2, Trophy, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AllDemosButton } from './SkillDemoViewers';
 
 /** Every kind of test: the All channel, and any caller from before channels. */
 const ALL_CHANNELS = workbenchById('all');
@@ -456,6 +457,9 @@ export function UtilityPanel({
             <span>Scorecards · {workbench.label}</span>
             <strong>{labBoard.length} saved result{labBoard.length === 1 ? '' : 's'}</strong>
             <em>Every {LAB_NOUN[labChannel]} this PC has run, ranked by what matters to you. Moving the fader runs nothing again.</em>
+            {/* The results are here; what they made was only ever reachable
+                from the model that made it. */}
+            <AllDemosButton className="mini-button outline utility-gallery-btn" />
           </div>
           <BalanceFader
             value={channelBalance}

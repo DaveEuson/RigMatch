@@ -215,6 +215,29 @@ textarea {
   white-space: nowrap;
 }
 
+.sw-winner-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.utility-gallery-btn {
+  margin-top: 8px;
+  align-self: start;
+}
+
+/* What a contestant made, on its own row in the wizard's final board. */
+.sw-scoreboard-demos {
+  margin-top: 4px;
+}
+
+.sw-scoreboard-demos .model-demo-chip {
+  padding: 1px 7px;
+  font-size: 10px;
+}
+
 /* What the winner made, on the last screen of the show. */
 .sw-winner-demos {
   margin-top: 10px;

@@ -156,6 +156,55 @@ export function labResultsSnapshot(): Record<string, AdvancedLabResult> {
  * Scorecards, the models table, etc. Matches on result.model so it works
  * regardless of how each result was keyed in storage.
  */
+/**
+ * Everything every model has made here, newest first.
+ *
+ * The artifacts existed per model and could only be found if you already knew
+ * which model to look at — the app a contestant built was one click away from
+ * a row nobody had a reason to open. This is the gallery's source: one list,
+ * every app, picture, reading and program, with the model that made it.
+ */
+export function getAllDemoArtifacts(): Array<DemoArtifact & { at: string; challenge: AdvancedLabResult['challenge'] }> {
+  const out: Array<DemoArtifact & { at: string; challenge: AdvancedLabResult['challenge'] }> = [];
+  for (const result of Object.values(readAdvancedLabResults())) {
+    if (!result || result.error) continue;
+    for (const artifact of demoArtifactsFor(result)) {
+      out.push({ ...artifact, at: result.completedAt, challenge: result.challenge });
+    }
+  }
+  return out.sort((left, right) => right.at.localeCompare(left.at));
+}
+
+/** One result's viewable artifacts, if it produced any. */
+function demoArtifactsFor(result: AdvancedLabResult): DemoArtifact[] {
+  const model = result.model;
+  if (result.challenge === 'app-builder') {
+    const html = extractHtmlDocument(result.response);
+    return html ? [{ model, kind: 'app', html, judged: wasJudged(result), grade: result.grade, score: result.score }] : [];
+  }
+  if ((result.challenge === 'image-generation' || result.challenge === 'video-generation') && result.imageDataUrl) {
+    return [{ model, kind: 'image', imageDataUrl: result.imageDataUrl, grade: result.grade, score: result.score }];
+  }
+  if (result.challenge === 'image-recognition') {
+    return [{
+      model,
+      kind: 'vision',
+      imageDataUrl: result.imageDataUrl,
+      description: result.response,
+      note: describeLabFailure(result),
+      grade: result.grade,
+      score: result.score,
+    }];
+  }
+  if (result.challenge === 'code') {
+    const code = extractCodeBlock(result.response);
+    return code
+      ? [{ model, kind: 'code', code, language: result.language, note: result.checks?.[0]?.detail, judged: true, grade: result.grade, score: result.score }]
+      : [];
+  }
+  return [];
+}
+
 export function getModelDemoArtifacts(model: string): DemoArtifact[] {
   if (!model) return [];
   const out: DemoArtifact[] = [];
