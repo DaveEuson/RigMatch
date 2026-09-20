@@ -29,7 +29,7 @@ test('a fact is kept, and adding it twice does not double it', () => {
   assert.equal(list[0].id, 'a', 'the original is kept, not replaced');
 });
 
-test('whitespace is normalised so a copied message is one tidy line', () => {
+test('whitespace is normalized so a copied message is one tidy line', () => {
   const list = addMemory([], '  I use   PostgreSQL\n\nnot MySQL  ', { id: 'a', now: NOW });
   assert.equal(list[0].text, 'I use PostgreSQL not MySQL');
 });

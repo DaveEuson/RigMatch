@@ -56,7 +56,7 @@ test('overall progress never goes backwards across a whole run', () => {
 
   assert.equal(previous, 49, 'the last question of the last model is #49 (0-based done count)');
   // The per-model round DOES still reset — that is correct, and is exactly why
-  // it must be labelled with the model it belongs to.
+  // it must be labeled with the model it belongs to.
   assert.equal(rounds.filter((r) => r === 1).length, 5, 'each model starts at round 1');
 });
 

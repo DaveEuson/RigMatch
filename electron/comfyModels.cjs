@@ -64,7 +64,7 @@ function assertModelUrl(url) {
 /**
  * A filename that cannot escape the folder it was meant for.
  *
- * The catalogue is ours, but this writes multi-gigabyte files to a path the
+ * The catalog is ours, but this writes multi-gigabyte files to a path the
  * user chose, and "../../" in a filename would put one anywhere on the disk.
  */
 function assertSafeFilename(filename) {
@@ -166,7 +166,7 @@ async function verifyComfyFolder(picked, serverCheckpoints) {
 // the downloader used to answer one by deleting everything and starting over.
 // So a download now resumes from its .part file with a Range request, picks
 // itself back up a few times without being asked, and is checked against the
-// catalogue's size and SHA-256 before ComfyUI can see it.
+// catalog's size and SHA-256 before ComfyUI can see it.
 
 /** Automatic resumes after a dropped connection, and the wait before each. */
 const RESUME_DELAYS_MS = [2_000, 10_000, 30_000];
@@ -380,7 +380,7 @@ async function fetchIntoPart({ url, partPath, wantBytes, token, signal, onProgre
           bytesPerSecond,
         });
       }
-      // Honour backpressure: a file arriving faster than the disk takes it
+      // Honor backpressure: a file arriving faster than the disk takes it
       // would otherwise pile up in memory, and at 40 GB that is not a buffer.
       if (!out.write(chunk)) await once(out, 'drain');
     }
@@ -426,7 +426,7 @@ async function fetchIntoPart({ url, partPath, wantBytes, token, signal, onProgre
  * Written to a .part file and renamed only once it is whole and checked. A
  * truncated or corrupted .safetensors is worse than no file: ComfyUI lists it,
  * offers it, and then fails deep in the loader with an error that looks like a
- * broken model. So the size must equal the catalogue's, and the SHA-256 must
+ * broken model. So the size must equal the catalog's, and the SHA-256 must
  * equal the one Hugging Face publishes, where it publishes one.
  *
  * A dropped connection keeps the .part and resumes it, a few times on its own
@@ -494,7 +494,7 @@ async function downloadModel({ root, folder, filename, url, expectedBytes, sha25
 
     // One fresh attempt, from nothing. A corrupted resume is the failure that
     // starting over can fix; a second mismatch means the source disagrees with
-    // the catalogue, and a third fetch would only repeat it.
+    // the catalog, and a third fetch would only repeat it.
     await fs.rm(partPath, { force: true });
     if (refetched) {
       throw new Error(`${problem} It was downloaded twice and failed the check both times, so it was not kept.`);

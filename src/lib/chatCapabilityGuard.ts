@@ -29,7 +29,7 @@ export function classifyChatRequest(message: string): ChatBeyond {
 
   // An action *and* an object, with no verbless fallback. A "the picture ... of"
   // branch seemed a cheap way to catch "a picture of a cat please", and it also
-  // caught "summarise the picture this data paints of Q4" — an ordinary
+  // caught "summarize the picture this data paints of Q4" — an ordinary
   // question about a spreadsheet. Missing the rare verbless request is the
   // better failure: a note that fires on prose stops being read.
   const asks = (verbs: string, nouns: string) =>

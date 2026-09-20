@@ -492,7 +492,11 @@ textarea:focus {
 
 .rm-chat-header-info {
   flex: 1;
-  min-width: 0;
+  /* A floor, not zero. The header is about 540px wide, and its fixed parts —
+     meter, model tag, the test picker and its button — add up to more than
+     that, so a name allowed to shrink to nothing did: 7px, one letter per
+     line, under a meter it no longer had room beside. */
+  min-width: 96px;
 }
 
 .rm-chat-header-info strong {
@@ -510,6 +514,11 @@ textarea:focus {
   color: var(--text-muted);
   font-size: 10px;
   font-style: normal;
+  /* One line that truncates, like the name above it. Wrapping, it squeezed
+     itself into a 75px column and ran five lines deep under the meter. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rm-chat-header-model {
@@ -520,7 +529,10 @@ textarea:focus {
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 2px 6px;
-  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .rm-personality-bar {
@@ -2150,6 +2162,107 @@ textarea:focus {
   font-style: normal;
   font-size: 11px;
   opacity: 0.6;
+}
+
+/* Hand a model back to RigMatch to be tested, from wherever Chat shows one. */
+.rm-test-btn {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.16));
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.rm-test-btn:hover:not(:disabled) {
+  border-color: var(--accent, #ffb347);
+  color: var(--accent, #ffb347);
+}
+
+.rm-test-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* What to test, beside the button that starts it. A chat model is measured on
+   five things, and the button used to be able to ask for one of them. */
+.rm-test-pick {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.rm-test-pick select {
+  max-width: 150px;
+  min-width: 76px;
+  width: 100%;
+  padding: 4px 8px;
+  text-overflow: ellipsis;
+  border-radius: 999px;
+  /* This app's own tokens, not the desktop app's: --line and --panel do not
+     exist here, so every rule that named them painted its hex fallback. */
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: inherit;
+  font-size: 11px;
+}
+
+.rm-test-pick select:disabled {
+  opacity: 0.4;
+}
+
+/* Reachable by a screen reader, invisible on screen. */
+.rm-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.rm-test-note {
+  margin: 0;
+  padding: 6px 14px;
+  font-size: 11px;
+  opacity: 0.75;
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+}
+
+/* Which model makes it: every one that runs here, tested first. */
+.rm-maker-pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.rm-maker-pick > span {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.rm-maker-pick select {
+  max-width: 340px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  background: var(--panel, rgba(255, 255, 255, 0.04));
+  color: inherit;
+  font-size: 11px;
+}
+
+.rm-maker-pick select:disabled {
+  opacity: 0.5;
 }
 
 .rm-studio-body {

@@ -17,7 +17,7 @@ export const GOALS_STORAGE_KEY = 'rigmatch:goals:v1';
  * That the goal question has been PUT to this person, whatever they answered.
  *
  * Separate from the answer itself, because "asked and skipped" and "never
- * asked" need different behaviour: the first must not be nagged, the second
+ * asked" need different behavior: the first must not be nagged, the second
  * must not be silently skipped.
  */
 export const GOALS_OFFERED_STORAGE_KEY = 'rigmatch:goals-offered:v1';

@@ -29,14 +29,14 @@ test('parses real nvidia-smi output captured from an RTX 4070', () => {
   assert.equal(reading.source, 'nvidia-smi');
 });
 
-test('parses the unit-bearing form, since nounits is not always honoured', () => {
+test('parses the unit-bearing form, since nounits is not always honored', () => {
   const reading = parseNvidiaGpuQuery('2521 MiB, 12282 MiB, 31 %');
   assert.equal(reading.vramUsedMb, 2521);
   assert.equal(reading.vramTotalMb, 12282);
   assert.equal(reading.utilizationPercent, 31);
 });
 
-test('GiB values are normalised to MiB', () => {
+test('GiB values are normalized to MiB', () => {
   const reading = parseNvidiaGpuQuery('2 GiB, 12 GiB, 40 %');
   assert.equal(reading.vramUsedMb, 2048);
   assert.equal(reading.vramTotalMb, 12288);
@@ -257,7 +257,7 @@ test('medianOf handles the basics', () => {
 
 // ── unified memory (Apple Silicon, NVIDIA Grace / DGX Spark, Jetson) ─────────
 
-test('unified-memory hardware is recognised', () => {
+test('unified-memory hardware is recognized', () => {
   // Apple Silicon often reports no GPU model string at all, so platform+arch
   // carries it there.
   assert.equal(isUnifiedMemoryGpu({ platform: 'darwin', arch: 'arm64' }), true);

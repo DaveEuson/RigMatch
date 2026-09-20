@@ -5,13 +5,13 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
  * The renderer's source, every file of it, concatenated.
  *
  * Guards and tests that pin themselves to `src/App.tsx` raise a false alarm
- * every time a component moves out of it: the behaviour is intact and only the
+ * every time a component moves out of it: the behavior is intact and only the
  * address is stale. That has now happened three times during the 0.7 split —
  * once to a release gate, twice to a test — so the address stops being a
  * filename and becomes "somewhere in the UI", which is what these checks
  * actually mean.
  *
- * Use it whenever the assertion is about behaviour existing at all. Keep
+ * Use it whenever the assertion is about behavior existing at all. Keep
  * reading a specific file when the assertion is genuinely about THAT file —
  * useDialog.ts implementing its effect a particular way, for instance.
  *

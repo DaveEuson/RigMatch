@@ -41,7 +41,7 @@ export const navItems: NavItem[] = [
  * through a 60px slot while "Dating Game Setup" sat below it, on a screen where
  * there is nothing to set up.
  *
- * It stays where a lineup is actually assembled: browsing the catalogue, and
+ * It stays where a lineup is actually assembled: browsing the catalog, and
  * reading about new drops. Comparison keeps its own copy inline.
  */
 export const LINEUP_STRIP_SCREENS: NavId[] = ['models', 'whatsNew'];
@@ -56,7 +56,7 @@ export const AMAZON_AFFILIATE_TAG = 'daveeuson01-20';
 export function amazonUrl(query: string): string {
   return `https://www.amazon.com/s?k=${encodeURIComponent(query)}&tag=${AMAZON_AFFILIATE_TAG}`;
 }
-export const APP_VERSION = '0.8.0';
+export const APP_VERSION = '0.9.0';
 export { CURRENT_SCORE_SCHEMA_VERSION } from './scoring.ts';
 export const GITHUB_ISSUES_URL = 'https://github.com/DaveEuson/RigMatch/issues/new';
 export const TEST_SUITE_STORAGE_KEY = 'rigmatch:test-suite:v1';
@@ -69,6 +69,32 @@ export { RUN_HISTORY_STORAGE_KEY } from './runHistory.ts';
 export const THEME_STORAGE_KEY = 'agentArcadeTheme';
 export const TUTORIAL_STORAGE_KEY = 'rigmatch:first-run-tutorial:v1';
 export const UI_MODE_STORAGE_KEY = 'rigmatch:ui-mode:v1';
+
+/**
+ * Whether the disk-space offer appears on the way out.
+ *
+ * It is a good offer once and an obstacle every time after: someone who has
+ * decided to keep their models meets a four-way delete menu every time they
+ * close the app. Set from the dialog's own checkbox, and nowhere else.
+ */
+export const CLOSE_CLEANUP_STORAGE_KEY = 'rigmatch:close-cleanup:v1';
+
+export function readCloseCleanupAsk(): boolean {
+  try {
+    return window.localStorage.getItem(CLOSE_CLEANUP_STORAGE_KEY) !== 'never';
+  } catch {
+    // A blocked store is not a reason to stop offering it.
+    return true;
+  }
+}
+
+export function writeCloseCleanupAsk(ask: boolean): void {
+  try {
+    window.localStorage.setItem(CLOSE_CLEANUP_STORAGE_KEY, ask ? 'ask' : 'never');
+  } catch {
+    // Forgetting the choice is survivable; crashing on the way out is not.
+  }
+}
 // Set once the user has picked Simple/Advanced on the first-launch splash. Kept
 // separate from UI_MODE_STORAGE_KEY (which is auto-written with the default) so
 // the splash shows exactly once, even for users upgrading from older builds.

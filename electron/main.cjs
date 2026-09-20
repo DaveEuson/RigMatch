@@ -104,8 +104,8 @@ const ALLOWED_EXTERNAL_HOSTS = new Set([
   // Cloud judge: "what's OpenRouter / get an API key" links in the run dialog.
   'openrouter.ai',
   'www.openrouter.ai',
-  // Model licences: the download consent dialog links each image and video
-  // model's Hugging Face page, which is where its licence is stated.
+  // Model licenses: the download consent dialog links each image and video
+  // model's Hugging Face page, which is where its license is stated.
   'huggingface.co',
   // Scorecard sharing: the social compose intents opened from the share modal.
   // Every host used by ShareScorecard.tsx must be listed here or the button is
@@ -493,7 +493,7 @@ let latestAudioMaker = { ready: false, model: null };
 /** RigMatch's crowned model for each thing Chat does with a chat model: chat, code, reading, listening. */
 let latestPicks = {};
 
-const { generationKind, mimeForFile, savePlan } = require('./bridgeMedia.cjs');
+const { generationKind, mimeForFile, savePlan, testRequest } = require('./bridgeMedia.cjs');
 
 /**
  * Pictures, clips and sounds asked for by RigMatch Chat, keyed by job id.
@@ -587,6 +587,14 @@ const scoresServer = http.createServer((req, res) => {
 
   if (req.method === 'POST' && url.pathname === '/generate') {
     handleGenerateRequest(req, res);
+    return;
+  }
+
+  // Chat asking RigMatch to test a model, rather than use it. The renderer owns
+  // every test, so this asks and waits for its word: what comes back is whether
+  // the test started, which is the only part Chat can act on.
+  if (req.method === 'POST' && url.pathname === '/test') {
+    handleTestRequest(req, res);
     return;
   }
 
@@ -685,10 +693,14 @@ function handleGenerateRequest(req, res) {
 
     let prompt = '';
     let kind = null;
+    // Which model to make it with, out of the list RigMatch sent Chat. The
+    // renderer refuses a key it never offered, so this only has to be a string.
+    let model = null;
     try {
       const request = JSON.parse(body || '{}');
       prompt = String(request.prompt ?? '').trim();
       kind = generationKind(request.kind);
+      if (typeof request.model === 'string' && request.model.length <= 200) model = request.model;
     } catch { /* handled below */ }
     if (!prompt) {
       res.statusCode = 400;
@@ -712,10 +724,69 @@ function handleGenerateRequest(req, res) {
     }
 
     const id = `gen-${Date.now()}-${Math.round(process.hrtime()[1] / 1000)}`;
-    rememberJob(id, { id, status: 'running', kind, prompt, startedAt: Date.now() });
-    win.webContents.send('bridge:generateRequest', { id, prompt, kind });
+    rememberJob(id, { id, status: 'running', kind, prompt, model, startedAt: Date.now() });
+    win.webContents.send('bridge:generateRequest', { id, prompt, kind, model });
     res.statusCode = 202;
     res.end(JSON.stringify({ id }));
+  });
+}
+
+/** Tests Chat asked for and the renderer has not answered yet, by id. */
+const pendingTests = new Map();
+
+function handleTestRequest(req, res) {
+  let body = '';
+  let tooBig = false;
+  req.on('data', (chunk) => {
+    body += chunk;
+    if (body.length > 4096) { tooBig = true; req.destroy(); }
+  });
+  req.on('end', () => {
+    res.setHeader('Content-Type', 'application/json');
+    if (tooBig) {
+      res.statusCode = 413;
+      res.end(JSON.stringify({ error: 'Request too long.' }));
+      return;
+    }
+    let asked = null;
+    try {
+      // A chat model, or one of the three makers. RigMatch tests each its own way.
+      asked = testRequest(JSON.parse(body || '{}'));
+    } catch { /* handled below */ }
+    if (!asked) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: 'Name a model and what to test: chat, code, app, reading, listening, image, video or audio.' }));
+      return;
+    }
+
+    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
+    if (!win) {
+      res.statusCode = 503;
+      res.end(JSON.stringify({ error: 'RigMatch is not running, so it cannot test anything.' }));
+      return;
+    }
+
+    const id = `test-${Date.now()}-${Math.round(process.hrtime()[1] / 1000)}`;
+    // A test can run for half an hour; what this waits for is the renderer
+    // saying it began, which takes a moment or never comes.
+    const timer = setTimeout(() => {
+      if (!pendingTests.delete(id)) return;
+      res.statusCode = 504;
+      res.end(JSON.stringify({ error: 'RigMatch did not answer. Is its window open?' }));
+    }, 15000);
+    pendingTests.set(id, (answer) => {
+      clearTimeout(timer);
+      if (answer?.started) {
+        res.statusCode = 202;
+        res.end(JSON.stringify({ started: true, message: answer.message ?? null }));
+        return;
+      }
+      // RigMatch's own words: it knows whether ComfyUI is busy, the model is not
+      // one it can test, or nothing is installed to test it with.
+      res.statusCode = 409;
+      res.end(JSON.stringify({ error: answer?.error ?? 'RigMatch could not start that test.' }));
+    });
+    win.webContents.send('bridge:testRequest', { id, ...asked });
   });
 }
 
@@ -965,6 +1036,19 @@ function registerHandlers() {
    * clips to Videos\RigMatch and sounds to Music\RigMatch, and only what the
    * job asked for is kept.
    */
+  /** The renderer saying whether a test Chat asked for has started. */
+  handleLogged('bridge:testResult', 'bridge', async (_event, result) => {
+    const answer = pendingTests.get(String(result?.id ?? ''));
+    if (!answer) return { ok: false };
+    pendingTests.delete(String(result.id));
+    answer({
+      started: result?.started === true,
+      message: typeof result?.message === 'string' ? result.message.slice(0, 300) : null,
+      error: typeof result?.error === 'string' ? result.error.slice(0, 300) : null,
+    });
+    return { ok: true };
+  });
+
   handleLogged('bridge:generateResult', 'bridge', async (_event, result) => {
     const id = String(result?.id ?? '');
     const job = id ? generationJobs.get(id) : undefined;
@@ -1111,16 +1195,35 @@ function registerHandlers() {
 
     // What a clip or a sound would be made with, checked the same way. A maker
     // with no model named is not ready, whatever its flag says.
+    const text = (value, limit = 200) => (typeof value === 'string' && value.length <= limit ? value : null);
+    /** Every model the maker offers, in the order RigMatch ranked them. */
+    const choicesFrom = (raw) => (Array.isArray(raw) ? raw : [])
+      .map((choice) => {
+        if (!choice || typeof choice !== 'object') return null;
+        const key = text(choice.key);
+        const name = text(choice.name);
+        if (!key || !name) return null;
+        return {
+          key,
+          name,
+          seconds: Number.isFinite(choice.seconds) && choice.seconds > 0 && choice.seconds < 1e6 ? choice.seconds : null,
+          tested: text(choice.tested, 120),
+          crowned: choice.crowned === true,
+        };
+      })
+      .filter(Boolean)
+      // One screenful of models; a listing longer than this is not a choice.
+      .slice(0, 40);
     const makerFrom = (raw) => {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-      const model = typeof raw.model === 'string' && raw.model.length <= 200 ? raw.model : null;
+      const model = text(raw.model);
       const seconds = Number.isFinite(raw.seconds) && raw.seconds > 0 && raw.seconds < 1e6 ? raw.seconds : null;
-      return { ready: raw.ready === true && Boolean(model), model, seconds };
+      return { ready: raw.ready === true && Boolean(model), model, seconds, choices: choicesFrom(raw.choices) };
     };
     const videoMaker = makerFrom(data.videoMaker);
     if (videoMaker) latestVideoMaker = videoMaker;
     const audioMaker = makerFrom(data.audioMaker);
-    if (audioMaker) latestAudioMaker = { ready: audioMaker.ready, model: audioMaker.model };
+    if (audioMaker) latestAudioMaker = { ready: audioMaker.ready, model: audioMaker.model, choices: audioMaker.choices };
 
     // RigMatch's crowned chat model for each use, by name.
     const rawPicks = data.picks;
@@ -2183,7 +2286,7 @@ async function getLatestCudaToolkitVersion() {
  *
  * Only reached when systeminformation found no controller at all, which on an
  * ordinary desktop means there is genuinely nothing to find. Returns {} in that
- * case, leaving the existing "Unknown GPU" behaviour exactly as it was.
+ * case, leaving the existing "Unknown GPU" behavior exactly as it was.
  *
  * The device tree is tried first because it needs no vendor tooling and names
  * the vendor as well as the part. nvidia-smi is second: it exists on newer
@@ -2435,7 +2538,7 @@ function assertValidModelName(model) {
  * The vocabulary observed on 0.32.9: `completion` (can answer at all), `vision`
  * (can read an image it is sent), `tools`, and `image` (generates images — and
  * notably arrives *without* `completion`). This replaces guessing from the
- * model's name, which mislabelled anything published under Ollama's `x/`
+ * model's name, which mislabeled anything published under Ollama's `x/`
  * community namespace as an image generator.
  *
  * It also settles a question the name could never answer. An image model can be
@@ -2675,9 +2778,9 @@ async function getOllamaCatalog(options = {}) {
  *
  * Without this the capability chips could only ever count installed models —
  * /api/show answers about downloads and nothing else — so "Hears audio" read
- * "1" against a 317-model catalogue and looked like a fact about the world.
+ * "1" against a 317-model catalog and looked like a fact about the world.
  *
- * /search?c=<capability> is the only endpoint that honours the filter:
+ * /search?c=<capability> is the only endpoint that honors the filter:
  * /library?c= silently ignores it and returns everything, which would mark
  * every model as having every capability. There is no pagination — p= is
  * ignored too — so this is the top twenty per capability, the same set the
@@ -2704,7 +2807,7 @@ async function fetchLibraryCapabilityIndex() {
   return index;
 }
 
-/** Attach library-reported capabilities to catalogue entries, by family. */
+/** Attach library-reported capabilities to catalog entries, by family. */
 function applyCapabilityIndex(models, index) {
   if (!index || index.size === 0) return models;
   return models.map((entry) => {
@@ -3281,7 +3384,7 @@ async function runBenchmark(request = {}, sender) {
         request.model,
       );
     } catch {
-      // Best effort: the unload is an optimisation, not a correctness
+      // Best effort: the unload is an optimization, not a correctness
       // requirement. Ollama releases the model on its own keep-alive timer.
     }
     benchmarkRunning = false;

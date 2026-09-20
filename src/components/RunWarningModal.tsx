@@ -132,7 +132,7 @@ export function RunWarningModal({
    * too. Two settings break it: a cloud model answers them remotely, and the
    * OpenRouter judge is sent both the question and the answer to grade. Whether
    * that matters is the reader's context to weigh, not this app's to assume —
-   * so it states what happens and leaves the judgement where it belongs.
+   * so it states what happens and leaves the judgment where it belongs.
    */
   const candourCount = benchmarkQuestions.slice(0, questionCount).filter((q) => q.type === 'candour').length;
   const cloudAnswerers = (mode === 'speed-date' ? lineupModels ?? [] : [selectedModel])
@@ -183,7 +183,7 @@ export function RunWarningModal({
   // Not knowing how long a run takes is the biggest hesitation before the
   // app's main action, so state it on the button. Past runs on this rig beat
   // the static table — a measured pace is this machine's own, and it is
-  // labelled so; the table stays as the rule of thumb for a first run.
+  // labeled so; the table stays as the rule of thumb for a first run.
   const minutesPerModel: Record<BenchmarkQuestionCount, number> = { 10: 3, 20: 5, 50: 15, 100: 30 };
   const runModelCount = mode === 'single' ? 1 : Math.max(1, shortlistedCount);
   const estimatedMs = skipQuestions ? 0 : (

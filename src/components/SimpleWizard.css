@@ -823,7 +823,11 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 /* Winner ------------------------------------------------------------------ */
 .sw-winner {
   position: relative;
-  flex: 1;
+  /* Not flex: 1. Stretched to the height of the scroll box, everything past
+     that height — the scoreboard's last rows, the two cards under it — was
+     clipped by this element rather than scrolled by its parent, and the step
+     simply ended mid-card with no way down. */
+  flex: 0 0 auto;
   margin: 0 20px;
   border-radius: 16px;
   padding: 30px 28px;
@@ -946,7 +950,7 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 }
 
 /* Below roughly 500px the brand column's 168px mode switch leaves the step rail
-   too little room. The rail centres its pills, so they overflowed their track
+   too little room. The rail centers its pills, so they overflowed their track
    in both directions: the first pill landed on top of the mode switch and stole
    its clicks, and the last was clipped away entirely by .sw-shell's
    overflow: hidden — invisible rather than scrollable. Give the rail its own
@@ -979,7 +983,7 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   line-height: 1.55;
   color: var(--text);
 }
-/* A full lineup is a status, not an action. Sized and coloured to sit where
+/* A full lineup is a status, not an action. Sized and colored to sit where
    the Pick button was without impersonating it. */
 .sw-card-full {
   margin: 0;
@@ -1119,8 +1123,8 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   color: var(--muted);
   background: color-mix(in srgb, var(--panel) 88%, transparent);
 }
-/* Tone follows the podium colours already used on this screen, and never
-   carries meaning on colour alone — the number is always the number. */
+/* Tone follows the podium colors already used on this screen, and never
+   carries meaning on color alone — the number is always the number. */
 .sw-answer-strip li.good { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
 .sw-answer-strip li.fair { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
 .sw-answer-strip li.poor { color: var(--muted); }
@@ -1416,4 +1420,60 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* Who made it, and whether it is already here. Four Gemma cards said nothing
+   about Google, and "already on your PC" was gray small print beside a bright
+   download size on the next card along. */
+.sw-card-maker {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sw-card-maker em {
+  padding: 1px 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--blue);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.sw-card-installed-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(var(--green-rgb), 0.16);
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sw-card-installed-badge svg {
+  width: 11px;
+  height: 11px;
+}
+
+.sw-card.installed {
+  border-color: rgba(var(--green-rgb), 0.34);
+}
+
+/* The door to everything made here, under the board that shows the last run. */
+.sw-maker-gallery {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 8px;
 }

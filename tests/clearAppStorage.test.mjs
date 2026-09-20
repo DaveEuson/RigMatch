@@ -11,7 +11,7 @@ import { readRendererSource } from '../scripts/renderer-source.mjs';
 // These tests pin the two properties that stop that returning: the sweep takes
 // the whole namespace, and nothing is stored outside the namespace.
 
-/** A localStorage good enough to sweep, including the re-indexing behaviour. */
+/** A localStorage good enough to sweep, including the re-indexing behavior. */
 function fakeStorage(entries) {
   const map = new Map(Object.entries(entries));
   return {

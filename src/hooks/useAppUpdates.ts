@@ -93,14 +93,14 @@ export function useAppUpdates({ setActivity }: { setActivity: (message: string) 
   // Quietly check for a newer release once on launch so the gentle update nudge
   // can appear. Silent — no activity spam; if it fails, the popup just won't show.
   useEffect(() => {
-    let cancelled = false;
+    let canceled = false;
     void (async () => {
       try {
         const result = await agentArcadeApi.checkForUpdates(updateChannel);
-        if (!cancelled) setUpdateCheck(result);
+        if (!canceled) setUpdateCheck(result);
       } catch { /* ignore — the popup just won't show */ }
     })();
-    return () => { cancelled = true; };
+    return () => { canceled = true; };
     // Once on mount; the default release channel is the right nudge at launch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

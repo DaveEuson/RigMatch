@@ -412,7 +412,7 @@ pub struct VramInfo {
 
 /// Parse `nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits`.
 ///
-/// Real captured output on this machine, both forms — `nounits` is not honoured
+/// Real captured output on this machine, both forms — `nounits` is not honored
 /// by every driver version, so the unit-bearing one has to parse too:
 ///   "12282"
 ///   "12282 MiB"
@@ -548,10 +548,17 @@ async fn get_rig_scores() -> Result<serde_json::Value, String> {
 /// borrowing the WebView's identity is more honest than relying on the header
 /// being absent.
 #[tauri::command]
-async fn start_rig_generation(prompt: String, kind: Option<String>) -> Result<serde_json::Value, String> {
+async fn start_rig_generation(
+    prompt: String,
+    kind: Option<String>,
+    model: Option<String>,
+) -> Result<serde_json::Value, String> {
     // A picture, a clip or a sound; RigMatch refuses anything else. Naming none
     // asks for a picture, as every Chat before this one did.
     let kind = kind.unwrap_or_else(|| "image".to_string());
+    // Which of the models RigMatch offered to use. Naming none leaves the
+    // choice to RigMatch, which takes the one it ranked first.
+    let model = model.unwrap_or_default();
     let client = reqwest::Client::builder()
         // Longer than the scores fetch: this only starts the work, but RigMatch
         // has to reach its renderer before it can answer.
@@ -561,7 +568,7 @@ async fn start_rig_generation(prompt: String, kind: Option<String>) -> Result<se
     let res = client
         .post(bridge_url("/generate"))
         .header("Origin", "tauri://localhost")
-        .json(&serde_json::json!({ "prompt": prompt, "kind": kind }))
+        .json(&serde_json::json!({ "prompt": prompt, "kind": kind, "model": model }))
         .send()
         .await
         .map_err(|_| "RigMatch is not running, so it cannot generate anything.".to_string())?;
@@ -662,6 +669,38 @@ async fn stop_rig_generation(id: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Ask RigMatch to test a model — its own test, run in its own window.
+///
+/// What comes back is whether it started. The run itself takes minutes and is
+/// watched in RigMatch, where the status bar and Activity already show it.
+#[tauri::command]
+async fn test_rig_model(kind: String, model: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let res = client
+        .post(bridge_url("/test"))
+        .header("Origin", "tauri://localhost")
+        .json(&serde_json::json!({ "kind": kind, "model": model }))
+        .send()
+        .await
+        .map_err(|_| "RigMatch is not running, so it cannot test anything.".to_string())?;
+
+    let status = res.status();
+    let body = res.json::<serde_json::Value>().await.unwrap_or(serde_json::Value::Null);
+    if !status.is_success() {
+        // RigMatch's own words: it knows whether ComfyUI is busy, the model is
+        // not one it can test, or nothing is installed to test it with.
+        let reason = body
+            .get("error")
+            .and_then(|e| e.as_str())
+            .unwrap_or("RigMatch could not start that test.");
+        return Err(reason.to_string());
+    }
+    Ok(body)
+}
+
 // Launches RigMatch from the bundled companions layout:
 //   <install-root>/companions/rigmatch-chat.exe  →  <install-root>/RigMatch.exe
 #[tauri::command]
@@ -719,6 +758,7 @@ pub fn run() {
             get_rig_generation_image,
             get_rig_generation_media,
             stop_rig_generation,
+            test_rig_model,
             get_ollama_vram,
             get_vram_info,
         ])
@@ -834,7 +874,7 @@ mod tests {
 
     #[test]
     fn writing_replaces_an_existing_store_and_leaves_no_temp_behind() {
-        // Rename-over-existing is platform specific; this is the behaviour the
+        // Rename-over-existing is platform specific; this is the behavior the
         // atomic write depends on, so it gets checked rather than assumed.
         let dir = std::env::temp_dir().join("rigmatch-store-replace");
         let _ = std::fs::remove_dir_all(&dir);
@@ -885,7 +925,7 @@ mod tests {
     }
 
     #[test]
-    fn cancelling_an_unknown_stream_is_harmless() {
+    fn canceling_an_unknown_stream_is_harmless() {
         // Stop can arrive after a reply has already finished and deregistered.
         let streams = ActiveStreams::default();
         let notify = std::sync::Arc::new(tokio::sync::Notify::new());
@@ -901,7 +941,7 @@ mod tests {
 
     #[test]
     fn nvidia_total_parses_both_output_forms() {
-        // Captured from the RTX 4070 on this machine. `nounits` is not honoured
+        // Captured from the RTX 4070 on this machine. `nounits` is not honored
         // by every driver version, so the unit-bearing form has to parse too.
         assert_eq!(parse_nvidia_total_mb("12282"), Some(12282));
         assert_eq!(parse_nvidia_total_mb("12282 MiB"), Some(12282));

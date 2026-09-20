@@ -121,7 +121,7 @@ export function readJudgeVerdict(answer: string): boolean | null {
  * Share of propositions the judge confirmed, or null when it could not answer
  * enough of them to mean anything.
  *
- * A summariser picked on the wrong metric once produced a summary that lost a
+ * A summarizer picked on the wrong metric once produced a summary that lost a
  * fact, and the lesson generalises: a weak judge does not yield a low score,
  * it yields no score. Reporting 30/100 when the judge shrugged at four
  * questions out of five would be a fabricated measurement.

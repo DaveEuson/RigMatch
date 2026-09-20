@@ -42,7 +42,7 @@ function summarizeMemory(mem) {
  * controller and systeminformation — which builds its Linux GPU list from lspci
  * — returns an empty array. Verified on an Orin Nano running JetPack R39:
  * si.graphics() reports zero controllers, so RigMatch had no model string, could
- * not recognise the part as unified-memory, and fell all the way through to 0 GB
+ * not recognize the part as unified-memory, and fell all the way through to 0 GB
  * on a machine with 7.4 GB to work with.
  *
  * The device tree answers where lspci cannot: "NVIDIA Jetson Orin Nano

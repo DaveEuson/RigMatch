@@ -30,7 +30,7 @@ test('peak is the loudest sample, whichever direction it swings', () => {
   assert.equal(peakAmplitude(new Float32Array([])), 0);
 });
 
-test('a dead microphone is recognised as silence', () => {
+test('a dead microphone is recognized as silence', () => {
   assert.equal(isEffectivelySilent(peakAmplitude(new Float32Array(16000))), true);
 });
 

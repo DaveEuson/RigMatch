@@ -167,7 +167,7 @@ export const GOALS: Goal[] = [
     matchLabel: 'Best for animating images',
     runtime: 'comfyui',
     // Supportable today — the LTX family has a local image-to-video template
-    // and the checkpoint already in the catalogue can drive it — but the
+    // and the checkpoint already in the catalog can drive it — but the
     // Video Lab only tests text-to-video so far. Until an i2v lab exists this
     // goal browses and downloads but does not grade, and it says so instead
     // of borrowing the text-to-video grade.
@@ -399,7 +399,7 @@ export function goalHardwareExpectation(goal: Goal, vramGb: number): GoalExpecta
       }
       return { tone: 'unlikely', note: 'The audio models here are 5 GB and up. Expect slow renders on this card — the test will give the real number.', source: 'heuristic' };
     case 'code':
-      // Rule of thumb, and labelled as one: small models write plausible-
+      // Rule of thumb, and labeled as one: small models write plausible-
       // looking code that often does not run. VRAM decides which sizes fit.
       if (vramGb >= 12) {
         return { tone: 'ready', note: 'Fits 7B–14B coding models, which is where genuinely useful code starts. Rule of thumb — the test decides.', source: 'heuristic' };

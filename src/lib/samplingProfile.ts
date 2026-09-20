@@ -12,7 +12,7 @@
  *
  * The family is read from the filename because it is the only thing available:
  * ComfyUI reports the checkpoints it can load, not what they are. That makes
- * this a heuristic, and it is written to fail safe — anything unrecognised
+ * this a heuristic, and it is written to fail safe — anything unrecognized
  * gets the ordinary settings that have always been used, so a new checkpoint
  * behaves no worse than it did before.
  */

@@ -182,7 +182,7 @@ if (nvidiaReading) {
   if (ratio > 0.8 && !unified) {
     report.verdict.push(
       `SUSPECT: GPU pool (${report.detection.gpuPoolGb}GB) is ${Math.round(ratio * 100)}% of system RAM ` +
-      `(${report.host.totalMemGb}GB), which looks unified — but "${gpuModel}" is not recognised as ` +
+      `(${report.host.totalMemGb}GB), which looks unified — but "${gpuModel}" is not recognized as ` +
       'unified hardware. Add a pattern to UNIFIED_MEMORY_GPU_PATTERNS.',
     );
   }

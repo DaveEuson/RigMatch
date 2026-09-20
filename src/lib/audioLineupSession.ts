@@ -262,5 +262,5 @@ export async function startAudioLineup(options: StartAudioLineupOptions): Promis
 export function stopAudioLineup(): void {
   if (!controller) return;
   controller.abort();
-  update({ message: 'Stopping — ComfyUI is cancelling the clip in flight.' });
+  update({ message: 'Stopping — ComfyUI is canceling the clip in flight.' });
 }

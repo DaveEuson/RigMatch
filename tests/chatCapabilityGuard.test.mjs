@@ -8,7 +8,7 @@ import { attachmentBlockedReason, chatBeyondNote, classifyChatRequest } from '..
 // announces it has made one. The second is a straight untruth, and the app was
 // relaying it without comment.
 
-test('a request for a picture is recognised', () => {
+test('a request for a picture is recognized', () => {
   for (const message of [
     'draw me a picture of a cat',
     'can you generate an image of a sunset',
@@ -37,7 +37,7 @@ test('talking about drawing is not asking for a drawing', () => {
     'what does this image tell you about the code',
     'explain how diffusion models create images',
     'write a function called drawGrid',
-    'summarise the picture this data paints of Q4',
+    'summarize the picture this data paints of Q4',
   ]) {
     assert.equal(classifyChatRequest(message), null, message);
   }
@@ -88,7 +88,7 @@ test('an attachment the model can take is left alone', () => {
   assert.equal(attachmentBlockedReason({ kind: 'image', model: 'llava', canSee: true, canHear: false }), null);
 });
 
-test('a transcription request is recognised', () => {
+test('a transcription request is recognized', () => {
   // A text model asked to transcribe does not refuse — it writes a plausible
   // transcript of nothing, which is the most convincing untruth of the lot.
   assert.equal(classifyChatRequest('transcribe this recording'), 'transcribe');

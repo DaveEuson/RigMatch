@@ -32,7 +32,7 @@ export function requestPull(current: PullRequest, next: 'cancel' | 'pause'): Pul
  * Order matters and is not obvious: a pause is only a pause if something was
  * actually downloading, because pausing between models leaves nothing to
  * resume and must read as a cancel. Read the wrong way round, a paused queue
- * announces itself as cancelled and the partial download is discarded.
+ * announces itself as canceled and the partial download is discarded.
  */
 export function pullOutcome({
   request,
@@ -40,9 +40,9 @@ export function pullOutcome({
 }: {
   request: PullRequest;
   hasActiveModel: boolean;
-}): 'paused' | 'cancelled' | 'failed' {
+}): 'paused' | 'canceled' | 'failed' {
   if (request === 'pause' && hasActiveModel) return 'paused';
-  if (request === 'cancel') return 'cancelled';
+  if (request === 'cancel') return 'canceled';
   return 'failed';
 }
 

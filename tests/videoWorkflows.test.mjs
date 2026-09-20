@@ -30,7 +30,7 @@ const EXPORTED = { prompt: '__PROMPT__', seed: 24 };
 const exportedGraph = (key) => catalog.models.find((m) => m.key === key).workflow;
 const REAL_SHA256 = /^[0-9a-f]{64}$/;
 
-test('every catalogue model has a spec, and nothing else does', () => {
+test('every catalog model has a spec, and nothing else does', () => {
   assert.deepEqual(
     VIDEO_MODEL_SPECS.map((spec) => spec.key).sort(),
     catalog.models.map((model) => model.key).sort(),
@@ -141,7 +141,7 @@ test('each model\'s main file declares every other file it cannot run without', 
   }
 });
 
-test('the catalogue\'s numbers are the export\'s numbers', () => {
+test('the catalog\'s numbers are the export\'s numbers', () => {
   for (const model of catalog.models) {
     const spec = videoModelSpec(model.key);
     assert.deepEqual(spec.output, model.output, model.key);
@@ -172,9 +172,9 @@ test('every lineup file carries a checksum, except the four a gated repository w
   assert.deepEqual(unhashed, ['gemma4-12b-ltx25', 'ltx-2.5', 'vae-ltx25-audio', 'vae-ltx25-video']);
 });
 
-test('a video checkpoint in the catalogue is never offered to the Image Lab as a picture model', () => {
+test('a video checkpoint in the catalog is never offered to the Image Lab as a picture model', () => {
   // LTX-2 and LTX-2.3 are checkpoints named ltx-2-… and ltx-2.3-…, which the
-  // name rule did not recognise, so the Image Lab would have run them.
+  // name rule did not recognize, so the Image Lab would have run them.
   for (const model of GENERATION_MODELS.filter((m) => m.kind === 'video' && m.folder === 'checkpoints')) {
     assert.ok(isVideoCheckpoint(model.filename), `${model.filename} would be offered as an image model`);
   }

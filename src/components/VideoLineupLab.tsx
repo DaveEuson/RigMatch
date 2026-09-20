@@ -391,11 +391,19 @@ export function VideoLineupLab({
                 className="video-lineup-name"
                 title={reachable ? facts.blocked ?? undefined : 'Start ComfyUI, and RigMatch can see which of these you already have.'}
               >
+                {/* The reason lived on the label's title, where a pointer finds
+                    it and a screen reader — or the screen audit — does not. On
+                    the box itself, it is part of the control's own name. */}
                 <input
                   type="checkbox"
                   checked={checked}
                   disabled={!facts.runnable || session.running}
                   onChange={() => togglePick(entry.key)}
+                  aria-label={facts.runnable
+                    ? `Race ${entry.name}`
+                    : `${entry.name} cannot race here: ${reachable
+                      ? facts.blocked ?? 'it does not fit this machine'
+                      : 'ComfyUI is not running, so RigMatch cannot see which files you have'}`}
                 />
                 <span>
                   <strong>{entry.name}</strong>

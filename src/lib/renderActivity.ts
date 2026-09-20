@@ -22,7 +22,7 @@ export type RenderKind = 'video' | 'image' | 'audio';
 
 export type RenderActivity = {
   kind: RenderKind;
-  /** The catalogue id of a model tested from its row, so the row can say so. */
+  /** The catalog id of a model tested from its row, so the row can say so. */
   key: string | null;
   /** The model at work now, or the one the run is about. */
   model: string | null;

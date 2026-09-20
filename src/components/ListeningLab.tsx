@@ -96,6 +96,8 @@ export function ListeningLab({
     try {
       const context = new AudioContext();
       audioContextRef.current = context;
+      // `createAnalyser` keeps its British spelling: it is the Web Audio API's
+      // name, not ours.
       const analyser = context.createAnalyser();
       analyser.fftSize = 1024;
       context.createMediaStreamSource(stream).connect(analyser);
@@ -104,7 +106,7 @@ export function ListeningLab({
 
       const tick = () => {
         analyser.getByteTimeDomainData(buffer);
-        // Bytes are centred on 128; distance from centre is the amplitude.
+        // Bytes are centered on 128; distance from center is the amplitude.
         let peak = 0;
         for (let i = 0; i < buffer.length; i += 1) {
           const value = Math.abs(buffer[i] - 128) / 128;

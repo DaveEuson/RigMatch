@@ -6,7 +6,7 @@
  * Categories 2, 6 and 7 — dead controls, missing affordance, size — are
  * checkable by a machine if it actually operates the app, and those are
  * exactly the ones a person's eye slides over on the twentieth pass. The
- * judgement calls (claims, agreement, honesty of score) still need reading;
+ * judgment calls (claims, agreement, honesty of score) still need reading;
  * this narrows where to read.
  *
  * Usage:  node scripts/audit-screens.mjs

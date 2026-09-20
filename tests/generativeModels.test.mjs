@@ -34,7 +34,7 @@ function loadMatcher(name) {
 const isImage = loadMatcher('isLikelyImageGenerationModel');
 const isVideo = loadMatcher('isLikelyVideoGenerationModel');
 
-test('the real image generators on Ollama are recognised', () => {
+test('the real image generators on Ollama are recognized', () => {
   // The two that exist, as published in the community namespace.
   assert.equal(isImage('x/flux2-klein'), true);
   assert.equal(isImage('x/z-image-turbo'), true);
@@ -70,16 +70,16 @@ test('nothing on Ollama satisfies "Makes video"', () => {
   }
 });
 
-test('a genuine video generator would still be recognised', () => {
+test('a genuine video generator would still be recognized', () => {
   // So the hidden filter reappears the day one lands, rather than staying dead.
   for (const name of ['wan2.1-t2v', 'ltx-video', 'cogvideox-5b', 'mochi-1', 'hunyuan-video']) {
     assert.equal(isVideo(name), true, `${name} should match`);
   }
 });
 
-test('the chip is hidden by the catalogue, not deleted from the code', () => {
+test('the chip is hidden by the catalog, not deleted from the code', () => {
   // Deleting it would mean noticing by hand if video generation ever arrives.
-  // Every renderer source, not App.tsx alone: this guard is about behaviour
+  // Every renderer source, not App.tsx alone: this guard is about behavior
   // that exists somewhere in the UI, and pinning it to one file made it fail
   // the moment ModelCabinet was extracted — a false alarm about a refactor
   // rather than a real regression.
@@ -151,7 +151,7 @@ test('capabilities are read from the installed model when the row carries one', 
   assert.equal(canGenerateText(row), false);
 });
 
-test('models that can answer are recognised as such', () => {
+test('models that can answer are recognized as such', () => {
   for (const caps of [['completion'], ['completion', 'tools'], ['completion', 'vision']]) {
     const row = { displayName: 'whatever', capabilities: caps };
     assert.equal(canGenerateText(row), true, `${caps} should be runnable`);
@@ -160,7 +160,7 @@ test('models that can answer are recognised as such', () => {
 });
 
 test('a provider that reports nothing falls back to the name, not to a refusal', () => {
-  // The browsable catalogue cannot be asked, and an older Ollama has no
+  // The browsable catalog cannot be asked, and an older Ollama has no
   // capabilities field. Assuming "cannot run" there would empty the app.
   assert.equal(canGenerateText({ displayName: 'llama3.2:3b' }), true);
   assert.equal(canGenerateText({ displayName: 'mistral:7b', capabilities: [] }), true);

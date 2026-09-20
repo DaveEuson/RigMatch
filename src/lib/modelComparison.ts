@@ -8,7 +8,7 @@ import { compareModelTags, describeModelTag } from './modelVariants.ts';
  * "Why is gemma4:e2b better than gemma4:e4b" is the first thing a real user
  * asks about two rows of the same family, and the app could not answer it:
  * getModelProfile matches on the family name, so every variant returned the
- * same archetype, the same specialties and the same colour.
+ * same archetype, the same specialties and the same color.
  *
  * The hard part is not laying out the numbers, it is knowing when not to claim
  * one. A Match score is RigMatch's own measurement on this machine, so a higher
@@ -148,7 +148,7 @@ export function compareModels(
  * missing when it does not — "test both to compare them" is a next action,
  * where a shrug is not.
  */
-export function summariseComparison(left: ComparisonSide, right: ComparisonSide): string {
+export function summarizeComparison(left: ComparisonSide, right: ComparisonSide): string {
   const a = left.score?.total;
   const b = right.score?.total;
   const leftName = left.row.displayName;

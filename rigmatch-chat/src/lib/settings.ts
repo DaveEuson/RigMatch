@@ -104,7 +104,7 @@ function normalizeSettings(settings: AppSettings): AppSettings {
     : DEFAULT_PERSONALITY_ID;
 
   // A stored value from a hand-edited or older settings blob must not become a
-  // num_ctx the model cannot honour, so anything unrecognized falls back to auto.
+  // num_ctx the model cannot honor, so anything unrecognized falls back to auto.
   const contextSize = settings.contextSize === "auto"
     || (typeof settings.contextSize === "number" && CONTEXT_STEPS.includes(settings.contextSize as never))
     ? settings.contextSize

@@ -58,8 +58,8 @@ import {
   upsertModelScores,
 } from './lib/scoring';
 import { BALANCE_STORAGE_KEY, applyBalance, readBalances, type Balances } from './lib/balance';
-import { codeWinner, labWinner, rankCoding, videoWinner } from './lib/channelWinners';
-import { chatPicks, pickAudioMaker, pickVideoMaker } from './lib/chatMakers';
+import { codeWinner, labWinner, rankCoding, rankLabList, videoWinner } from './lib/channelWinners';
+import { audioMakerChoices, chatPicks, videoMakerChoices } from './lib/chatMakers';
 import { renderChatAudio, renderChatVideo, type ChatRender } from './lib/chatRenders';
 import { installedAudioEntries } from './lib/audioLineup';
 import { audioModelSpec } from './lib/audioCatalog';
@@ -93,7 +93,7 @@ import { GameShowHost } from './components/GameShowHost';
 import { PanelHeader } from './components/CommonChrome';
 import { readDeckExpanded, writeDeckExpanded } from './lib/deckSettings';
 import { playJingle } from './lib/sound';
-import { TopDeck } from './components/TopDeck';
+import { ChannelSwitch, TopDeck } from './components/TopDeck';
 import {
   addSetValues,
   buildBugReportUrl,
@@ -133,8 +133,8 @@ import {
   canGenerateText,
   canJoinComparison,
   canHearAudio,
+  canReadImages,
   isLikelyImageGenerationModel,
-  isVisionModel,
   isListTestResult,
   isModelScores,
   isRecord,
@@ -187,6 +187,8 @@ import {
   TUTORIAL_STORAGE_KEY,
   UI_MODE_STORAGE_KEY,
   navItems,
+  readCloseCleanupAsk,
+  writeCloseCleanupAsk,
   type ThemeId,
   type UiMode,
 } from './lib/appConfig';
@@ -195,7 +197,7 @@ import { ShareScorecard } from './components/ShareScorecard';
 import { ExportHatchModal } from './components/ExportHatchModal';
 import { buildHatchProfile } from './lib/hatchProfile';
 import { UpdateAvailableToast } from './components/UpdateAvailableToast';
-import { SimpleWizard, type StepId as WizardStepId, type WizardModel } from './components/SimpleWizard';
+import { SimpleWizard, type DreamFilterId, type StepId as WizardStepId, type WizardModel } from './components/SimpleWizard';
 import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, ChoiceCruiseModal } from './components/dialogs';
 import { ChatDock } from './components/ChatDock';
 import { SkillRunMiniBar, LiveBuildModal, DemoResultModal } from './components/SkillDemoViewers';
@@ -240,6 +242,9 @@ import {
   DEFAULT_VISION_TEST_IMAGE,
   VISION_TEST_IMAGES,
 } from './lib/labChallenges';
+import { AUDIO_BENCHMARK_PROMPTS } from './lib/audioGenScoring';
+import { startAudioLineup } from './lib/audioLineupSession';
+import { startVideoLineup } from './lib/videoLineupSession';
 import { IMAGE_BENCHMARK_PROMPTS } from './lib/imageGenScoring';
 import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
 import { listenerCandidates } from './lib/audioGenChallenge';
@@ -253,6 +258,7 @@ import { modelMatchesTask } from './lib/modelCatalog';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLineupLive } from './lib/videoGenRunner';
 import {
+  allLineupEntries,
   asHardwareFit,
   comfyListing,
   estimateLineup,
@@ -319,6 +325,20 @@ type PersistedHistory = {
   savedAt: string;
 };
 
+/**
+ * The skill each test Chat can ask for runs, by the name Chat uses for it.
+ *
+ * Chat speaks in what a person would ask for — a picture it reads, an app it
+ * builds — and the run flow speaks in the skill's own name. One map, so the
+ * two vocabularies meet in exactly one place.
+ */
+const SKILL_FOR_TEST: Record<'reading' | 'listening' | 'code' | 'app', 'vision' | 'listening' | 'code' | 'app-builder'> = {
+  reading: 'vision',
+  listening: 'listening',
+  code: 'code',
+  app: 'app-builder',
+};
+
 function App() {
   const savedHistory = useMemo(() => getSavedHistory(), []);
   // On desktop, start with no benchmark data — the demo transcript/scores are
@@ -347,7 +367,7 @@ function App() {
   );
   const [queuedModelIds, setQueuedModelIds] = useState<Set<string>>(() => new Set());
   // Start empty on desktop: pre-picking five models made the wizard tick "Pick"
-  // as done before the user chose anything, showed the alternatives greyed out
+  // as done before the user chose anything, showed the alternatives grayed out
   // as "Lineup full", and told people to pick while having already picked for
   // them. Simple Mode offers an explicit "Choose for me" instead. The browser
   // demo keeps a filled lineup so the flow can be explored without setup.
@@ -406,7 +426,7 @@ function App() {
   const [reportOpen, setReportOpen] = useState(false);
   /**
    * The scores as measured. Everything downstream reads `modelScores` below,
-   * which is this map re-summarised at the chat Balance fader — so
+   * which is this map re-summarized at the chat Balance fader — so
    * what gets saved here is always the measurement, never a view of it.
    */
   const [savedModelScores, setModelScores] = useState<Record<string, TestedModelScore>>(() =>
@@ -415,7 +435,7 @@ function App() {
   /**
    * How much accuracy counts against speed: one Balance fader per channel,
    * asked before every test. The Match Score is the chat measurement, so the
-   * chat fader is the one that re-summarises it below.
+   * chat fader is the one that re-summarizes it below.
    */
   const [balances, setBalances] = useState<Balances>(() => readBalances(
     localStorage.getItem(BALANCE_STORAGE_KEY),
@@ -500,6 +520,8 @@ function App() {
   // Whether the live view is expanded (true) or minimized to the mini-bar (false).
   const [liveBuildOpen, setLiveBuildOpen] = useState(true);
   const [closeCleanupOpen, setCloseCleanupOpen] = useState(false);
+  /** Whether the disk-space offer still appears on the way out. */
+  const [closeCleanupAsk, setCloseCleanupAsk] = useState(() => readCloseCleanupAsk());
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
   const [benchmarkQuestionCount, setBenchmarkQuestionCount] = useState<BenchmarkQuestionCount>(10);
@@ -743,7 +765,7 @@ function App() {
     const reason = attachmentBlockedReason({
       kind: chatAttachment.kind,
       model: nextModel,
-      canSee: isVisionModel(nextModel),
+      canSee: canReadImages(nextRow ?? { displayName: nextModel }),
       canHear: canHearAudio(nextRow ?? { displayName: nextModel }),
     });
     if (reason) dropAttachment(reason, nextModel);
@@ -902,54 +924,69 @@ function App() {
     return collapseModelVariants(mapped, shortlistIds);
   }, [modelRows, shortlistIds, system.gpu.vramGb, system.platform]);
 
-  const wizardWinner = useMemo(
-    () => (topRigPick?.score
-      ? {
-        model: topRigPick.row.displayName,
-        score: topRigPick.score.total,
-        // The winner screen was printing the raw integer, so the app's most-seen
-        // score was the one surface still disagreeing with the decimal policy.
-        scoreLabel: formatMatchScore(topRigPick.score),
-        grade: topRigPick.score.grade,
-      }
-      : null),
-    [topRigPick],
-  );
+  /**
+   * What Simple Mode's show should measure.
+   *
+   * The wizard asks who your dream model is and then ran the same question
+   * round whatever the answer, so a coding buddy and a picture reader were
+   * both crowned on chat. The three answers Ollama can settle on its own now
+   * run their own test; makers need ComfyUI and still fall back to the
+   * questions, which is the next thing to fix rather than a thing to pretend
+   * about.
+   */
+  const [wizardDream, setWizardDream] = useState<DreamFilterId>('all');
+  const wizardRound: 'chat' | 'code' | 'vision' | 'listening' = wizardDream === 'code' ? 'code'
+    : wizardDream === 'read-image' ? 'vision'
+      : wizardDream === 'hear' ? 'listening'
+        : 'chat';
+  /**
+   * The channel whose results that round is ranked on.
+   *
+   * A coding buddy builds the small app rather than answering a code snippet
+   * question: it is the one round whose result a beginner can open, click and
+   * judge for themselves, which is worth more here than a number alone.
+   */
+  const wizardChannel: 'chat' | 'app' | 'reading' | 'listening' = wizardRound === 'vision' ? 'reading'
+    : wizardRound === 'code' ? 'app'
+      : wizardRound;
+  /** The skill each round runs, and the fader it is ranked at. */
+  const wizardSkill = wizardRound === 'code' ? 'app-builder' : wizardRound;
+  const wizardBalance = wizardChannel === 'app' ? balances.code : balances[wizardChannel];
 
   /**
-   * How the whole lineup placed, best first.
+   * What the wizard's Compare screen watches while a skill round runs.
    *
-   * The show is a comparison and the Winner screen was throwing the comparison
-   * away: it announced one model "out of the 5 you tested" and then showed
-   * nothing whatever about the other four. Every score is already here; only
-   * Advanced Mode was allowed to see them, which is exactly backwards for the
-   * mode whose users will never open Advanced.
+   * The picture, listening and app rounds report through `skillRunStatus`,
+   * which the wizard has never seen: its progress bar reads `RunProgress`, and
+   * its "the show is over" latch waits for a run to go active and then idle. So
+   * a picture round ran invisibly — Compare sat at 0% with Meet the winner
+   * disabled for as long as anyone waited — and where an earlier chat run had
+   * left `phase: 'complete'` behind, the latch released on the spot and crowned
+   * the previous board while the round was still going.
    */
-  const wizardLineupResults = useMemo(
-    () => shortlistedRows
-      .flatMap((row) => {
-        const score = modelScores[row.displayName];
-        return score ? [{ row, score }] : [];
-      })
-      // The app's own comparator, not a total-descending sort: the board shows
-      // the one-decimal Match value, and ranking on the rounded integer put
-      // 87.5 above 87.6 — a list that visibly contradicted its own numbers.
-      .sort((a, b) => compareTestedModelScores(a.score, b.score))
-      .map(({ row, score }) => ({
-        model: row.displayName,
-        name: getFriendlyModelName(row.displayName),
-        scoreLabel: formatMatchScore(score),
-        total: score.total,
-        grade: score.grade,
-      })),
-    [shortlistedRows, modelScores],
-  );
+  const wizardRunProgress: RunProgress | null = useMemo(() => {
+    if (wizardRound === 'chat') return runProgress;
+    if (skillRunStatus.phase === 'idle') return null;
+    const total = Math.max(skillRunStatus.total, 1);
+    return {
+      mode: 'speed-date',
+      phase: skillRunStatus.phase,
+      label: skillRunStatus.label,
+      // The label ends "… — <model>"; the screen names who is up now.
+      currentModel: skillRunStatus.label.split(' — ')[1] ?? '',
+      completed: skillRunStatus.completed,
+      total: skillRunStatus.total,
+      percent: Math.round((skillRunStatus.completed / total) * 100),
+      message: skillRunStatus.label,
+    };
+  }, [wizardRound, runProgress, skillRunStatus]);
+
 
   // Advanced's stats strip. Read once from the stored choice, falling back to
   // a rule based on how much height this screen actually has — see
   // scripts/measure-shell.mjs for the numbers that set the threshold.
   const [deckExpanded, setDeckExpanded] = useState(
-    () => readDeckExpanded(typeof window === 'undefined' ? 1080 : window.innerHeight),
+    () => readDeckExpanded(typeof window === 'undefined' ? 1080 : window.innerHeight, getSavedUiMode()),
   );
 
   /**
@@ -958,14 +995,14 @@ function App() {
    * The Pick screen filters generation models out of the Speed Dating lineup —
    * correctly, they cannot be benchmarked — and then had to describe the empty
    * grid. It said "No contestants can make video on this PC", which is not
-   * true: LTX-Video and WAN both ship in the catalogue and run here. Handing
+   * true: LTX-Video and WAN both ship in the catalog and run here. Handing
    * the wizard the real figures lets it say something true instead of
    * discouraging someone away from a feature that works.
    */
   const generationSummary = useMemo(() => {
-    const summarize = (kind: 'image' | 'video') => {
+    const summarize = (kind: 'image' | 'video' | 'audio') => {
       // Only the ones that run here: Simple Mode says "N run on this PC", and
-      // counting every catalogue row made that true of models too big for it.
+      // counting every catalog row made that true of models too big for it.
       const rows = modelRows.filter((row) => row.generationKind === kind
         && getHardwareFit(row, system.gpu.vramGb).recommend);
       return {
@@ -974,7 +1011,7 @@ function App() {
         names: rows.map((row) => row.displayName),
       };
     };
-    return { image: summarize('image'), video: summarize('video') };
+    return { image: summarize('image'), video: summarize('video'), audio: summarize('audio') };
   }, [modelRows, system.gpu.vramGb]);
 
   // Simple Mode needs its own share state: Advanced's lives inside the profile
@@ -1280,6 +1317,96 @@ function App() {
   const runChannel: ChannelId = workbenchInfo.id === 'code' || workbenchInfo.id === 'reading' ? workbenchInfo.id : 'chat';
 
   const labResults = useLabResults();
+
+  /**
+   * The show's results, from whichever round it ran.
+   *
+   * A skill round writes Lab results rather than Match scores, so the Winner
+   * screen reads those when the show was a coding job, a picture test or a
+   * listening test — ranked at that channel's fader, among the models that
+   * were actually picked, so the board on the last screen is the show that
+   * just happened and not a different one.
+   */
+  const wizardSkillBoard = useMemo(() => {
+    if (wizardRound === 'chat') return null;
+    const picked = new Set(shortlistedRows.map((row) => row.displayName));
+    const mine = Object.values(labResults).filter((result) => result && picked.has(result.model));
+    // Failures stay on the board. Dropping them made a round where nobody
+    // passed indistinguishable from a round that never ran — and since the
+    // winner screen unlocks on having a winner, five models that all fell short
+    // left the show with no way forward and nothing said. They are listed,
+    // last, and none of them is crowned.
+    const board = rankLabList(mine, wizardChannel as Exclude<typeof wizardChannel, 'chat'>, wizardBalance);
+    return board.length > 0 ? board : null;
+  }, [wizardRound, wizardChannel, shortlistedRows, labResults, wizardBalance]);
+
+  const wizardWinner = useMemo(
+    () => (wizardSkillBoard
+      // The first one that actually passed. A result that failed its check is
+      // never crowned, at any fader position.
+      ? (() => {
+        const top = wizardSkillBoard.find((ranked) => ranked.standing !== 'failed')?.item;
+        return top
+          ? { model: top.model, score: top.score, scoreLabel: String(top.score), grade: top.grade }
+          : null;
+      })()
+      : topRigPick?.score
+      ? {
+        model: topRigPick.row.displayName,
+        score: topRigPick.score.total,
+        // The winner screen was printing the raw integer, so the app's most-seen
+        // score was the one surface still disagreeing with the decimal policy.
+        scoreLabel: formatMatchScore(topRigPick.score),
+        grade: topRigPick.score.grade,
+      }
+      : null),
+    [topRigPick, wizardSkillBoard],
+  );
+
+  /**
+   * How the whole lineup placed, best first.
+   *
+   * The show is a comparison and the Winner screen was throwing the comparison
+   * away: it announced one model "out of the 5 you tested" and then showed
+   * nothing whatever about the other four. Every score is already here; only
+   * Advanced Mode was allowed to see them, which is exactly backwards for the
+   * mode whose users will never open Advanced.
+   */
+  const wizardLineupResults = useMemo(
+    () => (wizardSkillBoard
+      ? wizardSkillBoard.map(({ item: result, standing }) => {
+        // The coding round also asked questions, and that score is this
+        // model's Match: shown beside the app's, never instead of it.
+        const asked = wizardChannel === 'app' ? modelScores[result.model] : undefined;
+        return {
+          model: result.model,
+          name: getFriendlyModelName(result.model),
+          scoreLabel: String(result.score),
+          total: result.score,
+          grade: result.grade,
+          note: standing === 'failed'
+            ? 'did not pass the check'
+            : asked ? `${formatMatchScore(asked)} Match on the questions` : undefined,
+        };
+      })
+      : shortlistedRows
+      .flatMap((row) => {
+        const score = modelScores[row.displayName];
+        return score ? [{ row, score }] : [];
+      })
+      // The app's own comparator, not a total-descending sort: the board shows
+      // the one-decimal Match value, and ranking on the rounded integer put
+      // 87.5 above 87.6 — a list that visibly contradicted its own numbers.
+      .sort((a, b) => compareTestedModelScores(a.score, b.score))
+      .map(({ row, score }) => ({
+        model: row.displayName,
+        name: getFriendlyModelName(row.displayName),
+        scoreLabel: formatMatchScore(score),
+        total: score.total,
+        grade: score.grade,
+      }))),
+    [shortlistedRows, modelScores, wizardSkillBoard, wizardChannel],
+  );
   const lineupSession = useVideoLineupSession();
   /** Whatever ComfyUI is rendering for RigMatch now, wherever it was started. */
   const renderActivity = useRenderActivity();
@@ -1340,37 +1467,55 @@ function App() {
     () => comfyListing({ checkpoints: comfyCheckpoints, folders: comfyFolders ?? undefined }),
     [comfyCheckpoints, comfyFolders],
   );
-  const chatVideoMaker = useMemo(() => {
-    if (!comfyReachable) return null;
+  /** Every video model that can run here, as Chat lists them: tested first. */
+  const chatVideoChoices = useMemo(() => {
+    if (!comfyReachable) return [];
     const options = { calibration: readVideoCalibration(), saved: labResults };
-    return pickVideoMaker(runnableLineup(chatListing, videoMachine, options), lineupSession.record, pictureJudged ? balances.video : 0);
+    return videoMakerChoices({
+      runnable: runnableLineup(chatListing, videoMachine, options),
+      catalog: allLineupEntries(chatListing),
+      record: lineupSession.record,
+      balance: pictureJudged ? balances.video : 0,
+      secondsFor: (entry) => estimateLineup([entry], videoMachine, options).seconds,
+    });
   }, [comfyReachable, chatListing, videoMachine, labResults, lineupSession.record, pictureJudged, balances.video]);
-  const chatVideoSeconds = useMemo(
-    () => (chatVideoMaker
-      ? estimateLineup([chatVideoMaker], videoMachine, { calibration: readVideoCalibration(), saved: labResults }).seconds
-      : null),
-    [chatVideoMaker, videoMachine, labResults],
-  );
-  const chatAudioMaker = useMemo(() => {
-    if (!comfyReachable) return null;
-    const entry = pickAudioMaker(installedAudioEntries(chatListing), labResults, balances.audio);
-    return entry ? audioModelSpec(entry.key) ?? null : null;
-  }, [comfyReachable, chatListing, labResults, balances.audio]);
+  const chatAudioChoices = useMemo(() => (comfyReachable
+    ? audioMakerChoices({ installed: installedAudioEntries(chatListing), results: labResults, balance: balances.audio })
+    : []), [comfyReachable, chatListing, labResults, balances.audio]);
+  /**
+   * The model a Chat request runs on: the one it asked for, else the first
+   * offered. A key Chat was never offered is refused rather than guessed at,
+   * since the only sender that can name one is a Chat reading this same list.
+   */
+  const chatVideoEntry = useCallback((key?: string | null) => {
+    const wanted = key || chatVideoChoices[0]?.key;
+    if (!wanted || !chatVideoChoices.some((choice) => choice.key === wanted)) return null;
+    return allLineupEntries(chatListing).find((entry) => entry.key === wanted) ?? null;
+  }, [chatVideoChoices, chatListing]);
+  const chatAudioEntry = useCallback((key?: string | null) => {
+    const wanted = key || chatAudioChoices[0]?.key;
+    if (!wanted || !chatAudioChoices.some((choice) => choice.key === wanted)) return null;
+    return audioModelSpec(wanted) ?? null;
+  }, [chatAudioChoices]);
 
   // Chat asking for a clip or a sound. Pictures keep their own path, above.
   useEffect(() => {
     if (!agentArcadeApi.onBridgeGenerateRequest) return undefined;
-    return agentArcadeApi.onBridgeGenerateRequest(({ id, prompt, kind }) => {
+    return agentArcadeApi.onBridgeGenerateRequest(({ id, prompt, kind, model }) => {
       if (kind !== 'video' && kind !== 'audio') return;
       void (async () => {
         const report = (result: ChatRender) => agentArcadeApi.reportBridgeGenerateResult?.({ id, ...result });
         const noun = kind === 'video' ? 'a clip' : 'audio';
-        const name = kind === 'video' ? chatVideoMaker?.name : chatAudioMaker?.name;
+        const entry = kind === 'video' ? chatVideoEntry(model) : null;
+        const spec = kind === 'audio' ? chatAudioEntry(model) : null;
+        const name = entry?.name ?? spec?.name;
         if (!name) {
           await report({
-            error: kind === 'video'
-              ? 'No video model that can run on this PC is installed, or ComfyUI is not running.'
-              : 'No audio model is installed, or ComfyUI is not running.',
+            error: model
+              ? `RigMatch cannot make ${noun} with that model here. Pick another one.`
+              : kind === 'video'
+                ? 'No video model that can run on this PC is installed, or ComfyUI is not running.'
+                : 'No audio model is installed, or ComfyUI is not running.',
           });
           return;
         }
@@ -1385,10 +1530,10 @@ function App() {
         startImageTest({ key, kind, name, message: `Making ${noun} for RigMatch Chat: “${prompt}”`, stop: () => controller.abort() });
         try {
           const baseUrl = comfySettings.baseUrl;
-          const result: ChatRender = kind === 'video' && chatVideoMaker
-            ? await renderChatVideo({ entry: chatVideoMaker, prompt, baseUrl, signal: controller.signal })
-            : chatAudioMaker
-              ? await renderChatAudio({ spec: chatAudioMaker, prompt, baseUrl, signal: controller.signal })
+          const result: ChatRender = entry
+            ? await renderChatVideo({ entry, prompt, baseUrl, signal: controller.signal })
+            : spec
+              ? await renderChatAudio({ spec, prompt, baseUrl, signal: controller.signal })
               : { error: 'Nothing is installed to make it with.' };
           endImageTest(key, result.stopped
             ? { message: `Stopped making ${noun} for RigMatch Chat.`, failed: false }
@@ -1404,7 +1549,7 @@ function App() {
         }
       })();
     });
-  }, [chatVideoMaker, chatAudioMaker, comfySettings.baseUrl, renderActivity]);
+  }, [chatVideoEntry, chatAudioEntry, comfySettings.baseUrl, renderActivity]);
 
   // Chat's Stop, for whichever of its jobs is still running.
   useEffect(() => {
@@ -1512,7 +1657,7 @@ function App() {
     }
     // Deliberately does NOT touch selectedModel. It used to, which was fine on
     // the Models screen but wrong from the Closet in Settings: clicking Evict
-    // reassigned the app's selected model, and cancelling the confirmation left
+    // reassigned the app's selected model, and canceling the confirmation left
     // it reassigned — Top Pick and chat silently pointing somewhere new after an
     // action the user backed out of.
     setPendingDeleteModel(row);
@@ -1627,7 +1772,8 @@ function App() {
     if (!agentArcadeApi.onAppCloseRequest) return undefined;
 
     return agentArcadeApi.onAppCloseRequest(() => {
-      if (installedRowsForCleanup.length === 0) {
+      // Nothing to offer, or the offer was declined for good.
+      if (installedRowsForCleanup.length === 0 || !closeCleanupAsk) {
         void agentArcadeApi.closeApp();
         return;
       }
@@ -1635,7 +1781,7 @@ function App() {
       setCloseCleanupMessage(null);
       setCloseCleanupOpen(true);
     });
-  }, [installedRowsForCleanup.length]);
+  }, [installedRowsForCleanup.length, closeCleanupAsk]);
 
   const selectNav = useCallback((id: NavId) => {
     setActiveNavId(id);
@@ -1650,12 +1796,38 @@ function App() {
   }, [loadLogs]);
 
   /** Where a render in flight is shown in full: its model's row for a test of one, Comparison for a race. */
+  /**
+   * Open a model from another screen, and actually land on it.
+   *
+   * What's New sent the reader to the Models screen with the model selected and
+   * the channel left as it was. Opening a new cloud model while the channel was
+   * Reads images put them in front of an empty table: the model cannot read
+   * pictures, so the channel's lens filtered it out, and Open looked broken. A
+   * model the channel would hide moves to All, where every model is; a model the
+   * channel already shows leaves the channel alone.
+   */
+  /** A model opened from another screen, and when, so the list can bring it into view. */
+  const [revealModel, setRevealModel] = useState<{ model: string; at: number } | null>(null);
+  const openModelRow = useCallback((model: string) => {
+    setSelectedModel(model);
+    const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
+    const lens = workbenchInfo.taskFilter;
+    if (!row || (lens && !modelMatchesTask(row, lens))) chooseWorkbench('all');
+    // The moment, not the name: switching channel remounts the list, and a name
+    // it has already seen would leave the row collapsed and off screen.
+    setRevealModel({ model, at: Date.now() });
+    selectNav('models');
+  }, [modelRows, workbenchInfo.taskFilter, chooseWorkbench, selectNav]);
+
   const openRender = useCallback((render: RenderActivity) => {
     chooseWorkbench(renderChannel(render.kind));
     const row = render.solo && render.key
       ? modelRows.find((candidate) => candidate.generationId === render.key)
       : undefined;
-    if (row) setSelectedModel(row.displayName);
+    if (row) {
+      setSelectedModel(row.displayName);
+      setRevealModel({ model: row.displayName, at: Date.now() });
+    }
     selectNav(render.solo ? 'models' : 'speedDate');
   }, [chooseWorkbench, modelRows, selectNav]);
 
@@ -1761,6 +1933,38 @@ function App() {
   const requestBenchmarkRow = useCallback((row: ModelRow) => {
     requestBenchmarkForModel(row.displayName);
   }, [requestBenchmarkForModel]);
+
+  /**
+   * The picture test for one checkpoint, as the Images screen runs it: the same
+   * benchmark prompt, the same judge, and the result kept where every other
+   * picture result is kept, so a test started from Chat counts for the same
+   * crown as one started here.
+   */
+  const runPictureTest = useCallback(async (checkpoint: string) => {
+    const key = `picture-test:${checkpoint}`;
+    const promptId = IMAGE_BENCHMARK_PROMPTS[0].id;
+    const controller = new AbortController();
+    startImageTest({ key, kind: 'image', name: checkpoint, message: `Testing ${checkpoint}`, stop: () => controller.abort() });
+    try {
+      const run = await runImageLabChallenge({
+        checkpoint,
+        promptId,
+        judgeModel: pictureJudge || undefined,
+        ollamaBaseUrl: ollama.baseUrl,
+        comfyBaseUrl: comfySettings.baseUrl,
+        signal: controller.signal,
+      });
+      const result = toLabResult(run, promptId);
+      if (!result.error) writeAdvancedLabResults({ ...readAdvancedLabResults(), [`image:${checkpoint}`]: result });
+      endImageTest(key, result.error
+        ? { message: `${checkpoint} could not be tested: ${result.error}`, failed: true }
+        : { message: `${checkpoint} scored ${result.score} (${result.grade}).`, failed: false });
+    } catch (error) {
+      endImageTest(key, { message: `${checkpoint} could not be tested: ${getErrorMessage(error)}`, failed: true });
+    }
+  }, [pictureJudge, ollama.baseUrl, comfySettings.baseUrl]);
+
+
 
   const saveModelNote = useCallback((model: string, note: string) => {
     setModelNotes((current) => {
@@ -2197,7 +2401,7 @@ function App() {
           token: item.gated ? readHuggingFaceToken() || undefined : undefined,
         });
       } catch (error) {
-        // A cancelled stream lands here too; say stopped rather than failed,
+        // A canceled stream lands here too; say stopped rather than failed,
         // since the user asked for it.
         const message = getErrorMessage(error);
         if (pullQueueShouldStop()) {
@@ -2290,14 +2494,14 @@ function App() {
     setIsPullPaused(false);
     setIsPullingModels(true);
     let completedCount = 0;
-    let wasCancelled = false;
+    let wasCanceled = false;
     let activePullModel: string | null = null;
     const startingCount = queuedRows.length;
 
     try {
       for (const row of queuedRows) {
         if (pullQueueShouldStop()) {
-          wasCancelled = true;
+          wasCanceled = true;
           break;
         }
 
@@ -2376,10 +2580,10 @@ function App() {
       }
 
       if (pullQueueShouldStop()) {
-        wasCancelled = true;
+        wasCanceled = true;
       }
 
-      if (wasCancelled) {
+      if (wasCanceled) {
         const finishedLabel = completedCount === 0
           ? 'No models finished downloading.'
           : `${completedCount} of ${startingCount} model${startingCount === 1 ? '' : 's'} finished. Refreshing the model list...`;
@@ -2421,7 +2625,7 @@ function App() {
         return;
       }
 
-      if (outcome === 'cancelled') {
+      if (outcome === 'canceled') {
         setPullProgressByModel({});
         setActivity('Download queue canceled. No more queued models will start.');
         return;
@@ -2434,7 +2638,7 @@ function App() {
         // auto-start effect below restarts the queue the moment isPullingModels
         // goes false. A bad tag, a 404, or a full disk therefore produced a
         // tight retry loop against Ollama with the ticker flickering the same
-        // error forever, and no way out but cancelling the whole queue. The
+        // error forever, and no way out but canceling the whole queue. The
         // failed entry stays in pullProgressByModel so the UI can show what
         // happened and offer a retry.
         setQueuedModelIds((current) => {
@@ -2928,8 +3132,27 @@ function App() {
     tellUser(`Skill tests stopped: ${message}`);
   }, [tellUser]);
 
-  const runSkillTestsAfterRun = useCallback(async (models: string[]) => {
-    const selection = skillTestSelection;
+  /**
+   * `only` runs one skill across the models given, whatever the Skill Tests
+   * checkboxes say. Simple Mode's show uses it: someone who asked for a coding
+   * buddy gets the coding job, and someone who asked for a picture reader gets
+   * the picture test, rather than the question round every answer used to get.
+   */
+  const runSkillTestsAfterRun = useCallback(async (
+    models: string[],
+    only?: 'app-builder' | 'code' | 'vision' | 'listening',
+  ) => {
+    const selection = only
+      ? {
+        ...skillTestSelection,
+        appBuilder: only === 'app-builder',
+        code: only === 'code',
+        recognize: only === 'vision',
+        listen: only === 'listening',
+        image: false,
+        video: false,
+      }
+      : skillTestSelection;
     const appPrompt = resolveAppBuilderPrompt(selection.appPromptId, selection.appCustomPrompt);
     const codeTask = resolveCodeTask(selection.codeTaskId, selection.codeCustomTask);
     const jobs: Array<{ model: string; kind: 'app-builder' | 'image' | 'vision' | 'code' | 'listening' | 'video' }> = [];
@@ -2941,6 +3164,13 @@ function App() {
     const canHear = (model: string) => canHearAudio(
       modelRows.find((row) => row.displayName === model) ?? { displayName: model },
     );
+    // Same rule for eyes as for ears: what the provider reports about this
+    // model, with the name only as the fallback for one it will not describe.
+    // The name rule alone knows `gemma3` and not `gemma4`, so a model that
+    // reports `vision` was dropped from the picture round without a word.
+    const canSee = (model: string) => canReadImages(
+      modelRows.find((row) => row.displayName === model) ?? { displayName: model },
+    );
     for (const model of models) {
       if (selection.appBuilder && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
         jobs.push({ model, kind: 'app-builder' });
@@ -2948,7 +3178,7 @@ function App() {
       if (selection.code && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
         jobs.push({ model, kind: 'code' });
       }
-      if (selection.recognize && isVisionModel(model)) {
+      if (selection.recognize && canSee(model)) {
         jobs.push({ model, kind: 'vision' });
       }
       if (selection.listen && canHear(model)) {
@@ -2988,7 +3218,17 @@ function App() {
       }
     }
 
-    if (!jobs.length) return;
+    if (!jobs.length) {
+      // Silence here stranded the wizard: it waits for a run to start and then
+      // stop, and a round where nothing was eligible never did either. Say what
+      // happened, in the terms of what was asked for.
+      const nothing = selection.recognize ? 'None of these models can read pictures.'
+        : selection.listen ? 'None of these models can listen to audio.'
+        : 'None of these models can be tested that way.';
+      setSkillRunStatus({ phase: 'complete', label: nothing, completed: 0, total: 0 });
+      setActivity(nothing);
+      return;
+    }
 
     // One seed for the whole batch. Every video model then renders identical
     // input so the comparison is fair, while a later batch gets a different
@@ -3107,7 +3347,7 @@ function App() {
             seed: videoSeed,
             signal: stopVideo.signal,
             onProgress: (progress) => {
-              // Stop is honoured between models, as it is between other jobs.
+              // Stop is honored between models, as it is between other jobs.
               if (stopSkillRef.current) stopVideo.abort();
               if (progress.phase !== 'rendering') return;
               setSkillRunStatus({
@@ -3206,6 +3446,135 @@ function App() {
     // models can hear; without them here the run would use whatever was
     // installed when this callback was last built.
   }, [ollama.baseUrl, skillTestSelection, effectiveJudge, modelRows, videoMachine, pictureJudge]);
+
+  /**
+   * Chat asking RigMatch to test a model.
+   *
+   * Every choice in Chat names a model RigMatch has an opinion about, and until
+   * now the only way to earn that opinion was to find the model in RigMatch and
+   * start its test there. The test itself is RigMatch's own — the same solo run
+   * its screens start, with the same prompt, the same judge and the same
+   * unload — so what Chat triggers and what Advanced Mode triggers cannot
+   * drift apart. Chat hears whether it started; the run itself is watched in
+   * RigMatch, where the status bar and Activity already show it.
+   */
+  useEffect(() => {
+    if (!agentArcadeApi.onBridgeTestRequest) return undefined;
+    return agentArcadeApi.onBridgeTestRequest(({ id, kind, model }) => {
+      void (async () => {
+        const answer = (result: { started: boolean; message?: string; error?: string }) =>
+          agentArcadeApi.reportBridgeTestResult?.({ id, ...result });
+        // One render at a time, as every other path here refuses.
+        if (kind !== 'chat' && renderActivity) {
+          await answer({ started: false, error: `RigMatch is busy with ${renderActivity.model ?? 'another render'}.` });
+          return;
+        }
+        try {
+          if (kind === 'video') {
+            const entry = chatVideoEntry(model);
+            if (!entry) {
+              await answer({ started: false, error: 'RigMatch cannot test that video model here.' });
+              return;
+            }
+            await answer({ started: true, message: `Testing ${entry.name} in RigMatch.` });
+            const estimate = estimateLineup([entry], videoMachine, { calibration: readVideoCalibration(), saved: labResults });
+            void startVideoLineup({
+              entries: [entry],
+              // What its time will be read against, as the Video Lab reads it.
+              expected: { [entry.key]: { low: estimate.low, high: estimate.high, basis: estimate.basis } },
+              promptId: IMAGE_BENCHMARK_PROMPTS[0].id,
+              customPrompt: '',
+              judgeModel: pictureJudge || undefined,
+              ollamaBaseUrl: ollama.baseUrl,
+              // Cold, the way every other time on the board was measured.
+              unloadBetweenRuns: true,
+              gpuName: videoMachine.gpuName,
+              balance: pictureJudged ? balances.video : 0,
+              solo: true,
+            });
+            return;
+          }
+          if (kind === 'audio') {
+            const spec = chatAudioEntry(model);
+            if (!spec) {
+              await answer({ started: false, error: 'RigMatch cannot test that audio model here.' });
+              return;
+            }
+            await answer({ started: true, message: `Testing ${spec.name} in RigMatch.` });
+            void startAudioLineup({
+              entries: [{ key: spec.key, name: spec.name }],
+              promptId: AUDIO_BENCHMARK_PROMPTS[0].id,
+              customPrompt: '',
+              listenerModel: audioListener || undefined,
+              ollamaBaseUrl: ollama.baseUrl,
+              unloadBetweenRuns: true,
+              balance: balances.audio,
+              solo: true,
+            });
+            return;
+          }
+          if (kind === 'image') {
+            const checkpoint = chatImageGeneration.checkpoint;
+            if (!checkpoint) {
+              await answer({ started: false, error: 'No checkpoint that can draw is installed in ComfyUI.' });
+              return;
+            }
+            await answer({ started: true, message: `Testing ${checkpoint} in RigMatch.` });
+            void runPictureTest(checkpoint);
+            return;
+          }
+          const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
+          const blocker = getModelBenchmarkBlocker(row, selectedHost, ollama);
+          if (!row?.installed && !installedModelNames.has(model)) {
+            await answer({ started: false, error: `${model} is not installed here.` });
+            return;
+          }
+          if (blocker) {
+            await answer({ started: false, error: blocker });
+            return;
+          }
+          // The four skills a chat model is measured on beyond its answers.
+          // Each is the same run its own screen starts, on this one model, so a
+          // test begun from Chat and one begun in Advanced cannot disagree.
+          // A model is never asked to do what it cannot: an eyeless model asked
+          // to read a picture would take an F for the question, not the answer.
+          if (kind !== 'chat') {
+            if (kind === 'reading' && !canReadImages(row ?? { displayName: model })) {
+              await answer({ started: false, error: `${model} cannot read pictures, so there is nothing to measure.` });
+              return;
+            }
+            if (kind === 'listening' && !canHearAudio(row ?? { displayName: model })) {
+              await answer({ started: false, error: `${model} cannot listen to audio, so there is nothing to measure.` });
+              return;
+            }
+            // One test at a time. These share the graphics card, the run
+            // status and the Stop flag with every other run, so a second one
+            // started while the first is going measures the contention and
+            // leaves two runs writing over each other's progress.
+            if (gpuBusy || skillRunStatus.phase === 'running') {
+              await answer({ started: false, error: 'RigMatch is already running a test. This can start when that one finishes.' });
+              return;
+            }
+            await answer({ started: true, message: `Testing ${model} in RigMatch.` });
+            void runSkillTestsAfterRun([model], SKILL_FOR_TEST[kind]).catch(reportSkillRunFailure);
+            return;
+          }
+          // Not "Testing …": this one opens the resource warning and waits for
+          // a person. Chat said a run had begun while RigMatch sat on a dialog
+          // nobody had looked at yet.
+          await answer({ started: true, message: `RigMatch has ${model} ready — confirm the run there and it starts.` });
+          requestBenchmarkForModel(model);
+        } catch (error) {
+          await answer({ started: false, error: getErrorMessage(error) });
+        }
+      })();
+    });
+  }, [
+    chatVideoEntry, chatAudioEntry, chatImageGeneration.checkpoint, renderActivity, pictureJudge, pictureJudged,
+    ollama, audioListener, videoMachine, labResults, balances.video, balances.audio, modelRows, selectedHost,
+    installedModelNames, requestBenchmarkForModel, runPictureTest,
+    runSkillTestsAfterRun, reportSkillRunFailure, gpuBusy, skillRunStatus.phase,
+  ]);
 
   // One improve pass: hand the model its previous attempt (plus an optional user
   // hint), stream the rebuild into the live view, and return the new result — or
@@ -3328,14 +3697,14 @@ function App() {
 
   useEffect(() => {
     if (!pendingRunMode) { setPendingGpuContention(null); return; }
-    let cancelled = false;
+    let canceled = false;
     void agentArcadeApi.getGpuContention()
-      .then((result) => { if (!cancelled) setPendingGpuContention(result); })
+      .then((result) => { if (!canceled) setPendingGpuContention(result); })
       // A failed probe means the same thing as "could not check", which the
       // assessment already reports as `unknown` — so stay silent rather than
       // surfacing an error the user cannot act on.
       .catch(() => undefined);
-    return () => { cancelled = true; };
+    return () => { canceled = true; };
   }, [pendingRunMode]);
 
   const confirmPendingRun = useCallback(() => {
@@ -3376,7 +3745,7 @@ function App() {
   const cancelPendingRun = useCallback(() => {
     setPendingRunMode(null);
     setPendingSingleModel(null);
-    setActivity('Model test cancelled before resources were engaged.');
+    setActivity('Model test canceled before resources were engaged.');
   }, []);
 
 
@@ -3416,13 +3785,13 @@ function App() {
   useEffect(() => {
     if (!isDesktopRuntime) return;
     if (runProgress?.phase !== 'running') return;
-    let cancelled = false;
+    let canceled = false;
     const id = setInterval(() => {
       void agentArcadeApi.getSystemProfile()
-        .then((profile) => { if (!cancelled) setSystem(profile); })
+        .then((profile) => { if (!canceled) setSystem(profile); })
         .catch(() => { /* ignore transient poll errors */ });
     }, 1600);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => { canceled = true; clearInterval(id); };
   }, [runProgress?.phase]);
 
   useEffect(() => {
@@ -3506,7 +3875,7 @@ function App() {
       if (!row.installed) continue;
       const able: string[] = [];
       if (canGenerateText(row)) able.push('text');
-      if (isVisionModel(row.displayName)) able.push('vision');
+      if (canReadImages(row)) able.push('vision');
       if (canHearAudio(row)) able.push('audio');
       if (able.length) capabilities[row.displayName] = able;
     }
@@ -3529,13 +3898,23 @@ function App() {
       chosen: selectedModel,
       capabilities,
       imageMaker,
-      // What a clip or a sound would be made with, and how long a clip should take here.
-      videoMaker: { ready: Boolean(chatVideoMaker), model: chatVideoMaker?.name ?? null, seconds: chatVideoSeconds },
-      audioMaker: { ready: Boolean(chatAudioMaker), model: chatAudioMaker?.name ?? null },
+      // Every model a clip or a sound could be made with, tested first, with how
+      // long a clip should take here. The first is what Chat uses unless you pick.
+      videoMaker: {
+        ready: chatVideoChoices.length > 0,
+        model: chatVideoChoices[0]?.name ?? null,
+        seconds: chatVideoChoices[0]?.seconds ?? null,
+        choices: chatVideoChoices,
+      },
+      audioMaker: {
+        ready: chatAudioChoices.length > 0,
+        model: chatAudioChoices[0]?.name ?? null,
+        choices: chatAudioChoices,
+      },
       // The model each chat choice opens on.
       picks: chatModelPicks,
     } as Record<string, unknown>);
-  }, [modelScores, selectedModel, modelRows, chatImageGeneration, chatVideoMaker, chatVideoSeconds, chatAudioMaker, chatModelPicks]);
+  }, [modelScores, selectedModel, modelRows, chatImageGeneration, chatVideoChoices, chatAudioChoices, chatModelPicks]);
 
   useEffect(() => {
     if (!agentArcadeApi.onBenchmarkProgress) return undefined;
@@ -3593,13 +3972,13 @@ function App() {
   // visible in the UI — even after a renderer reload or a non-UI trigger.
   useEffect(() => {
     if (!agentArcadeApi.getActiveBenchmark) return undefined;
-    let cancelled = false;
+    let canceled = false;
     const apply = (status: BenchmarkStatus | undefined) => {
-      if (!cancelled) setExternalBenchmark(status?.running ? status : null);
+      if (!canceled) setExternalBenchmark(status?.running ? status : null);
     };
     agentArcadeApi.getActiveBenchmark().then(apply).catch(() => {});
     const off = agentArcadeApi.onBenchmarkStatus?.(apply);
-    return () => { cancelled = true; off?.(); };
+    return () => { canceled = true; off?.(); };
   }, []);
 
   useEffect(() => {
@@ -3624,12 +4003,27 @@ function App() {
     }
   }, [isPullPaused, isPullingModels, ollama.ready, pullQueuedModels, queuedRows.length, labDownloadName]);
 
+  /**
+   * The winner's jingle belongs to a result, not to a re-ranking.
+   *
+   * It fired on any rise in the Top Match's score, and the Balance fader
+   * re-ranks what has already been measured: dragging it from speed towards
+   * accuracy handed the crown to a different model every few notches, and the
+   * app sang each time. Nothing was being measured; the same numbers were
+   * being sorted differently. So the jingle now needs a run behind it — during
+   * one, or in the moments after it, while the scores settle.
+   */
+  const runActiveAtRef = useRef(0);
+  useEffect(() => {
+    if (isBenchmarking || isListTesting) runActiveAtRef.current = Date.now();
+  }, [isBenchmarking, isListTesting]);
+
   const prevTopScoreRef = useRef<number | null>(null);
   useEffect(() => {
     const score = topRigPick?.score?.total ?? null;
     const prev = prevTopScoreRef.current;
     if (score !== null && score !== prev) {
-      if (prev !== null && score > prev) {
+      if (prev !== null && score > prev && Date.now() - runActiveAtRef.current < 10_000) {
         playJingle('new-winner');
       }
       prevTopScoreRef.current = score;
@@ -3744,15 +4138,34 @@ function App() {
           onStartDownloads={() => requestThirdPartyModelDownloads(shortlistedRows)}
           onCancelDownloads={cancelDownloadQueue}
           isListTesting={isListTesting}
-          benchmarkActive={isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running)}
-          runProgress={runProgress}
+          benchmarkActive={isListTesting || isBenchmarking || runProgress?.phase === 'running' || skillRunStatus.phase === 'running' || Boolean(externalBenchmark?.running)}
+          runProgress={wizardRunProgress}
+          onDreamChange={setWizardDream}
+          round={wizardRound}
           onStartShow={() => {
             // Every score this show produces records where the fader stood.
-            runBalanceRef.current = balances.chat;
-            void runListTest();
+            runBalanceRef.current = wizardBalance;
+            // Clear the last round's ending before starting this one: the
+            // wizard releases its Compare step when the run it is watching goes
+            // from running to finished, and a 'complete' left over from the
+            // previous show is finished the instant this one begins.
+            setSkillRunStatus({ phase: 'idle', label: '', completed: 0, total: 0 });
+            if (wizardRound === 'chat') { void runListTest(); return; }
+            // The models picked for the show, in the order they were picked.
+            const models = shortlistedRows.filter((row) => row.installed).map((row) => row.displayName);
+            if (wizardRound === 'code') {
+              // A coding buddy is asked and then made to build: the questions
+              // measure how it answers, the app measures whether what it writes
+              // runs. Either alone crowns a model on half the job.
+              void runListTest()
+                .then(() => runSkillTestsAfterRun(models, 'app-builder'))
+                .catch(reportSkillRunFailure);
+              return;
+            }
+            void runSkillTestsAfterRun(models, wizardSkill as 'app-builder' | 'vision' | 'listening').catch(reportSkillRunFailure);
           }}
-          balance={balances.chat}
-          onBalanceChange={(value) => setBalance('chat', value)}
+          balance={wizardBalance}
+          onBalanceChange={(value) => setBalance(wizardChannel === 'app' ? 'code' : wizardChannel, value)}
           onStopShow={requestStopRun}
           winner={wizardWinner}
           lineupResults={wizardLineupResults}
@@ -3767,6 +4180,27 @@ function App() {
             onStopDownload: stopLabDownload,
             balance: balances.video,
             onBalanceChange: (value) => setBalance('video', value),
+          }}
+          makerRun={{
+            context: {
+              comfyReachable,
+              comfyFolders,
+              judgeModel: pictureJudge,
+              listenerModel: audioListener,
+              ollamaBaseUrl: ollama.baseUrl,
+              machine: videoMachine,
+              gpuBusy,
+              onCheckComfy: () => { void refreshComfyStatus(); },
+              // No Models screen in Simple Mode: this is the trip to Advanced,
+              // and the banner there says why the interface changed.
+              onOpenModels: () => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('models'); },
+            },
+            // Ranked where the channel's own fader stands, and flat on speed
+            // where nothing installed can judge what came out.
+            balances: {
+              images: pictureJudged ? balances.images : 0,
+              audio: audioListener ? balances.audio : 0,
+            },
           }}
           onChatWithWinner={openChatWithWinner}
           onOpenScorecard={() => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('history'); }}
@@ -3825,7 +4259,6 @@ function App() {
         deckExpanded={deckExpanded}
         onDeckExpandedChange={(expanded) => { setDeckExpanded(expanded); writeDeckExpanded(expanded); }}
         workbench={workbench}
-        onWorkbenchChange={chooseWorkbench}
         channelWinner={channelWinner}
         balance={balances[activeChannel]}
         onBalanceChange={(value) => setBalance(activeChannel, value)}
@@ -3853,22 +4286,32 @@ function App() {
       />
 
       <main className="stage-content">
-        <GameShowHost
-          uiMode={uiMode}
-          activeNavLabel={getNavLabel(activeNavId)}
-          ollamaReady={ollama.ready || lmStudio.ready}
-          installedCount={localModels.length}
-          modelCount={modelRows.length}
-          shortlistedCount={shortlistedRows.length}
-          uninstalledShortlistedCount={uninstalledShortlistedCount}
-          queuedCount={queuedRows.length}
-          scoredCount={scoredModelCount}
-          topPick={topRigPick}
-          isBusy={isScanningRig || isBenchmarking || isListTesting}
-          onSelectNav={selectNav}
-          onCheckRig={refreshRig}
-          onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
-        />
+        {/* The host narrates Simple Mode. In Advanced he announced which screen
+            was open, how many models were installed and how many were picked —
+            all of it already in the side menu and the lineup strip — above the
+            table that screen exists to show. The channels take that line
+            instead: they filter the panel below them, so they belong there and
+            not folded inside a header that collapses. */}
+        {uiMode === 'advanced'
+          ? <ChannelSwitch value={workbench} onChange={chooseWorkbench} />
+          : (
+            <GameShowHost
+              uiMode={uiMode}
+              activeNavLabel={getNavLabel(activeNavId)}
+              ollamaReady={ollama.ready || lmStudio.ready}
+              installedCount={localModels.length}
+              modelCount={modelRows.length}
+              shortlistedCount={shortlistedRows.length}
+              uninstalledShortlistedCount={uninstalledShortlistedCount}
+              queuedCount={queuedRows.length}
+              scoredCount={scoredModelCount}
+              topPick={topRigPick}
+              isBusy={isScanningRig || isBenchmarking || isListTesting}
+              onSelectNav={selectNav}
+              onCheckRig={refreshRig}
+              onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
+            />
+          )}
         {activeNavId === 'lan' && (
           <LanBrowser
             active={true}
@@ -3896,6 +4339,7 @@ function App() {
             key={workbenchInfo.id}
             active={true}
             rows={modelRows}
+            reveal={revealModel}
             comfyFolderSet={Boolean(comfySettings.folder)}
             goalLens={workbenchInfo.taskFilter ?? undefined}
             generationTest={{
@@ -4001,7 +4445,7 @@ function App() {
             formatPullCount={formatPullCount}
             onRefresh={refreshRig}
             onToggleNotifications={toggleModelNewsNotifications}
-            onOpenModel={(model) => { setSelectedModel(model); selectNav('models'); }}
+            onOpenModel={openModelRow}
           />
         )}
         {activeNavId === 'speedDate' && comparedWorkbench && (
@@ -4393,7 +4837,7 @@ function App() {
         <QuickCheckWarningModal
           row={pendingQuickCheck}
           questionCount={QUICK_CHECK_QUESTIONS.length}
-          onCancel={() => { setPendingQuickCheck(null); setActivity('Quick test cancelled before resources were engaged.'); }}
+          onCancel={() => { setPendingQuickCheck(null); setActivity('Quick test canceled before resources were engaged.'); }}
           onConfirm={confirmQuickCheck}
         />
       )}
@@ -4513,6 +4957,8 @@ function App() {
           onDeleteEverything={() => { void deleteRowsThenClose(installedRowsForCleanup, 'installed'); }}
           onCancel={cancelCloseCleanup}
           onUnderstand={() => { void closeAppAfterCleanup(); }}
+          askAgain={closeCleanupAsk}
+          onAskAgainChange={(ask) => { setCloseCleanupAsk(ask); writeCloseCleanupAsk(ask); }}
         />
       )}
       {supportModalOpen && (

@@ -6,7 +6,7 @@ import type { ModelRow } from '../types';
  * The filter rail: what you can narrow by, visible without opening anything.
  *
  * The tray this replaces answered "what can I narrow by" only after you clicked
- * a button labelled "Filters — 2 active", which named neither of the two. The
+ * a button labeled "Filters — 2 active", which named neither of the two. The
  * rail's whole job is that the answer is already on screen: the groups, the
  * options, and the count each one would leave you with.
  *
@@ -123,7 +123,7 @@ export function buildSearchSuggestions(input: {
   developerOptions: Array<{ id: string; label: string; count: number }>;
 }): SearchSuggestion[] {
   const query = input.query.trim().toLowerCase();
-  // One letter matches most of the catalogue; the list would be noise.
+  // One letter matches most of the catalog; the list would be noise.
   if (query.length < 2) return [];
 
   const ranked: Array<{ suggestion: SearchSuggestion; rank: number }> = [];

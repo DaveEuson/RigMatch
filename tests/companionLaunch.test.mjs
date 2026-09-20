@@ -29,7 +29,7 @@ test('a taken bridge does not send you looking for a missing file', () => {
   assert.doesNotMatch(message, /tauri build/);
 });
 
-test('an unrecognised failure falls back to the install advice', () => {
+test('an unrecognized failure falls back to the install advice', () => {
   // Better to point at the common cause than to say nothing at all.
   for (const result of [{ ok: false }, { ok: false, reason: 'weird' }, null, undefined]) {
     assert.match(companionLaunchMessage(result), /not found/i);

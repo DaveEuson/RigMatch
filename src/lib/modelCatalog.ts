@@ -67,7 +67,7 @@ export type HardwareFit = {
  *
  * Ollama reports this from `/api/show` — observed vocabulary on 0.32.9:
  * `completion`, `vision`, `tools`, `image`. It is only available for installed
- * models; the browsable catalogue cannot be asked, so the name heuristics below
+ * models; the browsable catalog cannot be asked, so the name heuristics below
  * remain the fallback rather than being replaced.
  */
 export type CapabilityBearing = {
@@ -75,7 +75,7 @@ export type CapabilityBearing = {
   installedModel?: { capabilities?: string[]; name?: string; model?: string };
   displayName?: string;
   name?: string;
-  /** False for a catalogue row that is not on this machine. */
+  /** False for a catalog row that is not on this machine. */
   installed?: boolean;
 };
 
@@ -84,7 +84,7 @@ export type CapabilityBearing = {
  *
  * The installed model wins. That comes from /api/show — the provider
  * describing a file it actually has — whereas `row.capabilities` on a
- * catalogue entry is what the Ollama website lists for the family, which is
+ * catalog entry is what the Ollama website lists for the family, which is
  * coarser: it covers a family rather than a tag, so a family listed as
  * seeing does not prove that its 0.5b tag does.
  *
@@ -106,15 +106,15 @@ export function getModelCapabilities(row: CapabilityBearing): string[] | null {
  * that cannot complete must be kept out of chat, out of benchmarks, and out of
  * a lineup, or it scores an F for a fault that is not its own.
  *
- * Unknown capabilities mean an older provider or a catalogue entry, and those
- * are assumed runnable — the previous behaviour, and wrong only for the handful
+ * Unknown capabilities mean an older provider or a catalog entry, and those
+ * are assumed runnable — the previous behavior, and wrong only for the handful
  * of image models.
  */
 export function canGenerateText(row: CapabilityBearing & { generationKind?: string }): boolean {
   // A ComfyUI checkpoint is settled before any capability lookup: it produces
   // pixels, not words, and it has no capabilities field — which the fallback
   // below reads as "assume runnable". That default exists so unknown Ollama
-  // catalogue entries are not excluded, and without this line it quietly
+  // catalog entries are not excluded, and without this line it quietly
   // qualified Stable Diffusion for a conversation benchmark.
   if (row.generationKind) return false;
   const capabilities = getModelCapabilities(row);
@@ -781,7 +781,7 @@ export function getModelSortValue(
     case 'skill':
       return getModelGoodForTags(row).join(' ');
     // 'origin' has always sorted by country while the column showing it was
-    // labelled "By" and printed the organisation — so sorting by the maker
+    // labeled "By" and printed the organization — so sorting by the maker
     // sorted by where they are. Now that country has its own column, the two
     // keys can mean what their headers say.
     case 'maker':
@@ -812,7 +812,7 @@ export function getModelSortValue(
       // release date and does not claim to be.
       //
       // Only installed models have one at all, which is why the column appears
-      // only under the Installed filter. Sorting a catalogue of 322 rows by a
+      // only under the Installed filter. Sorting a catalog of 322 rows by a
       // field 16 of them carry would be a list of blanks with a few dates on
       // the end.
       return row.installedModel?.modifiedAt ? Date.parse(row.installedModel.modifiedAt) || -1 : -1;
@@ -1405,6 +1405,13 @@ export const TASK_CATEGORIES = [
 export type TaskCategoryId = typeof TASK_CATEGORIES[number]['id'];
 export type ModelTaskFilterId = TaskCategoryId | 'uncensored' | 'imagegen' | 'videogen' | 'hears' | 'videoread' | 'audiogen';
 
+/**
+ * What the wizard can be asked for. Eight, for the seven things RigMatch
+ * measures: talking and writing are two ways of asking for the one channel,
+ * because a beginner looking for a writing partner does not read "chat".
+ */
+export type DreamTag = 'talk' | 'write' | 'code' | 'read-image' | 'hear' | 'image' | 'video' | 'audio';
+
 export const TASK_FILTER_CHIPS: Array<{ id: ModelTaskFilterId; label: string }> = [
   { id: 'coding',     label: 'Coding' },
   { id: 'assistant',  label: 'Chat' },
@@ -1538,14 +1545,24 @@ export function getModelGoodForLine(row: ModelRow): string {
   }
 }
 
-/** Which Simple Mode "dream" filters a model matches. */
-export function getModelDreamTags(row: ModelRow): Array<'talk' | 'write' | 'code' | 'image' | 'video'> {
-  const tags: Array<'talk' | 'write' | 'code' | 'image' | 'video'> = [];
+/**
+ * What a model could be someone's dream for, in the wizard's own words.
+ *
+ * All seven things RigMatch measures, not the five the wizard used to ask
+ * about: reading a picture, listening to audio and making audio were tested
+ * in Advanced Mode and unaskable in Simple, so a beginner who wanted one had
+ * no way to say so.
+ */
+export function getModelDreamTags(row: ModelRow): DreamTag[] {
+  const tags: DreamTag[] = [];
   if (modelMatchesTask(row, 'assistant')) tags.push('talk');
   if (modelMatchesTask(row, 'writing')) tags.push('write');
   if (modelMatchesTask(row, 'coding')) tags.push('code');
+  if (modelMatchesTask(row, 'vision')) tags.push('read-image');
+  if (modelMatchesTask(row, 'hears')) tags.push('hear');
   if (isLikelyImageGenerationModel(row.displayName)) tags.push('image');
   if (isLikelyVideoGenerationModel(row.displayName)) tags.push('video');
+  if (modelMatchesTask(row, 'audiogen')) tags.push('audio');
   return tags;
 }
 
@@ -1613,7 +1630,7 @@ export type TaskPick = {
   score: TestedModelScore;
   /**
    * True when this pick came from questions of that kind actually being asked
-   * on this machine, rather than from the catalogue's description of what the
+   * on this machine, rather than from the catalog's description of what the
    * model is generally for.
    */
   measured?: boolean;
@@ -1640,8 +1657,8 @@ export function getTaskTopPicks(
 
   // The benchmark asks coding and assistant questions and scores each answer,
   // so for those two categories there is a real result to use. The rest still
-  // come from the catalogue's keywords, which describe the model rather than
-  // its behaviour here.
+  // come from the catalog's keywords, which describe the model rather than
+  // its behavior here.
   const byModel = Object.fromEntries(scored.map((s) => [s.model, s.taskScores]));
   const measuredFor: Partial<Record<TaskCategoryId, TaskGroupId>> = {
     coding: 'coding',
@@ -1730,7 +1747,7 @@ export function getModelQuickFilters(
     //
     // It was "Rig Picks", which is the app's word rather than the user's, and
     // the cost was measurable: asked for a "Good Fit" filter, RigMatch's own
-    // author did not recognise this button with it open in front of him. The
+    // author did not recognize this button with it open in front of him. The
     // sibling filter below already does the right thing — "Too Big" selects the
     // rows badged "Too big" — while this one selected rows badged "Good fit",
     // "Sweet spot" and "Small pick" and named none of them.

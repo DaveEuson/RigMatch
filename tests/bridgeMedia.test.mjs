@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { FOLDER, generationKind, mimeForFile, parseMediaDataUrl, savePlan } = require('../electron/bridgeMedia.cjs');
+const { FOLDER, generationKind, mimeForFile, parseMediaDataUrl, savePlan, testRequest } = require('../electron/bridgeMedia.cjs');
 
 /**
  * RigMatch Chat can ask for a picture, a video or audio. These lock what it may
@@ -44,4 +44,21 @@ test('a saved file is served back as what it is', () => {
   assert.equal(mimeForFile('gen-2.mp3'), 'audio/mpeg');
   assert.equal(mimeForFile('gen-3.PNG'), 'image/png');
   assert.equal(mimeForFile('gen-4.exe'), 'application/octet-stream');
+});
+
+test('a test Chat asks for names a model and one of the things RigMatch tests', () => {
+  assert.deepEqual(testRequest({ kind: 'video', model: 'file:ltx-video-2b-v0.9.5.safetensors' }),
+    { kind: 'video', model: 'file:ltx-video-2b-v0.9.5.safetensors' });
+  assert.deepEqual(testRequest({ kind: 'chat', model: '  qwen2.5:7b  ' }), { kind: 'chat', model: 'qwen2.5:7b' });
+  // Every skill RigMatch measures can be asked for by name, including the four
+  // that run on the chat model itself.
+  assert.deepEqual(testRequest({ kind: 'listening', model: 'gemma4:e2b' }), { kind: 'listening', model: 'gemma4:e2b' });
+  assert.deepEqual(testRequest({ kind: 'reading', model: 'gemma4:e2b' }), { kind: 'reading', model: 'gemma4:e2b' });
+  assert.deepEqual(testRequest({ kind: 'code', model: 'qwen3.5:9b' }), { kind: 'code', model: 'qwen3.5:9b' });
+  assert.deepEqual(testRequest({ kind: 'app', model: 'qwen3.5:9b' }), { kind: 'app', model: 'qwen3.5:9b' });
+  assert.equal(testRequest({ kind: 'embedding', model: 'nomic-embed-text' }), null, 'a kind RigMatch does not test');
+  assert.equal(testRequest({ kind: 'video' }), null, 'a kind with no model is not a request');
+  assert.equal(testRequest({ kind: 'video', model: '   ' }), null);
+  assert.equal(testRequest({ kind: 'video', model: 'x'.repeat(201) }), null);
+  assert.equal(testRequest(null), null);
 });

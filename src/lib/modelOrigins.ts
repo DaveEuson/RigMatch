@@ -53,10 +53,10 @@ export function getCountryCode(country: string): string | null {
  * The models table shows `row.publisher ?? origin.organization` as the maker
  * but took the country from getModelOrigin(displayName) — two sources that can
  * disagree. They did: "T5-XXL text encoder (fp8)" carries the publisher Google
- * from the catalogue while its name matches no family, so the row said Google
+ * from the catalog while its name matches no family, so the row said Google
  * made it and then had nothing to say about where.
  *
- * Every entry here is an organisation already named in getModelOrigin above,
+ * Every entry here is an organization already named in getModelOrigin above,
  * keyed by name instead of by model. No new claims about who is where — the
  * same facts reached the other way round.
  */
@@ -103,7 +103,7 @@ export function getCountryForOrganization(organization: string): string | null {
  * of these are politically sensitive, and a badge is not the place to be
  * approximately right.
  *
- * Lightricks is the standing example — a real publisher in the catalogue, left
+ * Lightricks is the standing example — a real publisher in the catalog, left
  * uncoded on purpose rather than filled in from memory.
  */
 export function getDisplayCountry(model: string, publisher?: string): string | null {

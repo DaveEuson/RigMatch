@@ -71,7 +71,7 @@ export function renderWhatsNew(entry) {
 
 const DOWNLOAD_SECTIONS = `## Downloads
 
-- **Windows**: \`RigMatch-*-win-x64.exe\`
+- **Windows**: \`RigMatch-*-win-x64.exe\` (installer), or \`RigMatch-*-win-x64.zip\` — unpack it anywhere and run \`RigMatch.exe\`, which installs nothing and skips the SmartScreen prompt below
 - **macOS Apple Silicon**: \`RigMatch-*-mac-arm64.dmg\`
 - **macOS Intel**: \`RigMatch-*-mac-x64.dmg\`
 - **Linux x64**: \`RigMatch-*-linux-x86_64.AppImage\` or \`RigMatch-*-linux-amd64.deb\`
@@ -87,7 +87,7 @@ RigMatch for Windows is an unsigned beta, so Microsoft Defender SmartScreen will
 2. If SmartScreen says *"Windows protected your PC"*, choose **More info**, then **Run anyway**.
 3. If your browser blocks the download instead, choose **Keep** and, where asked, **Keep anyway**.
 
-Prefer not to click through a warning? Download the **\`.zip\`** instead, unpack it anywhere, and run \`RigMatch.exe\` from the folder — a portable copy that installs nothing.
+Prefer not to click through a warning at all? Take the **\`.zip\`** from Downloads above instead.
 
 Either way, verify what you downloaded against \`SHA256SUMS.txt\` on this release:
 
@@ -96,6 +96,14 @@ Get-FileHash RigMatch-*-win-x64.exe -Algorithm SHA256
 \`\`\`
 
 A signing certificate is on the roadmap; until it is bought and the reputation builds, this warning is expected on every release.
+
+What you can check in the meantime: every file here is published with GitHub build provenance, a signed record of which workflow built it, from which commit. With the \`gh\` CLI:
+
+\`\`\`bash
+gh attestation verify RigMatch-*-win-x64.exe --repo DaveEuson/RigMatch
+\`\`\`
+
+That proves the file came from this repository's release workflow and has not been altered since. It is not code signing, and Windows will still show its warning.
 
 ## macOS first launch
 

@@ -56,11 +56,11 @@ export type VideoLineupEntry = {
   sizing: VideoSizing;
   refMeasured: boolean;
   output: VideoModelSpec['output'];
-  /** A catalogue model, built by its family's graph. */
+  /** A catalog model, built by its family's graph. */
   spec?: VideoModelSpec;
   /** An LTX-Video 0.9 checkpoint, built by the graph RigMatch shipped in 0.6. */
   legacy?: { checkpoint: string; textEncoder: string };
-  /** Found in ComfyUI rather than downloaded from the catalogue, so on disk by definition. */
+  /** Found in ComfyUI rather than downloaded from the catalog, so on disk by definition. */
   found?: boolean;
 };
 
@@ -106,7 +106,24 @@ const LTX_2_NAME = /ltx-?2(?:\.\d+)?[-_.]/i;
 const T5_XXL_NAME = /t5xxl/i;
 
 /**
- * LTX-Video 0.9 checkpoints ComfyUI lists that did not come from the catalogue.
+ * The file said the way a person would say it.
+ *
+ * "ltx-video-2b-v0.9.5.safetensors" is a filename, and every screen that
+ * offered the model showed it as though it were the model's name — the maker
+ * card in Chat worst of all, where it sat under "Video maker" as the thing
+ * about to make your clip. Where the name carries neither a size nor a version
+ * there is nothing to improve on, so the file keeps its own name, minus the
+ * extension.
+ */
+export function strayLtxName(file: string): string {
+  const size = file.match(/(\d+(?:\.\d+)?)b\b/i)?.[1];
+  const version = file.match(/0\.9(?:\.\d+)?/)?.[0];
+  if (!size && !version) return file.replace(/\.[^.]+$/, '');
+  return `LTX-Video${size ? ` ${size}B` : ''}${version ? ` ${version}` : ''} (your own file)`;
+}
+
+/**
+ * LTX-Video 0.9 checkpoints ComfyUI lists that did not come from the catalog.
  *
  * Until 0.9 the Lab ran any LTX checkpoint in models/checkpoints and told people
  * to put one there, so some have files RigMatch never downloaded. Those still
@@ -125,7 +142,7 @@ export function strayLtxEntries(installed: ComfyFolderListing): VideoLineupEntry
     .filter((name) => LTX_09_NAME.test(name) && !LTX_2_NAME.test(name) && !isCatalogFile(name))
     .map((name) => ({
       key: `file:${name}`,
-      name,
+      name: strayLtxName(name),
       publisher: LEGACY_LTX.publisher,
       sizing: /13b/i.test(name) && big ? big.sizing : LEGACY_LTX.sizing,
       refMeasured: false,
@@ -135,7 +152,7 @@ export function strayLtxEntries(installed: ComfyFolderListing): VideoLineupEntry
     }));
 }
 
-/** The catalogue lineup, and whatever LTX-Video 0.9 checkpoints ComfyUI already has. */
+/** The catalog lineup, and whatever LTX-Video 0.9 checkpoints ComfyUI already has. */
 export function allLineupEntries(installed: ComfyFolderListing): VideoLineupEntry[] {
   return [...VIDEO_LINEUP, ...strayLtxEntries(installed)];
 }

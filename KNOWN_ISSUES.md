@@ -65,7 +65,7 @@ On Linux with the NVIDIA proprietary driver — most often on Wayland — the Ri
 **VRAM could read as 0 on some Linux/NVIDIA systems (fixed in 0.3.3, extended in 0.7.1)**
 The hardware scan sometimes couldn't read NVIDIA graphics memory on Linux, reporting 0 VRAM. That made RigMatch recommend only the smallest models (e.g. phi3:mini even on a 4090). As of 0.3.3, RigMatch falls back to `nvidia-smi` to read total VRAM when the normal scan comes back empty.
 
-That fallback was not enough on a Jetson, where the GPU is not a PCI device at all: the usual scan returns no graphics card whatsoever, and `nvidia-smi` answers `[N/A]` to every memory question. RigMatch 0.7.1 reads the board's own name from the device tree, recognises it as unified memory, and reports the shared pool — 7.4 GB on an Orin Nano, where 0.7.0 reported 0 GB and offered only the smallest models.
+That fallback was not enough on a Jetson, where the GPU is not a PCI device at all: the usual scan returns no graphics card whatsoever, and `nvidia-smi` answers `[N/A]` to every memory question. RigMatch 0.7.1 reads the board's own name from the device tree, recognizes it as unified memory, and reports the shared pool — 7.4 GB on an Orin Nano, where 0.7.0 reported 0 GB and offered only the smallest models.
 
 ---
 
@@ -99,7 +99,7 @@ Status as of 0.9:
 
 - **App Builder** (shipped): asks a model to create a complete single-file Tetris-style HTML game and grades structure, controls, scoring, game loop, collision logic, line clearing, restart/game-over handling, and truncation risk. As of 0.2.6 the output is also playable through an explicit **Play It** sandboxed preview (isolated iframe, network/storage/file access blocked); RigMatch never runs generated code automatically.
 - **Image Generation** (shipped, extra-beta): runs on the user's own ComfyUI, not Ollama — Ollama hosts no image models. Checkpoints download from Hugging Face only on request, and a local vision model, when one is installed, judges whether the picture matches the prompt.
-- **Video Generation** (shipped in 0.9, extra-beta): the Video Lineup races any of the seventeen catalogue video models — LTX-Video, LTX-2, Wan, HunyuanVideo, Kandinsky 5, Mochi and MiniMax H3 — on the user's own ComfyUI, with the same prompt and seed, unloading ComfyUI between models so each starts cold. Before anything downloads, every model shows whether it fits this machine, how long a clip should take here, and how much is left to download. Known limits:
+- **Video Generation** (shipped in 0.9, extra-beta): the Video Lineup races any of the seventeen catalog video models — LTX-Video, LTX-2, Wan, HunyuanVideo, Kandinsky 5, Mochi and MiniMax H3 — on the user's own ComfyUI, with the same prompt and seed, unloading ComfyUI between models so each starts cold. Before anything downloads, every model shows whether it fits this machine, how long a clip should take here, and how much is left to download. Known limits:
   - Time estimates are rough until RigMatch has timed LTX-Video 2B on this GPU; that one run calibrates every other estimate.
   - Motion quality is not scored. The middle frame is judged against the prompt; flicker and temporal consistency have no right answer and no local model judges them reliably.
   - A Jetson runs none of the lineup. Video there needs low-memory GGUF builds, which need a custom node RigMatch does not install.
@@ -112,7 +112,7 @@ Status as of 0.9:
   - Sound quality — clarity, mixing, artefacts — is not scored.
   - With nothing installed that can hear, clips are made and timed but not judged, and the fader holds at speed.
   - How much VRAM each model needs is a rule of thumb from its file size until one has been run on this machine.
-  - Stable Audio Open is under Stability AI's community licence: commercial use needs registering, and a business earning over US$1 million a year needs an enterprise licence.
+  - Stable Audio Open is under Stability AI's community license: commercial use needs registering, and a business earning over US$1 million a year needs an enterprise license.
 
 Safeguards required before expanding these tests:
 

@@ -4,7 +4,7 @@
  * Find copy that asserts something the app may not actually know.
  *
  * The bug that prompted this: selecting "A video maker" said "No contestants
- * can make video on this PC" while two video makers shipped in the catalogue
+ * can make video on this PC" while two video makers shipped in the catalog
  * and ran fine. The Pick grid excludes generation models deliberately, and the
  * copy turned that deliberate absence into a claim about the user's hardware.
  *
@@ -120,7 +120,7 @@ const worrying = unique.filter((finding) => NEGATIVE_CAPABILITY.test(finding.tex
 
 console.log(`${unique.length} distinct claim(s) worth re-reading, from ${files.length} files.\n`);
 console.log(`Of those, ${worrying.length} deny a capability — the shape that told this PC it`);
-console.log('could not make video while two video makers sat in the catalogue:\n');
+console.log('could not make video while two video makers sat in the catalog:\n');
 for (const finding of worrying) {
   console.log(`  ${finding.file}:${finding.line}${finding.count > 1 ? `  (x${finding.count})` : ''}`);
   console.log(`    "${finding.text.slice(0, 140)}${finding.text.length > 140 ? '…' : ''}"`);

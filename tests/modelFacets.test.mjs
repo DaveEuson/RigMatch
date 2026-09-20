@@ -6,7 +6,7 @@ const { buildQuickFacetGroups, buildSearchSuggestions } = await import('../src/l
 const { TASK_FILTER_CHIPS } = await import('../src/lib/modelCatalog.ts');
 
 /**
- * The rail replaced a tray labelled "Filters — 2 active" that named neither of
+ * The rail replaced a tray labeled "Filters — 2 active" that named neither of
  * the two. Everything below is about the one property that made the swap worth
  * doing: what you can narrow by, and what it costs you, is readable without
  * spending a click to find out.
@@ -111,7 +111,7 @@ test('a filter that would empty the table is never suggested', () => {
   assert.ok(!out.some((s) => s.id === 'videogen'));
 });
 
-test('one letter suggests nothing — it would match most of the catalogue', () => {
+test('one letter suggests nothing — it would match most of the catalog', () => {
   assert.deepEqual(buildSearchSuggestions(suggestInput('c', [row('codegemma:2b', 1.6)])), []);
 });
 
@@ -180,7 +180,7 @@ test('splitting loses nothing', () => {
   assert.equal(goodFor.length + standalone.length, chips.length);
 });
 
-test('a standalone filter the catalogue cannot offer is simply absent', () => {
+test('a standalone filter the catalog cannot offer is simply absent', () => {
   // offerableTaskFilters already drops chips nothing matches, so the group must
   // cope with its only member being gone rather than drawing an empty heading.
   const { standalone } = splitTaskFilters([{ id: 'coding', label: 'Coding' }]);

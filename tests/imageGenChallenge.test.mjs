@@ -56,7 +56,7 @@ test('a model that is not on this machine is never the judge', () => {
   // The Models list carries the Ollama website's capabilities for models that
   // are not downloaded. Judging with one failed every question, so pictures and
   // clips came back unjudged while the fader said a judge was there.
-  const catalogue = {
+  const catalog = {
     name: 'llama3.2-vision', displayName: 'llama3.2-vision:latest', installed: false,
     capabilities: ['completion', 'vision'],
   };
@@ -66,7 +66,7 @@ test('a model that is not on this machine is never the judge', () => {
     installedModel: { name: 'gemma3:4b', model: 'gemma3:4b', capabilities: ['completion', 'vision'] },
   };
   // Named by the installed tag, not the bare family Ollama would read as :latest.
-  assert.deepEqual(judgeCandidates([catalogue, onDisk]), ['gemma3:4b']);
+  assert.deepEqual(judgeCandidates([catalog, onDisk]), ['gemma3:4b']);
 });
 
 test('an unknown prompt id falls back rather than crashing a run', () => {

@@ -4,14 +4,17 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  AudioLines,
   Check,
   Code2,
+  Eye,
   Download,
   ExternalLink,
   Heart,
   Image as ImageIcon,
   Info,
   Lock,
+  Mic,
   MessageSquare,
   PenLine,
   Plus,
@@ -32,11 +35,16 @@ import { formatBytes, formatBytesPerSecond, formatPullCount } from '../lib/forma
 import { roundLabel } from '../lib/roundLabels';
 import { formatDuration } from '../lib/runEstimates';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
-import { getFriendlyModelName } from '../lib/modelCatalog';
+import { getFriendlyModelName, type DreamTag } from '../lib/modelCatalog';
+import { getCountryCode, getModelOrigin } from '../lib/modelOrigins';
 import { getDownloadRowStatus, summarizeDownloadStep } from '../lib/downloadStatus';
 import type { ComfyFolderListing } from '../lib/generationCatalog';
 import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
+import { AllDemosButton, ModelDemoChips } from './SkillDemoViewers';
 import { VideoLineupLab } from './VideoLineupLab';
+import { ComparisonRunCard, type ComparisonRunContext } from './ComparisonRunCard';
+import { LabComparison } from './LabComparison';
+import { useLabResults } from '../hooks/useLabResults';
 import { BalanceFader } from './BalanceFader';
 import { balanceLabel } from '../lib/balance';
 import { useDialog } from '../lib/useDialog';
@@ -48,7 +56,7 @@ import modelTestArt from '../assets/robot-model-test.webp';
 import brandIcon from '../assets/rigmatch-brand-icon.svg';
 import './SimpleWizard.css';
 
-export type DreamFilterId = 'talk' | 'write' | 'code' | 'image' | 'video' | 'all';
+export type DreamFilterId = DreamTag | 'all';
 
 /** A model prepared for the wizard's Pick grid (App computes fit/copy). */
 export type WizardModel = {
@@ -60,7 +68,7 @@ export type WizardModel = {
   /** Concrete fit, e.g. "4.7 GB of your 12 GB VRAM" — the grid is pre-filtered to
    *  models that fit, so the tier alone reads identically on every card. */
   fitDetail: string;
-  dreamTags: Array<Exclude<DreamFilterId, 'all'>>;
+  dreamTags: DreamTag[];
   /** How many size/quant variants this card is standing in for (> 1 only when
    *  siblings were collapsed). Beginners were shown every variant as its own
    *  near-identical card — "many versions of Gemma 4... I don't know how these
@@ -85,6 +93,25 @@ type SimpleRunProgress = RunProgress | null;
 
 export type { StepId };
 
+/** The host's line, the progress noun and the board's note, per round. */
+const ROUND_LINES: Record<'code' | 'vision' | 'listening', { host: string; unit: string; note: string }> = {
+  code: {
+    host: 'Coding round! Everyone answers the same questions first, then builds the same small app — and you can open what they hand in.',
+    unit: 'questions',
+    note: 'Every one of these answered the same questions and built the same app on your PC. Open the winner and click around: that is the other half of the test.',
+  },
+  vision: {
+    host: 'Picture round! Everyone sees the same picture and tells me what is in it — no peeking at each other.',
+    unit: 'pictures',
+    note: 'Every one of these was shown the same picture on your PC, and the score is how much of it they named.',
+  },
+  listening: {
+    host: 'Listening round! Everyone hears the same recording, and they all get the same questions about it.',
+    unit: 'recordings',
+    note: 'Every one of these heard the same recording on your PC.',
+  },
+};
+
 const HOST_COPY: Record<StepId, string> = {
   setup: "Welcome to RigMatch! First, let's take a quick peek at your computer. One click — I'll handle the rest.",
   pick: "So… who's your dream model? Tell me what you're looking for, and I'll bring out the right contestants.",
@@ -93,12 +120,23 @@ const HOST_COPY: Record<StepId, string> = {
   winner: "We have a match! Now — go get to know each other. And when you're ready for the control room, Advanced Mode is all yours.",
 };
 
+/**
+ * One chip per thing RigMatch measures.
+ *
+ * It asked about five and tested seven: reading a picture, listening to a
+ * recording and making music or sound effects were only reachable in Advanced
+ * Mode, so a beginner who wanted one of those had no way to say so and no
+ * reason to think the app could do it.
+ */
 const DREAM_CHIPS: Array<{ id: DreamFilterId; label: string; icon: typeof MessageSquare }> = [
   { id: 'talk', label: 'Someone to talk with', icon: MessageSquare },
   { id: 'write', label: 'A writing partner', icon: PenLine },
   { id: 'code', label: 'A coding buddy', icon: Code2 },
+  { id: 'read-image', label: 'Something that reads pictures', icon: Eye },
+  { id: 'hear', label: 'Something that listens', icon: Mic },
   { id: 'image', label: 'An image maker', icon: ImageIcon },
   { id: 'video', label: 'A video maker', icon: Video },
+  { id: 'audio', label: 'A music and sound maker', icon: AudioLines },
   { id: 'all', label: 'Surprise me — show everyone', icon: Sparkles },
 ];
 
@@ -140,6 +178,10 @@ type SimpleWizardProps = {
   } | null;
   /** The dream matching the first-run goal choice, so PICK opens on it. */
   initialDream?: DreamFilterId;
+  /** What the show should test: the chip the Pick step is standing on. */
+  onDreamChange?: (dream: DreamFilterId) => void;
+  /** What this show is measuring, which is what the host announces. */
+  round?: 'chat' | 'code' | 'vision' | 'listening';
   /**
    * Something the app needs this user to read — a refusal, a blocked queue, a
    * failed run. Advanced Mode shows these in the Ticker, which is Advanced-only,
@@ -190,9 +232,18 @@ type SimpleWizardProps = {
   generation?: {
     image: { total: number; installed: number; names: string[] };
     video: { total: number; installed: number; names: string[] };
+    audio: { total: number; installed: number; names: string[] };
   };
   /** Every model in the lineup that has a score, best first. */
-  lineupResults?: Array<{ model: string; name: string; scoreLabel: string; total: number; grade: string }>;
+  lineupResults?: Array<{
+    model: string;
+    name: string;
+    scoreLabel: string;
+    total: number;
+    grade: string;
+    /** A second measurement from the same show, e.g. the questions behind an app score. */
+    note?: string;
+  }>;
   onChatWithWinner: () => void;
   onOpenScorecard: () => void;
   /** Opens the shareable scorecard image for the winning model. */
@@ -222,6 +273,20 @@ type SimpleWizardProps = {
     /** The Video fader, asked before the race and moving the leaderboard after. */
     balance: number;
     onBalanceChange: (value: number) => void;
+  };
+  /**
+   * The image and sound makers' run, for their two chips.
+   *
+   * Same reason as the video race above, and the same card Advanced Mode's
+   * Comparison screen runs, so the two can never measure differently. Simple
+   * Mode's copy of it accepts a single maker: one installed checkpoint is the
+   * ordinary first install, and refusing to measure it is the dead end these
+   * chips used to be.
+   */
+  makerRun?: {
+    context: ComparisonRunContext;
+    /** Each maker channel's fader, already 0 where nothing can judge. */
+    balances: { images: number; audio: number };
   };
 };
 
@@ -280,7 +345,11 @@ export function SimpleWizard(props: SimpleWizardProps) {
     if (sawRunActive.current || phase === 'complete' || phase === 'failed') setAwaitingRun(false);
   }, [awaitingRun, benchmarkActive, props.runProgress?.phase]);
 
-  const compareDone = !awaitingRun && Boolean(winner) && !benchmarkActive;
+  // A finished show, whether or not it crowned anyone. Rounds can end with
+  // every contestant short of the pass line — and gating the last step on a
+  // winner left that show with Meet the winner locked, forever, saying nothing.
+  const showEnded = props.runProgress?.phase === 'complete' || props.runProgress?.phase === 'failed';
+  const compareDone = !awaitingRun && !benchmarkActive && (Boolean(winner) || showEnded);
   const winnerDone = compareDone;
 
   // Not manually memoized: React Compiler handles this, and a hand-written
@@ -334,7 +403,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
 
   // Nothing to fetch means Download is a no-op: it rendered full green progress
   // bars, claimed a download was happening, and quoted an ETA for work that had
-  // already been done. Skip it in both directions rather than showing theatre.
+  // already been done. Skip it in both directions rather than showing theater.
   const skipDownload = downloadAllInstalled;
 
   const startShow = () => {
@@ -475,7 +544,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
       </header>
 
       <div className="sw-content">
-        <HostStrip step={step} />
+        <HostStrip step={step} round={props.round} />
 
         {props.notice && (
           <div className="sw-notice" role="status" ref={noticeRef}>
@@ -614,7 +683,7 @@ function PreShowQuestion({
  * thing to notice, and the whole problem is that a beginner does not know what
  * to look for.
  */
-function HostStrip({ step }: { step: StepId }) {
+function HostStrip({ step, round }: { step: StepId; round?: 'chat' | 'code' | 'vision' | 'listening' }) {
   const explaining = useExplaining();
   return (
     <div className={`sw-host-strip${explaining ? ' explaining' : ''}`}>
@@ -627,7 +696,11 @@ function HostStrip({ step }: { step: StepId }) {
           whole screen danced. Nothing below the host may move. */}
       <div className="sw-host-bubble">
         <span>The host</span>
-        <p>{HOST_COPY[step]}</p>
+        {/* The host announces the round that is actually running: a coding
+            job is not "the same questions". */}
+        {/* The host announces the round that is actually running: a coding
+            job is not "the same questions". */}
+        <p>{step === 'compare' && round && round !== 'chat' ? ROUND_LINES[round].host : HOST_COPY[step]}</p>
         {explaining && (
           <div className="sw-host-explain" role="status">
             <span>{explaining.term}</span>
@@ -862,11 +935,16 @@ function listNames(names: string[]): string {
 
 function PickScreen({
   generation, wizardModels, modelsLoading, shortlistIds, shortlistedRows, onTogglePick, onChooseForMe, initialDream,
-  videoLineup, system, pullProgressByModel, benchmarkActive }: SimpleWizardProps) {
+  onDreamChange, videoLineup, makerRun, system, pullProgressByModel, benchmarkActive }: SimpleWizardProps) {
   // Opens on the dream matching the splash's primary goal, when there is one
   // — the person already answered this question once.
   const [dream, setDream] = useState<DreamFilterId>(initialDream ?? 'all');
+  // Told once on arrival and on every change, so the round that follows tests
+  // the thing that was asked for rather than always asking questions.
+  useEffect(() => { onDreamChange?.(dream); }, [dream, onDreamChange]);
   const [showAll, setShowAll] = useState(false);
+  // Everything measured here, for the maker boards below their run.
+  const labResults = useLabResults();
   // The video race's idea, kept here so switching chips and back keeps it.
   const [videoPromptId, setVideoPromptId] = useState(IMAGE_BENCHMARK_PROMPTS[0].id);
   const [videoCustomPrompt, setVideoCustomPrompt] = useState('');
@@ -878,25 +956,31 @@ function PickScreen({
   }, [wizardModels, dream]);
 
   const visible = showAll ? filtered : filtered.slice(0, 9);
-  const dreamNoun: Record<Exclude<DreamFilterId, 'all'>, string> = {
+  const dreamNoun: Record<DreamTag, string> = {
     talk: 'love a good conversation',
     write: 'are great writing partners',
     code: 'are handy coding buddies',
+    'read-image': 'can read a picture you give them',
+    hear: 'can listen to a recording',
     image: 'can make images',
     video: 'can make video',
+    audio: 'can make music and sound',
   };
   // Image and video makers are deliberately absent from this grid — they
   // cannot be benchmarked — so an empty grid here says nothing about whether
   // this PC can make images or video. It said "No contestants can make video
   // on this PC", which was simply false: the models exist, ship in the
-  // catalogue, and run. Report what is actually true of the machine.
-  const makers = dream === 'video' ? generation?.video : dream === 'image' ? generation?.image : undefined;
-  const makerNoun = dream === 'video' ? 'video maker' : 'image maker';
+  // catalog, and run. Report what is actually true of the machine.
+  const makers = dream === 'video' ? generation?.video
+    : dream === 'image' ? generation?.image
+      : dream === 'audio' ? generation?.audio
+        : undefined;
+  const makerNoun = dream === 'video' ? 'video maker' : dream === 'audio' ? 'music and sound maker' : 'image maker';
   const countLine = dream === 'all'
     ? `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} fit your PC`
     : filtered.length === 0
       ? (makers && makers.total > 0
-        ? `${makers.total} ${makerNoun}${makers.total === 1 ? '' : 's'} run on this PC — ${dream === 'video' && videoLineup ? 'race them below' : "they just don't compete here"}`
+        ? `${makers.total} ${makerNoun}${makers.total === 1 ? '' : 's'} run on this PC — ${(dream === 'video' && videoLineup) || ((dream === 'image' || dream === 'audio') && makerRun) ? 'try them below' : "they just don't compete here"}`
         : `No contestants ${dreamNoun[dream]} on this PC`)
       : `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} ${dreamNoun[dream]} · all of them fit your PC`;
 
@@ -945,6 +1029,34 @@ function PickScreen({
         <div className="sw-card-grid">
           {Array.from({ length: 6 }).map((_, i) => <div key={i} className="sw-card sw-card-skeleton" aria-hidden="true" />)}
         </div>
+      ) : filtered.length === 0 && (dream === 'image' || dream === 'audio') && makerRun ? (
+        // The same answer video gets: a run, here, rather than directions to a
+        // mode a beginner has not opened. "A music and sound maker" was the
+        // last chip that ended in the generic "nobody fits that bill" line,
+        // which was false — the makers exist, they just do not chat.
+        <>
+          <ComparisonRunCard
+            channel={dream === 'image' ? 'images' : 'audio'}
+            context={makerRun.context}
+            balance={dream === 'image' ? makerRun.balances.images : makerRun.balances.audio}
+            variant="simple"
+          />
+          {/* What they made, playable, right under the run that made it. The
+              card's own closing line says the results are "side by side
+              below", which in Simple Mode was true of nothing at all. */}
+          <LabComparison
+            channel={dream === 'image' ? 'images' : 'audio'}
+            results={labResults}
+            balance={dream === 'image' ? makerRun.balances.images : makerRun.balances.audio}
+          />
+          {/* The same door as the winner screen's. A maker run never reaches
+              that screen — the race happens here — so without this the clips
+              and pictures made in Simple Mode were the one thing "everything
+              they made" could not be opened from. */}
+          <div className="sw-maker-gallery">
+            <AllDemosButton />
+          </div>
+        </>
       ) : filtered.length === 0 && dream === 'video' && videoLineup ? (
         // They cannot join Speed Dating, so they get a race of their own, here,
         // rather than directions to a mode a beginner has not opened.
@@ -1032,9 +1144,26 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
   onToggle: () => void;
 }) {
   const fitLabel = model.fitTier === 'great' ? 'Runs great on your PC' : model.fitTier === 'well' ? 'Runs well on your PC' : 'Good fit — a little slower';
+  /**
+   * Who made it, in the name someone would recognize.
+   *
+   * Gemma4, Codegemma, Translategemma and Functiongemma are four cards from
+   * one company and nothing on them said Google; Llama says nothing about
+   * Meta, Qwen nothing about Alibaba. The Advanced table has carried a By
+   * column all along — beginners are the ones who need it most.
+   */
+  const origin = getModelOrigin(model.row.displayName);
+  const countryCode = origin.country ? getCountryCode(origin.country) : null;
   return (
-    <article className={`sw-card${picked ? ' picked' : ''}`}>
+    <article className={`sw-card${picked ? ' picked' : ''}${model.row.installed ? ' installed' : ''}`}>
       {picked && <span className="sw-card-pick-badge"><Heart aria-hidden="true" />Pick {pickIndex}</span>}
+      {!picked && model.row.installed && (
+        /* Downloaded already. It was a gray tick beside the model id, reading
+           as small print next to a bright download size on the card beside it;
+           the one thing a beginner picking five models most wants to know is
+           which ones cost nothing. */
+        <span className="sw-card-installed-badge"><Check aria-hidden="true" />On your PC</span>
+      )}
       <img className="sw-card-avatar" src={getModelAvatarSrc(model.row.displayName)} alt="" />
       <div className="sw-card-name">
         <strong>{model.name}</strong>
@@ -1051,12 +1180,20 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
           <code className="sw-card-id">{model.row.displayName}</code>
           <span className="sw-card-size">
             {model.row.installed
-              ? '✓ Already on your PC'
+              ? 'No download needed'
               : model.row.sizeGb
                 ? <Explain id="download-size">{`${model.row.sizeGb} GB download`}</Explain>
                 : 'Size unknown'}
           </span>
         </span>
+        {/* Only where the maker is actually known: "by Unknown model family"
+            is a worse answer than saying nothing. */}
+        {origin.organization !== 'Unknown model family' && (
+          <span className="sw-card-maker">
+            by {origin.organization}
+            {countryCode && <em title={origin.country}>{countryCode}</em>}
+          </span>
+        )}
         <em>{model.epithet}</em>
         {/* Collapsed siblings get one honest line instead of N clone cards. */}
         {(model.variantCount ?? 0) > 1 && (
@@ -1217,7 +1354,7 @@ function getEtaLabel(pull?: PullProgressUpdate): string {
 // ---------------------------------------------------------------------------
 // Compare
 
-function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
+function CompareScreen({ shortlistedRows, runProgress, round: showRound }: SimpleWizardProps) {
   const failed = runProgress?.phase === 'failed';
   const activeModel = runProgress?.currentModel ?? '';
   const round = (runProgress?.questionIndex ?? 0) + 1;
@@ -1288,7 +1425,7 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
   // What this question tests, from the question itself.
   //
   // This read the label through a chain of regexes and defaulted to "Everyday
-  // questions". Difficult Subjects questions are labelled by subject —
+  // questions". Difficult Subjects questions are labeled by subject —
   // "Tiananmen 1989", "Tank Man", "Xinjiang", "Tulsa 1921" — and match none of
   // those patterns, so all eight took the default: Simple Mode captioned a live
   // Tiananmen Square question as everyday chat. The type was on the question
@@ -1353,7 +1490,7 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
                 bar move together and neither ever goes backwards. */}
             <span>
               {totalQuestions > 0
-                ? `${questionsDone} of ${totalQuestions} questions`
+                ? `${questionsDone} of ${totalQuestions} ${showRound && showRound !== 'chat' ? ROUND_LINES[showRound].unit : 'questions'}`
                 : `${overallPercent}%`}
               {remainingLabel && <em className="sw-eta">· about {remainingLabel} left</em>}
             </span>
@@ -1401,9 +1538,48 @@ function CompareScreen({ shortlistedRows, runProgress }: SimpleWizardProps) {
 // ---------------------------------------------------------------------------
 // Winner
 
-function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
+function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
   if (!winner) {
-    return <div className="sw-winner"><p className="sw-muted">Run the show to crown your Top Match.</p></div>;
+    // Two different nothings: a show that has not run, and a show where nobody
+    // passed. The second one has a board to show and a reason to give.
+    const board = lineupResults ?? [];
+    if (board.length === 0) {
+      return <div className="sw-winner"><p className="sw-muted">Run the show to crown your Top Match.</p></div>;
+    }
+    return (
+      <div className="sw-winner">
+        <h2 className="sw-winner-none">Nobody passed this round</h2>
+        <p className="sw-muted">
+          {board.length === 1 ? 'The one contestant' : `All ${board.length} contestants`} answered, and none of them
+          got close enough to what was asked for to be crowned. That is a real result about this PC and these models
+          — not a failed show.
+        </p>
+        <div className="sw-scoreboard">
+          <span className="sw-eyebrow">How the lineup finished</span>
+          <ol>
+            {board.map((result, index) => (
+              <li key={result.model}>
+                <b className="sw-place">{index + 1}</b>
+                <img src={getModelAvatarSrc(result.model)} alt="" />
+                <span className="sw-scoreboard-name">
+                  {result.name}
+                  <em>{result.model}</em>
+                  <ModelDemoChips model={result.model} label="" className="sw-scoreboard-demos" />
+                </span>
+                <span className="sw-scoreboard-score">
+                  {result.scoreLabel}
+                  <em>Grade {result.grade}{result.note ? ` · ${result.note}` : ''}</em>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div className="sw-winner-actions-row">
+          <button type="button" className="sw-gold-pill" onClick={onRunAgain}>Run it again</button>
+          <button type="button" className="sw-ghost-pill" onClick={onSwitchToAdvanced}>Open the control room</button>
+        </div>
+      </div>
+    );
   }
   const shortName = winner.model.split(':')[0];
   const capName = shortName.charAt(0).toUpperCase() + shortName.slice(1);
@@ -1429,15 +1605,30 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, onChatW
           </span>
           {/* Say what the number means — a beginner has never seen either scale. */}
           <p className="sw-winner-why">
-            Best combination of speed, answer quality, and fit for your PC out of the {shortlistedRows.length} you
-            tested — this is its <Explain id="match-score">Match Score</Explain>.
+            {round === 'code'
+              ? <>Answered the same questions as the rest and built the best app of the {shortlistedRows.length} you tested, on your PC — judged on whether it runs and does what was asked.</>
+              : round === 'vision'
+                ? <>Named the most of the test picture out of the {shortlistedRows.length} you tested, and did it fastest on your PC.</>
+                : round === 'listening'
+                  ? <>Heard the test recording best out of the {shortlistedRows.length} you tested on your PC.</>
+                  : <>Best combination of speed, answer quality, and fit for your PC out of the {shortlistedRows.length} you
+                    tested — this is its <Explain id="match-score">Match Score</Explain>.</>}
           </p>
+          {/* Whatever it made is one click away. The app a coding round built is
+              the whole point of having run one: a beginner can open it, click
+              it, and judge the winner without knowing what a score is. */}
+          <ModelDemoChips model={winner.model} label="What it made" className="sw-winner-demos" />
           {/* Sharing belongs at the moment of the result, not three clicks away
               in Advanced Mode where a Simple Mode user will never find it. */}
-          <button type="button" className="sw-winner-share" onClick={onShareScore}>
-            <Share2 aria-hidden="true" />
-            Share your score
-          </button>
+          <div className="sw-winner-actions-row">
+            <button type="button" className="sw-winner-share" onClick={onShareScore}>
+              <Share2 aria-hidden="true" />
+              Share your score
+            </button>
+            {/* Everything made here, from the screen people are standing on
+                when they ask where it went. */}
+            <AllDemosButton className="sw-winner-share" />
+          </div>
         </div>
       </div>
 
@@ -1455,16 +1646,22 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, onChatW
                 <span className="sw-scoreboard-name">
                   {result.name}
                   <em>{result.model}</em>
+                  {/* Everything this contestant made, from its own row. The
+                      winner's was reachable and the rest were not, which is
+                      the same as not having them. */}
+                  <ModelDemoChips model={result.model} label="" className="sw-scoreboard-demos" />
                 </span>
                 <span className="sw-scoreboard-score">
                   {result.scoreLabel}
-                  <em>Grade {result.grade}</em>
+                  <em>Grade {result.grade}{result.note ? ` · ${result.note}` : ''}</em>
                 </span>
               </li>
             ))}
           </ol>
           <p className="sw-muted sw-scoreboard-note">
-            Every one of these ran the same questions on your PC. A close second may still
+            {round && round !== 'chat'
+              ? ROUND_LINES[round].note
+              : 'Every one of these ran the same questions on your PC.'} A close second may still
             suit you better — try chatting with either.
           </p>
         </div>

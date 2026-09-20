@@ -67,7 +67,7 @@ test('the summary request carries the earlier turns and any previous summary', (
   assert.equal(plain[0].role, 'system');
   assert.match(plain[1].content, /User: budget is 4800/);
   assert.match(plain[1].content, /Assistant: noted/);
-  assert.doesNotMatch(plain[1].content, /due March 14/, 'must not summarise turns it is keeping');
+  assert.doesNotMatch(plain[1].content, /due March 14/, 'must not summarize turns it is keeping');
 
   // A second pass has to build on the first, or whatever the first covered is
   // silently lost.
@@ -112,7 +112,7 @@ test('a count larger than the conversation cannot drop turns that are not there'
   assert.deepEqual(sent.map((m) => m.role), ['system'], 'everything covered, nothing left to append');
 });
 
-test('the summariser is ranked on answer quality, not the headline score', () => {
+test('the summarizer is ranked on answer quality, not the headline score', () => {
   // The headline total is a composite in which speed carries a large share, so
   // on a real rig the highest-scoring model is usually the smallest and fastest.
   // Ranking by it picked qwen2.5:0.5b over llama3.2:3b and produced a summary
@@ -150,7 +150,7 @@ test('a marginal quality gain is not worth loading another model', () => {
   );
 });
 
-test('with nothing scored, the current model does its own summarising', () => {
+test('with nothing scored, the current model does its own summarizing', () => {
   assert.deepEqual(pickSummarizer('llama3.2:3b', ['llama3.2:3b', 'other'], {}), { model: 'llama3.2:3b', borrowed: false });
   assert.deepEqual(pickSummarizer('llama3.2:3b', [], {}), { model: 'llama3.2:3b', borrowed: false });
   // A model that is scored but no longer installed must not be picked.
@@ -166,8 +166,8 @@ test('branched threads number themselves rather than piling up suffixes', () => 
   assert.equal(continuationTitle('Rotating a Postgres password (9)'), 'Rotating a Postgres password (10)');
 });
 
-test('the summariser prefers what was measured for instruction-following', () => {
-  // Summarising is following an instruction about a body of text. The
+test('the summarizer prefers what was measured for instruction-following', () => {
+  // Summarizing is following an instruction about a body of text. The
   // benchmark asks instruction questions and scores each answer, so that is a
   // far better description of the job than an average over every kind of
   // question — a model can be strong overall and careless about doing exactly

@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { chatPicks, pickAudioMaker, pickVideoMaker } from '../src/lib/chatMakers.ts';
+import { audioMakerChoices, chatPicks, videoMakerChoices } from '../src/lib/chatMakers.ts';
 import { CURRENT_SCORE_SCHEMA_VERSION } from '../src/lib/scoring.ts';
 
 /**
@@ -53,20 +53,46 @@ test('a use nothing has crowned has no pick, rather than a guess', () => {
   );
 });
 
-test('a clip is made by the Makes video winner when it runs here, and by the fastest that does when not', () => {
-  const ltx = video('ltx', 'LTX-Video 2B');
-  const wan = video('wan-5b', 'Wan 2.2 5B');
-  const wanSmall = video('wan-1.3b', 'Wan 2.1 1.3B');
-  // Wan 2.2 5B was quicker and drew a red barn for a lighthouse; Wan 2.1 1.3B drew the lighthouse.
-  const record = raced([finished('wan-5b', 'Wan 2.2 5B', 161, 0.6), finished('wan-1.3b', 'Wan 2.1 1.3B', 358, 1)]);
+const ltx = video('ltx', 'LTX-Video 2B');
+const wan = video('wan-5b', 'Wan 2.2 5B');
+const wanSmall = video('wan-1.3b', 'Wan 2.1 1.3B');
+const stray = video('file:ltx-video-2b-v0.9.5.safetensors', 'LTX-Video 2B 0.9.5 (your own file)');
+// Wan 2.2 5B was quicker and drew a red barn for a lighthouse; Wan 2.1 1.3B drew the lighthouse.
+const record = raced([finished('wan-5b', 'Wan 2.2 5B', 161, 0.6), finished('wan-1.3b', 'Wan 2.1 1.3B', 358, 1)]);
+/** The catalog's own order, best first, and the seconds a machine would take. */
+const catalog = [wan, wanSmall, ltx, stray];
+const seconds = { ltx: 12, 'wan-5b': 161, 'wan-1.3b': 358, 'file:ltx-video-2b-v0.9.5.safetensors': 12 };
+const offered = (runnable, useRecord, balance = 100) => videoMakerChoices({
+  runnable, catalog, record: useRecord, balance, secondsFor: (entry) => seconds[entry.key] ?? null,
+}).map((choice) => choice.key);
+
+test('a clip is made by the model the race crowned, and every model that runs here is offered', () => {
   // Runnable, fastest first, as runnableLineup gives it.
-  assert.equal(pickVideoMaker([ltx, wan, wanSmall], record, 100)?.key, 'wan-1.3b');
-  assert.equal(pickVideoMaker([ltx, wan], record, 100)?.key, 'ltx', 'a winner that cannot run here is not offered');
-  assert.equal(pickVideoMaker([ltx, wan], null, 50)?.key, 'ltx', 'with no race run yet, the fastest that can run');
-  assert.equal(pickVideoMaker([], record, 50), null);
+  assert.deepEqual(offered([ltx, wan, wanSmall], record), ['wan-1.3b', 'wan-5b', 'ltx']);
+  assert.deepEqual(offered([ltx, wan], record), ['wan-5b', 'ltx'], 'a winner that cannot run here is not offered');
 });
 
-test('audio is made by the Makes audio winner when installed, else the first installed', () => {
+test('with no race run, the catalog order stands and a stray file goes last', () => {
+  // The first real clip came from the stray 0.9.5 checkpoint, because it was the
+  // fastest thing installed. Fastest is not best, and a file RigMatch never
+  // downloaded runs the oldest graph it keeps.
+  assert.deepEqual(offered([stray, wan, wanSmall], null), ['wan-5b', 'wan-1.3b', 'file:ltx-video-2b-v0.9.5.safetensors']);
+  assert.deepEqual(offered([], record), []);
+});
+
+test('a video choice says what was measured here, and which model was crowned', () => {
+  const choices = videoMakerChoices({
+    runnable: [ltx, wan, wanSmall], catalog, record, balance: 100, secondsFor: (entry) => seconds[entry.key] ?? null,
+  });
+  assert.deepEqual(choices[0], {
+    key: 'wan-1.3b', name: 'Wan 2.1 1.3B', seconds: 358, tested: '6.0 min · 100% of the prompt', crowned: true,
+  });
+  assert.equal(choices[1].tested, '2.7 min · 60% of the prompt');
+  assert.equal(choices[2].tested, null, 'a model this machine has never run has nothing measured');
+  assert.equal(choices[2].seconds, 12, 'and is left with its estimate');
+});
+
+test('audio offers every installed model, the crowned one first', () => {
   const installed = [
     { key: 'ace-step-1.5-turbo', name: 'ACE-Step 1.5 Turbo' },
     { key: 'stable-audio-open-1.0', name: 'Stable Audio Open 1.0' },
@@ -75,8 +101,15 @@ test('audio is made by the Makes audio winner when installed, else the first ins
   const results = {
     'audio:stable': lab('audio-generation', 'Stable Audio Open 1.0', 8, { adherence: null, verdict: { matches: true, at: 'T' } }),
   };
-  assert.equal(pickAudioMaker(installed, results, 50)?.key, 'stable-audio-open-1.0');
-  assert.equal(pickAudioMaker(installed, {}, 50)?.key, 'ace-step-1.5-turbo');
-  assert.equal(pickAudioMaker(installed.slice(0, 1), results, 50)?.key, 'ace-step-1.5-turbo', 'a winner no longer installed is not offered');
-  assert.equal(pickAudioMaker([], results, 50), null);
+  const keys = (choices) => choices.map((choice) => choice.key);
+  assert.deepEqual(keys(audioMakerChoices({ installed, results, balance: 50 })), ['stable-audio-open-1.0', 'ace-step-1.5-turbo']);
+  assert.deepEqual(keys(audioMakerChoices({ installed, results: {}, balance: 50 })), ['ace-step-1.5-turbo', 'stable-audio-open-1.0']);
+  assert.deepEqual(
+    keys(audioMakerChoices({ installed: installed.slice(0, 1), results, balance: 50 })),
+    ['ace-step-1.5-turbo'],
+    'a winner no longer installed is not offered',
+  );
+  assert.equal(audioMakerChoices({ installed: [], results, balance: 50 }).length, 0);
+  const [best] = audioMakerChoices({ installed, results, balance: 50 });
+  assert.equal(best.tested, '8.0 s · B');
 });

@@ -80,9 +80,9 @@ test('a model and its variants report the same origin', () => {
 
 const { getDisplayCountry, getCountryForOrganization } = await import('../src/lib/modelOrigins.ts');
 
-test('a publisher the model name does not recognise still gets its country', () => {
+test('a publisher the model name does not recognize still gets its country', () => {
   // "T5-XXL text encoder (fp8)" matches no family, so the name lookup returns
-  // Unknown — while the row displayed "Google" as the maker from the catalogue
+  // Unknown — while the row displayed "Google" as the maker from the catalog
   // and then had nothing to say about where. Two sources, one row.
   assert.equal(getModelOrigin('T5-XXL text encoder (fp8)').country, 'Unknown');
   assert.equal(getDisplayCountry('T5-XXL text encoder (fp8)', 'Google'), 'United States');
@@ -102,7 +102,7 @@ test('no publisher and no match is null, not the string "Unknown"', () => {
   assert.equal(getDisplayCountry('mystery-model:1b'), null);
 });
 
-test('every organisation named here is one getModelOrigin already returns', () => {
+test('every organization named here is one getModelOrigin already returns', () => {
   // The point of this map is the same facts keyed the other way round, not a
   // second place where countries get invented.
   const known = new Set();
@@ -112,15 +112,15 @@ test('every organisation named here is one getModelOrigin already returns', () =
     'solar:10.7b', 'neural-chat:7b', 'openhermes:7b', 'dolphin:7b', 'llava:7b',
     'moondream:2b', 'minicpm:2b', 'tinyllama:1.1b', 'vicuna:7b',
   ]) known.add(getModelOrigin(model).organization);
-  known.add('Alibaba'); // the catalogue's shorter spelling of Alibaba Cloud
+  known.add('Alibaba'); // the catalog's shorter spelling of Alibaba Cloud
 
   for (const org of ['Google', 'Meta', 'Microsoft', 'IBM', 'DeepSeek', 'Mistral AI', 'Cohere', 'TII', 'Upstage']) {
-    assert.ok(known.has(org), `${org} is not an organisation getModelOrigin returns`);
+    assert.ok(known.has(org), `${org} is not an organization getModelOrigin returns`);
     assert.ok(getCountryForOrganization(org), `${org} has no country`);
   }
 });
 
-test('an organisation and a model of theirs agree on the country', () => {
+test('an organization and a model of theirs agree on the country', () => {
   const origin = getModelOrigin('gemma3:4b');
   assert.equal(getCountryForOrganization(origin.organization), origin.country);
 });

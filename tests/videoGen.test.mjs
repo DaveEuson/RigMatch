@@ -186,7 +186,7 @@ test('the same ComfyUI IS ready for video, given an encoder', () => {
   assert.deepEqual(found.map((entry) => entry.legacy.checkpoint), ['ltx-video-2b-v0.9.5.safetensors']);
 });
 
-test('a scaled fp8 encoder filename is still recognised as an encoder', () => {
+test('a scaled fp8 encoder filename is still recognized as an encoder', () => {
   // The real folder held t5xxl_fp8_e4m3fn_scaled.safetensors, not the exact
   // name the docs use.
   const [entry] = strayLtxEntries({
@@ -196,7 +196,7 @@ test('a scaled fp8 encoder filename is still recognised as an encoder', () => {
   assert.equal(entry.legacy.textEncoder, 't5xxl_fp8_e4m3fn_scaled.safetensors');
 });
 
-test('the 0.9.5 point release is recognised as a video checkpoint', () => {
+test('the 0.9.5 point release is recognized as a video checkpoint', () => {
   assert.ok(isVideoCheckpoint('ltx-video-2b-v0.9.5.safetensors'));
 });
 

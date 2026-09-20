@@ -40,7 +40,7 @@ export const KEEP_RECENT_TOKENS = 2000;
 export const MIN_KEEP_RECENT = 2;
 
 export const SUMMARY_INSTRUCTION =
-  "Summarise the conversation so far so it can stand in for the original messages. "
+  "Summarize the conversation so far so it can stand in for the original messages. "
   + "Keep every concrete fact: names, numbers, dates, versions, file paths, decisions, and constraints. "
   + "Keep any instruction the user gave about how to answer. "
   + "Write it as compact notes, not prose. Do not add anything that was not said.";
@@ -178,7 +178,7 @@ export function pickSummarizer(
   scores: Record<string, ChatModelScore>,
   minimumGain = 8,
 ): SummarizerChoice {
-  // Prefer what was actually measured for this kind of work. Summarising is
+  // Prefer what was actually measured for this kind of work. Summarizing is
   // following an instruction about a body of text, so the score from the
   // benchmark's instruction questions describes it far better than an average
   // over every kind of question — and a model can be strong overall while being

@@ -76,6 +76,26 @@ const AUDIO_STUDIO = "__rigmatch_audio_maker__";
 
 type MakeKind = "image" | "video" | "audio";
 
+/**
+ * What RigMatch can be asked to measure about a model.
+ *
+ * A maker is tested on what it makes. A chat model has five: the answers it
+ * gives, the code it writes, an app it builds, a picture it reads and a
+ * recording it hears. RigMatch refuses the ones this model cannot do — a model
+ * with no eyes asked to read a picture would take an F for the question rather
+ * than the answer — and says so in its own words.
+ */
+type TestKind = "chat" | MakeKind | "reading" | "listening" | "code" | "app";
+
+/** The five, in the order the picker offers them. */
+const CHAT_TESTS: Array<{ id: TestKind; label: string }> = [
+  { id: "chat", label: "its answers" },
+  { id: "code", label: "the code it writes" },
+  { id: "app", label: "an app it builds" },
+  { id: "reading", label: "a picture it reads" },
+  { id: "listening", label: "a recording it hears" },
+];
+
 /** What each maker is called, and what it asks for and says. */
 const STUDIOS: Record<MakeKind, {
   id: string;
@@ -135,6 +155,34 @@ const PICK_LABEL: Record<PickUse, string> = {
   reading: "Best at reading pictures on this PC",
   listening: "Best at listening on this PC",
 };
+
+/** One model a maker can use, as RigMatch ranked it: tested here first. */
+type MakerChoice = {
+  key: string;
+  name: string;
+  seconds: number | null;
+  /** What RigMatch measured when it tested this model on this PC, or null. */
+  tested: string | null;
+  crowned: boolean;
+};
+
+type MakerState = { ready: boolean; model: string | null; seconds: number | null; choices: MakerChoice[] };
+
+const CHOSEN_MAKERS_KEY = "rigmatch-chat:maker-models:v1";
+
+/** The maker models you chose last time, if the browser still holds them. */
+function readChosenMakers(): Partial<Record<MakeKind, string>> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CHOSEN_MAKERS_KEY) ?? "{}") as Record<string, unknown>;
+    const chosen: Partial<Record<MakeKind, string>> = {};
+    for (const kind of ["image", "video", "audio"] as MakeKind[]) {
+      if (typeof saved[kind] === "string") chosen[kind] = saved[kind];
+    }
+    return chosen;
+  } catch {
+    return {};
+  }
+}
 
 /** 42s, or 3m 05s. */
 function formatElapsed(ms: number): string {
@@ -550,7 +598,7 @@ function SummaryMarker({ conversation }: { conversation: Conversation }) {
         <span className="rm-summary-rule" aria-hidden="true" />
         <span className="rm-summary-label">
           {count > 0
-            ? `${count} earlier message${count === 1 ? "" : "s"} summarised`
+            ? `${count} earlier message${count === 1 ? "" : "s"} summarized`
             : "Continued from an earlier chat"}
           {conversation.summaryBy ? ` · by ${getDisplayName(conversation.summaryBy)}` : ""}
           {open ? " ▴" : " ▾"}
@@ -633,11 +681,25 @@ export default function App() {
     { ready: false, checkpoint: null },
   );
   /** What RigMatch would make a clip with, and roughly how long one takes on this PC. */
-  const [videoMaker, setVideoMaker] = useState<{ ready: boolean; model: string | null; seconds: number | null }>(
-    { ready: false, model: null, seconds: null },
-  );
+  const [videoMaker, setVideoMaker] = useState<MakerState>({ ready: false, model: null, seconds: null, choices: [] });
   /** What RigMatch would make music or a sound with. */
-  const [audioMaker, setAudioMaker] = useState<{ ready: boolean; model: string | null }>({ ready: false, model: null });
+  const [audioMaker, setAudioMaker] = useState<MakerState>({ ready: false, model: null, seconds: null, choices: [] });
+  /**
+   * The model you chose for a maker, kept between sessions.
+   *
+   * RigMatch ranks what can run here, tested first, and the first is used
+   * unless you say otherwise. Choosing is what this is for: the fastest model
+   * installed is not always the one you want a clip from.
+   */
+  const [makerModel, setMakerModel] = useState<Partial<Record<MakeKind, string>>>(readChosenMakers);
+  /** What RigMatch said about the last test asked for here; cleared after a while. */
+  const [testNote, setTestNote] = useState<string | null>(null);
+  const [chatTest, setChatTest] = useState<TestKind>("chat");
+  useEffect(() => {
+    if (!testNote) return undefined;
+    const id = setTimeout(() => setTestNote(null), 12_000);
+    return () => clearTimeout(id);
+  }, [testNote]);
   /** The model RigMatch's own tests crowned for each thing this window does with a chat model. */
   const [picks, setPicks] = useState<Partial<Record<PickUse, string>>>({});
 
@@ -778,15 +840,64 @@ export default function App() {
     });
   }, [buddies, settings.hiddenModels, modelRankings, pickedModel, capabilityFilter, rigCapabilities]);
 
-  /** Whether each maker can work now, and the model it would use. */
-  const makerStatus = (kind: MakeKind): { ready: boolean; model: string | null } => {
-    if (kind === "image") {
-      return { ready: imageMaker.ready, model: imageMaker.checkpoint?.replace(/\.(safetensors|ckpt|sft)$/i, "") ?? null };
+  /** Every model a maker could use, as RigMatch ranked them. */
+  const makerChoices = useCallback((kind: MakeKind): MakerChoice[] => (
+    kind === "video" ? videoMaker.choices : kind === "audio" ? audioMaker.choices : []
+  ), [videoMaker.choices, audioMaker.choices]);
+  /** The one it will use: yours, while it is still offered, else the one RigMatch put first. */
+  const chosenMaker = useCallback((kind: MakeKind): MakerChoice | null => {
+    const choices = makerChoices(kind);
+    return choices.find((choice) => choice.key === makerModel[kind]) ?? choices[0] ?? null;
+  }, [makerChoices, makerModel]);
+  /**
+   * Asking RigMatch to test a model, from wherever Chat is showing one.
+   *
+   * Every choice here names a model RigMatch has an opinion about, and earning
+   * that opinion used to mean finding the model in RigMatch and starting its
+   * test there. RigMatch runs its own test — the same one its own screens run —
+   * and this says whether it began. The run is watched in RigMatch, which
+   * already shows it in the status bar.
+   */
+  const testModel = useCallback(async (kind: TestKind, model: string, label = model) => {
+    setTestNote(`Asking RigMatch to test ${label}…`);
+    try {
+      const answer = await invoke<{ message?: string | null }>("test_rig_model", { kind, model });
+      setTestNote(answer?.message ?? `RigMatch is testing ${model}. Watch it there.`);
+    } catch (error) {
+      setTestNote(String(error));
     }
-    return kind === "video"
-      ? { ready: videoMaker.ready, model: videoMaker.model }
-      : { ready: audioMaker.ready, model: audioMaker.model };
+  }, []);
+
+  const chooseMaker = (kind: MakeKind, key: string) => {
+    setMakerModel((current) => {
+      const next = { ...current, [kind]: key };
+      // A browser that forgets is not an error: the choice still holds for now.
+      try { localStorage.setItem(CHOSEN_MAKERS_KEY, JSON.stringify(next)); } catch { /* ignored */ }
+      return next;
+    });
   };
+  /** A model in one line: what it is, what RigMatch measured, or what it should take. */
+  const describeChoice = (choice: MakerChoice): string => {
+    const note = choice.tested
+      ? `tested here: ${choice.tested}`
+      : choice.seconds
+        ? `about ${aboutHowLong(choice.seconds)}, never tested here`
+        : "never tested here";
+    return `${choice.name}${choice.crowned ? " · winner" : ""} · ${note}`;
+  };
+  /** Whether each maker can work now, and the model it would use. */
+  const makerStatus = useCallback((kind: MakeKind): { ready: boolean; model: string | null; seconds: number | null } => {
+    if (kind === "image") {
+      return {
+        ready: imageMaker.ready,
+        model: imageMaker.checkpoint?.replace(/\.(safetensors|ckpt|sft)$/i, "") ?? null,
+        seconds: null,
+      };
+    }
+    const state = kind === "video" ? videoMaker : audioMaker;
+    const chosen = chosenMaker(kind);
+    return { ready: state.ready, model: chosen?.name ?? state.model, seconds: chosen?.seconds ?? state.seconds };
+  }, [imageMaker, videoMaker, audioMaker, chosenMaker]);
   /** The maker the choice above the list opens, if it opens one. */
   const makerKind = MAKER_FOR[capabilityFilter] ?? null;
   /** The maker whose workspace is open, if one is. */
@@ -905,7 +1016,7 @@ export default function App() {
     return getContextUsage(used + estimateTokens(draft), activeContextLimit);
   }, [activeConversationKey, tokenMarkByKey, activeMessages, activeConversation, draft, activeContextLimit, memoryNote]);
 
-  /** Enough conversation to be worth summarising, and not already done. */
+  /** Enough conversation to be worth summarizing, and not already done. */
   const canCompact = activeConversation !== null
     && compactionSplit(activeConversation.messages, activeConversation.summarizedCount ?? 0) !== null;
 
@@ -994,14 +1105,18 @@ export default function App() {
         setImageMaker({ ready: maker?.ready === true, checkpoint: maker?.checkpoint ?? null });
         // What a clip or a sound would be made with. Absent from a RigMatch that
         // cannot make them, which leaves both makers not ready.
-        const video = raw.videoMaker as { ready?: boolean; model?: string | null; seconds?: number | null } | undefined;
-        setVideoMaker({
-          ready: video?.ready === true,
-          model: video?.model ?? null,
-          seconds: typeof video?.seconds === "number" ? video.seconds : null,
-        });
-        const audio = raw.audioMaker as { ready?: boolean; model?: string | null } | undefined;
-        setAudioMaker({ ready: audio?.ready === true, model: audio?.model ?? null });
+        // Every model each maker could use, tested first, as RigMatch ranked
+        // them. An older RigMatch sends no list, which leaves the one model it
+        // named as the only choice.
+        const asMaker = (raw: unknown): MakerState => {
+          const maker = (raw ?? {}) as { ready?: boolean; model?: string | null; seconds?: number | null; choices?: unknown };
+          const seconds = typeof maker.seconds === "number" ? maker.seconds : null;
+          const choices = (Array.isArray(maker.choices) ? maker.choices : [])
+            .filter((choice): choice is MakerChoice => Boolean(choice) && typeof (choice as MakerChoice).key === "string");
+          return { ready: maker.ready === true, model: maker.model ?? null, seconds, choices };
+        };
+        setVideoMaker(asMaker(raw.videoMaker));
+        setAudioMaker(asMaker(raw.audioMaker));
         setPicks((raw.picks as Partial<Record<PickUse, string>> | undefined) ?? {});
         saveCachedBridge(payload);
       } catch {
@@ -1049,23 +1164,23 @@ export default function App() {
 
   useEffect(() => {
     if (!activeBuddy || activeBuddy in contextInfo) return;
-    let cancelled = false;
+    let canceled = false;
     void getModelContextInfo(settings.ollamaUrl, activeBuddy).then((info) => {
-      if (!cancelled) setContextInfo((prev) => ({ ...prev, [activeBuddy]: info }));
+      if (!canceled) setContextInfo((prev) => ({ ...prev, [activeBuddy]: info }));
     });
-    return () => { cancelled = true; };
+    return () => { canceled = true; };
   }, [activeBuddy, contextInfo, settings.ollamaUrl]);
 
   // ── Persist conversations ────────────────────────────────────────────────
 
   useEffect(() => {
-    let cancelled = false;
+    let canceled = false;
     void loadConversations().then((loaded) => {
-      if (cancelled) return;
+      if (canceled) return;
       setConversations(loaded);
       setHistoryLoaded(true);
     });
-    return () => { cancelled = true; };
+    return () => { canceled = true; };
   }, []);
 
   // One writer for the life of the app. Updates arrive once per streamed token;
@@ -1091,16 +1206,16 @@ export default function App() {
   // Memory is loaded and written separately from conversations, so clearing
   // chat history does not silently take it with it.
   useEffect(() => {
-    let cancelled = false;
+    let canceled = false;
     void readMemoriesFile()
       .then((raw) => parseMemories(raw) ?? [])
       .catch(() => [])
       .then((loaded) => {
-        if (cancelled) return;
+        if (canceled) return;
         setMemories(loaded);
         setMemoriesLoaded(true);
       });
-    return () => { cancelled = true; };
+    return () => { canceled = true; };
   }, []);
 
   const memoryWriterRef = useRef<ReturnType<typeof createWriteScheduler<Memory[]>> | null>(null);
@@ -1206,14 +1321,18 @@ export default function App() {
     withReply(`Asking RigMatch to make this ${studio.noun} with ComfyUI. The chat model is not involved.`);
 
     try {
-      const started = await invoke<{ id: string }>("start_rig_generation", { prompt, kind });
+      // The model you picked, out of the list RigMatch sent. Nothing picked
+      // leaves it to RigMatch, which uses the one it ranked first.
+      const model = chosenMaker(kind)?.key ?? null;
+      const started = await invoke<{ id: string }>("start_rig_generation", { prompt, kind, model });
       setMaking({ kind, jobId: started.id });
       const startedAt = Date.now();
       // How long to keep asking. A picture takes seconds and a sound under a
       // minute, but a clip can take an hour on a slow model; RigMatch has its
       // own limit for each, and this only has to outlast it.
       const giveUpAfterMs = kind === "video" ? 4 * 3600_000 : kind === "audio" ? 15 * 60_000 : 5 * 60_000;
-      const usually = kind === "video" && videoMaker.seconds ? ` · usually ${aboutHowLong(videoMaker.seconds)} here` : "";
+      const expected = makerStatus(kind).seconds;
+      const usually = kind === "video" && expected ? ` · usually ${aboutHowLong(expected)} here` : "";
       // Elapsed time, not a bar: ComfyUI reports nothing between starting and
       // finishing, so a percentage would be invented.
       while (Date.now() - startedAt < giveUpAfterMs) {
@@ -1241,7 +1360,7 @@ export default function App() {
     } finally {
       setMaking(null);
     }
-  }, [draft, making, activeConversation, activeBuddy, activePersonality, videoMaker.seconds]);
+  }, [draft, making, activeConversation, activeBuddy, activePersonality, chosenMaker, makerStatus]);
 
   const generateImage = useCallback(() => makeWithRigMatch("image"), [makeWithRigMatch]);
 
@@ -1566,7 +1685,7 @@ export default function App() {
   }, []);
 
   /**
-   * Summarise the older turns of the open thread.
+   * Summarize the older turns of the open thread.
    *
    * Nothing is applied here — the summary is shown first, because a bad one
    * quietly poisons every later reply and the user is the only one who can
@@ -1593,7 +1712,7 @@ export default function App() {
         buildSummaryRequest(activeConversation.messages, upTo, activeConversation.summary),
         (token) => { text += token; },
         undefined,
-        // Summarising is the one call that must not be truncated: it is reading
+        // Summarizing is the one call that must not be truncated: it is reading
         // the whole of the history that no longer fits.
         { numCtx: activeContextLimit },
       );
@@ -1818,7 +1937,7 @@ export default function App() {
           >
             <strong>Here is what it kept</strong>
             <p>
-              The first {compactPlan.upTo} message{compactPlan.upTo === 1 ? "" : "s"} summarised into these notes
+              The first {compactPlan.upTo} message{compactPlan.upTo === 1 ? "" : "s"} summarized into these notes
               {compactPlan.by.borrowed
                 ? ` by ${getDisplayName(compactPlan.by.model)}, which scores higher on your rig than the model you are chatting with`
                 : ""}
@@ -2020,7 +2139,7 @@ export default function App() {
               <span className="rm-maker-note">
                 {makerStatus(makerKind).ready
                   ? `Not a chat model. Open it and describe ${STUDIOS[makerKind].ask} you want.`
-                    + (makerKind === "video" && videoMaker.seconds ? ` A clip takes ${aboutHowLong(videoMaker.seconds)} on this PC.` : "")
+                    + (makerKind === "video" && makerStatus("video").seconds ? ` A clip takes ${aboutHowLong(makerStatus("video").seconds!)} on this PC.` : "")
                     + (makerKind === "audio" ? " Each one is 30 seconds long." : "")
                   : STUDIOS[makerKind].notReady}
               </span>
@@ -2253,7 +2372,30 @@ export default function App() {
               <span className="rm-chat-header-model" title="Actual local Ollama model">
                 MODEL {activeBuddyObj.modelName}
               </span>
+              <label className="rm-test-pick">
+                <span className="rm-sr-only">What to test</span>
+                <select
+                  value={chatTest}
+                  onChange={(event) => setChatTest(event.target.value as TestKind)}
+                  disabled={typingModel === activeBuddy}
+                >
+                  {CHAT_TESTS.map((test) => (
+                    <option key={test.id} value={test.id}>Test {test.label}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="rm-test-btn"
+                onClick={() => void testModel(chatTest, activeBuddyObj.modelName)}
+                disabled={typingModel === activeBuddy}
+                title="RigMatch runs its own test on this model and scores it"
+              >
+                Test
+              </button>
             </div>
+
+            {testNote && <p className="rm-test-note">{testNote}</p>}
 
             <div className="rm-personality-bar">
               <div className="rm-personality-select-wrap">
@@ -2290,13 +2432,13 @@ export default function App() {
                     : "This chat is filling up the model's memory."}
                 </span>
                 <button type="button" className="rm-btn-sm" onClick={() => void runCompaction()} disabled={compacting}>
-                  {compacting ? "Summarising…" : "Free up room"}
+                  {compacting ? "Summarizing…" : "Free up room"}
                 </button>
               </div>
             )}
             {compactError && (
               <div className="rm-compact-bar urgent">
-                <span>Could not summarise: {compactError}</span>
+                <span>Could not summarize: {compactError}</span>
                 <button type="button" className="rm-btn-sm" onClick={() => setCompactError(null)}>Dismiss</button>
               </div>
             )}
@@ -2516,10 +2658,46 @@ export default function App() {
                     : STUDIOS[openStudio].missing}
                 </em>
               </div>
+              {/* The picture studio has no list to choose from — RigMatch picks the
+                  checkpoint — so a button gated on a chosen model never appeared
+                  there, and the one maker you cannot test from Chat was the one
+                  most people try first. Falls back to the model this studio says
+                  it is set to. */}
+              {makerStatus(openStudio).ready && (chosenMaker(openStudio) || makerStatus(openStudio).model) && (
+                <button
+                  type="button"
+                  className="rm-test-btn"
+                  onClick={() => {
+                    const chosen = chosenMaker(openStudio);
+                    const model = chosen?.key ?? makerStatus(openStudio).model ?? "";
+                    void testModel(openStudio, model, chosen?.name ?? model);
+                  }}
+                  disabled={Boolean(making)}
+                  title="RigMatch times this model and scores what it makes"
+                >
+                  Test this model
+                </button>
+              )}
+              {makerChoices(openStudio).length > 1 && (
+                <label className="rm-maker-pick">
+                  <span>Model</span>
+                  <select
+                    value={chosenMaker(openStudio)?.key ?? ""}
+                    onChange={(event) => chooseMaker(openStudio, event.target.value)}
+                    disabled={Boolean(making)}
+                  >
+                    {makerChoices(openStudio).map((choice) => (
+                      <option key={choice.key} value={choice.key}>{describeChoice(choice)}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <span className={makerStatus(openStudio).ready ? "rm-maker-state on" : "rm-maker-state off"}>
                 {makerStatus(openStudio).ready ? "Ready" : "Not ready"}
               </span>
             </div>
+
+            {testNote && <p className="rm-test-note">{testNote}</p>}
 
             <div className="rm-studio-body" ref={studioBodyRef}>
               {activeMessages.length === 0 && (
@@ -2528,7 +2706,7 @@ export default function App() {
                   <p className="rm-studio-hint">
                     RigMatch makes it with ComfyUI on this computer. Nothing is uploaded, and
                     finished {STUDIOS[openStudio].plural} are saved to your {STUDIOS[openStudio].folder} folder.
-                    {openStudio === "video" && videoMaker.seconds ? ` A clip takes ${aboutHowLong(videoMaker.seconds)} here.` : ""}
+                    {openStudio === "video" && makerStatus("video").seconds ? ` A clip takes ${aboutHowLong(makerStatus("video").seconds!)} here.` : ""}
                   </p>
                 </div>
               )}

@@ -78,7 +78,7 @@ export function judgeCandidates(installed: CapabilityBearing[]): string[] {
     // downloaded or not. Only a model on this machine can answer, so a row
     // that says it is not installed is never a judge.
     .filter((row) => row.installed !== false && canReadImages(row))
-    // The installed tag rather than the family: a catalogue row's name is the
+    // The installed tag rather than the family: a catalog row's name is the
     // bare family, which Ollama reads as ":latest" whatever is on disk.
     .map((row) => row.installedModel?.name ?? row.installedModel?.model ?? row.name ?? row.displayName ?? '')
     .filter(Boolean);

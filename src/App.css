@@ -27,6 +27,13 @@
 
 .app-shell {
   height: 100vh;
+  /* A control room, not a billboard. On a 2560px monitor every strip stretched
+     the full width of the glass: the header's eight cards spread until the
+     readouts were islands, and a table row ran a meter from its name to its
+     actions. The room behind it is the page's own background, which is what
+     the margins show. */
+  max-width: 1920px;
+  margin-inline: auto;
   padding: 24px;
   color: var(--text);
   background: var(--panel);
@@ -128,6 +135,25 @@
    controls rather than readouts) and drops the per-metric tiles.
 
    scripts/measure-shell.mjs prints these numbers again on demand. */
+/* Browser surfaces wear the room's colors too. Text selection, the caret and
+   the numerals in a column of scores all ship with defaults that belong to no
+   design system, and a plum auditorium with a Windows-blue selection is a room
+   with one wall missing. */
+::selection {
+  background: rgba(var(--primary-rgb), 0.32);
+  color: var(--text-strong);
+}
+
+input,
+textarea {
+  caret-color: rgb(var(--primary-rgb));
+}
+
+.model-table td,
+.model-table th {
+  font-variant-numeric: tabular-nums;
+}
+
 .top-deck { position: relative; }
 
 .top-deck-collapse {
@@ -156,6 +182,200 @@
    the panel down to 288px instead of up. */
 .top-deck.collapsed {
   padding: 6px 14px;
+}
+
+/* Folded, Advanced: a broadcast strip, not four cards.
+   Folded used to mean the same four padded panels with their readouts hidden —
+   215px on a 1280x820 window, and three wrapped rows costing 300px of a 640px
+   one, above a table that had shown no models at all. A strip is what a folded
+   header should be: the room's name, whether local AI is running, and what has
+   won so far, on one line, with the cards' own chrome stood down. */
+/* A question, not a klaxon: this dialog's own title stays in sentence case at
+   headline size. Shouted across two lines it read as an error, and it is an
+   offer you are free to refuse on the way out. */
+.model-cleanup-modal .modal-title strong {
+  font-family: var(--ui);
+  font-size: 19px;
+  text-transform: none;
+}
+
+.model-cleanup-modal .model-cleanup-remember span {
+  white-space: nowrap;
+}
+
+/* The footer is one line of three: the choice about next time, the way back,
+   and the way out. */
+.model-cleanup-modal .model-cleanup-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.model-cleanup-modal .model-cleanup-actions button {
+  white-space: nowrap;
+}
+
+.sw-winner-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.utility-gallery-btn {
+  margin-top: 8px;
+  align-self: start;
+}
+
+/* What a contestant made, on its own row in the wizard's final board. */
+.sw-scoreboard-demos {
+  margin-top: 4px;
+}
+
+.sw-scoreboard-demos .model-demo-chip {
+  padding: 1px 7px;
+  font-size: 10px;
+}
+
+/* What the winner made, on the last screen of the show. */
+.sw-winner-demos {
+  margin-top: 10px;
+  justify-content: center;
+}
+
+/* The close-time disk-space offer: one row per choice. */
+.model-cleanup-choices {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.model-cleanup-choices li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.model-cleanup-choices strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.model-cleanup-choices em {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.model-cleanup-remember {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.model-cleanup-remember input {
+  width: 15px;
+  height: 15px;
+  accent-color: rgb(var(--primary-rgb));
+}
+
+/* An empty lineup is one line. The slots, and the height they need, arrive
+   with the first contestant. */
+.model-pool-lineup.empty {
+  /* One line: the head's two columns collapse to one and the strip stops
+     reserving the height five contestant cards would have needed. */
+  grid-template-columns: minmax(0, 1fr);
+  padding: 6px 10px;
+}
+
+.model-pool-lineup.empty .model-pool-lineup-head {
+  align-items: center;
+}
+
+.model-pool-lineup.empty .model-pool-lineup-head > div:first-child {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.top-deck.mode-advanced.collapsed {
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-height: 0;
+  padding: 5px 14px;
+}
+
+.top-deck.mode-advanced.collapsed .brand-block,
+.top-deck.mode-advanced.collapsed .rig-card,
+.top-deck.mode-advanced.collapsed .local-status-card,
+.top-deck.mode-advanced.collapsed .top-deck-winner {
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+
+.top-deck.mode-advanced.collapsed .rig-card,
+.top-deck.mode-advanced.collapsed .top-deck-winner-basis,
+.top-deck.mode-advanced.collapsed .top-deck-winner-skill {
+  display: none;
+}
+
+/* The winner's line ends the strip, right-aligned, so the eye lands on the
+   one piece of the header that is a verdict.
+
+   Right-aligned by its content, not by shrinking its box: `justify-self: end`
+   left the card 271px wide in a 966px track, so the model name — the whole
+   point of the strip — ellipsized with 700px of nothing beside it. The box
+   takes the track and the content hugs the right, which looks identical and
+   truncates far later. */
+.top-deck.mode-advanced.collapsed .top-deck-winner {
+  justify-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* Expanded, the copy fills the card; in the strip it has a whole track behind
+   it, and a growing copy would drag the verdict back to the left edge of that
+   track. Content-sized, it stays at the right and still has the track to grow
+   into before anything truncates. */
+.top-deck.mode-advanced.collapsed .top-deck-winner-copy {
+  flex: 0 1 auto;
+}
+
+.top-deck.mode-advanced.collapsed .local-status-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 1240px) {
+  .top-deck.mode-advanced.collapsed {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+  }
 }
 /* Readouts go; controls stay. */
 .top-deck.collapsed .monitor-grid,
@@ -454,8 +674,8 @@
 .top-deck.mode-advanced {
   border-color: rgba(var(--blue-rgb), 0.5);
   background:
-    linear-gradient(90deg, rgba(var(--blue-rgb), 0.1), rgba(107, 90, 168, 0.1)),
-    rgba(26, 31, 44, 0.92);
+    linear-gradient(90deg, rgba(var(--blue-rgb), 0.08), rgba(var(--primary-rgb), 0.05)),
+    var(--panel);
 }
 
 .mode-focus-card {
@@ -793,7 +1013,7 @@
   padding: 6px 10px;
   border-radius: 6px;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 249, 239, 0.08);
   color: var(--muted);
   font-size: 11px;
   text-align: center;
@@ -940,7 +1160,7 @@
 /* Evidence the check ran, sitting under the button that ran it.
 
    Quiet on purpose: it is a receipt, not a status. The card above it already
-   carries the state in colour and in words, and a second green thing competing
+   carries the state in color and in words, and a second green thing competing
    for the same glance would make the strip harder to read, not easier. */
 .local-status-checked {
   display: flex;
@@ -3517,6 +3737,13 @@ tbody tr.computer-row.selected {
   white-space: nowrap;
 }
 
+/* The one control in the table's toolbar that did not answer a pointer. It
+   opens and closes the whole facet rail, and looked like a status chip. */
+.model-filter-toggle:hover {
+  border-color: rgba(var(--gold-rgb), 0.55);
+  color: var(--text-strong);
+}
+
 .model-filter-toggle.active {
   border-color: var(--pink);
   color: var(--text-strong);
@@ -4048,6 +4275,15 @@ tbody tr.computer-row.selected {
 
 .sort-header.active {
   color: var(--green);
+}
+
+/* The header itself has to answer, not only its arrow. Hover moved the sort
+   glyph's color and left the column name exactly as it was, which reads as a
+   label rather than the button it is — and the screen audit, which watches the
+   control's own computed style, called it numb. */
+.sort-header:hover {
+  color: var(--text-strong);
+  background: var(--panel-hover);
 }
 
 .sort-header.active svg,
@@ -5476,7 +5712,7 @@ tbody tr.computer-row.selected {
 .live-mini-track {
   height: 4px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 249, 239, 0.12);
   overflow: hidden;
 }
 
@@ -7080,7 +7316,7 @@ tbody tr.computer-row.selected {
   right: 8px;
   width: 28px;
   height: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 249, 239, 0.18);
   border-radius: 8px;
   color: var(--text);
   background: rgba(0, 0, 0, 0.22);
@@ -7956,7 +8192,7 @@ tbody tr.computer-row.selected {
 
 .suite-count-picker > button {
   padding: 3px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 249, 239, 0.12);
   border-radius: 4px;
   background: transparent;
   color: var(--text);
@@ -7967,8 +8203,8 @@ tbody tr.computer-row.selected {
 }
 
 .suite-count-picker > button:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 249, 239, 0.08);
+  border-color: rgba(255, 249, 239, 0.22);
 }
 
 .suite-count-picker > button.active {
@@ -9859,7 +10095,7 @@ tbody tr.computer-row.selected {
   right: 14px;
   width: 28px;
   height: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 249, 239, 0.1);
   border-radius: 6px;
   background: transparent;
   color: var(--muted);
@@ -9869,7 +10105,7 @@ tbody tr.computer-row.selected {
 }
 
 .modal-close-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 249, 239, 0.08);
   color: var(--text-strong);
 }
 
@@ -9952,7 +10188,7 @@ tbody tr.computer-row.selected {
   content: '';
   flex: 1;
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 249, 239, 0.08);
 }
 
 .support-hardware-intro {
@@ -9974,9 +10210,9 @@ tbody tr.computer-row.selected {
   justify-content: space-between;
   gap: 8px;
   padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 249, 239, 0.08);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 249, 239, 0.03);
   text-decoration: none;
   transition: border-color 0.15s, background 0.15s;
 }
@@ -10276,7 +10512,7 @@ tbody tr.computer-row.selected {
   padding: 7px 10px;
   border-radius: 8px;
   border: 1px solid var(--line);
-  background: var(--panel, rgba(255, 255, 255, 0.04));
+  background: var(--panel, rgba(255, 249, 239, 0.04));
   color: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -10449,7 +10685,7 @@ tbody tr.computer-row.selected {
 }
 
 .update-toast-close:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 249, 239, 0.06);
   color: var(--text);
 }
 
@@ -10895,7 +11131,7 @@ tbody tr.computer-row.selected {
 .theme-swatches i {
   width: 18px;
   height: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.32);
+  border: 1px solid rgba(255, 249, 239, 0.32);
   box-shadow: 0 0 8px currentColor;
 }
 
@@ -11240,7 +11476,7 @@ tbody tr.computer-row.selected {
 .advanced-lab-card {
   min-width: 0;
   padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 249, 239, 0.09);
   border-radius: 12px;
   background: rgba(5, 9, 12, 0.58);
   display: grid;
@@ -11337,7 +11573,7 @@ tbody tr.computer-row.selected {
 .run-skill-tests-head em {
   display: block;
   font-size: 11px;
-  color: var(--muted, rgba(255, 255, 255, 0.6));
+  color: var(--muted, rgba(255, 249, 239, 0.6));
 }
 
 .run-skill-test-option {
@@ -11359,7 +11595,7 @@ tbody tr.computer-row.selected {
 
 .run-skill-test-option span em {
   font-size: 11px;
-  color: var(--muted, rgba(255, 255, 255, 0.6));
+  color: var(--muted, rgba(255, 249, 239, 0.6));
 }
 
 .run-skill-image-prompt {
@@ -11496,6 +11732,15 @@ tbody tr.computer-row.selected {
 }
 
 /* Vision recognition result: the image the model read + its description. */
+/* A made clip, in the viewer that holds everything else a model made. The
+   player brings its own chrome; this only gives it room to sit in. */
+.demo-audio-result {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 16px;
+}
+
 .demo-vision-result {
   display: grid;
   grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
@@ -11574,7 +11819,7 @@ tbody tr.computer-row.selected {
 
 .activity-result-info em {
   font-size: 11px;
-  color: var(--muted, rgba(255, 255, 255, 0.6));
+  color: var(--muted, rgba(255, 249, 239, 0.6));
 }
 
 .activity-results-list .score-row-grade {
@@ -11599,7 +11844,7 @@ tbody tr.computer-row.selected {
 
 .activity-panel-head em {
   font-size: 12px;
-  color: var(--muted, rgba(255, 255, 255, 0.6));
+  color: var(--muted, rgba(255, 249, 239, 0.6));
 }
 
 .activity-card {
@@ -11619,7 +11864,7 @@ tbody tr.computer-row.selected {
 
 .activity-card em {
   font-size: 12px;
-  color: var(--muted, rgba(255, 255, 255, 0.6));
+  color: var(--muted, rgba(255, 249, 239, 0.6));
 }
 
 .activity-card-head {
@@ -11649,8 +11894,8 @@ tbody tr.computer-row.selected {
 }
 
 .activity-state.idle {
-  color: var(--muted, rgba(255, 255, 255, 0.55));
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted, rgba(255, 249, 239, 0.55));
+  background: rgba(255, 249, 239, 0.06);
 }
 
 .activity-download-row {
@@ -11684,7 +11929,7 @@ tbody tr.computer-row.selected {
 .advanced-lab-preview-note {
   margin: 0;
   font-size: 12px;
-  color: var(--muted, rgba(255, 255, 255, 0.6));
+  color: var(--muted, rgba(255, 249, 239, 0.6));
 }
 
 .advanced-lab-preview-frame {
@@ -11781,7 +12026,7 @@ tbody tr.computer-row.selected {
   padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid var(--line);
-  background: var(--panel, rgba(255, 255, 255, 0.04));
+  background: var(--panel, rgba(255, 249, 239, 0.04));
   color: inherit;
   font-size: 13px;
 }
@@ -11803,7 +12048,7 @@ tbody tr.computer-row.selected {
   padding: 5px 6px;
   border-radius: 8px;
   border: 1px solid var(--line);
-  background: var(--panel, rgba(255, 255, 255, 0.04));
+  background: var(--panel, rgba(255, 249, 239, 0.04));
   color: inherit;
   font-size: 12px;
   font-weight: 700;
@@ -11919,9 +12164,9 @@ tbody tr.computer-row.selected {
 
 .advanced-lab-checks div {
   padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 249, 239, 0.08);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 249, 239, 0.03);
 }
 
 .advanced-lab-checks div.passed {
@@ -11945,7 +12190,7 @@ tbody tr.computer-row.selected {
 /* Nothing measured this line, so neither green nor red, and dashed. */
 .advanced-lab-checks div.unchecked {
   border-style: dashed;
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 249, 239, 0.16);
 }
 
 .advanced-lab-checks div.unchecked span {
@@ -11963,7 +12208,7 @@ tbody tr.computer-row.selected {
   max-height: 280px;
   margin: 0;
   padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 249, 239, 0.08);
   border-radius: 10px;
   background: #080d10;
   color: var(--text);
@@ -12020,9 +12265,9 @@ tbody tr.computer-row.selected {
 
 .advanced-lab-consent {
   padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 249, 239, 0.08);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 249, 239, 0.03);
   color: var(--text);
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
@@ -12076,7 +12321,7 @@ tbody tr.computer-row.selected {
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
 }
 
-/* A licence condition that decides whether someone may use a model at all. */
+/* A license condition that decides whether someone may use a model at all. */
 .third-party-download-conditions {
   padding: 8px 10px;
   border: 1px solid rgba(var(--gold-rgb), 0.3);
@@ -12136,7 +12381,7 @@ tbody tr.computer-row.selected {
 }
 
 .video-lineup-list {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 249, 239, 0.08);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -12148,7 +12393,7 @@ tbody tr.computer-row.selected {
   gap: 10px;
   align-items: center;
   padding: 8px 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(255, 249, 239, 0.06);
   color: var(--text);
   font-size: 11px;
 }
@@ -12158,7 +12403,7 @@ tbody tr.computer-row.selected {
 }
 
 .video-lineup-row-head {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 249, 239, 0.03);
   color: var(--muted);
   font-size: 10px;
   font-weight: 900;
@@ -12212,7 +12457,7 @@ tbody tr.computer-row.selected {
   justify-self: start;
   padding: 4px 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 249, 239, 0.05);
   color: var(--text);
   font-size: 10px;
   font-weight: 800;
@@ -12365,9 +12610,9 @@ tbody tr.computer-row.selected {
 
 .video-lineup-board li {
   padding: 7px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 249, 239, 0.07);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 249, 239, 0.03);
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) auto auto;
   gap: 10px;
@@ -13928,7 +14173,7 @@ tbody tr.computer-row.selected {
   letter-spacing: 0.06em;
   padding: 1px 4px;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 249, 239, 0.12);
   color: var(--muted);
   vertical-align: middle;
 }
@@ -14771,7 +15016,7 @@ th,
 .compact-nav-item {
   min-height: 36px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(255, 249, 239, 0.035);
 }
 
 .compact-nav-item.active,
@@ -14944,8 +15189,8 @@ td {
 .top-deck.mode-advanced {
   border-color: rgba(var(--blue-rgb), 0.54);
   background:
-    linear-gradient(90deg, rgba(var(--blue-rgb), 0.12), rgba(107, 90, 168, 0.1)),
-    rgba(26, 31, 44, 0.92);
+    linear-gradient(90deg, rgba(var(--blue-rgb), 0.08), rgba(var(--primary-rgb), 0.05)),
+    var(--panel);
 }
 
 .top-deck .brand-block {
@@ -15080,7 +15325,7 @@ td {
      grid area, and an `auto` row compresses inside one — the row stayed at
      239px against 417px of items, so the nav overflowed it and painted over the
      donate button below. max-content refuses to compress, so the RAIL overflows
-     and scrolls instead, which is the behaviour this layout wants. */
+     and scrolls instead, which is the behavior this layout wants. */
   grid-template-rows: auto max-content auto auto;
   align-content: start;
   border: 1px solid rgba(var(--gold-rgb), 0.3);
@@ -16613,8 +16858,8 @@ td {
   align-items: center;
   gap: 5px;
   padding: 9px 14px;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 249, 239, 0.07);
+  border: 1px solid rgba(255, 249, 239, 0.14);
   border-radius: 20px;
   color: var(--text);
   font-size: 13px;
@@ -16629,8 +16874,8 @@ td {
 }
 
 .test-again-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 249, 239, 0.12);
+  border-color: rgba(255, 249, 239, 0.22);
   color: var(--text-strong);
 }
 
@@ -17895,7 +18140,7 @@ tbody tr.selected {
 
 .model-hub-header-copy em {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 249, 239, 0.82);
 }
 
 .model-hub-header-side {
@@ -18229,8 +18474,8 @@ tbody tr.selected {
   gap: 8px;
   align-items: flex-start;
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 249, 239, 0.04);
+  border: 1px solid rgba(255, 249, 239, 0.07);
   border-radius: 8px;
   text-align: left;
   width: 100%;
@@ -18671,7 +18916,7 @@ a.whats-next-support:hover {
 .popularity-track {
   height: 5px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 249, 239, 0.08);
   overflow: hidden;
 }
 
@@ -18844,7 +19089,7 @@ a.whats-next-support:hover {
 }
 
 .model-cleanup-cancel {
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 249, 239, 0.16);
   color: var(--text);
 }
 
@@ -19264,7 +19509,7 @@ a.whats-next-support:hover {
    before this rule: side menu 18px tall, nav 0px, 0 of 8 items visible.
 
    Below the threshold the shell grows to its content and the document scrolls,
-   which is the normal behaviour for a window too small for a fixed layout.
+   which is the normal behavior for a window too small for a fixed layout.
    Advanced Mode only — Simple Mode is a single full-height wizard column.
    --------------------------------------------------------------------------- */
 @media (max-width: 1200px), (max-height: 780px) {
@@ -19489,7 +19734,7 @@ a.whats-next-support:hover {
 }
 
 /* Marks a category pick that came from questions of that kind actually being
-   asked on this machine, rather than from the catalogue describing what the
+   asked on this machine, rather than from the catalog describing what the
    model is generally for. The distinction is the point of benchmarking. */
 .task-pick-measured {
   margin-left: 5px;
@@ -19560,9 +19805,9 @@ a.whats-next-support:hover {
 
 .settings-field input {
   padding: 9px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 249, 239, 0.12);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 249, 239, 0.04);
   color: var(--text);
   font-family: inherit;
   font-size: 0.95rem;
@@ -19601,9 +19846,9 @@ a.whats-next-support:hover {
   gap: 6px;
   margin: 10px 0;
   padding: 12px 14px;
-  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border: 1px dashed rgba(255, 249, 239, 0.18);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 249, 239, 0.03);
 }
 
 .listening-script-card > span {
@@ -19640,9 +19885,9 @@ a.whats-next-support:hover {
 
 .settings-field textarea {
   padding: 9px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 249, 239, 0.12);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 249, 239, 0.04);
   color: var(--text);
   font-family: inherit;
   font-size: 0.92rem;
@@ -19703,9 +19948,9 @@ a.whats-next-support:hover {
   gap: 4px;
   text-align: left;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 249, 239, 0.14);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 249, 239, 0.04);
   color: var(--text);
   cursor: pointer;
 }
@@ -20165,7 +20410,7 @@ a.whats-next-support:hover {
   flex: 1;
   height: 8px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 249, 239, 0.08);
   overflow: hidden;
 }
 
@@ -20191,13 +20436,8 @@ a.whats-next-support:hover {
    slot, a cream cap, detents at the three old presets. */
 
 .channel-switch {
-  grid-column: 1 / -1;
-  /* As wide as its answers, not as wide as the tracks it spans: the
-     deck's five tracks are wider than a 1280px window, which an empty last
-     track hid until something spanned it. */
-  justify-self: start;
-  width: max-content;
-  max-width: 100%;
+  /* It sits above the panel it filters now, so it is as wide as the panel. */
+  width: 100%;
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
@@ -20344,8 +20584,17 @@ a.whats-next-support:hover {
 }
 
 .balance-fader.mini .balance-fader-console {
-  padding: 4px 3px;
+  padding: 3px 4px 4px;
   border-radius: 7px;
+}
+
+/* Small enough to sit either side of a 24px slot, still a label: the eyebrow
+   voice at its smallest, tracked so uppercase stays readable. */
+.balance-fader.mini .balance-fader-end {
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  opacity: 0.85;
 }
 
 .balance-fader-end {
@@ -20878,7 +21127,7 @@ a.whats-next-support:hover {
 .comparison-run-progress li {
   padding: 6px 8px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 249, 239, 0.03);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;

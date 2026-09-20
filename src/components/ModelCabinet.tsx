@@ -1,6 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { isDesktopRuntime } from '../api';
-import robotContestantWall from '../assets/robot-contestant-wall.webp';
 import type { BenchmarkQuestionCount } from '../benchmarkSuite';
 import { formatGb, formatPullCount } from '../lib/format';
 /**
@@ -53,8 +52,8 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
  *
  * The tick is a tick and not a radio dot even though only one option per group
  * can be on at a time, because what the reader needs from it is "is this on",
- * and clicking an on one turns it off — which is checkbox behaviour, not radio
- * behaviour. The count is the point of the whole rail: it is the answer to
+ * and clicking an on one turns it off — which is checkbox behavior, not radio
+ * behavior. The count is the point of the whole rail: it is the answer to
  * "what does this cost me" before you spend the click.
  */
 function FacetButton({ label, count, active, onToggle }: {
@@ -93,6 +92,7 @@ export function ModelCabinet({
   renderingModelId = null,
   goalLens,
   selectedModel,
+  reveal = null,
   installedModelNames,
   shortlistIds,
   queuedModelIds,
@@ -142,7 +142,7 @@ export function ModelCabinet({
   /** The channel Advanced Mode is on, which decides what a row's Test runs. */
   channel: WorkbenchId;
   /**
-   * The catalogue id of a model being tested on its own right now. Its Test
+   * The catalog id of a model being tested on its own right now. Its Test
    * says so even with its panel closed, which is where people look for it.
    */
   renderingModelId?: string | null;
@@ -152,6 +152,8 @@ export function ModelCabinet({
   active: boolean;
   rows: ModelRow[];
   selectedModel: string;
+  /** A model opened from another screen, and when: the list brings it into view. */
+  reveal?: { model: string; at: number } | null;
   installedModelNames: Set<string>;
   shortlistIds: Set<string>;
   queuedModelIds: Set<string>;
@@ -282,7 +284,7 @@ export function ModelCabinet({
    * "Added" shows only while the Installed filter is on.
    *
    * The date comes from Ollama's modified_at, which only installed models have.
-   * Across the whole catalogue that is 16 rows of 322 — a column that is blank
+   * Across the whole catalog that is 16 rows of 322 — a column that is blank
    * 95% of the time, and sortable into a wall of nothing. Under the Installed
    * filter every row has one, which is the only place it is worth the width.
    */
@@ -388,7 +390,7 @@ export function ModelCabinet({
    * "Makes video" matched nothing at all — not one of the models installed
    * here, none of the 233 in Ollama's library, and nothing in the community
    * namespace. There is no video generation on Ollama to find, so the filter
-   * promised a category it could never fill. Deciding this from the catalogue
+   * promised a category it could never fill. Deciding this from the catalog
    * rather than deleting the chip means it comes back on its own the day a
    * video model appears.
    *
@@ -504,11 +506,18 @@ export function ModelCabinet({
    *
    * Only when the model is genuinely not visible, so clicking a row already on
    * screen never disturbs filters someone set deliberately.
+   *
+   * Driven by `reveal`, which carries the moment the model was opened rather
+   * than the model's name. Opening a model the channel would hide switches the
+   * channel, and that remounts this whole screen — a name compared with the
+   * last name seen is equal again on the new mount, so the row was left
+   * collapsed and off screen, which is what Open looked like it was doing:
+   * nothing.
    */
-  const [openedModel, setOpenedModel] = useState(selectedModel);
-  if (selectedModel !== openedModel) {
-    setOpenedModel(selectedModel);
-    const target = rows.find((row) => row.displayName === selectedModel || row.id === selectedModel);
+  const [revealedAt, setRevealedAt] = useState(0);
+  if (reveal && reveal.at !== revealedAt) {
+    setRevealedAt(reveal.at);
+    const target = rows.find((row) => row.displayName === reveal.model || row.id === reveal.model);
     if (target) {
       const family = getFriendlyModelName(target.displayName);
       setExpandedFamilies((current) => (current.has(family) ? current : new Set(current).add(family)));
@@ -521,6 +530,32 @@ export function ModelCabinet({
       }
     }
   }
+
+  /**
+   * And the row is scrolled to, which is the other half of being shown it.
+   *
+   * Clearing the filters and opening the family still left the reader at the
+   * top of a list of 355 rows to find it themselves. Only when the row is off
+   * screen: a row already in view must not shift under the cursor.
+   */
+  const tableRef = useRef<HTMLTableElement | null>(null);
+  useEffect(() => {
+    // Watched while the click is recent, rather than measured once. The list
+    // settles in two passes: a fifth of a second after Open the model's row was
+    // the only one rendered and sat in plain view, and a second later — the
+    // rest of its family drawn, the rows reordered — the same row was 4,629
+    // pixels below the bottom of the screen. Measured once, it had arrived.
+    if (!reveal?.model || Date.now() - reveal.at > 5000) return undefined;
+    const frame = requestAnimationFrame(() => {
+      const row = tableRef.current?.querySelector(`tr[data-model="${CSS.escape(reveal.model)}"]`);
+      if (!row) return;
+      const box = row.getBoundingClientRect();
+      // A row already in view must not shift under the cursor.
+      if (box.top >= 0 && box.bottom <= window.innerHeight) return;
+      row.scrollIntoView({ block: 'center' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [reveal?.model, reveal?.at, visibleRows]);
 
   /**
    * Searching opens what it found. Typing "e2b" and getting a shut "Gemma4"
@@ -622,7 +657,7 @@ export function ModelCabinet({
   }, []);
 
   /**
-   * Suggestions count against the whole catalogue, not the filtered view.
+   * Suggestions count against the whole catalog, not the filtered view.
    *
    * A suggestion is an offer to change what you are looking at, so counting it
    * inside the current selection would make it promise a number it will not
@@ -697,14 +732,12 @@ export function ModelCabinet({
 
   return (
     <section className={active ? 'panel model-panel panel-focused' : 'panel model-panel'}>
-      <header
-        className="model-hub-header"
-        style={{ backgroundImage: `url(${robotContestantWall})` }}
-        aria-label="Models"
-      >
+      {/* No stage light on a data surface. This header carried a photographic
+          backdrop and a sentence restating the filter chip below it, and
+          together they cost 90px above a table that had room for one row. */}
+      <header className="model-hub-header" aria-label="Models">
         <div className="model-hub-header-copy">
           <h2>Models</h2>
-          <em>{vramSafeCount} models look realistic for {vramLabel}. Test one model or run Speed Dating from here.</em>
         </div>
         <div className="model-hub-header-side">
           <span>{modelCountLabel}</span>
@@ -824,6 +857,11 @@ export function ModelCabinet({
               </button>
             )}
           </div>
+          {/* What the Match column means, beside the filters rather than in a
+              strip above the table. It explained the score to someone who
+              could not see a score yet, because the explanation was one of
+              four blocks between the screen's title and its first row. */}
+          <ScoreLegend />
         </aside>
       )}
       <div className="cabinet-main">
@@ -973,14 +1011,13 @@ export function ModelCabinet({
                 </span>
               </div>
             )}
-      <ScoreLegend />
       {shortlistedCount >= 5 && (
         <div className="lineup-full-banner" role="status">
           <span>⚡ Speed Dating lineup is full — 5/5 contestants selected. Remove one to swap in another.</span>
         </div>
       )}
       <div className="table-wrap model-table">
-        <table>
+        <table ref={tableRef}>
           <colgroup>
             {colWidths.map((w, i) => (hidePopularity && i === 7 ? null : <col key={i} style={{ width: w }} />))}
             {showAdded && <col style={{ width: 104 }} />}
@@ -1099,6 +1136,8 @@ export function ModelCabinet({
                 <Fragment key={row.id}>
                 <tr
                   className={[rowClassName, testing ? 'testing' : ''].filter(Boolean).join(' ')}
+                  // How a model opened from another screen is found again below.
+                  data-model={row.displayName}
                   onDoubleClick={() => { onSelect(row.displayName); onOpenTopPick(); }}
                   title="Double-click to open profile"
                 >

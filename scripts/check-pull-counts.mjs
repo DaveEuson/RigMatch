@@ -32,7 +32,7 @@ const MIN_SHARE = 0.8;
 function shippedPatterns() {
   const main = readFileSync(join(root, 'electron/main.cjs'), 'utf-8');
   const block = /const pullMatch = ([\s\S]*?);\n/.exec(main)?.[1];
-  if (!block) throw new Error('the pull-count fallback chain is no longer recognisable in electron/main.cjs');
+  if (!block) throw new Error('the pull-count fallback chain is no longer recognizable in electron/main.cjs');
 
   const literals = [...block.matchAll(/section\.match\((\/(?:\\.|[^/\\])+\/[a-z]*)\)/g)].map((m) => m[1]);
   if (literals.length === 0) throw new Error('no pull-count patterns found in electron/main.cjs');
@@ -58,7 +58,7 @@ for (const section of html.split(/<li[\s>]/i)) {
 
 if (named < 50) {
   throw new Error(`only ${named} models found on the library page — the page shape changed entirely, `
-    + 'so the catalogue scrape needs looking at before the pull counts do');
+    + 'so the catalog scrape needs looking at before the pull counts do');
 }
 
 const share = counted / named;

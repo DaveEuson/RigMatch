@@ -141,12 +141,12 @@ components:
 
 RigMatch looks like a daytime television studio that was built in 1974 and has been running ever since. Not a pastiche of one — an actual one, lit and warm and slightly worn. The palette is a deep plum auditorium under stage light, with a gold that never changes no matter which theme you pick, because the bulbs above the set are the same bulbs in every episode. The themes are named for that era on purpose — Avocado Green, Mustard Yellow, Retro Teal, Velvet Chocolate — alongside Stage Plum, the default, which is the auditorium itself. Every one of them is a warm dark room, never a cool one.
 
-The system holds one deliberate tension: **theatre frames, data leads.** The show is the container — the stage, the host, the marquee, the reveal — and it is allowed to be as theatrical as it wants at the edges. But the moment a number appears, the costume comes off. Scores, tables, speeds, and hardware readouts are rendered plainly and precisely, because the entire product is a claim that these measurements are trustworthy. A decorated measurement is a compromised one. When the show and the data disagree about a pixel, the data wins.
+The system holds one deliberate tension: **theater frames, data leads.** The show is the container — the stage, the host, the marquee, the reveal — and it is allowed to be as theatrical as it wants at the edges. But the moment a number appears, the costume comes off. Scores, tables, speeds, and hardware readouts are rendered plainly and precisely, because the entire product is a claim that these measurements are trustworthy. A decorated measurement is a compromised one. When the show and the data disagree about a pixel, the data wins.
 
 Interactive things are **warm and tactile** — gold-gradient pills that lift a single pixel and brighten slightly when you touch them, like the illuminated buttons on a period console. Nothing bounces, nothing springs. The response is small, immediate, and physical.
 
 **Key Characteristics:**
-- Warm dark: a plum auditorium, never slate, never neutral grey
+- Warm dark: a plum auditorium, never slate, never neutral gray
 - Gold is the constant across all five themes; it is the stage light itself
 - Two densities in one product: the wizard runs roughly 1.4–2.8× looser than the Advanced table
 - Pills for choices, soft rectangles for containers
@@ -156,7 +156,7 @@ Interactive things are **warm and tactile** — gold-gradient pills that lift a 
 **Anti-references — RigMatch must never be mistaken for:**
 - **Generic dark-mode SaaS.** Slate-and-indigo, Inter everywhere, purple gradient buttons. The look every AI tool converged on.
 - **Gamer RGB / cyberpunk.** Neon on black, angular clip-paths, glitch effects, monospace as a personality. The benchmarking-tool cliché, and the closest trap to fall into.
-- **Enterprise BI dashboard.** Dense grey tables, default chart-library colors, no point of view. Correct and forgettable.
+- **Enterprise BI dashboard.** Dense gray tables, default chart-library colors, no point of view. Correct and forgettable.
 
 ## Colors
 
@@ -194,7 +194,7 @@ The plum ladder, three steps from the auditorium to the riser:
 
 **The Gold Is the Verdict Rule.** Gold marks exactly two things: the thing that won, and the single next action. A screen with two gold elements competing has one too many. If everything is lit, nothing is.
 
-**The Warm Dark Rule.** Every background in every theme is a warm dark — plum, olive, or chocolate. No cool greys, no blue-blacks, no `#0f172a`. The moment a surface reads as slate, the room has become a SaaS dashboard.
+**The Warm Dark Rule.** Every background in every theme is a warm dark — plum, olive, or chocolate. No cool grays, no blue-blacks, no `#0f172a`. The moment a surface reads as slate, the room has become a SaaS dashboard.
 
 ## Typography
 
@@ -223,7 +223,7 @@ The plum ladder, three steps from the auditorium to the riser:
 
 ## Layout
 
-**The app shell** is a CSS grid with named areas — `top / menu stage / lineup / ticker` — at `height: 100vh`, `padding: 18px`, `gap: 16px`, with a `minmax(172px, 196px)` sidebar. Simple Mode collapses the whole shell to a single `stage` area and fills it. There is no global max-width wrapper; the app is full-bleed and constrains width per surface with `width: min(Npx, calc(100vw - Npx))`.
+**The app shell** is a CSS grid with named areas — `top / menu stage / lineup / ticker` — at `height: 100vh`, `padding: 18px`, `gap: 16px`, with a `minmax(172px, 196px)` sidebar. Simple Mode collapses the whole shell to a single `stage` area and fills it. The shell is capped at **1920px and centered** — on a 2560px monitor every strip ran the full width of the glass, and a table row a yard long is not a table anyone reads. Inside that cap the app is full-bleed and constrains width per surface with `width: min(Npx, calc(100vw - Npx))`.
 
 **Spacing** runs on a dense 2px-step scale rather than a 4pt or 8pt grid: **4 / 6 / 8 / 10 / 12 / 14 / 16**, with 8px and 10px dominant. The odd steps (3, 5, 7, 9) are systematic, not accidental — recurring pairs like `5px 7px` and `9px 14px` appear throughout Advanced Mode. The wizard uses the top of the scale plus a 28px page gutter.
 
@@ -258,7 +258,7 @@ Shadow appears only where something actually floats above the page: docks, modal
 
 **The Lift-Only Rule.** A shadow means the element is above the page — floating, active, or currently being acted on. A resting surface gets a tone step, not a shadow. If you cannot say what the element is floating *above*, delete the shadow.
 
-**The Glow Stays On Stage Rule.** Gold bloom, spotlight cones, and footlights belong to the stage, the reveal, and the marquee. A table, a score readout, a settings panel, or a form field never glows. This is the "theatre frames, data leads" principle expressed in light.
+**The Glow Stays On Stage Rule.** Gold bloom, spotlight cones, and footlights belong to the stage, the reveal, and the marquee. A table, a score readout, a settings panel, or a form field never glows. This is the "theater frames, data leads" principle expressed in light.
 
 ## Shapes
 
@@ -362,9 +362,9 @@ The image treatment across the app is one reusable recipe: a photographic banner
 
 ### Don't:
 
-- **Don't** put stage lighting on a data surface. No gold bloom, spotlight, or glow on a table, a score readout, a form, or a settings panel. Theatre frames; data leads.
+- **Don't** put stage lighting on a data surface. No gold bloom, spotlight, or glow on a table, a score readout, a form, or a settings panel. Theater frames; data leads.
 - **Don't** use a shadow on a resting surface. If you cannot name what the element floats above, it does not get one.
-- **Don't** introduce a cool grey, slate, or blue-black background in any theme. Every RigMatch dark is a warm dark.
+- **Don't** introduce a cool gray, slate, or blue-black background in any theme. Every RigMatch dark is a warm dark.
 - **Don't** set type below weight 600, and don't add a fourth plum step. To recede, use Dust or a smaller size.
 - **Don't** invent a new breakpoint. Use 1280 / 920 / 640; the incumbent 17-value sprawl is drift, not a system.
 - **Don't** hardcode a theme color as a literal hex — `#211b2b` in a component will not follow a theme switch. Reference the token.

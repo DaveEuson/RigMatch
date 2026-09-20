@@ -125,7 +125,7 @@ export function calculateWeightedTotal(score: MatchScoreLike, weights: ScoreWeig
 }
 
 /**
- * Re-summarise saved scores under a chosen priority.
+ * Re-summarize saved scores under a chosen priority.
  *
  * Applied once where scores are loaded rather than threaded through the
  * thirty-seven places that render or rank a Match. Every one of those reads
@@ -134,7 +134,7 @@ export function calculateWeightedTotal(score: MatchScoreLike, weights: ScoreWeig
  * parameter invites: one list re-ranked, one number beside it still balanced.
  *
  * The four measured signals are untouched. `speed` still means what it always
- * did; only the headline that summarises them moves.
+ * did; only the headline that summarizes them moves.
  */
 export function applyScorePriority<T extends MatchScoreLike & { grade?: string }>(
   scores: Record<string, T>,

@@ -83,7 +83,7 @@ export type OllamaModel = {
   /**
    * What the provider says this model can do — 'completion', 'vision',
    * 'tools', 'image'. Absent for models that are not installed (the browsable
-   * catalogue cannot be asked) and for providers that do not report it, in
+   * catalog cannot be asked) and for providers that do not report it, in
    * which case callers fall back to reading the name.
    */
   capabilities?: string[];
@@ -125,7 +125,7 @@ export type CatalogModel = {
    * is our problem.
    */
   runtime?: 'ollama' | 'comfyui';
-  /** Links a ComfyUI row back to its catalogue entry, for downloading. */
+  /** Links a ComfyUI row back to its catalog entry, for downloading. */
   generationId?: string;
   /** Who published it. Set for generation rows, whose names match no Ollama
       family and would otherwise read "Unknown model family". */
@@ -662,8 +662,27 @@ export type AgentArcadeApi = {
   installUpdate: () => Promise<void>;
   onUpdaterStatus?: (callback: (status: AutoUpdateStatus) => void) => () => void;
   /** RigMatch Chat asking for a picture, a clip or a sound, relayed by the loopback bridge. */
-  onBridgeGenerateRequest?: (callback: (request: { id: string; prompt: string; kind?: 'image' | 'video' | 'audio' }) => void) => () => void;
+  onBridgeGenerateRequest?: (callback: (request: {
+    id: string;
+    prompt: string;
+    kind?: 'image' | 'video' | 'audio';
+    /** Which maker to use, as a key out of the list RigMatch sent Chat. */
+    model?: string;
+  }) => void) => () => void;
   reportBridgeGenerateResult?: (result: { id: string; dataUrl?: string; error?: string; stopped?: boolean }) => Promise<{ ok: boolean }>;
+  /** RigMatch Chat asking RigMatch to test a model, rather than use it. */
+  onBridgeTestRequest?: (callback: (request: {
+    id: string;
+    /**
+     * Everything RigMatch measures, in the words Chat asks for it. Kept in
+     * step with `testRequest` in electron/bridgeMedia.cjs: while this said
+     * four and the validator accepted eight, the handler's branch for the
+     * other four narrowed to `never` and tsc checked it vacuously.
+     */
+    kind: 'chat' | 'image' | 'video' | 'audio' | 'reading' | 'listening' | 'code' | 'app';
+    model: string;
+  }) => void) => () => void;
+  reportBridgeTestResult?: (result: { id: string; started: boolean; message?: string; error?: string }) => Promise<{ ok: boolean }>;
   /** RigMatch Chat asking to stop something it started. */
   onBridgeGenerateStop?: (callback: (request: { id: string }) => void) => () => void;
   startOllamaInstall: () => Promise<void>;

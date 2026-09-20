@@ -2,13 +2,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { getModelTag, describeModelTag, summariseModelTag, compareModelTags } = await import('../src/lib/modelVariants.ts');
+const { getModelTag, describeModelTag, summarizeModelTag, compareModelTags } = await import('../src/lib/modelVariants.ts');
 
 /**
  * "Why is one of these better than the other, and what does e2b even stand
  * for" is the first question a real user asks about two rows of the same
  * family, and the app had no answer: getModelProfile matches on the family
- * name, so every variant returned the same archetype and the same colour.
+ * name, so every variant returned the same archetype and the same color.
  */
 
 const kinds = (name) => describeModelTag(name).map((fact) => fact.kind);
@@ -86,12 +86,12 @@ test('stripped guardrails are stated plainly, not softened', () => {
   assert.match(guard.plain, /refusals/i);
 });
 
-test('a tag with nothing to say summarises to nothing, not to an empty string', () => {
-  assert.equal(summariseModelTag('someone/mystery-model'), null);
+test('a tag with nothing to say summarizes to nothing, not to an empty string', () => {
+  assert.equal(summarizeModelTag('someone/mystery-model'), null);
 });
 
 test('the summary is chip-sized and ordered', () => {
-  assert.equal(summariseModelTag('mistral:7b-instruct-q4_k_m'), '7B · Q4 · Instruction-tuned');
+  assert.equal(summarizeModelTag('mistral:7b-instruct-q4_k_m'), '7B · Q4 · Instruction-tuned');
 });
 
 // --- comparing two variants ------------------------------------------------

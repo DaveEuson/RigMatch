@@ -74,8 +74,8 @@ const PRESENT = [
   ['winner board shows the whole lineup', js, 'How the lineup finished'],
   ['live answer scores on Compare', js, 'answers so far'],
   ['lineup-full is a note, not a dead button', js, 'drop one from your lineup'],
-  ['stale winner is labelled as previous', js, "not in tonight's lineup"],
-  ['licence links are built per model', js, 'ollama.com/library/'],
+  ['stale winner is labeled as previous', js, "not in tonight's lineup"],
+  ['license links are built per model', js, 'ollama.com/library/'],
   ['Gemma keeps its prohibited-use policy', js, 'prohibited_use_policy'],
   ['collapsible stats strip', css, 'top-deck-collapse'],
   // The minifier rewrites media queries to modern range syntax, so
@@ -94,10 +94,14 @@ const PRESENT = [
   ['Simple Mode can act on a notice, not just read it', js, 'sw-notice-fix'],
   ['goals that need ComfyUI say so before they are picked', js, 'needs ComfyUI'],
   ['plain-words glossary', js, 'A free program that does the actual work'],
-  ['quit cleanup: keep only my match', js, 'Keep Only My Match'],
+  // The button that said "Keep Only My Match" is a row now — one per choice,
+  // each saying what it deletes and what it frees — so the probe follows the
+  // copy to the line that only exists because that choice does.
+  ['quit cleanup keeps the top match', js, 'keeping your match'],
+  ['quit cleanup can clear everything, top match included', js, 'leaving nothing behind'],
   ['upgrade prompt copy', js, 'New in this version'],
   ['auto-judge note in the run dialog', js, 'no right answer to check against'],
-  ['release notes mention the licence fix', js, "links that model's terms"],
+  ['release notes mention the license fix', js, "links that model's terms"],
   // The share flow, from Dave's real LinkedIn test.
   ['share text says what RigMatch is', js, 'speed-dates AI models on your own hardware'],
   ['share text points at the download', js, 'Get it: '],

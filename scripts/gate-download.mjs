@@ -26,7 +26,7 @@ const require = createRequire(import.meta.url);
 const comfy = require('../electron/comfyModels.cjs');
 
 /** Taken from src/lib/generationCatalog.ts so this tests a shipping URL. */
-const CATALOGUE_URL = 'https://huggingface.co/Comfy-Org/stable-diffusion-v1-5-archive/resolve/main/v1-5-pruned-emaonly-fp16.safetensors';
+const CATALOG_URL = 'https://huggingface.co/Comfy-Org/stable-diffusion-v1-5-archive/resolve/main/v1-5-pruned-emaonly-fp16.safetensors';
 
 const argIndex = process.argv.indexOf('--comfy');
 const explicitRoot = argIndex !== -1 ? process.argv[argIndex + 1] : null;
@@ -121,10 +121,10 @@ if (!root) {
       root,
       folder: 'checkpoints',
       filename,
-      // A URL straight out of the catalogue, so this exercises what the app
+      // A URL straight out of the catalog, so this exercises what the app
       // actually downloads. Aborted as soon as bytes move: the point is that
       // progress is reported, not that gigabytes land on this disk.
-      url: CATALOGUE_URL,
+      url: CATALOG_URL,
     },
     (update) => {
       const received = update?.receivedBytes ?? update?.received ?? update?.bytes ?? 0;
@@ -146,7 +146,7 @@ if (!root) {
   for (const name of leftovers) rmSync(join(dir, name), { force: true });
 }
 
-// ── 4. Resuming depends on Hugging Face honouring Range ────────────────────
+// ── 4. Resuming depends on Hugging Face honoring Range ────────────────────
 // A 50 GB lineup file survives a dropped connection only because the CDN
 // answers a Range request with the rest of the file. If that ever stops, every
 // resume silently becomes a restart from zero — the tests cannot see it,
@@ -154,7 +154,7 @@ if (!root) {
 {
   const name = 'Hugging Face still resumes a download from the middle';
   try {
-    const response = await fetch(CATALOGUE_URL, { headers: { Range: 'bytes=0-15' }, redirect: 'follow' });
+    const response = await fetch(CATALOG_URL, { headers: { Range: 'bytes=0-15' }, redirect: 'follow' });
     const range = response.headers.get('content-range') ?? '';
     await response.body?.cancel?.().catch(() => {});
     record(name, response.status === 206 && /^bytes 0-15\//.test(range),

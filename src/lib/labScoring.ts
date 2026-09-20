@@ -98,8 +98,12 @@ export function scoreAdvancedVisionResponse(response: string, doneReason: string
         detail: 'Returned a substantive description, not a one-liner or refusal.',
       },
       {
+        // `colou?r` on purpose: this reads the MODEL's answer, not our prose,
+        // and a model describing a picture writes whichever spelling it was
+        // trained on. The American-English sweep flattened it to `color|color`
+        // and quietly stopped crediting every model that writes the British one.
         label: 'Concrete visual detail',
-        passed: answered && /\b(color|colour|robot|text|background|left|right|top|bottom|blue|green|orange|red|yellow|character|shape|screen|button|face|eye|logo)\b/i.test(text),
+        passed: answered && /\b(colou?r|robot|text|background|left|right|top|bottom|blue|green|orange|red|yellow|character|shape|screen|button|face|eye|logo)\b/i.test(text),
         detail: 'Names specific objects, colors, or layout instead of staying vague.',
       },
       engaged,

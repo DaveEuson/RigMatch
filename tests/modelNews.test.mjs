@@ -10,17 +10,17 @@ import {
 
 // What's New decides a claim the user reads: "3 new models found." Nothing
 // tested it before useModelNews was extracted, and the extraction is the moment
-// to fix that — the refactor asserts this behaviour is unchanged, so the
-// behaviour needs saying out loud somewhere.
+// to fix that — the refactor asserts this behavior is unchanged, so the
+// behavior needs saying out loud somewhere.
 
 const model = (name, tag = 'latest') => ({ id: `${name}:${tag}`, name, tag });
 
 test('the first ever scan announces nothing', () => {
   // Everything is new on a fresh install. Announcing it would greet a first-run
-  // user with "347 new models found", which is true of the catalogue and false
+  // user with "347 new models found", which is true of the catalog and false
   // about their situation.
-  const catalogue = [model('llama3'), model('gemma3'), model('qwen2.5')];
-  const { isBootstrap, state } = reconcileModelNews(catalogue, getEmptyModelNewsState());
+  const catalog = [model('llama3'), model('gemma3'), model('qwen2.5')];
+  const { isBootstrap, state } = reconcileModelNews(catalog, getEmptyModelNewsState());
 
   assert.equal(isBootstrap, true);
   assert.deepEqual(state.latestNewModelIds, [], 'a first run must announce nothing');
@@ -34,12 +34,12 @@ test('a model that appears after bootstrap is announced once', () => {
   assert.equal(second.isBootstrap, false);
   assert.deepEqual(second.state.latestNewModelIds, [getModelNewsId(model('gemma3'))]);
 
-  // Scanning again with the same catalogue must not re-announce it.
+  // Scanning again with the same catalog must not re-announce it.
   const third = reconcileModelNews([model('llama3'), model('gemma3')], second.state);
   assert.deepEqual(third.state.latestNewModelIds, [], 'a known model is not new twice');
 });
 
-test('a model that disappears from the catalogue stays known', () => {
+test('a model that disappears from the catalog stays known', () => {
   // Ollama's index is not stable; a model dropping out for one scan and coming
   // back must not read as a new arrival.
   const first = reconcileModelNews([model('llama3'), model('gemma3')], getEmptyModelNewsState());
@@ -70,7 +70,7 @@ test('known ids stay deduplicated and sorted', () => {
 });
 
 test('a model with no id falls back to name:tag', () => {
-  // The catalogue does not always carry an id, and an empty one would collapse
+  // The catalog does not always carry an id, and an empty one would collapse
   // every such model onto a single key — every one of them looking known.
   const a = getModelNewsId({ id: '', name: 'llama3', tag: '8b' });
   const b = getModelNewsId({ id: '', name: 'llama3', tag: '70b' });

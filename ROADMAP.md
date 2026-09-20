@@ -43,7 +43,7 @@ branch. The abstraction exists; LM Studio is simply second-class — `canDownloa
 is false for it, benchmark routing favours Ollama, and there is no setup path.
 
 Make LM Studio genuinely equal first, since it is the one users actually have.
-A third — llama.cpp's server — then costs mostly catalogue and detection work,
+A third — llama.cpp's server — then costs mostly catalog and detection work,
 because it speaks the same OpenAI-compatible API. Doing them in the other order
 means building the abstraction twice.
 

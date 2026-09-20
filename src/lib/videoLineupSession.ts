@@ -279,5 +279,5 @@ export async function startVideoLineup(options: StartLineupOptions): Promise<voi
 export function stopVideoLineup(): void {
   if (!controller) return;
   controller.abort();
-  update({ message: 'Stopping — ComfyUI is cancelling the model in flight.' });
+  update({ message: 'Stopping — ComfyUI is canceling the model in flight.' });
 }

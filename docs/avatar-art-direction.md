@@ -45,7 +45,7 @@ the robot from that.
 **1 · `granite` — IBM Granite** (`granite3.2`, `granite3.3`, `granite-code`)
 Carved from polished speckled granite — a stone robot, solid and unhurried.
 IBM's logo is eight horizontal bars, so etch subtle horizontal striations into
-the stone. *Slate grey, mineral speckle, IBM-blue glow.*
+the stone. *Slate gray, mineral speckle, IBM-blue glow.*
 
 **2 · `cohere` — Cohere** (`command-r`, `command-r-plus`, `aya`)
 Aya speaks 100+ languages, so give it a halo of small glowing glyphs from

@@ -1,6 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { formatGb } from '../lib/format';
-import { licenceConditionsForRows, licenseLinksForRows } from '../lib/modelLicenses';
+import { licenseConditionsForRows, licenseLinksForRows } from '../lib/modelLicenses';
 import { useDialog } from '../lib/useDialog';
 import type { ModelRow } from '../types';
 import { AlertTriangle, Download, ExternalLink, X } from 'lucide-react';
@@ -23,9 +23,9 @@ export function ThirdPartyDownloadConsentModal({
   // into ComfyUI. This said "your local Ollama" for both.
   const fromComfy = rows.filter((row) => row.runtime === 'comfyui').length;
   const plural = rows.length === 1 ? '' : 's';
-  // Where a licence limits who may use a model — by country, or by the size of
+  // Where a license limits who may use a model — by country, or by the size of
   // the business — it is said here, before anything downloads.
-  const conditions = licenceConditionsForRows(rows);
+  const conditions = licenseConditionsForRows(rows);
 
   return (
     <div className="modal-backdrop" role="presentation">

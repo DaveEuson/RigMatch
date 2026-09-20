@@ -128,7 +128,7 @@ test('every audio file is checked by its SHA-256 and named as its URL names it',
 
 test('an audio checkpoint is never offered to the Image Lab as a picture model', () => {
   for (const model of GENERATION_MODELS.filter((m) => m.kind === 'audio')) {
-    assert.ok(isAudioCheckpoint(model.filename), `${model.filename} is not recognised as audio`);
+    assert.ok(isAudioCheckpoint(model.filename), `${model.filename} is not recognized as audio`);
     assert.ok(!isPictureCheckpoint(model.filename), `${model.filename} would be offered as a picture model`);
   }
   for (const model of GENERATION_MODELS.filter((m) => m.kind === 'video' && m.folder === 'checkpoints')) {

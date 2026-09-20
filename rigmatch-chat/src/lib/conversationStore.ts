@@ -60,7 +60,7 @@ export type Conversation = {
    *
    * The messages themselves are kept: the transcript still shows every word
    * that was said, and only what gets *sent* is shortened. That is the whole
-   * point — the previous behaviour was Ollama silently discarding turns while
+   * point — the previous behavior was Ollama silently discarding turns while
    * the transcript went on displaying them.
    */
   summary?: string;
