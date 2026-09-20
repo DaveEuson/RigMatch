@@ -74,6 +74,38 @@ test('a server with no listable checkpoints still reports as reachable', async (
   assert.deepEqual(status.checkpoints, []);
 });
 
+/** What the shared fetch helper raises when nothing answers on the port. */
+const REFUSED = new Error('Cannot reach local AI service at http://127.0.0.1:8188. '
+  + 'Make sure Ollama or LM Studio is installed, running, and serving a local API.');
+
+test('a ComfyUI that is not running is an answer, not a failure', async () => {
+  // It is a separate program the user starts themselves, and the status poll
+  // runs every fifteen seconds. Throwing made the IPC handler log an error with
+  // a stack on every miss — 240 an hour, in the log testers are asked to send.
+  const { bridge } = harness({ '/system_stats': REFUSED });
+  const status = await bridge.getStatus(LOCAL);
+  assert.equal(status.reachable, false);
+  assert.deepEqual(status.checkpoints, []);
+});
+
+test('a server that answers badly is still a failure', async () => {
+  // Reachable and broken is a fault worth surfacing; only "nothing answered"
+  // is the ordinary case.
+  const { bridge } = harness({ '/system_stats': new Error('500 Internal Server Error') });
+  await assert.rejects(() => bridge.getStatus(LOCAL), /500/);
+});
+
+test('an unreachable ComfyUI names ComfyUI, not Ollama', async () => {
+  // The shared helper's message is written for the model provider, so a render
+  // against a stopped ComfyUI on 8188 sent the reader to check Ollama.
+  const { bridge } = harness({ '/prompt': REFUSED });
+  await assert.rejects(
+    () => bridge.submit(LOCAL, { 1: { class_type: 'X' } }),
+    (error) => /Cannot reach ComfyUI at http:\/\/127\.0\.0\.1:8188/.test(error.message)
+      && !/Ollama|LM Studio/.test(error.message),
+  );
+});
+
 test('checkpoints are listed when the server offers them', async () => {
   const { bridge } = harness({
     '/system_stats': { devices: [] },

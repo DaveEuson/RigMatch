@@ -21,7 +21,52 @@ function origin(baseUrl) {
   return String(baseUrl || '').replace(/\/+$/, '');
 }
 
-function createComfyBridge({ fetchJson, assertLocalhostUrl }) {
+/** The server a URL belongs to, for a message that names where it looked. */
+function serverOrigin(url) {
+  try {
+    return new URL(String(url)).origin;
+  } catch {
+    return origin(url);
+  }
+}
+
+/**
+ * Nothing answered on the port, as opposed to something answering badly.
+ *
+ * Matched on the message the shared fetch helper raises for a refused
+ * connection or a timeout, because that helper flattens the cause, plus the
+ * flag this module sets once it has rewritten that message. A server that
+ * answers with a 500, or with something that is not JSON, is a real fault and
+ * still throws.
+ */
+function isUnreachable(error) {
+  if (error?.unreachable === true) return true;
+  const message = String(error?.message ?? '');
+  return /Cannot reach local AI service|did not finish within/.test(message);
+}
+
+function createComfyBridge({ fetchJson: rawFetchJson, assertLocalhostUrl }) {
+  /**
+   * The same fetch, with a refusal that names the right program.
+   *
+   * The shared helper's message is written for the model provider — "make sure
+   * Ollama or LM Studio is installed, running, and serving a local API" — and
+   * it is raised for every local service, so a render failing against a stopped
+   * ComfyUI on 8188 sent the reader to check Ollama, which was running fine.
+   */
+  async function fetchJson(url, options = {}, timeoutMs) {
+    try {
+      return await rawFetchJson(url, options, timeoutMs);
+    } catch (error) {
+      if (!isUnreachable(error)) throw error;
+      const failure = new Error(`Cannot reach ComfyUI at ${serverOrigin(url)}. `
+        + 'Start ComfyUI and try again — RigMatch can start it for you from Settings.');
+      // Read by getStatus, which answers "not running" rather than failing.
+      failure.unreachable = true;
+      throw failure;
+    }
+  }
+
   async function getStatus(baseUrl, timeoutMs = 3000) {
     assertLocalhostUrl(baseUrl);
     const base = origin(baseUrl);
@@ -29,7 +74,22 @@ function createComfyBridge({ fetchJson, assertLocalhostUrl }) {
     // A build that answers /system_stats is running; the checkpoint list is a
     // second call because a server with no models installed is still reachable
     // and the user needs to be told those two things apart.
-    const stats = await fetchJson(`${base}/system_stats`, {}, timeoutMs);
+    //
+    // A ComfyUI that is simply not running is the ordinary case — it is a
+    // separate program the user starts themselves — so it is an answer, not a
+    // failure. Throwing here made the IPC handler log an error with a stack
+    // every time the fifteen-second poll missed, which on a machine without
+    // ComfyUI is 240 entries an hour in the log beta testers are asked to send.
+    // The message was wrong as well: the shared fetch helper assumes every
+    // local service is the model provider, so a dead ComfyUI on 8188 told the
+    // reader to check that Ollama or LM Studio was running.
+    let stats;
+    try {
+      stats = await fetchJson(`${base}/system_stats`, {}, timeoutMs);
+    } catch (error) {
+      if (isUnreachable(error)) return { reachable: false, checkpoints: [], textEncoders: [] };
+      throw error;
+    }
 
     // Older builds do not expose /models/{folder}, and none of these are worth
     // calling the server down over. Reachability is what /system_stats settled.
