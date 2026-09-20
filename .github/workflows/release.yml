@@ -181,6 +181,13 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
+      # Provenance: GitHub signs a statement that these files came out of this
+      # workflow, from this repo, at this commit. It is not code signing and
+      # does nothing for SmartScreen or Gatekeeper — it is the other half, the
+      # one that answers "is this really the file RigMatch built", which is what
+      # someone re-uploading the installer with adware would have to defeat.
+      id-token: write
+      attestations: write
 
     steps:
       # Checkout first: it cleans untracked files, which would wipe release/.
@@ -208,6 +215,18 @@ jobs:
           cd release
           find . -maxdepth 2 -type f \( -name "RigMatch-*.exe" -o -name "RigMatch-*.dmg" -o -name "RigMatch-*.AppImage" -o -name "RigMatch-*.deb" -o -name "RigMatch-*.zip" \) -print0 | xargs -0 sha256sum > SHA256SUMS.txt
           cat SHA256SUMS.txt
+
+      # Anyone can check a download against this with:
+      #   gh attestation verify RigMatch-<version>-win-x64.exe --repo DaveEuson/RigMatch
+      - name: Attest the release artifacts
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            release/RigMatch-*.exe
+            release/RigMatch-*.dmg
+            release/RigMatch-*.AppImage
+            release/RigMatch-*.deb
+            release/RigMatch-*.zip
 
       # Body = the tag's entry from src/data/releaseNotes.ts (same text the in-app
       # Update Center shows) followed by the download and macOS-first-launch
