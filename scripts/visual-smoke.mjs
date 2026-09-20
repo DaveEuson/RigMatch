@@ -87,15 +87,20 @@ async function runBrowserChecks(url) {
     .map((label) => label.trim().toLowerCase())
     .filter(Boolean);
   const simpleMenuHidden = !(await page.locator('.side-menu').isVisible().catch(() => false));
-  const simpleNoAdvancedChrome = (await page.locator('.top-deck, .advanced-host-bar, .ticker').count()) === 0;
+  const simpleNoAdvancedChrome = (await page.locator('.top-deck, .ticker').count()) === 0;
   const desktopOverflowX = await hasHorizontalOverflow(page);
   const overlayCount = await page.locator('.vite-error-overlay, vite-error-overlay').count();
   await settleImages(page, 'simple');
   await page.screenshot({ path: screenshots.simple, fullPage: false });
 
   await page.getByLabel('Advanced Mode').click();
-  await page.waitForSelector('.advanced-host-bar', { timeout: 10000 });
-  const advancedText = await page.locator('.advanced-host-bar').innerText();
+  // The host's line in Advanced was removed — it restated the side menu and the
+  // badges above the table — so this waited ten seconds for an element that no
+  // longer exists and then gave up, taking the rest of the run with it. The
+  // side menu's own header says which mode you are in, and it is there in every
+  // window this smoke opens.
+  await page.waitForSelector('.side-menu-title', { timeout: 10000 });
+  const advancedText = await page.locator('.side-menu-title').innerText();
   const wizardGoneInAdvanced = !(await page.locator('.sw-shell').isVisible().catch(() => false));
   const advancedMenuVisible = await page.locator('.side-menu').isVisible();
   await settleImages(page, 'advanced');
@@ -196,7 +201,8 @@ async function runBrowserChecks(url) {
     simpleStepPills: stepRailIsValid(simpleStepLabels),
     simpleMenuHidden,
     simpleNoAdvancedChrome,
-    advancedControlRoom: advancedText.includes('Advanced Control Room'),
+    // innerText is what is rendered, and the eyebrow is uppercased in CSS.
+    advancedControlRoom: /advanced mode/i.test(advancedText) && /power tools visible/i.test(advancedText),
     chatRoundTrip,
     chatDraftCleared,
     wizardGoneInAdvanced,

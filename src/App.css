@@ -3737,6 +3737,13 @@ tbody tr.computer-row.selected {
   white-space: nowrap;
 }
 
+/* The one control in the table's toolbar that did not answer a pointer. It
+   opens and closes the whole facet rail, and looked like a status chip. */
+.model-filter-toggle:hover {
+  border-color: rgba(var(--gold-rgb), 0.55);
+  color: var(--text-strong);
+}
+
 .model-filter-toggle.active {
   border-color: var(--pink);
   color: var(--text-strong);
@@ -4268,6 +4275,15 @@ tbody tr.computer-row.selected {
 
 .sort-header.active {
   color: var(--green);
+}
+
+/* The header itself has to answer, not only its arrow. Hover moved the sort
+   glyph's color and left the column name exactly as it was, which reads as a
+   label rather than the button it is — and the screen audit, which watches the
+   control's own computed style, called it numb. */
+.sort-header:hover {
+  color: var(--text-strong);
+  background: var(--panel-hover);
 }
 
 .sort-header.active svg,
