@@ -94,7 +94,11 @@ const PRESENT = [
   ['Simple Mode can act on a notice, not just read it', js, 'sw-notice-fix'],
   ['goals that need ComfyUI say so before they are picked', js, 'needs ComfyUI'],
   ['plain-words glossary', js, 'A free program that does the actual work'],
-  ['quit cleanup: keep only my match', js, 'Keep Only My Match'],
+  // The button that said "Keep Only My Match" is a row now — one per choice,
+  // each saying what it deletes and what it frees — so the probe follows the
+  // copy to the line that only exists because that choice does.
+  ['quit cleanup keeps the top match', js, 'keeping your match'],
+  ['quit cleanup can clear everything, top match included', js, 'leaving nothing behind'],
   ['upgrade prompt copy', js, 'New in this version'],
   ['auto-judge note in the run dialog', js, 'no right answer to check against'],
   ['release notes mention the license fix', js, "links that model's terms"],
