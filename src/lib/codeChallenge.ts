@@ -91,12 +91,29 @@ export function buildCodePrompt(language: string, task: string): string {
   ].join('\n');
 }
 
-// Pulls the first fenced code block out of a response; falls back to the whole
-// response (models sometimes omit the fence).
+/**
+ * The code out of a reply that may be mostly talk.
+ *
+ * The longest fenced block, not the first. The prompt asks for one block and no
+ * prose, and a model that follows it has exactly one — but the models this
+ * grades hardest are the ones least likely to follow it. A chatty model answers
+ * "first the imports:" with a two-line block and "and here is the game:" with
+ * the program; taking the first fence graded `import pygame` and scored a
+ * working answer near zero.
+ *
+ * With no fence at all it falls back to the whole reply. That is not a rescue:
+ * the prose goes into the parse check with everything else, which is the right
+ * result for a reply that never returned code.
+ */
 export function extractCodeBlock(response: string): string {
   const text = String(response ?? '');
-  const fenced = text.match(/```[a-zA-Z0-9+#.-]*\s*\n([\s\S]*?)```/);
-  return (fenced ? fenced[1] : text).trim();
+  const blocks = [...text.matchAll(/```[a-zA-Z0-9+#.-]*[ \t]*\r?\n([\s\S]*?)```/g)]
+    .map((match) => match[1].trim())
+    .filter(Boolean);
+  if (blocks.length === 0) return text.trim();
+  let longest = blocks[0];
+  for (const block of blocks) if (block.length > longest.length) longest = block;
+  return longest;
 }
 
 // The grading prompt handed to the judge model.
