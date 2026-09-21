@@ -135,19 +135,34 @@ export function canGenerateText(row: CapabilityBearing & { generationKind?: stri
  * Sorted largest-first because a bigger model is the better grader, with the
  * known-weak ones pushed to the back rather than dropped — they are still
  * better than scoring prose by its length.
+ *
+ * With this computer's memory known, a judge that fits comes before one that
+ * does not, within each of those groups. The largest installed model is often
+ * too big to run here: on an 8 GB Jetson it was a 9.6 GB gemma4, which loaded
+ * as 12 GB mostly on the CPU, took minutes per verdict, and held the GPU while
+ * the model under test was being timed. A smaller judge that runs properly is
+ * worth more than a bigger one that cannot.
  */
 export function textJudgeCandidates(
-  rows: Array<CapabilityBearing & { generationKind?: string; sizeGb?: number | null }>,
+  rows: Array<CapabilityBearing & { generationKind?: string; sizeGb?: number | null; params?: string }>,
+  vramGb = 0,
 ): string[] {
-  const names = [...rows]
-    .filter((row) => canGenerateText(row) && !isEmbeddingModel(row.displayName ?? row.name ?? ''))
-    .sort((a, b) => (b.sizeGb ?? 0) - (a.sizeGb ?? 0))
-    .map((row) => row.displayName ?? row.name ?? '')
-    .filter(Boolean);
+  const nameOf = (row: (typeof rows)[number]) => row.displayName ?? row.name ?? '';
+  const fits = (row: (typeof rows)[number]) => {
+    const { tone } = getHardwareFit({ params: row.params ?? '', sizeGb: row.sizeGb ?? null }, vramGb);
+    return tone === 'sweet-spot' || tone === 'good';
+  };
+  // Unknown memory says nothing about fit, so the order stays by size alone.
+  const fitsFirst = (list: typeof rows) => (vramGb > 0
+    ? [...list.filter(fits), ...list.filter((row) => !fits(row))]
+    : list);
+  const text = [...rows]
+    .filter((row) => canGenerateText(row) && !isEmbeddingModel(nameOf(row)) && nameOf(row))
+    .sort((a, b) => (b.sizeGb ?? 0) - (a.sizeGb ?? 0));
   return [
-    ...names.filter((name) => !WEAK_TEXT_JUDGE.test(name)),
-    ...names.filter((name) => WEAK_TEXT_JUDGE.test(name)),
-  ];
+    ...fitsFirst(text.filter((row) => !WEAK_TEXT_JUDGE.test(nameOf(row)))),
+    ...fitsFirst(text.filter((row) => WEAK_TEXT_JUDGE.test(nameOf(row)))),
+  ].map(nameOf);
 }
 
 /**
