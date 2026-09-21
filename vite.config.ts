@@ -1,10 +1,57 @@
-import { defineConfig } from 'vite'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+
+/**
+ * Writes THIRD_PARTY_NOTICES.txt: the license of every npm package the
+ * renderer bundle contains, taken from whatever the bundle actually pulled in.
+ *
+ * React and lucide-react are devDependencies because this build bundles them
+ * into dist/ and the main process never loads them. As runtime dependencies,
+ * electron-builder also copied their node_modules folders into the app, 25 MB
+ * of source maps, type files and development builds that nothing ran. Those
+ * folders were the only place their MIT and ISC notices shipped, though — the
+ * minified bundle drops license comments — so the notices are collected here.
+ */
+function thirdPartyNotices(): Plugin {
+  return {
+    name: 'rigmatch-third-party-notices',
+    apply: 'build',
+    generateBundle() {
+      const packageDirs = new Map<string, string>()
+      for (const id of this.getModuleIds()) {
+        const parts = id.split(/[\\/]node_modules[\\/]/)
+        if (parts.length < 2) continue
+        const rest = parts[parts.length - 1]
+        const segments = rest.split(/[\\/]/)
+        const name = rest.startsWith('@') ? `${segments[0]}/${segments[1]}` : segments[0]
+        packageDirs.set(name, join(id.slice(0, id.length - rest.length), name))
+      }
+
+      const sections = [...packageDirs].sort(([a], [b]) => a.localeCompare(b)).map(([name, dir]) => {
+        const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+        const licenseFile = readdirSync(dir).find((file) => /^licen[cs]e(\.|$)/i.test(file))
+        // A package with no license text to ship is a notice this build would
+        // silently leave out, so it stops the build instead.
+        if (!licenseFile) this.error(`${name} has no LICENSE file to copy into THIRD_PARTY_NOTICES.txt`)
+        const text = readFileSync(join(dir, licenseFile), 'utf8').trim()
+        return `${name} ${manifest.version} (${manifest.license})\n${'-'.repeat(60)}\n${text}\n`
+      })
+
+      this.emitFile({
+        type: 'asset',
+        fileName: 'THIRD_PARTY_NOTICES.txt',
+        source: `Open-source software bundled into RigMatch's interface.\n\n${sections.join('\n')}`,
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
-  plugins: [react()],
+  plugins: [react(), thirdPartyNotices()],
   server: {
     watch: {
       /**

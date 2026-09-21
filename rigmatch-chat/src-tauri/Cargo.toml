@@ -31,3 +31,13 @@ sysinfo = "0.33"
 # and dropped the moment Stop is pressed, rather than only between chunks — a
 # model still loading into VRAM produces no chunks to check against.
 tokio = { version = "1", features = ["sync", "macros", "rt"] }
+
+# The shipped binary trades build time for size. One codegen unit and full LTO
+# let the linker drop code across crate boundaries, "s" optimizes for size, and
+# strip removes the symbol table. Unwinding stays: panic = "abort" would change
+# what a panic in a stream handler does, not just how big the binary is.
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

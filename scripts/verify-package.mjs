@@ -43,6 +43,12 @@ if (!mainProcess) {
   process.exit(1);
 }
 
+// The renderer's libraries are bundled into dist/assets, so the package should
+// carry their license text and not their node_modules folders as well.
+const listing = entries.join('\n').replace(/\\/g, '/');
+const noticesEntry = entries.find((entry) => /[\\/]dist[\\/]THIRD_PARTY_NOTICES\.txt$/.test(entry));
+const notices = noticesEntry ? readEntry(noticesEntry) : '';
+
 let js = '';
 let css = '';
 const failures = [];
@@ -133,6 +139,11 @@ const PRESENT = [
   // The bridge is the one place an ordinary web page could reach into RigMatch.
   ['the bridge only answers its own companion', mainProcess, 'tauri://localhost'],
   ['a second RigMatch does not open a second window', mainProcess, 'requestSingleInstanceLock'],
+
+  // 0.9. The bundled libraries' licenses ship as a text file, since their
+  // node_modules folders, the only copy before, no longer do.
+  ['React license ships with the bundle', notices, 'react-dom 19'],
+  ['lucide icon license ships with the bundle', notices, 'lucide-react 1'],
 ];
 
 /** Things that must NOT be in the bundle. */
@@ -140,6 +151,9 @@ const ABSENT = [
   ['dead BenchmarkRun panel', js, 'BenchmarkRun'],
   // LinkedIn truncated the post at this string's question mark, eating the link.
   ['the old question-mark share text', js, 'Which local AI is your top match?'],
+  // 25 MB of source maps, type files and development builds nothing loaded.
+  ['renderer libraries copied beside the bundle', listing, '/node_modules/lucide-react/'],
+  ['React copied beside the bundle', listing, '/node_modules/react-dom/'],
 ];
 
 let missing = 0;
