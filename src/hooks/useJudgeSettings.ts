@@ -32,9 +32,10 @@ export type JudgeConfig = { provider: 'local' | 'openrouter'; model: string; api
  *
  * installedRowsForCleanup comes in as a parameter: the candidate list is
  * whatever is installed, which this hook has no business working out for
- * itself.
+ * itself. So does vramGb, which puts a judge that fits this computer ahead of
+ * one that does not.
  */
-export function useJudgeSettings({ installedRows }: { installedRows: ModelRow[] }) {
+export function useJudgeSettings({ installedRows, vramGb }: { installedRows: ModelRow[]; vramGb: number }) {
   const [qualityMode, setQualityMode] = useState<'heuristic' | 'judge'>(() => {
     try { return localStorage.getItem(QUALITY_MODE_STORAGE_KEY) === 'judge' ? 'judge' : 'heuristic'; }
     catch { return 'heuristic'; }
@@ -59,12 +60,12 @@ export function useJudgeSettings({ installedRows }: { installedRows: ModelRow[] 
     catch { return ''; }
   });
 
-  // Text-capable models only, largest first — not simply the biggest file: an
-  // embedding or OCR model is often the largest thing installed and grades
-  // prose as confident nonsense.
+  // Text-capable models only, the ones that fit this computer first, then
+  // largest first — not simply the biggest file: an embedding or OCR model is
+  // often the largest thing installed and grades prose as confident nonsense.
   const judgeModelOptions = useMemo(
-    () => textJudgeCandidates(installedRows),
-    [installedRows],
+    () => textJudgeCandidates(installedRows, vramGb),
+    [installedRows, vramGb],
   );
 
   // The judge model actually sent with a run: the user's pick if it's still

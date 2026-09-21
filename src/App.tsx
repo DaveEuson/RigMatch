@@ -819,7 +819,7 @@ function App() {
     openRouterKey, setOpenRouterKey,
     judgeModelOptions, effectiveJudgeModel, autoJudgeModels, effectiveJudge,
     resetJudgeSettings,
-  } = useJudgeSettings({ installedRows: installedRowsForCleanup });
+  } = useJudgeSettings({ installedRows: installedRowsForCleanup, vramGb: system.gpu.vramGb });
 
   const unscoredRowsForCleanup = useMemo(
     () => installedRowsForCleanup.filter((row) => !getModelScore(row, modelScores)),

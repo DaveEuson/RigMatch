@@ -3631,6 +3631,13 @@ async function runBenchmarkInner(request = {}, sender, signal) {
             : runJudgeGenerate(baseUrl, useJudge ? judgeModel : autoJudgeModel, judgePrompt, signal)),
         });
         promptJudgeScore = verdict ? verdict.score : null;
+        // The judge has already left (keep_alive 0 in runJudgeGenerate), but
+        // loading it can push this model out of GPU memory, and a model reloaded
+        // while the judge still held the GPU comes back split onto the CPU. Load
+        // it again now, untimed, so the next timing run measures the model and
+        // not its reload — two of this question's three runs are still to come.
+        const judgedHere = !(useJudge && judgeProvider === 'openrouter');
+        if (judgedHere && provider === 'ollama') await warmBenchmarkModel(baseUrl, model);
       }
       const sobrietyScore = promptJudgeScore != null
         ? promptJudgeScore
@@ -3923,6 +3930,16 @@ async function openRouterGenerateText(apiKey, model, prompt, maxTokens = 400, si
 // Runs the judge model deterministically to grade one answer. Kept short and
 // low-temperature so the verdict is stable and cheap. Any failure bubbles up so
 // scoreQualityWithJudge returns null and the caller falls back to the heuristic.
+/**
+ * One verdict from a local judge, which unloads as soon as it has answered.
+ *
+ * It used to stay for BENCHMARK_KEEP_ALIVE like the model under test, and the
+ * judge runs in the middle of that model's timing: after the first of each
+ * question's three runs. On an 8 GB Jetson a 12 GB judge held the GPU for the
+ * rest of the run, the model under test reloaded 74% on the CPU, and its speed
+ * score came out as 9. The judge paying a reload per verdict is the cheaper
+ * side of that trade.
+ */
 async function runJudgeGenerate(baseUrl, judgeModel, judgePrompt, signal) {
   const response = await fetchJson(
     `${baseUrl}/api/generate`,
@@ -3934,7 +3951,7 @@ async function runJudgeGenerate(baseUrl, judgeModel, judgePrompt, signal) {
         prompt: judgePrompt,
         stream: false,
         think: false,
-        keep_alive: BENCHMARK_KEEP_ALIVE,
+        keep_alive: 0,
         options: { temperature: 0, top_p: 1, num_predict: 200 },
       }),
     },

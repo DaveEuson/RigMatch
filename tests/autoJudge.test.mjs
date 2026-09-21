@@ -130,3 +130,46 @@ test('the rubric marks questions that ask for a clamp, not ones that mention one
   assert.equal(heuristicCanGrade('coding', review.prompt), false,
     'reviewing a clamp is not writing one — the rubric cannot mark it');
 });
+
+// The Jetson smoke for 0.9.0, with the models it actually had installed.
+const JETSON_MODELS = [
+  { displayName: 'gemma4:latest', sizeGb: 9.6, params: '8B' },
+  { displayName: 'gemma4:12b', sizeGb: 7.6, params: '12B' },
+  { displayName: 'mistral:7b', sizeGb: 4.4, params: '7B' },
+  { displayName: 'qwen2.5:1.5b', sizeGb: 0.9, params: '1.5B' },
+];
+
+test('a judge that fits this computer goes ahead of a bigger one that does not', () => {
+  // The largest-first rule picked a 9.6 GB gemma4 on a 7.4 GB Jetson. It loaded
+  // as 12 GB mostly on the CPU, took minutes per verdict, and held the GPU while
+  // the model under test was being timed.
+  assert.deepEqual(textJudgeCandidates(JETSON_MODELS, 7.4),
+    ['mistral:7b', 'qwen2.5:1.5b', 'gemma4:latest', 'gemma4:12b']);
+});
+
+test('with memory unknown the order stays by size alone', () => {
+  assert.deepEqual(textJudgeCandidates(JETSON_MODELS),
+    ['gemma4:latest', 'gemma4:12b', 'mistral:7b', 'qwen2.5:1.5b']);
+});
+
+test('fitting does not promote a known-bad grader over a real one', () => {
+  const picked = textJudgeCandidates([
+    { displayName: 'llava:7b', sizeGb: 4.7, params: '7B' },
+    { displayName: 'gemma4:latest', sizeGb: 9.6, params: '8B' },
+  ], 7.4);
+  assert.deepEqual(picked, ['gemma4:latest', 'llava:7b']);
+});
+
+test('the judge leaves the GPU before the model under test is timed again', () => {
+  // The judge runs after the first of each question's three timing runs. Kept
+  // loaded, it had the other two measured with the model split onto the CPU.
+  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
+  const judge = main.slice(main.indexOf('async function runJudgeGenerate'));
+  assert.match(judge.slice(0, judge.indexOf('\n}\n')), /keep_alive: 0,/,
+    'runJudgeGenerate must unload the judge as soon as it has answered');
+
+  const verdict = main.indexOf('promptJudgeScore = verdict ? verdict.score : null;');
+  assert.ok(verdict > 0, 'the verdict line moved; follow it');
+  assert.match(main.slice(verdict, verdict + 900), /await warmBenchmarkModel\(baseUrl, model\)/,
+    'after a local verdict the model under test must be loaded again before its next timed run');
+});
