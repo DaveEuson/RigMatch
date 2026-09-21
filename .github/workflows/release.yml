@@ -131,7 +131,8 @@ jobs:
             cp rigmatch-chat/src-tauri/target/release/bundle/appimage/*.AppImage release/ 2>/dev/null || true
             cp rigmatch-chat/src-tauri/target/release/bundle/deb/*.deb release/ 2>/dev/null || true
           fi
-          # Mac: handled by afterPack hook — Chat.app is bundled into the DMG
+          # Mac: the DMG takes RigMatch Chat.app from Tauri's output (the third
+          # dmg.contents entry in package.json), signed there by afterPack.
 
       # The Linux-only advisory guard, which the release path used to route
       # around entirely. It is wired into `npm run dist:linux` and `pack:linux`,
@@ -146,6 +147,28 @@ jobs:
         run: npm run build && npm exec -- electron-builder ${{ matrix.builderArgs }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      # Before 0.9.0 the DMG's "RigMatch Chat.app" was a second copy of RigMatch:
+      # its dmg.contents entry had no path, and electron-builder fills a missing
+      # path with the main app. The only check ran after publishing and looked
+      # for an executable inside, which the copy had. Check which app each one
+      # is, and that both load, before anything is released.
+      - name: Check the DMG holds RigMatch and RigMatch Chat
+        if: matrix.platform == 'mac'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg="$(ls release/RigMatch-*.dmg)"
+          mnt="$RUNNER_TEMP/rigmatch-dmg-check"
+          mkdir -p "$mnt"
+          hdiutil attach "$dmg" -nobrowse -quiet -mountpoint "$mnt"
+          trap 'hdiutil detach "$mnt" -quiet || true' EXIT
+          id_of() { plutil -extract CFBundleIdentifier raw -o - "$mnt/$1/Contents/Info.plist"; }
+          test "$(id_of RigMatch.app)" = "ai.rigmatch.app"
+          test "$(id_of 'RigMatch Chat.app')" = "ai.rigmatch.chat"
+          codesign --verify --deep --strict "$mnt/RigMatch.app"
+          codesign --verify --deep --strict "$mnt/RigMatch Chat.app"
+          du -sh "$dmg" "$mnt/RigMatch.app" "$mnt/RigMatch Chat.app"
 
       # Linux needs no renaming: electron-builder already emits latest-linux.yml
       # (x64) and latest-linux-arm64.yml, which is exactly what electron-updater

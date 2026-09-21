@@ -116,6 +116,7 @@
           "x": 180,
           "y": 430,
           "type": "file",
+          "path": "rigmatch-chat/src-tauri/target/release/bundle/macos/RigMatch Chat.app",
           "name": "RigMatch Chat.app"
         }
       ]

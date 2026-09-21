@@ -1,8 +1,8 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 // Runs after electron-builder packs the main app, before creating the DMG.
-// On Mac: copies RigMatch Chat.app into the DMG staging area so users can
-// drag both apps to Applications from a single disk image, then ad-hoc signs
-// both bundles.
+// On Mac: ad-hoc signs RigMatch Chat.app where Tauri built it, which is where
+// the DMG takes it from, nests a copy inside the main app for the Chat button,
+// and ad-hoc signs the main app last.
 const path = require('path');
 const fs = require('fs');
 const { execFileSync } = require('child_process');
@@ -52,13 +52,25 @@ module.exports = async function afterPack(context) {
   );
 
   if (!fs.existsSync(chatApp)) {
-    console.warn('[afterPack] RigMatch Chat.app not found — skipping DMG bundling');
+    // The DMG reads this path, so without it the DMG build fails later with a
+    // copy error that names neither Chat nor the fix.
+    throw new Error(`[afterPack] RigMatch Chat.app not found at ${chatApp} — run npm run build:chat first`);
   } else {
-    const dest = path.join(context.appOutDir, 'RigMatch Chat.app');
-    fs.rmSync(dest, { recursive: true, force: true });
-    fs.cpSync(chatApp, dest, { recursive: true });
-    console.log('[afterPack] Bundled RigMatch Chat.app into DMG staging area');
-    adhocSign(dest, 'RigMatch Chat.app');
+    /*
+     * The DMG's standalone RigMatch Chat.app is this bundle, read straight from
+     * Tauri's output by the third dmg.contents entry in package.json.
+     *
+     * That entry had no path, and electron-builder fills a missing path with
+     * the main app — so every Mac DMG before 0.9.0 carried RigMatch twice, the
+     * second copy named "RigMatch Chat": 250 MB where the app zips to 125, and a Mac
+     * user who dragged "RigMatch Chat" across got a second RigMatch. The copy
+     * this hook staged in appOutDir was never read by the DMG or the update
+     * zip. Tauri's output is also the one path that is the same for both Mac
+     * architectures, where appOutDir is release/mac or release/mac-arm64.
+     *
+     * Signed in place, so the copy users drag across loads on Apple silicon.
+     */
+    adhocSign(chatApp, 'RigMatch Chat.app for the DMG');
 
     /*
      * The copy RigMatch launches when the user did not drag both apps across.
