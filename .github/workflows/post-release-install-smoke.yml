@@ -148,6 +148,9 @@ jobs:
           find "$mountpoint" -maxdepth 2 -name "*.app" -print
           test -d "$mountpoint/RigMatch.app"
           test -d "$mountpoint/RigMatch Chat.app"
+          # Before 0.9.0 this was a second copy of RigMatch, and every check
+          # below passed it: it has an executable. Check which app it is.
+          test "$(plutil -extract CFBundleIdentifier raw -o - "$mountpoint/RigMatch Chat.app/Contents/Info.plist")" = "ai.rigmatch.chat"
 
           app_version="$(plutil -extract CFBundleShortVersionString raw -o - "$mountpoint/RigMatch.app/Contents/Info.plist")"
           test "$app_version" = "$version"
