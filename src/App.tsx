@@ -93,6 +93,7 @@ import { GameShowHost } from './components/GameShowHost';
 import { PanelHeader } from './components/CommonChrome';
 import { readDeckExpanded, writeDeckExpanded } from './lib/deckSettings';
 import { playJingle } from './lib/sound';
+import { nothingToRunNote } from './lib/skillRunNote';
 import { ChannelSwitch, TopDeck } from './components/TopDeck';
 import {
   addSetValues,
@@ -3221,10 +3222,10 @@ function App() {
     if (!jobs.length) {
       // Silence here stranded the wizard: it waits for a run to start and then
       // stop, and a round where nothing was eligible never did either. Say what
-      // happened, in the terms of what was asked for.
-      const nothing = selection.recognize ? 'None of these models can read pictures.'
-        : selection.listen ? 'None of these models can listen to audio.'
-        : 'None of these models can be tested that way.';
+      // happened, in the terms of what was asked for — and nothing at all when
+      // no skill was asked for, which is most runs.
+      const nothing = nothingToRunNote(selection);
+      if (!nothing) return;
       setSkillRunStatus({ phase: 'complete', label: nothing, completed: 0, total: 0 });
       setActivity(nothing);
       return;
