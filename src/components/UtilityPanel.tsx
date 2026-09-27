@@ -34,6 +34,7 @@ import { RomanceArtBanner } from './ScoreVisuals';
 import { SettingsSection } from './SettingsSection';
 import { ModelDemoChips } from './SkillDemoViewers';
 import { ThemePicker } from './ThemePicker';
+import { ShowExtrasSettings } from './ShowExtrasSettings';
 import { UiModePicker } from './UiModePicker';
 import { BalanceFader } from './BalanceFader';
 import { CodingBoard } from './CodingBoard';
@@ -797,7 +798,7 @@ export function UtilityPanel({
           <SettingsSection
             eyebrow="Interface"
             title="Preferences"
-            summary="Mode, theme, goals, and the Simple Mode path."
+            summary="Mode, theme, goals, show extras, and the Simple Mode path."
             open={openSections.has('interface')}
             onToggle={() => toggleSection('interface')}
             sectionId="interface"
@@ -805,6 +806,7 @@ export function UtilityPanel({
           <UiModePicker uiMode={uiMode} onUiModeChange={onUiModeChange} />
           <GoalsSummary goals={selectedGoals} onEditGoals={onEditGoals} />
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
+          <ShowExtrasSettings />
           </SettingsSection>
           <SettingsSection
             eyebrow="Storage"

@@ -12,10 +12,19 @@
  * `framed` adds the left-hand column. Advanced's stage leaves that side open
  * for the host; Simple Mode's stages are centered, and with the column missing
  * they read as lopsided rather than as a frame.
+ *
+ * `beat` chases on the theme song's eighth notes while it plays; `flash`
+ * blinks the whole sign for the winner, then settles back into the chase.
  */
-export function ShowMarquee({ dark = false, framed = false }: { dark?: boolean; framed?: boolean }) {
+export function ShowMarquee({ dark = false, framed = false, beat = false, flash = false }: {
+  dark?: boolean;
+  framed?: boolean;
+  beat?: boolean;
+  flash?: boolean;
+}) {
+  const mode = dark ? ' lights-down' : flash ? ' flash' : beat ? ' to-the-beat' : '';
   return (
-    <div className={dark ? 'live-show-marquee lights-down' : 'live-show-marquee'} aria-hidden="true">
+    <div className={`live-show-marquee${mode}`} aria-hidden="true">
       {Array.from({ length: framed ? 29 : 22 }).map((_item, index) => <i key={index} />)}
     </div>
   );

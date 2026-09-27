@@ -5481,6 +5481,23 @@ tbody tr.computer-row.selected {
   animation-delay: 380ms;
 }
 
+/* On the beat: while the theme song plays, the bulbs chase its eighth notes
+   (128 bpm), the odd ones half a beat behind. */
+.live-show-marquee.to-the-beat i { animation-duration: 234ms; }
+.live-show-marquee.to-the-beat i:nth-child(odd) { animation-delay: 234ms; }
+
+/* The winner: once the curtains are open the whole sign blinks, then settles
+   back into its chase. */
+.live-show-marquee.flash i {
+  animation: live-show-flash 180ms steps(1, end) 1100ms 12, live-show-bulb 1200ms ease-in-out 3260ms infinite alternate;
+}
+.live-show-marquee.flash i:nth-child(odd) { animation-delay: 1190ms, 3640ms; }
+
+@keyframes live-show-flash {
+  0% { opacity: 1; transform: scale(1.15); }
+  50% { opacity: 0.2; transform: scale(0.85); }
+}
+
 /* Lights down: a show that stopped. The bulbs hold still and dim instead of
    chasing over a stage where nothing is happening. */
 .live-show-marquee.lights-down i {
@@ -5660,6 +5677,14 @@ tbody tr.computer-row.selected {
   font: 950 12px/1 var(--ui);
   text-transform: uppercase;
   cursor: pointer;
+}
+
+/* The theme-music switch shares the header button's shape; on, it takes the
+   show's pink so it reads as a switch that is on, not as another action. */
+.live-show-minimize[aria-pressed="true"] {
+  border-color: var(--pink);
+  background: rgba(var(--pink-rgb), 0.18);
+  color: color-mix(in srgb, var(--pink) 70%, var(--text-strong));
 }
 
 /* Minimized "now playing" bar: keeps a Speed Dating run visible and
@@ -19724,6 +19749,13 @@ a.whats-next-support:hover {
   .live-show-marquee i {
     opacity: 1;
     transform: none;
+  }
+
+  /* The dance and the winner's flash are more specific than the rule above,
+     so they are stopped by name. */
+  .live-show-marquee.to-the-beat i,
+  .live-show-marquee.flash i {
+    animation: none;
   }
 
   /* State indicators. Each keeps a visible resting form: the dot stays solid,

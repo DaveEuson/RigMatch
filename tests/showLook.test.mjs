@@ -71,7 +71,7 @@ test('data is never under the stage lights', () => {
   const stage = tsx.slice(stageStart, dataStart);
   assert.ok(!stage.includes('sw-show-progress') && !stage.includes('sw-answer-strip'));
   // The stage closes before the board opens.
-  const winnerStart = tsx.indexOf('<div className="sw-winner-stage">');
+  const winnerStart = tsx.indexOf("<div className={effects ? 'sw-winner-stage curtained' : 'sw-winner-stage'}>");
   const boardStart = tsx.indexOf('<div className="sw-scoreboard">', winnerStart);
   assert.ok(winnerStart > 0 && boardStart > winnerStart);
   const between = tsx.slice(winnerStart, boardStart);

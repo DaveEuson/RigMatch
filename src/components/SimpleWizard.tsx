@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -16,6 +16,7 @@ import {
   Lock,
   Mic,
   MessageSquare,
+  Music,
   PenLine,
   RefreshCw,
   ScanLine,
@@ -47,6 +48,8 @@ import { BalanceFader } from './BalanceFader';
 import { balanceLabel } from '../lib/balance';
 import { useDialog } from '../lib/useDialog';
 import { ShowMarquee } from './ShowMarquee';
+import { setShowExtras, useShowExtras } from '../lib/showExtras';
+import { useShowTheme, type ShowMusicState } from '../hooks/useShowTheme';
 import { workbenchById } from '../lib/workbench';
 import rigGreenroom from '../assets/robot-rig-greenroom.webp';
 import speedDateShow from '../assets/robot-speed-date-show.webp';
@@ -404,6 +407,17 @@ export function SimpleWizard(props: SimpleWizardProps) {
   // step alone, a finished or failed run left Compare with no Back button at
   // all — the one screen a beginner could get stranded on.
   const showRunning = step === 'compare' && benchmarkActive;
+  // The theme song, if it is on: it loops while the contestants answer, and
+  // the show's ending picks the sting — ta-da for a winner, a sad trombone for
+  // a show that stopped or where nobody passed. A listening round is for the
+  // ears, so nothing plays over it.
+  const extras = useShowExtras();
+  const musicState: ShowMusicState = showRunning ? 'running'
+    : step === 'compare' && showFailed ? 'flopped'
+      : step === 'winner' && winner ? 'crowned'
+        : step === 'winner' && (props.lineupResults?.length ?? 0) > 0 ? 'flopped'
+          : 'idle';
+  useShowTheme(musicState, extras.music && props.round !== 'listening');
   const stepIndex = STEPS.indexOf(step);
   // Compare is only "complete" once the show has actually finished — leaving it
   // true mid-run let a beginner click through to a winner crowned on partial data.
@@ -565,7 +579,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
       </header>
 
       <div className="sw-content">
-        <HostStrip step={step} round={props.round} stopped={showFailed} />
+        <HostStrip step={step} round={props.round} stopped={showFailed} aside={<ShowExtrasSwitches />} />
 
         {props.notice && (
           <div className="sw-notice" role="status" ref={noticeRef}>
@@ -704,7 +718,7 @@ function PreShowQuestion({
  * thing to notice, and the whole problem is that a beginner does not know what
  * to look for.
  */
-function HostStrip({ step, round, stopped }: { step: StepId; round?: 'chat' | 'code' | 'vision' | 'listening'; stopped?: boolean }) {
+function HostStrip({ step, round, stopped, aside }: { step: StepId; round?: 'chat' | 'code' | 'vision' | 'listening'; stopped?: boolean; aside?: ReactNode }) {
   const explaining = useExplaining();
   return (
     <div className={`sw-host-strip${explaining ? ' explaining' : ''}`}>
@@ -736,8 +750,53 @@ function HostStrip({ step, round, stopped }: { step: StepId; round?: 'chat' | 'c
           </div>
         )}
       </div>
+      {aside}
     </div>
   );
+}
+
+/**
+ * The studio's two optional extras, both off until someone turns them on. They
+ * sit beside the host on every step, so the effects can be on before Pick (the
+ * hearts) and the music before the show starts. Toggle buttons with a fixed
+ * name: the pressed state says whether each is on.
+ */
+function ShowExtrasSwitches() {
+  const extras = useShowExtras();
+  return (
+    <div className="sw-extras" role="group" aria-label="Studio extras">
+      <span className="sw-eyebrow">Studio extras</span>
+      <button
+        type="button"
+        className="sw-extra"
+        aria-pressed={extras.music}
+        onClick={() => setShowExtras({ music: !extras.music })}
+      >
+        <i className="sw-extra-bulb" aria-hidden="true" />
+        <Music aria-hidden="true" />
+        Theme music
+      </button>
+      <button
+        type="button"
+        className="sw-extra"
+        aria-pressed={extras.effects}
+        onClick={() => setShowExtras({ effects: !extras.effects })}
+      >
+        <i className="sw-extra-bulb" aria-hidden="true" />
+        <Sparkles aria-hidden="true" />
+        Show effects
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The studio's APPLAUSE sign: unlit scenery until a contestant finishes a
+ * turn, then it blinks. Never the only way anything is said — the status line
+ * announces each finish — so it is hidden from assistive technology.
+ */
+function ApplauseSign({ lit }: { lit: boolean }) {
+  return <div className={lit ? 'sw-applause lit' : 'sw-applause'} aria-hidden="true">Applause</div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1195,8 +1254,21 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
    */
   const origin = getModelOrigin(model.row.displayName);
   const countryCode = origin.country ? getCountryCode(origin.country) : null;
+  // Show effects: a few hearts float up from the button as a pick lands. Keyed
+  // by a counter so each pick plays its own burst.
+  const { effects } = useShowExtras();
+  const [hearts, setHearts] = useState(0);
+  const toggle = () => {
+    if (effects && !picked) setHearts((n) => n + 1);
+    onToggle();
+  };
   return (
     <article className={`sw-card${picked ? ' picked' : ''}${model.row.installed ? ' installed' : ''}`}>
+      {effects && hearts > 0 && (
+        <span key={hearts} className="sw-heart-burst" aria-hidden="true">
+          <i>♥</i><i>♥</i><i>♥</i><i>♥</i><i>♥</i>
+        </span>
+      )}
       {picked && <span className="sw-card-pick-badge"><Heart aria-hidden="true" />Pick {pickIndex}</span>}
       {!picked && model.row.installed && (
         /* Downloaded already. It was a gray tick beside the model id, reading
@@ -1292,7 +1364,7 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
         <button
           type="button"
           className={picked ? 'sw-card-btn picked' : 'sw-card-btn'}
-          onClick={onToggle}
+          onClick={toggle}
         >
           {/* Nine buttons all named "♥ Pick" told a screen reader nothing about
               which model each one takes. The model's name is added out of sight,
@@ -1417,7 +1489,7 @@ function getEtaLabel(pull?: PullProgressUpdate): string {
 // ---------------------------------------------------------------------------
 // Compare
 
-function CompareScreen({ shortlistedRows, runProgress, round: showRound, onRetry }: SimpleWizardProps & { onRetry: () => void }) {
+function CompareScreen({ shortlistedRows, runProgress, round: showRound, benchmarkActive, onRetry }: SimpleWizardProps & { onRetry: () => void }) {
   const failed = runProgress?.phase === 'failed';
   const activeModel = runProgress?.currentModel ?? '';
   const round = (runProgress?.questionIndex ?? 0) + 1;
@@ -1430,6 +1502,21 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, onRetry
     : runProgress?.questionPrompt ?? 'The host is lining up the next question…';
   const completed = runProgress?.completed ?? 0;
   const [showPrompt, setShowPrompt] = useState(false);
+
+  const extras = useShowExtras();
+  // The bulbs dance to the theme song while it plays.
+  const onTheBeat = extras.music && showRound !== 'listening' && Boolean(benchmarkActive) && !failed;
+  // The APPLAUSE sign lights each time a contestant finishes a turn.
+  const [applause, setApplause] = useState(false);
+  const finishedBefore = useRef(completed);
+  useEffect(() => {
+    const finishedOne = completed > finishedBefore.current;
+    finishedBefore.current = completed;
+    if (!finishedOne || !extras.effects) return undefined;
+    setApplause(true);
+    const timer = setTimeout(() => setApplause(false), 2400);
+    return () => clearTimeout(timer);
+  }, [completed, extras.effects]);
 
   // Models run one at a time, each answering every question, so "Round 4 of 10"
   // is the CURRENT model's progress — it resets to 1 each time a new model
@@ -1532,7 +1619,8 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, onRetry
           photo was here all along, painted over by an opaque fill. */}
       <div className={failed ? 'sw-stage lights-down' : 'sw-stage'}>
         <div className="sw-stage-bg" style={{ backgroundImage: `url(${speedDateShow})` }} aria-hidden="true" />
-        <ShowMarquee dark={failed} framed />
+        <ShowMarquee dark={failed} framed beat={onTheBeat} />
+        {extras.effects && <ApplauseSign lit={applause} />}
         <div className="sw-compare-inner">
           {/* The raw benchmark prompt is dense jargon ("Return only valid JSON…
               use keys intent, action, target") and was the hero text on a beginner
@@ -1575,7 +1663,8 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, onRetry
               {showPrompt && <p className="sw-compare-raw">&ldquo;{question}&rdquo;</p>}
             </div>
           )}
-          <div className="sw-podiums">
+          {/* Show effects: the contestants walk on one after another. */}
+          <div className={extras.effects ? 'sw-podiums walk-on' : 'sw-podiums'}>
             {shortlistedRows.map((row, index) => {
               // Nobody is answering once the show has stopped.
               const isActive = !failed && row.displayName === activeModel;
@@ -1590,7 +1679,7 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, onRetry
               const state = dropped ? 'dropped' : isActive ? 'answering' : isDone ? 'done' : wasAnswering ? 'stopped' : 'waiting';
               const rowScore = runProgress?.lastResult?.model === row.displayName ? runProgress?.lastResult?.total : undefined;
               return (
-                <div key={row.displayName} className={`sw-podium ${state}`}>
+                <div key={row.displayName} className={`sw-podium ${state}`} style={{ '--i': index } as CSSProperties}>
                   <img src={getModelAvatarSrc(row.displayName)} alt="" />
                   {/* The name they picked, not the raw tag. Pick shows
                       "Qwen2.5"; showing "qwen2.5:7b" here reads as a different
@@ -1673,7 +1762,13 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, onRetry
 // ---------------------------------------------------------------------------
 // Winner
 
+/** When the curtains have parted far enough for the winner to land. */
+const CURTAIN_MS = 900;
+
 function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, balance, round, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
+  // Show effects: the curtains part on the winner, the bulbs flash, the
+  // audience applauds. Without them the reveal plays exactly as before.
+  const { effects } = useShowExtras();
   if (!winner) {
     // Two different nothings: a show that has not run, and a show where nobody
     // passed. The second one has a board to show and a reason to give.
@@ -1728,14 +1823,21 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, bala
           ceremony photo, the bulbs, the confetti, the halo. The scoreboard and
           everything under it stay plain — they are the measurements, and a lit
           measurement reads as a less trustworthy one. */}
-      <div className="sw-winner-stage">
+      <div className={effects ? 'sw-winner-stage curtained' : 'sw-winner-stage'}>
         <div className="sw-stage-bg" style={{ backgroundImage: `url(${ceremonyStage})` }} aria-hidden="true" />
-        <ShowMarquee framed />
+        <ShowMarquee framed flash={effects} />
+        {effects && <ApplauseSign lit />}
         <div className="sw-confetti" aria-hidden="true">
           {['gold', 'pink', 'green', 'blue', 'gold', 'pink'].map((c, i) => (
-            <i key={i} className={`sw-confetti-piece ${c}`} style={{ left: `${12 + i * 15}%`, animationDelay: `${i * 90}ms` }} />
+            <i key={i} className={`sw-confetti-piece ${c}`} style={{ left: `${12 + i * 15}%`, animationDelay: `${(effects ? CURTAIN_MS : 0) + i * 90}ms` }} />
           ))}
         </div>
+        {effects && (
+          <div className="sw-curtains" aria-hidden="true">
+            <i />
+            <i />
+          </div>
+        )}
         <div className="sw-winner-reveal">
           <div className="sw-winner-avatar-wrap">
             <img src={getModelAvatarSrc(winner.model)} alt="" />

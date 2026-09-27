@@ -1119,6 +1119,9 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 
 @media (max-width: 900px) {
   .sw-card-grid { grid-template-columns: minmax(0, 1fr); }
+  .sw-applause { display: none; }
+  .sw-host-strip { flex-wrap: wrap; }
+  .sw-extras { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; }
   .sw-stage > .live-show-marquee,
   .sw-winner-stage > .live-show-marquee { inset: 6px; border-radius: 12px; }
 }
@@ -1420,6 +1423,164 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   filter: brightness(0.95);
 }
 
+/* Studio extras ---------------------------------------------------------------
+   Theme music and show effects: both off until switched on beside the host.
+   Everything below the switches is scenery for the effects, and every piece
+   of it is aria-hidden and stands still under reduced motion. */
+
+/* The switches sit in the room to the right of the host's bubble, stacked, so
+   they cost no height on any step. */
+.sw-extras {
+  margin-left: auto;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.sw-extra {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 6px 14px 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.sw-extra svg { width: 14px; height: 14px; }
+.sw-extra:hover { border-color: var(--line-bright); color: var(--text-strong); }
+
+/* On: the show's pink, and the little bulb beside it lit. */
+.sw-extra[aria-pressed="true"] {
+  border-color: var(--pink);
+  background: rgba(var(--pink-rgb), 0.14);
+  color: color-mix(in srgb, var(--pink) 70%, var(--text-strong));
+}
+
+.sw-extra-bulb {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-strong) 18%, transparent);
+}
+
+.sw-extra[aria-pressed="true"] .sw-extra-bulb { background: var(--gold); }
+
+/* The APPLAUSE sign: an unlit prop in the stage's corner until a contestant
+   finishes a turn. */
+.sw-applause {
+  position: absolute;
+  top: 28px;
+  left: 34px;
+  z-index: 2;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 249, 239, 0.14);
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 249, 239, 0.24);
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.sw-applause.lit {
+  border-color: var(--pink);
+  background: color-mix(in srgb, var(--pink) 55%, #3a0a14);
+  color: #fff3e0;
+  text-shadow: 0 0 8px rgba(255, 220, 200, 0.9);
+  box-shadow: 0 0 18px rgba(var(--pink-rgb), 0.7);
+  animation: sw-applause-blink 400ms step-end 6;
+}
+
+/* On the winner's stage it waits for the curtains. */
+.sw-winner-stage .sw-applause.lit { animation-delay: 1100ms; }
+
+@keyframes sw-applause-blink { 50% { opacity: 0.35; } }
+
+/* The contestants walk on, one after another. */
+.sw-podiums.walk-on .sw-podium {
+  animation: sw-walk-on 460ms cubic-bezier(0.2, 0.9, 0.3, 1.25) backwards;
+  animation-delay: calc(var(--i, 0) * 140ms);
+}
+
+@keyframes sw-walk-on { from { opacity: 0; transform: translateY(36px) scale(0.92); } }
+
+/* Red velvet over the winner's stage, parting once. The folds come from the
+   show's pink, so a theme's curtain matches its stage. */
+.sw-curtains {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  pointer-events: none;
+}
+
+.sw-curtains i {
+  flex: 1;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.25), transparent 25%, transparent 70%, rgba(0, 0, 0, 0.45)),
+    repeating-linear-gradient(90deg,
+      color-mix(in srgb, var(--pink) 30%, #1c0409) 0,
+      color-mix(in srgb, var(--pink) 55%, #2a0610) 18px,
+      color-mix(in srgb, var(--pink) 30%, #1c0409) 36px);
+  box-shadow: inset 0 -8px 0 rgba(var(--gold-rgb), 0.6);
+  animation: sw-curtain-left 1000ms cubic-bezier(0.65, 0, 0.35, 1) 250ms forwards;
+}
+
+.sw-curtains i + i { animation-name: sw-curtain-right; }
+
+@keyframes sw-curtain-left { to { transform: translateX(-101%); } }
+@keyframes sw-curtain-right { to { transform: translateX(101%); } }
+
+/* Behind the curtains the winner waits to land, and the halo waits for it. */
+.sw-winner-stage.curtained .sw-winner-avatar-wrap { animation-delay: 900ms; animation-fill-mode: backwards; }
+.sw-winner-stage.curtained .sw-winner-avatar-wrap::before { animation-delay: 1500ms; }
+
+/* Hearts from a Pick button, as the pick lands. */
+.sw-heart-burst {
+  position: absolute;
+  left: 50%;
+  bottom: 30px;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.sw-heart-burst i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  color: var(--pink);
+  font-size: 16px;
+  font-style: normal;
+  line-height: 1;
+  opacity: 0;
+  animation: sw-heart-float 900ms ease-out forwards;
+}
+
+.sw-heart-burst i:nth-child(1) { --x: -46px; --r: -18deg; }
+.sw-heart-burst i:nth-child(2) { --x: -20px; --r: -6deg; font-size: 20px; animation-delay: 60ms; }
+.sw-heart-burst i:nth-child(3) { --x: 4px; --r: 4deg; font-size: 24px; animation-delay: 30ms; }
+.sw-heart-burst i:nth-child(4) { --x: 28px; --r: 10deg; font-size: 18px; animation-delay: 90ms; }
+.sw-heart-burst i:nth-child(5) { --x: 50px; --r: 20deg; animation-delay: 120ms; }
+
+@keyframes sw-heart-float {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(0.5); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--x)), -80px) scale(1.1) rotate(var(--r)); }
+}
+
 /* Reduced motion.
    This file had no such block, so every wizard animation ran regardless of the
    OS setting — in the mode built for the least technical users. State-carrying
@@ -1462,6 +1623,21 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   }
 
   .sw-lineup-slot.filled {
+    animation: none;
+  }
+
+  /* Show effects that are only motion go entirely; the applause sign is
+     simply lit, and the contestants are simply there. */
+  .sw-curtains,
+  .sw-heart-burst {
+    display: none;
+  }
+
+  .sw-podiums.walk-on .sw-podium,
+  .sw-applause.lit,
+  .sw-curtains i,
+  .sw-curtains i + i,
+  .sw-heart-burst i {
     animation: none;
   }
 

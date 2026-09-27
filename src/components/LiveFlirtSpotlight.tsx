@@ -8,7 +8,9 @@ import type { ModelRow, NetworkHost, RunProgress, SystemProfile } from '../types
 import { AvatarBust, MachineAvatar } from './Avatars';
 import { MetricTile } from './CommonChrome';
 import { ShowMarquee } from './ShowMarquee';
-import { Maximize2, MessageSquare, Minimize2, Plus, X } from 'lucide-react';
+import { setShowExtras, useShowExtras } from '../lib/showExtras';
+import { useShowTheme } from '../hooks/useShowTheme';
+import { Maximize2, MessageSquare, Minimize2, Music, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
 export function LiveFlirtSpotlight({
@@ -27,6 +29,13 @@ export function LiveFlirtSpotlight({
   onStop?: () => void;
 }) {
   const [minimized, setMinimized] = useState(false);
+  // The theme song, if it is on, for as long as this stage is up — it is only
+  // mounted while a run is going. Speed Dating only: a single model test is
+  // not a show.
+  const extras = useShowExtras();
+  const isShow = progress.mode === 'speed-date';
+  const musicOn = extras.music && isShow;
+  useShowTheme(isShow ? 'running' : 'idle', extras.music);
   // Live rig meters while the model works the hardware. Unified-memory Macs
   // report one shared pool instead of separate VRAM.
   const liveMeters = system ? (() => {
@@ -135,7 +144,7 @@ export function LiveFlirtSpotlight({
   return (
     <aside className="live-flirt-spotlight live-game-show" aria-label="Live Speed Dating game show stage">
       <div className="live-show-bg" style={{ backgroundImage: `url(${robotSpeedDateShow})` }} aria-hidden="true" />
-      <ShowMarquee />
+      <ShowMarquee beat={musicOn} />
 
       <div className="live-show-shell">
         <header className="live-show-header">
@@ -155,6 +164,18 @@ export function LiveFlirtSpotlight({
             </div>
           )}
           <div className="live-show-header-actions">
+            {isShow && (
+              <button
+                type="button"
+                className="live-show-minimize"
+                aria-pressed={extras.music}
+                onClick={() => setShowExtras({ music: !extras.music })}
+                title="The show's theme song — played live by this computer"
+              >
+                <Music aria-hidden="true" />
+                Theme music
+              </button>
+            )}
             <button type="button" className="live-show-minimize" onClick={() => setMinimized(true)} title="Minimize — keep the run going and use the rest of RigMatch">
               <Minimize2 aria-hidden="true" />
               Minimize
