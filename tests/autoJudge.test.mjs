@@ -168,8 +168,11 @@ test('the judge leaves the GPU before the model under test is timed again', () =
   assert.match(judge.slice(0, judge.indexOf('\n}\n')), /keep_alive: 0,/,
     'runJudgeGenerate must unload the judge as soon as it has answered');
 
+  // Between the verdict and the answer's score being taken: the judge block.
+  // A fixed character window broke the moment anything else joined the block.
   const verdict = main.indexOf('promptJudgeScore = verdict ? verdict.score : null;');
-  assert.ok(verdict > 0, 'the verdict line moved; follow it');
-  assert.match(main.slice(verdict, verdict + 900), /await warmBenchmarkModel\(baseUrl, model\)/,
+  const scored = main.indexOf('const sobrietyScore = promptJudgeScore != null', verdict);
+  assert.ok(verdict > 0 && scored > verdict, 'the verdict or scoring line moved; follow it');
+  assert.match(main.slice(verdict, scored), /await warmBenchmarkModel\(baseUrl, model\)/,
     'after a local verdict the model under test must be loaded again before its next timed run');
 });

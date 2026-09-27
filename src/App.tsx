@@ -4037,7 +4037,11 @@ function App() {
             ? Math.min(0.9, 0.15 + (runIndex / Math.max(1, runTotal)) * 0.75)
             : update.phase === 'prompt-start'
               ? 0.1
-              : 0;
+              // After the first timed run (0.15), before the rest: the bar must
+              // not step back while the judge marks the answer.
+              : update.phase === 'judging'
+                ? 0.2
+                : 0;
         const currentPromptProgress = promptTotal > 0
           ? Math.min(1, (update.promptIndex + promptFraction) / promptTotal)
           : 0;
@@ -4058,6 +4062,7 @@ function App() {
           questionType: update.promptType ?? (update.promptLabel ? undefined : current.questionType),
           questionPrompt: update.prompt ?? current.questionPrompt,
           questionPhase: update.phase,
+          questionJudge: update.phase === 'judging' ? update.judge : undefined,
           questionRunIndex: typeof update.runIndex === 'number' ? update.runIndex : current.questionRunIndex,
           questionRunTotal: update.runTotal ?? current.questionRunTotal,
           completedQuestions,

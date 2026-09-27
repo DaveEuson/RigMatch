@@ -26,6 +26,11 @@ export function describeRunFailure(raw: string): { kind: RunFailureKind; reason:
     const limit = seconds >= 60 ? `${Math.round(seconds / 60)} minute${Math.round(seconds / 60) === 1 ? '' : 's'}` : 'too long';
     return { kind: 'timeout', reason: `It spent more than ${limit} on a single question.` };
   }
+  // Every answer empty: the benchmark refuses to score it (main.cjs), since
+  // speed and fit alone ranked a model that said nothing.
+  if (/empty answer to every question/i.test(text)) {
+    return { kind: 'no-answers', reason: 'It gave an empty answer to every question, so there was nothing to score.' };
+  }
   // Ollama's own words for a runner that died, usually on memory.
   if (/runner has unexpectedly stopped|runner process has terminated|out of memory|requires more system memory|CUDA error/i.test(text)) {
     return { kind: 'crashed', reason: "Ollama's model runner stopped unexpectedly, often because the model ran out of memory." };

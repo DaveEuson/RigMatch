@@ -10,6 +10,7 @@
  */
 
 import { MIN_CONTESTANTS } from './downloadStatus.ts';
+import { formatDuration } from './runEstimates.ts';
 
 export type StepId = 'setup' | 'pick' | 'download' | 'compare' | 'winner';
 
@@ -120,4 +121,33 @@ export function showAnnouncement(state: {
     ? `${state.answering} is answering${state.modelCount > 1 ? `, model ${state.modelNumber} of ${state.modelCount}` : ''}.`
     : '';
   return [before, now].filter(Boolean).join(' ');
+}
+
+/**
+ * What the show says about the time left.
+ *
+ * The estimate was the whole elapsed time over the questions finished, so a
+ * question that stalled — a judge that stopped answering took two minutes over
+ * one — pushed it up every second: "about 5s left" became "about 4 min left"
+ * while nothing on screen moved. It is now the time the finished questions
+ * took, so it holds still during any one question, and once the current one
+ * has run well past the average it says so instead of guessing.
+ */
+export function showTimeLeft(state: {
+  /** How long the finished questions took, up to the last one finishing. */
+  elapsedMs: number;
+  questionsDone: number;
+  totalQuestions: number;
+  /** How long the current question has been going. */
+  sinceLastQuestionMs: number;
+  /** The judge, not the contestant, is working right now. */
+  judging: boolean;
+}): string {
+  const { elapsedMs, questionsDone, totalQuestions, sinceLastQuestionMs, judging } = state;
+  if (elapsedMs <= 0 || totalQuestions <= 0 || questionsDone < 3) return '';
+  const average = elapsedMs / questionsDone;
+  if (sinceLastQuestionMs > Math.max(3 * average, 45000)) {
+    return judging ? 'the judge is taking a while to mark this one' : 'this question is taking a while';
+  }
+  return `about ${formatDuration(average * (totalQuestions - questionsDone)).replace('~', '')} left`;
 }

@@ -29,6 +29,8 @@ export function QuestionStatusBar({
         ? (runLabel ?? 'Timing run')
         : progress.questionPhase === 'prompt-token'
           ? 'Responding…'
+          : progress.questionPhase === 'judging'
+            ? 'Being marked'
           : progress.questionPhase === 'prompt-start'
             ? 'Asking now'
             : progress.questionPhase === 'failed'

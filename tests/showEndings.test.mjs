@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import { describeRunFailure, droppedOutMessage, showStoppedMessage } from '../src/lib/runFailure.ts';
-import { minPicksFor, pickShortHint } from '../src/lib/wizardCopy.ts';
+import { minPicksFor, pickShortHint, showTimeLeft } from '../src/lib/wizardCopy.ts';
 import { topPickPresentation } from '../src/lib/format.ts';
 import { getCudaDetail } from '../src/lib/modelCatalog.ts';
 
@@ -116,4 +116,35 @@ test('a failed show stays on Compare instead of reaching Winner', () => {
   const wizard = readFileSync(new URL('../src/components/SimpleWizard.tsx', import.meta.url), 'utf-8');
   assert.match(wizard, /const compareDone = !awaitingRun && !benchmarkActive && !showFailed && /);
   assert.match(wizard, /Run the show again/);
+});
+
+test('a model that answered nothing is not scored', () => {
+  // It scored about 27 on speed and fit alone and was ranked; on "Speed first"
+  // that could put it above a model that answered slowly.
+  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
+  assert.match(main, /rawRuns\.every\(\(run\) => !String\(run\.response \|\| ''\)\.trim\(\)\)\) \{\s*throw new Error\(`\$\{model\} returned an empty answer to every question/);
+  const said = describeRunFailure(`Error: qwen3:0.6b returned an empty answer to every question, so there was nothing to score.`);
+  assert.equal(said.kind, 'no-answers');
+  assert.doesNotMatch(said.reason, /Ollama reported/);
+});
+
+test('a judge that stops answering is not waited on for every answer', () => {
+  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
+  assert.match(main, /if \(\(useJudge \|\| autoJudgeThis\) && runIndex === 0 && !judgeGaveUp\)/);
+  assert.match(main, /if \(judgeFailure && !signal\?\.aborted\) \{\s*judgeGaveUp = true;/);
+  assert.match(main, /phase: 'judging',/, 'marking is announced while it happens');
+});
+
+test('the time left stops climbing when a question stalls', () => {
+  // Six questions took a minute, fourteen to go: an estimate.
+  const at = (sinceLastQuestionMs, judging = false) => showTimeLeft({ elapsedMs: 60000, questionsDone: 6, totalQuestions: 20, sinceLastQuestionMs, judging });
+  assert.equal(at(1000), 'about 2 min left');
+  // It holds still while a question runs. On a hung judge it climbed from
+  // "about 5s left" to "about 1 min left" in 45 seconds, then kept going.
+  assert.equal(at(25000), at(1000));
+  // Two minutes into one question, it says what is happening instead.
+  assert.equal(at(120000), 'this question is taking a while');
+  assert.match(at(120000, true), /judge is taking a while/);
+  // Too early to say anything.
+  assert.equal(showTimeLeft({ elapsedMs: 5000, questionsDone: 2, totalQuestions: 20, sinceLastQuestionMs: 1000, judging: false }), '');
 });

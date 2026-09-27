@@ -71,6 +71,8 @@ export function LiveFlirtSpotlight({
     ? (runLabel ?? 'Timing run')
     : progress.questionPhase === 'prompt-token'
       ? 'Answering live'
+      : progress.questionPhase === 'judging'
+        ? 'Being marked'
       : progress.questionPhase === 'prompt-start'
         ? 'Host is asking'
         : progress.questionPhase === 'prompt-complete'

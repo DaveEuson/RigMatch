@@ -27,13 +27,12 @@ import {
   X,
 } from 'lucide-react';
 import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, RunFailure, RunProgress, SystemProfile } from '../types';
-import { STEPS, STEP_LABELS, footerHint, minPicksFor, nextBlockedHint, pickShortHint, showAnnouncement, type StepId } from '../lib/wizardCopy';
+import { STEPS, STEP_LABELS, footerHint, minPicksFor, nextBlockedHint, pickShortHint, showAnnouncement, showTimeLeft, type StepId } from '../lib/wizardCopy';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { Explain, ExplainText, InfoViewProvider } from './InfoView';
 import { useExplaining } from '../lib/infoContext';
 import { formatBytes, formatBytesPerSecond, formatPullCount } from '../lib/format';
 import { roundLabel } from '../lib/roundLabels';
-import { formatDuration } from '../lib/runEstimates';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 import { getFriendlyModelName, type DreamTag } from '../lib/modelCatalog';
 import { getCountryCode, getModelOrigin } from '../lib/modelOrigins';
@@ -1477,9 +1476,21 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, onRetry
     ? Math.round(answered.reduce((sum, value) => sum + value, 0) / answered.length)
     : null;
 
-  const remainingLabel = elapsedMs > 0 && totalQuestions > 0 && questionsDone >= 3
-    ? formatDuration((elapsedMs / questionsDone) * (totalQuestions - questionsDone)).replace('~', '')
-    : '';
+  // When the current question began, on the run's own clock, so a stall can be
+  // told from a slow run. Updated as the count moves, not read from the clock
+  // during render.
+  const [questionStartedAt, setQuestionStartedAt] = useState<{ done: number; at: number }>({ done: -1, at: 0 });
+  if (runClock && questionStartedAt.done !== questionsDone) setQuestionStartedAt({ done: questionsDone, at: runClock.now });
+  const judging = runProgress?.questionPhase === 'judging';
+  const timeLeft = showTimeLeft({
+    // Up to the last finished question, not now: the time since belongs to a
+    // question still running and says nothing yet about the rest.
+    elapsedMs: runClock && questionStartedAt.at ? questionStartedAt.at - runClock.startedAt : elapsedMs,
+    questionsDone,
+    totalQuestions,
+    sinceLastQuestionMs: runClock ? runClock.now - (questionStartedAt.at || runClock.startedAt) : 0,
+    judging,
+  });
 
   // What this question tests, from the question itself.
   //
@@ -1574,14 +1585,16 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, onRetry
                     contestant to someone who does not know the notation. */}
                 <strong>{getFriendlyModelName(row.displayName)}</strong>
                 <span className={`sw-podium-pill ${state}`}>
-                  {state === 'answering' ? <><i /><i /><i /> Answering</>
+                  {state === 'answering' ? (judging ? 'Being marked' : <><i /><i /><i /> Answering</>)
                     : state === 'dropped' ? "✕ Couldn't finish"
                       : state === 'done' ? '✓ Done'
                         : state === 'stopped' ? 'Stopped partway'
                           : failed ? 'Did not run' : 'Waiting'}
                 </span>
                 <em>
-                  {state === 'answering' ? 'Thinking it over…'
+                  {state === 'answering' ? (judging && runProgress?.questionJudge
+                    ? `${getFriendlyModelName(runProgress.questionJudge)} is marking it`
+                    : 'Thinking it over…')
                     : state === 'dropped' ? 'Sat out the rest'
                       : state === 'done' ? (rowScore != null ? `Scored ${rowScore}` : 'Answered')
                         : failed ? '' : 'Up next'}
@@ -1599,7 +1612,7 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, onRetry
               {totalQuestions > 0
                 ? `${questionsDone} of ${totalQuestions} ${showRound && showRound !== 'chat' ? ROUND_LINES[showRound].unit : 'questions'}`
                 : `${overallPercent}%`}
-              {remainingLabel && <em className="sw-eta">· about {remainingLabel} left</em>}
+              {timeLeft && <em className="sw-eta">· {timeLeft}</em>}
             </span>
           </div>
           <div
