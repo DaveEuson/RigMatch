@@ -9,6 +9,8 @@
  * running" over a frozen screen that offered no way back.
  */
 
+import { MIN_CONTESTANTS } from './downloadStatus.ts';
+
 export type StepId = 'setup' | 'pick' | 'download' | 'compare' | 'winner';
 
 export const STEPS: StepId[] = ['setup', 'pick', 'download', 'compare', 'winner'];
@@ -21,30 +23,50 @@ export const STEP_LABELS: Record<StepId, string> = {
   winner: 'Winner',
 };
 
-export function footerHint(step: StepId, ready: boolean, pickCount: number): string {
+/**
+ * How many contestants a round needs before the show can start.
+ *
+ * The chat and coding rounds are Speed Dating, which compares, so they need
+ * two. Pick allowed one, and a one-model lineup failed the instant the show
+ * began and landed on a Winner screen crowning nobody, with the reason never
+ * shown — reachable by anyone with a single model installed. The picture and
+ * listening rounds grade each model against a check, so one is enough.
+ */
+export function minPicksFor(round: 'chat' | 'code' | 'vision' | 'listening' | undefined): number {
+  return round === 'vision' || round === 'listening' ? 1 : MIN_CONTESTANTS;
+}
+
+/** What Pick says while the lineup is short. Empty once it is long enough. */
+export function pickShortHint(pickCount: number, minPicks: number): string {
+  if (pickCount >= minPicks) return '';
+  if (pickCount === 0) return `Pick at least ${minPicks} to continue`;
+  return `Pick ${minPicks - pickCount} more — the show compares them`;
+}
+
+export function footerHint(step: StepId, ready: boolean, pickCount: number, minPicks = 1, runFailed = false): string {
   switch (step) {
     // Only claim readiness once the check has actually passed. Before that this
     // line congratulated the user for a scan that hadn't run — and once it has,
     // the Setup screen already says so, so the footer stays quiet either way.
     case 'setup': return ready ? '' : 'One click checks Ollama and your hardware — nothing is installed or changed';
     case 'download': return 'Heads up: the show works your GPU, CPU, and fans hard until a winner is crowned — close heavy apps first';
-    case 'compare': return 'Scores appear live — the winner is crowned after the last round';
+    case 'compare': return runFailed ? '' : 'Scores appear live — the winner is crowned after the last round';
     case 'winner': return 'RigMatch remembers your Top Match — find it any time in the header';
-    default: return pickCount ? '' : 'Pick at least 1 to continue';
+    default: return pickShortHint(pickCount, minPicks);
   }
 }
 
-export function nextBlockedHint(step: StepId, downloadReason?: string, runFailed = false): string {
+export function nextBlockedHint(step: StepId, downloadReason?: string, runFailed = false, pickCount = 0, minPicks = 1): string {
   switch (step) {
     case 'setup': return 'Check your computer first';
-    case 'pick': return 'Pick at least 1 to continue';
+    case 'pick': return pickShortHint(pickCount, minPicks) || 'Pick at least 1 to continue';
     // "Waiting for downloads to finish" was shown even when every download had
     // already stopped and one had failed, which was simply untrue.
     case 'download': return downloadReason || 'Waiting for downloads to finish';
     // Likewise: a run that died is not a run that is still going. Saying so
     // stranded beginners on a frozen Compare screen with a disabled Next.
     case 'compare': return runFailed
-      ? 'The show stopped early — go Back to try again'
+      ? 'The show stopped early — try again, or go back and change the lineup'
       : 'The show is still running';
     default: return '';
   }

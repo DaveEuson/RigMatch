@@ -818,7 +818,17 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 
 .sw-podium-pill.answering { background: color-mix(in srgb, var(--gold) 16%, transparent); color: var(--gold); }
 .sw-podium-pill.done { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green); }
-.sw-podium-pill.waiting { background: color-mix(in srgb, var(--text-strong) 8%, transparent); color: var(--muted); }
+.sw-podium-pill.waiting,
+.sw-podium-pill.stopped { background: color-mix(in srgb, var(--text-strong) 8%, transparent); color: var(--muted); }
+/* Sat out: the show went on without it. Red is the one color the other states
+   do not use, and --red holds 6.6:1 or better on every panel. */
+.sw-podium.dropped { border-color: color-mix(in srgb, var(--red) 45%, transparent); opacity: 0.85; }
+.sw-podium-pill.dropped { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
+
+/* A show nobody finished: the reason, then the way on. */
+.sw-compare-stopped { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+/* Not the 19px bold that .sw-compare-question gives its paragraphs. */
+.sw-compare-stopped p { margin: 0; font-size: 13px; font-weight: 400; color: var(--muted); }
 
 .sw-podium-pill.answering i {
   width: 4px; height: 4px; border-radius: 50%; background: var(--gold);
@@ -1066,6 +1076,15 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.02);
 }
+/* Who sat out: plain lines, not the ranked rows' four-column grid. */
+.sw-dropped-out ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sw-dropped-out li {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  border-color: color-mix(in srgb, var(--red) 35%, transparent);
+}
+.sw-dropped-out li strong { color: var(--text-strong); }
 .sw-scoreboard li.winner {
   border-color: var(--gold);
   background: rgba(240, 190, 90, 0.09);

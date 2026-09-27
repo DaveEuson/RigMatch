@@ -46,6 +46,7 @@ import type {
   ScoreRigStamp,
   PendingRunMode,
   SkillTestSelection,
+  RunFailure,
   RunProgress,
   PendingScoreClear,
 } from './types';
@@ -94,6 +95,7 @@ import { PanelHeader } from './components/CommonChrome';
 import { readDeckExpanded, writeDeckExpanded } from './lib/deckSettings';
 import { playJingle } from './lib/sound';
 import { nothingToRunNote } from './lib/skillRunNote';
+import { describeRunFailure, droppedOutMessage, showStoppedMessage } from './lib/runFailure';
 import { ChannelSwitch, TopDeck } from './components/TopDeck';
 import {
   addSetValues,
@@ -1341,6 +1343,21 @@ function App() {
     return board.length > 0 ? board : null;
   }, [wizardRound, wizardChannel, shortlistedRows, labResults, wizardBalance]);
 
+  /**
+   * This show's own result, when it was a show of the lineup on screen.
+   *
+   * The chat round crowned `topRigPick` — the best score ever saved on this
+   * computer — and called it the best "out of the N you tested". After a show
+   * where a model dropped out, that crowned whoever had finished first; after
+   * any show it could crown a model from an earlier session that was not in
+   * the lineup at all. The show's result is what the show decided.
+   */
+  const wizardShowResult = useMemo(() => {
+    if (!listTestResult) return null;
+    const picked = new Set(shortlistedRows.map((row) => row.displayName));
+    return listTestResult.results.some((result) => picked.has(result.model)) ? listTestResult : null;
+  }, [listTestResult, shortlistedRows]);
+
   const wizardWinner = useMemo(
     () => (wizardSkillBoard
       // The first one that actually passed. A result that failed its check is
@@ -1349,6 +1366,14 @@ function App() {
         const top = wizardSkillBoard.find((ranked) => ranked.standing !== 'failed')?.item;
         return top
           ? { model: top.model, score: top.score, scoreLabel: String(top.score), grade: top.grade }
+          : null;
+      })()
+      : wizardShowResult
+      ? (() => {
+        const top = wizardShowResult.results.find((result) => result.model === wizardShowResult.winner)
+          ?? wizardShowResult.results[0];
+        return top
+          ? { model: top.model, score: top.total, scoreLabel: formatMatchScore(top), grade: top.grade }
           : null;
       })()
       : topRigPick?.score
@@ -1361,7 +1386,7 @@ function App() {
         grade: topRigPick.score.grade,
       }
       : null),
-    [topRigPick, wizardSkillBoard],
+    [topRigPick, wizardSkillBoard, wizardShowResult],
   );
 
   /**
@@ -1390,6 +1415,14 @@ function App() {
             : asked ? `${formatMatchScore(asked)} Match on the questions` : undefined,
         };
       })
+      : wizardShowResult
+      ? wizardShowResult.results.map((score) => ({
+        model: score.model,
+        name: getFriendlyModelName(score.model),
+        scoreLabel: formatMatchScore(score),
+        total: score.total,
+        grade: score.grade,
+      }))
       : shortlistedRows
       .flatMap((row) => {
         const score = modelScores[row.displayName];
@@ -1406,7 +1439,7 @@ function App() {
         total: score.total,
         grade: score.grade,
       }))),
-    [shortlistedRows, modelScores, wizardSkillBoard, wizardChannel],
+    [shortlistedRows, modelScores, wizardSkillBoard, wizardChannel, wizardShowResult],
   );
   const lineupSession = useVideoLineupSession();
   /** Whatever ComfyUI is rendering for RigMatch now, wherever it was started. */
@@ -1995,6 +2028,7 @@ function App() {
         total: 1,
         percent: 0,
         message: hostBlocker,
+        failureKind: 'other',
       });
       setActivity(hostBlocker);
       return;
@@ -2896,6 +2930,7 @@ function App() {
         total: runnableRows.length,
         percent: 0,
         message: why,
+        failureKind: 'too-few',
       });
       setActivity(why);
       return;
@@ -2911,6 +2946,7 @@ function App() {
         total: runnableRows.length,
         percent: 0,
         message: hostBlocker,
+        failureKind: 'other',
       });
       setActivity(hostBlocker);
       return;
@@ -2941,6 +2977,12 @@ function App() {
 
     try {
       const results: BenchmarkResult[] = [];
+      // Contestants that could not finish. One model failing used to end the
+      // whole show: the rest never ran, and whoever had finished was crowned
+      // "out of the 3 you tested". A runner crash, one dropped connection or one
+      // slow question was enough. Now that model sits out and the show goes on.
+      const failures: RunFailure[] = [];
+      let stoppedByUser = false;
       for (const [index, row] of runnableRows.entries()) {
         const progressId = `${listRunId}-${index}`;
         activeBenchmarkProgressIdRef.current = progressId;
@@ -2961,10 +3003,13 @@ function App() {
           completedQuestions: 0,
           questionScores: {},
           lastResult: current?.lastResult,
+          failedModels: [...failures],
         }));
         setActivity(`Speed Dating: testing compatibility with ${row.displayName}...`);
         const runtime = getModelRuntime(row, ollama);
-        const result = normalizeBenchmarkResultModel(await agentArcadeApi.runBenchmark({
+        let result: BenchmarkResult;
+        try {
+          result = normalizeBenchmarkResultModel(await agentArcadeApi.runBenchmark({
           model: row.displayName,
           baseUrl: runtime.baseUrl,
           provider: runtime.provider,
@@ -2975,8 +3020,31 @@ function App() {
           judgeModel: effectiveJudge?.model,
           judgeProvider: effectiveJudge?.provider,
           judgeApiKey: effectiveJudge?.apiKey,
-        autoJudgeModels,
-        }), row.displayName);
+          autoJudgeModels,
+          }), row.displayName);
+        } catch (error) {
+          const raw = getErrorMessage(error);
+          const failure = describeRunFailure(raw);
+          // Stop ends the show. Anything else ends only this contestant's run.
+          if (stopRunRef.current || failure.kind === 'stopped') {
+            stoppedByUser = true;
+            break;
+          }
+          failures.push({ model: row.displayName, ...failure });
+          void agentArcadeApi.appendLog({
+            level: 'warn',
+            source: 'renderer',
+            message: `Speed Dating went on without ${row.displayName}`,
+            details: { model: row.displayName, reason: failure.reason, error: raw },
+          }).catch(() => undefined);
+          setRunProgress((current) => (current ? {
+            ...current,
+            completed: index + 1,
+            failedModels: [...failures],
+            message: `${getFriendlyModelName(row.displayName)} couldn't finish. ${failure.reason}`,
+          } : current));
+          continue;
+        }
         results.push(result);
         setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
         const runBalance = runBalanceRef.current;
@@ -3005,6 +3073,7 @@ function App() {
             total: result.scores.total,
             grade: result.scores.grade,
           },
+          failedModels: [...failures],
         });
         if (isStopped) break;
       }
@@ -3014,7 +3083,32 @@ function App() {
       // in front of the user as the run's failure message. Fail with something
       // readable if a future path ever gets here with nothing.
       if (results.length === 0) {
-        throw new Error('No models finished a run, so there is nothing to compare.');
+        const ended = showStoppedMessage(failures, stoppedByUser, getFriendlyModelName);
+        await agentArcadeApi.appendLog({
+          level: stoppedByUser ? 'info' : 'error',
+          source: 'renderer',
+          message: 'Speed Dating ended with no model finished',
+          details: { candidates: runnableRows.map((row) => row.displayName), failures, stoppedByUser },
+        }).catch(() => undefined);
+        setRunProgress((current) => ({
+          mode: 'speed-date',
+          phase: 'failed',
+          label: 'Speed Dating',
+          currentModel: current?.currentModel ?? runnableRows[0].displayName,
+          completed: current?.completed ?? 0,
+          total: runnableRows.length,
+          percent: current?.percent ?? 0,
+          message: ended.message,
+          failureKind: ended.kind,
+          failedModels: [...failures],
+          lastResult: current?.lastResult,
+        }));
+        // Simple Mode's Compare screen says this in full; a notice above it
+        // repeated the same sentence word for word.
+        if (uiMode !== 'beginner') tellUser(ended.message);
+        setActivity(ended.message);
+        void refreshProviderStatus();
+        return;
       }
       const winner = results.reduce((best, result) =>
         compareBenchmarkResults(result, best) < 0 ? result : best,
@@ -3032,7 +3126,10 @@ function App() {
         completed: runnableRows.length,
         total: runnableRows.length,
         percent: 100,
-        message: `${winner.model} gets the rose for this computer. 🌹`,
+        message: stoppedByUser
+          ? `Stopped early — ${results.length} of ${runnableRows.length} models tested.`
+          : `${winner.model} gets the rose for this computer. 🌹`,
+        failedModels: [...failures],
         questionIndex: winner.prompts.length - 1,
         questionTotal: winner.prompts.length,
         questionLabel: winner.prompts[winner.prompts.length - 1]?.label,
@@ -3050,7 +3147,9 @@ function App() {
         results: results
           .map((r) => toTestedModelScore(r, currentSuiteName))
           .sort(compareTestedModelScores),
+        ...(failures.length ? { failures: [...failures] } : {}),
       });
+      if (failures.length) tellUser(droppedOutMessage(failures, getFriendlyModelName));
       {
         const completedAt = new Date().toISOString();
         const stored: StoredRunReport = {
@@ -3100,6 +3199,7 @@ function App() {
         },
       }).catch(() => undefined);
       void loadLogs();
+      const failure = describeRunFailure(errorMessage);
       setRunProgress((current) => ({
         mode: 'speed-date',
         phase: 'failed',
@@ -3108,10 +3208,11 @@ function App() {
         completed: current?.completed ?? 0,
         total: current?.total ?? runnableRows.length,
         percent: current?.percent ?? 0,
-        message: errorMessage,
+        message: failure.reason,
+        failureKind: failure.kind,
         lastResult: current?.lastResult,
       }));
-      tellUser(`Speed Dating stopped: ${errorMessage}`);
+      if (uiMode !== 'beginner') tellUser(`The show stopped. ${failure.reason}`);
       // See the note in startBenchmark's catch: without this, ollama.ready
       // stays stale-true and the reconnect poll never starts.
       void refreshProviderStatus();
@@ -4170,6 +4271,7 @@ function App() {
           onStopShow={requestStopRun}
           winner={wizardWinner}
           lineupResults={wizardLineupResults}
+          droppedOut={wizardSkillBoard ? undefined : wizardShowResult?.failures}
           generation={generationSummary}
           videoLineup={{
             comfyReachable,
