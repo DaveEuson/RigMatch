@@ -18,6 +18,12 @@
   background: var(--panel);
   box-shadow: var(--shadow);
   overflow: hidden;
+  /* Declared here, not on :root: data-theme is set on the app's root div, so a
+     :root declaration would resolve var(--bg) once, in the default theme, and
+     hand plum to the other four. Here it resolves inside the themed subtree. */
+  --stage-floor: color-mix(in srgb, var(--bg) 70%, #000);
+  /* A contestant portrait is a publicity still: gold hairline, soft drop. */
+  --portrait-frame: 0 0 0 1px rgba(var(--gold-rgb), 0.42), 0 6px 14px rgba(0, 0, 0, 0.35);
 }
 
 /* Header ------------------------------------------------------------------ */
@@ -80,6 +86,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* The step names hide by the room the rail has, not by the window: a
+     1280px window leaves the rail about 975px, and five named steps need
+     about 620. Hiding them at <=1280 showed most laptops a row of numbered
+     circles and padlocks instead of the show's running order. */
+  container: steps / inline-size;
 }
 
 .sw-step-wrap {
@@ -512,14 +523,14 @@ h3.sw-eyebrow { margin: 0; }
 .sw-card {
   position: relative;
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-columns: 88px minmax(0, 1fr);
   grid-template-areas:
     "avatar name"
     "avatar goodfor"
     "fit    fit"
     "action action";
   align-content: start;
-  gap: 8px 12px;
+  gap: 8px 14px;
   padding: 14px;
   border-radius: 16px;
   border: 1px solid var(--line);
@@ -593,14 +604,20 @@ h3.sw-eyebrow { margin: 0; }
    and only on cards already picked, which are the ones already decided. */
 .sw-card.picked > .sw-card-name { padding-right: 64px; }
 
+/* 88px sits beside the name, maker and "good for" lines, which already run
+   that tall, so the portrait is back to reading as a publicity still without
+   the card growing: the 150px photo it replaced cost a whole row of cards. */
 .sw-card-avatar {
   grid-area: avatar;
-  width: 64px;
-  height: 64px;
+  width: 88px;
+  height: 88px;
   object-fit: cover;
-  border-radius: 12px;
-  border: 2px solid color-mix(in srgb, var(--gold) 35%, transparent);
+  border-radius: 14px;
+  background: var(--panel-2);
+  box-shadow: var(--portrait-frame);
 }
+
+.sw-card.picked .sw-card-avatar { box-shadow: 0 0 0 2px var(--pink), 0 6px 14px rgba(0, 0, 0, 0.35); }
 
 .sw-card-name { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .sw-card-name h3 { margin: 0; font-size: 16px; font-weight: 700; line-height: inherit; color: var(--text-strong); overflow-wrap: anywhere; }
@@ -636,18 +653,26 @@ h3.sw-eyebrow { margin: 0; }
   color: var(--gold);
 }
 
+/* Gold marks the winner and the one next action. Six gold Pick bars made the
+   step read as a shop shelf and competed with Next, so picking is the show's
+   pink: an outline to hand out, filled once handed. Full --pink border for 3:1
+   against the card; the text mix is the one already measured on the picked
+   tint (5.5:1 there, higher on the bare panel). */
 .sw-card-btn {
   margin-top: auto;
   padding: 10px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 78%, white), var(--gold));
-  color: #27190a;
+  border: 1px solid var(--pink);
+  background: transparent;
+  color: color-mix(in srgb, var(--pink) 70%, var(--text-strong));
   font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   cursor: pointer;
+  transition: background 0.12s ease;
 }
+
+.sw-card-btn:not(.picked):not(:disabled):hover { background: rgba(var(--pink-rgb), 0.1); }
 
 .sw-card-btn.picked {
   background: color-mix(in srgb, var(--pink) 16%, transparent);
@@ -662,6 +687,22 @@ h3.sw-eyebrow { margin: 0; }
 .sw-show-more { align-self: center; margin-top: 4px; }
 
 .sw-pick-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 30px; text-align: center; }
+.sw-pick-empty-art {
+  position: relative;
+  width: min(640px, 100%);
+  height: 140px;
+  border-radius: 16px;
+  border: 1px solid rgba(var(--gold-rgb), 0.42);
+  background-size: cover;
+  background-position: left center;
+  overflow: hidden;
+}
+.sw-pick-empty-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 45%, color-mix(in srgb, var(--panel) 90%, transparent));
+}
 .sw-pick-empty p { margin: 0; color: var(--muted); }
 
 .sw-lineup-tray { justify-self: center; display: flex; flex-direction: column; align-items: center; gap: 5px; }
@@ -680,8 +721,12 @@ h3.sw-eyebrow { margin: 0; }
 }
 
 button.sw-lineup-slot.filled { border: 2px solid var(--pink); cursor: pointer; background: none; }
+.sw-lineup-slot.filled { box-shadow: var(--portrait-frame); animation: sw-slot-in 150ms ease-out; }
 .sw-lineup-slot.filled img { width: 100%; height: 100%; object-fit: cover; }
-.sw-lineup-slot.empty { border: 1px dashed var(--line); color: var(--muted); }
+/* A seat waiting for a date. Decorative, and hidden from assistive tech: the
+   tray's own line says how many are picked. */
+.sw-lineup-slot.empty { border: 1px dashed var(--line); color: color-mix(in srgb, var(--pink) 45%, var(--muted)); }
+@keyframes sw-slot-in { from { transform: scale(0.8); opacity: 0; } }
 .sw-lineup-slot.empty svg { width: 14px; height: 14px; }
 
 /* Remove badge on a picked lineup slot — always hinted, solid on hover. */
@@ -752,25 +797,63 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 /* Compare ----------------------------------------------------------------- */
 .sw-compare {
   position: relative;
-  flex: 1;
+  /* Not flex: 1, for the reason .sw-winner gives: stretched to the scroll
+     box's height, whatever ran past it was clipped by this element instead of
+     scrolled by its parent. At 1280x800 that was the progress bar and every
+     answer score — there, and unreachable. */
+  flex: 0 0 auto;
   margin: 0 20px;
   border-radius: 16px;
-  background-size: cover;
-  background-position: center;
+  background: var(--stage-floor);
   overflow: hidden;
 }
 
-.sw-compare::before {
+/* The stage and the winner's reveal share one lighting rig: the show's photo
+   dimmed onto the floor, a scrim, the marquee, and a spotlight from above.
+   The photo was loaded here all along — an opaque fill sat on top of it. */
+.sw-stage,
+.sw-winner-stage {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.sw-stage-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: 30% 40%;
+  opacity: 0.34;
+  filter: saturate(1.15) blur(1px);
+  transform: scale(1.03);
+  transition: opacity 0.4s ease;
+}
+
+.sw-stage::after,
+.sw-winner-stage::after {
   content: "";
   position: absolute;
   inset: 0;
+  z-index: 0;
+  pointer-events: none;
   background:
-    radial-gradient(circle at 50% 6%, color-mix(in srgb, var(--pink) 14%, transparent), transparent 40%),
-    radial-gradient(circle at 50% 96%, color-mix(in srgb, var(--gold) 10%, transparent), transparent 40%),
-    color-mix(in srgb, #14101e 86%, var(--bg));
+    radial-gradient(ellipse 55% 60% at 50% 0%, rgba(var(--gold-rgb), 0.12), transparent 70%),
+    linear-gradient(90deg, color-mix(in srgb, var(--stage-floor) 70%, transparent), transparent 22%, transparent 78%, color-mix(in srgb, var(--stage-floor) 70%, transparent)),
+    linear-gradient(180deg, color-mix(in srgb, var(--stage-floor) 20%, transparent), color-mix(in srgb, var(--stage-floor) 75%, transparent));
 }
 
-.sw-compare-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 28px; }
+.sw-stage > .live-show-marquee,
+.sw-winner-stage > .live-show-marquee { z-index: 1; }
+
+/* A show that stopped: lights down. The bulbs hold still (App.css) and the
+   photo dims, so the stage looks closed rather than mid-show. */
+.sw-stage.lights-down .sw-stage-bg { opacity: 0.2; }
+
+.sw-compare-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 28px 28px 24px; }
+
+/* Data is not lit: progress and scores sit under the stage, on the floor. */
+.sw-stage-data { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 16px 28px 24px; }
 
 .sw-compare-question {
   width: min(640px, 100%);
@@ -787,6 +870,7 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 .sw-podiums { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 200px)); gap: 18px; justify-content: center; width: 100%; }
 
 .sw-podium {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -795,13 +879,36 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   border-radius: 16px;
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--panel) 90%, transparent);
+  /* The lectern's lip: a podium, not a list row. */
+  box-shadow: inset 0 -3px 0 rgba(var(--gold-rgb), 0.35);
 }
 
-.sw-podium.answering { border-color: color-mix(in srgb, var(--gold) 60%, transparent); box-shadow: 0 0 22px color-mix(in srgb, var(--gold) 20%, transparent); }
+.sw-podium.answering { border-color: color-mix(in srgb, var(--gold) 60%, transparent); box-shadow: inset 0 -3px 0 rgba(var(--gold-rgb), 0.35), 0 0 22px color-mix(in srgb, var(--gold) 20%, transparent); }
+
+/* The spotlight on whoever is answering: a beam from the rig down onto the
+   podium, behind every card on the stage. It carries no state the pill does
+   not already say, so it is free to fade. */
+.sw-podium::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 40%;
+  z-index: -1;
+  width: 240px;
+  height: 360px;
+  transform: translateX(-50%);
+  clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%);
+  background: linear-gradient(180deg, transparent, rgba(var(--gold-rgb), 0.16));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease-out;
+}
+
+.sw-podium.answering::before { opacity: 1; }
 .sw-podium.done { border-color: color-mix(in srgb, var(--green) 50%, transparent); }
 .sw-podium.waiting { opacity: 0.8; }
 
-.sw-podium img { width: 76px; height: 76px; border-radius: 14px; object-fit: cover; }
+.sw-podium img { width: 76px; height: 76px; border-radius: 14px; object-fit: cover; background: var(--panel-2); box-shadow: var(--portrait-frame); }
 .sw-podium strong { font-size: 14px; font-weight: 700; color: var(--text-strong); }
 .sw-podium em { font-size: 11px; font-style: normal; color: var(--muted); }
 
@@ -854,7 +961,7 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   margin: 0 20px;
   border-radius: 16px;
   padding: 30px 28px;
-  background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--gold) 14%, transparent), transparent 42%), color-mix(in srgb, #14101e 86%, var(--bg));
+  background: var(--stage-floor);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -878,7 +985,23 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 .sw-confetti-piece.blue { background: var(--blue); }
 @keyframes sw-fall { to { transform: translateY(180px) rotate(320deg); opacity: 0; } }
 
-.sw-winner-reveal { display: flex; align-items: center; gap: 20px; }
+/* The stage runs to the card's edges and takes the card's top padding and
+   the gap under it, so the lighting costs no height. */
+.sw-winner.crowned { padding-top: 0; }
+.sw-winner-stage {
+  align-self: stretch;
+  display: flex;
+  justify-content: center;
+  margin: 0 -28px -24px;
+  padding: 30px 28px 24px;
+}
+.sw-winner-stage .sw-stage-bg { background-position: 18% 40%; }
+.sw-winner-stage > .sw-confetti { z-index: 1; }
+/* The one place text stands on the photo; the scrim holds it dark enough and
+   the shadow is the image recipe's. */
+.sw-winner-stage .sw-winner-copy { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
+
+.sw-winner-reveal { position: relative; z-index: 1; display: flex; align-items: center; gap: 20px; }
 .sw-winner-avatar-wrap { position: relative; animation: sw-drop 600ms ease-out; }
 @keyframes sw-drop { from { transform: translateY(-24px) scale(0.9); opacity: 0; } to { transform: none; opacity: 1; } }
 
@@ -888,8 +1011,21 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   border-radius: 22px;
   object-fit: cover;
   border: 3px solid var(--gold);
-  box-shadow: 0 0 0 6px color-mix(in srgb, var(--gold) 18%, transparent);
 }
+
+/* The winner's halo, lit once the portrait has landed. On its own layer so
+   the glow fades in by opacity rather than by animating a shadow. */
+.sw-winner-avatar-wrap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  box-shadow: 0 0 28px rgba(var(--gold-rgb), 0.45), 0 0 60px rgba(var(--gold-rgb), 0.2);
+  opacity: 0;
+  animation: sw-halo 600ms ease-out 400ms forwards;
+  pointer-events: none;
+}
+@keyframes sw-halo { to { opacity: 1; } }
 
 .sw-winner-trophy {
   position: absolute;
@@ -960,11 +1096,10 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 .sw-winner-links { display: flex; gap: 20px; }
 
 /* Responsive -------------------------------------------------------------- */
-@media (max-width: 1280px) {
+@container steps (max-width: 640px) {
   /* Out of sight, not out of the accessibility tree. The label is the step
      button's only name — the number beside it is aria-hidden — so display: none
-     left five nameless buttons on every screen at the most common laptop width,
-     and on any 1080p screen at 150% scaling. */
+     left five nameless buttons wherever the rail was too narrow for them. */
   .sw-step-label {
     position: absolute;
     width: 1px;
@@ -974,6 +1109,9 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
     white-space: nowrap;
   }
   .sw-step { padding: 8px 12px; }
+}
+
+@media (max-width: 1280px) {
   .sw-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sw-doors { grid-template-columns: minmax(0, 1fr); }
   .sw-header { grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
@@ -981,6 +1119,20 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 
 @media (max-width: 900px) {
   .sw-card-grid { grid-template-columns: minmax(0, 1fr); }
+  .sw-stage > .live-show-marquee,
+  .sw-winner-stage > .live-show-marquee { inset: 6px; border-radius: 12px; }
+}
+
+/* 200-400% zoom and narrow windows: the rig comes down (bulbs, beam, halo
+   glow), the photo stays because it costs no room, and the portrait goes back
+   to 64px so the card's text keeps its column. */
+@media (max-width: 640px) {
+  .sw-stage > .live-show-marquee,
+  .sw-winner-stage > .live-show-marquee,
+  .sw-podium::before,
+  .sw-winner-avatar-wrap::before { display: none; }
+  .sw-card { grid-template-columns: 64px minmax(0, 1fr); gap: 8px 12px; }
+  .sw-card-avatar { width: 64px; height: 64px; border-radius: 12px; }
 }
 
 /* Below roughly 500px the brand column's 168px mode switch leaves the step rail
@@ -1295,6 +1447,22 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   .sw-confetti-piece {
     animation: none;
     display: none;
+  }
+
+  /* The halo is simply on; the beam and the dimming switch without a fade;
+     a picked portrait takes its seat without the pop. */
+  .sw-winner-avatar-wrap::before {
+    animation: none;
+    opacity: 1;
+  }
+
+  .sw-podium::before,
+  .sw-stage-bg {
+    transition: none;
+  }
+
+  .sw-lineup-slot.filled {
+    animation: none;
   }
 
   /* The 1px hover lift and press settle are deliberately left alone. They are

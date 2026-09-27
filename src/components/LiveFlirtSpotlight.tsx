@@ -7,6 +7,7 @@ import { getShortModelName } from '../lib/modelCatalog';
 import type { ModelRow, NetworkHost, RunProgress, SystemProfile } from '../types';
 import { AvatarBust, MachineAvatar } from './Avatars';
 import { MetricTile } from './CommonChrome';
+import { ShowMarquee } from './ShowMarquee';
 import { Maximize2, MessageSquare, Minimize2, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -134,9 +135,7 @@ export function LiveFlirtSpotlight({
   return (
     <aside className="live-flirt-spotlight live-game-show" aria-label="Live Speed Dating game show stage">
       <div className="live-show-bg" style={{ backgroundImage: `url(${robotSpeedDateShow})` }} aria-hidden="true" />
-      <div className="live-show-marquee" aria-hidden="true">
-        {Array.from({ length: 22 }).map((_item, index) => <i key={index} />)}
-      </div>
+      <ShowMarquee />
 
       <div className="live-show-shell">
         <header className="live-show-header">

@@ -5481,6 +5481,15 @@ tbody tr.computer-row.selected {
   animation-delay: 380ms;
 }
 
+/* Lights down: a show that stopped. The bulbs hold still and dim instead of
+   chasing over a stage where nothing is happening. */
+.live-show-marquee.lights-down i {
+  animation: none;
+  opacity: 0.3;
+  transform: none;
+  box-shadow: none;
+}
+
 .live-show-marquee i:nth-child(1) { left: 4%; top: -4px; }
 .live-show-marquee i:nth-child(2) { left: 13%; top: -4px; }
 .live-show-marquee i:nth-child(3) { left: 22%; top: -4px; }
@@ -5503,6 +5512,14 @@ tbody tr.computer-row.selected {
 .live-show-marquee i:nth-child(20) { left: 40%; bottom: -4px; }
 .live-show-marquee i:nth-child(21) { left: 60%; bottom: -4px; }
 .live-show-marquee i:nth-child(22) { left: 80%; bottom: -4px; }
+/* The left column, rendered only by a framed marquee (Simple Mode's stages). */
+.live-show-marquee i:nth-child(23) { left: -4px; top: 12%; }
+.live-show-marquee i:nth-child(24) { left: -4px; top: 24%; }
+.live-show-marquee i:nth-child(25) { left: -4px; top: 36%; }
+.live-show-marquee i:nth-child(26) { left: -4px; top: 48%; }
+.live-show-marquee i:nth-child(27) { left: -4px; top: 60%; }
+.live-show-marquee i:nth-child(28) { left: -4px; top: 72%; }
+.live-show-marquee i:nth-child(29) { left: -4px; top: 84%; }
 
 .live-show-shell {
   position: relative;
