@@ -7,6 +7,12 @@
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  /* One column that may shrink below its content. The implicit column was
+     `auto`, so on a narrow window (400% zoom is 320px) the widest unbreakable
+     thing on the Pick step set the width of the whole shell, header included,
+     and overflow: hidden cut off everything past the edge — "RigMatch" read
+     "R". Content now has to fit the window instead of the other way round. */
+  grid-template-columns: minmax(0, 1fr);
   border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
   border-radius: 18px;
   background: var(--panel);
@@ -250,6 +256,10 @@
 }
 
 .sw-muted { color: var(--muted); }
+
+/* Some eyebrows are headings (h3) so a screen reader can jump to them; they
+   keep the eyebrow's look, not a heading's margins. */
+h3.sw-eyebrow { margin: 0; }
 
 .sw-eyebrow {
   font-size: 10px;
@@ -593,7 +603,7 @@
 }
 
 .sw-card-name { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.sw-card-name strong { font-size: 16px; font-weight: 700; color: var(--text-strong); }
+.sw-card-name h3 { margin: 0; font-size: 16px; font-weight: 700; line-height: inherit; color: var(--text-strong); overflow-wrap: anywhere; }
 .sw-card-name em { font-size: 11px; font-style: normal; color: var(--muted); }
 /* "Good for" reads as a label beside the line, not a heading above it — the
    stacked version spent a whole row on two words. */
@@ -642,7 +652,9 @@
 .sw-card-btn.picked {
   background: color-mix(in srgb, var(--pink) 16%, transparent);
   border-color: var(--pink);
-  color: var(--pink);
+  /* Pure pink on its own 16% tint was 4.37:1, under the 4.5:1 that 12px text
+     needs. Lifted toward white it is 5.5:1 or better in all five themes. */
+  color: color-mix(in srgb, var(--pink) 70%, var(--text-strong));
 }
 
 .sw-card-btn:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -769,7 +781,8 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   text-align: center;
 }
 
-.sw-compare-question p { margin: 6px 0 0; font-size: 19px; font-weight: 700; color: var(--text-strong); }
+.sw-compare-question p,
+.sw-compare-question h2 { margin: 6px 0 0; font-size: 19px; font-weight: 700; color: var(--text-strong); }
 
 .sw-podiums { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 200px)); gap: 18px; justify-content: center; width: 100%; }
 
@@ -885,7 +898,7 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 
 .sw-winner-trophy svg { width: 18px; height: 18px; }
 .sw-winner-copy { display: flex; flex-direction: column; gap: 4px; }
-.sw-winner-copy strong { font-size: 30px; font-weight: 800; color: var(--text-strong); }
+.sw-winner-copy h2 { margin: 0; font-size: 30px; font-weight: 800; line-height: 1.2; color: var(--text-strong); overflow-wrap: anywhere; }
 .sw-winner-grade { display: inline-flex; align-items: center; gap: 8px; }
 .sw-winner-grade b { font-size: 16px; font-weight: 900; color: var(--gold); }
 .sw-winner-grade em { font-size: 10px; font-style: normal; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
@@ -906,7 +919,7 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 .sw-door.advanced { border: 2px solid color-mix(in srgb, var(--blue) 55%, transparent); box-shadow: 0 0 26px color-mix(in srgb, var(--blue) 12%, transparent); }
 
 .sw-door-img { height: 110px; border-radius: 12px; background-size: cover; background-position: center; opacity: 0.85; }
-.sw-door strong { font-size: 18px; font-weight: 700; color: var(--text-strong); }
+.sw-door h3 { margin: 0; font-size: 18px; font-weight: 700; line-height: 1.3; color: var(--text-strong); }
 .sw-door p { margin: 0; font-size: 13px; color: var(--muted); }
 
 .sw-door-btn {
@@ -938,7 +951,18 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 
 /* Responsive -------------------------------------------------------------- */
 @media (max-width: 1280px) {
-  .sw-step-label { display: none; }
+  /* Out of sight, not out of the accessibility tree. The label is the step
+     button's only name — the number beside it is aria-hidden — so display: none
+     left five nameless buttons on every screen at the most common laptop width,
+     and on any 1080p screen at 150% scaling. */
+  .sw-step-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
   .sw-step { padding: 8px 12px; }
   .sw-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sw-doors { grid-template-columns: minmax(0, 1fr); }
@@ -964,6 +988,22 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 
   .sw-step { padding: 8px 10px; }
   .sw-step-dash { width: 10px; margin: 0 1px; }
+
+  /* The footer's three columns stack. Side by side at 320px — 400% zoom — the
+     Next button started past the window's edge and was cut away with the
+     step's only way forward on it. */
+  .sw-footer {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    padding: 12px 14px;
+  }
+  .sw-footer-right { justify-self: stretch; }
+  .sw-footer .sw-gold-pill {
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
+    text-align: center;
+  }
 }
 
 /* "Choose for me" escape hatch on the Pick step. */
@@ -1359,10 +1399,19 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 .sw-explain-term {
   all: unset;
   display: inline;
+  position: relative;
   cursor: help;
   color: var(--gold);
   border-bottom: 1px dotted currentColor;
   white-space: normal;
+}
+
+/* A taller hit area than the 15-22px line it sits on, without moving the
+   underline or the line: the pad is invisible and takes no space. */
+.sw-explain-term::after {
+  content: "";
+  position: absolute;
+  inset: -5px -2px;
 }
 
 .sw-explain-term:hover { border-bottom-style: solid; }
