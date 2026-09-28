@@ -164,6 +164,12 @@
 .sw-step.done:hover, .sw-step.active:hover { transform: translateY(-1px); filter: brightness(1.04); }
 
 /* Content + host strip ---------------------------------------------------- */
+/* The studio wall behind every step: a faint 1970s heart wallpaper, the rig's
+   light falling from above, and a warm pink glow low in the corners. It is
+   the scroll box's own background, so it holds still while the cards scroll
+   over it, and every card, bubble and panel on it is opaque — nothing that
+   carries a number is ever drawn on the pattern. The hearts are drawn at 11%,
+   well under anything that could cost text its contrast. */
 .sw-content {
   min-height: 0;
   overflow-y: auto;
@@ -171,6 +177,12 @@
   flex-direction: column;
   gap: 18px;
   padding-bottom: 20px;
+  background:
+    radial-gradient(ellipse 55% 42% at 50% 0%, rgba(var(--gold-rgb), 0.08), transparent 70%),
+    radial-gradient(ellipse 38% 55% at 0% 100%, rgba(var(--pink-rgb), 0.1), transparent 70%),
+    radial-gradient(ellipse 38% 55% at 100% 100%, rgba(var(--pink-rgb), 0.1), transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56'%3E%3Cg fill='none' stroke='%23e37185' stroke-opacity='0.11' stroke-width='1.2'%3E%3Cpath d='M14 12c-2-3-7-2-7 2 0 3 4 6 7 8 3-2 7-5 7-8 0-4-5-5-7-2z'/%3E%3Cpath d='M42 40c-2-3-7-2-7 2 0 3 4 6 7 8 3-2 7-5 7-8 0-4-5-5-7-2z'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 56px 56px,
+    var(--panel);
 }
 
 .sw-host-strip {

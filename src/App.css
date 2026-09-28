@@ -18336,22 +18336,35 @@ tbody tr.selected {
   line-height: 1.35;
 }
 
+/* A sunset at sea: a rose-to-gold sky meeting a blue sea at a real horizon,
+   with the sun's path glittering on the water beneath it. It used to be one
+   gradient from pink to blue with thin vertical stripes over it, which read
+   as a dull wash rather than as sky and water. */
 .cruise-scene {
   position: relative;
-  min-height: 300px;
+  /* The modal's grid gives this row at least 260px and shrinks it to that on
+     shorter windows. Asking for 300 made the scene spill 40px over the caption
+     below it, hiding "Romantic cruise launched" on an 800px-tall screen. */
+  min-height: 260px;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(251, 185, 187, 0.94) 0%, rgba(var(--gold-rgb), 0.72) 42%, rgba(var(--blue-rgb), 0.95) 100%);
+    linear-gradient(180deg,
+      #f2a3bd 0%, #f7bfa8 30%, #f6d493 54%, #f7e2ad 57%,
+      #8cc0cd 57.4%, #64a2bd 74%, #3d7aa0 100%);
 }
 
+/* The sun's path on the water. */
 .cruise-scene::before {
   content: "";
   position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, rgba(33, 27, 43, 0.1), rgba(255, 249, 239, 0.08) 54%, rgba(33, 27, 43, 0.18)),
-    repeating-linear-gradient(90deg, rgba(255, 249, 239, 0.18) 0 1px, transparent 1px 76px);
-  opacity: 0.74;
+  top: 57.4%;
+  bottom: 0;
+  right: calc(11% - 12px);
+  width: 120px;
+  background: repeating-linear-gradient(180deg, rgba(255, 238, 196, 0.75) 0 2px, transparent 2px 9px);
+  -webkit-mask-image: radial-gradient(ellipse 50% 100% at 50% 0%, #000 25%, transparent 75%);
+  mask-image: radial-gradient(ellipse 50% 100% at 50% 0%, #000 25%, transparent 75%);
+  animation: cruiseGlitter 1.6s ease-in-out infinite alternate;
 }
 
 .cruise-sun {
@@ -18396,81 +18409,76 @@ tbody tr.selected {
 .cruise-boat {
   position: absolute;
   z-index: 4;
-  left: 10%;
-  bottom: 58px;
-  width: 228px;
+  left: 9%;
+  bottom: 4px;
+  width: 260px;
   height: 142px;
-  animation: cruiseSail 5.4s ease-in-out infinite;
+  animation: cruiseSail 6s ease-in-out infinite;
   will-change: transform;
 }
 
+.cruise-ship {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 6px 10px rgba(18, 30, 50, 0.25));
+}
+
+/* The couple, standing on the sun deck. */
 .cruise-passengers {
   position: absolute;
   z-index: 5;
-  left: 56px;
-  top: 16px;
+  left: 98px;
+  top: 12px;
   display: flex;
-  gap: 20px;
+  gap: 8px;
   align-items: end;
 }
 
-.boat-cabin {
-  position: absolute;
-  left: 46px;
-  bottom: 44px;
-  width: 84px;
-  height: 44px;
-  border: 1px solid rgba(255, 249, 239, 0.46);
-  border-radius: 12px 12px 4px 4px;
-  background: rgba(33, 27, 43, 0.62);
+/* The lights twinkle, alternate bulbs half a beat apart. */
+.cruise-lights circle {
+  filter: drop-shadow(0 0 3px rgba(255, 214, 111, 0.9));
+  animation: cruiseTwinkle 1.2s ease-in-out infinite alternate;
 }
+.cruise-lights circle:nth-child(odd) { animation-delay: 0.6s; }
 
-.boat-sail {
+/* Hearts puffed from the funnel. */
+.cruise-puff {
   position: absolute;
-  right: 54px;
-  top: 4px;
-  width: 0;
-  height: 0;
-  border-top: 16px solid transparent;
-  border-bottom: 68px solid transparent;
-  border-left: 48px solid rgba(255, 249, 239, 0.92);
-  filter: drop-shadow(0 8px 10px rgba(33, 27, 43, 0.24));
+  z-index: 3;
+  left: 74px;
+  top: 12px;
+  color: #ffe1e8;
+  opacity: 0;
+  animation: cruisePuff 3.6s ease-out infinite;
 }
+.cruise-puff svg { width: 14px; height: 14px; fill: currentColor; }
+.puff-two { animation-delay: 1.2s; color: #ffb3c4; }
+.puff-three { animation-delay: 2.4s; }
 
-.boat-hull {
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 12px;
-  height: 44px;
-  border: 1px solid rgba(255, 249, 239, 0.32);
-  border-radius: 0 0 52px 52px;
-  background:
-    linear-gradient(180deg, rgba(255, 249, 239, 0.32), rgba(227, 113, 133, 0.26)),
-    rgba(33, 27, 43, 0.9);
-  box-shadow: inset 0 -10px 0 rgba(10, 7, 13, 0.22);
-}
-
+/* Crests of water: the front one laps over the hull's waterline. */
 .cruise-wave {
   position: absolute;
-  z-index: 2;
+  z-index: 6;
   left: -12%;
   right: -12%;
-  height: 58px;
-  bottom: -12px;
-  background:
-    radial-gradient(34px 24px at 34px 10px, rgba(255, 249, 239, 0.82) 0 38%, transparent 40%) repeat-x;
-  background-size: 68px 42px;
-  opacity: 0.86;
-  animation: cruiseWaves 3.8s linear infinite;
+  height: 34px;
+  bottom: -4px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='34'%3E%3Cpath d='M0 12 Q15 2 30 12 T60 12 T90 12 T120 12 V34 H0 Z' fill='%234f8db0'/%3E%3Cpath d='M0 12 Q15 2 30 12 T60 12 T90 12 T120 12' fill='none' stroke='%23e9f6fb' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x;
+  background-size: 120px 34px;
+  animation: cruiseWaves 4.2s linear infinite;
   will-change: transform;
 }
 
 .wave-two {
-  z-index: 1;
-  bottom: 18px;
-  opacity: 0.45;
-  animation-duration: 5.2s;
+  z-index: 2;
+  bottom: 30px;
+  height: 30px;
+  opacity: 0.55;
+  background-size: 160px 30px;
+  animation-duration: 6.4s;
   animation-direction: reverse;
 }
 
@@ -18597,7 +18605,7 @@ a.whats-next-support:hover {
   }
 
   50% {
-    transform: translateX(72px) translateY(-8px) rotate(2deg);
+    transform: translateX(48px) translateY(-5px) rotate(1.5deg);
   }
 
   100% {
@@ -18611,8 +18619,24 @@ a.whats-next-support:hover {
   }
 
   to {
-    transform: translateX(68px);
+    transform: translateX(120px);
   }
+}
+
+@keyframes cruiseTwinkle {
+  from { opacity: 0.45; }
+  to { opacity: 1; }
+}
+
+@keyframes cruisePuff {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.5); }
+  15% { opacity: 0.95; }
+  100% { opacity: 0; transform: translate(-26px, -46px) scale(1.25) rotate(-14deg); }
+}
+
+@keyframes cruiseGlitter {
+  from { opacity: 0.55; }
+  to { opacity: 1; }
 }
 
 @keyframes cruiseHeartFloat {
@@ -18631,9 +18655,15 @@ a.whats-next-support:hover {
 @media (prefers-reduced-motion: reduce) {
   .cruise-boat,
   .cruise-wave,
-  .cruise-heart {
+  .cruise-heart,
+  .cruise-scene::before,
+  .cruise-lights circle,
+  .cruise-puff {
     animation: none;
   }
+
+  /* Held still mid-puff they would float frozen; without the motion they go. */
+  .cruise-puff { display: none; }
 }
 
 @media (max-width: 920px) {
@@ -18740,9 +18770,9 @@ a.whats-next-support:hover {
   }
 
   .cruise-boat {
-    left: 5%;
-    width: 210px;
-    transform-origin: bottom center;
+    left: 3%;
+    transform-origin: bottom left;
+    scale: 0.85;
   }
 }
 

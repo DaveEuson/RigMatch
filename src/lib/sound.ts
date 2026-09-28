@@ -15,6 +15,11 @@ const STING_WAIT_MS = 600;
  * follows (Advanced's stage simply fades the theme out), it plays as before.
  */
 export function playJingle(type: Jingle) {
+  // A match gets the romance: harp, strings and a violin, not three beeps.
+  if (type === 'its-a-match') {
+    showTheme.romance();
+    return;
+  }
   if (showTheme.isPlaying() || showTheme.stingPlaying()) {
     window.setTimeout(() => { if (!showTheme.stingPlaying()) play(type); }, STING_WAIT_MS);
     return;

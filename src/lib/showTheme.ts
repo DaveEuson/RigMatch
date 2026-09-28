@@ -174,6 +174,77 @@ function slideWhistle(bus: Bus, t: number, from: number, to: number, dur: number
   o.connect(g).connect(bus);
 }
 
+// ---- The romance: harp, strings, a violin -------------------------------------
+
+/** A harp string: a bright pluck that rings and fades. */
+function harp(bus: Bus, m: number, t: number, peak = 0.07) {
+  const g = ctx!.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + 0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+  const f = ctx!.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 3800;
+  osc('triangle', mtof(m), t, t + 1.5).connect(f);
+  const shimmer = ctx!.createGain(); shimmer.gain.value = 0.25;
+  osc('sine', mtof(m + 12), t, t + 1.5).connect(shimmer).connect(f);
+  f.connect(g).connect(bus);
+}
+
+/** A string section: detuned saws, slow bow, a little vibrato. */
+function strings(bus: Bus, chord: number[], t: number, dur: number, peak = 0.022) {
+  const end = t + dur;
+  for (const m of chord) {
+    const f = ctx!.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1700; f.Q.value = 0.5;
+    const g = ctx!.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.55);
+    g.gain.setValueAtTime(peak, Math.max(t + 0.55, end - 0.1));
+    g.gain.linearRampToValueAtTime(0.0001, end + 1.1);
+    const vib = osc('sine', 5, t, end + 1.2);
+    const depth = ctx!.createGain(); depth.gain.value = 7;
+    vib.connect(depth);
+    for (const cents of [-7, 7]) {
+      const o = osc('sawtooth', mtof(m), t, end + 1.2);
+      o.detune.value = cents;
+      depth.connect(o.detune);
+      o.connect(f);
+    }
+    f.connect(g).connect(bus);
+  }
+}
+
+/** A solo violin: bowed in, singing vibrato that deepens as the note holds. */
+function violin(bus: Bus, m: number, t: number, dur: number) {
+  const end = t + dur;
+  const f = ctx!.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 3000; f.Q.value = 1.2;
+  const g = ctx!.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.07, t + 0.09);
+  g.gain.setValueAtTime(0.06, Math.max(t + 0.1, end - 0.08));
+  g.gain.linearRampToValueAtTime(0.0001, end + 0.25);
+  const vib = osc('sine', 5.5, t, end + 0.3);
+  const depth = ctx!.createGain();
+  depth.gain.setValueAtTime(3, t);
+  depth.gain.linearRampToValueAtTime(dur > 0.6 ? 16 : 9, t + Math.min(dur, 0.8));
+  vib.connect(depth);
+  const o = osc('sawtooth', mtof(m), t, end + 0.3);
+  // A violinist slides up into the note.
+  o.detune.setValueAtTime(-35, t);
+  o.detune.linearRampToValueAtTime(0, t + 0.07);
+  depth.connect(o.detune);
+  o.connect(f).connect(g).connect(bus);
+}
+
+/** A music-box chime: two pure partials, a long ring. */
+function chime(bus: Bus, m: number, t: number) {
+  for (const [shift, level] of [[0, 0.05], [19, 0.015]] as const) {
+    const g = ctx!.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(level, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+    osc('sine', mtof(m + shift), t, t + 2.3).connect(g).connect(bus);
+  }
+}
+
 // ---- The theme: eight bars in F, 128 bpm --------------------------------------
 
 const CHORDS: Record<string, number[]> = {
@@ -317,6 +388,34 @@ export const showTheme = {
     kick(bus, hit, 0.7);
     crash(bus, hit, 0.2);
     slideWhistle(bus, hit + 1.0, 900, 1900, 0.35);
+  },
+
+  /**
+   * "It's a match": a harp glissando, the strings swelling from B-flat to F,
+   * and a violin that sighs its way home. About five seconds. Plays whether
+   * or not the theme song is on — it replaces the arpeggio this moment always
+   * had.
+   */
+  romance() {
+    const ac = audio();
+    if (!ac) return;
+    void ac.resume();
+    const bus = freshSting(ac);
+    stingUntil = performance.now() + 5200;
+    const t0 = ac.currentTime + 0.08;
+    // The harp runs up two octaves of F major.
+    [65, 69, 72, 76, 79, 81, 84, 88, 89].forEach((m, i) => harp(bus, m, t0 + i * 0.075));
+    // IV to I: B-flat major seven, then F major nine.
+    strings(bus, [46, 58, 62, 65, 69], t0 + 0.15, 1.9);
+    strings(bus, [41, 57, 60, 64, 67, 69], t0 + 2.05, 2.2);
+    const melody: Array<[number, number, number]> = [
+      [0.35, 0.5, 74], [0.85, 0.45, 77], [1.3, 0.9, 81],
+      [2.2, 0.35, 79], [2.55, 0.35, 76], [2.9, 1.6, 77],
+    ];
+    for (const [at, dur, m] of melody) violin(bus, m, t0 + at, dur);
+    chime(bus, 84, t0 + 2.95);
+    chime(bus, 89, t0 + 3.2);
+    chime(bus, 93, t0 + 3.45);
   },
 
   /** Wah, wah, wah, wahhh. About three seconds. */
