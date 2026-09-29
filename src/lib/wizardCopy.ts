@@ -151,3 +151,19 @@ export function showTimeLeft(state: {
   }
   return `about ${formatDuration(average * (totalQuestions - questionsDone)).replace('~', '')} left`;
 }
+
+/**
+ * How the Winner line counts the field it won.
+ *
+ * "Out of the 3 you tested" is only true when every pick finished. It was said
+ * of a show where one dropped out, and after Stop it said "out of the 1 you
+ * tested" of a model that had nothing to be compared with. Anything short of
+ * the whole lineup is "that finished", and a lone finisher is said to be one.
+ */
+export function winnerField(finished: number, picked: number): { tested: string; onlyOne: boolean } {
+  const partial = finished < picked;
+  return {
+    tested: partial ? `${finished} that finished` : `${finished} you tested`,
+    onlyOne: partial && finished === 1,
+  };
+}
