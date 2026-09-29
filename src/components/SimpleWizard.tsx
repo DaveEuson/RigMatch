@@ -26,18 +26,17 @@ import {
   Video,
   X,
 } from 'lucide-react';
-import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, RunProgress, SystemProfile } from '../types';
-import { STEPS, STEP_LABELS, footerHint, nextBlockedHint, showAnnouncement, type StepId } from '../lib/wizardCopy';
+import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, RunFailure, RunProgress, SystemProfile } from '../types';
+import { STEPS, STEP_LABELS, footerHint, minPicksFor, nextBlockedHint, pickShortHint, showAnnouncement, showTimeLeft, type StepId } from '../lib/wizardCopy';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { Explain, ExplainText, InfoViewProvider } from './InfoView';
 import { useExplaining } from '../lib/infoContext';
 import { formatBytes, formatBytesPerSecond, formatPullCount } from '../lib/format';
 import { roundLabel } from '../lib/roundLabels';
-import { formatDuration } from '../lib/runEstimates';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 import { getFriendlyModelName, type DreamTag } from '../lib/modelCatalog';
 import { getCountryCode, getModelOrigin } from '../lib/modelOrigins';
-import { getDownloadRowStatus, summarizeDownloadStep } from '../lib/downloadStatus';
+import { MIN_CONTESTANTS, getDownloadRowStatus, summarizeDownloadStep } from '../lib/downloadStatus';
 import type { ComfyFolderListing } from '../lib/generationCatalog';
 import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
 import { AllDemosButton, ModelDemoChips } from './SkillDemoViewers';
@@ -244,6 +243,8 @@ type SimpleWizardProps = {
     /** A second measurement from the same show, e.g. the questions behind an app score. */
     note?: string;
   }>;
+  /** Contestants in this show that could not finish; the show went on without them. */
+  droppedOut?: RunFailure[];
   onChatWithWinner: () => void;
   onOpenScorecard: () => void;
   /** Opens the shareable scorecard image for the winning model. */
@@ -313,7 +314,8 @@ export function SimpleWizard(props: SimpleWizardProps) {
   }, [props.notice]);
 
   const setupDone = ollamaReady;
-  const pickDone = shortlistedRows.length >= 1;
+  const minPicks = minPicksFor(props.round);
+  const pickDone = shortlistedRows.length >= minPicks;
   const {
     canContinue: downloadCanContinue,
     allInstalled: downloadAllInstalled,
@@ -348,8 +350,18 @@ export function SimpleWizard(props: SimpleWizardProps) {
   // A finished show, whether or not it crowned anyone. Rounds can end with
   // every contestant short of the pass line — and gating the last step on a
   // winner left that show with Meet the winner locked, forever, saying nothing.
-  const showEnded = props.runProgress?.phase === 'complete' || props.runProgress?.phase === 'failed';
-  const compareDone = !awaitingRun && !benchmarkActive && (Boolean(winner) || showEnded);
+  //
+  // A failed show is not a finished one. Counting it as ended sent a show that
+  // stopped before anyone finished — a one-model lineup, Ollama quitting, Stop
+  // pressed on the first model — to the Winner screen, where the host said "We
+  // have a match!" over "Run the show to crown your Top Match." It stays on
+  // Compare, which says why and offers to run it again. A show where some models
+  // failed and others finished completes, and goes to Winner.
+  // A show's own failure only: a single test failing in Advanced writes to the
+  // same progress, and must not lock this wizard.
+  const showFailed = props.runProgress?.phase === 'failed' && props.runProgress.mode === 'speed-date';
+  const showEnded = props.runProgress?.phase === 'complete';
+  const compareDone = !awaitingRun && !benchmarkActive && !showFailed && (Boolean(winner) || showEnded);
   const winnerDone = compareDone;
 
   // Not manually memoized: React Compiler handles this, and a hand-written
@@ -551,7 +563,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
       </header>
 
       <div className="sw-content">
-        <HostStrip step={step} round={props.round} />
+        <HostStrip step={step} round={props.round} stopped={showFailed} />
 
         {props.notice && (
           <div className="sw-notice" role="status" ref={noticeRef}>
@@ -575,7 +587,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
         {step === 'setup' && <SetupScreen {...props} />}
         {step === 'pick' && <PickScreen {...props} />}
         {step === 'download' && <DownloadScreen {...props} />}
-        {step === 'compare' && <CompareScreen {...props} />}
+        {step === 'compare' && <CompareScreen {...props} onRetry={startShow} />}
         {step === 'winner' && <WinnerScreen {...props} onRunAgain={() => setStep('pick')} />}
       </div>
 
@@ -598,8 +610,8 @@ export function SimpleWizard(props: SimpleWizardProps) {
           )}
         </div>
         {step === 'pick'
-          ? <LineupTray shortlistedRows={shortlistedRows} onRemove={props.onTogglePick} />
-          : <span className="sw-footer-hint">{footerHint(step, ollamaReady, shortlistedRows.length)}</span>}
+          ? <LineupTray shortlistedRows={shortlistedRows} onRemove={props.onTogglePick} minPicks={minPicks} />
+          : <span className="sw-footer-hint">{footerHint(step, ollamaReady, shortlistedRows.length, minPicks, showFailed)}</span>}
         <div className="sw-footer-right">
           {step !== 'winner' && (
             <button
@@ -607,7 +619,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
               className="sw-gold-pill"
               onClick={goNext}
               disabled={!stepComplete[step]}
-              title={stepComplete[step] ? undefined : nextBlockedHint(step, downloadBlockedReason, props.runProgress?.phase === 'failed')}
+              title={stepComplete[step] ? undefined : nextBlockedHint(step, downloadBlockedReason, showFailed, shortlistedRows.length, minPicks)}
             >
               {nextLabel[step]}
               <ArrowRight aria-hidden="true" />
@@ -690,7 +702,7 @@ function PreShowQuestion({
  * thing to notice, and the whole problem is that a beginner does not know what
  * to look for.
  */
-function HostStrip({ step, round }: { step: StepId; round?: 'chat' | 'code' | 'vision' | 'listening' }) {
+function HostStrip({ step, round, stopped }: { step: StepId; round?: 'chat' | 'code' | 'vision' | 'listening'; stopped?: boolean }) {
   const explaining = useExplaining();
   return (
     <div className={`sw-host-strip${explaining ? ' explaining' : ''}`}>
@@ -704,10 +716,13 @@ function HostStrip({ step, round }: { step: StepId; round?: 'chat' | 'code' | 'v
       <div className="sw-host-bubble">
         <span>The host</span>
         {/* The host announces the round that is actually running: a coding
-            job is not "the same questions". */}
-        {/* The host announces the round that is actually running: a coding
-            job is not "the same questions". */}
-        <p>{step === 'compare' && round && round !== 'chat' ? ROUND_LINES[round].host : HOST_COPY[step]}</p>
+            job is not "the same questions". A stopped show is not one to sit
+            back and enjoy. */}
+        <p>
+          {step === 'compare' && stopped
+            ? "That didn't go to plan. Here's what happened, and we can go again whenever you're ready."
+            : step === 'compare' && round && round !== 'chat' ? ROUND_LINES[round].host : HOST_COPY[step]}
+        </p>
         {explaining && (
           <div className="sw-host-explain" role="status">
             <span>{explaining.term}</span>
@@ -1289,10 +1304,15 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
   );
 }
 
-function LineupTray({ shortlistedRows, onRemove }: { shortlistedRows: ModelRow[]; onRemove: (row: ModelRow) => void }) {
+function LineupTray({ shortlistedRows, onRemove, minPicks }: { shortlistedRows: ModelRow[]; onRemove: (row: ModelRow) => void; minPicks: number }) {
+  // Why Next is disabled, where it can be read. It was only the disabled
+  // button's tooltip, which a keyboard cannot reach and a touch never shows.
+  const short = shortlistedRows.length > 0 ? pickShortHint(shortlistedRows.length, minPicks) : '';
   return (
     <div className="sw-lineup-tray">
-      <span className="sw-eyebrow">Your lineup · {shortlistedRows.length} of 5{shortlistedRows.length ? ' · click to remove' : ''}</span>
+      <span className="sw-eyebrow" aria-live="polite">
+        Your lineup · {shortlistedRows.length} of 5{short ? ` · ${short}` : shortlistedRows.length ? ' · click to remove' : ''}
+      </span>
       <div className="sw-lineup-slots">
         {Array.from({ length: 5 }).map((_, index) => {
           const row = shortlistedRows[index];
@@ -1392,7 +1412,7 @@ function getEtaLabel(pull?: PullProgressUpdate): string {
 // ---------------------------------------------------------------------------
 // Compare
 
-function CompareScreen({ shortlistedRows, runProgress, round: showRound }: SimpleWizardProps) {
+function CompareScreen({ shortlistedRows, runProgress, round: showRound, onRetry }: SimpleWizardProps & { onRetry: () => void }) {
   const failed = runProgress?.phase === 'failed';
   const activeModel = runProgress?.currentModel ?? '';
   const round = (runProgress?.questionIndex ?? 0) + 1;
@@ -1456,9 +1476,21 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound }: Simpl
     ? Math.round(answered.reduce((sum, value) => sum + value, 0) / answered.length)
     : null;
 
-  const remainingLabel = elapsedMs > 0 && totalQuestions > 0 && questionsDone >= 3
-    ? formatDuration((elapsedMs / questionsDone) * (totalQuestions - questionsDone)).replace('~', '')
-    : '';
+  // When the current question began, on the run's own clock, so a stall can be
+  // told from a slow run. Updated as the count moves, not read from the clock
+  // during render.
+  const [questionStartedAt, setQuestionStartedAt] = useState<{ done: number; at: number }>({ done: -1, at: 0 });
+  if (runClock && questionStartedAt.done !== questionsDone) setQuestionStartedAt({ done: questionsDone, at: runClock.now });
+  const judging = runProgress?.questionPhase === 'judging';
+  const timeLeft = showTimeLeft({
+    // Up to the last finished question, not now: the time since belongs to a
+    // question still running and says nothing yet about the rest.
+    elapsedMs: runClock && questionStartedAt.at ? questionStartedAt.at - runClock.startedAt : elapsedMs,
+    questionsDone,
+    totalQuestions,
+    sinceLastQuestionMs: runClock ? runClock.now - (questionStartedAt.at || runClock.startedAt) : 0,
+    judging,
+  });
 
   // What this question tests, from the question itself.
   //
@@ -1494,30 +1526,56 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound }: Simpl
             use keys intent, action, target") and was the hero text on a beginner
             screen. Lead with a plain-English round label; keep the exact prompt
             one click away for anyone who wants to check the methodology. */}
-        <div className="sw-compare-question">
-          {/* Naming the model makes the per-model round count read as intended
-              rather than as the run resetting. */}
-          <span className="sw-eyebrow">
-            {totalRounds > 0 && modelCount > 1
-              ? `Model ${modelNumber} of ${modelCount} · Round ${round} of ${totalRounds}`
-              : totalRounds > 0
-                ? `Round ${round} of ${totalRounds}`
-                : 'Getting started'}
-          </span>
-          <h2>{plainRoundLabel}</h2>
-          <button type="button" className="sw-link" onClick={() => setShowPrompt((v) => !v)}>
-            {showPrompt ? 'Hide the exact question' : 'See the exact question'}
-          </button>
-          {showPrompt && <p className="sw-compare-raw">&ldquo;{question}&rdquo;</p>}
-        </div>
+        {failed ? (
+          // A show nobody finished stays here and says why, with the way on.
+          // It used to move to Winner, where the host said "We have a match!"
+          // over "Run the show to crown your Top Match."
+          <div className="sw-compare-question sw-compare-stopped">
+            <span className="sw-eyebrow">{runProgress?.failureKind === 'stopped' ? 'You stopped the show' : 'The show stopped'}</span>
+            <h2>{runProgress?.message ?? 'The show stopped early.'}</h2>
+            {runProgress?.failureKind === 'too-few' ? (
+              <p className="sw-muted">Go Back and pick at least {MIN_CONTESTANTS} models that are on this PC.</p>
+            ) : (
+              <>
+                <p className="sw-muted">Your lineup is still picked, so you can run it again, or go Back and change it.</p>
+                <button type="button" className="sw-gold-pill" onClick={onRetry}>
+                  <RefreshCw aria-hidden="true" />
+                  Run the show again
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="sw-compare-question">
+            {/* Naming the model makes the per-model round count read as intended
+                rather than as the run resetting. */}
+            <span className="sw-eyebrow">
+              {totalRounds > 0 && modelCount > 1
+                ? `Model ${modelNumber} of ${modelCount} · Round ${round} of ${totalRounds}`
+                : totalRounds > 0
+                  ? `Round ${round} of ${totalRounds}`
+                  : 'Getting started'}
+            </span>
+            <h2>{plainRoundLabel}</h2>
+            <button type="button" className="sw-link" onClick={() => setShowPrompt((v) => !v)}>
+              {showPrompt ? 'Hide the exact question' : 'See the exact question'}
+            </button>
+            {showPrompt && <p className="sw-compare-raw">&ldquo;{question}&rdquo;</p>}
+          </div>
+        )}
         <div className="sw-podiums">
           {shortlistedRows.map((row, index) => {
-            const isActive = row.displayName === activeModel;
+            // Nobody is answering once the show has stopped.
+            const isActive = !failed && row.displayName === activeModel;
+            // Sat out: the show went on without it.
+            const dropped = runProgress?.failedModels?.find((f) => f.model === row.displayName);
             // A model is "done" once the run has moved past its index. Per-model
             // scores aren't tracked in progress, so only the just-finished model
             // (lastResult) shows a number; earlier ones read "Answered".
             const isDone = !isActive && index < completed;
-            const state = isActive ? 'answering' : isDone ? 'done' : 'waiting';
+            // The one answering when the show stopped had started; the rest had not.
+            const wasAnswering = failed && row.displayName === activeModel;
+            const state = dropped ? 'dropped' : isActive ? 'answering' : isDone ? 'done' : wasAnswering ? 'stopped' : 'waiting';
             const rowScore = runProgress?.lastResult?.model === row.displayName ? runProgress?.lastResult?.total : undefined;
             return (
               <div key={row.displayName} className={`sw-podium ${state}`}>
@@ -1527,9 +1585,20 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound }: Simpl
                     contestant to someone who does not know the notation. */}
                 <strong>{getFriendlyModelName(row.displayName)}</strong>
                 <span className={`sw-podium-pill ${state}`}>
-                  {state === 'answering' ? <><i /><i /><i /> Answering</> : state === 'done' ? '✓ Done' : 'Waiting'}
+                  {state === 'answering' ? (judging ? 'Being marked' : <><i /><i /><i /> Answering</>)
+                    : state === 'dropped' ? "✕ Couldn't finish"
+                      : state === 'done' ? '✓ Done'
+                        : state === 'stopped' ? 'Stopped partway'
+                          : failed ? 'Did not run' : 'Waiting'}
                 </span>
-                <em>{state === 'answering' ? 'Thinking it over…' : state === 'done' ? (rowScore != null ? `Scored ${rowScore}` : 'Answered') : 'Up next'}</em>
+                <em>
+                  {state === 'answering' ? (judging && runProgress?.questionJudge
+                    ? `${getFriendlyModelName(runProgress.questionJudge)} is marking it`
+                    : 'Thinking it over…')
+                    : state === 'dropped' ? 'Sat out the rest'
+                      : state === 'done' ? (rowScore != null ? `Scored ${rowScore}` : 'Answered')
+                        : failed ? '' : 'Up next'}
+                </em>
               </div>
             );
           })}
@@ -1543,7 +1612,7 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound }: Simpl
               {totalQuestions > 0
                 ? `${questionsDone} of ${totalQuestions} ${showRound && showRound !== 'chat' ? ROUND_LINES[showRound].unit : 'questions'}`
                 : `${overallPercent}%`}
-              {remainingLabel && <em className="sw-eta">· about {remainingLabel} left</em>}
+              {timeLeft && <em className="sw-eta">· {timeLeft}</em>}
             </span>
           </div>
           <div
@@ -1589,7 +1658,7 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound }: Simpl
 // ---------------------------------------------------------------------------
 // Winner
 
-function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
+function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, balance, round, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
   if (!winner) {
     // Two different nothings: a show that has not run, and a show where nobody
     // passed. The second one has a board to show and a reason to give.
@@ -1634,6 +1703,10 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, 
   }
   const shortName = winner.model.split(':')[0];
   const capName = shortName.charAt(0).toUpperCase() + shortName.slice(1);
+  // Only the models that finished were compared. "Out of the 3 you tested" was
+  // said of a show where one had dropped out and one never ran.
+  const finished = lineupResults?.length || shortlistedRows.length;
+  const tested = droppedOut?.length ? `${finished} that finished` : `${finished} you tested`;
   return (
     <div className="sw-winner">
       <div className="sw-confetti" aria-hidden="true">
@@ -1657,13 +1730,17 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, 
           {/* Say what the number means — a beginner has never seen either scale. */}
           <p className="sw-winner-why">
             {round === 'code'
-              ? <>Answered the same questions as the rest and built the best app of the {shortlistedRows.length} you tested, on your PC — judged on whether it runs and does what was asked.</>
+              ? <>Answered the same questions as the rest and built the best app of the {tested}, on your PC — judged on whether it runs and does what was asked.</>
               : round === 'vision'
-                ? <>Named the most of the test picture out of the {shortlistedRows.length} you tested, and did it fastest on your PC.</>
+                ? <>Named the most of the test picture out of the {tested}, and did it fastest on your PC.</>
                 : round === 'listening'
-                  ? <>Heard the test recording best out of the {shortlistedRows.length} you tested on your PC.</>
-                  : <>Best combination of speed, answer quality, and fit for your PC out of the {shortlistedRows.length} you
-                    tested — this is its <Explain id="match-score">Match Score</Explain>.</>}
+                  ? <>Heard the test recording best out of the {tested} on your PC.</>
+                  : droppedOut?.length && finished === 1
+                    // Nothing was compared, so it is not "the best of" anything.
+                    ? <>The only one of your picks that finished, so it had nothing to be compared with — this
+                      is its <Explain id="match-score">Match Score</Explain>.</>
+                    : <>Best combination of speed, answer quality, and fit for your PC out of the {tested}
+                      {' '}— this is its <Explain id="match-score">Match Score</Explain>.</>}
           </p>
           {/* Whatever it made is one click away. The app a coding round built is
               the whole point of having run one: a beginner can open it, click
@@ -1715,6 +1792,20 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, 
               : 'Every one of these ran the same questions on your PC.'} A close second may still
             suit you better — try chatting with either.
           </p>
+        </div>
+      )}
+      {/* Who sat out, and why. They are not ranked: they did not answer
+          everything, so there is nothing fair to rank them on. */}
+      {(droppedOut?.length ?? 0) > 0 && (
+        <div className="sw-scoreboard sw-dropped-out">
+          <h3 className="sw-eyebrow">Couldn't finish</h3>
+          <ul>
+            {droppedOut!.map((failure) => (
+              <li key={failure.model}>
+                <strong>{getFriendlyModelName(failure.model)}</strong> — {failure.reason}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

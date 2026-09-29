@@ -9,7 +9,7 @@ import type { UiMode } from '../lib/appConfig';
 import { balanceLabel } from '../lib/balance';
 import type { ChannelWinner } from '../lib/channelWinners';
 import type { RigPick } from '../lib/modelCatalog';
-import { formatGb, topPickLabel } from '../lib/format';
+import { formatGb, topPickPresentation } from '../lib/format';
 import { strongestSkill } from '../lib/shareCopy';
 import { WORKBENCHES, workbenchById, type Workbench, type WorkbenchId } from '../lib/workbench';
 import { BalanceFader } from './BalanceFader';
@@ -292,7 +292,10 @@ export function TopDeck({
           onUse={onUseTopPick}
           onOpen={onOpenChannel}
         />
-      ) : topPick ? (
+      ) : topPick ? (() => {
+        const shown = topPickPresentation(topPick.tone, topPick.score?.grade);
+        const fits = system.gpu.vramGb > 0 ? formatGb(system.gpu.vramGb) : 'this computer';
+        return (
         <section className={`top-deck-winner${topPick.score ? ' with-fader' : ''}`} aria-label="Current best model">
           <AvatarBust model={topPick.row.displayName} size="small" extraClass="top-deck-winner-avatar" />
           <div className="top-deck-winner-copy">
@@ -302,14 +305,16 @@ export function TopDeck({
                 Measured: the actions wanted 221px inside a 218px row, so the
                 label was allotted exactly 0 and rendered as "TOP...". */}
             <div className="top-deck-winner-head">
-              <span>{channel.id === 'chat' ? channel.shortLabel : topPickLabel(topPick.score?.grade)}</span>
+              <span>{channel.id === 'chat' && topPick.score ? channel.shortLabel : shown.label}</span>
               {/* What it is top *for*. getRigPick has always computed this
                   sentence as `reason` and nothing ever showed it: the pick is
                   the highest saved Match score among models that fit this
                   computer, which is a narrower claim than "best model" and the
                   one the badge was silently making. */}
               <em className="top-deck-winner-basis" title={topPick.reason}>
-                best score that fits {system.gpu.vramGb > 0 ? formatGb(system.gpu.vramGb) : 'this computer'}
+                {topPick.tone === 'scored' ? `best score that fits ${fits}`
+                  : topPick.tone === 'installed' ? `fits ${fits} · not tested yet`
+                    : `fits ${fits} · not downloaded`}
               </em>
             </div>
             <strong>{topPick.row.displayName}</strong>
@@ -326,24 +331,27 @@ export function TopDeck({
               )}
             </em>
               <div className="top-deck-winner-actions">
-                <button
-                  type="button"
-                  className="top-deck-use-model-btn"
-                  onClick={() => onUseTopPick(topPick.row.displayName)}
-                  title="Set this as your active model"
-                >
-                  Use this model
-                </button>
-                <button
-                  type="button"
-                  className="top-deck-test-again-btn"
-                  onClick={() => onTestAgain(topPick.row.displayName)}
-                  title={`Run the compatibility test on ${topPick.row.displayName} again`}
-                  aria-label={`Test ${topPick.row.displayName} again`}
-                >
-                  <RefreshCw aria-hidden="true" />
-                  Test again
-                </button>
+                {shown.canUse && (
+                  <button
+                    type="button"
+                    className="top-deck-use-model-btn"
+                    onClick={() => onUseTopPick(topPick.row.displayName)}
+                    title="Set this as your active model"
+                  >
+                    Use this model
+                  </button>
+                )}
+                {shown.testLabel && (
+                  <button
+                    type="button"
+                    className="top-deck-test-again-btn"
+                    onClick={() => onTestAgain(topPick.row.displayName)}
+                    title={`Run the compatibility test on ${topPick.row.displayName}${topPick.score ? ' again' : ''}`}
+                  >
+                    <RefreshCw aria-hidden="true" />
+                    {shown.testLabel}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="top-deck-clear-btn"
@@ -367,7 +375,8 @@ export function TopDeck({
           </div>
           {topPick.score && fader}
         </section>
-      ) : (
+        );
+      })() : (
         <section className="top-deck-winner empty" aria-label="No winner yet">
           <Trophy aria-hidden="true" />
           <div>

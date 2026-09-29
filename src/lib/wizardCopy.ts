@@ -9,6 +9,9 @@
  * running" over a frozen screen that offered no way back.
  */
 
+import { MIN_CONTESTANTS } from './downloadStatus.ts';
+import { formatDuration } from './runEstimates.ts';
+
 export type StepId = 'setup' | 'pick' | 'download' | 'compare' | 'winner';
 
 export const STEPS: StepId[] = ['setup', 'pick', 'download', 'compare', 'winner'];
@@ -21,30 +24,50 @@ export const STEP_LABELS: Record<StepId, string> = {
   winner: 'Winner',
 };
 
-export function footerHint(step: StepId, ready: boolean, pickCount: number): string {
+/**
+ * How many contestants a round needs before the show can start.
+ *
+ * The chat and coding rounds are Speed Dating, which compares, so they need
+ * two. Pick allowed one, and a one-model lineup failed the instant the show
+ * began and landed on a Winner screen crowning nobody, with the reason never
+ * shown — reachable by anyone with a single model installed. The picture and
+ * listening rounds grade each model against a check, so one is enough.
+ */
+export function minPicksFor(round: 'chat' | 'code' | 'vision' | 'listening' | undefined): number {
+  return round === 'vision' || round === 'listening' ? 1 : MIN_CONTESTANTS;
+}
+
+/** What Pick says while the lineup is short. Empty once it is long enough. */
+export function pickShortHint(pickCount: number, minPicks: number): string {
+  if (pickCount >= minPicks) return '';
+  if (pickCount === 0) return `Pick at least ${minPicks} to continue`;
+  return `Pick ${minPicks - pickCount} more — the show compares them`;
+}
+
+export function footerHint(step: StepId, ready: boolean, pickCount: number, minPicks = 1, runFailed = false): string {
   switch (step) {
     // Only claim readiness once the check has actually passed. Before that this
     // line congratulated the user for a scan that hadn't run — and once it has,
     // the Setup screen already says so, so the footer stays quiet either way.
     case 'setup': return ready ? '' : 'One click checks Ollama and your hardware — nothing is installed or changed';
     case 'download': return 'Heads up: the show works your GPU, CPU, and fans hard until a winner is crowned — close heavy apps first';
-    case 'compare': return 'Scores appear live — the winner is crowned after the last round';
+    case 'compare': return runFailed ? '' : 'Scores appear live — the winner is crowned after the last round';
     case 'winner': return 'RigMatch remembers your Top Match — find it any time in the header';
-    default: return pickCount ? '' : 'Pick at least 1 to continue';
+    default: return pickShortHint(pickCount, minPicks);
   }
 }
 
-export function nextBlockedHint(step: StepId, downloadReason?: string, runFailed = false): string {
+export function nextBlockedHint(step: StepId, downloadReason?: string, runFailed = false, pickCount = 0, minPicks = 1): string {
   switch (step) {
     case 'setup': return 'Check your computer first';
-    case 'pick': return 'Pick at least 1 to continue';
+    case 'pick': return pickShortHint(pickCount, minPicks) || 'Pick at least 1 to continue';
     // "Waiting for downloads to finish" was shown even when every download had
     // already stopped and one had failed, which was simply untrue.
     case 'download': return downloadReason || 'Waiting for downloads to finish';
     // Likewise: a run that died is not a run that is still going. Saying so
     // stranded beginners on a frozen Compare screen with a disabled Next.
     case 'compare': return runFailed
-      ? 'The show stopped early — go Back to try again'
+      ? 'The show stopped early — try again, or go back and change the lineup'
       : 'The show is still running';
     default: return '';
   }
@@ -98,4 +121,33 @@ export function showAnnouncement(state: {
     ? `${state.answering} is answering${state.modelCount > 1 ? `, model ${state.modelNumber} of ${state.modelCount}` : ''}.`
     : '';
   return [before, now].filter(Boolean).join(' ');
+}
+
+/**
+ * What the show says about the time left.
+ *
+ * The estimate was the whole elapsed time over the questions finished, so a
+ * question that stalled — a judge that stopped answering took two minutes over
+ * one — pushed it up every second: "about 5s left" became "about 4 min left"
+ * while nothing on screen moved. It is now the time the finished questions
+ * took, so it holds still during any one question, and once the current one
+ * has run well past the average it says so instead of guessing.
+ */
+export function showTimeLeft(state: {
+  /** How long the finished questions took, up to the last one finishing. */
+  elapsedMs: number;
+  questionsDone: number;
+  totalQuestions: number;
+  /** How long the current question has been going. */
+  sinceLastQuestionMs: number;
+  /** The judge, not the contestant, is working right now. */
+  judging: boolean;
+}): string {
+  const { elapsedMs, questionsDone, totalQuestions, sinceLastQuestionMs, judging } = state;
+  if (elapsedMs <= 0 || totalQuestions <= 0 || questionsDone < 3) return '';
+  const average = elapsedMs / questionsDone;
+  if (sinceLastQuestionMs > Math.max(3 * average, 45000)) {
+    return judging ? 'the judge is taking a while to mark this one' : 'this question is taking a while';
+  }
+  return `about ${formatDuration(average * (totalQuestions - questionsDone)).replace('~', '')} left`;
 }

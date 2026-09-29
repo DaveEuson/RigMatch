@@ -11,6 +11,7 @@ import type {
   OllamaModel,
   OllamaStatus,
   PullProgressUpdate,
+  RunFailure,
   SystemProfile,
   TestedModelScore,
 } from '../types';
@@ -37,6 +38,8 @@ export type ModelQuickFilterId = 'all' | 'installed' | 'fits-vram' | 'scored' | 
 export type ListTestResult = {
   winner: string;
   results: TestedModelScore[];
+  /** Contestants that could not finish; the show went on without them. */
+  failures?: RunFailure[];
 };
 export type ModelProfile = {
   agentName: string;
@@ -265,7 +268,9 @@ export function isListTestResult(value: unknown): value is ListTestResult {
   return (
     typeof value.winner === 'string' &&
     Array.isArray(value.results) &&
-    value.results.every(isTestedModelScore)
+    value.results.every(isTestedModelScore) &&
+    (value.failures === undefined || (Array.isArray(value.failures)
+      && value.failures.every((f) => isRecord(f) && typeof f.model === 'string' && typeof f.reason === 'string')))
   );
 }
 
@@ -1060,8 +1065,11 @@ export function getCudaDetail(cuda: SystemProfile['cuda']) {
   const latest = cuda.latestToolkitVersion ? `latest ${cuda.latestToolkitVersion}` : 'latest unknown';
   const driver = cuda.driverCudaVersion ? `driver supports ${cuda.driverCudaVersion}` : 'driver CUDA unknown';
 
+  // "Models will run on CPU" was said to every machine without an NVIDIA card,
+  // which includes every Apple silicon Mac (Ollama runs on the GPU through
+  // Metal) and AMD cards Ollama supports through ROCm.
   if (cuda.status === 'not-nvidia') {
-    return 'CUDA acceleration applies to NVIDIA GPUs. Models will run on CPU.';
+    return "CUDA is only for NVIDIA graphics. Ollama uses this computer's own GPU support where it has one: Metal on Apple silicon, ROCm on supported AMD cards.";
   }
 
   if (cuda.status === 'current') {
@@ -1077,7 +1085,13 @@ export function getCudaDetail(cuda: SystemProfile['cuda']) {
     return `${driver}. Ollama uses the GPU driver directly — models run with full GPU acceleration. The CUDA Toolkit is only needed if you compile CUDA programs.`;
   }
 
-  return cuda.error || `${driver}; ${latest}.`;
+  // The raw command failure ("Command failed: nvidia-smi libnvrm_gpu.so:
+  // NvRmGpuLibOpen failed, error=4 …") was printed here as-is, on every Jetson,
+  // which has no nvidia-smi. Say what is and is not known instead.
+  if (!cuda.detected) {
+    return "RigMatch couldn't read the CUDA version on this computer, so it can't say whether the graphics card is set up for it.";
+  }
+  return `${driver}; ${latest}.`;
 }
 
 export function getSelectedContestantBlurb(

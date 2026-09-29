@@ -3527,6 +3527,9 @@ async function runBenchmarkInner(request = {}, sender, signal) {
     }
   };
 
+  // Set once the judge times out or cannot be reached; see below.
+  let judgeGaveUp = false;
+
   for (const [promptIndex, prompt] of benchmarkPrompts.entries()) {
     throwIfCanceled();
     const runs = [];
@@ -3622,15 +3625,51 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       // Judge grades the representative (first-run) answer; later runs reuse it.
       // On any judge failure, promptJudgeScore stays null and we use the heuristic.
       const autoJudgeThis = autoJudgeUnmarkable && !heuristicCanGrade(prompt.type, prompt.prompt);
-      if ((useJudge || autoJudgeThis) && runIndex === 0) {
+      if ((useJudge || autoJudgeThis) && runIndex === 0 && !judgeGaveUp) {
+        const judgeName = useJudge ? judgeModel : autoJudgeModel;
+        // Said while it happens. Marking an answer takes the judge model's own
+        // time, and the contestant was shown "Thinking it over…" throughout.
+        sendProgress({
+          phase: 'judging',
+          promptIndex,
+          promptId: prompt.id,
+          promptLabel: prompt.label,
+          promptType: prompt.type,
+          prompt: prompt.prompt,
+          judge: judgeName,
+          message: `${judgeName} is marking ${model}'s answer.`,
+        });
+        let judgeFailure = null;
         const verdict = await scoreQualityWithJudge({
           prompt,
           response: responseText,
-          generate: (judgePrompt) => (useJudge && judgeProvider === 'openrouter'
-            ? openRouterGenerateText(judgeApiKey, judgeModel, judgePrompt, 200, signal)
-            : runJudgeGenerate(baseUrl, useJudge ? judgeModel : autoJudgeModel, judgePrompt, signal)),
+          generate: async (judgePrompt) => {
+            try {
+              return await (useJudge && judgeProvider === 'openrouter'
+                ? openRouterGenerateText(judgeApiKey, judgeModel, judgePrompt, 200, signal)
+                : runJudgeGenerate(baseUrl, judgeName, judgePrompt, signal));
+            } catch (error) {
+              judgeFailure = error;
+              throw error;
+            }
+          },
         });
         promptJudgeScore = verdict ? verdict.score : null;
+        // A judge that timed out or could not be reached will do the same on
+        // every answer after this one, at up to two minutes each: a hung judge
+        // held a question for 120s while the time-left estimate climbed, and
+        // then did it again on the next. The rest of this model's answers are
+        // marked without it. An unreadable verdict is one bad answer, not a dead
+        // judge, so it does not count; nor does the user pressing Stop.
+        if (judgeFailure && !signal?.aborted) {
+          judgeGaveUp = true;
+          await appendAppLog({
+            level: 'warn',
+            source: 'benchmark',
+            message: `Judge ${judgeName} stopped answering; the rest of ${model}'s answers are marked without it`,
+            details: { model, judge: judgeName, promptId: prompt.id, error: serializeError(judgeFailure) },
+          });
+        }
         // The judge has already left (keep_alive 0 in runJudgeGenerate), but
         // loading it can push this model out of GPU memory, and a model reloaded
         // while the judge still held the GPU comes back split onto the CPU. Load
@@ -3741,6 +3780,13 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         ? `${prompt.label} returned no visible answer. ${completedPrompt.diagnostic}`
         : `${prompt.label} scored ${completedPrompt.sobrietyScore}.`,
     });
+  }
+
+  // Every answer came back empty. Speed and fit still added up to a Match of
+  // about 27, so a model that said nothing was ranked, and on "Speed first"
+  // could place above one that answered slowly. It gave nothing to score.
+  if (rawRuns.length > 0 && rawRuns.every((run) => !String(run.response || '').trim())) {
+    throw new Error(`${model} returned an empty answer to every question, so there was nothing to score.`);
   }
 
   const avgTokens = average(promptResults.map((result) => result.tokensPerSecond));

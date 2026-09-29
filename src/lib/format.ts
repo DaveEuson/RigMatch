@@ -22,6 +22,25 @@ export function gradeFor(score: number) {
   return 'D';
 }
 
+/**
+ * What the header calls its pick, and which of its buttons can work.
+ *
+ * With nothing scored, the header still showed a pick — the best installed
+ * model that fits, or failing that the best download — under "Best Tested",
+ * with "Test again" and "Use this model". A Jetson with no scorecards read
+ * "BEST TESTED mistral:7b". For a model not yet downloaded both buttons were
+ * dead: "Test again" only set a status line asking for an installed model.
+ */
+export function topPickPresentation(tone: 'scored' | 'installed' | 'download', grade: string | undefined): {
+  label: string;
+  testLabel: string | null;
+  canUse: boolean;
+} {
+  if (tone === 'scored') return { label: topPickLabel(grade), testLabel: 'Test again', canUse: true };
+  if (tone === 'installed') return { label: 'Untested pick', testLabel: 'Test it', canUse: true };
+  return { label: 'Worth downloading', testLabel: null, canUse: false };
+}
+
 export function topPickLabel(grade: string | undefined): string {
   if (!grade) return 'Best Tested';
   if (grade.startsWith('S') || grade.startsWith('A')) return 'Top Match';

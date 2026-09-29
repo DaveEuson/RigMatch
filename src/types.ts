@@ -282,7 +282,7 @@ export type TestedModelScore = {
 export type BenchmarkProgressUpdate = {
   id: string;
   model: string;
-  phase: 'started' | 'prompt-start' | 'prompt-run' | 'prompt-token' | 'prompt-complete' | 'complete' | 'failed';
+  phase: 'started' | 'prompt-start' | 'prompt-run' | 'prompt-token' | 'judging' | 'prompt-complete' | 'complete' | 'failed';
   promptIndex: number;
   promptTotal: number;
   runIndex?: number;
@@ -300,6 +300,8 @@ export type BenchmarkProgressUpdate = {
   elapsedMs?: number;
   tokensPerSecond?: number;
   sobrietyScore?: number;
+  /** The model marking the answer, while phase is 'judging'. */
+  judge?: string;
   message?: string;
 };
 
@@ -764,11 +766,24 @@ export type RunProgress = {
   questionType?: BenchmarkQuestionType;
   questionPrompt?: string;
   questionPhase?: BenchmarkProgressUpdate['phase'];
+  /** Who is marking the current answer, while questionPhase is 'judging'. */
+  questionJudge?: string;
   questionRunIndex?: number;
   questionRunTotal?: number;
   completedQuestions?: number;
   questionScores?: Record<string, number>;
+  /**
+   * Contestants that could not finish, with why in plain words. A show goes on
+   * without them rather than stopping, so the screens have to be able to say
+   * who dropped out.
+   */
+  failedModels?: RunFailure[];
+  /** Why a failed show stopped, so the screen can offer the right way on. */
+  failureKind?: RunFailureKind;
 };
+
+export type RunFailureKind = 'too-few' | 'stopped' | 'unreachable' | 'crashed' | 'timeout' | 'no-answers' | 'other';
+export type RunFailure = { model: string; kind: RunFailureKind; reason: string };
 
 /** How the Speed Dating transcript is grouped. */
 export type TranscriptViewMode = 'by-model' | 'by-question';
