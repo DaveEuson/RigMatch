@@ -73,6 +73,10 @@ jobs:
         uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
           workspaces: rigmatch-chat/src-tauri
+          # One cache per runner image. The cache is keyed by OS family, so the
+          # 22.04 builds restored a cargo-audit and build scripts compiled on
+          # 24.04, which need glibc 2.39 and cannot run there.
+          key: ${{ matrix.os }}
 
       - name: Install Linux system dependencies
         if: matrix.platform == 'linux'

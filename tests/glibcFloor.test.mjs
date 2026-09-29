@@ -39,6 +39,11 @@ test('the floor is Ubuntu 22.04, and both Linux builds run on it', () => {
   assert.match(release, /- os: ubuntu-22\.04-arm\n\s+platform: linux\n\s+artifact: linux-arm64/);
   assert.doesNotMatch(release, /- os: ubuntu-(?:latest|24\.04[^\n]*)\n\s+platform: linux/, 'a Linux build is back on a newer Ubuntu');
   assert.match(release, /run: node scripts\/check-glibc-floor\.mjs/);
+  // A cache shared with a newer image hands the build tools compiled for it.
+  assert.match(release, /workspaces: rigmatch-chat\/src-tauri
+(?:\s+#[^
+]*
+)*\s+key: \$\{\{ matrix\.os \}\}/);
 });
 
 test('the install smoke checks the oldest supported Ubuntu actually loads the binaries', () => {
