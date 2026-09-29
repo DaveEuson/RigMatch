@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -16,8 +16,8 @@ import {
   Lock,
   Mic,
   MessageSquare,
+  Music,
   PenLine,
-  Plus,
   RefreshCw,
   ScanLine,
   Share2,
@@ -47,11 +47,16 @@ import { useLabResults } from '../hooks/useLabResults';
 import { BalanceFader } from './BalanceFader';
 import { balanceLabel } from '../lib/balance';
 import { useDialog } from '../lib/useDialog';
+import { ShowMarquee } from './ShowMarquee';
+import { setShowExtras, useShowExtras } from '../lib/showExtras';
+import { useShowTheme, type ShowMusicState } from '../hooks/useShowTheme';
 import { workbenchById } from '../lib/workbench';
 import rigGreenroom from '../assets/robot-rig-greenroom.webp';
 import speedDateShow from '../assets/robot-speed-date-show.webp';
 import romanceHero from '../assets/robot-romance-hero.webp';
 import modelTestArt from '../assets/robot-model-test.webp';
+import contestantWall from '../assets/robot-contestant-wall.webp';
+import ceremonyStage from '../assets/robot-scorecard-ceremony.webp';
 import brandIcon from '../assets/rigmatch-brand-icon.svg';
 import './SimpleWizard.css';
 
@@ -402,6 +407,17 @@ export function SimpleWizard(props: SimpleWizardProps) {
   // step alone, a finished or failed run left Compare with no Back button at
   // all — the one screen a beginner could get stranded on.
   const showRunning = step === 'compare' && benchmarkActive;
+  // The theme song, if it is on: it loops while the contestants answer, and
+  // the show's ending picks the sting — ta-da for a winner, a sad trombone for
+  // a show that stopped or where nobody passed. A listening round is for the
+  // ears, so nothing plays over it.
+  const extras = useShowExtras();
+  const musicState: ShowMusicState = showRunning ? 'running'
+    : step === 'compare' && showFailed ? 'flopped'
+      : step === 'winner' && winner ? 'crowned'
+        : step === 'winner' && (props.lineupResults?.length ?? 0) > 0 ? 'flopped'
+          : 'idle';
+  useShowTheme(musicState, extras.music && props.round !== 'listening');
   const stepIndex = STEPS.indexOf(step);
   // Compare is only "complete" once the show has actually finished — leaving it
   // true mid-run let a beginner click through to a winner crowned on partial data.
@@ -563,7 +579,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
       </header>
 
       <div className="sw-content">
-        <HostStrip step={step} round={props.round} stopped={showFailed} />
+        <HostStrip step={step} round={props.round} stopped={showFailed} aside={<ShowExtrasSwitches />} />
 
         {props.notice && (
           <div className="sw-notice" role="status" ref={noticeRef}>
@@ -702,7 +718,7 @@ function PreShowQuestion({
  * thing to notice, and the whole problem is that a beginner does not know what
  * to look for.
  */
-function HostStrip({ step, round, stopped }: { step: StepId; round?: 'chat' | 'code' | 'vision' | 'listening'; stopped?: boolean }) {
+function HostStrip({ step, round, stopped, aside }: { step: StepId; round?: 'chat' | 'code' | 'vision' | 'listening'; stopped?: boolean; aside?: ReactNode }) {
   const explaining = useExplaining();
   return (
     <div className={`sw-host-strip${explaining ? ' explaining' : ''}`}>
@@ -734,8 +750,53 @@ function HostStrip({ step, round, stopped }: { step: StepId; round?: 'chat' | 'c
           </div>
         )}
       </div>
+      {aside}
     </div>
   );
+}
+
+/**
+ * The studio's two optional extras, both off until someone turns them on. They
+ * sit beside the host on every step, so the effects can be on before Pick (the
+ * hearts) and the music before the show starts. Toggle buttons with a fixed
+ * name: the pressed state says whether each is on.
+ */
+function ShowExtrasSwitches() {
+  const extras = useShowExtras();
+  return (
+    <div className="sw-extras" role="group" aria-label="Studio extras">
+      <span className="sw-eyebrow">Studio extras</span>
+      <button
+        type="button"
+        className="sw-extra"
+        aria-pressed={extras.music}
+        onClick={() => setShowExtras({ music: !extras.music })}
+      >
+        <i className="sw-extra-bulb" aria-hidden="true" />
+        <Music aria-hidden="true" />
+        Theme music
+      </button>
+      <button
+        type="button"
+        className="sw-extra"
+        aria-pressed={extras.effects}
+        onClick={() => setShowExtras({ effects: !extras.effects })}
+      >
+        <i className="sw-extra-bulb" aria-hidden="true" />
+        <Sparkles aria-hidden="true" />
+        Show effects
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The studio's APPLAUSE sign: unlit scenery until a contestant finishes a
+ * turn, then it blinks. Never the only way anything is said — the status line
+ * announces each finish — so it is hidden from assistive technology.
+ */
+function ApplauseSign({ lit }: { lit: boolean }) {
+  return <div className={lit ? 'sw-applause lit' : 'sw-applause'} aria-hidden="true">Applause</div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1116,6 +1177,9 @@ function PickScreen({
         />
       ) : filtered.length === 0 ? (
         <div className="sw-pick-empty">
+          {/* An empty wall is where the picture can go: there are no cards
+              here for it to push down. */}
+          <div className="sw-pick-empty-art" style={{ backgroundImage: `url(${contestantWall})` }} aria-hidden="true" />
           {dream === 'image' || dream === 'video' ? (
             // Honest rather than empty: these models exist, they just are not
             // Speed Dating contestants — they render instead of chatting.
@@ -1190,8 +1254,21 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
    */
   const origin = getModelOrigin(model.row.displayName);
   const countryCode = origin.country ? getCountryCode(origin.country) : null;
+  // Show effects: a few hearts float up from the button as a pick lands. Keyed
+  // by a counter so each pick plays its own burst.
+  const { effects } = useShowExtras();
+  const [hearts, setHearts] = useState(0);
+  const toggle = () => {
+    if (effects && !picked) setHearts((n) => n + 1);
+    onToggle();
+  };
   return (
     <article className={`sw-card${picked ? ' picked' : ''}${model.row.installed ? ' installed' : ''}`}>
+      {effects && hearts > 0 && (
+        <span key={hearts} className="sw-heart-burst" aria-hidden="true">
+          <i>♥</i><i>♥</i><i>♥</i><i>♥</i><i>♥</i>
+        </span>
+      )}
       {picked && <span className="sw-card-pick-badge"><Heart aria-hidden="true" />Pick {pickIndex}</span>}
       {!picked && model.row.installed && (
         /* Downloaded already. It was a gray tick beside the model id, reading
@@ -1287,7 +1364,7 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
         <button
           type="button"
           className={picked ? 'sw-card-btn picked' : 'sw-card-btn'}
-          onClick={onToggle}
+          onClick={toggle}
         >
           {/* Nine buttons all named "♥ Pick" told a screen reader nothing about
               which model each one takes. The model's name is added out of sight,
@@ -1329,7 +1406,7 @@ function LineupTray({ shortlistedRows, onRemove, minPicks }: { shortlistedRows: 
               <span className="sw-lineup-remove" aria-hidden="true"><X /></span>
             </button>
           ) : (
-            <span key={`empty-${index}`} className="sw-lineup-slot empty" aria-hidden="true"><Plus /></span>
+            <span key={`empty-${index}`} className="sw-lineup-slot empty" aria-hidden="true"><Heart /></span>
           );
         })}
       </div>
@@ -1412,7 +1489,7 @@ function getEtaLabel(pull?: PullProgressUpdate): string {
 // ---------------------------------------------------------------------------
 // Compare
 
-function CompareScreen({ shortlistedRows, runProgress, round: showRound, onRetry }: SimpleWizardProps & { onRetry: () => void }) {
+function CompareScreen({ shortlistedRows, runProgress, round: showRound, benchmarkActive, onRetry }: SimpleWizardProps & { onRetry: () => void }) {
   const failed = runProgress?.phase === 'failed';
   const activeModel = runProgress?.currentModel ?? '';
   const round = (runProgress?.questionIndex ?? 0) + 1;
@@ -1425,6 +1502,21 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, onRetry
     : runProgress?.questionPrompt ?? 'The host is lining up the next question…';
   const completed = runProgress?.completed ?? 0;
   const [showPrompt, setShowPrompt] = useState(false);
+
+  const extras = useShowExtras();
+  // The bulbs dance to the theme song while it plays.
+  const onTheBeat = extras.music && showRound !== 'listening' && Boolean(benchmarkActive) && !failed;
+  // The APPLAUSE sign lights each time a contestant finishes a turn.
+  const [applause, setApplause] = useState(false);
+  const finishedBefore = useRef(completed);
+  useEffect(() => {
+    const finishedOne = completed > finishedBefore.current;
+    finishedBefore.current = completed;
+    if (!finishedOne || !extras.effects) return undefined;
+    setApplause(true);
+    const timer = setTimeout(() => setApplause(false), 2400);
+    return () => clearTimeout(timer);
+  }, [completed, extras.effects]);
 
   // Models run one at a time, each answering every question, so "Round 4 of 10"
   // is the CURRENT model's progress — it resets to 1 each time a new model
@@ -1517,92 +1609,104 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, onRetry
   });
 
   return (
-    <div className="sw-compare" style={{ backgroundImage: `url(${speedDateShow})` }}>
+    <div className="sw-compare">
       {/* Always rendered, so a change is announced: a live region that appears
           already holding its text is not reliably read. */}
       <p className="sr-only" role="status">{announcement}</p>
-      <div className="sw-compare-inner">
-        {/* The raw benchmark prompt is dense jargon ("Return only valid JSON…
-            use keys intent, action, target") and was the hero text on a beginner
-            screen. Lead with a plain-English round label; keep the exact prompt
-            one click away for anyone who wants to check the methodology. */}
-        {failed ? (
-          // A show nobody finished stays here and says why, with the way on.
-          // It used to move to Winner, where the host said "We have a match!"
-          // over "Run the show to crown your Top Match."
-          <div className="sw-compare-question sw-compare-stopped">
-            <span className="sw-eyebrow">{runProgress?.failureKind === 'stopped' ? 'You stopped the show' : 'The show stopped'}</span>
-            <h2>{runProgress?.message ?? 'The show stopped early.'}</h2>
-            {runProgress?.failureKind === 'too-few' ? (
-              <p className="sw-muted">Go Back and pick at least {MIN_CONTESTANTS} models that are on this PC.</p>
-            ) : (
-              <>
-                <p className="sw-muted">Your lineup is still picked, so you can run it again, or go Back and change it.</p>
-                <button type="button" className="sw-gold-pill" onClick={onRetry}>
-                  <RefreshCw aria-hidden="true" />
-                  Run the show again
-                </button>
-              </>
-            )}
+      {/* The stage: the show's photo, its bulbs, and a spotlight on whoever is
+          answering. Only the question and the contestants stand on it — the
+          progress and the scores below are data, and data is not lit. The
+          photo was here all along, painted over by an opaque fill. */}
+      <div className={failed ? 'sw-stage lights-down' : 'sw-stage'}>
+        <div className="sw-stage-bg" style={{ backgroundImage: `url(${speedDateShow})` }} aria-hidden="true" />
+        <ShowMarquee dark={failed} framed beat={onTheBeat} />
+        {extras.effects && <ApplauseSign lit={applause} />}
+        <div className="sw-compare-inner">
+          {/* The raw benchmark prompt is dense jargon ("Return only valid JSON…
+              use keys intent, action, target") and was the hero text on a beginner
+              screen. Lead with a plain-English round label; keep the exact prompt
+              one click away for anyone who wants to check the methodology. */}
+          {failed ? (
+            // A show nobody finished stays here and says why, with the way on.
+            // It used to move to Winner, where the host said "We have a match!"
+            // over "Run the show to crown your Top Match."
+            <div className="sw-compare-question sw-compare-stopped">
+              <span className="sw-eyebrow">{runProgress?.failureKind === 'stopped' ? 'You stopped the show' : 'The show stopped'}</span>
+              <h2>{runProgress?.message ?? 'The show stopped early.'}</h2>
+              {runProgress?.failureKind === 'too-few' ? (
+                <p className="sw-muted">Go Back and pick at least {MIN_CONTESTANTS} models that are on this PC.</p>
+              ) : (
+                <>
+                  <p className="sw-muted">Your lineup is still picked, so you can run it again, or go Back and change it.</p>
+                  <button type="button" className="sw-gold-pill" onClick={onRetry}>
+                    <RefreshCw aria-hidden="true" />
+                    Run the show again
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="sw-compare-question">
+              {/* Naming the model makes the per-model round count read as intended
+                  rather than as the run resetting. */}
+              <span className="sw-eyebrow">
+                {totalRounds > 0 && modelCount > 1
+                  ? `Model ${modelNumber} of ${modelCount} · Round ${round} of ${totalRounds}`
+                  : totalRounds > 0
+                    ? `Round ${round} of ${totalRounds}`
+                    : 'Getting started'}
+              </span>
+              <h2>{plainRoundLabel}</h2>
+              <button type="button" className="sw-link" onClick={() => setShowPrompt((v) => !v)}>
+                {showPrompt ? 'Hide the exact question' : 'See the exact question'}
+              </button>
+              {showPrompt && <p className="sw-compare-raw">&ldquo;{question}&rdquo;</p>}
+            </div>
+          )}
+          {/* Show effects: the contestants walk on one after another. */}
+          <div className={extras.effects ? 'sw-podiums walk-on' : 'sw-podiums'}>
+            {shortlistedRows.map((row, index) => {
+              // Nobody is answering once the show has stopped.
+              const isActive = !failed && row.displayName === activeModel;
+              // Sat out: the show went on without it.
+              const dropped = runProgress?.failedModels?.find((f) => f.model === row.displayName);
+              // A model is "done" once the run has moved past its index. Per-model
+              // scores aren't tracked in progress, so only the just-finished model
+              // (lastResult) shows a number; earlier ones read "Answered".
+              const isDone = !isActive && index < completed;
+              // The one answering when the show stopped had started; the rest had not.
+              const wasAnswering = failed && row.displayName === activeModel;
+              const state = dropped ? 'dropped' : isActive ? 'answering' : isDone ? 'done' : wasAnswering ? 'stopped' : 'waiting';
+              const rowScore = runProgress?.lastResult?.model === row.displayName ? runProgress?.lastResult?.total : undefined;
+              return (
+                <div key={row.displayName} className={`sw-podium ${state}`} style={{ '--i': index } as CSSProperties}>
+                  <img src={getModelAvatarSrc(row.displayName)} alt="" />
+                  {/* The name they picked, not the raw tag. Pick shows
+                      "Qwen2.5"; showing "qwen2.5:7b" here reads as a different
+                      contestant to someone who does not know the notation. */}
+                  <strong>{getFriendlyModelName(row.displayName)}</strong>
+                  <span className={`sw-podium-pill ${state}`}>
+                    {state === 'answering' ? (judging ? 'Being marked' : <><i /><i /><i /> Answering</>)
+                      : state === 'dropped' ? "✕ Couldn't finish"
+                        : state === 'done' ? '✓ Done'
+                          : state === 'stopped' ? 'Stopped partway'
+                            : failed ? 'Did not run' : 'Waiting'}
+                  </span>
+                  <em>
+                    {state === 'answering' ? (judging && runProgress?.questionJudge
+                      ? `${getFriendlyModelName(runProgress.questionJudge)} is marking it`
+                      : 'Thinking it over…')
+                      : state === 'dropped' ? 'Sat out the rest'
+                        : state === 'done' ? (rowScore != null ? `Scored ${rowScore}` : 'Answered')
+                          : failed ? '' : 'Up next'}
+                  </em>
+                </div>
+              );
+            })}
           </div>
-        ) : (
-          <div className="sw-compare-question">
-            {/* Naming the model makes the per-model round count read as intended
-                rather than as the run resetting. */}
-            <span className="sw-eyebrow">
-              {totalRounds > 0 && modelCount > 1
-                ? `Model ${modelNumber} of ${modelCount} · Round ${round} of ${totalRounds}`
-                : totalRounds > 0
-                  ? `Round ${round} of ${totalRounds}`
-                  : 'Getting started'}
-            </span>
-            <h2>{plainRoundLabel}</h2>
-            <button type="button" className="sw-link" onClick={() => setShowPrompt((v) => !v)}>
-              {showPrompt ? 'Hide the exact question' : 'See the exact question'}
-            </button>
-            {showPrompt && <p className="sw-compare-raw">&ldquo;{question}&rdquo;</p>}
-          </div>
-        )}
-        <div className="sw-podiums">
-          {shortlistedRows.map((row, index) => {
-            // Nobody is answering once the show has stopped.
-            const isActive = !failed && row.displayName === activeModel;
-            // Sat out: the show went on without it.
-            const dropped = runProgress?.failedModels?.find((f) => f.model === row.displayName);
-            // A model is "done" once the run has moved past its index. Per-model
-            // scores aren't tracked in progress, so only the just-finished model
-            // (lastResult) shows a number; earlier ones read "Answered".
-            const isDone = !isActive && index < completed;
-            // The one answering when the show stopped had started; the rest had not.
-            const wasAnswering = failed && row.displayName === activeModel;
-            const state = dropped ? 'dropped' : isActive ? 'answering' : isDone ? 'done' : wasAnswering ? 'stopped' : 'waiting';
-            const rowScore = runProgress?.lastResult?.model === row.displayName ? runProgress?.lastResult?.total : undefined;
-            return (
-              <div key={row.displayName} className={`sw-podium ${state}`}>
-                <img src={getModelAvatarSrc(row.displayName)} alt="" />
-                {/* The name they picked, not the raw tag. Pick shows
-                    "Qwen2.5"; showing "qwen2.5:7b" here reads as a different
-                    contestant to someone who does not know the notation. */}
-                <strong>{getFriendlyModelName(row.displayName)}</strong>
-                <span className={`sw-podium-pill ${state}`}>
-                  {state === 'answering' ? (judging ? 'Being marked' : <><i /><i /><i /> Answering</>)
-                    : state === 'dropped' ? "✕ Couldn't finish"
-                      : state === 'done' ? '✓ Done'
-                        : state === 'stopped' ? 'Stopped partway'
-                          : failed ? 'Did not run' : 'Waiting'}
-                </span>
-                <em>
-                  {state === 'answering' ? (judging && runProgress?.questionJudge
-                    ? `${getFriendlyModelName(runProgress.questionJudge)} is marking it`
-                    : 'Thinking it over…')
-                    : state === 'dropped' ? 'Sat out the rest'
-                      : state === 'done' ? (rowScore != null ? `Scored ${rowScore}` : 'Answered')
-                        : failed ? '' : 'Up next'}
-                </em>
-              </div>
-            );
-          })}
         </div>
+      </div>
+      <div className="sw-stage-data">
         <div className="sw-show-progress">
           <div className="sw-show-progress-head">
             <span>Show progress</span>
@@ -1658,7 +1762,13 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, onRetry
 // ---------------------------------------------------------------------------
 // Winner
 
+/** When the curtains have parted far enough for the winner to land. */
+const CURTAIN_MS = 900;
+
 function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, balance, round, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
+  // Show effects: the curtains part on the winner, the bulbs flash, the
+  // audience applauds. Without them the reveal plays exactly as before.
+  const { effects } = useShowExtras();
   if (!winner) {
     // Two different nothings: a show that has not run, and a show where nobody
     // passed. The second one has a board to show and a reason to give.
@@ -1708,54 +1818,69 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, bala
   const finished = lineupResults?.length || shortlistedRows.length;
   const tested = droppedOut?.length ? `${finished} that finished` : `${finished} you tested`;
   return (
-    <div className="sw-winner">
-      <div className="sw-confetti" aria-hidden="true">
-        {['gold', 'pink', 'green', 'blue', 'gold', 'pink'].map((c, i) => (
-          <i key={i} className={`sw-confetti-piece ${c}`} style={{ left: `${12 + i * 15}%`, animationDelay: `${i * 90}ms` }} />
-        ))}
-      </div>
-      <div className="sw-winner-reveal">
-        <div className="sw-winner-avatar-wrap">
-          <img src={getModelAvatarSrc(winner.model)} alt="" />
-          <span className="sw-winner-trophy" aria-hidden="true"><Trophy /></span>
+    <div className="sw-winner crowned">
+      {/* The reveal is the one moment the show gets its full lighting: the
+          ceremony photo, the bulbs, the confetti, the halo. The scoreboard and
+          everything under it stay plain — they are the measurements, and a lit
+          measurement reads as a less trustworthy one. */}
+      <div className={effects ? 'sw-winner-stage curtained' : 'sw-winner-stage'}>
+        <div className="sw-stage-bg" style={{ backgroundImage: `url(${ceremonyStage})` }} aria-hidden="true" />
+        <ShowMarquee framed flash={effects} />
+        {effects && <ApplauseSign lit />}
+        <div className="sw-confetti" aria-hidden="true">
+          {['gold', 'pink', 'green', 'blue', 'gold', 'pink'].map((c, i) => (
+            <i key={i} className={`sw-confetti-piece ${c}`} style={{ left: `${12 + i * 15}%`, animationDelay: `${(effects ? CURTAIN_MS : 0) + i * 90}ms` }} />
+          ))}
         </div>
-        <div className="sw-winner-copy">
-          <span className="sw-eyebrow gold">Your top match</span>
-          <h2>{getFriendlyModelName(winner.model)}</h2>
-          <em className="sw-winner-tag">{winner.model}</em>
-          <span className="sw-winner-grade">
-            <b>{winner.scoreLabel}</b>
-            <em>Match · Grade {winner.grade} · {balanceLabel(balance)}</em>
-          </span>
-          {/* Say what the number means — a beginner has never seen either scale. */}
-          <p className="sw-winner-why">
-            {round === 'code'
-              ? <>Answered the same questions as the rest and built the best app of the {tested}, on your PC — judged on whether it runs and does what was asked.</>
-              : round === 'vision'
-                ? <>Named the most of the test picture out of the {tested}, and did it fastest on your PC.</>
-                : round === 'listening'
-                  ? <>Heard the test recording best out of the {tested} on your PC.</>
-                  : droppedOut?.length && finished === 1
-                    // Nothing was compared, so it is not "the best of" anything.
-                    ? <>The only one of your picks that finished, so it had nothing to be compared with — this
-                      is its <Explain id="match-score">Match Score</Explain>.</>
-                    : <>Best combination of speed, answer quality, and fit for your PC out of the {tested}
-                      {' '}— this is its <Explain id="match-score">Match Score</Explain>.</>}
-          </p>
-          {/* Whatever it made is one click away. The app a coding round built is
-              the whole point of having run one: a beginner can open it, click
-              it, and judge the winner without knowing what a score is. */}
-          <ModelDemoChips model={winner.model} label="What it made" className="sw-winner-demos" />
-          {/* Sharing belongs at the moment of the result, not three clicks away
-              in Advanced Mode where a Simple Mode user will never find it. */}
-          <div className="sw-winner-actions-row">
-            <button type="button" className="sw-winner-share" onClick={onShareScore}>
-              <Share2 aria-hidden="true" />
-              Share your score
-            </button>
-            {/* Everything made here, from the screen people are standing on
-                when they ask where it went. */}
-            <AllDemosButton className="sw-winner-share" />
+        {effects && (
+          <div className="sw-curtains" aria-hidden="true">
+            <i />
+            <i />
+          </div>
+        )}
+        <div className="sw-winner-reveal">
+          <div className="sw-winner-avatar-wrap">
+            <img src={getModelAvatarSrc(winner.model)} alt="" />
+            <span className="sw-winner-trophy" aria-hidden="true"><Trophy /></span>
+          </div>
+          <div className="sw-winner-copy">
+            <span className="sw-eyebrow gold">Your top match</span>
+            <h2>{getFriendlyModelName(winner.model)}</h2>
+            <em className="sw-winner-tag">{winner.model}</em>
+            <span className="sw-winner-grade">
+              <b>{winner.scoreLabel}</b>
+              <em>Match · Grade {winner.grade} · {balanceLabel(balance)}</em>
+            </span>
+            {/* Say what the number means — a beginner has never seen either scale. */}
+            <p className="sw-winner-why">
+              {round === 'code'
+                ? <>Answered the same questions as the rest and built the best app of the {tested}, on your PC — judged on whether it runs and does what was asked.</>
+                : round === 'vision'
+                  ? <>Named the most of the test picture out of the {tested}, and did it fastest on your PC.</>
+                  : round === 'listening'
+                    ? <>Heard the test recording best out of the {tested} on your PC.</>
+                    : droppedOut?.length && finished === 1
+                      // Nothing was compared, so it is not "the best of" anything.
+                      ? <>The only one of your picks that finished, so it had nothing to be compared with — this
+                        is its <Explain id="match-score">Match Score</Explain>.</>
+                      : <>Best combination of speed, answer quality, and fit for your PC out of the {tested}
+                        {' '}— this is its <Explain id="match-score">Match Score</Explain>.</>}
+            </p>
+            {/* Whatever it made is one click away. The app a coding round built is
+                the whole point of having run one: a beginner can open it, click
+                it, and judge the winner without knowing what a score is. */}
+            <ModelDemoChips model={winner.model} label="What it made" className="sw-winner-demos" />
+            {/* Sharing belongs at the moment of the result, not three clicks away
+                in Advanced Mode where a Simple Mode user will never find it. */}
+            <div className="sw-winner-actions-row">
+              <button type="button" className="sw-winner-share" onClick={onShareScore}>
+                <Share2 aria-hidden="true" />
+                Share your score
+              </button>
+              {/* Everything made here, from the screen people are standing on
+                  when they ask where it went. */}
+              <AllDemosButton className="sw-winner-share" />
+            </div>
           </div>
         </div>
       </div>

@@ -497,17 +497,57 @@ export function ChoiceCruiseModal({
           <span className="cruise-heart heart-two">
             <Heart aria-hidden="true" />
           </span>
+          <span className="cruise-wave wave-two" />
+          {/* The love boat: a white cruiser with a pink band, gold-rimmed
+              portholes, a heart on the bow, a string of lights from the mast,
+              and a funnel that puffs hearts. The couple stands on the sun
+              deck. */}
           <div className="cruise-boat">
+            <svg className="cruise-ship" viewBox="0 0 260 142" aria-hidden="true">
+              <defs>
+                <linearGradient id="cruise-white" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stopColor="#fffaf2" />
+                  <stop offset="1" stopColor="#e8d9c6" />
+                </linearGradient>
+              </defs>
+              <ellipse cx="131" cy="134" rx="108" ry="6" fill="rgba(18, 40, 62, 0.28)" />
+              {/* The string of lights, behind everything it hangs from. */}
+              <path d="M212 24 Q238 40 244 88 M212 24 Q150 6 90 30" fill="none" stroke="rgba(255, 249, 239, 0.7)" strokeWidth="0.8" />
+              <g className="cruise-lights" fill="#ffd66f">
+                {[[224, 34], [233, 48], [240, 66], [187, 18.5], [163, 16.3], [138, 17.5], [114, 22]].map(([cx, cy]) => (
+                  <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="2.2" />
+                ))}
+              </g>
+              <line x1="212" y1="22" x2="212" y2="90" stroke="#8a6a52" strokeWidth="2" />
+              <path d="M212 22 L234 27 L212 33 Z" fill="#e37185" />
+              <path d="M74 30 L90 30 L88 58 L76 58 Z" fill="#e37185" />
+              <rect x="74.6" y="35" width="14.8" height="5" fill="#fffaf2" />
+              <rect x="73" y="27" width="18" height="4" rx="1" fill="#3a2f3a" />
+              <rect x="70" y="58" width="120" height="32" rx="6" fill="url(#cruise-white)" stroke="#c9a888" />
+              {[80, 100, 120, 140, 160].map((x) => (
+                <rect key={x} x={x} y="66" width="14" height="10" rx="3" fill="#3b6f8f" />
+              ))}
+              <path d="M72 54.5 L188 54.5" stroke="#fffaf2" strokeWidth="5" strokeDasharray="1 11" />
+              <path d="M72 52 L188 52" stroke="#fffaf2" strokeWidth="1.2" />
+              <path d="M16 94 L246 88 Q240 110 216 130 L46 130 Q26 118 16 94 Z" fill="url(#cruise-white)" stroke="#c9a888" />
+              <path d="M17 97 L245 91 L243 99 L19 105 Z" fill="#e37185" />
+              <path d="M40 124 L220 124 L216 130 L46 130 Z" fill="#2c3e63" />
+              <g fill="#2c4f6e" stroke="#efbc5a" strokeWidth="2">
+                {[64, 92, 120, 148, 176].map((cx) => <circle key={cx} cx={cx} cy="114" r="3.6" />)}
+              </g>
+              <path d="M226 104c-1.2-1.8-4.4-1.2-4.4 1.3 0 1.9 2.6 3.7 4.4 4.9 1.8-1.2 4.4-3 4.4-4.9 0-2.5-3.2-3.1-4.4-1.3z" fill="#e37185" />
+              <path d="M20 93 L242 87" stroke="#fffaf2" strokeWidth="6" strokeDasharray="1.2 14" />
+              <path d="M20 90 L242 84" stroke="#fffaf2" strokeWidth="1.2" />
+            </svg>
+            <span className="cruise-puff puff-one"><Heart aria-hidden="true" /></span>
+            <span className="cruise-puff puff-two"><Heart aria-hidden="true" /></span>
+            <span className="cruise-puff puff-three"><Heart aria-hidden="true" /></span>
             <div className="cruise-passengers">
               <MachineAvatar host={host} size="small" />
               <AvatarBust model={model} size="small" />
             </div>
-            <span className="boat-cabin" />
-            <span className="boat-sail" />
-            <span className="boat-hull" />
           </div>
           <span className="cruise-wave wave-one" />
-          <span className="cruise-wave wave-two" />
         </div>
 
         <div className="cruise-caption">

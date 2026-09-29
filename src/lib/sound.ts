@@ -1,6 +1,33 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-/** UI jingles played on run milestones. */
-export function playJingle(type: 'speed-date-complete' | 'new-winner' | 'its-a-match') {
+import { showTheme } from './showTheme';
+
+type Jingle = 'speed-date-complete' | 'new-winner' | 'its-a-match';
+
+/** How long the show's own ending gets to start before a jingle plays anyway. */
+const STING_WAIT_MS = 600;
+
+/**
+ * UI jingles played on run milestones.
+ *
+ * With the theme song playing, the show ends with its own cue — a ta-da or a
+ * sad trombone — and a jingle on top of it is two bands at once. The jingle
+ * waits a moment for that cue and stands down if it started; where no cue
+ * follows (Advanced's stage simply fades the theme out), it plays as before.
+ */
+export function playJingle(type: Jingle) {
+  // A match gets the romance: harp, strings and a violin, not three beeps.
+  if (type === 'its-a-match') {
+    showTheme.romance();
+    return;
+  }
+  if (showTheme.isPlaying() || showTheme.stingPlaying()) {
+    window.setTimeout(() => { if (!showTheme.stingPlaying()) play(type); }, STING_WAIT_MS);
+    return;
+  }
+  play(type);
+}
+
+function play(type: Jingle) {
   try {
     const ctx = new AudioContext();
     const now = ctx.currentTime;

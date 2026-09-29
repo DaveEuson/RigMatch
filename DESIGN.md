@@ -284,6 +284,7 @@ Borders are hairlines. The interactive border is Seam Lit; the structural border
 - **Press:** two idioms, chosen by what the control does on hover. A control that lifts returns to rest when pressed (`translateY(0)`, `brightness(0.97)`); a control that is flat at rest pushes down (`translateY(1px)`, `brightness(0.95)`). Press is instant — no transition — because feedback the user is still holding should not lag.
 - **Secondary:** a Cream Bright wash at 0.07 alpha with a 0.28-alpha border, 30px tall, 9px radius. Every row action and toolbar control in Advanced Mode.
 - **Ghost:** transparent with a faint border, pilled; the wizard's Back control. Hovering shifts the border toward gold.
+- **Pick:** the wizard's contestant-card action. A Heartbeat Pink outline pill (full `--pink` border, text mixed 70% pink into Cream Bright) that fills to a 16% pink tint once picked. Not gold: a grid of gold Pick bars competed with the step's one next action.
 - **Danger:** Signal Red border and text on a near-black fill.
 - **Disabled:** `opacity: 0.48` (0.45 in the wizard) plus `cursor: not-allowed`, and the shadow is removed.
 - **Focus:** a 2px Avocado outline at 2px offset — the global focus treatment for the whole app.
@@ -327,10 +328,16 @@ The Speed Dating stage is the system's one fully theatrical surface, and it earn
 
 - **The proscenium** layers a warm top wash and a pink radial bloom over a plum fill, with an inner rim at 18px inset.
 - **The footlights** are a `::before` apron across the bottom 34%, radius `50% 50% 0 0` — that asymmetric radius is what makes it read as a curved stage lip rather than a gradient.
-- **The marquee** is 22 individually positioned 8px bulbs around the perimeter, each glowing at `0 0 15px rgba(255, 214, 111, 0.92)`, animating scale and opacity on a 1200ms alternate loop with odd bulbs delayed 380ms to imitate a chase-light sign.
-- **The host spotlight** is a single radial-gradient cone, no animation.
+- **The marquee** is 22 individually positioned 8px bulbs around the perimeter, each glowing at `0 0 15px rgba(255, 214, 111, 0.92)`, animating scale and opacity on a 1200ms alternate loop with odd bulbs delayed 380ms to imitate a chase-light sign. Advanced's stage leaves the left side open for the host; the wizard's centered stages add a seven-bulb left column (29 in all, `<ShowMarquee framed />`). A stopped show turns the lights down: the bulbs hold still at 0.3 with no glow.
+- **The host spotlight** is a single radial-gradient cone, no animation. In the wizard's compare step a second, narrower beam falls on whichever contestant is answering, and fades as the turn passes.
 
-This vocabulary is confined to the stage, the winner reveal, and the wizard's compare step. It does not travel.
+This vocabulary is confined to the stage, the winner reveal, and the wizard's compare step. It does not travel. In the wizard, the lit area stops above the data: the compare step's progress bar and answer scores, and the winner's scoreboard, sit on the plain stage floor below it.
+
+The wizard derives two local properties on `.sw-shell`, built from the twenty tokens rather than added to them: `--stage-floor` (`--bg` mixed 70% into black, the floor under both stages) and `--portrait-frame` (the gold hairline at 0.42 plus a soft drop). They are declared on the shell, not on `:root`, because `data-theme` is set on the app's root element; a `:root` declaration would resolve `--bg` once, in the default theme.
+
+**The Studio Wall.** Behind every wizard step, the scroll area carries a faint 1970s heart wallpaper (pink hearts at 11% stroke), the rig's gold light falling from above, and a pink glow low in both corners. It is the one piece of set dressing that travels past the stage, and it earns that by staying under everything: it holds still while cards scroll over it, and every card, bubble and panel on it is opaque, so no number is ever drawn on the pattern.
+
+**The Studio Extras Rule.** The show's look is for everyone; its noise and its bounce are opt-in. Two switches, *Theme music* and *Show effects*, sit beside the host on every wizard step and in Settings → Preferences, and both are off until someone turns them on. Music is an original tune synthesized live with Web Audio (no audio file ships, nothing is downloaded, about 0.15% of one CPU core while it plays), loops only while contestants answer, ends with a ta-da or a sad trombone, and never plays over a listening round. Effects are the contestants' walk-on, the APPLAUSE sign, curtains for the winner with a flashing marquee, and hearts from a Pick button. Every effect is scenery, aria-hidden, and gone or still under reduced motion; none of them ever touches a number.
 
 ### Contestant Portraits (signature)
 
