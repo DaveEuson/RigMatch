@@ -27,7 +27,7 @@ import {
   X,
 } from 'lucide-react';
 import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, RunFailure, RunProgress, SystemProfile } from '../types';
-import { STEPS, STEP_LABELS, footerHint, minPicksFor, nextBlockedHint, pickShortHint, showAnnouncement, showTimeLeft, type StepId } from '../lib/wizardCopy';
+import { STEPS, STEP_LABELS, footerHint, minPicksFor, nextBlockedHint, pickShortHint, showAnnouncement, showTimeLeft, winnerField, type StepId } from '../lib/wizardCopy';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { Explain, ExplainText, InfoViewProvider } from './InfoView';
 import { useExplaining } from '../lib/infoContext';
@@ -1703,10 +1703,10 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, bala
   }
   const shortName = winner.model.split(':')[0];
   const capName = shortName.charAt(0).toUpperCase() + shortName.slice(1);
-  // Only the models that finished were compared. "Out of the 3 you tested" was
-  // said of a show where one had dropped out and one never ran.
+  // Only the models that finished were compared: a dropout, or a show stopped
+  // early, leaves fewer finishers than picks.
   const finished = lineupResults?.length || shortlistedRows.length;
-  const tested = droppedOut?.length ? `${finished} that finished` : `${finished} you tested`;
+  const { tested, onlyOne } = winnerField(finished, shortlistedRows.length);
   return (
     <div className="sw-winner">
       <div className="sw-confetti" aria-hidden="true">
@@ -1735,7 +1735,7 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, bala
                 ? <>Named the most of the test picture out of the {tested}, and did it fastest on your PC.</>
                 : round === 'listening'
                   ? <>Heard the test recording best out of the {tested} on your PC.</>
-                  : droppedOut?.length && finished === 1
+                  : onlyOne
                     // Nothing was compared, so it is not "the best of" anything.
                     ? <>The only one of your picks that finished, so it had nothing to be compared with — this
                       is its <Explain id="match-score">Match Score</Explain>.</>
