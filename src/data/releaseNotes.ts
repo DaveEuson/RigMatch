@@ -3,6 +3,19 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.9.1',
+    label: 'Everyone Can Follow The Show',
+    date: 'Beta build',
+    notes: [
+      'A screen reader now hears the show. It used to run for three to ten minutes in silence and then say "Report ready"; everything in between was on screen only. It now says when each model starts answering and what the one before it scored, and it says so if the show stops early. The hardware check says its result too, which it never did, because that result appears further down the page.',
+      'Every button in Simple Mode says what it is. At 1280 pixels wide and narrower, which includes a 1080p laptop at 150% scaling, the five step buttons across the top had no name at all, because the label was hidden in a way that also hid it from screen readers. The model cards had nine buttons that all said "♥ Pick"; each now says whose, as in "Pick Gemma4".',
+      'The Pick, running and winner screens have headings, so a screen reader can jump between models instead of reading every card top to bottom. Each model card is headed by its name, and so is the winner.',
+      'Simple Mode fits a window at 400% zoom. At that size, which is 320 pixels, one unbreakable line on the Pick screen stretched the whole window, and "RigMatch" at the top read "R" while the Next button was cut off entirely. It now wraps, and the footer stacks. 200% already worked.',
+      'Two pieces of text were too faint to meet the contrast standard: "Skip tour" in the tutorial, at 3.5:1, is now 6.7:1, and "Picked · Click to remove" on a chosen model is 5.5:1 or better in all five themes. Explanations that lived only in hover tooltips can now be reached another way: the ComfyUI note appears under the goals once you pick one that needs it, and a screen reader reads each goal\'s hardware note and each card\'s country and download count. The dotted terms the host explains are easier to click.',
+      'How this was checked: axe-core against the WCAG 2.1 AA rules, a keyboard walk of every screen, and zoom and text-spacing checks, all in the real app through a full run to the winner. It was not tested with a screen reader in someone\'s hands. If something reads wrong to you, Report a bug says what happened.',
+    ],
+  },
+  {
     version: '0.9.0',
     label: 'What Matters More?',
     date: 'Beta build',

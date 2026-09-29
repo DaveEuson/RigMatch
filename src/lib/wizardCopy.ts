@@ -71,3 +71,31 @@ export function listeningBlockedReason(state: {
   if (state.needsCapture && !state.hasCapture) return 'Record or upload audio first';
   return '';
 }
+
+/**
+ * What a screen reader hears while the show runs.
+ *
+ * The show takes minutes, and the only thing it said out loud was "Report
+ * ready" at the very end — every podium, count and score in between was visual.
+ * This is read from a polite live region, so it changes only at the moments
+ * worth interrupting someone for: a model starting, the one before it
+ * finishing, and the run failing. Not every question: ten announcements a
+ * model would bury the ones that matter.
+ */
+export function showAnnouncement(state: {
+  /** The friendly name of the model answering now, or '' before one starts. */
+  answering: string;
+  modelNumber: number;
+  modelCount: number;
+  /** The last model to finish, with its score, once one has. */
+  finished?: { name: string; total: number };
+  failed: boolean;
+  failure?: string;
+}): string {
+  if (state.failed) return `The show stopped early. ${state.failure ?? ''}`.trim();
+  const before = state.finished ? `${state.finished.name} finished with ${Math.round(state.finished.total)}.` : '';
+  const now = state.answering
+    ? `${state.answering} is answering${state.modelCount > 1 ? `, model ${state.modelNumber} of ${state.modelCount}` : ''}.`
+    : '';
+  return [before, now].filter(Boolean).join(' ');
+}

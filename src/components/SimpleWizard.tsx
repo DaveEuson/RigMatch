@@ -27,7 +27,7 @@ import {
   X,
 } from 'lucide-react';
 import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, RunProgress, SystemProfile } from '../types';
-import { STEPS, STEP_LABELS, footerHint, nextBlockedHint, type StepId } from '../lib/wizardCopy';
+import { STEPS, STEP_LABELS, footerHint, nextBlockedHint, showAnnouncement, type StepId } from '../lib/wizardCopy';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { Explain, ExplainText, InfoViewProvider } from './InfoView';
 import { useExplaining } from '../lib/infoContext';
@@ -535,7 +535,14 @@ export function SimpleWizard(props: SimpleWizardProps) {
                   <span className="sw-step-mark" aria-hidden="true">
                     {isDone ? <Check /> : isLocked ? <Lock /> : id === 'winner' && isActive ? <Trophy /> : index + 1}
                   </span>
+                  {/* The label is the button's name. Narrow windows hide it from
+                      view, never from screen readers — display: none did both,
+                      and with the mark aria-hidden every step was just "button". */}
                   <span className="sw-step-label">{STEP_LABELS[id]}</span>
+                  {/* Done is shown only as a check mark, which is aria-hidden.
+                      Locked says itself through disabled, current through
+                      aria-current. */}
+                  {isDone && <span className="sr-only">, done</span>}
                 </button>
               </div>
             );
@@ -768,6 +775,17 @@ function SetupScreen({
           because a hardware scan for an unexplained thing is a strange first
           screen — it just no longer stands between the reader and the button. */}
       <h2>So let's check your computer</h2>
+      {/* Said aloud when the check finishes, in the words of the headline the
+          result shows. That result lands further down the page and the button
+          that started it disappears, so nothing else told a screen reader the
+          check had finished, or how. */}
+      <p className="sr-only" role="status">
+        {isScanning
+          ? 'Checking your computer…'
+          : checked
+            ? (comfyMissing ? 'Almost — one more program' : "You're all set!")
+            : attempted ? "We couldn't find Ollama" : ''}
+      </p>
       {/* Gone once the check has passed. It used to render unconditionally
           while the result below it was gated on `checked`, so a finished setup
           showed a big gold "Check my computer" sitting directly above "You're
@@ -986,6 +1004,9 @@ function PickScreen({
 
   return (
     <div className="sw-pick">
+      {/* The step's heading, for screen readers only: the host bubble says the
+          same thing to the eye, and each card below is an h3 under it. */}
+      <h2 className="sr-only">Pick your contestants</h2>
       <div className="sw-dream">
         {/* No eyebrow here. The host bubble twenty pixels above already asks
             "So… who's your dream model?" — a second heading asking the same
@@ -1166,7 +1187,8 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
       )}
       <img className="sw-card-avatar" src={getModelAvatarSrc(model.row.displayName)} alt="" />
       <div className="sw-card-name">
-        <strong>{model.name}</strong>
+        {/* A heading, so a screen reader can move card to card by name. */}
+        <h3>{model.name}</h3>
         {/* The pull tag and the cost, on one line. Both are facts about the
             same thing — which exact model this is and what taking it costs —
             and each having its own row was 15px of a card that had none to
@@ -1191,7 +1213,14 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
         {origin.organization !== 'Unknown model family' && (
           <span className="sw-card-maker">
             by {origin.organization}
-            {countryCode && <em title={origin.country}>{countryCode}</em>}
+            {/* The code is for the eye; the country's name was only in a hover
+                tooltip, which neither a keyboard nor a screen reader reaches. */}
+            {countryCode && (
+              <em title={origin.country}>
+                <span aria-hidden="true">{countryCode}</span>
+                <span className="sr-only">{origin.country}</span>
+              </em>
+            )}
           </span>
         )}
         <em>{model.epithet}</em>
@@ -1229,6 +1258,7 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
           >
             <Download aria-hidden="true" />
             {formatPullCount(model.row.pulls)} downloads
+            <span className="sr-only">, counted across every size of this model</span>
           </span>
         )}
       </div>
@@ -1244,7 +1274,15 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
           className={picked ? 'sw-card-btn picked' : 'sw-card-btn'}
           onClick={onToggle}
         >
-          {picked ? 'Picked ✓ · Click to remove' : '♥ Pick'}
+          {/* Nine buttons all named "♥ Pick" told a screen reader nothing about
+              which model each one takes. The model's name is added out of sight,
+              after the visible words, so the name still starts with what is on
+              screen for anyone who drives the app by voice. */}
+          {picked ? (
+            <>Picked <span aria-hidden="true">✓ </span>· Click to remove<span className="sr-only"> {model.name}</span></>
+          ) : (
+            <><span aria-hidden="true">♥ </span>Pick<span className="sr-only"> {model.name}</span></>
+          )}
         </button>
       )}
     </article>
@@ -1436,8 +1474,21 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound }: Simpl
     // is worse than an honest vague one, which is the whole lesson here.
     ?? (hasQuestion ? 'Next question' : 'Warming up…');
 
+  const lastResult = runProgress?.lastResult;
+  const announcement = showAnnouncement({
+    answering: activeModel ? getFriendlyModelName(activeModel) : '',
+    modelNumber,
+    modelCount,
+    finished: lastResult ? { name: getFriendlyModelName(lastResult.model), total: lastResult.total } : undefined,
+    failed,
+    failure: runProgress?.message,
+  });
+
   return (
     <div className="sw-compare" style={{ backgroundImage: `url(${speedDateShow})` }}>
+      {/* Always rendered, so a change is announced: a live region that appears
+          already holding its text is not reliably read. */}
+      <p className="sr-only" role="status">{announcement}</p>
       <div className="sw-compare-inner">
         {/* The raw benchmark prompt is dense jargon ("Return only valid JSON…
             use keys intent, action, target") and was the hero text on a beginner
@@ -1453,7 +1504,7 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound }: Simpl
                 ? `Round ${round} of ${totalRounds}`
                 : 'Getting started'}
           </span>
-          <p>{plainRoundLabel}</p>
+          <h2>{plainRoundLabel}</h2>
           <button type="button" className="sw-link" onClick={() => setShowPrompt((v) => !v)}>
             {showPrompt ? 'Hide the exact question' : 'See the exact question'}
           </button>
@@ -1555,7 +1606,7 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, 
           — not a failed show.
         </p>
         <div className="sw-scoreboard">
-          <span className="sw-eyebrow">How the lineup finished</span>
+          <h3 className="sw-eyebrow">How the lineup finished</h3>
           <ol>
             {board.map((result, index) => (
               <li key={result.model}>
@@ -1597,7 +1648,7 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, 
         </div>
         <div className="sw-winner-copy">
           <span className="sw-eyebrow gold">Your top match</span>
-          <strong>{getFriendlyModelName(winner.model)}</strong>
+          <h2>{getFriendlyModelName(winner.model)}</h2>
           <em className="sw-winner-tag">{winner.model}</em>
           <span className="sw-winner-grade">
             <b>{winner.scoreLabel}</b>
@@ -1637,7 +1688,7 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, 
           the 5 you tested" as a claim the screen did not back up. */}
       {(lineupResults?.length ?? 0) > 1 && (
         <div className="sw-scoreboard">
-          <span className="sw-eyebrow">How the lineup finished</span>
+          <h3 className="sw-eyebrow">How the lineup finished</h3>
           <ol>
             {lineupResults!.map((result, index) => (
               <li key={result.model} className={result.model === winner.model ? 'winner' : undefined}>
@@ -1671,14 +1722,14 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, balance, round, 
         <div className="sw-door chat">
           <div className="sw-door-img" style={{ backgroundImage: `url(${romanceHero})` }} aria-hidden="true" />
           <span className="sw-eyebrow gold">The happy ending</span>
-          <strong>Start chatting with {capName}</strong>
+          <h3>Start chatting with {capName}</h3>
           <p>Open RigMatch Chat and talk to your new match right away — it's already on your PC.</p>
           <button type="button" className="sw-door-btn gold" onClick={onChatWithWinner}><MessageSquare aria-hidden="true" />Chat with {capName}</button>
         </div>
         <div className="sw-door advanced">
           <div className="sw-door-img" style={{ backgroundImage: `url(${modelTestArt})` }} aria-hidden="true" />
           <span className="sw-eyebrow blue">You've graduated</span>
-          <strong>Step into Advanced Mode</strong>
+          <h3>Step into Advanced Mode</h3>
           <p>The full control room — every model, every score, custom tests. Your Top Match comes with you.</p>
           <button type="button" className="sw-door-btn blue" onClick={onSwitchToAdvanced}><ExternalLink aria-hidden="true" />Switch to Advanced</button>
         </div>

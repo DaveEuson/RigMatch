@@ -1,7 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { UiMode } from '../lib/appConfig';
 import type { GoalId } from '../lib/goals';
-import { goalHardwareExpectation, goalsByCategory, leagueLabel } from '../lib/goals';
+import { goalById, goalHardwareExpectation, goalsByCategory, leagueLabel } from '../lib/goals';
 import { useDialog } from '../lib/useDialog';
 import { BrandMark } from './CommonChrome';
 import { ModeStep } from './ModeStep';
@@ -78,6 +78,15 @@ export function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCa
                       const expectation = goalHardwareExpectation(goal, vramGb);
                       const selected = picked.includes(goal.id);
                       const pickOrder = picked.indexOf(goal.id) + 1;
+                      // The reason behind the one-line verdict. It lived only in
+                      // a hover tooltip, which a keyboard never opens and a screen
+                      // reader never reads; as the button's description it is
+                      // read after the name. ComfyUI's note is also shown below
+                      // the grid once such a goal is picked.
+                      const note = goal.runtime === 'none'
+                        ? goal.unsupportedReason
+                        : goal.runtime === 'comfyui' ? `${expectation.note} ${COMFY_GOAL_NOTE}` : expectation.note;
+                      const noteId = `goal-note-${goal.id}`;
                       return (
                         <button
                           key={goal.id}
@@ -85,16 +94,16 @@ export function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCa
                           className={`goal-splash-option${selected ? ' selected' : ''} tone-${expectation.tone}`}
                           onClick={() => toggle(goal.id)}
                           aria-pressed={selected}
+                          aria-describedby={note ? noteId : undefined}
                         >
+                          {note && <span id={noteId} hidden>{note}</span>}
                           <strong>{goal.desire}</strong>
                           {goal.runtime === 'none' ? (
                             // A missing backend is nobody's hardware's fault.
                             <em title={goal.unsupportedReason}>Not possible locally yet</em>
                           ) : (
                             <em
-                              title={goal.runtime === 'comfyui'
-                                ? `${expectation.note} ${COMFY_GOAL_NOTE}`
-                                : expectation.note}
+                              title={note}
                             >
                               {leagueLabel(expectation.tone)}
                               {goal.runtime === 'comfyui' ? ' · needs ComfyUI' : ''}
@@ -115,6 +124,11 @@ export function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCa
                 for chatting, so each goal you add means more testing time before RigMatch can
                 crown anyone. Your first pick leads.
               </p>
+            )}
+            {/* The tile says "needs ComfyUI"; this says what that means, where
+                everyone can read it, rather than only in a hover tooltip. */}
+            {picked.some((id) => goalById(id)?.runtime === 'comfyui') && (
+              <p className="goal-splash-nudge">{COMFY_GOAL_NOTE}</p>
             )}
             <div className="goal-splash-actions">
               {onSaveGoals ? (

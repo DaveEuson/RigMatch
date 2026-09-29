@@ -1848,7 +1848,9 @@ textarea {
 .quiet-link {
   background: none;
   border: none;
-  color: #5a7080;
+  /* Quiet by size and weight, not by being hard to read: the old #5a7080 was
+     3.5:1, and "Skip tour" is the way out of the tutorial. This is 6.7:1. */
+  color: #8aa0b0;
   font-size: 12px;
   cursor: pointer;
   padding: 4px 6px;
@@ -1856,7 +1858,7 @@ textarea {
   text-underline-offset: 2px;
 }
 .quiet-link:hover {
-  color: #8aa0b0;
+  color: #b8c8d4;
 }
 
 /* Welcome slide */
