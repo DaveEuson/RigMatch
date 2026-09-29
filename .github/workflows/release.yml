@@ -35,13 +35,17 @@ jobs:
             companion: rigmatch-chat
             builderArgs: --mac --x64
             chatBuilderArgs: --bundles app
-          - os: ubuntu-latest
+          # Linux builds on the oldest Ubuntu RigMatch supports: a binary needs
+          # the glibc of the machine that built it, and 24.04's 2.39 kept
+          # RigMatch Chat from opening on 22.04, Debian 12 and JetPack 6.
+          # scripts/check-glibc-floor.mjs holds the line after the build.
+          - os: ubuntu-22.04
             platform: linux
             artifact: linux-x64
             companion: rigmatch-chat
             builderArgs: --linux --x64
             chatBuilderArgs: --bundles deb
-          - os: ubuntu-24.04-arm
+          - os: ubuntu-22.04-arm
             platform: linux
             artifact: linux-arm64
             companion: rigmatch-chat
@@ -69,6 +73,10 @@ jobs:
         uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
           workspaces: rigmatch-chat/src-tauri
+          # One cache per runner image. The cache is keyed by OS family, so the
+          # 22.04 builds restored a cargo-audit and build scripts compiled on
+          # 24.04, which need glibc 2.39 and cannot run there.
+          key: ${{ matrix.os }}
 
       - name: Install Linux system dependencies
         if: matrix.platform == 'linux'
@@ -145,6 +153,10 @@ jobs:
 
       - name: Build RigMatch
         run: npm run build && npm exec -- electron-builder ${{ matrix.builderArgs }} --publish never
+
+      - name: Check the glibc floor
+        if: matrix.platform == 'linux'
+        run: node scripts/check-glibc-floor.mjs
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
