@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import { describeRunFailure, droppedOutMessage, showStoppedMessage } from '../src/lib/runFailure.ts';
-import { minPicksFor, pickShortHint, showTimeLeft } from '../src/lib/wizardCopy.ts';
+import { minPicksFor, pickShortHint, showTimeLeft, winnerField } from '../src/lib/wizardCopy.ts';
 import { topPickPresentation } from '../src/lib/format.ts';
 import { getCudaDetail } from '../src/lib/modelCatalog.ts';
 
@@ -147,4 +147,16 @@ test('the time left stops climbing when a question stalls', () => {
   assert.match(at(120000, true), /judge is taking a while/);
   // Too early to say anything.
   assert.equal(showTimeLeft({ elapsedMs: 5000, questionsDone: 2, totalQuestions: 20, sinceLastQuestionMs: 1000, judging: false }), '');
+});
+
+test('the Winner line counts only the models that finished', () => {
+  // Stopped after one model finished, the screen said the winner was the best
+  // "out of the 1 you tested" — a comparison with nothing.
+  assert.deepEqual(winnerField(1, 3), { tested: '1 that finished', onlyOne: true });
+  // One dropped out of three: two were compared.
+  assert.deepEqual(winnerField(2, 3), { tested: '2 that finished', onlyOne: false });
+  // Everyone finished: the plain claim is true.
+  assert.deepEqual(winnerField(3, 3), { tested: '3 you tested', onlyOne: false });
+  const wizard = readFileSync(new URL('../src/components/SimpleWizard.tsx', import.meta.url), 'utf-8');
+  assert.match(wizard, /const \{ tested, onlyOne \} = winnerField\(finished, shortlistedRows\.length\);/);
 });
