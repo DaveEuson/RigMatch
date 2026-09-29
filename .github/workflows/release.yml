@@ -157,6 +157,13 @@ jobs:
       - name: Check the glibc floor
         if: matrix.platform == 'linux'
         run: node scripts/check-glibc-floor.mjs
+
+      # Software centers and the AppImage catalog read the description and
+      # screenshots from this file; without it they screenshot a blank test
+      # machine's first-run dialog.
+      - name: Check the AppStream metadata ships
+        if: matrix.platform == 'linux'
+        run: ls release/*-unpacked/usr/share/metainfo/ai.rigmatch.app.metainfo.xml
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 

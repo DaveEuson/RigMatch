@@ -131,6 +131,10 @@
           "filter": [
             "rigmatch-chat"
           ]
+        },
+        {
+          "from": "build/linux/ai.rigmatch.app.metainfo.xml",
+          "to": "usr/share/metainfo/ai.rigmatch.app.metainfo.xml"
         }
       ],
       "target": [
