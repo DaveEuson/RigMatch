@@ -1569,7 +1569,11 @@ textarea {
 }
 
 .mode-splash-card {
-  width: min(760px, calc(100vw - 48px));
+  /* 100% of the backdrop's content box, not 100vw: the viewport width counts
+     the backdrop's own scrollbar, so on a screen short enough to need one the
+     card came out 20px too wide and the whole window scrolled sideways. The
+     backdrop's padding is the margin. */
+  width: min(760px, 100%);
   padding: 28px;
   border: 1px solid var(--line-bright);
   border-radius: 18px;

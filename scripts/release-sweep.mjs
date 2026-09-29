@@ -302,15 +302,19 @@ check('parity', 'the layout is checked at the smallest window the app allows', (
   //
   // Getting this wrong is quiet in the worst way: the smoke keeps passing at a
   // size nobody has, and the size people do have goes unchecked.
-  const win = read('electron/main.cjs');
+  // The minimum lives in windowFit.cjs, which lowers it only on a screen too
+  // small to hold it; createWindow() has to take it from there.
+  const win = read('electron/windowFit.cjs');
   const smoke = read('scripts/visual-smoke.mjs');
+  must(/minWidth:\s*fit\.minWidth/.test(read('electron/main.cjs')) && /minHeight:\s*fit\.minHeight/.test(read('electron/main.cjs')),
+    'createWindow() no longer takes its minimum from windowFit.cjs');
 
   const declared = {
     width: Number(/minWidth:\s*(\d+)/.exec(win)?.[1]),
     height: Number(/minHeight:\s*(\d+)/.exec(win)?.[1]),
   };
   must(declared.width && declared.height,
-    'could not read minWidth/minHeight from createWindow() — the smoke has nothing to match');
+    'could not read minWidth/minHeight from windowFit.cjs — the smoke has nothing to match');
 
   const short = /newContext\(\{\s*viewport:\s*\{\s*width:\s*(\d+),\s*height:\s*(\d+)\s*\}\s*\}\);\s*\n\s*const shortPage/.exec(smoke);
   must(short, 'the short-window context in visual-smoke.mjs is no longer recognizable');

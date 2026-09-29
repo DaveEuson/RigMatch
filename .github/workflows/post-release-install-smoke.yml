@@ -83,6 +83,7 @@ jobs:
           chmod +x "$appimage"
           "$appimage" --appimage-extract >/tmp/rigmatch-appimage-extract.log 2>&1
           test -x squashfs-root/AppRun
+          test -s squashfs-root/usr/share/metainfo/ai.rigmatch.app.metainfo.xml
           find squashfs-root -maxdepth 2 -type f \( -name "*.desktop" -o -name "RigMatch" -o -name "rigmatch-ai" \) -print
 
       - name: Install Debian package

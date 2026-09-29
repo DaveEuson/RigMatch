@@ -65,7 +65,7 @@ Every contestant answers the same questions on the game-show stage. No favorites
 
 ### 5 · Winner — your Top Match
 
-The reveal: grade, plain-language scorecard, and two doors out. Start chatting right away, or graduate to Advanced Mode.
+The reveal: your Top Match under the lights with its grade and Match Score, then how the whole lineup finished. Below that, two doors out: start chatting right away, or graduate to Advanced Mode.
 
 <p align="center"><img src="docs/images/05-winner.png" alt="Winner step — Top Match reveal" width="100%"></p>
 
