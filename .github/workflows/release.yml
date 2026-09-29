@@ -167,6 +167,29 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      # Both packages have to open on a stock Ubuntu. Through 0.9.1 the .deb did
+      # not ask for RigMatch Chat's WebKitGTK libraries, so the Chat button did
+      # nothing, and the AppImage's runtime needed libfuse2, which Ubuntu 22.04
+      # and newer do not install. The new runtime is one static binary.
+      - name: Check the Linux packages bring what they need
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          deb="$(ls release/RigMatch-*.deb)"
+          depends="$(dpkg-deb -f "$deb" Depends)"
+          echo "$depends"
+          for pkg in libwebkit2gtk-4.1-0 libjavascriptcoregtk-4.1-0 libsoup-3.0-0; do
+            grep -qw "$pkg" <<<"$depends" || { echo "::error::$deb does not depend on $pkg"; exit 1; }
+          done
+          appimage="$(ls release/RigMatch-*.AppImage)"
+          dynamic="$(readelf -d "$appimage" 2>&1 || true)"
+          if grep -q NEEDED <<<"$dynamic"; then
+            echo "$dynamic"
+            echo "::error::$appimage uses the old runtime, which needs libfuse2"
+            exit 1
+          fi
+
       # Before 0.9.0 the DMG's "RigMatch Chat.app" was a second copy of RigMatch:
       # its dmg.contents entry had no path, and electron-builder fills a missing
       # path with the main app. The only check ran after publishing and looked
