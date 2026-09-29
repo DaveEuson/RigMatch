@@ -24,12 +24,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            label: x64
+          # The oldest supported Ubuntu and the newest: a package can install
+          # cleanly on both and still fail to load on the older one.
+          - os: ubuntu-22.04
+            label: x64, 22.04
             appimage_suffix: linux-x86_64.AppImage
             deb_suffix: linux-amd64.deb
+          - os: ubuntu-latest
+            label: x64, latest
+            appimage_suffix: linux-x86_64.AppImage
+            deb_suffix: linux-amd64.deb
+          - os: ubuntu-22.04-arm
+            label: arm64, 22.04
+            appimage_suffix: linux-arm64.AppImage
+            deb_suffix: linux-arm64.deb
           - os: ubuntu-24.04-arm
-            label: arm64
+            label: arm64, 24.04
             appimage_suffix: linux-arm64.AppImage
             deb_suffix: linux-arm64.deb
 
@@ -91,6 +101,25 @@ jobs:
           dpkg -s rigmatch-ai
           dpkg -L rigmatch-ai | sed -n '1,80p'
           test -e /usr/bin/rigmatch-ai
+
+      # Installing proves the files arrived; it says nothing about whether this
+      # system's C library can load them. A binary built against a newer glibc
+      # installs cleanly and then fails the moment it starts.
+      - name: Check the installed binaries load on this system
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$(dirname "$(readlink -f /usr/bin/rigmatch-ai)")"
+          missing=0
+          for bin in "$app/rigmatch-ai" "$app/companions/rigmatch-chat"; do
+            test -x "$bin"
+            echo "== $bin"
+            # Captured first: with pipefail, grep -q quitting early could hide a match.
+            out="$(ldd "$bin" 2>&1 || true)"
+            echo "$out"
+            if grep -q "not found" <<<"$out"; then missing=1; fi
+          done
+          test "$missing" = 0
 
   macos:
     name: macOS DMG smoke (${{ matrix.label }})
