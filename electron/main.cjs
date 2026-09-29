@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-const { app, BrowserWindow, dialog, ipcMain, protocol, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, protocol, screen, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const { fileURLToPath } = require('node:url');
@@ -32,6 +32,7 @@ const {
 const { scoreQualityWithJudge } = require('./judgeScoring.cjs');
 const security = require('./security.cjs');
 const gpuContention = require('./gpuContention.cjs');
+const { fitWindowToScreen } = require('./windowFit.cjs');
 const {
   normalizeUpdateChannel,
   isNightlyRelease,
@@ -313,9 +314,12 @@ if (process.platform === 'linux' && isDev() && process.env.RIGMATCH_ENABLE_GPU !
 }
 
 function createWindow() {
+  // Sized to the screen it opens on, with a floor that bends for small ones:
+  // see windowFit.cjs.
+  const fit = fitWindowToScreen(screen.getPrimaryDisplay().workAreaSize);
   const win = new BrowserWindow({
-    width: 1800,
-    height: 1020,
+    width: fit.width,
+    height: fit.height,
     // A minimum is a promise that the window can always fit on the screen, and
     // 1280x820 could not keep it. Measured on a Jetson with a 1280x720 display:
     // Electron clamped the window down to the minimum and produced 1308x886 —
@@ -330,9 +334,10 @@ function createWindow() {
     // the nav rail clips nothing, there is no sideways overflow, and the ticker
     // simply falls below the fold and is reached by scrolling. So the floor is
     // set from what real screens leave once the OS takes its share, and the
-    // visual smoke now holds this exact size.
-    minWidth: 1024,
-    minHeight: 640,
+    // visual smoke now holds this exact size. On a screen too small for even
+    // that, the floor drops to what the screen can hold.
+    minWidth: fit.minWidth,
+    minHeight: fit.minHeight,
     backgroundColor: '#080b0d',
     title: 'RigMatch',
     icon: getWindowIconPath(),
