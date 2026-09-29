@@ -59,6 +59,11 @@ RigMatch builds separate Linux x64 and Linux ARM64 artifacts. Jetson users shoul
 
 As of 0.7.1 this is no longer untested: a Jetson Orin Nano running JetPack R39 launches RigMatch, reads the board, scores models and runs the companion. One machine is not broad coverage, and other Jetson generations remain unverified, but it is no longer a build nobody has started.
 
+**On a stock Ubuntu, RigMatch Chat did nothing and the AppImage did not open (fixed in 0.9.2)**
+RigMatch Chat is a WebKitGTK 4.1 app. Through 0.9.1 the `.deb` did not ask for WebKitGTK, so on a system without it the Chat button did nothing and showed no message. RigMatch now checks before opening Chat and names what is missing, and the `.deb` installs it. On 0.9.1 or earlier, install it yourself: `sudo apt install libwebkit2gtk-4.1-0`.
+
+Separately, AppImages through 0.9.1 need libfuse2 to open, and Ubuntu 22.04 and newer install fuse3 instead. On those versions, install `libfuse2` (22.04) or `libfuse2t64` (24.04). From 0.9.2 the AppImage uses a runtime that does not need libfuse2.
+
 **RigMatch Chat could crash on launch with NVIDIA graphics (fixed in 0.3.3)**
 On Linux with the NVIDIA proprietary driver — most often on Wayland — the RigMatch Chat companion could segfault immediately on launch. The crash was inside WebKitGTK's GL context handling (`libnvidia-eglcore`), an upstream WebKitGTK/NVIDIA interaction, not a bug in RigMatch itself. As of 0.3.3, RigMatch Chat disables WebKitGTK's DMABUF renderer at startup, which avoids the crash. If you still hit it on an older build or an unusual driver combination, launch with the environment variable `WEBKIT_DISABLE_DMABUF_RENDERER=1` set.
 
