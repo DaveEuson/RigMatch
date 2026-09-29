@@ -8,10 +8,24 @@
  * would connect to the other instance instead. Saying "not found" there sends
  * people looking for a missing file that is sitting right where it should be.
  */
-export type CompanionLaunchResult = { ok: boolean; reason?: string };
+export type CompanionLaunchResult = { ok: boolean; reason?: string; libraries?: string[]; packages?: string[] };
 
 export function companionLaunchMessage(result: CompanionLaunchResult | null | undefined): string | null {
   if (result?.ok) return null;
+
+  // Linux only: RigMatch Chat is a WebKitGTK app, and the system lacks a
+  // library it links against. `packages` is empty off apt-based systems.
+  if (result?.reason === 'missing-libraries') {
+    const packages = result.packages ?? [];
+    return [
+      'RigMatch Chat needs system libraries this computer does not have:',
+      ...(result.libraries ?? []).map((library) => `  ${library}`),
+      '',
+      ...(packages.length
+        ? ['Install them, then open Chat again:', `  sudo apt install ${packages.join(' ')}`]
+        : ['Install the packages that provide them (RigMatch Chat uses WebKitGTK 4.1), then open Chat again.']),
+    ].join('\n');
+  }
 
   if (result?.reason === 'bridge-taken') {
     return [
