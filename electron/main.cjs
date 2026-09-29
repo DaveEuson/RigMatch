@@ -1725,6 +1725,17 @@ async function openRigmatchUpdatePage(channel = 'release', preferredUrl = null) 
   return { url };
 }
 
+/** Whether Ollama lists `model` as installed. A bare name means its :latest. */
+async function ollamaHasModel(baseUrl, model) {
+  try {
+    const tags = await fetchJson(`${baseUrl}/api/tags`, {}, 2500);
+    const want = model.includes(':') ? model : `${model}:latest`;
+    return (tags?.models ?? []).some((entry) => [entry?.name, entry?.model].includes(want));
+  } catch {
+    return false;
+  }
+}
+
 async function fetchJson(url, options = {}, timeoutMs = 2500, maxBytes = JSON_RESPONSE_MAX_BYTES) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -3064,6 +3075,9 @@ async function pullModel(request = {}, sender) {
     const decoder = new TextDecoder();
     const tracker = createPullProgressTracker();
     let buffer = '';
+    // Ollama ends a finished pull with a "success" line, which the parser turns
+    // into phase 'complete'. Nothing else counts as finished.
+    let confirmed = false;
 
     while (true) {
       const { value, done } = await reader.read();
@@ -3078,6 +3092,7 @@ async function pullModel(request = {}, sender) {
         const update = normalizePullProgressLine(line, tracker);
         if (!update) continue;
         if (update.error) throw new Error(update.error);
+        if (update.phase === 'complete') confirmed = true;
         lastStatus = update.status || lastStatus;
         emit(update, update.phase !== 'pulling');
       }
@@ -3088,13 +3103,25 @@ async function pullModel(request = {}, sender) {
     const finalUpdate = normalizePullProgressLine(buffer, tracker);
     if (finalUpdate?.error) throw new Error(finalUpdate.error);
     if (finalUpdate) {
+      if (finalUpdate.phase === 'complete') confirmed = true;
       lastStatus = finalUpdate.status || lastStatus;
       emit(finalUpdate, finalUpdate.phase !== 'pulling');
     }
 
+    // A stream that simply stops — a dropped connection, a proxy giving up —
+    // used to be reported as complete at 100%, and the model was shown "On
+    // your PC" when it was not. Ask Ollama before calling it done; it keeps the
+    // partial layers, so starting again resumes.
+    if (!confirmed && !(await ollamaHasModel(baseUrl, model))) {
+      const at = tracker.lastTotalBytes && tracker.lastCompletedBytes !== null
+        ? ` at ${Math.round((tracker.lastCompletedBytes / tracker.lastTotalBytes) * 100)}%`
+        : '';
+      throw new Error(`The download of ${model} stopped${at} before Ollama confirmed it. Start it again to pick up where it left off.`);
+    }
+
     emit({
       phase: 'complete',
-      status: lastStatus === 'success' ? 'Download complete' : lastStatus,
+      status: 'Download complete',
       percent: 100,
       completedBytes: tracker.lastCompletedBytes,
       totalBytes: tracker.lastTotalBytes,
