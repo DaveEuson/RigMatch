@@ -1,6 +1,18 @@
 # RigMatch — Roadmap
 
-Ideas parked for later. Nothing here is committed; it's a candid backlog of directions worth exploring.
+Ideas parked for later. Nothing here is committed; it's a candid backlog of directions worth exploring. Last reviewed September 2026, at 0.9.1.
+
+---
+
+## Next
+
+### Refresh the screenshots
+
+The README's screenshots in `docs/images` date from August and show the flat dark look that 0.9.1 replaced, and the landing page (`site/index.html`) still shows a CSS mock of a scorecard instead of the app. Both are the first thing a visitor sees. The screens can be regenerated at 1280 × 800 from the real app, driven against a stand-in Ollama so every state of a show can be captured without real models.
+
+### A smaller download: drop the unused Chromium languages
+
+About 47 MB of every install is Chromium's translations for languages RigMatch does not use. Electron can leave them out (`electronLanguages`), but not yet safely: 18 date and number formatting calls take their locale from Chromium's language list, so trimming it would give everyone US formats. Pass the system locale into those calls first, then trim.
 
 ---
 
@@ -23,7 +35,7 @@ A version that strengthens it instead:
   scorecard, the way sharing a match card already works — not a setting flipped
   once and forgotten.
 - **Send the rig stamp, not the machine.** ScoreRigStamp already holds exactly
-  the right row: card, VRAM, driver, app version, model digest, quantisation,
+  the right row: card, VRAM, driver, app version, model digest, quantization,
   and the scores. No hostname, no prompts, no transcripts. The payload was built
   for this without meaning to be.
 - **The drift machinery is the moat.** We can refuse to aggregate scores
@@ -40,29 +52,21 @@ bolted onto a release.
 `LocalModelProvider` is already `'ollama' | 'lm-studio'`, `getModelRuntime`
 resolves a per-row baseUrl and provider, and sendChat has an OpenAI-compatible
 branch. The abstraction exists; LM Studio is simply second-class — `canDownload`
-is false for it, benchmark routing favours Ollama, and there is no setup path.
+is still false for it, benchmark routing favors Ollama, and there is no setup
+path.
 
 Make LM Studio genuinely equal first, since it is the one users actually have.
 A third — llama.cpp's server — then costs mostly catalog and detection work,
 because it speaks the same OpenAI-compatible API. Doing them in the other order
 means building the abstraction twice.
 
-### Code signing
-
-Unsigned Windows builds mean SmartScreen interrupts every download, and the
-likeliest real-world harm to users is not a competitor forking the repo but
-somebody re-uploading the .exe with adware under our name. A certificate fixes
-both. A few hundred a year, and the right time is when there are users to
-protect — before the demo video brings them.
-
 ### Discoverability on the long panels
 
 Twice in one session a feature existed and could not be found: the Start ComfyUI
 button at the bottom of Settings, and the Listening panel below four stacked
-Activity panels. Both were fixed by moving one thing, which is a symptom-level
-fix. If it recurs, the answer is structural — tabs or anchors on Activity —
-rather than relocating another control.
-
+Activity panels. Settings has since had the structural fix — a rail of sections
+that jumps to each one. Activity still stacks its panels; if something gets lost
+there again, give it the same rail rather than relocating another control.
 
 ### Rented hardware — "what could I do with a card I do not own?"
 
@@ -84,9 +88,9 @@ are rented, with a price per hour and a lifetime.
 
 **What has to be true first**
 
-- **A score must be stamped with the rig that produced it.** See KNOWN_ISSUES —
-  this is a live bug, not a rental one. Under rentals it would poison every
-  score.
+- ~~**A score must be stamped with the rig that produced it.**~~ Done in 0.6.0:
+  every score carries its rig stamp, and one measured on another machine is
+  flagged instead of being crowned.
 - **The network-host path needs its first real exercise.** It has a scanner and
   demo data; it has likely never been driven against a genuine remote host under
   test. A cheap pod running Ollama is exactly the rig for that.
@@ -98,47 +102,11 @@ are rented, with a price per hour and a lifetime.
 app stays on your desk; the rental is a host it talks to), and any reselling or
 brokering of compute.
 
-### ~~VRAM-tier simulation in the gates~~ — done 2026-08-21
-
-Shipped in `tests/vramTiers.test.mjs`, and more cheaply than planned. The
-proposed environment override turned out to be unnecessary: the fit functions
-already take VRAM as an argument, so eight tiers from 0 GB to 48 GB are
-reachable from a test with no app changes at all.
-
-What it holds is the invariant, not the wording — chiefly that a bigger card is
-never described as worse for the same goal, which hand-written thresholds get
-wrong easily and nobody testing on one card would ever see.
-
-### Code Challenge — multi-language, judge-graded coding test
-
-A skill test that asks a model to solve a coding task in a language you choose
-(Python, Go, Rust, SQL, …), graded by the LLM judge. The counterpart to App Builder
-for code that isn't a runnable web app — kept separate precisely because it can't be
-executed/previewed the way App Builder is. Reuses the judge, run flow, result viewer,
-and improve loop. Full design in [docs/code-challenge-spec.md](docs/code-challenge-spec.md).
-
-### Web version — marketing site + embedded demo
-
-> **Shipped (July 2026):** GitHub Pages now serves a marketing landing page at the
-> site root (`site/index.html`) with the interactive preview-mode demo one click
-> away at `/app/`. Shared scorecards link to the landing page, completing the
-> scorecard → landing → demo/download funnel. Remaining polish: real screenshots
-> on the landing page (currently a CSS scorecard mock), and repointing links if a
-> custom domain is added.
-
-Turn the current GitHub-README-as-homepage into a real `rigmatch.ai` marketing site, with the existing browser **preview mode** (`fallbackApi`, mock data) embedded as a one-click "try it" demo. The desktop app stays the real product; the site is top-of-funnel.
-
-**Why:** distribution. A niche desktop utility lives or dies on discovery, and a shareable URL beats a `.exe` on a Releases page. The interactive demo already exists for free (the app already runs in the browser via `npm run dev:web`).
-
-**Explicitly _not_** a functional replacement: a browser can't read VRAM/GPU accurately, so the **Fit** pillar degrades to a guess. A "browser drives your local Ollama" mode (needs `OLLAMA_ORIGINS` + Private Network Access handling) is possible but low-value — most people who can run Ollama can install the app. Skip unless users ask.
-
-**Effort:** landing page + embedded demo = days (reuses existing code). Full browser-based local testing = ~week, worse product.
-
-**Decision gate:** is the degraded (browser-estimated) Fit score acceptable for the demo? If yes, ship the marketing site. If Fit fidelity is sacred, keep it desktop-only and just build a static marketing page.
-
 ### Cloud comparison mode — OpenRouter as a reference baseline
 
 Let users benchmark **online models via OpenRouter** alongside their local ones, framed as an honest _local-vs-cloud measuring stick_ — "is a cheap cloud model good enough, or do you need local?" — **not** as more contestants for the local leaderboard.
+
+**Where it stands:** OpenRouter already works as an optional cloud *judge*: with a key, it can mark the answers local models give. Cloud models as contestants are not built, for the scoring reasons below.
 
 **Why:** the real user question is often "do I even need local?" RigMatch can answer it on the one axis that's directly comparable — quality on the same question set.
 
@@ -155,3 +123,45 @@ So don't mix cloud models into the local Match Score board (a datacenter 70B wou
 **Brand cost:** punctures the "100% local, nothing leaves your computer" promise (API key, per-token cost, prompts go to cloud). Must be clearly opt-in and walled off from the local core.
 
 **Practical notes:** skip the 3×-per-question runs for cloud (jitter makes stability noise — saves money); show an estimated cost _before_ running; store the API key carefully (it's a paid credential, unlike anything else in the app).
+
+---
+
+## Decided
+
+### Code signing — ship unsigned
+
+Decided 2026-09-19. RigMatch is free and earns nothing, so the yearly cost is not spendable: $99 a year for Apple's developer program, and $120 to $400+ a year for Windows. Builds ship unsigned, which means SmartScreen and Gatekeeper warn on first launch.
+
+What stands in for a certificate, at no cost:
+- The release notes explain both first-launch warnings in plain words. The Windows `.zip` runs without installing and skips the SmartScreen prompt.
+- `SHA256SUMS.txt` ships with every release.
+- Since 0.9.0, every file carries a GitHub build attestation, so anyone can check it was built from this repository: `gh attestation verify <file> --repo DaveEuson/RigMatch`. That covers the integrity half of what a certificate does, though nothing about the warnings.
+
+Revisit only if RigMatch starts earning. The order then is Apple first: $99 removes the macOS warning completely, with no reputation period to wait out.
+
+---
+
+## Done
+
+### Code Challenge — July 2026
+
+A judge-graded coding test in the language you choose (Python, Go, Rust, SQL, …), the counterpart to App Builder for code that can't be run as a web app. It is picked in the run dialog and needs a code-capable model and a judge. Design in [docs/code-challenge-spec.md](docs/code-challenge-spec.md).
+
+### Web version — July 2026
+
+GitHub Pages serves a landing page at the site root (`site/index.html`), with the interactive preview-mode demo one click away at `/app/`. Shared scorecards link to the landing page, completing the scorecard → landing → demo/download funnel. The demo runs on mock data, because a browser can't read VRAM or the GPU. Still to do: the landing page's real screenshots (see Next), and repointing links if a custom domain is added.
+
+### Scores stamped with their rig — 0.6.0
+
+Every score records the card, VRAM, driver, app version and model digest it was measured on, and a score from another machine or on changed weights is flagged instead of crowned.
+
+### VRAM-tier simulation in the gates — August 2026
+
+Shipped in `tests/vramTiers.test.mjs`, and more cheaply than planned. The
+proposed environment override turned out to be unnecessary: the fit functions
+already take VRAM as an argument, so eight tiers from 0 GB to 48 GB are
+reachable from a test with no app changes at all.
+
+What it holds is the invariant, not the wording — chiefly that a bigger card is
+never described as worse for the same goal, which hand-written thresholds get
+wrong easily and nobody testing on one card would ever see.
