@@ -9,12 +9,21 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to verify
-        required: true
-        default: v0.2.2
+        description: Release tag to verify (or leave empty and give a run)
+        required: false
+        default: ''
+      run_id:
+        description: Build & Release run to verify before tagging (its artifacts)
+        required: false
+        default: ''
 
 permissions:
   contents: read
+  actions: read
+
+env:
+  TAG: ${{ inputs.tag || github.event.release.tag_name }}
+  RUN_ID: ${{ inputs.run_id }}
 
 jobs:
   linux:
@@ -28,77 +37,95 @@ jobs:
           # cleanly on both and still fail to load on the older one.
           - os: ubuntu-22.04
             label: x64, 22.04
+            artifact: linux-x64
             appimage_suffix: linux-x86_64.AppImage
             deb_suffix: linux-amd64.deb
           - os: ubuntu-latest
             label: x64, latest
+            artifact: linux-x64
             appimage_suffix: linux-x86_64.AppImage
             deb_suffix: linux-amd64.deb
           - os: ubuntu-22.04-arm
             label: arm64, 22.04
+            artifact: linux-arm64
             appimage_suffix: linux-arm64.AppImage
             deb_suffix: linux-arm64.deb
           - os: ubuntu-24.04-arm
             label: arm64, 24.04
+            artifact: linux-arm64
             appimage_suffix: linux-arm64.AppImage
             deb_suffix: linux-arm64.deb
 
     steps:
-      - name: Download Linux release assets
+      - name: Download Linux packages
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag || github.event.release.tag_name }}
+          ARTIFACT: ${{ matrix.artifact }}
           APPIMAGE_SUFFIX: ${{ matrix.appimage_suffix }}
           DEB_SUFFIX: ${{ matrix.deb_suffix }}
         shell: bash
         run: |
           set -euo pipefail
-          version="${TAG#v}"
-          version="${version%%-*}"
-          appimage="RigMatch-${version}-${APPIMAGE_SUFFIX}"
-          deb="RigMatch-${version}-${DEB_SUFFIX}"
-
           mkdir -p assets
-          gh release download "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "$appimage" \
-            --pattern "$deb" \
-            --dir assets
-
-          test -s "assets/$appimage"
-          test -s "assets/$deb"
-          sha256sum "assets/$appimage" "assets/$deb"
+          if [[ -n "$RUN_ID" ]]; then
+            gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-$ARTIFACT" --dir assets
+          else
+            test -n "$TAG" || { echo "::error::Give a tag or a run"; exit 1; }
+            version="${TAG#v}"
+            version="${version%%-*}"
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --pattern "RigMatch-$version-$APPIMAGE_SUFFIX" --pattern "RigMatch-$version-$DEB_SUFFIX" --dir assets
+          fi
+          appimage="$(ls assets/RigMatch-*-"$APPIMAGE_SUFFIX")"
+          deb="$(ls assets/RigMatch-*-"$DEB_SUFFIX")"
+          test -s "$appimage"
+          test -s "$deb"
+          sha256sum "$appimage" "$deb"
+          chmod +x "$appimage"
+          echo "APPIMAGE=$PWD/$appimage" >> "$GITHUB_ENV"
+          echo "DEB=$PWD/$deb" >> "$GITHUB_ENV"
 
       - name: Verify AppImage can be extracted
-        env:
-          TAG: ${{ inputs.tag || github.event.release.tag_name }}
-          APPIMAGE_SUFFIX: ${{ matrix.appimage_suffix }}
         shell: bash
         run: |
           set -euo pipefail
-          version="${TAG#v}"
-          version="${version%%-*}"
-          appimage="assets/RigMatch-${version}-${APPIMAGE_SUFFIX}"
-
-          chmod +x "$appimage"
-          "$appimage" --appimage-extract >/tmp/rigmatch-appimage-extract.log 2>&1
+          "$APPIMAGE" --appimage-extract >/tmp/rigmatch-appimage-extract.log 2>&1
           test -x squashfs-root/AppRun
           test -s squashfs-root/usr/share/metainfo/ai.rigmatch.app.metainfo.xml
           find squashfs-root -maxdepth 2 -type f \( -name "*.desktop" -o -name "RigMatch" -o -name "rigmatch-ai" \) -print
 
-      - name: Install Debian package
-        env:
-          TAG: ${{ inputs.tag || github.event.release.tag_name }}
-          DEB_SUFFIX: ${{ matrix.deb_suffix }}
+      # Extracting works without FUSE, so the step above could not tell that
+      # through 0.9.1 the AppImage did not open on a stock Ubuntu: its runtime
+      # loads libfuse2 to mount itself, and 22.04 and newer install fuse3 in
+      # its place. Take libfuse2 away and mount it the way a double-click does.
+      - name: Open the AppImage without libfuse2
         shell: bash
         run: |
           set -euo pipefail
-          version="${TAG#v}"
-          version="${version%%-*}"
-          deb="assets/RigMatch-${version}-${DEB_SUFFIX}"
+          for pkg in libfuse2 libfuse2t64; do
+            if dpkg -s "$pkg" >/dev/null 2>&1; then sudo apt-get remove -y "$pkg"; fi
+          done
+          if ldconfig -p | grep -q 'libfuse\.so\.2'; then echo "::error::libfuse2 is still installed"; exit 1; fi
+          command -v fusermount3 >/dev/null || sudo apt-get install -y fuse3
+          "$APPIMAGE" --appimage-mount >/tmp/rigmatch-appimage-mount.log 2>&1 &
+          pid=$!
+          mnt=""
+          for _ in $(seq 1 30); do
+            mnt="$(head -n 1 /tmp/rigmatch-appimage-mount.log || true)"
+            if [[ -x "$mnt/AppRun" ]] || ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          cat /tmp/rigmatch-appimage-mount.log
+          test -x "$mnt/AppRun"
+          test -s "$mnt/usr/share/metainfo/ai.rigmatch.app.metainfo.xml"
+          kill "$pid"
 
+      - name: Install Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y "./$deb"
+          sudo apt-get install -y "$DEB"
           dpkg -s rigmatch-ai
           dpkg -L rigmatch-ai | sed -n '1,80p'
           test -e /usr/bin/rigmatch-ai
@@ -131,48 +158,47 @@ jobs:
         include:
           - os: macos-latest
             label: Apple Silicon
+            artifact: mac-arm64
             dmg_suffix: mac-arm64.dmg
           - os: macos-15-intel
             label: Intel
+            artifact: mac-x64
             dmg_suffix: mac-x64.dmg
 
     steps:
-      - name: Download macOS release asset
+      - name: Download the DMG
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag || github.event.release.tag_name }}
+          ARTIFACT: ${{ matrix.artifact }}
           DMG_SUFFIX: ${{ matrix.dmg_suffix }}
         shell: bash
         run: |
           set -euo pipefail
-          version="${TAG#v}"
-          version="${version%%-*}"
-          dmg="RigMatch-${version}-${DMG_SUFFIX}"
-
           mkdir -p assets
-          gh release download "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "$dmg" \
-            --dir assets
-
-          test -s "assets/$dmg"
-          shasum -a 256 "assets/$dmg"
+          if [[ -n "$RUN_ID" ]]; then
+            gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-$ARTIFACT" --dir assets
+          else
+            test -n "$TAG" || { echo "::error::Give a tag or a run"; exit 1; }
+            version="${TAG#v}"
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "RigMatch-${version%%-*}-$DMG_SUFFIX" --dir assets
+          fi
+          dmg="$(ls assets/RigMatch-*-"$DMG_SUFFIX")"
+          test -s "$dmg"
+          shasum -a 256 "$dmg"
+          version="$(basename "$dmg")"
+          version="${version#RigMatch-}"
+          echo "DMG=$PWD/$dmg" >> "$GITHUB_ENV"
+          echo "VERSION=${version%-"$DMG_SUFFIX"}" >> "$GITHUB_ENV"
 
       - name: Mount DMG and inspect apps
-        env:
-          TAG: ${{ inputs.tag || github.event.release.tag_name }}
-          DMG_SUFFIX: ${{ matrix.dmg_suffix }}
         shell: bash
         run: |
           set -euo pipefail
-          version="${TAG#v}"
-          version="${version%%-*}"
-          dmg="assets/RigMatch-${version}-${DMG_SUFFIX}"
           mountpoint="$RUNNER_TEMP/rigmatch-dmg"
           install_dir="$RUNNER_TEMP/RigMatchInstallSmoke"
 
           mkdir -p "$mountpoint" "$install_dir"
-          hdiutil attach "$dmg" -nobrowse -quiet -mountpoint "$mountpoint"
+          hdiutil attach "$DMG" -nobrowse -quiet -mountpoint "$mountpoint"
           trap 'hdiutil detach "$mountpoint" -quiet || true' EXIT
 
           find "$mountpoint" -maxdepth 2 -name "*.app" -print
@@ -183,7 +209,7 @@ jobs:
           test "$(plutil -extract CFBundleIdentifier raw -o - "$mountpoint/RigMatch Chat.app/Contents/Info.plist")" = "ai.rigmatch.chat"
 
           app_version="$(plutil -extract CFBundleShortVersionString raw -o - "$mountpoint/RigMatch.app/Contents/Info.plist")"
-          test "$app_version" = "$version"
+          test "$app_version" = "$VERSION"
           test -x "$mountpoint/RigMatch.app/Contents/MacOS/RigMatch"
 
           ditto "$mountpoint/RigMatch.app" "$install_dir/RigMatch.app"

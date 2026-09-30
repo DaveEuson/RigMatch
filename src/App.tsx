@@ -60,6 +60,7 @@ import {
 } from './lib/scoring';
 import { BALANCE_STORAGE_KEY, applyBalance, readBalances, type Balances } from './lib/balance';
 import { codeWinner, labWinner, rankCoding, rankLabList, videoWinner } from './lib/channelWinners';
+import { companionLaunchMessage } from './lib/companionLaunch';
 import { audioMakerChoices, chatPicks, videoMakerChoices } from './lib/chatMakers';
 import { renderChatAudio, renderChatVideo, type ChatRender } from './lib/chatRenders';
 import { installedAudioEntries } from './lib/audioLineup';
@@ -4751,8 +4752,8 @@ function App() {
         onOpenRender={openRender}
         onOpenChat={async () => {
           if (isDesktopRuntime) {
-            const result = await agentArcadeApi.openChatApp();
-            if (!result?.ok) alert('RigMatch Chat was not found in this local build.\n\nFor preview/dev testing, build and copy the companion first:\n\nnpm run build:chat\nnpm run prepare:companions\n\nRelease installers include RigChat when the companion is packaged.');
+            const problem = companionLaunchMessage(await agentArcadeApi.openChatApp());
+            if (problem) alert(problem);
           } else {
             setChatOpen(true);
           }

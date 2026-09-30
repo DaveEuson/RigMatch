@@ -33,6 +33,7 @@ const { scoreQualityWithJudge } = require('./judgeScoring.cjs');
 const security = require('./security.cjs');
 const gpuContention = require('./gpuContention.cjs');
 const { fitWindowToScreen } = require('./windowFit.cjs');
+const { missingLibraries, debianPackagesFor } = require('./companionLibraries.cjs');
 const {
   normalizeUpdateChannel,
   isNightlyRelease,
@@ -1368,6 +1369,13 @@ function registerHandlers() {
       } catch {
         continue;
       }
+      if (!isWin && !isMac) {
+        const libraries = await companionMissingLibraries(candidate, cleanEnv);
+        if (libraries.length) {
+          const packages = fsSync.existsSync('/usr/bin/apt-get') ? debianPackagesFor(libraries) : [];
+          return { ok: false, reason: 'missing-libraries', libraries, packages };
+        }
+      }
       const child = spawn(candidate, [], {
         cwd: path.dirname(candidate),
         env: cleanEnv,
@@ -1380,6 +1388,18 @@ function registerHandlers() {
     }
     return { ok: false, reason: 'not-found' };
   });
+}
+
+// Run with the environment the companion gets, so an AppImage's library path
+// counts. ldd lists a library it cannot find as "name => not found".
+async function companionMissingLibraries(binary, env) {
+  try {
+    const { stdout } = await execFileAsync('ldd', [binary], { env, timeout: 5000 });
+    return missingLibraries(stdout);
+  } catch (error) {
+    // No ldd (a trimmed or musl system) means no answer: launch as before.
+    return missingLibraries(error?.stdout);
+  }
 }
 
 function handleLogged(channel, source, handler) {

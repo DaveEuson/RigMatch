@@ -117,18 +117,31 @@ ordinary unidentified-developer prompt covered in the steps above.
 <details>
 <summary><strong>Linux &amp; Jetson note</strong></summary>
 
-NVIDIA Jetson devices are usually **ARM64/aarch64** — use the Linux ARM64 artifact, not x64. Install the matching `.deb` through `apt` so dependencies resolve:
+Pick the file for your processor: **amd64 / x86_64** for most PCs, **arm64** for NVIDIA Jetson and other ARM64 boards.
+
+**`.deb` (Debian, Ubuntu, JetPack):** install it through `apt`, which also installs everything RigMatch Chat needs:
 
 ```bash
 sudo apt update
-sudo apt install ./Rigmatch-*-linux-*.deb
+sudo apt install ./RigMatch-*-linux-amd64.deb
 ```
 
-If apt reports missing desktop libraries, install the common Electron runtime dependencies:
+On a Jetson or another ARM64 board, the file ends in `linux-arm64.deb` instead.
+
+**AppImage:** make it executable, then open it:
 
 ```bash
-sudo apt install libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 xdg-utils libatspi2.0-0 libuuid1 libsecret-1-0
+chmod +x RigMatch-*.AppImage
+./RigMatch-*.AppImage
 ```
+
+An AppImage installs nothing, so RigMatch Chat uses your system's WebKitGTK 4.1. If it is missing, RigMatch says so when you open Chat; on Debian and Ubuntu:
+
+```bash
+sudo apt install libwebkit2gtk-4.1-0
+```
+
+AppImages up to 0.9.1 also need libfuse2 to open, which Ubuntu 22.04 and newer do not install: `sudo apt install libfuse2` on 22.04, `libfuse2t64` on 24.04. Later AppImages do not need it.
 </details>
 
 ### Build from source

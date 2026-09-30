@@ -142,6 +142,25 @@
         "deb"
       ]
     },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0",
+        "libwebkit2gtk-4.1-0",
+        "libjavascriptcoregtk-4.1-0",
+        "libsoup-3.0-0"
+      ]
+    },
+    "toolsets": {
+      "appimage": "1.0.3"
+    },
     "publish": {
       "provider": "github",
       "owner": "DaveEuson",

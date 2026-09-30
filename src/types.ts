@@ -658,7 +658,7 @@ export type AgentArcadeApi = {
   cancelCloseApp: () => Promise<{ ok: boolean }>;
   onAppCloseRequest?: (callback: () => void) => () => void;
   syncScores: (scores: Record<string, unknown>) => Promise<void>;
-  openChatApp: () => Promise<{ ok: boolean; reason?: string }>;
+  openChatApp: () => Promise<{ ok: boolean; reason?: string; libraries?: string[]; packages?: string[] }>;
   checkAutoUpdate: () => Promise<void>;
   downloadUpdate: () => Promise<void>;
   installUpdate: () => Promise<void>;

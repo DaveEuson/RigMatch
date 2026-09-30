@@ -88,7 +88,7 @@ For the Rust companion audit, run `cargo audit` from `rigmatch-chat/src-tauri`.
 - The release body includes the macOS unsigned beta first-launch note. It goes out the moment the tag is pushed, so it has to be right beforehand.
 - `SHA256SUMS.txt` is generated and uploaded with the release.
 - The nested `RigMatch.AI-main/` scratch folder is not committed or included.
-- **Artifacts are NOT drafts.** The workflow publishes on a `v*` tag with `draft: false`, and anything not matching nightly/alpha/canary/preview is marked Latest immediately. Smoke-test before tagging, not after. To build without publishing, run the workflow via `workflow_dispatch` — the release job is gated on `refs/tags/`, so it produces artifacts and publishes nothing.
+- **Artifacts are NOT drafts.** The workflow publishes on a `v*` tag with `draft: false`, and anything not matching nightly/alpha/canary/preview is marked Latest immediately. Smoke-test before tagging, not after. To build without publishing, run the workflow via `workflow_dispatch` — the release job is gated on `refs/tags/`, so it produces artifacts and publishes nothing. Then run the install smoke on that build's artifacts, still before tagging: `gh workflow run post-release-install-smoke.yml -f run_id=<that run's id>`. After publishing, run it again with `-f tag=<tag>`: a release made by the workflow does not start it.
 
 ## Logs for beta reports
 
