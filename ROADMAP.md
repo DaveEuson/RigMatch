@@ -6,10 +6,6 @@ Ideas parked for later. Nothing here is committed; it's a candid backlog of dire
 
 ## Next
 
-### Put the real app on the landing page
-
-The landing page (`site/index.html`) still shows a CSS mock of a scorecard instead of the app, and it is the first thing a visitor sees. The README's screenshots were replaced for 0.9.1 with the real app at 1280 × 800, driven against a stand-in Ollama so every state of a show could be captured without real models; the landing page can use the same ones.
-
 ### A smaller download: drop the unused Chromium languages
 
 About 47 MB of every install is Chromium's translations for languages RigMatch does not use. Electron can leave them out (`electronLanguages`), but not yet safely: 18 date and number formatting calls take their locale from Chromium's language list, so trimming it would give everyone US formats. Pass the system locale into those calls first, then trim.
@@ -143,6 +139,10 @@ Revisit only if RigMatch starts earning. The order then is Apple first: $99 remo
 
 ## Done
 
+### The real app on the landing page — September 2026
+
+The landing page (`site/index.html`) showed a CSS mock of a scorecard. It now shows the Speed Dating stage and the winner reveal from the README's screenshots, which were taken from a real show at 1280 × 800 against a real Ollama; only the Download step's screenshot used a stand-in. The link preview (`site/og-image.png`) is built from the same stage, and it no longer prints the old `RigMatch.AI` address, which had stopped working.
+
 ### Linux out of the box — 0.9.2
 
 Both Linux packages open on a stock Ubuntu 22.04 or 24.04. The `.deb` installs the WebKitGTK libraries RigMatch Chat needs, the AppImage uses the static runtime and no longer needs libfuse2, and Chat names any library it is missing instead of doing nothing. The install smoke now takes libfuse2 away and mounts the AppImage the way a double-click does, and it can run on a build's artifacts before anything is tagged. RigMatch is listed in the AppImage catalog at [appimage.github.io/RigMatch](https://appimage.github.io/RigMatch/).
@@ -153,7 +153,7 @@ A judge-graded coding test in the language you choose (Python, Go, Rust, SQL, �
 
 ### Web version — July 2026
 
-GitHub Pages serves a landing page at the site root (`site/index.html`), with the interactive preview-mode demo one click away at `/app/`. Shared scorecards link to the landing page, completing the scorecard → landing → demo/download funnel. The demo runs on mock data, because a browser can't read VRAM or the GPU. Still to do: the real app on the landing page (see Next), and repointing links if a custom domain is added.
+GitHub Pages serves a landing page at the site root (`site/index.html`), with the interactive preview-mode demo one click away at `/app/`. Shared scorecards link to the landing page, completing the scorecard → landing → demo/download funnel. The demo runs on mock data, because a browser can't read VRAM or the GPU. Still to do: repointing links if a custom domain is added.
 
 ### Scores stamped with their rig — 0.6.0
 

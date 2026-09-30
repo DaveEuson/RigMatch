@@ -69,7 +69,7 @@
       .nav-links { display: flex; align-items: center; gap: 22px; font-size: 14px; font-weight: 600; }
       .nav-links a { color: var(--muted); text-decoration: none; }
       .nav-links a:hover { color: var(--text); }
-      .nav-cta { background: var(--gold); color: #10131a; padding: 8px 14px; border-radius: 999px; font-weight: 800; }
+      .nav-links a.nav-cta { background: var(--gold); color: #10131a; padding: 8px 14px; border-radius: 999px; font-weight: 800; }
       @media (max-width: 640px) { .nav-links a.hide-sm { display: none; } }
 
       /* Buttons */
@@ -80,33 +80,20 @@
       .btn-ghost:hover { border-color: var(--gold); }
 
       /* Hero */
-      .hero { padding: 70px 0 40px; }
-      .hero-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 48px; align-items: center; }
+      .hero { padding: 64px 0 40px; }
+      .hero-grid { display: grid; gap: 40px; }
       .eyebrow { color: var(--gold); font-weight: 800; letter-spacing: 2px; font-size: 12px; text-transform: uppercase; }
-      h1 { font-size: clamp(34px, 5vw, 52px); line-height: 1.06; margin: 14px 0 16px; letter-spacing: -0.5px; }
+      h1 { font-size: clamp(34px, 5vw, 52px); line-height: 1.06; margin: 14px 0 16px; letter-spacing: -0.5px; max-width: 18em; text-wrap: balance; }
       h1 em { color: var(--gold); font-style: normal; }
-      .lede { color: var(--muted); font-size: 18px; max-width: 34ch; }
+      .lede { color: var(--muted); font-size: 18px; max-width: 58ch; }
       .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
       .cta-note { color: var(--quiet); font-size: 13px; margin-top: 12px; }
-      @media (max-width: 860px) { .hero-grid { grid-template-columns: 1fr; gap: 34px; } .hero-visual { order: -1; } }
 
-      /* Hero scorecard mock (echoes the shareable card) */
-      .card { background: linear-gradient(180deg, var(--bg-soft), #12161d); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; position: relative; overflow: hidden; }
-      .card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: linear-gradient(90deg, var(--gold), var(--teal)); }
-      .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-      .card-brand { font-weight: 800; color: var(--gold); font-size: 15px; }
-      .card-brand span { display: block; color: var(--quiet); font-weight: 500; font-size: 11px; }
-      .card-top { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
-      .grade { width: 76px; height: 76px; border-radius: 16px; display: grid; place-items: center; font-size: 44px; font-weight: 900; color: var(--gold); border: 3px solid var(--gold); background: var(--panel); }
-      .card-title .label { color: var(--gold); font-weight: 800; font-size: 11px; letter-spacing: 1.5px; }
-      .card-title .model { font-size: 24px; font-weight: 800; }
-      .card-title .score { color: var(--muted); font-size: 13px; }
-      .bar-row { display: grid; grid-template-columns: 62px 1fr 34px; align-items: center; gap: 10px; margin: 9px 0; font-size: 13px; }
-      .bar-row .k { color: var(--muted); font-weight: 600; }
-      .bar-row .v { text-align: right; font-weight: 800; }
-      .track { height: 12px; background: var(--panel); border-radius: 8px; overflow: hidden; }
-      .fill { height: 100%; border-radius: 8px; }
-      .rig { margin-top: 16px; padding: 9px 12px; background: var(--panel); border-radius: 10px; color: var(--muted); font-size: 12px; }
+      /* Screenshots of the real app */
+      .shot { margin: 0; background: var(--bg-soft); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+      .shot img { display: block; width: 100%; height: auto; }
+      .shot figcaption { padding: 12px 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+      .steps + .shot { margin-top: 26px; }
 
       /* Sections */
       section { padding: 54px 0; }
@@ -175,25 +162,11 @@
             <p class="cta-note">The browser demo runs on sample data. Download the app to score your real rig — 100% locally.</p>
           </div>
 
-          <div class="hero-visual">
-            <div class="card" aria-hidden="true">
-              <div class="card-head">
-                <div class="card-brand">RigMatch<span>The AI dating game show for your PC</span></div>
-              </div>
-              <div class="card-top">
-                <div class="grade">A</div>
-                <div class="card-title">
-                  <div class="label">TOP MATCH ON THIS PC</div>
-                  <div class="model">qwen2.5:7b</div>
-                  <div class="score">92 / 100 Match Score</div>
-                </div>
-              </div>
-              <div class="bar-row"><span class="k">Speed</span><span class="track"><span class="fill" style="width:94%;background:var(--teal)"></span></span><span class="v">94</span></div>
-              <div class="bar-row"><span class="k">Quality</span><span class="track"><span class="fill" style="width:91%;background:var(--gold)"></span></span><span class="v">91</span></div>
-              <div class="bar-row"><span class="k">Fit</span><span class="track"><span class="fill" style="width:88%;background:var(--green)"></span></span><span class="v">88</span></div>
-              <div class="rig">RTX 4070 &nbsp;·&nbsp; 12 GB VRAM &nbsp;·&nbsp; 32 GB RAM &nbsp;·&nbsp; 100% local</div>
-            </div>
-          </div>
+          <figure class="shot">
+            <img src="./shots/stage.webp" width="1192" height="362"
+              alt="The Speed Dating stage in RigMatch: Llama3.2 is done and scored 88, Qwen2.5 is answering a coding question, and Gemma3 waits its turn.">
+            <figcaption>Speed Dating on a real PC: every model answers the same questions, one at a time, scored as it goes.</figcaption>
+          </figure>
         </div>
       </section>
 
@@ -220,6 +193,11 @@
               <p>One 0–100 Match Score and a letter grade — then chat with the winner right away.</p>
             </div>
           </div>
+          <figure class="shot">
+            <img src="./shots/winner.webp" width="1192" height="518" loading="lazy"
+              alt="The winner reveal: Llama3.2 is the Top Match with 88.2, grade A, ahead of Gemma3 at 86.6 and Qwen2.5 at 81.0.">
+            <figcaption>The same show's result: three models, one Top Match, every score measured on that PC.</figcaption>
+          </figure>
         </div>
       </section>
 
@@ -241,8 +219,8 @@
         <div class="wrap">
           <div class="trust">
             <h2>100% local. Nothing leaves your computer.</h2>
-            <p>Models run through Ollama on your own hardware. Nothing you type, test, or score is ever sent to a cloud — no account, no telemetry.</p>
-            <div class="badges"><span>No account</span><span>No cloud</span><span>No telemetry</span><span>Source available · read the code</span></div>
+            <p>Models run through Ollama on your own hardware. Nothing you type, test, or score leaves your computer unless you choose a cloud judge — no account, no telemetry.</p>
+            <div class="badges"><span>No account</span><span>No cloud needed</span><span>No telemetry</span><span>Source available · read the code</span></div>
           </div>
         </div>
       </section>
