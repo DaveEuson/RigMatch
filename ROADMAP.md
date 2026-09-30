@@ -1,14 +1,14 @@
 # RigMatch — Roadmap
 
-Ideas parked for later. Nothing here is committed; it's a candid backlog of directions worth exploring. Last reviewed September 2026, at 0.9.1.
+Ideas parked for later. Nothing here is committed; it's a candid backlog of directions worth exploring. Last reviewed September 2026, at 0.9.2.
 
 ---
 
 ## Next
 
-### Refresh the screenshots
+### Put the real app on the landing page
 
-The README's screenshots in `docs/images` date from August and show the flat dark look that 0.9.1 replaced, and the landing page (`site/index.html`) still shows a CSS mock of a scorecard instead of the app. Both are the first thing a visitor sees. The screens can be regenerated at 1280 × 800 from the real app, driven against a stand-in Ollama so every state of a show can be captured without real models.
+The landing page (`site/index.html`) still shows a CSS mock of a scorecard instead of the app, and it is the first thing a visitor sees. The README's screenshots were replaced for 0.9.1 with the real app at 1280 × 800, driven against a stand-in Ollama so every state of a show could be captured without real models; the landing page can use the same ones.
 
 ### A smaller download: drop the unused Chromium languages
 
@@ -143,13 +143,17 @@ Revisit only if RigMatch starts earning. The order then is Apple first: $99 remo
 
 ## Done
 
+### Linux out of the box — 0.9.2
+
+Both Linux packages open on a stock Ubuntu 22.04 or 24.04. The `.deb` installs the WebKitGTK libraries RigMatch Chat needs, the AppImage uses the static runtime and no longer needs libfuse2, and Chat names any library it is missing instead of doing nothing. The install smoke now takes libfuse2 away and mounts the AppImage the way a double-click does, and it can run on a build's artifacts before anything is tagged. RigMatch is listed in the AppImage catalog at [appimage.github.io/RigMatch](https://appimage.github.io/RigMatch/).
+
 ### Code Challenge — July 2026
 
 A judge-graded coding test in the language you choose (Python, Go, Rust, SQL, …), the counterpart to App Builder for code that can't be run as a web app. It is picked in the run dialog and needs a code-capable model and a judge. Design in [docs/code-challenge-spec.md](docs/code-challenge-spec.md).
 
 ### Web version — July 2026
 
-GitHub Pages serves a landing page at the site root (`site/index.html`), with the interactive preview-mode demo one click away at `/app/`. Shared scorecards link to the landing page, completing the scorecard → landing → demo/download funnel. The demo runs on mock data, because a browser can't read VRAM or the GPU. Still to do: the landing page's real screenshots (see Next), and repointing links if a custom domain is added.
+GitHub Pages serves a landing page at the site root (`site/index.html`), with the interactive preview-mode demo one click away at `/app/`. Shared scorecards link to the landing page, completing the scorecard → landing → demo/download funnel. The demo runs on mock data, because a browser can't read VRAM or the GPU. Still to do: the real app on the landing page (see Next), and repointing links if a custom domain is added.
 
 ### Scores stamped with their rig — 0.6.0
 
