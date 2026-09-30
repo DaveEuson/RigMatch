@@ -3,6 +3,17 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.9.2',
+    label: 'Linux Out Of The Box',
+    date: 'Beta build',
+    notes: [
+      'On Linux, RigMatch Chat opens on a fresh install. Chat is built on WebKitGTK, and the .deb never asked for it, so on a system without it the Chat button did nothing and said nothing. Installing the .deb now installs it too.',
+      'When Chat can\'t start, RigMatch says why. Before opening Chat on Linux it checks that every library Chat needs is there. If one is missing, it names it and, on Debian and Ubuntu, gives the command that installs it. The AppImage needs this most, because it can\'t install anything itself.',
+      'The AppImage opens on Ubuntu 22.04 and newer with nothing extra installed. It used to need libfuse2, which those versions no longer include, so double-clicking it did nothing until you installed that by hand. It now uses the newer AppImage runtime, which doesn\'t need it.',
+      'Electron 42.10, which fixes four high-severity security issues in the framework RigMatch is built on.',
+    ],
+  },
+  {
     version: '0.9.1',
     label: 'Everyone Can Follow The Show',
     date: 'Beta build',
