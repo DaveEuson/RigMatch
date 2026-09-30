@@ -24,7 +24,7 @@
 
 Picking a local LLM is confusing: parameter counts, quantization, VRAM, context windows… RigMatch skips all of that. It **benchmarks models on your actual hardware** through [Ollama](https://ollama.com), scores each one on **speed, answer quality, and hardware fit**, and crowns a **Top Match** with a 0–100 Match Score.
 
-Everything runs on your machine. No account, no cloud, no telemetry.
+Everything runs on your machine. No account, no telemetry, and no cloud unless you choose a cloud judge.
 
 - 🖥️ **Reads your real rig**. GPU, VRAM, RAM and disk decide which contestants even qualify
 - 💛 **Speed Dating benchmarks**. Every model answers the same questions, live on stage
