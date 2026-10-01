@@ -7,7 +7,7 @@ import type { ModelRow } from '../types';
 export type ModelFamilyId =
   | 'deepseek' | 'llama' | 'qwen' | 'mistral' | 'gemma' | 'phi'
   | 'granite' | 'cohere' | 'vision' | 'yi' | 'solar' | 'falcon'
-  | 'starcoder' | 'smollm' | 'stablelm' | 'imagegen'
+  | 'starcoder' | 'smollm' | 'stablelm' | 'imagegen' | 'ajax'
   | 'generic';
 
 export type ModelOrigin = {
@@ -115,6 +115,10 @@ export function getDisplayCountry(model: string, publisher?: string): string | n
 
 export function getModelFamily(model: string): ModelFamilyId {
   const lower = String(model || '').toLowerCase();
+  // Odysseus's Ajax is a fine-tuned Qwen 3.5 9B, and a release name can carry
+  // the base model's ("Ajax-Qwen3.5-9B"), so it is checked before qwen. Whole
+  // word only: "ajax" inside some unrelated name is not this model.
+  if (/(^|[^a-z])ajax([^a-z]|$)/.test(lower)) return 'ajax';
   if (lower.includes('deepseek')) return 'deepseek';
   if (lower.includes('llama')) return 'llama';
   if (lower.includes('qwen')) return 'qwen';
@@ -159,6 +163,9 @@ export function getModelOrigin(model: string): ModelOrigin {
       return { family, country: 'United States', organization: 'Google' };
     case 'phi':
       return { family, country: 'United States', organization: 'Microsoft' };
+    case 'ajax':
+      // The project names no country, and one is not guessed here.
+      return { family, country: 'Unknown', organization: 'Odysseus' };
     case 'generic':
     default:
       if (lower.includes('granite')) return { family, country: 'United States', organization: 'IBM' };

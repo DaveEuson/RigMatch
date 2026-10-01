@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getModelFamily, getModelOrigin } from '../src/lib/modelOrigins.ts';
+import { getDisplayCountry, getModelFamily, getModelOrigin } from '../src/lib/modelOrigins.ts';
 
 test('core families keep their own art', () => {
   assert.equal(getModelFamily('qwen2.5:7b'), 'qwen');
@@ -35,6 +35,21 @@ test('new families are detected for their upcoming art', () => {
   assert.equal(getModelFamily('starcoder2:3b'), 'starcoder');
   assert.equal(getModelFamily('smollm2'), 'smollm');
   assert.equal(getModelFamily('stablelm2'), 'stablelm');
+});
+
+test('Ajax is its own contestant, even when its name carries its base model', () => {
+  // Odysseus's agent model is a fine-tuned Qwen 3.5 9B. Its release name is
+  // not known yet, and could be an Ollama tag or a Hugging Face path that
+  // mentions Qwen; none of those should file it under Alibaba's Qwen.
+  for (const name of ['ajax:9b', 'odysseus/ajax:latest', 'hf.co/odysseus-dev/Ajax-9B-GGUF:Q4_K_M', 'hf.co/someone/Ajax-Qwen3.5-9B-GGUF:Q8_0']) {
+    assert.equal(getModelFamily(name), 'ajax', name);
+    assert.equal(getModelOrigin(name).organization, 'Odysseus', name);
+  }
+  // No country is claimed for it.
+  assert.equal(getDisplayCountry('ajax:9b'), null);
+  // A whole word only.
+  assert.notEqual(getModelFamily('ajaxified-llama:3b'), 'ajax');
+  assert.equal(getModelFamily('qwen3.5:9b'), 'qwen');
 });
 
 test('vision and image-generation models share a family', () => {
