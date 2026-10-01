@@ -12,9 +12,14 @@ const BENCHMARK_TYPE_LABELS: Record<BenchmarkQuestionType, string> = {
   format: 'Format following',
   coding: 'Coding task',
   candour: 'Difficult subject',
+  tools: 'Tool call',
 };
 
-/** Moved out of App.tsx with TestSuiteEditorDock, its only consumer. */
+/**
+ * Moved out of App.tsx with TestSuiteEditorDock, its only consumer. 'tools'
+ * is left out: a tool question is checked against the call it should produce,
+ * which electron/agentTools.cjs knows only for its own prompts.
+ */
 const BENCHMARK_QUESTION_TYPES: BenchmarkQuestionType[] = ['assistant', 'writing', 'json', 'truth', 'format', 'coding'];
 
 export function TestSuiteEditorDock({

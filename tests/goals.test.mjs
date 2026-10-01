@@ -50,13 +50,13 @@ test('writing is scored on writing questions, and only on those', () => {
   assert.equal(write.unsupportedReason, undefined, 'nothing left to apologize for');
 });
 
-test('tools is scoreable on day one, using the json questions', () => {
-  // "Return only valid JSON for this local assistant request..." was always
-  // a tool-use question; it now counts under the goal it measures, and
-  // instruction-following keeps only format.
+test('tools is crowned on real tool calls as well as the json questions', () => {
+  // "Return only valid JSON for this local assistant request..." measured
+  // formatting a request; the tool questions measure making one. Both count
+  // under the goal, and instruction-following keeps only format.
   const tools = goalById('use-tools');
   assert.equal(tools.grading, 'questions');
-  assert.deepEqual([...tools.questionTypes], ['json']);
+  assert.deepEqual([...tools.questionTypes], ['tools', 'json']);
   const instructions = SCORED_QUALITIES.find((q) => q.id === 'instructions');
   assert.deepEqual([...instructions.questionTypes], ['format']);
 });

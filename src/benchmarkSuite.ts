@@ -2,7 +2,7 @@
 export const BENCHMARK_QUESTION_LEVELS = [10, 20, 50, 100] as const;
 
 export type BenchmarkQuestionCount = (typeof BENCHMARK_QUESTION_LEVELS)[number];
-export type BenchmarkQuestionType = 'json' | 'truth' | 'format' | 'assistant' | 'coding' | 'writing' | 'candour';
+export type BenchmarkQuestionType = 'json' | 'truth' | 'format' | 'assistant' | 'coding' | 'writing' | 'candour' | 'tools';
 
 export type BenchmarkQuestion = {
   id: string;
@@ -231,21 +231,22 @@ export const BENCHMARK_PRESETS: BenchmarkPreset[] = [
   {
     id: 'tools',
     label: 'Tools & Automations',
-    description: 'Structured output for home automation, scripts, and anything that reads a model\'s answer as data.',
+    description: 'Calling real tools the way an agent does (search, calendar, email, devices), and structured output for anything that reads a model\'s answer as data.',
     questions: [
-      // Weighted to json, because that is what the tools goal is crowned on —
-      // six of them clears the three-answer bar in a single ten-question run.
-      // Every other preset was goal-shaped already; this one was the gap that
-      // left "Power my tools and automations" with nowhere to send people.
-      { id: 'pre_tool_1',  label: 'Device command',     type: 'json',      prompt: 'Return only valid JSON for this home-automation request: "dim the kitchen lights to 30% at sunset". Use keys intent, action, target, and urgency.' },
-      { id: 'pre_tool_2',  label: 'Tool choice',        type: 'json',      prompt: 'Return only valid JSON choosing between two tools for "find last month\'s electricity usage". Use keys winner, reason, risks, next_step. Tools: a database query vs. a web search.' },
-      { id: 'pre_tool_3',  label: 'Format: steps',      type: 'format',    prompt: 'Reply with exactly three numbered steps to add a new smart plug to an existing home-automation setup.' },
-      { id: 'pre_tool_4',  label: 'Sensor reading',     type: 'json',      prompt: 'Return only valid JSON describing a temperature sensor reading. Use keys intent, action, target, urgency. Set intent to "read_sensor" and target to "living_room_thermostat".' },
+      // Eight tool calls, checked against the call each one should produce
+      // (electron/agentTools.cjs holds the tools and the checks, matched on
+      // these exact prompts). The JSON questions measured whether a model can
+      // format a request; these measure whether it can make one. The last two
+      // tool questions test holding back: no tool needed, and a detail missing.
+      { id: 'pre_agent_search',   label: 'Web search',       type: 'tools', prompt: "Search the web for the Louvre's opening hours this week." },
+      { id: 'pre_agent_page',     label: 'Open a page',      type: 'tools', prompt: 'Open https://example.com/pricing and tell me what the plans cost.' },
+      { id: 'pre_agent_calendar', label: 'Calendar event',   type: 'tools', prompt: 'Add a dentist appointment to my calendar on 2026-10-14 at 15:30 for 45 minutes.' },
+      { id: 'pre_agent_email',    label: 'Send an email',    type: 'tools', prompt: 'Email sam@example.com with the subject "Running late" and tell them I will be 10 minutes late.' },
+      { id: 'pre_agent_task',     label: 'To-do item',       type: 'tools', prompt: 'Put "renew my passport" on my to-do list, due 2026-11-01.' },
+      { id: 'pre_agent_device',   label: 'Device command',   type: 'tools', prompt: 'Dim the kitchen lights to 30%.' },
+      { id: 'pre_agent_no_tool',  label: 'No tool needed',   type: 'tools', prompt: 'What is 12 multiplied by 12? Answer with just the number.' },
+      { id: 'pre_agent_missing',  label: 'Missing detail',   type: 'tools', prompt: 'Email my landlord that the heating is broken.' },
       { id: 'pre_tool_5',  label: 'Truth: device state',type: 'truth',     prompt: 'Is my front door currently locked? If this information was not provided to you, say you cannot determine it from the prompt.' },
-      { id: 'pre_tool_6',  label: 'Schedule payload',   type: 'json',      prompt: 'Return only valid JSON for a recurring automation: run the hallway lights every weekday at 07:00. Use keys intent, action, target, urgency.' },
-      { id: 'pre_tool_7',  label: 'Format: bullets',    type: 'format',    prompt: 'Reply with exactly two short bullet points on when an automation should run locally rather than in the cloud.' },
-      { id: 'pre_tool_8',  label: 'Webhook body',       type: 'json',      prompt: 'Return only valid JSON for a webhook that reports a motion event. Use keys intent, action, target, urgency. Set intent to "motion_detected".' },
-      { id: 'pre_tool_9',  label: 'Failure path',       type: 'json',      prompt: 'Return only valid JSON describing what to do when a smart device does not respond. Use keys intent, action, target, urgency.' },
       { id: 'pre_tool_10', label: 'Parse a request',    type: 'json',      prompt: 'Return only valid JSON parsing this instruction: "turn off everything downstairs except the fridge". Use keys intent, action, target, urgency.' },
     ],
   },
@@ -313,5 +314,6 @@ function isBenchmarkQuestionType(value: unknown): value is BenchmarkQuestionType
     || value === 'assistant'
     || value === 'coding'
     || value === 'writing'
-    || value === 'candour';
+    || value === 'candour'
+    || value === 'tools';
 }

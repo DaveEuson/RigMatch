@@ -18,12 +18,12 @@ test('a difficult subject is named as one, not as everyday chat', () => {
 });
 
 test('every question type has a caption', () => {
-  const types = ['json', 'truth', 'format', 'assistant', 'coding', 'writing', 'candour'];
+  const types = ['json', 'truth', 'format', 'assistant', 'coding', 'writing', 'candour', 'tools'];
   for (const type of types) {
     assert.equal(typeof roundLabel(type), 'string', `${type} has no caption`);
     assert.ok(roundLabel(type).length > 0);
   }
-  // A total record: an eighth type must fail to compile rather than default.
+  // A total record: a ninth type must fail to compile rather than default.
   assert.equal(Object.keys(ROUND_LABELS).length, types.length);
 });
 

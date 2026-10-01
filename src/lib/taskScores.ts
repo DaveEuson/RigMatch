@@ -31,7 +31,7 @@ export const TASK_GROUPS = [
   { id: 'chat', label: 'Everyday chat', questionTypes: ['assistant'] },
   { id: 'writing', label: 'Writing', questionTypes: ['writing'] },
   { id: 'facts', label: 'Sticking to facts', questionTypes: ['truth'] },
-  { id: 'tools', label: 'Tools & automations', questionTypes: ['json'] },
+  { id: 'tools', label: 'Tools & automations', questionTypes: ['tools', 'json'] },
   { id: 'instructions', label: 'Following instructions', questionTypes: ['format'] },
   { id: 'candour', label: 'Difficult subjects', questionTypes: ['candour'] },
 ] as const satisfies ReadonlyArray<{

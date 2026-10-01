@@ -35,6 +35,14 @@ const gpuContention = require('./gpuContention.cjs');
 const { fitWindowToScreen } = require('./windowFit.cjs');
 const { missingLibraries, debianPackagesFor } = require('./companionLibraries.cjs');
 const {
+  findAgentTask,
+  buildToolChatBody,
+  isToolsUnsupportedError,
+  readToolCalls,
+  describeToolAnswer,
+  scoreToolAnswer,
+} = require('./agentTools.cjs');
+const {
   normalizeUpdateChannel,
   isNightlyRelease,
   normalizeReleaseVersion,
@@ -3625,11 +3633,16 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       let promptEvalDurationMs = null;
       let loadDurationMs = null;
       let thinkingDisabled = BENCHMARK_THINK_DISABLED;
+      // A tool question's calls and verdict; null for every other type.
+      let toolAnswer = null;
 
       try {
-        const generateResult = provider === 'lm-studio'
-          ? await runLmStudioBenchmarkPrompt(baseUrl, model, prompt.prompt, signal)
-          : await runBenchmarkPromptParity(baseUrl, model, prompt.prompt, signal);
+        const generateResult = prompt.type === 'tools'
+          ? await runBenchmarkToolPrompt(baseUrl, model, prompt.prompt, signal, provider)
+          : provider === 'lm-studio'
+            ? await runLmStudioBenchmarkPrompt(baseUrl, model, prompt.prompt, signal)
+            : await runBenchmarkPromptParity(baseUrl, model, prompt.prompt, signal);
+        toolAnswer = generateResult.toolAnswer || null;
         responseText = generateResult.responseText;
         evalCount = generateResult.evalCount;
         evalDurationSeconds = generateResult.evalDurationSeconds;
@@ -3677,7 +3690,10 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       // Judge grades the representative (first-run) answer; later runs reuse it.
       // On any judge failure, promptJudgeScore stays null and we use the heuristic.
       const autoJudgeThis = autoJudgeUnmarkable && !heuristicCanGrade(prompt.type, prompt.prompt);
-      if ((useJudge || autoJudgeThis) && runIndex === 0 && !judgeGaveUp) {
+      // A tool call is checked by rule even when a judge is on: the right tool
+      // and the right date are facts, and a judge would be shown a description
+      // of the call rather than the call.
+      if ((useJudge || autoJudgeThis) && !toolAnswer && runIndex === 0 && !judgeGaveUp) {
         const judgeName = useJudge ? judgeModel : autoJudgeModel;
         // Said while it happens. Marking an answer takes the judge model's own
         // time, and the contestant was shown "Thinking it over…" throughout.
@@ -3730,25 +3746,28 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         const judgedHere = !(useJudge && judgeProvider === 'openrouter');
         if (judgedHere && provider === 'ollama') await warmBenchmarkModel(baseUrl, model);
       }
+      const toolVerdict = toolAnswer?.verdict || null;
       const sobrietyScore = promptJudgeScore != null
         ? promptJudgeScore
-        : scoreSobriety(prompt, responseText);
+        : toolVerdict ? toolVerdict.score : scoreSobriety(prompt, responseText);
       // Say which of the three this number actually is. Without it the UI
       // cannot tell a graded answer from a length proxy, and was crowning
       // "best for talking" on the latter.
       const scoredBy = promptJudgeScore != null
         ? 'judge'
-        : heuristicCanGrade(prompt.type, prompt.prompt, responseText) ? 'heuristic' : 'unjudged';
+        : toolVerdict || heuristicCanGrade(prompt.type, prompt.prompt, responseText) ? 'heuristic' : 'unjudged';
       const promptStatus = getBenchmarkPromptStatus(responseText, doneReason);
-      const diagnostic = buildPromptDiagnostic({
-        responseText,
-        doneReason,
-        evalCount,
-        evalDurationSeconds,
-        elapsedMs,
-        status: promptStatus,
-        thinkingDisabled,
-      });
+      const diagnostic = toolVerdict
+        ? `${model} ${toolVerdict.verdict}.`
+        : buildPromptDiagnostic({
+          responseText,
+          doneReason,
+          evalCount,
+          evalDurationSeconds,
+          elapsedMs,
+          status: promptStatus,
+          thinkingDisabled,
+        });
 
       runs.push({
         elapsedMs,
@@ -3766,6 +3785,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         promptEvalDurationMs,
         loadDurationMs,
         thinkingDisabled,
+        toolsUnsupported: Boolean(toolAnswer?.unsupported),
       });
       rawRuns.push({ prompt, ...runs[runs.length - 1] });
 
@@ -3816,6 +3836,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       evalCount: Math.round(average(runs.map((run) => run.evalCount))),
       evalDurationMs: Math.round(median(runs.map((run) => run.evalDurationMs))),
       thinkingDisabled: runs.every((run) => run.thinkingDisabled),
+      ...(runs.every((run) => run.toolsUnsupported) ? { toolsUnsupported: true } : {}),
     });
     const completedPrompt = promptResults[promptResults.length - 1];
     sendProgress({
@@ -3841,8 +3862,12 @@ async function runBenchmarkInner(request = {}, sender, signal) {
     throw new Error(`${model} returned an empty answer to every question, so there was nothing to score.`);
   }
 
-  const avgTokens = average(promptResults.map((result) => result.tokensPerSecond));
-  const avgLatency = average(promptResults.map((result) => result.elapsedMs));
+  // A tool question Ollama refused for this model comes back in milliseconds
+  // with nothing generated; timed, it would read as the fastest answer of the
+  // run. It scores 0 for answer quality and stays out of speed.
+  const timedResults = promptResults.filter((result) => !result.toolsUnsupported);
+  const avgTokens = average(timedResults.map((result) => result.tokensPerSecond));
+  const avgLatency = average(timedResults.map((result) => result.elapsedMs));
   const firstTokenSamples = rawRuns.map((r) => r.firstTokenMs).filter(Number.isFinite);
   const avgFirstToken = firstTokenSamples.length > 0 ? average(firstTokenSamples) : null;
   /**
@@ -4122,6 +4147,84 @@ async function runBenchmarkPromptParity(baseUrl, model, prompt, signal) {
     promptEvalDurationMs: durationNsToMs(response.prompt_eval_duration),
     loadDurationMs: durationNsToMs(response.load_duration),
     thinkingDisabled,
+  };
+}
+
+/**
+ * One tool question: the prompt, with electron/agentTools.cjs's tool kit, sent
+ * to /api/chat, and the calls the model made checked against the task.
+ *
+ * A model Ollama has no tool support for is refused in milliseconds with
+ * "does not support tools". That is a finding about the model, so it comes
+ * back as an answer scoring 0, marked so its timing stays out of speed, rather
+ * than as an error that would end its run.
+ */
+async function runBenchmarkToolPrompt(baseUrl, model, prompt, signal, provider) {
+  const task = findAgentTask(prompt);
+  const unsupported = (reason) => ({
+    responseText: `No tool call: ${reason}`,
+    evalCount: 0,
+    evalDurationSeconds: 0,
+    doneReason: 'tools unsupported',
+    totalDurationMs: null,
+    promptEvalDurationMs: null,
+    loadDurationMs: null,
+    thinkingDisabled: BENCHMARK_THINK_DISABLED,
+    toolAnswer: { unsupported: true, verdict: task ? { score: 0, verdict: 'cannot call tools in Ollama' } : null },
+  });
+  if (provider === 'lm-studio') return unsupported('the tool test runs through Ollama.');
+
+  const requestUrl = `${baseUrl}/api/chat`;
+  const send = (disableThinking) => fetchJson(
+    requestUrl,
+    {
+      method: 'POST',
+      signal,
+      body: JSON.stringify(buildToolChatBody({
+        model,
+        prompt,
+        keepAlive: BENCHMARK_KEEP_ALIVE,
+        options: BENCHMARK_GENERATE_OPTIONS,
+        disableThinking,
+      })),
+    },
+    BENCHMARK_TIMEOUT_MS,
+  );
+  let thinkingDisabled = BENCHMARK_THINK_DISABLED;
+  let response;
+  try {
+    response = await send(true);
+  } catch (error) {
+    if (isToolsUnsupportedError(error)) return unsupported('Ollama says this model does not support tools.');
+    if (!isUnsupportedThinkError(error)) throw error;
+    thinkingDisabled = false;
+    try {
+      response = await send(false);
+    } catch (retryError) {
+      if (isToolsUnsupportedError(retryError)) return unsupported('Ollama says this model does not support tools.');
+      throw retryError;
+    }
+  }
+
+  const calls = readToolCalls(response.message);
+  const content = String(response.message?.content || '');
+  const responseText = describeToolAnswer(calls, content);
+  const evalCount = normalizePositiveNumber(response.eval_count) || estimateTokens(responseText);
+  const evalDurationSeconds = normalizePositiveNumber(response.eval_duration)
+    ? Number(response.eval_duration) / 1_000_000_000
+    : 0;
+  return {
+    responseText,
+    evalCount,
+    evalDurationSeconds,
+    doneReason: response.done_reason || (response.done ? 'stop' : 'unknown'),
+    totalDurationMs: durationNsToMs(response.total_duration),
+    promptEvalDurationMs: durationNsToMs(response.prompt_eval_duration),
+    loadDurationMs: durationNsToMs(response.load_duration),
+    thinkingDisabled,
+    // A tool question this file has no check for (an imported custom suite)
+    // falls back to the ordinary, ungraded scoring.
+    toolAnswer: task ? { calls, verdict: scoreToolAnswer(task, { calls, content }) } : null,
   };
 }
 

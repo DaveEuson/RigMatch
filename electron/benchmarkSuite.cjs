@@ -159,7 +159,8 @@ function isBenchmarkQuestionType(value) {
     || value === 'assistant'
     || value === 'coding'
     || value === 'writing'
-    || value === 'candour';
+    || value === 'candour'
+    || value === 'tools';
 }
 
 module.exports = {
