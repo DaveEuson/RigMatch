@@ -181,6 +181,20 @@ function heuristicCanGrade(type, prompt, response) {
   return true;
 }
 
+/**
+ * One question's scoredBy, from its timing runs.
+ *
+ * A judge marks the first run and its mark is reused for the rest, so a judged
+ * question is 'judge' on every run. If any run's number came from nothing that
+ * could grade it, the averaged score is partly unmeasured: 'unjudged' wins.
+ */
+function summarizeScoredBy(runs) {
+  const kinds = runs.map((run) => run.scoredBy);
+  if (kinds.length === 0 || kinds.includes('unjudged')) return 'unjudged';
+  if (kinds.every((kind) => kind === 'judge')) return 'judge';
+  return 'heuristic';
+}
+
 function getBenchmarkPromptStatus(response, doneReason) {
   if (!String(response || '').trim()) return 'no-response';
 
@@ -312,6 +326,7 @@ module.exports = {
   summarizePromptDiagnostics,
   scoreSobriety,
   getBenchmarkPromptStatus,
+  summarizeScoredBy,
   summarizeDoneReasons,
   summarizePromptStatuses,
   isStableBenchmarkRun,
