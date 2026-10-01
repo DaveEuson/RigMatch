@@ -1,4 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
+const { findAgentTask } = require('./agentTools.cjs');
+
 const BENCHMARK_THINK_DISABLED = true;
 
 function buildBenchmarkGenerateBody({ model, prompt, keepAlive, options }) {
@@ -173,6 +175,9 @@ function heuristicCanGrade(type, prompt, response) {
     if (response === undefined) return false;
     return candourEngagement(response) !== 'engaged';
   }
+  // A tool call is checked against the call its task expects, which exists
+  // only for agentTools' own prompts. An imported tool question has none.
+  if (type === 'tools') return findAgentTask(prompt) !== null;
   return true;
 }
 

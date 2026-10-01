@@ -191,13 +191,15 @@ export const GOALS: Goal[] = [
     id: 'use-tools',
     category: 'work',
     desire: 'Power my tools and automations',
-    // The Home Assistant crowd's whole reason for local AI, and scoreable on
-    // day one: the suite already asks JSON/tool-output questions.
+    // The Home Assistant crowd's whole reason for local AI. Crowned on real
+    // tool calls (electron/agentTools.cjs) as well as the JSON questions that
+    // scored it alone at first: those measured formatting a request, these
+    // measure making one.
     label: 'Tools & automations',
     matchLabel: 'Best for automations',
     runtime: 'ollama',
     grading: 'questions',
-    questionTypes: ['json'],
+    questionTypes: ['tools', 'json'],
   },
   {
     id: 'make-audio',

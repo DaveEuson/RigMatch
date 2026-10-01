@@ -195,6 +195,11 @@ export type BenchmarkPromptResult = {
   evalCount?: number;
   evalDurationMs?: number;
   thinkingDisabled?: boolean;
+  /**
+   * A tool question Ollama refused to pass this model tools for. It scores 0,
+   * and its timing (a refusal in milliseconds) is left out of speed.
+   */
+  toolsUnsupported?: boolean;
 };
 
 export type BenchmarkResult = {

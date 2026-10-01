@@ -130,7 +130,8 @@ test('a model that answered nothing is not scored', () => {
 
 test('a judge that stops answering is not waited on for every answer', () => {
   const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
-  assert.match(main, /if \(\(useJudge \|\| autoJudgeThis\) && runIndex === 0 && !judgeGaveUp\)/);
+  // !toolAnswer: a tool call is checked by rule, never sent to a judge.
+  assert.match(main, /if \(\(useJudge \|\| autoJudgeThis\) && !toolAnswer && runIndex === 0 && !judgeGaveUp\)/);
   assert.match(main, /if \(judgeFailure && !signal\?\.aborted\) \{\s*judgeGaveUp = true;/);
   assert.match(main, /phase: 'judging',/, 'marking is announced while it happens');
 });
