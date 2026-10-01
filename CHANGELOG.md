@@ -4,6 +4,14 @@ Every RigMatch release, newest first. These are the same notes the app shows in
 Update Center — this file and the GitHub release pages are generated from
 `src/data/releaseNotes.ts`, so there is only one place to write them.
 
+## 0.9.3 — Can It Actually Do Things?
+_Beta build_
+
+- RigMatch can test whether a model uses tools. Agent models like Odysseus's Ajax are built to act: search the web, add to your calendar, send an email. RigMatch now hands each model six working tools through Ollama and checks that it calls the right one with the right details. Two questions test holding back. One needs no tool at all; the other asks for an email without saying who to send it to. Of the six models tried that could use tools, five sent it anyway, three of them to an address they made up. A model Ollama can't give tools to scores 0 on those questions and still finishes its run, and that instant refusal is kept out of the speed score.
+- The Tools & Automations goal now picks its winner from real tool calls as well as the JSON questions it used before.
+- Answers nothing could grade stopped counting as graded. Since mid-August, RigMatch has known whether each score came from a judge, a rule, or nothing at all (chat answers scored only by their length), but it lost that when it saved the result. Those placeholder numbers went into answer quality and could crown "Best for talking". They're left out now. Because this changes what a score measures, results saved before this version show "Retest recommended" until you run them again.
+- Ajax has its own contestant portrait: the Trojan War hero, in a bronze helmet with a crimson crest, holding his shield. It's listed as made by Odysseus.
+
 ## 0.9.2 — Linux Out Of The Box
 _Beta build_
 
