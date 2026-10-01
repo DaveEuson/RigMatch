@@ -10,8 +10,13 @@ import { summarizeTaskScores } from './taskScores.ts';
  * v5: the json questions moved out of the pooled "instructions" task group
  * into their own "tools" group. A v4 instructions score mixes two question
  * kinds a v5 one does not, so the two cannot be ranked against each other.
+ *
+ * v6: each question's scoredBy reaches the saved result. Through v5 it never
+ * did, so answer quality averaged in answers nothing could grade (prose
+ * scored by length), and every group counted as graded. The tools group also
+ * gained real tool calls (electron/agentTools.cjs) alongside its json ones.
  */
-export const CURRENT_SCORE_SCHEMA_VERSION = 5;
+export const CURRENT_SCORE_SCHEMA_VERSION = 6;
 
 /**
  * Relative weights that make up the 0–100 Match Score. They sum to 1.0.

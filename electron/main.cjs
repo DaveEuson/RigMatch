@@ -19,6 +19,7 @@ const {
   scoreSobriety,
   heuristicCanGrade,
   getBenchmarkPromptStatus,
+  summarizeScoredBy,
   summarizeDoneReasons,
   summarizePromptStatuses,
   isStableBenchmarkRun,
@@ -3829,6 +3830,11 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       elapsedMs: Math.round(median(runs.map((run) => run.elapsedMs))),
       tokensPerSecond: Math.round(median(runs.map((run) => run.tokensPerSecond)) * 10) / 10,
       sobrietyScore: Math.round(average(runs.map((run) => run.sobrietyScore))),
+      // How that number was reached. It was worked out for every run and never
+      // copied here, so every answer read as graded: the headline answer
+      // quality averaged in length-scored prose, and a group of answers nothing
+      // could grade still counted toward a "Best for" crown.
+      scoredBy: summarizeScoredBy(runs),
       response: runs[runs.length - 1]?.response || '',
       doneReason: summarizeDoneReasons(runs.map((run) => run.doneReason)),
       status: summarizePromptStatuses(runs.map((run) => run.status)),
