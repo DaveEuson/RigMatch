@@ -35,6 +35,7 @@ the joke, and it's what makes the set feel designed rather than decorated:
 | Mistral | A *mistral* is a French wind → a swept, flowing wind-crest |
 | Phi | The Greek letter **Φ** → a ring-and-stem antenna forming the symbol |
 | Qwen | Mint-green bot with a glowing heart on its chest panel |
+| Ajax | Ajax, the giant hero of the Trojan War and Odysseus's comrade → a bronze Corinthian helmet with a crimson crest and a Greek-key shield |
 | Generic | Unknown contestant → a **?** on its face screen |
 
 Keep that rule. When in doubt, ask "what is this model *named after*?" and build
@@ -139,3 +140,8 @@ Community fine-tunes (`zephyr`, `vicuna`, `openhermes`, `nous-hermes2`,
 `neural-chat`, `starling-lm`, `orca-mini`, `wizardlm2`, `mistral-openorca`)
 intentionally keep the generic robot. They aren't distinct vendors, and mapping
 them onto a base family would mislabel their organization in the "By" column.
+
+The one exception is Ajax, Odysseus's fine-tune of Qwen 3.5 9B, which got its
+own portrait for RigMatch's Ajax report (2026-10). It is its own family with
+Odysseus as the maker, never mapped onto Qwen, and its country is left blank:
+the project names none.

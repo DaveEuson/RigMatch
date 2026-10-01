@@ -1,6 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { getModelFamily, type ModelFamilyId } from './modelOrigins.ts';
 import machineAvatarLocal from '../assets/machine-avatar-local.webp';
+import modelAvatarAjax from '../assets/model-avatar-ajax.webp';
 import modelAvatarCohere from '../assets/model-avatar-cohere.webp';
 import modelAvatarDeepSeek from '../assets/model-avatar-deepseek.webp';
 import modelAvatarFalcon from '../assets/model-avatar-falcon.webp';
@@ -38,6 +39,9 @@ export const MODEL_AVATAR_ASSETS: Record<ModelFamilyId, string> = {
   smollm: modelAvatarSmolLM,
   stablelm: modelAvatarStableLM,
   imagegen: modelAvatarImageGen,
+  // A fine-tune, which would normally keep the generic robot. Odysseus's agent
+  // model gets its own because it is tested by name in RigMatch's Ajax report.
+  ajax: modelAvatarAjax,
 
   // Fallback for community fine-tunes and anything unrecognized. To add a new
   // family portrait, see docs/avatar-art-direction.md.
