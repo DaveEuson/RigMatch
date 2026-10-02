@@ -13,6 +13,7 @@ const BENCHMARK_TYPE_LABELS: Record<BenchmarkQuestionType, string> = {
   coding: 'Coding task',
   candour: 'Difficult subject',
   tools: 'Tool call',
+  edgy: 'Harmless but edgy request',
 };
 
 /**
@@ -20,7 +21,7 @@ const BENCHMARK_TYPE_LABELS: Record<BenchmarkQuestionType, string> = {
  * is left out: a tool question is checked against the call it should produce,
  * which electron/agentTools.cjs knows only for its own prompts.
  */
-const BENCHMARK_QUESTION_TYPES: BenchmarkQuestionType[] = ['assistant', 'writing', 'json', 'truth', 'format', 'coding'];
+const BENCHMARK_QUESTION_TYPES: BenchmarkQuestionType[] = ['assistant', 'writing', 'json', 'truth', 'format', 'coding', 'edgy'];
 
 export function TestSuiteEditorDock({
   questions,

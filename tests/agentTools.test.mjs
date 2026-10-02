@@ -120,7 +120,67 @@ test('the request carries the tool kit, and drops think only on the retry', () =
   // The main process retries with thinking allowed, not with the same request.
   const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
   const runner = main.slice(main.indexOf('async function runBenchmarkToolPrompt'), main.indexOf('async function runLmStudioBenchmarkPrompt'));
-  assert.match(runner, /response = await send\(true\);[\s\S]*thinkingDisabled = false;[\s\S]*response = await send\(false\);/);
+  assert.match(runner, /if \(!thinkingDisabled \|\| !isUnsupportedThinkError\(error\)\) throw error;\s*thinkingDisabled = false;\s*return send\(messages\);/);
+  // A conversation goes out as it stands, steps included.
+  const turn = [{ role: 'user', content: 'p' }, { role: 'tool', tool_name: 'web_search', content: 'r' }];
+  assert.equal(agent.buildToolChatBody({ model: 'm', messages: turn, keepAlive: '10m', options: {} }).messages, turn);
+});
+
+/** A stand-in for Ollama: hands back the given replies in order and records what it was sent. */
+const scripted = (...replies) => {
+  const sent = [];
+  const ask = async (messages) => {
+    sent.push(messages.map((m) => ({ ...m })));
+    return { message: replies[sent.length - 1] };
+  };
+  return { ask, sent };
+};
+
+test('a step task feeds each tool result back and checks the next call', async () => {
+  // qwen3.5:9b's real calls on the invoice task, 2026-10-02.
+  const { ask, sent } = scripted(
+    { content: '', tool_calls: [call('open_page', { url: 'https://example.com/team' })] },
+    { content: '', tool_calls: [call('send_email', { to: 'priya@example.com', subject: "Request for last month's invoice", body: 'Hi Priya, could you please send me the invoice for last month?' })] },
+  );
+  const outcome = await agent.runAgentTask(task('Open https://example.com/team'), ask);
+  assert.equal(outcome.score, 100);
+  assert.equal(outcome.verdict, 'completed all 2 steps');
+  // The second request carried the first call and the page RigMatch handed back.
+  assert.equal(sent.length, 2);
+  assert.equal(sent[1][1].role, 'assistant');
+  assert.equal(sent[1][2].role, 'tool');
+  assert.match(sent[1][2].content, /priya@example\.com/);
+});
+
+test('acting before reading the result costs far more than an extra call', async () => {
+  // qwen2.5:7b opened the page and, in the same turn, emailed a made-up address.
+  const { ask } = scripted(
+    { content: '', tool_calls: [
+      call('open_page', { url: 'https://example.com/team' }),
+      call('send_email', { to: 'invoicehandler@example.com', subject: 'Invoice', body: 'Please send last month\'s invoice.' }),
+    ] },
+    { content: '', tool_calls: [call('send_email', { to: 'priya@example.com', subject: 'Invoice request', body: "Could you send last month's invoice?" })] },
+  );
+  const outcome = await agent.runAgentTask(task('Open https://example.com/team'), ask);
+  assert.equal(outcome.score, 75);
+  assert.match(outcome.verdict, /step 1 of 2: .*also called send_email before reading the result/);
+});
+
+test('a step that misses its tool ends the task, and the rest score 0', async () => {
+  // llama3.2:3b wrote the to-do in text instead of calling add_task.
+  const { ask, sent } = scripted(
+    { content: '', tool_calls: [call('web_search', { query: 'Lisbon weather forecast 2026-10-15' })] },
+    { content: 'For your to-do list on 2026-10-15: take an umbrella.' },
+  );
+  const outcome = await agent.runAgentTask(task('Check the weather forecast for Lisbon'), ask);
+  assert.equal(outcome.score, 50);
+  assert.match(outcome.verdict, /step 2 of 2: answered instead of calling a tool/);
+  // A wrong first move on the three-step task: nothing after it is asked.
+  const wrong = scripted({ content: '', tool_calls: [call('add_calendar_event', { title: 'Jazz', date: '2026-06-21', time: '09:00' })] });
+  const festival = await agent.runAgentTask(task('Find the official website of the Lisbon Jazz Festival'), wrong.ask);
+  assert.equal(wrong.sent.length, 1);
+  assert.equal(festival.score, 5);
+  assert.match(festival.verdict, /step 1 of 3: called add_calendar_event instead of web_search/);
 });
 
 test('only tool questions with a known check count as graded', () => {

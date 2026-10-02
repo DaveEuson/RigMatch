@@ -22,7 +22,7 @@ const cjs = require('../electron/benchmarkSuite.cjs');
  */
 
 test('both copies accept exactly the same question types', () => {
-  const types = ['json', 'truth', 'format', 'assistant', 'coding', 'writing', 'candour', 'tools'];
+  const types = ['json', 'truth', 'format', 'assistant', 'coding', 'writing', 'candour', 'tools', 'edgy'];
   for (const type of types) {
     const plan = cjs.buildBenchmarkPromptPlan(1, [{ id: 't', label: 't', type, prompt: 'p' }]);
     assert.equal(plan[0].type, type,

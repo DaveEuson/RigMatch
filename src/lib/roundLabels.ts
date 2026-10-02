@@ -30,6 +30,7 @@ export const ROUND_LABELS: Record<BenchmarkQuestionType, string> = {
   writing: 'Writing something well',
   candour: 'Difficult subjects',
   tools: 'Using tools',
+  edgy: 'Harmless but edgy',
 };
 
 /**
