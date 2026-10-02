@@ -658,6 +658,10 @@ export default function App() {
   const [ollamaVersion, setOllamaVersion] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("checking");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** "Want to go deeper?": what Odysseus is, and whether it is already running here. */
+  const [deeperOpen, setDeeperOpen] = useState(false);
+  const [odysseusUp, setOdysseusUp] = useState(false);
+  const deeperActionRef = useRef<HTMLButtonElement>(null);
   const [draftSettings, setDraftSettings] = useState<AppSettings>(settings);
   const [rigScores, setRigScores] = useState<Record<string, ModelScore>>(() => loadCachedBridge().scores);
   /** What is being made for this window, and RigMatch's job for it once there is one, so Stop can reach it. */
@@ -1574,6 +1578,17 @@ export default function App() {
     setSettingsOpen(true);
   };
 
+  /** The model to suggest in Odysseus: RigMatch's Top Match, else the one open here. */
+  const deeperModel = chosenModel ?? activeBuddy;
+  const openDeeper = () => {
+    setOdysseusUp(false);
+    setDeeperOpen(true);
+    void invoke<boolean>("odysseus_running").then((up) => setOdysseusUp(up === true)).catch(() => undefined);
+  };
+  useEffect(() => {
+    if (deeperOpen) deeperActionRef.current?.focus();
+  }, [deeperOpen]);
+
   const applySettings = () => {
     const rawUrl = draftSettings.ollamaUrl.trim() || "http://localhost:11434";
     try {
@@ -1963,6 +1978,71 @@ export default function App() {
         </div>
       )}
 
+      {/* Where to go when chatting is not enough: Odysseus, a separate
+          open-source workspace that can use the same Ollama. Described and
+          linked, never bundled or copied; it is AGPL and a server you install. */}
+      {deeperOpen && (
+        <div
+          className="rm-modal-backdrop"
+          role="presentation"
+          onClick={() => setDeeperOpen(false)}
+          onKeyDown={(e) => { if (e.key === "Escape") setDeeperOpen(false); }}
+        >
+          <div
+            className="rm-modal rm-modal-wide rm-deeper"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rm-deeper-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <strong id="rm-deeper-title">Want to go deeper?</strong>
+            <p>
+              RigMatch Chat is for talking to your models. <b>Odysseus</b> is a free, open-source AI workspace
+              that does much more with the same ones:
+            </p>
+            <ul className="rm-deeper-list">
+              <li>Agents that use tools: your files, the shell, web search</li>
+              <li>Research across the web, written up with its sources</li>
+              <li>A document editor with AI edits</li>
+              <li>Email, notes, tasks and a calendar it can help with</li>
+              <li>Side-by-side model comparisons</li>
+            </ul>
+            <p>
+              It runs on your own computer and can use the models you already have in Ollama
+              {deeperModel ? <>, including <b>{getDisplayName(deeperModel)}</b></> : null}. Setting it up takes
+              Docker or Python, so it is a bigger step than RigMatch.
+            </p>
+            {odysseusUp ? (
+              <p className="rm-deeper-found">
+                Odysseus is running on this PC. If {deeperModel ? getDisplayName(deeperModel) : "your model"} is not
+                in its model list yet, add your Ollama in its Settings: <code>http://localhost:11434/v1</code>
+              </p>
+            ) : (
+              <ol className="rm-deeper-steps">
+                <li>Install Odysseus with the setup guide on its site.</li>
+                <li>
+                  In Odysseus's Settings, add your Ollama: <code>http://localhost:11434/v1</code>
+                  {" "}(a Docker install uses a different address; the guide has it).
+                </li>
+                <li>Pick {deeperModel ? getDisplayName(deeperModel) : "a model"} and start a chat.</li>
+              </ol>
+            )}
+            <p className="rm-deeper-note">Odysseus is a separate project. RigMatch is not affiliated with it.</p>
+            <div className="rm-modal-actions">
+              <button type="button" className="rm-btn-sm" onClick={() => setDeeperOpen(false)}>Close</button>
+              <button
+                ref={deeperActionRef}
+                type="button"
+                className="rm-btn-sm rm-btn-primary"
+                onClick={() => void invoke("open_odysseus", { local: odysseusUp }).catch(() => undefined)}
+              >
+                {odysseusUp ? "Open Odysseus" : "Visit Odysseus"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Deleting a conversation cannot be undone and there is no bin to
           recover it from, so it gets asked about by name. */}
       {confirmDelete && (
@@ -2312,6 +2392,9 @@ export default function App() {
         </div>
 
         <div className="rm-buddy-panel-footer">
+          <button type="button" className="rm-deeper-btn" onClick={openDeeper}>
+            Want to go deeper?
+          </button>
           <button
             type="button"
             className="rm-open-rigmatch-btn"
