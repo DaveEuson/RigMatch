@@ -41,7 +41,7 @@ const {
   isToolsUnsupportedError,
   readToolCalls,
   describeToolAnswer,
-  scoreToolAnswer,
+  runAgentTask,
 } = require('./agentTools.cjs');
 const {
   normalizeUpdateChannel,
@@ -4181,56 +4181,67 @@ async function runBenchmarkToolPrompt(baseUrl, model, prompt, signal, provider) 
   if (provider === 'lm-studio') return unsupported('the tool test runs through Ollama.');
 
   const requestUrl = `${baseUrl}/api/chat`;
-  const send = (disableThinking) => fetchJson(
+  let thinkingDisabled = BENCHMARK_THINK_DISABLED;
+  const send = (messages) => fetchJson(
     requestUrl,
     {
       method: 'POST',
       signal,
       body: JSON.stringify(buildToolChatBody({
         model,
-        prompt,
+        messages,
         keepAlive: BENCHMARK_KEEP_ALIVE,
         options: BENCHMARK_GENERATE_OPTIONS,
-        disableThinking,
+        disableThinking: thinkingDisabled,
       })),
     },
     BENCHMARK_TIMEOUT_MS,
   );
-  let thinkingDisabled = BENCHMARK_THINK_DISABLED;
-  let response;
+  // An Ollama too old to accept `think` is asked again without it, and the
+  // rest of the task's steps follow suit.
+  const ask = async (messages) => {
+    try {
+      return await send(messages);
+    } catch (error) {
+      if (!thinkingDisabled || !isUnsupportedThinkError(error)) throw error;
+      thinkingDisabled = false;
+      return send(messages);
+    }
+  };
+
+  let outcome;
   try {
-    response = await send(true);
+    if (task) {
+      outcome = await runAgentTask(task, ask);
+    } else {
+      // A tool question this file has no check for (an imported custom suite):
+      // asked once, and scored the ordinary, ungraded way.
+      const reply = await ask([{ role: 'user', content: prompt }]);
+      const calls = readToolCalls(reply.message);
+      outcome = { turns: [{ reply, calls }], description: describeToolAnswer(calls, reply.message?.content) };
+    }
   } catch (error) {
     if (isToolsUnsupportedError(error)) return unsupported('Ollama says this model does not support tools.');
-    if (!isUnsupportedThinkError(error)) throw error;
-    thinkingDisabled = false;
-    try {
-      response = await send(false);
-    } catch (retryError) {
-      if (isToolsUnsupportedError(retryError)) return unsupported('Ollama says this model does not support tools.');
-      throw retryError;
-    }
+    throw error;
   }
 
-  const calls = readToolCalls(response.message);
-  const content = String(response.message?.content || '');
-  const responseText = describeToolAnswer(calls, content);
-  const evalCount = normalizePositiveNumber(response.eval_count) || estimateTokens(responseText);
-  const evalDurationSeconds = normalizePositiveNumber(response.eval_duration)
-    ? Number(response.eval_duration) / 1_000_000_000
-    : 0;
+  // A multi-step task is timed over all of its turns.
+  const replies = outcome.turns.map((turn) => turn.reply);
+  const sum = (key) => replies.reduce((total, reply) => total + (normalizePositiveNumber(reply?.[key]) || 0), 0);
+  const responseText = outcome.description;
+  const last = replies[replies.length - 1] || {};
   return {
     responseText,
-    evalCount,
-    evalDurationSeconds,
-    doneReason: response.done_reason || (response.done ? 'stop' : 'unknown'),
-    totalDurationMs: durationNsToMs(response.total_duration),
-    promptEvalDurationMs: durationNsToMs(response.prompt_eval_duration),
-    loadDurationMs: durationNsToMs(response.load_duration),
+    evalCount: sum('eval_count') || estimateTokens(responseText),
+    evalDurationSeconds: sum('eval_duration') / 1_000_000_000,
+    doneReason: last.done_reason || (last.done ? 'stop' : 'unknown'),
+    totalDurationMs: durationNsToMs(sum('total_duration')),
+    promptEvalDurationMs: durationNsToMs(sum('prompt_eval_duration')),
+    loadDurationMs: durationNsToMs(replies[0]?.load_duration),
     thinkingDisabled,
-    // A tool question this file has no check for (an imported custom suite)
-    // falls back to the ordinary, ungraded scoring.
-    toolAnswer: task ? { calls, verdict: scoreToolAnswer(task, { calls, content }) } : null,
+    toolAnswer: task
+      ? { calls: outcome.turns.flatMap((turn) => turn.calls), verdict: { score: outcome.score, verdict: outcome.verdict } }
+      : null,
   };
 }
 

@@ -38,6 +38,7 @@ const PURPOSE: Record<string, string> = {
   // judge it separates further than any other group — a flat refusal and a
   // confidently invented answer both score 0 where the heuristic gave both 72.
   candour: 'difficult subjects',
+  edgy: 'harmless but edgy requests',
 };
 
 /**
