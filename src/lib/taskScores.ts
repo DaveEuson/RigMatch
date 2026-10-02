@@ -34,6 +34,7 @@ export const TASK_GROUPS = [
   { id: 'tools', label: 'Tools & automations', questionTypes: ['tools', 'json'] },
   { id: 'instructions', label: 'Following instructions', questionTypes: ['format'] },
   { id: 'candour', label: 'Difficult subjects', questionTypes: ['candour'] },
+  { id: 'edgy', label: 'Harmless but edgy', questionTypes: ['edgy'] },
 ] as const satisfies ReadonlyArray<{
   id: string;
   label: string;
