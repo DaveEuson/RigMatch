@@ -15,6 +15,7 @@ import { WORKBENCHES, workbenchById, type Workbench, type WorkbenchId } from '..
 import { BalanceFader } from './BalanceFader';
 import { BrandMark, MetricTile } from './CommonChrome';
 import { ComfyStartButton } from './ComfyStartButton';
+import { BadgeCase } from './AchievementShelf';
 import { AvatarBust, MachineAvatar } from './Avatars';
 
 export function TopDeck({
@@ -280,8 +281,13 @@ export function TopDeck({
           {comfyFolder && !comfyReachable && (
             <ComfyStartButton folder={comfyFolder} variant="deck" />
           )}
+          {/* The expanded deck has no room for the whole case: its count, here. */}
+          {uiMode === 'advanced' && <BadgeCase compact />}
         </div>
       </section>
+
+      {/* The collapsed strip has the room the expanded deck does not. */}
+      {uiMode === 'advanced' && <BadgeCase />}
 
       {!chatLike ? (
         <ChannelWinnerCard

@@ -51,7 +51,7 @@ import { useDialog } from '../lib/useDialog';
 import { ShowMarquee } from './ShowMarquee';
 import { setShowExtras, useShowExtras, useShowStage, type ShowStage } from '../lib/showExtras';
 import { TROJAN_HOST_COPY, ajaxHostLine } from '../lib/trojanStage';
-import { AchievementUnlocked } from './AchievementShelf';
+import { AchievementUnlocked, BadgeCase } from './AchievementShelf';
 import { useShowTheme, type ShowMusicState } from '../hooks/useShowTheme';
 import { workbenchById } from '../lib/workbench';
 import rigGreenroom from '../assets/robot-rig-greenroom.webp';
@@ -600,6 +600,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
             );
           })}
         </nav>
+        <BadgeCase />
       </header>
 
       <div className="sw-content">

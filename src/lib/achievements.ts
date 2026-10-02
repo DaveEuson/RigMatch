@@ -37,6 +37,8 @@ export type Achievement = {
   title: string;
   /** How to earn it, written as the thing to try. */
   how: string;
+  /** What earning it took, said once it has been: "You finished your first show." */
+  done: string;
   /** Shown as "???" until earned, with `hint` in place of `how`. */
   hidden?: boolean;
   hint?: string;
@@ -45,19 +47,20 @@ export type Achievement = {
 };
 
 export const ACHIEVEMENTS: Achievement[] = [
-  { id: 'first-date', title: 'First date', how: 'Finish your first show.' },
-  { id: 'speed-dater', title: 'Speed dater', how: 'Test five different models.' },
-  { id: 'second-date', title: 'Second date', how: 'Test a model again and see what changed.' },
-  { id: 'fair-judge', title: 'Fair judge', how: 'Run a show with a judge model marking the answers.' },
-  { id: 'hands-on', title: 'Hands on', how: 'Run the Tools & Automations questions.' },
-  { id: 'thick-skin', title: 'Thick skin', how: 'Run Harmless but Edgy or Difficult Subjects.' },
-  { id: 'picture-this', title: 'Picture this', how: 'Make a picture with ComfyUI.' },
-  { id: 'say-it', title: 'Say it out loud', how: 'Make a sound or a song with ComfyUI.' },
-  { id: 'penguin', title: 'Penguin', how: 'Run RigMatch on Linux.' },
+  { id: 'first-date', title: 'First date', how: 'Finish your first show.', done: 'You finished your first show.' },
+  { id: 'speed-dater', title: 'Speed dater', how: 'Test five different models.', done: 'You tested five different models.' },
+  { id: 'second-date', title: 'Second date', how: 'Test a model again and see what changed.', done: 'You tested a model again to see what changed.' },
+  { id: 'fair-judge', title: 'Fair judge', how: 'Run a show with a judge model marking the answers.', done: 'You ran a show with a judge model marking the answers.' },
+  { id: 'hands-on', title: 'Hands on', how: 'Run the Tools & Automations questions.', done: 'You ran the Tools & Automations questions.' },
+  { id: 'thick-skin', title: 'Thick skin', how: 'Run Harmless but Edgy or Difficult Subjects.', done: 'You ran Harmless but Edgy or Difficult Subjects.' },
+  { id: 'picture-this', title: 'Picture this', how: 'Make a picture with ComfyUI.', done: 'You made a picture with ComfyUI.' },
+  { id: 'say-it', title: 'Say it out loud', how: 'Make a sound or a song with ComfyUI.', done: 'You made a sound or a song with ComfyUI.' },
+  { id: 'penguin', title: 'Penguin', how: 'Run RigMatch on Linux.', done: 'You ran RigMatch on Linux.' },
   {
     id: 'trojan-hero',
     title: 'Trojan hero',
     how: 'Test Ajax, the agent model made for Odysseus.',
+    done: 'You tested Ajax, the agent model made for Odysseus.',
     hidden: true,
     hint: 'Hidden. It has something to do with a hero of Troy.',
     reward: 'Unlocks the Trojan stage.',

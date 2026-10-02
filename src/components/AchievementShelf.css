@@ -1,11 +1,262 @@
 /* RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE. */
 
-/* Achievements are completions, so they wear Avocado, the system's color for
-   a finished step. Gold stays with the winner and the next action: on the
-   Winner screen a gold badge would compete with the crown. */
+/* Achievements are completions, so their words wear Avocado, the system's
+   color for a finished step. The pins are their own enamel colors, like the
+   contestant portraits. Gold stays with the winner and the next action. */
 
-/* The shelf: a list, two columns where there is room. Earned ones lit, locked
-   ones quiet, each saying what to try. */
+/* The pins ---------------------------------------------------------------- */
+.achievement-pin {
+  display: block;
+  flex: none;
+  overflow: visible;
+}
+
+.achievement-pin:not(.socket) {
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.55));
+}
+
+/* An empty socket in the badge's own shape, pressed into the case. */
+.achievement-pin.socket .socket-shape {
+  fill: rgba(0, 0, 0, 0.3);
+  stroke: color-mix(in srgb, var(--line-bright) 75%, transparent);
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+}
+
+.achievement-pin .socket-mark {
+  fill: var(--muted);
+  font: 900 14px var(--display);
+}
+
+/* The badge case in the top bar --------------------------------------------- */
+.badge-case {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  justify-self: end;
+  padding: 3px 6px;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.24);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.badge-slot {
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.badge-slot:hover {
+  background: var(--panel-hover);
+  transform: translateY(-1px);
+}
+
+.badge-slot:focus-visible,
+.badge-case-count:focus-visible,
+.badge-splash-close:focus-visible,
+.badge-splash-use:focus-visible,
+.achievement-use:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.badge-case-count {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 4px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-strong);
+  font: 800 12px var(--ui);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.badge-case.compact {
+  justify-self: start;
+  width: max-content;
+  margin-top: 6px;
+  padding: 2px 4px;
+}
+
+.badge-case.compact .badge-case-count { display: inline-flex; }
+
+/* A narrow window keeps the count and loses the row. */
+@media (max-width: 900px) {
+  .badge-case > .badge-slot { display: none; }
+  .badge-case-count { display: inline-flex; }
+}
+
+/* The splash: one badge up close ------------------------------------------- */
+.badge-splash {
+  width: min(400px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 30px 28px 22px;
+  border: 1px solid var(--line-bright);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  text-align: center;
+}
+
+.badge-splash:popover-open {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+
+.badge-splash::backdrop {
+  background: rgba(8, 5, 12, 0.62);
+}
+
+.badge-splash-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.badge-splash-close:hover {
+  background: var(--panel-hover);
+  color: var(--text-strong);
+}
+
+.badge-splash-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* The pin sits in its own pool of light; a locked one in a dimmer one. */
+.badge-splash-hero {
+  display: grid;
+  place-items: center;
+  width: 168px;
+  height: 148px;
+  margin-bottom: 4px;
+  background: radial-gradient(closest-side, rgba(255, 249, 239, 0.07), transparent);
+}
+
+.badge-splash-hero.earned {
+  background: radial-gradient(closest-side, rgba(255, 249, 239, 0.16), transparent);
+}
+
+.badge-splash-hero .achievement-pin:not(.socket) {
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.55));
+}
+
+.badge-splash h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font: 900 22px/1.1 var(--display);
+  text-wrap: balance;
+}
+
+.badge-splash-state {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.badge-splash-state.earned {
+  color: var(--green);
+}
+
+.badge-splash-how {
+  max-width: 34ch;
+  margin: 6px 0 0;
+  font-size: 15px;
+  line-height: 1.45;
+  text-wrap: balance;
+}
+
+.badge-splash-how b {
+  color: var(--text-strong);
+}
+
+.badge-splash-reward {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.badge-splash-use,
+.achievement-use {
+  margin-top: 6px;
+  padding: 7px 16px;
+  border: 1px solid var(--line-bright);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text-strong);
+  font: 700 13px var(--ui);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.badge-splash-use:hover,
+.achievement-use:hover {
+  background: var(--panel-hover);
+  transform: translateY(-1px);
+}
+
+.badge-splash-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+
+.badge-splash-row .badge-slot[aria-pressed="true"] {
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--line-bright);
+}
+
+.badge-splash-count {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The splash rises into place, once, from already visible. */
+@media (prefers-reduced-motion: no-preference) {
+  .badge-splash:popover-open {
+    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.22s ease;
+  }
+
+  @starting-style {
+    .badge-splash:popover-open {
+      opacity: 0.4;
+      transform: translateY(10px) scale(0.97);
+    }
+  }
+}
+
+/* The shelf in Settings ------------------------------------------------------ */
 .achievement-shelf {
   display: grid;
   gap: 12px;
@@ -38,28 +289,6 @@
   align-items: start;
   padding: 10px 0;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
-}
-
-.achievement-badge {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
-  color: var(--muted);
-}
-
-.achievement-badge svg {
-  width: 15px;
-  height: 15px;
-}
-
-.earned .achievement-badge,
-.achievement-unlocked .achievement-badge {
-  border-color: rgba(var(--green-rgb), 0.7);
-  background: rgba(var(--green-rgb), 0.16);
-  color: var(--green);
 }
 
 .achievement-copy {
@@ -99,21 +328,27 @@
   color: var(--text-strong);
 }
 
-/* "You earned …", under the Winner reveal: one quiet line of good news,
-   not a second crown. */
+/* "You earned …", under the Winner reveal: the pin, handed over. -------------- */
 .achievement-unlocked {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-  padding: 12px 14px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 12px 16px;
   border: 1px solid rgba(var(--green-rgb), 0.4);
   border-radius: 12px;
   background: rgba(var(--green-rgb), 0.07);
 }
 
+.achievement-unlocked-pins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: 120px;
+}
+
 .achievement-unlocked h3 {
-  margin: 4px 0 0;
+  margin: 0;
   color: var(--text-strong);
   font-size: 14px;
   font-weight: 800;
@@ -139,59 +374,14 @@
 }
 
 .achievement-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-  margin-top: 10px;
-}
-
-.achievement-use {
-  padding: 6px 14px;
-  border: 1px solid var(--line-bright);
-  border-radius: 999px;
-  background: var(--panel-2);
-  color: var(--text-strong);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease;
-}
-
-.achievement-use:hover {
-  background: var(--panel-hover);
-  transform: translateY(-1px);
-}
-
-.achievement-all {
-  flex-basis: 100%;
-}
-
-.achievement-all summary {
-  width: max-content;
-  color: var(--muted);
-  font-size: 12px;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.achievement-all summary:hover {
-  color: var(--text-strong);
-}
-
-.achievement-all[open] summary {
-  margin-bottom: 10px;
-}
-
-.achievement-use:focus-visible,
-.achievement-all summary:focus-visible {
-  outline: 2px solid var(--green);
-  outline-offset: 2px;
+  margin-top: 4px;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .badge-slot,
+  .badge-splash-use,
   .achievement-use { transition: none; }
+  .badge-slot:hover,
+  .badge-splash-use:hover,
   .achievement-use:hover { transform: none; }
 }

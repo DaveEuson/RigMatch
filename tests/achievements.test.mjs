@@ -115,3 +115,17 @@ test('the app records badges from its saved runs, results and Lab, quietly at la
   const lab = readFileSync(new URL('../src/lib/labResults.ts', import.meta.url), 'utf-8');
   assert.match(lab, /recordAchievements\(\{ labChallenges: labChallengesWithOutput\(results\) \}\)/);
 });
+
+test('every badge says what earning it took, and the case is in both top bars', () => {
+  for (const a of ACHIEVEMENTS) assert.match(a.done, /^You /, `${a.id} has no past-tense line for its splash`);
+  const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8');
+  const wizard = read('../src/components/SimpleWizard.tsx');
+  assert.match(wizard, /<\/nav>\s*<BadgeCase \/>\s*<\/header>/, 'Simple Mode lost its badge case');
+  const deck = read('../src/components/TopDeck.tsx');
+  assert.match(deck, /<BadgeCase compact \/>/, 'the expanded deck lost its badge count');
+  assert.match(deck, /\{uiMode === 'advanced' && <BadgeCase \/>\}/, 'the collapsed strip lost its badge case');
+  // Each pin opens its splash: a locked badge is the one that says what to try.
+  const shelf = read('../src/components/AchievementShelf.tsx');
+  assert.match(shelf, /popover="auto"/);
+  assert.match(shelf, /<b>To unlock it:<\/b> \{a\.how\}/);
+});
