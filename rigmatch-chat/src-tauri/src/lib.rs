@@ -723,6 +723,57 @@ fn open_rigmatch_ai() -> Result<(), String> {
     ))
 }
 
+/// Odysseus: a separate, open-source AI workspace that can use the same Ollama.
+/// Both addresses are fixed here rather than passed in, so the page can never
+/// ask Chat to open or fetch anything else.
+const ODYSSEUS_SITE: &str = "https://odysseus-dev.github.io/odysseus";
+const ODYSSEUS_LOCAL: &str = "http://localhost:7000";
+
+/// The system's own browser. `window.open` from the page would open the site
+/// inside a bare webview window, or nothing at all on Linux.
+fn open_in_browser(url: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    let program = "explorer";
+    #[cfg(target_os = "macos")]
+    let program = "open";
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let program = "xdg-open";
+    let mut child = std::process::Command::new(program)
+        .arg(url)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    // Reaped off the main thread so a Unix opener does not linger as a zombie.
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn open_odysseus(local: bool) -> Result<(), String> {
+    open_in_browser(if local { ODYSSEUS_LOCAL } else { ODYSSEUS_SITE })
+}
+
+/// Whether Odysseus is answering on its default port. macOS's AirPlay receiver
+/// listens on 7000 too, so the page has to say it is Odysseus.
+#[tauri::command]
+async fn odysseus_running() -> bool {
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(800))
+        .build()
+    else {
+        return false;
+    };
+    match client.get("http://127.0.0.1:7000/").send().await {
+        Ok(response) => response
+            .text()
+            .await
+            .map(|body| body.contains("Odysseus"))
+            .unwrap_or(false),
+        Err(_) => false,
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // WebKitGTK (the Linux webview backing Tauri) segfaults inside
@@ -761,6 +812,8 @@ pub fn run() {
             test_rig_model,
             get_ollama_vram,
             get_vram_info,
+            open_odysseus,
+            odysseus_running,
         ])
         .run(tauri::generate_context!())
         .expect("error while running RigMatch Chat");
