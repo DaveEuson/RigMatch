@@ -10,6 +10,7 @@ import {
   Eye,
   Download,
   ExternalLink,
+  HandFist,
   Heart,
   Image as ImageIcon,
   Info,
@@ -48,7 +49,9 @@ import { BalanceFader } from './BalanceFader';
 import { balanceLabel } from '../lib/balance';
 import { useDialog } from '../lib/useDialog';
 import { ShowMarquee } from './ShowMarquee';
-import { setShowExtras, useShowExtras } from '../lib/showExtras';
+import { setShowExtras, useShowExtras, useShowStage, type ShowStage } from '../lib/showExtras';
+import { TROJAN_HOST_COPY, ajaxHostLine } from '../lib/trojanStage';
+import { AchievementUnlocked } from './AchievementShelf';
 import { useShowTheme, type ShowMusicState } from '../hooks/useShowTheme';
 import { workbenchById } from '../lib/workbench';
 import rigGreenroom from '../assets/robot-rig-greenroom.webp';
@@ -59,6 +62,7 @@ import contestantWall from '../assets/robot-contestant-wall.webp';
 import ceremonyStage from '../assets/robot-scorecard-ceremony.webp';
 import brandIcon from '../assets/rigmatch-brand-icon.svg';
 import './SimpleWizard.css';
+import './TrojanStage.css';
 
 export type DreamFilterId = DreamTag | 'all';
 
@@ -412,6 +416,26 @@ export function SimpleWizard(props: SimpleWizardProps) {
   // a show that stopped or where nobody passed. A listening round is for the
   // ears, so nothing plays over it.
   const extras = useShowExtras();
+  const stage = useShowStage();
+  // The host's Ajax lines: who is in the lineup, who is answering, and whether
+  // a judge has marked them yet. "Judged" is kept for the rest of that model's
+  // turn, so the host does not flip back and forth between questions.
+  const progress = props.runProgress;
+  const [judged, setJudged] = useState<{ run?: string; models: string[] }>({ models: [] });
+  if (progress?.questionPhase === 'judging' && progress.currentModel
+    && !(judged.run === progress.progressId && judged.models.includes(progress.currentModel))) {
+    setJudged({
+      run: progress.progressId,
+      models: [...(judged.run === progress.progressId ? judged.models : []), progress.currentModel],
+    });
+  }
+  const ajaxLine = ajaxHostLine({
+    step,
+    lineup: shortlistedRows.map((row) => row.displayName),
+    currentModel: progress?.currentModel,
+    judged: Boolean(progress?.currentModel && judged.run === progress.progressId && judged.models.includes(progress.currentModel)),
+    questionScores: progress?.questionScores,
+  });
   const musicState: ShowMusicState = showRunning ? 'running'
     : step === 'compare' && showFailed ? 'flopped'
       : step === 'winner' && winner ? 'crowned'
@@ -487,7 +511,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
 
   return (
     <InfoViewProvider>
-    <div className="sw-shell">
+    <div className={stage === 'trojan' ? 'sw-shell stage-trojan' : 'sw-shell'}>
       <header className="sw-header">
         <div className="sw-brand">
           <img src={brandIcon} alt="" />
@@ -579,7 +603,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
       </header>
 
       <div className="sw-content">
-        <HostStrip step={step} round={props.round} stopped={showFailed} aside={<ShowExtrasSwitches />} />
+        <HostStrip step={step} round={props.round} stopped={showFailed} stage={stage} line={ajaxLine} aside={<ShowExtrasSwitches />} />
 
         {props.notice && (
           <div className="sw-notice" role="status" ref={noticeRef}>
@@ -718,7 +742,15 @@ function PreShowQuestion({
  * thing to notice, and the whole problem is that a beginner does not know what
  * to look for.
  */
-function HostStrip({ step, round, stopped, aside }: { step: StepId; round?: 'chat' | 'code' | 'vision' | 'listening'; stopped?: boolean; aside?: ReactNode }) {
+function HostStrip({ step, round, stopped, stage, line, aside }: {
+  step: StepId;
+  round?: 'chat' | 'code' | 'vision' | 'listening';
+  stopped?: boolean;
+  stage: ShowStage;
+  /** Something the host has to say about this lineup, over the step's usual line. */
+  line?: string | null;
+  aside?: ReactNode;
+}) {
   const explaining = useExplaining();
   return (
     <div className={`sw-host-strip${explaining ? ' explaining' : ''}`}>
@@ -737,7 +769,9 @@ function HostStrip({ step, round, stopped, aside }: { step: StepId; round?: 'cha
         <p>
           {step === 'compare' && stopped
             ? "That didn't go to plan. Here's what happened, and we can go again whenever you're ready."
-            : step === 'compare' && round && round !== 'chat' ? ROUND_LINES[round].host : HOST_COPY[step]}
+            : line
+              ?? (step === 'compare' && round && round !== 'chat' ? ROUND_LINES[round].host
+                : stage === 'trojan' ? TROJAN_HOST_COPY[step] : HOST_COPY[step])}
         </p>
         {explaining && (
           <div className="sw-host-explain" role="status">
@@ -1257,6 +1291,7 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
   // Show effects: a few hearts float up from the button as a pick lands. Keyed
   // by a counter so each pick plays its own burst.
   const { effects } = useShowExtras();
+  const stage = useShowStage();
   const [hearts, setHearts] = useState(0);
   const toggle = () => {
     if (effects && !picked) setHearts((n) => n + 1);
@@ -1266,7 +1301,7 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
     <article className={`sw-card${picked ? ' picked' : ''}${model.row.installed ? ' installed' : ''}`}>
       {effects && hearts > 0 && (
         <span key={hearts} className="sw-heart-burst" aria-hidden="true">
-          <i>♥</i><i>♥</i><i>♥</i><i>♥</i><i>♥</i>
+          {Array.from({ length: 5 }, (_, i) => <i key={i}>{stage === 'trojan' ? <HandFist /> : '♥'}</i>)}
         </span>
       )}
       {picked && <span className="sw-card-pick-badge"><Heart aria-hidden="true" />Pick {pickIndex}</span>}
@@ -1804,6 +1839,8 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, bala
             ))}
           </ol>
         </div>
+        {/* A show nobody won still happened, and can still earn a badge. */}
+        <AchievementUnlocked />
         <div className="sw-winner-actions-row">
           <button type="button" className="sw-gold-pill" onClick={onRunAgain}>Run it again</button>
           <button type="button" className="sw-ghost-pill" onClick={onSwitchToAdvanced}>Open the control room</button>
@@ -1884,6 +1921,9 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, bala
           </div>
         </div>
       </div>
+
+      {/* What this show earned, if anything: a badge for a feature found. */}
+      <AchievementUnlocked />
 
       {/* The rest of the comparison. Announcing one winner and hiding the other
           four made the show's whole output a single number, and left "out of

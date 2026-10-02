@@ -1,0 +1,88 @@
+/* RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE. */
+
+/* The Trojan stage, earned by testing Ajax (the Trojan hero achievement).
+
+   The show is dressed as a black-figure vase, the Attic pottery that shows
+   Ajax and Achilles bent over a board game (Exekias, about 530 BC): black
+   glaze, the clay's terracotta, buff for the drawn lines, bronze for the
+   armor. Red and black from a 2,500-year-old pot rather than from a gaming
+   keyboard, so it stays a warm room and never turns neon.
+
+   It re-points the theme tokens inside the wizard, the way a theme does, so
+   every card, pill and score follows without a rule of its own. Gold is left
+   alone: the stage light is the same in every episode, and it still marks the
+   winner and the next thing to do. */
+.sw-shell.stage-trojan {
+  --bg: #120c09;
+  --panel: #1c130e;
+  --panel-2: #281b13;
+  --panel-hover: rgba(240, 225, 207, 0.07);
+  --line: #5c3d28;
+  --line-bright: #8e5d3a;
+  --text: #f0e1cf;
+  --text-strong: #fff6ea;
+  --muted: #c4a68c;
+  --pink: #cf6a3d;
+  --pink-rgb: 207, 106, 61;
+  --primary-rgb: 207, 106, 61;
+  --trojan-bronze: #b9844a;
+  /* The running key that circles every vase of the period. */
+  --trojan-key: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 12'%3E%3Cpath d='M0 .8H20M0 11.2H20' fill='none' stroke='black' stroke-width='1'/%3E%3Cpath d='M0 9H20M15 9V3H5V7H11V5' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='square'/%3E%3C/svg%3E");
+  --trojan-laurel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cpath d='M108.8 183.5L129 178.8L147.5 169.3L163.1 155.5L174.8 138.3L181.9 118.7L184 98L180.9 77.5L172.9 58.3L160.4 41.6' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(108.8 183.5) rotate(-53.1) scale(1.1)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(108.8 183.5) rotate(26.9) scale(1.1)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(129 178.8) rotate(-67.3) scale(1)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(129 178.8) rotate(12.7) scale(1)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(147.5 169.3) rotate(-81.6) scale(1)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(147.5 169.3) rotate(-1.6) scale(1)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(163.1 155.5) rotate(-95.8) scale(0.9)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(163.1 155.5) rotate(-15.8) scale(0.9)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(174.8 138.3) rotate(-110) scale(0.9)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(174.8 138.3) rotate(-30) scale(0.9)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(181.9 118.7) rotate(-124.2) scale(0.8)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(181.9 118.7) rotate(-44.2) scale(0.8)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(184 98) rotate(-138.4) scale(0.8)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(184 98) rotate(-58.4) scale(0.8)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(180.9 77.5) rotate(-152.7) scale(0.7)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(180.9 77.5) rotate(-72.7) scale(0.7)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(172.9 58.3) rotate(-166.9) scale(0.7)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(172.9 58.3) rotate(-86.9) scale(0.7)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(160.4 41.6) rotate(-126.9) scale(0.6)'/%3E%3Cpath d='M91.2 183.5L71 178.8L52.5 169.3L36.9 155.5L25.2 138.3L18.1 118.7L16 98L19.1 77.5L27.1 58.3L39.6 41.6' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(91.2 183.5) rotate(-206.9) scale(1.1)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(91.2 183.5) rotate(-126.9) scale(1.1)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(71 178.8) rotate(-192.7) scale(1)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(71 178.8) rotate(-112.7) scale(1)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(52.5 169.3) rotate(-178.4) scale(1)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(52.5 169.3) rotate(-98.4) scale(1)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(36.9 155.5) rotate(-164.2) scale(0.9)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(36.9 155.5) rotate(-84.2) scale(0.9)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(25.2 138.3) rotate(-150) scale(0.9)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(25.2 138.3) rotate(-70) scale(0.9)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(18.1 118.7) rotate(-135.8) scale(0.8)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(18.1 118.7) rotate(-55.8) scale(0.8)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(16 98) rotate(-121.6) scale(0.8)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(16 98) rotate(-41.6) scale(0.8)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(19.1 77.5) rotate(-107.3) scale(0.7)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(19.1 77.5) rotate(-27.3) scale(0.7)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(27.1 58.3) rotate(-93.1) scale(0.7)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(27.1 58.3) rotate(-13.1) scale(0.7)'/%3E%3Cpath d='M0 0Q6 -4.2 14 0Q6 4.2 0 0Z' transform='translate(39.6 41.6) rotate(-53.1) scale(0.6)'/%3E%3C/svg%3E");
+}
+
+/* The studio photo, fired like clay. */
+.stage-trojan .sw-stage-bg {
+  filter: sepia(0.75) saturate(1.45) hue-rotate(-14deg) brightness(0.85) blur(1px);
+}
+
+/* A key frieze along the stage floor, under the contestants and the winner.
+   Only along the floor: the marquee owns the top edge. */
+.stage-trojan .sw-stage::before,
+.stage-trojan .sw-winner-stage::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 2;
+  height: 16px;
+  background: var(--trojan-bronze);
+  -webkit-mask: var(--trojan-key) repeat-x left center / 26px 16px;
+  mask: var(--trojan-key) repeat-x left center / 26px 16px;
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+/* The winner is crowned in laurel, lit with the halo once the portrait has
+   landed. Gold, because it is the verdict. */
+.stage-trojan .sw-winner-reveal { gap: 44px; }
+
+.stage-trojan .sw-winner-avatar-wrap::after {
+  content: "";
+  position: absolute;
+  inset: -32px;
+  z-index: -1;
+  background: var(--gold);
+  -webkit-mask: var(--trojan-laurel) center / contain no-repeat;
+  mask: var(--trojan-laurel) center / contain no-repeat;
+  opacity: 0;
+  animation: sw-halo 600ms ease-out 400ms forwards;
+  pointer-events: none;
+}
+
+.stage-trojan .sw-winner-stage.curtained .sw-winner-avatar-wrap::after { animation-delay: 1500ms; }
+
+/* Picks land with fist bumps, in bronze. */
+.stage-trojan .sw-heart-burst i { color: var(--trojan-bronze); }
+
+.sw-heart-burst i svg {
+  display: block;
+  width: 1em;
+  height: 1em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-trojan .sw-winner-avatar-wrap::after {
+    animation: none;
+    opacity: 1;
+  }
+}

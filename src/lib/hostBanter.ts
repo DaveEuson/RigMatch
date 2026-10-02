@@ -12,6 +12,7 @@ export type HostBanterContext = {
   questionLabel: string;
   phase: HostBanterPhase;
   index: number; // question index — drives stable line variety across questions
+  stage?: 'studio' | 'trojan'; // the Trojan stage's host talks like a YouTuber
 };
 
 const POOLS: Record<HostBanterPhase, string[]> = {
@@ -40,11 +41,40 @@ const POOLS: Record<HostBanterPhase, string[]> = {
   ],
 };
 
+// The Trojan stage, unlocked by testing Ajax: same host, an arena instead of a
+// studio, and "bros" for the audience. No real person's catchphrases.
+const TROJAN_POOLS: Record<HostBanterPhase, string[]> = {
+  warming: [
+    'Alright bros, {who} is stepping into the arena.',
+    'Shields up, {who}. Same questions for everyone — no favorites.',
+    '{who}, the arena is yours. Let’s see what you’ve got.',
+  ],
+  asking: [
+    '{who}, here it comes: “{q}”',
+    'Bros, watch this one. {who}: “{q}”',
+    'Question for {who}, no pressure: “{q}”',
+    'Over to you, {who} — “{q}”',
+  ],
+  answering: [
+    '{who} is cooking, bros…',
+    'Hold the line, {who}…',
+    'The arena goes quiet. {who} is thinking…',
+    'Tokens flying, bros. {who} is going for it.',
+  ],
+  scored: [
+    'Let’s see what the scoreboard says for {who}, bros.',
+    'Not bad, {who}. Fist bump.',
+    'Big respect, {who}! On to the next.',
+    'The judges have spoken, bros. Nice one, {who}.',
+  ],
+};
+
 export function getHostBanter(ctx: HostBanterContext): string {
   const who = ctx.contestantNumber > 0
     ? `Contestant #${ctx.contestantNumber} (${ctx.model})`
     : (ctx.model || 'our next contestant');
-  const pool = POOLS[ctx.phase] ?? POOLS.asking;
+  const pools = ctx.stage === 'trojan' ? TROJAN_POOLS : POOLS;
+  const pool = pools[ctx.phase] ?? pools.asking;
   const pick = pool[(Math.abs(ctx.index || 0) + Math.max(0, ctx.contestantNumber)) % pool.length];
   return pick
     .replace(/\{who\}/g, who)

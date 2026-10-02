@@ -19,13 +19,17 @@ const wizardCss = read('../src/components/SimpleWizard.css');
 const appCss = read('../src/App.css');
 
 test('both extras are off unless explicitly switched on', () => {
-  assert.deepEqual(readShowExtras(null), { music: false, effects: false });
-  assert.deepEqual(readShowExtras('not json'), { music: false, effects: false });
-  assert.deepEqual(readShowExtras('null'), { music: false, effects: false });
+  const off = { music: false, effects: false, stage: 'studio' };
+  assert.deepEqual(readShowExtras(null), off);
+  assert.deepEqual(readShowExtras('not json'), off);
+  assert.deepEqual(readShowExtras('null'), off);
   // "yes", 1 and "true" are not true.
-  assert.deepEqual(readShowExtras('{"music":"yes","effects":1}'), { music: false, effects: false });
-  assert.deepEqual(readShowExtras('{"music":true}'), { music: true, effects: false });
-  assert.deepEqual(readShowExtras('{"music":true,"effects":true}'), { music: true, effects: true });
+  assert.deepEqual(readShowExtras('{"music":"yes","effects":1}'), off);
+  assert.deepEqual(readShowExtras('{"music":true}'), { ...off, music: true });
+  assert.deepEqual(readShowExtras('{"music":true,"effects":true}'), { ...off, music: true, effects: true });
+  // Only the one stage name that exists is read; anything else is the studio.
+  assert.equal(readShowExtras('{"stage":"trojan"}').stage, 'trojan');
+  assert.equal(readShowExtras('{"stage":"olympus"}').stage, 'studio');
 });
 
 test('every effect is rendered only when effects are on', () => {

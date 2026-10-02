@@ -1,0 +1,197 @@
+/* RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE. */
+
+/* Achievements are completions, so they wear Avocado, the system's color for
+   a finished step. Gold stays with the winner and the next action: on the
+   Winner screen a gold badge would compete with the crown. */
+
+/* The shelf: a list, two columns where there is room. Earned ones lit, locked
+   ones quiet, each saying what to try. */
+.achievement-shelf {
+  display: grid;
+  gap: 12px;
+}
+
+.achievement-shelf-count {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.achievement-shelf-count b {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.achievement-shelf ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  column-gap: 28px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.achievement-shelf li {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+
+.achievement-badge {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  color: var(--muted);
+}
+
+.achievement-badge svg {
+  width: 15px;
+  height: 15px;
+}
+
+.earned .achievement-badge,
+.achievement-unlocked .achievement-badge {
+  border-color: rgba(var(--green-rgb), 0.7);
+  background: rgba(var(--green-rgb), 0.16);
+  color: var(--green);
+}
+
+.achievement-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.achievement-copy b {
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.achievement-copy > span {
+  color: var(--text);
+}
+
+.locked .achievement-copy b,
+.locked .achievement-copy > span {
+  color: var(--muted);
+}
+
+.achievement-copy em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.earned .achievement-copy em {
+  color: var(--green);
+}
+
+.achievement-reward {
+  color: var(--text-strong);
+}
+
+/* "You earned …", under the Winner reveal: one quiet line of good news,
+   not a second crown. */
+.achievement-unlocked {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid rgba(var(--green-rgb), 0.4);
+  border-radius: 12px;
+  background: rgba(var(--green-rgb), 0.07);
+}
+
+.achievement-unlocked h3 {
+  margin: 4px 0 0;
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 800;
+  text-wrap: balance;
+}
+
+.achievement-unlocked p,
+.achievement-unlocked ul {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.achievement-unlocked ul {
+  display: grid;
+  gap: 2px;
+  padding: 0;
+  list-style: none;
+}
+
+.achievement-unlocked li b {
+  color: var(--text-strong);
+}
+
+.achievement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 10px;
+}
+
+.achievement-use {
+  padding: 6px 14px;
+  border: 1px solid var(--line-bright);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.achievement-use:hover {
+  background: var(--panel-hover);
+  transform: translateY(-1px);
+}
+
+.achievement-all {
+  flex-basis: 100%;
+}
+
+.achievement-all summary {
+  width: max-content;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.achievement-all summary:hover {
+  color: var(--text-strong);
+}
+
+.achievement-all[open] summary {
+  margin-bottom: 10px;
+}
+
+.achievement-use:focus-visible,
+.achievement-all summary:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .achievement-use { transition: none; }
+  .achievement-use:hover { transform: none; }
+}

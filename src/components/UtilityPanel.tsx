@@ -35,6 +35,8 @@ import { SettingsSection } from './SettingsSection';
 import { ModelDemoChips } from './SkillDemoViewers';
 import { ThemePicker } from './ThemePicker';
 import { ShowExtrasSettings } from './ShowExtrasSettings';
+import { AchievementShelf } from './AchievementShelf';
+import { ACHIEVEMENTS, useAchievements } from '../lib/achievements';
 import { UiModePicker } from './UiModePicker';
 import { BalanceFader } from './BalanceFader';
 import { CodingBoard } from './CodingBoard';
@@ -268,8 +270,11 @@ export function UtilityPanel({
     () => installedRows.reduce((total, row) => total + (row.sizeGb ?? 0), 0),
     [installedRows],
   );
+  const { earned: earnedAchievements } = useAchievements();
+  const earnedCount = ACHIEVEMENTS.filter((a) => earnedAchievements[a.id]).length;
   const settingsRail = useMemo(() => buildSettingsRail({
     interface: `${uiMode === 'beginner' ? 'Simple' : 'Advanced'} Mode · ${getThemeLabel(themeId)}`,
+    achievements: `${earnedCount} of ${ACHIEVEMENTS.length} earned`,
     storage: installedRows.length > 0
       ? `${installedRows.length} installed · ${formatGb(installedSizeGb)}`
       : 'Nothing installed yet',
@@ -277,7 +282,7 @@ export function UtilityPanel({
     updates: `v${APP_VERSION}`,
     // ComfyUI, Support and Advanced get no status line: this panel does not
     // hold a true one for them, and a filler word would read as information.
-  }, { advanced: uiMode !== 'beginner' }), [uiMode, themeId, installedRows.length, installedSizeGb, ollama.version]);
+  }, { advanced: uiMode !== 'beginner' }), [uiMode, themeId, earnedCount, installedRows.length, installedSizeGb, ollama.version]);
 
   const checkOllamaUpdate = useCallback(async () => {
     setIsCheckingOllamaUpdate(true);
@@ -807,6 +812,16 @@ export function UtilityPanel({
           <GoalsSummary goals={selectedGoals} onEditGoals={onEditGoals} />
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
           <ShowExtrasSettings />
+          </SettingsSection>
+          <SettingsSection
+            eyebrow="Show"
+            title="Achievements"
+            summary={`${earnedCount} of ${ACHIEVEMENTS.length} earned. Each one is something worth trying.`}
+            open={openSections.has('achievements')}
+            onToggle={() => toggleSection('achievements')}
+            sectionId="achievements"
+          >
+            <AchievementShelf />
           </SettingsSection>
           <SettingsSection
             eyebrow="Storage"

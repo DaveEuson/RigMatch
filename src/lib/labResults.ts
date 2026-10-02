@@ -7,6 +7,7 @@
  */
 
 import { ADVANCED_LAB_STORAGE_KEY } from './appConfig.ts';
+import { recordAchievements } from './achievements.ts';
 import { extractHtmlDocument } from './labPreview.ts';
 import { extractCodeBlock } from './codeChallenge.ts';
 import { describeLabFailure } from './labScoring.ts';
@@ -124,6 +125,18 @@ export function writeAdvancedLabResults(results: Record<string, AdvancedLabResul
   }
   resultsVersion += 1;
   for (const listener of resultListeners) listener();
+  recordAchievements({ labChallenges: labChallengesWithOutput(results) });
+}
+
+/**
+ * The challenges where a model made something, for the achievements that ask
+ * for a picture or a sound. A failed attempt is saved too, and is not one.
+ */
+export function labChallengesWithOutput(results: Record<string, AdvancedLabResult>): string[] {
+  return Object.values(results)
+    .filter((result) => (result.challenge === 'image-generation' && (result.imageDataUrl || result.score > 0))
+      || (result.challenge === 'audio-generation' && result.audioRef))
+    .map((result) => result.challenge);
 }
 
 /*
