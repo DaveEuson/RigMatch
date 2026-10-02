@@ -1,5 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { recordAchievements } from './lib/achievements';
 import {
   ArrowLeft,
   HelpCircle,
@@ -225,6 +226,7 @@ import { LiveFlirtSpotlight } from './components/LiveFlirtSpotlight';
 import { extractHtmlDocument } from './lib/labPreview';
 import {
   describeLabFailure,
+  labChallengesWithOutput,
   readAdvancedLabResults,
   writeAdvancedLabResults,
   wasJudged,
@@ -482,6 +484,23 @@ function App() {
   // was never persisted, so every trend reset on close.
   const scoreTrend = useMemo(() => getScoreTrend(runHistory), [runHistory]);
   const scoreDeltas = useMemo(() => getAllRunDeltas(runHistory), [runHistory]);
+  // Achievements are read from what is already kept, so a run, a retest or a
+  // judged show earns its badge the moment it is saved. The first look, as the
+  // app opens, is quiet: anything found then was earned before this launch. The
+  // preview page's sample data earns nothing.
+  const achievementsLookedRef = useRef(false);
+  useEffect(() => {
+    if (!isDesktopRuntime) return;
+    const quiet = !achievementsLookedRef.current;
+    achievementsLookedRef.current = true;
+    recordAchievements({
+      runs: Object.values(runHistory.runs).flat(),
+      results: Object.values(benchmarkByModel),
+      // Saving a Lab result records its own; this is the backlog.
+      labChallenges: quiet ? labChallengesWithOutput(readAdvancedLabResults()) : undefined,
+      platform: system.platform,
+    }, { quiet });
+  }, [runHistory, benchmarkByModel, system.platform]);
   // Held here, not inside SimpleWizard: switching to Advanced unmounts the wizard,
   // and the user should come back to the step they left.
   const [wizardStep, setWizardStep] = useState<WizardStepId>('setup');

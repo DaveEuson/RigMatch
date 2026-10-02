@@ -8,7 +8,7 @@ import type { ModelRow, NetworkHost, RunProgress, SystemProfile } from '../types
 import { AvatarBust, MachineAvatar } from './Avatars';
 import { MetricTile } from './CommonChrome';
 import { ShowMarquee } from './ShowMarquee';
-import { setShowExtras, useShowExtras } from '../lib/showExtras';
+import { setShowExtras, useShowExtras, useShowStage } from '../lib/showExtras';
 import { useShowTheme } from '../hooks/useShowTheme';
 import { Maximize2, MessageSquare, Minimize2, Music, Plus, X } from 'lucide-react';
 import { useState } from 'react';
@@ -33,6 +33,7 @@ export function LiveFlirtSpotlight({
   // mounted while a run is going. Speed Dating only: a single model test is
   // not a show.
   const extras = useShowExtras();
+  const stage = useShowStage();
   const isShow = progress.mode === 'speed-date';
   const musicOn = extras.music && isShow;
   useShowTheme(isShow ? 'running' : 'idle', extras.music);
@@ -107,6 +108,7 @@ export function LiveFlirtSpotlight({
     questionLabel: currentLabel,
     phase: banterPhase,
     index: currentQuestionIndex,
+    stage,
   };
   // Two voices on stage: the HOST asks the questions (question card), while the
   // computer is TONIGHT'S DATE — the one the contestants are trying to win.

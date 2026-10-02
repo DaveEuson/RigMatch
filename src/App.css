@@ -377,6 +377,31 @@ textarea {
     gap: 10px;
   }
 }
+
+/* The badge case. The whole row of pins goes in the collapsed strip, which has
+   room beside the local check; the expanded deck and a narrow strip get its
+   count inside the local check instead. Never both. */
+.top-deck > .badge-case { display: none; }
+.top-deck.collapsed .local-status-card .badge-case.compact { margin-top: 0; }
+
+/* The local check sizes its own button for a 156px target; the count and the
+   splash it opens are not that button. */
+.local-status-card .badge-case button {
+  min-width: 0;
+  min-height: 0;
+  justify-content: normal;
+}
+
+.local-status-card .badge-case .badge-slot {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+@media (min-width: 1241px) {
+  .top-deck.mode-advanced.collapsed { grid-template-columns: auto auto auto minmax(0, 1fr); }
+  .top-deck.mode-advanced.collapsed > .badge-case { display: flex; }
+  .top-deck.mode-advanced.collapsed .local-status-card .badge-case.compact { display: none; }
+}
 /* Readouts go; controls stay. */
 .top-deck.collapsed .monitor-grid,
 .top-deck.collapsed .brand-block p,

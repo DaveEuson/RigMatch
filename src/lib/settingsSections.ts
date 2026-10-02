@@ -16,6 +16,7 @@
  */
 export type SettingsSectionId =
   | 'interface'
+  | 'achievements'
   | 'storage'
   | 'providers'
   | 'generation'
@@ -33,6 +34,7 @@ export type SettingsSectionSpec = {
 
 export const SETTINGS_SECTIONS: SettingsSectionSpec[] = [
   { id: 'interface', eyebrow: 'Interface', title: 'Preferences', summary: 'Mode, theme, goals, and the Simple Mode path.' },
+  { id: 'achievements', eyebrow: 'Show', title: 'Achievements', summary: 'Badges for the parts of RigMatch worth trying.' },
   { id: 'storage', eyebrow: 'Storage', title: 'The Closet', summary: 'Who is taking up shelf space, and whether they earned it.' },
   { id: 'providers', eyebrow: 'Local AI', title: 'Computer & Providers', summary: 'Runtime, Ollama, LM Studio, and local-only scope.' },
   { id: 'generation', eyebrow: 'Generation', title: 'ComfyUI', summary: 'Where image and video generation run, and whether RigMatch may unload models.' },

@@ -29,7 +29,8 @@
 /* Header ------------------------------------------------------------------ */
 .sw-header {
   display: grid;
-  grid-template-columns: minmax(190px, auto) minmax(0, 1fr);
+  /* Brand, steps, and the badge case on the right. */
+  grid-template-columns: minmax(190px, auto) minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
   padding: 14px 20px;
@@ -1126,7 +1127,7 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 @media (max-width: 1280px) {
   .sw-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sw-doors { grid-template-columns: minmax(0, 1fr); }
-  .sw-header { grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
+  .sw-header { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; }
 }
 
 @media (max-width: 900px) {
