@@ -37,8 +37,12 @@ export function BalanceFader({
   /** What accuracy means here, in words someone can check. */
   accuracyMeans: string;
   lockedReason?: string | null;
-  /** `full` asks the question before a test; `mini` sits on a result card. */
-  variant?: 'full' | 'mini';
+  /**
+   * `full` asks the question before a test; `mini` sits on a result card;
+   * `row` is the run sheet's: presets, then a level slider from Speed first to
+   * Accuracy first.
+   */
+  variant?: 'full' | 'mini' | 'row';
   disabled?: boolean;
   label?: string;
 }) {
@@ -97,6 +101,57 @@ export function BalanceFader({
   const valueText = locked
     ? `Speed only. ${lockedReason}`
     : `${split}${notch ? `, ${notch.label}` : ''}`;
+
+  // Level, not vertical: a horizontal range renders the same in every engine,
+  // so the stock control is fine here, and the presets above it do the detents.
+  if (variant === 'row') {
+    return (
+      <section className={`balance-row${locked ? ' locked' : ''}`} aria-labelledby={`${id}-label`}>
+        <h3 className="balance-row-question" id={`${id}-label`}>{label}</h3>
+        <div className="balance-row-presets" role="group" aria-label="Presets">
+          {[...BALANCE_NOTCHES].reverse().map((mark) => (
+            <button
+              key={mark.id}
+              type="button"
+              className="chip"
+              aria-pressed={notch?.id === mark.id}
+              disabled={inert}
+              onClick={() => commit(Math.round(mark.value))}
+            >
+              {mark.label}
+            </button>
+          ))}
+        </div>
+        <div className="balance-row-level">
+          <span aria-hidden="true">Speed first</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={Math.round(shown)}
+            disabled={inert}
+            aria-labelledby={`${id}-label`}
+            aria-describedby={`${id}-means`}
+            aria-valuetext={valueText}
+            onChange={(event) => {
+              const position = Number(event.target.value);
+              const detent = BALANCE_NOTCHES.find((mark) => Math.abs(mark.value - position) <= DETENT);
+              commit(detent ? Math.round(detent.value) : position);
+            }}
+          />
+          <span aria-hidden="true">Accuracy first</span>
+        </div>
+        <p className="balance-row-readout" aria-live="polite">
+          {locked ? 'Speed only' : notch ? `${notch.label}: ${split}` : split}
+        </p>
+        <p className="balance-row-means" id={`${id}-means`}>
+          {locked
+            ? lockedReason
+            : `Accuracy here is ${accuracyMeans}. Moving this re-ranks results you already have; nothing runs again.`}
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section

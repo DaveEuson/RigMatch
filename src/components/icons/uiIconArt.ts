@@ -33,7 +33,7 @@ export const UI_ICON_ART: Record<UiIconName, { strokeWidth: number; body: string
   },
   "err": {
     "strokeWidth": 2.2,
-    "body": "<circle cx=\"12\" cy=\"12\" r=\"9\" style=\"fill:var(--red)\" style=\"stroke:var(--red)\"></circle><path d=\"M8.8 8.8l6.4 6.4M15.2 8.8l-6.4 6.4\" style=\"stroke:var(--bg)\" stroke-width=\"2.6\"></path>"
+    "body": "<circle cx=\"12\" cy=\"12\" r=\"9\" style=\"fill:var(--red);stroke:var(--red)\"></circle><path d=\"M8.8 8.8l6.4 6.4M15.2 8.8l-6.4 6.4\" style=\"stroke:var(--bg)\" stroke-width=\"2.6\"></path>"
   },
   "gavel": {
     "strokeWidth": 2.2,
@@ -49,7 +49,7 @@ export const UI_ICON_ART: Record<UiIconName, { strokeWidth: number; body: string
   },
   "hearts": {
     "strokeWidth": 2.2,
-    "body": "<path d=\"M8.5 18C4.5 15.2 3 12.8 3 10.7 3 9 4.3 7.7 6 7.7c1.1 0 2 .6 2.5 1.5.5-.9 1.4-1.5 2.5-1.5 1.7 0 3 1.3 3 3 0 2.1-1.5 4.5-5.5 7.3Z\"></path><path d=\"M15.5 20.5c-4-2.8-5.5-5.2-5.5-7.3 0-1.7 1.3-3 3-3 1.1 0 2 .6 2.5 1.5.5-.9 1.4-1.5 2.5-1.5 1.7 0 3 1.3 3 3 0 2.1-1.5 4.5-5.5 7.3Z\" style=\"fill:var(--accent)\" style=\"stroke:var(--accent)\"></path><path d=\"M14 4l.6 1.8M18 3.5l-.6 1.9M10.5 4.8l1 1.2\"></path>"
+    "body": "<path d=\"M8.5 18C4.5 15.2 3 12.8 3 10.7 3 9 4.3 7.7 6 7.7c1.1 0 2 .6 2.5 1.5.5-.9 1.4-1.5 2.5-1.5 1.7 0 3 1.3 3 3 0 2.1-1.5 4.5-5.5 7.3Z\"></path><path d=\"M15.5 20.5c-4-2.8-5.5-5.2-5.5-7.3 0-1.7 1.3-3 3-3 1.1 0 2 .6 2.5 1.5.5-.9 1.4-1.5 2.5-1.5 1.7 0 3 1.3 3 3 0 2.1-1.5 4.5-5.5 7.3Z\" style=\"fill:var(--accent);stroke:var(--accent)\"></path><path d=\"M14 4l.6 1.8M18 3.5l-.6 1.9M10.5 4.8l1 1.2\"></path>"
   },
   "lab": {
     "strokeWidth": 2.2,
@@ -65,7 +65,7 @@ export const UI_ICON_ART: Record<UiIconName, { strokeWidth: number; body: string
   },
   "models": {
     "strokeWidth": 2.2,
-    "body": "<rect x=\"3\" y=\"3\" width=\"7.5\" height=\"7.5\" rx=\"2.5\"></rect><rect x=\"13.5\" y=\"3\" width=\"7.5\" height=\"7.5\" rx=\"2.5\" style=\"fill:var(--accent)\" style=\"stroke:var(--accent)\"></rect><rect x=\"3\" y=\"13.5\" width=\"7.5\" height=\"7.5\" rx=\"2.5\"></rect><rect x=\"13.5\" y=\"13.5\" width=\"7.5\" height=\"7.5\" rx=\"2.5\"></rect>"
+    "body": "<rect x=\"3\" y=\"3\" width=\"7.5\" height=\"7.5\" rx=\"2.5\"></rect><rect x=\"13.5\" y=\"3\" width=\"7.5\" height=\"7.5\" rx=\"2.5\" style=\"fill:var(--accent);stroke:var(--accent)\"></rect><rect x=\"3\" y=\"13.5\" width=\"7.5\" height=\"7.5\" rx=\"2.5\"></rect><rect x=\"13.5\" y=\"13.5\" width=\"7.5\" height=\"7.5\" rx=\"2.5\"></rect>"
   },
   "more": {
     "strokeWidth": 2.2,
@@ -73,11 +73,11 @@ export const UI_ICON_ART: Record<UiIconName, { strokeWidth: number; body: string
   },
   "nodes": {
     "strokeWidth": 2.2,
-    "body": "<rect x=\"2.5\" y=\"4\" width=\"7\" height=\"6\" rx=\"2\"></rect><rect x=\"14.5\" y=\"14\" width=\"7\" height=\"6\" rx=\"2\" style=\"fill:var(--accent)\" style=\"stroke:var(--accent)\"></rect><rect x=\"14.5\" y=\"4\" width=\"7\" height=\"6\" rx=\"2\"></rect><path d=\"M9.5 7h5M18 10v4M9.5 7c3 0 2 10 5 10\"></path>"
+    "body": "<rect x=\"2.5\" y=\"4\" width=\"7\" height=\"6\" rx=\"2\"></rect><rect x=\"14.5\" y=\"14\" width=\"7\" height=\"6\" rx=\"2\" style=\"fill:var(--accent);stroke:var(--accent)\"></rect><rect x=\"14.5\" y=\"4\" width=\"7\" height=\"6\" rx=\"2\"></rect><path d=\"M9.5 7h5M18 10v4M9.5 7c3 0 2 10 5 10\"></path>"
   },
   "ok": {
     "strokeWidth": 2.2,
-    "body": "<circle cx=\"12\" cy=\"12\" r=\"9\" style=\"fill:var(--green)\" style=\"stroke:var(--green)\"></circle><path d=\"M7.5 12.3l3 3 6-6.3\" style=\"stroke:var(--bg)\" stroke-width=\"2.6\"></path>"
+    "body": "<circle cx=\"12\" cy=\"12\" r=\"9\" style=\"fill:var(--green);stroke:var(--green)\"></circle><path d=\"M7.5 12.3l3 3 6-6.3\" style=\"stroke:var(--bg)\" stroke-width=\"2.6\"></path>"
   },
   "palette": {
     "strokeWidth": 2.2,
@@ -109,7 +109,7 @@ export const UI_ICON_ART: Record<UiIconName, { strokeWidth: number; body: string
   },
   "sparkle": {
     "strokeWidth": 2.2,
-    "body": "<path d=\"M10 3c.6 3.9 2.6 5.9 6.5 6.5-3.9.6-5.9 2.6-6.5 6.5-.6-3.9-2.6-5.9-6.5-6.5C7.4 8.9 9.4 6.9 10 3Z\" style=\"fill:var(--accent)\" style=\"stroke:var(--accent)\"></path><path d=\"M18 14.5c.3 1.9 1.1 2.7 3 3-1.9.3-2.7 1.1-3 3-.3-1.9-1.1-2.7-3-3 1.9-.3 2.7-1.1 3-3Z\"></path>"
+    "body": "<path d=\"M10 3c.6 3.9 2.6 5.9 6.5 6.5-3.9.6-5.9 2.6-6.5 6.5-.6-3.9-2.6-5.9-6.5-6.5C7.4 8.9 9.4 6.9 10 3Z\" style=\"fill:var(--accent);stroke:var(--accent)\"></path><path d=\"M18 14.5c.3 1.9 1.1 2.7 3 3-1.9.3-2.7 1.1-3 3-.3-1.9-1.1-2.7-3-3 1.9-.3 2.7-1.1 3-3Z\"></path>"
   },
   "trophy": {
     "strokeWidth": 2.2,
@@ -125,6 +125,6 @@ export const UI_ICON_ART: Record<UiIconName, { strokeWidth: number; body: string
   },
   "warn": {
     "strokeWidth": 2.2,
-    "body": "<path d=\"M10.3 4.2a2 2 0 0 1 3.4 0l7.6 13a2 2 0 0 1-1.7 3H4.4a2 2 0 0 1-1.7-3Z\" style=\"fill:var(--gold)\" style=\"stroke:var(--gold)\"></path><path d=\"M12 9v4.5\" style=\"stroke:var(--bg)\" stroke-width=\"2.6\"></path><circle cx=\"12\" cy=\"16.8\" r=\"1.3\" style=\"fill:var(--bg)\" stroke=\"none\"></circle>"
+    "body": "<path d=\"M10.3 4.2a2 2 0 0 1 3.4 0l7.6 13a2 2 0 0 1-1.7 3H4.4a2 2 0 0 1-1.7-3Z\" style=\"fill:var(--gold);stroke:var(--gold)\"></path><path d=\"M12 9v4.5\" style=\"stroke:var(--bg)\" stroke-width=\"2.6\"></path><circle cx=\"12\" cy=\"16.8\" r=\"1.3\" style=\"fill:var(--bg)\" stroke=\"none\"></circle>"
   }
 };
