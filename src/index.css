@@ -1,44 +1,88 @@
+/* Design tokens, "Call sheet" (the 2026-10 redesign).
+
+   Warm darks only. Three surface steps and nothing nests deeper than one panel.
+   Gold is the winner and the single next action, identical in every theme, as
+   are green (OK, focus) and red (failure, text only). A theme changes only the
+   surfaces, the divider line and the accent.
+
+   The names above the rule in each block are the design's. The ones below it
+   are the names the app already used, kept as aliases so a screen not yet
+   rebuilt keeps working; new code uses the design's names. */
 :root {
-  --bg: #171523;
-  --panel: #211b2b;
-  --panel-2: #2d2638;
-  /* The interactive wash: a resting surface lifted slightly on hover or when
-     active. Cream Bright at 7%, constant across themes, so it is declared once
-     here rather than per theme. */
-  --panel-hover: rgba(255, 249, 239, 0.07);
-  --line: #5b4e62;
-  --line-bright: #8b7588;
-  --text: #efe5dc;
+  /* Surfaces. */
+  --bg: #1b1726;
+  --panel: #241e30;
+  --panel-2: #2e2740;
+  --stage: #120f1b;
+  /* Lines: dividers, and the border of anything you can act on. */
+  --line: #3b3349;
+  --line-strong: #6d5f78;
+  /* Text. Against the page background: 14.6, 12.9 and 8.1 to 1. */
   --text-strong: #fff9ef;
-  --muted: #b9aaa2;
-  --green: #95b46a;
-  /* Per theme, like --blue-rgb: the tinted score and fit pills need it
-     under green text. */
-  --green-rgb: 149, 180, 106;
-  --primary-rgb: 227, 113, 133;
-  --blue: #6ba9b9;
-  /* Triplet form for alpha compositing, as with --gold-rgb. Unlike gold and
-     red this one differs per theme, so every block declares its own. */
-  --blue-rgb: 107, 169, 185;
-  --pink: #e37185;
-  /* Per theme, like --blue-rgb. Note --primary-rgb happens to hold this same
-     triplet in the default theme only — they are different colors in the
-     other four, so a bare rgba(227, 113, 133, x) is ambiguous. Use this
-     when the value means "the pink". */
-  --pink-rgb: 227, 113, 133;
+  --text: #f0e7dc;
+  --muted: #bdafa6;
+  /* Signal. */
   --gold: #efbc5a;
-  /* Triplet form for alpha compositing: rgba(var(--gold-rgb), 0.4). Gold is the
-     one color identical in every theme, so it is declared here only — keep the
-     two in sync if --gold ever moves. */
-  --gold-rgb: 239, 188, 90;
+  --gold-ink: #241808;
+  --pink: #e37185;
+  --green: #95b46a;
+  --blue: #6ba9b9;
   --red: #ff9278;
-  /* Same deal as --gold-rgb: red is the other color identical in every theme,
-     and the status pills need it as a tint under red text. Keep in sync. */
+  /* Selection, progress, "chosen". Varies per theme; gold never does. The
+     default theme's accent is the pink, written out so the contrast test can
+     measure it. */
+  --accent: #e37185;
+  --focus: #95b46a;
+  /* Type. */
+  --display: "Young Serif", Georgia, serif;
+  --ui: "Atkinson Hyperlegible", system-ui, sans-serif;
+  --figure: "Spline Sans Mono", ui-monospace, Consolas, monospace;
+  --fs-display: clamp(32px, 4vw, 56px);
+  --fs-h1: 32px;
+  --fs-h2: 22px;
+  --fs-h3: 18px;
+  --fs-body: 16px;
+  --fs-ui: 14px;
+  --fs-small: 12px;
+  /* Space, on a 4-point scale. */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+  /* Shape. */
+  --r-control: 8px;
+  --r-panel: 12px;
+  --r-portrait: 12px;
+  --r-hero: 16px;
+  /* Control sizes. */
+  --h-control: 40px;
+  --h-control-sm: 32px;
+  --h-row: 44px;
+  --target-min: 24px;
+  /* Motion and depth. A shadow is for floating things only. */
+  --t-fast: 120ms ease;
+  --t-base: 180ms ease;
+  --shadow-float: 0 16px 40px rgba(7, 5, 12, 0.5);
+  --portrait-frame: 0 0 0 1px rgba(239, 188, 90, 0.45);
+  --winner-frame: 0 0 0 3px #efbc5a, 0 0 40px rgba(239, 188, 90, 0.45);
+
+  /* ---- Aliases for the names the app already used. ---- */
+  --line-bright: var(--line-strong);
+  --mono: var(--figure);
+  --shadow: var(--shadow-float);
+  /* The interactive wash: a resting surface lifted on hover or when active. */
+  --panel-hover: rgba(255, 249, 239, 0.07);
+  /* Triplets for alpha compositing: rgba(var(--gold-rgb), 0.4). Keep each in
+     step with its color. Only --primary-rgb (the accent) varies per theme. */
+  --primary-rgb: 227, 113, 133;
+  --pink-rgb: 227, 113, 133;
+  --gold-rgb: 239, 188, 90;
+  --green-rgb: 149, 180, 106;
+  --blue-rgb: 107, 169, 185;
   --red-rgb: 255, 146, 120;
-  --shadow: 0 18px 42px rgba(7, 5, 12, 0.42);
-  --ui: "Inter", "Segoe UI", system-ui, sans-serif;
-  --display: "Segoe UI", "Inter", system-ui, sans-serif;
-  --mono: "Cascadia Mono", "Consolas", monospace;
 
   font-family: var(--ui);
   color: var(--text);
@@ -49,96 +93,45 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Themes. data-theme is set on the app's root element. */
 [data-theme="avocado"] {
   --bg: #141b18;
   --panel: #20281f;
   --panel-2: #293424;
-  --line: #56634a;
-  --line-bright: #82906a;
-  --text: #e8e2d5;
-  --text-strong: #fff7ea;
-  --muted: #b0ad94;
-  --green: #9fbb6f;
-  --green-rgb: 159, 187, 111;
+  --stage: #0e1411;
+  --line: #34402f;
+  --accent: #e67553;
   --primary-rgb: 230, 117, 83;
-  --blue: #78b4c1;
-  --blue-rgb: 120, 180, 193;
-  --pink: #e67583;
-  --pink-rgb: 230, 117, 131;
-  --gold: #efbc5a;
-  --red: #ff9278;
-  --gold-rgb: 239, 188, 90;
-  --red-rgb: 255, 146, 120;
-  --panel-hover: #293424;
 }
 
 [data-theme="mustard"] {
   --bg: #201720;
   --panel: #2a2231;
   --panel-2: #352c3a;
-  --line: #665a60;
-  --line-bright: #928270;
-  --text: #f0e7d7;
-  --text-strong: #fff9ef;
-  --muted: #b9ab97;
-  --green: #8fb36f;
-  --green-rgb: 143, 179, 111;
-  --primary-rgb: 239, 188, 90;
-  --blue: #70b1c3;
-  --blue-rgb: 112, 177, 195;
-  --pink: #df708c;
-  --pink-rgb: 223, 112, 140;
-  --gold: #efbc5a;
-  --red: #ff9278;
-  --gold-rgb: 239, 188, 90;
-  --red-rgb: 255, 146, 120;
-  --panel-hover: #352c3a;
+  --stage: #171017;
+  --line: #463a45;
+  --accent: #df708c;
+  --primary-rgb: 223, 112, 140;
 }
 
 [data-theme="teal"] {
   --bg: #111a20;
   --panel: #1c2830;
   --panel-2: #253742;
-  --line: #4d6770;
-  --line-bright: #78919b;
-  --text: #e6ece7;
-  --text-strong: #fbfff7;
-  --muted: #a8b6ad;
-  --green: #9cb96e;
-  --green-rgb: 156, 185, 110;
+  --stage: #0b1318;
+  --line: #2e4049;
+  --accent: #68a8b8;
   --primary-rgb: 104, 168, 184;
-  --blue: #7bbbcc;
-  --blue-rgb: 123, 187, 204;
-  --pink: #e0708a;
-  --pink-rgb: 224, 112, 138;
-  --gold: #efbc5a;
-  --red: #ff9278;
-  --gold-rgb: 239, 188, 90;
-  --red-rgb: 255, 146, 120;
-  --panel-hover: #253742;
 }
 
 [data-theme="chocolate"] {
   --bg: #1e1719;
   --panel: #292021;
   --panel-2: #352a28;
-  --line: #5c4b47;
-  --line-bright: #88726a;
-  --text: #eee2d8;
-  --text-strong: #fff8ee;
-  --muted: #b5a59c;
-  --green: #96b46c;
-  --green-rgb: 150, 180, 108;
-  --primary-rgb: 220, 108, 78;
-  --blue: #73adbb;
-  --blue-rgb: 115, 173, 187;
-  --pink: #e07086;
-  --pink-rgb: 224, 112, 134;
-  --gold: #efbc5a;
-  --red: #ff9278;
-  --gold-rgb: 239, 188, 90;
-  --red-rgb: 255, 146, 120;
-  --panel-hover: #352a28;
+  --stage: #161012;
+  --line: #44363a;
+  --accent: #e07a6a;
+  --primary-rgb: 224, 122, 106;
 }
 
 * {
@@ -162,4 +155,17 @@ body {
 button,
 input {
   font: inherit;
+}
+
+/* The focus ring: 2px green, 2px out, never removed. Lowest specificity, so a
+   component that draws its own ring on a wrapper still can. */
+:where(:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Browser surfaces carry the palette too. */
+::selection {
+  background: rgba(var(--primary-rgb), 0.35);
+  color: var(--text-strong);
 }
