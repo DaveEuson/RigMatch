@@ -1,43 +1,16 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  AlertTriangle,
-  ArrowLeft,
-  ArrowRight,
-  AudioLines,
-  Check,
-  Code2,
-  Eye,
-  Download,
-  ExternalLink,
-  HandFist,
-  Heart,
-  Image as ImageIcon,
-  Info,
-  Lock,
-  Mic,
-  MessageSquare,
-  Music,
-  PenLine,
-  RefreshCw,
-  ScanLine,
-  Share2,
-  Sparkles,
-  Trophy,
-  Video,
-  X,
-} from 'lucide-react';
+import { Check, HandFist, Lock, Trophy, X } from 'lucide-react';
 import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, RunFailure, RunProgress, SystemProfile } from '../types';
 import { STEPS, STEP_LABELS, footerHint, minPicksFor, nextBlockedHint, pickShortHint, showAnnouncement, showTimeLeft, winnerField, type StepId } from '../lib/wizardCopy';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { Explain, ExplainText, InfoViewProvider } from './InfoView';
 import { useExplaining } from '../lib/infoContext';
-import { formatBytes, formatBytesPerSecond, formatPullCount } from '../lib/format';
+import { formatBytes, formatBytesPerSecond } from '../lib/format';
 import { roundLabel } from '../lib/roundLabels';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
 import { getFriendlyModelName, type DreamTag } from '../lib/modelCatalog';
-import { getCountryCode, getModelOrigin } from '../lib/modelOrigins';
 import { MIN_CONTESTANTS, getDownloadRowStatus, summarizeDownloadStep } from '../lib/downloadStatus';
 import type { ComfyFolderListing } from '../lib/generationCatalog';
 import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
@@ -48,15 +21,14 @@ import { LabComparison } from './LabComparison';
 import { useLabResults } from '../hooks/useLabResults';
 import { balanceLabel } from '../lib/balance';
 import { ShowMarquee } from './ShowMarquee';
-import { setShowExtras, useShowExtras, useShowStage, type ShowStage } from '../lib/showExtras';
+import { setShowExtras, useShowExtras, useShowStage } from '../lib/showExtras';
 import { TROJAN_HOST_COPY, ajaxHostLine } from '../lib/trojanStage';
+import { hostLine } from '../lib/hostScript';
+import { LOW_DISK_GB } from '../lib/loadLevel';
+import { UiIcon } from './icons/UiIcon';
 import { AchievementUnlocked } from './AchievementShelf';
 import { useShowTheme, type ShowMusicState } from '../hooks/useShowTheme';
-import rigGreenroom from '../assets/robot-rig-greenroom.webp';
 import speedDateShow from '../assets/robot-speed-date-show.webp';
-import romanceHero from '../assets/robot-romance-hero.webp';
-import modelTestArt from '../assets/robot-model-test.webp';
-import contestantWall from '../assets/robot-contestant-wall.webp';
 import ceremonyStage from '../assets/robot-scorecard-ceremony.webp';
 import './SimpleWizard.css';
 import './TrojanStage.css';
@@ -70,7 +42,7 @@ export type WizardModel = {
   epithet: string;
   goodForLine: string;
   fitTier: 'great' | 'well' | 'slower';
-  /** Concrete fit, e.g. "4.7 GB of your 12 GB VRAM" — the grid is pre-filtered to
+  /** Concrete fit, e.g. "4.7 of 12 GB" — the grid is pre-filtered to
    *  models that fit, so the tier alone reads identically on every card. */
   fitDetail: string;
   dreamTags: DreamTag[];
@@ -117,32 +89,24 @@ const ROUND_LINES: Record<'code' | 'vision' | 'listening', { host: string; unit:
   },
 };
 
-const HOST_COPY: Record<StepId, string> = {
-  setup: "Welcome to RigMatch! First, let's take a quick peek at your computer. One click — I'll handle the rest.",
-  pick: "So… who's your dream model? Tell me what you're looking for, and I'll bring out the right contestants.",
-  download: "Great picks! I'm bringing your contestants to the studio. This takes a few minutes — feel free to do something else, I'll let you know when we're ready.",
-  compare: "It's Speed Dating time! Everyone gets the same questions — no favorites, I promise. Sit back and enjoy the show.",
-  winner: "We have a match! Now — go get to know each other. And when you're ready for the control room, Advanced Mode is all yours.",
-};
-
 /**
- * One chip per thing RigMatch measures.
+ * One tab per thing RigMatch measures.
  *
  * It asked about five and tested seven: reading a picture, listening to a
  * recording and making music or sound effects were only reachable in Advanced
  * Mode, so a beginner who wanted one of those had no way to say so and no
  * reason to think the app could do it.
  */
-const DREAM_CHIPS: Array<{ id: DreamFilterId; label: string; icon: typeof MessageSquare }> = [
-  { id: 'talk', label: 'Someone to talk with', icon: MessageSquare },
-  { id: 'write', label: 'A writing partner', icon: PenLine },
-  { id: 'code', label: 'A coding buddy', icon: Code2 },
-  { id: 'read-image', label: 'Something that reads pictures', icon: Eye },
-  { id: 'hear', label: 'Something that listens', icon: Mic },
-  { id: 'image', label: 'An image maker', icon: ImageIcon },
-  { id: 'video', label: 'A video maker', icon: Video },
-  { id: 'audio', label: 'A music and sound maker', icon: AudioLines },
-  { id: 'all', label: 'Surprise me — show everyone', icon: Sparkles },
+const GOAL_TABS: Array<{ id: DreamFilterId; label: string }> = [
+  { id: 'talk', label: 'Chat' },
+  { id: 'write', label: 'Writing' },
+  { id: 'code', label: 'Code' },
+  { id: 'read-image', label: 'Reads pictures' },
+  { id: 'hear', label: 'Listens' },
+  { id: 'image', label: 'Makes pictures' },
+  { id: 'video', label: 'Makes video' },
+  { id: 'audio', label: 'Makes sound' },
+  { id: 'all', label: 'Show everyone' },
 ];
 
 type SimpleWizardProps = {
@@ -226,13 +190,22 @@ type SimpleWizardProps = {
    */
   onStartShow: (begin: () => void) => void;
   onStopShow: () => void;
+  /** What the show will ask, for the Pick footer, e.g. "10 questions, General." */
+  planLine?: string;
   /**
    * How much accuracy counts against speed in the show: asked as it starts,
    * and shown beside the result.
    */
   balance: number;
   onBalanceChange: (value: number) => void;
-  winner: { model: string; score: number; scoreLabel: string; grade: string } | null;
+  winner: {
+    model: string;
+    score: number;
+    scoreLabel: string;
+    grade: string;
+    /** The measurements behind the score, when the round has them (questions do; a skill round does not). */
+    measures?: Array<{ label: string; value: number }>;
+  } | null;
   /**
    * What this PC can generate, which the Pick grid deliberately excludes.
    * Without it the empty grid was described as "no contestants can make video
@@ -496,15 +469,60 @@ export function SimpleWizard(props: SimpleWizardProps) {
   const showMinutes = Math.max(1, Math.round(shortlistedRows.length * 3));
 
   const nextLabel: Partial<Record<StepId, string>> = {
-    setup: 'Next · Choose your models',
     // "Download 5 models · already on your PC" contradicted itself inside one
-    // label. When nothing needs downloading, this button starts the comparison.
+    // label. When nothing needs downloading, this button starts the show.
     pick: skipDownload
-      ? `Next · Start the comparison · ~${showMinutes} min`
-      : `Next · Download ${shortlistedRows.length} model${shortlistedRows.length === 1 ? '' : 's'}${downloadSuffix}`,
-    download: `Next · Start the comparison · ~${showMinutes} min`,
-    compare: 'Next · See the winner',
+      ? `Start the show · about ${showMinutes} min`
+      : `Download ${shortlistedRows.length} model${shortlistedRows.length === 1 ? '' : 's'}${downloadSuffix}`,
+    download: `Start the show · about ${showMinutes} min`,
   };
+
+  // The host's line for where the show is. Ajax and the Trojan stage have
+  // their own say; a stopped show is said plainly, over everything.
+  const failedDownload = step === 'download'
+    ? shortlistedRows.find((row) => getDownloadRowStatus(row.installed, props.pullProgressByModel[row.displayName]) === 'failed')
+    : undefined;
+  const questionNumber = (progress?.questionIndex ?? 0) + 1;
+  const judgeOnStage = progress?.questionJudge && shortlistedRows.some((row) => row.displayName === progress.questionJudge)
+    ? progress.questionJudge : null;
+  const scriptLine = (() => {
+    switch (step) {
+      case 'setup':
+        return props.isScanning ? hostLine('setupChecking', {}, shortlistedRows.length)
+          : ollamaReady && props.system.gpu.vramGb ? hostLine('setupDone', { vram: Math.round(props.system.gpu.vramGb) })
+            : hostLine('setupIdle');
+      case 'pick':
+        return hostLine(shortlistedRows.length >= 5 ? 'pickFull' : 'pick', {}, shortlistedRows.length);
+      case 'download':
+        return failedDownload
+          ? hostLine('downloadFailed', { name: getFriendlyModelName(failedDownload.displayName) })
+          : pendingGb > 0 ? hostLine('download', { gb: pendingGb.toFixed(1) }) : hostLine('download', {}, 1);
+      case 'compare':
+        if (props.round && props.round !== 'chat') return ROUND_LINES[props.round].host;
+        if (judgeOnStage) return hostLine('selfJudge', { name: getFriendlyModelName(judgeOnStage) });
+        return progress?.currentModel
+          ? hostLine('dating', {
+            name: getFriendlyModelName(progress.currentModel),
+            q: questionNumber,
+            topic: roundLabel(progress.questionType)?.toLowerCase() ?? 'the next question',
+          }, questionNumber)
+          : "It's showtime! Everyone gets the same questions, no favorites.";
+      case 'winner':
+        return winner ? hostLine('winner', { name: getFriendlyModelName(winner.model) }, shortlistedRows.length)
+          : (props.lineupResults?.length ?? 0) > 0 ? hostLine('noWinner') : hostLine('pick');
+      default:
+        return '';
+    }
+  })();
+  const hostSays = step === 'compare' && showFailed
+    ? (progress?.failureKind === 'stopped' ? hostLine('stopped', {}, shortlistedRows.length)
+      : "That didn't go to plan. Here's what happened, and we can go again whenever you're ready.")
+    : ajaxLine ?? (stage === 'trojan' ? TROJAN_HOST_COPY[step] : scriptLine);
+
+  // Only Pick and Download have a footer: Setup's one button is on the page,
+  // the running show has no next step to offer, and the winner's doors are
+  // its own actions.
+  const footerStep = step === 'pick' || step === 'download';
 
   const tracker = (
     <nav className="sw-steps" aria-label="Wizard steps">
@@ -575,70 +593,72 @@ export function SimpleWizard(props: SimpleWizardProps) {
       {props.trackerSlot ? createPortal(tracker, props.trackerSlot) : <header className="sw-header">{tracker}</header>}
 
       <div className="sw-content">
-        <HostStrip step={step} round={props.round} stopped={showFailed} stage={stage} line={ajaxLine} aside={<ShowExtrasSwitches />} />
+        <HostStrip line={hostSays} />
 
         {props.notice && (
           <div className="sw-notice" role="status" ref={noticeRef}>
-            <AlertTriangle aria-hidden="true" />
+            <UiIcon name="warn" size={20} />
             <p>{props.notice}</p>
             {props.noticeAction && (
               <button
                 type="button"
-                className="sw-notice-fix"
+                className="btn btn-line btn-sm sw-notice-fix"
                 onClick={() => void props.noticeAction?.run()}
               >
                 {props.noticeAction.label}
               </button>
             )}
             {props.onDismissNotice && (
-              <button type="button" onClick={props.onDismissNotice}>Got it</button>
+              <button type="button" className="btn btn-link" onClick={props.onDismissNotice}>Got it</button>
             )}
           </div>
         )}
 
-        {step === 'setup' && <SetupScreen {...props} />}
+        {step === 'setup' && <SetupScreen {...props} onContinue={() => setStep('pick')} />}
         {step === 'pick' && <PickScreen {...props} />}
         {step === 'download' && <DownloadScreen {...props} />}
-        {step === 'compare' && <CompareScreen {...props} onRetry={startShow} />}
+        {step === 'compare' && <CompareScreen {...props} onRetry={startShow} onChangeLineup={() => setStep('pick')} />}
         {step === 'winner' && <WinnerScreen {...props} onRunAgain={() => setStep('pick')} />}
       </div>
 
-      <footer className="sw-footer">
-        <div className="sw-footer-left">
-          {step !== 'setup' && (
+      {footerStep && (
+        <footer className="sw-footer">
+          <div className="sw-footer-left">
             <button
               type="button"
-              className="sw-ghost-pill"
-              onClick={showRunning ? props.onStopShow : downloadsActive ? props.onCancelDownloads : goBack}
-              title={showRunning
-                ? 'Stops after the current question. Models already scored keep their results.'
-                : downloadsActive
-                  ? 'Stops after the current file. Anything already downloaded stays on your PC.'
-                  : undefined}
+              className="btn btn-line"
+              onClick={downloadsActive ? props.onCancelDownloads : goBack}
+              title={downloadsActive ? 'Stops after the current file. Anything already downloaded stays on your PC.' : undefined}
             >
-              <ArrowLeft aria-hidden="true" />
-              {showRunning ? 'Stop the show' : downloadsActive ? 'Stop downloads' : 'Back'}
+              {downloadsActive ? 'Stop downloads' : 'Back'}
             </button>
-          )}
-        </div>
-        {step === 'pick'
-          ? <LineupTray shortlistedRows={shortlistedRows} onRemove={props.onTogglePick} minPicks={minPicks} />
-          : <span className="sw-footer-hint">{footerHint(step, ollamaReady, shortlistedRows.length, minPicks, showFailed)}</span>}
-        <div className="sw-footer-right">
-          {step !== 'winner' && (
+          </div>
+          {step === 'pick'
+            ? (
+              <LineupTray
+                shortlistedRows={shortlistedRows}
+                onRemove={props.onTogglePick}
+                minPicks={minPicks}
+                plan={props.planLine}
+                // Changing the questions opens the run sheet, which starts the
+                // show; with downloads still to do, the sheet comes after them.
+                onChangePlan={skipDownload && pickDone ? startShow : undefined}
+              />
+            )
+            : <span className="sw-footer-hint">{footerHint(step, ollamaReady, shortlistedRows.length, minPicks, showFailed)}</span>}
+          <div className="sw-footer-right">
             <button
               type="button"
-              className="sw-gold-pill"
+              className="btn btn-gold"
               onClick={goNext}
               disabled={!stepComplete[step]}
               title={stepComplete[step] ? undefined : nextBlockedHint(step, downloadBlockedReason, showFailed, shortlistedRows.length, minPicks)}
             >
               {nextLabel[step]}
-              <ArrowRight aria-hidden="true" />
             </button>
-          )}
-        </div>
-      </footer>
+          </div>
+        </footer>
+      )}
     </div>
     </InfoViewProvider>
   );
@@ -652,37 +672,16 @@ export function SimpleWizard(props: SimpleWizardProps) {
  * thing to notice, and the whole problem is that a beginner does not know what
  * to look for.
  */
-function HostStrip({ step, round, stopped, stage, line, aside }: {
-  step: StepId;
-  round?: 'chat' | 'code' | 'vision' | 'listening';
-  stopped?: boolean;
-  stage: ShowStage;
-  /** Something the host has to say about this lineup, over the step's usual line. */
-  line?: string | null;
-  aside?: ReactNode;
-}) {
+function HostStrip({ line }: { line: string }) {
   const explaining = useExplaining();
   return (
     <div className={`sw-host-strip${explaining ? ' explaining' : ''}`}>
       <img className="sw-host-avatar" src={HOST_AVATAR_SRC} alt="" />
       {/* The narration stays in the layout at a constant height; the
-          explanation is layered ON TOP of it rather than replacing it. An
-          explanation runs to three paragraphs against the narration's two
-          lines, so swapping them in place grew the bubble by ~33px and shoved
-          the entire page down every time the pointer crossed a term — the
-          whole screen danced. Nothing below the host may move. */}
+          explanation is layered ON TOP of it rather than replacing it, so
+          nothing below the host moves when the pointer crosses a term. */}
       <div className="sw-host-bubble">
-        <span>The host</span>
-        {/* The host announces the round that is actually running: a coding
-            job is not "the same questions". A stopped show is not one to sit
-            back and enjoy. */}
-        <p>
-          {step === 'compare' && stopped
-            ? "That didn't go to plan. Here's what happened, and we can go again whenever you're ready."
-            : line
-              ?? (step === 'compare' && round && round !== 'chat' ? ROUND_LINES[round].host
-                : stage === 'trojan' ? TROJAN_HOST_COPY[step] : HOST_COPY[step])}
-        </p>
+        <p className="sw-host-line">{line}</p>
         {explaining && (
           <div className="sw-host-explain" role="status">
             <span>{explaining.term}</span>
@@ -694,42 +693,6 @@ function HostStrip({ step, round, stopped, stage, line, aside }: {
           </div>
         )}
       </div>
-      {aside}
-    </div>
-  );
-}
-
-/**
- * The studio's two optional extras, both off until someone turns them on. They
- * sit beside the host on every step, so the effects can be on before Pick (the
- * hearts) and the music before the show starts. Toggle buttons with a fixed
- * name: the pressed state says whether each is on.
- */
-function ShowExtrasSwitches() {
-  const extras = useShowExtras();
-  return (
-    <div className="sw-extras" role="group" aria-label="Studio extras">
-      <span className="sw-eyebrow">Studio extras</span>
-      <button
-        type="button"
-        className="sw-extra"
-        aria-pressed={extras.music}
-        onClick={() => setShowExtras({ music: !extras.music })}
-      >
-        <i className="sw-extra-bulb" aria-hidden="true" />
-        <Music aria-hidden="true" />
-        Theme music
-      </button>
-      <button
-        type="button"
-        className="sw-extra"
-        aria-pressed={extras.effects}
-        onClick={() => setShowExtras({ effects: !extras.effects })}
-      >
-        <i className="sw-extra-bulb" aria-hidden="true" />
-        <Sparkles aria-hidden="true" />
-        Show effects
-      </button>
     </div>
   );
 }
@@ -756,10 +719,13 @@ function SetupScreen({
   onStartOllamaInstall,
   onLaunchOllamaInstaller,
   comfySetup,
-}: SimpleWizardProps) {
+  onContinue,
+}: SimpleWizardProps & { onContinue: () => void }) {
   const checked = ollamaReady; // a successful check makes Ollama ready
-  const gpu = system.gpu.model || 'your graphics card';
+  const gpu = system.gpu.model || 'Graphics card not identified';
+  const vram = system.gpu.isUnifiedMemory ? 0 : Math.round(system.gpu.vramGb || 0);
   const freeGb = Math.round(system.storage.availableGb || 0);
+  const memoryGb = Math.round(system.memory.totalGb || 0);
   // Only surface the "couldn't find Ollama" card after the user actually ran a
   // check that came back not-ready — never on first load before they've clicked.
   const [attempted, setAttempted] = useState(false);
@@ -770,6 +736,7 @@ function SetupScreen({
   // Only "missing" when a goal actually needs it. No goal needing ComfyUI means
   // there is nothing missing, however absent ComfyUI happens to be.
   const comfyMissing = Boolean(comfySetup?.needed) && !comfySetup?.ready;
+  const failed = attempted && !checked && !isScanning;
 
   // Install-flow state. Linux gets a copyable one-liner (no installer binary);
   // Windows/macOS get the in-app download → launch handoff.
@@ -783,120 +750,67 @@ function SetupScreen({
 
   return (
     <div className="sw-setup">
-      <div className="sw-setup-hero" style={{ backgroundImage: `url(${rigGreenroom})` }} aria-hidden="true" />
-      {/* The action first, the reading under it.
-
-          Measured at 1366x768, the most common laptop: this step put 933px of
-          content in a 497px window and left "Check my computer" 182px below the
-          fold. The host line promises "one click — I'll handle the rest" and the
-          click was the one thing a newcomer could not see.
-
-          Nothing is cut. Saying what a model IS still matters — it was added
-          because a hardware scan for an unexplained thing is a strange first
-          screen — it just no longer stands between the reader and the button. */}
-      <h2>So let's check your computer</h2>
-      {/* Said aloud when the check finishes, in the words of the headline the
-          result shows. That result lands further down the page and the button
-          that started it disappears, so nothing else told a screen reader the
-          check had finished, or how. */}
+      <h2>{checked && !isScanning ? (comfyMissing ? 'Almost there: one more program' : 'Your computer is ready') : "Let's check your computer"}</h2>
+      {/* Said aloud when the check finishes, in the words of the headline. The
+          button that started it changes, so nothing else told a screen reader
+          the check had finished, or how. */}
       <p className="sr-only" role="status">
         {isScanning
           ? 'Checking your computer…'
           : checked
-            ? (comfyMissing ? 'Almost — one more program' : "You're all set!")
+            ? (comfyMissing ? 'Almost there: one more program' : 'Your computer is ready')
             : attempted ? "We couldn't find Ollama" : ''}
       </p>
-      {/* Gone once the check has passed. It used to render unconditionally
-          while the result below it was gated on `checked`, so a finished setup
-          showed a big gold "Check my computer" sitting directly above "You're
-          all set! · Check again" — two controls for one job, the louder of them
-          already satisfied. The results block carries its own "Check again",
-          which is the only version of this that still has something to do. */}
-      {(!checked || isScanning) && (
-        <button type="button" className="sw-gold-pill sw-cta" onClick={runCheck} disabled={isScanning}>
-          {isScanning ? <RefreshCw className="sw-spin" aria-hidden="true" /> : <ScanLine aria-hidden="true" />}
-          {isScanning ? 'Checking your computer…' : 'Check my computer'}
-        </button>
+
+      {!checked && !failed && (
+        <>
+          <p className="sw-setup-lede">
+            RigMatch looks at your <Explain id="graphics-card">graphics card</Explain> and memory, works out
+            which AI models will run well, then has them compete so you can crown a winner. Everything stays
+            on your PC: no account, no cloud.
+          </p>
+          <p className="sw-setup-explainer">
+            <strong>What's a <Explain id="model">model</Explain>?</strong> A program that runs on your own
+            computer. It can chat, help you write, explain code or make pictures. They're free, there are
+            hundreds, and which one is best depends on your machine.
+          </p>
+        </>
       )}
-      <p className="sw-muted">
-        RigMatch looks at your <Explain id="graphics-card">graphics card</Explain> and memory, works out which
-        models will actually run well here, then has them compete so you can crown a winner.
-        Everything stays on your PC — no account, no cloud.
-      </p>
-      <p className="sw-setup-lede">
-        An <Explain id="model">AI model</Explain> is a program that runs on your own computer — it can hold a
-        conversation, help you write, explain code, or make pictures. They're free, there are hundreds,
-        and which one is best depends entirely on the machine you have.
-      </p>
-      {/* Beginners' real fear is "will this break my computer." Name it once, here. */}
-      <p className="sw-muted sw-setup-safety">
-        Models download into a folder RigMatch manages — nothing is installed system-wide, and you can delete them any time.
-      </p>
 
       {checked && !isScanning && (
-        <div className={comfyMissing ? 'sw-setup-result partial' : 'sw-setup-result ok'}>
-          <div className="sw-setup-result-head">
-            <span className={comfyMissing ? 'sw-check-circle partial' : 'sw-check-circle'} aria-hidden="true">
-              {comfyMissing ? <AlertTriangle /> : <Check />}
-            </span>
-            {/*
-              The headline has to survive the one case it was wrong in. "You're
-              all set" was said to people whose goal needed a second program
-              nobody had looked for — a confident false statement of exactly the
-              kind this app exists to stop making.
-            */}
-            <strong>{comfyMissing ? 'Almost — one more program' : "You're all set!"}</strong>
-            <button type="button" className="sw-link" onClick={onCheckComputer}>Check again</button>
-          </div>
-          <ResultRow
-            label="Local AI found"
-            detail={<><Explain id="ollama">Ollama</Explain> is installed and running</>}
-          />
-          <ResultRow label="Strong graphics card" detail={`${gpu} — great for local AI`} />
-          <ResultRow label="Plenty of space" detail={`${freeGb} GB free for models`} />
+        <ul className="sw-found" aria-label="What RigMatch found">
+          <FoundRow label="Graphics card" value={vram ? `${gpu} · ${vram} GB video memory` : gpu} />
+          {memoryGb > 0 && <FoundRow label="Memory" value={`${memoryGb} GB`} />}
+          <FoundRow label="Disk space" value={`${freeGb} GB free for models`} warn={freeGb < LOW_DISK_GB} />
+          <FoundRow label="Ollama" value={<><Explain id="ollama">Ollama</Explain> found and running</>} />
           {comfySetup?.needed && (
-            comfySetup.ready ? (
-              <ResultRow
-                label="Picture-making ready"
-                detail={`ComfyUI is running${comfySetup.checkpoint ? ` with ${comfySetup.checkpoint}` : ''}`}
-              />
-            ) : (
-              <div className="sw-setup-missing">
-                <strong>ComfyUI not found</strong>
-                <p>
-                  You picked something that makes pictures or video. Ollama cannot do that — it is
-                  ComfyUI's job, a separate free program RigMatch does not install. Everything else
-                  here works without it.
-                </p>
-                {comfySetup.onFind && (
-                  <button
-                    type="button"
-                    className="sw-gold-pill sw-setup-find"
-                    onClick={() => void comfySetup?.onFind?.()}
-                  >
-                    <ScanLine aria-hidden="true" />
-                    Find ComfyUI for me
-                  </button>
-                )}
-              </div>
-            )
+            <FoundRow
+              label="ComfyUI"
+              warn={!comfySetup.ready}
+              value={comfySetup.ready
+                ? `Running${comfySetup.checkpoint ? ` with ${comfySetup.checkpoint}` : ''}`
+                : 'Not found. You picked something that makes pictures or video, which is ComfyUI’s job, a separate free program RigMatch does not install. Everything else works without it.'}
+            >
+              {!comfySetup.ready && comfySetup.onFind && (
+                <button type="button" className="btn btn-line btn-sm" onClick={() => void comfySetup?.onFind?.()}>
+                  Find ComfyUI for me
+                </button>
+              )}
+            </FoundRow>
           )}
-        </div>
+        </ul>
       )}
 
-      {attempted && !checked && !isScanning && (
-        <div className="sw-setup-result error">
-          <div className="sw-setup-result-head">
-            <span className="sw-check-circle error" aria-hidden="true"><X /></span>
-            <strong>We couldn't find Ollama</strong>
-          </div>
-          <p className="sw-muted sw-setup-error-copy">
-            RigMatch needs <Explain id="ollama">Ollama</Explain> — a free program that does the actual
-            work of running models on your PC.
+      {failed && (
+        <div className="sw-setup-error">
+          <h3>We couldn't find Ollama</h3>
+          <p>
+            RigMatch needs <Explain id="ollama">Ollama</Explain>, a free program that does the actual work of
+            running models on your PC.
             {isLinux ? (
               <> Copy the one-line command below into a <Explain id="terminal">terminal</Explain>, then check again.</>
             ) : (
-              " RigMatch can download and start the installer for you — you won't need to leave this window."
+              " RigMatch can download and start the installer for you, without leaving this window."
             )}
           </p>
 
@@ -905,7 +819,7 @@ function SetupScreen({
               <code>{install.command}</code>
               <button
                 type="button"
-                className="sw-ghost-pill"
+                className="btn btn-line btn-sm"
                 onClick={() => void copyText(install.command).then((ok) => {
                   setCopiedCommand(ok ? 'copied' : 'failed');
                   window.setTimeout(() => setCopiedCommand('idle'), 2400);
@@ -915,12 +829,11 @@ function SetupScreen({
               </button>
             </div>
           ) : installerReady ? (
-            <div className="sw-setup-error-actions">
-              <button type="button" className="sw-gold-pill" onClick={() => onLaunchOllamaInstaller(install.installerPath)}>
-                <Download aria-hidden="true" />
+            <div className="sw-setup-actions">
+              <button type="button" className="btn btn-gold" onClick={() => onLaunchOllamaInstaller(install.installerPath)}>
                 Run the installer
               </button>
-              <span className="sw-muted sw-install-hint">Follow Ollama's prompts, then come back and check again.</span>
+              <span className="sw-muted">Follow Ollama's prompts, then come back and check again.</span>
             </div>
           ) : installDownloading ? (
             <div className="sw-install-progress">
@@ -928,36 +841,55 @@ function SetupScreen({
               <span className="sw-muted">Downloading Ollama… {install.percent}%</span>
             </div>
           ) : (
-            <div className="sw-setup-error-actions">
-              <button type="button" className="sw-gold-pill" onClick={isDesktop ? onStartOllamaInstall : onGetOllama}>
-                <Download aria-hidden="true" />
+            <div className="sw-setup-actions">
+              <button type="button" className="btn btn-gold" onClick={isDesktop ? onStartOllamaInstall : onGetOllama}>
                 {installFailed ? 'Try the download again' : isLinux ? 'Show the install command' : 'Install Ollama for me'}
               </button>
-              <button type="button" className="sw-ghost-pill" onClick={onGetOllama}>
-                <ExternalLink aria-hidden="true" />
+              <button type="button" className="btn btn-line" onClick={onGetOllama}>
                 Open ollama.com
               </button>
             </div>
           )}
 
-          {installFailed && <p className="sw-muted sw-install-hint">{install.error}</p>}
+          {installFailed && <p className="sw-muted">{install.error}</p>}
 
-          <button type="button" className="sw-ghost-pill sw-install-recheck" onClick={runCheck}>
-            <RefreshCw aria-hidden="true" />
-            Check again
-          </button>
+          <button type="button" className="btn btn-link" onClick={runCheck}>Check again</button>
         </div>
       )}
+
+      {!failed && (
+        <div className="sw-setup-actions">
+          {checked && !isScanning ? (
+            <>
+              <button type="button" className="btn btn-gold sw-cta" onClick={onContinue}>Choose your models</button>
+              <button type="button" className="btn btn-link" onClick={onCheckComputer}>Check again</button>
+            </>
+          ) : (
+            <button type="button" className="btn btn-gold sw-cta" onClick={runCheck} disabled={isScanning}>
+              {isScanning ? 'Looking…' : 'Check my computer'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Beginners' real fear is "will this break my computer." Name it once, here. */}
+      <p className="sw-muted sw-setup-safety">
+        Models download into a folder RigMatch manages. Nothing is installed system-wide, and you can delete them any time.
+      </p>
     </div>
   );
 }
 
-function ResultRow({ label, detail }: { label: string; detail: ReactNode }) {
+function FoundRow({ label, value, warn = false, children }: { label: string; value: ReactNode; warn?: boolean; children?: ReactNode }) {
   return (
-    <div className="sw-result-row">
-      <strong>{label}</strong>
-      <span>{detail}</span>
-    </div>
+    <li className={warn ? 'sw-found-row warn' : 'sw-found-row'}>
+      <i className="sw-found-dot" aria-hidden="true" />
+      <span className="sw-found-label">{label}</span>
+      <span className="sw-found-value">
+        <span>{value}</span>
+        {children}
+      </span>
+    </li>
   );
 }
 
@@ -1027,44 +959,31 @@ function PickScreen({
       {/* The step's heading, for screen readers only: the host bubble says the
           same thing to the eye, and each card below is an h3 under it. */}
       <h2 className="sr-only">Pick your contestants</h2>
-      <div className="sw-dream">
-        {/* No eyebrow here. The host bubble twenty pixels above already asks
-            "So… who's your dream model?" — a second heading asking the same
-            question in the same words was a row of the viewport spent saying
-            nothing new, on the step where rows are scarcest. The group keeps
-            its aria-label, so nothing is lost to a screen reader. */}
-        <div className="sw-dream-chips" role="group" aria-label="Filter contestants by what you want">
-          {DREAM_CHIPS.map((chip) => {
-            const Icon = chip.icon;
-            return (
-              <button
-                key={chip.id}
-                type="button"
-                className={`sw-chip ${dream === chip.id ? 'active' : ''}`}
-                aria-pressed={dream === chip.id}
-                onClick={() => { setDream(chip.id); setShowAll(false); }}
-              >
-                <Icon aria-hidden="true" />
-                {chip.label}
-              </button>
-            );
-          })}
-        </div>
+      <div className="sw-goal-tabs" role="group" aria-label="What do you want a model for?">
+        {GOAL_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className="sw-goal-tab"
+            aria-pressed={dream === tab.id}
+            onClick={() => { setDream(tab.id); setShowAll(false); }}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       <div className="sw-pick-count">
         <span>{modelsLoading ? 'Bringing out the contestants…' : countLine}</span>
-        {dream !== 'all' && <button type="button" className="sw-link" onClick={() => setDream('all')}>Show everyone instead</button>}
+        {/* The escape hatch for "I don't know how to choose", which is most of
+            this audience. Fills the lineup with the best-fitting models. Not
+            gold: Start the show is this step's one next action. */}
+        {!modelsLoading && filtered.length > 0 && shortlistedRows.length === 0 && (
+          <button type="button" className="btn btn-line btn-sm sw-choose-for-me" onClick={onChooseForMe}>
+            Not sure? Choose 5 for me
+          </button>
+        )}
       </div>
-
-      {/* The escape hatch for "I don't know how to choose" — which is most of
-          this audience. Fills the lineup with the best-fitting models. */}
-      {!modelsLoading && filtered.length > 0 && shortlistedRows.length === 0 && (
-        <button type="button" className="sw-gold-pill sw-choose-for-me" onClick={onChooseForMe}>
-          <Sparkles aria-hidden="true" />
-          Not sure? Choose 5 for me
-        </button>
-      )}
 
       {modelsLoading ? (
         <div className="sw-card-grid">
@@ -1123,7 +1042,6 @@ function PickScreen({
         <div className="sw-pick-empty">
           {/* An empty wall is where the picture can go: there are no cards
               here for it to push down. */}
-          <div className="sw-pick-empty-art" style={{ backgroundImage: `url(${contestantWall})` }} aria-hidden="true" />
           {dream === 'image' || dream === 'video' ? (
             // Honest rather than empty: these models exist, they just are not
             // Speed Dating contestants — they render instead of chatting.
@@ -1150,7 +1068,7 @@ function PickScreen({
           ) : (
             <p>Hmm, nobody fits that bill on this PC — try another type or show everyone.</p>
           )}
-          <button type="button" className="sw-chip active" onClick={() => setDream('all')}><Sparkles aria-hidden="true" />Surprise me — show everyone</button>
+          <button type="button" className="btn btn-line btn-sm" onClick={() => setDream('all')}>Show everyone</button>
         </div>
       ) : (
         <>
@@ -1172,7 +1090,7 @@ function PickScreen({
             })}
           </div>
           {!showAll && filtered.length > visible.length && (
-            <button type="button" className="sw-link sw-show-more" onClick={() => setShowAll(true)}>Show more models that fit your PC</button>
+            <button type="button" className="btn btn-link sw-show-more" onClick={() => setShowAll(true)}>Show more models that fit your PC</button>
           )}
         </>
       )}
@@ -1187,17 +1105,7 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
   disabled: boolean;
   onToggle: () => void;
 }) {
-  const fitLabel = model.fitTier === 'great' ? 'Runs great on your PC' : model.fitTier === 'well' ? 'Runs well on your PC' : 'Good fit — a little slower';
-  /**
-   * Who made it, in the name someone would recognize.
-   *
-   * Gemma4, Codegemma, Translategemma and Functiongemma are four cards from
-   * one company and nothing on them said Google; Llama says nothing about
-   * Meta, Qwen nothing about Alibaba. The Advanced table has carried a By
-   * column all along — beginners are the ones who need it most.
-   */
-  const origin = getModelOrigin(model.row.displayName);
-  const countryCode = origin.country ? getCountryCode(origin.country) : null;
+  const fitLabel = model.fitTier === 'great' ? 'Runs great' : model.fitTier === 'well' ? 'Runs well' : 'A little slower';
   // Show effects: a few hearts float up from the button as a pick lands. Keyed
   // by a counter so each pick plays its own burst.
   const { effects } = useShowExtras();
@@ -1208,137 +1116,79 @@ function ContestantCard({ model, picked, pickIndex, disabled, onToggle }: {
     onToggle();
   };
   return (
-    <article className={`sw-card${picked ? ' picked' : ''}${model.row.installed ? ' installed' : ''}`}>
+    <article className={`sw-card${picked ? ' picked' : ''}`}>
       {effects && hearts > 0 && (
         <span key={hearts} className="sw-heart-burst" aria-hidden="true">
           {Array.from({ length: 5 }, (_, i) => <i key={i}>{stage === 'trojan' ? <HandFist /> : '♥'}</i>)}
         </span>
       )}
-      {picked && <span className="sw-card-pick-badge"><Heart aria-hidden="true" />Pick {pickIndex}</span>}
-      {!picked && model.row.installed && (
-        /* Downloaded already. It was a gray tick beside the model id, reading
-           as small print next to a bright download size on the card beside it;
-           the one thing a beginner picking five models most wants to know is
-           which ones cost nothing. */
-        <span className="sw-card-installed-badge"><Check aria-hidden="true" />On your PC</span>
-      )}
-      <img className="sw-card-avatar" src={getModelAvatarSrc(model.row.displayName)} alt="" />
-      <div className="sw-card-name">
-        {/* A heading, so a screen reader can move card to card by name. */}
-        <h3>{model.name}</h3>
-        {/* The pull tag and the cost, on one line. Both are facts about the
-            same thing — which exact model this is and what taking it costs —
-            and each having its own row was 15px of a card that had none to
-            spare.
-
-            The tag matters because friendly names strip the variant, so
-            Qwen2.5-coder and Qwen2.5 were identical cards down to the avatar
-            and persona. The size matters because "Download 5 models" should
-            never be a blind commitment, and installed picks are visibly free. */}
-        <span className="sw-card-meta">
-          <code className="sw-card-id">{model.row.displayName}</code>
-          <span className="sw-card-size">
-            {model.row.installed
-              ? 'No download needed'
-              : model.row.sizeGb
-                ? <Explain id="download-size">{`${model.row.sizeGb} GB download`}</Explain>
-                : 'Size unknown'}
-          </span>
-        </span>
-        {/* Only where the maker is actually known: "by Unknown model family"
-            is a worse answer than saying nothing. */}
-        {origin.organization !== 'Unknown model family' && (
-          <span className="sw-card-maker">
-            by {origin.organization}
-            {/* The code is for the eye; the country's name was only in a hover
-                tooltip, which neither a keyboard nor a screen reader reaches. */}
-            {countryCode && (
-              <em title={origin.country}>
-                <span aria-hidden="true">{countryCode}</span>
-                <span className="sr-only">{origin.country}</span>
-              </em>
-            )}
-          </span>
-        )}
-        <em>{model.epithet}</em>
-        {/* Collapsed siblings get one honest line instead of N clone cards. */}
-        {(model.variantCount ?? 0) > 1 && (
-          <span className="sw-card-variants">
-            Best of {model.variantCount} sizes for your PC · all sizes in Advanced
-          </span>
-        )}
+      <div className="sw-card-portrait">
+        <img className="sw-card-avatar" src={getModelAvatarSrc(model.row.displayName)} alt="" />
+        {/* Where it sits in the lineup. The button says "Picked" in words. */}
+        {picked && <span className="sw-card-order" aria-hidden="true">{pickIndex}</span>}
       </div>
-      <div className="sw-card-goodfor">
-        <span className="sw-eyebrow">Good for</span>
-        <p>{model.goodForLine}</p>
+      <div className="sw-card-body">
+        {/* A heading, so a screen reader can move row to row by name. The tag
+            is for anyone who wants the exact model; friendly names drop it. */}
+        <h3 title={model.row.displayName}>{model.name}</h3>
+        <p className="sw-card-why">{model.goodForLine}</p>
+        {/* Does it fit, and what does taking it cost. A beginner picking five
+            most wants to know which ones cost nothing to try. */}
+        <p className="sw-card-fit">
+          <i className={`sw-fit-dot ${model.fitTier}`} aria-hidden="true" />
+          {fitLabel}
+          {model.row.installed
+            ? ' · on your PC'
+            : model.row.sizeGb
+              ? <> · needs a <Explain id="download-size">{`${model.row.sizeGb} GB download`}</Explain></>
+              : ''}
+          {model.fitDetail && <span className="sw-card-vram"> · <ExplainText text={model.fitDetail} /></span>}
+        </p>
       </div>
-      {/* Does it fit, and do other people use it — the two questions a beginner
-          can actually act on, side by side. They share the row rather than
-          stacking, so popularity costs no height when it fits and wraps when it
-          does not.
-
-          Ollama counts pulls per family, which is why thirty-five Gemma 4 rows
-          all read "23.9M" in Advanced. Here that is not a caveat but the right
-          number: these cards are already collapsed to one per family, so a
-          family figure is exactly what the card stands for. */}
-      <div className="sw-card-signals">
-        <span className={`sw-fit-badge ${model.fitTier === 'slower' ? 'gold' : 'green'}`} title={model.fitDetail}>
-          <Heart aria-hidden="true" />{fitLabel}
-          {model.fitDetail && <i className="sw-fit-detail"><ExplainText text={model.fitDetail} /></i>}
-        </span>
-        {/* Absent, not "No pull data": a beginner card should not carry a slot
-            explaining a number it does not have. */}
-        {model.row.pulls != null && model.row.pulls > 0 && (
-          <span
-            className="sw-pop-badge"
-            title={`${model.row.pulls.toLocaleString()} downloads from the Ollama library. Counted across every size of this model.`}
-          >
-            <Download aria-hidden="true" />
-            {formatPullCount(model.row.pulls)} downloads
-            <span className="sr-only">, counted across every size of this model</span>
-          </span>
+      {/* A full lineup is a status, so the button says it and stays out of reach. */}
+      <button
+        type="button"
+        className={picked ? 'sw-card-btn picked' : 'sw-card-btn'}
+        onClick={toggle}
+        disabled={disabled}
+      >
+        {/* Nine buttons all named "Pick" told a screen reader nothing about
+            which model each one takes. The model's name is added out of sight,
+            after the visible words, so the name still starts with what is on
+            screen for anyone who drives the app by voice. */}
+        {picked ? (
+          <>Picked · remove<span className="sr-only"> {model.name}</span></>
+        ) : disabled ? (
+          <>Lineup full<span className="sr-only">, so {model.name} cannot be picked</span></>
+        ) : (
+          <>Pick<span className="sr-only"> {model.name}</span></>
         )}
-      </div>
-      {/* A full lineup used to leave "Lineup full" sitting in the primary
-          button — so most cards in the grid presented a dead gold control as
-          their call to action. It is a status, so it reads as one, and it says
-          what to do about it. */}
-      {disabled ? (
-        <p className="sw-card-full">Lineup full — drop one from your lineup to swap it in.</p>
-      ) : (
-        <button
-          type="button"
-          className={picked ? 'sw-card-btn picked' : 'sw-card-btn'}
-          onClick={toggle}
-        >
-          {/* Nine buttons all named "♥ Pick" told a screen reader nothing about
-              which model each one takes. The model's name is added out of sight,
-              after the visible words, so the name still starts with what is on
-              screen for anyone who drives the app by voice. */}
-          {picked ? (
-            <>Picked <span aria-hidden="true">✓ </span>· Click to remove<span className="sr-only"> {model.name}</span></>
-          ) : (
-            <><span aria-hidden="true">♥ </span>Pick<span className="sr-only"> {model.name}</span></>
-          )}
-        </button>
-      )}
+      </button>
     </article>
   );
 }
 
-function LineupTray({ shortlistedRows, onRemove, minPicks }: { shortlistedRows: ModelRow[]; onRemove: (row: ModelRow) => void; minPicks: number }) {
-  // Why Next is disabled, where it can be read. It was only the disabled
+function LineupTray({ shortlistedRows, onRemove, minPicks, plan, onChangePlan }: {
+  shortlistedRows: ModelRow[];
+  onRemove: (row: ModelRow) => void;
+  minPicks: number;
+  /** What the show will ask, e.g. "10 questions, General." */
+  plan?: string;
+  /** Opens the run sheet, where the questions are set. */
+  onChangePlan?: () => void;
+}) {
+  // Why Start is disabled, where it can be read. It was only the disabled
   // button's tooltip, which a keyboard cannot reach and a touch never shows.
-  const short = shortlistedRows.length > 0 ? pickShortHint(shortlistedRows.length, minPicks) : '';
+  const short = pickShortHint(shortlistedRows.length, minPicks);
+  const sentence = shortlistedRows.length === 0
+    ? 'Pick up to five models.'
+    : short ? `Your lineup: ${shortlistedRows.length} of 5. ${short}.`
+      : `Your lineup: ${shortlistedRows.length} of 5. Select one to remove it.`;
   return (
     <div className="sw-lineup-tray">
-      <span className="sw-eyebrow" aria-live="polite">
-        Your lineup · {shortlistedRows.length} of 5{short ? ` · ${short}` : shortlistedRows.length ? ' · click to remove' : ''}
-      </span>
-      <div className="sw-lineup-slots">
-        {Array.from({ length: 5 }).map((_, index) => {
-          const row = shortlistedRows[index];
-          return row ? (
+      {shortlistedRows.length > 0 && (
+        <div className="sw-lineup-slots">
+          {shortlistedRows.map((row) => (
             <button
               key={row.displayName}
               type="button"
@@ -1350,11 +1200,16 @@ function LineupTray({ shortlistedRows, onRemove, minPicks }: { shortlistedRows: 
               <img src={getModelAvatarSrc(row.displayName)} alt="" />
               <span className="sw-lineup-remove" aria-hidden="true"><X /></span>
             </button>
-          ) : (
-            <span key={`empty-${index}`} className="sw-lineup-slot empty" aria-hidden="true"><Heart /></span>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
+      <span className="sw-lineup-text" aria-live="polite">{sentence}</span>
+      {plan && (
+        <span className="sw-lineup-plan">
+          {plan}
+          {onChangePlan && <> <button type="button" className="btn btn-link" onClick={onChangePlan}>Change</button></>}
+        </span>
+      )}
     </div>
   );
 }
@@ -1413,10 +1268,7 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel }: SimpleWizardPr
           </div>
         );
       })}
-      <div className="sw-info-note">
-        <Info aria-hidden="true" />
-        <span>Downloads pick up where they left off if you close RigMatch. Your other apps won't slow down.</span>
-      </div>
+      <p className="sw-muted sw-download-note">Downloads pick up where they left off if you close RigMatch.</p>
     </div>
   );
 }
@@ -1434,7 +1286,7 @@ function getEtaLabel(pull?: PullProgressUpdate): string {
 // ---------------------------------------------------------------------------
 // Compare
 
-function CompareScreen({ shortlistedRows, runProgress, round: showRound, benchmarkActive, onRetry }: SimpleWizardProps & { onRetry: () => void }) {
+function CompareScreen({ shortlistedRows, runProgress, round: showRound, benchmarkActive, onRetry, onChangeLineup, onStopShow }: SimpleWizardProps & { onRetry: () => void; onChangeLineup: () => void }) {
   const failed = runProgress?.phase === 'failed';
   const activeModel = runProgress?.currentModel ?? '';
   const round = (runProgress?.questionIndex ?? 0) + 1;
@@ -1576,17 +1428,22 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, benchma
             // It used to move to Winner, where the host said "We have a match!"
             // over "Run the show to crown your Top Match."
             <div className="sw-compare-question sw-compare-stopped">
-              <span className="sw-eyebrow">{runProgress?.failureKind === 'stopped' ? 'You stopped the show' : 'The show stopped'}</span>
+              <p className="sw-round-meta">{runProgress?.failureKind === 'stopped' ? 'You stopped the show' : 'The show stopped'}</p>
               <h2>{runProgress?.message ?? 'The show stopped early.'}</h2>
               {runProgress?.failureKind === 'too-few' ? (
-                <p className="sw-muted">Go Back and pick at least {MIN_CONTESTANTS} models that are on this PC.</p>
+                <>
+                  <p>Pick at least {MIN_CONTESTANTS} models that are on this PC.</p>
+                  <div className="sw-stage-actions">
+                    <button type="button" className="btn btn-gold" onClick={onChangeLineup}>Change the lineup</button>
+                  </div>
+                </>
               ) : (
                 <>
-                  <p className="sw-muted">Your lineup is still picked, so you can run it again, or go Back and change it.</p>
-                  <button type="button" className="sw-gold-pill" onClick={onRetry}>
-                    <RefreshCw aria-hidden="true" />
-                    Run the show again
-                  </button>
+                  <p>Your lineup is still picked, so you can run it again or change it.</p>
+                  <div className="sw-stage-actions">
+                    <button type="button" className="btn btn-gold" onClick={onRetry}>Run the show again</button>
+                    <button type="button" className="btn btn-line" onClick={onChangeLineup}>Change the lineup</button>
+                  </div>
                 </>
               )}
             </div>
@@ -1594,15 +1451,15 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, benchma
             <div className="sw-compare-question">
               {/* Naming the model makes the per-model round count read as intended
                   rather than as the run resetting. */}
-              <span className="sw-eyebrow">
+              <h2>{plainRoundLabel}</h2>
+              <p className="sw-round-meta">
                 {totalRounds > 0 && modelCount > 1
-                  ? `Model ${modelNumber} of ${modelCount} · Round ${round} of ${totalRounds}`
+                  ? `Round ${round} of ${totalRounds} · contestant ${modelNumber} of ${modelCount}`
                   : totalRounds > 0
                     ? `Round ${round} of ${totalRounds}`
                     : 'Getting started'}
-              </span>
-              <h2>{plainRoundLabel}</h2>
-              <button type="button" className="sw-link" onClick={() => setShowPrompt((v) => !v)}>
+              </p>
+              <button type="button" className="btn btn-link" onClick={() => setShowPrompt((v) => !v)}>
                 {showPrompt ? 'Hide the exact question' : 'See the exact question'}
               </button>
               {showPrompt && <p className="sw-compare-raw">&ldquo;{question}&rdquo;</p>}
@@ -1630,21 +1487,15 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, benchma
                       "Qwen2.5"; showing "qwen2.5:7b" here reads as a different
                       contestant to someone who does not know the notation. */}
                   <strong>{getFriendlyModelName(row.displayName)}</strong>
-                  <span className={`sw-podium-pill ${state}`}>
-                    {state === 'answering' ? (judging ? 'Being marked' : <><i /><i /><i /> Answering</>)
-                      : state === 'dropped' ? "✕ Couldn't finish"
-                        : state === 'done' ? '✓ Done'
+                  <span className={`sw-podium-state ${state}`}>
+                    {state === 'answering' ? (judging
+                      ? (runProgress?.questionJudge ? `${getFriendlyModelName(runProgress.questionJudge)} is marking it` : 'Being marked')
+                      : 'Answering…')
+                      : state === 'dropped' ? "Couldn't finish"
+                        : state === 'done' ? (rowScore != null ? `Done · scored ${rowScore}` : 'Done')
                           : state === 'stopped' ? 'Stopped partway'
-                            : failed ? 'Did not run' : 'Waiting'}
+                            : failed ? 'Did not run' : 'Up next'}
                   </span>
-                  <em>
-                    {state === 'answering' ? (judging && runProgress?.questionJudge
-                      ? `${getFriendlyModelName(runProgress.questionJudge)} is marking it`
-                      : 'Thinking it over…')
-                      : state === 'dropped' ? 'Sat out the rest'
-                        : state === 'done' ? (rowScore != null ? `Scored ${rowScore}` : 'Answered')
-                          : failed ? '' : 'Up next'}
-                  </em>
                 </div>
               );
             })}
@@ -1654,14 +1505,14 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, benchma
       <div className="sw-stage-data">
         <div className="sw-show-progress">
           <div className="sw-show-progress-head">
-            <span>Show progress</span>
+            <span>Progress</span>
             {/* Counts every question the whole run will ask, so the label and the
                 bar move together and neither ever goes backwards. */}
             <span>
               {totalQuestions > 0
                 ? `${questionsDone} of ${totalQuestions} ${showRound && showRound !== 'chat' ? ROUND_LINES[showRound].unit : 'questions'}`
                 : `${overallPercent}%`}
-              {timeLeft && <em className="sw-eta">· {timeLeft}</em>}
+              {timeLeft && <em className="sw-eta"> · {timeLeft}</em>}
             </span>
           </div>
           <div
@@ -1678,17 +1529,15 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, benchma
 
         <div className="sw-answer-strip">
           <div className="sw-answer-strip-head">
-            <span className="sw-eyebrow">
+            <span>
               {activeModel ? `${getFriendlyModelName(activeModel)}'s answers so far` : 'Answers so far'}
             </span>
             {answeredAverage != null && (
-              <em>{answered.length} scored · averaging {answeredAverage}</em>
+              <em>{answered.length} scored · averaging <b>{answeredAverage}</b></em>
             )}
           </div>
           {answered.length === 0 ? (
-            <p className="sw-muted">
-              Every answer is scored out of 100 as it arrives. They'll show up here.
-            </p>
+            <p className="sw-muted">Every answer is scored out of 100 as it arrives.</p>
           ) : (
             <ol aria-label="Answer scores for the model currently answering">
               {answered.map((score, index) => (
@@ -1699,6 +1548,32 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, benchma
             </ol>
           )}
         </div>
+
+        {/* No gold here: while the show runs there is no next step, only a way
+            to stop it. The music switch is here too, for whoever wants quiet
+            now rather than a trip to Settings. */}
+        {benchmarkActive && !failed && (
+          <div className="sw-show-controls">
+            {showRound !== 'listening' && (
+              <button
+                type="button"
+                className="btn btn-link"
+                aria-pressed={extras.music}
+                onClick={() => setShowExtras({ music: !extras.music })}
+              >
+                {extras.music ? 'Turn the music off' : 'Play the theme music'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-line"
+              onClick={onStopShow}
+              title="Stops after the current question. Models already scored keep their results."
+            >
+              Stop the show
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1719,47 +1594,34 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, bala
     // passed. The second one has a board to show and a reason to give.
     const board = lineupResults ?? [];
     if (board.length === 0) {
-      return <div className="sw-winner"><p className="sw-muted">Run the show to crown your Top Match.</p></div>;
+      return (
+        <div className="sw-winner">
+          <p className="sw-muted">Run the show to crown your Top Match.</p>
+          <div className="sw-winner-actions">
+            <button type="button" className="btn btn-gold" onClick={onRunAgain}>Pick a lineup</button>
+          </div>
+        </div>
+      );
     }
     return (
       <div className="sw-winner">
         <h2 className="sw-winner-none">Nobody passed this round</h2>
         <p className="sw-muted">
           {board.length === 1 ? 'The one contestant' : `All ${board.length} contestants`} answered, and none of them
-          got close enough to what was asked for to be crowned. That is a real result about this PC and these models
-          — not a failed show.
+          got close enough to what was asked for to be crowned. That is a real result about this PC and these models,
+          not a failed show.
         </p>
-        <div className="sw-scoreboard">
-          <h3 className="sw-eyebrow">How the lineup finished</h3>
-          <ol>
-            {board.map((result, index) => (
-              <li key={result.model}>
-                <b className="sw-place">{index + 1}</b>
-                <img src={getModelAvatarSrc(result.model)} alt="" />
-                <span className="sw-scoreboard-name">
-                  {result.name}
-                  <em>{result.model}</em>
-                  <ModelDemoChips model={result.model} label="" className="sw-scoreboard-demos" />
-                </span>
-                <span className="sw-scoreboard-score">
-                  {result.scoreLabel}
-                  <em>Grade {result.grade}{result.note ? ` · ${result.note}` : ''}</em>
-                </span>
-              </li>
-            ))}
-          </ol>
+        <div className="sw-winner-actions">
+          <button type="button" className="btn btn-gold" onClick={onRunAgain}>Run it again</button>
+          <button type="button" className="btn btn-line" onClick={onSwitchToAdvanced}>Open the control room</button>
         </div>
         {/* A show nobody won still happened, and can still earn a badge. */}
         <AchievementUnlocked />
-        <div className="sw-winner-actions-row">
-          <button type="button" className="sw-gold-pill" onClick={onRunAgain}>Run it again</button>
-          <button type="button" className="sw-ghost-pill" onClick={onSwitchToAdvanced}>Open the control room</button>
-        </div>
+        <Scoreboard results={board} />
       </div>
     );
   }
-  const shortName = winner.model.split(':')[0];
-  const capName = shortName.charAt(0).toUpperCase() + shortName.slice(1);
+  const name = getFriendlyModelName(winner.model);
   // Only the models that finished were compared: a dropout, or a show stopped
   // early, leaves fewer finishers than picks.
   const finished = lineupResults?.length || shortlistedRows.length;
@@ -1767,9 +1629,8 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, bala
   return (
     <div className="sw-winner crowned">
       {/* The reveal is the one moment the show gets its full lighting: the
-          ceremony photo, the bulbs, the confetti, the halo. The scoreboard and
-          everything under it stay plain — they are the measurements, and a lit
-          measurement reads as a less trustworthy one. */}
+          ceremony photo, the bulbs, the confetti. The actions and the board
+          under it stay plain; they are the measurements and the way on. */}
       <div className={effects ? 'sw-winner-stage curtained' : 'sw-winner-stage'}>
         <div className="sw-stage-bg" style={{ backgroundImage: `url(${ceremonyStage})` }} aria-hidden="true" />
         <ShowMarquee framed flash={effects} />
@@ -1788,48 +1649,59 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, bala
         <div className="sw-winner-reveal">
           <div className="sw-winner-avatar-wrap">
             <img src={getModelAvatarSrc(winner.model)} alt="" />
-            <span className="sw-winner-trophy" aria-hidden="true"><Trophy /></span>
           </div>
           <div className="sw-winner-copy">
-            <span className="sw-eyebrow gold">Your top match</span>
-            <h2>{getFriendlyModelName(winner.model)}</h2>
-            <em className="sw-winner-tag">{winner.model}</em>
-            <span className="sw-winner-grade">
+            <p className="sw-winner-kicker">Your Top Match</p>
+            <div className="sw-winner-name">
+              <h2>{getFriendlyModelName(winner.model)}</h2>
+              <span className="sw-winner-tag">{winner.model}</span>
+            </div>
+            <div className="sw-winner-grade">
               <b>{winner.scoreLabel}</b>
-              <em>Match · Grade {winner.grade} · {balanceLabel(balance)}</em>
-            </span>
-            {/* Say what the number means — a beginner has never seen either scale. */}
+              <span><Explain id="match-score">Match Score</Explain> · Grade {winner.grade} · {balanceLabel(balance)}</span>
+            </div>
+            {/* Say what the number means; a beginner has never seen either scale. */}
             <p className="sw-winner-why">
               {round === 'code'
-                ? <>Answered the same questions as the rest and built the best app of the {tested}, on your PC — judged on whether it runs and does what was asked.</>
+                ? <>Answered the same questions as the rest and built the best app of the {tested}, on your PC, judged on whether it runs and does what was asked.</>
                 : round === 'vision'
                   ? <>Named the most of the test picture out of the {tested}, and did it fastest on your PC.</>
                   : round === 'listening'
                     ? <>Heard the test recording best out of the {tested} on your PC.</>
                     : onlyOne
                       // Nothing was compared, so it is not "the best of" anything.
-                      ? <>The only one of your picks that finished, so it had nothing to be compared with — this
-                        is its <Explain id="match-score">Match Score</Explain>.</>
-                      : <>Best combination of speed, answer quality, and fit for your PC out of the {tested}
-                        {' '}— this is its <Explain id="match-score">Match Score</Explain>.</>}
+                      ? <>The only one of your picks that finished, so it had nothing to be compared with.</>
+                      : <>The best mix of speed, answer quality and fit for your PC out of the {tested}.</>}
             </p>
+            {winner.measures && winner.measures.length > 0 && (
+              <dl className="sw-winner-measures">
+                {winner.measures.map((measure) => (
+                  <div key={measure.label}>
+                    <dt>{measure.label}</dt>
+                    <dd>{Math.round(measure.value)}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
             {/* Whatever it made is one click away. The app a coding round built is
-                the whole point of having run one: a beginner can open it, click
-                it, and judge the winner without knowing what a score is. */}
+                the whole point of having run one. */}
             <ModelDemoChips model={winner.model} label="What it made" className="sw-winner-demos" />
-            {/* Sharing belongs at the moment of the result, not three clicks away
-                in Advanced Mode where a Simple Mode user will never find it. */}
-            <div className="sw-winner-actions-row">
-              <button type="button" className="sw-winner-share" onClick={onShareScore}>
-                <Share2 aria-hidden="true" />
-                Share your score
-              </button>
-              {/* Everything made here, from the screen people are standing on
-                  when they ask where it went. */}
-              <AllDemosButton className="sw-winner-share" />
-            </div>
           </div>
         </div>
+      </div>
+
+      {/* Two doors and the small ones beside them. Chat is the happy ending,
+          so it is the one gold button; the control room is Advanced Mode. */}
+      <div className="sw-winner-actions">
+        <button type="button" className="btn btn-gold sw-winner-chat" onClick={onChatWithWinner}>Chat with {name}</button>
+        <button type="button" className="btn btn-line sw-winner-door" onClick={onSwitchToAdvanced}>Open the control room</button>
+        <span className="sw-winner-links">
+          <button type="button" className="btn btn-link" onClick={onOpenScorecard}>See every answer</button>
+          {/* Sharing belongs at the moment of the result. */}
+          <button type="button" className="btn btn-link" onClick={onShareScore}>Share</button>
+          <AllDemosButton className="btn btn-link" label="Everything they made" />
+          <button type="button" className="btn btn-link" onClick={onRunAgain}>Run the show again</button>
+        </span>
       </div>
 
       {/* What this show earned, if anything: a badge for a feature found. */}
@@ -1839,72 +1711,58 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, bala
           four made the show's whole output a single number, and left "out of
           the 5 you tested" as a claim the screen did not back up. */}
       {(lineupResults?.length ?? 0) > 1 && (
-        <div className="sw-scoreboard">
-          <h3 className="sw-eyebrow">How the lineup finished</h3>
-          <ol>
-            {lineupResults!.map((result, index) => (
-              <li key={result.model} className={result.model === winner.model ? 'winner' : undefined}>
-                <b className="sw-place">{index + 1}</b>
-                <img src={getModelAvatarSrc(result.model)} alt="" />
-                <span className="sw-scoreboard-name">
-                  {result.name}
-                  <em>{result.model}</em>
-                  {/* Everything this contestant made, from its own row. The
-                      winner's was reachable and the rest were not, which is
-                      the same as not having them. */}
-                  <ModelDemoChips model={result.model} label="" className="sw-scoreboard-demos" />
-                </span>
-                <span className="sw-scoreboard-score">
-                  {result.scoreLabel}
-                  <em>Grade {result.grade}{result.note ? ` · ${result.note}` : ''}</em>
-                </span>
-              </li>
-            ))}
-          </ol>
-          <p className="sw-muted sw-scoreboard-note">
-            {round && round !== 'chat'
-              ? ROUND_LINES[round].note
-              : 'Every one of these ran the same questions on your PC.'} A close second may still
-            suit you better — try chatting with either.
-          </p>
-        </div>
+        <Scoreboard
+          results={lineupResults!}
+          winnerModel={winner.model}
+          note={`${round && round !== 'chat' ? ROUND_LINES[round].note : 'Every one of these ran the same questions on your PC.'} A close second may still suit you better, so try chatting with either.`}
+        />
       )}
       {/* Who sat out, and why. They are not ranked: they did not answer
           everything, so there is nothing fair to rank them on. */}
       {(droppedOut?.length ?? 0) > 0 && (
         <div className="sw-scoreboard sw-dropped-out">
-          <h3 className="sw-eyebrow">Couldn't finish</h3>
+          <h3>Couldn't finish</h3>
           <ul>
             {droppedOut!.map((failure) => (
               <li key={failure.model}>
-                <strong>{getFriendlyModelName(failure.model)}</strong> — {failure.reason}
+                <strong>{getFriendlyModelName(failure.model)}</strong>: {failure.reason}
               </li>
             ))}
           </ul>
         </div>
       )}
+    </div>
+  );
+}
 
-      <div className="sw-doors">
-        <div className="sw-door chat">
-          <div className="sw-door-img" style={{ backgroundImage: `url(${romanceHero})` }} aria-hidden="true" />
-          <span className="sw-eyebrow gold">The happy ending</span>
-          <h3>Start chatting with {capName}</h3>
-          <p>Open RigMatch Chat and talk to your new match right away — it's already on your PC.</p>
-          <button type="button" className="sw-door-btn gold" onClick={onChatWithWinner}><MessageSquare aria-hidden="true" />Chat with {capName}</button>
-        </div>
-        <div className="sw-door advanced">
-          <div className="sw-door-img" style={{ backgroundImage: `url(${modelTestArt})` }} aria-hidden="true" />
-          <span className="sw-eyebrow blue">You've graduated</span>
-          <h3>Step into Advanced Mode</h3>
-          <p>The full control room — every model, every score, custom tests. Your Top Match comes with you.</p>
-          <button type="button" className="sw-door-btn blue" onClick={onSwitchToAdvanced}><ExternalLink aria-hidden="true" />Switch to Advanced</button>
-        </div>
-      </div>
-
-      <div className="sw-winner-links">
-        <button type="button" className="sw-link" onClick={onOpenScorecard}>See the full scorecard</button>
-        <button type="button" className="sw-link" onClick={onRunAgain}>Run the show again</button>
-      </div>
+/** How the lineup finished: one row a contestant, best first. Plain, never lit. */
+function Scoreboard({ results, winnerModel, note }: {
+  results: NonNullable<SimpleWizardProps['lineupResults']>;
+  winnerModel?: string;
+  note?: string;
+}) {
+  return (
+    <div className="sw-scoreboard">
+      <h3>How the lineup finished</h3>
+      <ol>
+        {results.map((result, index) => (
+          <li key={result.model} className={result.model === winnerModel ? 'winner' : undefined}>
+            <b className="sw-place">{index + 1}</b>
+            <img src={getModelAvatarSrc(result.model)} alt="" />
+            <span className="sw-scoreboard-name">
+              {result.name}
+              <em>{result.model}</em>
+              {/* Everything this contestant made, from its own row. */}
+              <ModelDemoChips model={result.model} label="" className="sw-scoreboard-demos" />
+            </span>
+            <span className="sw-scoreboard-score">
+              {result.scoreLabel}
+              <em>Grade {result.grade}{result.note ? ` · ${result.note}` : ''}</em>
+            </span>
+          </li>
+        ))}
+      </ol>
+      {note && <p className="sw-muted sw-scoreboard-note">{note}</p>}
     </div>
   );
 }

@@ -74,6 +74,14 @@ export function questionsForSet(id: Exclude<QuestionSetId, 'custom'>): Benchmark
   return [...(BENCHMARK_PRESETS.find((preset) => preset.id === id)?.questions ?? DEFAULT_BENCHMARK_QUESTIONS)];
 }
 
+/** The set's name as the sheet's chips show it, or "your questions" once edited. */
+export function questionSetLabel(questions: BenchmarkQuestion[]): string {
+  const id = activeQuestionSet(questions);
+  if (id === 'custom') return 'your questions';
+  if (id === 'general') return 'General';
+  return BENCHMARK_PRESETS.find((preset) => preset.id === id)?.label ?? 'General';
+}
+
 export const GENERAL_SET_DESCRIPTION = 'Mixed questions covering JSON output, instruction following and everyday tasks.';
 
 export const COUNT_OPTIONS: Array<{ count: BenchmarkQuestionCount; name: string; perModel: string; minutes: number }> = [

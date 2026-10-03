@@ -506,7 +506,6 @@
 /* Simple Mode's wizard fills the screen under the strip. */
 .app-shell[data-ui-mode='beginner'] .sw-shell {
   grid-area: stage;
-  margin: var(--s3) var(--s4) var(--s4);
 }
 
 /* ---- Floating: downloads and toasts ------------------------------------- */
@@ -520,11 +519,15 @@
 
 .activity-toast-region {
   position: fixed;
-  left: var(--s4);
-  bottom: var(--s4);
+  left: 50%;
+  bottom: 28px;
   z-index: 31;
-  max-width: min(440px, calc(100vw - 32px));
+  max-width: min(520px, calc(100vw - 32px));
+  transform: translateX(-50%);
 }
+
+/* Above Simple Mode's footer dock, never over its buttons. */
+.app-shell:has(.sw-footer) .activity-toast-region { bottom: 96px; }
 
 .activity-toast {
   display: flex;

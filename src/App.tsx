@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { recordAchievements } from './lib/achievements';
 import {
   ArrowLeft,
-  HelpCircle,
   Lightbulb,
   Sparkles,
   Trophy,
@@ -125,7 +124,6 @@ import {
   getPlatformFit,
   getRigPick,
   getSavedThemeId,
-  getSavedTutorialSeen,
   getSavedUiMode,
   getFriendlyModelName,
   getThemeLabel,
@@ -216,7 +214,7 @@ import { DownloadTickerDock } from './components/DownloadTickerDock';
 import { Elapsed } from './components/Elapsed';
 import { FirstRunSplash } from './components/FirstRunSplash';
 import { ModelPoolLineupStrip } from './components/ModelPoolLineupStrip';
-import { FirstRunTutorial } from './components/FirstRunTutorial';
+import { WelcomeOverlay } from './components/WelcomeOverlay';
 import { ActivityPanel } from './components/ActivityPanel';
 import { SpeedDatePanel } from './components/SpeedDatePanel';
 import { UtilityPanel } from './components/UtilityPanel';
@@ -309,6 +307,9 @@ import './App.css';
 import './styles/shell.css';
 import './styles/controls.css';
 import './styles/runSheet.css';
+import './styles/welcome.css';
+import { matchMeasures } from './lib/matchCard';
+import { questionSetLabel } from './lib/runSheet';
 
 
 // Quick TEST resource warning opt-out ('off' = user chose "don't warn again").
@@ -608,8 +609,8 @@ function App() {
   const [setupGuideOpen, setSetupGuideOpen] = useState(false);
   const [clearDataOpen, setClearDataOpen] = useState(false);
   const [pendingScoreClear, setPendingScoreClear] = useState<PendingScoreClear | null>(null);
-  const [tutorialOpen, setTutorialOpen] = useState(() => !getSavedTutorialSeen());
-  const [tutorialStep, setTutorialStep] = useState(0);
+  // The welcome again, from Settings. The first run's own is useGoals' showModeSplash.
+  const [welcomeReplay, setWelcomeReplay] = useState(false);
 
   const selectedHost = hosts.find((host) => host.id === selectedHostId) ?? hosts[0];
 
@@ -939,7 +940,7 @@ function App() {
         // The grid only ever shows models that fit, so every tier label reads the
         // same. State the numbers a beginner actually needs to judge it.
         fitDetail: row.sizeGb && vramGb > 0
-          ? `${formatGb(row.sizeGb)} of your ${formatGb(vramGb)} VRAM`
+          ? `${Math.round(row.sizeGb * 10) / 10} of ${formatGb(vramGb)}`
           : row.sizeGb
             ? `${formatGb(row.sizeGb)} on disk`
             : '',
@@ -1299,12 +1300,6 @@ function App() {
   }, [modelRows, ollama.baseUrl, pendingScoreClear, selectedModel]);
 
 
-  const closeTutorial = useCallback(() => {
-    writeLocal(TUTORIAL_STORAGE_KEY, 'seen');
-    setTutorialOpen(false);
-    setActivity('Quick guide closed. Use the Matchmaker Menu to move through the app.');
-  }, []);
-
   const selectUiMode = useCallback((nextMode: UiMode) => {
     setUiMode(nextMode);
     setActivity(nextMode === 'beginner'
@@ -1379,6 +1374,11 @@ function App() {
     return listTestResult.results.some((result) => picked.has(result.model)) ? listTestResult : null;
   }, [listTestResult, shortlistedRows]);
 
+  // What the show will ask, said in the Pick footer beside "Change".
+  const wizardPlanLine = wizardRound === 'vision' ? 'One picture to describe.'
+    : wizardRound === 'listening' ? 'One recording to write down.'
+      : `${benchmarkQuestionCount} questions, ${questionSetLabel(benchmarkQuestions)}.${wizardRound === 'code' ? ' Then each builds an app.' : ''}`;
+
   const wizardWinner = useMemo(
     () => (wizardSkillBoard
       // The first one that actually passed. A result that failed its check is
@@ -1394,7 +1394,7 @@ function App() {
         const top = wizardShowResult.results.find((result) => result.model === wizardShowResult.winner)
           ?? wizardShowResult.results[0];
         return top
-          ? { model: top.model, score: top.total, scoreLabel: formatMatchScore(top), grade: top.grade }
+          ? { model: top.model, score: top.total, scoreLabel: formatMatchScore(top), grade: top.grade, measures: matchMeasures(top) }
           : null;
       })()
       : topRigPick?.score
@@ -1405,6 +1405,7 @@ function App() {
         // score was the one surface still disagreeing with the decimal policy.
         scoreLabel: formatMatchScore(topRigPick.score),
         grade: topRigPick.score.grade,
+        measures: matchMeasures(topRigPick.score),
       }
       : null),
     [topRigPick, wizardSkillBoard, wizardShowResult],
@@ -4306,13 +4307,35 @@ function App() {
           </a>
         </div>
       )}
-      {showModeSplash && <FirstRunSplash vramGb={system.gpu.vramGb || 0} onDone={chooseInterfaceMode} />}
+      {showModeSplash && (
+        <WelcomeOverlay
+          vramGb={system.gpu.vramGb || 0}
+          onFinish={({ goals, advanced }) => {
+            chooseInterfaceMode(advanced ? 'advanced' : 'beginner', goals);
+            // The old guide's flag: anyone welcomed has had the tour it replaced.
+            writeLocal(TUTORIAL_STORAGE_KEY, 'seen');
+          }}
+        />
+      )}
+      {welcomeReplay && (
+        <WelcomeOverlay
+          vramGb={system.gpu.vramGb || 0}
+          initialGoal={selectedGoals[0]}
+          replay
+          onClose={() => setWelcomeReplay(false)}
+          onFinish={({ goals, advanced }) => {
+            setWelcomeReplay(false);
+            saveGoalsFromSettings(goals);
+            selectUiMode(advanced ? 'advanced' : 'beginner');
+            if (!advanced) setWizardStep('setup');
+          }}
+        />
+      )}
       {/* Upgraded from a version without goals: ask the new question, leave
           the mode they already chose alone. */}
       {showGoalsIntro && (
         <FirstRunSplash
           vramGb={system.gpu.vramGb || 0}
-          onDone={chooseInterfaceMode}
           initialGoals={selectedGoals}
           isUpgrade
           onSaveGoals={saveGoalsFromIntro}
@@ -4322,7 +4345,6 @@ function App() {
       {!showModeSplash && showGoalsEditor && (
         <FirstRunSplash
           vramGb={system.gpu.vramGb || 0}
-          onDone={chooseInterfaceMode}
           initialGoals={selectedGoals}
           onSaveGoals={saveGoalsFromSettings}
           onCancel={() => setShowGoalsEditor(false)}
@@ -4406,6 +4428,7 @@ function App() {
           balance={wizardBalance}
           onBalanceChange={(value) => setBalance(wizardChannel === 'app' ? 'code' : wizardChannel, value)}
           onStopShow={requestStopRun}
+          planLine={wizardPlanLine}
           winner={wizardWinner}
           lineupResults={wizardLineupResults}
           droppedOut={wizardSkillBoard ? undefined : wizardShowResult?.failures}
@@ -4795,6 +4818,7 @@ function App() {
             onThemeChange={selectTheme}
             onUiModeChange={selectUiMode}
             onEditGoals={() => setShowGoalsEditor(true)}
+            onShowWelcome={() => setWelcomeReplay(true)}
             onDeleteModel={requestDeleteModel}
             onRefreshLogs={loadLogs}
             onCopyLogs={copyLogs}
@@ -5167,38 +5191,6 @@ function App() {
         />
       )}
 
-      {!tutorialOpen && uiMode === 'advanced' && (
-        <button
-          type="button"
-          className="help-float-btn"
-          onClick={() => { setTutorialOpen(true); setTutorialStep(0); }}
-          title="Reopen the getting started guide"
-          aria-label="Open getting started guide"
-        >
-          <HelpCircle aria-hidden="true" />
-        </button>
-      )}
-
-      {/* Never at the same time as the mode splash. Both open on a true first
-          run: the splash sits above it at z-index 200, so the tour was invisible
-          — but it mounts second, so its focus trap won, and a keyboard user was
-          tabbing through a dialog they could not see behind the one they could.
-          The tour also walks nav items whose visibility depends on the mode the
-          splash has not been answered with yet. */}
-      {tutorialOpen && !showModeSplash && (
-        <FirstRunTutorial
-          stepIndex={tutorialStep}
-          installedCount={ollama.models.length}
-          modelCount={modelRows.length}
-          ollamaReady={ollama.ready}
-          ollamaVersion={ollama.version}
-          lmStudioReady={lmStudio.ready}
-          lmStudioCount={lmStudio.models.length}
-          onStepChange={setTutorialStep}
-          onClose={closeTutorial}
-          onSelectNav={selectNav}
-        />
-      )}
     </div>
   );
 }

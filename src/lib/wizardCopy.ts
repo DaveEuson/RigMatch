@@ -20,7 +20,7 @@ export const STEP_LABELS: Record<StepId, string> = {
   setup: 'Setup',
   pick: 'Pick',
   download: 'Download',
-  compare: 'Compare',
+  compare: 'Show',
   winner: 'Winner',
 };
 

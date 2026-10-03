@@ -76,10 +76,10 @@ console.log(`scanned ${wanted.length} bundle file(s): ${(js.length / 1e6).toFixe
 /** [label, haystack, needle] — a string that exists only because of one fix. */
 const PRESENT = [
   ['host explains a term on hover', js, 'the host explains this above'],
-  ['setup says what a model is first', js, 'is a program that runs on your own computer'],
+  ['setup says what a model is', js, 'A program that runs on your own computer'],
   ['winner board shows the whole lineup', js, 'How the lineup finished'],
   ['live answer scores on Compare', js, 'answers so far'],
-  ['lineup-full is a note, not a dead button', js, 'drop one from your lineup'],
+  ['a full lineup says so, and names the model it blocks', js, 'cannot be picked'],
   ['stale winner is labeled as previous', js, "not in tonight's lineup"],
   ['license links are built per model', js, 'ollama.com/library/'],
   ['Gemma keeps its prohibited-use policy', js, 'prohibited_use_policy'],

@@ -54,7 +54,7 @@ test('the stage floor follows the theme', () => {
 });
 
 test('every piece of scenery is hidden from assistive technology', () => {
-  for (const cls of ['sw-stage-bg', 'sw-pick-empty-art']) {
+  for (const cls of ['sw-stage-bg']) {
     const tags = tsx.match(new RegExp(`<div className="${cls}"[^>]*>`, 'g')) ?? [];
     assert.ok(tags.length > 0, `${cls} is not rendered`);
     for (const tag of tags) assert.match(tag, /aria-hidden="true"/, `${cls} is announced`);
@@ -72,7 +72,7 @@ test('data is never under the stage lights', () => {
   assert.ok(!stage.includes('sw-show-progress') && !stage.includes('sw-answer-strip'));
   // The stage closes before the board opens.
   const winnerStart = tsx.indexOf("<div className={effects ? 'sw-winner-stage curtained' : 'sw-winner-stage'}>");
-  const boardStart = tsx.indexOf('<div className="sw-scoreboard">', winnerStart);
+  const boardStart = tsx.indexOf('<Scoreboard', winnerStart);
   assert.ok(winnerStart > 0 && boardStart > winnerStart);
   const between = tsx.slice(winnerStart, boardStart);
   const opens = (between.match(/<div\b/g) ?? []).length - (between.match(/<div\b[^>]*\/>/g) ?? []).length;
@@ -86,16 +86,19 @@ test('gold stays the verdict: the Pick buttons are not gold', () => {
   assert.doesNotMatch(ruleBody(css, '.sw-card-btn'), /gold/);
 });
 
-test('step names hide by the room the rail has, not by the window', () => {
-  const laptop = blockBody(css, '@media (max-width: 1280px)');
-  assert.ok(!laptop.includes('.sw-step-label'), 'step names hidden on every <=1280px window again');
-  assert.match(blockBody(css, '@container steps'), /\.sw-step-label/);
-  assert.match(ruleBody(css, '.sw-steps'), /container: steps \/ inline-size;/);
+test('the step names stay on screen in the top bar', () => {
+  // The tracker lives in the app's top bar, which has the room; the names were
+  // once hidden on every window at or below 1280px.
+  const shell = read('../src/styles/shell.css');
+  assert.match(ruleBody(shell, '.top-bar .sw-step-label'), /position: static;/);
+  for (const source of [css, shell]) {
+    assert.doesNotMatch(source, /\.sw-step-label\s*\{[^}]*display:\s*none/);
+  }
 });
 
 test('every new animation stands still when the OS asks for less motion', () => {
   const reduced = blockBody(css, '@media (prefers-reduced-motion: reduce) {\n  /* The skeleton');
-  for (const selector of ['.sw-winner-avatar-wrap::before', '.sw-podium::before', '.sw-lineup-slot.filled']) {
+  for (const selector of ['.sw-winner-avatar-wrap::before', '.sw-podium', '.sw-lineup-slot.filled']) {
     assert.ok(reduced.includes(selector), `${selector} is not covered by reduced motion`);
   }
   // Lights down holds the bulbs still in every mode, not only reduced motion.

@@ -1,0 +1,70 @@
+/* RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE. */
+
+/* The first-run welcome: three steps over a dimmed app, in a 620px panel. */
+
+.welcome-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: var(--s5);
+  background: rgba(12, 9, 18, 0.8);
+}
+
+.welcome-overlay {
+  display: flex;
+  flex-direction: column;
+  width: min(620px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  border-radius: var(--r-hero);
+  background: var(--panel);
+  box-shadow: var(--shadow-float);
+  color: var(--text);
+  font: 400 var(--fs-body) / 1.55 var(--ui);
+  animation: welcome-in 250ms ease-out;
+}
+@keyframes welcome-in { from { opacity: 0; transform: translateY(8px); } }
+
+/* The show's three stage colors, as a strip across the top. */
+.welcome-stripe { flex: none; height: 6px; background: linear-gradient(90deg, var(--pink) 0 33.3%, #d9743a 33.3% 66.6%, #4fb3a5 66.6%); }
+
+.welcome-body { display: flex; flex-direction: column; gap: var(--s4); min-height: 0; padding: var(--s5) var(--s5) var(--s3); overflow-y: auto; }
+.welcome-head { display: flex; align-items: center; gap: var(--s4); }
+.welcome-host { flex: none; width: 72px; height: 72px; border-radius: var(--r-portrait); box-shadow: var(--portrait-frame); object-fit: cover; }
+.welcome-head h2 { margin: 0; color: var(--text-strong); font: 400 30px / 1.15 var(--display); text-wrap: balance; }
+.welcome-body p { margin: 0; }
+
+.welcome-goals { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: var(--s2); }
+.welcome-goal {
+  min-height: var(--h-control);
+  padding: 6px var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text-strong);
+  font: 400 15px / 1.3 var(--ui);
+  text-align: left;
+  cursor: pointer;
+}
+.welcome-goal:not(:disabled):hover { background: var(--panel-hover); }
+.welcome-goal[aria-pressed='true'] { border: 2px solid var(--accent); padding: 5px calc(var(--s3) - 1px); background: color-mix(in srgb, var(--accent) 16%, transparent); font-weight: 700; }
+.welcome-goal:disabled { cursor: not-allowed; opacity: 0.5; }
+.welcome-note { min-height: 3em; color: var(--muted); font-size: var(--fs-ui); }
+
+.welcome-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); padding: var(--s3) var(--s5) var(--s5); }
+.welcome-dots { display: flex; gap: 6px; }
+.welcome-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
+.welcome-dots i.on { background: var(--accent); }
+.welcome-spacer { flex: 1; }
+.welcome-advanced { font-weight: 400; color: var(--text); }
+
+@media (max-height: 700px) {
+  .welcome-body { padding-top: var(--s4); }
+  .welcome-host { width: 56px; height: 56px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-overlay { animation: none; }
+}

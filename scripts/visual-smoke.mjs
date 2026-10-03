@@ -294,7 +294,7 @@ async function forceSimpleMode(page) {
 // picked model is already installed, which is always true of the sample-data
 // demo this smoke runs against. So assert the rail's shape rather than a fixed
 // count — a bare `length >= 4` would pass on four wrong pills in any order.
-const WIZARD_STEPS = ['setup', 'pick', 'download', 'compare', 'winner'];
+const WIZARD_STEPS = ['setup', 'pick', 'download', 'show', 'winner'];
 const SKIPPABLE_STEPS = new Set(['download']);
 
 function stepRailIsValid(labels) {

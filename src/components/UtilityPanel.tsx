@@ -85,6 +85,7 @@ export function UtilityPanel({
   onThemeChange,
   onUiModeChange,
   onEditGoals,
+  onShowWelcome,
   onDeleteModel,
   onRefreshLogs,
   onCopyLogs,
@@ -128,6 +129,8 @@ export function UtilityPanel({
   onThemeChange: (themeId: ThemeId) => void;
   onUiModeChange: (mode: UiMode) => void;
   onEditGoals: () => void;
+  /** Opens the first-run welcome again. */
+  onShowWelcome: () => void;
   onDeleteModel: (row: ModelRow) => void;
   onRefreshLogs: () => void;
   onCopyLogs: () => void;
@@ -810,6 +813,18 @@ export function UtilityPanel({
           >
           <UiModePicker uiMode={uiMode} onUiModeChange={onUiModeChange} />
           <GoalsSummary goals={selectedGoals} onEditGoals={onEditGoals} />
+          <section className="ui-mode-picker" aria-label="The welcome">
+            <div>
+              <span>First run</span>
+              <strong>The three-step welcome</strong>
+            </div>
+            <div className="mode-toggle">
+              <button type="button" onClick={onShowWelcome}>
+                <strong>Show the welcome again</strong>
+                <span>What RigMatch is, what a model is, and what you want one for.</span>
+              </button>
+            </div>
+          </section>
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
           <ShowExtrasSettings />
           </SettingsSection>
