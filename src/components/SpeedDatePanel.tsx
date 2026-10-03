@@ -237,7 +237,7 @@ export function SpeedDatePanel({
               disabled={isListTesting}
             >
               <Settings aria-hidden="true" />
-              Edit Questions
+              Questions and judge
             </button>
             <button
               type="button"

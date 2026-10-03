@@ -207,15 +207,13 @@ import { SimpleWizard, type DreamFilterId, type StepId as WizardStepId, type Wiz
 import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, ChoiceCruiseModal } from './components/dialogs';
 import { ChatDock } from './components/ChatDock';
 import { SkillRunMiniBar, LiveBuildModal, DemoResultModal } from './components/SkillDemoViewers';
-import { RunWarningModal } from './components/RunWarningModal';
+import { RunSheet } from './components/RunSheet';
 import { ClearScoresModal } from './components/ClearScoresModal';
 import { ThirdPartyDownloadConsentModal } from './components/ThirdPartyDownloadConsentModal';
-import { QuickCheckWarningModal } from './components/QuickCheckWarningModal';
 import { SetupGuideDock } from './components/SetupGuideDock';
 import { LanBrowser } from './components/LanBrowser';
 import { DownloadTickerDock } from './components/DownloadTickerDock';
 import { Elapsed } from './components/Elapsed';
-import { TestSuiteEditorDock } from './components/TestSuiteEditorDock';
 import { FirstRunSplash } from './components/FirstRunSplash';
 import { ModelPoolLineupStrip } from './components/ModelPoolLineupStrip';
 import { FirstRunTutorial } from './components/FirstRunTutorial';
@@ -309,6 +307,8 @@ import { gpuBusyNote } from './lib/gpuBusyNote';
 import { pullOutcome } from './lib/pullControl';
 import './App.css';
 import './styles/shell.css';
+import './styles/controls.css';
+import './styles/runSheet.css';
 
 
 // Quick TEST resource warning opt-out ('off' = user chose "don't warn again").
@@ -522,7 +522,13 @@ function App() {
   const [pendingGpuContention, setPendingGpuContention] = useState<GpuContention | null>(null);
   const [pendingRunMode, setPendingRunMode] = useState<PendingRunMode | null>(null);
   const [pendingSingleModel, setPendingSingleModel] = useState<string | null>(null);
-  const [pendingQuickCheck, setPendingQuickCheck] = useState<ModelRow | null>(null);
+  // How the run sheet opened: with its quick check ticked, straight into the
+  // question editor, or from Simple Mode's show, whose step moves on only once
+  // the show really starts.
+  const [sheetQuick, setSheetQuick] = useState(false);
+  const [sheetEditing, setSheetEditing] = useState(false);
+  const [sheetSimple, setSheetSimple] = useState(false);
+  const simpleBeginRef = useRef<(() => void) | null>(null);
   const [skillTestSelection, setSkillTestSelection] = useState<SkillTestSelection>({
     appBuilder: false,
     appPromptId: DEFAULT_APP_BUILDER_PRESET_ID,
@@ -556,7 +562,6 @@ function App() {
   // How many improve passes each model has had this session (App Builder retries).
   const [improveCounts, setImproveCounts] = useState<Record<string, number>>({});
   const [benchmarkQuestions, setBenchmarkQuestions] = useState<BenchmarkQuestion[]>(() => getSavedBenchmarkQuestions());
-  const [suiteEditorOpen, setSuiteEditorOpen] = useState(false);
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null);
   const [activity, setActivity] = useState('Contestants is your hub: browse models, run tests, manage downloads, and start Speed Dating.');
   const [activeNavId, setActiveNavId] = useState<NavId>('models');
@@ -1657,7 +1662,9 @@ function App() {
       setChosenModel(null);
       setClearedTopMatches(new Set<string>());
       resetModelNews();
-      setSuiteEditorOpen(false);
+      setSheetQuick(false);
+      setSheetEditing(false);
+      setSheetSimple(false);
       // The guide is not reopened either. Clearing data is not the same as
       // asking to be taught the app again, and the Matchmaker Menu title
       // reopens it on demand for anyone who does want it.
@@ -1924,7 +1931,7 @@ function App() {
   }, [ollama.models, selectedHost, system.gpu.model, system.gpu.vramGb, system.gpu.driverVersion]);
 
 
-  const requestBenchmarkForModel = useCallback((model: string) => {
+  const requestBenchmarkForModel = useCallback((model: string, options?: { quick?: boolean }) => {
     const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
     const installed = Boolean(row?.installed || installedModelNames.has(model));
     const hostBlocker = getModelBenchmarkBlocker(row, selectedHost, ollama);
@@ -1941,8 +1948,10 @@ function App() {
 
     setSelectedModel(model);
     setPendingSingleModel(model);
+    setSheetQuick(Boolean(options?.quick));
+    setSheetEditing(false);
+    setSheetSimple(false);
     setPendingRunMode('single');
-    setActivity(`Confirm the resource warning before testing ${model}.`);
   }, [installedModelNames, modelRows, ollama, selectedHost]);
 
   const requestBenchmark = useCallback(() => {
@@ -2150,26 +2159,16 @@ function App() {
   }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
-    // The quick TEST button skips the full launch modal, but it still loads a
-    // multi-GB model into VRAM — warn once unless the user opted out.
-    let skipWarning = false;
-    try { skipWarning = localStorage.getItem(QUICK_CHECK_WARNING_KEY) === 'off'; } catch { /* storage unavailable */ }
-    if (skipWarning) {
+    // Through the sheet with its quick check ticked, unless someone chose to
+    // start quick checks straight away.
+    let skipSheet = false;
+    try { skipSheet = localStorage.getItem(QUICK_CHECK_WARNING_KEY) === 'off'; } catch { /* storage unavailable */ }
+    if (skipSheet) {
       void startBenchmark(row.displayName, QUICK_CHECK_QUESTIONS);
       return;
     }
-    setPendingQuickCheck(row);
-  }, [startBenchmark]);
-
-  const confirmQuickCheck = useCallback((dontWarnAgain: boolean) => {
-    const row = pendingQuickCheck;
-    setPendingQuickCheck(null);
-    if (!row) return;
-    if (dontWarnAgain) {
-      try { localStorage.setItem(QUICK_CHECK_WARNING_KEY, 'off'); } catch { /* storage unavailable */ }
-    }
-    void startBenchmark(row.displayName, QUICK_CHECK_QUESTIONS);
-  }, [pendingQuickCheck, startBenchmark]);
+    requestBenchmarkForModel(row.displayName, { quick: true });
+  }, [requestBenchmarkForModel, startBenchmark]);
 
   const queueModel = useCallback((row: ModelRow) => {
     if (row.localProvider === 'lm-studio' || row.canDownload === false) {
@@ -2855,40 +2854,54 @@ function App() {
     });
   }, [system.gpu.vramGb, system.platform]);
 
-  const requestListTest = useCallback(() => {
+  /**
+   * Why the lineup cannot start the show right now, or null when it can. The
+   * sheet still opens for "Questions and judge" and shows this on its button.
+   */
+  const lineupBlocker = useCallback((): string | null => {
     const incompatibleLineupRows = shortlistedRows.filter((row) => !getPlatformFit(row.displayName, system.platform).compatible);
     if (incompatibleLineupRows.length > 0) {
       const first = incompatibleLineupRows[0];
       const reason = getPlatformFit(first.displayName, system.platform).reason;
-      setActivity(`${first.displayName} cannot run Speed Dating on this computer: ${reason}. Remove it from the lineup first.`);
-      return;
+      return `${first.displayName} cannot run on this computer: ${reason}. Take it out of the lineup first.`;
     }
-
     const runnableRows = shortlistedRows.filter((row) => row.installed).slice(0, 5);
     const missingDownloadCount = shortlistedRows.filter((row) => !row.installed).length;
-    const hostBlocker = getLineupBenchmarkBlocker(runnableRows, selectedHost, ollama);
-
     if (missingDownloadCount > 0) {
-      setActivity(`${countWithVerb(missingDownloadCount, 'Speed Dating contestant', 'needs', 'need')} downloading first. Open setup and use Download All.`);
-      return;
+      return `${countWithVerb(missingDownloadCount, 'contestant', 'needs', 'need')} downloading first.`;
     }
-
     if (runnableRows.length < MIN_CONTESTANTS) {
-      setActivity(`Pick at least ${MIN_CONTESTANTS} installed models for Speed Dating. Five is the sweet spot.`);
+      return `Pick at least ${MIN_CONTESTANTS} installed models for the show. Five is the sweet spot.`;
+    }
+    return getLineupBenchmarkBlocker(runnableRows, selectedHost, ollama);
+  }, [ollama, selectedHost, shortlistedRows, system.platform]);
+
+  const requestListTest = useCallback(() => {
+    const blocker = lineupBlocker();
+    if (blocker) {
+      setActivity(blocker);
       return;
     }
-
-    if (hostBlocker) {
-      setActivity(hostBlocker);
-      return;
-    }
-
     setPendingSingleModel(null);
+    setSheetQuick(false);
+    setSheetEditing(false);
+    setSheetSimple(false);
     setPendingRunMode('speed-date');
-    setActivity(`Confirm resource warning before comparing ${runnableRows.length} models with ${benchmarkQuestionCount} questions each.`);
-  }, [benchmarkQuestionCount, ollama, selectedHost, shortlistedRows, system.platform]);
+  }, [lineupBlocker]);
 
-  const runListTest = useCallback(async () => {
+  /** "Questions and judge": the show's sheet with the editor open, whether or not the lineup can run yet. */
+  const openQuestionsSheet = useCallback(() => {
+    setPendingSingleModel(null);
+    setSheetQuick(false);
+    setSheetSimple(false);
+    setSheetEditing(true);
+    setPendingRunMode('speed-date');
+  }, []);
+
+  const runListTest = useCallback(async (questionsOverride?: BenchmarkQuestion[]) => {
+    // The quick check runs the lineup on its three questions instead of the set.
+    const plan = questionsOverride ?? benchmarkPromptPlan;
+    const count = questionsOverride ? questionsOverride.length : benchmarkQuestionCount;
     const runnableRows = shortlistedRows.filter((row) => row.installed && getPlatformFit(row.displayName, system.platform).compatible).slice(0, 5);
     const hostBlocker = getLineupBenchmarkBlocker(runnableRows, selectedHost, ollama);
     const listRunId = createRunProgressId('speed-date');
@@ -2955,15 +2968,15 @@ function App() {
       completed: 0,
       total: runnableRows.length,
       percent: 0,
-      message: `0 of ${runnableRows.length} model candidates tested with ${benchmarkQuestionCount} questions each.`,
+      message: `0 of ${runnableRows.length} model candidates tested with ${count} questions each.`,
       questionIndex: 0,
-      questionTotal: benchmarkPromptPlan.length,
-      questionLabel: benchmarkPromptPlan[0]?.label,
-      questionPrompt: benchmarkPromptPlan[0]?.prompt,
+      questionTotal: plan.length,
+      questionLabel: plan[0]?.label,
+      questionPrompt: plan[0]?.prompt,
       completedQuestions: 0,
       questionScores: {},
     });
-    setActivity(`Running Speed Dating across ${runnableRows.length} model candidates with ${benchmarkQuestionCount} questions each...`);
+    setActivity(`Running Speed Dating across ${runnableRows.length} model candidates with ${count} questions each...`);
 
     try {
       const results: BenchmarkResult[] = [];
@@ -2987,9 +3000,9 @@ function App() {
           percent: Math.round(((index + 0.25) / runnableRows.length) * 100),
           message: `Testing candidate ${index + 1} of ${runnableRows.length}.`,
           questionIndex: 0,
-          questionTotal: benchmarkPromptPlan.length,
-          questionLabel: benchmarkPromptPlan[0]?.label,
-          questionPrompt: benchmarkPromptPlan[0]?.prompt,
+          questionTotal: plan.length,
+          questionLabel: plan[0]?.label,
+          questionPrompt: plan[0]?.prompt,
           completedQuestions: 0,
           questionScores: {},
           lastResult: current?.lastResult,
@@ -3003,8 +3016,8 @@ function App() {
           model: row.displayName,
           baseUrl: runtime.baseUrl,
           provider: runtime.provider,
-          questionCount: benchmarkQuestionCount,
-          questions: benchmarkPromptPlan,
+          questionCount: count,
+          questions: plan,
           progressId,
           qualityMode: effectiveJudge ? 'judge' : 'heuristic',
           judgeModel: effectiveJudge?.model,
@@ -3183,7 +3196,7 @@ function App() {
         details: {
           computer: selectedHost?.hostname ?? system.hostname,
           baseUrl: ollama.baseUrl,
-          questionCount: benchmarkQuestionCount,
+          questionCount: count,
           candidates: runnableRows.map((row) => row.displayName),
           error: errorMessage,
         },
@@ -3799,27 +3812,75 @@ function App() {
     return () => { canceled = true; };
   }, [pendingRunMode]);
 
-  const confirmPendingRun = useCallback(() => {
+  /**
+   * Simple Mode's show, once its sheet is confirmed. The round decides what
+   * runs: questions, questions and then an app, or a skill test alone.
+   */
+  const startSimpleShow = useCallback(() => {
+    // Clear the last round's ending before starting this one: the wizard
+    // releases its Compare step when the run it is watching goes from running
+    // to finished, and a 'complete' left over from the previous show is
+    // finished the instant this one begins.
+    setSkillRunStatus({ phase: 'idle', label: '', completed: 0, total: 0 });
+    if (wizardRound === 'chat') { void runListTest(); return; }
+    // The models picked for the show, in the order they were picked.
+    const models = shortlistedRows.filter((row) => row.installed).map((row) => row.displayName);
+    if (wizardRound === 'code') {
+      // A coding buddy is asked and then made to build: the questions measure
+      // how it answers, the app measures whether what it writes runs. Either
+      // alone crowns a model on half the job.
+      void runListTest()
+        .then(() => runSkillTestsAfterRun(models, 'app-builder'))
+        .catch(reportSkillRunFailure);
+      return;
+    }
+    void runSkillTestsAfterRun(models, wizardSkill as 'app-builder' | 'vision' | 'listening').catch(reportSkillRunFailure);
+  }, [reportSkillRunFailure, runListTest, runSkillTestsAfterRun, shortlistedRows, wizardRound, wizardSkill]);
+
+  const closeRunSheet = useCallback(() => {
+    setPendingRunMode(null);
+    setPendingSingleModel(null);
+    setSheetQuick(false);
+    setSheetEditing(false);
+    setSheetSimple(false);
+    simpleBeginRef.current = null;
+  }, []);
+
+  const confirmPendingRun = useCallback(({ skipQuickSheet, skillsOnly }: { skipQuickSheet: boolean; skillsOnly: boolean }) => {
     const mode = pendingRunMode;
     const model = pendingSingleModel;
+    const quick = sheetQuick;
+    const simple = sheetSimple;
+    const beginSimple = simpleBeginRef.current;
     const skillModels = mode === 'single'
       ? [model ?? selectedModel].filter(Boolean)
       : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName);
-    // Captured before the modal closes: every result from this run carries the
+    // Captured before the sheet closes: every result from this run carries the
     // contention that was measured when the user chose to start it.
     runGpuContentionRef.current = pendingGpuContention?.level;
     // And where the fader stood when they chose to start.
-    runBalanceRef.current = balances[runChannel];
-    setPendingRunMode(null);
-    setPendingSingleModel(null);
+    runBalanceRef.current = simple ? wizardBalance : balances[runChannel];
+    closeRunSheet();
 
-    // Skill-tests-only: skip the Q&A benchmark and run just the selected skills.
-    // Forced on for image-only lineups, since image models can't answer questions.
-    const selection = skillTestSelection;
-    const anySkill = selection.appBuilder || selection.image;
-    const imageOnly = skillModels.length > 0 && skillModels.every(isLikelyImageGenerationModel);
-    if (anySkill && (selection.skipQuestions || imageOnly)) {
-      setActivity('Running skill tests only — the question round was skipped.');
+    if (simple) {
+      startSimpleShow();
+      beginSimple?.();
+      return;
+    }
+
+    if (quick) {
+      if (skipQuickSheet) {
+        try { localStorage.setItem(QUICK_CHECK_WARNING_KEY, 'off'); } catch { /* storage unavailable */ }
+      }
+      if (mode === 'single') void startBenchmark(model, QUICK_CHECK_QUESTIONS);
+      else void runListTest(QUICK_CHECK_QUESTIONS);
+      return;
+    }
+
+    // Skill tests only: the sheet worked out whether any were picked that this
+    // lineup can do, and an image-only lineup always lands here.
+    if (skillsOnly) {
+      setActivity('Running the skill tests only; the questions were skipped.');
       void runSkillTestsAfterRun(skillModels).catch(reportSkillRunFailure);
       return;
     }
@@ -3832,13 +3893,12 @@ function App() {
     if (mode === 'speed-date') {
       void runListTest().then(() => runSkillTestsAfterRun(skillModels)).catch(reportSkillRunFailure);
     }
-  }, [balances, pendingGpuContention, pendingRunMode, pendingSingleModel, runChannel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, skillTestSelection, startBenchmark, reportSkillRunFailure]);
+  }, [balances, closeRunSheet, pendingGpuContention, pendingRunMode, pendingSingleModel, runChannel, runListTest, runSkillTestsAfterRun, selectedModel, sheetQuick, sheetSimple, shortlistedRows, startBenchmark, startSimpleShow, reportSkillRunFailure, wizardBalance]);
 
   const cancelPendingRun = useCallback(() => {
-    setPendingRunMode(null);
-    setPendingSingleModel(null);
-    setActivity('Model test canceled before resources were engaged.');
-  }, []);
+    closeRunSheet();
+    setActivity('Canceled before anything ran.');
+  }, [closeRunSheet]);
 
 
   // Launch scan: reads this machine, reuses the cached catalog. Not user-initiated,
@@ -4333,27 +4393,15 @@ function App() {
           runProgress={wizardRunProgress}
           onDreamChange={setWizardDream}
           round={wizardRound}
-          onStartShow={() => {
-            // Every score this show produces records where the fader stood.
-            runBalanceRef.current = wizardBalance;
-            // Clear the last round's ending before starting this one: the
-            // wizard releases its Compare step when the run it is watching goes
-            // from running to finished, and a 'complete' left over from the
-            // previous show is finished the instant this one begins.
-            setSkillRunStatus({ phase: 'idle', label: '', completed: 0, total: 0 });
-            if (wizardRound === 'chat') { void runListTest(); return; }
-            // The models picked for the show, in the order they were picked.
-            const models = shortlistedRows.filter((row) => row.installed).map((row) => row.displayName);
-            if (wizardRound === 'code') {
-              // A coding buddy is asked and then made to build: the questions
-              // measure how it answers, the app measures whether what it writes
-              // runs. Either alone crowns a model on half the job.
-              void runListTest()
-                .then(() => runSkillTestsAfterRun(models, 'app-builder'))
-                .catch(reportSkillRunFailure);
-              return;
-            }
-            void runSkillTestsAfterRun(models, wizardSkill as 'app-builder' | 'vision' | 'listening').catch(reportSkillRunFailure);
+          onStartShow={(begin) => {
+            // Through the sheet like every run. The wizard moves to its show
+            // step only when the sheet is confirmed.
+            simpleBeginRef.current = begin;
+            setPendingSingleModel(null);
+            setSheetQuick(false);
+            setSheetEditing(false);
+            setSheetSimple(true);
+            setPendingRunMode('speed-date');
           }}
           balance={wizardBalance}
           onBalanceChange={(value) => setBalance(wizardChannel === 'app' ? 'code' : wizardChannel, value)}
@@ -4572,7 +4620,7 @@ function App() {
             onPauseQueue={pauseDownloadQueue}
             onCancelQueue={cancelDownloadQueue}
             onToggleShortlist={toggleShortlist}
-            onOpenSuiteEditor={() => setSuiteEditorOpen(true)}
+            onOpenSuiteEditor={openQuestionsSheet}
             onOpenSpeedDate={() => selectNav('speedDate')}
             onOpenTopPick={() => selectNav('agent')}
             onRefresh={refreshRig}
@@ -4657,7 +4705,7 @@ function App() {
             questionCount={benchmarkQuestionCount}
             questionPlan={benchmarkPromptPlan}
             onQuestionCountChange={setBenchmarkQuestionCount}
-            onOpenSuiteEditor={() => setSuiteEditorOpen(true)}
+            onOpenSuiteEditor={openQuestionsSheet}
             onOpenLogs={openLogsPanel}
             onOpenModelPool={() => selectNav('models')}
             onOpenHistory={() => selectNav('history')}
@@ -4686,7 +4734,7 @@ function App() {
             onTalk={() => setChatOpen(true)}
             onChoose={() => setChosenModel(selectedModel)}
             onRunTest={requestBenchmark}
-            onEditQuestions={() => setSuiteEditorOpen(true)}
+            onEditQuestions={openQuestionsSheet}
             onTalkWithPrompt={(prompt) => { setChatInput(prompt); setChatOpen(true); }}
             topPick={topRigPick}
             onClearTopMatch={clearTopMatch}
@@ -4902,21 +4950,14 @@ function App() {
         />
       )}
 
-      {suiteEditorOpen && (
-        <TestSuiteEditorDock
-          questions={benchmarkQuestions}
-          isCustom={currentSuiteName === 'Custom Suite'}
-          questionCount={benchmarkQuestionCount}
-          onChange={setBenchmarkQuestions}
-          onQuestionCountChange={setBenchmarkQuestionCount}
-          onReset={() => setBenchmarkQuestions([...DEFAULT_BENCHMARK_QUESTIONS])}
-          onClose={() => setSuiteEditorOpen(false)}
-        />
-      )}
-
       {pendingRunMode && (
-        <RunWarningModal
+        <RunSheet
           mode={pendingRunMode}
+          simpleRound={sheetSimple ? wizardRound : undefined}
+          quick={sheetQuick}
+          onQuickChange={setSheetQuick}
+          initialEditing={sheetEditing}
+          startBlockedReason={pendingRunMode === 'speed-date' && !sheetSimple ? lineupBlocker() : null}
           selectedModel={pendingSingleModel ?? selectedModel}
           measuredPerModelMs={(() => {
             const hardware = toRunHardware(system);
@@ -4947,11 +4988,10 @@ function App() {
           gpuContention={pendingGpuContention}
           onDownloadMissing={() => requestThirdPartyModelDownloads(shortlistedRows)}
           onChangeQuestionCount={setBenchmarkQuestionCount}
-          onLoadPreset={setBenchmarkQuestions}
+          onChangeQuestions={setBenchmarkQuestions}
           autoJudgeModel={autoJudgeModels.find((m) => m !== (pendingSingleModel ?? selectedModel)) ?? ''}
           goalPresetId={presetIdForGoal(runGoal)}
           goalDesire={runGoal ? goalById(runGoal)?.desire.toLowerCase() : undefined}
-          onEditQuestions={() => { cancelPendingRun(); setSuiteEditorOpen(true); }}
           qualityMode={qualityMode}
           judgeModel={effectiveJudgeModel}
           judgeModelOptions={judgeModelOptions}
@@ -4981,7 +5021,12 @@ function App() {
             const text = formatVideoEstimate(estimateLineup(entries, videoMachine, { calibration }), { roughNote: false });
             return { count: entries.length, estimate: text.charAt(0).toLowerCase() + text.slice(1) };
           })()}
-          balance={{
+          balance={sheetSimple ? {
+            value: wizardBalance,
+            onChange: (value) => setBalance(wizardChannel === 'app' ? 'code' : wizardChannel, value),
+            channel: workbenchById(wizardChannel === 'app' ? 'code' : wizardChannel).label,
+            accuracyMeans: workbenchById(wizardChannel === 'app' ? 'code' : wizardChannel).accuracyMeans,
+          } : {
             value: balances[runChannel],
             onChange: (value) => setBalance(runChannel, value),
             channel: workbenchById(runChannel).label,
@@ -4990,14 +5035,6 @@ function App() {
         />
       )}
 
-      {pendingQuickCheck && (
-        <QuickCheckWarningModal
-          row={pendingQuickCheck}
-          questionCount={QUICK_CHECK_QUESTIONS.length}
-          onCancel={() => { setPendingQuickCheck(null); setActivity('Quick test canceled before resources were engaged.'); }}
-          onConfirm={confirmQuickCheck}
-        />
-      )}
 
       {liveBuild && liveBuildOpen && (
         <LiveBuildModal build={liveBuild} onClose={() => setLiveBuildOpen(false)} />

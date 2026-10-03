@@ -716,9 +716,9 @@ export type ModelRow = CatalogModel & {
 };
 
 /**
- * Which kind of run the confirmation dialog is about to start.
+ * Which kind of run the run sheet is about to start.
  *
- * Lives here rather than in App.tsx so RunWarningModal can be its own file:
+ * Lives here rather than in App.tsx so RunSheet can be its own file:
  * a component that only needs two type names should not have to import from
  * the 12,000-line module it was extracted from.
  */

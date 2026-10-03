@@ -49,6 +49,9 @@ test('the interface icons follow the text color, not a fixed cream', () => {
     const { body, strokeWidth } = UI_ICON_ART[name];
     assert.ok(strokeWidth > 0, name);
     assert.doesNotMatch(body, /#f0e7dc|c2pa|<metadata/i, `${name} still carries the design file's color or metadata`);
+    // HTML keeps only the first of two style attributes, so a filled and
+    // stroked shape lost its stroke color and drew a text-colored ring.
+    assert.doesNotMatch(body, /style="[^"]*"\s+style=/, `${name} has two style attributes on one element`);
   }
 });
 

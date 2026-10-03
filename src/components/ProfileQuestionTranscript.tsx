@@ -29,10 +29,10 @@ export function ProfileQuestionTranscript({
         <MessageSquare aria-hidden="true" />
         <strong>No test transcript yet</strong>
         <span>Use Test in Contestants or run Speed Dating. RigMatch will save each question, answer, score, and timing here.</span>
-        <em>Questions can still be changed from the test popup or Edit Suite in Speed Dating.</em>
+        <em>Questions and judge sets what every test asks, and who marks it.</em>
         <button type="button" className="mini-button outline advanced-only" onClick={onEditQuestions}>
           <Settings aria-hidden="true" />
-          Edit Questions
+          Questions and judge
         </button>
       </div>
     );
@@ -58,7 +58,7 @@ export function ProfileQuestionTranscript({
           <em>Changes apply to the next single test or Speed Dating run.</em>
           <button type="button" className="mini-button outline advanced-only" onClick={onEditQuestions}>
             <Settings aria-hidden="true" />
-            Edit Questions
+            Questions and judge
           </button>
         </div>
       </div>

@@ -6,8 +6,8 @@ import type { GpuContention } from '../types';
 /**
  * "Something else is using your graphics card", wherever a run can start.
  *
- * This lived inside RunWarningModal, which meant only the benchmark and Speed
- * Dating flows ever said it. The capability lab — Listening, Vision, Code, App
+ * This lived inside the run dialog (now RunSheet), which meant only the
+ * benchmark and Speed Dating flows ever said it. The capability lab — Listening, Vision, Code, App
  * Builder — never asked, so a run started while a game held the GPU simply hung
  * for four minutes and then reported a connection timeout. The model was loaded
  * and the service was reachable; it was starved of compute, and nothing on

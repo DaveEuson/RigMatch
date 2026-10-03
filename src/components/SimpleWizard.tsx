@@ -46,15 +46,12 @@ import { VideoLineupLab } from './VideoLineupLab';
 import { ComparisonRunCard, type ComparisonRunContext } from './ComparisonRunCard';
 import { LabComparison } from './LabComparison';
 import { useLabResults } from '../hooks/useLabResults';
-import { BalanceFader } from './BalanceFader';
 import { balanceLabel } from '../lib/balance';
-import { useDialog } from '../lib/useDialog';
 import { ShowMarquee } from './ShowMarquee';
 import { setShowExtras, useShowExtras, useShowStage, type ShowStage } from '../lib/showExtras';
 import { TROJAN_HOST_COPY, ajaxHostLine } from '../lib/trojanStage';
 import { AchievementUnlocked } from './AchievementShelf';
 import { useShowTheme, type ShowMusicState } from '../hooks/useShowTheme';
-import { workbenchById } from '../lib/workbench';
 import rigGreenroom from '../assets/robot-rig-greenroom.webp';
 import speedDateShow from '../assets/robot-speed-date-show.webp';
 import romanceHero from '../assets/robot-romance-hero.webp';
@@ -223,7 +220,11 @@ type SimpleWizardProps = {
   /** True while any benchmark is running (renderer or main-process state). */
   benchmarkActive: boolean;
   runProgress: SimpleRunProgress;
-  onStartShow: () => void;
+  /**
+   * Opens the run sheet for the show. `begin` is called once the sheet is
+   * confirmed, which is when the wizard moves to its show step.
+   */
+  onStartShow: (begin: () => void) => void;
   onStopShow: () => void;
   /**
    * How much accuracy counts against speed in the show: asked as it starts,
@@ -343,10 +344,6 @@ export function SimpleWizard(props: SimpleWizardProps) {
   // "Meet the winner" button stayed enabled and would declare a result from
   // partial data.
   const [awaitingRun, setAwaitingRun] = useState(false);
-  // The show is a test, and every test first asks what matters more. Asked as
-  // the show starts rather than on a screen of its own: a sixth step in a
-  // five-step wizard is a step people skip.
-  const [askingBalance, setAskingBalance] = useState(false);
   const sawRunActive = useRef(false);
   useEffect(() => {
     if (!awaitingRun) { sawRunActive.current = false; return; }
@@ -460,25 +457,23 @@ export function SimpleWizard(props: SimpleWizardProps) {
   // already been done. Skip it in both directions rather than showing theater.
   const skipDownload = downloadAllInstalled;
 
+  // Every run goes through the sheet, which also asks what matters more. The
+  // step moves on only once it is confirmed; Cancel leaves the wizard where it was.
   const startShow = () => {
-    props.onStartShow();
-    // Set synchronously so the derived step can't promote Compare -> Winner in
-    // the gap before the run reports itself as active.
-    setAwaitingRun(true);
-  };
-
-  const beginShow = () => {
-    setAskingBalance(false);
-    startShow();
-    setStep('compare');
+    props.onStartShow(() => {
+      // Set synchronously so the derived step can't promote Compare -> Winner
+      // in the gap before the run reports itself as active.
+      setAwaitingRun(true);
+      setStep('compare');
+    });
   };
 
   const goNext = () => {
     if (step === 'pick') {
-      if (skipDownload) { setAskingBalance(true); return; }
+      if (skipDownload) { startShow(); return; }
       props.onStartDownloads();
     }
-    if (step === 'download') { setAskingBalance(true); return; }
+    if (step === 'download') { startShow(); return; }
     if (stepIndex < STEPS.length - 1) setStep(STEPS[stepIndex + 1]);
   };
   const goBack = () => {
@@ -644,70 +639,8 @@ export function SimpleWizard(props: SimpleWizardProps) {
           )}
         </div>
       </footer>
-      {askingBalance && (
-        <PreShowQuestion
-          balance={props.balance}
-          onBalanceChange={props.onBalanceChange}
-          contestants={shortlistedRows.length}
-          onStart={beginShow}
-          onCancel={() => setAskingBalance(false)}
-        />
-      )}
     </div>
     </InfoViewProvider>
-  );
-}
-
-/**
- * Before the show: what matters more, a quick answer or the best one?
- *
- * The same question every test asks, with the same fader, put where the show
- * starts. A beginner has never been asked it, and it changes who wins.
- */
-function PreShowQuestion({
-  balance,
-  onBalanceChange,
-  contestants,
-  onStart,
-  onCancel,
-}: {
-  balance: number;
-  onBalanceChange: (value: number) => void;
-  contestants: number;
-  onStart: () => void;
-  onCancel: () => void;
-}) {
-  const panelRef = useDialog<HTMLElement>(onCancel);
-  return (
-    <div className="modal-backdrop" role="presentation">
-      <section
-        ref={panelRef}
-        className="sw-balance-card"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="sw-balance-title"
-      >
-        <span className="sw-eyebrow">Before the show</span>
-        <h2 id="sw-balance-title">What matters more to you?</h2>
-        <p>
-          Some people want a quick answer, some want the best one. Set it to what you want, and
-          your {contestants} contestants are ranked that way.
-        </p>
-        <BalanceFader
-          value={balance}
-          onChange={onBalanceChange}
-          accuracyMeans={workbenchById('chat').accuracyMeans}
-          label="Accuracy or speed?"
-        />
-        <div className="sw-balance-actions">
-          <button type="button" className="sw-ghost-pill" onClick={onCancel}>Not yet</button>
-          <button type="button" className="sw-gold-pill" onClick={onStart}>
-            Start the show
-            <ArrowRight aria-hidden="true" />
-          </button>
-        </div>
-      </section>
-    </div>
   );
 }
 
