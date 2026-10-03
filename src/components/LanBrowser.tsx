@@ -1,4 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
+import { useEffect, useRef, useState } from 'react';
 import { isDesktopRuntime } from '../api';
 import robotRigGreenroom from '../assets/robot-rig-greenroom.webp';
 import { formatGb } from '../lib/format';
@@ -49,6 +50,25 @@ export function LanBrowser({
   onOpenSetupGuide: () => void;
 }) {
   const hostMeta = ollama.ready || lmStudio.ready ? 'Local AI ready' : 'Local AI offline';
+  // Check Local has to show that it ran: on a fast machine with nothing
+  // changed, a rescan returned a screen identical to the one before. The
+  // receipt is stamped when the scan finishes (a clock read in render would be
+  // impure and go stale), with seconds so two presses differ, and it says what
+  // the check found. It moved here with the button when the stats deck went.
+  const localModelCount = ollama.models.length + lmStudio.models.length;
+  const [lastChecked, setLastChecked] = useState<string | null>(null);
+  const [foundAtCheck, setFoundAtCheck] = useState<number | null>(null);
+  const wasScanning = useRef(false);
+  useEffect(() => {
+    if (wasScanning.current && !isScanning) {
+      setLastChecked(new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setFoundAtCheck(localModelCount);
+    }
+    wasScanning.current = isScanning;
+  }, [isScanning, localModelCount]);
+  const receipt = lastChecked && !isScanning
+    ? `Checked ${lastChecked} — ${foundAtCheck === 0 ? 'no local models found' : `${foundAtCheck} model${foundAtCheck === 1 ? '' : 's'} found`}`
+    : null;
   const localFallbackHost: NetworkHost = {
     id: 'localhost-preview',
     hostname: `${system.hostname} (This Machine)`,
@@ -79,7 +99,7 @@ export function LanBrowser({
         actionLabel={isScanning ? 'Checking' : 'Check Local'}
         onAction={onScan}
         busy={isScanning}
-        meta={hostMeta}
+        meta={receipt ? `${hostMeta} · ${receipt}` : hostMeta}
       />
       <RomanceArtBanner
         image={robotRigGreenroom}

@@ -3,7 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const source = readFileSync(new URL('../src/components/TopDeck.tsx', import.meta.url), 'utf-8');
+// The receipt sits beside Check Local on My PC; it lived in the stats deck until the redesign removed it.
+const source = readFileSync(new URL('../src/components/LanBrowser.tsx', import.meta.url), 'utf-8');
 
 /**
  * Check Local has to show that it ran.

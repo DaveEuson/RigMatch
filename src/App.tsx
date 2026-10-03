@@ -60,7 +60,7 @@ import {
   upsertModelScores,
 } from './lib/scoring';
 import { BALANCE_STORAGE_KEY, applyBalance, readBalances, type Balances } from './lib/balance';
-import { codeWinner, labWinner, rankCoding, rankLabList, videoWinner } from './lib/channelWinners';
+import { codeWinner, labWinner, rankLabList, videoWinner } from './lib/channelWinners';
 import { companionLaunchMessage } from './lib/companionLaunch';
 import { audioMakerChoices, chatPicks, videoMakerChoices } from './lib/chatMakers';
 import { renderChatAudio, renderChatVideo, type ChatRender } from './lib/chatRenders';
@@ -80,7 +80,7 @@ import {
 import { useLabResults } from './hooks/useLabResults';
 import { useVideoLineupSession } from './hooks/useVideoLineupSession';
 import { useRenderActivity, useRenderOutcome } from './hooks/useRenderActivity';
-import { endImageTest, renderChannel, startImageTest, type RenderActivity } from './lib/renderActivity';
+import { endImageTest, renderChannel, renderLabel, startImageTest, type RenderActivity } from './lib/renderActivity';
 import { RunReportModal } from './components/RunReportModal';
 import type { StoredRunReport } from './lib/runReports';
 import {
@@ -91,17 +91,19 @@ import {
   reportStorageCandidates,
 } from './lib/runReports';
 import { WhatsNewPanel } from './components/WhatsNewPanel';
-import { SideMenu, type NavId, type NavItem } from './components/SideMenu';
-import { GameShowHost } from './components/GameShowHost';
+import type { NavId, NavItem } from './lib/appConfig';
 import { PanelHeader } from './components/CommonChrome';
-import { readDeckExpanded, writeDeckExpanded } from './lib/deckSettings';
 import { playJingle } from './lib/sound';
 import { nothingToRunNote } from './lib/skillRunNote';
 import { describeRunFailure, droppedOutMessage, showStoppedMessage } from './lib/runFailure';
-import { ChannelSwitch, TopDeck } from './components/TopDeck';
+import { ChannelSwitch } from './components/ChannelSwitch';
+import { TopBar, type ConnectionState } from './components/TopBar';
+import { LoadStrip } from './components/LoadStrip';
+import { ActivityToast } from './components/ActivityToast';
+import { TopMatchCard } from './components/TopMatchCard';
+import { LAB_CHANNELS, SHOW_CHANNELS, TOP_TABS, tabForView, viewForTab, type TopTabId } from './lib/topTabs';
 import {
   addSetValues,
-  buildBugReportUrl,
   createEmptyBenchmark,
   createQueuedPullProgress,
   createRunProgressId,
@@ -120,7 +122,6 @@ import {
   getModelProfile,
   getModelRuntime,
   getModelScore,
-  getNavLabel,
   getPlatformFit,
   getRigPick,
   getSavedThemeId,
@@ -212,7 +213,8 @@ import { ThirdPartyDownloadConsentModal } from './components/ThirdPartyDownloadC
 import { QuickCheckWarningModal } from './components/QuickCheckWarningModal';
 import { SetupGuideDock } from './components/SetupGuideDock';
 import { LanBrowser } from './components/LanBrowser';
-import { Ticker } from './components/Ticker';
+import { DownloadTickerDock } from './components/DownloadTickerDock';
+import { Elapsed } from './components/Elapsed';
 import { TestSuiteEditorDock } from './components/TestSuiteEditorDock';
 import { FirstRunSplash } from './components/FirstRunSplash';
 import { ModelPoolLineupStrip } from './components/ModelPoolLineupStrip';
@@ -260,7 +262,7 @@ import { toVideoLabResult } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
 import { readHuggingFaceToken } from './lib/huggingFaceToken';
 import { goalById, presetIdForGoal } from './lib/goals';
-import { modelMatchesTask } from './lib/modelCatalog';
+import { isVisiblePullProgress, modelMatchesTask } from './lib/modelCatalog';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLineupLive } from './lib/videoGenRunner';
 import {
@@ -306,6 +308,7 @@ import { useGpuContention } from './hooks/useGpuContention';
 import { gpuBusyNote } from './lib/gpuBusyNote';
 import { pullOutcome } from './lib/pullControl';
 import './App.css';
+import './styles/shell.css';
 
 
 // Quick TEST resource warning opt-out ('off' = user chose "don't warn again").
@@ -830,10 +833,6 @@ function App() {
     () => modelRows.filter((row) => shortlistIds.has(row.displayName) && canJoinComparison(row)).slice(0, 5),
     [modelRows, shortlistIds],
   );
-  const uninstalledShortlistedCount = useMemo(
-    () => shortlistedRows.filter((row) => !row.installed).length,
-    [shortlistedRows],
-  );
   const installedRowsForCleanup = useMemo(() => deletableRows(modelRows), [modelRows]);
   const {
     qualityMode, setQualityMode, setJudgeModel,
@@ -1008,9 +1007,6 @@ function App() {
   // Advanced's stats strip. Read once from the stored choice, falling back to
   // a rule based on how much height this screen actually has — see
   // scripts/measure-shell.mjs for the numbers that set the threshold.
-  const [deckExpanded, setDeckExpanded] = useState(
-    () => readDeckExpanded(typeof window === 'undefined' ? 1080 : window.innerHeight, getSavedUiMode()),
-  );
 
   /**
    * What this PC can actually generate.
@@ -1610,31 +1606,10 @@ function App() {
     if (!agentArcadeApi.onBridgeGenerateStop) return undefined;
     return agentArcadeApi.onBridgeGenerateStop(({ id }) => chatRenderStops.current.get(id)?.abort());
   }, []);
-  /** The side menu's Models count follows the channel, as the Models screen does. */
-  const channelModelCount = useMemo(() => {
-    const filter = workbenchInfo.taskFilter;
-    return filter ? modelRows.filter((row) => modelMatchesTask(row, filter)).length : modelRows.length;
-  }, [workbenchInfo.taskFilter, modelRows]);
   /** Images, Video and Listening compare their own results; Speed Dating cannot test them. */
   const comparedWorkbench = isComparedChannel(workbenchInfo.id) ? { ...workbenchInfo, id: workbenchInfo.id } : null;
   /** The goal the Run dialog's focus suggestion answers: the channel's, on a channel. */
   const runGoal: string | undefined = workbenchInfo.id === 'all' ? selectedGoals[0] : workbenchInfo.goals[0];
-  /** What the side menu counts for Comparison and Scorecards on this channel. */
-  const channelMetas = useMemo(() => {
-    const count = (challenge: string) => Object.values(labResults).filter((result) => result?.challenge === challenge).length;
-    // "None" rather than "0 pictures", as What's New says it.
-    const tally = (amount: number, noun: string) => (amount > 0 ? `${amount} ${noun}${amount === 1 ? '' : 's'}` : 'None');
-    const kept = (amount: number) => (amount > 0 ? `${amount}` : 'New');
-    switch (workbenchInfo.id) {
-      case 'images': return { comparison: tally(count('image-generation'), 'picture'), scorecards: kept(count('image-generation')) };
-      case 'video': return { comparison: tally(lineupSession.record?.entries.length ?? 0, 'clip'), scorecards: kept(count('video-generation')) };
-      case 'listening': return { comparison: tally(count('listening'), 'test'), scorecards: kept(count('listening')) };
-      case 'reading': return { comparison: undefined, scorecards: kept(count('image-recognition')) };
-      case 'audio': return { comparison: tally(count('audio-generation'), 'clip'), scorecards: kept(count('audio-generation')) };
-      case 'code': return { comparison: undefined, scorecards: kept(rankCoding(Object.values(modelScores), balances.code).ranked.length) };
-      default: return { comparison: undefined, scorecards: undefined };
-    }
-  }, [workbenchInfo.id, labResults, lineupSession.record, modelScores, balances.code]);
 
   const confirmClearData = useCallback(async () => {
     // The run log is cleared first but must not gate anything: the main process
@@ -1839,14 +1814,9 @@ function App() {
 
   const selectNav = useCallback((id: NavId) => {
     setActiveNavId(id);
-
-    if (id === 'history') {
-      void loadLogs();
-      setActivity(`${getNavLabel(id)} selected.`);
-      return;
-    }
-
-    setActivity(`${getNavLabel(id)} selected.`);
+    // Changing screens is not news: with activity shown as a toast, announcing
+    // every click would cover the screen you just opened.
+    if (id === 'history') void loadLogs();
   }, [loadLogs]);
 
   /** Where a render in flight is shown in full: its model's row for a test of one, Comparison for a race. */
@@ -4176,6 +4146,80 @@ function App() {
     setActiveNavId(uiMode === 'advanced' ? 'models' : 'lan');
   }, [activeNavId, uiMode, visibleNavItems]);
 
+  // ---- The top bar and the load strip (the redesign's shell) ----
+  const activeTab = tabForView(activeNavId, workbench);
+  const selectTab = useCallback((id: string) => {
+    const view = viewForTab(id as TopTabId, workbench);
+    if (view.workbench) chooseWorkbench(view.workbench);
+    selectNav(view.nav);
+  }, [workbench, chooseWorkbench, selectNav]);
+  // Simple Mode's step tracker is the wizard's; it renders into the bar.
+  const [trackerSlot, setTrackerSlot] = useState<HTMLDivElement | null>(null);
+  const rigChecked = Boolean(system.cpu.brand || system.gpu.model);
+  const connections: { ollama: ConnectionState; comfy: ConnectionState } = {
+    ollama: ollama.ready || lmStudio.ready ? 'ok' : isScanningRig ? 'testing' : rigChecked ? 'down' : 'untested',
+    // Grey until someone sets ComfyUI up: most people never will, and red would
+    // read as something broken.
+    comfy: comfyReachable ? 'ok' : comfySettings.folder ? 'down' : 'untested',
+  };
+  const openConnections = useCallback(() => {
+    if (uiMode === 'beginner') { setCameFromSimple(true); selectUiMode('advanced'); }
+    selectNav('lan');
+  }, [uiMode, selectUiMode, selectNav]);
+  const openChatApp = useCallback(async () => {
+    if (isDesktopRuntime) {
+      const problem = companionLaunchMessage(await agentArcadeApi.openChatApp());
+      if (problem) alert(problem);
+    } else {
+      setChatOpen(true);
+    }
+  }, [setChatOpen]);
+  // What is running, for the load strip. A render and a run can overlap; the
+  // render is what holds the graphics card, so it is the one shown.
+  const runningLine = renderActivity ? (
+    <>
+      <i className="running-dot" aria-hidden="true" />
+      <button type="button" className="running-open" onClick={() => openRender(renderActivity)}>
+        {renderLabel(renderActivity)} · {renderActivity.model ?? 'ComfyUI'}
+        {renderActivity.step ? ` · ${renderActivity.step.index + 1} of ${renderActivity.step.total}` : ''}
+      </button>
+      {renderActivity.startedAt !== null && <Elapsed since={renderActivity.startedAt} />}
+      <button type="button" className="running-stop" onClick={renderActivity.stop}>Stop</button>
+    </>
+  ) : runProgress?.phase === 'running' ? (
+    <>
+      <i className="running-dot" aria-hidden="true" />
+      <button type="button" className="running-open" onClick={() => (uiMode === 'advanced' ? selectNav('speedDate') : undefined)}>
+        Running {runProgress.label}{runProgress.currentModel ? ` · ${runProgress.currentModel}` : ''}
+      </button>
+    </>
+  ) : skillRunStatus.phase === 'running' ? (
+    <>
+      <i className="running-dot" aria-hidden="true" />
+      <span>Running {skillRunStatus.label}</span>
+    </>
+  ) : isPullingModels && pullingModel ? (
+    <>
+      <i className="running-dot" aria-hidden="true" />
+      <span>Downloading {pullingModel}</span>
+    </>
+  ) : null;
+  // The load strip is always on screen, so it reads the computer every few
+  // seconds even with nothing running (a run polls faster, above). Only while
+  // the window is visible: a hidden RigMatch has nobody to show it to.
+  useEffect(() => {
+    if (!isDesktopRuntime) return undefined;
+    if (runProgress?.phase === 'running') return undefined;
+    let canceled = false;
+    const id = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      void agentArcadeApi.getSystemProfile()
+        .then((profile) => { if (!canceled) setSystem(profile); })
+        .catch(() => { /* ignore transient poll errors */ });
+    }, 5000);
+    return () => { canceled = true; clearInterval(id); };
+  }, [runProgress?.phase]);
+
   return (
     <div
       className={`app-shell ${showGlobalLineup ? 'has-global-lineup' : 'no-global-lineup'}${!isDesktopRuntime ? ' has-demo-banner' : ''}`}
@@ -4224,8 +4268,28 @@ function App() {
           onCancel={() => setShowGoalsEditor(false)}
         />
       )}
+      <TopBar
+        uiMode={uiMode}
+        onUiModeChange={selectUiMode}
+        tabs={uiMode === 'advanced' ? TOP_TABS.map((tab) => ({ ...tab, count: tab.id === 'whatsNew' ? modelNews.latestNewModelIds.length : undefined })) : undefined}
+        activeTab={activeTab ?? undefined}
+        onSelectTab={selectTab}
+        tracker={uiMode === 'beginner' ? <div className="top-bar-tracker-slot" ref={setTrackerSlot} /> : undefined}
+        topMatch={topRigPick?.score
+          ? { model: topRigPick.row.displayName, name: getFriendlyModelName(topRigPick.row.displayName), scoreLabel: formatMatchScore(topRigPick.score) }
+          : null}
+        onOpenTopMatch={() => selectNav('history')}
+        themeId={themeId}
+        onThemeChange={setThemeId}
+        connections={connections}
+        onOpenConnections={openConnections}
+        onOpenSettings={() => selectNav('settings')}
+        onOpenChat={() => { void openChatApp(); }}
+      />
+      <LoadStrip system={system} running={runningLine} />
       {uiMode === 'beginner' && (
         <SimpleWizard
+          trackerSlot={trackerSlot}
           // Only when there is one to open — that is what keeps the Compare
           // step disabled rather than dead on a machine that has never run one.
           onOpenRunReport={listTestResult || runReports.length > 0
@@ -4349,97 +4413,72 @@ function App() {
       )}
       {uiMode === 'advanced' && (
       <>
-      {/* "See the full scorecard" used to switch modes silently — the whole
-          interface changed with no explanation and no way back. Say what
-          happened and offer the return trip. */}
-      {cameFromSimple && (
-        <div className="mode-jump-banner" role="status">
-          <span>
-            The full scorecard lives in <strong>Advanced Mode</strong>, so RigMatch switched you over.
-          </span>
-          <button
-            type="button"
-            className="mini-button"
-            onClick={() => { setCameFromSimple(false); selectUiMode('beginner'); }}
-          >
-            <ArrowLeft aria-hidden="true" />
-            Back to the guided wizard
-          </button>
-        </div>
-      )}
-      <TopDeck isScanning={isScanningRig} onScan={refreshRig}
-        system={system}
-        ollama={ollama}
-        lmStudio={lmStudio}
-        uiMode={uiMode}
-        onUiModeChange={selectUiMode}
-        topPick={topRigPick}
-        onUseTopPick={(model) => {
-          setSelectedModel(model);
-          setChosenModel(model);
-        }}
-        onTestAgain={requestBenchmarkForModel}
-        onClearTopPick={clearTopMatch}
-        onRestoreClearedTopPicks={restoreClearedTopMatches}
-        clearedTopPickCount={clearedTopMatches.size}
-        comfyFolder={comfySettings.folder}
-        comfyReachable={comfyReachable}
-        deckExpanded={deckExpanded}
-        onDeckExpandedChange={(expanded) => { setDeckExpanded(expanded); writeDeckExpanded(expanded); }}
-        workbench={workbench}
-        channelWinner={channelWinner}
-        balance={balances[activeChannel]}
-        onBalanceChange={(value) => setBalance(activeChannel, value)}
-        balanceLocked={balanceLock(activeChannel)}
-        onOpenChannel={() => selectNav(workbenchInfo.home)}
-      />
-
-      <SideMenu
-        items={visibleNavItems}
-        ollamaReady={ollama.ready || lmStudio.ready}
-        modelCount={channelModelCount}
-        shortlistCount={shortlistedRows.length}
-        newModelDropCount={modelNews.latestNewModelIds.length}
-        isRunning={isBenchmarking || isListTesting || Boolean(renderActivity)}
-        activeId={activeNavId}
-        scoredCount={scoredModelCount}
-        topPickMeta={topRigPick?.score ? topRigPick.score.grade : (scoredModelCount > 0 ? 'Ready' : 'Wait')}
-        comparisonMeta={channelMetas.comparison}
-        scorecardMeta={channelMetas.scorecards}
-        uiMode={uiMode}
-        onSelect={selectNav}
-        onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
-        onOpenSupport={() => setSupportModalOpen(true)}
-        bugReportUrl={buildBugReportUrl(system, ollama, logPath)}
-      />
 
       <main className="stage-content">
-        {/* The host narrates Simple Mode. In Advanced he announced which screen
-            was open, how many models were installed and how many were picked —
-            all of it already in the side menu and the lineup strip — above the
-            table that screen exists to show. The channels take that line
-            instead: they filter the panel below them, so they belong there and
-            not folded inside a header that collapses. */}
-        {uiMode === 'advanced'
-          ? <ChannelSwitch value={workbench} onChange={chooseWorkbench} />
-          : (
-            <GameShowHost
-              uiMode={uiMode}
-              activeNavLabel={getNavLabel(activeNavId)}
-              ollamaReady={ollama.ready || lmStudio.ready}
-              installedCount={localModels.length}
-              modelCount={modelRows.length}
-              shortlistedCount={shortlistedRows.length}
-              uninstalledShortlistedCount={uninstalledShortlistedCount}
-              queuedCount={queuedRows.length}
-              scoredCount={scoredModelCount}
-              topPick={topRigPick}
-              isBusy={isScanningRig || isBenchmarking || isListTesting}
-              onSelectNav={selectNav}
-              onCheckRig={refreshRig}
-              onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
-            />
+        {/* One header row for every screen, so the panel below is always the
+            second row of the stage, whatever this tab adds above it. */}
+        <div className="screen-nav">
+          {/* "See the full scorecard" used to switch modes silently — the whole
+              interface changed with no explanation and no way back. Say what
+              happened and offer the return trip. */}
+          {cameFromSimple && (
+            <div className="mode-jump-banner" role="status">
+              <span>
+                The full scorecard lives in <strong>Advanced Mode</strong>, so RigMatch switched you over.
+              </span>
+              <button
+                type="button"
+                className="mini-button"
+                onClick={() => { setCameFromSimple(false); selectUiMode('beginner'); }}
+              >
+                <ArrowLeft aria-hidden="true" />
+                Back to the guided wizard
+              </button>
+            </div>
           )}
+          {/* What a tab holds, under the bar. Models filters by what a model is
+              for; Comparison and Labs choose which show to run; Results and Labs
+              have more than one view until their screens are rebuilt. */}
+          {activeTab === 'models' && <ChannelSwitch value={workbench} onChange={chooseWorkbench} label="Show" />}
+          {activeTab === 'comparison' && <ChannelSwitch value={workbench} onChange={chooseWorkbench} channels={SHOW_CHANNELS} label="The show for" />}
+          {activeTab === 'labs' && (
+            <>
+              <ChannelSwitch value={workbench} onChange={chooseWorkbench} channels={LAB_CHANNELS} label="Lab" />
+              <div className="screen-tabs" role="group" aria-label="Lab view">
+                <button type="button" aria-pressed={activeNavId === 'speedDate'} onClick={() => selectNav('speedDate')}>Compare models</button>
+                <button type="button" aria-pressed={activeNavId === 'activity'} onClick={() => selectNav('activity')}>Test one at a time</button>
+              </div>
+            </>
+          )}
+          {activeTab === 'results' && (
+            <>
+              <div className="screen-tabs" role="group" aria-label="Results view">
+                <button type="button" aria-pressed={activeNavId === 'history'} onClick={() => selectNav('history')}>Scorecards</button>
+                {scoredModelCount > 0 && (
+                  <button type="button" aria-pressed={activeNavId === 'agent'} onClick={() => selectNav('agent')}>Top Pick</button>
+                )}
+                <button type="button" aria-pressed={activeNavId === 'activity'} onClick={() => selectNav('activity')}>Runs</button>
+              </div>
+              {activeNavId !== 'activity' && (
+                <TopMatchCard
+                  system={system}
+                  topPick={topRigPick}
+                  onUseTopPick={(model) => { setSelectedModel(model); setChosenModel(model); }}
+                  onTestAgain={requestBenchmarkForModel}
+                  onClearTopPick={clearTopMatch}
+                  onRestoreClearedTopPicks={restoreClearedTopMatches}
+                  clearedTopPickCount={clearedTopMatches.size}
+                  workbench={workbench}
+                  channelWinner={channelWinner}
+                  balance={balances[activeChannel]}
+                  onBalanceChange={(value) => setBalance(activeChannel, value)}
+                  balanceLocked={balanceLock(activeChannel)}
+                  onOpenChannel={() => selectNav(workbenchInfo.home)}
+                />
+              )}
+            </>
+          )}
+        </div>
         {activeNavId === 'lan' && (
           <LanBrowser
             active={true}
@@ -4751,34 +4790,24 @@ function App() {
       </>
       )}
 
-      {uiMode === 'advanced' && (
-        <Ticker
-        activity={activity}
-        isDesktopRuntime={isDesktopRuntime}
-        topPick={topRigPick}
-        queuedRows={queuedRows}
-        pullProgressByModel={pullProgressByModel}
-        isPulling={isPullingModels}
-        pullingModel={pullingModel}
-        isPullCancelRequested={isPullCancelRequested}
-        isPullPauseRequested={isPullPauseRequested}
-        isPullPaused={isPullPaused}
-        onResumeQueue={pullQueuedModels}
-        onPauseQueue={pauseDownloadQueue}
-        onCancelQueue={cancelDownloadQueue}
-        onOpenDownloads={() => selectNav('models')}
-        render={renderActivity}
-        onOpenRender={openRender}
-        onOpenChat={async () => {
-          if (isDesktopRuntime) {
-            const problem = companionLaunchMessage(await agentArcadeApi.openChatApp());
-            if (problem) alert(problem);
-          } else {
-            setChatOpen(true);
-          }
-        }}
-      />
+      {uiMode === 'advanced' && (queuedRows.length > 0 || Boolean(pullingModel) || Object.values(pullProgressByModel).some((progress) => isVisiblePullProgress(progress))) && (
+        <div className="download-dock-float">
+          <DownloadTickerDock
+            queuedRows={queuedRows}
+            pullProgressByModel={pullProgressByModel}
+            isPulling={isPullingModels}
+            pullingModel={pullingModel}
+            isPullCancelRequested={isPullCancelRequested}
+            isPullPauseRequested={isPullPauseRequested}
+            isPullPaused={isPullPaused}
+            onResumeQueue={pullQueuedModels}
+            onPauseQueue={pauseDownloadQueue}
+            onCancelQueue={cancelDownloadQueue}
+            onOpenDownloads={() => selectNav('models')}
+          />
+        </div>
       )}
+      <ActivityToast message={activity} />
       {reportReady && !reportOpen && listTestResult && (
         <div className="report-ready-bar" role="status">
           <Trophy aria-hidden="true" />

@@ -15,7 +15,7 @@ import type {
   SystemProfile,
   TestedModelScore,
 } from '../types';
-import type { NavId } from '../components/SideMenu';
+import type { NavId } from '../types';
 import { getDisplayCountry, getModelFamily, getModelOrigin } from './modelOrigins.ts';
 import { normalizeModelKey } from './modelKey.ts';
 import { MATCH_GRADE_BANDS, compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore } from './scoring.ts';

@@ -337,10 +337,11 @@ check('parity', 'the layout is checked at the smallest window the app allows', (
     `the screen audit runs at ${auditSize[1]}x${auditSize[2]} but the app's minimum is `
     + `${declared.width}x${declared.height} — it is auditing a window nobody has`);
 
-  // These two only label a size, so a stale claim misleads a reader rather than
+  // This one only labels a size, so a stale claim misleads a reader rather than
   // mis-testing anything. Still worth failing on: the label is how the next
-  // person decides which row is the one that matters.
-  for (const rel of ['scripts/responsive-sweep.mjs', 'scripts/measure-shell.mjs']) {
+  // person decides which row is the one that matters. (measure-shell.mjs went
+  // with the side menu and stats deck it measured.)
+  for (const rel of ['scripts/responsive-sweep.mjs']) {
     const body = read(rel);
     const claim = new RegExp(`\\b${declared.width}\\b[^\\n]*\\b${declared.height}\\b|\\b${declared.height}\\b[^\\n]*minimum|minimum[^\\n]*\\b${declared.width}\\b`);
     must(claim.test(body), `${rel} no longer names ${declared.width}x${declared.height} as the minimum window`);
