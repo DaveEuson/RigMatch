@@ -3298,7 +3298,9 @@ button.model-pool-empty-slot.interactive:disabled {
 .queue-actions .mini-button {
   margin-top: 0;
   flex: 1 1 128px;
-  min-width: 0;
+  /* Wrap to the next line rather than shrink: min-width 0 let a narrow
+     footer squeeze "Download" to 22px, under the 24px target. */
+  min-width: max-content;
   min-height: 32px;
 }
 

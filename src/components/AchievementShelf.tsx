@@ -118,6 +118,11 @@ export function BadgeCase({ compact = false }: { compact?: boolean }) {
   const { open, splash } = useBadgeSplash();
   const count = ACHIEVEMENTS.filter((a) => earned[a.id]).length;
   const next = ACHIEVEMENTS.find((a) => !earned[a.id] && !a.hidden) ?? ACHIEVEMENTS[0];
+  // On a narrow window the case keeps the three most recently earned.
+  const recent = new Set(ACHIEVEMENTS.filter((a) => earned[a.id])
+    .sort((a, b) => Date.parse(earned[b.id] ?? '') - Date.parse(earned[a.id] ?? ''))
+    .slice(0, 3)
+    .map((a) => a.id));
   return (
     <div className={compact ? 'badge-case compact' : 'badge-case'} role="group" aria-label={`Achievements, ${count} of ${ACHIEVEMENTS.length} earned`}>
       {!compact && ACHIEVEMENTS.map((a) => {
@@ -126,7 +131,7 @@ export function BadgeCase({ compact = false }: { compact?: boolean }) {
           <button
             key={a.id}
             type="button"
-            className="badge-slot"
+            className={recent.has(a.id) ? 'badge-slot recent' : 'badge-slot'}
             aria-label={`${badgeName(a, got)}, ${got ? 'earned' : 'not earned yet'}`}
             title={badgeName(a, got)}
             onClick={(event) => open(a.id, event.currentTarget)}

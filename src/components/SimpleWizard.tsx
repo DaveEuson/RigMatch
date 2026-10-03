@@ -1,5 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -51,7 +52,7 @@ import { useDialog } from '../lib/useDialog';
 import { ShowMarquee } from './ShowMarquee';
 import { setShowExtras, useShowExtras, useShowStage, type ShowStage } from '../lib/showExtras';
 import { TROJAN_HOST_COPY, ajaxHostLine } from '../lib/trojanStage';
-import { AchievementUnlocked, BadgeCase } from './AchievementShelf';
+import { AchievementUnlocked } from './AchievementShelf';
 import { useShowTheme, type ShowMusicState } from '../hooks/useShowTheme';
 import { workbenchById } from '../lib/workbench';
 import rigGreenroom from '../assets/robot-rig-greenroom.webp';
@@ -60,7 +61,6 @@ import romanceHero from '../assets/robot-romance-hero.webp';
 import modelTestArt from '../assets/robot-model-test.webp';
 import contestantWall from '../assets/robot-contestant-wall.webp';
 import ceremonyStage from '../assets/robot-scorecard-ceremony.webp';
-import brandIcon from '../assets/rigmatch-brand-icon.svg';
 import './SimpleWizard.css';
 import './TrojanStage.css';
 
@@ -256,6 +256,8 @@ type SimpleWizardProps = {
   droppedOut?: RunFailure[];
   onChatWithWinner: () => void;
   onOpenScorecard: () => void;
+  /** Where the step tracker goes: the app's top bar. */
+  trackerSlot?: HTMLElement | null;
   /** Opens the shareable scorecard image for the winning model. */
   onShareScore: () => void;
   onRunAgain: () => void;
@@ -509,99 +511,73 @@ export function SimpleWizard(props: SimpleWizardProps) {
     compare: 'Next · See the winner',
   };
 
+  const tracker = (
+    <nav className="sw-steps" aria-label="Wizard steps">
+      {/* A skipped Download step is dropped from the stepper entirely rather
+          than left sitting there permanently incomplete. */}
+      {STEPS.filter((id) => !(id === 'download' && skipDownload)).map((id, index) => {
+        const isActive = id === step;
+        const isDone = stepState.done[id] && !isActive;
+        const isLocked = !stepState.unlocked[id] && !isActive;
+        const cls = isActive ? 'active' : isDone ? 'done' : 'locked';
+        /**
+         * Compare, once the show has crowned someone, opens the report.
+         *
+         * The step derivation auto-advances compare -> winner as soon as a
+         * match exists, which is right: after the show the winner is the
+         * point. The side effect was a button styled `done`, not disabled,
+         * that did nothing at all when clicked — setStep('compare') simply
+         * resolved back to 'winner'.
+         *
+         * Opening the report is what the word already promises, and in
+         * Simple Mode it is the only route to the transcript at all: there
+         * is no side menu here, so the Comparison screen does not exist.
+         * With no report to open it is disabled rather than dead.
+         */
+        const opensReport = id === 'compare' && compareDone;
+        const clickable = opensReport ? Boolean(props.onOpenRunReport) : isDone;
+        return (
+          <div className="sw-step-wrap" key={id}>
+            {index > 0 && <i className="sw-step-dash" aria-hidden="true" />}
+            <button
+              type="button"
+              className={`sw-step ${cls}`}
+              onClick={() => {
+                if (!clickable) return;
+                if (opensReport) props.onOpenRunReport?.();
+                else setStep(id);
+              }}
+              title={opensReport
+                ? (props.onOpenRunReport ? 'See how the models answered' : 'No saved report for this run')
+                : undefined}
+              disabled={!clickable && !isActive}
+              aria-current={isActive ? 'step' : undefined}
+            >
+              <span className="sw-step-mark" aria-hidden="true">
+                {isDone ? <Check /> : isLocked ? <Lock /> : id === 'winner' && isActive ? <Trophy /> : index + 1}
+              </span>
+              {/* The label is the button's name. Narrow windows hide it from
+                  view, never from screen readers — display: none did both,
+                  and with the mark aria-hidden every step was just "button". */}
+              <span className="sw-step-label">{STEP_LABELS[id]}</span>
+              {/* Done is shown only as a check mark, which is aria-hidden.
+                  Locked says itself through disabled, current through
+                  aria-current. */}
+              {isDone && <span className="sr-only">, done</span>}
+            </button>
+          </div>
+        );
+      })}
+    </nav>
+  );
+
   return (
     <InfoViewProvider>
     <div className={stage === 'trojan' ? 'sw-shell stage-trojan' : 'sw-shell'}>
-      <header className="sw-header">
-        <div className="sw-brand">
-          <img src={brandIcon} alt="" />
-          <div>
-            <strong>RigMatch</strong>
-            <span>AI matchmaking for your PC</span>
-            {/* Mode switch lives under the brand in both Simple and Advanced so it
-                never moves when you toggle. Shares .global-mode-switch styling. */}
-            <div className="global-mode-switch" role="group" aria-label="Current interface mode">
-              <span>Mode</span>
-              <button
-                type="button"
-                className="active"
-                aria-pressed="true"
-                aria-label="Simple Mode"
-                title="Simple Mode keeps RigMatch focused on the main flow"
-              >
-                Simple
-              </button>
-              <button
-                type="button"
-                onClick={props.onSwitchToAdvanced}
-                aria-pressed="false"
-                aria-label="Advanced Mode"
-                title="Advanced Mode shows deeper tools and diagnostics"
-              >
-                Advanced
-              </button>
-            </div>
-          </div>
-        </div>
-        <nav className="sw-steps" aria-label="Wizard steps">
-          {/* A skipped Download step is dropped from the stepper entirely rather
-              than left sitting there permanently incomplete. */}
-          {STEPS.filter((id) => !(id === 'download' && skipDownload)).map((id, index) => {
-            const isActive = id === step;
-            const isDone = stepState.done[id] && !isActive;
-            const isLocked = !stepState.unlocked[id] && !isActive;
-            const cls = isActive ? 'active' : isDone ? 'done' : 'locked';
-            /**
-             * Compare, once the show has crowned someone, opens the report.
-             *
-             * The step derivation auto-advances compare -> winner as soon as a
-             * match exists, which is right: after the show the winner is the
-             * point. The side effect was a button styled `done`, not disabled,
-             * that did nothing at all when clicked — setStep('compare') simply
-             * resolved back to 'winner'.
-             *
-             * Opening the report is what the word already promises, and in
-             * Simple Mode it is the only route to the transcript at all: there
-             * is no side menu here, so the Comparison screen does not exist.
-             * With no report to open it is disabled rather than dead.
-             */
-            const opensReport = id === 'compare' && compareDone;
-            const clickable = opensReport ? Boolean(props.onOpenRunReport) : isDone;
-            return (
-              <div className="sw-step-wrap" key={id}>
-                {index > 0 && <i className="sw-step-dash" aria-hidden="true" />}
-                <button
-                  type="button"
-                  className={`sw-step ${cls}`}
-                  onClick={() => {
-                    if (!clickable) return;
-                    if (opensReport) props.onOpenRunReport?.();
-                    else setStep(id);
-                  }}
-                  title={opensReport
-                    ? (props.onOpenRunReport ? 'See how the models answered' : 'No saved report for this run')
-                    : undefined}
-                  disabled={!clickable && !isActive}
-                  aria-current={isActive ? 'step' : undefined}
-                >
-                  <span className="sw-step-mark" aria-hidden="true">
-                    {isDone ? <Check /> : isLocked ? <Lock /> : id === 'winner' && isActive ? <Trophy /> : index + 1}
-                  </span>
-                  {/* The label is the button's name. Narrow windows hide it from
-                      view, never from screen readers — display: none did both,
-                      and with the mark aria-hidden every step was just "button". */}
-                  <span className="sw-step-label">{STEP_LABELS[id]}</span>
-                  {/* Done is shown only as a check mark, which is aria-hidden.
-                      Locked says itself through disabled, current through
-                      aria-current. */}
-                  {isDone && <span className="sr-only">, done</span>}
-                </button>
-              </div>
-            );
-          })}
-        </nav>
-        <BadgeCase />
-      </header>
+      {/* The step tracker sits in the app's top bar, beside the badge case, theme
+          and mode switch, which the bar now carries for both modes. Without a
+          bar to sit in (a test, say) it falls back to its own header. */}
+      {props.trackerSlot ? createPortal(tracker, props.trackerSlot) : <header className="sw-header">{tracker}</header>}
 
       <div className="sw-content">
         <HostStrip step={step} round={props.round} stopped={showFailed} stage={stage} line={ajaxLine} aside={<ShowExtrasSwitches />} />

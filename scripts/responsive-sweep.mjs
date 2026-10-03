@@ -69,7 +69,7 @@ for (const mode of ['beginner', 'advanced']) {
       localStorage.setItem('rigmatch:goals-offered:v1', 'yes');
     }, mode);
     await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
-    await page.waitForSelector(mode === 'beginner' ? '.sw-shell' : '.side-menu', { timeout: 20000 }).catch(() => {});
+    await page.waitForSelector(mode === 'beginner' ? '.sw-shell' : '.top-bar-tabs', { timeout: 20000 }).catch(() => {});
     await page.waitForTimeout(700);
 
     const report = await page.evaluate(() => {
@@ -147,9 +147,9 @@ for (const mode of ['beginner', 'advanced']) {
 
       // Anything sitting outside the box of its own scroll container.
       const clipped = [];
-      for (const container of document.querySelectorAll('.side-menu, .sw-content, .panel')) {
+      for (const container of document.querySelectorAll('.top-bar, .sw-content, .panel')) {
         const box = container.getBoundingClientRect();
-        for (const child of container.querySelectorAll('.side-menu-item, .sw-step, .sw-card')) {
+        for (const child of container.querySelectorAll('.top-tab, .sw-step, .sw-card')) {
           const childBox = child.getBoundingClientRect();
           if (childBox.bottom > box.bottom + 1 || childBox.right > box.right + 1) clipped.push(label(child));
         }

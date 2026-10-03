@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { GLOSSARY, findGlossaryTerms, glossaryEntry, tickerTips } from '../src/lib/glossary.ts';
+import { GLOSSARY, findGlossaryTerms, glossaryEntry } from '../src/lib/glossary.ts';
 
 /**
  * The point of this file is a promise: someone who has never run a local model
@@ -85,18 +85,6 @@ test('the words a beginner meets first are all covered', () => {
 test('ids are unique, since the UI keys off them', () => {
   const ids = GLOSSARY.map((entry) => entry.id);
   assert.equal(new Set(ids).size, ids.length);
-});
-
-test('the Advanced ticker reads from the same source', () => {
-  // Two copies of a definition drift, and then the app disagrees with itself
-  // about what a word means depending on which mode you are in.
-  const tips = tickerTips();
-  assert.equal(tips.length, GLOSSARY.length);
-  for (const tip of tips) {
-    assert.ok(tip.term && tip.tip.length > 40);
-  }
-  const vram = tips.find((tip) => tip.term.includes('VRAM'));
-  assert.ok(vram, 'the technical name should still be findable for people who know it');
 });
 
 // ---------------------------------------------------------------------------

@@ -83,7 +83,8 @@ const PRESENT = [
   ['stale winner is labeled as previous', js, "not in tonight's lineup"],
   ['license links are built per model', js, 'ollama.com/library/'],
   ['Gemma keeps its prohibited-use policy', js, 'prohibited_use_policy'],
-  ['collapsible stats strip', css, 'top-deck-collapse'],
+  ['the top bar with its tabs', css, 'top-bar-tabs'],
+  ['the computer-load strip', css, 'load-strip-readings'],
   // The minifier rewrites media queries to modern range syntax, so
   // "max-height: 900px" in the source ships as "(height<=900px)". Probing for
   // the authored spelling reported this fix missing when it was present.

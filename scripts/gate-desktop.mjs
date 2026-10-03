@@ -117,8 +117,9 @@ try {
     localStorage.setItem('rigmatch:goals-offered:v1', 'yes');
   });
   await page.reload();
-  await page.waitForSelector('.side-menu-item', { timeout: 20000 });
-  await page.getByLabel('Scorecards').click();
+  await page.waitForSelector('.top-tab', { timeout: 20000 });
+  // Results opens on Scorecards, where the log panel is.
+  await page.locator('.top-tab', { hasText: 'Results' }).click();
   await page.waitForTimeout(600);
 
   const shown = await page.evaluate((text) => document.body.innerText.includes(text), marker);
@@ -176,7 +177,7 @@ try {
 
   // Chat is checked by visual-smoke against the preview, not here: a cold
   // desktop profile has no scan, so no scored model and no "Talk to Model", and
-  // the ticker's Chat button launches the separate RigChat companion and raises
+  // the top bar's Chat button launches the separate RigChat companion and raises
   // a blocking alert when it is not packaged. A gate that cannot reach the
   // thing it names is worse than one that admits where the check lives.
 
@@ -193,9 +194,8 @@ try {
     record(`${channel} is registered`, state === 'registered', state === 'registered' ? undefined : state);
   }
 
-  // Exact: a label match is a substring match, and the Balance fader on the
-  // Scorecards screen labels its presets "Quick settings".
-  await page.getByLabel('Settings', { exact: true }).click();
+  // Settings is the top bar's own button, not a tab.
+  await page.locator('.top-bar-settings').click();
   await page.waitForTimeout(400);
 
   // SettingsSection renders `{isOpen && children}` and defaults to closed, so
@@ -254,8 +254,8 @@ try {
   // then reported "RigMatch app data cleared." The unit tests exercise the
   // sweep in isolation; only this shows that the button reaches it.
   await page.reload();
-  await page.waitForSelector('.side-menu-item', { timeout: 20000 });
-  await page.getByLabel('Settings', { exact: true }).click();
+  await page.waitForSelector('.top-tab', { timeout: 20000 });
+  await page.locator('.top-bar-settings').click();
   await page.waitForTimeout(400);
 
   await page.evaluate(() => {
@@ -307,8 +307,8 @@ try {
   // beginner wizard immediately and again on the next launch.
   record(
     'an Advanced user is still in Advanced Mode',
-    await page.locator('.side-menu-item').count() > 0,
-    `${await page.locator('.side-menu-item').count()} rail item(s)`,
+    await page.locator('.top-tab').count() > 0,
+    `${await page.locator('.top-tab').count()} tab(s)`,
   );
   record(
     'the mode survives a restart too',
@@ -327,7 +327,7 @@ try {
   await page.waitForTimeout(1200);
   record(
     'and it is still Advanced after reloading',
-    await page.locator('.side-menu-item').count() > 0,
+    await page.locator('.top-tab').count() > 0,
   );
   record('nor does the guide return at the next launch', !(await guideShowing()));
 
