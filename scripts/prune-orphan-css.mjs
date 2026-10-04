@@ -37,6 +37,8 @@ function pastComment(css, i) {
 
 const withoutComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, ' ');
 
+const isAtPrelude = (prelude) => withoutComments(prelude).trimStart().startsWith('@');
+
 /**
  * Split a selector list on top-level commas — `:is(a, b)` holds together.
  *
@@ -108,7 +110,9 @@ function render(nodes) {
   for (const node of nodes) {
     if (node.kind === 'text') { out += node.text; continue; }
 
-    const isAtRule = node.prelude.trimStart().startsWith('@');
+    // A comment above an @media is part of its prelude: read past it, or the
+    // whole block passes as one ordinary rule and nothing inside is pruned.
+    const isAtRule = isAtPrelude(node.prelude);
     if (isAtRule) {
       const inner = render(parse(node.inner));
       // An at-rule whose every child died has nothing left to say.
@@ -138,7 +142,7 @@ function allSelectors(css) {
   const walk = (list) => {
     for (const node of list) {
       if (node.kind !== 'block') continue;
-      if (node.prelude.trimStart().startsWith('@')) { walk(parse(node.inner)); continue; }
+      if (isAtPrelude(node.prelude)) { walk(parse(node.inner)); continue; }
       for (const selector of splitSelectors(node.prelude)) {
         const clean = selector.trim();
         if (clean) found.push(clean);
@@ -172,7 +176,8 @@ if (remaining.length) {
   throw new Error(`refusing to write — selectors appeared that were not there before:\n  ${remaining.join('\n  ')}`);
 }
 
-const stillThere = orphans.filter((c) => new RegExp(`\\.${c}(?![\\w-])`).test(after));
+// Outside comments: a note naming a class it once styled is not a rule.
+const stillThere = orphans.filter((c) => new RegExp(`\\.${c}(?![\\w-])`).test(withoutComments(after)));
 if (stillThere.length) throw new Error(`still present after pruning: ${stillThere.join(', ')}`);
 
 writeFileSync(file, after);
