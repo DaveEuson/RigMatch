@@ -228,7 +228,7 @@ export function RunSheet({
           : simpleRound === 'code' ? `${contestants} answer the same questions, then each builds a small app. One at a time; each is unloaded before the next.`
             : `${contestants} answer the same questions, one at a time. Each is unloaded before the next.`;
 
-  const gpuName = system.gpu.model && system.gpu.model !== 'Unknown GPU' ? system.gpu.model : 'your graphics card';
+  const gpuName = system.gpu.model && system.gpu.model !== 'Unknown GPU' ? system.gpu.model : 'graphics card';
   const onBattery = system.battery.hasBattery && system.battery.acConnected === false;
 
   const pickSet = (id: Exclude<QuestionSetId, 'custom'>) => {
@@ -277,7 +277,7 @@ export function RunSheet({
           <div className="run-sheet-warning">
             <UiIcon name="warn" size={20} />
             <p>
-              This works {gpuName}, the processor and the fans hard until it finishes.
+              Your {gpuName}, processor and fans will work hard until this finishes.
               {gpuContention?.level === 'clear' && ' Nothing else is using the graphics card right now.'}
               {system.battery.hasBattery && !onBattery && ' Keep the laptop plugged in for a fair reading.'}
             </p>

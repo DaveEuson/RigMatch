@@ -23,7 +23,7 @@ import { balanceLabel } from '../lib/balance';
 import { ShowMarquee } from './ShowMarquee';
 import { setShowExtras, useShowExtras, useShowStage } from '../lib/showExtras';
 import { TROJAN_HOST_COPY, ajaxHostLine } from '../lib/trojanStage';
-import { hostLine } from '../lib/hostScript';
+import { HOST_LINES, hostLine } from '../lib/hostScript';
 import { LOW_DISK_GB } from '../lib/loadLevel';
 import { UiIcon } from './icons/UiIcon';
 import { AchievementUnlocked } from './AchievementShelf';
@@ -371,9 +371,13 @@ export function SimpleWizard(props: SimpleWizardProps) {
   // Derive the visible step: honor the user's choice, but clamp to the furthest
   // unlocked step if a prerequisite was lost, and auto-advance Compare -> Winner
   // once the show crowns a match. Deriving avoids setState-in-effect churn.
+  // A failed show keeps its own screen, which says what went wrong, even when
+  // the failure also undid an earlier step: Ollama quitting mid-show used to
+  // drop the user back on "Welcome to RigMatch!" with only a toast to explain.
   const step: StepId = compareDone && chosenStep === 'compare'
     ? 'winner'
-    : stepState.unlocked[chosenStep] ? chosenStep : furthestStep;
+    : chosenStep === 'compare' && showFailed ? 'compare'
+      : stepState.unlocked[chosenStep] ? chosenStep : furthestStep;
   const setStep = (next: StepId) => {
     setChosenStep(next);
     props.onStepChange?.(next);
@@ -471,7 +475,9 @@ export function SimpleWizard(props: SimpleWizardProps) {
   const nextLabel: Partial<Record<StepId, string>> = {
     // "Download 5 models · already on your PC" contradicted itself inside one
     // label. When nothing needs downloading, this button starts the show.
-    pick: skipDownload
+    pick: shortlistedRows.length === 0
+      ? `Pick ${minPicks} or more`
+      : skipDownload
       ? `Start the show · about ${showMinutes} min`
       : `Download ${shortlistedRows.length} model${shortlistedRows.length === 1 ? '' : 's'}${downloadSuffix}`,
     download: `Start the show · about ${showMinutes} min`,
@@ -495,18 +501,20 @@ export function SimpleWizard(props: SimpleWizardProps) {
         return hostLine(shortlistedRows.length >= 5 ? 'pickFull' : 'pick', {}, shortlistedRows.length);
       case 'download':
         return failedDownload
-          ? hostLine('downloadFailed', { name: getFriendlyModelName(failedDownload.displayName) })
+          // "We'll carry on with the others" only when there are enough of them.
+          ? hostLine('downloadFailed', { name: getFriendlyModelName(failedDownload.displayName) }, downloadBlockedReason ? 1 : 0)
           : pendingGb > 0 ? hostLine('download', { gb: pendingGb.toFixed(1) }) : hostLine('download', {}, 1);
       case 'compare':
         if (props.round && props.round !== 'chat') return ROUND_LINES[props.round].host;
         if (judgeOnStage) return hostLine('selfJudge', { name: getFriendlyModelName(judgeOnStage) });
-        return progress?.currentModel
-          ? hostLine('dating', {
-            name: getFriendlyModelName(progress.currentModel),
-            q: questionNumber,
-            topic: roundLabel(progress.questionType)?.toLowerCase() ?? 'the next question',
-          }, questionNumber)
-          : "It's showtime! Everyone gets the same questions, no favorites.";
+        if (!progress?.currentModel) return "It's showtime! Everyone gets the same questions, no favorites.";
+        {
+          // Between contestants the question type is not known yet, and the
+          // round line said "Round 1: the next question." Skip that line then.
+          const topic = roundLabel(progress.questionType)?.toLowerCase();
+          const turn = !topic && questionNumber % HOST_LINES.dating.length === 1 ? 0 : questionNumber;
+          return hostLine('dating', { name: getFriendlyModelName(progress.currentModel), q: questionNumber, topic }, turn);
+        }
       case 'winner':
         return winner ? hostLine('winner', { name: getFriendlyModelName(winner.model) }, shortlistedRows.length)
           : (props.lineupResults?.length ?? 0) > 0 ? hostLine('noWinner') : hostLine('pick');
@@ -645,7 +653,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
                 onChangePlan={skipDownload && pickDone ? startShow : undefined}
               />
             )
-            : <span className="sw-footer-hint">{footerHint(step, ollamaReady, shortlistedRows.length, minPicks, showFailed)}</span>}
+            : <span className="sw-footer-hint">{step === 'download' && downloadBlockedReason ? downloadBlockedReason : footerHint(step, ollamaReady, shortlistedRows.length, minPicks, showFailed)}</span>}
           <div className="sw-footer-right">
             <button
               type="button"
@@ -1217,8 +1225,13 @@ function LineupTray({ shortlistedRows, onRemove, minPicks, plan, onChangePlan }:
 // ---------------------------------------------------------------------------
 // Download
 
-function DownloadScreen({ shortlistedRows, pullProgressByModel }: SimpleWizardProps) {
+function DownloadScreen({ shortlistedRows, pullProgressByModel, onStartDownloads }: SimpleWizardProps) {
   const readyCount = shortlistedRows.filter((row) => row.installed).length;
+  // Once nothing is moving, a failed download can be started again from here.
+  // The row said "Start it again" and there was no way to, so a lineup short of
+  // contestants was a dead end.
+  const statuses = shortlistedRows.map((row) => getDownloadRowStatus(row.installed, pullProgressByModel[row.displayName]));
+  const canRetry = statuses.includes('failed') && !statuses.some((s) => s === 'downloading' || s === 'queued');
   return (
     <div className="sw-download">
       <div className="sw-download-head">
@@ -1238,7 +1251,7 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel }: SimpleWizardPr
           ? 'Ready to go'
           // The main process reports why it failed; say so instead of dropping it.
           : status === 'failed'
-            ? (pull?.error || pull?.status || 'Download failed')
+            ? (pull?.error || pull?.status || 'Download failed').replace(/^Error:\s*/, '')
             : status === 'paused'
               ? 'Paused'
               : status === 'queued'
@@ -1268,6 +1281,11 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel }: SimpleWizardPr
           </div>
         );
       })}
+      {canRetry && (
+        <div className="sw-download-retry">
+          <button type="button" className="btn btn-line" onClick={onStartDownloads}>Try the downloads again</button>
+        </div>
+      )}
       <p className="sw-muted sw-download-note">Downloads pick up where they left off if you close RigMatch.</p>
     </div>
   );
@@ -1745,9 +1763,12 @@ function Scoreboard({ results, winnerModel, note }: {
     <div className="sw-scoreboard">
       <h3>How the lineup finished</h3>
       <ol>
-        {results.map((result, index) => (
+        {results.map((result, index) => {
+          const tied = results.some((other, i) => i !== index && other.scoreLabel === result.scoreLabel);
+          const place = results.findIndex((other) => other.scoreLabel === result.scoreLabel) + 1;
+          return (
           <li key={result.model} className={result.model === winnerModel ? 'winner' : undefined}>
-            <b className="sw-place">{index + 1}</b>
+            <b className="sw-place">{tied ? `=${place}` : index + 1}</b>
             <img src={getModelAvatarSrc(result.model)} alt="" />
             <span className="sw-scoreboard-name">
               {result.name}
@@ -1757,11 +1778,17 @@ function Scoreboard({ results, winnerModel, note }: {
             </span>
             <span className="sw-scoreboard-score">
               {result.scoreLabel}
-              <em>Grade {result.grade}{result.note ? ` · ${result.note}` : ''}</em>
+              <em>{tied ? 'Tied · ' : ''}Grade {result.grade}{result.note ? ` · ${result.note}` : ''}</em>
             </span>
           </li>
-        ))}
+          );
+        })}
       </ol>
+      {results.length > 1 && results[0].scoreLabel === results[1].scoreLabel && (
+        <p className="sw-muted sw-scoreboard-note">
+          A tie at the top goes to the better answers, then steadiness, fit and speed.
+        </p>
+      )}
       {note && <p className="sw-muted sw-scoreboard-note">{note}</p>}
     </div>
   );

@@ -5,7 +5,7 @@ import { getModelScore } from '../lib/modelCatalog';
 import { formatMatchScore } from '../lib/scoring';
 import type { ModelRow, TestedModelScore } from '../types';
 import { AvatarBust } from './Avatars';
-import { ExternalLink, Plus, Trophy, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
 export function ModelPoolLineupStrip({
@@ -49,16 +49,16 @@ export function ModelPoolLineupStrip({
   const empty = rows.length === 0;
   const classNames = ['model-pool-lineup', full ? 'full' : '', empty ? 'empty' : '', className].filter(Boolean).join(' ');
   const startLabel = isListTesting
-    ? 'Testing...'
+    ? 'Show running…'
     : rows.length < MIN_CONTESTANTS
       ? `Pick ${Math.max(0, MIN_CONTESTANTS - rows.length)} more`
       : missingDownloadCount > 0
-        ? 'Open Setup'
-        : 'Start Speed Dating';
+        ? 'Download first'
+        : 'Start the show';
   const lineupStatus = rows.length < MIN_CONTESTANTS
     ? `Pick at least ${MIN_CONTESTANTS} contestants before the show starts.`
     : missingDownloadCount > 0
-      ? `${countWithVerb(missingDownloadCount, 'contestant', 'needs', 'need')} downloading. Open setup to download the selected lineup.`
+      ? `${countWithVerb(missingDownloadCount, 'contestant', 'needs', 'need')} downloading first.`
       : full
         ? 'Lineup full. Remove a contestant to swap.'
         : 'Ready. Add more or start the show.';
@@ -67,25 +67,21 @@ export function ModelPoolLineupStrip({
     <section className={classNames} aria-label="Speed Dating lineup">
       <div className="model-pool-lineup-head">
         <div>
-          <span>Dating Game Setup</span>
+          <span>Lineup</span>
           <strong>{rows.length}/5 contestants picked</strong>
           <em>{lineupStatus}</em>
         </div>
         <div className="lineup-head-actions">
           <button
             type="button"
-            className="primary-button compact"
+            className="btn btn-line btn-sm"
             onClick={canRunSpeedDate ? onRunListTest : onOpenSpeedDate}
             disabled={!canUsePrimaryAction}
-            title={missingDownloadCount > 0 ? 'Open Speed Dating setup to download the selected lineup' : undefined}
+            title={missingDownloadCount > 0 ? 'Open Comparison to download the lineup' : undefined}
           >
-            <Trophy aria-hidden="true" />
             {startLabel}
           </button>
-          <button type="button" className="mini-button outline" onClick={onOpenSpeedDate} title="Open the full Speed Dating setup">
-            <ExternalLink aria-hidden="true" />
-            Open
-          </button>
+          <button type="button" className="btn btn-link" onClick={onOpenSpeedDate}>Open Comparison</button>
         </div>
       </div>
       {!empty && (

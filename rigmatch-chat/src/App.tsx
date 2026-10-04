@@ -1080,6 +1080,24 @@ export default function App() {
     else document.documentElement.removeAttribute("data-chat-light");
   }, [settings.stage, settings.theme]);
 
+  // Escape closes whatever is open on top. Only the More menu and "Want to go
+  // deeper?" listened before: Settings, the personality editor, a model's
+  // profile, Delete and the narrow-window chat list all ignored it.
+  useEffect(() => {
+    if (!confirmDelete && !compactPlan && !personalityEditor && !profileModal && !settingsOpen && !sidebarOpen) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || moreOpen) return;
+      if (confirmDelete) setConfirmDelete(null);
+      else if (compactPlan) setCompactPlan(null);
+      else if (personalityEditor) setPersonalityEditor(null);
+      else if (profileModal) setProfileModal(null);
+      else if (settingsOpen) setSettingsOpen(false);
+      else setSidebarOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [confirmDelete, compactPlan, personalityEditor, profileModal, settingsOpen, sidebarOpen, moreOpen]);
+
   // The More menu closes on Escape and on a click anywhere else.
   useEffect(() => {
     if (!moreOpen) return undefined;
@@ -2399,7 +2417,8 @@ export default function App() {
                           onBlur={(e) => renameConversation(thread.id, e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") renameConversation(thread.id, e.currentTarget.value);
-                            if (e.key === "Escape") setRenamingId(null);
+                            // Cancels the rename only, not the chat list around it.
+                            if (e.key === "Escape") { e.stopPropagation(); setRenamingId(null); }
                           }}
                         />
                       ) : (

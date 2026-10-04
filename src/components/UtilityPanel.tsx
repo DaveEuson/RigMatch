@@ -77,6 +77,7 @@ export function UtilityPanel({
   onUiModeChange,
   onEditGoals,
   onShowWelcome,
+  sectionRequest,
   topMatch,
   onDeleteModel,
   onRefreshLogs,
@@ -117,6 +118,8 @@ export function UtilityPanel({
   onEditGoals: () => void;
   /** Opens the first-run welcome again. */
   onShowWelcome: () => void;
+  /** A section to open, from a link elsewhere; `at` makes a repeat request count. */
+  sectionRequest?: { id: SettingsSectionId; at: number } | null;
   /** The Top Match card, shown at the head of the Scorecards. */
   topMatch?: ReactNode;
   onDeleteModel: (row: ModelRow) => void;
@@ -199,6 +202,9 @@ export function UtilityPanel({
   useEffect(() => {
     settingsBodyRef.current?.scrollTo({ top: 0 });
   }, [openSection]);
+  useEffect(() => {
+    if (sectionRequest) setOpenSection(sectionRequest.id);
+  }, [sectionRequest]);
   const openSectionFromRail = useCallback((id: SettingsSectionId) => {
     if (id === openSection) settingsBodyRef.current?.scrollTo({ top: 0 });
     else setOpenSection(id);

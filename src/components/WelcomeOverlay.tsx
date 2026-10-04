@@ -120,7 +120,7 @@ export function WelcomeOverlay({ vramGb, initialGoal, replay = false, onFinish, 
             className="btn btn-gold"
             onClick={() => (step < STEPS.length - 1 ? setStep(step + 1) : finish(false))}
           >
-            {step < STEPS.length - 1 ? 'Next' : 'Start the show'}
+            {step < STEPS.length - 1 ? 'Next' : "Let's go"}
           </button>
         </div>
       </div>
