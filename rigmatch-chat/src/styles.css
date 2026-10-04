@@ -528,12 +528,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
 .rm-profile-stat { display: grid; gap: 2px; padding: 10px; border-radius: var(--r-control); background: var(--panel-2); }
 .rm-profile-untested { grid-column: 1 / -1; color: var(--muted); }
 .rm-profile-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.rm-chosen-badge, .rm-rank-medal { flex: none; }
 
 /* Personality editor. */
 .rm-personality-preview { display: flex; align-items: center; gap: 12px; }
 .rm-avatar-tools { display: flex; flex-wrap: wrap; gap: 8px; }
-.rm-profile-tool-btn { min-height: 32px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: var(--r-control); color: var(--text-strong); font-weight: 700; }
 .rm-model-truth-card { display: grid; gap: 4px; padding: 12px; border-radius: var(--r-control); background: var(--panel-2); }
 .rm-model-truth-card strong { color: var(--text-strong); }
 .rm-model-truth-card span { color: var(--muted); }
