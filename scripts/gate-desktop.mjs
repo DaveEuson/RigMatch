@@ -200,11 +200,11 @@ try {
   await page.locator('.top-bar-settings').click();
   await page.waitForTimeout(400);
 
-  // SettingsSection renders `{isOpen && children}` and defaults to closed, so
-  // UpdateCenter is not merely hidden — it is absent from the DOM. Asserting
-  // against it while collapsed reported the updater subscription dead when it
-  // was fine, which is the kind of false alarm that gets a gate ignored.
-  await page.locator('.settings-section-toggle', { hasText: /Versions & Release Notes/ }).first().click();
+  // Only the section picked in the rail is rendered, so UpdateCenter is absent
+  // from the DOM until its rail entry is clicked. Asserting against it before
+  // that reported the updater subscription dead when it was fine, which is the
+  // kind of false alarm that gets a gate ignored.
+  await page.locator('.settings-rail-item', { hasText: /^Updates/ }).first().click();
   await page.waitForSelector('.update-center', { timeout: 10000 });
   record('the Updates section opens', await page.locator('.update-center').count() === 1);
 
@@ -268,11 +268,11 @@ try {
     localStorage.setItem('not-ours', 'keep');
   });
 
-  await page.locator('.settings-section-toggle', { hasText: /Scoring & Reset/ }).first().click();
+  await page.locator('.settings-rail-item', { hasText: /Scoring and reset/ }).first().click();
   await page.waitForSelector('.danger-zone', { timeout: 10000 });
-  await page.getByRole('button', { name: /^Clear All Data$/ }).first().click();
+  await page.getByRole('button', { name: /^Clear all data$/ }).first().click();
   await page.waitForSelector('.destructive-modal', { timeout: 10000 });
-  await page.locator('.destructive-modal .modal-actions').getByRole('button', { name: /^Clear All Data$/ }).click();
+  await page.locator('.destructive-modal .modal-actions').getByRole('button', { name: /^Clear all data$/ }).click();
   await page.waitForTimeout(1500);
 
   // Asserted as the absence of the failure, not the presence of the success

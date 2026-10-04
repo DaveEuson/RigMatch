@@ -24,7 +24,6 @@ import { useDialog } from '../lib/useDialog';
 import type { AutoUpdateStatus, ModelRow, NetworkHost, OllamaStatus, SystemProfile, TestedModelScore, UpdateChannel, UpdateCheckResponse } from '../types';
 import { ClosetSection } from './ClosetSection';
 import { ComfySettings } from './ComfySettings';
-import { BrandMark } from './CommonChrome';
 import { GoalsSummary } from './GoalsSummary';
 import { HistoryTimeline } from './HistoryTimeline';
 import { HowWeScoreSection } from './HowWeScoreSection';
@@ -39,10 +38,7 @@ import { BalanceFader } from './BalanceFader';
 import { CodingBoard } from './CodingBoard';
 import { LabStandings } from './LabStandings';
 import { ReleaseNotes, UpdateCenter } from './UpdateCenter';
-// `History` must be imported explicitly: without it the name resolves to the
-// DOM's global History constructor, which is a real value, so nothing errors
-// until it is used as a JSX component.
-import { Bug, ChevronRight, Coffee, Copy, Download, ExternalLink, History, RefreshCw, Settings, Trash2, Trophy, X } from 'lucide-react';
+import { Bug, ChevronRight, Coffee, Copy, Download, ExternalLink, RefreshCw, Trash2, Trophy, X } from 'lucide-react';
 import { getModelAvatarSrc } from '../lib/modelAvatars';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AllDemosButton } from './SkillDemoViewers';
@@ -145,7 +141,6 @@ export function UtilityPanel({
   channelBalanceLock?: string | null;
   labResults: Record<string, AdvancedLabResult>;
 }) {
-  const Icon = panel === 'history' ? History : Settings;
 
   // Load the log when this panel opens.
   //
@@ -192,67 +187,22 @@ export function UtilityPanel({
   const [isCheckingOllamaUpdate, setIsCheckingOllamaUpdate] = useState(false);
 
   /**
-   * Settings opens on Preferences and nothing else, as it always has. The rail
-   * is what makes that safe: with a contents list on screen, a closed section
-   * is no longer a section you have to remember exists.
-   */
-  const [openSections, setOpenSections] = useState<Set<SettingsSectionId>>(() => new Set(['interface']));
-  const pendingScrollRef = useRef<SettingsSectionId | null>(null);
-  const toggleSection = useCallback((id: SettingsSectionId) => {
-    setOpenSections((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-  /**
-   * From the rail, a section always opens — it never toggles shut.
+   * Settings shows one section at a time and opens on Preferences. The rail
+   * picks the section; picking a new one starts the column at its top, and
+   * picking the one already showing scrolls back up to its heading.
    *
-   * Clicking a contents entry means "take me there". Having it close the thing
-   * you just asked for, because it happened to be open already, is the same
-   * class of bug as a button that answers off-screen: you click, and the screen
-   * moves the wrong way.
+   * The column is scrolled directly rather than with scrollIntoView, which
+   * also scrolls every ancestor and pushed the top bar off the window.
    */
-  /**
-   * Instant, not smooth.
-   *
-   * `behavior: 'smooth'` is a no-op in the Chromium this ships on — measured:
-   * scrollIntoView and scrollTo both leave scrollTop at 0, while 'auto' lands
-   * exactly. A nicety that silently does nothing is worse than no nicety at
-   * all here, because the thing it silently fails to do is the rail's whole
-   * job. Instant also happens to be what someone who asked for reduced motion
-   * wanted, so there is nothing left to branch on.
-   */
-  const scrollToSection = useCallback((id: SettingsSectionId) => {
-    document.getElementById(`settings-${id}`)
-      ?.scrollIntoView({ behavior: 'auto', block: 'start' });
-  }, []);
-  const openSectionFromRail = useCallback((id: SettingsSectionId) => {
-    if (openSections.has(id)) {
-      // Already open, so the DOM is already the right height — scroll now
-      // rather than waiting for a render that will not happen.
-      scrollToSection(id);
-      return;
-    }
-    pendingScrollRef.current = id;
-    setOpenSections((current) => new Set(current).add(id));
-  }, [openSections, scrollToSection]);
-  /**
-   * The scroll waits for the commit, it does not race it.
-   *
-   * The first version scrolled inside a requestAnimationFrame right after
-   * setState, which fires before React has rendered the newly opened section —
-   * so the click opened the right thing and left the view exactly where it was,
-   * which is the failure the rail exists to stop. An effect runs after the DOM
-   * is updated, so the section is open and at its real height by then.
-   */
+  const [openSection, setOpenSection] = useState<SettingsSectionId>('interface');
+  const settingsBodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const pending = pendingScrollRef.current;
-    if (!pending) return;
-    pendingScrollRef.current = null;
-    scrollToSection(pending);
-  }, [openSections, scrollToSection]);
+    settingsBodyRef.current?.scrollTo({ top: 0 });
+  }, [openSection]);
+  const openSectionFromRail = useCallback((id: SettingsSectionId) => {
+    if (id === openSection) settingsBodyRef.current?.scrollTo({ top: 0 });
+    else setOpenSection(id);
+  }, [openSection]);
   const installedSizeGb = useMemo(
     () => installedRows.reduce((total, row) => total + (row.sizeGb ?? 0), 0),
     [installedRows],
@@ -260,12 +210,11 @@ export function UtilityPanel({
   const { earned: earnedAchievements } = useAchievements();
   const earnedCount = ACHIEVEMENTS.filter((a) => earnedAchievements[a.id]).length;
   const settingsRail = useMemo(() => buildSettingsRail({
-    interface: `${uiMode === 'beginner' ? 'Simple' : 'Advanced'} Mode · ${getThemeLabel(themeId)}`,
-    achievements: `${earnedCount} of ${ACHIEVEMENTS.length} earned`,
-    storage: installedRows.length > 0
-      ? `${installedRows.length} installed · ${formatGb(installedSizeGb)}`
-      : 'Nothing installed yet',
-    providers: ollama.version ? `Ollama v${ollama.version}` : 'Ollama not detected',
+    // The mode is on the top bar's switch, so the rail names the theme.
+    interface: getThemeLabel(themeId),
+    achievements: `${earnedCount} of ${ACHIEVEMENTS.length}`,
+    storage: installedRows.length > 0 ? formatGb(installedSizeGb) : 'Empty',
+    providers: ollama.version ? `Ollama ${ollama.version}` : 'No Ollama',
     updates: `v${APP_VERSION}`,
     // ComfyUI, Support and Advanced get no status line: this panel does not
     // hold a true one for them, and a filler word would read as information.
@@ -319,16 +268,7 @@ export function UtilityPanel({
             </p>
           </div>
         </header>
-      ) : (
-        <div className="utility-title">
-          <div>
-            <Icon aria-hidden="true" />
-            <div>
-              <strong>{getNavLabel(panel)}</strong>
-            </div>
-          </div>
-        </div>
-      )}
+      ) : null}
 
       {panel === 'history' && !labChannel && topMatch}
 
@@ -353,7 +293,7 @@ export function UtilityPanel({
               <p className="score-explainer-note">Scored benchmarks disable hidden thinking when Ollama supports it, so models are graded on visible answers instead of internal reasoning tokens. Chat mode is not affected.</p>
               <div className="score-explainer-grid">
                 <div>
-                  <span>Answer Quality</span>
+                  <span>Answer quality</span>
                   <strong>How well it follows the prompt</strong>
                   <em>Did it follow instructions, stay on task, and give complete answers? Graded across all test prompts.</em>
                 </div>
@@ -363,7 +303,7 @@ export function UtilityPanel({
                   <em>Tokens per second, measured live on your hardware. Faster = higher speed score.</em>
                 </div>
                 <div>
-                  <span>Hardware Fit</span>
+                  <span>Hardware fit</span>
                   <strong>How well it suits your rig</strong>
                   <em>Models that run comfortably within your VRAM and RAM get a bonus. Models that strain your hardware get penalised.</em>
                 </div>
@@ -637,77 +577,51 @@ export function UtilityPanel({
         // settings-body, not just utility-body: this column is prose-width
         // rows, and the class other utility panels share must not inherit that.
         <div className="settings-layout">
-          {/* A contents list for a two-thousand-pixel column. Same argument as
-              the model rail: what is in here, and what it is set to, without
-              opening anything to find out. */}
+          {/* The navigation: one entry per section, with what it is set to. */}
           <nav className="settings-rail" aria-label="Settings sections">
-            <div className="settings-rail-head">
-              <strong>Sections</strong>
-              <em>{openSections.size} open</em>
-            </div>
+            <h2 className="settings-rail-title">Settings</h2>
             {settingsRail.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                className={openSections.has(item.id) ? 'settings-rail-item open' : 'settings-rail-item'}
+                className={openSection === item.id ? 'settings-rail-item open' : 'settings-rail-item'}
                 onClick={() => openSectionFromRail(item.id)}
-                aria-current={openSections.has(item.id) ? 'true' : undefined}
+                aria-current={openSection === item.id ? 'true' : undefined}
               >
-                <span>{item.eyebrow}</span>
                 <strong>{item.title}</strong>
                 {item.status && <em>{item.status}</em>}
               </button>
             ))}
           </nav>
-        <div className="utility-body settings-body">
-          {/* Stays in the column, not the rail: the rail is hidden on narrow
-              windows, and the app's own name and version should not be. */}
-          <div className="utility-logo">
-            <BrandMark />
-            <strong>RigMatch</strong>
-            <em>v{APP_VERSION}</em>
-          </div>
+        <div ref={settingsBodyRef} className="utility-body settings-body">
           <SettingsSection
-            eyebrow="Interface"
             title="Preferences"
             summary="Mode, theme, goals, show extras, and the Simple Mode path."
-            open={openSections.has('interface')}
-            onToggle={() => toggleSection('interface')}
+            open={openSection === 'interface'}
             sectionId="interface"
           >
           <UiModePicker uiMode={uiMode} onUiModeChange={onUiModeChange} />
           <GoalsSummary goals={selectedGoals} onEditGoals={onEditGoals} />
-          <section className="ui-mode-picker" aria-label="The welcome">
-            <div>
-              <span>First run</span>
-              <strong>The three-step welcome</strong>
-            </div>
-            <div className="mode-toggle">
-              <button type="button" onClick={onShowWelcome}>
-                <strong>Show the welcome again</strong>
-                <span>What RigMatch is, what a model is, and what you want one for.</span>
-              </button>
-            </div>
-          </section>
+          <div className="utility-stat">
+            <span>Welcome</span>
+            <em>Three steps: what RigMatch is, what a model is, and what you want one for.</em>
+            <button type="button" className="btn btn-line" onClick={onShowWelcome}>Show the welcome again</button>
+          </div>
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
           <ShowExtrasSettings />
           </SettingsSection>
           <SettingsSection
-            eyebrow="Show"
             title="Achievements"
             summary={`${earnedCount} of ${ACHIEVEMENTS.length} earned. Each one is something worth trying.`}
-            open={openSections.has('achievements')}
-            onToggle={() => toggleSection('achievements')}
+            open={openSection === 'achievements'}
             sectionId="achievements"
           >
             <AchievementShelf />
           </SettingsSection>
           <SettingsSection
-            eyebrow="Storage"
             title="The Closet"
             summary="Who is taking up shelf space, and whether they earned it."
-            open={openSections.has('storage')}
-            onToggle={() => toggleSection('storage')}
+            open={openSection === 'storage'}
             sectionId="storage"
           >
             <ClosetSection
@@ -718,41 +632,32 @@ export function UtilityPanel({
             />
           </SettingsSection>
           <SettingsSection
-            eyebrow="Local AI"
-            title="Computer & Providers"
+            title="Providers"
             summary="Runtime, Ollama, LM Studio, and local-only scope."
-            open={openSections.has('providers')}
-            onToggle={() => toggleSection('providers')}
+            open={openSection === 'providers'}
             sectionId="providers"
           >
           <div className="utility-stat">
-            <span>Computer & providers</span>
-            <strong>Full details live in Your Rig</strong>
-            <em>Hardware, CUDA, Ollama and LM Studio status all live under Your Rig. Local models run entirely on this machine — nothing leaves your computer.</em>
+            <span>Status</span>
+            <strong>Full details are on My PC</strong>
+            <em>Hardware, CUDA, Ollama and LM Studio status are all on My PC. Local models run entirely on this computer; nothing leaves it.</em>
+            <button type="button" className="btn btn-line" onClick={onOpenSetupGuide}>Setup guide</button>
           </div>
-          <button type="button" className="primary-button compact" onClick={onOpenSetupGuide}>
-            <ExternalLink aria-hidden="true" />
-            Setup Guide
-          </button>
           </SettingsSection>
 
           <SettingsSection
-            eyebrow="Generation"
             title="ComfyUI"
             summary="Where image and video generation run, and whether RigMatch may unload models."
-            open={openSections.has('generation')}
-            onToggle={() => toggleSection('generation')}
+            open={openSection === 'generation'}
             sectionId="generation"
           >
           <ComfySettings />
           </SettingsSection>
 
           <SettingsSection
-            eyebrow="Updates"
-            title="Versions & Release Notes"
+            title="Updates"
             summary="RigMatch app updates, Ollama updates, and recent changes."
-            open={openSections.has('updates')}
-            onToggle={() => toggleSection('updates')}
+            open={openSection === 'updates'}
             sectionId="updates"
           >
           <UpdateCenter
@@ -769,7 +674,7 @@ export function UtilityPanel({
           <section className={`ollama-update-card ${ollamaHasUpdate ? 'has-update' : ''}`} aria-label="Ollama version">
             <div className="ollama-update-head">
               <div>
-                <span>Ollama Engine</span>
+                <span>Ollama</span>
                 <strong>
                   {ollama.version ? `v${ollama.version} installed` : 'Not detected'}
                   {ollamaUpdateLatest && !ollamaHasUpdate ? ' — up to date' : ''}
@@ -780,7 +685,7 @@ export function UtilityPanel({
               </div>
               <button
                 type="button"
-                className="mini-button outline"
+                className="btn btn-line btn-sm"
                 onClick={() => void checkOllamaUpdate()}
                 disabled={isCheckingOllamaUpdate}
               >
@@ -805,25 +710,23 @@ export function UtilityPanel({
           </SettingsSection>
 
           <SettingsSection
-            eyebrow="Support"
-            title="Feedback & Support"
+            title="Support"
             summary="Donationware link, bug reports, and diagnostics."
-            open={openSections.has('support')}
-            onToggle={() => toggleSection('support')}
+            open={openSection === 'support'}
             sectionId="support"
           >
           <div className="utility-stat">
-            <span>Mode</span>
+            <span>Support RigMatch</span>
             <strong>Donationware</strong>
             <em>Simple Mode stays free. Advanced is the natural home for future supporter tools, but this beta keeps everything open while the flow gets polished.</em>
             <a
-              className="donation-link donation-link-prominent"
+              className="btn btn-line"
               href={BUY_ME_A_COFFEE_URL}
               target="_blank"
               rel="noopener noreferrer"
             >
               <Coffee aria-hidden="true" />
-              Support RigMatch — Buy Me a Coffee
+              Buy Me a Coffee
               <ExternalLink aria-hidden="true" />
             </a>
           </div>
@@ -833,18 +736,18 @@ export function UtilityPanel({
             <em>One click opens a prefilled GitHub issue with your hardware specs attached. No telemetry — this is the only way I hear about bugs.</em>
             <div className="bug-report-actions">
               <a
-                className="primary-button compact"
+                className="btn btn-line"
                 href={buildBugReportUrl(system, ollama, logPath)}
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 <Bug aria-hidden="true" />
-                Report a Bug
+                Report a bug
                 <ExternalLink aria-hidden="true" />
               </a>
               <button
                 type="button"
-                className="mini-button outline"
+                className="btn btn-line"
                 onClick={() => void copyText(buildDiagnosticsText(system, ollama, logPath)).then((ok) => {
                   setDiagnosticsCopy(ok ? 'copied' : 'failed');
                   window.setTimeout(() => setDiagnosticsCopy('idle'), 2400);
@@ -852,7 +755,7 @@ export function UtilityPanel({
                 title="Copy hardware + version info to clipboard"
               >
                 <Copy aria-hidden="true" />
-                {diagnosticsCopy === 'copied' ? 'Copied' : diagnosticsCopy === 'failed' ? 'Copy failed' : 'Copy Diagnostics'}
+                {diagnosticsCopy === 'copied' ? 'Copied' : diagnosticsCopy === 'failed' ? 'Copy failed' : 'Copy diagnostics'}
               </button>
             </div>
           </div>
@@ -864,24 +767,22 @@ export function UtilityPanel({
           </SettingsSection>
 
           <SettingsSection
-            eyebrow="Advanced"
-            title="Scoring & Reset"
+            title="Scoring and reset"
             summary="How scoring works and destructive cleanup."
             advancedOnly
-            open={openSections.has('advanced')}
-            onToggle={() => toggleSection('advanced')}
+            open={openSection === 'advanced'}
             sectionId="advanced"
           >
           <HowWeScoreSection />
           <section className="danger-zone" aria-label="Data reset">
             <div>
-              <span>Danger Zone</span>
-              <strong>Clear App Data</strong>
+              <span>Danger zone</span>
+              <strong>Clear app data</strong>
               <em>Clears everything RigMatch saved here: logs, scores, comparison results, chat, model notes, goals, theme, question suite, and grading settings including any saved API key. Installed Ollama models stay put, and so does your Simple or Advanced choice; the getting-started guide is not replayed.</em>
             </div>
-            <button type="button" className="danger-button compact" onClick={onClearAllData}>
+            <button type="button" className="btn btn-danger" onClick={onClearAllData}>
               <Trash2 aria-hidden="true" />
-              Clear All Data
+              Clear all data
             </button>
           </section>
           </SettingsSection>

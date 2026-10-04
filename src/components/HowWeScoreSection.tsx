@@ -14,7 +14,7 @@ export function HowWeScoreSection() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open ? 'true' : 'false'}
       >
-        <span>How We Score</span>
+        <span>How we score</span>
         <ChevronDown className={open ? 'rotated' : ''} aria-hidden="true" />
       </button>
       {open && (

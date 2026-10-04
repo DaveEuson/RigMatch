@@ -1,0 +1,123 @@
+/* RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE. */
+
+/*
+ * The older dialogs: delete a model, clear scores or app data, download
+ * consent, How we score, the share card and the lab previews. They share
+ * .run-warning-modal (an icon, an eyebrow over a title, a body, a row of
+ * actions) and take the run sheet's look: a plain panel, a Young Serif title
+ * in sentence case, hairlines, and the shared button shapes.
+ */
+
+.run-warning-modal,
+.run-warning-modal.destructive-modal {
+  border: 0;
+  border-radius: var(--r-panel);
+  background: var(--panel);
+  box-shadow: var(--shadow-float);
+  color: var(--text);
+  font: 400 var(--fs-ui) / 1.5 var(--ui);
+}
+.run-warning-modal,
+.run-warning-modal * {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+.run-warning-modal .modal-title {
+  align-items: flex-start;
+  gap: var(--s3);
+  min-height: 0;
+  padding: var(--s5) var(--s5) var(--s4);
+  border-bottom: 1px solid var(--line);
+  background: none;
+}
+.run-warning-modal .modal-title > svg {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-top: 2px;
+  color: var(--gold);
+}
+.run-warning-modal .modal-title.danger > svg { color: var(--red); }
+.run-warning-modal .modal-title > div { flex: 1; min-width: 0; }
+.run-warning-modal .modal-title span { color: var(--muted); font: 400 var(--fs-ui) / 1.3 var(--ui); }
+.run-warning-modal .modal-title strong {
+  margin-top: 2px;
+  color: var(--text-strong);
+  font: 400 var(--fs-h2) / 1.2 var(--display);
+}
+
+.run-warning-modal .modal-body { gap: var(--s4); padding: var(--s4) var(--s5); }
+.run-warning-modal .modal-body p { color: var(--text); font: 400 var(--fs-ui) / 1.5 var(--ui); }
+
+/* What it clears and what it keeps: rows, not three cards. */
+.run-warning-modal .modal-warning-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+.run-warning-modal .modal-warning-grid > div {
+  grid-template-columns: 88px minmax(0, 1fr);
+  column-gap: var(--s3);
+  row-gap: 2px;
+  min-height: 0;
+  padding: var(--s3) 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+}
+.run-warning-modal .modal-warning-grid span {
+  grid-row: span 2;
+  color: var(--muted);
+  font: 400 var(--fs-ui) / 1.4 var(--ui);
+}
+.run-warning-modal .modal-warning-grid strong {
+  color: var(--text-strong);
+  font: 700 var(--fs-ui) / 1.4 var(--ui);
+  white-space: normal;
+}
+.run-warning-modal .modal-warning-grid em {
+  color: var(--text);
+  font: 400 var(--fs-ui) / 1.45 var(--ui);
+  font-style: normal;
+}
+
+.run-warning-modal .modal-actions,
+.destructive-modal .modal-actions {
+  flex-wrap: wrap;
+  gap: var(--s2);
+  padding: var(--s4) var(--s5) var(--s5);
+  border-top: 1px solid var(--line);
+}
+
+/* The older buttons take the shared shapes: the confirm is gold, a delete is
+   red, everything else is an outline. */
+.run-warning-modal :is(.mini-button, .primary-button, .danger-button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  min-height: var(--h-control);
+  padding: 0 var(--s4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-strong);
+  font: 700 var(--fs-ui) / 1.2 var(--ui);
+  cursor: pointer;
+}
+.run-warning-modal :is(.mini-button, .primary-button, .danger-button) svg { width: 18px; height: 18px; }
+.run-warning-modal .mini-button:not(:disabled):hover { border-color: var(--text); background: var(--panel-hover); }
+.run-warning-modal .primary-button { border-color: var(--gold); background: var(--gold); color: var(--gold-ink); }
+.run-warning-modal .primary-button:not(:disabled):hover { border-color: #f5ca72; background: #f5ca72; }
+.run-warning-modal .danger-button { border-color: var(--red); color: var(--red); }
+.run-warning-modal .danger-button:not(:disabled):hover { background: rgba(var(--red-rgb), 0.12); }
+.run-warning-modal :is(.mini-button, .primary-button, .danger-button):disabled { cursor: not-allowed; opacity: 0.5; }
+
+/* How we score: left-aligned prose, and its three cards at 14px. */
+.score-explainer-modal .score-explainer-body p { text-align: left; }
+.score-explainer-modal .score-explainer-grid > div { border: 1px solid var(--line); background: none; }
+.score-explainer-modal .score-explainer-grid :is(span, strong, em) { font-size: var(--fs-ui); }
+.score-explainer-modal .score-explainer-grid span { color: var(--muted); }

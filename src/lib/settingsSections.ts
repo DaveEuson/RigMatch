@@ -3,16 +3,13 @@
 /**
  * The Settings screen's own contents list.
  *
- * Settings is seven collapsed accordions stacked in a two-thousand-pixel
- * column. Closed, they tell you a section exists but not what it is set to;
- * open, they push everything below them off the screen. Either way the only
- * way to find out what your provider is, or which theme is on, was to open
- * things and read.
+ * Settings used to be eight accordions stacked in a column that ran past two
+ * thousand pixels. Closed, they said a section existed but not what it was set
+ * to; open, they pushed everything below them off the screen.
  *
- * So the rail carries the same two things the model rail carries: what is in
- * here, and what it is currently set to — the answer before the click. The
- * section list lives here rather than inline in the panel so the rail and the
- * accordions are rendered from one array and cannot drift apart.
+ * Now the rail is the navigation and the column shows one section at a time.
+ * Each rail entry carries what the section is currently set to, so the answer
+ * is there before the click.
  */
 export type SettingsSectionId =
   | 'interface'
@@ -26,21 +23,20 @@ export type SettingsSectionId =
 
 export type SettingsSectionSpec = {
   id: SettingsSectionId;
-  eyebrow: string;
   title: string;
   summary: string;
   advancedOnly?: boolean;
 };
 
 export const SETTINGS_SECTIONS: SettingsSectionSpec[] = [
-  { id: 'interface', eyebrow: 'Interface', title: 'Preferences', summary: 'Mode, theme, goals, and the Simple Mode path.' },
-  { id: 'achievements', eyebrow: 'Show', title: 'Achievements', summary: 'Badges for the parts of RigMatch worth trying.' },
-  { id: 'storage', eyebrow: 'Storage', title: 'The Closet', summary: 'Who is taking up shelf space, and whether they earned it.' },
-  { id: 'providers', eyebrow: 'Local AI', title: 'Computer & Providers', summary: 'Runtime, Ollama, LM Studio, and local-only scope.' },
-  { id: 'generation', eyebrow: 'Generation', title: 'ComfyUI', summary: 'Where image and video generation run, and whether RigMatch may unload models.' },
-  { id: 'updates', eyebrow: 'Updates', title: 'Versions & Release Notes', summary: 'RigMatch app updates, Ollama updates, and recent changes.' },
-  { id: 'support', eyebrow: 'Support', title: 'Feedback & Support', summary: 'Donationware link, bug reports, and diagnostics.' },
-  { id: 'advanced', eyebrow: 'Advanced', title: 'Scoring & Reset', summary: 'How scoring works and destructive cleanup.', advancedOnly: true },
+  { id: 'interface', title: 'Preferences', summary: 'Mode, theme, goals, and the Simple Mode path.' },
+  { id: 'achievements', title: 'Achievements', summary: 'Badges for the parts of RigMatch worth trying.' },
+  { id: 'storage', title: 'The Closet', summary: 'Who is taking up shelf space, and whether they earned it.' },
+  { id: 'providers', title: 'Providers', summary: 'Runtime, Ollama, LM Studio, and local-only scope.' },
+  { id: 'generation', title: 'ComfyUI', summary: 'Where image and video generation run, and whether RigMatch may unload models.' },
+  { id: 'updates', title: 'Updates', summary: 'RigMatch app updates, Ollama updates, and recent changes.' },
+  { id: 'support', title: 'Support', summary: 'Donationware link, bug reports, and diagnostics.' },
+  { id: 'advanced', title: 'Scoring and reset', summary: 'How scoring works and destructive cleanup.', advancedOnly: true },
 ];
 
 export type SettingsRailItem = SettingsSectionSpec & { status: string | null };

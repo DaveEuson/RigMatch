@@ -69,7 +69,7 @@ export function ClosetSection({
               </div>
               <span className="closet-size">{sizeGb > 0 ? `${sizeGb.toFixed(1)} GB` : '—'}</span>
               {isWinner ? (
-                <span className="closet-keep" title="Your current top match. Probably worth its shelf space.">WINNER</span>
+                <span className="closet-keep" title="Your current top match. Probably worth its shelf space.">Winner</span>
               ) : evictedBy(row) ? (
                 // A button that cannot do what it says is worse than no button.
                 // Ollama is the only thing RigMatch can delete from; ComfyUI
