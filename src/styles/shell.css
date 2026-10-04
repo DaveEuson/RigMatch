@@ -163,7 +163,8 @@
 .top-bar-icon-btn:hover,
 .top-match-chip:hover,
 .top-bar-connections:hover,
-.top-bar-settings:hover {
+.top-bar-settings:hover,
+.top-bar-donate:hover {
   background: var(--panel-hover);
 }
 
@@ -251,7 +252,8 @@
 .conn-dot.testing { background: var(--gold); }
 .conn-dot.down { background: var(--red); }
 
-.top-bar-settings {
+.top-bar-settings,
+.top-bar-donate {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -669,7 +671,8 @@
 @media (max-width: 1919px) {
   .top-bar:where(.advanced) .top-match-chip-name,
   .top-bar:where(.advanced) .top-bar-service-name,
-  .top-bar:where(.advanced) .top-bar-settings span { display: none; }
+  .top-bar:where(.advanced) .top-bar-settings span,
+  .top-bar:where(.advanced) .top-bar-donate span { display: none; }
   .top-bar:where(.advanced) .badge-case > .badge-slot { display: none; }
   .top-bar:where(.advanced) .badge-case > .badge-slot.recent { display: grid; }
   .top-bar:where(.advanced) .badge-case-count { display: inline-flex; }
@@ -679,7 +682,8 @@
 @media (max-width: 1599px) {
   .top-match-chip-name { display: none; }
   .top-bar-service-name { display: none; }
-  .top-bar-settings span { display: none; }
+  .top-bar-settings span,
+  .top-bar-donate span { display: none; }
   .top-bar .badge-case > .badge-slot { display: none; }
   .top-bar .badge-case > .badge-slot.recent { display: grid; }
   .top-bar .badge-case-count { display: inline-flex; }

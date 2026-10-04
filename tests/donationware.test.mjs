@@ -14,7 +14,7 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8');
 
 test('the top bar has a Donate button in both modes, and it opens the support dialog', () => {
   const bar = read('../src/components/TopBar.tsx');
-  const donate = bar.indexOf('className="top-bar-settings top-bar-donate"');
+  const donate = bar.indexOf('className="top-bar-donate"');
   assert.ok(donate > 0, 'the top bar lost its Donate button');
   // Settings is Advanced only; Donate must not sit inside that condition.
   assert.ok(donate < bar.indexOf('{advanced && onOpenSettings && ('), 'Donate moved behind the Advanced-only Settings condition');

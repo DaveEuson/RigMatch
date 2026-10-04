@@ -137,7 +137,7 @@ export function TopBar({
             menu, and Settings is Advanced only, so nothing said so in Simple. */}
         <button
           type="button"
-          className="top-bar-settings top-bar-donate"
+          className="top-bar-donate"
           onClick={onOpenSupport}
           title="RigMatch is donationware: every feature is free"
           // The word hides below 1600px wide, like Settings', and hidden text
