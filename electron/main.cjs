@@ -402,26 +402,38 @@ function createWindow() {
 
   // Electron grants every permission a renderer asks for unless a handler says
   // otherwise, which sat oddly beside contextIsolation, the sandbox, the CSP
-  // and the host allowlists. RigMatch needs exactly one: the microphone, for
-  // the listening test. Everything else — camera, geolocation, notifications,
+  // and the host allowlists. RigMatch needs two: the microphone, for the
+  // listening test, and notifications, for What's New's "tell me about new
+  // models" switch, which asks only when someone turns it on (refused, the
+  // switch could never turn on). Everything else — camera, geolocation,
   // clipboard reads, MIDI, USB, serial — is refused, and refused audibly
   // rather than silently, so a future feature that needs one fails loudly here
   // instead of mysteriously in the renderer.
-  const ALLOWED_PERMISSIONS = new Set(['media', 'audioCapture']);
-  const decide = (permission) => {
+  const ALLOWED_PERMISSIONS = new Set(['media', 'audioCapture', 'notifications']);
+  const decide = (permission, details = {}) => {
     const allowed = ALLOWED_PERMISSIONS.has(permission);
     if (!allowed) {
       console.warn(`[permissions] refused "${permission}": not in ALLOWED_PERMISSIONS`);
+      return false;
     }
-    return allowed;
+    // "media" is the camera as well as the microphone. Only sound is needed,
+    // and before this the camera queried as granted.
+    if (permission === 'media') {
+      const types = details.mediaTypes ?? (details.mediaType ? [details.mediaType] : []);
+      if (types.some((type) => type !== 'audio')) {
+        console.warn(`[permissions] refused "media" for ${types.join(', ')}: only audio is allowed`);
+        return false;
+      }
+    }
+    return true;
   };
-  win.webContents.session.setPermissionRequestHandler((_contents, permission, callback) => {
-    callback(decide(permission));
+  win.webContents.session.setPermissionRequestHandler((_contents, permission, callback, details) => {
+    callback(decide(permission, details));
   });
   // The request handler covers prompts; the check handler covers the synchronous
   // queries a page can make without prompting. Both are needed, or a permission
   // denied at the prompt still reads as "granted" when queried.
-  win.webContents.session.setPermissionCheckHandler((_contents, permission) => decide(permission));
+  win.webContents.session.setPermissionCheckHandler((_contents, permission, _origin, details) => decide(permission, details));
 
   if (isDev()) {
     win.loadURL('http://127.0.0.1:5173');
@@ -864,6 +876,10 @@ function publishPreviewDocument(html) {
   }
   return `${PREVIEW_SCHEME}://app/${id}`;
 }
+
+// Windows shows a desktop notification only for an app with an ID, and the
+// installer's shortcut carries this one (package.json build.appId).
+if (process.platform === 'win32') app.setAppUserModelId('ai.rigmatch.app');
 
 // One RigMatch at a time. Two instances race for the loopback bridge on
 // SCORES_SERVER_PORT: the loser binds nothing, so RigMatch Chat keeps talking to
