@@ -654,3 +654,13 @@
     min-width: 0;
   }
 }
+
+/* Short or narrow windows let the document scroll (App.css sets every row to
+   "auto" there). With the 100vh minimum still in force, a screen shorter than
+   the window had its spare height shared out among the rows, so on a 1366×768
+   laptop the top bar and the load strip stretched tall. The screen's own row
+   takes the spare height instead. */
+@media (max-width: 1200px), (max-height: 780px) {
+  .app-shell:not([data-ui-mode='beginner']) { grid-template-rows: auto auto 1fr auto; }
+  .app-shell.no-global-lineup:not([data-ui-mode='beginner']) { grid-template-rows: auto auto 1fr; }
+}

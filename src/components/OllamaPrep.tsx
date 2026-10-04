@@ -48,7 +48,7 @@ export function OllamaPrep({
         <div className="prep-actions">
           <button type="button" className="mini-button outline" onClick={onScanRig}>
             <RefreshCw aria-hidden="true" />
-            Check Again
+            Check again
           </button>
         </div>
       </div>
@@ -92,7 +92,7 @@ export function OllamaPrep({
           >
             {commandCopy === 'copied' ? 'Copied' : commandCopy === 'failed' ? 'Select it above' : 'Copy'}
           </button>
-          <p className="install-script-hint">Open a terminal, paste, and press Enter. Then click Check Again below.</p>
+          <p className="install-script-hint">Open a terminal, paste, and press Enter. Then click Check again below.</p>
         </div>
       ) : isReady && 'installerPath' in ip ? (
         <button type="button" className="install-ollama-btn ready" onClick={() => onLaunchOllamaInstaller(ip.installerPath)}>
@@ -129,7 +129,7 @@ export function OllamaPrep({
             <span>{isLinux ? 'Open a terminal, paste the command, and press Enter' : 'Run the installer — Ollama starts automatically in the background'}</span>
           </li>
           <li className="install-step"><b>3</b>
-            <span>Come back here and click <strong>Check Again</strong></span>
+            <span>Come back here and click <strong>Check again</strong></span>
           </li>
         </ol>
       )}
@@ -137,7 +137,7 @@ export function OllamaPrep({
       <div className="install-hero-footer">
         <button type="button" className="mini-button outline" onClick={onScanRig}>
           <RefreshCw aria-hidden="true" />
-          Check Again
+          Check again
         </button>
         <button type="button" className="mini-button outline" onClick={onOpenSetupGuide}>
           <ExternalLink aria-hidden="true" />
