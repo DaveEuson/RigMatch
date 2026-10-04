@@ -4140,36 +4140,37 @@ tbody tr.computer-row.selected {
   white-space: nowrap;
 }
 
+/* Stacked: it lives in the filter column now, and side by side its three
+   parts had about 80px each, one word to a line. */
 .score-legend-strip {
-  margin: 0 10px 8px;
+  margin: var(--s3) 0 0;
   min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid rgba(var(--blue-rgb), 0.32);
+  padding: var(--s3);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(8, 16, 19, 0.72);
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  gap: var(--s1);
   color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .score-legend-strip span {
-  color: var(--blue);
-  font-size: 12px;
-  font-weight: 900;
-  text-transform: uppercase;
-  white-space: nowrap;
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .score-legend-strip strong {
-  color: var(--text-strong);
-  font-size: 12px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .score-legend-strip em {
   min-width: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   font-style: normal;
 }
 
