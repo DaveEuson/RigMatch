@@ -121,7 +121,7 @@ const PRESENT = [
   // handler that is the whole of the renderer's posture toward the microphone.
   ['permission requests are gated', mainProcess, 'setPermissionRequestHandler'],
   ['permission checks are gated too', mainProcess, 'setPermissionCheckHandler'],
-  ['only the microphone is allowed', mainProcess, "ALLOWED_PERMISSIONS = new Set(['media'"],
+  ['only the microphone and notifications are allowed', mainProcess, "ALLOWED_PERMISSIONS = new Set(['media', 'audioCapture', 'notifications'])"],
   ['ComfyUI can be located automatically', mainProcess, 'comfy:locateFolder'],
   ['the scores bridge stays on loopback', mainProcess, "'127.0.0.1'"],
 
