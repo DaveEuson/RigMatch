@@ -26,6 +26,7 @@ export const releaseNotes: ReleaseNoteEntry[] = [
       'Sound is opt-in. Show effects now covers short sounds: a curtain when a show starts, a jingle and applause for a winner, a sting for a badge, and a soft buzz when a test or download fails. Before, the end-of-run jingles played whether or not you\'d switched anything on.',
       'RigMatch reads what each Ollama model can do from the model\'s own Ollama page: which sizes read pictures, and which models use tools, think or hear. Models now sit under the right filters, and models that can chat are no longer kept out of the lineup.',
       'Two new picture models: Z-Image Turbo and FLUX.2 [klein] 4B. Both fit a 12 GB card, share one text encoder, and run with the settings their makers publish.',
+      'RigMatch is donationware, and now says so: a Donate button in the top bar, and a line on the welcome and the Winner screen. Every feature stays free, and nothing is locked if you don\'t donate.',
       'Fixes: if Ollama stops mid-show, the show stays on screen and says why; failed downloads can be retried; tied models show as tied; a judge that can\'t run hands its questions to the automatic judge; and Labs says when ComfyUI is missing a model file instead of showing a raw error. My PC, What\'s New and Logs scroll again on an ordinary window, and a test\'s fixed settings are plain text instead of buttons you can\'t press.',
     ],
   },
