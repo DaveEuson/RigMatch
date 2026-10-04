@@ -3179,8 +3179,9 @@ function App() {
         };
         setRunReports((current) => addRunReport(current, stored));
       }
+      // The report bar announces the winner; a toast as well said it twice,
+      // on screen and to screen readers, and by the model's raw id.
       setReportReady(true);
-      setActivity(`Best match: ${winner.model} scored ${formatMatchScore(winner.scores)} for this setup.`);
       await agentArcadeApi.appendLog({
         level: 'info',
         source: 'renderer',
