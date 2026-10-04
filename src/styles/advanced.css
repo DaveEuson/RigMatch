@@ -328,3 +328,84 @@
 @media (max-width: 920px) {
   .app-shell[data-ui-mode='advanced'] .model-panel .cabinet-body { padding: 0 var(--s4) var(--s4); }
 }
+
+/* ---- A screen's header: title, one line of what it is, its actions ------------ */
+.app-shell[data-ui-mode='advanced'] .page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s3) var(--s5);
+  padding: var(--s4) var(--s5) var(--s3);
+}
+.app-shell[data-ui-mode='advanced'] .page-head h2 { margin: 0; color: var(--text-strong); font: 400 var(--fs-h1) / 1.1 var(--display); }
+.app-shell[data-ui-mode='advanced'] .page-head p { max-width: 76ch; margin: 4px 0 0; color: var(--text); font-size: var(--fs-ui); }
+.app-shell[data-ui-mode='advanced'] .page-head-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
+
+/* ---- Comparison ----------------------------------------------------------------- */
+.app-shell[data-ui-mode='advanced'] .speed-date-panel { border: 0; border-radius: 0; background: none; box-shadow: none; overflow: visible; }
+.app-shell[data-ui-mode='advanced'] .speed-date-body { gap: var(--s4); padding: 0 var(--s5) var(--s5); }
+.app-shell[data-ui-mode='advanced'] .comparison-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
+.app-shell[data-ui-mode='advanced'] .comparison-rail {
+  position: static;
+  flex-direction: row;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.app-shell[data-ui-mode='advanced'] .comparison-rail .comparison-rail-item {
+  display: inline-flex;
+  align-items: baseline;
+  width: auto;
+  min-height: 40px;
+  margin-bottom: -1px;
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+  font: 400 15px / 1 var(--ui);
+}
+.app-shell[data-ui-mode='advanced'] .comparison-rail .comparison-rail-item.active { border-bottom-color: var(--accent); background: none; color: var(--text-strong); font-weight: 700; }
+.app-shell[data-ui-mode='advanced'] .comparison-rail-status { color: var(--muted); font-weight: 400; font-size: var(--fs-ui); }
+.app-shell[data-ui-mode='advanced'] .comparison-view > section,
+.app-shell[data-ui-mode='advanced'] .speed-date-lineup-card,
+.app-shell[data-ui-mode='advanced'] .speed-date-results,
+.app-shell[data-ui-mode='advanced'] .speed-date-empty {
+  border: 0;
+  border-radius: var(--r-panel);
+  background: var(--panel);
+  box-shadow: none;
+}
+
+/* ---- Labs: what to run on the left, what came out on the right --------------------- */
+.app-shell[data-ui-mode='advanced'] .lab-page { border: 0; border-radius: 0; background: none; box-shadow: none; overflow: visible; }
+.app-shell[data-ui-mode='advanced'] .lab-layout {
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s5);
+  padding: 0 var(--s5) var(--s5);
+}
+.app-shell[data-ui-mode='advanced'] .lab-layout.single { grid-template-columns: minmax(0, 1fr); }
+.app-shell[data-ui-mode='advanced'] .lab-controls > * {
+  margin: 0;
+  border: 0;
+  border-radius: var(--r-panel);
+  background: var(--panel);
+  box-shadow: none;
+}
+.app-shell[data-ui-mode='advanced'] .lab-results { display: grid; gap: var(--s4); min-width: 0; }
+.app-shell[data-ui-mode='advanced'] .lab-results > .balance-row { padding: var(--s4); border-radius: var(--r-panel); background: var(--panel); }
+.app-shell[data-ui-mode='advanced'] .lab-empty { display: grid; justify-items: start; gap: var(--s2); padding: var(--s5); border-radius: var(--r-panel); background: var(--panel); color: var(--text); font-size: var(--fs-ui); }
+.app-shell[data-ui-mode='advanced'] .lab-empty strong { color: var(--text-strong); font: 400 var(--fs-h2) / 1.2 var(--display); }
+@media (max-width: 1100px) {
+  .app-shell[data-ui-mode='advanced'] .lab-layout { grid-template-columns: minmax(0, 1fr); }
+}
+.app-shell[data-ui-mode='advanced'] .comparison-rail { gap: 2px var(--s5); margin-top: var(--s2); }
+.app-shell[data-ui-mode='advanced'] .comparison-rail .comparison-rail-item { gap: 6px; }
