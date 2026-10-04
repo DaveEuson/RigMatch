@@ -495,3 +495,108 @@
 .app-shell[data-ui-mode='advanced'] .top-deck-winner.empty { padding: var(--s5); border: 0; border-radius: var(--r-panel); background: var(--panel); box-shadow: none; }
 .app-shell[data-ui-mode='advanced'] .top-match-empty { margin: 0 0 4px; color: var(--text-strong); font: 400 var(--fs-h2) / 1.2 var(--display); }
 .app-shell[data-ui-mode='advanced'] .top-match-score span { font-family: var(--ui); font-weight: 400; }
+
+/* ---- My PC › Logs ------------------------------------------------------------- */
+.app-shell[data-ui-mode='advanced'] .logs-page { border: 0; border-radius: 0; background: none; box-shadow: none; overflow: visible; }
+.app-shell[data-ui-mode='advanced'] .logs-view { display: grid; gap: var(--s3); padding: 0 var(--s5) var(--s5); }
+.app-shell[data-ui-mode='advanced'] .logs-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s4); }
+.app-shell[data-ui-mode='advanced'] .logs-sources { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.app-shell[data-ui-mode='advanced'] .logs-sources .chip { min-height: 32px; padding: 0 10px; }
+.app-shell[data-ui-mode='advanced'] .logs-sources .chip[aria-pressed='true'] { padding: 0 9px; }
+.app-shell[data-ui-mode='advanced'] .logs-count { color: var(--muted); font: 500 13px / 1 var(--figure); }
+.app-shell[data-ui-mode='advanced'] .logs-search input {
+  width: 240px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: var(--stage);
+  color: var(--text-strong);
+  font: 400 var(--fs-ui) / 1 var(--ui);
+}
+.app-shell[data-ui-mode='advanced'] .logs-levels { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); color: var(--muted); font-size: var(--fs-ui); }
+.app-shell[data-ui-mode='advanced'] .logs-level { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; color: var(--text-strong); cursor: pointer; }
+.app-shell[data-ui-mode='advanced'] .logs-level input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.app-shell[data-ui-mode='advanced'] .logs-level i { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); }
+.app-shell[data-ui-mode='advanced'] .logs-level.warn i { background: var(--gold); }
+.app-shell[data-ui-mode='advanced'] .logs-level.error i { background: var(--red); }
+.app-shell[data-ui-mode='advanced'] .logs-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.app-shell[data-ui-mode='advanced'] .logs-following { border-color: var(--green); }
+.app-shell[data-ui-mode='advanced'] .logs-pane {
+  height: 520px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  background: var(--stage);
+  font: 500 13px / 1.5 var(--figure);
+}
+.app-shell[data-ui-mode='advanced'] .logs-row {
+  display: grid;
+  grid-template-columns: 96px 120px 64px minmax(0, 1fr);
+  gap: var(--s3);
+  padding: 8px var(--s3);
+  border-bottom: 1px solid var(--line);
+  color: var(--text-strong);
+}
+.app-shell[data-ui-mode='advanced'] .logs-row.error { background: rgba(var(--red-rgb), 0.08); }
+.app-shell[data-ui-mode='advanced'] .logs-row.warn { background: rgba(var(--gold-rgb), 0.06); }
+.app-shell[data-ui-mode='advanced'] .logs-time { color: var(--muted); }
+.app-shell[data-ui-mode='advanced'] .logs-source { overflow: hidden; color: var(--blue); text-overflow: ellipsis; white-space: nowrap; }
+.app-shell[data-ui-mode='advanced'] .logs-level-tag { color: var(--blue); font-weight: 700; }
+.app-shell[data-ui-mode='advanced'] .logs-row.warn .logs-level-tag { color: var(--gold); }
+.app-shell[data-ui-mode='advanced'] .logs-row.error .logs-level-tag { color: var(--red); }
+.app-shell[data-ui-mode='advanced'] .logs-message { overflow-wrap: anywhere; white-space: pre-wrap; }
+.app-shell[data-ui-mode='advanced'] .logs-message details { margin-top: 4px; color: var(--muted); }
+.app-shell[data-ui-mode='advanced'] .logs-message pre { margin: 4px 0 0; white-space: pre-wrap; }
+.app-shell[data-ui-mode='advanced'] .logs-empty { padding: var(--s5); color: var(--muted); font: 400 var(--fs-ui) / 1.5 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .logs-path { margin: 0; color: var(--muted); font: 500 13px / 1.4 var(--figure); }
+@media (max-width: 920px) {
+  .app-shell[data-ui-mode='advanced'] .logs-row { grid-template-columns: 80px minmax(0, 1fr); }
+  .app-shell[data-ui-mode='advanced'] .logs-source, .app-shell[data-ui-mode='advanced'] .logs-level-tag { grid-column: 2; }
+  .app-shell[data-ui-mode='advanced'] .logs-message { grid-column: 1 / -1; }
+}
+
+/* ---- My PC › Overview ---------------------------------------------------------- */
+.app-shell[data-ui-mode='advanced'] .lan-panel,
+.app-shell[data-ui-mode='advanced'] .panel.lan-panel { border: 0; border-radius: 0; background: none; box-shadow: none; overflow: visible; }
+.app-shell[data-ui-mode='advanced'] .mypc-heading { margin: var(--s4) var(--s5) var(--s2); color: var(--text-strong); font: 400 var(--fs-h2) / 1.2 var(--display); }
+.app-shell[data-ui-mode='advanced'] .ollama-prep,
+.app-shell[data-ui-mode='advanced'] .ollama-install-hero,
+.app-shell[data-ui-mode='advanced'] .setup-doctor,
+.app-shell[data-ui-mode='advanced'] .rig-details-panel {
+  margin: 0 var(--s5) var(--s3);
+  border: 0;
+  border-radius: var(--r-panel);
+  background: var(--panel);
+  box-shadow: none;
+}
+.app-shell[data-ui-mode='advanced'] .prep-badge { border: 0; background: none; }
+/* Setup check: rows, not five boxes. */
+.app-shell[data-ui-mode='advanced'] .setup-doctor-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+.app-shell[data-ui-mode='advanced'] .setup-doctor-grid > * {
+  display: grid;
+  grid-template-columns: 160px 160px minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--s3);
+  min-height: var(--h-row);
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.app-shell[data-ui-mode='advanced'] .setup-doctor-grid > *:last-child { border-bottom: 0; }
+.app-shell[data-ui-mode='advanced'] .setup-doctor-grid > * > span:first-child { color: var(--muted); font: 400 var(--fs-ui) / 1.3 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .setup-doctor-grid > * > strong { font: 700 var(--fs-ui) / 1.3 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .setup-doctor-grid > * > em,
+.app-shell[data-ui-mode='advanced'] .setup-doctor-grid > * > p { margin: 0; color: var(--text); font: 400 var(--fs-ui) / 1.4 var(--ui); font-style: normal; }
+.app-shell[data-ui-mode='advanced'] .mypc-hosts { margin: 0 var(--s5) var(--s3); border: 0; border-radius: 0; background: none; }
+.app-shell[data-ui-mode='advanced'] .mypc-hosts th { border-bottom: 1px solid var(--line); background: none; color: var(--muted); font: 400 var(--fs-ui) / 1.2 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .mypc-hosts td { border-bottom: 1px solid var(--line); background: none; font-size: var(--fs-ui); }
+.app-shell[data-ui-mode='advanced'] .mypc-hosts tr.selected td { background: var(--panel-2); }
+.app-shell[data-ui-mode='advanced'] .rig-details-grid > * { border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; box-shadow: none; }
+.app-shell[data-ui-mode='advanced'] .lan-panel > .utility-stat { margin: 0 var(--s5) var(--s3); border: 0; border-radius: var(--r-panel); background: var(--panel); box-shadow: none; }
+@media (max-width: 920px) {
+  .app-shell[data-ui-mode='advanced'] .setup-doctor-grid > * { grid-template-columns: minmax(0, 1fr); }
+}

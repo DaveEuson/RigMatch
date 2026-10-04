@@ -21,14 +21,13 @@ import { describeLabAccuracy, rankLabList, type LabChannel } from '../lib/channe
 import type { AdvancedLabResult } from '../lib/labResults';
 import { workbenchById, type Workbench } from '../lib/workbench';
 import { useDialog } from '../lib/useDialog';
-import type { AppLogEntry, AutoUpdateStatus, ModelRow, NetworkHost, OllamaStatus, SystemProfile, TestedModelScore, UpdateChannel, UpdateCheckResponse } from '../types';
+import type { AutoUpdateStatus, ModelRow, NetworkHost, OllamaStatus, SystemProfile, TestedModelScore, UpdateChannel, UpdateCheckResponse } from '../types';
 import { ClosetSection } from './ClosetSection';
 import { ComfySettings } from './ComfySettings';
 import { BrandMark } from './CommonChrome';
 import { GoalsSummary } from './GoalsSummary';
 import { HistoryTimeline } from './HistoryTimeline';
 import { HowWeScoreSection } from './HowWeScoreSection';
-import { LogEntry } from './LogEntry';
 import { SettingsSection } from './SettingsSection';
 import { ModelDemoChips } from './SkillDemoViewers';
 import { ThemePicker } from './ThemePicker';
@@ -43,7 +42,7 @@ import { ReleaseNotes, UpdateCenter } from './UpdateCenter';
 // `History` must be imported explicitly: without it the name resolves to the
 // DOM's global History constructor, which is a real value, so nothing errors
 // until it is used as a JSX component.
-import { Bug, ChevronRight, Coffee, Copy, Download, ExternalLink, FolderOpen, History, RefreshCw, Settings, Trash2, Trophy, X } from 'lucide-react';
+import { Bug, ChevronRight, Coffee, Copy, Download, ExternalLink, History, RefreshCw, Settings, Trash2, Trophy, X } from 'lucide-react';
 import { getModelAvatarSrc } from '../lib/modelAvatars';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AllDemosButton } from './SkillDemoViewers';
@@ -73,13 +72,11 @@ export function UtilityPanel({
   uiMode,
   selectedGoals,
   installedRows,
-  appLogs,
   modelScores,
   updateChannel,
   updateCheck,
   isCheckingUpdates,
   logPath,
-  isLoadingLogs,
   onThemeChange,
   onUiModeChange,
   onEditGoals,
@@ -87,9 +84,6 @@ export function UtilityPanel({
   topMatch,
   onDeleteModel,
   onRefreshLogs,
-  onCopyLogs,
-  onClearLogs,
-  onOpenLogsFolder,
   onClearScore,
   onClearAllScores,
   onClearAllData,
@@ -117,13 +111,11 @@ export function UtilityPanel({
   uiMode: UiMode;
   selectedGoals: GoalId[];
   installedRows: ModelRow[];
-  appLogs: AppLogEntry[];
   modelScores: Record<string, TestedModelScore>;
   updateChannel: UpdateChannel;
   updateCheck: UpdateCheckResponse | null;
   isCheckingUpdates: boolean;
   logPath: string;
-  isLoadingLogs: boolean;
   onThemeChange: (themeId: ThemeId) => void;
   onUiModeChange: (mode: UiMode) => void;
   onEditGoals: () => void;
@@ -133,9 +125,6 @@ export function UtilityPanel({
   topMatch?: ReactNode;
   onDeleteModel: (row: ModelRow) => void;
   onRefreshLogs: () => void;
-  onCopyLogs: () => void;
-  onClearLogs: () => void;
-  onOpenLogsFolder: () => void;
   onClearScore: (model: string) => void;
   onClearAllScores: () => void;
   onClearAllData: () => void;
@@ -311,57 +300,6 @@ export function UtilityPanel({
 
   // The run log belongs to every channel: a failed test is a failed test
   // whatever it was testing.
-  const logConsole = (
-    <section className="log-console advanced-only" aria-label="Run logs">
-      <div className="log-console-head">
-        <div>
-          <span>Run Logs</span>
-          <strong>{isLoadingLogs ? 'Loading' : `${appLogs.length} entries`}</strong>
-          <em>{logPath || 'Log file not created yet'}</em>
-        </div>
-        <div className="log-actions">
-          <button type="button" className="mini-button outline icon-only" onClick={onRefreshLogs} title="Refresh logs" aria-label="Refresh logs">
-            <RefreshCw className={isLoadingLogs ? 'spin' : ''} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="mini-button outline icon-only"
-            onClick={onCopyLogs}
-            disabled={!appLogs.length}
-            title={appLogs.length ? 'Copy logs' : 'Nothing to copy — the log is empty'}
-            aria-label={appLogs.length ? 'Copy logs' : 'Copy logs — nothing to copy, the log is empty'}
-          >
-            <Copy aria-hidden="true" />
-          </button>
-          <button type="button" className="mini-button outline icon-only" onClick={onOpenLogsFolder} title="Open log folder" aria-label="Open log folder">
-            <FolderOpen aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="mini-button outline"
-            onClick={onClearLogs}
-            disabled={!appLogs.length}
-            title={appLogs.length ? 'Clear the run log' : 'Nothing to clear — the log is empty'}
-          >
-            Clear
-          </button>
-        </div>
-      </div>
-
-      <div className="log-list">
-        {appLogs.length ? (
-          appLogs.slice(0, 12).map((entry) => (
-            <LogEntry key={entry.id} entry={entry} />
-          ))
-        ) : (
-          <div className="utility-empty">
-            <strong>No logs yet</strong>
-            <span>Failed tests and desktop bridge errors will appear here.</span>
-          </div>
-        )}
-      </div>
-    </section>
-  );
 
   return (
     <section
@@ -484,7 +422,6 @@ export function UtilityPanel({
               <span>{workbench.emptyHint}</span>
             </div>
           )}
-          {logConsole}
         </div>
       )}
 
@@ -693,7 +630,6 @@ export function UtilityPanel({
               <span>Compare two or more models to rank the best match.</span>
             </div>
           )}
-          {logConsole}
         </div>
       )}
 
