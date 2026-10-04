@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Is Ajax everything it claims to be? A RigMatch report</title>
     <meta name="description" content="RigMatch ran Ajax, the agent model made for Odysseus, and the stock Qwen 3.5 9B it was fine-tuned from through the same questions on the same PC, and checked each of Ajax's claims. Every answer is shown." />
-    <link rel="icon" type="image/png" href="../app/rigmatch-brand-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="../icons/rigmatch-32.svg" />
     <meta property="og:title" content="Is Ajax everything it claims to be?" />
     <meta property="og:description" content="Ajax and the stock Qwen 3.5 9B, the same questions, the same PC, every answer side by side. A RigMatch report." />
     <meta property="og:type" content="article" />
@@ -16,22 +16,23 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Is Ajax everything it claims to be?" />
     <meta name="twitter:image" content="https://daveeuson.github.io/RigMatch/ajax/og-image.png" />
+    <link rel="stylesheet" href="../site.css" />
     <style>
       :root {
         color-scheme: dark;
-        --bg: #080b0f;
-        --bg-soft: #0d1117;
-        --panel: #151c28;
-        --panel-strong: #1d2533;
-        --line: #2c3b4d;
-        --text: #f7f0df;
-        --muted: #b9b1a3;
-        --quiet: #8b949e;
-        --gold: #ffc957;
-        --gold-dark: #c28a22;
-        --teal: #69d1c8;
-        --coral: #ff6f86;
-        --green: #9bc278;
+        --bg: #1b1726;
+        --bg-soft: #201a2b;
+        --panel: #241e30;
+        --panel-strong: #2e2740;
+        --line: #3b3349;
+        --text: #f0e7dc;
+        --muted: #bdafa6;
+        --quiet: #a99c94;
+        --gold: #efbc5a;
+        --gold-dark: #efbc5a;
+        --teal: #4fb3a5;
+        --coral: #e37185;
+        --green: #95b46a;
         --radius: 14px;
         --wrap: 1160px;
         --rail: 132px;
@@ -40,10 +41,9 @@
       html { scroll-behavior: smooth; }
       body {
         margin: 0;
-        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        font-family: var(--ui);
         color: var(--text);
         background:
-          radial-gradient(1100px 520px at 50% -12%, rgba(255, 201, 87, 0.09), transparent 62%),
           var(--bg);
         line-height: 1.55;
         -webkit-font-smoothing: antialiased;
@@ -56,19 +56,19 @@
       .num { font-variant-numeric: tabular-nums; }
 
       /* Nav, as on the landing page */
-      header.nav { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(10px); background: rgba(8, 11, 15, 0.78); border-bottom: 1px solid var(--line); }
+      header.nav { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(10px); background: rgba(27, 23, 38, 0.88); border-bottom: 1px solid var(--line); }
       .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 62px; }
-      .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; color: var(--text); text-decoration: none; }
-      .brand .dot { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, var(--gold), var(--gold-dark)); display: grid; place-items: center; color: #10131a; font-weight: 900; }
+      .brand { display: flex; align-items: center; gap: 10px; font: 400 20px / 1 var(--display); color: var(--text-strong); text-decoration: none; }
+      .brand img { width: 30px; height: 30px; }
       .nav-links { display: flex; align-items: center; gap: 22px; font-size: 14px; font-weight: 600; }
       .nav-links a { color: var(--muted); text-decoration: none; }
       .nav-links a:hover { color: var(--text); }
-      .nav-links a.nav-cta { background: var(--gold); color: #10131a; padding: 8px 14px; border-radius: 999px; font-weight: 800; }
+      .nav-links a.nav-cta { background: var(--gold); color: var(--gold-ink); padding: 9px 16px; border-radius: 8px; font-weight: 700; }
       @media (max-width: 640px) { .nav-links a.hide-sm { display: none; } }
 
       /* The headline: the question, the two contestants, the verdicts */
       .masthead { padding: 56px 0 28px; }
-      .masthead h1 { font-size: clamp(36px, 6vw, 68px); line-height: 1.02; letter-spacing: -0.03em; margin: 0 0 18px; max-width: 14em; text-wrap: balance; }
+      .masthead h1 { font-size: clamp(36px, 6vw, 68px); line-height: 1.04; margin: 0 0 18px; max-width: 14em; text-wrap: balance; }
       .deck { color: var(--muted); font-size: 19px; max-width: 62ch; margin: 0; }
       .deck strong { color: var(--text); font-weight: 650; }
       .byline { margin-top: 14px; color: var(--quiet); font-size: 14px; }
@@ -88,7 +88,7 @@
       .claim-q q { color: var(--text); font-style: italic; }
       .claim-q q::before, .claim-q q::after { color: var(--gold); }
 
-      .verdict { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; padding: 6px 12px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+      .verdict { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; padding: 6px 12px; border-radius: 8px; border: 1px solid currentColor; white-space: nowrap; }
       .verdict svg { width: 14px; height: 14px; }
       .v-holds { color: var(--green); }
       .v-partly { color: var(--gold); }
@@ -97,10 +97,10 @@
 
       /* A claim's section */
       section.claim { padding: 64px 0 8px; }
-      section.claim > .wrap > h2 { font-size: clamp(26px, 3.6vw, 38px); line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 12px; max-width: 22em; text-wrap: balance; }
+      section.claim > .wrap > h2 { font-size: clamp(26px, 3.6vw, 38px); line-height: 1.12; margin: 0 0 12px; max-width: 22em; text-wrap: balance; }
       .claim-lede { color: var(--muted); max-width: 66ch; margin: 0 0 8px; font-size: 17px; }
       .block { margin-top: 40px; }
-      .block h3 { font-size: 21px; margin: 0 0 8px; letter-spacing: -0.01em; }
+      .block h3 { font-size: 21px; margin: 0 0 8px; }
       .block .claim-lede { font-size: 16px; }
       .claim-lede q { color: var(--text); font-style: italic; }
       .tally { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: baseline; margin: 26px 0 6px; padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
@@ -110,7 +110,7 @@
       .tally .side small { color: var(--quiet); font-size: 13px; margin: 0 10px 0 4px; }
       .tally .side.right small { margin: 0 0 0 4px; }
       .tally .side.right .name { margin-right: 10px; }
-      .tally .what { text-align: center; color: var(--quiet); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; }
+      .tally .what { text-align: center; color: var(--quiet); font-size: 14px; white-space: nowrap; }
       .later { color: var(--quiet); font-size: 14px; font-weight: 600; }
 
       /* The transcript: two columns around a rail of question keys */
@@ -140,7 +140,7 @@
       .s-mid { color: var(--gold); }
       .s-bad { color: var(--coral); }
       .answer .text { margin: 0; color: var(--text); font-size: 15px; white-space: pre-wrap; overflow-wrap: anywhere; }
-      .answer .call { font-family: "Cascadia Mono", Consolas, ui-monospace, monospace; font-size: 13px; color: var(--teal); white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+      .answer .call { font-family: var(--figure); font-size: 13px; color: var(--teal); white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
       .answer .note { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
       .answer details summary { cursor: pointer; color: var(--gold); font-size: 13px; font-weight: 700; margin-top: 8px; list-style: none; }
       .answer details summary::-webkit-details-marker { display: none; }
@@ -154,14 +154,14 @@
       .measures { border-top: 1px solid var(--line); margin-top: 22px; }
       .m-row { display: grid; grid-template-columns: 1fr var(--rail) 1fr; align-items: center; border-bottom: 1px solid var(--line); padding: 16px 0; }
       .m-row.head { padding: 10px 0; color: var(--quiet); font-size: 13px; font-weight: 700; }
-      .m-row .m-key { text-align: center; color: var(--quiet); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+      .m-row .m-key { text-align: center; color: var(--quiet); font-size: 14px; }
       .m-row .right { text-align: right; }
       .m-row b { font-size: 24px; font-weight: 800; }
       .m-row .unit { color: var(--quiet); font-size: 13px; margin-left: 6px; }
       .m-row .right .unit { margin: 0 6px 0 0; }
 
       .method { padding: 72px 0 24px; }
-      .method h2 { font-size: 28px; margin: 0 0 14px; letter-spacing: -0.02em; }
+      .method h2 { font-size: 28px; margin: 0 0 14px; }
       .method dl { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 10px 22px; margin: 0; max-width: 900px; }
       .method dt { color: var(--quiet); font-size: 14px; }
       .method dd { margin: 0; color: var(--text); font-size: 15px; }
@@ -172,11 +172,11 @@
       .close-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 30px; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; }
       .close-panel h2 { margin: 0 0 6px; font-size: 26px; }
       .close-panel p { margin: 0; color: var(--muted); max-width: 52ch; }
-      .btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; border-radius: 999px; font-weight: 800; font-size: 15px; text-decoration: none; }
-      .btn-primary { background: linear-gradient(135deg, var(--gold), var(--gold-dark)); color: #10131a; box-shadow: 0 10px 30px rgba(255, 201, 87, 0.2); }
-      .btn-primary:hover { color: #10131a; filter: brightness(1.06); }
+      .btn { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 22px; border-radius: 8px; font-weight: 700; font-size: 16px; text-decoration: none; }
+      .btn-primary { background: var(--gold); color: var(--gold-ink); }
+      .btn-primary:hover { background: #f5ca72; color: var(--gold-ink); }
 
-      footer { border-top: 1px solid var(--line); padding: 28px 0; color: var(--quiet); font-size: 13px; }
+      footer { border-top: 1px solid var(--line); padding: 28px 0; color: var(--quiet); font-size: 14px; }
       footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
       footer a { color: var(--muted); text-decoration: none; margin-left: 18px; }
 
@@ -212,7 +212,7 @@
   <body>
     <!--
       THESIS: The answers make the case. Ajax and the stock Qwen 3.5 9B it was fine-tuned from, side by side on every question that tests one of Ajax's claims; refuses the benchmark-chart page that asks readers to trust a bar.
-      OWN-WORLD: RigMatch's site: night ground #080b0f, cream text, gold for verdicts and actions, teal for better, coral for worse; contestant portraits from the app; a centre rail of drawn verdict marks between two transcript columns.
+      OWN-WORLD: RigMatch's site, in the app's redesign: the plum stage #1b1726, Young Serif headings over Atkinson Hyperlegible, gold for verdicts and actions, teal for better, pink for worse; contestant portraits from the app; a centre rail of drawn verdict marks between two transcript columns.
       STORY: A reader sees the four claims and their verdicts in one screen, then checks any verdict against the actual answers, then can run the same test on their own PC.
       FIRST VIEWPORT: The question as a large headline, a one-paragraph deck, the two portraits facing each other across the rail, and the four claims with their verdict chips; the download sits in the nav.
       FORM: Annotated transcript fused with a ruled reference page (centre rail) and a normalling schedule (the rail breaks where the fine-tune changed the answer); dealt structure 4 of 7; seed a1b2c3d4.
@@ -220,7 +220,7 @@
     -->
     <header class="nav">
       <div class="wrap nav-inner">
-        <a class="brand" href="../"><span class="dot">R</span> RigMatch</a>
+        <a class="brand" href="../"><img src="../icons/rigmatch-32.svg" alt="" />RigMatch</a>
         <nav class="nav-links" aria-label="Site">
           <a href="#method" class="hide-sm">How it was tested</a>
           <a href="https://github.com/DaveEuson/RigMatch" class="hide-sm">GitHub</a>

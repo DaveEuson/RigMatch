@@ -1,249 +1,253 @@
 <!doctype html>
+<!-- RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE. -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RigMatch — find the best local AI your PC can actually run</title>
-    <meta
-      name="description"
-      content="RigMatch benchmarks local AI models on your own hardware through Ollama, scores each on speed, answer quality, and hardware fit, and crowns your Top Match. 100% local — no account, no cloud."
-    />
-    <link rel="icon" type="image/png" href="./app/rigmatch-brand-icon.png" />
-    <meta property="og:title" content="RigMatch — the AI dating game show for your PC" />
-    <meta property="og:description" content="Find the best local AI model your computer can actually run. 100% local." />
+    <title>RigMatch · Find the AI your computer was made for</title>
+    <meta name="description" content="RigMatch tests local AI models on your own PC and crowns a Top Match: a score measured on your machine, not taken from a leaderboard. Free for Windows, macOS and Linux. Nothing leaves your computer." />
+    <link rel="icon" type="image/svg+xml" href="./icons/rigmatch-32.svg" />
+    <link rel="stylesheet" href="./site.css" />
+    <meta name="theme-color" content="#1b1726" />
+    <meta property="og:title" content="RigMatch: find the AI your computer was made for" />
+    <meta property="og:description" content="Local models take the stage on your own PC. One walks away as your Top Match." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://daveeuson.github.io/RigMatch/" />
     <meta property="og:image" content="https://daveeuson.github.io/RigMatch/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="RigMatch — the AI dating game show for your PC" />
-    <meta name="twitter:description" content="Find the best local AI model your computer can actually run. 100% local — no account, no cloud." />
+    <meta name="twitter:title" content="RigMatch: find the AI your computer was made for" />
+    <meta name="twitter:description" content="Local models take the stage on your own PC. One walks away as your Top Match. Nothing leaves your computer." />
     <meta name="twitter:image" content="https://daveeuson.github.io/RigMatch/og-image.png" />
     <style>
-      :root {
-        color-scheme: dark;
-        --bg: #080b0f;
-        --bg-soft: #0d1117;
-        --panel: #151c28;
-        --panel-strong: #1d2533;
-        --line: #2c3b4d;
-        --text: #f7f0df;
-        --muted: #b9b1a3;
-        --quiet: #7d8793;
-        --gold: #ffc957;
-        --gold-dark: #c28a22;
-        --teal: #69d1c8;
-        --coral: #ff6f86;
-        --green: #9bc278;
-        --radius: 16px;
-        --shadow: 0 24px 80px rgba(0, 0, 0, 0.46);
-        --wrap: 1080px;
-      }
-      * { box-sizing: border-box; }
-      html { scroll-behavior: smooth; }
-      body {
-        margin: 0;
-        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-        color: var(--text);
-        background:
-          radial-gradient(1200px 600px at 70% -10%, rgba(255, 201, 87, 0.10), transparent 60%),
-          radial-gradient(900px 500px at 0% 20%, rgba(105, 209, 200, 0.08), transparent 55%),
-          var(--bg);
-        line-height: 1.55;
-        -webkit-font-smoothing: antialiased;
-      }
-      a { color: inherit; }
-      .wrap { width: 100%; max-width: var(--wrap); margin: 0 auto; padding: 0 22px; }
+      section { padding-block: 56px 24px; }
+      section h2 { margin: 0; font-size: clamp(30px, 3.6vw, 42px); line-height: 1.12; }
+      .lede-muted { max-width: 62ch; margin: 0; color: var(--muted); }
 
-      /* Nav */
-      header.nav {
-        position: sticky; top: 0; z-index: 20;
-        backdrop-filter: blur(10px);
-        background: rgba(8, 11, 15, 0.72);
-        border-bottom: 1px solid var(--line);
-      }
-      .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 62px; }
-      .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: 0.2px; }
-      .brand .dot { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, var(--gold), var(--gold-dark)); display: grid; place-items: center; color: #10131a; font-weight: 900; }
-      .nav-links { display: flex; align-items: center; gap: 22px; font-size: 14px; font-weight: 600; }
-      .nav-links a { color: var(--muted); text-decoration: none; }
-      .nav-links a:hover { color: var(--text); }
-      .nav-links a.nav-cta { background: var(--gold); color: #10131a; padding: 8px 14px; border-radius: 999px; font-weight: 800; }
-      @media (max-width: 640px) { .nav-links a.hide-sm { display: none; } }
+      /* Hero: the pitch beside a night on the stage. */
+      .hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); align-items: center; gap: 40px; padding-block: 40px 24px; }
+      .hero-copy { display: flex; flex-direction: column; gap: 20px; }
+      .host { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 15px; }
+      .host img { width: 52px; height: 52px; border-radius: 12px; box-shadow: 0 0 0 1px rgba(239, 188, 90, 0.45); }
+      .hero h1 { margin: 0; font-size: clamp(40px, 5.4vw, 64px); line-height: 1.04; }
+      .hero p { max-width: 52ch; margin: 0; font-size: 19px; text-wrap: pretty; }
+      .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+      .hero-note { color: var(--muted); font-size: 14px; }
 
-      /* Buttons */
-      .btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; border-radius: 999px; font-weight: 800; font-size: 15px; text-decoration: none; border: 1px solid transparent; cursor: pointer; transition: transform 0.08s ease; }
-      .btn:active { transform: translateY(1px); }
-      .btn-primary { background: linear-gradient(135deg, var(--gold), var(--gold-dark)); color: #10131a; box-shadow: 0 10px 30px rgba(255, 201, 87, 0.22); }
-      .btn-ghost { background: transparent; color: var(--text); border-color: var(--line); }
-      .btn-ghost:hover { border-color: var(--gold); }
+      .stage { display: flex; flex-direction: column; gap: 18px; padding: 16px 18px 20px; border: 1px solid rgba(239, 188, 90, 0.45); border-radius: 16px; background: radial-gradient(ellipse at 50% 0%, #4a2a40, #1c1426 72%); }
+      .bulbs { display: flex; justify-content: space-between; }
+      .bulbs span { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 10px rgba(239, 188, 90, 0.8); }
+      .stage-head { text-align: center; }
+      .stage-head strong { display: block; color: var(--text-strong); font: 400 26px / 1.2 var(--display); }
+      .stage-head span { font-size: 14px; }
+      .stage-cast { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; margin: 0; padding: 0; list-style: none; }
+      .stage-cast li { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 130px; text-align: center; }
+      .stage-cast img { width: 84px; height: 84px; border-radius: 14px; box-shadow: 0 0 0 1px rgba(239, 188, 90, 0.45); }
+      .stage-cast b { color: var(--text-strong); font: 400 18px / 1.2 var(--display); }
+      .stage-cast span { font-size: 14px; color: var(--muted); }
+      .stage-cast .done { opacity: 0.85; }
+      .stage-cast .done span { color: var(--green); }
+      .stage-cast .on img { box-shadow: 0 0 0 2px var(--pink), 0 0 24px rgba(227, 113, 133, 0.45); }
+      .stage-cast .on span { color: var(--text-strong); }
+      .stage-cast .next { opacity: 0.7; }
+      .progress { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 10px; background: #120f1b; font-size: 14px; }
+      .progress div:first-child { display: flex; justify-content: space-between; gap: 12px; }
+      .progress div:first-child span:first-child { color: var(--text-strong); }
+      .bar { height: 8px; border-radius: 4px; background: var(--panel-2); }
+      .bar i { display: block; width: 47%; height: 8px; border-radius: 4px; background: var(--pink); }
 
-      /* Hero */
-      .hero { padding: 64px 0 40px; }
-      .hero-grid { display: grid; gap: 40px; }
-      .eyebrow { color: var(--gold); font-weight: 800; letter-spacing: 2px; font-size: 12px; text-transform: uppercase; }
-      h1 { font-size: clamp(34px, 5vw, 52px); line-height: 1.06; margin: 14px 0 16px; letter-spacing: -0.5px; max-width: 18em; text-wrap: balance; }
-      h1 em { color: var(--gold); font-style: normal; }
-      .lede { color: var(--muted); font-size: 18px; max-width: 58ch; }
-      .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
-      .cta-note { color: var(--quiet); font-size: 13px; margin-top: 12px; }
+      /* How it works: four steps in order, so they are numbered. */
+      .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 0 28px; margin: 28px 0 0; padding: 0; list-style: none; counter-reset: step; }
+      .steps li { display: flex; flex-direction: column; gap: 8px; padding: 18px 0; border-top: 2px solid var(--line); counter-increment: step; }
+      .steps .step-mark { display: flex; align-items: center; gap: 12px; color: var(--text); }
+      .steps .step-mark svg { width: 28px; height: 28px; }
+      .steps .step-mark::after { content: '0' counter(step); color: var(--muted); font: 500 14px / 1 var(--figure); }
+      .steps h3 { margin: 0; font-size: 22px; }
+      .steps p { margin: 0; color: var(--muted); font-size: 16px; }
 
-      /* Screenshots of the real app */
-      .shot { margin: 0; background: var(--bg-soft); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
-      .shot img { display: block; width: 100%; height: auto; }
-      .shot figcaption { padding: 12px 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
-      .steps + .shot { margin-top: 26px; }
+      /* A real result. */
+      .top-match { display: flex; flex-wrap: wrap; align-items: center; gap: 28px; padding: 28px; border: 1px solid rgba(239, 188, 90, 0.45); border-radius: 16px; background: linear-gradient(90deg, rgba(28, 20, 38, 0.55), rgba(28, 20, 38, 0.94) 55%), url('./assets/set-speed-date.webp') center / cover; }
+      .top-match img { width: 160px; height: 160px; border-radius: 18px; box-shadow: 0 0 0 3px var(--gold), 0 0 40px rgba(239, 188, 90, 0.45); }
+      .top-match > div { display: flex; flex: 1; flex-direction: column; gap: 6px; min-width: 260px; }
+      .top-match .top-match-name { margin: 0; color: var(--text-strong); font: 400 clamp(36px, 4.4vw, 54px) / 1 var(--display); }
+      .top-match-score { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; }
+      .top-match-score .figure { color: var(--text-strong); font-size: 48px; line-height: 1.1; }
+      .top-match p { max-width: 52ch; margin: 0; font-size: 16px; }
 
-      /* Sections */
-      section { padding: 54px 0; }
-      .section-head { text-align: center; max-width: 640px; margin: 0 auto 34px; }
-      .section-head h2 { font-size: clamp(26px, 3.5vw, 34px); margin: 0 0 10px; }
-      .section-head p { color: var(--muted); margin: 0; }
+      /* The score. */
+      .pillars { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 12px; margin: 24px 0 0; padding: 0; list-style: none; }
+      .pillars li { display: flex; flex-direction: column; gap: 6px; padding: 18px; border-radius: 12px; background: var(--panel); }
+      .pillars li div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+      .pillars b { color: var(--text-strong); font-size: 18px; }
+      .pillars .figure { color: var(--muted); font-size: 14px; }
+      .pillars p { margin: 0; color: var(--muted); font-size: 15px; }
 
-      .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
-      .step { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
-      .step .n { width: 34px; height: 34px; border-radius: 10px; background: rgba(255, 201, 87, 0.14); color: var(--gold); font-weight: 900; display: grid; place-items: center; margin-bottom: 12px; }
-      .step h3 { margin: 0 0 8px; font-size: 18px; }
-      .step p { margin: 0; color: var(--muted); font-size: 14px; }
-      @media (max-width: 760px) { .steps { grid-template-columns: 1fr; } }
+      /* What it tests. */
+      .kinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 0 28px; margin: 24px 0 0; padding: 0; list-style: none; }
+      .kinds li { display: flex; align-items: flex-start; gap: 14px; padding: 16px 0; border-top: 1px solid var(--line); }
+      .kinds svg { width: 28px; height: 28px; flex: none; margin-top: 2px; color: var(--text); }
+      .kinds b { display: block; color: var(--text-strong); }
+      .kinds span { color: var(--muted); font-size: 15px; }
 
-      .pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 8px; }
-      .pillar { text-align: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px 18px; }
-      .pillar .emoji { font-size: 30px; }
-      .pillar h4 { margin: 10px 0 6px; font-size: 17px; }
-      .pillar p { margin: 0; color: var(--muted); font-size: 13px; }
-      @media (max-width: 760px) { .pillars { grid-template-columns: 1fr; } }
+      /* The Ajax report. */
+      .report { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; padding: 24px 28px; border-radius: 16px; background: var(--panel); }
+      .report img { width: 96px; height: 96px; border-radius: 16px; }
+      .report div { flex: 1; min-width: 260px; }
+      .report h2 { font-size: clamp(26px, 3vw, 34px); }
+      .report p { margin: 6px 0 0; color: var(--muted); }
 
-      .trust { text-align: center; background: linear-gradient(180deg, rgba(105, 209, 200, 0.06), transparent); border: 1px solid var(--line); border-radius: var(--radius); padding: 40px 24px; }
-      .trust h2 { font-size: clamp(24px, 3vw, 30px); margin: 0 0 10px; }
-      .trust p { color: var(--muted); margin: 0 auto; max-width: 46ch; }
-      .trust .badges { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 18px; }
-      .trust .badges span { font-size: 13px; font-weight: 700; color: var(--green); border: 1px solid rgba(155, 194, 120, 0.3); border-radius: 999px; padding: 6px 14px; background: rgba(155, 194, 120, 0.06); }
+      /* Local. */
+      .local { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); align-items: center; gap: 24px; padding: 32px; border-radius: 16px; background: var(--panel); }
+      .local h2 { font-size: clamp(28px, 3.2vw, 38px); }
+      .local p { margin: 10px 0 0; color: var(--muted); }
+      .local ul { margin: 0; padding: 0; list-style: none; }
+      .local li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); color: var(--text-strong); }
+      .local li svg { width: 22px; height: 22px; color: var(--green); }
 
-      .final { text-align: center; }
-      .final h2 { font-size: clamp(28px, 4vw, 40px); margin: 0 0 14px; }
-      .final .hero-cta { justify-content: center; }
-
-      footer { border-top: 1px solid var(--line); padding: 30px 0; color: var(--quiet); font-size: 13px; }
-      .foot-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
-      .foot-inner a { color: var(--muted); text-decoration: none; margin-left: 18px; }
-      .foot-inner a:hover { color: var(--text); }
+      /* Download. */
+      .download { display: flex; flex-direction: column; align-items: center; gap: 22px; padding-block: 40px 72px; text-align: center; }
+      .download .apps { display: flex; gap: 16px; }
+      .download .apps img { width: 96px; height: 96px; }
+      .download h2 { font-size: clamp(34px, 4.4vw, 52px); }
+      .download p { max-width: 54ch; margin: 0; color: var(--muted); }
+      .download .hero-actions { justify-content: center; }
     </style>
   </head>
   <body>
-    <header class="nav">
-      <div class="wrap nav-inner">
-        <div class="brand"><span class="dot">R</span> RigMatch</div>
-        <nav class="nav-links">
-          <a href="#how" class="hide-sm">How it works</a>
-          <a href="#score" class="hide-sm">Match Score</a>
-          <a href="https://github.com/DaveEuson/RigMatch" class="hide-sm">GitHub</a>
-          <a href="./app/" class="nav-cta">Try the demo</a>
-        </nav>
-      </div>
+    <div class="stripe"></div>
+    <header class="wrap site-head">
+      <a class="brand" href="#top"><img src="./icons/rigmatch-32.svg" alt="" />RigMatch</a>
+      <nav class="site-nav" aria-label="Main">
+        <a class="hide-sm" href="#how">How it works</a>
+        <a class="hide-sm" href="#score">How we score</a>
+        <a class="hide-sm" href="#tests">What it tests</a>
+        <a class="hide-sm" href="./ajax/">The Ajax report</a>
+        <a class="hide-sm" href="https://github.com/DaveEuson/RigMatch">GitHub</a>
+        <a class="btn btn-gold" href="#download">Download</a>
+      </nav>
     </header>
 
-    <main>
-      <section class="hero">
-        <div class="wrap hero-grid">
-          <div class="hero-copy">
-            <div class="eyebrow">The AI dating game show for your PC</div>
-            <h1>Find the best local AI your computer can <em>actually</em> run.</h1>
-            <p class="lede">
-              RigMatch benchmarks AI models on <strong>your</strong> hardware through Ollama, scores each on
-              speed, answer quality, and hardware fit, and crowns a Top Match — one honest number, measured
-              on your machine, not a leaderboard's.
-            </p>
-            <div class="hero-cta">
-              <a class="btn btn-primary" href="./app/">▶ Try the live demo</a>
-              <a class="btn btn-ghost" href="https://github.com/DaveEuson/RigMatch/releases/latest">⬇ Download for desktop</a>
-            </div>
-            <p class="cta-note">The browser demo runs on sample data. Download the app to score your real rig — 100% locally.</p>
+    <main id="top">
+      <div class="wrap hero">
+        <div class="hero-copy">
+          <div class="host"><img src="./assets/host.webp" alt="" />The dating show where your PC meets its perfect AI</div>
+          <h1>Find the AI your computer was made for.</h1>
+          <p>Local models take the stage on your own PC. They answer the same questions and are timed on your hardware. One of them walks away as your Top Match, with a score measured on your machine, not taken from a leaderboard.</p>
+          <div class="hero-actions">
+            <a class="btn btn-gold btn-lg" href="https://github.com/DaveEuson/RigMatch/releases/latest"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3.5v10" style="stroke:var(--accent)"></path><path d="M7.5 9.5 12 14l4.5-4.5" style="stroke:var(--accent)"></path><path d="M3.5 15v2.5a3 3 0 0 0 3 3h11a3 3 0 0 0 3-3V15"></path></svg>Download for Windows</a>
+            <a class="btn btn-line btn-lg" href="./app/"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 5.2v13.6a1.2 1.2 0 0 0 1.8 1l10.4-6.8a1.2 1.2 0 0 0 0-2L9.8 4.2A1.2 1.2 0 0 0 8 5.2Z" style="fill:var(--accent)"></path></svg>Try the demo</a>
           </div>
-
-          <figure class="shot">
-            <img src="./shots/stage.webp" width="1192" height="362"
-              alt="The Speed Dating stage in RigMatch: Llama3.2 is done and scored 88, Qwen2.5 is answering a coding question, and Gemma3 waits its turn.">
-            <figcaption>Speed Dating on a real PC: every model answers the same questions, one at a time, scored as it goes.</figcaption>
-          </figure>
+          <div class="hero-note">Free. Also for macOS and Linux. The demo runs on sample data in your browser.</div>
         </div>
+        <div class="stage" role="img" aria-label="A show in progress: Llama3.2 is done and scored 88, Qwen2.5 is answering a coding question, and Gemma3 is up next.">
+          <div class="bulbs" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="stage-head"><strong>Writing a bit of code</strong><span>Question 5 of 10 · contestant 2 of 3</span></div>
+          <ul class="stage-cast">
+            <li class="done"><img src="./assets/llama.webp" alt="" /><b>Llama3.2</b><span>Done · 88</span></li>
+            <li class="on"><img src="./assets/qwen.webp" alt="" /><b>Qwen2.5</b><span>Answering…</span></li>
+            <li class="next"><img src="./assets/gemma.webp" alt="" /><b>Gemma3</b><span>Up next</span></li>
+          </ul>
+          <div class="progress">
+            <div><span>Progress</span><span><span class="figure">14 of 30</span> · about 2 min left</span></div>
+            <div class="bar"><i></i></div>
+          </div>
+        </div>
+      </div>
+
+      <section id="how" class="wrap">
+        <h2>Picking a local model shouldn’t take a degree in graphics memory.</h2>
+        <ol class="steps">
+          <li><span class="step-mark"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="6.5" width="19" height="13" rx="4"></rect><rect x="5.5" y="9.5" width="10" height="7" rx="2"></rect><circle cx="18.5" cy="11" r="1.1" style="fill:var(--accent)" stroke="none"></circle><circle cx="18.5" cy="15" r="1.1" style="fill:var(--accent)" stroke="none"></circle><path d="M8.5 6.5 6 3M15.5 6.5 18 3"></path></svg></span><h3>It reads your PC</h3><p>Graphics card, memory and disk, in one click. Only models that fit get to audition.</p></li>
+          <li><span class="step-mark"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="7.5" height="7.5" rx="2.5"></rect><rect x="13.5" y="3" width="7.5" height="7.5" rx="2.5" style="fill:var(--accent);stroke:var(--accent)"></rect><rect x="3" y="13.5" width="7.5" height="7.5" rx="2.5"></rect><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2.5"></rect></svg></span><h3>You pick the contestants</h3><p>Say what you want: chat, writing, code, pictures. Pick up to five.</p></li>
+          <li><span class="step-mark"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8.5 18C4.5 15.2 3 12.8 3 10.7 3 9 4.3 7.7 6 7.7c1.1 0 2 .6 2.5 1.5.5-.9 1.4-1.5 2.5-1.5 1.7 0 3 1.3 3 3 0 2.1-1.5 4.5-5.5 7.3Z"></path><path d="M15.5 20.5c-4-2.8-5.5-5.2-5.5-7.3 0-1.7 1.3-3 3-3 1.1 0 2 .6 2.5 1.5.5-.9 1.4-1.5 2.5-1.5 1.7 0 3 1.3 3 3 0 2.1-1.5 4.5-5.5 7.3Z" style="fill:var(--accent);stroke:var(--accent)"></path><path d="M14 4l.6 1.8M18 3.5l-.6 1.9M10.5 4.8l1 1.2"></path></svg></span><h3>The show runs</h3><p>Same questions, same stage, one at a time, timed on your hardware. Every answer is kept so you can read it.</p></li>
+          <li><span class="step-mark"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M7 3.5h10v5a5 5 0 0 1-10 0Z"></path><path d="M7 5.5H4.5v1.5A3 3 0 0 0 7.5 10M17 5.5h2.5v1.5a3 3 0 0 1-3 3"></path><path d="M12 13.5v3M8 20.5h8M9 16.5h6v4H9z"></path><path d="M12 5.2l.8 1.6 1.7.2-1.2 1.2.3 1.7-1.6-.8-1.6.8.3-1.7L9.5 7l1.7-.2Z" style="fill:var(--accent)" stroke="none"></path></svg></span><h3>Meet your Top Match</h3><p>One score, one reason, and a button to start chatting with the winner.</p></li>
+        </ol>
       </section>
 
-      <section id="how">
-        <div class="wrap">
-          <div class="section-head">
-            <h2>Picking a local model shouldn't need a PhD in VRAM</h2>
-            <p>Parameter counts, quantization, context windows… RigMatch skips all of that and just tells you what runs well on <em>your</em> PC.</p>
-          </div>
-          <div class="steps">
-            <div class="step">
-              <div class="n">1</div>
-              <h3>Reads your real rig</h3>
-              <p>GPU, VRAM, RAM, and disk decide which contestants even qualify — no jargon, no guesswork.</p>
-            </div>
-            <div class="step">
-              <div class="n">2</div>
-              <h3>Speed-dating benchmarks</h3>
-              <p>Every model answers the same questions, live on stage, timed and scored fairly on your hardware.</p>
-            </div>
-            <div class="step">
-              <div class="n">3</div>
-              <h3>Crowns your Top Match</h3>
-              <p>One 0–100 Match Score and a letter grade — then chat with the winner right away.</p>
-            </div>
-          </div>
-          <figure class="shot">
-            <img src="./shots/winner.webp" width="1192" height="518" loading="lazy"
-              alt="The winner reveal: Llama3.2 is the Top Match with 88.2, grade A, ahead of Gemma3 at 86.6 and Qwen2.5 at 81.0.">
-            <figcaption>The same show's result: three models, one Top Match, every score measured on that PC.</figcaption>
-          </figure>
-        </div>
-      </section>
-
-      <section id="score">
-        <div class="wrap">
-          <div class="section-head">
-            <h2>One honest number you can trust</h2>
-            <p>The Match Score blends three things, all measured on your machine.</p>
-          </div>
-          <div class="pillars">
-            <div class="pillar"><div class="emoji">⚡</div><h4>Speed</h4><p>Real tokens/sec and first-token latency on your rig.</p></div>
-            <div class="pillar"><div class="emoji">🎯</div><h4>Quality</h4><p>Answer accuracy across a test suite — optionally graded by a stronger judge model.</p></div>
-            <div class="pillar"><div class="emoji">🧩</div><h4>Fit</h4><p>How comfortably the model sits in your VRAM and RAM.</p></div>
+      <section class="wrap" aria-labelledby="example-title">
+        <div class="top-match">
+          <img src="./assets/llama.webp" alt="" />
+          <div>
+            <span id="example-title">The Top Match from a real show on a home PC</span>
+            <p class="top-match-name">Llama3.2</p>
+            <div class="top-match-score"><span class="figure">88.2</span><span>Match Score · Grade A</span></div>
+            <p>Gemma3 came second at 86.6 and Qwen2.5 third at 81.0. A close second may still suit you better, so chat with both.</p>
           </div>
         </div>
       </section>
 
-      <section>
-        <div class="wrap">
-          <div class="trust">
-            <h2>100% local. Nothing leaves your computer.</h2>
-            <p>Models run through Ollama on your own hardware. Nothing you type, test, or score leaves your computer unless you choose a cloud judge — no account, no telemetry.</p>
-            <div class="badges"><span>No account</span><span>No cloud needed</span><span>No telemetry</span><span>Source available · read the code</span></div>
+      <section id="score" class="wrap">
+        <h2>One honest number</h2>
+        <p class="lede-muted" style="margin-top: 16px;">The Match Score blends four measurements, all taken on your computer. Slide between accuracy first and speed first and the ranking updates, without running anything again.</p>
+        <ul class="pillars">
+          <li><div><b>Answer quality</b><span class="figure">× 0.34</span></div><p>Checked by rules where there is a right answer, and by a judge model where there isn’t.</p></li>
+          <li><div><b>Speed</b><span class="figure">× 0.32</span></div><p>Tokens a second and time to the first word, measured on your hardware.</p></li>
+          <li><div><b>Finish rate</b><span class="figure">× 0.18</span></div><p>Whether it finishes its answers, without errors or running out of time.</p></li>
+          <li><div><b>Fit</b><span class="figure">× 0.16</span></div><p>How comfortably it sits in your memory, leaving room for everything else.</p></li>
+        </ul>
+      </section>
+
+      <section id="tests" class="wrap">
+        <h2>Not just chat</h2>
+        <ul class="kinds">
+          <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 3.5h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-7l-5 3.5V17.5H5a3 3 0 0 1-3-3v-8a3 3 0 0 1 3-3Z"></path><circle cx="8" cy="10.5" r="1.3" style="fill:var(--accent)" stroke="none"></circle><circle cx="12" cy="10.5" r="1.3" style="fill:var(--accent)" stroke="none"></circle><circle cx="16" cy="10.5" r="1.3" style="fill:var(--accent)" stroke="none"></circle></svg><div><b>Chat and writing</b><span>Everyday questions, drafts and summaries.</span></div></li>
+          <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="7.5" height="7.5" rx="2.5"></rect><rect x="13.5" y="3" width="7.5" height="7.5" rx="2.5" style="fill:var(--accent);stroke:var(--accent)"></rect><rect x="3" y="13.5" width="7.5" height="7.5" rx="2.5"></rect><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2.5"></rect></svg><div><b>Code</b><span>Code questions, and an App Builder that makes something you can open.</span></div></li>
+          <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 3v4M15 3v4"></path><path d="M6.5 7h11v3.5a5.5 5.5 0 0 1-11 0Z"></path><path d="M12 16v2.5a2.5 2.5 0 0 0 2.5 2.5H17"></path><path d="M11 10.5l1.6-2v2.6L14 9" style="stroke:var(--accent)"></path></svg><div><b>Tools and agents</b><span>Six working tools: it checks the model calls the right one with the right details.</span></div></li>
+          <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="4" width="19" height="16" rx="4"></rect><circle cx="16" cy="9" r="2" style="fill:var(--accent)" stroke="none"></circle><path d="M3 17.5l5.5-5.5 4 4 2.5-2.5 6 5"></path></svg><div><b>Pictures</b><span>Image models in ComfyUI, the same prompt side by side.</span></div></li>
+          <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 3c.6 3.9 2.6 5.9 6.5 6.5-3.9.6-5.9 2.6-6.5 6.5-.6-3.9-2.6-5.9-6.5-6.5C7.4 8.9 9.4 6.9 10 3Z" style="fill:var(--accent);stroke:var(--accent)"></path><path d="M18 14.5c.3 1.9 1.1 2.7 3 3-1.9.3-2.7 1.1-3 3-.3-1.9-1.1-2.7-3-3 1.9-.3 2.7-1.1 3-3Z"></path></svg><div><b>Video, sound and music</b><span>Clips from ComfyUI’s video and audio models, with your eye and ear as the judge.</span></div></li>
+          <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3.5h12a1 1 0 0 1 1 1v16l-7-4-7 4v-16a1 1 0 0 1 1-1Z"></path><path d="M12 13c-2.4-1.6-3.2-3-3.2-4.2 0-1 .8-1.8 1.7-1.8.7 0 1.2.3 1.5.9.3-.6.8-.9 1.5-.9.9 0 1.7.8 1.7 1.8 0 1.2-.8 2.6-3.2 4.2Z" style="fill:var(--accent)" stroke="none"></path></svg><div><b>Listening and reading pictures</b><span>Speech to text and questions about a picture, each with an answer to check against.</span></div></li>
+        </ul>
+      </section>
+
+      <section class="wrap" aria-labelledby="report-title">
+        <div class="report">
+          <img src="./ajax/ajax.webp" alt="" />
+          <div>
+            <h2 id="report-title">Is Ajax everything it claims to be?</h2>
+            <p>Ajax and the stock Qwen 3.5 9B it was fine-tuned from, the same questions on the same PC, every answer side by side.</p>
           </div>
+          <a class="btn btn-line" href="./ajax/">Read the report</a>
         </div>
       </section>
 
-      <section class="final">
-        <div class="wrap">
-          <h2>Meet your PC's perfect match.</h2>
-          <div class="hero-cta">
-            <a class="btn btn-primary" href="./app/">▶ Try the live demo</a>
-            <a class="btn btn-ghost" href="https://github.com/DaveEuson/RigMatch/releases/latest">⬇ Download — Windows · macOS · Linux</a>
+      <section class="wrap">
+        <div class="local">
+          <div>
+            <h2>Nothing leaves your computer</h2>
+            <p>Models run through Ollama and ComfyUI on your own hardware. No account, no telemetry. The one exception is a cloud judge, which you’d have to choose yourself, and RigMatch shows what it would send before every run.</p>
           </div>
+          <ul>
+            <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" style="fill:var(--green);stroke:var(--green)"></circle><path d="M7.5 12.3l3 3 6-6.3" style="stroke:var(--bg)" stroke-width="2.6"></path></svg>No account</li>
+            <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" style="fill:var(--green);stroke:var(--green)"></circle><path d="M7.5 12.3l3 3 6-6.3" style="stroke:var(--bg)" stroke-width="2.6"></path></svg>No telemetry</li>
+            <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" style="fill:var(--green);stroke:var(--green)"></circle><path d="M7.5 12.3l3 3 6-6.3" style="stroke:var(--bg)" stroke-width="2.6"></path></svg>Models stay on your disk</li>
+            <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" style="fill:var(--green);stroke:var(--green)"></circle><path d="M7.5 12.3l3 3 6-6.3" style="stroke:var(--bg)" stroke-width="2.6"></path></svg>Source on GitHub</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="download" class="wrap download">
+        <div class="apps"><img src="./icons/rigmatch-256.svg" alt="RigMatch icon" /><img src="./icons/rigmatch-chat-256.svg" alt="RigMatch Chat icon" /></div>
+        <h2>Meet your PC’s perfect match.</h2>
+        <p>RigMatch and RigMatch Chat, free. You’ll also need Ollama; RigMatch walks you through setting it up.</p>
+        <div class="hero-actions">
+          <a class="btn btn-gold btn-lg" href="https://github.com/DaveEuson/RigMatch/releases/latest"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3.5v10" style="stroke:var(--accent)"></path><path d="M7.5 9.5 12 14l4.5-4.5" style="stroke:var(--accent)"></path><path d="M3.5 15v2.5a3 3 0 0 0 3 3h11a3 3 0 0 0 3-3V15"></path></svg>Windows</a>
+          <a class="btn btn-line btn-lg" href="https://github.com/DaveEuson/RigMatch/releases/latest"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3.5v10" style="stroke:var(--accent)"></path><path d="M7.5 9.5 12 14l4.5-4.5" style="stroke:var(--accent)"></path><path d="M3.5 15v2.5a3 3 0 0 0 3 3h11a3 3 0 0 0 3-3V15"></path></svg>macOS</a>
+          <a class="btn btn-line btn-lg" href="https://github.com/DaveEuson/RigMatch/releases/latest"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3.5v10" style="stroke:var(--accent)"></path><path d="M7.5 9.5 12 14l4.5-4.5" style="stroke:var(--accent)"></path><path d="M3.5 15v2.5a3 3 0 0 0 3 3h11a3 3 0 0 0 3-3V15"></path></svg>Linux</a>
         </div>
       </section>
     </main>
 
-    <footer>
-      <div class="wrap foot-inner">
-        <div>Made with 💛 and a retro-computer host.</div>
-        <div>
-          <a href="./app/">Live demo</a>
+    <footer class="site-foot">
+      <div class="wrap">
+        <img src="./icons/rigmatch-32.svg" alt="" />
+        <span>RigMatch, by Dave Euson</span>
+        <nav aria-label="Footer">
+          <a href="./app/">Demo</a>
+          <a href="./ajax/">The Ajax report</a>
           <a href="https://github.com/DaveEuson/RigMatch">GitHub</a>
           <a href="https://github.com/DaveEuson/RigMatch/releases/latest">Download</a>
-        </div>
+        </nav>
       </div>
     </footer>
   </body>
