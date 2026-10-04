@@ -278,7 +278,7 @@
 .app-shell[data-ui-mode='advanced'] .model-filter-note span { font-weight: 400; }
 
 /* ---- What's New -------------------------------------------------------------- */
-.app-shell[data-ui-mode='advanced'] .whats-new-panel { padding: var(--s4) var(--s5) var(--s5); border: 0; border-radius: 0; background: none; box-shadow: none; gap: var(--s3); overflow: visible; }
+.app-shell[data-ui-mode='advanced'] .whats-new-panel { padding: var(--s4) var(--s5) var(--s5); border: 0; border-radius: 0; background: none; box-shadow: none; gap: var(--s3); overflow-y: auto; }
 .app-shell[data-ui-mode='advanced'] .news-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s3) var(--s5); }
 .app-shell[data-ui-mode='advanced'] .news-head h2 { margin: 0; color: var(--text-strong); font: 400 var(--fs-h1) / 1.1 var(--display); }
 .app-shell[data-ui-mode='advanced'] .news-head p { max-width: 72ch; margin: 4px 0 0; color: var(--text); font-size: var(--fs-ui); }
@@ -343,7 +343,7 @@
 .app-shell[data-ui-mode='advanced'] .page-head-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
 
 /* ---- Comparison ----------------------------------------------------------------- */
-.app-shell[data-ui-mode='advanced'] .speed-date-panel { border: 0; border-radius: 0; background: none; box-shadow: none; overflow: visible; }
+.app-shell[data-ui-mode='advanced'] .speed-date-panel { border: 0; border-radius: 0; background: none; box-shadow: none; overflow-y: auto; }
 .app-shell[data-ui-mode='advanced'] .speed-date-body { gap: var(--s4); padding: 0 var(--s5) var(--s5); }
 .app-shell[data-ui-mode='advanced'] .comparison-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
 .app-shell[data-ui-mode='advanced'] .comparison-rail {
@@ -384,7 +384,7 @@
 }
 
 /* ---- Labs: what to run on the left, what came out on the right --------------------- */
-.app-shell[data-ui-mode='advanced'] .lab-page { border: 0; border-radius: 0; background: none; box-shadow: none; overflow: visible; }
+.app-shell[data-ui-mode='advanced'] .lab-page { border: 0; border-radius: 0; background: none; box-shadow: none; overflow-y: auto; }
 .app-shell[data-ui-mode='advanced'] .lab-layout {
   display: grid;
   grid-template-columns: 330px minmax(0, 1fr);
@@ -411,7 +411,7 @@
 .app-shell[data-ui-mode='advanced'] .comparison-rail .comparison-rail-item { gap: 6px; }
 
 /* ---- Results ------------------------------------------------------------------ */
-.app-shell[data-ui-mode='advanced'] .history-panel { border: 0; border-radius: 0; background: none; box-shadow: none; overflow: visible; }
+.app-shell[data-ui-mode='advanced'] .history-panel { border: 0; border-radius: 0; background: none; box-shadow: none; overflow-y: auto; }
 .app-shell[data-ui-mode='advanced'] .history-panel .utility-body { display: grid; gap: var(--s4); padding: 0 var(--s5) var(--s5); }
 .app-shell[data-ui-mode='advanced'] .results-toolbar {
   display: flex;
@@ -497,7 +497,7 @@
 .app-shell[data-ui-mode='advanced'] .top-match-score span { font-family: var(--ui); font-weight: 400; }
 
 /* ---- My PC › Logs ------------------------------------------------------------- */
-.app-shell[data-ui-mode='advanced'] .logs-page { border: 0; border-radius: 0; background: none; box-shadow: none; overflow: visible; }
+.app-shell[data-ui-mode='advanced'] .logs-page { border: 0; border-radius: 0; background: none; box-shadow: none; overflow-y: auto; }
 .app-shell[data-ui-mode='advanced'] .logs-view { display: grid; gap: var(--s3); padding: 0 var(--s5) var(--s5); }
 .app-shell[data-ui-mode='advanced'] .logs-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s4); }
 .app-shell[data-ui-mode='advanced'] .logs-sources { display: flex; flex-wrap: wrap; gap: var(--s2); }
@@ -558,7 +558,9 @@
 
 /* ---- My PC › Overview ---------------------------------------------------------- */
 .app-shell[data-ui-mode='advanced'] .lan-panel,
-.app-shell[data-ui-mode='advanced'] .panel.lan-panel { border: 0; border-radius: 0; background: none; box-shadow: none; overflow: visible; }
+/* Scrolls, as it did before the restyle: .stage-content clips, so with
+   overflow visible the lower half of the page could not be reached. */
+.app-shell[data-ui-mode='advanced'] .panel.lan-panel { border: 0; border-radius: 0; background: none; box-shadow: none; overflow-y: auto; }
 .app-shell[data-ui-mode='advanced'] .mypc-heading { margin: var(--s4) var(--s5) var(--s2); color: var(--text-strong); font: 400 var(--fs-h2) / 1.2 var(--display); }
 .app-shell[data-ui-mode='advanced'] .ollama-prep,
 .app-shell[data-ui-mode='advanced'] .ollama-install-hero,
