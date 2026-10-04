@@ -139,6 +139,14 @@
   font-weight: 500;
 }
 
+/* A long model name must not push the bar onto two rows; the title has it whole. */
+.top-match-chip-name {
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .top-bar-icon-btn {
   display: grid;
   place-items: center;
@@ -256,6 +264,10 @@
   font: 400 14px/1 var(--ui);
   cursor: pointer;
 }
+
+/* Simple's bar has the room to keep the word at every width (measured down to
+   1024px), and Simple is where newcomers are. Advanced drops it with Settings'. */
+.top-bar.simple .top-bar-donate span { display: inline; }
 
 .top-bar-mode {
   display: inline-flex;
@@ -649,8 +661,23 @@
 /* ---- Narrower windows: the bar keeps its controls and loses words, so it
    stays one row down to the 1024px minimum. Measured, not guessed: at 1440
    the full bar wanted about 1650px. ------------------------------------------ */
+
+/* Advanced carries six tabs and the Top Match, so it runs out of room sooner:
+   with a Top Match its full bar wants about 1820px, and at 1600 it wrapped to
+   two rows. The same rules as the next block; :where keeps them the same
+   weight, so the narrower tiers further down still win. */
+@media (max-width: 1919px) {
+  .top-bar:where(.advanced) .top-match-chip-name,
+  .top-bar:where(.advanced) .top-bar-service-name,
+  .top-bar:where(.advanced) .top-bar-settings span { display: none; }
+  .top-bar:where(.advanced) .badge-case > .badge-slot { display: none; }
+  .top-bar:where(.advanced) .badge-case > .badge-slot.recent { display: grid; }
+  .top-bar:where(.advanced) .badge-case-count { display: inline-flex; }
+  .top-bar:where(.advanced) .badge-case-count .achievement-pin { display: none; }
+}
+
 @media (max-width: 1599px) {
-  .top-match-name { display: none; }
+  .top-match-chip-name { display: none; }
   .top-bar-service-name { display: none; }
   .top-bar-settings span { display: none; }
   .top-bar .badge-case > .badge-slot { display: none; }

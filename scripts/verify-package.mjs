@@ -111,6 +111,10 @@ const PRESENT = [
   ['share text says what RigMatch is', js, 'speed-dates AI models on your own hardware'],
   ['share text points at the download', js, 'Get it: '],
   ['the card is copied for pasting', js, 'The card is on your clipboard'],
+  // Donationware, said where newcomers look: the welcome, the Winner screen
+  // and the Donate button's dialog.
+  ['donationware is said plainly', js, 'nothing is locked if you don’t donate'],
+  ['the support dialog says donating unlocks nothing', js, 'because nothing is locked'],
   // Screen-audit fixes.
   ['the listening test names its blocker', js, 'Record or upload audio first'],
   ['settings rail rows answer to the pointer', css, 'settings-rail-item:hover'],

@@ -26,6 +26,8 @@ Picking a local LLM is confusing: parameter counts, quantization, VRAM, context 
 
 Everything runs on your machine. No account, no telemetry, and no cloud unless you choose a cloud judge.
 
+**RigMatch is donationware.** Every feature is free, and nothing is locked if you don't donate. If it helps you, you can [buy me a coffee](https://buymeacoffee.com/daveeuson).
+
 - 🖥️ **Reads your real rig**. GPU, VRAM, RAM and disk decide which contestants even qualify
 - 💛 **Speed Dating benchmarks**. Every model answers the same questions, live on stage
 - 🏆 **Match Score (0–100)** — speed, quality and fit, scored on your PC

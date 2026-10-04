@@ -724,7 +724,7 @@ export function UtilityPanel({
           <div className="utility-stat">
             <span>Support RigMatch</span>
             <strong>Donationware</strong>
-            <em>Simple Mode stays free. Advanced is the natural home for future supporter tools, but this beta keeps everything open while the flow gets polished.</em>
+            <em>Every feature is free, in Simple and Advanced, with no trial and nothing locked. Donating is optional and unlocks nothing; it helps me keep building RigMatch.</em>
             <a
               className="btn btn-line"
               href={BUY_ME_A_COFFEE_URL}

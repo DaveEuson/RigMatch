@@ -2466,10 +2466,10 @@ export default function App() {
             <button
               type="button"
               className="rm-btn rm-btn-link"
-              title="Support RigMatch development"
+              title="RigMatch is donationware: every feature is free"
               onClick={() => window.open("https://buymeacoffee.com/daveeuson", "_blank", "noopener,noreferrer")}
             >
-              Support RigMatch
+              Donate
             </button>
           </div>
         </div>

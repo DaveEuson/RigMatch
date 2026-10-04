@@ -589,6 +589,11 @@
 .sw-scoreboard-note { max-width: 68ch; }
 .sw-dropped-out li { display: block; color: var(--text); }
 
+/* The donationware line under the results: quiet, and the link reads as one. */
+.sw-donate-note { margin: var(--s4) 0 0; color: var(--muted); font-size: var(--fs-ui); text-align: center; }
+.sw-donate-note a { color: var(--text-strong); font-weight: 700; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.sw-donate-note a:hover { text-decoration-color: currentColor; }
+
 /* ---- Show effects -----------------------------------------------------
    Off until switched on in Settings. Every piece is aria-hidden scenery and
    stands still under reduced motion. */

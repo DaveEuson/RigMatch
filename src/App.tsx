@@ -4385,6 +4385,7 @@ function App() {
         // From the top bar Settings opens on Preferences, not on the last section a link asked for.
         onOpenSettings={() => { setSettingsSectionRequest(null); selectNav('settings'); }}
         onOpenChat={() => { void openChatApp(); }}
+        onOpenSupport={() => setSupportModalOpen(true)}
       />
       <LoadStrip system={system} running={runningLine} />
       {uiMode === 'beginner' && (

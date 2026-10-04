@@ -26,6 +26,7 @@ import { ShowMarquee } from './ShowMarquee';
 import { setShowExtras, useShowExtras, useShowStage } from '../lib/showExtras';
 import { TROJAN_HOST_COPY, ajaxHostLine } from '../lib/trojanStage';
 import { HOST_LINES, hostLine } from '../lib/hostScript';
+import { BUY_ME_A_COFFEE_URL } from '../lib/appConfig';
 import { LOW_DISK_GB } from '../lib/loadLevel';
 import { UiIcon } from './icons/UiIcon';
 import { AchievementUnlocked } from './AchievementShelf';
@@ -1777,6 +1778,12 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, bala
           </ul>
         </div>
       )}
+      {/* Said once, after the show has delivered, and never in its way. */}
+      <p className="sw-donate-note">
+        RigMatch is donationware: every feature is free, and nothing is locked if you don’t donate. If tonight’s
+        match saved you time,{' '}
+        <a href={BUY_ME_A_COFFEE_URL} target="_blank" rel="noopener noreferrer">buy me a coffee</a>.
+      </p>
     </div>
   );
 }

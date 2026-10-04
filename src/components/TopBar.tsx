@@ -29,8 +29,8 @@ const CONNECTION_WORDS: Record<ConnectionState, string> = {
  *
  * Left to right: the app, where you are (Simple's four-step tracker or
  * Advanced's tabs), the Top Match, the badge case, the theme, the local
- * services, Settings, and the mode switch. It replaces the side menu, the stats
- * deck and the channel row: one place to look for where you are.
+ * services, Chat, Donate, Settings, and the mode switch. It replaces the side
+ * menu, the stats deck and the channel row: one place to look for where you are.
  */
 export function TopBar({
   uiMode,
@@ -47,6 +47,7 @@ export function TopBar({
   onOpenConnections,
   onOpenSettings,
   onOpenChat,
+  onOpenSupport,
 }: {
   uiMode: UiMode;
   onUiModeChange: (mode: UiMode) => void;
@@ -64,6 +65,8 @@ export function TopBar({
   onOpenConnections: () => void;
   onOpenSettings?: () => void;
   onOpenChat: () => void;
+  /** The donation dialog. */
+  onOpenSupport: () => void;
 }) {
   const advanced = uiMode === 'advanced';
   return (
@@ -103,7 +106,7 @@ export function TopBar({
             title={`Top Match: ${topMatch.name}`}
           >
             <img src={getModelAvatarSrc(topMatch.model)} alt="" width={26} height={26} />
-            <span className="top-match-name">{topMatch.name}</span>
+            <span className="top-match-chip-name">{topMatch.name}</span>
             <span className="top-match-score">{topMatch.scoreLabel}</span>
           </button>
         )}
@@ -129,6 +132,20 @@ export function TopBar({
         </button>
         <button type="button" className="top-bar-icon-btn" onClick={onOpenChat} title="Open RigMatch Chat" aria-label="Open RigMatch Chat">
           <UiIcon name="chat" size={20} />
+        </button>
+        {/* RigMatch is donationware. The side menu's button went with the side
+            menu, and Settings is Advanced only, so nothing said so in Simple. */}
+        <button
+          type="button"
+          className="top-bar-settings top-bar-donate"
+          onClick={onOpenSupport}
+          title="RigMatch is donationware: every feature is free"
+          // The word hides below 1600px wide, like Settings', and hidden text
+          // names nothing.
+          aria-label="Donate"
+        >
+          <UiIcon name="coffee" size={18} />
+          <span>Donate</span>
         </button>
         {advanced && onOpenSettings && (
           <button type="button" className="top-bar-settings" onClick={onOpenSettings}>
