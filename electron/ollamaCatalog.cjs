@@ -225,11 +225,15 @@ function scanOllamaFamilyRows(name, source) {
   return rows;
 }
 
-/** What each size accepts, keyed by tag: the snapshot's per-size record. */
+/** What each size accepts and weighs, keyed by tag: the snapshot's per-size record. */
 function parseOllamaFamilySizes(name, html) {
   return Object.fromEntries(scanOllamaFamilyRows(name, String(html || ''))
     .filter((row) => row.inputs)
-    .map((row) => [row.tag, { inputs: row.inputs, ...(row.cloudOnly ? { cloudOnly: true } : {}) }]));
+    .map((row) => [row.tag, {
+      inputs: row.inputs,
+      ...(row.sizeGb ? { sizeGb: row.sizeGb } : {}),
+      ...(row.cloudOnly ? { cloudOnly: true } : {}),
+    }]));
 }
 
 function parseOllamaFamilyRows(name, html) {
@@ -255,6 +259,10 @@ function parseOllamaFamilyRows(name, html) {
  *
  * A family with no local size at all cannot be downloaded, so its row is given
  * the family's real cloud tag: every cloud check in the app reads the tag.
+ *
+ * A family the scan listed but did not open arrives as one "latest" row with
+ * no size, which "Good fit" cannot place and so hid: qwen2.5vl and llama4
+ * were missing from Reads images that way. The snapshot's size fills it.
  */
 function applyCapabilitySnapshot(entries, snapshot) {
   const families = snapshot?.families ?? {};
@@ -281,6 +289,7 @@ function applyCapabilitySnapshot(entries, snapshot) {
       ...(capabilities ? { capabilities } : {}),
       ...(facts.description && !entry.description ? { description: facts.description } : {}),
       ...(sizes[tag]?.cloudOnly ? { cloudOnly: true } : {}),
+      ...(entry.sizeGb == null && sizes[tag]?.sizeGb ? { sizeGb: sizes[tag].sizeGb } : {}),
     };
   });
 }

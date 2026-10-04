@@ -53,7 +53,7 @@ test('each size says what it accepts: gemma3:1b reads text, gemma3:4b reads pict
   const caps = Object.fromEntries(parseOllamaFamilyRows('gemma3', html).map((row) => [row.tag, row.capabilities]));
   assert.deepEqual(caps['1b'], ['completion']);
   assert.deepEqual(caps['4b'], ['completion', 'vision']);
-  assert.deepEqual(parseOllamaFamilySizes('gemma3', html), { '1b': { inputs: ['text'] }, '4b': { inputs: ['text', 'image'] } });
+  assert.deepEqual(parseOllamaFamilySizes('gemma3', html), { '1b': { inputs: ['text'], sizeGb: 0.8 }, '4b': { inputs: ['text', 'image'], sizeGb: 3.3 } });
 });
 
 test('a model that uses tools and thinks still writes text', () => {
@@ -94,18 +94,20 @@ test('a cloud-only size is marked, and a local size is not', () => {
 
 test('snapshot: fills what the live scan did not reach, and the live page wins', () => {
   const snapshot = { families: {
-    gemma3: { badges: ['vision'], description: 'Gemma 3', sizes: { '1b': { inputs: ['text'] }, '4b': { inputs: ['text', 'image'] } } },
+    gemma3: { badges: ['vision'], description: 'Gemma 3', sizes: { '1b': { inputs: ['text'], sizeGb: 0.8 }, '4b': { inputs: ['text', 'image'], sizeGb: 3.3 } } },
     'kimi-k2.6': { badges: ['vision', 'tools', 'thinking', 'cloud'], description: 'Kimi', sizes: { cloud: { inputs: ['text', 'image'], cloudOnly: true } } },
   } };
   const [small, big, live, cloud] = applyCapabilitySnapshot([
-    { id: 'gemma3:1b', name: 'gemma3', tag: '1b' },
-    { id: 'gemma3:4b', name: 'gemma3', tag: '4b' },
+    { id: 'gemma3:1b', name: 'gemma3', tag: '1b', sizeGb: null },
+    { id: 'gemma3:4b', name: 'gemma3', tag: '4b', sizeGb: 3.1 },
     { id: 'gemma3:12b', name: 'gemma3', tag: '12b', capabilities: ['completion'] },
     { id: 'kimi-k2.6:latest', name: 'kimi-k2.6', tag: 'latest' },
   ], snapshot);
   assert.deepEqual(small.capabilities, ['completion']);
   assert.deepEqual(big.capabilities, ['completion', 'vision']);
   assert.equal(small.description, 'Gemma 3');
+  assert.equal(small.sizeGb, 0.8, 'a row with no size takes the snapshot size, so Good fit can place it');
+  assert.equal(big.sizeGb, 3.1, 'a size the scan already had is kept');
   assert.deepEqual(live.capabilities, ['completion'], 'a live reading is never overwritten');
   assert.equal(cloud.tag, 'cloud', 'a family with no local size is named by its cloud tag, which every cloud check reads');
   assert.equal(cloud.id, 'kimi-k2.6:cloud');
