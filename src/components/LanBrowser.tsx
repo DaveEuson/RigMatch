@@ -1,14 +1,11 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useEffect, useRef, useState } from 'react';
 import { isDesktopRuntime } from '../api';
-import robotRigGreenroom from '../assets/robot-rig-greenroom.webp';
-import { formatGb } from '../lib/format';
 import type { NetworkHost, OllamaInstallProgress, OllamaStatus, SystemProfile } from '../types';
 import { MachineAvatar } from './Avatars';
 import { PanelHeader } from './CommonChrome';
 import { OllamaPrep } from './OllamaPrep';
 import { RigDetailsPanel } from './RigDetailsPanel';
-import { RomanceArtBanner } from './ScoreVisuals';
 import { SetupDoctor } from './SetupDoctor';
 import { ThirdPartyModelNotice } from './ThirdPartyModelNotice';
 import { UpgradeRig } from './UpgradeRig';
@@ -100,13 +97,6 @@ export function LanBrowser({
         onAction={onScan}
         busy={isScanning}
         meta={receipt ? `${hostMeta} · ${receipt}` : hostMeta}
-      />
-      <RomanceArtBanner
-        image={robotRigGreenroom}
-        className="rig-art-banner"
-        kicker="Rig profile"
-        title="This computer is getting ready for a match"
-        body={`${system.gpu.vramGb ? `${formatGb(system.gpu.vramGb)} VRAM` : `${formatGb(system.memory.totalGb)} RAM`} helps RigMatch keep model suggestions realistic.`}
       />
       <OllamaPrep
         system={system}

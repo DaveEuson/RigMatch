@@ -474,6 +474,43 @@
   padding: 0;
 }
 
+/* The channel tabs (Models, Comparison, Labs): words with an accent
+   underline, like the top bar's, not a boxed row of icon pills. */
+.screen-nav .channel-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--s5);
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.screen-nav .channel-switch button {
+  min-height: 40px;
+  margin-bottom: -1px;
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+  font: 400 15px/1 var(--ui);
+}
+
+.screen-nav .channel-switch button:not(.active):hover { background: none; color: var(--text-strong); }
+
+.screen-nav .channel-switch button.active {
+  border-bottom-color: var(--accent);
+  background: none;
+  box-shadow: none;
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
 .screen-tabs {
   display: flex;
   flex-wrap: wrap;

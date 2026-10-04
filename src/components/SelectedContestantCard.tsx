@@ -1,7 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { formatGb, formatThroughput } from '../lib/format';
 import type { ModelProfile } from '../lib/modelCatalog';
-import { getHardwareFit, getSelectedContestantBlurb, isVisiblePullProgress } from '../lib/modelCatalog';
+import { getFriendlyModelName, getHardwareFit, getSelectedContestantBlurb, isVisiblePullProgress } from '../lib/modelCatalog';
 import { getModelOrigin } from '../lib/modelOrigins';
 import type { RunDelta } from '../lib/runHistory';
 import type { ModelRow, PullProgressUpdate, TestedModelScore } from '../types';
@@ -9,7 +9,6 @@ import { AvatarBust } from './Avatars';
 import { describeModelTag } from '../lib/modelVariants.ts';
 import { DownloadProgressInline } from './DownloadProgressInline';
 import { ScoreDeltaCell, ScoreRadar, ScoreSparkline } from './ScoreVisuals';
-import { Download, Gauge, Heart, Trophy, X, Zap } from 'lucide-react';
 
 export function SelectedContestantCard({
   row,
@@ -105,9 +104,9 @@ export function SelectedContestantCard({
     <section className="contestant-spotlight" aria-label={`Selected contestant is ${row.displayName}`}>
       <AvatarBust generationKind={row.generationKind} model={row.displayName} size="small" />
       <div className="contestant-spotlight-copy">
-        <span>Selected model</span>
-        <strong>{row.displayName}</strong>
-        <em>{row.params} · {profile.archetype}</em>
+        <h2 className="contestant-name">{getFriendlyModelName(row.displayName)}</h2>
+        <code className="contestant-tag">{row.displayName}</code>
+        <em>{[row.params, profile.archetype].filter(Boolean).join(' · ')}</em>
         <p>{getSelectedContestantBlurb(row, profile, score, hardwareFit)}</p>
         {/* What the letters after the colon mean, next to the letters
             themselves. The line above says "e2b · Small-footprint helper",
@@ -125,28 +124,13 @@ export function SelectedContestantCard({
           </ul>
         )}
       </div>
-      <div className="contestant-spotlight-stats" aria-label="Selected model details">
-        <div>
-          <span>Match</span>
-          <strong>{matchLabel}</strong>
-        </div>
-        <div>
-          <span>Fit</span>
-          <strong>{hardwareFit.label}</strong>
-        </div>
-        <div title={`${origin.organization} · ${origin.country}`}>
-          <span>By</span>
-          <strong>{origin.organization}</strong>
-        </div>
-        <div>
-          <span>Size</span>
-          <strong>{sizeLabel}</strong>
-        </div>
-        <div>
-          <span>Status</span>
-          <strong>{statusLabel}</strong>
-        </div>
-      </div>
+      <dl className="contestant-facts" aria-label="Selected model details">
+        <div><dt>Match</dt><dd>{matchLabel}</dd></div>
+        <div><dt>Fit</dt><dd>{hardwareFit.label}</dd></div>
+        <div title={`${origin.organization} · ${origin.country}`}><dt>Maker</dt><dd>{origin.organization}</dd></div>
+        <div><dt>Download</dt><dd className="figure">{sizeLabel}</dd></div>
+        <div><dt>Status</dt><dd>{statusLabel}</dd></div>
+      </dl>
       {score && (
         <div className="contestant-radar-row">
           <ScoreRadar speed={score.speed} sobriety={score.sobriety} fit={score.fit} />
@@ -173,73 +157,62 @@ export function SelectedContestantCard({
           </div>
         </div>
       )}
-      {vramHint && (
-        <div className="contestant-vram-hint">
-          <span>Upgrade path</span>
-          <p>{vramHint}</p>
-        </div>
-      )}
+      {vramHint && <p className="contestant-vram-hint">{vramHint}</p>}
       <div className="contestant-spotlight-actions">
         <span>{hardwareFit.detail}</span>
         <div>
           {installed ? (
             <button
               type="button"
-              className={`primary-button compact${!hardwareFit.recommend ? ' warn' : ''}`}
+              className="btn btn-gold"
               onClick={() => onScoreModel(row)}
               disabled={isBenchmarking}
-              title={!hardwareFit.recommend ? (hardwareFit.tone === 'unknown' ? '⚠ Size unknown — RigMatch can\'t gauge fit yet, test anyway?' : '⚠ Too big for your VRAM — will be slow, test anyway?') : undefined}
+              title={!hardwareFit.recommend ? (hardwareFit.tone === 'unknown' ? 'Size unknown: RigMatch cannot gauge the fit yet. Test anyway?' : 'Too big for your graphics memory, so it will be slow. Test anyway?') : undefined}
             >
-              <Gauge aria-hidden="true" />
-              Test Model
+              Test this model
             </button>
           ) : (
             <button
               type="button"
-              className={queued ? 'primary-button compact queued' : `primary-button compact${!hardwareFit.recommend ? ' warn' : ''}`}
+              className={queued ? 'btn btn-line' : 'btn btn-gold'}
               onClick={() => onQueueModel(row)}
-              title={!hardwareFit.recommend && !queued ? (hardwareFit.tone === 'unknown' ? 'Size unknown — download to find out the footprint?' : '⚠ Too big for your VRAM — download anyway?') : queued ? 'Remove this model from the download queue' : 'Add this model to the download queue'}
+              title={!hardwareFit.recommend && !queued ? (hardwareFit.tone === 'unknown' ? 'Size unknown: download to find out the footprint?' : 'Too big for your graphics memory. Download anyway?') : queued ? 'Remove this model from the download queue' : 'Add this model to the download queue'}
             >
-              {queued ? <X aria-hidden="true" /> : <Download aria-hidden="true" />}
-              {queued ? 'Remove from Queue' : 'Get Model'}
+              {queued ? 'Remove from the queue' : `Download${row.sizeGb ? ` · ${sizeLabel}` : ''}`}
             </button>
           )}
           {installed && (
             <button
               type="button"
-              className={`mini-button outline${!hardwareFit.recommend ? ' warn' : ''}`}
+              className="btn btn-line btn-sm"
               onClick={() => onQuickCheck(row)}
               disabled={isBenchmarking}
-              title={!hardwareFit.recommend ? (hardwareFit.tone === 'unknown' ? '⚠ Size unknown — quick check anyway?' : '⚠ Too big for your VRAM — quick check anyway?') : 'Run a 3-question sanity check (coding, accuracy, format)'}
+              title={!hardwareFit.recommend ? (hardwareFit.tone === 'unknown' ? 'Size unknown. Quick check anyway?' : 'Too big for your graphics memory. Quick check anyway?') : 'Three questions: coding, accuracy and format'}
             >
-              <Zap aria-hidden="true" />
-              Quick Check
+              Quick check
             </button>
           )}
           {(!speedDateLineupFull || shortlisted) && (
             <button
               type="button"
-              className={shortlisted ? 'mini-button contestant-date-button active' : 'mini-button contestant-date-button'}
+              className={shortlisted ? 'btn btn-line btn-sm contestant-date-button active' : 'btn btn-line btn-sm contestant-date-button'}
               onClick={() => onToggleShortlist(row)}
               disabled={isBenchmarking || !canChangeSpeedDateSlot}
-              title={shortlisted ? 'Remove this model from Speed Dating' : 'Add this model to Speed Dating'}
+              aria-pressed={shortlisted}
             >
-              <Heart aria-hidden="true" />
-              {shortlisted ? 'Selected' : 'Add to Speed Dating'}
+              {shortlisted ? 'In the lineup · remove' : 'Add to lineup'}
             </button>
           )}
-          <button type="button" className="mini-button outline" onClick={onOpenSpeedDate}>
-            <Trophy aria-hidden="true" />
-            Lineup
+          <button type="button" className="btn btn-line btn-sm" onClick={onOpenSpeedDate}>
+            Open Comparison
           </button>
           {installed && (
             <button
               type="button"
-              className="mini-button outline"
+              className="btn btn-line btn-sm"
               onClick={() => onChooseModel(row.displayName)}
               title={`Set ${row.displayName} as your Top Match`}
             >
-              <Heart aria-hidden="true" />
               Set as Top Match
             </button>
           )}
@@ -256,9 +229,7 @@ export function SelectedContestantCard({
         )}
       </div>
       <div className="contestant-notes">
-        <label htmlFor={`note-${row.displayName}`}>
-          <span>Notes</span>
-        </label>
+        <label htmlFor={`note-${row.displayName}`}>Your notes</label>
         <textarea
           id={`note-${row.displayName}`}
           className="contestant-notes-area"

@@ -1,8 +1,8 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { useMemo, type ReactNode } from 'react';
-import { Bell, CheckCircle, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import type { CatalogModel, ModelRow } from '../types';
 import { getModelOrigin } from '../lib/modelOrigins';
+import { getModelAvatarSrc } from '../lib/modelAvatars';
 import {
   getModelNewsItems,
   getNotificationDetail,
@@ -20,8 +20,6 @@ type WhatsNewPanelProps = {
   notificationsEnabled: boolean;
   notificationPermission: ModelNotificationPermission;
   isScanning: boolean;
-  renderHeader: (meta: string) => ReactNode;
-  renderAvatar: (model: string) => ReactNode;
   getModelSpecialties: (model: string) => string[];
   formatHistoryTime: (timestamp: string) => string;
   formatGb: (value: number) => string;
@@ -40,8 +38,6 @@ export function WhatsNewPanel({
   notificationsEnabled,
   notificationPermission,
   isScanning,
-  renderHeader,
-  renderAvatar,
   getModelSpecialties,
   formatHistoryTime,
   formatGb,
@@ -62,118 +58,83 @@ export function WhatsNewPanel({
   const latestDrops = newsItems.filter((item) => latestNewIds.has(item.id));
   const liveCount = catalog.filter((model) => model.live).length;
   const lastChecked = modelNews.lastCheckedAt ? formatHistoryTime(modelNews.lastCheckedAt) : 'Not checked yet';
-  const notificationsLabel = notificationsEnabled ? 'Notifications on' : 'Notify me';
   const notificationsDetail = getNotificationDetail(notificationsEnabled, notificationPermission);
 
+  // Two views of one list: what the last scan found, and everything recent.
+  const [scope, setScope] = useState<'new' | 'recent'>(latestDrops.length > 0 ? 'new' : 'recent');
+  const shown = scope === 'new' ? latestDrops : newsItems.slice(0, 24);
+
   return (
-    <section className={active ? 'panel whats-new-panel panel-focused' : 'panel whats-new-panel'} aria-label="What's New panel">
-      {renderHeader(latestDrops.length > 0 ? `${latestDrops.length} new` : `${catalog.length} watched`)}
-
-      <div className="whats-new-body">
-        <section className="model-news-hero" aria-label="Model drop watcher">
-          <div>
-            <span>Living Model Radar</span>
-            <strong>RigMatch watches the live Ollama catalog for new models</strong>
-            <em>No hand-maintained release list. When a scan sees a model RigMatch has not seen before, it lands here.</em>
-          </div>
-          <div className="model-news-actions">
-            <button type="button" className="primary-button compact" onClick={onRefresh} disabled={isScanning}>
-              <RefreshCw className={isScanning ? 'spin' : ''} aria-hidden="true" />
-              {isScanning ? 'Checking' : 'Check Now'}
-            </button>
-            <button
-              type="button"
-              className={notificationsEnabled ? 'mini-button outline subscribed' : 'mini-button outline'}
-              onClick={onToggleNotifications}
-            >
-              {notificationsEnabled ? <CheckCircle aria-hidden="true" /> : <Bell aria-hidden="true" />}
-              {notificationsLabel}
-            </button>
-          </div>
-        </section>
-
-        <div className="model-news-stats" aria-label="Model catalog status">
-          <div className="utility-stat">
-            <span>Latest Drop</span>
-            <strong>{latestDrops.length > 0 ? `${latestDrops.length} model${latestDrops.length === 1 ? '' : 's'}` : 'No new drops'}</strong>
-            <em>{latestDrops.length > 0 ? 'Found on the latest catalog scan.' : 'RigMatch is caught up with its saved snapshot.'}</em>
-          </div>
-          <div className="utility-stat">
-            <span>Catalog Source</span>
-            <strong>{catalogMeta.source}</strong>
-            <em>{catalogMeta.error ? `Fallback note: ${catalogMeta.error}` : `${liveCount} live Ollama entries in this scan.`}</em>
-          </div>
-          <div className="utility-stat">
-            <span>Last Checked</span>
-            <strong>{lastChecked}</strong>
-            <em>{modelNews.knownModelIds.length} known model entries watched locally.</em>
-          </div>
-          <div className="utility-stat">
-            <span>Alerts</span>
-            <strong>{notificationsEnabled ? 'Subscribed' : 'Not subscribed'}</strong>
-            <em>{notificationsDetail}</em>
-          </div>
+    <section className={active ? 'panel whats-new-panel panel-focused' : 'panel whats-new-panel'} aria-label="What's New">
+      <header className="news-head">
+        <div>
+          <h2>What's New</h2>
+          <p>
+            RigMatch watches the live Ollama catalog. When it sees a model it hasn't seen before, it lands here.
+            {' '}Last checked {lastChecked}.
+            {catalogMeta.error ? ` ${catalogMeta.source}: ${catalogMeta.error}` : ''}
+          </p>
         </div>
+        <div className="news-actions">
+          <button type="button" className="btn btn-line" onClick={onRefresh} disabled={isScanning}>
+            {isScanning ? 'Checking…' : 'Check now'}
+          </button>
+          <button
+            type="button"
+            className="news-switch"
+            role="switch"
+            aria-checked={notificationsEnabled}
+            onClick={onToggleNotifications}
+            title={notificationsDetail}
+          >
+            <span className="news-switch-track" aria-hidden="true"><i /></span>
+            Tell me when a new one lands
+          </button>
+        </div>
+      </header>
 
-        {latestDrops.length > 0 && (
-          <section className="model-news-section latest" aria-label="New model drops">
-            <div className="model-news-section-title">
-              <Sparkles aria-hidden="true" />
-              <div>
-                <span>New This Scan</span>
-                <strong>Fresh model drops</strong>
-              </div>
-            </div>
-            <ol className="model-news-list">
-              {latestDrops.map((item) => (
-                <ModelNewsListItem
-                  key={item.id}
-                  item={item}
-                  isLatest={true}
-                  renderAvatar={renderAvatar}
-                  getModelSpecialties={getModelSpecialties}
-                  formatHistoryTime={formatHistoryTime}
-                  formatGb={formatGb}
-                  formatPullCount={formatPullCount}
-                  onOpenModel={onOpenModel}
-                />
-              ))}
-            </ol>
-          </section>
-        )}
-
-        <section className="model-news-section" aria-label="Latest catalog entries">
-          <div className="model-news-section-title">
-            <Bell aria-hidden="true" />
-            <div>
-              <span>Latest Catalog</span>
-              <strong>{newsItems.length > 0 ? 'Most recently seen models' : 'Waiting for catalog data'}</strong>
-            </div>
-          </div>
-          {newsItems.length > 0 ? (
-            <ol className="model-news-list">
-              {newsItems.slice(0, 24).map((item) => (
-                <ModelNewsListItem
-                  key={item.id}
-                  item={item}
-                  isLatest={latestNewIds.has(item.id)}
-                  renderAvatar={renderAvatar}
-                  getModelSpecialties={getModelSpecialties}
-                  formatHistoryTime={formatHistoryTime}
-                  formatGb={formatGb}
-                  formatPullCount={formatPullCount}
-                  onOpenModel={onOpenModel}
-                />
-              ))}
-            </ol>
-          ) : (
-            <div className="utility-empty">
-              <strong>No catalog snapshot yet</strong>
-              <span>Run a model refresh and RigMatch will seed the watcher from the current Ollama catalog.</span>
-            </div>
-          )}
-        </section>
+      <div className="screen-tabs news-tabs" role="group" aria-label="Which models">
+        <button type="button" aria-pressed={scope === 'new'} onClick={() => setScope('new')}>
+          New this scan <span className="news-count">{latestDrops.length}</span>
+        </button>
+        <button type="button" aria-pressed={scope === 'recent'} onClick={() => setScope('recent')}>
+          Recently seen <span className="news-count">{Math.min(newsItems.length, 24)}</span>
+        </button>
+        <span className="news-tabs-note">
+          {catalog.length} watched · {liveCount} live in this scan · {notificationsEnabled ? 'notifications on' : 'notifications off'}
+        </span>
       </div>
+
+      {shown.length > 0 ? (
+        <ol className="model-news-list">
+          {shown.map((item) => (
+            <ModelNewsListItem
+              key={item.id}
+              item={item}
+              isLatest={latestNewIds.has(item.id)}
+              getModelSpecialties={getModelSpecialties}
+              formatHistoryTime={formatHistoryTime}
+              formatGb={formatGb}
+              formatPullCount={formatPullCount}
+              onOpenModel={onOpenModel}
+            />
+          ))}
+        </ol>
+      ) : (
+        <div className="news-empty">
+          {scope === 'new' ? (
+            <>
+              <strong>Nothing new since the last scan</strong>
+              <span>RigMatch is caught up with its saved snapshot. Check now to scan again.</span>
+            </>
+          ) : (
+            <>
+              <strong>No catalog snapshot yet</strong>
+              <span>Check now and RigMatch will start watching from the current Ollama catalog.</span>
+            </>
+          )}
+        </div>
+      )}
     </section>
   );
 }
@@ -181,7 +142,6 @@ export function WhatsNewPanel({
 function ModelNewsListItem({
   item,
   isLatest,
-  renderAvatar,
   getModelSpecialties,
   formatHistoryTime,
   formatGb,
@@ -190,7 +150,6 @@ function ModelNewsListItem({
 }: {
   item: ModelNewsItem;
   isLatest: boolean;
-  renderAvatar: (model: string) => ReactNode;
   getModelSpecialties: (model: string) => string[];
   formatHistoryTime: (timestamp: string) => string;
   formatGb: (value: number) => string;
@@ -199,27 +158,32 @@ function ModelNewsListItem({
 }) {
   const origin = getModelOrigin(item.displayName);
   const specialties = getModelSpecialties(item.displayName).slice(0, 3);
+  const [base, tag] = item.displayName.split(':');
 
   return (
     <li className={isLatest ? 'model-news-item is-new' : 'model-news-item'}>
-      {renderAvatar(item.displayName)}
+      <div className="model-news-portrait">
+        <img src={getModelAvatarSrc(item.displayName)} alt="" />
+        {isLatest && <span className="model-news-new">New</span>}
+      </div>
       <div className="model-news-copy">
-        <span>
-          {isLatest && <b>New</b>}
-          {item.installed && <b className="installed">Installed</b>}
-          <em>{origin.organization}</em>
-        </span>
-        <strong>{item.displayName}</strong>
+        <div className="model-news-name">
+          <strong>{base}</strong>
+          {tag && <code>{item.displayName}</code>}
+        </div>
         <p>{specialties.join(' · ') || item.model.pack}</p>
+        <span className="model-news-by">
+          {origin.organization !== 'Unknown model family' ? `by ${origin.organization}` : 'maker not recorded'}
+          {' · '}seen {formatHistoryTime(item.firstSeenAt)}
+          {item.model.pulls != null && <> · <b>{formatPullCount(item.model.pulls)} pulls</b></>}
+        </span>
       </div>
       <div className="model-news-meta">
-        <span>{item.model.sizeGb ? formatGb(item.model.sizeGb) : 'Size TBA'}</span>
-        <em>{item.model.pulls != null ? `${formatPullCount(item.model.pulls)} pulls` : item.model.source}</em>
-        <small>Seen {formatHistoryTime(item.firstSeenAt)}</small>
+        <span className="figure">{item.model.sizeGb ? formatGb(item.model.sizeGb) : 'Size not listed'}</span>
+        <span className="model-news-status">{item.installed ? 'On your PC' : 'Not downloaded'}</span>
       </div>
-      <button type="button" className="mini-button outline" onClick={() => onOpenModel(item.displayName)}>
-        Open
-        <ChevronRight aria-hidden="true" />
+      <button type="button" className="btn btn-line btn-sm" onClick={() => onOpenModel(item.displayName)}>
+        Details
       </button>
     </li>
   );

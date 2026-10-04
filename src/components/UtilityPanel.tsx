@@ -1,7 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { matchDisplayLabel } from '../lib/goals';
 import type { UtilityPanelId } from '../types';
-import robotScorecardCeremony from '../assets/robot-scorecard-ceremony.webp';
 import { releaseNotes } from '../data/releaseNotes';
 import type { ThemeId, UiMode } from '../lib/appConfig';
 import { APP_VERSION, BUY_ME_A_COFFEE_URL } from '../lib/appConfig';
@@ -17,8 +16,8 @@ import { MATCH_GRADE_BAND_ROWS } from '../lib/scoreReference';
 import type { SettingsSectionId } from '../lib/settingsSections';
 import { buildSettingsRail } from '../lib/settingsSections';
 import { formatMatchScore, isLegacyScore, scoreDrift, scoreDriftLabel } from '../lib/scoring';
-import { balanceLabel, balanceSplit } from '../lib/balance';
-import { describeLabAccuracy, rankCoding, rankLabList, type LabChannel } from '../lib/channelWinners';
+import { balanceSplit } from '../lib/balance';
+import { describeLabAccuracy, rankLabList, type LabChannel } from '../lib/channelWinners';
 import type { AdvancedLabResult } from '../lib/labResults';
 import { workbenchById, type Workbench } from '../lib/workbench';
 import { useDialog } from '../lib/useDialog';
@@ -30,7 +29,6 @@ import { GoalsSummary } from './GoalsSummary';
 import { HistoryTimeline } from './HistoryTimeline';
 import { HowWeScoreSection } from './HowWeScoreSection';
 import { LogEntry } from './LogEntry';
-import { RomanceArtBanner } from './ScoreVisuals';
 import { SettingsSection } from './SettingsSection';
 import { ModelDemoChips } from './SkillDemoViewers';
 import { ThemePicker } from './ThemePicker';
@@ -195,10 +193,6 @@ export function UtilityPanel({
   const labBoard = useMemo(
     () => (labChannel ? rankLabList(Object.values(labResults), labChannel, channelRankAt) : []),
     [labChannel, labResults, channelRankAt],
-  );
-  const codingRanked = useMemo(
-    () => (channel === 'code' ? rankCoding(rankedModelScores, channelBalance).ranked.length : 0),
-    [channel, rankedModelScores, channelBalance],
   );
   const savedChatMessageCount = Math.max(0, chatMessages.length - 1);
   const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
@@ -440,25 +434,6 @@ export function UtilityPanel({
         </div>
       )}
 
-      {panel === 'history' && (
-        <RomanceArtBanner
-          image={robotScorecardCeremony}
-          className="scorecard-art-banner art-banner-slim"
-          kicker="Scorecard ceremony"
-          title="Saved tests, ranked scores, crowned matches"
-          body={labChannel
-            ? (labBoard.length > 0
-              ? `${labBoard.length} ${LAB_NOUN[labChannel]}${labBoard.length === 1 ? '' : 's'} ranked at ${balanceLabel(channelRankAt)}.`
-              : workbench.emptyHint)
-            : channel === 'code'
-              ? (codingRanked > 0
-                ? `${codingRanked} model${codingRanked === 1 ? '' : 's'} ranked on coding answers at ${balanceLabel(channelBalance)}.`
-                : workbench.emptyHint)
-              : rankedModelScores.length > 0
-                ? `${rankedModelScores.length} tested model${rankedModelScores.length === 1 ? '' : 's'} ranked by Match score at ${balanceLabel(channelBalance)}.`
-                : 'Run a model test or Speed Dating to start the ceremony.'}
-        />
-      )}
 
       {panel === 'history' && labChannel && (
         <div className="utility-body">
