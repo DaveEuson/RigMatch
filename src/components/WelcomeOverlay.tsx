@@ -59,10 +59,15 @@ export function WelcomeOverlay({ vramGb, initialGoal, replay = false, onFinish, 
           </div>
 
           {at === 'welcome' && (
-            <p>
-              The dating show where your computer meets its perfect AI model. Contestants answer the same
-              questions on your own PC, and the host crowns a Top Match. Nothing leaves this computer.
-            </p>
+            <>
+              <p>
+                The dating show where your computer meets its perfect AI model. Contestants answer the same
+                questions on your own PC, and the host crowns a Top Match. Nothing leaves this computer.
+              </p>
+              <p className="welcome-free">
+                RigMatch is donationware: every feature is free, and nothing is locked if you don’t donate.
+              </p>
+            </>
           )}
           {at === 'model' && (
             <p>

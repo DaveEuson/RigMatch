@@ -52,6 +52,7 @@
 .welcome-goal[aria-pressed='true'] { border: 2px solid var(--accent); padding: 5px calc(var(--s3) - 1px); background: color-mix(in srgb, var(--accent) 16%, transparent); font-weight: 700; }
 .welcome-goal:disabled { cursor: not-allowed; opacity: 0.5; }
 .welcome-note { min-height: 3em; color: var(--muted); font-size: var(--fs-ui); }
+.welcome-free { color: var(--muted); font-size: var(--fs-ui); }
 
 .welcome-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); padding: var(--s3) var(--s5) var(--s5); }
 .welcome-dots { display: flex; gap: 6px; }

@@ -1,16 +1,17 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Check, Code2, Coffee, ExternalLink, Heart, MessageSquare, Share2, ShoppingCart, Terminal, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, Code2, Coffee, ExternalLink, Heart, MessageSquare, Share2, Terminal, Trash2, X } from 'lucide-react';
 import { agentArcadeApi } from '../api';
 import type { ModelRow, NetworkHost, SystemProfile, TestedModelScore } from '../types';
 import { formatGb } from '../lib/format';
 import { sumModelRowGb, getShortModelName } from '../lib/modelCatalog';
-import { BUY_ME_A_COFFEE_URL, amazonUrl } from '../lib/appConfig';
+import { BUY_ME_A_COFFEE_URL } from '../lib/appConfig';
 import { playJingle } from '../lib/sound';
 import { AvatarBust, MachineAvatar } from './Avatars';
 import { ShareScorecard } from './ShareScorecard';
 import { useDialog } from '../lib/useDialog';
 import { companionLaunchMessage } from '../lib/companionLaunch';
+import { UiIcon } from './icons/UiIcon';
 
 export function DeleteModelModal({
   row,
@@ -250,96 +251,50 @@ export function CloseCleanupModal({
   );
 }
 
-const SUPPORT_HARDWARE_LINKS = [
-  {
-    label: 'RTX 4070 Ti GPU',
-    desc: '12 GB VRAM — runs 13B models with headroom. Best price-to-VRAM upgrade for most rigs.',
-    query: 'RTX 4070 Ti graphics card 12GB',
-  },
-  {
-    label: 'RTX 4090 GPU',
-    desc: '24 GB VRAM — the local AI endgame. 70B models in reach. Serious kit for serious models.',
-    query: 'RTX 4090 graphics card 24GB',
-  },
-  {
-    label: 'AI-Ready Gaming Desktop',
-    desc: 'Pre-built Windows PC with high-VRAM GPU — plug in Ollama and go, no assembly required.',
-    query: 'gaming desktop RTX 4070 Ti AI machine learning',
-  },
-  {
-    label: 'Apple Mac Studio M4 Max',
-    desc: '36–128 GB unified memory. Runs 30B models silently. Every GB counts for local AI.',
-    query: 'Apple Mac Studio M4 Max',
-  },
-] as const;
-
 export function SupportModal({ onClose }: { onClose: () => void }) {
   const dialogRef = useDialog<HTMLElement>(onClose);
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <section
         ref={dialogRef}
-        className="support-modal"
+        className="run-warning-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="support-modal-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <button type="button" className="modal-close-btn" onClick={onClose} aria-label="Close">
-          <X aria-hidden="true" />
-        </button>
-        <div className="support-modal-header">
-          <span>☕</span>
+        <div className="modal-title">
+          <UiIcon name="coffee" size={24} />
           <div>
-            <h2 id="support-modal-title">Support RigMatch</h2>
-            <p>Free to use, forever. If it saved you time hunting the right model, a coffee keeps the lights on.</p>
+            <span>Donationware</span>
+            <strong id="support-modal-title">RigMatch is free. All of it.</strong>
           </div>
         </div>
-
-        <a
-          className="support-coffee-btn"
-          href={BUY_ME_A_COFFEE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Coffee aria-hidden="true" />
-          Buy Me a Coffee
-          <ExternalLink aria-hidden="true" className="support-ext-icon" />
-        </a>
-
-        <div className="support-divider">
-          <span>or level up your rig</span>
+        <div className="modal-body">
+          <p>
+            If RigMatch found you a model worth keeping, a coffee helps me keep building it. If you can't, or would
+            rather not, nothing changes.
+          </p>
+          <div className="modal-warning-grid">
+            <div>
+              <span>Free</span>
+              <strong>Every feature</strong>
+              <em>Simple and Advanced, Chat, the labs and every show. No trial, no account and no ads.</em>
+            </div>
+            <div>
+              <span>Donating</span>
+              <strong>Optional</strong>
+              <em>It unlocks nothing, because nothing is locked.</em>
+            </div>
+          </div>
         </div>
-
-        <p className="support-hardware-intro">
-          More VRAM = more models. These affiliate links cost you nothing extra and send a small cut back to RigMatch development.
-        </p>
-
-        <div className="support-hardware-grid">
-          {SUPPORT_HARDWARE_LINKS.map((link) => (
-            <a
-              key={link.label}
-              href={amazonUrl(link.query)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="support-hardware-card"
-              aria-label={`Search for ${link.label} on Amazon`}
-            >
-              <div className="support-hardware-card-inner">
-                <strong>{link.label}</strong>
-                <p>{link.desc}</p>
-              </div>
-              <span className="support-amazon-badge">
-                <ShoppingCart aria-hidden="true" />
-                Amazon
-              </span>
-            </a>
-          ))}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-line" onClick={onClose}>Close</button>
+          <a className="btn btn-gold" href={BUY_ME_A_COFFEE_URL} target="_blank" rel="noopener noreferrer">
+            Buy me a coffee
+            <ExternalLink aria-hidden="true" />
+          </a>
         </div>
-
-        <p className="support-disclosure">
-          Affiliate links — purchases support RigMatch at no extra cost to you.
-        </p>
       </section>
     </div>
   );
@@ -618,7 +573,7 @@ export function ChoiceCruiseModal({
               <Coffee aria-hidden="true" />
               <div>
                 <strong>Support RigMatch</strong>
-                <em>Free to use, donationware. If it saved you time, a coffee keeps it going.</em>
+                <em>Donationware: every feature is free, and nothing is locked if you don't donate. If it saved you time, a coffee keeps it going.</em>
               </div>
             </a>
           </div>

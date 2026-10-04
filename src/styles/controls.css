@@ -21,6 +21,8 @@
   background: transparent;
   color: var(--text-strong);
   font: 700 var(--fs-ui) / 1.2 var(--ui);
+  /* Some are links (Buy me a coffee, Report a bug); only .btn-link underlines. */
+  text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
   transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);

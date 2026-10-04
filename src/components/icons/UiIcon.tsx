@@ -2,7 +2,7 @@
 import { UI_ICON_ART, type UiIconName } from './uiIconArt';
 
 /**
- * One of the redesign's 30 interface icons, drawn in the current text color.
+ * One of the redesign's interface icons, drawn in the current text color.
  *
  * The art is trusted, generated markup (uiIconArt.ts), not anything a user or
  * a model wrote, which is what makes setting it as HTML safe here. Decorative

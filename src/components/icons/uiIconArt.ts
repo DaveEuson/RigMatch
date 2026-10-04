@@ -1,9 +1,10 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 // Generated from the redesign's interface icon set (design_handoff_rigmatch/icons/ui).
 // Strokes use currentColor; fixed signal colors use the tokens. Edit the source
-// set and regenerate rather than editing these strings by hand.
+// set and regenerate rather than editing these strings by hand. One exception:
+// "coffee" (the Donate button) was drawn here afterwards, in the same style.
 
-export const UI_ICON_NAMES = ["badge","bolt","chat","cpu","disk","download","err","gavel","gear","gpu","hearts","lab","lineup","memory","models","more","nodes","ok","palette","picture","play","plug","ram","search","send","sparkle","trophy","tv","vram","warn"] as const;
+export const UI_ICON_NAMES = ["badge","bolt","chat","coffee","cpu","disk","download","err","gavel","gear","gpu","hearts","lab","lineup","memory","models","more","nodes","ok","palette","picture","play","plug","ram","search","send","sparkle","trophy","tv","vram","warn"] as const;
 export type UiIconName = (typeof UI_ICON_NAMES)[number];
 
 export const UI_ICON_ART: Record<UiIconName, { strokeWidth: number; body: string }> = {
@@ -18,6 +19,10 @@ export const UI_ICON_ART: Record<UiIconName, { strokeWidth: number; body: string
   "chat": {
     "strokeWidth": 2.2,
     "body": "<path d=\"M5 3.5h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-7l-5 3.5V17.5H5a3 3 0 0 1-3-3v-8a3 3 0 0 1 3-3Z\"></path><circle cx=\"8\" cy=\"10.5\" r=\"1.3\" style=\"fill:var(--accent)\" stroke=\"none\"></circle><circle cx=\"12\" cy=\"10.5\" r=\"1.3\" style=\"fill:var(--accent)\" stroke=\"none\"></circle><circle cx=\"16\" cy=\"10.5\" r=\"1.3\" style=\"fill:var(--accent)\" stroke=\"none\"></circle>"
+  },
+  "coffee": {
+    "strokeWidth": 2.2,
+    "body": "<path d=\"M8 3.5c-.9 1.1.9 2 0 3.2M12 3.5c-.9 1.1.9 2 0 3.2\"></path><path d=\"M4 9.5h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5Z\"></path><path d=\"M5.1 12h9.8v2.5a3.9 3.9 0 0 1-3.9 3.9H9a3.9 3.9 0 0 1-3.9-3.9Z\" style=\"fill:var(--accent)\" stroke=\"none\"></path><path d=\"M16 11h1.5a2.75 2.75 0 0 1 0 5.5H16\"></path>"
   },
   "cpu": {
     "strokeWidth": 2.2,

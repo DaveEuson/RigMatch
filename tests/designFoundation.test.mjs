@@ -8,7 +8,7 @@ import { BADGE_ART } from '../src/components/badgeArt.ts';
 import { ACHIEVEMENTS } from '../src/lib/achievements.ts';
 
 /**
- * The redesign's foundation: three bundled typefaces, the token set, the 30
+ * The redesign's foundation: three bundled typefaces, the token set, the 31
  * interface icons and the badge art. These pin what the rest of the build
  * leans on, so a missing font file or an icon still carrying a fixed color
  * fails here rather than as a fallback face or a cream icon on a light panel.
@@ -44,7 +44,7 @@ test('the tokens name the three faces and keep the old names working', () => {
 });
 
 test('the interface icons follow the text color, not a fixed cream', () => {
-  assert.equal(UI_ICON_NAMES.length, 30);
+  assert.equal(UI_ICON_NAMES.length, 31, 'the 30 from the handoff, plus coffee for Donate');
   for (const name of UI_ICON_NAMES) {
     const { body, strokeWidth } = UI_ICON_ART[name];
     assert.ok(strokeWidth > 0, name);

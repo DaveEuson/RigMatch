@@ -10,7 +10,7 @@ export function UiModePicker({
 }) {
   const modes: Array<{ id: UiMode; label: string; description: string }> = [
     { id: 'beginner', label: 'Simple', description: 'Free guided path: check, pick, compare, use the winner.' },
-    { id: 'advanced', label: 'Advanced', description: 'Power tools for deeper testing, diagnostics, and supporter experiments.' },
+    { id: 'advanced', label: 'Advanced', description: 'Power tools for deeper testing and diagnostics.' },
   ];
 
   return (
