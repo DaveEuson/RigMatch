@@ -85,11 +85,9 @@ const PRESENT = [
   ['Gemma keeps its prohibited-use policy', js, 'prohibited_use_policy'],
   ['the top bar with its tabs', css, 'top-bar-tabs'],
   ['the computer-load strip', css, 'load-strip-readings'],
-  // The minifier rewrites media queries to modern range syntax, so
-  // "max-height: 900px" in the source ships as "(height<=900px)". Probing for
-  // the authored spelling reported this fix missing when it was present.
-  ['nav rail compacts on short screens', css, 'height<=900px'],
-  ['visible scrollbar on the nav rail', css, 'scrollbar-thumb'],
+  // The nav rail these two once covered went with the redesign (the top bar
+  // replaced it); the scrollbar styling outlived it.
+  ['visible scrollbars', css, 'scrollbar-thumb'],
   ['winner scoreboard styling', css, 'sw-scoreboard'],
   ['answer strip styling', css, 'sw-answer-strip'],
   ['Find ComfyUI for me', js, 'Find ComfyUI for me'],
