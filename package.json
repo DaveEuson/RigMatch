@@ -48,6 +48,10 @@
     "appId": "ai.rigmatch.app",
     "productName": "RigMatch",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "electronLanguages": [
+      "en-US",
+      "en"
+    ],
     "files": [
       "dist/**",
       "electron/**",

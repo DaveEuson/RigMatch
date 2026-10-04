@@ -24,7 +24,6 @@ import {
   APP_VERSION,
   GITHUB_ISSUES_URL,
   MODE_SPLASH_STORAGE_KEY,
-  TUTORIAL_STORAGE_KEY,
   UI_MODE_STORAGE_KEY,
   navItems,
   themeOptions,
@@ -622,42 +621,6 @@ export function getResultExplanation(
     body: `${model} is a ${score.grade} match because ${strongestTrait}, scored ${score.speed}% speed, ${score.sobriety}% answer quality, and ${score.fit}% computer fit on ${host?.hostname ?? 'this computer'}. ${caution}`,
     bottleneck,
   };
-}
-
-export function getModelProfileHighlights(
-  row: ModelRow | undefined,
-  profile: ModelProfile,
-  score: TestedModelScore | undefined,
-  vramGb: number,
-) {
-  const sizeGb = row?.sizeGb ?? row?.installedModel?.sizeGb ?? null;
-  const origin = getModelOrigin(row?.displayName ?? '');
-  const redFlag = sizeGb && vramGb > 0 && sizeGb > vramGb
-    ? sizeGb <= vramGb * 1.15 ? 'RAM assist' : 'Too big for VRAM'
-    : sizeGb && sizeGb >= 12
-      ? 'Large download'
-      : score && score.sobriety < 75
-        ? 'Needs supervision'
-        : 'Low drama';
-
-  return [
-    {
-      label: 'Best use',
-      value: profile.archetype,
-    },
-    {
-      label: 'Best for',
-      value: profile.specialties.slice(0, 2).join(' + '),
-    },
-    {
-      label: 'By',
-      value: origin.organization,
-    },
-    {
-      label: 'Red flag',
-      value: redFlag,
-    },
-  ];
 }
 
 export function getRigPick(
@@ -1315,10 +1278,6 @@ export function hasChosenInterfaceMode(): boolean {
   return window.localStorage.getItem(MODE_SPLASH_STORAGE_KEY) != null;
 }
 
-export function getSavedTutorialSeen() {
-  return window.localStorage.getItem(TUTORIAL_STORAGE_KEY) === 'seen';
-}
-
 export function isThemeId(value: string | null): value is ThemeId {
   return themeOptions.some((theme) => theme.id === value);
 }
@@ -1632,32 +1591,6 @@ export function getModelDreamTags(row: ModelRow): DreamTag[] {
   if (isLikelyVideoGenerationModel(row.displayName)) tags.push('video');
   if (modelMatchesTask(row, 'audiogen')) tags.push('audio');
   return tags;
-}
-
-/**
- * The Models filter that shows a goal's candidates.
- *
- * The splash asks what someone wants to do; this is how that answer reaches
- * the Models screen without inventing a second filter system. Goals with no
- * chip yet return undefined and simply apply no lens — never a wrong one.
- */
-export function taskFilterForGoal(goalId: string | undefined): ModelTaskFilterId | undefined {
-  switch (goalId) {
-    case 'talk': return 'assistant';
-    case 'write': return 'writing';
-    case 'code': return 'coding';
-    case 'transcribe-file': return 'hears';
-    case 'describe-image': return 'vision';
-    case 'make-images': return 'imagegen';
-    // Image-to-video and text-to-video draw from the same checkpoint pool.
-    case 'animate-image': return 'videogen';
-    case 'make-video': return 'videogen';
-    case 'make-audio': return 'audiogen';
-    // use-tools has no capability chip yet; json-scored, so Matches can rank
-    // it, but the Models screen cannot filter for it until tools capability
-    // reporting lands. transcribe-live and ask-documents have no lens either.
-    default: return undefined;
-  }
 }
 
 export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolean {

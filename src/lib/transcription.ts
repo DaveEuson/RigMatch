@@ -137,6 +137,4 @@ export function extractTranscript(response: string): string {
  */
 export const MIN_REFERENCE_WORDS = 30;
 
-export function isReferenceLongEnough(expected: string): boolean {
-  return normalizeTranscript(expected).length >= MIN_REFERENCE_WORDS;
-}
+

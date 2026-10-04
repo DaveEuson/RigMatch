@@ -216,10 +216,7 @@ export function accuracyCounted<T>(ranked: RankedContender<T>[]): boolean {
   return ranked.some((entry) => entry.standing !== 'failed' && entry.accuracy !== null);
 }
 
-/** What a ranking was really ranked at: the fader, or speed alone when nothing was judged. */
-export function rankedAtLabel<T>(ranked: RankedContender<T>[], balance: number): string {
-  return accuracyCounted(ranked) ? balanceLabel(balance) : 'speed only';
-}
+
 
 /** True when no result in the race was judged, so the fader can only mean speed. */
 export function speedOnly<T>(contenders: Contender<T>[]): boolean {

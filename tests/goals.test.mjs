@@ -9,7 +9,6 @@ import {
   MODEL_ATTRIBUTES,
   SCORED_QUALITIES,
   goalById,
-  goalCoverage,
   goalHardwareExpectation,
   goalsByCategory,
   questionScoredGoals,
@@ -144,17 +143,6 @@ test('the goal mapping preserves what the old task groups measured', () => {
   const oldCoding = TASK_GROUPS.find((g) => g.id === 'coding');
   assert.deepEqual([...goalById('talk').questionTypes], [...oldChat.questionTypes]);
   assert.deepEqual([...goalById('code').questionTypes], [...oldCoding.questionTypes]);
-});
-
-test('a ten-question run is reported as too thin to rank goals', () => {
-  const short = goalCoverage(10);
-  assert.equal(short.enough, false);
-  assert.ok(short.perGoal < MIN_QUESTIONS_PER_GOAL);
-  assert.ok(short.suggestion >= 20);
-});
-
-test('a twenty-question run clears the bar', () => {
-  assert.equal(goalCoverage(20).enough, true);
 });
 
 test('hardware expectations declare their source, measured or heuristic', () => {

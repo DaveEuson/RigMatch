@@ -7,34 +7,6 @@ import { formatRunDelta, type RunDelta } from '../lib/runHistory';
 
 /** Small presentational score/status widgets shared across panels. Extracted from App.tsx. */
 
-export function RomanceArtBanner({
-  image,
-  className = '',
-  kicker,
-  title,
-  body,
-}: {
-  image: string;
-  className?: string;
-  kicker: string;
-  title: string;
-  body: string;
-}) {
-  return (
-    <section
-      className={`romance-art-banner ${className}`}
-      style={{ backgroundImage: `url(${image})` }}
-      aria-label={title}
-    >
-      <div>
-        <span>{kicker}</span>
-        <strong>{title}</strong>
-        <em>{body}</em>
-      </div>
-    </section>
-  );
-}
-
 export function ScoreRadar({ speed, sobriety, fit }: { speed: number; sobriety: number; fit: number }) {
   const size = 84;
   const cx = size / 2, cy = size / 2;

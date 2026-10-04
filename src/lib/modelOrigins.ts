@@ -189,10 +189,6 @@ export function getModelOrigin(model: string): ModelOrigin {
   }
 }
 
-export function getModelDeveloperKey(model: string) {
-  return normalizeDeveloperId(getModelOrigin(model).organization);
-}
-
 /**
  * Who made this row, for the developer filter.
  *

@@ -82,14 +82,4 @@ export function samplingProfileFor(checkpoint: string): SamplingProfile {
   return hit ? hit.profile : STANDARD_PROFILE;
 }
 
-/**
- * True when the checkpoint is one of the distilled families.
- *
- * Kept separate from the profile because callers that compare models need to
- * know that two runs were measured under different settings — a four-step
- * render and a twenty-step render are not the same unit of work, and speed
- * scored per step flatters the slower one.
- */
-export function isDistilledCheckpoint(checkpoint: string): boolean {
-  return samplingProfileFor(checkpoint) !== STANDARD_PROFILE;
-}
+

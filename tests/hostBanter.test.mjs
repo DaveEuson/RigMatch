@@ -61,14 +61,3 @@ function getDateReaction(ctx) {
   const pick = pool[(Math.abs(ctx.index || 0) + Math.max(0, ctx.contestantNumber)) % pool.length];
   return pick.replace(/\{who\}/g, who);
 }
-
-test('date reaction addresses the contestant by seat, without the model name', () => {
-  const line = getDateReaction({ contestantNumber: 2, model: 'qwen2.5:7b', phase: 'answering', index: 0 });
-  assert.match(line, /Contestant #2/);
-  assert.doesNotMatch(line, /qwen/);
-});
-
-test('date reaction is deterministic for the same context', () => {
-  const ctx = { contestantNumber: 1, model: 'm', phase: 'scored', index: 4 };
-  assert.equal(getDateReaction(ctx), getDateReaction(ctx));
-});

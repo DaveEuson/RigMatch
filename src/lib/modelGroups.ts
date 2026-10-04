@@ -122,14 +122,7 @@ function pickFace<T>(
   return pool.reduce((champion, row) => (rank(row) > rank(champion) ? row : champion), pool[0]);
 }
 
-/** How many table rows a grouping will actually draw, with these families open. */
-export function countVisibleRows<T>(grouped: Array<GroupedRow<T>>, expanded: Set<string>): number {
-  return grouped.reduce((total, entry) => {
-    if (entry.kind === 'row') return total + 1;
-    // The group's own row, plus its variants when it is open.
-    return total + 1 + (expanded.has(entry.group.family) ? entry.group.rows.length : 0);
-  }, 0);
-}
+
 
 /**
  * Families to open on the reader's behalf.

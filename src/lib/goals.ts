@@ -315,19 +315,7 @@ export type ModelAttributeId = (typeof MODEL_ATTRIBUTES)[number]['id'];
  */
 export const MIN_QUESTIONS_PER_GOAL = 3;
 
-export function goalCoverage(questionCount: number): {
-  perGoal: number;
-  enough: boolean;
-  suggestion: number;
-} {
-  const buckets = questionScoredGoals().length + SCORED_QUALITIES.length;
-  const perGoal = Math.floor(questionCount / Math.max(1, buckets));
-  return {
-    perGoal,
-    enough: perGoal >= MIN_QUESTIONS_PER_GOAL,
-    suggestion: buckets * MIN_QUESTIONS_PER_GOAL <= 20 ? 20 : 50,
-  };
-}
+
 
 /**
  * What this hardware should expect from a goal, before any test runs.

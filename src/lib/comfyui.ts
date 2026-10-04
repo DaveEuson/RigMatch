@@ -19,8 +19,6 @@
  * because the renderer's origin is not one ComfyUI's CORS policy accepts.
  */
 
-export const COMFY_DEFAULT_URL = 'http://127.0.0.1:8188';
-
 /** Node ids in the graph below. Arbitrary, but referenced by wiring, so named. */
 const CHECKPOINT = '4';
 const LATENT = '5';
@@ -268,40 +266,10 @@ function describeFailure(messages: unknown[] | undefined): string {
   return 'ComfyUI reported the run failed but said no more.';
 }
 
-/** The URL that fetches a produced image. */
-export function viewUrl(baseUrl: string, ref: ComfyImageRef): string {
-  const query = new URLSearchParams({
-    filename: ref.filename,
-    subfolder: ref.subfolder,
-    type: ref.type,
-  });
-  return `${baseUrl.replace(/\/$/, '')}/view?${query.toString()}`;
-}
+
 
 export type ComfyDevice = { name: string; type: string; vramTotal: number; vramFree: number };
 
-/**
- * What ComfyUI says it is running on.
- *
- * The field names differ across versions and some builds omit the VRAM
- * figures entirely, so everything is optional and missing numbers become 0
- * rather than NaN — a fit calculation that divides by NaN silently poisons a
- * whole scorecard.
- */
-export function parseSystemStats(stats: unknown): ComfyDevice[] {
-  const devices = (stats as { devices?: unknown[] } | null)?.devices;
-  if (!Array.isArray(devices)) return [];
-  return devices.map((raw) => {
-    const device = raw as Record<string, unknown>;
-    return {
-      name: typeof device.name === 'string' ? device.name : 'unknown',
-      type: typeof device.type === 'string' ? device.type : 'unknown',
-      vramTotal: numberOr(device.vram_total, 0),
-      vramFree: numberOr(device.vram_free, 0),
-    };
-  });
-}
 
-function numberOr(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-}
+
+

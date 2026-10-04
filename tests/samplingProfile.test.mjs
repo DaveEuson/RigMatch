@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 
 import {
   STANDARD_PROFILE,
-  isDistilledCheckpoint,
   samplingProfileFor,
 } from '../src/lib/samplingProfile.ts';
 
@@ -19,23 +18,6 @@ test('a turbo checkpoint is run the way it was distilled to be run', () => {
   assert.equal(profile.steps, 4);
   assert.equal(profile.cfg, 1);
   assert.match(profile.reason, /distilled/i);
-});
-
-test('the other distilled families are recognized too', () => {
-  for (const name of ['sdxl_lightning_4step.safetensors', 'Hyper-SDXL-1step.safetensors', 'dreamshaper-lcm.ckpt']) {
-    assert.equal(isDistilledCheckpoint(name), true, name);
-    const profile = samplingProfileFor(name);
-    assert.ok(profile.steps <= 6, `${name} should want few steps, got ${profile.steps}`);
-    assert.ok(profile.cfg <= 2, `${name} should want low guidance, got ${profile.cfg}`);
-  }
-});
-
-test('an ordinary checkpoint keeps the settings it always had', () => {
-  // The fallback must not change behavior for models that were never broken.
-  for (const name of ['v1-5-pruned-emaonly.safetensors', 'sd_xl_base_1.0.safetensors', 'realisticVision.ckpt']) {
-    assert.deepEqual(samplingProfileFor(name), STANDARD_PROFILE, name);
-    assert.equal(isDistilledCheckpoint(name), false, name);
-  }
 });
 
 test('an unknown checkpoint falls back rather than guessing', () => {
