@@ -42,10 +42,18 @@ test('a missing checkpoint is surfaced, not swallowed as a successful submit', (
       node_errors: { 4: { errors: [{ message: 'value not in list: ckpt_name' }] } },
     },
   });
+  // Said as something a newcomer can act on, naming the input that was missing.
   return assert.rejects(
     () => bridge.submit(LOCAL, { 4: {} }),
-    /rejected the workflow.*node 4.*value not in list/s,
+    /does not have a model file this test needs \(ckpt_name\)/,
   );
+});
+
+test('any other node error still says what ComfyUI rejected', () => {
+  const { bridge } = harness({
+    '/prompt': { prompt_id: 'abc', node_errors: { 7: { errors: [{ message: 'Required input is missing: seed' }] } } },
+  });
+  return assert.rejects(() => bridge.submit(LOCAL, { 7: {} }), /rejected the workflow.*node 7.*Required input is missing/s);
 });
 
 test('a submit with no prompt id is an error rather than an undefined job', async () => {
