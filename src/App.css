@@ -392,7 +392,8 @@ textarea {
   justify-content: normal;
 }
 
-.local-status-card .badge-case .badge-slot {
+.local-status-card .badge-case .badge-slot,
+.local-status-card .badge-case .badge-case-count {
   min-width: 24px;
   min-height: 24px;
 }

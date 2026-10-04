@@ -58,11 +58,11 @@ function contrast(foreground, background) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-const SURFACES = ['bg', 'panel', 'panel-2'];
+const SURFACES = ['bg', 'panel', 'panel-2', 'stage'];
 /** Body-size text: WCAG AA wants 4.5:1. */
 const TEXT_TOKENS = ['text', 'text-strong', 'muted'];
 /** Accents carry emphasis, verdicts, and badges: hold them to 3:1. */
-const ACCENT_TOKENS = ['gold', 'green', 'red', 'blue', 'pink'];
+const ACCENT_TOKENS = ['gold', 'green', 'red', 'blue', 'pink', 'accent'];
 
 test('the theme parser actually found the themes', () => {
   // Stage Plum is the :root default; the other four are named blocks.

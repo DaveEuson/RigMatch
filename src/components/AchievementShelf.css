@@ -15,19 +15,6 @@
   filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.55));
 }
 
-/* An empty socket in the badge's own shape, pressed into the case. */
-.achievement-pin.socket .socket-shape {
-  fill: rgba(0, 0, 0, 0.3);
-  stroke: color-mix(in srgb, var(--line-bright) 75%, transparent);
-  stroke-width: 1.3;
-  stroke-linejoin: round;
-}
-
-.achievement-pin .socket-mark {
-  fill: var(--muted);
-  font: 900 14px var(--display);
-}
-
 /* The badge case in the top bar --------------------------------------------- */
 .badge-case {
   display: flex;
@@ -72,6 +59,7 @@
   display: none;
   align-items: center;
   gap: 6px;
+  min-height: 24px;
   padding: 2px 8px 2px 4px;
   border: 0;
   border-radius: 999px;
