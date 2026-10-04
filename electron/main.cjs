@@ -66,6 +66,9 @@ const {
   inferParamsFromModelName,
   sortOllamaFamilyRows,
   parseOllamaFamilyRows,
+  parseOllamaFamilyFacts,
+  ollamaCapabilitiesFor,
+  applyCapabilitySnapshot,
 } = require('./ollamaCatalog.cjs');
 const { summarizeMemory, cleanDeviceTreeModel } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
@@ -2788,14 +2791,12 @@ async function getOllamaCatalog(options = {}) {
       }));
     const liveCatalog = [...detailedCatalog, ...familyOnlyCatalog].slice(0, OLLAMA_LIBRARY_MODEL_LIMIT);
 
-    // Four more requests, in parallel with nothing else outstanding. A failure
-    // here degrades the chips to installed-only rather than failing the sync.
-    const capabilityIndex = await fetchLibraryCapabilityIndex().catch(() => new Map());
-
+    // What each size can do comes from the family pages fetched above; the
+    // release-time snapshot covers families those did not reach.
     const result = {
       syncedAt: new Date().toISOString(),
       source: 'Ollama library live scan',
-      models: applyCapabilityIndex(mergeCatalogs(liveCatalog, fallback), capabilityIndex),
+      models: applyCapabilitySnapshot(mergeCatalogs(liveCatalog, fallback), OLLAMA_CAPABILITY_SNAPSHOT),
       error: null,
     };
     ollamaCatalogCache = result;
@@ -2813,7 +2814,7 @@ async function getOllamaCatalog(options = {}) {
     return {
       syncedAt: new Date().toISOString(),
       source: 'Bundled catalog',
-      models: fallback,
+      models: applyCapabilitySnapshot(fallback, OLLAMA_CAPABILITY_SNAPSHOT),
       error: error.message || 'Could not sync Ollama library',
     };
   } finally {
@@ -2825,47 +2826,17 @@ async function getOllamaCatalog(options = {}) {
 }
 
 /**
- * Which library models the Ollama site says can see, hear, use tools or think.
- *
- * Without this the capability chips could only ever count installed models —
- * /api/show answers about downloads and nothing else — so "Hears audio" read
- * "1" against a 317-model catalog and looked like a fact about the world.
- *
- * /search?c=<capability> is the only endpoint that honors the filter:
- * /library?c= silently ignores it and returns everything, which would mark
- * every model as having every capability. There is no pagination — p= is
- * ignored too — so this is the top twenty per capability, the same set the
- * Ollama site shows. Partial, but partial in the direction of "these
- * definitely can" rather than "only what I happen to have downloaded".
+ * What each library family and size can do, as Ollama's own pages said at
+ * release time. See applyCapabilitySnapshot in ollamaCatalog.cjs; missing or
+ * unreadable just leaves those rows to the name rules.
  */
-const OLLAMA_LIBRARY_CAPABILITIES = ['vision', 'audio', 'tools', 'thinking'];
-
-async function fetchLibraryCapabilityIndex() {
-  const index = new Map();
-  await Promise.all(OLLAMA_LIBRARY_CAPABILITIES.map(async (capability) => {
-    try {
-      const html = await fetchOllamaHtml(`https://ollama.com/search?c=${capability}`, 7000);
-      for (const match of String(html).matchAll(/href="\/library\/([a-z0-9._-]+)"/gi)) {
-        const family = match[1].toLowerCase();
-        if (!index.has(family)) index.set(family, new Set());
-        index.get(family).add(capability);
-      }
-    } catch {
-      // One capability failing just means its chip counts installed models
-      // only, which is where every chip started.
-    }
-  }));
-  return index;
-}
-
-/** Attach library-reported capabilities to catalog entries, by family. */
-function applyCapabilityIndex(models, index) {
-  if (!index || index.size === 0) return models;
-  return models.map((entry) => {
-    const caps = index.get(String(entry.name || '').toLowerCase());
-    return caps ? { ...entry, capabilities: [...caps] } : entry;
-  });
-}
+const OLLAMA_CAPABILITY_SNAPSHOT = (() => {
+  try {
+    return require('./ollamaCapabilities.json');
+  } catch {
+    return null;
+  }
+})();
 
 function mergeCatalogs(liveCatalog, fallback) {
   const map = new Map();
@@ -2971,6 +2942,9 @@ async function getOllamaFamilyCatalog(name) {
   const rows = parseOllamaFamilyRows(name, html);
 
   if (rows.length === 0) {
+    // x/ pages link no sizes, but still say what the family is for.
+    const facts = parseOllamaFamilyFacts(html);
+    const capabilities = ollamaCapabilitiesFor({ name, tag: 'latest', inputs: null, badges: facts.badges, description: facts.description });
     return [{
       id: `${name}:latest`,
       name,
@@ -2980,6 +2954,8 @@ async function getOllamaFamilyCatalog(name) {
       pack: 'Live Family',
       source: 'Ollama library',
       live: true,
+      ...(capabilities ? { capabilities } : {}),
+      ...(facts.description ? { description: facts.description } : {}),
     }];
   }
 

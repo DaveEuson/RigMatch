@@ -99,10 +99,81 @@ function sortOllamaFamilyRows(rows) {
   });
 }
 
-function parseOllamaFamilyRows(name, html) {
-  const rows = [];
-  const seen = new Set();
+const OLLAMA_BADGES = ['vision', 'tools', 'thinking', 'embedding', 'audio', 'cloud'];
+
+/**
+ * What a family page says about the whole family: the capability badges under
+ * its name (rounded spans: vision, tools, thinking, embedding, audio, cloud)
+ * and its one-line description.
+ *
+ * This replaced /search?c=<capability>, which returned only the top twenty
+ * per capability, and for c=audio ignored the filter and returned the newest
+ * twenty models, none of which can hear.
+ */
+function parseOllamaFamilyFacts(html) {
   const source = String(html || '');
+  const badges = [];
+  for (const match of source.matchAll(/<span[^>]*class=["'][^"']*\brounded-md\b[^"']*["'][^>]*>\s*([a-z]+)\s*<\/span>/gi)) {
+    const badge = match[1].toLowerCase();
+    if (OLLAMA_BADGES.includes(badge) && !badges.includes(badge)) badges.push(badge);
+  }
+  const description = decodeHtml((source.match(/<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i) || [])[1] || '');
+  return { badges, description };
+}
+
+/**
+ * One size's row text: "3.3GB · 128K context window · Text, Image · 1 year ago",
+ * "6.6GB - 9.5GB · …" when it has several quantizations, "- · 1M context
+ * window · Text · …" when it only runs in Ollama's cloud.
+ */
+function parseOllamaRowFacts(detail) {
+  const match = String(detail || '').match(/(?:^|\s)(-|\d+(?:\.\d+)?\s*[KMGT]?B(?:\s*-\s*\d+(?:\.\d+)?\s*[KMGT]?B)?)\s*·\s*(?:\d+(?:\.\d+)?[KM]?|-)\s+context window\s*·\s*([A-Za-z, ]+?)\s*·/);
+  if (!match) return { inputs: null, cloudOnly: false };
+  return {
+    inputs: match[2].split(',').map((item) => item.trim().toLowerCase()).filter(Boolean),
+    cloudOnly: match[1] === '-',
+  };
+}
+
+/**
+ * Sizes that hear, for families whose page badge says "audio" for all of them.
+ * Ollama lists hearing per family; Gemma 4's own model card on its Ollama page
+ * gives E2B and E4B "Text, Image, Audio" and the larger dense model "Text,
+ * Image" with "No Audio", and gemma4:latest is the E4B. Without this, Listens
+ * to audio offered gemma4:31b, which fails on the first clip.
+ */
+const HEARING_SIZES = {
+  gemma4: /^(?:latest|e2b|e4b)(?:-|$)/i,
+};
+
+/**
+ * What this size can do, in the words Ollama's /api/show uses for an installed
+ * model (completion, vision, audio, tools, thinking, embedding, image), so a
+ * row reads the same before and after download.
+ *
+ * Null when the page says nothing usable, which leaves the name rules to guess.
+ */
+function ollamaCapabilitiesFor({ name, tag, inputs, badges = [], description = '' }) {
+  if (badges.includes('embedding')) return ['embedding'];
+  // The x/ namespace is Ollama's experimental shelf: image makers, and the odd
+  // model that is neither, so it is read from its description.
+  if (/^x\//i.test(String(name))) {
+    return /image[- ]generation|text-to-image|generat\w*\s+(?:an?\s+)?images?\b/i.test(description) ? ['image'] : null;
+  }
+  if (!inputs && badges.length === 0) return null;
+  const capabilities = ['completion'];
+  if (inputs ? inputs.includes('image') : badges.includes('vision')) capabilities.push('vision');
+  const hearingSizes = HEARING_SIZES[String(name).toLowerCase()];
+  if (badges.includes('audio') && (!hearingSizes || hearingSizes.test(String(tag)))) capabilities.push('audio');
+  if (badges.includes('tools')) capabilities.push('tools');
+  if (badges.includes('thinking')) capabilities.push('thinking');
+  return capabilities;
+}
+
+/** Every size linked on a family page, with what it accepts, unsorted. */
+function scanOllamaFamilyRows(name, source) {
+  const rows = [];
+  const byKey = new Map();
   // "x/" namespace models are served from /x/<name>, not /library/<name>.
   const pathPrefix = /^x\//i.test(name) ? name : `library/${name}`;
   const rowPattern = new RegExp(`href=["']/${escapeRegExp(pathPrefix)}:([^"'#?/<>\\s]+)["']`, 'gi');
@@ -113,8 +184,6 @@ function parseOllamaFamilyRows(name, html) {
     const tag = decodeURIComponentSafe(decodeHtml(match[1]));
     if (!isValidOllamaTag(tag)) continue;
     const key = `${name}:${tag}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
 
     // Scope the size lookup to THIS tag's own row: from just after its link to
     // the start of the next tag's link. The previous ±window bled into
@@ -125,21 +194,95 @@ function parseOllamaFamilyRows(name, html) {
     const nextStart = i + 1 < matches.length ? (matches[i + 1].index ?? source.length) : source.length;
     const rowEnd = Math.min(nextStart, rowStart + 1400);
     const detail = getPlainText(source.slice(rowStart, rowEnd));
-    const sizeGb = parseSizeToGb(detail);
+    const rowFacts = parseOllamaRowFacts(detail);
 
-    rows.push({
+    // Each size is linked twice, once per layout; only one of them carries
+    // the "· Text, Image ·" line, so a second sighting can fill it in.
+    const existing = byKey.get(key);
+    if (existing) {
+      if (!existing.inputs && rowFacts.inputs) {
+        existing.inputs = rowFacts.inputs;
+        existing.cloudOnly = rowFacts.cloudOnly;
+      }
+      continue;
+    }
+
+    const row = {
       id: key,
       name,
       tag,
       params: inferParamsFromTag(tag),
-      sizeGb,
+      sizeGb: parseSizeToGb(detail),
       pack: tag === 'latest' ? 'Live Latest' : 'Live Tag',
       source: 'Ollama library',
       live: true,
-    });
+      inputs: rowFacts.inputs,
+      cloudOnly: rowFacts.cloudOnly,
+    };
+    byKey.set(key, row);
+    rows.push(row);
   }
+  return rows;
+}
 
-  return sortOllamaFamilyRows(rows).slice(0, OLLAMA_FAMILY_TAG_LIMIT);
+/** What each size accepts, keyed by tag: the snapshot's per-size record. */
+function parseOllamaFamilySizes(name, html) {
+  return Object.fromEntries(scanOllamaFamilyRows(name, String(html || ''))
+    .filter((row) => row.inputs)
+    .map((row) => [row.tag, { inputs: row.inputs, ...(row.cloudOnly ? { cloudOnly: true } : {}) }]));
+}
+
+function parseOllamaFamilyRows(name, html) {
+  const source = String(html || '');
+  const facts = parseOllamaFamilyFacts(source);
+  const described = scanOllamaFamilyRows(name, source).map(({ inputs, cloudOnly, ...row }) => {
+    const capabilities = ollamaCapabilitiesFor({ name, tag: row.tag, inputs, badges: facts.badges, description: facts.description });
+    return {
+      ...row,
+      ...(capabilities ? { capabilities } : {}),
+      ...(facts.description ? { description: facts.description } : {}),
+      ...(cloudOnly ? { cloudOnly: true } : {}),
+    };
+  });
+  return sortOllamaFamilyRows(described).slice(0, OLLAMA_FAMILY_TAG_LIMIT);
+}
+
+/**
+ * Fills in what the live scan did not reach — families past the detail limit,
+ * and the bundled list when offline — from the snapshot taken at release time
+ * (electron/ollamaCapabilities.json, written by
+ * scripts/snapshot-ollama-capabilities.mjs). The live page always wins.
+ *
+ * A family with no local size at all cannot be downloaded, so its row is given
+ * the family's real cloud tag: every cloud check in the app reads the tag.
+ */
+function applyCapabilitySnapshot(entries, snapshot) {
+  const families = snapshot?.families ?? {};
+  return entries.map((entry) => {
+    if (entry.capabilities) return entry;
+    const facts = families[String(entry.name || '').toLowerCase()];
+    if (!facts) return entry;
+    const sizes = facts.sizes ?? {};
+    const tags = Object.keys(sizes);
+    let tag = entry.tag;
+    if (tags.length && tags.every((t) => sizes[t].cloudOnly) && !/cloud/i.test(tag)) {
+      tag = tags.find((t) => /cloud/i.test(t)) ?? 'cloud';
+    }
+    const capabilities = ollamaCapabilitiesFor({
+      name: entry.name,
+      tag,
+      inputs: sizes[tag]?.inputs ?? null,
+      badges: facts.badges ?? [],
+      description: facts.description ?? '',
+    });
+    return {
+      ...entry,
+      ...(tag !== entry.tag ? { tag, id: `${entry.name}:${tag}` } : {}),
+      ...(capabilities ? { capabilities } : {}),
+      ...(facts.description && !entry.description ? { description: facts.description } : {}),
+      ...(sizes[tag]?.cloudOnly ? { cloudOnly: true } : {}),
+    };
+  });
 }
 
 module.exports = {
@@ -155,5 +298,10 @@ module.exports = {
   inferParamsFromTag,
   inferParamsFromModelName,
   sortOllamaFamilyRows,
+  parseOllamaFamilyFacts,
+  parseOllamaRowFacts,
+  ollamaCapabilitiesFor,
+  parseOllamaFamilySizes,
   parseOllamaFamilyRows,
+  applyCapabilitySnapshot,
 };
