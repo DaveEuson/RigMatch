@@ -69,12 +69,17 @@ export type HardwareFit = {
  * What a provider says a model can do, when it says anything.
  *
  * Ollama reports this from `/api/show` — observed vocabulary on 0.32.9:
- * `completion`, `vision`, `tools`, `image`. It is only available for installed
- * models; the browsable catalog cannot be asked, so the name heuristics below
- * remain the fallback rather than being replaced.
+ * `completion`, `vision`, `tools`, `image` — for installed models. Catalog
+ * rows carry the same words, read from the size's row on its Ollama family
+ * page (electron/ollamaCatalog.cjs). The name heuristics below are the
+ * fallback for a model neither describes.
  */
 export type CapabilityBearing = {
   capabilities?: string[];
+  /** The family's one-line description from its Ollama page. */
+  description?: string;
+  /** This size runs only in Ollama's cloud, so it cannot be downloaded. */
+  cloudOnly?: boolean;
   installedModel?: { capabilities?: string[]; name?: string; model?: string };
   displayName?: string;
   name?: string;
@@ -87,9 +92,9 @@ export type CapabilityBearing = {
  *
  * The installed model wins. That comes from /api/show — the provider
  * describing a file it actually has — whereas `row.capabilities` on a
- * catalog entry is what the Ollama website lists for the family, which is
- * coarser: it covers a family rather than a tag, so a family listed as
- * seeing does not prove that its 0.5b tag does.
+ * catalog entry is what the Ollama website says: what this size accepts
+ * (gemma3:1b reads text only, gemma3:4b text and images), and the family's
+ * badges for tools, thinking and hearing, which are per family.
  *
  * Both beat guessing from the name, which is why callers prefer this and fall
  * back to a name rule only when it returns null.
@@ -188,7 +193,10 @@ const WEAK_TEXT_JUDGE = /\bocr\b|deepseek-ocr|got-ocr|olmocr|bakllava|^llava|\/l
  * where a batch run gives every checkpoint the same prompt and the same seed.
  */
 export function canJoinComparison(row: ModelRow): boolean {
-  return row.runtime !== 'comfyui' && canGenerateText(row) && !isEmbeddingModel(row.displayName);
+  // A cloud model answers from Ollama's servers, so its speed and fit say
+  // nothing about this PC.
+  return row.runtime !== 'comfyui' && canGenerateText(row) && !isEmbeddingModel(row.displayName)
+    && !row.cloudOnly && !isCloudModel(row.displayName);
 }
 
 /**
@@ -1506,7 +1514,38 @@ export function isUncensoredModel(name: string): boolean {
     lower.includes('hermes-2');
 }
 
+/**
+ * What a family's own Ollama description says it is for.
+ *
+ * The profile table below knows families by name, and every family newer than
+ * it fell to "chat, utility, experiments": devstral, deepcoder and
+ * kimi-k2.7-code were missing from Code although their pages say coding.
+ */
+export function descriptionSpecialties(description: string | undefined): string[] {
+  const text = description ?? '';
+  return [
+    /\bcod(?:e|es|ing|er|ers)\b|codebases?|programming|software engineering|developers?\b/i.test(text) ? 'coding' : '',
+    /\breason(?:s|ing)?\b|\bmath(?:s|ematics)?\b/i.test(text) ? 'reasoning' : '',
+    /\bwrit(?:e|es|ing)\b|creative|storytelling|role-?play/i.test(text) ? 'writing' : '',
+  ].filter(Boolean);
+}
+
+/** A model made to transcribe pictures of text, not to hold a conversation. */
+function isOcrModel(row: ModelRow): boolean {
+  return /\bocr\b/i.test(row.displayName) || /\bOCR\b/.test(row.description ?? '');
+}
+
+/** The short list a row shows under "Good for". */
 export function getModelGoodForTags(row: ModelRow): string[] {
+  return allGoodForTags(row).slice(0, 5);
+}
+
+/**
+ * Every "good for" tag, for filtering. The visible list stops at five, and
+ * filtering on that cut dropped a model from Tiny whenever its "low memory"
+ * tag landed sixth.
+ */
+function allGoodForTags(row: ModelRow): string[] {
   // A checkpoint is not a chat model, and running its filename through the
   // personality profiler produced "chat, utility, experiments" on a video
   // model. What it makes is already known, so nothing needs inferring.
@@ -1518,8 +1557,9 @@ export function getModelGoodForTags(row: ModelRow): string[] {
   }
   const profile = getModelProfile(row.displayName);
   const tags = [
-    isLikelyImageGenerationModel(row.displayName) ? 'makes images' : '',
+    isImageGenerationModel(row) ? 'makes images' : '',
     isLikelyVideoGenerationModel(row.displayName) ? 'makes video' : '',
+    ...descriptionSpecialties(row.description),
     ...profile.specialties,
     row.pack,
     row.sizeGb != null && row.sizeGb <= 2.5 ? 'low memory' : '',
@@ -1540,8 +1580,7 @@ export function getModelGoodForTags(row: ModelRow): string[] {
       if (seen.has(tag)) return false;
       seen.add(tag);
       return true;
-    })
-    .slice(0, 5);
+    });
 }
 
 /** Plain-language epithet for a model card in Simple Mode (no jargon). */
@@ -1589,7 +1628,7 @@ export function getModelDreamTags(row: ModelRow): DreamTag[] {
   if (modelMatchesTask(row, 'coding')) tags.push('code');
   if (modelMatchesTask(row, 'vision')) tags.push('read-image');
   if (modelMatchesTask(row, 'hears')) tags.push('hear');
-  if (isLikelyImageGenerationModel(row.displayName)) tags.push('image');
+  if (isImageGenerationModel(row)) tags.push('image');
   if (isLikelyVideoGenerationModel(row.displayName)) tags.push('video');
   if (modelMatchesTask(row, 'audiogen')) tags.push('audio');
   return tags;
@@ -1646,11 +1685,18 @@ export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolea
   if (task === 'vision' && getModelCapabilities(row)) return canReadImages(row);
   if (task === 'videoread') return canWatchVideo(row);
   if (task === 'audiogen') return isLikelyAudioGenerationModel(row.displayName);
+  // Chat, writing, code and reasoning are things said in words: an embedding
+  // model only turns text into numbers, and an OCR model only transcribes a
+  // picture, though both carried "chat" from the default profile.
+  const embedding = isEmbeddingModel(row.displayName) || (getModelCapabilities(row)?.includes('embedding') ?? false);
+  if (WORD_TASKS.has(task) && (!canGenerateText(row) || embedding || isOcrModel(row))) return false;
   const category = TASK_CATEGORIES.find((c) => c.id === task);
   if (!category || category.keywords.length === 0) return true;
-  const specialties = getModelGoodForTags(row).map((s) => s.toLowerCase());
+  const specialties = allGoodForTags(row);
   return category.keywords.some((kw) => specialties.some((sp) => sp.includes(kw)));
 }
+
+const WORD_TASKS = new Set<ModelTaskFilterId>(['assistant', 'writing', 'coding', 'reasoning']);
 
 export type TaskPick = {
   id: TaskCategoryId;

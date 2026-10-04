@@ -111,11 +111,15 @@ export type CatalogModel = {
   live: boolean;
   pulls?: number | null;
   /**
-   * What the Ollama website lists this family as able to do. Coarser than an
-   * installed model's own report — it describes a family, not a tag — and
-   * covers only the top twenty per capability, which is all /search returns.
+   * What this size can do according to its Ollama family page, in /api/show's
+   * words: what it accepts is per size, tools, thinking and hearing per family.
+   * An installed model's own report replaces it.
    */
   capabilities?: string[];
+  /** The family's one-line description from its Ollama page. */
+  description?: string;
+  /** This size runs only in Ollama's cloud and cannot be downloaded. */
+  cloudOnly?: boolean;
   /**
    * What runs this model. Absent means Ollama, which is nearly everything.
    *
