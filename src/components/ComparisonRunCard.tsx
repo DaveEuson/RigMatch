@@ -5,10 +5,10 @@ import { AUDIO_CLIP_SECONDS } from '../lib/audioCatalog';
 import { AUDIO_BENCHMARK_PROMPTS } from '../lib/audioGenScoring';
 import { installedAudioEntries } from '../lib/audioLineup';
 import { startAudioLineup, stopAudioLineup, type AudioLineupStage } from '../lib/audioLineupSession';
-import { isPictureCheckpoint } from '../lib/checkpointKinds';
+import { drawableModels } from '../lib/pictureRecipes';
 import { readComfySettings } from '../lib/comfySettings';
 import { ensureComfyRunning } from '../lib/comfyStarter';
-import { GENERATION_MODELS, type ComfyFolderListing } from '../lib/generationCatalog';
+import { generationFileLabel, type ComfyFolderListing } from '../lib/generationCatalog';
 import { CUSTOM_IMAGE_PROMPT_ID, IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
 import type { ImageLineupEntry } from '../lib/imageLineup';
 import { startImageLineup, stopImageLineup, type ImageLineupStage } from '../lib/imageLineupSession';
@@ -99,11 +99,6 @@ const COPY: Record<GenerationChannel, {
 
 const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 
-/** The name a person knows a checkpoint by: the catalog's, or the file's own. */
-function checkpointName(file: string): string {
-  return GENERATION_MODELS.find((model) => model.filename.toLowerCase() === file.toLowerCase())?.label ?? file;
-}
-
 /**
  * Several models, one prompt, run from the screen that shows them side by side.
  *
@@ -174,11 +169,10 @@ export function ComparisonRunCard({
       .filter(({ facts }) => facts.runnable)
       .sort((a, b) => a.facts.estimate.seconds - b.facts.estimate.seconds)
     : [];
-  // A video or audio checkpoint cannot draw a still, so it is not offered here.
+  // Picture checkpoints and the three-file models with every part present; a
+  // video or audio checkpoint cannot draw a still, so it is not offered here.
   const imageEntries: ImageLineupEntry[] = channel === 'images'
-    ? (context.comfyFolders.checkpoints ?? [])
-      .filter(isPictureCheckpoint)
-      .map((file) => ({ checkpoint: file, name: checkpointName(file) }))
+    ? drawableModels(context.comfyFolders).map((file) => ({ checkpoint: file, name: generationFileLabel(file) }))
     : [];
   // Every file each needs, where ComfyUI reads it.
   const audioEntries = audio ? installedAudioEntries(context.comfyFolders) : [];

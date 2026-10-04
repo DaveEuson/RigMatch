@@ -17,7 +17,7 @@ import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
 import { AllDemosButton, ModelDemoChips } from './SkillDemoViewers';
 import { VideoLineupLab } from './VideoLineupLab';
 import { ComparisonRunCard, type ComparisonRunContext } from './ComparisonRunCard';
-import { isPictureCheckpoint } from '../lib/checkpointKinds';
+import { drawableModels } from '../lib/pictureRecipes';
 import { installedAudioEntries } from '../lib/audioLineup';
 import { LabComparison } from './LabComparison';
 import { useLabResults } from '../hooks/useLabResults';
@@ -962,7 +962,7 @@ function PickScreen({
   // makers run on this PC, try them below" sat over a card offering one.
   const ready = makerRun && (dream === 'image' || dream === 'audio')
     ? (dream === 'image'
-      ? (makerRun.context.comfyFolders.checkpoints ?? []).filter(isPictureCheckpoint).length
+      ? drawableModels(makerRun.context.comfyFolders).length
       : installedAudioEntries(makerRun.context.comfyFolders).length)
     : null;
   const makerLine = !makers || makers.total === 0 ? null

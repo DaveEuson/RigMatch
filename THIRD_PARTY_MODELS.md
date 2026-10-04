@@ -36,6 +36,8 @@ A model and the encoder or VAE it needs are often published separately, under di
 | MiniMax H3 | MiniMax | MiniMax H3 Community License Agreement | Does not cover use in the European Union, the United Kingdom, South Korea or the United States. A business earning over US$20 million a year needs MiniMax's written permission. |
 | Stable Diffusion 1.5 | Runway / Stability AI | CreativeML OpenRAIL-M | Use-based restrictions are set out in the license. |
 | SDXL-Turbo | Stability AI | Stability AI Community License | Commercial use requires registering with Stability AI, and a business earning over US$1 million a year needs an enterprise license. |
+| Z-Image Turbo (int8) | Alibaba Tongyi Lab | Apache 2.0 | |
+| FLUX.2 [klein] 4B | Black Forest Labs | Apache 2.0 | The 9B [klein] is under a non-commercial license; RigMatch offers only the 4B. |
 
 ### Parts the models download
 
@@ -53,6 +55,8 @@ A model and the encoder or VAE it needs are often published separately, under di
 | LLaVA-Llama-3 text encoder (fp8) | HunyuanVideo 1.0 | Comfy-Org/HunyuanVideo_repackaged | Tencent Hunyuan Community License |
 | MiniMax H3 text encoder, VAEs and turbo LoRA | MiniMax H3 | Comfy-Org/MiniMax-H3 | MiniMax H3 Community License |
 | Mochi VAE | Mochi 1 | Comfy-Org/mochi_preview_repackaged | Apache 2.0 |
+| Qwen3 4B text encoder, FLUX autoencoder | Z-Image Turbo, FLUX.2 [klein] 4B | Comfy-Org/z_image_turbo | Apache 2.0 |
+| FLUX.2 VAE | FLUX.2 [klein] 4B | Comfy-Org/vae-text-encorder-for-flux-klein-4b | Apache 2.0. The copy in Comfy-Org/flux2-dev is under the FLUX.1 [dev] non-commercial license, so RigMatch downloads this one. |
 
 Release checklist:
 

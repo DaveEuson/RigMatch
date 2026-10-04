@@ -15,6 +15,7 @@
  */
 
 import {
+  buildRecipeWorkflow,
   buildTxt2ImgWorkflow,
   extractImages,
   readStatus,
@@ -24,6 +25,7 @@ import {
 import { getErrorMessage } from './format.ts';
 import type { AdvancedLabCheck } from './labResults.ts';
 import { samplingProfileFor } from './samplingProfile.ts';
+import { recipeForFile } from './pictureRecipes.ts';
 import { askPropositions, scoreImageGeneration, type ImagePrompt } from './imageGenScoring.ts';
 
 /** How often to ask whether the image is ready. */
@@ -105,13 +107,33 @@ export async function runImageGeneration(options: ImageRunOptions): Promise<Imag
   const profile = samplingProfileFor(checkpoint);
   const steps = settings.steps ?? profile.steps;
   const cfg = settings.cfg ?? profile.cfg;
-  const graph = buildTxt2ImgWorkflow({
-    checkpoint,
-    prompt: imagePrompt.prompt,
-    ...settings,
-    steps,
-    cfg,
-  });
+  // A model in three files has its own graph; the checkpoint graph would ask
+  // CheckpointLoaderSimple for a file in diffusion_models and fail.
+  const recipe = recipeForFile(checkpoint);
+  const graph = recipe
+    ? buildRecipeWorkflow({
+      graph: recipe.recipe.graph,
+      unet: recipe.unet,
+      clip: recipe.clip,
+      clipType: recipe.recipe.clipType,
+      vae: recipe.vae,
+      prompt: imagePrompt.prompt,
+      width: settings.width ?? 512,
+      height: settings.height ?? 512,
+      steps,
+      cfg,
+      seed: settings.seed ?? 0,
+      sampler: recipe.recipe.sampler,
+      scheduler: recipe.recipe.scheduler,
+      shift: recipe.recipe.shift,
+    })
+    : buildTxt2ImgWorkflow({
+      checkpoint,
+      prompt: imagePrompt.prompt,
+      ...settings,
+      steps,
+      cfg,
+    });
 
   let promptId: string | undefined;
   let startedAt = now();

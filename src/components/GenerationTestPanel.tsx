@@ -122,7 +122,7 @@ export function GenerationTestPanel({
   const model = !video && row.generationId ? generationModelById(row.generationId) : undefined;
   // The file as ComfyUI lists it, which is the name its loader is asked for.
   const checkpoint = model
-    ? (context.comfyFolders.checkpoints ?? []).find((name) => name.toLowerCase() === model.filename.toLowerCase())
+    ? (context.comfyFolders[model.folder] ?? []).find((name) => name.toLowerCase() === model.filename.toLowerCase())
       ?? model.filename
     : '';
   // The keys the Lab saves under, so a test here and one there are the same record.

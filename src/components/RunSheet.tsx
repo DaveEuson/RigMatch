@@ -626,8 +626,8 @@ export function RunSheet({
                     disabled={!imageCapable}
                     onChange={(on) => onSkillSelectionChange({ ...skillSelection, image: on })}
                     detail={!imageCapable
-                      ? 'Needs ComfyUI running with at least one checkpoint. Ollama cannot make images.'
-                      : `Runs the prompt below on ${comfyCheckpoints.length === 1 ? 'your checkpoint' : `all ${comfyCheckpoints.length} checkpoints`} in ComfyUI, apart from the models above.`}
+                      ? 'Needs ComfyUI running with at least one picture model. Ollama cannot make images.'
+                      : `Runs the prompt below on ${comfyCheckpoints.length === 1 ? 'your picture model' : `all ${comfyCheckpoints.length} picture models`} in ComfyUI, apart from the models above.`}
                   >
                     {/* A fixed list: the score comes from a judge checking things
                         the prompt asked for, and free text has none to check. */}

@@ -11,7 +11,7 @@ import { VideoLineupResults } from './VideoLineupResults';
 const COPY: Record<ComparedChannel, { title: string; subtitle: string; empty: string; emptyBody: string }> = {
   images: {
     title: 'Pictures side by side',
-    subtitle: 'Every checkpoint given the same prompt, ranked by what matters to you.',
+    subtitle: 'Every picture model given the same prompt, ranked by what matters to you.',
     empty: 'Nothing to compare yet',
     emptyBody: 'Tick two or more picture models above and draw the same prompt with each, and their pictures line up here.',
   },

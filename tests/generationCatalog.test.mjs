@@ -1,6 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { recipeForFile } from '../src/lib/pictureRecipes.ts';
 
 import {
   GENERATION_MODELS,
@@ -42,9 +43,10 @@ test('a video model always declares the text encoder it cannot run without', () 
 
 test('each kind lands in a folder ComfyUI reads that kind from', () => {
   // LTX-2 and LTX-2.3 ship as whole checkpoints; every other video model is a
-  // bare diffusion model. The graph tests pin each file to its exact loader.
+  // bare diffusion model, as are Z-Image Turbo and FLUX.2 [klein]. The graph
+  // tests pin each file to its exact loader.
   const FOLDERS = {
-    image: ['checkpoints'],
+    image: ['checkpoints', 'diffusion_models'],
     video: ['checkpoints', 'diffusion_models'],
     audio: ['checkpoints'],
     'text-encoder': ['text_encoders'],
@@ -54,6 +56,14 @@ test('each kind lands in a folder ComfyUI reads that kind from', () => {
   };
   for (const m of GENERATION_MODELS) {
     assert.ok(FOLDERS[m.kind]?.includes(m.folder), `${m.id} (${m.kind}) would be written to ${m.folder}/`);
+  }
+});
+
+test('a picture model outside checkpoints has a recipe to run it', () => {
+  // The checkpoint graph cannot load a bare diffusion model; without a recipe
+  // it would be listed, downloaded and then fail in the loader.
+  for (const m of GENERATION_MODELS.filter((model) => model.kind === 'image' && model.folder === 'diffusion_models')) {
+    assert.ok(recipeForFile(m.filename), `${m.id} has no graph in pictureRecipes.ts`);
   }
 });
 

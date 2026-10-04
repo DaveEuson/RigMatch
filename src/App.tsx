@@ -251,7 +251,7 @@ import { startVideoLineup } from './lib/videoLineupSession';
 import { IMAGE_BENCHMARK_PROMPTS } from './lib/imageGenScoring';
 import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
 import { listenerCandidates } from './lib/audioGenChallenge';
-import { isPictureCheckpoint } from './lib/checkpointKinds';
+import { drawableModels, recipeFootprintGb } from './lib/pictureRecipes';
 import { batchSeed } from './lib/videoGen';
 import { toVideoLabResult } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
@@ -664,6 +664,9 @@ function App() {
           // cannot hold, so VRAM alone called runnable models too big and the
           // download queue refused them.
           const lineup = entry.generationKind === 'video' ? lineupEntry(entry.generationId) : undefined;
+          // A three-file picture model is sized by what it holds at once, not
+          // by its download: the encoder is swapped out before it draws.
+          const footprint = entry.generationKind === 'image' ? recipeFootprintGb(entry.generationId) : null;
           return {
             ...entry,
             displayName: entry.name,
@@ -675,6 +678,7 @@ function App() {
             ...(lineup
               ? { fitOverride: asHardwareFit(videoFit(lineup.sizing, videoMachine, { hasToken: hasToken || entry.installedFile })) }
               : {}),
+            ...(footprint != null ? { fitOverride: getHardwareFit({ params: entry.params, sizeGb: footprint }, videoMachine.vramGb) } : {}),
           };
         });
       return [...generation, ...rows];
@@ -704,7 +708,7 @@ function App() {
     // input is invalid: None" — it carries no text encoder. The offer appeared,
     // it was pressed, and it could never have worked: exactly the empty promise
     // this feature exists to prevent, made by the feature itself.
-    const drawable = comfyCheckpoints.filter(isPictureCheckpoint);
+    const drawable = drawableModels(comfyListing({ checkpoints: comfyCheckpoints, folders: comfyFolders ?? undefined }));
 
     return {
       // ComfyUI answering is not the same as ComfyUI being able to draw.
@@ -734,7 +738,7 @@ function App() {
       },
       gpuNote: async () => gpuBusyNote(await refreshChatGpu()),
     };
-  }, [comfyCheckpoints, ollama.baseUrl, comfySettings.baseUrl, refreshChatGpu]);
+  }, [comfyCheckpoints, comfyFolders, ollama.baseUrl, comfySettings.baseUrl, refreshChatGpu]);
 
   /**
    * Generate on behalf of RigMatch Chat.
@@ -2828,7 +2832,7 @@ function App() {
 
   const toggleShortlist = useCallback((row: ModelRow) => {
     if (!canJoinComparison(row)) {
-      setActivity(`${row.displayName} cannot join Speed Dating — the comparison is a conversation, and this model does not chat. Generation models race each other in the Lab, where every checkpoint gets the same prompt and seed.`);
+      setActivity(`${row.displayName} cannot join Speed Dating — the comparison is a conversation, and this model does not chat. Generation models race each other in the Lab, where every model gets the same prompt and seed.`);
       return;
     }
     const hardwareFit = getHardwareFit(row, system.gpu.vramGb);
@@ -3321,7 +3325,7 @@ function App() {
       if (selection.image) {
         // A video or audio checkpoint in a still-image graph fails deep in the
         // sampler with a shape error, so it is never offered one.
-        for (const name of comfy.checkpoints.filter(isPictureCheckpoint)) {
+        for (const name of drawableModels(comfyListing(comfy))) {
           jobs.push({ model: name, kind: 'image' });
         }
       }
@@ -5062,7 +5066,7 @@ function App() {
             ? modelRows.filter((row) => row.displayName === (pendingSingleModel ?? selectedModel))
             : shortlistedRows.filter((row) => row.installed).slice(0, 5)
           ).some((row) => canHearAudio(row))}
-          comfyCheckpoints={comfyCheckpoints}
+          comfyCheckpoints={drawableModels(chatListing)}
           videoLineup={(() => {
             // Worked out only while this dialog is open, which is the one place that asks.
             const calibration = readVideoCalibration();
