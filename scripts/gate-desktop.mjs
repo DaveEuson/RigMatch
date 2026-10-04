@@ -316,12 +316,12 @@ try {
   );
 
   // The guide used to reopen immediately, and then again at the next launch
-  // because the sweep took its "seen" flag with everything else.
-  // Matched on `.tutorial-modal`, the element itself. Matching on body text
-  // instead passed while the guide was wide open — a false green in the check
+  // because the sweep took its "seen" flag with everything else. The guide is
+  // now the first-run welcome. Matched on the element itself: matching on body
+  // text passed while the guide was wide open, a false green in the check
   // written to catch exactly this, found only by breaking the code on purpose.
-  const guideShowing = async () => (await page.locator('.tutorial-modal').count()) > 0;
-  record('the getting-started guide does not reopen', !(await guideShowing()));
+  const guideShowing = async () => (await page.locator('.welcome-overlay, .tutorial-modal').count()) > 0;
+  record('the first-run welcome does not reopen', !(await guideShowing()));
 
   await page.reload();
   await page.waitForTimeout(1200);

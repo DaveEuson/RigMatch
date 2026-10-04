@@ -248,8 +248,6 @@ export function RunSheet({
     onChangeJudgeSource(next === 'cloud' ? 'openrouter' : 'local');
   };
 
-  const setLabel = setId === 'custom' ? 'Your questions'
-    : setId === 'general' ? 'General' : BENCHMARK_PRESETS.find((p) => p.id === setId)?.label ?? 'General';
   const setDescription = setId === 'custom'
     ? 'Questions you wrote or changed. Scores from them may not compare with the standard sets.'
     : setId === 'general' ? GENERAL_SET_DESCRIPTION : BENCHMARK_PRESETS.find((p) => p.id === setId)?.description ?? '';
@@ -403,7 +401,7 @@ export function RunSheet({
                   </p>
                 </div>
               ) : (
-                <ol className="run-sheet-questions" aria-label={`${setLabel} questions`}>
+                <ol className="run-sheet-questions" aria-label="Questions in this set">
                   {benchmarkQuestions.map((question, index) => {
                     const marker = questionMarker(question);
                     return (

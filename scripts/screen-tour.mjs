@@ -79,13 +79,13 @@ async function run(url) {
     // Wait for the run to have actually produced something rather than for a
     // fixed duration, and stop early if it finishes and moves on: a fixed
     // sleep here photographed the Winner screen and filed it under Compare.
-    if (step === 'compare') {
+    if (step === 'show') {
       let shot = false;
       for (let tick = 0; tick < 40; tick += 1) {
         await page.waitForTimeout(1000);
         // Keep waiting after the mid-run shot: the run finishing is what
         // unlocks Winner, and leaving early strands the tour here.
-        if ((await currentStep(page)) !== 'compare') break;
+        if ((await currentStep(page)) !== 'show') break;
         if (!shot && (await page.locator('.sw-eta').count()) > 0) {
           screens.push({ ...(await capture(page, 'compare-midrun')), note: `${tick + 1}s into the run` });
           shot = true;
@@ -93,10 +93,13 @@ async function run(url) {
       }
     }
 
-    const next = page.locator('.sw-footer-right button:not([disabled])').last();
+    // Setup's one button is on the page; Pick and Download have the footer.
+    const next = page.locator('.sw-footer-right button:not([disabled]), .sw-setup .btn-gold:not([disabled])').last();
     if ((await next.count()) === 0) break;
     const before = step;
     await next.click().catch(() => {});
+    // Starting the show opens the run sheet first.
+    if (await page.locator('.run-sheet').count()) await page.locator('.run-sheet .btn-gold').click().catch(() => {});
     await page.waitForFunction(
       (prev) => document.querySelector('.sw-step.active .sw-step-label')?.textContent?.trim().toLowerCase() !== prev,
       before,
@@ -157,7 +160,7 @@ async function tourDownload(page, seen) {
 
   // Free a slot, then take a card that advertises a download rather than
   // "Already on your PC".
-  const drop = page.locator('.sw-card.picked button', { hasText: /click to remove/i }).first();
+  const drop = page.locator('.sw-card.picked button', { hasText: /remove/i }).first();
   if ((await drop.count()) === 0) return [];
   await drop.click();
   await page.waitForTimeout(300);

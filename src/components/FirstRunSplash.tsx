@@ -1,10 +1,8 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import type { UiMode } from '../lib/appConfig';
 import type { GoalId } from '../lib/goals';
 import { goalById, goalHardwareExpectation, goalsByCategory, leagueLabel } from '../lib/goals';
 import { useDialog } from '../lib/useDialog';
 import { BrandMark } from './CommonChrome';
-import { ModeStep } from './ModeStep';
 import { useState } from 'react';
 
 /**
@@ -20,27 +18,23 @@ const COMFY_GOAL_NOTE = 'Image, video and audio generation run through ComfyUI �
   + 'free program RigMatch does not install or bundle. RigMatch can find it for you once it '
   + 'is running.';
 
-export function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCancel, isUpgrade }: {
+/**
+ * The goals editor: Settings' "Change goals", and the one-time question for
+ * someone upgrading from a version without goals. A first run meets the
+ * welcome (WelcomeOverlay) instead, which asks for one goal.
+ */
+export function FirstRunSplash({ vramGb, initialGoals, onSaveGoals, onCancel, isUpgrade }: {
   vramGb: number;
-  onDone: (mode: UiMode, goals: GoalId[]) => void;
   /** Set when reopened from Settings: pre-checks the saved picks. */
   initialGoals?: GoalId[];
   /** Set when this is an existing user meeting the goal question for the
    *  first time — the copy should welcome them back, not greet a stranger. */
   isUpgrade?: boolean;
-  /** Set when reopened from Settings: save picks and close, no mode step. */
-  onSaveGoals?: (goals: GoalId[]) => void;
+  onSaveGoals: (goals: GoalId[]) => void;
   onCancel?: () => void;
 }) {
-  // On first run there is no onClose: the choice is required, so Escape must
-  // not dismiss it. Reopened from Settings it is an ordinary dialog and
-  // Escape cancels. Focus is trapped either way — it previously left focus on
-  // <body> behind a full-viewport overlay.
+  // An ordinary dialog: Escape cancels, and focus is trapped while it is open.
   const splashRef = useDialog<HTMLDivElement>(onCancel);
-  // The desire comes before the mode: "what do you want to do?" is a question
-  // about the person, "Simple or Advanced?" is a question about our UI, and
-  // the person's question goes first.
-  const [step, setStep] = useState<'goals' | 'mode'>('goals');
   const [picked, setPicked] = useState<GoalId[]>(initialGoals ?? []);
 
   const toggle = (id: GoalId) => {
@@ -59,8 +53,6 @@ export function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCa
             <span>Find the best AI your PC can run — nothing leaves this computer.</span>
           </div>
         </div>
-        {step === 'goals' ? (
-          <>
             <h2 className="mode-splash-title">
               {isUpgrade ? 'New in this version: what would you like to do?' : 'What would you like to do?'}
             </h2>
@@ -131,29 +123,17 @@ export function FirstRunSplash({ vramGb, onDone, initialGoals, onSaveGoals, onCa
               <p className="goal-splash-nudge">{COMFY_GOAL_NOTE}</p>
             )}
             <div className="goal-splash-actions">
-              {onSaveGoals ? (
-                <>
-                  {onCancel && (
-                    <button type="button" className="mini-button" onClick={onCancel}>
-                      {isUpgrade ? 'Not now' : 'Cancel'}
-                    </button>
-                  )}
-                  <button type="button" className="primary-button" onClick={() => onSaveGoals(picked)}>
-                    {isUpgrade
-                      ? (picked.length === 0 ? 'Skip for now' : 'Use these goals')
-                      : (picked.length === 0 ? 'Clear goals' : 'Save goals')}
-                  </button>
-                </>
-              ) : (
-                <button type="button" className="primary-button" onClick={() => setStep('mode')}>
-                  {picked.length === 0 ? 'Skip for now' : 'Continue'}
+              {onCancel && (
+                <button type="button" className="mini-button" onClick={onCancel}>
+                  {isUpgrade ? 'Not now' : 'Cancel'}
                 </button>
               )}
+              <button type="button" className="primary-button" onClick={() => onSaveGoals(picked)}>
+                {isUpgrade
+                  ? (picked.length === 0 ? 'Skip for now' : 'Use these goals')
+                  : (picked.length === 0 ? 'Clear goals' : 'Save goals')}
+              </button>
             </div>
-          </>
-        ) : (
-          <ModeStep onPick={(mode) => onDone(mode, picked)} />
-        )}
       </div>
     </div>
   );

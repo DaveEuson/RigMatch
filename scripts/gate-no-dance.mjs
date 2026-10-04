@@ -40,7 +40,8 @@ for (const step of ['setup', 'pick']) {
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.sw-shell');
   if (step === 'pick') {
-    await page.locator('.sw-footer-right button:not([disabled])').last().click();
+    // Setup's own button: "Choose your models" once the check has passed.
+    await page.locator('.sw-setup .btn-gold:not([disabled])').last().click();
     await page.waitForTimeout(700);
   }
   await page.waitForTimeout(400);

@@ -15,6 +15,19 @@
 import type { ScoreRigStamp, TestedModelScore } from '../types.ts';
 import { formatMatchScore } from './scoring.ts';
 
+/**
+ * The four measurements behind a Match score, in the words the card uses. A
+ * score saved before stability was measured shows its total there.
+ */
+export function matchMeasures(score: Pick<TestedModelScore, 'sobriety' | 'speed' | 'stability' | 'fit' | 'total'>): Array<{ label: string; value: number }> {
+  return [
+    { label: 'Accuracy', value: score.sobriety },
+    { label: 'Speed', value: score.speed },
+    { label: 'Stability', value: score.stability ?? score.total },
+    { label: 'Fit', value: score.fit },
+  ];
+}
+
 export type MatchCardInput = {
   score: TestedModelScore;
   /** "Best for coding" when a goal crowned this; absent for the overall pick. */
@@ -40,12 +53,7 @@ export function matchCardLines({ score, matchLabel, appVersion }: MatchCardInput
     model: score.model,
     scoreLine: formatMatchScore(score),
     grade: score.grade,
-    subScores: [
-      { label: 'Accuracy', value: score.sobriety },
-      { label: 'Speed', value: score.speed },
-      { label: 'Stability', value: score.stability ?? score.total },
-      { label: 'Fit', value: score.fit },
-    ],
+    subScores: matchMeasures(score),
     // The rig is part of the number. A card without it would invite exactly
     // the comparison the app spends so much effort refusing to fake.
     // Three cases, because a shared card must never name a machine it did not
