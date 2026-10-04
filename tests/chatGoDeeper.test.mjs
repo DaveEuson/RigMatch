@@ -41,5 +41,5 @@ test('the dialog says what Odysseus is, how to connect it, and that RigMatch is 
   assert.match(dialog, /RigMatch is not affiliated with it\./);
   assert.match(dialog, /invoke\("open_odysseus", \{ local: odysseusUp \}\)/);
   assert.doesNotMatch(dialog, /window\.open/, 'a webview window is not the browser');
-  assert.match(app, /className="rm-deeper-btn" onClick=\{openDeeper\}/, 'nothing opens the dialog');
+  assert.match(app, /className="rm-btn rm-btn-link rm-deeper-btn" onClick=\{openDeeper\}>Want to go deeper\?<\/button>/, 'nothing opens the dialog');
 });

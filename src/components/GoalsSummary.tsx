@@ -13,7 +13,7 @@ export function GoalsSummary({
   return (
     <section className="ui-mode-picker" aria-label="Your goals">
       <div>
-        <span>Your Goals</span>
+        <span>Goals</span>
         <strong>
           {primary
             ? `${primary.desire}${goals.length > 1 ? ` · +${goals.length - 1} more` : ''}`

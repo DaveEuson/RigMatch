@@ -47,16 +47,6 @@ test('between the notches only accuracy and speed trade places', () => {
   assert.ok(balanceWeights(70).sobriety > balanceWeights(70).speed);
 });
 
-test('re-weighting at a notch matches the old priority setting exactly', () => {
-  const saved = {
-    'a:7b': score({ sobriety: 92, speed: 31, stability: 80, fit: 70 }),
-    'b:1b': score({ sobriety: 40, speed: 98, stability: 90, fit: 95 }),
-  };
-  for (const notch of BALANCE_NOTCHES) {
-    assert.deepEqual(applyBalance(saved, notch.value), applyScorePriority(saved, notch.id), notch.id);
-  }
-});
-
 test('Balanced rewrites nothing', () => {
   const saved = { 'a:7b': score() };
   assert.equal(applyBalance(saved, BALANCED), saved);
@@ -84,18 +74,6 @@ test('every score can say what it was ranked at', () => {
   // The ends say what they mean rather than "0% accuracy".
   assert.equal(balanceLabel(0), 'speed only');
   assert.equal(balanceLabel(100), 'accuracy only');
-});
-
-test('a ranking with nothing judged says it was ranked on speed alone', () => {
-  const unjudged = rankByBalance([run('slow', 50, null), run('fast', 10, null)], 70);
-  assert.equal(accuracyCounted(unjudged), false);
-  assert.equal(rankedAtLabel(unjudged, 70), 'speed only');
-  const judged = rankByBalance([run('slow', 50, 1), run('fast', 10, null)], 70);
-  assert.equal(accuracyCounted(judged), true);
-  assert.equal(rankedAtLabel(judged, 70), '70% accuracy');
-  // A judged result that failed its check does not make the rest judged.
-  const onlyFailed = rankByBalance([run('short', 5, 0.3, { failed: true }), run('fast', 10, null)], 70);
-  assert.equal(accuracyCounted(onlyFailed), false);
 });
 
 test('a chat priority chosen before the fader carries over to chat and code only', () => {

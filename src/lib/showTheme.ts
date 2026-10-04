@@ -8,9 +8,15 @@
  * original tune in the style of a 1970s dating show — organ, brass, a bouncy
  * bass and a slide whistle — and deliberately not any real show's theme.
  *
- * Three cues: a looping theme while the contestants answer, a drum roll and
- * ta-da when a winner is crowned, and a sad trombone when a show stops with
- * nobody crowned. Off unless the user turns music on (showExtras).
+ * Three music cues: a looping theme while the contestants answer, a drum roll
+ * and ta-da when a winner is crowned, and a sad trombone when a show stops
+ * with nobody crowned. Off unless the user turns music on (showExtras).
+ *
+ * The short effect cues from the redesign's sound brief live here too, on the
+ * same instruments: curtain, sting, jingle, applause, buzz and fanfare. They
+ * play under the Show effects switch (lib/sound.ts), on their own bus, and the
+ * theme ducks under them rather than stopping. They are sketches of the
+ * timing until recorded audio exists.
  */
 
 export const THEME_BPM = 128;
@@ -174,6 +180,25 @@ function slideWhistle(bus: Bus, t: number, from: number, to: number, dur: number
   o.connect(g).connect(bus);
 }
 
+/** One clap: a short burst of noise in the band a hand makes, under 2.5 kHz. */
+function clap(bus: Bus, t: number, peak: number) {
+  const src = ctx!.createBufferSource(); src.buffer = noiseBuf;
+  const f = ctx!.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900 + Math.random() * 1300; f.Q.value = 1.4;
+  const g = ctx!.createGain();
+  g.gain.setValueAtTime(peak, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+  src.connect(f).connect(g).connect(bus);
+  src.start(t, Math.random() * 1.5); src.stop(t + 0.06);
+}
+
+/** A small studio audience: dense at first, thinning out fast, no whoops. */
+function applause(bus: Bus, t: number, dur: number) {
+  for (let i = 0; i < 150; i += 1) {
+    const at = Math.random() ** 1.8 * dur;
+    clap(bus, t + at, 0.09 * (1 - (at / dur) * 0.8));
+  }
+}
+
 // ---- The romance: harp, strings, a violin -------------------------------------
 
 /** A harp string: a bright pluck that rings and fades. */
@@ -328,6 +353,71 @@ function stopLoop(fade: number) {
   themeBus = null;
 }
 
+/** The jingle: five notes from the top of the theme, the show's signature. */
+const MOTIF: Array<[number, number, number]> = [[0, 0.1, 72], [0.11, 0.1, 69], [0.22, 0.1, 72], [0.34, 0.14, 77], [0.5, 0.38, 81]];
+
+export type ShowCue = 'curtain' | 'sting' | 'jingle' | 'applause' | 'buzz' | 'fanfare';
+
+/** Seconds each cue lasts, from the sound brief. */
+export const CUE_SECONDS: Record<ShowCue, number> = {
+  curtain: 0.6, sting: 0.4, jingle: 0.9, applause: 1.6, buzz: 0.35, fanfare: 2.7,
+};
+
+const CUES: Record<ShowCue, (bus: Bus, t: number) => void> = {
+  // A rising organ swell into a soft cymbal, left open for the theme.
+  curtain(bus, t) {
+    const ac = ctx!;
+    for (const m of [53, 57, 60, 65]) {
+      const o = ac.createOscillator();
+      o.setPeriodicWave(organWave!);
+      o.frequency.value = mtof(m);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.03, t + 0.5);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.75);
+      o.connect(g).connect(bus);
+      o.start(t); o.stop(t + 0.8);
+    }
+    crash(bus, t + 0.5, 0.05);
+  },
+  // Three bright brass notes, major.
+  sting(bus, t) {
+    brass(bus, [72], t, 0.09, 0.06);
+    brass(bus, [76], t + 0.1, 0.09, 0.06);
+    brass(bus, [79, 84], t + 0.2, 0.2, 0.05);
+  },
+  jingle(bus, t) {
+    for (const [at, dur, m] of MOTIF) brass(bus, [m], t + at, dur, 0.055);
+    organ(bus, [53, 57, 60, 65], t, 0.85);
+    bass(bus, 41, t + 0.5, 0.38);
+  },
+  applause(bus, t) {
+    applause(bus, t, CUE_SECONDS.applause);
+  },
+  // A low, soft double reed, falling a half step: sympathetic, not mocking.
+  buzz(bus, t) {
+    const ac = ctx!;
+    [[45, 0], [44, 0.18]].forEach(([m, at]) => {
+      const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 520; f.Q.value = 1.5;
+      const g = ac.createGain();
+      shape(g, t + at, 0.02, 0.09, 0.07, t + at + 0.14, 0.04);
+      for (const type of ['sawtooth', 'square'] as const) osc(type, mtof(m), t + at, t + at + 0.2).connect(f);
+      f.connect(g).connect(bus);
+    });
+  },
+  // The jingle in full brass, a held chord, and the audience.
+  fanfare(bus, t) {
+    for (let i = 0; i < 10; i += 1) snare(bus, t + i * 0.035, 0.03 + i * 0.01);
+    const hit = t + 0.38;
+    for (const [at, dur, m] of MOTIF) brass(bus, [m - 12, m], hit + at, dur, 0.05);
+    brass(bus, [53, 57, 60, 65, 69, 72], hit + 0.9, 1.3, 0.045);
+    lead(bus, 77, hit + 0.9, 1.3);
+    bass(bus, 41, hit + 0.9, 1.2);
+    crash(bus, hit + 0.9, 0.12);
+    applause(bus, hit + 1.1, 1.2);
+  },
+};
+
 let stingBus: Bus | null = null;
 /** When the current sting finishes (performance.now()). */
 let stingUntil = 0;
@@ -369,6 +459,25 @@ export const showTheme = {
     stingUntil = 0;
   },
 
+  /**
+   * One of the short effect cues. It plays beside the theme rather than
+   * replacing it: the theme dips 6 dB for the length of the cue.
+   */
+  cue(name: ShowCue) {
+    const ac = audio();
+    if (!ac) return;
+    void ac.resume();
+    const seconds = CUE_SECONDS[name];
+    const bus = newBus(ac);
+    const t0 = ac.currentTime + 0.03;
+    CUES[name](bus, t0);
+    if (themeBus && name !== 'buzz') {
+      themeBus.gain.setTargetAtTime(0.5, t0, 0.03);
+      themeBus.gain.setTargetAtTime(1, t0 + seconds, 0.2);
+    }
+    setTimeout(() => bus.disconnect(), (seconds + 1.5) * 1000);
+  },
+
   /** Drum roll, "da-da", ta-da. About three seconds. */
   winner() {
     const ac = audio();
@@ -392,9 +501,8 @@ export const showTheme = {
 
   /**
    * "It's a match": a harp glissando, the strings swelling from B-flat to F,
-   * and a violin that sighs its way home. About five seconds. Plays whether
-   * or not the theme song is on — it replaces the arpeggio this moment always
-   * had.
+   * and a violin that sighs its way home. About five seconds. An effect, so
+   * it plays under the Show effects switch whether or not the theme is on.
    */
   romance() {
     const ac = audio();

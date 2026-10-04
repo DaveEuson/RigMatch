@@ -77,18 +77,6 @@ export function useJudgeSettings({ installedRows, vramGb }: { installedRows: Mod
     return judgeModelOptions[0] ?? '';
   }, [qualityMode, judgeModel, judgeModelOptions]);
 
-  /**
-   * A local model to mark the answers the rules cannot, when judging is off.
-   *
-   * Chat and writing questions have no shape for the heuristic to match, so
-   * 0.6 stopped them crowning anyone — which left those goals graded but
-   * uncrownable unless the user found the judge setting.
-   */
-  const autoJudgeModels = useMemo(() => {
-    if (qualityMode === 'judge') return [];
-    return judgeModelOptions;
-  }, [qualityMode, judgeModelOptions]);
-
   const effectiveJudge = useMemo<JudgeConfig | null>(() => {
     if (qualityMode !== 'judge') return null;
     if (judgeSource === 'openrouter') {
@@ -98,6 +86,22 @@ export function useJudgeSettings({ installedRows, vramGb }: { installedRows: Mod
     }
     return effectiveJudgeModel ? { provider: 'local', model: effectiveJudgeModel } : null;
   }, [qualityMode, judgeSource, cloudJudgeModel, openRouterKey, effectiveJudgeModel]);
+
+  /**
+   * A local model to mark the answers the rules cannot, whenever no judge is
+   * in use: judging off, or a judge picked that cannot run (OpenRouter with no
+   * key, a local judge with nothing installed).
+   *
+   * Chat and writing questions have no shape for the heuristic to match, so
+   * 0.6 stopped them crowning anyone — which left those goals graded but
+   * uncrownable unless the user found the judge setting. Keyed on judging
+   * being switched on, a cloud judge with no key left them unmarked while
+   * the run sheet promised "this run uses the built-in checks".
+   */
+  const autoJudgeModels = useMemo(
+    () => (effectiveJudge ? [] : judgeModelOptions),
+    [effectiveJudge, judgeModelOptions],
+  );
 
   useEffect(() => {
     try { localStorage.setItem(QUALITY_MODE_STORAGE_KEY, qualityMode); } catch { /* ignore */ }

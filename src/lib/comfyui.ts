@@ -19,8 +19,6 @@
  * because the renderer's origin is not one ComfyUI's CORS policy accepts.
  */
 
-export const COMFY_DEFAULT_URL = 'http://127.0.0.1:8188';
-
 /** Node ids in the graph below. Arbitrary, but referenced by wiring, so named. */
 const CHECKPOINT = '4';
 const LATENT = '5';
@@ -108,6 +106,85 @@ export function buildTxt2ImgWorkflow(req: Txt2ImgRequest): Record<string, unknow
   };
 }
 
+/** What a three-file picture model's graph is built from; see pictureRecipes.ts. */
+export type RecipeGraphRequest = {
+  graph: 'aura-flow' | 'flux2';
+  unet: string;
+  clip: string;
+  clipType: string;
+  vae: string;
+  prompt: string;
+  width: number;
+  height: number;
+  steps: number;
+  cfg: number;
+  seed: number;
+  sampler: string;
+  scheduler: string;
+  shift?: number;
+};
+
+/**
+ * The graph for a picture model in three files: loaders for the model, the
+ * encoder and the decoder, then the sampling its makers publish.
+ *
+ * Both models are distilled to run with guidance off, so the negative prompt
+ * is the positive one zeroed, as in ComfyUI's templates. Z-Image samples with
+ * KSampler after AuraFlow's shift; FLUX.2 [klein] has its own scheduler and
+ * goes through SamplerCustomAdvanced, which takes the seed as a noise node.
+ */
+export function buildRecipeWorkflow(req: RecipeGraphRequest): Record<string, unknown> {
+  const loaders = {
+    1: { class_type: 'UNETLoader', inputs: { unet_name: req.unet, weight_dtype: 'default' } },
+    2: { class_type: 'CLIPLoader', inputs: { clip_name: req.clip, type: req.clipType } },
+    3: { class_type: 'VAELoader', inputs: { vae_name: req.vae } },
+    4: { class_type: 'CLIPTextEncode', inputs: { text: req.prompt, clip: ['2', 0] } },
+    5: { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['4', 0] } },
+  };
+  const save = (samples: string) => ({
+    20: { class_type: 'VAEDecode', inputs: { samples: [samples, 0], vae: ['3', 0] } },
+    21: { class_type: 'SaveImage', inputs: { filename_prefix: 'RigMatch', images: ['20', 0] } },
+  });
+
+  if (req.graph === 'aura-flow') {
+    return {
+      ...loaders,
+      6: { class_type: 'ModelSamplingAuraFlow', inputs: { model: ['1', 0], shift: req.shift ?? 3 } },
+      7: { class_type: 'EmptySD3LatentImage', inputs: { width: req.width, height: req.height, batch_size: 1 } },
+      8: {
+        class_type: 'KSampler',
+        inputs: {
+          seed: req.seed,
+          steps: req.steps,
+          cfg: req.cfg,
+          sampler_name: req.sampler,
+          scheduler: req.scheduler,
+          denoise: 1,
+          model: ['6', 0],
+          positive: ['4', 0],
+          negative: ['5', 0],
+          latent_image: ['7', 0],
+        },
+      },
+      ...save('8'),
+    };
+  }
+
+  return {
+    ...loaders,
+    6: { class_type: 'EmptyFlux2LatentImage', inputs: { width: req.width, height: req.height, batch_size: 1 } },
+    7: { class_type: 'Flux2Scheduler', inputs: { steps: req.steps, width: req.width, height: req.height } },
+    8: { class_type: 'KSamplerSelect', inputs: { sampler_name: req.sampler } },
+    9: { class_type: 'RandomNoise', inputs: { noise_seed: req.seed } },
+    10: { class_type: 'CFGGuider', inputs: { model: ['1', 0], positive: ['4', 0], negative: ['5', 0], cfg: req.cfg } },
+    11: {
+      class_type: 'SamplerCustomAdvanced',
+      inputs: { noise: ['9', 0], guider: ['10', 0], sampler: ['8', 0], sigmas: ['7', 0], latent_image: ['6', 0] },
+    },
+    ...save('11'),
+  };
+}
+
 export type ComfyImageRef = { filename: string; subfolder: string; type: string };
 
 /**
@@ -189,40 +266,10 @@ function describeFailure(messages: unknown[] | undefined): string {
   return 'ComfyUI reported the run failed but said no more.';
 }
 
-/** The URL that fetches a produced image. */
-export function viewUrl(baseUrl: string, ref: ComfyImageRef): string {
-  const query = new URLSearchParams({
-    filename: ref.filename,
-    subfolder: ref.subfolder,
-    type: ref.type,
-  });
-  return `${baseUrl.replace(/\/$/, '')}/view?${query.toString()}`;
-}
+
 
 export type ComfyDevice = { name: string; type: string; vramTotal: number; vramFree: number };
 
-/**
- * What ComfyUI says it is running on.
- *
- * The field names differ across versions and some builds omit the VRAM
- * figures entirely, so everything is optional and missing numbers become 0
- * rather than NaN — a fit calculation that divides by NaN silently poisons a
- * whole scorecard.
- */
-export function parseSystemStats(stats: unknown): ComfyDevice[] {
-  const devices = (stats as { devices?: unknown[] } | null)?.devices;
-  if (!Array.isArray(devices)) return [];
-  return devices.map((raw) => {
-    const device = raw as Record<string, unknown>;
-    return {
-      name: typeof device.name === 'string' ? device.name : 'unknown',
-      type: typeof device.type === 'string' ? device.type : 'unknown',
-      vramTotal: numberOr(device.vram_total, 0),
-      vramFree: numberOr(device.vram_free, 0),
-    };
-  });
-}
 
-function numberOr(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-}
+
+

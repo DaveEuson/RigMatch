@@ -5,10 +5,8 @@ import assert from 'node:assert/strict';
 import {
   buildTxt2ImgWorkflow,
   extractImages,
-  parseSystemStats,
   readStatus,
-  viewUrl,
-} from '../src/lib/comfyui.ts';
+  } from '../src/lib/comfyui.ts';
 
 test('the graph wires the sampler to the checkpoint, prompts and latent', () => {
   const graph = buildTxt2ImgWorkflow({ checkpoint: 'sd15.safetensors', prompt: 'a lighthouse' });
@@ -71,24 +69,4 @@ test('a run that failed mid-graph is reported as failed, not as done with no ima
 test('a successful run is done and not failed', () => {
   const history = { abc: { outputs: {}, status: { completed: true, status_str: 'success' } } };
   assert.deepEqual(readStatus(history, 'abc'), { done: true, failed: false, error: undefined });
-});
-
-test('the view URL escapes a subfolder and filename with spaces', () => {
-  const url = viewUrl('http://127.0.0.1:8188/', {
-    filename: 'my image.png',
-    subfolder: 'a b',
-    type: 'output',
-  });
-  assert.equal(url, 'http://127.0.0.1:8188/view?filename=my+image.png&subfolder=a+b&type=output');
-});
-
-test('missing VRAM figures read as zero rather than NaN', () => {
-  // A NaN here divides through a fit calculation and quietly ruins a scorecard.
-  const devices = parseSystemStats({ devices: [{ name: 'cuda:0', type: 'cuda' }] });
-  assert.deepEqual(devices, [{ name: 'cuda:0', type: 'cuda', vramTotal: 0, vramFree: 0 }]);
-});
-
-test('system stats from a build that reports nothing yield no devices', () => {
-  assert.deepEqual(parseSystemStats(null), []);
-  assert.deepEqual(parseSystemStats({}), []);
 });

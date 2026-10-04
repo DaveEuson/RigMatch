@@ -281,8 +281,3 @@ export const CUSTOM_IMAGE_PROMPT_ID = 'custom';
 export function customImagePrompt(text: string): ImagePrompt {
   return { id: CUSTOM_IMAGE_PROMPT_ID, prompt: text.trim(), propositions: [] };
 }
-
-/** True when this prompt cannot have its adherence judged. */
-export function isUnjudgeablePrompt(prompt: ImagePrompt): boolean {
-  return prompt.propositions.length === 0;
-}

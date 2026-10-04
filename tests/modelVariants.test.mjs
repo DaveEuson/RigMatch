@@ -14,17 +14,6 @@ const { getModelTag, describeModelTag, summarizeModelTag, compareModelTags } = a
 const kinds = (name) => describeModelTag(name).map((fact) => fact.kind);
 const labels = (name) => describeModelTag(name).map((fact) => fact.label);
 
-test('the tag is whatever follows the colon', () => {
-  assert.equal(getModelTag('gemma4:e2b'), 'e2b');
-  assert.equal(getModelTag('qwen2.5-coder:7b'), '7b');
-  assert.equal(getModelTag('lmstudio-community/qwen2.5-coder-7b-instruct:q4_k_m'), 'q4_k_m');
-});
-
-test('an untagged name is the latest tag, not an empty one', () => {
-  assert.equal(getModelTag('gemma4'), 'latest');
-  assert.equal(getModelTag(''), 'latest');
-});
-
 test('e2b is read as effective, not as two billion', () => {
   // The whole reason this module exists. "2b" is true of the string and false
   // of the model: an E2B needs a 2B model's memory and has far more behind it.
@@ -84,14 +73,6 @@ test('stripped guardrails are stated plainly, not softened', () => {
   const guard = facts.find((fact) => fact.kind === 'guardrails');
   assert.ok(guard);
   assert.match(guard.plain, /refusals/i);
-});
-
-test('a tag with nothing to say summarizes to nothing, not to an empty string', () => {
-  assert.equal(summarizeModelTag('someone/mystery-model'), null);
-});
-
-test('the summary is chip-sized and ordered', () => {
-  assert.equal(summarizeModelTag('mistral:7b-instruct-q4_k_m'), '7B · Q4 · Instruction-tuned');
 });
 
 // --- comparing two variants ------------------------------------------------

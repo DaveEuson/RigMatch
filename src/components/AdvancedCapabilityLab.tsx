@@ -21,7 +21,9 @@ import { comfyBridgeAvailable, describeComfyBusy, getComfyStatus } from "../lib/
 import { readComfySettings } from "../lib/comfySettings";
 import { onComfyStarted } from "../lib/comfyStarter";
 import { canHearAudio } from "../lib/modelCatalog";
-import { isPictureCheckpoint } from "../lib/checkpointKinds";
+import { drawableModels } from "../lib/pictureRecipes";
+import { generationFileLabel } from "../lib/generationCatalog";
+import { comfyListing } from "../lib/videoLineup";
 import { useVideoLineupSession } from "../hooks/useVideoLineupSession";
 import { ListeningLab } from "./ListeningLab";
 import { PromptPicker } from "./PromptPicker";
@@ -74,7 +76,7 @@ function readinessFrom(available: boolean, status: ComfyStatus | null): ImageRea
   // an LTX checkpoint is not ready for *images* — judging readiness on the
   // raw list rendered the ready branch with an empty picker and a dead Run
   // button, explaining nothing.
-  const usable = status.checkpoints.filter(isPictureCheckpoint);
+  const usable = drawableModels(comfyListing(status));
   if (!usable.length) return { kind: 'no-checkpoints' };
   return { kind: 'ready', checkpoints: usable };
 }
@@ -362,8 +364,8 @@ export function AdvancedCapabilityLab({
               <strong>App Builder</strong>
             </div>
             {visibleResult && (
-              <b className={`advanced-lab-grade ${getScoreTone(visibleResult.score)}`}>
-                {visibleResult.score} · {visibleResult.grade}
+              <b className={visibleResult.error ? 'advanced-lab-grade failed' : `advanced-lab-grade ${getScoreTone(visibleResult.score)}`}>
+                {visibleResult.error ? 'Failed' : `${visibleResult.score} · ${visibleResult.grade}`}
               </b>
             )}
           </div>
@@ -478,8 +480,8 @@ export function AdvancedCapabilityLab({
               <span>Extra beta creative test</span>
               <strong>Image Generation</strong>
             </div>
-            <b className={visibleImageResult ? `advanced-lab-grade ${getScoreTone(visibleImageResult.score)}` : 'advanced-lab-grade locked'}>
-              {visibleImageResult ? `${visibleImageResult.score} · ${visibleImageResult.grade}` : 'Extra beta'}
+            <b className={!visibleImageResult ? 'advanced-lab-grade locked' : visibleImageResult.error ? 'advanced-lab-grade failed' : `advanced-lab-grade ${getScoreTone(visibleImageResult.score)}`}>
+              {!visibleImageResult ? 'Extra beta' : visibleImageResult.error ? 'Failed' : `${visibleImageResult.score} · ${visibleImageResult.grade}`}
             </b>
           </div>
           <p>
@@ -525,7 +527,7 @@ export function AdvancedCapabilityLab({
           ) : (
             <>
               <div className="advanced-lab-image-controls">
-                <label htmlFor="advanced-image-checkpoint">Checkpoint</label>
+                <label htmlFor="advanced-image-checkpoint">Model</label>
                 <select
                   id="advanced-image-checkpoint"
                   value={activeCheckpoint}
@@ -533,7 +535,7 @@ export function AdvancedCapabilityLab({
                   disabled={imageRunning}
                 >
                   {availableCheckpoints.map((name) => (
-                    <option key={name} value={name}>{name}</option>
+                    <option key={name} value={name}>{generationFileLabel(name)}</option>
                   ))}
                 </select>
               </div>

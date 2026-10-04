@@ -1,6 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { ModelRow, TestedModelScore } from '../types';
-import { compareModelTags, describeModelTag } from './modelVariants.ts';
+import { compareModelTags } from './modelVariants.ts';
 
 /**
  * Two models, side by side, and an honest answer about which is better.
@@ -188,10 +188,4 @@ export function orderComparisonCandidates<T>(
   const siblings = others.filter((row) => familyOf(row) === family);
   const rest = others.filter((row) => familyOf(row) !== family);
   return [...siblings, ...rest];
-}
-
-/** True when the two names decode to exactly the same set of traits. */
-export function tagsAreIdentical(left: string, right: string): boolean {
-  return compareModelTags(left, right).length === 0
-    && describeModelTag(left).length === describeModelTag(right).length;
 }

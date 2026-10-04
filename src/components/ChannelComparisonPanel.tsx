@@ -1,5 +1,4 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { Trophy } from 'lucide-react';
 import { comparisonGroups } from '../lib/channelWinners';
 import type { AdvancedLabResult } from '../lib/labResults';
 import type { LineupRecord } from '../lib/videoLineup';
@@ -12,7 +11,7 @@ import { VideoLineupResults } from './VideoLineupResults';
 const COPY: Record<ComparedChannel, { title: string; subtitle: string; empty: string; emptyBody: string }> = {
   images: {
     title: 'Pictures side by side',
-    subtitle: 'Every checkpoint given the same prompt, ranked by what matters to you.',
+    subtitle: 'Every picture model given the same prompt, ranked by what matters to you.',
     empty: 'Nothing to compare yet',
     emptyBody: 'Tick two or more picture models above and draw the same prompt with each, and their pictures line up here.',
   },
@@ -83,52 +82,56 @@ export function ChannelComparisonPanel({
     : [];
 
   return (
-    <section className="panel panel-focused channel-comparison" aria-label={`Comparison: ${workbench.label}`}>
-      <div className="speed-date-title">
+    <section className="panel channel-comparison lab-page" aria-label={`Labs: ${workbench.label}`}>
+      <header className="page-head">
         <div>
-          <span>Comparison · {workbench.label}</span>
-          <strong>{copy.title}</strong>
+          <h2>{copy.title}</h2>
+          <p>{copy.subtitle} Lab results are kept apart from the Match Score.</p>
         </div>
-        <em>{copy.subtitle}</em>
-      </div>
+      </header>
 
-      <div className="channel-comparison-body">
-        <BalanceFader
-          value={balance}
-          onChange={onBalanceChange}
-          accuracyMeans={workbench.accuracyMeans}
-          lockedReason={lockedReason}
-          label={`What matters more for ${workbench.activity}?`}
-        />
-
+      <div className={run && channel !== 'listening' ? 'lab-layout' : 'lab-layout single'}>
+        {/* What to run on the left, what came out on the right. */}
         {run && channel !== 'listening' && (
-          // Keyed so switching channels starts from a clean pick.
-          <ComparisonRunCard key={channel} channel={channel} context={run} balance={rankAt} />
+          <aside className="lab-controls" aria-label="Run this lab">
+            {/* Keyed so switching channels starts from a clean pick. */}
+            <ComparisonRunCard key={channel} channel={channel} context={run} balance={rankAt} />
+          </aside>
         )}
 
-        {!hasResults ? (
-          <div className="speed-date-empty">
-            <Trophy aria-hidden="true" />
-            <strong>{copy.empty}</strong>
-            <span>{copy.emptyBody}</span>
-            {(!run || channel === 'listening') && (
-              <button type="button" className="primary-button compact" onClick={onOpenLab}>
-                {workbench.startLabel}
-              </button>
-            )}
-          </div>
-        ) : channel === 'video' && record ? (
-          <VideoLineupResults
-            record={record}
-            saved={labResults}
-            rankAt={rankAt}
-            running={lineup.running}
-            current={lineup.current}
-            unfinished={unfinished}
+        <div className="lab-results">
+          <BalanceFader
+            variant="row"
+            value={balance}
+            onChange={onBalanceChange}
+            accuracyMeans={workbench.accuracyMeans}
+            lockedReason={lockedReason}
+            label={`What matters more for ${workbench.activity}?`}
           />
-        ) : channel !== 'video' ? (
-          <LabComparison channel={channel} results={labResults} balance={rankAt} />
-        ) : null}
+
+          {!hasResults ? (
+            <div className="lab-empty">
+              <strong>{copy.empty}</strong>
+              <span>{copy.emptyBody}</span>
+              {(!run || channel === 'listening') && (
+                <button type="button" className="btn btn-gold" onClick={onOpenLab}>
+                  {workbench.startLabel}
+                </button>
+              )}
+            </div>
+          ) : channel === 'video' && record ? (
+            <VideoLineupResults
+              record={record}
+              saved={labResults}
+              rankAt={rankAt}
+              running={lineup.running}
+              current={lineup.current}
+              unfinished={unfinished}
+            />
+          ) : channel !== 'video' ? (
+            <LabComparison channel={channel} results={labResults} balance={rankAt} />
+          ) : null}
+        </div>
       </div>
     </section>
   );

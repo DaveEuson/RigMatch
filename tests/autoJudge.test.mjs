@@ -21,6 +21,14 @@ const { heuristicCanGrade } = require('../electron/benchmarkScoring.cjs');
 const judgeCallsFor = (questions) =>
   buildBenchmarkPromptPlan(10, questions).filter((q) => !heuristicCanGrade(q.type, q.prompt)).length;
 
+test('a judge that cannot run hands its questions to the automatic judge', () => {
+  // OpenRouter with no key, or a local judge with nothing installed: the run
+  // sheet promises the built-in checks, which include the automatic judge.
+  const hook = readFileSync(new URL('../src/hooks/useJudgeSettings.ts', import.meta.url), 'utf-8');
+  assert.match(hook, /\(\) => \(effectiveJudge \? \[\] : judgeModelOptions\)/);
+  assert.doesNotMatch(hook, /if \(qualityMode === 'judge'\) return \[\];/);
+});
+
 test('a run of nothing but checkable questions pays no judge cost', () => {
   const tools = BENCHMARK_PRESETS.find((p) => p.id === 'tools');
   assert.equal(judgeCallsFor(tools.questions), 0,

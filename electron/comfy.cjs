@@ -145,10 +145,27 @@ function createComfyBridge({ fetchJson: rawFetchJson, assertLocalhostUrl }) {
     // name arrives here rather than as an HTTP error.
     const nodeErrors = result?.node_errors;
     if (nodeErrors && Object.keys(nodeErrors).length) {
+      const missing = missingFileInput(nodeErrors);
+      if (missing) {
+        throw new Error(`ComfyUI does not have a model file this test needs (${missing}). Put the file in ComfyUI's models folder, or pick a model that is installed, then try again.`);
+      }
       throw new Error(`ComfyUI rejected the workflow: ${describeNodeErrors(nodeErrors)}`);
     }
     if (!result?.prompt_id) throw new Error('ComfyUI accepted the workflow but returned no prompt id.');
     return { promptId: result.prompt_id };
+  }
+
+  /** The input whose file ComfyUI could not find, from its "Value not in list" error. */
+  function missingFileInput(nodeErrors) {
+    for (const detail of Object.values(nodeErrors)) {
+      for (const error of Array.isArray(detail?.errors) ? detail.errors : []) {
+        if (!/value not in list/i.test(`${error?.message ?? ''} ${error?.details ?? ''}`)) continue;
+        const named = error?.extra_info?.input_name
+          ?? String(error?.details ?? error?.message ?? '').match(/(\w+_name)\b/)?.[1];
+        return named || 'a model file';
+      }
+    }
+    return null;
   }
 
   function describeNodeErrors(nodeErrors) {

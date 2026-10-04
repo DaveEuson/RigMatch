@@ -127,43 +127,7 @@ export type TaskWinner = {
   margin: number;
 };
 
-/**
- * The best model for each task, from what was actually measured.
- *
- * A winner needs a real margin: these scores come from a heuristic judge, so
- * two models a point apart are indistinguishable and picking between them would
- * be inventing a result.
- */
-export function findTaskWinners(
-  byModel: Record<string, TaskScores | undefined>,
-  minimumMargin = 5,
-): TaskWinner[] {
-  const winners: TaskWinner[] = [];
 
-  for (const group of TASK_GROUPS) {
-    const ranked = Object.entries(byModel)
-      .map(([model, tasks]) => ({ model, task: tasks?.[group.id] }))
-      .filter((entry): entry is { model: string; task: TaskScore } => isVerdictWorthy(entry.task))
-      .sort((a, b) => b.task.score - a.task.score);
-
-    const [best, runnerUp] = ranked;
-    if (!best) continue;
-    const margin = runnerUp ? best.task.score - runnerUp.task.score : 0;
-    // A single scored model is the best by default — there is nothing to
-    // separate it from, so the margin rule does not apply.
-    if (runnerUp && margin < minimumMargin) continue;
-
-    winners.push({
-      task: group.id,
-      label: group.label,
-      model: best.model,
-      score: best.task.score,
-      margin,
-    });
-  }
-
-  return winners;
-}
 
 /**
  * The best model for one task, for callers that want to route work to it —

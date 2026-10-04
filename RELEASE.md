@@ -44,6 +44,19 @@ reality, a window that does not fit the screen. They were added over 0.6 and 0.7
 and were missing from this list, which is how the list came to describe a
 smaller release process than the one actually run.
 
+Refresh what RigMatch knows about each Ollama model before building, and
+commit the result if it changed:
+
+```bash
+node scripts/snapshot-ollama-capabilities.mjs
+```
+
+It reads every catalog family's Ollama page (what each size accepts, and the
+tools, thinking, hearing, embedding and cloud badges) into
+`electron/ollamaCapabilities.json`. The app reads the same facts live, but only
+for the families its catalog scan opens, and none when offline; everything else
+uses this file. A stale file is how a model ends up under the wrong filter.
+
 After packaging, confirm the build contains what was committed:
 
 ```bash

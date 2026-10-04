@@ -40,13 +40,7 @@ export type VariantFact = {
   plain: string;
 };
 
-/** Everything after the first colon, lowercased. `latest` when there is no tag. */
-export function getModelTag(displayName: string): string {
-  const afterSlash = String(displayName ?? '').split('/').pop() ?? '';
-  const colon = afterSlash.indexOf(':');
-  const tag = colon === -1 ? '' : afterSlash.slice(colon + 1);
-  return (tag || 'latest').toLowerCase();
-}
+
 
 /**
  * The whole name, lowercased — not just the tag.
@@ -168,11 +162,7 @@ export function describeModelTag(displayName: string): VariantFact[] {
   return facts;
 }
 
-/** One line for a table cell or tooltip. Null when the name says nothing useful. */
-export function summarizeModelTag(displayName: string): string | null {
-  const facts = describeModelTag(displayName);
-  return facts.length > 0 ? facts.map((fact) => fact.label).join(' · ') : null;
-}
+
 
 /**
  * What actually separates two variants, in the order a chooser cares about.

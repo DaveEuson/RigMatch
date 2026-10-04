@@ -52,13 +52,21 @@ test('null and undefined are both "no status", not "null"', () => {
   assert.equal(rail.find((s) => s.id === 'updates').status, null);
 });
 
-test('the rail carries the eyebrow and title the accordion shows', () => {
-  // Both are rendered from this one array, so a section cannot be called one
-  // thing in the contents list and another where it lands.
+test('the rail carries the title the section shows', () => {
   const rail = buildSettingsRail({}, { advanced: true });
-  const storage = rail.find((s) => s.id === 'storage');
-  assert.equal(storage.eyebrow, 'Storage');
-  assert.equal(storage.title, 'The Closet');
+  assert.equal(rail.find((s) => s.id === 'storage').title, 'The Closet');
+});
+
+test('section titles are sentence case, without eyebrows', () => {
+  for (const section of SETTINGS_SECTIONS) {
+    assert.ok(!('eyebrow' in section), `${section.id} still has an eyebrow`);
+    assert.ok(!section.title.includes('&'), `${section.title} uses an ampersand`);
+    const words = section.title.split(' ').slice(1);
+    // "The Closet" is a name, so its capital stays.
+    if (section.id !== 'storage') {
+      assert.ok(words.every((w) => w === w.toLowerCase() || w === 'ComfyUI'), `${section.title} is not sentence case`);
+    }
+  }
 });
 
 test('exactly one section is marked advanced-only', () => {

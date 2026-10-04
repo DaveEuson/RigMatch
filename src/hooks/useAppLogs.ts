@@ -37,7 +37,8 @@ export function useAppLogs({
       const result = await agentArcadeApi.getLogs(200);
       setAppLogs(result.entries);
       setLogPath(result.logPath);
-      setActivity(`Loaded ${result.entries.length} log entr${result.entries.length === 1 ? 'y' : 'ies'}.`);
+      // Not announced: the log loads whenever Results opens, and a toast saying
+      // so covered the screen just opened. A failure still says so.
     } catch (error) {
       setActivity(`Log load failed: ${getErrorMessage(error)}`);
     } finally {

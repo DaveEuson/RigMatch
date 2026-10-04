@@ -1,0 +1,449 @@
+/* RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE. */
+
+/*
+ * Settings, in both modes: a 230px rail that picks one section, and that
+ * section as a column of hairline rows.
+ *
+ * The section bodies are older components (the update center, the Closet,
+ * ComfyUI) built as stacks of boxes with an uppercase eyebrow over a title.
+ * This file flattens those boxes and turns each eyebrow into the row's
+ * heading, rather than rewriting every component's markup.
+ */
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  gap: var(--s6);
+  min-height: 0;
+  padding: var(--s5) var(--s6) 0;
+  overflow: hidden;
+}
+.settings-layout,
+.settings-layout * {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+/* ── The rail ─────────────────────────────────────────────────────────── */
+
+.settings-layout .settings-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 0 var(--s5);
+  border: 0;
+  background: none;
+}
+.settings-rail-title {
+  margin: 0 0 var(--s4);
+  padding: 0 var(--s3);
+  color: var(--text-strong);
+  font: 400 var(--fs-h1) / 1.1 var(--display);
+}
+.settings-layout .settings-rail-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  width: 100%;
+  min-height: var(--h-control);
+  padding: var(--s2) var(--s3);
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.settings-layout .settings-rail-item:hover { background: var(--panel-hover); }
+.settings-layout .settings-rail-item:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.settings-layout .settings-rail-item.open { background: var(--panel-2); }
+.settings-layout .settings-rail-item strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: inherit;
+  font: 500 var(--fs-ui) / 1.3 var(--ui);
+}
+.settings-layout .settings-rail-item.open strong { color: var(--text-strong); font-weight: 700; }
+/* What the section is set to. It gives way to the title when space runs out. */
+.settings-layout .settings-rail-item em {
+  flex: 0 1 auto;
+  max-width: 50%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font: 400 var(--fs-small) / 1.3 var(--ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── The section ──────────────────────────────────────────────────────── */
+
+.settings-layout .settings-body {
+  display: block;
+  width: auto;
+  max-width: 780px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--s2) var(--s7) 0;
+}
+.settings-layout .settings-section {
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.settings-section-head {
+  padding-bottom: var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+.settings-section-head h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font: 400 var(--fs-h1) / 1.1 var(--display);
+}
+.settings-section-head p {
+  max-width: 70ch;
+  margin: var(--s1) 0 0;
+  color: var(--text);
+  font: 400 var(--fs-ui) / 1.5 var(--ui);
+}
+.settings-layout .settings-section-body {
+  display: grid;
+  gap: 0;
+  padding: 0;
+}
+
+/* Every block is a row between hairlines, whatever box it used to be. */
+.settings-layout .settings-section-body > * {
+  margin: 0;
+  padding: var(--s5) 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.settings-layout .settings-section-body > * + * { border-top: 1px solid var(--line); }
+/* The bug report row had a pink wash, set with !important. */
+.settings-layout .settings-section-body > .bug-report-stat {
+  border: 0 !important;
+  border-top: 1px solid var(--line) !important;
+  background: none !important;
+}
+.settings-layout a.btn { text-decoration: none; }
+/* A field and its buttons belong to the row above them. */
+.settings-layout .settings-section-body > :is(.settings-field, .advanced-lab-actions) {
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* The old eyebrow is the row's heading; the old title is its first line. */
+.settings-section-body :is(
+  .utility-stat > span:first-child,
+  .ui-mode-picker > div:first-child > span,
+  .theme-picker > div:first-child > span,
+  .danger-zone > div > span:first-child,
+  .update-center-head > div > span:first-child,
+  .ollama-update-head > div > span:first-child,
+  .release-notes-head > span:first-child
+) {
+  display: block;
+  margin: 0 0 var(--s1);
+  color: var(--text-strong);
+  font: 400 var(--fs-h2) / 1.2 var(--display);
+}
+.settings-section-body :is(
+  .utility-stat,
+  .ui-mode-picker > div:first-child,
+  .theme-picker > div:first-child,
+  .danger-zone > div,
+  .update-center-head > div,
+  .ollama-update-head > div,
+  .release-notes-head
+) > strong {
+  display: block;
+  margin: 0;
+  color: var(--text-strong);
+  font: 700 var(--fs-ui) / 1.4 var(--ui);
+}
+.settings-section-body :is(
+  .utility-stat,
+  .danger-zone > div,
+  .update-center-head > div,
+  .update-result
+) > em {
+  display: block;
+  max-width: 70ch;
+  margin: var(--s1) 0 0;
+  color: var(--text);
+  font: 400 var(--fs-ui) / 1.5 var(--ui);
+  font-style: normal;
+}
+.settings-layout .settings-section-body .utility-stat {
+  display: grid;
+  justify-items: start;
+  gap: 0;
+}
+.settings-layout .utility-stat > .btn,
+.settings-layout .bug-report-actions { margin-top: var(--s3); }
+.settings-layout .bug-report-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.settings-layout .danger-zone {
+  display: grid;
+  justify-items: start;
+  gap: var(--s3);
+}
+.settings-section-body .danger-zone > div > span:first-child { color: var(--red); }
+
+/* Older buttons inside the sections take the outline look. */
+.settings-section-body :is(.mini-button, .primary-button, .danger-button) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: var(--h-control-sm);
+  padding: 0 var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-strong);
+  font: 700 var(--fs-ui) / 1.2 var(--ui);
+}
+.settings-section-body :is(.mini-button, .primary-button, .danger-button):not(:disabled):hover {
+  border-color: var(--text);
+  background: var(--panel-hover);
+}
+.settings-section-body :is(.mini-button, .primary-button, .danger-button) svg { width: 16px; height: 16px; }
+.settings-layout .advanced-lab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  padding-bottom: var(--s4);
+}
+
+/* Fields and check rows. */
+.settings-layout .settings-field {
+  display: grid;
+  gap: var(--s1);
+  max-width: 520px;
+  padding-bottom: var(--s3);
+}
+.settings-layout .settings-field > span { color: var(--text-strong); font: 600 var(--fs-ui) / 1.3 var(--ui); }
+.settings-layout .settings-field input {
+  height: var(--h-control);
+  padding: 0 var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: var(--panel);
+  color: var(--text-strong);
+  font: 400 var(--fs-ui) var(--figure);
+}
+.settings-layout .settings-field input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.settings-layout .settings-section-body > .advanced-lab-consent {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s3);
+  padding: var(--s3) 0;
+  color: var(--text);
+  font: 400 var(--fs-ui) / 1.5 var(--ui);
+  cursor: pointer;
+}
+.settings-layout .advanced-lab-consent input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--accent); }
+
+/* Mode and goals: choices as outlined tiles, the chosen one in the accent. */
+.settings-layout .mode-toggle {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--s2);
+  margin-top: var(--s3);
+}
+.settings-layout .mode-toggle button {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-height: 0;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.settings-layout .mode-toggle button:hover { background: var(--panel-hover); }
+.settings-layout .mode-toggle button[aria-pressed='true'] {
+  padding: calc(var(--s3) - 1px) calc(var(--s4) - 1px);
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.settings-layout .mode-toggle button strong { color: var(--text-strong); font: 700 var(--fs-ui) / 1.3 var(--ui); }
+.settings-layout .mode-toggle button span { color: var(--text); font: 400 var(--fs-ui) / 1.45 var(--ui); }
+
+/* Themes: three across, each with a strip of its colours. */
+.settings-layout .theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--s3);
+  margin-top: var(--s3);
+}
+.settings-layout .theme-card {
+  display: grid;
+  gap: 2px;
+  padding: var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-panel);
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.settings-layout .theme-card:hover { border-color: var(--text); }
+.settings-layout .theme-card.active {
+  padding: calc(var(--s3) - 1px);
+  border: 2px solid var(--accent);
+}
+.settings-layout .theme-swatches {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 4px;
+  height: 40px;
+  margin-bottom: var(--s2);
+}
+.settings-layout .theme-swatches i {
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 6px;
+  box-shadow: none;
+}
+.settings-layout .theme-card strong { color: var(--text-strong); font: 700 var(--fs-ui) / 1.3 var(--ui); }
+.settings-layout .theme-card em { color: var(--text); font: 400 var(--fs-ui) / 1.4 var(--ui); font-style: normal; }
+
+/* Achievements: the section line already says how many are earned. */
+.settings-layout .achievement-shelf-count { display: none; }
+
+/* The Closet: the head repeats the section title, the rows lose their boxes. */
+.settings-layout .closet-head > span:first-child { display: none; }
+.settings-layout .closet-head strong { color: var(--text-strong); font: 700 var(--fs-ui) / 1.4 var(--ui); }
+.settings-layout .closet-list {
+  display: grid;
+  gap: 0;
+  margin: var(--s3) 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+.settings-layout .closet-list li {
+  min-height: var(--h-row);
+  padding: var(--s2) 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+}
+.settings-layout .closet-row-name strong { font: 700 var(--fs-ui) / 1.3 var(--ui); }
+.settings-layout :is(.closet-row-name em, .closet-keep, .closet-elsewhere) { font-size: var(--fs-small); }
+.settings-layout .closet-keep {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+/* Updates. */
+.settings-layout :is(.update-center-head, .ollama-update-head) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+.settings-layout .update-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.settings-layout .update-channel-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-top: var(--s3);
+}
+/* The old channel cards were grids; these are chips. */
+.settings-layout .update-channel-toggle .chip {
+  display: inline-flex;
+  width: auto;
+  min-height: var(--h-control);
+  padding: 0 14px;
+  background: transparent;
+  color: var(--text-strong);
+  font: 400 var(--fs-ui) / 1.2 var(--ui);
+  text-align: left;
+}
+.settings-layout .update-channel-toggle .chip[aria-pressed='true'] {
+  padding: 0 13px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  font-weight: 700;
+}
+.settings-layout .update-channel-toggle .chip span {
+  display: inline;
+  margin: 0;
+  color: var(--muted);
+  font: 400 var(--fs-ui) / 1.2 var(--ui);
+}
+.settings-layout .update-result {
+  margin-top: var(--s3);
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.settings-layout .update-result > span:first-child { color: var(--muted); font: 400 var(--fs-ui) / 1.4 var(--ui); }
+.settings-layout .update-result > strong { display: block; color: var(--text-strong); font: 700 var(--fs-ui) / 1.4 var(--ui); }
+.settings-layout .update-result > p { margin: var(--s1) 0 0; color: var(--text); font: 400 var(--fs-ui) / 1.5 var(--ui); }
+.settings-layout .release-notes-head { display: block; }
+.settings-layout .release-notes ol {
+  display: grid;
+  gap: 0;
+  margin: var(--s3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.settings-layout .release-notes ol > li {
+  padding: var(--s4) 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+}
+
+/* How we score opens like a heading with a chevron, not a bar. */
+.settings-layout .how-we-score-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  width: auto;
+  min-height: var(--target-min);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-strong);
+  font: 400 var(--fs-h2) / 1.2 var(--display);
+  cursor: pointer;
+}
+
+/* Narrow windows keep the rail: it wraps above the section, without statuses. */
+@media (max-width: 860px) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: var(--s4);
+    padding: var(--s4) var(--s4) 0;
+  }
+  .settings-layout .settings-rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--s1);
+    overflow: visible;
+    padding: 0 0 var(--s3);
+    border-bottom: 1px solid var(--line);
+  }
+  .settings-rail-title { flex-basis: 100%; margin-bottom: var(--s2); }
+  .settings-layout .settings-rail-item { width: auto; min-height: var(--h-control-sm); }
+  .settings-layout .settings-rail-item em { display: none; }
+}

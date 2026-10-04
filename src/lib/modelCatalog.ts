@@ -15,7 +15,7 @@ import type {
   SystemProfile,
   TestedModelScore,
 } from '../types';
-import type { NavId } from '../components/SideMenu';
+import type { NavId } from '../types';
 import { getDisplayCountry, getModelFamily, getModelOrigin } from './modelOrigins.ts';
 import { normalizeModelKey } from './modelKey.ts';
 import { MATCH_GRADE_BANDS, compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore } from './scoring.ts';
@@ -24,7 +24,6 @@ import {
   APP_VERSION,
   GITHUB_ISSUES_URL,
   MODE_SPLASH_STORAGE_KEY,
-  TUTORIAL_STORAGE_KEY,
   UI_MODE_STORAGE_KEY,
   navItems,
   themeOptions,
@@ -69,12 +68,17 @@ export type HardwareFit = {
  * What a provider says a model can do, when it says anything.
  *
  * Ollama reports this from `/api/show` — observed vocabulary on 0.32.9:
- * `completion`, `vision`, `tools`, `image`. It is only available for installed
- * models; the browsable catalog cannot be asked, so the name heuristics below
- * remain the fallback rather than being replaced.
+ * `completion`, `vision`, `tools`, `image` — for installed models. Catalog
+ * rows carry the same words, read from the size's row on its Ollama family
+ * page (electron/ollamaCatalog.cjs). The name heuristics below are the
+ * fallback for a model neither describes.
  */
 export type CapabilityBearing = {
   capabilities?: string[];
+  /** The family's one-line description from its Ollama page. */
+  description?: string;
+  /** This size runs only in Ollama's cloud, so it cannot be downloaded. */
+  cloudOnly?: boolean;
   installedModel?: { capabilities?: string[]; name?: string; model?: string };
   displayName?: string;
   name?: string;
@@ -87,9 +91,9 @@ export type CapabilityBearing = {
  *
  * The installed model wins. That comes from /api/show — the provider
  * describing a file it actually has — whereas `row.capabilities` on a
- * catalog entry is what the Ollama website lists for the family, which is
- * coarser: it covers a family rather than a tag, so a family listed as
- * seeing does not prove that its 0.5b tag does.
+ * catalog entry is what the Ollama website says: what this size accepts
+ * (gemma3:1b reads text only, gemma3:4b text and images), and the family's
+ * badges for tools, thinking and hearing, which are per family.
  *
  * Both beat guessing from the name, which is why callers prefer this and fall
  * back to a name rule only when it returns null.
@@ -188,7 +192,10 @@ const WEAK_TEXT_JUDGE = /\bocr\b|deepseek-ocr|got-ocr|olmocr|bakllava|^llava|\/l
  * where a batch run gives every checkpoint the same prompt and the same seed.
  */
 export function canJoinComparison(row: ModelRow): boolean {
-  return row.runtime !== 'comfyui' && canGenerateText(row) && !isEmbeddingModel(row.displayName);
+  // A cloud model answers from Ollama's servers, so its speed and fit say
+  // nothing about this PC.
+  return row.runtime !== 'comfyui' && canGenerateText(row) && !isEmbeddingModel(row.displayName)
+    && !row.cloudOnly && !isCloudModel(row.displayName);
 }
 
 /**
@@ -614,42 +621,6 @@ export function getResultExplanation(
     body: `${model} is a ${score.grade} match because ${strongestTrait}, scored ${score.speed}% speed, ${score.sobriety}% answer quality, and ${score.fit}% computer fit on ${host?.hostname ?? 'this computer'}. ${caution}`,
     bottleneck,
   };
-}
-
-export function getModelProfileHighlights(
-  row: ModelRow | undefined,
-  profile: ModelProfile,
-  score: TestedModelScore | undefined,
-  vramGb: number,
-) {
-  const sizeGb = row?.sizeGb ?? row?.installedModel?.sizeGb ?? null;
-  const origin = getModelOrigin(row?.displayName ?? '');
-  const redFlag = sizeGb && vramGb > 0 && sizeGb > vramGb
-    ? sizeGb <= vramGb * 1.15 ? 'RAM assist' : 'Too big for VRAM'
-    : sizeGb && sizeGb >= 12
-      ? 'Large download'
-      : score && score.sobriety < 75
-        ? 'Needs supervision'
-        : 'Low drama';
-
-  return [
-    {
-      label: 'Best use',
-      value: profile.archetype,
-    },
-    {
-      label: 'Best for',
-      value: profile.specialties.slice(0, 2).join(' + '),
-    },
-    {
-      label: 'By',
-      value: origin.organization,
-    },
-    {
-      label: 'Red flag',
-      value: redFlag,
-    },
-  ];
 }
 
 export function getRigPick(
@@ -1307,10 +1278,6 @@ export function hasChosenInterfaceMode(): boolean {
   return window.localStorage.getItem(MODE_SPLASH_STORAGE_KEY) != null;
 }
 
-export function getSavedTutorialSeen() {
-  return window.localStorage.getItem(TUTORIAL_STORAGE_KEY) === 'seen';
-}
-
 export function isThemeId(value: string | null): value is ThemeId {
   return themeOptions.some((theme) => theme.id === value);
 }
@@ -1506,7 +1473,38 @@ export function isUncensoredModel(name: string): boolean {
     lower.includes('hermes-2');
 }
 
+/**
+ * What a family's own Ollama description says it is for.
+ *
+ * The profile table below knows families by name, and every family newer than
+ * it fell to "chat, utility, experiments": devstral, deepcoder and
+ * kimi-k2.7-code were missing from Code although their pages say coding.
+ */
+export function descriptionSpecialties(description: string | undefined): string[] {
+  const text = description ?? '';
+  return [
+    /\bcod(?:e|es|ing|er|ers)\b|codebases?|programming|software engineering|developers?\b/i.test(text) ? 'coding' : '',
+    /\breason(?:s|ing)?\b|\bmath(?:s|ematics)?\b/i.test(text) ? 'reasoning' : '',
+    /\bwrit(?:e|es|ing)\b|creative|storytelling|role-?play/i.test(text) ? 'writing' : '',
+  ].filter(Boolean);
+}
+
+/** A model made to transcribe pictures of text, not to hold a conversation. */
+function isOcrModel(row: ModelRow): boolean {
+  return /\bocr\b/i.test(row.displayName) || /\bOCR\b/.test(row.description ?? '');
+}
+
+/** The short list a row shows under "Good for". */
 export function getModelGoodForTags(row: ModelRow): string[] {
+  return allGoodForTags(row).slice(0, 5);
+}
+
+/**
+ * Every "good for" tag, for filtering. The visible list stops at five, and
+ * filtering on that cut dropped a model from Tiny whenever its "low memory"
+ * tag landed sixth.
+ */
+function allGoodForTags(row: ModelRow): string[] {
   // A checkpoint is not a chat model, and running its filename through the
   // personality profiler produced "chat, utility, experiments" on a video
   // model. What it makes is already known, so nothing needs inferring.
@@ -1518,8 +1516,9 @@ export function getModelGoodForTags(row: ModelRow): string[] {
   }
   const profile = getModelProfile(row.displayName);
   const tags = [
-    isLikelyImageGenerationModel(row.displayName) ? 'makes images' : '',
+    isImageGenerationModel(row) ? 'makes images' : '',
     isLikelyVideoGenerationModel(row.displayName) ? 'makes video' : '',
+    ...descriptionSpecialties(row.description),
     ...profile.specialties,
     row.pack,
     row.sizeGb != null && row.sizeGb <= 2.5 ? 'low memory' : '',
@@ -1540,8 +1539,7 @@ export function getModelGoodForTags(row: ModelRow): string[] {
       if (seen.has(tag)) return false;
       seen.add(tag);
       return true;
-    })
-    .slice(0, 5);
+    });
 }
 
 /** Plain-language epithet for a model card in Simple Mode (no jargon). */
@@ -1589,36 +1587,10 @@ export function getModelDreamTags(row: ModelRow): DreamTag[] {
   if (modelMatchesTask(row, 'coding')) tags.push('code');
   if (modelMatchesTask(row, 'vision')) tags.push('read-image');
   if (modelMatchesTask(row, 'hears')) tags.push('hear');
-  if (isLikelyImageGenerationModel(row.displayName)) tags.push('image');
+  if (isImageGenerationModel(row)) tags.push('image');
   if (isLikelyVideoGenerationModel(row.displayName)) tags.push('video');
   if (modelMatchesTask(row, 'audiogen')) tags.push('audio');
   return tags;
-}
-
-/**
- * The Models filter that shows a goal's candidates.
- *
- * The splash asks what someone wants to do; this is how that answer reaches
- * the Models screen without inventing a second filter system. Goals with no
- * chip yet return undefined and simply apply no lens — never a wrong one.
- */
-export function taskFilterForGoal(goalId: string | undefined): ModelTaskFilterId | undefined {
-  switch (goalId) {
-    case 'talk': return 'assistant';
-    case 'write': return 'writing';
-    case 'code': return 'coding';
-    case 'transcribe-file': return 'hears';
-    case 'describe-image': return 'vision';
-    case 'make-images': return 'imagegen';
-    // Image-to-video and text-to-video draw from the same checkpoint pool.
-    case 'animate-image': return 'videogen';
-    case 'make-video': return 'videogen';
-    case 'make-audio': return 'audiogen';
-    // use-tools has no capability chip yet; json-scored, so Matches can rank
-    // it, but the Models screen cannot filter for it until tools capability
-    // reporting lands. transcribe-live and ask-documents have no lens either.
-    default: return undefined;
-  }
 }
 
 export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolean {
@@ -1646,11 +1618,18 @@ export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolea
   if (task === 'vision' && getModelCapabilities(row)) return canReadImages(row);
   if (task === 'videoread') return canWatchVideo(row);
   if (task === 'audiogen') return isLikelyAudioGenerationModel(row.displayName);
+  // Chat, writing, code and reasoning are things said in words: an embedding
+  // model only turns text into numbers, and an OCR model only transcribes a
+  // picture, though both carried "chat" from the default profile.
+  const embedding = isEmbeddingModel(row.displayName) || (getModelCapabilities(row)?.includes('embedding') ?? false);
+  if (WORD_TASKS.has(task) && (!canGenerateText(row) || embedding || isOcrModel(row))) return false;
   const category = TASK_CATEGORIES.find((c) => c.id === task);
   if (!category || category.keywords.length === 0) return true;
-  const specialties = getModelGoodForTags(row).map((s) => s.toLowerCase());
+  const specialties = allGoodForTags(row);
   return category.keywords.some((kw) => specialties.some((sp) => sp.includes(kw)));
 }
+
+const WORD_TASKS = new Set<ModelTaskFilterId>(['assistant', 'writing', 'coding', 'reasoning']);
 
 export type TaskPick = {
   id: TaskCategoryId;
@@ -2232,34 +2211,6 @@ export function formatLogsForClipboard(logs: AppLogEntry[]) {
       ].filter(Boolean).join('\n');
     })
     .join('\n\n');
-}
-
-
-export function playDoneJingle() {
-  try {
-    const ctx = new AudioContext();
-    const melody: Array<[number, number, number]> = [
-      [523.25, 0,    0.15],
-      [659.25, 0.14, 0.15],
-      [783.99, 0.28, 0.15],
-      [1046.5, 0.42, 0.45],
-    ];
-    for (const [freq, offset, dur] of melody) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      const t = ctx.currentTime + offset;
-      gain.gain.setValueAtTime(0.25, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      osc.start(t);
-      osc.stop(t + dur + 0.05);
-    }
-  } catch {
-    // audio not available
-  }
 }
 
 /**

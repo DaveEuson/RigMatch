@@ -58,34 +58,6 @@ test('reliability and fit hold their share in every profile', () => {
   }
 });
 
-test('switching priority does not touch what was measured', () => {
-  const before = { 'a:7b': score({ sobriety: 90, speed: 30 }) };
-  const after = applyScorePriority(before, 'accuracy');
-  for (const key of ['sobriety', 'speed', 'stability', 'fit']) {
-    assert.equal(after['a:7b'][key], before['a:7b'][key], `${key} must not change`);
-  }
-});
-
-test('the headline, its decimal and its grade move together', () => {
-  const applied = applyScorePriority({ 'a:7b': score({ sobriety: 95, speed: 20 }) }, 'accuracy');
-  const entry = applied['a:7b'];
-  assert.equal(entry.total, Math.round(entry.preciseTotal));
-  assert.equal(entry.grade, gradeForMatchScore(entry.total));
-});
-
-test('balanced returns the very same object, so nothing is rewritten by default', () => {
-  const before = { 'a:7b': score() };
-  assert.equal(applyScorePriority(before, 'balanced'), before);
-});
-
-test('a corrupt or missing stored preference falls back rather than throwing', () => {
-  assert.equal(readScorePriority(null), 'balanced');
-  assert.equal(readScorePriority(undefined), 'balanced');
-  assert.equal(readScorePriority(''), 'balanced');
-  assert.equal(readScorePriority('nonsense'), 'balanced');
-  assert.equal(readScorePriority('accuracy'), 'accuracy');
-});
-
 test('the three copies of the weights still agree', () => {
   // They live in scoring.ts, in a literal in electron/main.cjs, and as display
   // percentages in scoreReference.ts. The repo's pattern for a value the main

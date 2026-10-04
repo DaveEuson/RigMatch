@@ -76,19 +76,18 @@ console.log(`scanned ${wanted.length} bundle file(s): ${(js.length / 1e6).toFixe
 /** [label, haystack, needle] — a string that exists only because of one fix. */
 const PRESENT = [
   ['host explains a term on hover', js, 'the host explains this above'],
-  ['setup says what a model is first', js, 'is a program that runs on your own computer'],
+  ['setup says what a model is', js, 'A program that runs on your own computer'],
   ['winner board shows the whole lineup', js, 'How the lineup finished'],
   ['live answer scores on Compare', js, 'answers so far'],
-  ['lineup-full is a note, not a dead button', js, 'drop one from your lineup'],
+  ['a full lineup says so, and names the model it blocks', js, 'cannot be picked'],
   ['stale winner is labeled as previous', js, "not in tonight's lineup"],
   ['license links are built per model', js, 'ollama.com/library/'],
   ['Gemma keeps its prohibited-use policy', js, 'prohibited_use_policy'],
-  ['collapsible stats strip', css, 'top-deck-collapse'],
-  // The minifier rewrites media queries to modern range syntax, so
-  // "max-height: 900px" in the source ships as "(height<=900px)". Probing for
-  // the authored spelling reported this fix missing when it was present.
-  ['nav rail compacts on short screens', css, 'height<=900px'],
-  ['visible scrollbar on the nav rail', css, 'scrollbar-thumb'],
+  ['the top bar with its tabs', css, 'top-bar-tabs'],
+  ['the computer-load strip', css, 'load-strip-readings'],
+  // The nav rail these two once covered went with the redesign (the top bar
+  // replaced it); the scrollbar styling outlived it.
+  ['visible scrollbars', css, 'scrollbar-thumb'],
   ['winner scoreboard styling', css, 'sw-scoreboard'],
   ['answer strip styling', css, 'sw-answer-strip'],
   ['Find ComfyUI for me', js, 'Find ComfyUI for me'],
@@ -114,13 +113,13 @@ const PRESENT = [
   ['the card is copied for pasting', js, 'The card is on your clipboard'],
   // Screen-audit fixes.
   ['the listening test names its blocker', js, 'Record or upload audio first'],
-  ['settings rows answer to the pointer', css, 'settings-section-toggle'],
+  ['settings rail rows answer to the pointer', css, 'settings-rail-item:hover'],
   // Main process — ships separately from the renderer bundle, so probing only
   // dist/assets would miss everything in electron/, including the permission
   // handler that is the whole of the renderer's posture toward the microphone.
   ['permission requests are gated', mainProcess, 'setPermissionRequestHandler'],
   ['permission checks are gated too', mainProcess, 'setPermissionCheckHandler'],
-  ['only the microphone is allowed', mainProcess, "ALLOWED_PERMISSIONS = new Set(['media'"],
+  ['only the microphone and notifications are allowed', mainProcess, "ALLOWED_PERMISSIONS = new Set(['media', 'audioCapture', 'notifications'])"],
   ['ComfyUI can be located automatically', mainProcess, 'comfy:locateFolder'],
   ['the scores bridge stays on loopback', mainProcess, "'127.0.0.1'"],
 

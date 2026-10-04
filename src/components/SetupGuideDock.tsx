@@ -31,7 +31,7 @@ export function SetupGuideDock({
           <div>
             <span>This machine</span>
             <strong>{getPlatformName(system.platform)} installer</strong>
-            <p>Open Ollama, install it, then use Check Again. RigMatch looks for the local API on port 11434.</p>
+            <p>Open Ollama, install it, then use Check again. RigMatch looks for the local API on port 11434.</p>
             <button type="button" className="primary-button compact" onClick={onInstallOllama}>
               Official Download
             </button>
@@ -53,7 +53,7 @@ export function SetupGuideDock({
           <div>
             <span>Windows</span>
             <strong>Installer path</strong>
-            <p>Install Ollama for Windows, keep it running in the tray, then Check Again.</p>
+            <p>Install Ollama for Windows, keep it running in the tray, then Check again.</p>
           </div>
         </section>
 

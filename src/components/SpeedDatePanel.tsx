@@ -1,7 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { History } from 'lucide-react';
-import robotSpeedDateShow from '../assets/robot-speed-date-show.webp';
 import type { BenchmarkQuestion, BenchmarkQuestionCount } from '../benchmarkSuite';
+import { formatMatchScore } from '../lib/scoring';
 import { MIN_CONTESTANTS } from '../lib/downloadStatus';
 import { balanceLabel, balanceSplit, crowned } from '../lib/balance';
 import { comparisonGroups, rankCoding, rankLabList, rankMatchResults } from '../lib/channelWinners';
@@ -16,7 +16,6 @@ import { buildComparisonRail, defaultComparisonView, describeRankingCoverage } f
 import type { BenchmarkResult, ModelRow, NetworkHost, RunProgress, TestedModelScore } from '../types';
 import { QuestionSuitePreview } from './QuestionSuitePreview';
 import { RunProgressPanel } from './RunProgressPanel';
-import { RomanceArtBanner } from './ScoreVisuals';
 import { SpeedDateContestantCard } from './SpeedDateContestantCard';
 import { SpeedDateShowAnimation } from './SpeedDateShowAnimation';
 import { SpeedDateTranscriptPanel } from './SpeedDateTranscriptPanel';
@@ -25,7 +24,7 @@ import { TestProcessCard } from './TestProcessCard';
 import { BalanceFader } from './BalanceFader';
 import { CodingBoard } from './CodingBoard';
 import { LabComparison } from './LabComparison';
-import { Boxes, ChevronRight, Download, Plus, Settings, Trophy } from 'lucide-react';
+import { ChevronRight, Download, Plus, Trophy } from 'lucide-react';
 import { useState } from 'react';
 
 /** Every kind of test: the All channel, and any caller from before channels. */
@@ -170,92 +169,47 @@ export function SpeedDatePanel({
           sequence that does not exist. It says the word in the nav instead, so
           clicking "Comparison" lands somewhere that confirms you arrived; the
           feature keeps its name on the line below. */}
-      <div className="speed-date-title">
+      {/* One header: what this screen is, what the next run will ask, and the
+          actions that set it up and start it. It replaced a title, a photo
+          banner and a "Setup" card that each said part of this. */}
+      <header className="page-head">
         <div>
-          <span>{channel === 'all' ? 'Comparison' : `Comparison · ${workbench.label}`}</span>
-          <strong>Speed Dating</strong>
+          <h2>{channel === 'all' ? 'Comparison' : `Comparison · ${workbench.label}`}</h2>
+          <p>
+            {runReadiness}
+            {' '}
+            {standingLine(lineupStanding(leader ?? undefined, lineupNames), winnerResult?.total)}
+          </p>
         </div>
-        <em>Compare up to five picked models with the same questions.</em>
-      </div>
-
-      <RomanceArtBanner
-        image={robotSpeedDateShow}
-        className="speed-date-art-banner art-banner-slim"
-        kicker="Tonight's lineup"
-        // Was the fixed string "Five contestants, one rig, same questions",
-        // which a three-model lineup made false in its first word.
-        title={`${shortlistedRows.length} contestant${shortlistedRows.length === 1 ? '' : 's'}, one rig, same questions`}
-        // Checked against the lineup on screen, not just read from the saved
-        // result: listTestResult survives across sessions, so swapping one
-        // contestant was enough to make this announce a leader that is not in
-        // tonight's lineup at all.
-        // The leader at the fader, not the one crowned when the run ended: move
-        // the fader and a different model can lead.
-        body={standingLine(
-          lineupStanding(leader ?? undefined, lineupNames),
-          winnerResult?.total,
-        )}
-      />
+        <div className="page-head-actions">
+          <button type="button" className="btn btn-line" onClick={onOpenModelPool} disabled={isListTesting}>
+            Choose models
+          </button>
+          {uninstalledLineupRows.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-line"
+              onClick={() => onQueueMissingModels(uninstalledLineupRows)}
+              disabled={isListTesting}
+              title={`Queue ${uninstalledLineupRows.length} uninstalled contestant${uninstalledLineupRows.length === 1 ? '' : 's'} for download`}
+            >
+              Download all ({uninstalledLineupRows.length})
+            </button>
+          )}
+          <button type="button" className="btn btn-line" onClick={onOpenSuiteEditor} disabled={isListTesting}>
+            Questions and judge
+          </button>
+          <button type="button" className="btn btn-gold" onClick={onRunListTest} disabled={!canRunListTest}>
+            {isListTesting
+              ? 'Running…'
+              : shortlistedRows.length >= MIN_CONTESTANTS
+                ? uninstalledLineupRows.length > 0 ? 'Download first' : listTestResult ? 'Run again' : 'Start the show'
+                : `Pick ${MIN_CONTESTANTS} or more`}
+          </button>
+        </div>
+      </header>
 
       <div className="speed-date-body">
-        <div className="speed-date-command-bar">
-          <div>
-            {/* "Dating Game Setup" was the third themed heading in the top
-                200px, after the title and the banner kicker. This one labels
-                the row of controls that actually runs the thing, so it says
-                what the row is. */}
-            <span>Setup</span>
-            <strong>{shortlistedRows.length}/5 contestants picked</strong>
-            <em>{runReadiness}</em>
-          </div>
-          <div className="speed-date-command-actions">
-            <button
-              type="button"
-              className="mini-button outline"
-              onClick={onOpenModelPool}
-              disabled={isListTesting}
-            >
-              <Boxes aria-hidden="true" />
-              Choose Models
-            </button>
-            {uninstalledLineupRows.length > 0 && (
-              <button
-                type="button"
-                className="mini-button outline"
-                onClick={() => onQueueMissingModels(uninstalledLineupRows)}
-                disabled={isListTesting}
-                title={`Queue ${uninstalledLineupRows.length} uninstalled contestant${uninstalledLineupRows.length === 1 ? '' : 's'} for download`}
-              >
-                <Download aria-hidden="true" />
-                Download All ({uninstalledLineupRows.length})
-              </button>
-            )}
-            <button
-              type="button"
-              className="mini-button outline advanced-only"
-              onClick={onOpenSuiteEditor}
-              disabled={isListTesting}
-            >
-              <Settings aria-hidden="true" />
-              Edit Questions
-            </button>
-            <button
-              type="button"
-              className="primary-button compact"
-              onClick={onRunListTest}
-              disabled={!canRunListTest}
-            >
-              <Trophy aria-hidden="true" />
-              {isListTesting ? 'Testing' : shortlistedRows.length >= MIN_CONTESTANTS ? uninstalledLineupRows.length > 0 ? 'Download First' : 'Start Speed Dating' : `Pick ${MIN_CONTESTANTS}+`}
-            </button>
-            {/* The lineup collapse toggle used to live here. It hid one card of
-                seven and left the other six stacked, which is not the problem
-                anyone had; the rail below replaces it by making every part of
-                this screen a place you can go instead of a thing you scroll
-                past. */}
-          </div>
-        </div>
-
         {/* The stage earns its 112px while there is a show, and not before.
             Idle it said "Ready Check — 5 contestants ready for the same
             questions", which is the sentence the command bar directly above it
@@ -283,17 +237,19 @@ export function SpeedDatePanel({
         )}
 
         <div className="comparison-layout">
-          <nav className="comparison-rail" aria-label="Comparison sections">
+          <nav className="screen-tabs comparison-rail" aria-label="Comparison sections">
             {comparisonRail.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 className={activeView === item.id ? 'comparison-rail-item active' : 'comparison-rail-item'}
                 onClick={() => setChosenView(item.id)}
+                aria-pressed={activeView === item.id}
                 aria-current={activeView === item.id ? 'page' : undefined}
+                title={item.status ?? undefined}
               >
-                <strong>{item.label}</strong>
-                {item.status && <em>{item.status}</em>}
+                {item.label}
+                {item.status && <span className="comparison-rail-status">{item.status}</span>}
               </button>
             ))}
           </nav>
@@ -427,7 +383,7 @@ export function SpeedDatePanel({
                 <div className="list-winner">
                   <span>{channel === 'all' ? 'Best Match' : workbench.shortLabel}</span>
                   <strong>{leader}</strong>
-                  <em>{winnerResult ? `${winnerResult.total} · ${winnerResult.grade} · ${balanceLabel(balance)}` : 'Ranked'}</em>
+                  <em>{winnerResult ? `${formatMatchScore(winnerResult)} · ${winnerResult.grade} · ${balanceLabel(balance)}` : 'Ranked'}</em>
                 </div>
                 {/* Directly under the crown, because it is the caveat on the crown.
                     A Best Match drawn from three of your five models is a different

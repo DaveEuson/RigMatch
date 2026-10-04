@@ -66,6 +66,9 @@ const {
   inferParamsFromModelName,
   sortOllamaFamilyRows,
   parseOllamaFamilyRows,
+  parseOllamaFamilyFacts,
+  ollamaCapabilitiesFor,
+  applyCapabilitySnapshot,
 } = require('./ollamaCatalog.cjs');
 const { summarizeMemory, cleanDeviceTreeModel } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
@@ -399,26 +402,38 @@ function createWindow() {
 
   // Electron grants every permission a renderer asks for unless a handler says
   // otherwise, which sat oddly beside contextIsolation, the sandbox, the CSP
-  // and the host allowlists. RigMatch needs exactly one: the microphone, for
-  // the listening test. Everything else — camera, geolocation, notifications,
+  // and the host allowlists. RigMatch needs two: the microphone, for the
+  // listening test, and notifications, for What's New's "tell me about new
+  // models" switch, which asks only when someone turns it on (refused, the
+  // switch could never turn on). Everything else — camera, geolocation,
   // clipboard reads, MIDI, USB, serial — is refused, and refused audibly
   // rather than silently, so a future feature that needs one fails loudly here
   // instead of mysteriously in the renderer.
-  const ALLOWED_PERMISSIONS = new Set(['media', 'audioCapture']);
-  const decide = (permission) => {
+  const ALLOWED_PERMISSIONS = new Set(['media', 'audioCapture', 'notifications']);
+  const decide = (permission, details = {}) => {
     const allowed = ALLOWED_PERMISSIONS.has(permission);
     if (!allowed) {
       console.warn(`[permissions] refused "${permission}": not in ALLOWED_PERMISSIONS`);
+      return false;
     }
-    return allowed;
+    // "media" is the camera as well as the microphone. Only sound is needed,
+    // and before this the camera queried as granted.
+    if (permission === 'media') {
+      const types = details.mediaTypes ?? (details.mediaType ? [details.mediaType] : []);
+      if (types.some((type) => type !== 'audio')) {
+        console.warn(`[permissions] refused "media" for ${types.join(', ')}: only audio is allowed`);
+        return false;
+      }
+    }
+    return true;
   };
-  win.webContents.session.setPermissionRequestHandler((_contents, permission, callback) => {
-    callback(decide(permission));
+  win.webContents.session.setPermissionRequestHandler((_contents, permission, callback, details) => {
+    callback(decide(permission, details));
   });
   // The request handler covers prompts; the check handler covers the synchronous
   // queries a page can make without prompting. Both are needed, or a permission
   // denied at the prompt still reads as "granted" when queried.
-  win.webContents.session.setPermissionCheckHandler((_contents, permission) => decide(permission));
+  win.webContents.session.setPermissionCheckHandler((_contents, permission, _origin, details) => decide(permission, details));
 
   if (isDev()) {
     win.loadURL('http://127.0.0.1:5173');
@@ -861,6 +876,10 @@ function publishPreviewDocument(html) {
   }
   return `${PREVIEW_SCHEME}://app/${id}`;
 }
+
+// Windows shows a desktop notification only for an app with an ID, and the
+// installer's shortcut carries this one (package.json build.appId).
+if (process.platform === 'win32') app.setAppUserModelId('ai.rigmatch.app');
 
 // One RigMatch at a time. Two instances race for the loopback bridge on
 // SCORES_SERVER_PORT: the loser binds nothing, so RigMatch Chat keeps talking to
@@ -1619,6 +1638,7 @@ async function startOllamaInstall(sender) {
   // Hoisted so the catch can distinguish a real filesystem error (which aborts
   // the fetch below) from a genuine user cancel.
   let streamError = null;
+  let fileStream = null;
   ollamaInstallController = new AbortController();
   try {
     send({ phase: 'downloading', percent: 0, receivedBytes: 0, totalBytes: 0 });
@@ -1629,7 +1649,7 @@ async function startOllamaInstall(sender) {
     if (!response.ok) throw new Error(`Download failed: ${response.status} ${response.statusText}`);
     const total = parseInt(response.headers.get('content-length') || '0', 10);
     let received = 0;
-    const fileStream = fsSync.createWriteStream(dest);
+    fileStream = fsSync.createWriteStream(dest);
     // Without an 'error' listener, a stream error (disk full, permission lost) is
     // thrown as an uncaught exception and crashes the main process — the outer
     // try/catch only sees awaited rejections. Capture it and abort the fetch so
@@ -1663,6 +1683,11 @@ async function startOllamaInstall(sender) {
     // report the underlying fs error instead of swallowing it as a silent cancel.
     const cause = streamError || err;
     if (cause.name !== 'AbortError') send({ phase: 'error', error: cause.message || 'Download failed' });
+    // A cancelled or failed download left a partial installer in the temp
+    // folder, tens of megabytes that nothing would ever launch. Closed first:
+    // Windows will not delete a file that is still open.
+    if (fileStream && !fileStream.closed) await new Promise((resolve) => { fileStream.once('close', resolve); fileStream.destroy(); });
+    await fs.rm(dest, { force: true }).catch(() => undefined);
   } finally {
     ollamaInstallController = null;
   }
@@ -2782,14 +2807,12 @@ async function getOllamaCatalog(options = {}) {
       }));
     const liveCatalog = [...detailedCatalog, ...familyOnlyCatalog].slice(0, OLLAMA_LIBRARY_MODEL_LIMIT);
 
-    // Four more requests, in parallel with nothing else outstanding. A failure
-    // here degrades the chips to installed-only rather than failing the sync.
-    const capabilityIndex = await fetchLibraryCapabilityIndex().catch(() => new Map());
-
+    // What each size can do comes from the family pages fetched above; the
+    // release-time snapshot covers families those did not reach.
     const result = {
       syncedAt: new Date().toISOString(),
       source: 'Ollama library live scan',
-      models: applyCapabilityIndex(mergeCatalogs(liveCatalog, fallback), capabilityIndex),
+      models: applyCapabilitySnapshot(mergeCatalogs(liveCatalog, fallback), OLLAMA_CAPABILITY_SNAPSHOT),
       error: null,
     };
     ollamaCatalogCache = result;
@@ -2807,7 +2830,7 @@ async function getOllamaCatalog(options = {}) {
     return {
       syncedAt: new Date().toISOString(),
       source: 'Bundled catalog',
-      models: fallback,
+      models: applyCapabilitySnapshot(fallback, OLLAMA_CAPABILITY_SNAPSHOT),
       error: error.message || 'Could not sync Ollama library',
     };
   } finally {
@@ -2819,47 +2842,17 @@ async function getOllamaCatalog(options = {}) {
 }
 
 /**
- * Which library models the Ollama site says can see, hear, use tools or think.
- *
- * Without this the capability chips could only ever count installed models —
- * /api/show answers about downloads and nothing else — so "Hears audio" read
- * "1" against a 317-model catalog and looked like a fact about the world.
- *
- * /search?c=<capability> is the only endpoint that honors the filter:
- * /library?c= silently ignores it and returns everything, which would mark
- * every model as having every capability. There is no pagination — p= is
- * ignored too — so this is the top twenty per capability, the same set the
- * Ollama site shows. Partial, but partial in the direction of "these
- * definitely can" rather than "only what I happen to have downloaded".
+ * What each library family and size can do, as Ollama's own pages said at
+ * release time. See applyCapabilitySnapshot in ollamaCatalog.cjs; missing or
+ * unreadable just leaves those rows to the name rules.
  */
-const OLLAMA_LIBRARY_CAPABILITIES = ['vision', 'audio', 'tools', 'thinking'];
-
-async function fetchLibraryCapabilityIndex() {
-  const index = new Map();
-  await Promise.all(OLLAMA_LIBRARY_CAPABILITIES.map(async (capability) => {
-    try {
-      const html = await fetchOllamaHtml(`https://ollama.com/search?c=${capability}`, 7000);
-      for (const match of String(html).matchAll(/href="\/library\/([a-z0-9._-]+)"/gi)) {
-        const family = match[1].toLowerCase();
-        if (!index.has(family)) index.set(family, new Set());
-        index.get(family).add(capability);
-      }
-    } catch {
-      // One capability failing just means its chip counts installed models
-      // only, which is where every chip started.
-    }
-  }));
-  return index;
-}
-
-/** Attach library-reported capabilities to catalog entries, by family. */
-function applyCapabilityIndex(models, index) {
-  if (!index || index.size === 0) return models;
-  return models.map((entry) => {
-    const caps = index.get(String(entry.name || '').toLowerCase());
-    return caps ? { ...entry, capabilities: [...caps] } : entry;
-  });
-}
+const OLLAMA_CAPABILITY_SNAPSHOT = (() => {
+  try {
+    return require('./ollamaCapabilities.json');
+  } catch {
+    return null;
+  }
+})();
 
 function mergeCatalogs(liveCatalog, fallback) {
   const map = new Map();
@@ -2965,6 +2958,9 @@ async function getOllamaFamilyCatalog(name) {
   const rows = parseOllamaFamilyRows(name, html);
 
   if (rows.length === 0) {
+    // x/ pages link no sizes, but still say what the family is for.
+    const facts = parseOllamaFamilyFacts(html);
+    const capabilities = ollamaCapabilitiesFor({ name, tag: 'latest', inputs: null, badges: facts.badges, description: facts.description });
     return [{
       id: `${name}:latest`,
       name,
@@ -2974,6 +2970,8 @@ async function getOllamaFamilyCatalog(name) {
       pack: 'Live Family',
       source: 'Ollama library',
       live: true,
+      ...(capabilities ? { capabilities } : {}),
+      ...(facts.description ? { description: facts.description } : {}),
     }];
   }
 

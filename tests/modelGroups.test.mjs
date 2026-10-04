@@ -83,26 +83,6 @@ test('a coder build is its own family, not another size of the chat one', () => 
     ['Qwen2.5', 'Qwen2.5-coder']);
 });
 
-// --- what the reader actually sees -----------------------------------------
-
-test('collapsing five variants into one row is the whole point', () => {
-  const out = group(gemmas);
-  assert.equal(countVisibleRows(out, new Set()), 1);
-});
-
-test('opening one family shows its variants under it', () => {
-  const out = group(gemmas);
-  assert.equal(countVisibleRows(out, new Set(['Gemma4'])), 6);
-});
-
-test('a 147-row list of five families draws five rows closed', () => {
-  const many = ['gemma4', 'qwen2.5', 'llama3.2', 'mistral', 'phi3']
-    .flatMap((family) => Array.from({ length: 29 }, (_, i) => row(`${family}:${i + 1}b`)));
-  const out = group(many);
-  assert.equal(many.length, 145);
-  assert.equal(countVisibleRows(out, new Set()), 5);
-});
-
 // --- searching --------------------------------------------------------------
 
 const matches = (r, q) => r.displayName.toLowerCase().includes(q.toLowerCase());

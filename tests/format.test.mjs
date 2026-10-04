@@ -40,6 +40,11 @@ test('the IPC wrapper never reaches the user', () => {
   assert.match(out, /not running/i, 'and it is humanized on the way out');
 });
 
+test('the "Error:" the IPC wrapper carried goes with it', () => {
+  const wrapped = new Error("Error invoking remote method 'ollama:pull': Error: The download of x stopped at 50% before Ollama confirmed it.");
+  assert.equal(getErrorMessage(wrapped), 'The download of x stopped at 50% before Ollama confirmed it.');
+});
+
 test('the macOS/MLX rule still fires', () => {
   assert.match(describeRunError('llama runner failed: mlx not supported'), /Apple Silicon/i);
 });

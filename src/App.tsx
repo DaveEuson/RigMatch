@@ -3,9 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { recordAchievements } from './lib/achievements';
 import {
   ArrowLeft,
-  HelpCircle,
   Lightbulb,
-  Sparkles,
   Trophy,
   X,
 } from 'lucide-react';
@@ -60,7 +58,7 @@ import {
   upsertModelScores,
 } from './lib/scoring';
 import { BALANCE_STORAGE_KEY, applyBalance, readBalances, type Balances } from './lib/balance';
-import { codeWinner, labWinner, rankCoding, rankLabList, videoWinner } from './lib/channelWinners';
+import { codeWinner, labWinner, rankLabList, videoWinner } from './lib/channelWinners';
 import { companionLaunchMessage } from './lib/companionLaunch';
 import { audioMakerChoices, chatPicks, videoMakerChoices } from './lib/chatMakers';
 import { renderChatAudio, renderChatVideo, type ChatRender } from './lib/chatRenders';
@@ -80,7 +78,7 @@ import {
 import { useLabResults } from './hooks/useLabResults';
 import { useVideoLineupSession } from './hooks/useVideoLineupSession';
 import { useRenderActivity, useRenderOutcome } from './hooks/useRenderActivity';
-import { endImageTest, renderChannel, startImageTest, type RenderActivity } from './lib/renderActivity';
+import { endImageTest, renderChannel, renderLabel, startImageTest, type RenderActivity } from './lib/renderActivity';
 import { RunReportModal } from './components/RunReportModal';
 import type { StoredRunReport } from './lib/runReports';
 import {
@@ -91,17 +89,18 @@ import {
   reportStorageCandidates,
 } from './lib/runReports';
 import { WhatsNewPanel } from './components/WhatsNewPanel';
-import { SideMenu, type NavId, type NavItem } from './components/SideMenu';
-import { GameShowHost } from './components/GameShowHost';
-import { PanelHeader } from './components/CommonChrome';
-import { readDeckExpanded, writeDeckExpanded } from './lib/deckSettings';
-import { playJingle } from './lib/sound';
+import type { NavId, NavItem } from './lib/appConfig';
+import { playCue, playJingle } from './lib/sound';
 import { nothingToRunNote } from './lib/skillRunNote';
 import { describeRunFailure, droppedOutMessage, showStoppedMessage } from './lib/runFailure';
-import { ChannelSwitch, TopDeck } from './components/TopDeck';
+import { ChannelSwitch } from './components/ChannelSwitch';
+import { TopBar, type ConnectionState } from './components/TopBar';
+import { LoadStrip } from './components/LoadStrip';
+import { ActivityToast } from './components/ActivityToast';
+import { TopMatchCard } from './components/TopMatchCard';
+import { LAB_CHANNELS, SHOW_CHANNELS, TOP_TABS, tabForView, viewForTab, type TopTabId } from './lib/topTabs';
 import {
   addSetValues,
-  buildBugReportUrl,
   createEmptyBenchmark,
   createQueuedPullProgress,
   createRunProgressId,
@@ -120,11 +119,9 @@ import {
   getModelProfile,
   getModelRuntime,
   getModelScore,
-  getNavLabel,
   getPlatformFit,
   getRigPick,
   getSavedThemeId,
-  getSavedTutorialSeen,
   getSavedUiMode,
   getFriendlyModelName,
   getThemeLabel,
@@ -147,7 +144,6 @@ import {
   normalizeBenchmarkResultModel,
   normalizeModelKey,
   ollamaModelMatchesAliases,
-  playDoneJingle,
   removeBenchmarkResults,
   removeListTestScores,
   removeModelScores,
@@ -197,7 +193,6 @@ import {
   type ThemeId,
   type UiMode,
 } from './lib/appConfig';
-import { AvatarBust } from './components/Avatars';
 import { ShareScorecard } from './components/ShareScorecard';
 import { ExportHatchModal } from './components/ExportHatchModal';
 import { buildHatchProfile } from './lib/hatchProfile';
@@ -206,17 +201,19 @@ import { SimpleWizard, type DreamFilterId, type StepId as WizardStepId, type Wiz
 import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, ChoiceCruiseModal } from './components/dialogs';
 import { ChatDock } from './components/ChatDock';
 import { SkillRunMiniBar, LiveBuildModal, DemoResultModal } from './components/SkillDemoViewers';
-import { RunWarningModal } from './components/RunWarningModal';
+import { RunSheet } from './components/RunSheet';
 import { ClearScoresModal } from './components/ClearScoresModal';
 import { ThirdPartyDownloadConsentModal } from './components/ThirdPartyDownloadConsentModal';
-import { QuickCheckWarningModal } from './components/QuickCheckWarningModal';
 import { SetupGuideDock } from './components/SetupGuideDock';
 import { LanBrowser } from './components/LanBrowser';
-import { Ticker } from './components/Ticker';
-import { TestSuiteEditorDock } from './components/TestSuiteEditorDock';
+import { DownloadTickerDock } from './components/DownloadTickerDock';
+import { Elapsed } from './components/Elapsed';
 import { FirstRunSplash } from './components/FirstRunSplash';
 import { ModelPoolLineupStrip } from './components/ModelPoolLineupStrip';
-import { FirstRunTutorial } from './components/FirstRunTutorial';
+import { WelcomeOverlay } from './components/WelcomeOverlay';
+import { AchievementCues } from './components/TrojanReveal';
+import type { SettingsSectionId } from './lib/settingsSections';
+import { LogsView } from './components/LogsView';
 import { ActivityPanel } from './components/ActivityPanel';
 import { SpeedDatePanel } from './components/SpeedDatePanel';
 import { UtilityPanel } from './components/UtilityPanel';
@@ -254,13 +251,13 @@ import { startVideoLineup } from './lib/videoLineupSession';
 import { IMAGE_BENCHMARK_PROMPTS } from './lib/imageGenScoring';
 import { judgeCandidates, toLabResult } from './lib/imageGenChallenge';
 import { listenerCandidates } from './lib/audioGenChallenge';
-import { isPictureCheckpoint } from './lib/checkpointKinds';
+import { drawableModels, recipeFootprintGb } from './lib/pictureRecipes';
 import { batchSeed } from './lib/videoGen';
 import { toVideoLabResult } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
 import { readHuggingFaceToken } from './lib/huggingFaceToken';
 import { goalById, presetIdForGoal } from './lib/goals';
-import { modelMatchesTask } from './lib/modelCatalog';
+import { isVisiblePullProgress, modelMatchesTask } from './lib/modelCatalog';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLineupLive } from './lib/videoGenRunner';
 import {
@@ -306,6 +303,15 @@ import { useGpuContention } from './hooks/useGpuContention';
 import { gpuBusyNote } from './lib/gpuBusyNote';
 import { pullOutcome } from './lib/pullControl';
 import './App.css';
+import './styles/shell.css';
+import './styles/controls.css';
+import './styles/runSheet.css';
+import './styles/welcome.css';
+import './styles/advanced.css';
+import './styles/settings.css';
+import './styles/dialogs.css';
+import { matchMeasures } from './lib/matchCard';
+import { questionSetLabel } from './lib/runSheet';
 
 
 // Quick TEST resource warning opt-out ('off' = user chose "don't warn again").
@@ -519,7 +525,13 @@ function App() {
   const [pendingGpuContention, setPendingGpuContention] = useState<GpuContention | null>(null);
   const [pendingRunMode, setPendingRunMode] = useState<PendingRunMode | null>(null);
   const [pendingSingleModel, setPendingSingleModel] = useState<string | null>(null);
-  const [pendingQuickCheck, setPendingQuickCheck] = useState<ModelRow | null>(null);
+  // How the run sheet opened: with its quick check ticked, straight into the
+  // question editor, or from Simple Mode's show, whose step moves on only once
+  // the show really starts.
+  const [sheetQuick, setSheetQuick] = useState(false);
+  const [sheetEditing, setSheetEditing] = useState(false);
+  const [sheetSimple, setSheetSimple] = useState(false);
+  const simpleBeginRef = useRef<(() => void) | null>(null);
   const [skillTestSelection, setSkillTestSelection] = useState<SkillTestSelection>({
     appBuilder: false,
     appPromptId: DEFAULT_APP_BUILDER_PRESET_ID,
@@ -553,7 +565,6 @@ function App() {
   // How many improve passes each model has had this session (App Builder retries).
   const [improveCounts, setImproveCounts] = useState<Record<string, number>>({});
   const [benchmarkQuestions, setBenchmarkQuestions] = useState<BenchmarkQuestion[]>(() => getSavedBenchmarkQuestions());
-  const [suiteEditorOpen, setSuiteEditorOpen] = useState(false);
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null);
   const [activity, setActivity] = useState('Contestants is your hub: browse models, run tests, manage downloads, and start Speed Dating.');
   const [activeNavId, setActiveNavId] = useState<NavId>('models');
@@ -600,8 +611,12 @@ function App() {
   const [setupGuideOpen, setSetupGuideOpen] = useState(false);
   const [clearDataOpen, setClearDataOpen] = useState(false);
   const [pendingScoreClear, setPendingScoreClear] = useState<PendingScoreClear | null>(null);
-  const [tutorialOpen, setTutorialOpen] = useState(() => !getSavedTutorialSeen());
-  const [tutorialStep, setTutorialStep] = useState(0);
+  // A Settings section a link elsewhere asks for, such as ComfyUI help on Models.
+  const [settingsSectionRequest, setSettingsSectionRequest] = useState<{ id: SettingsSectionId; at: number } | null>(null);
+  // The welcome again, from Settings. The first run's own is useGoals' showModeSplash.
+  const [welcomeReplay, setWelcomeReplay] = useState(false);
+  // My PC's two views: the computer and its connections, or everything logged.
+  const [myPcView, setMyPcView] = useState<'overview' | 'logs'>('overview');
 
   const selectedHost = hosts.find((host) => host.id === selectedHostId) ?? hosts[0];
 
@@ -649,6 +664,9 @@ function App() {
           // cannot hold, so VRAM alone called runnable models too big and the
           // download queue refused them.
           const lineup = entry.generationKind === 'video' ? lineupEntry(entry.generationId) : undefined;
+          // A three-file picture model is sized by what it holds at once, not
+          // by its download: the encoder is swapped out before it draws.
+          const footprint = entry.generationKind === 'image' ? recipeFootprintGb(entry.generationId) : null;
           return {
             ...entry,
             displayName: entry.name,
@@ -660,6 +678,7 @@ function App() {
             ...(lineup
               ? { fitOverride: asHardwareFit(videoFit(lineup.sizing, videoMachine, { hasToken: hasToken || entry.installedFile })) }
               : {}),
+            ...(footprint != null ? { fitOverride: getHardwareFit({ params: entry.params, sizeGb: footprint }, videoMachine.vramGb) } : {}),
           };
         });
       return [...generation, ...rows];
@@ -689,7 +708,7 @@ function App() {
     // input is invalid: None" — it carries no text encoder. The offer appeared,
     // it was pressed, and it could never have worked: exactly the empty promise
     // this feature exists to prevent, made by the feature itself.
-    const drawable = comfyCheckpoints.filter(isPictureCheckpoint);
+    const drawable = drawableModels(comfyListing({ checkpoints: comfyCheckpoints, folders: comfyFolders ?? undefined }));
 
     return {
       // ComfyUI answering is not the same as ComfyUI being able to draw.
@@ -719,7 +738,7 @@ function App() {
       },
       gpuNote: async () => gpuBusyNote(await refreshChatGpu()),
     };
-  }, [comfyCheckpoints, ollama.baseUrl, comfySettings.baseUrl, refreshChatGpu]);
+  }, [comfyCheckpoints, comfyFolders, ollama.baseUrl, comfySettings.baseUrl, refreshChatGpu]);
 
   /**
    * Generate on behalf of RigMatch Chat.
@@ -830,10 +849,6 @@ function App() {
     () => modelRows.filter((row) => shortlistIds.has(row.displayName) && canJoinComparison(row)).slice(0, 5),
     [modelRows, shortlistIds],
   );
-  const uninstalledShortlistedCount = useMemo(
-    () => shortlistedRows.filter((row) => !row.installed).length,
-    [shortlistedRows],
-  );
   const installedRowsForCleanup = useMemo(() => deletableRows(modelRows), [modelRows]);
   const {
     qualityMode, setQualityMode, setJudgeModel,
@@ -935,7 +950,7 @@ function App() {
         // The grid only ever shows models that fit, so every tier label reads the
         // same. State the numbers a beginner actually needs to judge it.
         fitDetail: row.sizeGb && vramGb > 0
-          ? `${formatGb(row.sizeGb)} of your ${formatGb(vramGb)} VRAM`
+          ? `${Math.round(row.sizeGb * 10) / 10} of ${formatGb(vramGb)}`
           : row.sizeGb
             ? `${formatGb(row.sizeGb)} on disk`
             : '',
@@ -1008,9 +1023,6 @@ function App() {
   // Advanced's stats strip. Read once from the stored choice, falling back to
   // a rule based on how much height this screen actually has — see
   // scripts/measure-shell.mjs for the numbers that set the threshold.
-  const [deckExpanded, setDeckExpanded] = useState(
-    () => readDeckExpanded(typeof window === 'undefined' ? 1080 : window.innerHeight, getSavedUiMode()),
-  );
 
   /**
    * What this PC can actually generate.
@@ -1298,12 +1310,6 @@ function App() {
   }, [modelRows, ollama.baseUrl, pendingScoreClear, selectedModel]);
 
 
-  const closeTutorial = useCallback(() => {
-    writeLocal(TUTORIAL_STORAGE_KEY, 'seen');
-    setTutorialOpen(false);
-    setActivity('Quick guide closed. Use the Matchmaker Menu to move through the app.');
-  }, []);
-
   const selectUiMode = useCallback((nextMode: UiMode) => {
     setUiMode(nextMode);
     setActivity(nextMode === 'beginner'
@@ -1378,6 +1384,11 @@ function App() {
     return listTestResult.results.some((result) => picked.has(result.model)) ? listTestResult : null;
   }, [listTestResult, shortlistedRows]);
 
+  // What the show will ask, said in the Pick footer beside "Change".
+  const wizardPlanLine = wizardRound === 'vision' ? 'One picture to describe.'
+    : wizardRound === 'listening' ? 'One recording to write down.'
+      : `${benchmarkQuestionCount} questions, ${questionSetLabel(benchmarkQuestions)}.${wizardRound === 'code' ? ' Then each builds an app.' : ''}`;
+
   const wizardWinner = useMemo(
     () => (wizardSkillBoard
       // The first one that actually passed. A result that failed its check is
@@ -1393,7 +1404,7 @@ function App() {
         const top = wizardShowResult.results.find((result) => result.model === wizardShowResult.winner)
           ?? wizardShowResult.results[0];
         return top
-          ? { model: top.model, score: top.total, scoreLabel: formatMatchScore(top), grade: top.grade }
+          ? { model: top.model, score: top.total, scoreLabel: formatMatchScore(top), grade: top.grade, measures: matchMeasures(top) }
           : null;
       })()
       : topRigPick?.score
@@ -1404,6 +1415,7 @@ function App() {
         // score was the one surface still disagreeing with the decimal policy.
         scoreLabel: formatMatchScore(topRigPick.score),
         grade: topRigPick.score.grade,
+        measures: matchMeasures(topRigPick.score),
       }
       : null),
     [topRigPick, wizardSkillBoard, wizardShowResult],
@@ -1610,31 +1622,10 @@ function App() {
     if (!agentArcadeApi.onBridgeGenerateStop) return undefined;
     return agentArcadeApi.onBridgeGenerateStop(({ id }) => chatRenderStops.current.get(id)?.abort());
   }, []);
-  /** The side menu's Models count follows the channel, as the Models screen does. */
-  const channelModelCount = useMemo(() => {
-    const filter = workbenchInfo.taskFilter;
-    return filter ? modelRows.filter((row) => modelMatchesTask(row, filter)).length : modelRows.length;
-  }, [workbenchInfo.taskFilter, modelRows]);
   /** Images, Video and Listening compare their own results; Speed Dating cannot test them. */
   const comparedWorkbench = isComparedChannel(workbenchInfo.id) ? { ...workbenchInfo, id: workbenchInfo.id } : null;
   /** The goal the Run dialog's focus suggestion answers: the channel's, on a channel. */
   const runGoal: string | undefined = workbenchInfo.id === 'all' ? selectedGoals[0] : workbenchInfo.goals[0];
-  /** What the side menu counts for Comparison and Scorecards on this channel. */
-  const channelMetas = useMemo(() => {
-    const count = (challenge: string) => Object.values(labResults).filter((result) => result?.challenge === challenge).length;
-    // "None" rather than "0 pictures", as What's New says it.
-    const tally = (amount: number, noun: string) => (amount > 0 ? `${amount} ${noun}${amount === 1 ? '' : 's'}` : 'None');
-    const kept = (amount: number) => (amount > 0 ? `${amount}` : 'New');
-    switch (workbenchInfo.id) {
-      case 'images': return { comparison: tally(count('image-generation'), 'picture'), scorecards: kept(count('image-generation')) };
-      case 'video': return { comparison: tally(lineupSession.record?.entries.length ?? 0, 'clip'), scorecards: kept(count('video-generation')) };
-      case 'listening': return { comparison: tally(count('listening'), 'test'), scorecards: kept(count('listening')) };
-      case 'reading': return { comparison: undefined, scorecards: kept(count('image-recognition')) };
-      case 'audio': return { comparison: tally(count('audio-generation'), 'clip'), scorecards: kept(count('audio-generation')) };
-      case 'code': return { comparison: undefined, scorecards: kept(rankCoding(Object.values(modelScores), balances.code).ranked.length) };
-      default: return { comparison: undefined, scorecards: undefined };
-    }
-  }, [workbenchInfo.id, labResults, lineupSession.record, modelScores, balances.code]);
 
   const confirmClearData = useCallback(async () => {
     // The run log is cleared first but must not gate anything: the main process
@@ -1682,7 +1673,9 @@ function App() {
       setChosenModel(null);
       setClearedTopMatches(new Set<string>());
       resetModelNews();
-      setSuiteEditorOpen(false);
+      setSheetQuick(false);
+      setSheetEditing(false);
+      setSheetSimple(false);
       // The guide is not reopened either. Clearing data is not the same as
       // asking to be taught the app again, and the Matchmaker Menu title
       // reopens it on demand for anyone who does want it.
@@ -1839,14 +1832,9 @@ function App() {
 
   const selectNav = useCallback((id: NavId) => {
     setActiveNavId(id);
-
-    if (id === 'history') {
-      void loadLogs();
-      setActivity(`${getNavLabel(id)} selected.`);
-      return;
-    }
-
-    setActivity(`${getNavLabel(id)} selected.`);
+    // Changing screens is not news: with activity shown as a toast, announcing
+    // every click would cover the screen you just opened.
+    if (id === 'history') void loadLogs();
   }, [loadLogs]);
 
   /** Where a render in flight is shown in full: its model's row for a test of one, Comparison for a race. */
@@ -1954,7 +1942,7 @@ function App() {
   }, [ollama.models, selectedHost, system.gpu.model, system.gpu.vramGb, system.gpu.driverVersion]);
 
 
-  const requestBenchmarkForModel = useCallback((model: string) => {
+  const requestBenchmarkForModel = useCallback((model: string, options?: { quick?: boolean }) => {
     const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
     const installed = Boolean(row?.installed || installedModelNames.has(model));
     const hostBlocker = getModelBenchmarkBlocker(row, selectedHost, ollama);
@@ -1971,8 +1959,10 @@ function App() {
 
     setSelectedModel(model);
     setPendingSingleModel(model);
+    setSheetQuick(Boolean(options?.quick));
+    setSheetEditing(false);
+    setSheetSimple(false);
     setPendingRunMode('single');
-    setActivity(`Confirm the resource warning before testing ${model}.`);
   }, [installedModelNames, modelRows, ollama, selectedHost]);
 
   const requestBenchmark = useCallback(() => {
@@ -2137,7 +2127,7 @@ function App() {
           suite: currentSuiteName,
         },
       });
-      playDoneJingle();
+      playJingle('test-complete');
     } catch (error) {
       const errorMessage = getErrorMessage(error);
       await agentArcadeApi.appendLog({
@@ -2166,6 +2156,7 @@ function App() {
         message: errorMessage,
       });
       tellUser(`The test stopped: ${errorMessage}`);
+      playCue('buzz');
       // Re-read the provider. The commonest reason a run dies is that Ollama
       // went away mid-test, and nothing here updated ollama.ready — so the app
       // kept showing "Ollama ready" and "Desktop bridge online" for a provider
@@ -2180,26 +2171,16 @@ function App() {
   }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
-    // The quick TEST button skips the full launch modal, but it still loads a
-    // multi-GB model into VRAM — warn once unless the user opted out.
-    let skipWarning = false;
-    try { skipWarning = localStorage.getItem(QUICK_CHECK_WARNING_KEY) === 'off'; } catch { /* storage unavailable */ }
-    if (skipWarning) {
+    // Through the sheet with its quick check ticked, unless someone chose to
+    // start quick checks straight away.
+    let skipSheet = false;
+    try { skipSheet = localStorage.getItem(QUICK_CHECK_WARNING_KEY) === 'off'; } catch { /* storage unavailable */ }
+    if (skipSheet) {
       void startBenchmark(row.displayName, QUICK_CHECK_QUESTIONS);
       return;
     }
-    setPendingQuickCheck(row);
-  }, [startBenchmark]);
-
-  const confirmQuickCheck = useCallback((dontWarnAgain: boolean) => {
-    const row = pendingQuickCheck;
-    setPendingQuickCheck(null);
-    if (!row) return;
-    if (dontWarnAgain) {
-      try { localStorage.setItem(QUICK_CHECK_WARNING_KEY, 'off'); } catch { /* storage unavailable */ }
-    }
-    void startBenchmark(row.displayName, QUICK_CHECK_QUESTIONS);
-  }, [pendingQuickCheck, startBenchmark]);
+    requestBenchmarkForModel(row.displayName, { quick: true });
+  }, [requestBenchmarkForModel, startBenchmark]);
 
   const queueModel = useCallback((row: ModelRow) => {
     if (row.localProvider === 'lm-studio' || row.canDownload === false) {
@@ -2717,6 +2698,7 @@ function App() {
         }));
       }
       setActivity(`Model download failed: ${getErrorMessage(error)}`);
+      playCue('buzz');
     } finally {
       setPullingModel(null);
       setIsPullingModels(false);
@@ -2850,7 +2832,7 @@ function App() {
 
   const toggleShortlist = useCallback((row: ModelRow) => {
     if (!canJoinComparison(row)) {
-      setActivity(`${row.displayName} cannot join Speed Dating — the comparison is a conversation, and this model does not chat. Generation models race each other in the Lab, where every checkpoint gets the same prompt and seed.`);
+      setActivity(`${row.displayName} cannot join Speed Dating — the comparison is a conversation, and this model does not chat. Generation models race each other in the Lab, where every model gets the same prompt and seed.`);
       return;
     }
     const hardwareFit = getHardwareFit(row, system.gpu.vramGb);
@@ -2885,40 +2867,54 @@ function App() {
     });
   }, [system.gpu.vramGb, system.platform]);
 
-  const requestListTest = useCallback(() => {
+  /**
+   * Why the lineup cannot start the show right now, or null when it can. The
+   * sheet still opens for "Questions and judge" and shows this on its button.
+   */
+  const lineupBlocker = useCallback((): string | null => {
     const incompatibleLineupRows = shortlistedRows.filter((row) => !getPlatformFit(row.displayName, system.platform).compatible);
     if (incompatibleLineupRows.length > 0) {
       const first = incompatibleLineupRows[0];
       const reason = getPlatformFit(first.displayName, system.platform).reason;
-      setActivity(`${first.displayName} cannot run Speed Dating on this computer: ${reason}. Remove it from the lineup first.`);
-      return;
+      return `${first.displayName} cannot run on this computer: ${reason}. Take it out of the lineup first.`;
     }
-
     const runnableRows = shortlistedRows.filter((row) => row.installed).slice(0, 5);
     const missingDownloadCount = shortlistedRows.filter((row) => !row.installed).length;
-    const hostBlocker = getLineupBenchmarkBlocker(runnableRows, selectedHost, ollama);
-
     if (missingDownloadCount > 0) {
-      setActivity(`${countWithVerb(missingDownloadCount, 'Speed Dating contestant', 'needs', 'need')} downloading first. Open setup and use Download All.`);
-      return;
+      return `${countWithVerb(missingDownloadCount, 'contestant', 'needs', 'need')} downloading first.`;
     }
-
     if (runnableRows.length < MIN_CONTESTANTS) {
-      setActivity(`Pick at least ${MIN_CONTESTANTS} installed models for Speed Dating. Five is the sweet spot.`);
+      return `Pick at least ${MIN_CONTESTANTS} installed models for the show. Five is the sweet spot.`;
+    }
+    return getLineupBenchmarkBlocker(runnableRows, selectedHost, ollama);
+  }, [ollama, selectedHost, shortlistedRows, system.platform]);
+
+  const requestListTest = useCallback(() => {
+    const blocker = lineupBlocker();
+    if (blocker) {
+      setActivity(blocker);
       return;
     }
-
-    if (hostBlocker) {
-      setActivity(hostBlocker);
-      return;
-    }
-
     setPendingSingleModel(null);
+    setSheetQuick(false);
+    setSheetEditing(false);
+    setSheetSimple(false);
     setPendingRunMode('speed-date');
-    setActivity(`Confirm resource warning before comparing ${runnableRows.length} models with ${benchmarkQuestionCount} questions each.`);
-  }, [benchmarkQuestionCount, ollama, selectedHost, shortlistedRows, system.platform]);
+  }, [lineupBlocker]);
 
-  const runListTest = useCallback(async () => {
+  /** "Questions and judge": the show's sheet with the editor open, whether or not the lineup can run yet. */
+  const openQuestionsSheet = useCallback(() => {
+    setPendingSingleModel(null);
+    setSheetQuick(false);
+    setSheetSimple(false);
+    setSheetEditing(true);
+    setPendingRunMode('speed-date');
+  }, []);
+
+  const runListTest = useCallback(async (questionsOverride?: BenchmarkQuestion[]) => {
+    // The quick check runs the lineup on its three questions instead of the set.
+    const plan = questionsOverride ?? benchmarkPromptPlan;
+    const count = questionsOverride ? questionsOverride.length : benchmarkQuestionCount;
     const runnableRows = shortlistedRows.filter((row) => row.installed && getPlatformFit(row.displayName, system.platform).compatible).slice(0, 5);
     const hostBlocker = getLineupBenchmarkBlocker(runnableRows, selectedHost, ollama);
     const listRunId = createRunProgressId('speed-date');
@@ -2974,6 +2970,7 @@ function App() {
 
     stopRunRef.current = false;
     setIsListTesting(true);
+    playCue('curtain');
     setListTestResult(null);
     setReportReady(false);
     setRunProgress({
@@ -2985,15 +2982,15 @@ function App() {
       completed: 0,
       total: runnableRows.length,
       percent: 0,
-      message: `0 of ${runnableRows.length} model candidates tested with ${benchmarkQuestionCount} questions each.`,
+      message: `0 of ${runnableRows.length} model candidates tested with ${count} questions each.`,
       questionIndex: 0,
-      questionTotal: benchmarkPromptPlan.length,
-      questionLabel: benchmarkPromptPlan[0]?.label,
-      questionPrompt: benchmarkPromptPlan[0]?.prompt,
+      questionTotal: plan.length,
+      questionLabel: plan[0]?.label,
+      questionPrompt: plan[0]?.prompt,
       completedQuestions: 0,
       questionScores: {},
     });
-    setActivity(`Running Speed Dating across ${runnableRows.length} model candidates with ${benchmarkQuestionCount} questions each...`);
+    setActivity(`Running Speed Dating across ${runnableRows.length} model candidates with ${count} questions each...`);
 
     try {
       const results: BenchmarkResult[] = [];
@@ -3017,9 +3014,9 @@ function App() {
           percent: Math.round(((index + 0.25) / runnableRows.length) * 100),
           message: `Testing candidate ${index + 1} of ${runnableRows.length}.`,
           questionIndex: 0,
-          questionTotal: benchmarkPromptPlan.length,
-          questionLabel: benchmarkPromptPlan[0]?.label,
-          questionPrompt: benchmarkPromptPlan[0]?.prompt,
+          questionTotal: plan.length,
+          questionLabel: plan[0]?.label,
+          questionPrompt: plan[0]?.prompt,
           completedQuestions: 0,
           questionScores: {},
           lastResult: current?.lastResult,
@@ -3033,8 +3030,8 @@ function App() {
           model: row.displayName,
           baseUrl: runtime.baseUrl,
           provider: runtime.provider,
-          questionCount: benchmarkQuestionCount,
-          questions: benchmarkPromptPlan,
+          questionCount: count,
+          questions: plan,
           progressId,
           qualityMode: effectiveJudge ? 'judge' : 'heuristic',
           judgeModel: effectiveJudge?.model,
@@ -3186,8 +3183,9 @@ function App() {
         };
         setRunReports((current) => addRunReport(current, stored));
       }
+      // The report bar announces the winner; a toast as well said it twice,
+      // on screen and to screen readers, and by the model's raw id.
       setReportReady(true);
-      setActivity(`Best match: ${winner.model} scored ${winner.scores.total} for this setup.`);
       await agentArcadeApi.appendLog({
         level: 'info',
         source: 'renderer',
@@ -3213,7 +3211,7 @@ function App() {
         details: {
           computer: selectedHost?.hostname ?? system.hostname,
           baseUrl: ollama.baseUrl,
-          questionCount: benchmarkQuestionCount,
+          questionCount: count,
           candidates: runnableRows.map((row) => row.displayName),
           error: errorMessage,
         },
@@ -3327,7 +3325,7 @@ function App() {
       if (selection.image) {
         // A video or audio checkpoint in a still-image graph fails deep in the
         // sampler with a shape error, so it is never offered one.
-        for (const name of comfy.checkpoints.filter(isPictureCheckpoint)) {
+        for (const name of drawableModels(comfyListing(comfy))) {
           jobs.push({ model: name, kind: 'image' });
         }
       }
@@ -3829,27 +3827,75 @@ function App() {
     return () => { canceled = true; };
   }, [pendingRunMode]);
 
-  const confirmPendingRun = useCallback(() => {
+  /**
+   * Simple Mode's show, once its sheet is confirmed. The round decides what
+   * runs: questions, questions and then an app, or a skill test alone.
+   */
+  const startSimpleShow = useCallback(() => {
+    // Clear the last round's ending before starting this one: the wizard
+    // releases its Compare step when the run it is watching goes from running
+    // to finished, and a 'complete' left over from the previous show is
+    // finished the instant this one begins.
+    setSkillRunStatus({ phase: 'idle', label: '', completed: 0, total: 0 });
+    if (wizardRound === 'chat') { void runListTest(); return; }
+    // The models picked for the show, in the order they were picked.
+    const models = shortlistedRows.filter((row) => row.installed).map((row) => row.displayName);
+    if (wizardRound === 'code') {
+      // A coding buddy is asked and then made to build: the questions measure
+      // how it answers, the app measures whether what it writes runs. Either
+      // alone crowns a model on half the job.
+      void runListTest()
+        .then(() => runSkillTestsAfterRun(models, 'app-builder'))
+        .catch(reportSkillRunFailure);
+      return;
+    }
+    void runSkillTestsAfterRun(models, wizardSkill as 'app-builder' | 'vision' | 'listening').catch(reportSkillRunFailure);
+  }, [reportSkillRunFailure, runListTest, runSkillTestsAfterRun, shortlistedRows, wizardRound, wizardSkill]);
+
+  const closeRunSheet = useCallback(() => {
+    setPendingRunMode(null);
+    setPendingSingleModel(null);
+    setSheetQuick(false);
+    setSheetEditing(false);
+    setSheetSimple(false);
+    simpleBeginRef.current = null;
+  }, []);
+
+  const confirmPendingRun = useCallback(({ skipQuickSheet, skillsOnly }: { skipQuickSheet: boolean; skillsOnly: boolean }) => {
     const mode = pendingRunMode;
     const model = pendingSingleModel;
+    const quick = sheetQuick;
+    const simple = sheetSimple;
+    const beginSimple = simpleBeginRef.current;
     const skillModels = mode === 'single'
       ? [model ?? selectedModel].filter(Boolean)
       : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName);
-    // Captured before the modal closes: every result from this run carries the
+    // Captured before the sheet closes: every result from this run carries the
     // contention that was measured when the user chose to start it.
     runGpuContentionRef.current = pendingGpuContention?.level;
     // And where the fader stood when they chose to start.
-    runBalanceRef.current = balances[runChannel];
-    setPendingRunMode(null);
-    setPendingSingleModel(null);
+    runBalanceRef.current = simple ? wizardBalance : balances[runChannel];
+    closeRunSheet();
 
-    // Skill-tests-only: skip the Q&A benchmark and run just the selected skills.
-    // Forced on for image-only lineups, since image models can't answer questions.
-    const selection = skillTestSelection;
-    const anySkill = selection.appBuilder || selection.image;
-    const imageOnly = skillModels.length > 0 && skillModels.every(isLikelyImageGenerationModel);
-    if (anySkill && (selection.skipQuestions || imageOnly)) {
-      setActivity('Running skill tests only — the question round was skipped.');
+    if (simple) {
+      startSimpleShow();
+      beginSimple?.();
+      return;
+    }
+
+    if (quick) {
+      if (skipQuickSheet) {
+        try { localStorage.setItem(QUICK_CHECK_WARNING_KEY, 'off'); } catch { /* storage unavailable */ }
+      }
+      if (mode === 'single') void startBenchmark(model, QUICK_CHECK_QUESTIONS);
+      else void runListTest(QUICK_CHECK_QUESTIONS);
+      return;
+    }
+
+    // Skill tests only: the sheet worked out whether any were picked that this
+    // lineup can do, and an image-only lineup always lands here.
+    if (skillsOnly) {
+      setActivity('Running the skill tests only; the questions were skipped.');
       void runSkillTestsAfterRun(skillModels).catch(reportSkillRunFailure);
       return;
     }
@@ -3862,13 +3908,12 @@ function App() {
     if (mode === 'speed-date') {
       void runListTest().then(() => runSkillTestsAfterRun(skillModels)).catch(reportSkillRunFailure);
     }
-  }, [balances, pendingGpuContention, pendingRunMode, pendingSingleModel, runChannel, runListTest, runSkillTestsAfterRun, selectedModel, shortlistedRows, skillTestSelection, startBenchmark, reportSkillRunFailure]);
+  }, [balances, closeRunSheet, pendingGpuContention, pendingRunMode, pendingSingleModel, runChannel, runListTest, runSkillTestsAfterRun, selectedModel, sheetQuick, sheetSimple, shortlistedRows, startBenchmark, startSimpleShow, reportSkillRunFailure, wizardBalance]);
 
   const cancelPendingRun = useCallback(() => {
-    setPendingRunMode(null);
-    setPendingSingleModel(null);
-    setActivity('Model test canceled before resources were engaged.');
-  }, []);
+    closeRunSheet();
+    setActivity('Canceled before anything ran.');
+  }, [closeRunSheet]);
 
 
   // Launch scan: reads this machine, reuses the cached catalog. Not user-initiated,
@@ -4169,12 +4214,88 @@ function App() {
       .filter((item) => item.id !== 'agent' || hasScores);
   }, [scoredModelCount, uiMode]);
   // The Speed Dating lineup means nothing on a channel Speed Dating cannot test.
-  const showGlobalLineup = uiMode === 'advanced' && LINEUP_STRIP_SCREENS.includes(activeNavId) && !comparedWorkbench;
+  // Not while the live show is up: during a run the only thing to do is Stop.
+  const showGlobalLineup = uiMode === 'advanced' && LINEUP_STRIP_SCREENS.includes(activeNavId) && !comparedWorkbench
+    && runProgress?.phase !== 'running';
 
   useEffect(() => {
     if (visibleNavItems.some((item) => item.id === activeNavId)) return;
     setActiveNavId(uiMode === 'advanced' ? 'models' : 'lan');
   }, [activeNavId, uiMode, visibleNavItems]);
+
+  // ---- The top bar and the load strip (the redesign's shell) ----
+  const activeTab = tabForView(activeNavId, workbench);
+  const selectTab = useCallback((id: string) => {
+    const view = viewForTab(id as TopTabId, workbench);
+    if (view.workbench) chooseWorkbench(view.workbench);
+    selectNav(view.nav);
+  }, [workbench, chooseWorkbench, selectNav]);
+  // Simple Mode's step tracker is the wizard's; it renders into the bar.
+  const [trackerSlot, setTrackerSlot] = useState<HTMLDivElement | null>(null);
+  const rigChecked = Boolean(system.cpu.brand || system.gpu.model);
+  const connections: { ollama: ConnectionState; comfy: ConnectionState } = {
+    ollama: ollama.ready || lmStudio.ready ? 'ok' : isScanningRig ? 'testing' : rigChecked ? 'down' : 'untested',
+    // Grey until someone sets ComfyUI up: most people never will, and red would
+    // read as something broken.
+    comfy: comfyReachable ? 'ok' : comfySettings.folder ? 'down' : 'untested',
+  };
+  const openConnections = useCallback(() => {
+    if (uiMode === 'beginner') { setCameFromSimple(true); selectUiMode('advanced'); }
+    selectNav('lan');
+  }, [uiMode, selectUiMode, selectNav]);
+  const openChatApp = useCallback(async () => {
+    if (isDesktopRuntime) {
+      const problem = companionLaunchMessage(await agentArcadeApi.openChatApp());
+      if (problem) alert(problem);
+    } else {
+      setChatOpen(true);
+    }
+  }, [setChatOpen]);
+  // What is running, for the load strip. A render and a run can overlap; the
+  // render is what holds the graphics card, so it is the one shown.
+  const runningLine = renderActivity ? (
+    <>
+      <i className="running-dot" aria-hidden="true" />
+      <button type="button" className="running-open" onClick={() => openRender(renderActivity)}>
+        {renderLabel(renderActivity)} · {renderActivity.model ?? 'ComfyUI'}
+        {renderActivity.step ? ` · ${renderActivity.step.index + 1} of ${renderActivity.step.total}` : ''}
+      </button>
+      {renderActivity.startedAt !== null && <Elapsed since={renderActivity.startedAt} />}
+      <button type="button" className="running-stop" onClick={renderActivity.stop}>Stop</button>
+    </>
+  ) : runProgress?.phase === 'running' ? (
+    <>
+      <i className="running-dot" aria-hidden="true" />
+      <button type="button" className="running-open" onClick={() => (uiMode === 'advanced' ? selectNav('speedDate') : undefined)}>
+        Running {runProgress.label}{runProgress.currentModel ? ` · ${runProgress.currentModel}` : ''}
+      </button>
+    </>
+  ) : skillRunStatus.phase === 'running' ? (
+    <>
+      <i className="running-dot" aria-hidden="true" />
+      <span>Running {skillRunStatus.label}</span>
+    </>
+  ) : isPullingModels && pullingModel ? (
+    <>
+      <i className="running-dot" aria-hidden="true" />
+      <span>Downloading {pullingModel}</span>
+    </>
+  ) : null;
+  // The load strip is always on screen, so it reads the computer every few
+  // seconds even with nothing running (a run polls faster, above). Only while
+  // the window is visible: a hidden RigMatch has nobody to show it to.
+  useEffect(() => {
+    if (!isDesktopRuntime) return undefined;
+    if (runProgress?.phase === 'running') return undefined;
+    let canceled = false;
+    const id = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      void agentArcadeApi.getSystemProfile()
+        .then((profile) => { if (!canceled) setSystem(profile); })
+        .catch(() => { /* ignore transient poll errors */ });
+    }, 5000);
+    return () => { canceled = true; clearInterval(id); };
+  }, [runProgress?.phase]);
 
   return (
     <div
@@ -4202,13 +4323,36 @@ function App() {
           </a>
         </div>
       )}
-      {showModeSplash && <FirstRunSplash vramGb={system.gpu.vramGb || 0} onDone={chooseInterfaceMode} />}
+      <AchievementCues busy={isBenchmarking || isListTesting} />
+      {showModeSplash && (
+        <WelcomeOverlay
+          vramGb={system.gpu.vramGb || 0}
+          onFinish={({ goals, advanced }) => {
+            chooseInterfaceMode(advanced ? 'advanced' : 'beginner', goals);
+            // The old guide's flag: anyone welcomed has had the tour it replaced.
+            writeLocal(TUTORIAL_STORAGE_KEY, 'seen');
+          }}
+        />
+      )}
+      {welcomeReplay && (
+        <WelcomeOverlay
+          vramGb={system.gpu.vramGb || 0}
+          initialGoal={selectedGoals[0]}
+          replay
+          onClose={() => setWelcomeReplay(false)}
+          onFinish={({ goals, advanced }) => {
+            setWelcomeReplay(false);
+            saveGoalsFromSettings(goals);
+            selectUiMode(advanced ? 'advanced' : 'beginner');
+            if (!advanced) setWizardStep('setup');
+          }}
+        />
+      )}
       {/* Upgraded from a version without goals: ask the new question, leave
           the mode they already chose alone. */}
       {showGoalsIntro && (
         <FirstRunSplash
           vramGb={system.gpu.vramGb || 0}
-          onDone={chooseInterfaceMode}
           initialGoals={selectedGoals}
           isUpgrade
           onSaveGoals={saveGoalsFromIntro}
@@ -4218,14 +4362,34 @@ function App() {
       {!showModeSplash && showGoalsEditor && (
         <FirstRunSplash
           vramGb={system.gpu.vramGb || 0}
-          onDone={chooseInterfaceMode}
           initialGoals={selectedGoals}
           onSaveGoals={saveGoalsFromSettings}
           onCancel={() => setShowGoalsEditor(false)}
         />
       )}
+      <TopBar
+        uiMode={uiMode}
+        onUiModeChange={selectUiMode}
+        tabs={uiMode === 'advanced' ? TOP_TABS.map((tab) => ({ ...tab, count: tab.id === 'whatsNew' ? modelNews.latestNewModelIds.length : undefined })) : undefined}
+        activeTab={activeTab ?? undefined}
+        onSelectTab={selectTab}
+        tracker={uiMode === 'beginner' ? <div className="top-bar-tracker-slot" ref={setTrackerSlot} /> : undefined}
+        topMatch={topRigPick?.score
+          ? { model: topRigPick.row.displayName, name: getFriendlyModelName(topRigPick.row.displayName), scoreLabel: formatMatchScore(topRigPick.score) }
+          : null}
+        onOpenTopMatch={() => selectNav('history')}
+        themeId={themeId}
+        onThemeChange={setThemeId}
+        connections={connections}
+        onOpenConnections={openConnections}
+        // From the top bar Settings opens on Preferences, not on the last section a link asked for.
+        onOpenSettings={() => { setSettingsSectionRequest(null); selectNav('settings'); }}
+        onOpenChat={() => { void openChatApp(); }}
+      />
+      <LoadStrip system={system} running={runningLine} />
       {uiMode === 'beginner' && (
         <SimpleWizard
+          trackerSlot={trackerSlot}
           // Only when there is one to open — that is what keeps the Compare
           // step disabled rather than dead on a machine that has never run one.
           onOpenRunReport={listTestResult || runReports.length > 0
@@ -4269,31 +4433,20 @@ function App() {
           runProgress={wizardRunProgress}
           onDreamChange={setWizardDream}
           round={wizardRound}
-          onStartShow={() => {
-            // Every score this show produces records where the fader stood.
-            runBalanceRef.current = wizardBalance;
-            // Clear the last round's ending before starting this one: the
-            // wizard releases its Compare step when the run it is watching goes
-            // from running to finished, and a 'complete' left over from the
-            // previous show is finished the instant this one begins.
-            setSkillRunStatus({ phase: 'idle', label: '', completed: 0, total: 0 });
-            if (wizardRound === 'chat') { void runListTest(); return; }
-            // The models picked for the show, in the order they were picked.
-            const models = shortlistedRows.filter((row) => row.installed).map((row) => row.displayName);
-            if (wizardRound === 'code') {
-              // A coding buddy is asked and then made to build: the questions
-              // measure how it answers, the app measures whether what it writes
-              // runs. Either alone crowns a model on half the job.
-              void runListTest()
-                .then(() => runSkillTestsAfterRun(models, 'app-builder'))
-                .catch(reportSkillRunFailure);
-              return;
-            }
-            void runSkillTestsAfterRun(models, wizardSkill as 'app-builder' | 'vision' | 'listening').catch(reportSkillRunFailure);
+          onStartShow={(begin) => {
+            // Through the sheet like every run. The wizard moves to its show
+            // step only when the sheet is confirmed.
+            simpleBeginRef.current = begin;
+            setPendingSingleModel(null);
+            setSheetQuick(false);
+            setSheetEditing(false);
+            setSheetSimple(true);
+            setPendingRunMode('speed-date');
           }}
           balance={wizardBalance}
           onBalanceChange={(value) => setBalance(wizardChannel === 'app' ? 'code' : wizardChannel, value)}
           onStopShow={requestStopRun}
+          planLine={wizardPlanLine}
           winner={wizardWinner}
           lineupResults={wizardLineupResults}
           droppedOut={wizardSkillBoard ? undefined : wizardShowResult?.failures}
@@ -4349,98 +4502,94 @@ function App() {
       )}
       {uiMode === 'advanced' && (
       <>
-      {/* "See the full scorecard" used to switch modes silently — the whole
-          interface changed with no explanation and no way back. Say what
-          happened and offer the return trip. */}
-      {cameFromSimple && (
-        <div className="mode-jump-banner" role="status">
-          <span>
-            The full scorecard lives in <strong>Advanced Mode</strong>, so RigMatch switched you over.
-          </span>
-          <button
-            type="button"
-            className="mini-button"
-            onClick={() => { setCameFromSimple(false); selectUiMode('beginner'); }}
-          >
-            <ArrowLeft aria-hidden="true" />
-            Back to the guided wizard
-          </button>
-        </div>
-      )}
-      <TopDeck isScanning={isScanningRig} onScan={refreshRig}
-        system={system}
-        ollama={ollama}
-        lmStudio={lmStudio}
-        uiMode={uiMode}
-        onUiModeChange={selectUiMode}
-        topPick={topRigPick}
-        onUseTopPick={(model) => {
-          setSelectedModel(model);
-          setChosenModel(model);
-        }}
-        onTestAgain={requestBenchmarkForModel}
-        onClearTopPick={clearTopMatch}
-        onRestoreClearedTopPicks={restoreClearedTopMatches}
-        clearedTopPickCount={clearedTopMatches.size}
-        comfyFolder={comfySettings.folder}
-        comfyReachable={comfyReachable}
-        deckExpanded={deckExpanded}
-        onDeckExpandedChange={(expanded) => { setDeckExpanded(expanded); writeDeckExpanded(expanded); }}
-        workbench={workbench}
-        channelWinner={channelWinner}
-        balance={balances[activeChannel]}
-        onBalanceChange={(value) => setBalance(activeChannel, value)}
-        balanceLocked={balanceLock(activeChannel)}
-        onOpenChannel={() => selectNav(workbenchInfo.home)}
-      />
-
-      <SideMenu
-        items={visibleNavItems}
-        ollamaReady={ollama.ready || lmStudio.ready}
-        modelCount={channelModelCount}
-        shortlistCount={shortlistedRows.length}
-        newModelDropCount={modelNews.latestNewModelIds.length}
-        isRunning={isBenchmarking || isListTesting || Boolean(renderActivity)}
-        activeId={activeNavId}
-        scoredCount={scoredModelCount}
-        topPickMeta={topRigPick?.score ? topRigPick.score.grade : (scoredModelCount > 0 ? 'Ready' : 'Wait')}
-        comparisonMeta={channelMetas.comparison}
-        scorecardMeta={channelMetas.scorecards}
-        uiMode={uiMode}
-        onSelect={selectNav}
-        onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
-        onOpenSupport={() => setSupportModalOpen(true)}
-        bugReportUrl={buildBugReportUrl(system, ollama, logPath)}
-      />
 
       <main className="stage-content">
-        {/* The host narrates Simple Mode. In Advanced he announced which screen
-            was open, how many models were installed and how many were picked —
-            all of it already in the side menu and the lineup strip — above the
-            table that screen exists to show. The channels take that line
-            instead: they filter the panel below them, so they belong there and
-            not folded inside a header that collapses. */}
-        {uiMode === 'advanced'
-          ? <ChannelSwitch value={workbench} onChange={chooseWorkbench} />
-          : (
-            <GameShowHost
-              uiMode={uiMode}
-              activeNavLabel={getNavLabel(activeNavId)}
-              ollamaReady={ollama.ready || lmStudio.ready}
-              installedCount={localModels.length}
-              modelCount={modelRows.length}
-              shortlistedCount={shortlistedRows.length}
-              uninstalledShortlistedCount={uninstalledShortlistedCount}
-              queuedCount={queuedRows.length}
-              scoredCount={scoredModelCount}
-              topPick={topRigPick}
-              isBusy={isScanningRig || isBenchmarking || isListTesting}
-              onSelectNav={selectNav}
-              onCheckRig={refreshRig}
-              onOpenTutorial={() => { setTutorialOpen(true); setTutorialStep(0); }}
-            />
+        {/* Over the screen, not the window: the top bar and its live CPU and GPU
+            strip stay in view while a run goes. */}
+        {uiMode === 'advanced' && runProgress?.phase === 'running' && (
+          <LiveFlirtSpotlight
+            progress={runProgress}
+            rows={runProgress.mode === 'speed-date'
+              ? shortlistedRows
+              : modelRows.filter((row) => row.displayName === runProgress.currentModel)}
+            onStop={requestStopRun}
+          />
+        )}
+        {/* One header row for every screen, so the panel below is always the
+            second row of the stage, whatever this tab adds above it. */}
+        <div className="screen-nav">
+          {/* "See the full scorecard" used to switch modes silently — the whole
+              interface changed with no explanation and no way back. Say what
+              happened and offer the return trip. */}
+          {cameFromSimple && (
+            <div className="mode-jump-banner" role="status">
+              <span>
+                The full scorecard lives in <strong>Advanced Mode</strong>, so RigMatch switched you over.
+              </span>
+              <button
+                type="button"
+                className="mini-button"
+                onClick={() => { setCameFromSimple(false); selectUiMode('beginner'); }}
+              >
+                <ArrowLeft aria-hidden="true" />
+                Back to the guided wizard
+              </button>
+            </div>
           )}
-        {activeNavId === 'lan' && (
+          {/* What a tab holds, under the bar. Models filters by what a model is
+              for; Comparison and Labs choose which show to run; Results and Labs
+              have more than one view until their screens are rebuilt. */}
+          {activeTab === 'models' && <ChannelSwitch value={workbench} onChange={chooseWorkbench} label="Show" />}
+          {activeTab === 'comparison' && <ChannelSwitch value={workbench} onChange={chooseWorkbench} channels={SHOW_CHANNELS} label="The show for" />}
+          {activeTab === 'labs' && (
+            <>
+              <ChannelSwitch value={workbench} onChange={chooseWorkbench} channels={LAB_CHANNELS} label="Lab" />
+              <div className="screen-tabs" role="group" aria-label="Lab view">
+                <button type="button" aria-pressed={activeNavId === 'speedDate'} onClick={() => selectNav('speedDate')}>Compare models</button>
+                <button type="button" aria-pressed={activeNavId === 'activity'} onClick={() => selectNav('activity')}>Test one at a time</button>
+              </div>
+            </>
+          )}
+          {activeTab === 'results' && (
+            <>
+              <div className="screen-tabs" role="group" aria-label="Results view">
+                <button type="button" aria-pressed={activeNavId === 'history'} onClick={() => selectNav('history')}>Scorecards</button>
+                {scoredModelCount > 0 && (
+                  <button type="button" aria-pressed={activeNavId === 'agent'} onClick={() => selectNav('agent')}>Top Pick</button>
+                )}
+                <button type="button" aria-pressed={activeNavId === 'activity'} onClick={() => selectNav('activity')}>Runs</button>
+              </div>
+            </>
+          )}
+          {activeTab === 'mypc' && (
+            <div className="screen-tabs" role="group" aria-label="My PC view">
+              <button type="button" aria-pressed={myPcView === 'overview'} onClick={() => setMyPcView('overview')}>Overview</button>
+              <button type="button" aria-pressed={myPcView === 'logs'} onClick={() => { setMyPcView('logs'); void loadLogs(); }}>
+                Logs <span className="news-count">{appLogs.length}</span>
+              </button>
+            </div>
+          )}
+        </div>
+        {activeNavId === 'lan' && myPcView === 'logs' && (
+          <section className="panel logs-page" aria-label="Logs">
+            <header className="page-head">
+              <div>
+                <h2>Logs</h2>
+                <p>What RigMatch wrote down: tests, downloads, connections and errors. Kept on this computer only.</p>
+              </div>
+            </header>
+            <LogsView
+              entries={appLogs}
+              logPath={logPath}
+              loading={isLoadingLogs}
+              onRefresh={loadLogs}
+              onCopy={() => { void copyLogs(); }}
+              onOpenFolder={() => { void openLogsFolder(); }}
+              onClear={() => { void clearLogs(); }}
+            />
+          </section>
+        )}
+        {activeNavId === 'lan' && myPcView === 'overview' && (
           <LanBrowser
             active={true}
             system={system}
@@ -4500,7 +4649,7 @@ function App() {
             // Settings already explains ComfyUI in plain language; window.open
             // was popup-blocked in the browser preview and the review found the
             // button dead. In-app navigation cannot be blocked.
-            onOpenComfyHelp={() => selectNav('settings')}
+            onOpenComfyHelp={() => { setSettingsSectionRequest({ id: 'generation', at: Date.now() }); selectNav('settings'); }}
             selectedModel={selectedModel}
             installedModelNames={installedModelNames}
             shortlistIds={shortlistIds}
@@ -4533,7 +4682,7 @@ function App() {
             onPauseQueue={pauseDownloadQueue}
             onCancelQueue={cancelDownloadQueue}
             onToggleShortlist={toggleShortlist}
-            onOpenSuiteEditor={() => setSuiteEditorOpen(true)}
+            onOpenSuiteEditor={openQuestionsSheet}
             onOpenSpeedDate={() => selectNav('speedDate')}
             onOpenTopPick={() => selectNav('agent')}
             onRefresh={refreshRig}
@@ -4557,16 +4706,6 @@ function App() {
             notificationsEnabled={modelNewsNotificationsEnabled}
             notificationPermission={notificationPermission}
             isScanning={isScanningRig}
-            renderHeader={(meta) => (
-              <PanelHeader
-                icon={Sparkles}
-                title="What's New"
-                actionLabel={isScanningRig ? 'Checking' : 'Check Now'}
-                onAction={refreshRig}
-                meta={meta}
-              />
-            )}
-            renderAvatar={(model) => <AvatarBust model={model} size="tiny" />}
             getModelSpecialties={(model) => getModelProfile(model).specialties}
             formatHistoryTime={formatHistoryTime}
             formatGb={formatGb}
@@ -4618,7 +4757,7 @@ function App() {
             questionCount={benchmarkQuestionCount}
             questionPlan={benchmarkPromptPlan}
             onQuestionCountChange={setBenchmarkQuestionCount}
-            onOpenSuiteEditor={() => setSuiteEditorOpen(true)}
+            onOpenSuiteEditor={openQuestionsSheet}
             onOpenLogs={openLogsPanel}
             onOpenModelPool={() => selectNav('models')}
             onOpenHistory={() => selectNav('history')}
@@ -4647,7 +4786,7 @@ function App() {
             onTalk={() => setChatOpen(true)}
             onChoose={() => setChosenModel(selectedModel)}
             onRunTest={requestBenchmark}
-            onEditQuestions={() => setSuiteEditorOpen(true)}
+            onEditQuestions={openQuestionsSheet}
             onTalkWithPrompt={(prompt) => { setChatInput(prompt); setChatOpen(true); }}
             topPick={topRigPick}
             onClearTopMatch={clearTopMatch}
@@ -4694,9 +4833,7 @@ function App() {
             ollama={ollama}
             system={system}
             themeId={themeId}
-            appLogs={appLogs}
             modelScores={modelScores}
-            chatMessages={chatMessages}
             updateChannel={updateChannel}
             updateCheck={updateCheck}
             isCheckingUpdates={isCheckingUpdates}
@@ -4704,15 +4841,31 @@ function App() {
             selectedGoals={selectedGoals}
             installedRows={modelRows.filter((row) => row.installed)}
             logPath={logPath}
-            isLoadingLogs={isLoadingLogs}
             onThemeChange={selectTheme}
             onUiModeChange={selectUiMode}
+            // The Top Match leads the Scorecards, under the Results title.
+            topMatch={(
+              <TopMatchCard
+                system={system}
+                topPick={topRigPick}
+                onUseTopPick={(model) => { setSelectedModel(model); setChosenModel(model); }}
+                onTestAgain={requestBenchmarkForModel}
+                onClearTopPick={clearTopMatch}
+                onRestoreClearedTopPicks={restoreClearedTopMatches}
+                clearedTopPickCount={clearedTopMatches.size}
+                workbench={workbench}
+                channelWinner={channelWinner}
+                balance={balances[activeChannel]}
+                onBalanceChange={(value) => setBalance(activeChannel, value)}
+                balanceLocked={balanceLock(activeChannel)}
+                onOpenChannel={() => selectNav(workbenchInfo.home)}
+              />
+            )}
             onEditGoals={() => setShowGoalsEditor(true)}
+            onShowWelcome={() => setWelcomeReplay(true)}
+            sectionRequest={settingsSectionRequest}
             onDeleteModel={requestDeleteModel}
             onRefreshLogs={loadLogs}
-            onCopyLogs={copyLogs}
-            onClearLogs={clearLogs}
-            onOpenLogsFolder={openLogsFolder}
             onClearScore={requestClearScore}
             onClearAllScores={requestClearAllScores}
             onClearAllData={requestClearData}
@@ -4751,42 +4904,32 @@ function App() {
       </>
       )}
 
-      {uiMode === 'advanced' && (
-        <Ticker
-        activity={activity}
-        isDesktopRuntime={isDesktopRuntime}
-        topPick={topRigPick}
-        queuedRows={queuedRows}
-        pullProgressByModel={pullProgressByModel}
-        isPulling={isPullingModels}
-        pullingModel={pullingModel}
-        isPullCancelRequested={isPullCancelRequested}
-        isPullPauseRequested={isPullPauseRequested}
-        isPullPaused={isPullPaused}
-        onResumeQueue={pullQueuedModels}
-        onPauseQueue={pauseDownloadQueue}
-        onCancelQueue={cancelDownloadQueue}
-        onOpenDownloads={() => selectNav('models')}
-        render={renderActivity}
-        onOpenRender={openRender}
-        onOpenChat={async () => {
-          if (isDesktopRuntime) {
-            const problem = companionLaunchMessage(await agentArcadeApi.openChatApp());
-            if (problem) alert(problem);
-          } else {
-            setChatOpen(true);
-          }
-        }}
-      />
+      {uiMode === 'advanced' && (queuedRows.length > 0 || Boolean(pullingModel) || Object.values(pullProgressByModel).some((progress) => isVisiblePullProgress(progress))) && (
+        <div className="download-dock-float">
+          <DownloadTickerDock
+            queuedRows={queuedRows}
+            pullProgressByModel={pullProgressByModel}
+            isPulling={isPullingModels}
+            pullingModel={pullingModel}
+            isPullCancelRequested={isPullCancelRequested}
+            isPullPauseRequested={isPullPauseRequested}
+            isPullPaused={isPullPaused}
+            onResumeQueue={pullQueuedModels}
+            onPauseQueue={pauseDownloadQueue}
+            onCancelQueue={cancelDownloadQueue}
+            onOpenDownloads={() => selectNav('models')}
+          />
+        </div>
       )}
+      <ActivityToast message={activity} />
       {reportReady && !reportOpen && listTestResult && (
         <div className="report-ready-bar" role="status">
           <Trophy aria-hidden="true" />
           <span>
-            Report ready — {listTestResult.results.length} model{listTestResult.results.length === 1 ? '' : 's'} compared,
-            {' '}{listTestResult.winner} came first
+            Report ready: {listTestResult.results.length} model{listTestResult.results.length === 1 ? '' : 's'} compared,
+            {' '}{getFriendlyModelName(listTestResult.winner)} came first
           </span>
-          <button type="button" className="primary-button compact" onClick={() => setReportOpen(true)}>
+          <button type="button" className="btn btn-line btn-sm" onClick={() => setReportOpen(true)}>
             See the report
           </button>
           <button type="button" className="report-ready-dismiss" onClick={() => setReportReady(false)} aria-label="Dismiss report notice">
@@ -4860,34 +5003,14 @@ function App() {
         </div>
       )}
 
-      {uiMode === 'advanced' && runProgress?.phase === 'running' && (
-        <LiveFlirtSpotlight
-          progress={runProgress}
-          host={selectedHost}
-          system={system}
-          rows={runProgress.mode === 'speed-date'
-            ? shortlistedRows
-            : modelRows.filter((row) => row.displayName === runProgress.currentModel)}
-          questionPlan={benchmarkQuestions.slice(0, benchmarkQuestionCount)}
-          onStop={requestStopRun}
-        />
-      )}
-
-      {suiteEditorOpen && (
-        <TestSuiteEditorDock
-          questions={benchmarkQuestions}
-          isCustom={currentSuiteName === 'Custom Suite'}
-          questionCount={benchmarkQuestionCount}
-          onChange={setBenchmarkQuestions}
-          onQuestionCountChange={setBenchmarkQuestionCount}
-          onReset={() => setBenchmarkQuestions([...DEFAULT_BENCHMARK_QUESTIONS])}
-          onClose={() => setSuiteEditorOpen(false)}
-        />
-      )}
-
       {pendingRunMode && (
-        <RunWarningModal
+        <RunSheet
           mode={pendingRunMode}
+          simpleRound={sheetSimple ? wizardRound : undefined}
+          quick={sheetQuick}
+          onQuickChange={setSheetQuick}
+          initialEditing={sheetEditing}
+          startBlockedReason={pendingRunMode === 'speed-date' && !sheetSimple ? lineupBlocker() : null}
           selectedModel={pendingSingleModel ?? selectedModel}
           measuredPerModelMs={(() => {
             const hardware = toRunHardware(system);
@@ -4918,11 +5041,10 @@ function App() {
           gpuContention={pendingGpuContention}
           onDownloadMissing={() => requestThirdPartyModelDownloads(shortlistedRows)}
           onChangeQuestionCount={setBenchmarkQuestionCount}
-          onLoadPreset={setBenchmarkQuestions}
+          onChangeQuestions={setBenchmarkQuestions}
           autoJudgeModel={autoJudgeModels.find((m) => m !== (pendingSingleModel ?? selectedModel)) ?? ''}
           goalPresetId={presetIdForGoal(runGoal)}
           goalDesire={runGoal ? goalById(runGoal)?.desire.toLowerCase() : undefined}
-          onEditQuestions={() => { cancelPendingRun(); setSuiteEditorOpen(true); }}
           qualityMode={qualityMode}
           judgeModel={effectiveJudgeModel}
           judgeModelOptions={judgeModelOptions}
@@ -4944,7 +5066,7 @@ function App() {
             ? modelRows.filter((row) => row.displayName === (pendingSingleModel ?? selectedModel))
             : shortlistedRows.filter((row) => row.installed).slice(0, 5)
           ).some((row) => canHearAudio(row))}
-          comfyCheckpoints={comfyCheckpoints}
+          comfyCheckpoints={drawableModels(chatListing)}
           videoLineup={(() => {
             // Worked out only while this dialog is open, which is the one place that asks.
             const calibration = readVideoCalibration();
@@ -4952,7 +5074,12 @@ function App() {
             const text = formatVideoEstimate(estimateLineup(entries, videoMachine, { calibration }), { roughNote: false });
             return { count: entries.length, estimate: text.charAt(0).toLowerCase() + text.slice(1) };
           })()}
-          balance={{
+          balance={sheetSimple ? {
+            value: wizardBalance,
+            onChange: (value) => setBalance(wizardChannel === 'app' ? 'code' : wizardChannel, value),
+            channel: workbenchById(wizardChannel === 'app' ? 'code' : wizardChannel).label,
+            accuracyMeans: workbenchById(wizardChannel === 'app' ? 'code' : wizardChannel).accuracyMeans,
+          } : {
             value: balances[runChannel],
             onChange: (value) => setBalance(runChannel, value),
             channel: workbenchById(runChannel).label,
@@ -4961,14 +5088,6 @@ function App() {
         />
       )}
 
-      {pendingQuickCheck && (
-        <QuickCheckWarningModal
-          row={pendingQuickCheck}
-          questionCount={QUICK_CHECK_QUESTIONS.length}
-          onCancel={() => { setPendingQuickCheck(null); setActivity('Quick test canceled before resources were engaged.'); }}
-          onConfirm={confirmQuickCheck}
-        />
-      )}
 
       {liveBuild && liveBuildOpen && (
         <LiveBuildModal build={liveBuild} onClose={() => setLiveBuildOpen(false)} />
@@ -5101,38 +5220,6 @@ function App() {
         />
       )}
 
-      {!tutorialOpen && uiMode === 'advanced' && (
-        <button
-          type="button"
-          className="help-float-btn"
-          onClick={() => { setTutorialOpen(true); setTutorialStep(0); }}
-          title="Reopen the getting started guide"
-          aria-label="Open getting started guide"
-        >
-          <HelpCircle aria-hidden="true" />
-        </button>
-      )}
-
-      {/* Never at the same time as the mode splash. Both open on a true first
-          run: the splash sits above it at z-index 200, so the tour was invisible
-          — but it mounts second, so its focus trap won, and a keyboard user was
-          tabbing through a dialog they could not see behind the one they could.
-          The tour also walks nav items whose visibility depends on the mode the
-          splash has not been answered with yet. */}
-      {tutorialOpen && !showModeSplash && (
-        <FirstRunTutorial
-          stepIndex={tutorialStep}
-          installedCount={ollama.models.length}
-          modelCount={modelRows.length}
-          ollamaReady={ollama.ready}
-          ollamaVersion={ollama.version}
-          lmStudioReady={lmStudio.ready}
-          lmStudioCount={lmStudio.models.length}
-          onStepChange={setTutorialStep}
-          onClose={closeTutorial}
-          onSelectNav={selectNav}
-        />
-      )}
     </div>
   );
 }

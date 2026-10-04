@@ -436,11 +436,7 @@ export async function runVideoLineup({
   return outcomes;
 }
 
-/** Fastest first, as the leaderboard reads, and every failure after the last finisher. */
-export function rankLineup<T extends { elapsedMs: number; error?: string }>(items: T[]): T[] {
-  const finished = items.filter((item) => !item.error).sort((a, b) => a.elapsedMs - b.elapsedMs);
-  return [...finished, ...items.filter((item) => item.error)];
-}
+
 
 /**
  * The calibration this lineup earned, if it rendered LTX-Video 2B.

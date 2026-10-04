@@ -1,17 +1,13 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
+import { useEffect, useRef, useState } from 'react';
 import { isDesktopRuntime } from '../api';
-import robotRigGreenroom from '../assets/robot-rig-greenroom.webp';
-import { formatGb } from '../lib/format';
 import type { NetworkHost, OllamaInstallProgress, OllamaStatus, SystemProfile } from '../types';
 import { MachineAvatar } from './Avatars';
-import { PanelHeader } from './CommonChrome';
 import { OllamaPrep } from './OllamaPrep';
 import { RigDetailsPanel } from './RigDetailsPanel';
-import { RomanceArtBanner } from './ScoreVisuals';
 import { SetupDoctor } from './SetupDoctor';
 import { ThirdPartyModelNotice } from './ThirdPartyModelNotice';
 import { UpgradeRig } from './UpgradeRig';
-import { Network } from 'lucide-react';
 
 export function LanBrowser({
   active,
@@ -49,6 +45,25 @@ export function LanBrowser({
   onOpenSetupGuide: () => void;
 }) {
   const hostMeta = ollama.ready || lmStudio.ready ? 'Local AI ready' : 'Local AI offline';
+  // Check Local has to show that it ran: on a fast machine with nothing
+  // changed, a rescan returned a screen identical to the one before. The
+  // receipt is stamped when the scan finishes (a clock read in render would be
+  // impure and go stale), with seconds so two presses differ, and it says what
+  // the check found. It moved here with the button when the stats deck went.
+  const localModelCount = ollama.models.length + lmStudio.models.length;
+  const [lastChecked, setLastChecked] = useState<string | null>(null);
+  const [foundAtCheck, setFoundAtCheck] = useState<number | null>(null);
+  const wasScanning = useRef(false);
+  useEffect(() => {
+    if (wasScanning.current && !isScanning) {
+      setLastChecked(new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setFoundAtCheck(localModelCount);
+    }
+    wasScanning.current = isScanning;
+  }, [isScanning, localModelCount]);
+  const receipt = lastChecked && !isScanning
+    ? `Checked ${lastChecked} — ${foundAtCheck === 0 ? 'no local models found' : `${foundAtCheck} model${foundAtCheck === 1 ? '' : 's'} found`}`
+    : null;
   const localFallbackHost: NetworkHost = {
     id: 'localhost-preview',
     hostname: `${system.hostname} (This Machine)`,
@@ -73,21 +88,17 @@ export function LanBrowser({
 
   return (
     <section className={panelClassName}>
-      <PanelHeader
-        icon={Network}
-        title="Your Rig"
-        actionLabel={isScanning ? 'Checking' : 'Check Local'}
-        onAction={onScan}
-        busy={isScanning}
-        meta={hostMeta}
-      />
-      <RomanceArtBanner
-        image={robotRigGreenroom}
-        className="rig-art-banner"
-        kicker="Rig profile"
-        title="This computer is getting ready for a match"
-        body={`${system.gpu.vramGb ? `${formatGb(system.gpu.vramGb)} VRAM` : `${formatGb(system.memory.totalGb)} RAM`} helps RigMatch keep model suggestions realistic.`}
-      />
+      <header className="page-head">
+        <div>
+          <h2>My PC</h2>
+          <p>{receipt ? `${hostMeta} · ${receipt}` : hostMeta}</p>
+        </div>
+        <div className="page-head-actions">
+          <button type="button" className="btn btn-line" onClick={onScan} disabled={isScanning}>
+            {isScanning ? 'Checking…' : 'Check again'}
+          </button>
+        </div>
+      </header>
       <OllamaPrep
         system={system}
         ollama={ollama}
@@ -106,12 +117,13 @@ export function LanBrowser({
         onCheckComputer={onScanRig}
         onOpenSetupGuide={onOpenSetupGuide}
       />
-      <div className="table-wrap">
+      <h3 className="mypc-heading">Computers RigMatch can see</h3>
+      <div className="table-wrap mypc-hosts">
         <table>
           <thead>
             <tr>
-              <th>Hostname</th>
-              <th>IP Address</th>
+              <th>Computer</th>
+              <th>Address</th>
               <th>Provider</th>
               <th>Models</th>
               <th>Status</th>

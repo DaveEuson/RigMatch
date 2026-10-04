@@ -108,8 +108,8 @@ try {
     `${loaded?.entries?.length ?? 0} entr(y/ies)`,
   );
 
-  // The UI path: openLogsPanel() moves to History and calls loadLogs(). This is
-  // the part that moved into useAppLogs, so drive it rather than the API.
+  // The UI path: opening My PC › Logs calls loadLogs(), which lives in
+  // useAppLogs, so drive it rather than the API.
   await page.evaluate(() => {
     localStorage.setItem('rigmatch:ui-mode:v1', 'advanced');
     localStorage.setItem('rigmatch:first-run-tutorial:v1', 'seen');
@@ -117,16 +117,19 @@ try {
     localStorage.setItem('rigmatch:goals-offered:v1', 'yes');
   });
   await page.reload();
-  await page.waitForSelector('.side-menu-item', { timeout: 20000 });
-  await page.getByLabel('Scorecards').click();
-  await page.waitForTimeout(600);
+  await page.waitForSelector('.top-tab', { timeout: 20000 });
+  // The log lives on My PC › Logs; opening that tab loads it.
+  await page.locator('.top-tab', { hasText: 'My PC' }).click();
+  await page.waitForTimeout(400);
+  await page.locator('.screen-tabs button', { hasText: /^Logs/ }).click();
+  await page.waitForTimeout(800);
 
   const shown = await page.evaluate((text) => document.body.innerText.includes(text), marker);
   const pathShown = await page.evaluate(
     (p) => document.body.innerText.includes(p) || document.body.innerText.includes('rigmatch-log'),
     profile,
   );
-  record('the History panel renders loaded entries', shown);
+  record('the Logs view renders loaded entries', shown);
   record('the log path is shown to the user', pathShown);
 
   const copied = await page.evaluate(async () => {
@@ -176,7 +179,7 @@ try {
 
   // Chat is checked by visual-smoke against the preview, not here: a cold
   // desktop profile has no scan, so no scored model and no "Talk to Model", and
-  // the ticker's Chat button launches the separate RigChat companion and raises
+  // the top bar's Chat button launches the separate RigChat companion and raises
   // a blocking alert when it is not packaged. A gate that cannot reach the
   // thing it names is worse than one that admits where the check lives.
 
@@ -193,16 +196,15 @@ try {
     record(`${channel} is registered`, state === 'registered', state === 'registered' ? undefined : state);
   }
 
-  // Exact: a label match is a substring match, and the Balance fader on the
-  // Scorecards screen labels its presets "Quick settings".
-  await page.getByLabel('Settings', { exact: true }).click();
+  // Settings is the top bar's own button, not a tab.
+  await page.locator('.top-bar-settings').click();
   await page.waitForTimeout(400);
 
-  // SettingsSection renders `{isOpen && children}` and defaults to closed, so
-  // UpdateCenter is not merely hidden — it is absent from the DOM. Asserting
-  // against it while collapsed reported the updater subscription dead when it
-  // was fine, which is the kind of false alarm that gets a gate ignored.
-  await page.locator('.settings-section-toggle', { hasText: /Versions & Release Notes/ }).first().click();
+  // Only the section picked in the rail is rendered, so UpdateCenter is absent
+  // from the DOM until its rail entry is clicked. Asserting against it before
+  // that reported the updater subscription dead when it was fine, which is the
+  // kind of false alarm that gets a gate ignored.
+  await page.locator('.settings-rail-item', { hasText: /^Updates/ }).first().click();
   await page.waitForSelector('.update-center', { timeout: 10000 });
   record('the Updates section opens', await page.locator('.update-center').count() === 1);
 
@@ -254,8 +256,8 @@ try {
   // then reported "RigMatch app data cleared." The unit tests exercise the
   // sweep in isolation; only this shows that the button reaches it.
   await page.reload();
-  await page.waitForSelector('.side-menu-item', { timeout: 20000 });
-  await page.getByLabel('Settings', { exact: true }).click();
+  await page.waitForSelector('.top-tab', { timeout: 20000 });
+  await page.locator('.top-bar-settings').click();
   await page.waitForTimeout(400);
 
   await page.evaluate(() => {
@@ -266,11 +268,11 @@ try {
     localStorage.setItem('not-ours', 'keep');
   });
 
-  await page.locator('.settings-section-toggle', { hasText: /Scoring & Reset/ }).first().click();
+  await page.locator('.settings-rail-item', { hasText: /Scoring and reset/ }).first().click();
   await page.waitForSelector('.danger-zone', { timeout: 10000 });
-  await page.getByRole('button', { name: /^Clear All Data$/ }).first().click();
+  await page.getByRole('button', { name: /^Clear all data$/ }).first().click();
   await page.waitForSelector('.destructive-modal', { timeout: 10000 });
-  await page.locator('.destructive-modal .modal-actions').getByRole('button', { name: /^Clear All Data$/ }).click();
+  await page.locator('.destructive-modal .modal-actions').getByRole('button', { name: /^Clear all data$/ }).click();
   await page.waitForTimeout(1500);
 
   // Asserted as the absence of the failure, not the presence of the success
@@ -307,8 +309,8 @@ try {
   // beginner wizard immediately and again on the next launch.
   record(
     'an Advanced user is still in Advanced Mode',
-    await page.locator('.side-menu-item').count() > 0,
-    `${await page.locator('.side-menu-item').count()} rail item(s)`,
+    await page.locator('.top-tab').count() > 0,
+    `${await page.locator('.top-tab').count()} tab(s)`,
   );
   record(
     'the mode survives a restart too',
@@ -316,18 +318,18 @@ try {
   );
 
   // The guide used to reopen immediately, and then again at the next launch
-  // because the sweep took its "seen" flag with everything else.
-  // Matched on `.tutorial-modal`, the element itself. Matching on body text
-  // instead passed while the guide was wide open — a false green in the check
+  // because the sweep took its "seen" flag with everything else. The guide is
+  // now the first-run welcome. Matched on the element itself: matching on body
+  // text passed while the guide was wide open, a false green in the check
   // written to catch exactly this, found only by breaking the code on purpose.
-  const guideShowing = async () => (await page.locator('.tutorial-modal').count()) > 0;
-  record('the getting-started guide does not reopen', !(await guideShowing()));
+  const guideShowing = async () => (await page.locator('.welcome-overlay, .tutorial-modal').count()) > 0;
+  record('the first-run welcome does not reopen', !(await guideShowing()));
 
   await page.reload();
   await page.waitForTimeout(1200);
   record(
     'and it is still Advanced after reloading',
-    await page.locator('.side-menu-item').count() > 0,
+    await page.locator('.top-tab').count() > 0,
   );
   record('nor does the guide return at the next launch', !(await guideShowing()));
 

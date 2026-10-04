@@ -1,834 +1,416 @@
-/* Simple Mode wizard. Colors are expressed through the theme tokens in
-   index.css (via color-mix for tints) so all five themes keep working. */
+/* RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE. */
+
+/*
+ * Simple Mode, drawn as the redesign's "Call sheet": flat warm surfaces for
+ * everything you read and press, and the theatre (photo, bulbs, portraits,
+ * confetti) kept to the two stages, the running show and the winner's reveal.
+ * Gold is the winner and the one next action on a screen; data is never lit.
+ */
 
 .sw-shell {
-  grid-area: stage;
-  min-width: 0;
-  min-height: 0;
+  /* The stage floor follows the theme. data-theme sits on the app's root, so
+     the token is declared here rather than on :root, where --bg resolves once. */
+  --stage-floor: color-mix(in srgb, var(--bg) 62%, var(--stage));
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  /* One column that may shrink below its content. The implicit column was
-     `auto`, so on a narrow window (400% zoom is 320px) the widest unbreakable
-     thing on the Pick step set the width of the whole shell, header included,
-     and overflow: hidden cut off everything past the edge — "RigMatch" read
-     "R". Content now has to fit the window instead of the other way round. */
   grid-template-columns: minmax(0, 1fr);
-  border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
-  border-radius: 18px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-  /* Declared here, not on :root: data-theme is set on the app's root div, so a
-     :root declaration would resolve var(--bg) once, in the default theme, and
-     hand plum to the other four. Here it resolves inside the themed subtree. */
-  --stage-floor: color-mix(in srgb, var(--bg) 70%, #000);
-  /* A contestant portrait is a publicity still: gold hairline, soft drop. */
-  --portrait-frame: 0 0 0 1px rgba(var(--gold-rgb), 0.42), 0 6px 14px rgba(0, 0, 0, 0.35);
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  background-color: var(--bg);
+  /* The 70s wallpaper: outline hearts, faint enough to read through. */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><path d='M32 44C22 37 19 32 19 28.5 19 25.5 21.2 23.5 24 23.5c2.4 0 3.7 1.3 4.5 3 .8-1.7 2.1-3 4.5-3 2.8 0 5 2 5 5C38 32 42 37 32 44Z' fill='none' stroke='%23e37185' stroke-opacity='.13' stroke-width='1.5'/></svg>");
+  color: var(--text);
+  font: 400 var(--fs-body) / 1.5 var(--ui);
 }
 
-/* Header ------------------------------------------------------------------ */
-.sw-header {
-  display: grid;
-  /* Brand, steps, and the badge case on the right. */
-  grid-template-columns: minmax(190px, auto) minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-  padding: 14px 20px;
-  border-bottom: 1px solid color-mix(in srgb, var(--gold) 22%, transparent);
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--gold) 7%, transparent), color-mix(in srgb, var(--green) 6%, transparent)),
-    var(--panel);
-}
-
-.sw-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.sw-brand img {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-}
-
-.sw-brand strong {
-  display: block;
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--text-strong);
-}
-
-.sw-brand span {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--pink);
-}
-
-/* Mode switch under the brand — mirrors Advanced Mode's .global-mode-switch
-   (styled in App.css) so the control sits in the same spot in both modes. */
-.sw-brand .global-mode-switch {
-  width: 168px;
-  margin-top: 7px;
-}
-
-.sw-brand .global-mode-switch span {
-  grid-column: 1 / -1;
-  color: var(--gold);
-  font-size: 9px;
-  letter-spacing: normal;
-  text-align: left;
-  padding-left: 3px;
-}
-
-.sw-steps {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* The step names hide by the room the rail has, not by the window: a
-     1280px window leaves the rail about 975px, and five named steps need
-     about 620. Hiding them at <=1280 showed most laptops a row of numbered
-     circles and padlocks instead of the show's running order. */
-  container: steps / inline-size;
-}
-
-.sw-step-wrap {
-  display: flex;
-  align-items: center;
-}
-
-.sw-step-dash {
-  width: 16px;
-  height: 1px;
-  background: var(--line);
-  margin: 0 2px;
-}
-
+/* Without the top bar (a test, say) the tracker gets its own header. */
+.sw-header { display: flex; justify-content: center; padding: var(--s3) var(--s5); border-bottom: 1px solid var(--line); }
+.sw-steps { display: flex; align-items: center; gap: var(--s4); }
+.sw-step-wrap { display: contents; }
+.sw-step-dash { display: none; }
 .sw-step {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 999px;
-  border: 1px solid transparent;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: 400 15px / 1 var(--ui);
   cursor: pointer;
-  transition: transform 0.12s ease, filter 0.12s ease;
 }
+.sw-step:disabled { cursor: default; }
+.sw-step.active { border-bottom-color: var(--accent); color: var(--text-strong); font-weight: 700; }
+.sw-step-mark svg { width: 14px; height: 14px; }
 
-.sw-step-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.sw-step-mark svg { width: 13px; height: 13px; }
-
-.sw-step-label {
-  font-size: 12px;
-  font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.sw-step.active {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 78%, white), var(--gold));
-  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
-  color: #27190a;
-  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.25);
-}
-
-.sw-step.active .sw-step-mark { background: rgba(39, 25, 10, 0.16); color: #27190a; }
-
-.sw-step.done {
-  background: color-mix(in srgb, var(--green) 10%, transparent);
-  border-color: color-mix(in srgb, var(--green) 50%, transparent);
-  color: color-mix(in srgb, var(--green) 55%, var(--text-strong));
-}
-
-.sw-step.done .sw-step-mark svg { color: var(--green); }
-
-.sw-step.locked {
-  background: color-mix(in srgb, var(--text-strong) 3%, transparent);
-  border-color: color-mix(in srgb, var(--text-strong) 8%, transparent);
-  color: color-mix(in srgb, var(--muted) 55%, var(--bg));
-  cursor: default;
-}
-
-.sw-step.locked .sw-step-mark { background: color-mix(in srgb, var(--text-strong) 6%, transparent); }
-.sw-step.done:hover, .sw-step.active:hover { transform: translateY(-1px); filter: brightness(1.04); }
-
-/* Content + host strip ---------------------------------------------------- */
-/* The studio wall behind every step: a faint 1970s heart wallpaper, the rig's
-   light falling from above, and a warm pink glow low in the corners. It is
-   the scroll box's own background, so it holds still while the cards scroll
-   over it, and every card, bubble and panel on it is opaque — nothing that
-   carries a number is ever drawn on the pattern. The hearts are drawn at 11%,
-   well under anything that could cost text its contrast. */
 .sw-content {
-  min-height: 0;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding-bottom: 20px;
-  background:
-    radial-gradient(ellipse 55% 42% at 50% 0%, rgba(var(--gold-rgb), 0.08), transparent 70%),
-    radial-gradient(ellipse 38% 55% at 0% 100%, rgba(var(--pink-rgb), 0.1), transparent 70%),
-    radial-gradient(ellipse 38% 55% at 100% 100%, rgba(var(--pink-rgb), 0.1), transparent 70%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56'%3E%3Cg fill='none' stroke='%23e37185' stroke-opacity='0.11' stroke-width='1.2'%3E%3Cpath d='M14 12c-2-3-7-2-7 2 0 3 4 6 7 8 3-2 7-5 7-8 0-4-5-5-7-2z'/%3E%3Cpath d='M42 40c-2-3-7-2-7 2 0 3 4 6 7 8 3-2 7-5 7-8 0-4-5-5-7-2z'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 56px 56px,
-    var(--panel);
+  gap: var(--s4);
+  width: 100%;
+  max-width: 1280px;
+  min-height: 0;
+  margin: 0 auto;
+  padding: var(--s4) var(--s5) var(--s5);
+  overflow-y: auto;
 }
 
+.sw-muted { margin: 0; color: var(--muted); font-size: var(--fs-ui); }
+
+/* ---- The host --------------------------------------------------------- */
 .sw-host-strip {
+  position: relative;
   display: flex;
-  gap: 14px;
-  padding: 20px 28px 0;
+  align-items: center;
+  gap: var(--s4);
+  flex: none;
 }
 
 .sw-host-avatar {
-  width: 64px;
-  height: 64px;
-  flex: 0 0 64px;
-  border-radius: 14px;
-  border: 2px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-portrait);
+  box-shadow: var(--portrait-frame);
   object-fit: cover;
 }
 
-.sw-host-bubble {
-  position: relative;
-  max-width: 620px;
-  padding: 12px 18px;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  background: var(--panel-2);
+.sw-host-bubble { position: relative; flex: 1; max-width: 820px; min-height: 58px; display: flex; align-items: center; }
+
+.sw-host-line {
+  margin: 0;
+  color: var(--text-strong);
+  font: 400 22px / 1.3 var(--display);
+  text-wrap: pretty;
 }
 
-.sw-host-bubble::before {
-  content: "";
-  position: absolute;
-  left: -6px;
-  top: 24px;
-  width: 12px;
-  height: 12px;
-  transform: rotate(45deg);
-  background: var(--panel-2);
-  border-left: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-
-.sw-host-bubble span {
-  display: block;
-  font-size: 9px;
-  font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--gold);
-}
-
-.sw-host-bubble p { margin: 4px 0 0; font-size: 14px; line-height: 1.45; }
-
-/* The explanation is layered over the narration, never swapped into it.
-
-   Swapping grew the bubble from 104px to 137px — an explanation runs to three
-   paragraphs where the narration is two lines — and every element below the
-   host moved down by that much each time the pointer crossed a term. The
-   effect from the user's side was the whole screen dancing.
-
-   Absolutely positioned from the bubble's top-left, free to be as tall as the
-   text needs, and contributing nothing to layout. It may extend past the
-   bubble and cover what is beneath: that is the correct trade, because it is
-   transient and it is the thing the reader just asked to see. */
+/* A term's explanation, layered over the line so nothing below the host moves. */
 .sw-host-explain {
   position: absolute;
-  top: -1px;
-  left: -1px;
-  right: -1px;
-  z-index: 6;
-  padding: 12px 18px;
-  border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
-  background: var(--panel-2);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
-}
-
-.sw-host-explain > span {
-  display: block;
-  font-size: 9px;
-  font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--gold);
-}
-
-.sw-host-explain p { margin: 4px 0 0; font-size: 14px; line-height: 1.45; }
-.sw-host-explain .sw-host-because,
-.sw-host-explain .sw-host-also { color: var(--muted); font-size: 13px; }
-
-@media (prefers-reduced-motion: no-preference) {
-  .sw-host-explain { animation: sw-explain-in 90ms ease-out; }
-}
-@keyframes sw-explain-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.sw-muted { color: var(--muted); }
-
-/* Some eyebrows are headings (h3) so a screen reader can jump to them; they
-   keep the eyebrow's look, not a heading's margins. */
-h3.sw-eyebrow { margin: 0; }
-
-.sw-eyebrow {
-  font-size: 10px;
-  font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--gold);
-}
-
-.sw-eyebrow.blue { color: var(--blue); }
-
-.sw-link {
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font-size: 12px;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.sw-link:hover { color: var(--text-strong); }
-
-/* Footer ------------------------------------------------------------------ */
-.sw-footer {
+  top: -6px;
+  left: -12px;
+  right: 0;
+  z-index: 5;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 28px;
-  border-top: 1px solid color-mix(in srgb, var(--text-strong) 8%, transparent);
+  gap: 4px;
+  padding: var(--s3) var(--s4);
+  border: 1px solid rgba(var(--gold-rgb), 0.45);
+  border-radius: var(--r-panel);
   background: var(--panel);
+  box-shadow: var(--shadow-float);
+  animation: sw-explain-in 90ms ease-out;
 }
+@keyframes sw-explain-in { from { opacity: 0; transform: translateY(-2px); } }
+.sw-host-explain > span { color: var(--gold); font: 700 var(--fs-ui) / 1.3 var(--ui); }
+.sw-host-explain p { margin: 0; color: var(--text); font-size: var(--fs-ui); line-height: 1.5; }
+.sw-host-because, .sw-host-also { color: var(--muted); }
 
-.sw-footer-right { justify-self: end; }
-.sw-footer-hint { justify-self: center; font-size: 12px; color: var(--muted); text-align: center; }
+/* A term reads as part of the sentence. An unstyled button renders as a white
+   box mid-paragraph and looks like something to type into. */
+.sw-explain-term {
+  all: unset;
+  display: inline;
+  position: relative;
+  cursor: help;
+  color: var(--gold);
+  border-bottom: 1px dotted currentColor;
+  white-space: normal;
+}
+/* A taller hit area than the line it sits on, without moving the line. */
+.sw-explain-term::after { content: ""; position: absolute; inset: -5px -2px; }
+.sw-explain-term:hover { border-bottom-style: solid; }
+.sw-explain-term:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
 
-.sw-ghost-pill {
-  display: inline-flex;
+/* The message channel: a refusal, a blocked queue, a failed run. */
+.sw-notice {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 18px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--text-strong) 16%, transparent);
-  background: color-mix(in srgb, var(--text-strong) 6%, transparent);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border: 1px solid rgba(var(--gold-rgb), 0.4);
+  border-radius: var(--r-control);
+  background: rgba(var(--gold-rgb), 0.08);
 }
+.sw-notice > svg { flex: none; }
+.sw-notice p { flex: 1; margin: 0; font-size: var(--fs-ui); }
 
-.sw-ghost-pill svg { width: 14px; height: 14px; }
-.sw-ghost-pill:hover { border-color: color-mix(in srgb, var(--gold) 45%, transparent); color: var(--text-strong); }
-
-.sw-gold-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 22px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 78%, white), var(--gold));
-  color: #27190a;
-  font-size: 12px;
-  font-weight: 900;
-  text-transform: uppercase;
-  cursor: pointer;
-  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.25);
-  transition: transform 0.12s ease, filter 0.12s ease;
-}
-
-.sw-gold-pill svg { width: 15px; height: 15px; }
-.sw-gold-pill:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.04); }
-.sw-gold-pill:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
-
-/* Setup ------------------------------------------------------------------- */
+/* ---- Setup ------------------------------------------------------------ */
 .sw-setup {
-  width: min(620px, 100%);
-  margin: 0 auto;
-  padding: 0 28px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 22px;
+  gap: var(--s4);
+  width: 100%;
+  max-width: 640px;
+  margin: var(--s2) auto 0;
   text-align: center;
 }
-
-.sw-setup-hero {
-  width: 100%;
-  height: 190px;
-  border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
-  background-size: cover;
-  background-position: center;
-}
-
-.sw-setup h2 { margin: 0; font-size: 26px; font-weight: 800; color: var(--text-strong); }
-.sw-setup > p { margin: 0; font-size: 14px; max-width: 520px; }
-.sw-cta { padding: 15px 34px; font-size: 15px; }
-
-.sw-setup-result {
-  width: 100%;
-  padding: 18px 22px;
-  border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--green) 45%, transparent);
+.sw-setup h2 { margin: 0; color: var(--text-strong); font: 400 40px / 1.1 var(--display); text-wrap: balance; }
+.sw-setup-lede { margin: 0; font-size: 17px; color: var(--text); }
+.sw-setup-explainer {
+  margin: 0;
+  padding: var(--s4);
+  border-radius: var(--r-panel);
   background: var(--panel);
+  color: var(--muted);
+  font-size: 15px;
   text-align: left;
+}
+.sw-setup-explainer strong { color: var(--text-strong); }
+.sw-setup-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--s3) var(--s4); }
+.sw-setup .sw-cta { min-height: 52px; padding: 0 var(--s6); font-size: 18px; }
+.sw-setup-safety { max-width: 52ch; }
+
+.sw-found {
+  width: 100%;
+  margin: 0;
+  padding: 4px var(--s5);
+  border-radius: var(--r-panel);
+  background: var(--panel);
+  list-style: none;
+  text-align: left;
+}
+.sw-found-row {
+  display: grid;
+  grid-template-columns: 10px 140px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 14px;
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.sw-found-row:last-child { border-bottom: 0; }
+.sw-found-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); align-self: center; }
+.sw-found-row.warn .sw-found-dot { background: var(--gold); }
+.sw-found-label { color: var(--muted); font-size: 15px; }
+.sw-found-value { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s2); color: var(--text-strong); }
+
+.sw-setup-error {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.sw-setup-result.error { border-color: color-mix(in srgb, var(--red) 45%, transparent); }
-
-.sw-setup-result-head { display: flex; align-items: center; gap: 10px; }
-.sw-setup-result-head strong { font-size: 16px; font-weight: 800; color: color-mix(in srgb, var(--green) 55%, var(--text-strong)); }
-.sw-setup-result.error .sw-setup-result-head strong { color: color-mix(in srgb, var(--red) 45%, var(--text-strong)); }
-.sw-setup-result-head .sw-link { margin-left: auto; }
-
-.sw-check-circle {
-  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--green) 22%, transparent);
-  color: var(--green);
+  gap: var(--s3);
+  width: 100%;
+  padding: var(--s5);
+  border: 1px solid rgba(var(--red-rgb), 0.45);
+  border-radius: var(--r-panel);
+  background: var(--panel);
 }
-
-.sw-check-circle.error { background: color-mix(in srgb, var(--red) 22%, transparent); color: var(--red); }
-.sw-check-circle svg { width: 15px; height: 15px; }
-
-/* Ready-except-for-one-thing.
-
-   Deliberately gold rather than red: the computer passed every check RigMatch
-   can make on its own, and the missing piece is a separate program the person
-   has not installed yet. Red would read as "something is broken here", which
-   would be its own untrue statement in the opposite direction. */
-.sw-setup-result.partial { border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
-.sw-setup-result.partial .sw-setup-result-head strong { color: color-mix(in srgb, var(--gold) 60%, var(--text-strong)); }
-.sw-check-circle.partial { background: color-mix(in srgb, var(--gold) 22%, transparent); color: var(--gold); }
-
-.sw-setup-missing {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 4px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
-  background: color-mix(in srgb, var(--gold) 7%, transparent);
-}
-
-.sw-setup-missing strong { font-size: 14px; color: var(--text-strong); }
-.sw-setup-missing p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
-.sw-setup-find { margin-top: 2px; }
-
-.sw-result-row { display: flex; flex-direction: column; gap: 1px; font-size: 13px; }
-.sw-result-row strong { color: var(--text-strong); }
-.sw-result-row span { color: var(--muted); }
-
-.sw-setup-error-copy { font-size: 13px; margin: 0; }
-.sw-setup-error-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-
-/* In-app Ollama install flow (Simple Mode setup failure state). */
-.sw-install-script {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 10px 0;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.28);
-}
-
+.sw-setup-error h3 { margin: 0; color: var(--text-strong); font: 400 var(--fs-h2) / 1.2 var(--display); }
+.sw-setup-error p { margin: 0; }
+.sw-install-script { display: flex; align-items: center; gap: var(--s2); width: 100%; }
 .sw-install-script code {
   flex: 1;
   min-width: 0;
+  padding: var(--s2) var(--s3);
   overflow-x: auto;
-  font-size: 12px;
+  border-radius: var(--r-control);
+  background: var(--stage);
+  color: var(--text-strong);
+  font: 500 var(--fs-ui) / 1.4 var(--figure);
   white-space: nowrap;
+  user-select: all;
 }
+.sw-install-progress { display: grid; gap: var(--s2); width: 100%; }
+.sw-install-progress-bar { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.sw-install-progress-bar i { display: block; height: 100%; background: var(--accent); }
 
-.sw-install-progress { margin: 12px 0; }
+/* ---- Pick ------------------------------------------------------------- */
+.sw-pick { display: flex; flex-direction: column; gap: var(--s3); }
 
-.sw-install-progress-bar {
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  overflow: hidden;
-  margin-bottom: 6px;
+.sw-goal-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1) var(--s5);
+  border-bottom: 1px solid var(--line);
 }
-
-.sw-install-progress-bar i {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--gold);
-  transition: width 0.2s ease;
-}
-
-.sw-install-hint { font-size: 12px; }
-
-.sw-install-recheck { margin-top: 12px; }
-
-/* Pick -------------------------------------------------------------------- */
-.sw-pick { padding: 0 28px; display: flex; flex-direction: column; gap: 16px; }
-.sw-dream { display: flex; flex-direction: column; gap: 8px; }
-.sw-dream-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-
-.sw-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--text-strong) 16%, transparent);
-  background: color-mix(in srgb, var(--text-strong) 5%, transparent);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
+.sw-goal-tab {
+  min-height: 40px;
+  margin-bottom: -1px;
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: 400 15px / 1 var(--ui);
   cursor: pointer;
 }
+.sw-goal-tab:hover { color: var(--text-strong); }
+.sw-goal-tab[aria-pressed='true'] { border-bottom-color: var(--accent); color: var(--text-strong); font-weight: 700; }
 
-.sw-chip svg { width: 14px; height: 14px; }
-.sw-chip:hover { border-color: color-mix(in srgb, var(--gold) 50%, transparent); color: var(--text-strong); }
+.sw-pick-count { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s4); min-height: 32px; color: var(--muted); font-size: var(--fs-ui); }
 
-.sw-chip.active {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 78%, white), var(--gold));
-  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
-  color: #27190a;
-  font-weight: 900;
+/* Rows with hairlines, two to a line where there is room. */
+.sw-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(440px, 100%), 1fr));
+  column-gap: var(--s6);
 }
 
-.sw-pick-count { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); }
-
-.sw-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-
-/* The contestant card lies across, not down.
-
-   It used to be a vertical stack with a 150px publicity photo on top, which
-   made one card 392px tall. On a 1366x768 laptop the Pick step gets a 484px
-   viewport, so a single row of contestants filled it exactly and 990px of the
-   grid — the second and third rows, the "show more" link, everything — sat
-   below a fold with nothing above it saying so. The photo is theme; choosing
-   between contestants is the job, and the job was the part off screen.
-   Same information, turned ninety degrees. */
 .sw-card {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  min-width: 0;
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.sw-card-skeleton { height: 89px; opacity: 0.5; animation: sw-pulse 1.4s ease-in-out infinite; }
+@keyframes sw-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.6; } }
+
+.sw-card-portrait { position: relative; flex: none; }
+.sw-card-avatar { display: block; width: 64px; height: 64px; border-radius: var(--r-portrait); box-shadow: var(--portrait-frame); object-fit: cover; }
+.sw-card-order {
+  position: absolute;
+  top: -6px;
+  left: -6px;
   display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
-  grid-template-areas:
-    "avatar name"
-    "avatar goodfor"
-    "fit    fit"
-    "action action";
-  align-content: start;
-  gap: 8px 14px;
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  background: var(--panel);
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg);
+  font: 700 13px / 1 var(--ui);
 }
 
-.sw-card > .sw-card-name { grid-area: name; }
-.sw-card > .sw-card-goodfor { grid-area: goodfor; }
-/* "Does it fit" and "do people use it", sharing one row. Wrapping rather than
-   stacking, so the download count is free on cards whose fit line is short and
-   takes a second line only where it genuinely does not fit. */
-.sw-card > .sw-card-signals {
-  grid-area: fit;
+.sw-card-body { flex: 1; min-width: 0; }
+.sw-card-body h3 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font: 400 20px / 1.25 var(--display);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sw-card-why { margin: 0; color: var(--text); font-size: var(--fs-ui); }
+.sw-card-fit { margin: 2px 0 0; color: var(--muted); font-size: var(--fs-ui); }
+.sw-fit-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--green); }
+.sw-fit-dot.slower { background: var(--gold); }
+.sw-card-vram { font-family: var(--figure); font-size: 13px; }
+
+/* Outline, never gold: gold is the one next action, Start the show. */
+.sw-card-btn {
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text-strong);
+  font: 400 var(--fs-ui) / 1 var(--ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.sw-card-btn:not(:disabled):hover { background: var(--panel-hover); }
+.sw-card-btn.picked { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.sw-card-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+.sw-show-more { align-self: center; }
+
+.sw-pick-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s3);
+  max-width: 68ch;
+  padding: var(--s5);
+  border-radius: var(--r-panel);
+  background: var(--panel);
+}
+.sw-pick-empty p { margin: 0; }
+.sw-maker-gallery { display: flex; justify-content: center; padding: 4px 0 8px; }
+
+/* ---- Footer dock ------------------------------------------------------ */
+.sw-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--s5);
+  padding: var(--s4) var(--s5);
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+.sw-footer-left, .sw-footer-right { flex: none; }
+.sw-footer-hint { flex: 1; color: var(--muted); font-size: var(--fs-ui); text-align: center; }
+
+.sw-lineup-tray {
+  flex: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: var(--s2) 14px;
   min-width: 0;
-}
-
-/* Muted against the fit badge's green: fit is the signal that decides whether
-   a model is usable at all, popularity only breaks a tie between models that
-   already fit. */
-.sw-pop-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
+  font-size: var(--fs-ui);
 }
-
-.sw-pop-badge svg { width: 11px; height: 11px; }
-.sw-card > .sw-card-btn,
-.sw-card > .sw-card-full { grid-area: action; }
-
-.sw-card.picked {
-  border: 2px solid var(--pink);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pink) 15%, transparent);
-}
-
-/* Matches a real card, so the grid does not jump when the contestants land. */
-.sw-card-skeleton { height: 202px; opacity: 0.5; animation: sw-pulse 1.4s ease-in-out infinite; }
-@keyframes sw-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.6; } }
-
-.sw-card-pick-badge {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--pink);
-  color: #2a0d16;
-  font-size: 10px;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.sw-card-pick-badge svg { width: 11px; height: 11px; }
-
-/* The badge used to float over the photo. With the photo down to a 64px
-   thumbnail it floats over the name instead, so the name row gives it room —
-   and only on cards already picked, which are the ones already decided. */
-.sw-card.picked > .sw-card-name { padding-right: 64px; }
-
-/* 88px sits beside the name, maker and "good for" lines, which already run
-   that tall, so the portrait is back to reading as a publicity still without
-   the card growing: the 150px photo it replaced cost a whole row of cards. */
-.sw-card-avatar {
-  grid-area: avatar;
-  width: 88px;
-  height: 88px;
-  object-fit: cover;
-  border-radius: 14px;
-  background: var(--panel-2);
-  box-shadow: var(--portrait-frame);
-}
-
-.sw-card.picked .sw-card-avatar { box-shadow: 0 0 0 2px var(--pink), 0 6px 14px rgba(0, 0, 0, 0.35); }
-
-.sw-card-name { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.sw-card-name h3 { margin: 0; font-size: 16px; font-weight: 700; line-height: inherit; color: var(--text-strong); overflow-wrap: anywhere; }
-.sw-card-name em { font-size: 11px; font-style: normal; color: var(--muted); }
-/* "Good for" reads as a label beside the line, not a heading above it — the
-   stacked version spent a whole row on two words. */
-.sw-card-goodfor { display: flex; align-items: baseline; gap: 6px; }
-.sw-card-goodfor .sw-eyebrow { flex: none; }
-.sw-card-goodfor p { margin: 0; font-size: 13px; }
-
-.sw-fit-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  align-self: flex-start;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.sw-fit-badge svg { width: 12px; height: 12px; }
-
-.sw-fit-badge.green {
-  background: color-mix(in srgb, var(--green) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--green) 50%, transparent);
-  color: color-mix(in srgb, var(--green) 55%, var(--text-strong));
-}
-
-.sw-fit-badge.gold {
-  background: color-mix(in srgb, var(--gold) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
-  color: var(--gold);
-}
-
-/* Gold marks the winner and the one next action. Six gold Pick bars made the
-   step read as a shop shelf and competed with Next, so picking is the show's
-   pink: an outline to hand out, filled once handed. Full --pink border for 3:1
-   against the card; the text mix is the one already measured on the picked
-   tint (5.5:1 there, higher on the bare panel). */
-.sw-card-btn {
-  margin-top: auto;
-  padding: 10px;
-  border-radius: 999px;
-  border: 1px solid var(--pink);
-  background: transparent;
-  color: color-mix(in srgb, var(--pink) 70%, var(--text-strong));
-  font-size: 12px;
-  font-weight: 900;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-
-.sw-card-btn:not(.picked):not(:disabled):hover { background: rgba(var(--pink-rgb), 0.1); }
-
-.sw-card-btn.picked {
-  background: color-mix(in srgb, var(--pink) 16%, transparent);
-  border-color: var(--pink);
-  /* Pure pink on its own 16% tint was 4.37:1, under the 4.5:1 that 12px text
-     needs. Lifted toward white it is 5.5:1 or better in all five themes. */
-  color: color-mix(in srgb, var(--pink) 70%, var(--text-strong));
-}
-
-.sw-card-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-.sw-show-more { align-self: center; margin-top: 4px; }
-
-.sw-pick-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 30px; text-align: center; }
-.sw-pick-empty-art {
-  position: relative;
-  width: min(640px, 100%);
-  height: 140px;
-  border-radius: 16px;
-  border: 1px solid rgba(var(--gold-rgb), 0.42);
-  background-size: cover;
-  background-position: left center;
-  overflow: hidden;
-}
-.sw-pick-empty-art::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent 45%, color-mix(in srgb, var(--panel) 90%, transparent));
-}
-.sw-pick-empty p { margin: 0; color: var(--muted); }
-
-.sw-lineup-tray { justify-self: center; display: flex; flex-direction: column; align-items: center; gap: 5px; }
 .sw-lineup-slots { display: flex; gap: 6px; }
-
 .sw-lineup-slot {
   position: relative;
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
+  width: 40px;
+  height: 40px;
   padding: 0;
+  border: 0;
+  border-radius: var(--r-control);
+  background: none;
+  cursor: pointer;
 }
-
-button.sw-lineup-slot.filled { border: 2px solid var(--pink); cursor: pointer; background: none; }
+.sw-lineup-slot img { display: block; width: 40px; height: 40px; border-radius: var(--r-control); object-fit: cover; }
 .sw-lineup-slot.filled { box-shadow: var(--portrait-frame); animation: sw-slot-in 150ms ease-out; }
-.sw-lineup-slot.filled img { width: 100%; height: 100%; object-fit: cover; }
-/* A seat waiting for a date. Decorative, and hidden from assistive tech: the
-   tray's own line says how many are picked. */
-.sw-lineup-slot.empty { border: 1px dashed var(--line); color: color-mix(in srgb, var(--pink) 45%, var(--muted)); }
 @keyframes sw-slot-in { from { transform: scale(0.8); opacity: 0; } }
-.sw-lineup-slot.empty svg { width: 14px; height: 14px; }
-
-/* Remove badge on a picked lineup slot — always hinted, solid on hover. */
 .sw-lineup-remove {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  background: color-mix(in srgb, var(--red) 55%, transparent);
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-control);
+  background: rgba(7, 5, 12, 0.6);
+  color: var(--text-strong);
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: opacity var(--t-fast);
 }
+.sw-lineup-remove svg { width: 18px; height: 18px; }
+.sw-lineup-slot:hover .sw-lineup-remove, .sw-lineup-slot:focus-visible .sw-lineup-remove { opacity: 1; }
+.sw-lineup-plan .btn-link { min-height: 0; }
 
-button.sw-lineup-slot.filled:hover .sw-lineup-remove,
-button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
-.sw-lineup-remove svg { width: 15px; height: 15px; }
-
-/* Download ---------------------------------------------------------------- */
-.sw-download { width: min(680px, 100%); margin: 0 auto; padding: 0 28px; display: flex; flex-direction: column; gap: 12px; }
-.sw-download-head { display: flex; align-items: center; justify-content: space-between; }
-.sw-download-head h2 { margin: 0; font-size: 22px; font-weight: 800; color: var(--text-strong); }
-.sw-download-head span { font-size: 13px; font-weight: 800; color: var(--gold); }
-
-.sw-dl-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-}
-
-.sw-dl-row.done { border-color: color-mix(in srgb, var(--green) 45%, transparent); }
-.sw-dl-row.downloading { border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
-.sw-dl-row.queued { opacity: 0.75; }
-
-.sw-dl-avatar { width: 46px; height: 46px; flex: 0 0 46px; border-radius: 10px; object-fit: cover; }
-.sw-dl-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.sw-dl-info strong { font-size: 14px; font-weight: 700; color: var(--text-strong); }
-.sw-dl-info em { font-size: 11px; font-style: normal; color: var(--muted); }
-
-.sw-dl-track { height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--text-strong) 8%, transparent); overflow: hidden; }
-.sw-dl-track i { display: block; height: 100%; border-radius: inherit; }
-.sw-dl-row.done .sw-dl-track i { background: linear-gradient(90deg, var(--green), color-mix(in srgb, var(--green) 60%, var(--text-strong))); }
-.sw-dl-row.downloading .sw-dl-track i { background: linear-gradient(90deg, color-mix(in srgb, var(--gold) 80%, white), var(--gold)); }
-
-.sw-dl-status { flex: 0 0 auto; font-size: 13px; font-weight: 900; }
+/* ---- Download --------------------------------------------------------- */
+.sw-download { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 860px; margin: 0 auto; }
+.sw-download-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); margin-bottom: var(--s2); }
+.sw-download-head h2 { margin: 0; color: var(--text-strong); font: 400 28px / 1.2 var(--display); }
+.sw-download-head span { color: var(--muted); font-size: var(--fs-ui); }
+.sw-dl-row { display: flex; align-items: center; gap: var(--s4); padding: var(--s3) 0; border-bottom: 1px solid var(--line); }
+.sw-dl-avatar { flex: none; width: 48px; height: 48px; border-radius: var(--r-control); box-shadow: var(--portrait-frame); object-fit: cover; }
+.sw-dl-info { flex: 1; display: grid; gap: 4px; min-width: 0; }
+.sw-dl-info strong { color: var(--text-strong); font: 400 18px / 1.2 var(--display); font-weight: 400; }
+.sw-dl-info em { color: var(--muted); font-size: var(--fs-ui); font-style: normal; }
+.sw-dl-track { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.sw-dl-track i { display: block; height: 100%; background: var(--accent); transition: width 0.6s ease; }
+.sw-dl-row.done .sw-dl-track i { background: var(--green); }
+.sw-dl-row.failed .sw-dl-track i { background: var(--red); }
+.sw-dl-status { flex: none; min-width: 7em; color: var(--text); font: 500 var(--fs-ui) / 1 var(--figure); text-align: right; }
 .sw-dl-row.done .sw-dl-status { color: var(--green); }
-.sw-dl-row.downloading .sw-dl-status { color: var(--gold); }
-.sw-dl-row.queued .sw-dl-status { color: var(--muted); }
+.sw-dl-row.failed .sw-dl-status { color: var(--red); }
+.sw-download-note { padding-top: var(--s2); }
+.sw-download-retry { display: flex; padding-top: var(--s3); }
 
-.sw-info-note {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
-  background: color-mix(in srgb, var(--blue) 8%, transparent);
-  font-size: 12px;
-}
-
-.sw-info-note svg { width: 16px; height: 16px; flex: 0 0 16px; color: var(--blue); }
-
-/* Compare ----------------------------------------------------------------- */
+/* ---- The show ------------------------------------------------------------
+   The lit stage (photo, bulbs, the question, the contestants) over a plain
+   scoreboard. Progress and scores sit off the stage: data is not lit. */
 .sw-compare {
-  position: relative;
-  /* Not flex: 1, for the reason .sw-winner gives: stretched to the scroll
-     box's height, whatever ran past it was clipped by this element instead of
-     scrolled by its parent. At 1280x800 that was the progress bar and every
-     answer score — there, and unreachable. */
   flex: 0 0 auto;
-  margin: 0 20px;
-  border-radius: 16px;
-  background: var(--stage-floor);
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
 }
 
-/* The stage and the winner's reveal share one lighting rig: the show's photo
-   dimmed onto the floor, a scrim, the marquee, and a spotlight from above.
-   The photo was loaded here all along — an opaque fill sat on top of it. */
 .sw-stage,
 .sw-winner-stage {
   position: relative;
   isolation: isolate;
   overflow: hidden;
+  border-radius: var(--r-panel);
+  background: var(--stage-floor);
 }
 
 .sw-stage-bg {
@@ -836,13 +418,10 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   inset: 0;
   z-index: 0;
   background-size: cover;
-  background-position: 30% 40%;
-  opacity: 0.34;
-  filter: saturate(1.15) blur(1px);
-  transform: scale(1.03);
+  background-position: center;
+  opacity: 0.45;
   transition: opacity 0.4s ease;
 }
-
 .sw-stage::after,
 .sw-winner-stage::after {
   content: "";
@@ -850,139 +429,172 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse 55% 60% at 50% 0%, rgba(var(--gold-rgb), 0.12), transparent 70%),
-    linear-gradient(90deg, color-mix(in srgb, var(--stage-floor) 70%, transparent), transparent 22%, transparent 78%, color-mix(in srgb, var(--stage-floor) 70%, transparent)),
-    linear-gradient(180deg, color-mix(in srgb, var(--stage-floor) 20%, transparent), color-mix(in srgb, var(--stage-floor) 75%, transparent));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--stage-floor) 55%, transparent), color-mix(in srgb, var(--stage-floor) 92%, transparent) 70%);
 }
-
+.sw-winner-stage::after {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--stage-floor) 45%, transparent), color-mix(in srgb, var(--stage-floor) 92%, transparent) 60%);
+}
 .sw-stage > .live-show-marquee,
 .sw-winner-stage > .live-show-marquee { z-index: 1; }
-
-/* A show that stopped: lights down. The bulbs hold still (App.css) and the
-   photo dims, so the stage looks closed rather than mid-show. */
 .sw-stage.lights-down .sw-stage-bg { opacity: 0.2; }
 
-.sw-compare-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 28px 28px 24px; }
+.sw-compare-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s5);
+  min-height: 300px;
+  padding: var(--s6) var(--s6) var(--s5);
+}
 
-/* Data is not lit: progress and scores sit under the stage, on the floor. */
-.sw-stage-data { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 16px 28px 24px; }
+.sw-compare-question { display: flex; flex-direction: column; align-items: center; gap: 4px; max-width: 64ch; text-align: center; }
+.sw-compare-question h2 { margin: 0; color: var(--text-strong); font: 400 32px / 1.15 var(--display); text-wrap: balance; }
+.sw-compare-question p { margin: 0; }
+.sw-round-meta { margin: 0; color: var(--text); font-size: 15px; }
+.sw-compare-raw {
+  max-width: 60ch;
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r-control);
+  background: rgba(7, 5, 12, 0.55);
+  color: var(--text-strong);
+  font-size: var(--fs-ui);
+}
+.sw-compare-stopped h2 { font-size: var(--fs-h2); }
+.sw-stage-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s3); margin-top: var(--s2); }
 
-.sw-compare-question {
-  width: min(640px, 100%);
-  padding: 16px 20px;
-  border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
+/* The contestants: portrait, name, and where they are, in words and color. */
+.sw-podiums { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s5); }
+.sw-podium {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 170px;
+  text-align: center;
+  opacity: 0.6;
+  transition: opacity var(--t-base);
+}
+.sw-podium.answering, .sw-podium.done, .sw-podium.stopped { opacity: 1; }
+.sw-podium img { width: 88px; height: 88px; border-radius: var(--r-portrait); box-shadow: var(--portrait-frame); object-fit: cover; }
+.sw-podium.answering img { box-shadow: 0 0 0 3px var(--accent); }
+.sw-podium strong { color: var(--text-strong); font: 400 19px / 1.2 var(--display); }
+.sw-podium-state { color: var(--muted); font-size: var(--fs-ui); }
+.sw-podium-state.answering { color: var(--accent); font-weight: 700; }
+.sw-podium-state.done { color: var(--green); }
+.sw-podium-state.dropped { color: var(--red); }
+
+.sw-stage-data {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s4) var(--s5);
+  border-radius: var(--r-panel);
+  background: var(--stage);
+}
+.sw-show-progress { display: grid; gap: var(--s2); }
+.sw-show-progress-head { display: flex; justify-content: space-between; gap: var(--s4); font-size: 15px; }
+.sw-show-progress-head > span:first-child { color: var(--text-strong); }
+.sw-show-progress-head > span:last-child { color: var(--muted); font-family: var(--figure); font-size: var(--fs-ui); }
+.sw-eta { font-style: normal; }
+.sw-show-progress-track { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.sw-show-progress-track i { display: block; height: 100%; border-radius: 4px; background: var(--accent); transition: width 0.6s ease; }
+
+.sw-answer-strip { display: grid; gap: var(--s2); }
+.sw-answer-strip-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s2) var(--s4); color: var(--muted); font-size: var(--fs-ui); }
+.sw-answer-strip-head em { font-style: normal; }
+.sw-answer-strip-head b { color: var(--text-strong); font: 500 16px / 1 var(--figure); }
+.sw-answer-strip ol { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.sw-answer-strip li {
+  min-width: 2.6em;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text-strong);
+  font: 500 var(--fs-ui) / 1 var(--figure);
   text-align: center;
 }
+.sw-answer-strip li.poor { color: var(--red); }
+.sw-answer-strip li.good { color: var(--green); }
+.sw-show-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--s3) var(--s4); }
 
-.sw-compare-question p,
-.sw-compare-question h2 { margin: 6px 0 0; font-size: 19px; font-weight: 700; color: var(--text-strong); }
+/* ---- Winner ----------------------------------------------------------- */
+.sw-winner { display: flex; flex-direction: column; gap: var(--s4); }
+.sw-winner-none { margin: 0; color: var(--text-strong); font: 400 var(--fs-h1) / 1.2 var(--display); }
 
-.sw-podiums { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 200px)); gap: 18px; justify-content: center; width: 100%; }
-
-.sw-podium {
+.sw-winner-reveal {
   position: relative;
+  z-index: 2;
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 16px 14px;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel) 90%, transparent);
-  /* The lectern's lip: a podium, not a list row. */
-  box-shadow: inset 0 -3px 0 rgba(var(--gold-rgb), 0.35);
+  gap: var(--s6) 40px;
+  padding: 44px 40px 32px;
 }
-
-.sw-podium.answering { border-color: color-mix(in srgb, var(--gold) 60%, transparent); box-shadow: inset 0 -3px 0 rgba(var(--gold-rgb), 0.35), 0 0 22px color-mix(in srgb, var(--gold) 20%, transparent); }
-
-/* The spotlight on whoever is answering: a beam from the rig down onto the
-   podium, behind every card on the stage. It carries no state the pill does
-   not already say, so it is free to fade. */
-.sw-podium::before {
+.sw-winner-avatar-wrap { position: relative; flex: none; animation: sw-drop 600ms ease-out; }
+@keyframes sw-drop { from { transform: translateY(-24px) scale(0.9); opacity: 0; } to { transform: none; opacity: 1; } }
+.sw-winner-avatar-wrap img { display: block; width: 176px; height: 176px; border-radius: var(--r-portrait); box-shadow: var(--winner-frame); object-fit: cover; }
+/* The halo, lit once the portrait lands. Its own layer so it fades by opacity. */
+.sw-winner-avatar-wrap::before {
   content: "";
   position: absolute;
-  left: 50%;
-  bottom: 40%;
-  z-index: -1;
-  width: 240px;
-  height: 360px;
-  transform: translateX(-50%);
-  clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%);
-  background: linear-gradient(180deg, transparent, rgba(var(--gold-rgb), 0.16));
+  inset: 0;
+  border-radius: var(--r-portrait);
+  box-shadow: 0 0 60px rgba(var(--gold-rgb), 0.25);
   opacity: 0;
+  animation: sw-halo 600ms ease-out 400ms forwards;
   pointer-events: none;
-  transition: opacity 0.3s ease-out;
 }
+@keyframes sw-halo { to { opacity: 1; } }
 
-.sw-podium.answering::before { opacity: 1; }
-.sw-podium.done { border-color: color-mix(in srgb, var(--green) 50%, transparent); }
-.sw-podium.waiting { opacity: 0.8; }
+.sw-winner-copy { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: min(280px, 100%); }
+.sw-winner-kicker { margin: 0; color: var(--text); font-size: 15px; }
+.sw-winner-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2) var(--s5); }
+.sw-winner-name h2 { margin: 0; color: var(--text-strong); font: 400 60px / 1 var(--display); overflow-wrap: anywhere; }
+.sw-winner-tag { color: var(--muted); font: 500 13px / 1 var(--figure); }
+.sw-winner-grade { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s3); margin-top: 4px; }
+.sw-winner-grade b { color: var(--text-strong); font: 500 56px / 1 var(--figure); }
+.sw-winner-grade span { color: var(--text); font-size: 16px; }
+.sw-winner-why { max-width: 56ch; margin: 0; color: var(--text); font-size: 16px; }
+.sw-winner-measures { display: flex; flex-wrap: wrap; gap: var(--s5); margin: var(--s2) 0 0; }
+.sw-winner-measures div { display: grid; gap: 2px; }
+.sw-winner-measures dt { color: var(--muted); font-size: var(--fs-ui); }
+.sw-winner-measures dd { margin: 0; color: var(--text-strong); font: 500 20px / 1 var(--figure); }
 
-.sw-podium img { width: 76px; height: 76px; border-radius: 14px; object-fit: cover; background: var(--panel-2); box-shadow: var(--portrait-frame); }
-.sw-podium strong { font-size: 14px; font-weight: 700; color: var(--text-strong); }
-.sw-podium em { font-size: 11px; font-style: normal; color: var(--muted); }
+.sw-winner-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s4); }
+.sw-winner-chat, .sw-winner-door { min-height: 48px; padding: 0 var(--s5); font-size: 16px; }
+.sw-winner-chat { font-size: 17px; }
+.sw-winner-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s5); margin-left: auto; }
 
-.sw-podium-pill {
-  display: inline-flex;
+.sw-scoreboard { display: grid; gap: var(--s2); }
+.sw-scoreboard h3 { margin: var(--s2) 0 0; color: var(--text-strong); font: 400 var(--fs-h3) / 1.3 var(--display); }
+.sw-scoreboard ol, .sw-scoreboard ul { margin: 0; padding: 0; list-style: none; }
+.sw-scoreboard li {
+  display: grid;
+  grid-template-columns: 28px 40px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 900;
-  text-transform: uppercase;
+  gap: var(--s3);
+  min-height: var(--h-row);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
 }
+.sw-scoreboard li img { width: 40px; height: 40px; border-radius: var(--r-control); object-fit: cover; }
+.sw-place { color: var(--muted); font: 500 var(--fs-ui) / 1 var(--figure); }
+.sw-scoreboard li.winner .sw-place { color: var(--gold); }
+.sw-scoreboard-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--s3); min-width: 0; color: var(--text-strong); }
+.sw-scoreboard-name em { color: var(--muted); font: 500 13px / 1 var(--figure); font-style: normal; }
+.sw-scoreboard-score { display: grid; justify-items: end; color: var(--text-strong); font: 500 18px / 1.1 var(--figure); }
+.sw-scoreboard-score em { color: var(--muted); font: 400 var(--fs-ui) / 1.2 var(--ui); font-style: normal; }
+.sw-scoreboard-note { max-width: 68ch; }
+.sw-dropped-out li { display: block; color: var(--text); }
 
-.sw-podium-pill.answering { background: color-mix(in srgb, var(--gold) 16%, transparent); color: var(--gold); }
-.sw-podium-pill.done { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green); }
-.sw-podium-pill.waiting,
-.sw-podium-pill.stopped { background: color-mix(in srgb, var(--text-strong) 8%, transparent); color: var(--muted); }
-/* Sat out: the show went on without it. Red is the one color the other states
-   do not use, and --red holds 6.6:1 or better on every panel. */
-.sw-podium.dropped { border-color: color-mix(in srgb, var(--red) 45%, transparent); opacity: 0.85; }
-.sw-podium-pill.dropped { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
+/* ---- Show effects -----------------------------------------------------
+   Off until switched on in Settings. Every piece is aria-hidden scenery and
+   stands still under reduced motion. */
 
-/* A show nobody finished: the reason, then the way on. */
-.sw-compare-stopped { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
-/* Not the 19px bold that .sw-compare-question gives its paragraphs. */
-.sw-compare-stopped p { margin: 0; font-size: 13px; font-weight: 400; color: var(--muted); }
-
-.sw-podium-pill.answering i {
-  width: 4px; height: 4px; border-radius: 50%; background: var(--gold);
-  animation: sw-dot 1s infinite ease-in-out;
-}
-.sw-podium-pill.answering i:nth-child(2) { animation-delay: 0.2s; }
-.sw-podium-pill.answering i:nth-child(3) { animation-delay: 0.4s; }
-@keyframes sw-dot { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
-
-.sw-show-progress { width: min(640px, 100%); display: flex; flex-direction: column; gap: 6px; }
-.sw-show-progress-head { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
-.sw-show-progress-track { height: 10px; border-radius: 999px; background: color-mix(in srgb, var(--text-strong) 8%, transparent); overflow: hidden; }
-.sw-show-progress-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--pink), var(--gold)); transition: width 0.3s ease; }
-
-/* Winner ------------------------------------------------------------------ */
-.sw-winner {
-  position: relative;
-  /* Not flex: 1. Stretched to the height of the scroll box, everything past
-     that height — the scoreboard's last rows, the two cards under it — was
-     clipped by this element rather than scrolled by its parent, and the step
-     simply ended mid-card with no way down. */
-  flex: 0 0 auto;
-  margin: 0 20px;
-  border-radius: 16px;
-  padding: 30px 28px;
-  background: var(--stage-floor);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 24px;
-  overflow: hidden;
-}
-
-.sw-confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+/* Confetti over the winner: it falls once and fades. */
+.sw-confetti { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
 .sw-confetti-piece {
   position: absolute;
   top: -20px;
@@ -998,528 +610,30 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
 .sw-confetti-piece.blue { background: var(--blue); }
 @keyframes sw-fall { to { transform: translateY(180px) rotate(320deg); opacity: 0; } }
 
-/* The stage runs to the card's edges and takes the card's top padding and
-   the gap under it, so the lighting costs no height. */
-.sw-winner.crowned { padding-top: 0; }
-.sw-winner-stage {
-  align-self: stretch;
-  display: flex;
-  justify-content: center;
-  margin: 0 -28px -24px;
-  padding: 30px 28px 24px;
-}
-.sw-winner-stage .sw-stage-bg { background-position: 18% 40%; }
-.sw-winner-stage > .sw-confetti { z-index: 1; }
-/* The one place text stands on the photo; the scrim holds it dark enough and
-   the shadow is the image recipe's. */
-.sw-winner-stage .sw-winner-copy { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
-
-.sw-winner-reveal { position: relative; z-index: 1; display: flex; align-items: center; gap: 20px; }
-.sw-winner-avatar-wrap { position: relative; animation: sw-drop 600ms ease-out; }
-@keyframes sw-drop { from { transform: translateY(-24px) scale(0.9); opacity: 0; } to { transform: none; opacity: 1; } }
-
-.sw-winner-avatar-wrap img {
-  width: 120px;
-  height: 120px;
-  border-radius: 22px;
-  object-fit: cover;
-  border: 3px solid var(--gold);
-}
-
-/* The winner's halo, lit once the portrait has landed. On its own layer so
-   the glow fades in by opacity rather than by animating a shadow. */
-.sw-winner-avatar-wrap::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 22px;
-  box-shadow: 0 0 28px rgba(var(--gold-rgb), 0.45), 0 0 60px rgba(var(--gold-rgb), 0.2);
-  opacity: 0;
-  animation: sw-halo 600ms ease-out 400ms forwards;
-  pointer-events: none;
-}
-@keyframes sw-halo { to { opacity: 1; } }
-
-.sw-winner-trophy {
-  position: absolute;
-  top: -10px;
-  right: -10px;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  border: 2px solid #27190a;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 78%, white), var(--gold));
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #27190a;
-}
-
-.sw-winner-trophy svg { width: 18px; height: 18px; }
-.sw-winner-copy { display: flex; flex-direction: column; gap: 4px; }
-.sw-winner-copy h2 { margin: 0; font-size: 30px; font-weight: 800; line-height: 1.2; color: var(--text-strong); overflow-wrap: anywhere; }
-.sw-winner-grade { display: inline-flex; align-items: center; gap: 8px; }
-.sw-winner-grade b { font-size: 16px; font-weight: 900; color: var(--gold); }
-.sw-winner-grade em { font-size: 10px; font-style: normal; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-.sw-eyebrow.gold { color: var(--gold); letter-spacing: 0.1em; }
-
-.sw-doors { display: grid; grid-template-columns: repeat(2, minmax(0, 380px)); gap: 18px; }
-
-.sw-door {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px;
-  border-radius: 18px;
-  background: var(--panel);
-}
-
-.sw-door.chat { border: 2px solid color-mix(in srgb, var(--gold) 55%, transparent); box-shadow: 0 0 26px color-mix(in srgb, var(--gold) 14%, transparent); }
-.sw-door.advanced { border: 2px solid color-mix(in srgb, var(--blue) 55%, transparent); box-shadow: 0 0 26px color-mix(in srgb, var(--blue) 12%, transparent); }
-
-.sw-door-img { height: 110px; border-radius: 12px; background-size: cover; background-position: center; opacity: 0.85; }
-.sw-door h3 { margin: 0; font-size: 18px; font-weight: 700; line-height: 1.3; color: var(--text-strong); }
-.sw-door p { margin: 0; font-size: 13px; color: var(--muted); }
-
-.sw-door-btn {
-  margin-top: 4px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 11px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.sw-door-btn svg { width: 15px; height: 15px; }
-.sw-door-btn.gold {
-  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 78%, white), var(--gold));
-  color: #27190a;
-}
-.sw-door-btn.blue {
-  border: 1px solid color-mix(in srgb, var(--blue) 55%, transparent);
-  background: color-mix(in srgb, var(--blue) 14%, transparent);
-  color: color-mix(in srgb, var(--blue) 55%, var(--text-strong));
-}
-
-.sw-winner-links { display: flex; gap: 20px; }
-
-/* Responsive -------------------------------------------------------------- */
-@container steps (max-width: 640px) {
-  /* Out of sight, not out of the accessibility tree. The label is the step
-     button's only name — the number beside it is aria-hidden — so display: none
-     left five nameless buttons wherever the rail was too narrow for them. */
-  .sw-step-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-  .sw-step { padding: 8px 12px; }
-}
-
-@media (max-width: 1280px) {
-  .sw-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .sw-doors { grid-template-columns: minmax(0, 1fr); }
-  .sw-header { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; }
-}
-
-@media (max-width: 900px) {
-  .sw-card-grid { grid-template-columns: minmax(0, 1fr); }
-  .sw-applause { display: none; }
-  .sw-host-strip { flex-wrap: wrap; }
-  .sw-extras { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; }
-  .sw-stage > .live-show-marquee,
-  .sw-winner-stage > .live-show-marquee { inset: 6px; border-radius: 12px; }
-}
-
-/* 200-400% zoom and narrow windows: the rig comes down (bulbs, beam, halo
-   glow), the photo stays because it costs no room, and the portrait goes back
-   to 64px so the card's text keeps its column. */
-@media (max-width: 640px) {
-  .sw-stage > .live-show-marquee,
-  .sw-winner-stage > .live-show-marquee,
-  .sw-podium::before,
-  .sw-winner-avatar-wrap::before { display: none; }
-  .sw-card { grid-template-columns: 64px minmax(0, 1fr); gap: 8px 12px; }
-  .sw-card-avatar { width: 64px; height: 64px; border-radius: 12px; }
-}
-
-/* Below roughly 500px the brand column's 168px mode switch leaves the step rail
-   too little room. The rail centers its pills, so they overflowed their track
-   in both directions: the first pill landed on top of the mode switch and stole
-   its clicks, and the last was clipped away entirely by .sw-shell's
-   overflow: hidden — invisible rather than scrollable. Give the rail its own
-   row and tighten the pills so five of them still fit at 320px. */
-@media (max-width: 640px) {
-  .sw-header {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-    padding: 12px 14px;
-  }
-
-  .sw-step { padding: 8px 10px; }
-  .sw-step-dash { width: 10px; margin: 0 1px; }
-
-  /* The footer's three columns stack. Side by side at 320px — 400% zoom — the
-     Next button started past the window's edge and was cut away with the
-     step's only way forward on it. */
-  .sw-footer {
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: center;
-    padding: 12px 14px;
-  }
-  .sw-footer-right { justify-self: stretch; }
-  .sw-footer .sw-gold-pill {
-    width: 100%;
-    justify-content: center;
-    white-space: normal;
-    text-align: center;
-  }
-}
-
-/* "Choose for me" escape hatch on the Pick step. */
-.sw-choose-for-me {
-  align-self: flex-start;
-  margin: 4px 0 12px;
-}
-
-/* Beginner-clarity additions: safety line, card size badge, winner subtitle,
-   and the collapsible raw benchmark prompt on Compare. */
-/* The "what is this even for" opener, above the scan headline. Sized between
-   the h2 and the muted body copy so it reads as the lead, not a caption. */
-.sw-setup-lede {
-  max-width: 60ch;
-  margin: 0 auto 2px;
-  font-size: 15px;
-  line-height: 1.55;
-  color: var(--text);
-}
-/* A full lineup is a status, not an action. Sized and colored to sit where
-   the Pick button was without impersonating it. */
-.sw-card-full {
-  margin: 0;
-  padding: 10px 12px;
-  font-size: 12px;
-  line-height: 1.4;
-  text-align: center;
-  color: var(--muted);
-  border: 1px dashed var(--line);
-  border-radius: 10px;
-  background: transparent;
-}
-/* Time remaining next to the question count on Compare. Quiet, because it is
-   a forecast that firms up as the run goes. */
-.sw-eta { margin-left: 6px; font-style: normal; color: var(--muted); }
-/* The full result of the show, under the winner. A table would read as data
-   to audit; this is a podium, so places and scores are what carry weight. */
-.sw-scoreboard {
-  width: min(720px, 100%);
-  margin: 22px auto 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.sw-scoreboard ol {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.sw-scoreboard li {
-  display: grid;
-  grid-template-columns: 24px 34px 1fr auto;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
-}
-/* Who sat out: plain lines, not the ranked rows' four-column grid. */
-.sw-dropped-out ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.sw-dropped-out li {
-  display: block;
-  font-size: 13px;
-  color: var(--muted);
-  border-color: color-mix(in srgb, var(--red) 35%, transparent);
-}
-.sw-dropped-out li strong { color: var(--text-strong); }
-.sw-scoreboard li.winner {
-  border-color: var(--gold);
-  background: rgba(240, 190, 90, 0.09);
-}
-.sw-place {
-  font-size: 13px;
-  color: var(--muted);
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-.sw-scoreboard li.winner .sw-place { color: var(--gold); }
-.sw-scoreboard img {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  object-fit: cover;
-}
-.sw-scoreboard-name {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  font-weight: 600;
-}
-/* The raw tag stays available for anyone who wants to look the model up, but
-   never at the same weight as the name they chose it by. */
-.sw-scoreboard-name em {
-  font-style: normal;
-  font-size: 11px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sw-scoreboard-score {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.sw-scoreboard-score em {
-  font-style: normal;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--muted);
-}
-.sw-scoreboard-note { margin: 2px 0 0; font-size: 12px; text-align: center; }
-
-@media (max-width: 620px) {
-  .sw-scoreboard li { grid-template-columns: 20px 28px 1fr auto; gap: 8px; padding: 7px 10px; }
-  .sw-scoreboard img { width: 28px; height: 28px; }
-}
-/* Live scores for the model currently answering.
-   The Compare panel stretches to fill the step, so its bottom third sat empty
-   for the whole run — on the one screen where the user is doing nothing but
-   waiting and wants to know how it is going. */
-.sw-answer-strip {
-  width: min(720px, 100%);
-  margin-top: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.sw-answer-strip-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-.sw-answer-strip-head em {
-  font-style: normal;
-  font-size: 12px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.sw-answer-strip > p { margin: 0; font-size: 12px; }
-.sw-answer-strip ol {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.sw-answer-strip li {
-  min-width: 34px;
-  padding: 5px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  font-size: 12px;
-  font-weight: 700;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  background: color-mix(in srgb, var(--panel) 88%, transparent);
-}
-/* Tone follows the podium colors already used on this screen, and never
-   carries meaning on color alone — the number is always the number. */
-.sw-answer-strip li.good { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
-.sw-answer-strip li.fair { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
-.sw-answer-strip li.poor { color: var(--muted); }
-
-.sw-setup-safety { font-size: 12px; margin-top: -10px; }
-.sw-card-size { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
-/* Tag and cost share a row, wrapping to two only when the tag is long enough
-   to need it. The margins above are for any other place a size line appears. */
-.sw-card-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; margin-top: 2px; }
-.sw-card-meta .sw-card-id,
-.sw-card-meta .sw-card-size { margin-top: 0; }
-/* Note under the size line when one card stands in for several size variants. */
-.sw-card-variants { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); opacity: 0.8; font-style: italic; }
-/* The real pull tag. Monospace so a variant like "-coder" is scannable against
-   the friendly name above it. */
-.sw-card-id {
-  display: block;
-  margin-top: 2px;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
-/* Concrete fit numbers, carried inside the badge so they cannot drift from it. */
-.sw-fit-detail {
-  font-style: normal;
-  font-weight: 600;
-  opacity: 0.8;
-}
-.sw-fit-detail::before { content: '· '; }
-.sw-winner-tag { display: block; font-size: 11px; color: var(--muted); font-style: normal; }
-.sw-winner-why { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--muted); max-width: 46ch; }
-.sw-compare-raw { margin-top: 8px; font-size: 13px; opacity: 0.85; }
-
-/* Share sits with the result, where the impulse to share actually happens —
-   not three clicks away in Advanced Mode. */
-.sw-winner-share {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin-top: 12px;
-  padding: 8px 16px;
-  border: 1px solid var(--line-bright);
-  border-radius: 999px;
-  background: rgba(255, 249, 239, 0.06);
-  color: var(--text-strong);
-  font-family: var(--ui);
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.sw-winner-share:hover {
-  border-color: var(--gold);
-  background: rgba(var(--gold-rgb), 0.14);
-}
-
-.sw-winner-share svg { width: 15px; height: 15px; }
-
-/* Press states. The wizard is the mode built for people least sure they clicked
-   the right thing, and it had no :active feedback anywhere. Kept at the end of
-   the file so these beat the :hover rules, which sit at equal specificity.
-   .sw-gold-pill and .sw-step already transition transform and filter, so those
-   two ease; the rest are instant, which is correct for a press. */
-
-/* Lifts on hover — press returns it to rest. */
-.sw-gold-pill:active:not(:disabled),
-.sw-step.done:active,
-.sw-step.active:active {
-  transform: translateY(0);
-  filter: brightness(0.97);
-}
-
-/* Flat at rest — press pushes it down. */
-.sw-ghost-pill:active:not(:disabled),
-.sw-chip:active,
-.sw-card-btn:active:not(:disabled),
-.sw-link:active,
-.sw-winner-share:active {
-  transform: translateY(1px);
-  filter: brightness(0.95);
-}
-
-/* Studio extras ---------------------------------------------------------------
-   Theme music and show effects: both off until switched on beside the host.
-   Everything below the switches is scenery for the effects, and every piece
-   of it is aria-hidden and stands still under reduced motion. */
-
-/* The switches sit in the room to the right of the host's bubble, stacked, so
-   they cost no height on any step. */
-.sw-extras {
-  margin-left: auto;
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-
-.sw-extra {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 32px;
-  padding: 6px 14px 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}
-
-.sw-extra svg { width: 14px; height: 14px; }
-.sw-extra:hover { border-color: var(--line-bright); color: var(--text-strong); }
-
-/* On: the show's pink, and the little bulb beside it lit. */
-.sw-extra[aria-pressed="true"] {
-  border-color: var(--pink);
-  background: rgba(var(--pink-rgb), 0.14);
-  color: color-mix(in srgb, var(--pink) 70%, var(--text-strong));
-}
-
-.sw-extra-bulb {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--text-strong) 18%, transparent);
-}
-
-.sw-extra[aria-pressed="true"] .sw-extra-bulb { background: var(--gold); }
-
 /* The APPLAUSE sign: an unlit prop in the stage's corner until a contestant
-   finishes a turn. */
+   finishes a turn. Decoration, so it may sit below the 14px floor. */
 .sw-applause {
   position: absolute;
   top: 28px;
   left: 34px;
   z-index: 2;
   padding: 5px 12px;
-  border-radius: 6px;
   border: 1px solid rgba(255, 249, 239, 0.14);
+  border-radius: 6px;
   background: rgba(0, 0, 0, 0.35);
   color: rgba(255, 249, 239, 0.24);
-  font-family: var(--display);
-  font-size: 11px;
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
+  font: 400 13px / 1 var(--display);
+  letter-spacing: 0.18em;
   pointer-events: none;
 }
-
 .sw-applause.lit {
   border-color: var(--pink);
   background: color-mix(in srgb, var(--pink) 55%, #3a0a14);
   color: #fff3e0;
-  text-shadow: 0 0 8px rgba(255, 220, 200, 0.9);
   box-shadow: 0 0 18px rgba(var(--pink-rgb), 0.7);
   animation: sw-applause-blink 400ms step-end 6;
 }
-
-/* On the winner's stage it waits for the curtains. */
 .sw-winner-stage .sw-applause.lit { animation-delay: 1100ms; }
-
 @keyframes sw-applause-blink { 50% { opacity: 0.35; } }
 
 /* The contestants walk on, one after another. */
@@ -1527,19 +641,10 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   animation: sw-walk-on 460ms cubic-bezier(0.2, 0.9, 0.3, 1.25) backwards;
   animation-delay: calc(var(--i, 0) * 140ms);
 }
-
 @keyframes sw-walk-on { from { opacity: 0; transform: translateY(36px) scale(0.92); } }
 
-/* Red velvet over the winner's stage, parting once. The folds come from the
-   show's pink, so a theme's curtain matches its stage. */
-.sw-curtains {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  display: flex;
-  pointer-events: none;
-}
-
+/* Red velvet over the winner's stage, parting once. */
+.sw-curtains { position: absolute; inset: 0; z-index: 3; display: flex; pointer-events: none; }
 .sw-curtains i {
   flex: 1;
   background:
@@ -1551,25 +656,15 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   box-shadow: inset 0 -8px 0 rgba(var(--gold-rgb), 0.6);
   animation: sw-curtain-left 1000ms cubic-bezier(0.65, 0, 0.35, 1) 250ms forwards;
 }
-
 .sw-curtains i + i { animation-name: sw-curtain-right; }
-
 @keyframes sw-curtain-left { to { transform: translateX(-101%); } }
 @keyframes sw-curtain-right { to { transform: translateX(101%); } }
-
 /* Behind the curtains the winner waits to land, and the halo waits for it. */
 .sw-winner-stage.curtained .sw-winner-avatar-wrap { animation-delay: 900ms; animation-fill-mode: backwards; }
 .sw-winner-stage.curtained .sw-winner-avatar-wrap::before { animation-delay: 1500ms; }
 
 /* Hearts from a Pick button, as the pick lands. */
-.sw-heart-burst {
-  position: absolute;
-  left: 50%;
-  bottom: 30px;
-  z-index: 3;
-  pointer-events: none;
-}
-
+.sw-heart-burst { position: absolute; right: 48px; bottom: 30px; z-index: 3; pointer-events: none; }
 .sw-heart-burst i {
   position: absolute;
   left: 0;
@@ -1581,324 +676,71 @@ button.sw-lineup-slot.filled:focus-visible .sw-lineup-remove { opacity: 1; }
   opacity: 0;
   animation: sw-heart-float 900ms ease-out forwards;
 }
-
 .sw-heart-burst i:nth-child(1) { --x: -46px; --r: -18deg; }
 .sw-heart-burst i:nth-child(2) { --x: -20px; --r: -6deg; font-size: 20px; animation-delay: 60ms; }
 .sw-heart-burst i:nth-child(3) { --x: 4px; --r: 4deg; font-size: 24px; animation-delay: 30ms; }
 .sw-heart-burst i:nth-child(4) { --x: 28px; --r: 10deg; font-size: 18px; animation-delay: 90ms; }
 .sw-heart-burst i:nth-child(5) { --x: 50px; --r: 20deg; animation-delay: 120ms; }
-
 @keyframes sw-heart-float {
   0% { opacity: 0; transform: translate(-50%, 0) scale(0.5); }
   20% { opacity: 1; }
   100% { opacity: 0; transform: translate(calc(-50% + var(--x)), -80px) scale(1.1) rotate(var(--r)); }
 }
 
-/* Reduced motion.
-   This file had no such block, so every wizard animation ran regardless of the
-   OS setting — in the mode built for the least technical users. State-carrying
-   motion is replaced with a static equivalent; decoration is removed. */
+/* ---- Narrow windows --------------------------------------------------- */
+/* Five contestants stay on one line down to the 1024px minimum window. */
+@media (max-width: 1280px) {
+  .sw-podiums { gap: var(--s4); }
+  .sw-podium { width: 148px; }
+  .sw-compare-inner { gap: var(--s4); min-height: 0; padding: var(--s5) var(--s5) var(--s4); }
+}
+
+@media (max-width: 920px) {
+  .sw-content { padding: var(--s3) var(--s4) var(--s4); }
+  .sw-host-line { font-size: 19px; }
+  .sw-winner-reveal { padding: 36px var(--s5) var(--s5); }
+  .sw-winner-name h2 { font-size: 44px; }
+  .sw-winner-grade b { font-size: 44px; }
+  .sw-winner-links { margin-left: 0; }
+}
+
+@media (max-width: 640px) {
+  .sw-host-avatar { width: 44px; height: 44px; }
+  .sw-host-line { font-size: 17px; }
+  .sw-setup h2 { font-size: 30px; }
+  .sw-found-row { grid-template-columns: 10px minmax(0, 1fr); }
+  .sw-found-value { grid-column: 2; }
+  .sw-footer { flex-wrap: wrap; padding: var(--s3) var(--s4); gap: var(--s3); }
+  .sw-lineup-tray { order: -1; flex-basis: 100%; justify-content: flex-start; }
+  .sw-footer-right { margin-left: auto; }
+  .sw-compare-inner { padding: var(--s5) var(--s4); }
+  .sw-podium { width: 130px; }
+  .sw-winner-avatar-wrap img { width: 128px; height: 128px; }
+}
+
+/* ---- Reduced motion ----------------------------------------------------
+   State-carrying motion becomes its static end state; decoration goes. */
 @media (prefers-reduced-motion: reduce) {
   /* The skeleton keeps its dimmed placeholder look without breathing. */
-  .sw-card-skeleton {
-    animation: none;
-    opacity: 0.5;
-  }
-
-  /* "Answering" dots: still the indicator, just no longer blinking. */
-  .sw-podium-pill.answering i {
-    animation: none;
-    opacity: 1;
-  }
-
-  /* The winner still arrives, just without the drop. */
-  .sw-winner-avatar-wrap {
-    animation: none;
-  }
-
-  /* Confetti falls once and fades; held still it would sit frozen mid-air at
-     70% opacity, so remove it from the layout entirely. */
-  .sw-confetti-piece {
-    animation: none;
-    display: none;
-  }
-
-  /* The halo is simply on; the beam and the dimming switch without a fade;
-     a picked portrait takes its seat without the pop. */
-  .sw-winner-avatar-wrap::before {
-    animation: none;
-    opacity: 1;
-  }
-
-  .sw-podium::before,
-  .sw-stage-bg {
-    transition: none;
-  }
-
-  .sw-lineup-slot.filled {
-    animation: none;
-  }
-
+  .sw-card-skeleton { animation: none; opacity: 0.5; }
+  .sw-host-explain { animation: none; }
+  /* The winner still arrives, just without the drop; the halo is simply on. */
+  .sw-winner-avatar-wrap { animation: none; }
+  .sw-winner-avatar-wrap::before { animation: none; opacity: 1; }
+  /* Confetti held still would hang mid-air, so it goes. */
+  .sw-confetti-piece { animation: none; display: none; }
+  .sw-podium,
+  .sw-stage-bg,
+  .sw-dl-track i,
+  .sw-show-progress-track i { transition: none; }
+  .sw-lineup-slot.filled { animation: none; }
   /* Show effects that are only motion go entirely; the applause sign is
      simply lit, and the contestants are simply there. */
   .sw-curtains,
-  .sw-heart-burst {
-    display: none;
-  }
-
+  .sw-heart-burst { display: none; }
   .sw-podiums.walk-on .sw-podium,
   .sw-applause.lit,
   .sw-curtains i,
   .sw-curtains i + i,
-  .sw-heart-burst i {
-    animation: none;
-  }
-
-  /* The 1px hover lift and press settle are deliberately left alone. They are
-     an order of magnitude below anything that triggers motion sensitivity, and
-     removing them would cost real feedback for no accessibility gain. */
-}
-
-/* The message channel Simple Mode never had. Advanced renders these in the
-   Ticker; without this the mode most beginners use is mute by construction. */
-.sw-notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 0 0 14px;
-  padding: 12px 14px;
-  border: 1px solid rgba(var(--gold-rgb), 0.42);
-  border-radius: 12px;
-  background: rgba(var(--gold-rgb), 0.10);
-  color: var(--text);
-}
-
-.sw-notice svg {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
-  color: var(--gold);
-}
-
-.sw-notice p {
-  flex: 1;
-  margin: 0;
-  font-size: 0.9rem;
-  line-height: 1.45;
-}
-
-.sw-notice button {
-  flex: none;
-  padding: 4px 12px;
-  border: 1px solid rgba(var(--gold-rgb), 0.5);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--gold);
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.sw-notice button:hover { background: rgba(var(--gold-rgb), 0.16); }
-
-/* The one that does something, next to the one that only dismisses.
-
-   Given weight because it is the whole point of the notice: "Got it" closes a
-   message about a blocked download, and this fixes it. Styled as a filled
-   button rather than a second outline so the difference is visible before the
-   labels are read. */
-.sw-notice-fix {
-  background: rgba(var(--gold-rgb), 0.9);
-  border-color: transparent;
-  color: #1a1206;
-}
-
-.sw-notice-fix:hover { background: var(--gold); }
-
-/* ---------------------------------------------------------------------------
-   The Host as the explainer.
-
-   He is bigger and louder than he was, because he is now the answer to "what
-   does that mean" as well as the narrator — and because a beginner needs one
-   obvious place to look rather than a second panel to notice.
-   --------------------------------------------------------------------------- */
-.sw-host-strip {
-  align-items: center;
-  gap: 18px;
-}
-
-.sw-host-avatar {
-  width: 96px;
-  height: 96px;
-  border-radius: 20px;
-  border: 2px solid rgba(var(--gold-rgb), 0.45);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
-  transition: border-color 140ms ease, transform 140ms ease;
-}
-
-.sw-host-bubble {
-  flex: 1;
-  min-height: 104px;
-  font-size: 1.02rem;
-  line-height: 1.55;
-  transition: border-color 140ms ease, background 140ms ease;
-}
-
-.sw-host-bubble p { margin: 0; }
-.sw-host-bubble p + p { margin-top: 8px; }
-
-/* Answering a question rather than narrating the step. */
-.sw-host-strip.explaining .sw-host-avatar {
-  border-color: var(--gold);
-  transform: scale(1.03);
-}
-
-.sw-host-strip.explaining .sw-host-bubble {
-  border-color: rgba(var(--gold-rgb), 0.55);
-  background: rgba(var(--gold-rgb), 0.09);
-}
-
-.sw-host-strip.explaining .sw-host-bubble > span { color: var(--gold); }
-
-.sw-host-because { color: var(--muted); }
-
-.sw-host-also {
-  font-size: 0.86rem;
-  color: var(--muted);
-  opacity: 0.85;
-}
-
-/* A term reads as part of the sentence. An unstyled button renders as a white
-   box mid-paragraph and looks like something to type into. */
-.sw-explain-term {
-  all: unset;
-  display: inline;
-  position: relative;
-  cursor: help;
-  color: var(--gold);
-  border-bottom: 1px dotted currentColor;
-  white-space: normal;
-}
-
-/* A taller hit area than the 15-22px line it sits on, without moving the
-   underline or the line: the pad is invisible and takes no space. */
-.sw-explain-term::after {
-  content: "";
-  position: absolute;
-  inset: -5px -2px;
-}
-
-.sw-explain-term:hover { border-bottom-style: solid; }
-
-.sw-explain-term:focus-visible {
-  outline: 2px solid var(--green);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-
-@media (max-width: 900px) {
-  .sw-host-avatar { width: 64px; height: 64px; }
-  .sw-host-bubble { min-height: 0; font-size: 0.95rem; }
-}
-
-/* Standalone text controls need a hittable box; "Check again" measured 18px. */
-.sw-link {
-  min-height: 24px;
-  display: inline-flex;
-  align-items: center;
-}
-
-/* Before the show: what matters more. The one gold thing is the button that
-   starts it, so the card itself stays neutral. */
-.sw-balance-card {
-  width: min(520px, 100%);
-  max-height: calc(100vh - 36px);
-  overflow-y: auto;
-  display: grid;
-  gap: 12px;
-  padding: 20px;
-  border: 1px solid color-mix(in srgb, var(--text-strong) 14%, transparent);
-  border-radius: 18px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-}
-
-.sw-balance-card h2 {
-  margin: 0;
-  color: var(--text-strong);
-  font-size: 20px;
-  font-weight: 900;
-  text-wrap: balance;
-}
-
-.sw-balance-card p {
-  margin: 0;
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.sw-balance-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-/* Who made it, and whether it is already here. Four Gemma cards said nothing
-   about Google, and "already on your PC" was gray small print beside a bright
-   download size on the next card along. */
-.sw-card-maker {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.sw-card-maker em {
-  padding: 1px 4px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  color: var(--blue);
-  font-size: 9px;
-  font-style: normal;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-}
-
-.sw-card-installed-badge {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(var(--green-rgb), 0.16);
-  color: var(--green);
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.sw-card-installed-badge svg {
-  width: 11px;
-  height: 11px;
-}
-
-.sw-card.installed {
-  border-color: rgba(var(--green-rgb), 0.34);
-}
-
-/* The door to everything made here, under the board that shows the last run. */
-.sw-maker-gallery {
-  display: flex;
-  justify-content: center;
-  padding: 4px 0 8px;
+  .sw-heart-burst i { animation: none; }
 }

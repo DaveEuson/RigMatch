@@ -79,13 +79,13 @@ async function run(url) {
     // Wait for the run to have actually produced something rather than for a
     // fixed duration, and stop early if it finishes and moves on: a fixed
     // sleep here photographed the Winner screen and filed it under Compare.
-    if (step === 'compare') {
+    if (step === 'show') {
       let shot = false;
       for (let tick = 0; tick < 40; tick += 1) {
         await page.waitForTimeout(1000);
         // Keep waiting after the mid-run shot: the run finishing is what
         // unlocks Winner, and leaving early strands the tour here.
-        if ((await currentStep(page)) !== 'compare') break;
+        if ((await currentStep(page)) !== 'show') break;
         if (!shot && (await page.locator('.sw-eta').count()) > 0) {
           screens.push({ ...(await capture(page, 'compare-midrun')), note: `${tick + 1}s into the run` });
           shot = true;
@@ -93,10 +93,13 @@ async function run(url) {
       }
     }
 
-    const next = page.locator('.sw-footer-right button:not([disabled])').last();
+    // Setup's one button is on the page; Pick and Download have the footer.
+    const next = page.locator('.sw-footer-right button:not([disabled]), .sw-setup .btn-gold:not([disabled])').last();
     if ((await next.count()) === 0) break;
     const before = step;
     await next.click().catch(() => {});
+    // Starting the show opens the run sheet first.
+    if (await page.locator('.run-sheet').count()) await page.locator('.run-sheet .btn-gold').click().catch(() => {});
     await page.waitForFunction(
       (prev) => document.querySelector('.sw-step.active .sw-step-label')?.textContent?.trim().toLowerCase() !== prev,
       before,
@@ -157,7 +160,7 @@ async function tourDownload(page, seen) {
 
   // Free a slot, then take a card that advertises a download rather than
   // "Already on your PC".
-  const drop = page.locator('.sw-card.picked button', { hasText: /click to remove/i }).first();
+  const drop = page.locator('.sw-card.picked button', { hasText: /remove/i }).first();
   if ((await drop.count()) === 0) return [];
   await drop.click();
   await page.waitForTimeout(300);
@@ -219,22 +222,19 @@ async function tourAdvanced(page) {
   // in". Say which it was.
   await page.getByLabel('Advanced Mode').click();
   try {
-    await page.waitForSelector('.side-menu-item', { timeout: 10000 });
+    await page.waitForSelector('.top-tab', { timeout: 10000 });
   } catch {
-    throw new Error('switched to Advanced Mode but no side-menu items rendered — '
+    throw new Error('switched to Advanced Mode but no tabs rendered — '
       + `current step was "${await currentStep(page)}"`);
   }
 
-  // The item's own aria-label, not its text: the rendered button concatenates
-  // its number, title, description and badge into "1ModelsBrowse, test,
-  // compare13", which makes a useless slug and an unreadable report.
-  const labels = await page.locator('.side-menu-item').evaluateAll(
-    (nodes) => nodes.map((node) => node.getAttribute('aria-label') || ''),
-  );
+  // The tab's label span, not the whole button, which also holds a count.
+  const labels = [...(await page.locator('.top-tab > span:not(.top-tab-count)').allTextContents()), 'Settings'];
   for (const [index, raw] of labels.entries()) {
     const label = raw.replace(/\s+/g, ' ').trim();
     const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    await page.locator('.side-menu-item').nth(index).click();
+    if (label === 'Settings') await page.locator('.top-bar-settings').click();
+    else await page.locator('.top-tab').nth(index).click();
     // The panel swaps in place, so there is no navigation to await. Settle on
     // the network instead of a fixed sleep.
     await page.waitForLoadState('networkidle').catch(() => {});

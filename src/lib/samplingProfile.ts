@@ -17,6 +17,8 @@
  * behaves no worse than it did before.
  */
 
+import { recipeForFile } from './pictureRecipes.ts';
+
 export type SamplingProfile = {
   steps: number;
   cfg: number;
@@ -68,6 +70,10 @@ function bareName(checkpoint: string): string {
 export function samplingProfileFor(checkpoint: string): SamplingProfile {
   const name = bareName(checkpoint ?? '');
   if (!name) return STANDARD_PROFILE;
+  // A three-file model's settings are known exactly; "z_image_turbo" would
+  // otherwise match "turbo" and run at 4 steps where it is made for 8.
+  const recipe = recipeForFile(checkpoint)?.recipe;
+  if (recipe) return { steps: recipe.steps, cfg: recipe.cfg, reason: recipe.reason };
 
   const hit = DISTILLED
     .filter((entry) => name.includes(entry.match))
@@ -76,14 +82,4 @@ export function samplingProfileFor(checkpoint: string): SamplingProfile {
   return hit ? hit.profile : STANDARD_PROFILE;
 }
 
-/**
- * True when the checkpoint is one of the distilled families.
- *
- * Kept separate from the profile because callers that compare models need to
- * know that two runs were measured under different settings — a four-step
- * render and a twenty-step render are not the same unit of work, and speed
- * scored per step flatters the slower one.
- */
-export function isDistilledCheckpoint(checkpoint: string): boolean {
-  return samplingProfileFor(checkpoint) !== STANDARD_PROFILE;
-}
+

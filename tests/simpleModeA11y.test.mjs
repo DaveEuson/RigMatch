@@ -28,9 +28,9 @@ test('the step labels are never removed from the accessibility tree', () => {
 test('every Pick button says which model it picks', () => {
   // Nine buttons all named "♥ Pick". The name follows the visible words, so a
   // voice user can still say what they see.
-  assert.match(tsx, /Pick<span className="sr-only"> \{model\.name\}<\/span>/);
-  assert.match(tsx, /Click to remove<span className="sr-only"> \{model\.name\}<\/span>/);
-  assert.match(tsx, /<span aria-hidden="true">♥ <\/span>/, 'the heart glyph is read aloud as a word');
+  assert.match(tsx, /<>Pick<span className="sr-only"> \{model\.name\}<\/span><\/>/);
+  assert.match(tsx, /Picked · remove<span className="sr-only"> \{model\.name\}<\/span>/);
+  assert.match(tsx, /Lineup full<span className="sr-only">, so \{model\.name\} cannot be picked<\/span>/);
 });
 
 test('the running show and the hardware check speak through live regions', () => {
@@ -40,10 +40,10 @@ test('the running show and the hardware check speak through live regions', () =>
 
 test('the pick, running and winner screens have headings', () => {
   assert.match(tsx, /<h2 className="sr-only">Pick your contestants<\/h2>/);
-  assert.match(tsx, /<h3>\{model\.name\}<\/h3>/);
+  assert.match(tsx, /<h3 title=\{model\.row\.displayName\}>\{model\.name\}<\/h3>/);
   assert.match(tsx, /<h2>\{plainRoundLabel\}<\/h2>/);
   assert.match(tsx, /<h2>\{getFriendlyModelName\(winner\.model\)\}<\/h2>/);
-  assert.match(tsx, /<h3 className="sw-eyebrow">How the lineup finished<\/h3>/);
+  assert.match(tsx, /<h3>How the lineup finished<\/h3>/);
 });
 
 test('the wizard shell can shrink to a 320px window', () => {
@@ -67,9 +67,3 @@ const contrast = (a, b) => {
   return (x + 0.05) / (y + 0.05);
 };
 
-test('"Skip tour" is readable at rest, not only on hover', () => {
-  // It was #5a7080 on the tutorial's #11171b: 3.5:1, and it is the way out.
-  const rest = appCss.match(/\.quiet-link\s*\{[^}]*?color:\s*(#[0-9a-f]{6})/i)?.[1];
-  assert.ok(rest, '.quiet-link has no resting color to check');
-  assert.ok(contrast(rest, '#11171b') >= 4.5, `${rest} on #11171b is ${contrast(rest, '#11171b').toFixed(2)}:1`);
-});

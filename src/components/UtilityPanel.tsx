@@ -1,7 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { matchDisplayLabel } from '../lib/goals';
 import type { UtilityPanelId } from '../types';
-import robotScorecardCeremony from '../assets/robot-scorecard-ceremony.webp';
 import { releaseNotes } from '../data/releaseNotes';
 import type { ThemeId, UiMode } from '../lib/appConfig';
 import { APP_VERSION, BUY_ME_A_COFFEE_URL } from '../lib/appConfig';
@@ -17,20 +16,17 @@ import { MATCH_GRADE_BAND_ROWS } from '../lib/scoreReference';
 import type { SettingsSectionId } from '../lib/settingsSections';
 import { buildSettingsRail } from '../lib/settingsSections';
 import { formatMatchScore, isLegacyScore, scoreDrift, scoreDriftLabel } from '../lib/scoring';
-import { balanceLabel, balanceSplit } from '../lib/balance';
-import { describeLabAccuracy, rankCoding, rankLabList, type LabChannel } from '../lib/channelWinners';
+import { balanceSplit } from '../lib/balance';
+import { describeLabAccuracy, rankLabList, type LabChannel } from '../lib/channelWinners';
 import type { AdvancedLabResult } from '../lib/labResults';
 import { workbenchById, type Workbench } from '../lib/workbench';
 import { useDialog } from '../lib/useDialog';
-import type { AppLogEntry, AutoUpdateStatus, ChatMessage, ModelRow, NetworkHost, OllamaStatus, SystemProfile, TestedModelScore, UpdateChannel, UpdateCheckResponse } from '../types';
+import type { AutoUpdateStatus, ModelRow, NetworkHost, OllamaStatus, SystemProfile, TestedModelScore, UpdateChannel, UpdateCheckResponse } from '../types';
 import { ClosetSection } from './ClosetSection';
 import { ComfySettings } from './ComfySettings';
-import { BrandMark } from './CommonChrome';
 import { GoalsSummary } from './GoalsSummary';
 import { HistoryTimeline } from './HistoryTimeline';
 import { HowWeScoreSection } from './HowWeScoreSection';
-import { LogEntry } from './LogEntry';
-import { RomanceArtBanner } from './ScoreVisuals';
 import { SettingsSection } from './SettingsSection';
 import { ModelDemoChips } from './SkillDemoViewers';
 import { ThemePicker } from './ThemePicker';
@@ -42,11 +38,9 @@ import { BalanceFader } from './BalanceFader';
 import { CodingBoard } from './CodingBoard';
 import { LabStandings } from './LabStandings';
 import { ReleaseNotes, UpdateCenter } from './UpdateCenter';
-// `History` must be imported explicitly: without it the name resolves to the
-// DOM's global History constructor, which is a real value, so nothing errors
-// until it is used as a JSX component.
-import { Bot, Bug, Check, ChevronRight, Coffee, Copy, Download, ExternalLink, FolderOpen, HelpCircle, History, RefreshCw, Settings, Share2, Trash2, Trophy, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Bug, ChevronRight, Coffee, Copy, Download, ExternalLink, RefreshCw, Trash2, Trophy, X } from 'lucide-react';
+import { getModelAvatarSrc } from '../lib/modelAvatars';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AllDemosButton } from './SkillDemoViewers';
 
 /** Every kind of test: the All channel, and any caller from before channels. */
@@ -74,22 +68,19 @@ export function UtilityPanel({
   uiMode,
   selectedGoals,
   installedRows,
-  appLogs,
   modelScores,
-  chatMessages,
   updateChannel,
   updateCheck,
   isCheckingUpdates,
   logPath,
-  isLoadingLogs,
   onThemeChange,
   onUiModeChange,
   onEditGoals,
+  onShowWelcome,
+  sectionRequest,
+  topMatch,
   onDeleteModel,
   onRefreshLogs,
-  onCopyLogs,
-  onClearLogs,
-  onOpenLogsFolder,
   onClearScore,
   onClearAllScores,
   onClearAllData,
@@ -117,22 +108,22 @@ export function UtilityPanel({
   uiMode: UiMode;
   selectedGoals: GoalId[];
   installedRows: ModelRow[];
-  appLogs: AppLogEntry[];
   modelScores: Record<string, TestedModelScore>;
-  chatMessages: ChatMessage[];
   updateChannel: UpdateChannel;
   updateCheck: UpdateCheckResponse | null;
   isCheckingUpdates: boolean;
   logPath: string;
-  isLoadingLogs: boolean;
   onThemeChange: (themeId: ThemeId) => void;
   onUiModeChange: (mode: UiMode) => void;
   onEditGoals: () => void;
+  /** Opens the first-run welcome again. */
+  onShowWelcome: () => void;
+  /** A section to open, from a link elsewhere; `at` makes a repeat request count. */
+  sectionRequest?: { id: SettingsSectionId; at: number } | null;
+  /** The Top Match card, shown at the head of the Scorecards. */
+  topMatch?: ReactNode;
   onDeleteModel: (row: ModelRow) => void;
   onRefreshLogs: () => void;
-  onCopyLogs: () => void;
-  onClearLogs: () => void;
-  onOpenLogsFolder: () => void;
   onClearScore: (model: string) => void;
   onClearAllScores: () => void;
   onClearAllData: () => void;
@@ -153,7 +144,6 @@ export function UtilityPanel({
   channelBalanceLock?: string | null;
   labResults: Record<string, AdvancedLabResult>;
 }) {
-  const Icon = panel === 'history' ? History : Settings;
 
   // Load the log when this panel opens.
   //
@@ -193,11 +183,6 @@ export function UtilityPanel({
     () => (labChannel ? rankLabList(Object.values(labResults), labChannel, channelRankAt) : []),
     [labChannel, labResults, channelRankAt],
   );
-  const codingRanked = useMemo(
-    () => (channel === 'code' ? rankCoding(rankedModelScores, channelBalance).ranked.length : 0),
-    [channel, rankedModelScores, channelBalance],
-  );
-  const savedChatMessageCount = Math.max(0, chatMessages.length - 1);
   const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
   const scoreExplainerRef = useDialog<HTMLDivElement>(() => setScoreExplainerOpen(false));
   const [scoreCopied, setScoreCopied] = useState(false);
@@ -205,67 +190,25 @@ export function UtilityPanel({
   const [isCheckingOllamaUpdate, setIsCheckingOllamaUpdate] = useState(false);
 
   /**
-   * Settings opens on Preferences and nothing else, as it always has. The rail
-   * is what makes that safe: with a contents list on screen, a closed section
-   * is no longer a section you have to remember exists.
-   */
-  const [openSections, setOpenSections] = useState<Set<SettingsSectionId>>(() => new Set(['interface']));
-  const pendingScrollRef = useRef<SettingsSectionId | null>(null);
-  const toggleSection = useCallback((id: SettingsSectionId) => {
-    setOpenSections((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-  /**
-   * From the rail, a section always opens — it never toggles shut.
+   * Settings shows one section at a time and opens on Preferences. The rail
+   * picks the section; picking a new one starts the column at its top, and
+   * picking the one already showing scrolls back up to its heading.
    *
-   * Clicking a contents entry means "take me there". Having it close the thing
-   * you just asked for, because it happened to be open already, is the same
-   * class of bug as a button that answers off-screen: you click, and the screen
-   * moves the wrong way.
+   * The column is scrolled directly rather than with scrollIntoView, which
+   * also scrolls every ancestor and pushed the top bar off the window.
    */
-  /**
-   * Instant, not smooth.
-   *
-   * `behavior: 'smooth'` is a no-op in the Chromium this ships on — measured:
-   * scrollIntoView and scrollTo both leave scrollTop at 0, while 'auto' lands
-   * exactly. A nicety that silently does nothing is worse than no nicety at
-   * all here, because the thing it silently fails to do is the rail's whole
-   * job. Instant also happens to be what someone who asked for reduced motion
-   * wanted, so there is nothing left to branch on.
-   */
-  const scrollToSection = useCallback((id: SettingsSectionId) => {
-    document.getElementById(`settings-${id}`)
-      ?.scrollIntoView({ behavior: 'auto', block: 'start' });
-  }, []);
-  const openSectionFromRail = useCallback((id: SettingsSectionId) => {
-    if (openSections.has(id)) {
-      // Already open, so the DOM is already the right height — scroll now
-      // rather than waiting for a render that will not happen.
-      scrollToSection(id);
-      return;
-    }
-    pendingScrollRef.current = id;
-    setOpenSections((current) => new Set(current).add(id));
-  }, [openSections, scrollToSection]);
-  /**
-   * The scroll waits for the commit, it does not race it.
-   *
-   * The first version scrolled inside a requestAnimationFrame right after
-   * setState, which fires before React has rendered the newly opened section —
-   * so the click opened the right thing and left the view exactly where it was,
-   * which is the failure the rail exists to stop. An effect runs after the DOM
-   * is updated, so the section is open and at its real height by then.
-   */
+  const [openSection, setOpenSection] = useState<SettingsSectionId>('interface');
+  const settingsBodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const pending = pendingScrollRef.current;
-    if (!pending) return;
-    pendingScrollRef.current = null;
-    scrollToSection(pending);
-  }, [openSections, scrollToSection]);
+    settingsBodyRef.current?.scrollTo({ top: 0 });
+  }, [openSection]);
+  useEffect(() => {
+    if (sectionRequest) setOpenSection(sectionRequest.id);
+  }, [sectionRequest]);
+  const openSectionFromRail = useCallback((id: SettingsSectionId) => {
+    if (id === openSection) settingsBodyRef.current?.scrollTo({ top: 0 });
+    else setOpenSection(id);
+  }, [openSection]);
   const installedSizeGb = useMemo(
     () => installedRows.reduce((total, row) => total + (row.sizeGb ?? 0), 0),
     [installedRows],
@@ -273,12 +216,11 @@ export function UtilityPanel({
   const { earned: earnedAchievements } = useAchievements();
   const earnedCount = ACHIEVEMENTS.filter((a) => earnedAchievements[a.id]).length;
   const settingsRail = useMemo(() => buildSettingsRail({
-    interface: `${uiMode === 'beginner' ? 'Simple' : 'Advanced'} Mode · ${getThemeLabel(themeId)}`,
-    achievements: `${earnedCount} of ${ACHIEVEMENTS.length} earned`,
-    storage: installedRows.length > 0
-      ? `${installedRows.length} installed · ${formatGb(installedSizeGb)}`
-      : 'Nothing installed yet',
-    providers: ollama.version ? `Ollama v${ollama.version}` : 'Ollama not detected',
+    // The mode is on the top bar's switch, so the rail names the theme.
+    interface: getThemeLabel(themeId),
+    achievements: `${earnedCount} of ${ACHIEVEMENTS.length}`,
+    storage: installedRows.length > 0 ? formatGb(installedSizeGb) : 'Empty',
+    providers: ollama.version ? `Ollama ${ollama.version}` : 'No Ollama',
     updates: `v${APP_VERSION}`,
     // ComfyUI, Support and Advanced get no status line: this panel does not
     // hold a true one for them, and a filler word would read as information.
@@ -313,72 +255,28 @@ export function UtilityPanel({
 
   // The run log belongs to every channel: a failed test is a failed test
   // whatever it was testing.
-  const logConsole = (
-    <section className="log-console advanced-only" aria-label="Run logs">
-      <div className="log-console-head">
-        <div>
-          <span>Run Logs</span>
-          <strong>{isLoadingLogs ? 'Loading' : `${appLogs.length} entries`}</strong>
-          <em>{logPath || 'Log file not created yet'}</em>
-        </div>
-        <div className="log-actions">
-          <button type="button" className="mini-button outline icon-only" onClick={onRefreshLogs} title="Refresh logs" aria-label="Refresh logs">
-            <RefreshCw className={isLoadingLogs ? 'spin' : ''} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="mini-button outline icon-only"
-            onClick={onCopyLogs}
-            disabled={!appLogs.length}
-            title={appLogs.length ? 'Copy logs' : 'Nothing to copy — the log is empty'}
-            aria-label={appLogs.length ? 'Copy logs' : 'Copy logs — nothing to copy, the log is empty'}
-          >
-            <Copy aria-hidden="true" />
-          </button>
-          <button type="button" className="mini-button outline icon-only" onClick={onOpenLogsFolder} title="Open log folder" aria-label="Open log folder">
-            <FolderOpen aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="mini-button outline"
-            onClick={onClearLogs}
-            disabled={!appLogs.length}
-            title={appLogs.length ? 'Clear the run log' : 'Nothing to clear — the log is empty'}
-          >
-            Clear
-          </button>
-        </div>
-      </div>
-
-      <div className="log-list">
-        {appLogs.length ? (
-          appLogs.slice(0, 12).map((entry) => (
-            <LogEntry key={entry.id} entry={entry} />
-          ))
-        ) : (
-          <div className="utility-empty">
-            <strong>No logs yet</strong>
-            <span>Failed tests and desktop bridge errors will appear here.</span>
-          </div>
-        )}
-      </div>
-    </section>
-  );
 
   return (
     <section
       className={panel === 'history' ? 'panel utility-panel history-panel panel-focused' : 'panel utility-panel panel-focused'}
       aria-label={`${getNavLabel(panel)} panel`}
     >
-      <div className="utility-title">
-        <div>
-          <Icon aria-hidden="true" />
+      {panel === 'history' ? (
+        <header className="page-head">
           <div>
-            <span>Panel</span>
-            <strong>{getNavLabel(panel)}</strong>
+            <h2>Results</h2>
+            <p>
+              {labChannel
+                ? `${labBoard.length} saved ${LAB_NOUN[labChannel]}${labBoard.length === 1 ? '' : 's'} on ${workbench.label.toLowerCase()}, ranked by what matters to you.`
+                : rankedModelScores.length > 0
+                  ? `${rankedModelScores.length} tested model${rankedModelScores.length === 1 ? '' : 's'}, ranked at ${balanceSplit(channelBalance)}. Moving the fader re-ranks what is already measured; nothing runs again.`
+                  : 'Nothing measured yet. Run a single test or the show to build the ranking.'}
+            </p>
           </div>
-        </div>
-      </div>
+        </header>
+      ) : null}
+
+      {panel === 'history' && !labChannel && topMatch}
 
       {scoreExplainerOpen && (
         <div className="modal-backdrop" role="presentation" onClick={() => setScoreExplainerOpen(false)}>
@@ -401,7 +299,7 @@ export function UtilityPanel({
               <p className="score-explainer-note">Scored benchmarks disable hidden thinking when Ollama supports it, so models are graded on visible answers instead of internal reasoning tokens. Chat mode is not affected.</p>
               <div className="score-explainer-grid">
                 <div>
-                  <span>Answer Quality</span>
+                  <span>Answer quality</span>
                   <strong>How well it follows the prompt</strong>
                   <em>Did it follow instructions, stay on task, and give complete answers? Graded across all test prompts.</em>
                 </div>
@@ -411,7 +309,7 @@ export function UtilityPanel({
                   <em>Tokens per second, measured live on your hardware. Faster = higher speed score.</em>
                 </div>
                 <div>
-                  <span>Hardware Fit</span>
+                  <span>Hardware fit</span>
                   <strong>How well it suits your rig</strong>
                   <em>Models that run comfortably within your VRAM and RAM get a bonus. Models that strain your hardware get penalised.</em>
                 </div>
@@ -437,43 +335,24 @@ export function UtilityPanel({
         </div>
       )}
 
-      {panel === 'history' && (
-        <RomanceArtBanner
-          image={robotScorecardCeremony}
-          className="scorecard-art-banner art-banner-slim"
-          kicker="Scorecard ceremony"
-          title="Saved tests, ranked scores, crowned matches"
-          body={labChannel
-            ? (labBoard.length > 0
-              ? `${labBoard.length} ${LAB_NOUN[labChannel]}${labBoard.length === 1 ? '' : 's'} ranked at ${balanceLabel(channelRankAt)}.`
-              : workbench.emptyHint)
-            : channel === 'code'
-              ? (codingRanked > 0
-                ? `${codingRanked} model${codingRanked === 1 ? '' : 's'} ranked on coding answers at ${balanceLabel(channelBalance)}.`
-                : workbench.emptyHint)
-              : rankedModelScores.length > 0
-                ? `${rankedModelScores.length} tested model${rankedModelScores.length === 1 ? '' : 's'} ranked by Match score at ${balanceLabel(channelBalance)}.`
-                : 'Run a model test or Speed Dating to start the ceremony.'}
-        />
-      )}
 
       {panel === 'history' && labChannel && (
         <div className="utility-body">
-          <div className="utility-stat">
-            <span>Scorecards · {workbench.label}</span>
-            <strong>{labBoard.length} saved result{labBoard.length === 1 ? '' : 's'}</strong>
-            <em>Every {LAB_NOUN[labChannel]} this PC has run, ranked by what matters to you. Moving the fader runs nothing again.</em>
+          <div className="results-toolbar">
+            <BalanceFader
+              variant="row"
+              value={channelBalance}
+              onChange={onChannelBalanceChange}
+              accuracyMeans={workbench.accuracyMeans}
+              lockedReason={channelBalanceLock}
+              label={`What matters more for ${workbench.activity}?`}
+            />
             {/* The results are here; what they made was only ever reachable
                 from the model that made it. */}
-            <AllDemosButton className="mini-button outline utility-gallery-btn" />
+            <div className="results-toolbar-actions">
+              <AllDemosButton className="btn btn-line btn-sm" label="Everything they made" />
+            </div>
           </div>
-          <BalanceFader
-            value={channelBalance}
-            onChange={onChannelBalanceChange}
-            accuracyMeans={workbench.accuracyMeans}
-            lockedReason={channelBalanceLock}
-            label={`What matters more for ${workbench.activity}?`}
-          />
           {labBoard.length > 0 ? (
             <LabStandings
               ranked={labBoard}
@@ -489,92 +368,55 @@ export function UtilityPanel({
               <span>{workbench.emptyHint}</span>
             </div>
           )}
-          {logConsole}
         </div>
       )}
 
       {panel === 'history' && !labChannel && (
         <div className="utility-body">
-          <div className="utility-stat">
-            <div className="utility-stat-head">
-              <span>Ranking board</span>
-              <div className="utility-stat-head-actions">
-                {topRankedScore && (
-                  <button
-                    type="button"
-                    className="how-we-score-trigger"
-                    onClick={() => {
-                      void downloadMatchCard({ score: topRankedScore, appVersion: APP_VERSION }).then((saved) => {
-                        if (!saved) return;
-                      });
-                    }}
-                    title={`Save a match card image of ${topRankedScore.model} — share it wherever you like; RigMatch sends nothing anywhere.`}
-                  >
-                    <Share2 aria-hidden="true" />
-                    Share card
-                  </button>
-                )}
-                {rankedModelScores.length > 0 && onSelectTopPick && (
-                  <button
-                    type="button"
-                    className="how-we-score-trigger flow-next-trigger"
-                    onClick={() => onSelectTopPick(rankedModelScores[0].model)}
-                    title={`Open ${rankedModelScores[0].model} in Top Pick`}
-                  >
-                    <Bot aria-hidden="true" />
-                    Top Pick
-                    <ChevronRight aria-hidden="true" />
-                  </button>
-                )}
-                {rankedModelScores.length > 0 && (
-                  <button
-                    type="button"
-                    className={`how-we-score-trigger${scoreCopied ? ' copied' : ''}`}
-                    onClick={copyScorecard}
-                    title="Copy results as markdown to share on Reddit, Discord, etc."
-                    aria-label="Copy scorecard to clipboard"
-                  >
-                    {scoreCopied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-                    {scoreCopied ? 'Copied!' : 'Share results'}
-                  </button>
-                )}
+          <div className="results-toolbar">
+            <BalanceFader
+              variant="row"
+              value={channelBalance}
+              onChange={onChannelBalanceChange}
+              accuracyMeans={workbench.accuracyMeans}
+              label={`What matters more for ${channel === 'code' ? 'code' : 'chat and writing'}?`}
+            />
+            <div className="results-toolbar-actions">
+              {topRankedScore && (
                 <button
                   type="button"
-                  className="how-we-score-trigger"
-                  onClick={() => setScoreExplainerOpen(true)}
-                  title="How scores are calculated"
-                  aria-label="How we score — open explanation"
+                  className="btn btn-line btn-sm"
+                  onClick={() => { void downloadMatchCard({ score: topRankedScore, appVersion: APP_VERSION }); }}
+                  title={`Save a match card image of ${topRankedScore.model}. RigMatch sends nothing anywhere.`}
                 >
-                  <HelpCircle aria-hidden="true" />
-                  How we score
+                  Share scorecard
                 </button>
-                {rankedModelScores.length > 0 && (
-                  <button
-                    type="button"
-                    className="how-we-score-trigger clear-all-scores-trigger"
-                    onClick={onClearAllScores}
-                    title="Clear every saved score and transcript (asks first)"
-                    aria-label="Clear all saved scores"
-                  >
-                    <Trash2 aria-hidden="true" />
-                    Clear all
-                  </button>
-                )}
-              </div>
+              )}
+              {rankedModelScores.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-line btn-sm"
+                  onClick={copyScorecard}
+                  title="Copy the results as Markdown, for Reddit, Discord and the like"
+                >
+                  {scoreCopied ? 'Copied' : 'Copy results'}
+                </button>
+              )}
+              <button type="button" className="btn btn-line btn-sm" onClick={() => setScoreExplainerOpen(true)}>
+                How we score
+              </button>
+              {rankedModelScores.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  onClick={onClearAllScores}
+                  title="Clear every saved score and transcript (asks first)"
+                >
+                  Clear scores…
+                </button>
+              )}
             </div>
-            <strong>{rankedModelScores.length} tested model{rankedModelScores.length === 1 ? '' : 's'}</strong>
-            <em>
-              {rankedModelScores.length > 0
-                ? `Click any row to open it in Top Pick. Ranked at ${balanceSplit(channelBalance)}.`
-                : 'Run a single test or Speed Dating to build the ranking.'}
-            </em>
           </div>
-          <BalanceFader
-            value={channelBalance}
-            onChange={onChannelBalanceChange}
-            accuracyMeans={workbench.accuracyMeans}
-            label={`What matters more for ${channel === 'code' ? 'code' : 'chat and writing'}?`}
-          />
           {/* Code's own board, first: the coding answers alone, at the Code
               fader. The Match ranking below still blends every kind of question. */}
           {channel === 'code' && (
@@ -582,11 +424,6 @@ export function UtilityPanel({
               <CodingBoard scores={rankedModelScores} balance={channelBalance} label={workbench.shortLabel} />
             </section>
           )}
-          <div className="utility-stat">
-            <span>Best saved test</span>
-            <strong>{topRankedScore ? topRankedScore.model : 'No saved score'}</strong>
-            <em>{topRankedScore ? `${formatMatchScore(topRankedScore)} total · ${topRankedScore.grade}` : 'Run a test to save the next scorecard.'}</em>
-          </div>
           {channel !== 'code' && goalMatches.length > 0 && (
             <div className="task-picks-section goal-match-board" aria-label="Your matches by goal">
               <span>Matches</span>
@@ -651,6 +488,7 @@ export function UtilityPanel({
             </div>
           )}
 
+          {rankedModelScores.length > 0 && <h3 className="results-heading">Every tested model</h3>}
           {rankedModelScores.length > 0 && (
             <ol className="utility-list score-ranking-list" aria-label="Ranked model scores">
               {rankedModelScores.map((score, index) => {
@@ -684,6 +522,7 @@ export function UtilityPanel({
                     }}
                   >
                     <b>{isTied ? '=' : index + 1}</b>
+                    <img className="score-row-portrait" src={getModelAvatarSrc(score.model)} alt="" />
                     <div className="score-row-name">
                       <span>
                         {score.model}
@@ -701,7 +540,7 @@ export function UtilityPanel({
                       <em>{score.speed} speed · {score.sobriety} accuracy · {score.fit} fit · {getResponseEstimate(score.speed)}</em>
                     </div>
                     <strong className={`score-row-grade ${getScoreTone(score.total)}`}>
-                      {isTied && <span className="tie-badge">TIED</span>}
+                      {isTied && <span className="tie-badge">Tied</span>}
                       {formatMatchScore(score)} · {score.grade}
                     </strong>
                     {onSelectTopPick && <ChevronRight className="score-row-nav-arrow" aria-hidden="true" />}
@@ -712,7 +551,6 @@ export function UtilityPanel({
                       title={`Clear ${score.model} score`}
                       aria-label={`Clear ${score.model} score`}
                     >
-                      <Trash2 aria-hidden="true" />
                       <span>Remove</span>
                     </button>
                   </li>
@@ -720,34 +558,10 @@ export function UtilityPanel({
               })}
             </ol>
           )}
-          <section className="score-cleanup-panel" aria-label="Score cleanup">
-            <div>
-              <span>Score Cleanup</span>
-              <strong>Forget stale match history</strong>
-              <em>Clears scorecards and test transcripts only. Installed Ollama models stay put.</em>
-            </div>
-            <button type="button" className="danger-button compact" onClick={onClearAllScores} disabled={!rankedModelScores.length}>
-              <Trash2 aria-hidden="true" />
-              Clear All Scores
-            </button>
-          </section>
           <HistoryTimeline scores={recentModelScores} onClearScore={onClearScore} />
-          <div className="utility-stat">
-            <span>Current match</span>
-            <strong>{selectedHost?.hostname ?? 'Local machine'}</strong>
-            <em>{selectedModel}</em>
-          </div>
-          <div className="utility-stat">
-            <span>Saved app history</span>
-            <strong>{recentModelScores.length} scorecard{recentModelScores.length === 1 ? '' : 's'}</strong>
-            <em>
-              {savedChatMessageCount > 0
-                ? `${savedChatMessageCount} chat message${savedChatMessageCount === 1 ? '' : 's'} saved locally`
-                : 'Chat starts saving locally after your first message'}
-            </em>
-          </div>
+          {listTestResult && <h3 className="results-heading">The last show</h3>}
           {listTestResult ? (
-            <ol className="utility-list" aria-label="Latest Speed Dating ranking">
+            <ol className="utility-list" aria-label="The last show's ranking">
               {listTestResult.results.map((result, index) => (
                 <li key={result.model} className={result.model === listTestResult.winner ? 'winner' : ''}>
                   <b>{index + 1}</b>
@@ -762,7 +576,6 @@ export function UtilityPanel({
               <span>Compare two or more models to rank the best match.</span>
             </div>
           )}
-          {logConsole}
         </div>
       )}
 
@@ -770,65 +583,51 @@ export function UtilityPanel({
         // settings-body, not just utility-body: this column is prose-width
         // rows, and the class other utility panels share must not inherit that.
         <div className="settings-layout">
-          {/* A contents list for a two-thousand-pixel column. Same argument as
-              the model rail: what is in here, and what it is set to, without
-              opening anything to find out. */}
+          {/* The navigation: one entry per section, with what it is set to. */}
           <nav className="settings-rail" aria-label="Settings sections">
-            <div className="settings-rail-head">
-              <strong>Sections</strong>
-              <em>{openSections.size} open</em>
-            </div>
+            <h2 className="settings-rail-title">Settings</h2>
             {settingsRail.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                className={openSections.has(item.id) ? 'settings-rail-item open' : 'settings-rail-item'}
+                className={openSection === item.id ? 'settings-rail-item open' : 'settings-rail-item'}
                 onClick={() => openSectionFromRail(item.id)}
-                aria-current={openSections.has(item.id) ? 'true' : undefined}
+                aria-current={openSection === item.id ? 'true' : undefined}
               >
-                <span>{item.eyebrow}</span>
                 <strong>{item.title}</strong>
                 {item.status && <em>{item.status}</em>}
               </button>
             ))}
           </nav>
-        <div className="utility-body settings-body">
-          {/* Stays in the column, not the rail: the rail is hidden on narrow
-              windows, and the app's own name and version should not be. */}
-          <div className="utility-logo">
-            <BrandMark />
-            <strong>RigMatch</strong>
-            <em>v{APP_VERSION}</em>
-          </div>
+        <div ref={settingsBodyRef} className="utility-body settings-body">
           <SettingsSection
-            eyebrow="Interface"
             title="Preferences"
             summary="Mode, theme, goals, show extras, and the Simple Mode path."
-            open={openSections.has('interface')}
-            onToggle={() => toggleSection('interface')}
+            open={openSection === 'interface'}
             sectionId="interface"
           >
           <UiModePicker uiMode={uiMode} onUiModeChange={onUiModeChange} />
           <GoalsSummary goals={selectedGoals} onEditGoals={onEditGoals} />
+          <div className="utility-stat">
+            <span>Welcome</span>
+            <em>Three steps: what RigMatch is, what a model is, and what you want one for.</em>
+            <button type="button" className="btn btn-line" onClick={onShowWelcome}>Show the welcome again</button>
+          </div>
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
           <ShowExtrasSettings />
           </SettingsSection>
           <SettingsSection
-            eyebrow="Show"
             title="Achievements"
             summary={`${earnedCount} of ${ACHIEVEMENTS.length} earned. Each one is something worth trying.`}
-            open={openSections.has('achievements')}
-            onToggle={() => toggleSection('achievements')}
+            open={openSection === 'achievements'}
             sectionId="achievements"
           >
             <AchievementShelf />
           </SettingsSection>
           <SettingsSection
-            eyebrow="Storage"
             title="The Closet"
             summary="Who is taking up shelf space, and whether they earned it."
-            open={openSections.has('storage')}
-            onToggle={() => toggleSection('storage')}
+            open={openSection === 'storage'}
             sectionId="storage"
           >
             <ClosetSection
@@ -839,41 +638,32 @@ export function UtilityPanel({
             />
           </SettingsSection>
           <SettingsSection
-            eyebrow="Local AI"
-            title="Computer & Providers"
+            title="Providers"
             summary="Runtime, Ollama, LM Studio, and local-only scope."
-            open={openSections.has('providers')}
-            onToggle={() => toggleSection('providers')}
+            open={openSection === 'providers'}
             sectionId="providers"
           >
           <div className="utility-stat">
-            <span>Computer & providers</span>
-            <strong>Full details live in Your Rig</strong>
-            <em>Hardware, CUDA, Ollama and LM Studio status all live under Your Rig. Local models run entirely on this machine — nothing leaves your computer.</em>
+            <span>Status</span>
+            <strong>Full details are on My PC</strong>
+            <em>Hardware, CUDA, Ollama and LM Studio status are all on My PC. Local models run entirely on this computer; nothing leaves it.</em>
+            <button type="button" className="btn btn-line" onClick={onOpenSetupGuide}>Setup guide</button>
           </div>
-          <button type="button" className="primary-button compact" onClick={onOpenSetupGuide}>
-            <ExternalLink aria-hidden="true" />
-            Setup Guide
-          </button>
           </SettingsSection>
 
           <SettingsSection
-            eyebrow="Generation"
             title="ComfyUI"
             summary="Where image and video generation run, and whether RigMatch may unload models."
-            open={openSections.has('generation')}
-            onToggle={() => toggleSection('generation')}
+            open={openSection === 'generation'}
             sectionId="generation"
           >
           <ComfySettings />
           </SettingsSection>
 
           <SettingsSection
-            eyebrow="Updates"
-            title="Versions & Release Notes"
+            title="Updates"
             summary="RigMatch app updates, Ollama updates, and recent changes."
-            open={openSections.has('updates')}
-            onToggle={() => toggleSection('updates')}
+            open={openSection === 'updates'}
             sectionId="updates"
           >
           <UpdateCenter
@@ -890,7 +680,7 @@ export function UtilityPanel({
           <section className={`ollama-update-card ${ollamaHasUpdate ? 'has-update' : ''}`} aria-label="Ollama version">
             <div className="ollama-update-head">
               <div>
-                <span>Ollama Engine</span>
+                <span>Ollama</span>
                 <strong>
                   {ollama.version ? `v${ollama.version} installed` : 'Not detected'}
                   {ollamaUpdateLatest && !ollamaHasUpdate ? ' — up to date' : ''}
@@ -901,7 +691,7 @@ export function UtilityPanel({
               </div>
               <button
                 type="button"
-                className="mini-button outline"
+                className="btn btn-line btn-sm"
                 onClick={() => void checkOllamaUpdate()}
                 disabled={isCheckingOllamaUpdate}
               >
@@ -926,25 +716,23 @@ export function UtilityPanel({
           </SettingsSection>
 
           <SettingsSection
-            eyebrow="Support"
-            title="Feedback & Support"
+            title="Support"
             summary="Donationware link, bug reports, and diagnostics."
-            open={openSections.has('support')}
-            onToggle={() => toggleSection('support')}
+            open={openSection === 'support'}
             sectionId="support"
           >
           <div className="utility-stat">
-            <span>Mode</span>
+            <span>Support RigMatch</span>
             <strong>Donationware</strong>
             <em>Simple Mode stays free. Advanced is the natural home for future supporter tools, but this beta keeps everything open while the flow gets polished.</em>
             <a
-              className="donation-link donation-link-prominent"
+              className="btn btn-line"
               href={BUY_ME_A_COFFEE_URL}
               target="_blank"
               rel="noopener noreferrer"
             >
               <Coffee aria-hidden="true" />
-              Support RigMatch — Buy Me a Coffee
+              Buy Me a Coffee
               <ExternalLink aria-hidden="true" />
             </a>
           </div>
@@ -954,18 +742,18 @@ export function UtilityPanel({
             <em>One click opens a prefilled GitHub issue with your hardware specs attached. No telemetry — this is the only way I hear about bugs.</em>
             <div className="bug-report-actions">
               <a
-                className="primary-button compact"
+                className="btn btn-line"
                 href={buildBugReportUrl(system, ollama, logPath)}
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 <Bug aria-hidden="true" />
-                Report a Bug
+                Report a bug
                 <ExternalLink aria-hidden="true" />
               </a>
               <button
                 type="button"
-                className="mini-button outline"
+                className="btn btn-line"
                 onClick={() => void copyText(buildDiagnosticsText(system, ollama, logPath)).then((ok) => {
                   setDiagnosticsCopy(ok ? 'copied' : 'failed');
                   window.setTimeout(() => setDiagnosticsCopy('idle'), 2400);
@@ -973,7 +761,7 @@ export function UtilityPanel({
                 title="Copy hardware + version info to clipboard"
               >
                 <Copy aria-hidden="true" />
-                {diagnosticsCopy === 'copied' ? 'Copied' : diagnosticsCopy === 'failed' ? 'Copy failed' : 'Copy Diagnostics'}
+                {diagnosticsCopy === 'copied' ? 'Copied' : diagnosticsCopy === 'failed' ? 'Copy failed' : 'Copy diagnostics'}
               </button>
             </div>
           </div>
@@ -985,24 +773,22 @@ export function UtilityPanel({
           </SettingsSection>
 
           <SettingsSection
-            eyebrow="Advanced"
-            title="Scoring & Reset"
+            title="Scoring and reset"
             summary="How scoring works and destructive cleanup."
             advancedOnly
-            open={openSections.has('advanced')}
-            onToggle={() => toggleSection('advanced')}
+            open={openSection === 'advanced'}
             sectionId="advanced"
           >
           <HowWeScoreSection />
           <section className="danger-zone" aria-label="Data reset">
             <div>
-              <span>Danger Zone</span>
-              <strong>Clear App Data</strong>
+              <span>Danger zone</span>
+              <strong>Clear app data</strong>
               <em>Clears everything RigMatch saved here: logs, scores, comparison results, chat, model notes, goals, theme, question suite, and grading settings including any saved API key. Installed Ollama models stay put, and so does your Simple or Advanced choice; the getting-started guide is not replayed.</em>
             </div>
-            <button type="button" className="danger-button compact" onClick={onClearAllData}>
+            <button type="button" className="btn btn-danger" onClick={onClearAllData}>
               <Trash2 aria-hidden="true" />
-              Clear All Data
+              Clear all data
             </button>
           </section>
           </SettingsSection>

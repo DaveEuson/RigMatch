@@ -145,17 +145,6 @@ export function glossaryEntry(id: string): GlossaryEntry | undefined {
   return BY_ID.get(id);
 }
 
-/**
- * The rotating tips the Advanced ticker shows, built from the same source so
- * the two cannot drift into disagreeing about what a word means.
- */
-export function tickerTips(): Array<{ term: string; tip: string }> {
-  return GLOSSARY.map((entry) => ({
-    term: entry.alsoCalled ? `${entry.term} (${entry.alsoCalled})` : entry.term,
-    tip: entry.because ? `${entry.plain} ${entry.because}` : entry.plain,
-  }));
-}
-
 /** Every name a glossary entry answers to, longest first. */
 const TERM_ALIASES = GLOSSARY
   .flatMap((entry) => [entry.term, entry.alsoCalled]
