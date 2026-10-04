@@ -34,7 +34,7 @@ test('the host keeps to the script: short lines, numbers filled in, never left a
 });
 
 test('the script\'s Trojan line is not used: the stage is earned by testing Ajax, not by the smallest model', () => {
-  assert.ok(!('trojan' in HOST_LINES));
+  assert.match(hostLine('trojan'), /Ajax/);
   assert.doesNotMatch(read('../src/lib/hostScript.ts'), /smallest contestant/);
 });
 

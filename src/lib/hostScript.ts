@@ -8,8 +8,9 @@
  * the app through the {braces}, never written in, and no line claims a result
  * the board does not show.
  *
- * The script's own Trojan line is left out: it crowned the smallest model,
- * which is not how the Trojan stage is earned here (see lib/trojanStage.ts).
+ * The script's own Trojan line crowned the smallest model, which is not how
+ * the Trojan stage is earned here (see lib/trojanStage.ts), so the Trojan line
+ * below is RigMatch's own.
  */
 export const HOST_LINES = {
   setupIdle: [
@@ -64,6 +65,9 @@ export const HOST_LINES = {
   ],
   noWinner: [
     "Nobody passed tonight. That's a real result about these models on this computer, not a broken show.",
+  ],
+  trojan: [
+    'You tested Ajax, the agent model made for Odysseus. Ladies and gentlemen, a true Trojan hero!',
   ],
   stopped: [
     'Show\'s stopped. No harm done, and the scores so far are kept.',

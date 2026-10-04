@@ -1,0 +1,91 @@
+/* RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE. */
+
+/*
+ * The Trojan hero reveal. One fixed world on purpose: the same plum-to-black
+ * spotlight whatever stage colour is chosen, because it is the one moment the
+ * whole screen belongs to the show. Above every dialog, including the run
+ * sheet.
+ */
+
+.trojan-reveal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: var(--s5);
+  overflow-y: auto;
+  background: radial-gradient(ellipse at 50% 30%, rgba(90, 48, 72, 0.96), rgba(12, 9, 18, 0.97) 70%);
+  animation: trojan-in 0.3s ease-out;
+}
+
+.trojan-reveal-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 560px;
+  text-align: center;
+}
+
+.trojan-reveal-bulbs { display: flex; gap: 14px; }
+.trojan-reveal-bulbs span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #efbc5a;
+  box-shadow: 0 0 10px rgba(239, 188, 90, 0.8);
+  animation: trojan-bulb 0.76s infinite;
+}
+.trojan-reveal-bulbs span:nth-child(even) { animation-delay: 0.38s; }
+
+.trojan-reveal-kicker {
+  margin: 0;
+  color: #efbc5a;
+  font: 700 15px / 1.3 var(--ui);
+}
+
+.trojan-reveal-badge { animation: trojan-pop 0.6s ease-out; }
+
+.trojan-reveal h2 {
+  margin: 0;
+  color: #fff9ef;
+  font: 400 44px / 1.05 var(--display);
+  text-wrap: balance;
+}
+
+.trojan-reveal-line {
+  max-width: 48ch;
+  margin: 0;
+  color: #f0e7dc;
+  font: 400 18px / 1.5 var(--ui);
+}
+
+.trojan-reveal-reward {
+  margin: 0;
+  color: #bdafa6;
+  font: 400 var(--fs-ui) / 1.5 var(--ui);
+}
+
+.trojan-reveal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s3);
+  margin-top: 6px;
+}
+.trojan-reveal-actions .btn { min-height: 48px; padding: 0 26px; font-size: 17px; }
+.trojan-reveal-actions .btn-line { border-color: rgba(255, 249, 239, 0.4); color: #fff9ef; }
+
+@keyframes trojan-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes trojan-bulb { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+@keyframes trojan-pop {
+  from { opacity: 0; transform: scale(0.6); }
+  70% { opacity: 1; transform: scale(1.06); }
+  to { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trojan-reveal,
+  .trojan-reveal * { animation: none !important; }
+}

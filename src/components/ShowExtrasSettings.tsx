@@ -31,8 +31,10 @@ export function ShowExtrasSettings() {
           onChange={(event) => setShowExtras({ effects: event.target.checked })}
         />
         <span>
-          Show effects in Simple Mode: contestants walk on, an APPLAUSE sign, curtains for the
-          winner, and hearts when you pick. All of them stay still when Windows is set to reduce
+          Show effects. Short sounds: a curtain when a show starts, a jingle and applause for a
+          winner, a sting for a badge, and a soft buzz when a test or download fails. In Simple
+          Mode, contestants also walk on, an APPLAUSE sign lights, curtains open for the winner, and
+          hearts pop when you pick. The moving parts stay still when your computer is set to reduce
           motion.
         </span>
       </label>

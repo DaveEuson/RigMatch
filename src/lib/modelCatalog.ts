@@ -2234,34 +2234,6 @@ export function formatLogsForClipboard(logs: AppLogEntry[]) {
     .join('\n\n');
 }
 
-
-export function playDoneJingle() {
-  try {
-    const ctx = new AudioContext();
-    const melody: Array<[number, number, number]> = [
-      [523.25, 0,    0.15],
-      [659.25, 0.14, 0.15],
-      [783.99, 0.28, 0.15],
-      [1046.5, 0.42, 0.45],
-    ];
-    for (const [freq, offset, dur] of melody) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      const t = ctx.currentTime + offset;
-      gain.gain.setValueAtTime(0.25, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      osc.start(t);
-      osc.stop(t + dur + 0.05);
-    }
-  } catch {
-    // audio not available
-  }
-}
-
 /**
  * Filters that match on a provider-reported capability and nothing else.
  *
