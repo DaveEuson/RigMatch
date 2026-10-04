@@ -396,7 +396,7 @@ export function ClearDataModal({
           </button>
           <button type="button" className="danger-button compact" onClick={onConfirm}>
             <Trash2 aria-hidden="true" />
-            Clear All Data
+            Clear all data
           </button>
         </div>
       </section>

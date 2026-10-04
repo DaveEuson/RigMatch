@@ -115,7 +115,7 @@ const PRESENT = [
   ['the card is copied for pasting', js, 'The card is on your clipboard'],
   // Screen-audit fixes.
   ['the listening test names its blocker', js, 'Record or upload audio first'],
-  ['settings rows answer to the pointer', css, 'settings-section-toggle'],
+  ['settings rail rows answer to the pointer', css, 'settings-rail-item:hover'],
   // Main process — ships separately from the renderer bundle, so probing only
   // dist/assets would miss everything in electron/, including the permission
   // handler that is the whole of the renderer's posture toward the microphone.

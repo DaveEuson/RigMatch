@@ -14,7 +14,7 @@ export function getUpdateStatusLabel(result: UpdateCheckResponse | null, isCheck
 }
 
 export function getDirectUpdateDownloadLabel(result: UpdateCheckResponse | null, channel: UpdateChannel) {
-  if (result?.downloadKind !== 'installer' || !result.downloadUrl) return 'View Downloads';
+  if (result?.downloadKind !== 'installer' || !result.downloadUrl) return 'View downloads';
   const channelLabel = getUpdateChannelLabel(channel);
 
   if (result.downloadName?.endsWith('.exe')) return `Download ${channelLabel} EXE`;

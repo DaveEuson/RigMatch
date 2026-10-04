@@ -11014,85 +11014,6 @@ tbody tr.computer-row.selected {
   background: rgba(255, 249, 239, 0.045);
 }
 
-.settings-section-toggle {
-  width: 100%;
-  min-width: 0;
-  padding: 12px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.settings-section-toggle span {
-  display: block;
-  color: var(--pink);
-  font-size: 10px;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.settings-section-toggle strong {
-  display: block;
-  margin-top: 4px;
-  color: var(--text-strong);
-  font-family: var(--display);
-  font-size: 17px;
-  line-height: 1.05;
-  text-transform: uppercase;
-}
-
-.settings-section-toggle em {
-  display: block;
-  margin-top: 5px;
-  color: var(--text);
-  font-size: 12px;
-  font-style: normal;
-  line-height: 1.35;
-}
-
-/* The row is a button spanning the whole panel, and it had no hover state, no
-   focus ring and no pressed state — so pointing at it did nothing, and on a
-   wide monitor the chevron sat a screen away from the label it belonged to.
-   Clicking felt like guessing. */
-.settings-section-toggle:hover {
-  background: rgba(255, 249, 239, 0.05);
-}
-
-.settings-section-toggle:hover strong {
-  color: var(--gold);
-}
-
-.settings-section-toggle:active {
-  background: rgba(255, 249, 239, 0.08);
-}
-
-.settings-section-toggle:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: -2px;
-  border-radius: 8px;
-}
-
-.settings-section-toggle:hover svg {
-  color: var(--text-strong);
-}
-
-.settings-section-toggle svg {
-  width: 18px;
-  height: 18px;
-  color: var(--gold);
-  transition: transform 0.16s ease;
-}
-
-.settings-section.open .settings-section-toggle svg {
-  transform: rotate(180deg);
-}
-
 .settings-section-body {
   min-width: 0;
   padding: 0 12px 12px;
@@ -20349,30 +20270,6 @@ a.whats-next-support:hover {
   border-right: 1px solid rgba(var(--gold-rgb), 0.16);
 }
 
-.settings-rail-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 8px 10px;
-  margin-bottom: 6px;
-  border-bottom: 1px solid rgba(var(--gold-rgb), 0.16);
-}
-
-.settings-rail-head strong {
-  color: var(--text-strong);
-  font-family: var(--display);
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.settings-rail-head em {
-  margin-left: auto;
-  color: var(--muted);
-  font: 11px/1 var(--mono);
-  font-style: normal;
-}
-
 .settings-rail-item {
   min-height: 24px;
   display: block;
@@ -20393,15 +20290,6 @@ a.whats-next-support:hover {
 .settings-rail-item.open {
   border-left-color: var(--pink);
   background: rgba(var(--pink-rgb), 0.1);
-}
-
-.settings-rail-item span {
-  display: block;
-  color: var(--pink);
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .settings-rail-item strong {
@@ -20428,19 +20316,6 @@ a.whats-next-support:hover {
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* Under this the rail and a 920px prose column no longer both fit; the column
-   is the thing you came for, so the rail goes and the accordion headers carry
-   the navigation on their own, as they did before. */
-@media (max-width: 1100px) {
-  .settings-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .settings-rail {
-    display: none;
-  }
 }
 
 /* Why a disabled action cannot run, beside the action itself. A dead primary

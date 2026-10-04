@@ -16,7 +16,7 @@ export function UiModePicker({
   return (
     <section className="ui-mode-picker" aria-label="Interface mode">
       <div>
-        <span>Interface Mode</span>
+        <span>Mode</span>
         <strong>{uiMode === 'beginner' ? 'Simple Mode is on' : 'Advanced Mode is on'}</strong>
       </div>
       <div className="mode-toggle" role="group" aria-label="Choose interface mode">
