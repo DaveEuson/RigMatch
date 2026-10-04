@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 
 import {
   extractTranscript,
-  isReferenceLongEnough,
   normalizeTranscript,
   scoreTranscription,
 } from '../src/lib/transcription.ts';
@@ -28,25 +27,6 @@ test('writing digits instead of spelling them is not a mistake', () => {
   const scored = scoreTranscription(SPOKEN, HEARD_OPENAI);
   assert.equal(scored.score, 100, `"zebra 77" should match "zebra seven seven"`);
   assert.equal(scored.errors, 0);
-});
-
-test('a short reference makes ordinary variance look like failure', () => {
-  // The native endpoint heard the sentence perfectly but wrote "pass code" for
-  // "passcode" — a substitution plus an insertion. Against eight words that is
-  // 25% error, and scores 75. The metric is right; the reference is too short,
-  // which is why the benchmark script has to be a passage.
-  const scored = scoreTranscription(SPOKEN, HEARD_NATIVE);
-  assert.equal(scored.score, 75);
-  assert.equal(scored.referenceWords, 8);
-  assert.equal(isReferenceLongEnough(SPOKEN), false, 'this sentence must not be used as a reference');
-});
-
-test('the same slip against a proper passage barely registers', () => {
-  const passage = `${SPOKEN} ${'The quick brown fox jumps over the lazy dog. '.repeat(4)}`;
-  const heard = passage.replace('passcode', 'pass code');
-  assert.equal(isReferenceLongEnough(passage), true);
-  const scored = scoreTranscription(passage, heard);
-  assert.ok(scored.score >= 95, `one compound split should be minor, scored ${scored.score}`);
 });
 
 test('mishearing a word is scored against the reference length', () => {

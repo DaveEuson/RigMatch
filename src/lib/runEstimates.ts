@@ -98,11 +98,4 @@ export function formatDuration(ms: number): string {
   return `~${Math.round(minutes / 5) * 5} min`;
 }
 
-/** The full sentence for a run dialog, source included. */
-export function estimateLine(estimate: RunEstimate): string {
-  const duration = formatDuration(estimate.ms);
-  if (!duration) return '';
-  return estimate.source === 'measured'
-    ? `Expect about ${duration.replace('~', '')}, going by past runs on this rig.`
-    : `Expect roughly ${duration.replace('~', '')} — a rule of thumb until this rig's first run measures it.`;
-}
+

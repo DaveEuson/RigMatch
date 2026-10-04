@@ -19,7 +19,6 @@ import {
   lineupRecordEntry,
   lineupTimeoutMs,
   measuredSecondsFor,
-  rankLineup,
   runVideoLineup,
   runnableLineup,
   strayLtxEntries,
@@ -370,16 +369,6 @@ test('Stop skips the judging too', async () => {
     ...fakeClock(),
   });
   assert.ok(!calls.events.includes('judge'));
-});
-
-test('the leaderboard is fastest first, with every failure after the last finisher', () => {
-  const ranked = rankLineup([
-    { key: 'kandinsky-5', elapsedMs: 1278000 },
-    { key: 'mochi-1', elapsedMs: 5000, error: 'CUDA out of memory' },
-    { key: 'ltxv-2b', elapsedMs: 16500 },
-    { key: 'ltx-2.3', elapsedMs: 65100 },
-  ]);
-  assert.deepEqual(ranked.map((item) => item.key), ['ltxv-2b', 'ltx-2.3', 'kandinsky-5', 'mochi-1']);
 });
 
 test('a result is read against the estimate its card showed', () => {

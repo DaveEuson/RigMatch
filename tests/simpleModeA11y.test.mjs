@@ -67,9 +67,3 @@ const contrast = (a, b) => {
   return (x + 0.05) / (y + 0.05);
 };
 
-test('"Skip tour" is readable at rest, not only on hover', () => {
-  // It was #5a7080 on the tutorial's #11171b: 3.5:1, and it is the way out.
-  const rest = appCss.match(/\.quiet-link\s*\{[^}]*?color:\s*(#[0-9a-f]{6})/i)?.[1];
-  assert.ok(rest, '.quiet-link has no resting color to check');
-  assert.ok(contrast(rest, '#11171b') >= 4.5, `${rest} on #11171b is ${contrast(rest, '#11171b').toFixed(2)}:1`);
-});

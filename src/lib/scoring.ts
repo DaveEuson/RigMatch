@@ -69,10 +69,7 @@ export const DEFAULT_SCORE_PRIORITY: ScorePriorityId = 'balanced';
 
 export const SCORE_PRIORITY_STORAGE_KEY = 'rigmatch:score-priority:v1';
 
-/** Unknown or absent stored values fall back to the historical weighting. */
-export function readScorePriority(raw: string | null | undefined): ScorePriorityId {
-  return raw && raw in SCORE_PRIORITIES ? raw as ScorePriorityId : DEFAULT_SCORE_PRIORITY;
-}
+
 
 /**
  * The canonical Match Score grade bands — the single source of truth for the
@@ -129,31 +126,7 @@ export function calculateWeightedTotal(score: MatchScoreLike, weights: ScoreWeig
   return Number(weighted.toFixed(1));
 }
 
-/**
- * Re-summarize saved scores under a chosen priority.
- *
- * Applied once where scores are loaded rather than threaded through the
- * thirty-seven places that render or rank a Match. Every one of those reads
- * `preciseTotal`, `total` or `grade`, so rewriting the three here means they
- * cannot disagree with each other — which is the failure mode a per-call-site
- * parameter invites: one list re-ranked, one number beside it still balanced.
- *
- * The four measured signals are untouched. `speed` still means what it always
- * did; only the headline that summarizes them moves.
- */
-export function applyScorePriority<T extends MatchScoreLike & { grade?: string }>(
-  scores: Record<string, T>,
-  priority: ScorePriorityId,
-): Record<string, T> {
-  if (priority === DEFAULT_SCORE_PRIORITY) return scores;
-  const out: Record<string, T> = {};
-  for (const [key, score] of Object.entries(scores)) {
-    const preciseTotal = calculatePreciseTotal(score, priority);
-    const total = Math.round(preciseTotal);
-    out[key] = { ...score, preciseTotal, total, grade: gradeForMatchScore(total) };
-  }
-  return out;
-}
+
 
 /** Convert a completed benchmark run into the persisted per-model score shape. */
 export function toTestedModelScore(

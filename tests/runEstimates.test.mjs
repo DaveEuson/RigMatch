@@ -6,8 +6,7 @@ import {
   estimateBenchmarkMs,
   estimateSpeedDateMs,
   formatDuration,
-  estimateLine,
-} from '../src/lib/runEstimates.ts';
+  } from '../src/lib/runEstimates.ts';
 
 const RIG = { gpu: 'RTX 4070', vramGb: 12, ramGb: 32, cpu: 'Ryzen', os: 'Windows 11' };
 const OTHER_RIG = { ...RIG, gpu: 'RTX 3060' };
@@ -46,13 +45,6 @@ test("another rig's pace says nothing about this one", () => {
   const estimate = estimateBenchmarkMs(h, { model: 'llama3.1:8b', questionCount: 10, hardware: RIG });
   assert.equal(estimate.source, 'heuristic');
   assert.equal(estimate.sampleCount, 0);
-});
-
-test('no history at all is an honest rule of thumb', () => {
-  const estimate = estimateBenchmarkMs(null, { questionCount: 20 });
-  assert.equal(estimate.source, 'heuristic');
-  assert.equal(estimate.ms, 200_000);
-  assert.match(estimateLine(estimate), /rule of thumb/i);
 });
 
 test('speed dating sums per-contestant estimates and only claims measured when all are', () => {

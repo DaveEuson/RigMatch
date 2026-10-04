@@ -81,8 +81,3 @@ export function markGoalsOffered(): void {
   try { window.localStorage.setItem(GOALS_OFFERED_STORAGE_KEY, 'yes'); }
   catch { /* storage disabled; the question simply gets asked again */ }
 }
-
-/** The default lens: the first goal picked, or none. */
-export function primaryGoalId(): GoalId | undefined {
-  return readSelectedGoals()[0];
-}
