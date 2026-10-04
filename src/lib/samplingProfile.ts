@@ -17,6 +17,8 @@
  * behaves no worse than it did before.
  */
 
+import { recipeForFile } from './pictureRecipes.ts';
+
 export type SamplingProfile = {
   steps: number;
   cfg: number;
@@ -68,6 +70,10 @@ function bareName(checkpoint: string): string {
 export function samplingProfileFor(checkpoint: string): SamplingProfile {
   const name = bareName(checkpoint ?? '');
   if (!name) return STANDARD_PROFILE;
+  // A three-file model's settings are known exactly; "z_image_turbo" would
+  // otherwise match "turbo" and run at 4 steps where it is made for 8.
+  const recipe = recipeForFile(checkpoint)?.recipe;
+  if (recipe) return { steps: recipe.steps, cfg: recipe.cfg, reason: recipe.reason };
 
   const hit = DISTILLED
     .filter((entry) => name.includes(entry.match))

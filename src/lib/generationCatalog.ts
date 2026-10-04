@@ -90,6 +90,73 @@ export const GENERATION_MODELS: GenerationModel[] = [
     note: 'Much better pictures than 1.5, and distilled so it still runs in a few steps. Bigger download.',
     publisher: 'Stability AI',
   },
+  // ── Three-file picture models ─────────────────────────────────────────────
+  // A diffusion model, its text encoder and its decoder, each in its own
+  // folder, run with the graph in pictureRecipes.ts. Files, sizes and SHA-256
+  // from the Hugging Face trees, all Apache 2.0. The two share one encoder:
+  // qwen_3_4b.safetensors is the same file in both Comfy-Org repositories.
+  {
+    id: 'z-image-turbo',
+    label: 'Z-Image Turbo',
+    kind: 'image',
+    folder: 'diffusion_models',
+    filename: 'z_image_turbo_int8_convrot.safetensors',
+    url: 'https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/diffusion_models/z_image_turbo_int8_convrot.safetensors',
+    bytes: 6201001296,
+    sha256: 'be517ebd47c912a5626a588e1aeea43e6be4a43c0cdcd2b48a2a780d9f358635',
+    note: 'Photo-real pictures in 8 steps. The int8 build, which fits a 12 GB card where the full one does not.',
+    requires: ['qwen3-4b-encoder', 'flux-ae'],
+    publisher: 'Alibaba Tongyi Lab',
+  },
+  {
+    id: 'flux2-klein-4b',
+    label: 'FLUX.2 [klein] 4B',
+    kind: 'image',
+    folder: 'diffusion_models',
+    filename: 'flux-2-klein-4b.safetensors',
+    url: 'https://huggingface.co/Comfy-Org/vae-text-encorder-for-flux-klein-4b/resolve/main/split_files/diffusion_models/flux-2-klein-4b.safetensors',
+    bytes: 7751105712,
+    sha256: 'ec3d4e733a771f61c052fb4856c48b336c55eaf2c65487c2a1faeb9bbda7a343',
+    note: 'Black Forest Labs\' fastest FLUX: 4 steps, and good at readable text inside a picture.',
+    requires: ['qwen3-4b-encoder', 'flux2-vae'],
+    publisher: 'Black Forest Labs',
+  },
+  {
+    id: 'qwen3-4b-encoder',
+    label: 'Qwen3 4B text encoder',
+    kind: 'text-encoder',
+    folder: 'text_encoders',
+    filename: 'qwen_3_4b.safetensors',
+    url: 'https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/text_encoders/qwen_3_4b.safetensors',
+    bytes: 8044982048,
+    sha256: '6c671498573ac2f7a5501502ccce8d2b08ea6ca2f661c458e708f36b36edfc5a',
+    note: 'What Z-Image Turbo and FLUX.2 [klein] read prompts with. One download serves both.',
+    publisher: 'Alibaba Qwen',
+  },
+  {
+    id: 'flux-ae',
+    label: 'FLUX autoencoder',
+    kind: 'vae',
+    folder: 'vae',
+    filename: 'ae.safetensors',
+    url: 'https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors',
+    bytes: 335304388,
+    sha256: 'afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38',
+    note: 'Turns Z-Image Turbo\'s output into a picture.',
+    publisher: 'Black Forest Labs',
+  },
+  {
+    id: 'flux2-vae',
+    label: 'FLUX.2 VAE',
+    kind: 'vae',
+    folder: 'vae',
+    filename: 'flux2-vae.safetensors',
+    url: 'https://huggingface.co/Comfy-Org/vae-text-encorder-for-flux-klein-4b/resolve/main/split_files/vae/flux2-vae.safetensors',
+    bytes: 336211292,
+    sha256: '868fe7b343cc8f3a19dbcfcafbc3d5f888802be3f89bd81b65b3621a066ce8f3',
+    note: 'Turns FLUX.2 [klein]\'s output into a picture.',
+    publisher: 'Black Forest Labs',
+  },
   {
     id: 'ltxv-distilled',
     label: 'LTX-Video 2B (distilled)',
@@ -685,6 +752,12 @@ export const GENERATION_MODELS: GenerationModel[] = [
 
 export function generationModelById(id: string): GenerationModel | undefined {
   return GENERATION_MODELS.find((m) => m.id === id);
+}
+
+/** The name a person knows a model file by: the catalog's, or the file's own. */
+export function generationFileLabel(file: string): string {
+  const bare = (file.split(/[\\/]/).pop() ?? file).toLowerCase();
+  return GENERATION_MODELS.find((model) => model.filename.toLowerCase() === bare)?.label ?? file;
 }
 
 /** Human-sized, for a number someone is deciding to spend an evening on. */

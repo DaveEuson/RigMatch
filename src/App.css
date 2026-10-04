@@ -12080,20 +12080,28 @@ tbody tr.computer-row.selected {
   opacity: 0.85;
 }
 
+/* The fixed settings a test runs with, as plain text. Drawn as pills they
+   read as options to press, and none of them can be changed. */
 .advanced-lab-safeguards {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: baseline;
+  row-gap: 2px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .advanced-lab-safeguards span {
-  padding: 5px 8px;
-  border: 1px solid rgba(var(--primary-rgb), 0.24);
-  border-radius: 999px;
-  background: rgba(var(--primary-rgb), 0.08);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 800;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* After, not before: a wrapped line must not start with a dot. */
+.advanced-lab-safeguards span:not(:last-child)::after {
+  content: '·';
+  margin: 0 8px;
 }
 
 .advanced-lab-warning {
