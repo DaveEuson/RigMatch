@@ -98,7 +98,7 @@
   margin-left: 8px;
   padding-left: 8px;
   border-left: 1px solid rgba(0, 0, 0, 0.25);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 600;
   opacity: 0.8;
@@ -235,7 +235,7 @@ textarea {
 
 .sw-scoreboard-demos .model-demo-chip {
   padding: 1px 7px;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 /* What the winner made, on the last screen of the show. */
@@ -274,7 +274,7 @@ textarea {
   display: block;
   margin-top: 2px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   font-variant-numeric: tabular-nums;
 }
@@ -478,7 +478,7 @@ textarea {
   border-radius: 999px;
   background: rgba(13, 21, 20, 0.7);
   color: var(--gold);
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -507,7 +507,7 @@ textarea {
 .top-deck-winner span {
   display: block;
   color: var(--gold);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -520,7 +520,7 @@ textarea {
   border-radius: 999px;
   background: linear-gradient(180deg, #ffd66f 0%, #efa83a 100%);
   color: #27190a;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -547,7 +547,7 @@ textarea {
 .top-deck-winner em {
   display: block;
   font-style: normal;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text);
   margin-top: 1px;
 }
@@ -576,7 +576,7 @@ textarea {
 
 .global-lineup-strip .model-pool-lineup-head > div > em,
 .global-lineup-strip .model-pool-lineup-head > div > span {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .global-lineup-strip .model-pool-lineup-head > div > strong {
@@ -600,7 +600,7 @@ textarea {
 }
 
 .top-deck .brand-block p {
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 2px;
 }
 
@@ -621,7 +621,7 @@ textarea {
 .global-mode-switch span {
   grid-column: 1 / -1;
   color: var(--gold);
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1;
   font-weight: 900;
   text-transform: uppercase;
@@ -639,7 +639,7 @@ textarea {
   color: var(--muted);
   /* Was 8px. This is the control that switches the entire interface between
      its two modes; at 8px uppercase it was the smallest text in the app. */
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   cursor: pointer;
@@ -673,13 +673,13 @@ textarea {
 
 .top-deck .rig-card span,
 .top-deck .local-status-card span {
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 2px;
 }
 
 .top-deck .rig-card em,
 .top-deck .local-status-card em {
-  font-size: 10px;
+  font-size: 12px;
   margin: 1px 0 4px;
 }
 
@@ -720,7 +720,7 @@ textarea {
 
 .mode-focus-card span {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -737,7 +737,7 @@ textarea {
   display: block;
   margin-top: 3px;
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.25;
 }
@@ -773,7 +773,7 @@ textarea {
 .mode-focus-card li span {
   min-width: 0;
   color: var(--text-strong);
-  font-size: 8px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -785,11 +785,11 @@ textarea {
 }
 
 .top-deck .metric-tile span {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .top-deck .metric-tile strong {
-  font-size: 11px;
+  font-size: 12px;
   margin: 2px 0 4px;
   min-height: 0;
   overflow: hidden;
@@ -875,7 +875,7 @@ textarea {
 
 .side-menu-title span {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -888,7 +888,7 @@ textarea {
 
 .side-menu-title small {
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.25;
 }
@@ -917,7 +917,7 @@ textarea {
   margin: 3px 0 0;
   padding: 0 7px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -999,7 +999,7 @@ textarea {
 .side-menu-item em {
   max-width: 42px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 800;
   text-align: right;
@@ -1041,7 +1041,7 @@ textarea {
   background: transparent;
   border: 1px solid rgba(255, 249, 239, 0.08);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   text-align: center;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
@@ -1065,7 +1065,7 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   text-align: center;
   text-decoration: none;
@@ -1144,7 +1144,7 @@ textarea {
 }
 
 .monitor-grid .metric-tile span {
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .monitor-grid .metric-tile strong {
@@ -1193,7 +1193,7 @@ textarea {
   align-items: center;
   gap: 5px;
   margin-top: 5px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   /* The card forces nowrap on its spans to keep the strip on one line; this one
      is the longest text in it and must be allowed to wrap on a narrow window. */
@@ -1255,7 +1255,7 @@ textarea {
   min-height: 24px;
   padding: 4px 10px;
   border-radius: 999px;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1;
   white-space: nowrap;
 }
@@ -1290,7 +1290,7 @@ textarea {
   margin-top: 4px;
   padding: 4px 9px;
   color: var(--gold);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -1412,7 +1412,7 @@ textarea {
 .wizard-rounds span {
   display: block;
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -1470,7 +1470,7 @@ textarea {
 
 .question-status-head span {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -1489,7 +1489,7 @@ textarea {
 .question-status-head p {
   margin: 4px 0 0;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
   max-height: 32px;
   overflow: hidden;
@@ -1501,7 +1501,7 @@ textarea {
   border: 1px solid rgba(var(--primary-rgb), 0.36);
   color: var(--green);
   background: rgba(var(--primary-rgb), 0.1);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 900;
   text-align: center;
@@ -1539,13 +1539,13 @@ textarea {
   border: none; border-radius: 12px;
   display: grid;
   place-items: center;
-  font: 10px/1 var(--mono);
+  font: 12px/1 var(--mono);
 }
 
 .question-chip-track span {
   min-width: 0;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1554,7 +1554,7 @@ textarea {
 
 .question-chip-track em {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 900;
   text-transform: uppercase;
@@ -1799,7 +1799,7 @@ textarea {
 
 .tutorial-prize span {
   color: var(--green);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -1932,7 +1932,7 @@ textarea {
 }
 
 .show-format-step em {
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   color: var(--text);
   line-height: 1.4;
@@ -2350,7 +2350,7 @@ textarea {
 .advanced-host-bar span {
   min-width: 0;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2380,7 +2380,7 @@ textarea {
 .doctor-card span {
   display: block;
   color: var(--pink);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -2438,7 +2438,7 @@ textarea {
 
 .doctor-card em {
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.3;
 }
@@ -2447,7 +2447,7 @@ textarea {
   width: fit-content;
   min-height: 24px;
   padding: 0 7px;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .host-name-cell {
@@ -2470,7 +2470,7 @@ textarea {
   border: 1px solid rgba(247, 189, 67, 0.58);
   color: var(--gold);
   background: rgba(247, 189, 67, 0.1);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1;
   text-align: center;
@@ -2497,7 +2497,7 @@ textarea {
 
 .rig-details-panel.empty span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .rig-details-head {
@@ -2513,7 +2513,7 @@ textarea {
 .rig-details-head span,
 .rig-details-grid span {
   color: var(--green);
-  font-size: 9px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -2528,7 +2528,7 @@ textarea {
 
 .rig-details-head > em {
   color: var(--blue);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   text-transform: uppercase;
   white-space: nowrap;
@@ -2556,7 +2556,7 @@ textarea {
 
 .rig-details-grid strong {
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2565,7 +2565,7 @@ textarea {
 
 .rig-details-grid em {
   color: var(--text);
-  font-size: 9px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.25;
   overflow: hidden;
@@ -2606,7 +2606,7 @@ textarea {
 
 .prep-copy span {
   color: var(--green);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -2622,7 +2622,7 @@ textarea {
   display: block;
   margin-top: 4px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.35;
   overflow: visible;
@@ -2686,7 +2686,7 @@ textarea {
 }
 
 .install-hero-copy span {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -2808,7 +2808,7 @@ textarea {
 .install-script-hint {
   width: 100%;
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   opacity: 0.6;
   color: var(--text);
 }
@@ -2856,7 +2856,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   color: var(--green);
 }
@@ -2880,7 +2880,7 @@ textarea {
 }
 
 .install-hero-note {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   margin-left: auto;
 }
@@ -2932,7 +2932,7 @@ textarea {
 .model-pool-lineup-head span,
 .model-pool-lineup-card span {
   color: var(--pink);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -2947,7 +2947,7 @@ textarea {
   display: block;
   margin-top: 2px;
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.25;
 }
@@ -2986,7 +2986,7 @@ textarea {
 .model-pool-empty-slot strong {
   min-width: 0;
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2995,7 +2995,7 @@ textarea {
 .model-pool-lineup-card em,
 .model-pool-empty-slot em {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
   font-style: normal;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3030,7 +3030,7 @@ textarea {
 .model-pool-empty-slot b {
   grid-row: 1 / 3;
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   align-self: center;
 }
 
@@ -3072,7 +3072,7 @@ button.model-pool-empty-slot.interactive svg {
 }
 
 button.model-pool-empty-slot.interactive strong {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -3112,7 +3112,7 @@ button.model-pool-empty-slot.interactive:disabled {
 }
 
 .picker-header span {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -3147,7 +3147,7 @@ button.model-pool-empty-slot.interactive:disabled {
 }
 
 .picker-model-meta {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   flex-shrink: 0;
 }
@@ -3179,7 +3179,7 @@ button.model-pool-empty-slot.interactive:disabled {
   display: block;
   margin-top: 4px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3207,7 +3207,7 @@ button.model-pool-empty-slot.interactive:disabled {
 
 .queue-status-copy span {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -3219,7 +3219,7 @@ button.model-pool-empty-slot.interactive:disabled {
 
 .queue-status-copy em {
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3250,7 +3250,7 @@ button.model-pool-empty-slot.interactive:disabled {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3323,7 +3323,7 @@ button.model-pool-empty-slot.interactive:disabled {
 
 .disk-guard span {
   color: var(--green);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -3379,7 +3379,7 @@ td {
 th {
   color: var(--text-strong);
   background: #1c2024;
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -3514,7 +3514,7 @@ tbody tr.computer-row.selected {
 
 .model-family-row em {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -3522,7 +3522,7 @@ tbody tr.computer-row.selected {
 .model-family-best {
   padding: 1px 7px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -3547,7 +3547,7 @@ tbody tr.computer-row.selected {
   border-radius: 999px;
   background: rgba(var(--blue-rgb), 0.14);
   color: var(--blue);
-  font-size: 9px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 700;
   white-space: nowrap;
@@ -3573,7 +3573,7 @@ tbody tr.computer-row.selected {
   border: 1px solid var(--line);
   border-radius: 4px;
   color: var(--muted);
-  font: 9px/1.35 var(--mono);
+  font: 12px/1.35 var(--mono);
   font-weight: 700;
   letter-spacing: 0.04em;
   vertical-align: middle;
@@ -3581,13 +3581,13 @@ tbody tr.computer-row.selected {
 
 .model-family-maker {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
 .model-family-pulls {
   color: var(--muted);
-  font: 11px/1 var(--mono);
+  font: 12px/1 var(--mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -3596,7 +3596,7 @@ tbody tr.computer-row.selected {
 .model-family-hint {
   margin-left: auto;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* --- Filter rail -----------------------------------------------------------
@@ -3642,7 +3642,7 @@ tbody tr.computer-row.selected {
   border: 0;
   background: transparent;
   color: var(--pink);
-  font: 11px/1 var(--ui);
+  font: 12px/1 var(--ui);
   cursor: pointer;
   padding: 2px 6px;
 }
@@ -3656,7 +3656,7 @@ tbody tr.computer-row.selected {
 .model-facet-group h3 {
   margin: 0 0 4px;
   padding: 0 8px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -3722,7 +3722,7 @@ tbody tr.computer-row.selected {
 }
 
 .model-facet-count {
-  font: 11px/1 var(--mono);
+  font: 12px/1 var(--mono);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -3763,7 +3763,7 @@ tbody tr.computer-row.selected {
 
 .model-filter-toggle em {
   font-style: normal;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   max-width: 190px;
   overflow: hidden;
@@ -3833,7 +3833,7 @@ tbody tr.computer-row.selected {
 
 .model-search-suggestions em {
   font-style: normal;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -3847,7 +3847,7 @@ tbody tr.computer-row.selected {
 }
 
 .model-search-suggestions b {
-  font: 11px/1 var(--mono);
+  font: 12px/1 var(--mono);
   font-weight: 400;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -3927,7 +3927,7 @@ tbody tr.computer-row.selected {
 }
 
 .fmw-title > span {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -3996,7 +3996,7 @@ tbody tr.computer-row.selected {
 }
 
 .fmw-desc {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   line-height: 1.3;
 }
@@ -4013,7 +4013,7 @@ tbody tr.computer-row.selected {
 
 .fmw-picks-label {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--blue);
   text-transform: uppercase;
@@ -4040,7 +4040,7 @@ tbody tr.computer-row.selected {
   position: absolute;
   top: -8px;
   left: 12px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   color: var(--gold);
   background: var(--bg);
@@ -4063,14 +4063,14 @@ tbody tr.computer-row.selected {
 }
 
 .fmw-pick-info em {
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   color: var(--gold);
 }
 
 .fmw-pick-info p {
   margin: 2px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text);
   line-height: 1.4;
 }
@@ -4135,7 +4135,7 @@ tbody tr.computer-row.selected {
 
 .model-sort-status {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -4155,7 +4155,7 @@ tbody tr.computer-row.selected {
 
 .score-legend-strip span {
   color: var(--blue);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   white-space: nowrap;
@@ -4163,13 +4163,13 @@ tbody tr.computer-row.selected {
 
 .score-legend-strip strong {
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .score-legend-strip em {
   min-width: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -4194,7 +4194,7 @@ tbody tr.computer-row.selected {
 .model-filter-note span {
   min-width: 0;
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4208,7 +4208,7 @@ tbody tr.computer-row.selected {
   color: var(--blue);
   min-height: 24px;
   padding: 0 8px;
-  font: 10px/1 var(--ui);
+  font: 12px/1 var(--ui);
   text-transform: uppercase;
   cursor: pointer;
 }
@@ -4232,7 +4232,7 @@ tbody tr.computer-row.selected {
 
 .lineup-full-banner span {
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -4366,7 +4366,7 @@ tbody tr.computer-row.selected {
 .model-table .mini-button {
   min-width: 52px;
   padding: 0 6px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .model-table .download-row-button {
@@ -4421,7 +4421,7 @@ tbody tr.computer-row.selected {
 .download-progress-copy span {
   min-width: 0;
   color: var(--text-strong);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 850;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4430,7 +4430,7 @@ tbody tr.computer-row.selected {
 
 .download-progress-copy strong {
   color: var(--blue);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -4471,7 +4471,7 @@ tbody tr.computer-row.selected {
 .download-progress-inline em {
   min-width: 0;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.25;
   overflow: hidden;
@@ -4578,7 +4578,7 @@ tbody tr.computer-row.selected {
 
 .table-empty-state span {
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .table-empty-state .mini-button {
@@ -4595,7 +4595,7 @@ tbody tr.computer-row.selected {
   background: rgba(var(--blue-rgb), 0.1);
   display: inline-flex;
   align-items: center;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   line-height: 1;
   overflow: hidden;
@@ -4630,7 +4630,7 @@ tbody tr.computer-row.selected {
   padding: 3px 5px;
   color: var(--text-strong);
   background: #11161a;
-  font: 10px/1 var(--mono);
+  font: 12px/1 var(--mono);
 }
 
 .size-pill.small {
@@ -4683,7 +4683,7 @@ tbody tr.computer-row.selected {
 
 .score-pill em {
   color: var(--text);
-  font-size: 9px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1;
 }
@@ -4708,7 +4708,7 @@ tbody tr.computer-row.selected {
 
 .score-pill.empty {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0;
 }
 
@@ -4720,7 +4720,7 @@ tbody tr.computer-row.selected {
   align-items: center;
   gap: 4px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .model-status-pill svg {
@@ -4798,7 +4798,7 @@ tbody tr.computer-row.selected {
   border-radius: 4px;
   color: var(--blue);
   background: #11161a;
-  font: 10px/1 var(--ui);
+  font: 12px/1 var(--ui);
   text-transform: uppercase;
   cursor: pointer;
 }
@@ -4871,7 +4871,7 @@ tbody tr.computer-row.selected {
   /* 10px, not 9: these sit inside the clickable model row, where anything under
      10px is below what the screen audit will accept — and it is right, this is
      the line that tells you whether a model is 3.8B or a text encoder. */
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 600;
   color: var(--text);
@@ -4881,7 +4881,7 @@ tbody tr.computer-row.selected {
 
 .model-pulls-sub {
   display: block;
-  font-size: 9px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 500;
   color: rgb(var(--primary-rgb));
@@ -4896,7 +4896,7 @@ tbody tr.computer-row.selected {
 
 .speed-pill {
   display: inline-block;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   padding: 2px 6px;
   border-radius: 4px;
@@ -4939,7 +4939,7 @@ tbody tr.computer-row.selected {
   border-radius: 3px;
   background: rgba(var(--red-rgb), 0.1);
   color: var(--red);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -5078,7 +5078,7 @@ tbody tr.computer-row.selected {
 .compatibility-next-step span,
 .compatibility-steps span {
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 950;
   text-transform: uppercase;
 }
@@ -5219,7 +5219,7 @@ tbody tr.computer-row.selected {
 .resource-copy span,
 .cuda-status span {
   color: var(--gold);
-  font-size: 9px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -5238,7 +5238,7 @@ tbody tr.computer-row.selected {
 .resource-copy em,
 .cuda-status em {
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.25;
 }
@@ -5280,7 +5280,7 @@ tbody tr.computer-row.selected {
 .test-suite-strip span {
   display: block;
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -5309,7 +5309,7 @@ tbody tr.computer-row.selected {
 .test-process-grid span {
   display: block;
   color: var(--pink);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -5324,7 +5324,7 @@ tbody tr.computer-row.selected {
 
 .test-process-head em {
   color: var(--blue);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 800;
   line-height: 1.25;
@@ -5356,7 +5356,7 @@ tbody tr.computer-row.selected {
 
 .test-process-grid em {
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.35;
 }
@@ -5400,13 +5400,13 @@ tbody tr.computer-row.selected {
 .run-progress-main span {
   display: block;
   color: var(--pink);
-  font-size: 9px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
 .run-progress-head strong {
   color: var(--green);
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -5417,7 +5417,7 @@ tbody tr.computer-row.selected {
 .run-progress-explainer {
   margin: 0;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -5616,13 +5616,13 @@ tbody tr.computer-row.selected {
 
 .live-show-meters .metric-tile span {
   color: var(--gold);
-  font-size: 8px;
+  font-size: 12px;
   letter-spacing: 0.04em;
 }
 
 .live-show-meters .metric-tile strong {
   margin: 3px 0 4px;
-  font-size: 11px;
+  font-size: 12px;
   min-height: 0;
   line-height: 1.1;
   text-transform: none;
@@ -5648,7 +5648,7 @@ tbody tr.computer-row.selected {
 .live-show-nameplate span {
   display: block;
   color: var(--pink);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 950;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -5778,7 +5778,7 @@ tbody tr.computer-row.selected {
 }
 
 .live-mini-info em {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6112,7 +6112,7 @@ tbody tr.computer-row.selected {
 
 .live-show-nameplate em {
   color: var(--green);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 800;
 }
@@ -6181,7 +6181,7 @@ tbody tr.computer-row.selected {
 .live-show-progress em {
   min-width: 0;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.3;
   text-align: right;
@@ -6429,7 +6429,7 @@ tbody tr.computer-row.selected {
 .flirt-bubble span {
   min-width: 0;
   color: var(--pink);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   overflow: hidden;
@@ -6440,7 +6440,7 @@ tbody tr.computer-row.selected {
 .flirt-bubble strong {
   min-width: 0;
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.25;
 }
 
@@ -6632,7 +6632,7 @@ tbody tr.computer-row.selected {
 .run-progress-foot strong {
   min-width: 0;
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6751,7 +6751,7 @@ tbody tr.computer-row.selected {
 .match-score-strip span,
 .match-detail-grid span {
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -6814,7 +6814,7 @@ tbody tr.computer-row.selected {
 
 .match-detail-grid em {
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.25;
 }
@@ -6837,7 +6837,7 @@ tbody tr.computer-row.selected {
 
 .prompt-proof-empty span {
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.25;
 }
 
@@ -6848,7 +6848,7 @@ tbody tr.computer-row.selected {
   border: 1px dashed #3b454a;
   color: var(--muted);
   background: #0c1013;
-  font-size: 9px;
+  font-size: 12px;
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6907,7 +6907,7 @@ tbody tr.computer-row.selected {
 
 .list-winner span {
   color: var(--green);
-  font-size: 9px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -6921,7 +6921,7 @@ tbody tr.computer-row.selected {
 
 .list-winner em {
   color: var(--gold);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   white-space: nowrap;
 }
@@ -6934,7 +6934,7 @@ tbody tr.computer-row.selected {
   margin: 0;
   padding: 0 2px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -6964,7 +6964,7 @@ tbody tr.computer-row.selected {
 .speed-date-lineup-head span,
 .speed-date-contestant-head span {
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -7067,7 +7067,7 @@ tbody tr.computer-row.selected {
   margin-top: 3px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -7144,7 +7144,7 @@ tbody tr.computer-row.selected {
   display: block;
   margin-top: 3px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -7210,7 +7210,7 @@ tbody tr.computer-row.selected {
 .speed-date-stage-cue span {
   display: block;
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -7280,7 +7280,7 @@ tbody tr.computer-row.selected {
 
 .speed-date-stage-lineup li > span {
   color: var(--gold);
-  font: 900 10px/1 var(--ui);
+  font: 900 12px/1 var(--ui);
 }
 
 .speed-date-stage-cue {
@@ -7351,7 +7351,7 @@ tbody tr.computer-row.selected {
 .speed-date-lineup-stats span {
   display: block;
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -7436,7 +7436,7 @@ tbody tr.computer-row.selected {
   display: block;
   margin-top: 2px;
   color: var(--gold);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.2;
 }
@@ -7454,7 +7454,7 @@ tbody tr.computer-row.selected {
   border-radius: 8px;
   color: var(--text-strong);
   background: rgba(5, 9, 13, 0.64);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   line-height: 1.15;
   display: grid;
@@ -7464,7 +7464,7 @@ tbody tr.computer-row.selected {
 .speed-date-contestant-card p {
   margin: 0;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -7488,7 +7488,7 @@ tbody tr.computer-row.selected {
 
 .speed-date-empty-slot span {
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -7565,7 +7565,7 @@ tbody tr.computer-row.selected {
 .speed-date-live-question span,
 .speed-date-question-plan span {
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -7613,13 +7613,13 @@ tbody tr.computer-row.selected {
 .speed-date-transcript-tabs button b {
   grid-row: 1 / 3;
   color: var(--gold);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .speed-date-transcript-tabs button span {
   min-width: 0;
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -7629,7 +7629,7 @@ tbody tr.computer-row.selected {
 .speed-date-transcript-tabs button em {
   min-width: 0;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
   font-style: normal;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -7696,7 +7696,7 @@ tbody tr.computer-row.selected {
   border-radius: 6px;
   background: rgba(5, 9, 13, 0.68);
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   text-align: center;
@@ -7723,7 +7723,7 @@ tbody tr.computer-row.selected {
 .sbs-question-prompt span {
   display: block;
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   margin-bottom: 4px;
@@ -7778,7 +7778,7 @@ tbody tr.computer-row.selected {
 
 .sbs-answer-model em {
   font-style: normal;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 4px;
@@ -7797,7 +7797,7 @@ tbody tr.computer-row.selected {
 }
 
 .sbs-answer-meta span {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text);
 }
 
@@ -7811,7 +7811,7 @@ tbody tr.computer-row.selected {
   border-radius: 999px;
   background: rgba(238, 0, 85, 0.12);
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   line-height: 1;
   text-transform: uppercase;
@@ -7887,7 +7887,7 @@ tbody tr.computer-row.selected {
   color: var(--gold);
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .speed-date-qa-head div {
@@ -7902,7 +7902,7 @@ tbody tr.computer-row.selected {
 
 .speed-date-qa-head em {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   white-space: nowrap;
 }
@@ -7922,7 +7922,7 @@ tbody tr.computer-row.selected {
 }
 
 .model-demo-chips-label {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -7939,7 +7939,7 @@ tbody tr.computer-row.selected {
   border-radius: 999px;
   background: color-mix(in srgb, var(--blue) 12%, transparent);
   color: var(--blue);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   cursor: pointer;
 }
@@ -7976,7 +7976,7 @@ tbody tr.computer-row.selected {
   border-radius: 999px;
   color: var(--gold);
   background: rgba(var(--gold-rgb), 0.08);
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -8103,7 +8103,7 @@ tbody tr.computer-row.selected {
 .question-suite-head span {
   display: block;
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -8123,7 +8123,7 @@ tbody tr.computer-row.selected {
   border: 1px solid #596169;
   color: var(--text);
   background: #151b20;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   cursor: pointer;
 }
@@ -8171,7 +8171,7 @@ tbody tr.computer-row.selected {
 .question-row span {
   display: block;
   color: var(--green);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -8179,7 +8179,7 @@ tbody tr.computer-row.selected {
 .question-row p {
   margin: 2px 0 0;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -8212,7 +8212,7 @@ tbody tr.computer-row.selected {
 .suite-editor-toolbar span,
 .suite-question-card span {
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -8242,7 +8242,7 @@ tbody tr.computer-row.selected {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--green, #5cba8a);
   opacity: 0.8;
 }
@@ -8262,7 +8262,7 @@ tbody tr.computer-row.selected {
 .suite-count-picker > span {
   margin-left: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -8272,7 +8272,7 @@ tbody tr.computer-row.selected {
   border-radius: 4px;
   background: transparent;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
@@ -8392,7 +8392,7 @@ tbody tr.computer-row.selected {
   align-items: center;
   gap: 7px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .speed-date-results li b {
@@ -8408,7 +8408,7 @@ tbody tr.computer-row.selected {
 
 .speed-date-results li em {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
   font-style: normal;
   white-space: nowrap;
 }
@@ -8446,7 +8446,7 @@ tbody tr.computer-row.selected {
 
 .speed-date-empty span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .agent-panel {
@@ -8508,7 +8508,7 @@ tbody tr.computer-row.selected {
 }
 
 .avatar-frame-name {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-strong);
   text-align: center;
@@ -8656,7 +8656,7 @@ tbody tr.computer-row.selected {
   border-radius: 4px;
   background: rgba(238, 0, 85, 0.0);
   color: rgba(255, 249, 239, 0.0);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 16px;
   text-align: center;
   cursor: pointer;
@@ -8682,7 +8682,7 @@ tbody tr.computer-row.selected {
 .roster-name {
   max-width: 100%;
   color: var(--text-strong);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.2;
   word-break: break-all;
@@ -8696,7 +8696,7 @@ tbody tr.computer-row.selected {
   border-radius: 999px;
   background: rgba(var(--green-rgb), 0.11);
   color: var(--green);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 950;
   line-height: 1;
   overflow: hidden;
@@ -8739,14 +8739,14 @@ tbody tr.computer-row.selected {
 
 .match-tagline span {
   color: var(--pink);
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.1;
   text-transform: uppercase;
 }
 
 .match-tagline strong {
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.15;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -8825,13 +8825,13 @@ tbody tr.computer-row.selected {
 
 .pairing-link span {
   color: var(--pink);
-  font-size: 9px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
 .pairing-link strong {
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -8942,7 +8942,7 @@ tbody tr.computer-row.selected {
 
 .agent-nameplate span {
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .matchmaker-notes {
@@ -8961,13 +8961,13 @@ tbody tr.computer-row.selected {
 
 .matchmaker-notes span {
   color: var(--pink);
-  font-size: 9px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
 .matchmaker-notes strong {
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.25;
 }
 
@@ -9018,7 +9018,7 @@ tbody tr.computer-row.selected {
 }
 
 .score-tile span {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -9071,7 +9071,7 @@ tbody tr.computer-row.selected {
   color: var(--text);
   display: grid;
   place-items: center;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -9099,7 +9099,7 @@ tbody tr.computer-row.selected {
 
 .result-explainer span {
   color: var(--pink);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -9113,7 +9113,7 @@ tbody tr.computer-row.selected {
 .result-explainer p {
   margin: 0;
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -9126,7 +9126,7 @@ tbody tr.computer-row.selected {
   background: rgba(232, 160, 32, 0.1);
   border: 1px solid rgba(232, 160, 32, 0.35);
   color: #e8a020 !important;
-  font-size: 10px !important;
+  font-size: 12px !important;
   line-height: 1.4 !important;
 }
 
@@ -9606,7 +9606,7 @@ tbody tr.computer-row.selected {
   align-items: center;
   gap: 6px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .ear-verdict .mini-button svg {
@@ -9691,7 +9691,7 @@ tbody tr.computer-row.selected {
 }
 
 .upgrade-rig-heading span {
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
@@ -9744,7 +9744,7 @@ tbody tr.computer-row.selected {
 }
 
 .upgrade-card-category {
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -9792,20 +9792,20 @@ tbody tr.computer-row.selected {
 }
 
 .upgrade-card-spec {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--gold);
   font-weight: 600;
 }
 
 .upgrade-card-price {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-strong);
 }
 
 .upgrade-card-benefit {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text);
   line-height: 1.45;
   flex: 1;
@@ -9819,7 +9819,7 @@ tbody tr.computer-row.selected {
   border-radius: 6px;
   background: #ff9900;
   color: #111;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   text-decoration: none;
   transition: background 0.12s, transform 0.1s;
@@ -9850,7 +9850,7 @@ tbody tr.computer-row.selected {
 
 .upgrade-disclosure {
   margin: 0;
-  font-size: 10px;
+  font-size: 12px;
   color: rgba(255, 249, 239, 0.3);
   line-height: 1.4;
 }
@@ -9884,7 +9884,7 @@ tbody tr.computer-row.selected {
 .setup-card span {
   display: block;
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -9943,7 +9943,7 @@ tbody tr.computer-row.selected {
   border: 1px solid #34414a;
   background: #090d10;
   color: var(--blue);
-  font: 11px/1.4 var(--mono);
+  font: 12px/1.4 var(--mono);
   white-space: normal;
   word-break: break-word;
 }
@@ -9974,7 +9974,7 @@ tbody tr.computer-row.selected {
   border-radius: 999px;
   background: rgba(var(--primary-rgb), 0.08);
   color: var(--green);
-  font: 10px/1 var(--ui);
+  font: 12px/1 var(--ui);
   font-weight: 800;
   text-transform: uppercase;
   cursor: pointer;
@@ -10035,7 +10035,7 @@ tbody tr.computer-row.selected {
 
 .score-explainer-grid span {
   color: var(--pink);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -10049,7 +10049,7 @@ tbody tr.computer-row.selected {
 
 .score-explainer-grid em {
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.4;
 }
@@ -10061,7 +10061,7 @@ tbody tr.computer-row.selected {
 
 .score-explainer-grades > span {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -10088,7 +10088,7 @@ tbody tr.computer-row.selected {
 }
 
 .grade-chip em {
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -10126,7 +10126,7 @@ tbody tr.computer-row.selected {
 .score-explainer-note {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   text-align: center;
 }
 
@@ -10254,7 +10254,7 @@ tbody tr.computer-row.selected {
   align-items: center;
   gap: 12px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -10309,7 +10309,7 @@ tbody tr.computer-row.selected {
 .support-hardware-card-inner p {
   margin: 0;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -10322,7 +10322,7 @@ tbody tr.computer-row.selected {
   background: rgba(255, 153, 0, 0.12);
   border: 1px solid rgba(255, 153, 0, 0.25);
   color: #ff9900;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
   align-self: flex-start;
@@ -10336,7 +10336,7 @@ tbody tr.computer-row.selected {
 .support-disclosure {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   text-align: center;
   opacity: 0.7;
 }
@@ -10370,7 +10370,7 @@ tbody tr.computer-row.selected {
 .modal-warning-grid span {
   display: block;
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -10427,7 +10427,7 @@ tbody tr.computer-row.selected {
 
 .modal-warning-grid em {
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.25;
 }
@@ -10447,7 +10447,7 @@ tbody tr.computer-row.selected {
 }
 
 .run-question-picker-head > span {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -10466,7 +10466,7 @@ tbody tr.computer-row.selected {
   align-items: center;
   justify-content: center;
   min-height: 32px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   padding: 6px 12px;
   border-radius: 7px;
@@ -10522,7 +10522,7 @@ tbody tr.computer-row.selected {
 }
 
 .run-q-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--gold);
   text-transform: uppercase;
@@ -10530,14 +10530,14 @@ tbody tr.computer-row.selected {
 }
 
 .run-q-prompt {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   font-style: normal;
   line-height: 1.4;
 }
 
 .run-question-picker > span {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -10739,7 +10739,7 @@ tbody tr.computer-row.selected {
 }
 
 .update-toast-head span {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
@@ -10868,7 +10868,7 @@ tbody tr.computer-row.selected {
   justify-content: center;
   gap: 2px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -10981,7 +10981,7 @@ tbody tr.computer-row.selected {
 .utility-stat span {
   display: block;
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -11034,7 +11034,7 @@ tbody tr.computer-row.selected {
 .theme-picker > div:first-child span {
   display: block;
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -11082,7 +11082,7 @@ tbody tr.computer-row.selected {
 
 .mode-toggle span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -11140,7 +11140,7 @@ tbody tr.computer-row.selected {
 
 .theme-card em {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -11186,7 +11186,7 @@ tbody tr.computer-row.selected {
 .model-news-section-title span {
   display: block;
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -11298,7 +11298,7 @@ tbody tr.computer-row.selected {
   gap: 5px;
   align-items: center;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -11307,7 +11307,7 @@ tbody tr.computer-row.selected {
   border-radius: 999px;
   color: var(--gold);
   background: rgba(var(--gold-rgb), 0.12);
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1;
 }
 
@@ -11336,7 +11336,7 @@ tbody tr.computer-row.selected {
 .model-news-meta small {
   margin: 0;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.25;
 }
 
@@ -11350,7 +11350,7 @@ tbody tr.computer-row.selected {
 
 .model-news-meta span {
   color: var(--green);
-  font: 11px/1 var(--mono);
+  font: 12px/1 var(--mono);
 }
 
 .model-news-meta small {
@@ -11373,7 +11373,7 @@ tbody tr.computer-row.selected {
 .third-party-model-notice span {
   display: block;
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -11390,7 +11390,7 @@ tbody tr.computer-row.selected {
   display: block;
   margin-top: 5px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.45;
 }
@@ -11421,7 +11421,7 @@ tbody tr.computer-row.selected {
 .advanced-lab-model label {
   display: block;
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -11438,7 +11438,7 @@ tbody tr.computer-row.selected {
   display: block;
   margin-top: 4px;
   color: var(--blue);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.35;
 }
@@ -11561,7 +11561,7 @@ tbody tr.computer-row.selected {
 }
 
 .run-skill-tests-head span {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--gold);
@@ -11569,7 +11569,7 @@ tbody tr.computer-row.selected {
 
 .run-skill-tests-head em {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted, rgba(255, 249, 239, 0.6));
 }
 
@@ -11591,7 +11591,7 @@ tbody tr.computer-row.selected {
 }
 
 .run-skill-test-option span em {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted, rgba(255, 249, 239, 0.6));
 }
 
@@ -11635,7 +11635,7 @@ tbody tr.computer-row.selected {
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.25);
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -11753,7 +11753,7 @@ tbody tr.computer-row.selected {
 
 .demo-vision-reading span {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -11815,7 +11815,7 @@ tbody tr.computer-row.selected {
 }
 
 .activity-result-info em {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted, rgba(255, 249, 239, 0.6));
 }
 
@@ -11828,7 +11828,7 @@ tbody tr.computer-row.selected {
 }
 
 .activity-panel-head span {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--gold);
@@ -11882,7 +11882,7 @@ tbody tr.computer-row.selected {
 .activity-state {
   padding: 4px 10px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .activity-state.running {
@@ -11951,7 +11951,7 @@ tbody tr.computer-row.selected {
   border-radius: 999px;
   background: rgba(var(--gold-rgb), 0.14);
   color: var(--gold, #ffc957);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 700;
   text-transform: uppercase;
@@ -12087,7 +12087,7 @@ tbody tr.computer-row.selected {
   border-radius: 999px;
   background: rgba(var(--primary-rgb), 0.08);
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -12101,7 +12101,7 @@ tbody tr.computer-row.selected {
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 8px;
   align-items: start;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -12123,7 +12123,7 @@ tbody tr.computer-row.selected {
   border-radius: 10px;
   background: rgba(var(--primary-rgb), 0.08);
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .advanced-lab-message.failed {
@@ -12198,7 +12198,7 @@ tbody tr.computer-row.selected {
   display: block;
   margin-top: 3px;
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .advanced-lab-output {
@@ -12209,7 +12209,7 @@ tbody tr.computer-row.selected {
   border-radius: 10px;
   background: #080d10;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
   overflow: auto;
   white-space: pre-wrap;
@@ -12232,7 +12232,7 @@ tbody tr.computer-row.selected {
 
 .advanced-lab-image-preview em {
   color: var(--blue);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.35;
 }
@@ -12244,7 +12244,7 @@ tbody tr.computer-row.selected {
 
 .advanced-lab-image-controls label {
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -12270,7 +12270,7 @@ tbody tr.computer-row.selected {
   grid-template-columns: 16px minmax(0, 1fr);
   gap: 8px;
   align-items: start;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -12295,7 +12295,7 @@ tbody tr.computer-row.selected {
 
 .advanced-lab-download span {
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -12333,7 +12333,7 @@ tbody tr.computer-row.selected {
 
 .third-party-download-conditions strong {
   color: var(--gold);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -12369,7 +12369,7 @@ tbody tr.computer-row.selected {
   gap: 8px 12px;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -12392,7 +12392,7 @@ tbody tr.computer-row.selected {
   padding: 8px 10px;
   border-top: 1px solid rgba(255, 249, 239, 0.06);
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .video-lineup-row:first-child {
@@ -12402,7 +12402,7 @@ tbody tr.computer-row.selected {
 .video-lineup-row-head {
   background: rgba(255, 249, 239, 0.03);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -12446,7 +12446,7 @@ tbody tr.computer-row.selected {
 
 .video-lineup-name em {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -12456,7 +12456,7 @@ tbody tr.computer-row.selected {
   border-radius: 999px;
   background: rgba(255, 249, 239, 0.05);
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -12527,7 +12527,7 @@ tbody tr.computer-row.selected {
 .video-lineup-error {
   flex-basis: 100%;
   color: var(--red);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   text-align: right;
 }
@@ -12555,7 +12555,7 @@ tbody tr.computer-row.selected {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 8px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -12594,7 +12594,7 @@ tbody tr.computer-row.selected {
 
 .video-lineup-results-head span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .video-lineup-board {
@@ -12614,7 +12614,7 @@ tbody tr.computer-row.selected {
   grid-template-columns: 28px minmax(0, 1fr) auto auto;
   gap: 10px;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .video-lineup-board li > b:first-child {
@@ -12642,7 +12642,7 @@ tbody tr.computer-row.selected {
 
 .video-lineup-board em {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -12699,7 +12699,7 @@ tbody tr.computer-row.selected {
   display: grid;
   place-items: center;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .video-lineup-clip figcaption {
@@ -12708,7 +12708,7 @@ tbody tr.computer-row.selected {
   gap: 6px;
   align-items: center;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .video-lineup-clip figcaption strong {
@@ -12728,7 +12728,7 @@ tbody tr.computer-row.selected {
   align-items: center;
   gap: 6px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -12748,7 +12748,7 @@ tbody tr.computer-row.selected {
 .utility-empty .comfy-start-status {
   display: inline-flex;
   margin-top: 0;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .comfy-start-status > span,
@@ -12814,7 +12814,7 @@ tbody tr.computer-row.selected {
   color: var(--text);
   display: grid;
   gap: 4px;
-  font: 11px/1.2 var(--ui);
+  font: 12px/1.2 var(--ui);
   cursor: pointer;
 }
 
@@ -12903,7 +12903,7 @@ tbody tr.computer-row.selected {
 
 .generation-test-head span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -12943,7 +12943,7 @@ tbody tr.computer-row.selected {
   align-items: center;
   gap: 10px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -12953,7 +12953,7 @@ tbody tr.computer-row.selected {
   border: 0;
   background: none;
   color: var(--blue);
-  font: 11px/1.3 var(--ui);
+  font: 12px/1.3 var(--ui);
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
@@ -12966,7 +12966,7 @@ tbody tr.computer-row.selected {
 
 .generation-test-label {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -13022,7 +13022,7 @@ tbody tr.computer-row.selected {
   display: grid;
   place-items: center;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .generation-test-picture figcaption {
@@ -13031,7 +13031,7 @@ tbody tr.computer-row.selected {
   align-items: center;
   gap: 6px 10px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .generation-test-picture figcaption strong {
@@ -13055,7 +13055,7 @@ tbody tr.computer-row.selected {
 .generation-test-meta {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -13070,7 +13070,7 @@ tbody tr.computer-row.selected {
   align-content: center;
   gap: 8px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   text-align: center;
 }
@@ -13132,7 +13132,7 @@ tbody tr.computer-row.selected {
   margin: 0;
   padding-left: 18px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -13151,7 +13151,7 @@ tbody tr.computer-row.selected {
   border-radius: 999px;
   color: var(--text-strong);
   background: rgba(var(--gold-rgb), 0.08);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   text-decoration: none;
   text-transform: uppercase;
@@ -13202,7 +13202,7 @@ tbody tr.computer-row.selected {
 
 .third-party-download-list em {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 800;
   text-transform: uppercase;
@@ -13225,7 +13225,7 @@ tbody tr.computer-row.selected {
   border-radius: 999px;
   color: var(--text-strong);
   background: rgba(var(--gold-rgb), 0.08);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   text-decoration: none;
   text-transform: uppercase;
@@ -13252,7 +13252,7 @@ tbody tr.computer-row.selected {
   border-radius: 10px;
   background: rgba(238, 0, 85, 0.08);
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -13274,7 +13274,7 @@ tbody tr.computer-row.selected {
 
 .task-picks-section > span {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -13301,7 +13301,7 @@ tbody tr.computer-row.selected {
 
 .task-pick-card em {
   color: var(--pink);
-  font-size: 9px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 900;
   text-transform: uppercase;
@@ -13312,7 +13312,7 @@ tbody tr.computer-row.selected {
 
 .task-pick-card strong {
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -13321,13 +13321,13 @@ tbody tr.computer-row.selected {
 }
 
 .task-pick-card .score-row-grade {
-  font-size: 10px;
+  font-size: 12px;
   padding: 2px 6px;
   justify-self: start;
 }
 
 .task-pick-response-time {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 2px;
 }
@@ -13358,7 +13358,7 @@ tbody tr.computer-row.selected {
 
 .ollama-update-head span {
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   display: block;
@@ -13379,7 +13379,7 @@ tbody tr.computer-row.selected {
   border: 1px solid rgba(var(--green-rgb), 0.5);
   border-radius: 20px;
   color: var(--green);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 700;
 }
@@ -13447,7 +13447,7 @@ tbody tr.computer-row.selected {
 .release-notes-head span,
 .release-notes > ol > li > div span {
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -13512,14 +13512,14 @@ tbody tr.computer-row.selected {
 
 .update-channel-toggle span {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
 
 .update-channel-toggle em {
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.3;
 }
@@ -13557,7 +13557,7 @@ tbody tr.computer-row.selected {
   border-radius: 7px;
   color: var(--green);
   background: rgba(var(--green-rgb), 0.09);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   overflow-wrap: anywhere;
   text-decoration: none;
@@ -13610,7 +13610,7 @@ tbody tr.computer-row.selected {
 
 .release-notes > ol > li > div em {
   color: var(--blue);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   white-space: nowrap;
 }
@@ -13742,7 +13742,7 @@ tbody tr.computer-row.selected {
 .danger-zone span {
   display: block;
   color: var(--red);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -13770,7 +13770,7 @@ tbody tr.computer-row.selected {
 
 .history-timeline-head span {
   color: var(--blue);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -13812,7 +13812,7 @@ tbody tr.computer-row.selected {
 .log-entry-meta span {
   display: block;
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -13828,7 +13828,7 @@ tbody tr.computer-row.selected {
   display: block;
   margin-top: 4px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   overflow-wrap: anywhere;
 }
@@ -13882,7 +13882,7 @@ tbody tr.computer-row.selected {
 
 .log-entry-meta strong {
   color: var(--green);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -13896,7 +13896,7 @@ tbody tr.computer-row.selected {
 
 .log-entry-meta em {
   color: var(--blue);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   text-transform: uppercase;
 }
@@ -13904,14 +13904,14 @@ tbody tr.computer-row.selected {
 .log-entry p {
   margin: 0;
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .log-entry details {
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .log-entry summary {
@@ -13929,7 +13929,7 @@ tbody tr.computer-row.selected {
   border: none; border-radius: 12px;
   color: var(--text);
   background: #070a0d;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.35;
   white-space: pre-wrap;
 }
@@ -13970,7 +13970,7 @@ tbody tr.computer-row.selected {
 
 .history-timeline time {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.25;
 }
 
@@ -13992,13 +13992,13 @@ tbody tr.computer-row.selected {
 .history-timeline li span {
   min-width: 0;
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.25;
 }
 
 .history-timeline li em {
   color: var(--green);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 900;
   white-space: nowrap;
@@ -14017,7 +14017,7 @@ tbody tr.computer-row.selected {
 
 .score-cleanup-panel span {
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -14032,7 +14032,7 @@ tbody tr.computer-row.selected {
   display: block;
   margin-top: 3px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -14051,7 +14051,7 @@ tbody tr.computer-row.selected {
 }
 
 .score-clear-button span {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -14119,7 +14119,7 @@ tbody tr.computer-row.selected {
 
 .score-ranking-list em {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   white-space: nowrap;
   overflow: hidden;
@@ -14165,7 +14165,7 @@ tbody tr.computer-row.selected {
 }
 
 .tie-badge {
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.06em;
   padding: 1px 4px;
@@ -14554,7 +14554,7 @@ tr:focus-visible,
   }
 
   .flow-step strong {
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .workbench {
@@ -14627,7 +14627,7 @@ tr:focus-visible,
 
   .roster-score {
     padding: 2px 5px;
-    font-size: 8px;
+    font-size: 12px;
   }
 
   .match-tagline {
@@ -14665,7 +14665,7 @@ tr:focus-visible,
 
   .matchmaker-notes strong,
   .matchmaker-notes li strong {
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .score-tile {
@@ -15081,7 +15081,7 @@ td {
 .slot-button {
   min-width: 56px;
   padding: 0 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -15208,7 +15208,7 @@ td {
 }
 
 .top-deck .brand-block p {
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 1px;
 }
 
@@ -15230,7 +15230,7 @@ td {
 
 .top-deck .rig-card span,
 .top-deck .local-status-card span {
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 1px;
 }
 
@@ -15252,11 +15252,11 @@ td {
 }
 
 .top-deck .metric-tile span {
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .top-deck .metric-tile strong {
-  font-size: 11px;
+  font-size: 12px;
   margin: 1px 0 3px;
   min-height: 0;
   overflow: hidden;
@@ -15267,7 +15267,7 @@ td {
 .top-deck .top-deck-use-model-btn {
   padding: 3px 6px;
   /* Was 8px. This is a button, and its label has to be read to be used. */
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .top-deck .mini-bars i {
@@ -15298,7 +15298,7 @@ td {
 
 .top-deck .primary-button.compact {
   padding: 4px 8px;
-  font-size: 10px;
+  font-size: 12px;
   gap: 4px;
   border-radius: 6px;
 }
@@ -15468,7 +15468,7 @@ td {
 
 .stage-content .wizard-rounds span {
   margin: 0;
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .stage-content .wizard-rounds strong {
@@ -15478,7 +15478,7 @@ td {
   white-space: normal;
   overflow-wrap: anywhere;
   line-height: 1.1;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .stage-content .host-actions {
@@ -15491,7 +15491,7 @@ td {
 
 .stage-content .host-actions span {
   grid-column: 1 / -1;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .stage-content .host-actions .primary-button,
@@ -15541,7 +15541,7 @@ td {
 .stage-content .host-actions .simple-primary-action em {
   grid-column: 2;
   color: rgba(14, 18, 20, 0.72);
-  font-size: 9px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 900;
   line-height: 1;
@@ -15790,14 +15790,14 @@ td {
   border-radius: 999px;
   background: rgba(var(--blue-rgb), 0.12);
   color: var(--text-strong);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
 }
 
 .contestant-variant-facts span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -15851,7 +15851,7 @@ td {
   border-radius: 999px;
   background: rgba(var(--gold-rgb), 0.12);
   color: var(--gold);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -15875,7 +15875,7 @@ td {
 .task-matrix-head span {
   display: block;
   color: var(--blue);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -15911,7 +15911,7 @@ td {
 
 .task-matrix thead th {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -15943,7 +15943,7 @@ td {
 
 .task-matrix td.needs-judge {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -15951,13 +15951,13 @@ td {
 .task-matrix td.too-few,
 .task-matrix td.none {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .task-matrix-legend {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -16019,7 +16019,7 @@ td {
 .activity-report-list em {
   grid-column: 1;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -16031,7 +16031,7 @@ td {
   border: 1px solid var(--line-bright);
   border-radius: 999px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   white-space: nowrap;
@@ -16049,7 +16049,7 @@ td {
 
 .activity-report-note {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.4;
 }
@@ -16147,7 +16147,7 @@ td {
 .run-report-head span {
   display: block;
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -16205,7 +16205,7 @@ td {
 
 .run-report-ranking b {
   color: var(--muted);
-  font: 11px/1 var(--mono);
+  font: 12px/1 var(--mono);
 }
 
 .run-report-ranking li > span {
@@ -16219,7 +16219,7 @@ td {
 
 .run-report-ranking em {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   white-space: nowrap;
 }
@@ -16245,7 +16245,7 @@ td {
 .run-report-foot span {
   min-width: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .run-report-foot button:first-of-type {
@@ -16289,7 +16289,7 @@ td {
 
 .model-compare-head span {
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -16341,7 +16341,7 @@ td {
   padding: 3px 4px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   text-align: left;
   text-overflow: ellipsis;
@@ -16351,7 +16351,7 @@ td {
 .model-compare-table th[scope="row"] {
   padding: 3px 4px 3px 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
   text-align: left;
 }
@@ -16359,7 +16359,7 @@ td {
 .model-compare-table td {
   padding: 3px 4px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -16375,7 +16375,7 @@ td {
 .model-compare-note {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -16418,7 +16418,7 @@ td {
 .contestant-spotlight-stats span,
 .contestant-spotlight-actions > span {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -16552,7 +16552,7 @@ td {
   fill: var(--muted);
   /* Was 7px, the smallest text anywhere in the app. These name the axes of the
      score breakdown, so they are the labels that make the chart mean anything. */
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   font-family: inherit;
   text-transform: uppercase;
@@ -16580,7 +16580,7 @@ td {
 
 .contestant-radar-scores span {
   color: var(--gold);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -16629,7 +16629,7 @@ td {
 
 .contestant-delta-cell em {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 600;
 }
@@ -16651,7 +16651,7 @@ td {
   /* Was 8px. This is the warning that a score was measured on different
      hardware and may no longer describe this machine — the last thing that
      should be the smallest text on screen. */
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 900;
   letter-spacing: 0.04em;
@@ -16674,7 +16674,7 @@ td {
 .contestant-vram-hint > span {
   display: block;
   color: var(--gold);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   margin-bottom: 3px;
@@ -16683,7 +16683,7 @@ td {
 .contestant-vram-hint p {
   margin: 0;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -16702,7 +16702,7 @@ td {
   color: var(--gold);
   /* Inside a <label>, so 10px is the floor: uppercase at 900 weight is already
      hard on small text, and this one names the field beneath it. */
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -16715,7 +16715,7 @@ td {
   border-radius: 7px;
   background: #151d22;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-family: inherit;
   line-height: 1.4;
   resize: vertical;
@@ -16744,7 +16744,7 @@ td {
 .lineup-gap-suggestions > span {
   display: block;
   color: rgba(var(--primary-rgb), 1);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   margin-bottom: 8px;
@@ -16779,14 +16779,14 @@ td {
 .lineup-suggestion-item em {
   display: block;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
 }
 
 
 .top-pick-ribbon span {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -16930,7 +16930,7 @@ td {
 
 .dating-profile-intro span {
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -17005,7 +17005,7 @@ td {
     rgba(15, 16, 24, 0.54);
   color: var(--muted);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   text-align: left;
   display: grid;
@@ -17022,7 +17022,7 @@ td {
 
 .profile-tabs > button em {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 900;
   line-height: 1.1;
@@ -17123,7 +17123,7 @@ td {
 }
 
 .use-case-card span {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   line-height: 1.4;
   flex: 1;
@@ -17154,7 +17154,7 @@ td {
 
 .profile-details-title span {
   color: var(--blue);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -17228,7 +17228,7 @@ td {
 .profile-question-head span,
 .profile-qa-block span {
   color: var(--pink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 950;
   text-transform: uppercase;
 }
@@ -17272,7 +17272,7 @@ td {
 
 .profile-score-grid span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -17285,7 +17285,7 @@ td {
 
 .profile-score-grid em {
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -17412,7 +17412,7 @@ td {
   color: var(--gold);
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .profile-question-head div {
@@ -17519,7 +17519,7 @@ tbody tr.selected {
   border-radius: 999px;
   background: rgba(255, 249, 239, 0.045);
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 900;
   line-height: 1;
   overflow: hidden;
@@ -18009,7 +18009,7 @@ tbody tr.selected {
 
 .agent-romance-banner span {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .agent-romance-banner strong {
@@ -18061,7 +18061,7 @@ tbody tr.selected {
 
 .romance-art-banner span {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 950;
   text-transform: uppercase;
 }
@@ -18124,7 +18124,7 @@ tbody tr.selected {
 
 .model-hub-header-copy span {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 950;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -18136,7 +18136,7 @@ tbody tr.selected {
 }
 
 .model-hub-header-copy em {
-  font-size: 11px;
+  font-size: 12px;
   color: rgba(255, 249, 239, 0.82);
 }
 
@@ -18148,7 +18148,7 @@ tbody tr.selected {
 }
 
 .model-hub-header-side span {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--pink, #e88bb5);
   white-space: nowrap;
 }
@@ -18182,7 +18182,7 @@ tbody tr.selected {
 }
 
 .art-banner-slim em {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -18269,7 +18269,7 @@ tbody tr.selected {
 .cruise-title span,
 .cruise-caption span {
   color: var(--pink);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 950;
   text-transform: uppercase;
 }
@@ -18462,7 +18462,7 @@ tbody tr.selected {
 
 .cruise-what-next > span {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 950;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -18532,13 +18532,13 @@ a.whats-next-support:hover {
 
 .whats-next-item strong {
   color: var(--text-strong);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .whats-next-item em {
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.4;
 }
@@ -18854,7 +18854,7 @@ a.whats-next-support:hover {
   border-radius: 999px;
   color: var(--gold);
   background: rgba(var(--gold-rgb), 0.1);
-  font-size: 9px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 900;
   line-height: 1;
@@ -18898,7 +18898,7 @@ a.whats-next-support:hover {
 
 /* Placeholder when the column shows measured speed and this row has no test yet. */
 .speed-untested {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   opacity: 0.55;
   white-space: nowrap;
@@ -19460,7 +19460,7 @@ a.whats-next-support:hover {
   }
 
   .side-menu-copy small {
-    font-size: 9px;
+    font-size: 12px;
   }
 
   .score-legend-strip {
@@ -19590,7 +19590,7 @@ a.whats-next-support:hover {
 .profile-question-id {
   margin-left: 8px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--muted);
   text-transform: none;
@@ -19605,7 +19605,7 @@ a.whats-next-support:hover {
   background: var(--panel);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* Skill-test failure explanation, shown where a result would be. A blank panel
@@ -19622,7 +19622,7 @@ a.whats-next-support:hover {
 
 .demo-failure-note strong { color: var(--text-strong); font-size: 13px; }
 .demo-failure-note p { margin: 0; color: var(--text); font-size: 12px; line-height: 1.45; }
-.demo-failure-note em { color: var(--muted); font-size: 11px; font-style: normal; line-height: 1.4; }
+.demo-failure-note em { color: var(--muted); font-size: 12px; font-style: normal; line-height: 1.4; }
 
 /* GPU contention note in the pre-flight modal. Informational, never a blocker —
    the run button stays enabled behind it. */
@@ -19801,7 +19801,7 @@ a.whats-next-support:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .chat-attachment-audio svg {
@@ -20164,7 +20164,7 @@ a.whats-next-support:hover {
   .side-menu-nav { gap: 4px; }
   .side-menu-group { gap: 4px; }
   /* 9px is the floor the responsive sweep holds non-control text to. */
-  .side-menu-group h2 { margin-top: 0; font-size: 9px; }
+  .side-menu-group h2 { margin-top: 0; font-size: 12px; }
   .side-menu-item { min-height: 28px; }
 
   /* On a short window, the two screens that still carry the 172px lineup strip
@@ -20178,7 +20178,7 @@ a.whats-next-support:hover {
   .has-global-lineup .side-menu-group h2 { display: none; }
   .side-menu-title { padding-top: 2px; padding-bottom: 2px; }
   .side-menu-donate,
-  .side-menu-bug-report { padding-top: 4px; padding-bottom: 4px; font-size: 10px; }
+  .side-menu-bug-report { padding-top: 4px; padding-bottom: 4px; font-size: 12px; }
 }
 
 /* Short AND narrow, where two correct rules combine into a wrong one.
@@ -20233,7 +20233,7 @@ a.whats-next-support:hover {
    difference between a number that means something and one that does not. */
 .advanced-lab-custom-note {
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
   color: var(--muted);
 }
@@ -20311,7 +20311,7 @@ a.whats-next-support:hover {
   margin-top: 3px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -20380,8 +20380,8 @@ a.whats-next-support:hover {
 /* Measured at 8px in the screen audit. A score pill is the row's headline and
    "Not tested" is the state that asks you to do something — neither belongs at
    the smallest size in the app. */
-.roster-score { font-size: 10px; }
-.speed-untested { font-size: 10px; opacity: 0.7; }
+.roster-score { font-size: 12px; }
+.speed-untested { font-size: 12px; opacity: 0.7; }
 
 /* The listening input meter.
    Driven by a --level custom property written straight to the element each
@@ -20412,7 +20412,7 @@ a.whats-next-support:hover {
 }
 
 .listening-meter span {
-  font-size: 11px;
+  font-size: 12px;
   opacity: 0.65;
   white-space: nowrap;
 }
@@ -20440,7 +20440,7 @@ a.whats-next-support:hover {
 .channel-switch > span {
   padding: 0 8px 0 5px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -20457,7 +20457,7 @@ a.whats-next-support:hover {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
   cursor: pointer;
@@ -20516,7 +20516,7 @@ a.whats-next-support:hover {
   background: rgba(255, 249, 239, 0.06);
   color: var(--text);
   /* A button's label has to be read to be used: 10px, like Use this model. */
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   white-space: nowrap;
@@ -20579,7 +20579,7 @@ a.whats-next-support:hover {
 /* Small enough to sit either side of a 24px slot, still a label: the eyebrow
    voice at its smallest, tracked so uppercase stays readable. */
 .balance-fader.mini .balance-fader-end {
-  font-size: 8px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   line-height: 1;
   opacity: 0.85;
@@ -20587,7 +20587,7 @@ a.whats-next-support:hover {
 
 .balance-fader-end {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -20698,7 +20698,7 @@ a.whats-next-support:hover {
 
 .balance-fader-question {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -20732,7 +20732,7 @@ a.whats-next-support:hover {
   border-radius: 999px;
   background: transparent;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   cursor: pointer;
   transition: color 0.12s ease-out, background-color 0.12s ease-out, border-color 0.12s ease-out;
@@ -20767,7 +20767,7 @@ a.whats-next-support:hover {
 .balance-fader-means {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -20798,7 +20798,7 @@ a.whats-next-support:hover {
 
 .lab-standings-head span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .lab-standings ol {
@@ -20818,7 +20818,7 @@ a.whats-next-support:hover {
   grid-template-columns: 24px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .lab-standings li > b:first-child {
@@ -20849,7 +20849,7 @@ a.whats-next-support:hover {
 
 .lab-standings em {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -20874,7 +20874,7 @@ a.whats-next-support:hover {
 
 .lab-standings-more {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -21010,7 +21010,7 @@ a.whats-next-support:hover {
 
 .comparison-run-head span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -21084,7 +21084,7 @@ a.whats-next-support:hover {
 
 .comparison-run-models em {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -21095,7 +21095,7 @@ a.whats-next-support:hover {
   align-items: center;
   gap: 10px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -21120,7 +21120,7 @@ a.whats-next-support:hover {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .comparison-run-progress li.drawing,
@@ -21168,7 +21168,7 @@ a.whats-next-support:hover {
 .lab-comparison-head span,
 .lab-comparison-head em {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -21238,7 +21238,7 @@ a.whats-next-support:hover {
   display: grid;
   place-items: center;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .lab-comparison-card-head {
@@ -21270,12 +21270,12 @@ a.whats-next-support:hover {
 
 .lab-comparison-card-head .advanced-lab-grade {
   padding: 3px 7px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .lab-comparison-card > em {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
 }
 

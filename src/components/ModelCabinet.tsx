@@ -257,7 +257,7 @@ export function ModelCabinet({
   // cell padding), Match fits its header — the previous 62/80/66 defaults
   // ellipsized all three.
   // Eight now: "Made In" sits after "By". Narrow, because it holds two letters.
-  const [colWidths, setColWidths] = useState([156, 92, 126, 86, 68, 110, 76, 96]);
+  const [colWidths, setColWidths] = useState([156, 92, 126, 86, 82, 110, 76, 116]);
   // Popularity is the least essential column (the local Ollama API exposes no
   // pull counts), so it yields first on narrower windows instead of forcing
   // horizontal scrolling. Handled in JS because the <col> track would keep
@@ -1025,7 +1025,7 @@ export function ModelCabinet({
               <SortableModelHeader label="Size" sortName="size" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(1, e)} />
               <SortableModelHeader label="Good for" sortName="skill" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(2, e)} />
               <SortableModelHeader label="Maker" sortName="maker" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(3, e)} />
-              <SortableModelHeader label="Made in" sortName="origin" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(4, e)} />
+              <SortableModelHeader label="From" sortName="origin" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(4, e)} />
               <SortableModelHeader label="Status" sortName="status" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(5, e)} />
               <SortableModelHeader label="Match" sortName="score" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(6, e)} />
               {!hidePopularity && (

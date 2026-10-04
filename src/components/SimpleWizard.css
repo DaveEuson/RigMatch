@@ -392,6 +392,7 @@
 .sw-dl-row.done .sw-dl-status { color: var(--green); }
 .sw-dl-row.failed .sw-dl-status { color: var(--red); }
 .sw-download-note { padding-top: var(--s2); }
+.sw-download-retry { display: flex; padding-top: var(--s3); }
 
 /* ---- The show ------------------------------------------------------------
    The lit stage (photo, bulbs, the question, the contestants) over a plain

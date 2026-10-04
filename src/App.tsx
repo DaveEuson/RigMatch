@@ -212,6 +212,7 @@ import { FirstRunSplash } from './components/FirstRunSplash';
 import { ModelPoolLineupStrip } from './components/ModelPoolLineupStrip';
 import { WelcomeOverlay } from './components/WelcomeOverlay';
 import { AchievementCues } from './components/TrojanReveal';
+import type { SettingsSectionId } from './lib/settingsSections';
 import { LogsView } from './components/LogsView';
 import { ActivityPanel } from './components/ActivityPanel';
 import { SpeedDatePanel } from './components/SpeedDatePanel';
@@ -610,6 +611,8 @@ function App() {
   const [setupGuideOpen, setSetupGuideOpen] = useState(false);
   const [clearDataOpen, setClearDataOpen] = useState(false);
   const [pendingScoreClear, setPendingScoreClear] = useState<PendingScoreClear | null>(null);
+  // A Settings section a link elsewhere asks for, such as ComfyUI help on Models.
+  const [settingsSectionRequest, setSettingsSectionRequest] = useState<{ id: SettingsSectionId; at: number } | null>(null);
   // The welcome again, from Settings. The first run's own is useGoals' showModeSplash.
   const [welcomeReplay, setWelcomeReplay] = useState(false);
   // My PC's two views: the computer and its connections, or everything logged.
@@ -3177,7 +3180,7 @@ function App() {
         setRunReports((current) => addRunReport(current, stored));
       }
       setReportReady(true);
-      setActivity(`Best match: ${winner.model} scored ${winner.scores.total} for this setup.`);
+      setActivity(`Best match: ${winner.model} scored ${formatMatchScore(winner.scores)} for this setup.`);
       await agentArcadeApi.appendLog({
         level: 'info',
         source: 'renderer',
@@ -4313,7 +4316,7 @@ function App() {
           </a>
         </div>
       )}
-      <AchievementCues />
+      <AchievementCues busy={isBenchmarking || isListTesting} />
       {showModeSplash && (
         <WelcomeOverlay
           vramGb={system.gpu.vramGb || 0}
@@ -4372,7 +4375,8 @@ function App() {
         onThemeChange={setThemeId}
         connections={connections}
         onOpenConnections={openConnections}
-        onOpenSettings={() => selectNav('settings')}
+        // From the top bar Settings opens on Preferences, not on the last section a link asked for.
+        onOpenSettings={() => { setSettingsSectionRequest(null); selectNav('settings'); }}
         onOpenChat={() => { void openChatApp(); }}
       />
       <LoadStrip system={system} running={runningLine} />
@@ -4627,7 +4631,7 @@ function App() {
             // Settings already explains ComfyUI in plain language; window.open
             // was popup-blocked in the browser preview and the review found the
             // button dead. In-app navigation cannot be blocked.
-            onOpenComfyHelp={() => selectNav('settings')}
+            onOpenComfyHelp={() => { setSettingsSectionRequest({ id: 'generation', at: Date.now() }); selectNav('settings'); }}
             selectedModel={selectedModel}
             installedModelNames={installedModelNames}
             shortlistIds={shortlistIds}
@@ -4841,6 +4845,7 @@ function App() {
             )}
             onEditGoals={() => setShowGoalsEditor(true)}
             onShowWelcome={() => setWelcomeReplay(true)}
+            sectionRequest={settingsSectionRequest}
             onDeleteModel={requestDeleteModel}
             onRefreshLogs={loadLogs}
             onClearScore={requestClearScore}
@@ -4903,10 +4908,10 @@ function App() {
         <div className="report-ready-bar" role="status">
           <Trophy aria-hidden="true" />
           <span>
-            Report ready — {listTestResult.results.length} model{listTestResult.results.length === 1 ? '' : 's'} compared,
-            {' '}{listTestResult.winner} came first
+            Report ready: {listTestResult.results.length} model{listTestResult.results.length === 1 ? '' : 's'} compared,
+            {' '}{getFriendlyModelName(listTestResult.winner)} came first
           </span>
-          <button type="button" className="primary-button compact" onClick={() => setReportOpen(true)}>
+          <button type="button" className="btn btn-line btn-sm" onClick={() => setReportOpen(true)}>
             See the report
           </button>
           <button type="button" className="report-ready-dismiss" onClick={() => setReportReady(false)} aria-label="Dismiss report notice">

@@ -343,6 +343,8 @@
   border-radius: 0;
   background: none;
 }
+.settings-layout .closet-row-name strong { font: 700 var(--fs-ui) / 1.3 var(--ui); }
+.settings-layout :is(.closet-row-name em, .closet-keep, .closet-elsewhere) { font-size: var(--fs-small); }
 .settings-layout .closet-keep {
   border-color: var(--gold);
   color: var(--gold);

@@ -71,18 +71,28 @@ export function TrojanReveal({ onClose }: { onClose: () => void }) {
  * found while the app opens is recorded as seen in the same commit, so
  * someone upgrading with fifty runs behind them gets no fanfare for last month.
  */
-export function AchievementCues() {
+export function AchievementCues({ busy }: { busy: boolean }) {
   const state = useAchievements();
   const previous = useRef(state.earned);
+  const [pending, setPending] = useState<{ reveal: boolean; sting: boolean }>({ reveal: false, sting: false });
   const [reveal, setReveal] = useState(false);
 
   useEffect(() => {
     const fresh = (Object.keys(state.earned) as AchievementId[])
       .filter((id) => !previous.current[id] && !state.seen.includes(id));
     previous.current = state.earned;
-    if (fresh.includes('trojan-hero')) setReveal(true);
-    else if (fresh.length > 0) playCue('sting');
+    if (fresh.includes('trojan-hero')) setPending((p) => ({ ...p, reveal: true }));
+    else if (fresh.length > 0) setPending((p) => ({ ...p, sting: true }));
   }, [state]);
+
+  // Held until the run ends: Ajax finishing first in a lineup used to cover
+  // the rest of the show with the reveal and play the fanfare over it.
+  useEffect(() => {
+    if (busy || (!pending.reveal && !pending.sting)) return;
+    if (pending.reveal) setReveal(true);
+    else playCue('sting');
+    setPending({ reveal: false, sting: false });
+  }, [busy, pending]);
 
   return reveal ? <TrojanReveal onClose={() => setReveal(false)} /> : null;
 }

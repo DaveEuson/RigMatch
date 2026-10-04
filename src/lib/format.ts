@@ -42,11 +42,11 @@ export function topPickPresentation(tone: 'scored' | 'installed' | 'download', g
 }
 
 export function topPickLabel(grade: string | undefined): string {
-  if (!grade) return 'Best Tested';
+  if (!grade) return 'Best tested';
   if (grade.startsWith('S') || grade.startsWith('A')) return 'Top Match';
-  if (grade.startsWith('B')) return 'Strong Contender';
-  if (grade.startsWith('C')) return 'Best So Far';
-  return 'Best Tested';
+  if (grade.startsWith('B')) return 'Strong contender';
+  if (grade.startsWith('C')) return 'Best so far';
+  return 'Best tested';
 }
 
 /** Hover/aria explanation for a score label shown on tiles and detail panels. */
@@ -181,7 +181,7 @@ export function hashString(value: string) {
 /** Strip Electron IPC wrapper noise from error messages before display. */
 export function getErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return describeRunError(message.replace(/^Error invoking remote method '[^']+':\s*/i, ''));
+  return describeRunError(message.replace(/^Error invoking remote method '[^']+':\s*/i, '').replace(/^Error:\s*/, ''));
 }
 
 /**

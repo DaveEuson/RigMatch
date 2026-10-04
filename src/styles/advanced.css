@@ -600,3 +600,29 @@
 @media (max-width: 920px) {
   .app-shell[data-ui-mode='advanced'] .setup-doctor-grid > * { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ── The lineup dock under every Advanced screen ─────────────────────────── */
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip,
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip * { text-transform: none !important; letter-spacing: normal !important; }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip {
+  margin: 0;
+  padding: var(--s2) var(--s5);
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel);
+}
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-head { padding: 0; }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-head > div > span { color: var(--muted); font: 400 var(--fs-small) / 1.3 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-head > div > strong { color: var(--text-strong); font: 700 var(--fs-ui) / 1.3 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-head > div > em { color: var(--muted); font: 400 var(--fs-small) / 1.35 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .lineup-head-actions { display: flex; align-items: center; gap: var(--s2); }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-slots { padding: 0; }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip :is(.model-pool-lineup-card, .model-pool-empty-slot) {
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: transparent;
+}
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card span { color: var(--muted); font: 400 var(--fs-small) / 1.2 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card strong { font: 700 13px / 1.25 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card em { color: var(--muted); font: 400 var(--fs-small) / 1.25 var(--ui); font-style: normal; }

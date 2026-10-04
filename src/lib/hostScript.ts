@@ -44,7 +44,8 @@ export const HOST_LINES = {
   ],
   downloadFailed: [
     "Oh dear, {name} missed the bus. The download stopped. We'll carry on with the others.",
-    "A hiccup backstage: {name} didn't arrive. Nothing's broken, and you can try again from Models.",
+    // Used when too few contestants arrived to carry on, beside "Try the downloads again".
+    "A hiccup backstage: {name} didn't arrive. Nothing's broken; try the download again or pick someone else.",
   ],
   dating: [
     "{name} is on question {q}. Let's see what they've got.",
@@ -70,7 +71,8 @@ export const HOST_LINES = {
     'You tested Ajax, the agent model made for Odysseus. Ladies and gentlemen, a true Trojan hero!',
   ],
   stopped: [
-    'Show\'s stopped. No harm done, and the scores so far are kept.',
+    // This screen only shows when no model finished: there are no scores to keep.
+    "Show's stopped. No harm done, and your lineup is still picked.",
     "We'll call it there. Come back any time; the stage stays set.",
   ],
 } as const;

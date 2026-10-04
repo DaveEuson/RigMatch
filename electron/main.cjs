@@ -1619,6 +1619,7 @@ async function startOllamaInstall(sender) {
   // Hoisted so the catch can distinguish a real filesystem error (which aborts
   // the fetch below) from a genuine user cancel.
   let streamError = null;
+  let fileStream = null;
   ollamaInstallController = new AbortController();
   try {
     send({ phase: 'downloading', percent: 0, receivedBytes: 0, totalBytes: 0 });
@@ -1629,7 +1630,7 @@ async function startOllamaInstall(sender) {
     if (!response.ok) throw new Error(`Download failed: ${response.status} ${response.statusText}`);
     const total = parseInt(response.headers.get('content-length') || '0', 10);
     let received = 0;
-    const fileStream = fsSync.createWriteStream(dest);
+    fileStream = fsSync.createWriteStream(dest);
     // Without an 'error' listener, a stream error (disk full, permission lost) is
     // thrown as an uncaught exception and crashes the main process — the outer
     // try/catch only sees awaited rejections. Capture it and abort the fetch so
@@ -1663,6 +1664,11 @@ async function startOllamaInstall(sender) {
     // report the underlying fs error instead of swallowing it as a silent cancel.
     const cause = streamError || err;
     if (cause.name !== 'AbortError') send({ phase: 'error', error: cause.message || 'Download failed' });
+    // A cancelled or failed download left a partial installer in the temp
+    // folder, tens of megabytes that nothing would ever launch. Closed first:
+    // Windows will not delete a file that is still open.
+    if (fileStream && !fileStream.closed) await new Promise((resolve) => { fileStream.once('close', resolve); fileStream.destroy(); });
+    await fs.rm(dest, { force: true }).catch(() => undefined);
   } finally {
     ollamaInstallController = null;
   }
