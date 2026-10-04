@@ -1,5 +1,4 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { RefreshCw, Trophy, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { SystemProfile } from '../types';
 import { balanceLabel } from '../lib/balance';
@@ -7,9 +6,12 @@ import type { ChannelWinner } from '../lib/channelWinners';
 import type { RigPick } from '../lib/modelCatalog';
 import { formatGb, topPickPresentation } from '../lib/format';
 import { strongestSkill } from '../lib/shareCopy';
+import { matchMeasures } from '../lib/matchCard';
+import { formatMatchScore } from '../lib/scoring';
+import { getModelAvatarSrc } from '../lib/modelAvatars';
+import { getFriendlyModelName } from '../lib/modelCatalog';
 import { workbenchById, type Workbench, type WorkbenchId } from '../lib/workbench';
 import { BalanceFader } from './BalanceFader';
-import { AvatarBust } from './Avatars';
 import { CHANNEL_ICONS } from '../lib/channelIcons';
 
 /**
@@ -77,101 +79,90 @@ export function TopMatchCard({
         const shown = topPickPresentation(topPick.tone, topPick.score?.grade);
         const fits = system.gpu.vramGb > 0 ? formatGb(system.gpu.vramGb) : 'this computer';
         return (
-        <section className={`top-deck-winner${topPick.score ? ' with-fader' : ''}`} aria-label="Current best model">
-          <AvatarBust model={topPick.row.displayName} size="small" extraClass="top-deck-winner-avatar" />
+        <section className="top-deck-winner hero" aria-label="Current best model">
+          <img className="top-match-portrait" src={getModelAvatarSrc(topPick.row.displayName)} alt="" />
           <div className="top-deck-winner-copy">
-            {/* The label gets its own row.
-                It used to share one flex row with the buttons under
-                justify-content:space-between, and only the label could shrink.
-                Measured: the actions wanted 221px inside a 218px row, so the
-                label was allotted exactly 0 and rendered as "TOP...". */}
-            <div className="top-deck-winner-head">
-              <span>{channel.id === 'chat' && topPick.score ? channel.shortLabel : shown.label}</span>
-              {/* What it is top *for*. getRigPick has always computed this
-                  sentence as `reason` and nothing ever showed it: the pick is
-                  the highest saved Match score among models that fit this
-                  computer, which is a narrower claim than "best model" and the
-                  one the badge was silently making. */}
-              <em className="top-deck-winner-basis" title={topPick.reason}>
-                {topPick.tone === 'scored' ? `best score that fits ${fits}`
-                  : topPick.tone === 'installed' ? `fits ${fits} · not tested yet`
-                    : `fits ${fits} · not downloaded`}
-              </em>
+            {/* What it is top for: the highest saved Match among models that fit
+                this computer, a narrower claim than "best model". */}
+            <p className="top-match-kicker" title={topPick.reason}>
+              {channel.id === 'chat' && topPick.score ? channel.shortLabel : shown.label}
+              {' · '}
+              {topPick.tone === 'scored' ? `best score that fits ${fits}`
+                : topPick.tone === 'installed' ? `fits ${fits}, not tested yet`
+                  : `fits ${fits}, not downloaded`}
+            </p>
+            <div className="top-match-name">
+              <h2>{getFriendlyModelName(topPick.row.displayName)}</h2>
+              <code>{topPick.row.displayName}</code>
             </div>
-            <strong>{topPick.row.displayName}</strong>
-            <em>
-              {/* With what it was ranked at: the same model can win at one fader
-                  position and not another, so a bare score overclaims. */}
-              {topPick.score ? `${topPick.score.total} Match · ${topPick.score.grade} · ${rankedAt}` : topPick.fitLabel}
-              {/* And what it is actually good at, when a run measured enough to
-                  say. strongestSkill returns null unless a task group has three
-                  graded answers behind it, so this stays quiet rather than
-                  crowning a skill on one question. */}
-              {topPick.score && strongestSkill(topPick.score) && (
-                <span className="top-deck-winner-skill"> · strongest at {strongestSkill(topPick.score)!.purpose}</span>
-              )}
-            </em>
-              <div className="top-deck-winner-actions">
-                {shown.canUse && (
-                  <button
-                    type="button"
-                    className="top-deck-use-model-btn"
-                    onClick={() => onUseTopPick(topPick.row.displayName)}
-                    title="Set this as your active model"
-                  >
-                    Use this model
-                  </button>
-                )}
-                {shown.testLabel && (
-                  <button
-                    type="button"
-                    className="top-deck-test-again-btn"
-                    onClick={() => onTestAgain(topPick.row.displayName)}
-                    title={`Run the compatibility test on ${topPick.row.displayName}${topPick.score ? ' again' : ''}`}
-                  >
-                    <RefreshCw aria-hidden="true" />
-                    {shown.testLabel}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="top-deck-clear-btn"
-                  onClick={onClearTopPick}
-                  title={`Clear ${topPick.row.displayName} as Top Match for now`}
-                  aria-label={`Clear ${topPick.row.displayName} as Top Match`}
-                >
-                  <X aria-hidden="true" />
-                </button>
-                {clearedTopPickCount > 0 && (
-                  <button
-                    type="button"
-                    className="top-deck-restore-btn"
-                    onClick={onRestoreClearedTopPicks}
-                    title="Restore cleared Top Match candidates"
-                  >
-                    Restore
-                  </button>
-                )}
+            {topPick.score ? (
+              <div className="top-match-score">
+                {/* With what it was ranked at: the same model can win at one
+                    fader position and not another. */}
+                <b>{formatMatchScore(topPick.score)}</b>
+                <span>Match Score · Grade {topPick.score.grade} · {rankedAt}</span>
               </div>
+            ) : (
+              <p className="top-match-line">{topPick.fitLabel}</p>
+            )}
+            {/* What it is good at, only when three graded answers say so. */}
+            {topPick.score && strongestSkill(topPick.score) && (
+              <p className="top-match-line">Strongest at {strongestSkill(topPick.score)!.purpose}.</p>
+            )}
+            {topPick.score && (
+              <dl className="top-match-measures">
+                {matchMeasures(topPick.score).map((measure) => (
+                  <div key={measure.label}><dt>{measure.label}</dt><dd>{Math.round(measure.value)}</dd></div>
+                ))}
+              </dl>
+            )}
           </div>
-          {topPick.score && fader}
+          <div className="top-deck-winner-actions">
+            {shown.canUse && (
+              <button
+                type="button"
+                className="btn btn-gold"
+                onClick={() => onUseTopPick(topPick.row.displayName)}
+                title="Set this as your active model"
+              >
+                Use this model
+              </button>
+            )}
+            {shown.testLabel && (
+              <button
+                type="button"
+                className="btn btn-line"
+                onClick={() => onTestAgain(topPick.row.displayName)}
+                title={`Run the compatibility test on ${topPick.row.displayName}${topPick.score ? ' again' : ''}`}
+              >
+                {shown.testLabel}
+              </button>
+            )}
+            <span className="top-match-links">
+              <button
+                type="button"
+                className="btn btn-link"
+                onClick={onClearTopPick}
+                title={`Clear ${topPick.row.displayName} as Top Match for now`}
+              >
+                Clear for now
+              </button>
+              {clearedTopPickCount > 0 && (
+                <button type="button" className="btn btn-link" onClick={onRestoreClearedTopPicks} title="Restore cleared Top Match candidates">
+                  Restore
+                </button>
+              )}
+            </span>
+          </div>
         </section>
         );
       })() : (
         <section className="top-deck-winner empty" aria-label="No winner yet">
-          <Trophy aria-hidden="true" />
           <div>
-            <span>{channel.id === 'chat' ? channel.shortLabel : 'Best Match'}</span>
-            <strong>No tests yet</strong>
-            <em>{clearedTopPickCount > 0 ? `${clearedTopPickCount} cleared. Restore when needed.` : 'Test a model to crown the winner.'}</em>
+            <h2 className="top-match-empty">No Top Match yet</h2>
+            <p className="top-match-line">{clearedTopPickCount > 0 ? `${clearedTopPickCount} cleared. Restore when needed.` : 'Test a model to crown one.'}</p>
             {clearedTopPickCount > 0 && (
-              <button
-                type="button"
-                className="top-deck-restore-btn"
-                onClick={onRestoreClearedTopPicks}
-              >
-                Restore
-              </button>
+              <button type="button" className="btn btn-link" onClick={onRestoreClearedTopPicks}>Restore</button>
             )}
           </div>
         </section>
@@ -205,12 +196,10 @@ function ChannelWinnerCard({
   if (!winner) {
     return (
       <section className="top-deck-winner empty" aria-label={`${channel.matchLabel}: nothing crowned yet`}>
-        <Trophy aria-hidden="true" />
         <div>
-          <span>{channel.shortLabel}</span>
-          <strong>Nothing crowned yet</strong>
-          <em>{channel.emptyHint}</em>
-          <button type="button" className="top-deck-see-btn" onClick={onOpen}>{channel.startLabel}</button>
+          <h2 className="top-match-empty">{channel.shortLabel}: nothing crowned yet</h2>
+          <p className="top-match-line">{channel.emptyHint}</p>
+          <button type="button" className="btn btn-line btn-sm" onClick={onOpen}>{channel.startLabel}</button>
         </div>
       </section>
     );

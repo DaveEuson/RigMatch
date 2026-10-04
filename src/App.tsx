@@ -4528,23 +4528,6 @@ function App() {
                 )}
                 <button type="button" aria-pressed={activeNavId === 'activity'} onClick={() => selectNav('activity')}>Runs</button>
               </div>
-              {activeNavId !== 'activity' && (
-                <TopMatchCard
-                  system={system}
-                  topPick={topRigPick}
-                  onUseTopPick={(model) => { setSelectedModel(model); setChosenModel(model); }}
-                  onTestAgain={requestBenchmarkForModel}
-                  onClearTopPick={clearTopMatch}
-                  onRestoreClearedTopPicks={restoreClearedTopMatches}
-                  clearedTopPickCount={clearedTopMatches.size}
-                  workbench={workbench}
-                  channelWinner={channelWinner}
-                  balance={balances[activeChannel]}
-                  onBalanceChange={(value) => setBalance(activeChannel, value)}
-                  balanceLocked={balanceLock(activeChannel)}
-                  onOpenChannel={() => selectNav(workbenchInfo.home)}
-                />
-              )}
             </>
           )}
         </div>
@@ -4794,7 +4777,6 @@ function App() {
             themeId={themeId}
             appLogs={appLogs}
             modelScores={modelScores}
-            chatMessages={chatMessages}
             updateChannel={updateChannel}
             updateCheck={updateCheck}
             isCheckingUpdates={isCheckingUpdates}
@@ -4805,6 +4787,24 @@ function App() {
             isLoadingLogs={isLoadingLogs}
             onThemeChange={selectTheme}
             onUiModeChange={selectUiMode}
+            // The Top Match leads the Scorecards, under the Results title.
+            topMatch={(
+              <TopMatchCard
+                system={system}
+                topPick={topRigPick}
+                onUseTopPick={(model) => { setSelectedModel(model); setChosenModel(model); }}
+                onTestAgain={requestBenchmarkForModel}
+                onClearTopPick={clearTopMatch}
+                onRestoreClearedTopPicks={restoreClearedTopMatches}
+                clearedTopPickCount={clearedTopMatches.size}
+                workbench={workbench}
+                channelWinner={channelWinner}
+                balance={balances[activeChannel]}
+                onBalanceChange={(value) => setBalance(activeChannel, value)}
+                balanceLocked={balanceLock(activeChannel)}
+                onOpenChannel={() => selectNav(workbenchInfo.home)}
+              />
+            )}
             onEditGoals={() => setShowGoalsEditor(true)}
             onShowWelcome={() => setWelcomeReplay(true)}
             onDeleteModel={requestDeleteModel}

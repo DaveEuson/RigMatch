@@ -409,3 +409,89 @@
 }
 .app-shell[data-ui-mode='advanced'] .comparison-rail { gap: 2px var(--s5); margin-top: var(--s2); }
 .app-shell[data-ui-mode='advanced'] .comparison-rail .comparison-rail-item { gap: 6px; }
+
+/* ---- Results ------------------------------------------------------------------ */
+.app-shell[data-ui-mode='advanced'] .history-panel { border: 0; border-radius: 0; background: none; box-shadow: none; overflow: visible; }
+.app-shell[data-ui-mode='advanced'] .history-panel .utility-body { display: grid; gap: var(--s4); padding: 0 var(--s5) var(--s5); }
+.app-shell[data-ui-mode='advanced'] .results-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3) var(--s5);
+  padding: var(--s4);
+  border-radius: var(--r-panel);
+  background: var(--panel);
+}
+.app-shell[data-ui-mode='advanced'] .results-toolbar .balance-row { flex: 1 1 420px; }
+.app-shell[data-ui-mode='advanced'] .results-toolbar-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.app-shell[data-ui-mode='advanced'] .results-heading { margin: var(--s2) 0 0; color: var(--text-strong); font: 400 var(--fs-h2) / 1.2 var(--display); }
+
+/* The ranking: rows with a place, a portrait, the name and the score. */
+.app-shell[data-ui-mode='advanced'] .history-panel .utility-list { display: grid; gap: 0; margin: 0; padding: 0; border-top: 1px solid var(--line); list-style: none; }
+.app-shell[data-ui-mode='advanced'] .history-panel .utility-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 56px;
+  padding: 6px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.app-shell[data-ui-mode='advanced'] .history-panel .utility-list li:hover { background: var(--panel-hover); }
+.app-shell[data-ui-mode='advanced'] .history-panel .utility-list li > b { width: 2em; flex: none; color: var(--muted); font: 500 var(--fs-ui) / 1 var(--figure); background: none; border: 0; }
+.app-shell[data-ui-mode='advanced'] .score-row-portrait { width: 40px; height: 40px; flex: none; border-radius: var(--r-control); box-shadow: var(--portrait-frame); object-fit: cover; }
+.app-shell[data-ui-mode='advanced'] .score-row-name { flex: 1; min-width: 0; }
+.app-shell[data-ui-mode='advanced'] .score-row-name > span { color: var(--text-strong); font-weight: 700; }
+.app-shell[data-ui-mode='advanced'] .score-row-name > em { display: block; color: var(--muted); font: 400 13px / 1.4 var(--ui); font-style: normal; }
+.app-shell[data-ui-mode='advanced'] .score-row-grade { padding: 0; border: 0; background: none; color: var(--text-strong); font: 500 18px / 1.1 var(--figure); }
+.app-shell[data-ui-mode='advanced'] .score-clear-button { min-height: 28px; padding: 0 8px; border: 0; background: none; color: var(--muted); font: 400 13px / 1 var(--ui); text-decoration: underline; text-underline-offset: 3px; }
+.app-shell[data-ui-mode='advanced'] .score-clear-button:hover { color: var(--red); }
+.app-shell[data-ui-mode='advanced'] .legacy-score-badge { padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 10px; background: none; color: var(--gold); font: 400 12px / 1.5 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .tie-badge { margin-right: 6px; color: var(--muted); font: 400 13px / 1 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .history-panel .utility-empty,
+.app-shell[data-ui-mode='advanced'] .history-panel .utility-stat,
+.app-shell[data-ui-mode='advanced'] .history-panel .task-picks-section,
+.app-shell[data-ui-mode='advanced'] .history-panel .speed-date-results {
+  border: 0;
+  border-radius: var(--r-panel);
+  background: var(--panel);
+  box-shadow: none;
+}
+.app-shell[data-ui-mode='advanced'] .task-pick-card { border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; box-shadow: none; }
+
+/* The Top Match, at the head of the Scorecards. */
+.app-shell[data-ui-mode='advanced'] .history-panel .top-match-card { margin: 0 var(--s5) var(--s4); }
+.app-shell[data-ui-mode='advanced'] .top-deck-winner.hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s5) 40px;
+  padding: var(--s5) var(--s6);
+  border: 0;
+  border-radius: var(--r-panel);
+  background: var(--panel);
+  box-shadow: none;
+}
+.app-shell[data-ui-mode='advanced'] .top-match-portrait { width: 128px; height: 128px; flex: none; border-radius: var(--r-portrait); box-shadow: var(--winner-frame); object-fit: cover; }
+.app-shell[data-ui-mode='advanced'] .top-deck-winner.hero .top-deck-winner-copy { flex: 1; min-width: 260px; display: grid; gap: 4px; }
+.app-shell[data-ui-mode='advanced'] .top-match-kicker { margin: 0; color: var(--text); font-size: 15px; }
+.app-shell[data-ui-mode='advanced'] .top-match-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--s4); }
+.app-shell[data-ui-mode='advanced'] .top-match-name h2 { margin: 0; color: var(--text-strong); font: 400 48px / 1 var(--display); }
+.app-shell[data-ui-mode='advanced'] .top-match-name code { color: var(--muted); background: none; padding: 0; font: 500 13px / 1 var(--figure); }
+.app-shell[data-ui-mode='advanced'] .top-match-score { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s3); }
+.app-shell[data-ui-mode='advanced'] .top-match-score b { color: var(--text-strong); font: 500 44px / 1 var(--figure); }
+.app-shell[data-ui-mode='advanced'] .top-match-score span { color: var(--text); font-size: 15px; }
+.app-shell[data-ui-mode='advanced'] .top-match-line { margin: 0; color: var(--text); font-size: var(--fs-ui); }
+.app-shell[data-ui-mode='advanced'] .top-match-measures { display: flex; flex-wrap: wrap; gap: var(--s5); margin: var(--s2) 0 0; }
+.app-shell[data-ui-mode='advanced'] .top-match-measures div { display: grid; gap: 2px; }
+.app-shell[data-ui-mode='advanced'] .top-match-measures dt { color: var(--muted); font-size: var(--fs-ui); }
+.app-shell[data-ui-mode='advanced'] .top-match-measures dd { margin: 0; color: var(--text-strong); font: 500 18px / 1 var(--figure); }
+.app-shell[data-ui-mode='advanced'] .top-deck-winner.hero .top-deck-winner-actions { display: grid; gap: var(--s2); min-width: 200px; }
+.app-shell[data-ui-mode='advanced'] .top-match-links { display: flex; gap: var(--s4); justify-content: center; }
+.app-shell[data-ui-mode='advanced'] .top-deck-winner.empty { padding: var(--s5); border: 0; border-radius: var(--r-panel); background: var(--panel); box-shadow: none; }
+.app-shell[data-ui-mode='advanced'] .top-match-empty { margin: 0 0 4px; color: var(--text-strong); font: 400 var(--fs-h2) / 1.2 var(--display); }
+.app-shell[data-ui-mode='advanced'] .top-match-score span { font-family: var(--ui); font-weight: 400; }
