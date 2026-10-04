@@ -153,13 +153,20 @@ export function TopBar({
 function ThemeButton({ themeId, onChange }: { themeId: ThemeId; onChange: (id: ThemeId) => void }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const current = themeOptions.find((theme) => theme.id === themeId) ?? themeOptions[0];
+  // Closing removes the menu, so focus inside it would fall to the page:
+  // hand it back to the palette button instead.
+  const close = () => {
+    if (wrapRef.current?.contains(document.activeElement)) buttonRef.current?.focus();
+    setOpen(false);
+  };
   useEffect(() => {
     if (!open) return undefined;
     const onDown = (event: MouseEvent) => {
       if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
     };
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
     return () => {
@@ -170,6 +177,7 @@ function ThemeButton({ themeId, onChange }: { themeId: ThemeId; onChange: (id: T
   return (
     <div className="top-bar-theme" ref={wrapRef}>
       <button
+        ref={buttonRef}
         type="button"
         className="top-bar-icon-btn"
         aria-expanded={open}
@@ -188,7 +196,7 @@ function ThemeButton({ themeId, onChange }: { themeId: ThemeId; onChange: (id: T
               type="button"
               aria-pressed={theme.id === themeId}
               className={theme.id === themeId ? 'active' : ''}
-              onClick={() => { onChange(theme.id); setOpen(false); }}
+              onClick={() => { onChange(theme.id); close(); }}
             >
               <span className="theme-swatch" aria-hidden="true">
                 {getThemeSwatches(theme.id).map((swatch, index) => <i key={index} style={{ background: swatch }} />)}
