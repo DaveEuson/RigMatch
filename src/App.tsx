@@ -4214,7 +4214,9 @@ function App() {
       .filter((item) => item.id !== 'agent' || hasScores);
   }, [scoredModelCount, uiMode]);
   // The Speed Dating lineup means nothing on a channel Speed Dating cannot test.
-  const showGlobalLineup = uiMode === 'advanced' && LINEUP_STRIP_SCREENS.includes(activeNavId) && !comparedWorkbench;
+  // Not while the live show is up: during a run the only thing to do is Stop.
+  const showGlobalLineup = uiMode === 'advanced' && LINEUP_STRIP_SCREENS.includes(activeNavId) && !comparedWorkbench
+    && runProgress?.phase !== 'running';
 
   useEffect(() => {
     if (visibleNavItems.some((item) => item.id === activeNavId)) return;
@@ -4502,6 +4504,17 @@ function App() {
       <>
 
       <main className="stage-content">
+        {/* Over the screen, not the window: the top bar and its live CPU and GPU
+            strip stay in view while a run goes. */}
+        {uiMode === 'advanced' && runProgress?.phase === 'running' && (
+          <LiveFlirtSpotlight
+            progress={runProgress}
+            rows={runProgress.mode === 'speed-date'
+              ? shortlistedRows
+              : modelRows.filter((row) => row.displayName === runProgress.currentModel)}
+            onStop={requestStopRun}
+          />
+        )}
         {/* One header row for every screen, so the panel below is always the
             second row of the stage, whatever this tab adds above it. */}
         <div className="screen-nav">
@@ -4988,19 +5001,6 @@ function App() {
           <span className="benchmark-running-dot" aria-hidden="true" />
           <span>{formatBenchmarkBanner(externalBenchmark)}</span>
         </div>
-      )}
-
-      {uiMode === 'advanced' && runProgress?.phase === 'running' && (
-        <LiveFlirtSpotlight
-          progress={runProgress}
-          host={selectedHost}
-          system={system}
-          rows={runProgress.mode === 'speed-date'
-            ? shortlistedRows
-            : modelRows.filter((row) => row.displayName === runProgress.currentModel)}
-          questionPlan={benchmarkQuestions.slice(0, benchmarkQuestionCount)}
-          onStop={requestStopRun}
-        />
       )}
 
       {pendingRunMode && (

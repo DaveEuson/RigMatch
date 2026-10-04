@@ -682,7 +682,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
  * thing to notice, and the whole problem is that a beginner does not know what
  * to look for.
  */
-function HostStrip({ line }: { line: string }) {
+export function HostStrip({ line }: { line: string }) {
   const explaining = useExplaining();
   return (
     <div className={`sw-host-strip${explaining ? ' explaining' : ''}`}>
@@ -1321,7 +1321,14 @@ function getEtaLabel(pull?: PullProgressUpdate): string {
 // ---------------------------------------------------------------------------
 // Compare
 
-function CompareScreen({ shortlistedRows, runProgress, round: showRound, benchmarkActive, onRetry, onChangeLineup, onStopShow }: SimpleWizardProps & { onRetry: () => void; onChangeLineup: () => void }) {
+/** What the show needs, so Advanced Mode's live show can be this one too. */
+export type ShowStageProps = Pick<SimpleWizardProps, 'shortlistedRows' | 'runProgress' | 'round' | 'benchmarkActive' | 'onStopShow'> & {
+  /** Absent where a stopped show has nowhere to go back to. */
+  onRetry?: () => void;
+  onChangeLineup?: () => void;
+};
+
+export function CompareScreen({ shortlistedRows, runProgress, round: showRound, benchmarkActive, onRetry, onChangeLineup, onStopShow }: ShowStageProps) {
   const failed = runProgress?.phase === 'failed';
   const activeModel = runProgress?.currentModel ?? '';
   const round = (runProgress?.questionIndex ?? 0) + 1;
@@ -1468,17 +1475,21 @@ function CompareScreen({ shortlistedRows, runProgress, round: showRound, benchma
               {runProgress?.failureKind === 'too-few' ? (
                 <>
                   <p>Pick at least {MIN_CONTESTANTS} models that are on this PC.</p>
-                  <div className="sw-stage-actions">
-                    <button type="button" className="btn btn-gold" onClick={onChangeLineup}>Change the lineup</button>
-                  </div>
+                  {onChangeLineup && (
+                    <div className="sw-stage-actions">
+                      <button type="button" className="btn btn-gold" onClick={onChangeLineup}>Change the lineup</button>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
                   <p>Your lineup is still picked, so you can run it again or change it.</p>
-                  <div className="sw-stage-actions">
-                    <button type="button" className="btn btn-gold" onClick={onRetry}>Run the show again</button>
-                    <button type="button" className="btn btn-line" onClick={onChangeLineup}>Change the lineup</button>
-                  </div>
+                  {(onRetry || onChangeLineup) && (
+                    <div className="sw-stage-actions">
+                      {onRetry && <button type="button" className="btn btn-gold" onClick={onRetry}>Run the show again</button>}
+                      {onChangeLineup && <button type="button" className="btn btn-line" onClick={onChangeLineup}>Change the lineup</button>}
+                    </div>
+                  )}
                 </>
               )}
             </div>

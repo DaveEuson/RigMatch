@@ -457,11 +457,47 @@
 
 /* ---- The screen --------------------------------------------------------- */
 .stage-content {
+  position: relative;
   margin: 0;
   border: 0;
   border-radius: 0;
   background: var(--bg);
   box-shadow: none;
+}
+
+/* Advanced Mode's live show: Simple Mode's show over the screen while a run
+   goes, scrolling inside it, so the top bar stays in view. */
+.live-show.sw-shell {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: block;
+  overflow-y: auto;
+}
+
+.live-show-body {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: var(--s4) var(--s5) var(--s5);
+  display: grid;
+  gap: var(--s4);
+}
+
+.live-show-top {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+}
+
+.live-show-top .sw-host-strip {
+  flex: 1;
+  min-width: 0;
+}
+
+.live-show-top .btn svg,
+.live-mini-bar .btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .screen-nav {

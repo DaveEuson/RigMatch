@@ -5736,10 +5736,10 @@ tbody tr.computer-row.selected {
   gap: 12px;
   width: min(420px, calc(100vw - 80px));
   padding: 10px 14px;
-  border: 1px solid rgba(var(--gold-rgb), 0.5);
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(46, 31, 42, 0.96), rgba(18, 22, 25, 0.97));
-  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.5), 0 0 26px rgba(var(--gold-rgb), 0.18);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
 }
 
 .live-mini-dot {
@@ -5771,7 +5771,7 @@ tbody tr.computer-row.selected {
 }
 
 .live-mini-info strong {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-strong);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5797,14 +5797,14 @@ tbody tr.computer-row.selected {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--gold);
+  background: var(--accent);
   transition: width 0.3s ease;
 }
 
 .live-mini-percent {
   flex: 0 0 auto;
-  font: 950 14px/1 var(--ui);
-  color: var(--gold);
+  font: 500 14px/1 var(--figure);
+  color: var(--text-strong);
 }
 
 .live-show-stop.compact {
