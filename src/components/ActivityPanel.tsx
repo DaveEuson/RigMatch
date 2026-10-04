@@ -1,5 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { getScoreTone } from '../lib/format';
+import { formatMatchScore } from '../lib/scoring';
 import { extractHtmlDocument } from '../lib/labPreview';
 import { useLabResults } from '../hooks/useLabResults';
 import type { Balances } from '../lib/balance';
@@ -92,6 +93,8 @@ type ActivityJob = {
   label: string;
   grade: string;
   score: number;
+  /** The Match score as everywhere else shows it, to one decimal. */
+  scoreLabel?: string;
   completedAt: string;
   html?: string | null;
   imageDataUrl?: string;
@@ -112,7 +115,7 @@ type ActivityJob = {
     const jobs: ActivityJob[] = [];
     for (const score of Object.values(modelScores)) {
       if (!score?.completedAt) continue;
-      jobs.push({ key: `bench:${score.model}`, model: score.model, kind: 'benchmark', channel: 'chat', label: 'Compatibility test', grade: score.grade, score: score.total, completedAt: score.completedAt });
+      jobs.push({ key: `bench:${score.model}`, model: score.model, kind: 'benchmark', channel: 'chat', label: 'Compatibility test', grade: score.grade, score: score.total, scoreLabel: formatMatchScore(score), completedAt: score.completedAt });
     }
     for (const result of Object.values(labResults)) {
       if (!result || result.error || !result.completedAt) continue;
@@ -331,7 +334,7 @@ type ActivityJob = {
                   <strong>{job.model}</strong>
                   <em>{job.label} · {formatHistoryTime(job.completedAt)}</em>
                 </div>
-                <span className={`score-row-grade ${getScoreTone(job.score)}`}>{job.score} · {job.grade}</span>
+                <span className={`score-row-grade ${getScoreTone(job.score)}`}>{job.scoreLabel ?? job.score} · {job.grade}</span>
                 {job.kind === 'app' && (
                   <button
                     type="button"
