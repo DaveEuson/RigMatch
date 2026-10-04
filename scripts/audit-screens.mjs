@@ -152,14 +152,13 @@ await page.evaluate(() => {
   localStorage.setItem('rigmatch:goals-offered:v1', 'yes');
 });
 await page.reload({ waitUntil: 'domcontentloaded' });
-await page.waitForSelector('.side-menu-item', { timeout: 20000 });
+await page.waitForSelector('.top-tab', { timeout: 20000 });
 
-const navLabels = await page.locator('.side-menu-item').evaluateAll(
-  (nodes) => nodes.map((n) => n.getAttribute('aria-label') || ''),
-);
+const navLabels = [...(await page.locator('.top-tab > span:not(.top-tab-count)').allTextContents()), 'Settings'];
 
 for (const [index, name] of navLabels.entries()) {
-  await page.locator('.side-menu-item').nth(index).click();
+  if (name === 'Settings') await page.locator('.top-bar-settings').click();
+  else await page.locator('.top-tab').nth(index).click();
   await page.waitForLoadState('networkidle').catch(() => {});
   await page.waitForTimeout(500);
 

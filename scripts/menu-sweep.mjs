@@ -32,7 +32,19 @@ const SIZES = [
   { w: 1920, h: 1080, note: 'desktop' },
 ];
 
-const SCREENS = ['Models', "What's New", 'Comparison', 'Scorecards', 'Top Pick', 'Your Rig', 'Activity', 'Settings'];
+/** Every screen, by the tab (and the view inside it) that opens it. */
+const SCREENS = [
+  { name: 'Models', tab: 'Models' },
+  { name: "What's New", tab: "What's New" },
+  { name: 'Comparison', tab: 'Comparison' },
+  { name: 'Labs', tab: 'Labs' },
+  { name: 'Lab, one at a time', tab: 'Labs', view: 'Test one at a time' },
+  { name: 'Scorecards', tab: 'Results', view: 'Scorecards' },
+  { name: 'Top Pick', tab: 'Results', view: 'Top Pick' },
+  { name: 'Runs', tab: 'Results', view: 'Runs' },
+  { name: 'My PC', tab: 'My PC' },
+  { name: 'Settings', settings: true },
+];
 
 /**
  * Sidebars are not starved menus.
@@ -41,7 +53,7 @@ const SCREENS = ['Models', "What's New", 'Comparison', 'Scorecards', 'Top Pick',
  * column is not an empty track. Naming them here rather than trying to tell
  * them apart by measurement, which is what an earlier version did badly.
  */
-const RAILS = ['side-menu', 'comparison-rail', 'settings-rail', 'model-facets', 'cabinet-body'];
+const RAILS = ['comparison-rail', 'settings-rail', 'model-facets', 'cabinet-body'];
 
 const auditScript = (rails) => {
   const SEL = ['[role="tablist"]', '[role="group"]', 'nav', '[class*="tabs"]', '[class*="-menu"]',
@@ -130,17 +142,25 @@ for (const size of SIZES) {
     localStorage.setItem('rigmatch:goals-offered:v1', 'yes');
   });
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
-  await page.waitForSelector('.side-menu', { timeout: 20000 }).catch(() => {});
+  await page.waitForSelector('.top-bar', { timeout: 20000 }).catch(() => {});
   await page.waitForTimeout(700);
 
   console.log(`\n  ${size.w}x${size.h}  ${size.note}`);
-  for (const screen of SCREENS) {
-    const went = await page.evaluate((name) => {
-      const item = [...document.querySelectorAll('.side-menu-item')]
-        .find((node) => node.querySelector('.side-menu-copy strong')?.textContent === name);
-      item?.click();
-      return Boolean(item);
-    }, screen);
+  for (const target of SCREENS) {
+    const screen = target.name;
+    const went = await page.evaluate(({ tab, view, settings }) => {
+      const click = (node) => { node?.click(); return Boolean(node); };
+      if (settings) return click(document.querySelector('.top-bar-settings'));
+      const tabButton = [...document.querySelectorAll('.top-tab')].find((node) => node.textContent.trim().startsWith(tab));
+      if (!click(tabButton)) return false;
+      return true;
+    }, target);
+    if (went && target.view) {
+      await page.waitForTimeout(300);
+      await page.evaluate((view) => {
+        [...document.querySelectorAll('.screen-tabs button')].find((node) => node.textContent.trim() === view)?.click();
+      }, target.view);
+    }
     if (!went) {
       console.log(`    --   ${screen.padEnd(11)} not in this menu`);
       continue;

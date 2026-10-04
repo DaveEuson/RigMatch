@@ -15,7 +15,17 @@ import {
   Trophy,
   type LucideIcon,
 } from 'lucide-react';
-import type { NavId, NavItem } from '../components/SideMenu';
+import type { NavId } from '../types';
+
+export type { NavId };
+
+/** A screen in Advanced Mode, as the old side menu listed it. */
+export type NavItem = {
+  id: NavId;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+};
 
 export type ThemeId = 'orange' | 'avocado' | 'mustard' | 'teal' | 'chocolate';
 export type UiMode = 'beginner' | 'advanced';
@@ -142,11 +152,12 @@ export const themeOptions: Array<{
 export type ThemeSwatches = [string, string, string];
 
 /**
- * The three tokens that actually differ between themes: the accent, the raised
- * surface, and the lit seam. `--gold` is deliberately absent — it is identical
- * in every theme, so it tells you nothing about the one you are picking.
+ * Three tokens that actually differ between themes: the accent, the raised
+ * surface and the page. `--gold` is deliberately absent — it is identical in
+ * every theme, so it tells you nothing about the one you are picking — and so
+ * is `--line-bright` since the redesign made the control border a constant.
  */
-const THEME_SWATCH_TOKENS = ['--primary-rgb', '--panel-2', '--line-bright'] as const;
+const THEME_SWATCH_TOKENS = ['--primary-rgb', '--panel-2', '--bg'] as const;
 
 let themeSwatchCache: Map<ThemeId, ThemeSwatches> | null = null;
 

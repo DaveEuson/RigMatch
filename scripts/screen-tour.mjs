@@ -219,22 +219,19 @@ async function tourAdvanced(page) {
   // in". Say which it was.
   await page.getByLabel('Advanced Mode').click();
   try {
-    await page.waitForSelector('.side-menu-item', { timeout: 10000 });
+    await page.waitForSelector('.top-tab', { timeout: 10000 });
   } catch {
-    throw new Error('switched to Advanced Mode but no side-menu items rendered — '
+    throw new Error('switched to Advanced Mode but no tabs rendered — '
       + `current step was "${await currentStep(page)}"`);
   }
 
-  // The item's own aria-label, not its text: the rendered button concatenates
-  // its number, title, description and badge into "1ModelsBrowse, test,
-  // compare13", which makes a useless slug and an unreadable report.
-  const labels = await page.locator('.side-menu-item').evaluateAll(
-    (nodes) => nodes.map((node) => node.getAttribute('aria-label') || ''),
-  );
+  // The tab's label span, not the whole button, which also holds a count.
+  const labels = [...(await page.locator('.top-tab > span:not(.top-tab-count)').allTextContents()), 'Settings'];
   for (const [index, raw] of labels.entries()) {
     const label = raw.replace(/\s+/g, ' ').trim();
     const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    await page.locator('.side-menu-item').nth(index).click();
+    if (label === 'Settings') await page.locator('.top-bar-settings').click();
+    else await page.locator('.top-tab').nth(index).click();
     // The panel swaps in place, so there is no navigation to await. Settle on
     // the network instead of a fixed sleep.
     await page.waitForLoadState('networkidle').catch(() => {});

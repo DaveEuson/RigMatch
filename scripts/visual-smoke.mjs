@@ -86,8 +86,9 @@ async function runBrowserChecks(url) {
   const simpleStepLabels = (await page.locator('.sw-steps .sw-step-label').allTextContents())
     .map((label) => label.trim().toLowerCase())
     .filter(Boolean);
-  const simpleMenuHidden = !(await page.locator('.side-menu').isVisible().catch(() => false));
-  const simpleNoAdvancedChrome = (await page.locator('.top-deck, .ticker').count()) === 0;
+  // Simple Mode's bar carries the step tracker, never Advanced's tabs.
+  const simpleMenuHidden = !(await page.locator('.top-bar-tabs').isVisible().catch(() => false));
+  const simpleNoAdvancedChrome = (await page.locator('.top-bar-tabs, .screen-nav').count()) === 0;
   const desktopOverflowX = await hasHorizontalOverflow(page);
   const overlayCount = await page.locator('.vite-error-overlay, vite-error-overlay').count();
   await settleImages(page, 'simple');
@@ -99,10 +100,11 @@ async function runBrowserChecks(url) {
   // longer exists and then gave up, taking the rest of the run with it. The
   // side menu's own header says which mode you are in, and it is there in every
   // window this smoke opens.
-  await page.waitForSelector('.side-menu-title', { timeout: 10000 });
-  const advancedText = await page.locator('.side-menu-title').innerText();
+  await page.waitForSelector('.top-bar-tabs', { timeout: 10000 });
+  // The mode switch says which mode is on; the tabs say which screens it has.
+  const advancedText = `${await page.locator('.top-bar-mode button.active').innerText()} ${(await page.locator('.top-tab').allTextContents()).join(' ')}`;
   const wizardGoneInAdvanced = !(await page.locator('.sw-shell').isVisible().catch(() => false));
-  const advancedMenuVisible = await page.locator('.side-menu').isVisible();
+  const advancedMenuVisible = await page.locator('.top-bar-tabs').isVisible();
   await settleImages(page, 'advanced');
   await page.screenshot({ path: screenshots.advanced, fullPage: false });
 
@@ -110,7 +112,7 @@ async function runBrowserChecks(url) {
    * A chat round trip, which lives here rather than in the desktop gate.
    *
    * The dock is unreachable in a cold desktop profile — no scan, so no scored
-   * model and no "Talk to Model" — and the ticker's Chat button launches the
+   * model and no "Talk to Model" — and the top bar's Chat button launches the
    * separate RigChat companion there, raising a blocking alert when it is not
    * packaged. Preview has demo data and stubs sendChat below the callback, so
    * this exercises the real composer, the real transcript keyed by model, and
@@ -119,7 +121,7 @@ async function runBrowserChecks(url) {
   let chatRoundTrip = false;
   let chatDraftCleared = false;
   try {
-    await page.locator('.ticker-chat-link').click();
+    await page.getByLabel('Open RigMatch Chat').click();
     await page.waitForSelector('.chat-dock', { timeout: 10000 });
     // The composer carries no type attribute, so `input[type=text]` misses it.
     const composer = page.locator('.chat-form input:not([type=file])').first();
@@ -153,17 +155,17 @@ async function runBrowserChecks(url) {
   await shortPage.goto(url, { waitUntil: 'domcontentloaded', timeout: COLD_START_MS });
   await forceSimpleMode(shortPage);
   await shortPage.getByLabel('Advanced Mode').click();
-  await shortPage.waitForSelector('.side-menu-item', { timeout: 10000 });
+  await shortPage.waitForSelector('.top-tab', { timeout: 10000 });
   const clippedNav = await shortPage.evaluate(() => {
-    const menu = document.querySelector('.side-menu');
-    if (!menu) return ['side menu missing'];
-    const box = menu.getBoundingClientRect();
-    return [...menu.querySelectorAll('.side-menu-item')]
+    const bar = document.querySelector('.top-bar');
+    if (!bar) return ['top bar missing'];
+    const box = bar.getBoundingClientRect();
+    return [...bar.querySelectorAll('.top-tab')]
       .filter((item) => {
         const rect = item.getBoundingClientRect();
-        return rect.bottom > box.bottom + 1 || rect.top < box.top - 1;
+        return rect.bottom > box.bottom + 1 || rect.right > box.right + 1;
       })
-      .map((item) => item.getAttribute('aria-label') || 'unnamed');
+      .map((item) => (item.textContent || 'unnamed').trim());
   });
   // Reachable is not the same as readable. Two media queries — one hiding the
   // number badge on short windows, one hiding the icon on narrow ones — each
@@ -172,9 +174,8 @@ async function runBrowserChecks(url) {
   // destination in the rail rendered as "M..", "W..", "C..". The nav was fully
   // present and completely unreadable, so the clipping check above passed.
   const truncatedNav = await shortPage.evaluate(() => {
-    return [...document.querySelectorAll('.side-menu-item')]
-      .map((item) => item.querySelector('.side-menu-copy strong'))
-      .filter((label) => label && label.scrollWidth > label.clientWidth + 1)
+    return [...document.querySelectorAll('.top-tab > span:not(.top-tab-count)')]
+      .filter((label) => label.scrollWidth > label.clientWidth + 1)
       .map((label) => (label.textContent || '').trim());
   });
 
@@ -202,7 +203,7 @@ async function runBrowserChecks(url) {
     simpleMenuHidden,
     simpleNoAdvancedChrome,
     // innerText is what is rendered, and the eyebrow is uppercased in CSS.
-    advancedControlRoom: /advanced mode/i.test(advancedText) && /power tools visible/i.test(advancedText),
+    advancedControlRoom: /advanced/i.test(advancedText) && /models/i.test(advancedText) && /my pc/i.test(advancedText),
     chatRoundTrip,
     chatDraftCleared,
     wizardGoneInAdvanced,

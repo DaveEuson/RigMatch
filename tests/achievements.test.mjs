@@ -116,14 +116,15 @@ test('the app records badges from its saved runs, results and Lab, quietly at la
   assert.match(lab, /recordAchievements\(\{ labChallenges: labChallengesWithOutput\(results\) \}\)/);
 });
 
-test('every badge says what earning it took, and the case is in both top bars', () => {
+test('every badge says what earning it took, and the case is in the top bar in both modes', () => {
   for (const a of ACHIEVEMENTS) assert.match(a.done, /^You /, `${a.id} has no past-tense line for its splash`);
   const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8');
-  const wizard = read('../src/components/SimpleWizard.tsx');
-  assert.match(wizard, /<\/nav>\s*<BadgeCase \/>\s*<\/header>/, 'Simple Mode lost its badge case');
-  const deck = read('../src/components/TopDeck.tsx');
-  assert.match(deck, /<BadgeCase compact \/>/, 'the expanded deck lost its badge count');
-  assert.match(deck, /\{uiMode === 'advanced' && <BadgeCase \/>\}/, 'the collapsed strip lost its badge case');
+  assert.match(read('../src/components/TopBar.tsx'), /<BadgeCase \/>/, 'the top bar lost its badge case');
+  // One bar for both modes, rendered outside the Simple/Advanced split.
+  const app = read('../src/App.tsx');
+  const bar = app.indexOf('<TopBar');
+  assert.ok(bar > 0, 'the app no longer renders the top bar');
+  assert.ok(bar < app.indexOf("{uiMode === 'beginner' && (\n        <SimpleWizard"), 'the top bar is no longer shared by both modes');
   // Each pin opens its splash: a locked badge is the one that says what to try.
   const shelf = read('../src/components/AchievementShelf.tsx');
   assert.match(shelf, /popover="auto"/);
