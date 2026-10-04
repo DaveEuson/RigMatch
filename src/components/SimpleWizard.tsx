@@ -17,6 +17,8 @@ import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
 import { AllDemosButton, ModelDemoChips } from './SkillDemoViewers';
 import { VideoLineupLab } from './VideoLineupLab';
 import { ComparisonRunCard, type ComparisonRunContext } from './ComparisonRunCard';
+import { isPictureCheckpoint } from '../lib/checkpointKinds';
+import { installedAudioEntries } from '../lib/audioLineup';
 import { LabComparison } from './LabComparison';
 import { useLabResults } from '../hooks/useLabResults';
 import { balanceLabel } from '../lib/balance';
@@ -954,12 +956,25 @@ function PickScreen({
       : dream === 'audio' ? generation?.audio
         : undefined;
   const makerNoun = dream === 'video' ? 'video maker' : dream === 'audio' ? 'music and sound maker' : 'image maker';
+  const makerCount = (n: number) => `${n} ${makerNoun}${n === 1 ? '' : 's'}`;
+  // The picture and sound runs below offer only makers already in ComfyUI.
+  // makers.total also counts ones that fit but need downloading, so "2 image
+  // makers run on this PC, try them below" sat over a card offering one.
+  const ready = makerRun && (dream === 'image' || dream === 'audio')
+    ? (dream === 'image'
+      ? (makerRun.context.comfyFolders.checkpoints ?? []).filter(isPictureCheckpoint).length
+      : installedAudioEntries(makerRun.context.comfyFolders).length)
+    : null;
+  const makerLine = !makers || makers.total === 0 ? null
+    : ready === null
+      ? `${makerCount(makers.total)} ${makers.total === 1 ? 'runs' : 'run'} on this PC. ${dream === 'video' && videoLineup ? `Try ${makers.total === 1 ? 'it' : 'them'} below.` : "They just don't compete here."}`
+      : ready > 0
+        ? `${makerCount(ready)} ${ready === 1 ? 'is' : 'are'} installed. Try ${ready === 1 ? 'it' : 'them'} below.`
+        : `${makerCount(makers.total)} ${makers.total === 1 ? 'fits' : 'fit'} this PC, but none is installed yet.`;
   const countLine = dream === 'all'
     ? `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} fit your PC`
     : filtered.length === 0
-      ? (makers && makers.total > 0
-        ? `${makers.total} ${makerNoun}${makers.total === 1 ? '' : 's'} run on this PC — ${(dream === 'video' && videoLineup) || ((dream === 'image' || dream === 'audio') && makerRun) ? 'try them below' : "they just don't compete here"}`
-        : `No contestants ${dreamNoun[dream]} on this PC`)
+      ? makerLine ?? `No contestants ${dreamNoun[dream]} on this PC`
       : `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} ${dreamNoun[dream]} · all of them fit your PC`;
 
   return (
@@ -1056,10 +1071,12 @@ function PickScreen({
             <>
               {makers && makers.total > 0 ? (
                 <p>
-                  {listNames(makers.names)} run on this PC.{' '}
-                  {makers.installed > 0
-                    ? `${makers.installed === makers.total ? 'Both are' : `${makers.installed} of them is`} already installed. `
-                    : 'They need downloading first. '}
+                  {listNames(makers.names)} {makers.total === 1 ? 'runs' : 'run'} on this PC.{' '}
+                  {makers.installed === 0
+                    ? `${makers.total === 1 ? 'It needs' : 'They need'} downloading first. `
+                    : makers.installed < makers.total
+                      ? `${makers.installed} of them ${makers.installed === 1 ? 'is' : 'are'} already installed. `
+                      : `${makers.total === 1 ? 'It is' : makers.total === 2 ? 'Both are' : 'All of them are'} already installed. `}
                   They draw instead of chatting, so they cannot join Speed Dating — find them in
                   Advanced Mode under Models ({dream === 'video' ? '"Makes video"' : '"Makes images"'}),
                   and run them from the Lab.
