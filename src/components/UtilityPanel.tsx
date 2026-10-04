@@ -21,7 +21,7 @@ import { describeLabAccuracy, rankLabList, type LabChannel } from '../lib/channe
 import type { AdvancedLabResult } from '../lib/labResults';
 import { workbenchById, type Workbench } from '../lib/workbench';
 import { useDialog } from '../lib/useDialog';
-import type { AppLogEntry, AutoUpdateStatus, ChatMessage, ModelRow, NetworkHost, OllamaStatus, SystemProfile, TestedModelScore, UpdateChannel, UpdateCheckResponse } from '../types';
+import type { AppLogEntry, AutoUpdateStatus, ModelRow, NetworkHost, OllamaStatus, SystemProfile, TestedModelScore, UpdateChannel, UpdateCheckResponse } from '../types';
 import { ClosetSection } from './ClosetSection';
 import { ComfySettings } from './ComfySettings';
 import { BrandMark } from './CommonChrome';
@@ -43,8 +43,9 @@ import { ReleaseNotes, UpdateCenter } from './UpdateCenter';
 // `History` must be imported explicitly: without it the name resolves to the
 // DOM's global History constructor, which is a real value, so nothing errors
 // until it is used as a JSX component.
-import { Bot, Bug, Check, ChevronRight, Coffee, Copy, Download, ExternalLink, FolderOpen, HelpCircle, History, RefreshCw, Settings, Share2, Trash2, Trophy, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Bug, ChevronRight, Coffee, Copy, Download, ExternalLink, FolderOpen, History, RefreshCw, Settings, Trash2, Trophy, X } from 'lucide-react';
+import { getModelAvatarSrc } from '../lib/modelAvatars';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AllDemosButton } from './SkillDemoViewers';
 
 /** Every kind of test: the All channel, and any caller from before channels. */
@@ -74,7 +75,6 @@ export function UtilityPanel({
   installedRows,
   appLogs,
   modelScores,
-  chatMessages,
   updateChannel,
   updateCheck,
   isCheckingUpdates,
@@ -84,6 +84,7 @@ export function UtilityPanel({
   onUiModeChange,
   onEditGoals,
   onShowWelcome,
+  topMatch,
   onDeleteModel,
   onRefreshLogs,
   onCopyLogs,
@@ -118,7 +119,6 @@ export function UtilityPanel({
   installedRows: ModelRow[];
   appLogs: AppLogEntry[];
   modelScores: Record<string, TestedModelScore>;
-  chatMessages: ChatMessage[];
   updateChannel: UpdateChannel;
   updateCheck: UpdateCheckResponse | null;
   isCheckingUpdates: boolean;
@@ -129,6 +129,8 @@ export function UtilityPanel({
   onEditGoals: () => void;
   /** Opens the first-run welcome again. */
   onShowWelcome: () => void;
+  /** The Top Match card, shown at the head of the Scorecards. */
+  topMatch?: ReactNode;
   onDeleteModel: (row: ModelRow) => void;
   onRefreshLogs: () => void;
   onCopyLogs: () => void;
@@ -194,7 +196,6 @@ export function UtilityPanel({
     () => (labChannel ? rankLabList(Object.values(labResults), labChannel, channelRankAt) : []),
     [labChannel, labResults, channelRankAt],
   );
-  const savedChatMessageCount = Math.max(0, chatMessages.length - 1);
   const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
   const scoreExplainerRef = useDialog<HTMLDivElement>(() => setScoreExplainerOpen(false));
   const [scoreCopied, setScoreCopied] = useState(false);
@@ -367,15 +368,31 @@ export function UtilityPanel({
       className={panel === 'history' ? 'panel utility-panel history-panel panel-focused' : 'panel utility-panel panel-focused'}
       aria-label={`${getNavLabel(panel)} panel`}
     >
-      <div className="utility-title">
-        <div>
-          <Icon aria-hidden="true" />
+      {panel === 'history' ? (
+        <header className="page-head">
           <div>
-            <span>Panel</span>
-            <strong>{getNavLabel(panel)}</strong>
+            <h2>Results</h2>
+            <p>
+              {labChannel
+                ? `${labBoard.length} saved ${LAB_NOUN[labChannel]}${labBoard.length === 1 ? '' : 's'} on ${workbench.label.toLowerCase()}, ranked by what matters to you.`
+                : rankedModelScores.length > 0
+                  ? `${rankedModelScores.length} tested model${rankedModelScores.length === 1 ? '' : 's'}, ranked at ${balanceSplit(channelBalance)}. Moving the fader re-ranks what is already measured; nothing runs again.`
+                  : 'Nothing measured yet. Run a single test or the show to build the ranking.'}
+            </p>
+          </div>
+        </header>
+      ) : (
+        <div className="utility-title">
+          <div>
+            <Icon aria-hidden="true" />
+            <div>
+              <strong>{getNavLabel(panel)}</strong>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {panel === 'history' && !labChannel && topMatch}
 
       {scoreExplainerOpen && (
         <div className="modal-backdrop" role="presentation" onClick={() => setScoreExplainerOpen(false)}>
@@ -437,21 +454,21 @@ export function UtilityPanel({
 
       {panel === 'history' && labChannel && (
         <div className="utility-body">
-          <div className="utility-stat">
-            <span>Scorecards · {workbench.label}</span>
-            <strong>{labBoard.length} saved result{labBoard.length === 1 ? '' : 's'}</strong>
-            <em>Every {LAB_NOUN[labChannel]} this PC has run, ranked by what matters to you. Moving the fader runs nothing again.</em>
+          <div className="results-toolbar">
+            <BalanceFader
+              variant="row"
+              value={channelBalance}
+              onChange={onChannelBalanceChange}
+              accuracyMeans={workbench.accuracyMeans}
+              lockedReason={channelBalanceLock}
+              label={`What matters more for ${workbench.activity}?`}
+            />
             {/* The results are here; what they made was only ever reachable
                 from the model that made it. */}
-            <AllDemosButton className="mini-button outline utility-gallery-btn" />
+            <div className="results-toolbar-actions">
+              <AllDemosButton className="btn btn-line btn-sm" label="Everything they made" />
+            </div>
           </div>
-          <BalanceFader
-            value={channelBalance}
-            onChange={onChannelBalanceChange}
-            accuracyMeans={workbench.accuracyMeans}
-            lockedReason={channelBalanceLock}
-            label={`What matters more for ${workbench.activity}?`}
-          />
           {labBoard.length > 0 ? (
             <LabStandings
               ranked={labBoard}
@@ -473,86 +490,50 @@ export function UtilityPanel({
 
       {panel === 'history' && !labChannel && (
         <div className="utility-body">
-          <div className="utility-stat">
-            <div className="utility-stat-head">
-              <span>Ranking board</span>
-              <div className="utility-stat-head-actions">
-                {topRankedScore && (
-                  <button
-                    type="button"
-                    className="how-we-score-trigger"
-                    onClick={() => {
-                      void downloadMatchCard({ score: topRankedScore, appVersion: APP_VERSION }).then((saved) => {
-                        if (!saved) return;
-                      });
-                    }}
-                    title={`Save a match card image of ${topRankedScore.model} — share it wherever you like; RigMatch sends nothing anywhere.`}
-                  >
-                    <Share2 aria-hidden="true" />
-                    Share card
-                  </button>
-                )}
-                {rankedModelScores.length > 0 && onSelectTopPick && (
-                  <button
-                    type="button"
-                    className="how-we-score-trigger flow-next-trigger"
-                    onClick={() => onSelectTopPick(rankedModelScores[0].model)}
-                    title={`Open ${rankedModelScores[0].model} in Top Pick`}
-                  >
-                    <Bot aria-hidden="true" />
-                    Top Pick
-                    <ChevronRight aria-hidden="true" />
-                  </button>
-                )}
-                {rankedModelScores.length > 0 && (
-                  <button
-                    type="button"
-                    className={`how-we-score-trigger${scoreCopied ? ' copied' : ''}`}
-                    onClick={copyScorecard}
-                    title="Copy results as markdown to share on Reddit, Discord, etc."
-                    aria-label="Copy scorecard to clipboard"
-                  >
-                    {scoreCopied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-                    {scoreCopied ? 'Copied!' : 'Share results'}
-                  </button>
-                )}
+          <div className="results-toolbar">
+            <BalanceFader
+              variant="row"
+              value={channelBalance}
+              onChange={onChannelBalanceChange}
+              accuracyMeans={workbench.accuracyMeans}
+              label={`What matters more for ${channel === 'code' ? 'code' : 'chat and writing'}?`}
+            />
+            <div className="results-toolbar-actions">
+              {topRankedScore && (
                 <button
                   type="button"
-                  className="how-we-score-trigger"
-                  onClick={() => setScoreExplainerOpen(true)}
-                  title="How scores are calculated"
-                  aria-label="How we score — open explanation"
+                  className="btn btn-line btn-sm"
+                  onClick={() => { void downloadMatchCard({ score: topRankedScore, appVersion: APP_VERSION }); }}
+                  title={`Save a match card image of ${topRankedScore.model}. RigMatch sends nothing anywhere.`}
                 >
-                  <HelpCircle aria-hidden="true" />
-                  How we score
+                  Share scorecard
                 </button>
-                {rankedModelScores.length > 0 && (
-                  <button
-                    type="button"
-                    className="how-we-score-trigger clear-all-scores-trigger"
-                    onClick={onClearAllScores}
-                    title="Clear every saved score and transcript (asks first)"
-                    aria-label="Clear all saved scores"
-                  >
-                    <Trash2 aria-hidden="true" />
-                    Clear all
-                  </button>
-                )}
-              </div>
+              )}
+              {rankedModelScores.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-line btn-sm"
+                  onClick={copyScorecard}
+                  title="Copy the results as Markdown, for Reddit, Discord and the like"
+                >
+                  {scoreCopied ? 'Copied' : 'Copy results'}
+                </button>
+              )}
+              <button type="button" className="btn btn-line btn-sm" onClick={() => setScoreExplainerOpen(true)}>
+                How we score
+              </button>
+              {rankedModelScores.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  onClick={onClearAllScores}
+                  title="Clear every saved score and transcript (asks first)"
+                >
+                  Clear scores…
+                </button>
+              )}
             </div>
-            <strong>{rankedModelScores.length} tested model{rankedModelScores.length === 1 ? '' : 's'}</strong>
-            <em>
-              {rankedModelScores.length > 0
-                ? `Click any row to open it in Top Pick. Ranked at ${balanceSplit(channelBalance)}.`
-                : 'Run a single test or Speed Dating to build the ranking.'}
-            </em>
           </div>
-          <BalanceFader
-            value={channelBalance}
-            onChange={onChannelBalanceChange}
-            accuracyMeans={workbench.accuracyMeans}
-            label={`What matters more for ${channel === 'code' ? 'code' : 'chat and writing'}?`}
-          />
           {/* Code's own board, first: the coding answers alone, at the Code
               fader. The Match ranking below still blends every kind of question. */}
           {channel === 'code' && (
@@ -560,11 +541,6 @@ export function UtilityPanel({
               <CodingBoard scores={rankedModelScores} balance={channelBalance} label={workbench.shortLabel} />
             </section>
           )}
-          <div className="utility-stat">
-            <span>Best saved test</span>
-            <strong>{topRankedScore ? topRankedScore.model : 'No saved score'}</strong>
-            <em>{topRankedScore ? `${formatMatchScore(topRankedScore)} total · ${topRankedScore.grade}` : 'Run a test to save the next scorecard.'}</em>
-          </div>
           {channel !== 'code' && goalMatches.length > 0 && (
             <div className="task-picks-section goal-match-board" aria-label="Your matches by goal">
               <span>Matches</span>
@@ -629,6 +605,7 @@ export function UtilityPanel({
             </div>
           )}
 
+          {rankedModelScores.length > 0 && <h3 className="results-heading">Every tested model</h3>}
           {rankedModelScores.length > 0 && (
             <ol className="utility-list score-ranking-list" aria-label="Ranked model scores">
               {rankedModelScores.map((score, index) => {
@@ -662,6 +639,7 @@ export function UtilityPanel({
                     }}
                   >
                     <b>{isTied ? '=' : index + 1}</b>
+                    <img className="score-row-portrait" src={getModelAvatarSrc(score.model)} alt="" />
                     <div className="score-row-name">
                       <span>
                         {score.model}
@@ -679,7 +657,7 @@ export function UtilityPanel({
                       <em>{score.speed} speed · {score.sobriety} accuracy · {score.fit} fit · {getResponseEstimate(score.speed)}</em>
                     </div>
                     <strong className={`score-row-grade ${getScoreTone(score.total)}`}>
-                      {isTied && <span className="tie-badge">TIED</span>}
+                      {isTied && <span className="tie-badge">Tied</span>}
                       {formatMatchScore(score)} · {score.grade}
                     </strong>
                     {onSelectTopPick && <ChevronRight className="score-row-nav-arrow" aria-hidden="true" />}
@@ -690,7 +668,6 @@ export function UtilityPanel({
                       title={`Clear ${score.model} score`}
                       aria-label={`Clear ${score.model} score`}
                     >
-                      <Trash2 aria-hidden="true" />
                       <span>Remove</span>
                     </button>
                   </li>
@@ -698,34 +675,10 @@ export function UtilityPanel({
               })}
             </ol>
           )}
-          <section className="score-cleanup-panel" aria-label="Score cleanup">
-            <div>
-              <span>Score Cleanup</span>
-              <strong>Forget stale match history</strong>
-              <em>Clears scorecards and test transcripts only. Installed Ollama models stay put.</em>
-            </div>
-            <button type="button" className="danger-button compact" onClick={onClearAllScores} disabled={!rankedModelScores.length}>
-              <Trash2 aria-hidden="true" />
-              Clear All Scores
-            </button>
-          </section>
           <HistoryTimeline scores={recentModelScores} onClearScore={onClearScore} />
-          <div className="utility-stat">
-            <span>Current match</span>
-            <strong>{selectedHost?.hostname ?? 'Local machine'}</strong>
-            <em>{selectedModel}</em>
-          </div>
-          <div className="utility-stat">
-            <span>Saved app history</span>
-            <strong>{recentModelScores.length} scorecard{recentModelScores.length === 1 ? '' : 's'}</strong>
-            <em>
-              {savedChatMessageCount > 0
-                ? `${savedChatMessageCount} chat message${savedChatMessageCount === 1 ? '' : 's'} saved locally`
-                : 'Chat starts saving locally after your first message'}
-            </em>
-          </div>
+          {listTestResult && <h3 className="results-heading">The last show</h3>}
           {listTestResult ? (
-            <ol className="utility-list" aria-label="Latest Speed Dating ranking">
+            <ol className="utility-list" aria-label="The last show's ranking">
               {listTestResult.results.map((result, index) => (
                 <li key={result.model} className={result.model === listTestResult.winner ? 'winner' : ''}>
                   <b>{index + 1}</b>
