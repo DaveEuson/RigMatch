@@ -43,7 +43,7 @@ console.log(run(['scripts/extract-component.mjs', name, String(start + 1), Strin
 // --- wire the import --------------------------------------------------------
 {
   const app = readFileSync(appPath, 'utf-8');
-  const anchor = "import { RunWarningModal } from './components/RunWarningModal';";
+  const anchor = "import { RunSheet } from './components/RunSheet';";
   if (!app.includes(anchor)) throw new Error('import anchor missing from App.tsx');
   writeFileSync(appPath, app.replace(anchor, `${anchor}\nimport { ${name} } from './components/${name}';`));
 }

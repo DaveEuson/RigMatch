@@ -1,0 +1,117 @@
+/* RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE. */
+
+/*
+ * The redesign's controls. Four buttons (gold, outline, text link, destructive),
+ * a selectable chip and a check toggle, all sentence case on an 8px radius.
+ *
+ * Gold is the winner and the one next action, so a screen has at most one
+ * .btn-gold. Screens move onto these as each phase restyles them; the old
+ * .primary-button and .mini-button stay until nothing uses them.
+ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  min-height: var(--h-control);
+  padding: 0 var(--s4);
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text-strong);
+  font: 700 var(--fs-ui) / 1.2 var(--ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.btn svg { width: 18px; height: 18px; flex: none; }
+.btn:disabled { cursor: not-allowed; opacity: 0.5; }
+.btn-sm { min-height: var(--h-control-sm); padding: 0 var(--s3); }
+
+.btn-gold { background: var(--gold); border-color: var(--gold); color: var(--gold-ink); }
+.btn-gold:not(:disabled):hover { background: #f5ca72; border-color: #f5ca72; }
+
+.btn-line { border-color: var(--line-strong); }
+.btn-line:not(:disabled):hover { background: var(--panel-hover); border-color: var(--text); }
+
+.btn-danger { border-color: var(--red); color: var(--red); }
+.btn-danger:not(:disabled):hover { background: rgba(var(--red-rgb), 0.12); }
+
+.btn-link {
+  min-height: var(--target-min);
+  padding: 0;
+  color: var(--text-strong);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+.btn-link:not(:disabled):hover { text-decoration-color: currentColor; }
+
+/* A choice among a few: the chosen one is outlined in the accent. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: var(--h-control);
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text-strong);
+  font: 400 var(--fs-ui) / 1.2 var(--ui);
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.chip:not(:disabled):hover { background: var(--panel-hover); }
+.chip[aria-pressed='true'] {
+  border: 2px solid var(--accent);
+  padding: 0 13px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  font-weight: 700;
+}
+.chip:disabled { cursor: not-allowed; opacity: 0.5; }
+.chip em { color: var(--gold); font-style: normal; font-weight: 700; }
+
+.chip-row { display: flex; flex-wrap: wrap; gap: var(--s2); }
+
+/* A box that is ticked or not, with a title and a line under it. */
+.check-toggle {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  width: 100%;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text);
+  font: 400 var(--fs-ui) / 1.45 var(--ui);
+  text-align: left;
+  cursor: pointer;
+}
+.check-toggle:not(:disabled):hover { background: var(--panel-hover); }
+.check-toggle[aria-pressed='true'], .check-toggle:has(input:checked) { border-color: var(--accent); }
+.check-toggle:disabled, .check-toggle.disabled { cursor: not-allowed; opacity: 0.55; }
+.check-toggle strong { display: block; color: var(--text-strong); }
+.check-toggle-box {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border: 2px solid var(--line-strong);
+  border-radius: 4px;
+  color: var(--gold-ink);
+}
+.check-toggle[aria-pressed='true'] .check-toggle-box,
+.check-toggle input:checked + .check-toggle-box {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.check-toggle-box svg { width: 14px; height: 14px; }
+.check-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.check-toggle:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }

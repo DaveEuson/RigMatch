@@ -39,7 +39,7 @@ export function QuestionSuitePreview({
         </div>
         <button type="button" className="mini-button outline suite-edit-button advanced-only" onClick={onOpenSuiteEditor}>
           <Settings aria-hidden="true" />
-          Edit Suite
+          Questions and judge
         </button>
       </div>
       <div className="question-list" aria-label={`${questionCount} benchmark questions`}>
