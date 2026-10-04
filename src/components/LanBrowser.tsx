@@ -3,13 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { isDesktopRuntime } from '../api';
 import type { NetworkHost, OllamaInstallProgress, OllamaStatus, SystemProfile } from '../types';
 import { MachineAvatar } from './Avatars';
-import { PanelHeader } from './CommonChrome';
 import { OllamaPrep } from './OllamaPrep';
 import { RigDetailsPanel } from './RigDetailsPanel';
 import { SetupDoctor } from './SetupDoctor';
 import { ThirdPartyModelNotice } from './ThirdPartyModelNotice';
 import { UpgradeRig } from './UpgradeRig';
-import { Network } from 'lucide-react';
 
 export function LanBrowser({
   active,
@@ -90,14 +88,17 @@ export function LanBrowser({
 
   return (
     <section className={panelClassName}>
-      <PanelHeader
-        icon={Network}
-        title="Your Rig"
-        actionLabel={isScanning ? 'Checking' : 'Check Local'}
-        onAction={onScan}
-        busy={isScanning}
-        meta={receipt ? `${hostMeta} · ${receipt}` : hostMeta}
-      />
+      <header className="page-head">
+        <div>
+          <h2>My PC</h2>
+          <p>{receipt ? `${hostMeta} · ${receipt}` : hostMeta}</p>
+        </div>
+        <div className="page-head-actions">
+          <button type="button" className="btn btn-line" onClick={onScan} disabled={isScanning}>
+            {isScanning ? 'Checking…' : 'Check again'}
+          </button>
+        </div>
+      </header>
       <OllamaPrep
         system={system}
         ollama={ollama}
@@ -116,12 +117,13 @@ export function LanBrowser({
         onCheckComputer={onScanRig}
         onOpenSetupGuide={onOpenSetupGuide}
       />
-      <div className="table-wrap">
+      <h3 className="mypc-heading">Computers RigMatch can see</h3>
+      <div className="table-wrap mypc-hosts">
         <table>
           <thead>
             <tr>
-              <th>Hostname</th>
-              <th>IP Address</th>
+              <th>Computer</th>
+              <th>Address</th>
               <th>Provider</th>
               <th>Models</th>
               <th>Status</th>

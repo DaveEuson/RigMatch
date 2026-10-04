@@ -212,6 +212,7 @@ import { Elapsed } from './components/Elapsed';
 import { FirstRunSplash } from './components/FirstRunSplash';
 import { ModelPoolLineupStrip } from './components/ModelPoolLineupStrip';
 import { WelcomeOverlay } from './components/WelcomeOverlay';
+import { LogsView } from './components/LogsView';
 import { ActivityPanel } from './components/ActivityPanel';
 import { SpeedDatePanel } from './components/SpeedDatePanel';
 import { UtilityPanel } from './components/UtilityPanel';
@@ -609,6 +610,8 @@ function App() {
   const [pendingScoreClear, setPendingScoreClear] = useState<PendingScoreClear | null>(null);
   // The welcome again, from Settings. The first run's own is useGoals' showModeSplash.
   const [welcomeReplay, setWelcomeReplay] = useState(false);
+  // My PC's two views: the computer and its connections, or everything logged.
+  const [myPcView, setMyPcView] = useState<'overview' | 'logs'>('overview');
 
   const selectedHost = hosts.find((host) => host.id === selectedHostId) ?? hosts[0];
 
@@ -4530,8 +4533,35 @@ function App() {
               </div>
             </>
           )}
+          {activeTab === 'mypc' && (
+            <div className="screen-tabs" role="group" aria-label="My PC view">
+              <button type="button" aria-pressed={myPcView === 'overview'} onClick={() => setMyPcView('overview')}>Overview</button>
+              <button type="button" aria-pressed={myPcView === 'logs'} onClick={() => { setMyPcView('logs'); void loadLogs(); }}>
+                Logs <span className="news-count">{appLogs.length}</span>
+              </button>
+            </div>
+          )}
         </div>
-        {activeNavId === 'lan' && (
+        {activeNavId === 'lan' && myPcView === 'logs' && (
+          <section className="panel logs-page" aria-label="Logs">
+            <header className="page-head">
+              <div>
+                <h2>Logs</h2>
+                <p>What RigMatch wrote down: tests, downloads, connections and errors. Kept on this computer only.</p>
+              </div>
+            </header>
+            <LogsView
+              entries={appLogs}
+              logPath={logPath}
+              loading={isLoadingLogs}
+              onRefresh={loadLogs}
+              onCopy={() => { void copyLogs(); }}
+              onOpenFolder={() => { void openLogsFolder(); }}
+              onClear={() => { void clearLogs(); }}
+            />
+          </section>
+        )}
+        {activeNavId === 'lan' && myPcView === 'overview' && (
           <LanBrowser
             active={true}
             system={system}
@@ -4775,7 +4805,6 @@ function App() {
             ollama={ollama}
             system={system}
             themeId={themeId}
-            appLogs={appLogs}
             modelScores={modelScores}
             updateChannel={updateChannel}
             updateCheck={updateCheck}
@@ -4784,7 +4813,6 @@ function App() {
             selectedGoals={selectedGoals}
             installedRows={modelRows.filter((row) => row.installed)}
             logPath={logPath}
-            isLoadingLogs={isLoadingLogs}
             onThemeChange={selectTheme}
             onUiModeChange={selectUiMode}
             // The Top Match leads the Scorecards, under the Results title.
@@ -4809,9 +4837,6 @@ function App() {
             onShowWelcome={() => setWelcomeReplay(true)}
             onDeleteModel={requestDeleteModel}
             onRefreshLogs={loadLogs}
-            onCopyLogs={copyLogs}
-            onClearLogs={clearLogs}
-            onOpenLogsFolder={openLogsFolder}
             onClearScore={requestClearScore}
             onClearAllScores={requestClearAllScores}
             onClearAllData={requestClearData}

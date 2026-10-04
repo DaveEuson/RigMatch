@@ -108,8 +108,8 @@ try {
     `${loaded?.entries?.length ?? 0} entr(y/ies)`,
   );
 
-  // The UI path: openLogsPanel() moves to History and calls loadLogs(). This is
-  // the part that moved into useAppLogs, so drive it rather than the API.
+  // The UI path: opening My PC › Logs calls loadLogs(), which lives in
+  // useAppLogs, so drive it rather than the API.
   await page.evaluate(() => {
     localStorage.setItem('rigmatch:ui-mode:v1', 'advanced');
     localStorage.setItem('rigmatch:first-run-tutorial:v1', 'seen');
@@ -118,16 +118,18 @@ try {
   });
   await page.reload();
   await page.waitForSelector('.top-tab', { timeout: 20000 });
-  // Results opens on Scorecards, where the log panel is.
-  await page.locator('.top-tab', { hasText: 'Results' }).click();
-  await page.waitForTimeout(600);
+  // The log lives on My PC › Logs; opening that tab loads it.
+  await page.locator('.top-tab', { hasText: 'My PC' }).click();
+  await page.waitForTimeout(400);
+  await page.locator('.screen-tabs button', { hasText: /^Logs/ }).click();
+  await page.waitForTimeout(800);
 
   const shown = await page.evaluate((text) => document.body.innerText.includes(text), marker);
   const pathShown = await page.evaluate(
     (p) => document.body.innerText.includes(p) || document.body.innerText.includes('rigmatch-log'),
     profile,
   );
-  record('the History panel renders loaded entries', shown);
+  record('the Logs view renders loaded entries', shown);
   record('the log path is shown to the user', pathShown);
 
   const copied = await page.evaluate(async () => {
