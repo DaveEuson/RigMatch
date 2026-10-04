@@ -3,6 +3,20 @@ import { CONTEXT_STEPS } from "./contextWindow";
 
 const SETTINGS_KEY = "rigmatch-chat-settings";
 
+/**
+ * The stage colors, the same five RigMatch offers. Only the surfaces, the lines
+ * and the accent change; gold never does. Light mode is separate (theme).
+ */
+export const STAGES = [
+  { id: "plum", label: "Stage Plum" },
+  { id: "avocado", label: "Avocado" },
+  { id: "mustard", label: "Mustard" },
+  { id: "teal", label: "Teal" },
+  { id: "chocolate", label: "Chocolate" },
+] as const;
+
+export type StageId = (typeof STAGES)[number]["id"];
+
 export type AppSettings = {
   ollamaUrl: string;
   userName: string;
@@ -10,6 +24,7 @@ export type AppSettings = {
   activePersonalityId: string;
   personalityProfiles: PersonalityProfile[];
   theme: "dark" | "light";
+  stage: StageId;
   muted: boolean;
   hiddenModels: string[];
   showSystemMonitor: boolean;
@@ -60,6 +75,7 @@ const DEFAULTS: AppSettings = {
   activePersonalityId: DEFAULT_PERSONALITY_ID,
   personalityProfiles: DEFAULT_PERSONALITY_PROFILES,
   theme: "dark",
+  stage: "plum",
   muted: false,
   hiddenModels: [],
   showSystemMonitor: true,
@@ -110,10 +126,13 @@ function normalizeSettings(settings: AppSettings): AppSettings {
     ? settings.contextSize
     : "auto";
 
+  const stage = STAGES.some((entry) => entry.id === settings.stage) ? settings.stage : "plum";
+
   return {
     ...settings,
     activePersonalityId,
     personalityProfiles,
     contextSize,
+    stage,
   };
 }

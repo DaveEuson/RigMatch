@@ -6,6 +6,7 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, readConversationsFile, writeConversationsFile, readMemoriesFile, writeMemoriesFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
 import { createWriteScheduler } from "./lib/writeScheduler";
+import { UI_ICON_ART, type UiIconName } from "./lib/uiIconArt";
 import { classifyChatRequest, companionBeyondNote } from "./lib/chatCapabilityGuard";
 import {
   KEEP_RECENT_MESSAGES,
@@ -39,10 +40,12 @@ import {
 } from "./lib/conversationStore";
 import {
   DEFAULT_PERSONALITY_ID,
+  STAGES,
   loadSettings,
   saveSettings,
   type AppSettings,
   type PersonalityProfile,
+  type StageId,
 } from "./lib/settings";
 import {
   CONTEXT_STEPS,
@@ -95,6 +98,18 @@ const CHAT_TESTS: Array<{ id: TestKind; label: string }> = [
   { id: "reading", label: "a picture it reads" },
   { id: "listening", label: "a recording it hears" },
 ];
+
+/** The line under each test in the More menu: what RigMatch will have it do. */
+const TEST_NOTES: Record<TestKind, string> = {
+  chat: "RigMatch's questions, scored",
+  code: "A coding task, read by a judge",
+  app: "Builds a small app you can open",
+  reading: "Describes a picture",
+  listening: "Writes down a short recording",
+  image: "Makes a picture, timed and checked",
+  video: "Makes a clip, timed",
+  audio: "Makes a sound, timed",
+};
 
 /** What each maker is called, and what it asks for and says. */
 const STUDIOS: Record<MakeKind, {
@@ -554,6 +569,25 @@ function BuddyAvatar({
  * between, and answers as though the earlier turns were never said — while the
  * transcript above still shows them all.
  */
+/** One of the redesign's interface icons, the same art RigMatch draws. Decorative. */
+function Icon({ name, size = 18 }: { name: UiIconName; size?: number }) {
+  const art = UI_ICON_ART[name];
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={art.strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      dangerouslySetInnerHTML={{ __html: art.body }}
+    />
+  );
+}
+
 function ContextMeter({ usage, info, limit }: {
   usage: ReturnType<typeof getContextUsage>;
   info: ModelContextInfo | null;
@@ -573,7 +607,7 @@ function ContextMeter({ usage, info, limit }: {
   return (
     <div className={`rm-context-meter rm-context-${state}`} title={title}>
       <span className="rm-context-label">
-        {usage.willTruncate ? "MEMORY FULL" : "MEMORY"} {formatContextSize(usage.used)} / {formatContextSize(limit)}
+        {usage.willTruncate ? "Memory full" : "Memory"} <b>{formatContextSize(usage.used)} / {formatContextSize(limit)}</b>
       </span>
       <span className="rm-context-track" aria-hidden="true">
         <span className="rm-context-fill" style={{ width: `${Math.round(usage.fraction * 100)}%` }} />
@@ -627,6 +661,12 @@ export default function App() {
   const [confirmDelete, setConfirmDelete] = useState<Conversation | null>(null);
   // Standing memory: facts the user asked to be carried across conversations.
   const [memories, setMemories] = useState<Memory[]>([]);
+  // The thread header's More menu, the memory panel beside the thread, and the
+  // sidebar as an overlay on a narrow window.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
   const [memoriesLoaded, setMemoriesLoaded] = useState(false);
   const [memoryDraft, setMemoryDraft] = useState("");
   const [compacting, setCompacting] = useState(false);
@@ -698,7 +738,6 @@ export default function App() {
   const [makerModel, setMakerModel] = useState<Partial<Record<MakeKind, string>>>(readChosenMakers);
   /** What RigMatch said about the last test asked for here; cleared after a while. */
   const [testNote, setTestNote] = useState<string | null>(null);
-  const [chatTest, setChatTest] = useState<TestKind>("chat");
   useEffect(() => {
     if (!testNote) return undefined;
     const id = setTimeout(() => setTestNote(null), 12_000);
@@ -794,8 +833,6 @@ export default function App() {
   const prevTypingRef = useRef<string | null>(null);
 
   // ── Derived ───────────────────────────────────────────────────────────────
-
-  const RANK_MEDALS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
   // Standard competition ranking: rank = 1 + count of models with strictly higher score
   const modelRankings = useMemo(() => {
@@ -1034,11 +1071,29 @@ export default function App() {
     [buddies],
   );
 
-  // ── Apply theme ───────────────────────────────────────────────────────────
-
+  // ── Apply the look ─────────────────────────────────────────────────────────
+  // On the document as well as the app root, so the page behind it (and any
+  // overscroll) is the same color.
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", settings.theme);
-  }, [settings.theme]);
+    document.documentElement.setAttribute("data-stage", settings.stage);
+    if (settings.theme === "light") document.documentElement.setAttribute("data-chat-light", "");
+    else document.documentElement.removeAttribute("data-chat-light");
+  }, [settings.stage, settings.theme]);
+
+  // The More menu closes on Escape and on a click anywhere else.
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setMoreOpen(false); };
+    const onDown = (event: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(event.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown);
+    };
+  }, [moreOpen]);
 
   // ── Fetch models ──────────────────────────────────────────────────────────
 
@@ -1605,6 +1660,7 @@ export default function App() {
       activePersonalityId: draftSettings.activePersonalityId,
       personalityProfiles: draftSettings.personalityProfiles,
       theme: draftSettings.theme,
+      stage: draftSettings.stage,
       muted: draftSettings.muted,
       hiddenModels,
       showSystemMonitor: draftSettings.showSystemMonitor,
@@ -1806,6 +1862,14 @@ export default function App() {
     setProfileModal(null);
   };
 
+  /** The header's look controls: applied and saved at once, no Save button. */
+  const updateLook = (patch: Partial<Pick<AppSettings, "theme" | "stage">>) => {
+    const next = { ...settings, ...patch };
+    saveSettings(next);
+    setSettings(next);
+    setDraftSettings((draft) => ({ ...draft, ...patch }));
+  };
+
   const applyPersonalitySettings = (nextSettings: AppSettings) => {
     saveSettings(nextSettings);
     setSettings(nextSettings);
@@ -1915,28 +1979,61 @@ export default function App() {
   const ramClass = ramPct > 0.88 ? "hot" : ramPct > 0.70 ? "warm" : "";
 
   return (
-    <div className="rm-app" data-theme={settings.theme}>
+    <div className="rm-app" data-stage={settings.stage} data-chat-light={settings.theme === "light" ? "" : undefined}>
 
-      {/* ── Custom Title Bar ───────────────────────────────────────── */}
-      <div className="rm-titlebar" data-tauri-drag-region>
-        <span className="rm-titlebar-title" data-tauri-drag-region>⚡ RigMatch Chat</span>
-        <div className="rm-titlebar-controls">
+      {/* ── Header ─────────────────────────────────────────────────────
+          The window is frameless, so this is also the title bar: drag it to
+          move the window, and the last two buttons minimize and close. */}
+      <header className="rm-header" data-tauri-drag-region>
+        <span className="rm-header-title" data-tauri-drag-region>RigMatch Chat</span>
+        {settings.showSystemMonitor && sysStats && (
+          <span className="rm-header-stats" data-tauri-drag-region>
+            <span className={cpuClass}>CPU {Math.round(sysStats.cpuPercent)}%</span>
+            {" · "}
+            <span className={ramClass}>RAM {sysStats.ramUsedGb.toFixed(1)} / {Math.round(sysStats.ramTotalGb)} GB</span>
+            {vramUsedGb !== null && <>{" · "}<span title="Video memory used by loaded Ollama models">VRAM {vramUsedGb.toFixed(1)} GB</span></>}
+          </span>
+        )}
+        <span className="rm-header-spacer" data-tauri-drag-region />
+        <label className="rm-header-stage">
+          <span className="rm-sr-only">Stage colors</span>
+          <select value={settings.stage} onChange={(event) => updateLook({ stage: event.target.value as StageId })}>
+            {STAGES.map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="rm-btn rm-btn-line rm-btn-sm"
+          aria-pressed={settings.theme === "light"}
+          onClick={() => updateLook({ theme: settings.theme === "light" ? "dark" : "light" })}
+        >
+          {settings.theme === "light" ? "Dark mode" : "Light mode"}
+        </button>
+        <button
+          type="button"
+          className="rm-btn rm-btn-line rm-btn-sm"
+          onClick={() => void invoke("open_rigmatch_ai").catch(() => undefined)}
+        >
+          Back to RigMatch
+        </button>
+        <span className="rm-window-controls">
           <button
             type="button"
-            className="rm-titlebar-btn minimize"
+            className="rm-window-btn"
             onClick={() => getCurrentWindow().minimize()}
             aria-label="Minimize"
           >−</button>
           <button
             type="button"
-            className="rm-titlebar-btn close"
+            className="rm-window-btn close"
             // Land anything still inside the coalescing window before the
             // webview goes away.
             onClick={() => { void writerRef.current?.flush().finally(() => getCurrentWindow().close()); }}
             aria-label="Close"
           >×</button>
-        </div>
-      </div>
+        </span>
+      </header>
+      <div className="rm-stripe" aria-hidden="true" />
 
       {/* The summary is shown before it is used. A poor one quietly degrades
           every later reply, and the person who had the conversation is the only
@@ -2083,54 +2180,31 @@ export default function App() {
         </div>
       )}
 
-      {/* ── System Monitor Bar ─────────────────────────────────────── */}
-      {settings.showSystemMonitor && sysStats && (
-        <div className="rm-system-bar">
-          <span className={`rm-sys-stat ${cpuClass}`}>
-            CPU <strong>{Math.round(sysStats.cpuPercent)}%</strong>
-          </span>
-          <span className="rm-sys-divider" />
-          <span className={`rm-sys-stat ${ramClass}`}>
-            RAM <strong>{sysStats.ramUsedGb.toFixed(1)}</strong>
-            <em>/ {Math.round(sysStats.ramTotalGb)} GB</em>
-          </span>
-          {vramUsedGb !== null && (
-            <>
-              <span className="rm-sys-divider" />
-              <span className="rm-sys-stat" title="VRAM used by loaded Ollama models">
-                VRAM <strong>{vramUsedGb.toFixed(1)} GB</strong>
-              </span>
-            </>
-          )}
-        </div>
-      )}
-
       <div className="rm-content">
       {/* ── Buddy List ─────────────────────────────────────────────── */}
-      <aside className="rm-buddy-panel">
+      {sidebarOpen && <div className="rm-sidebar-scrim" role="presentation" onClick={() => setSidebarOpen(false)} />}
+      <aside className={sidebarOpen ? "rm-buddy-panel open" : "rm-buddy-panel"}>
         <div className="rm-buddy-panel-header">
-          <div className="rm-logo">
-            <span className="rm-logo-badge">⚡</span>
-            <div>
-              <strong>RigMatch Chat</strong>
-              <em>{settings.userName}</em>
-            </div>
-          </div>
-          <span className={`rm-conn-dot ${connectionStatus}`} title={connectionStatus} />
+          <h2>Chats</h2>
+          <button
+            type="button"
+            className="rm-btn rm-btn-line rm-btn-sm"
+            onClick={() => {
+              const target = activeBuddyObj?.modelName ?? visibleBuddies[0]?.modelName;
+              if (target) { startNewConversation(target); setSidebarOpen(false); }
+            }}
+            disabled={!activeBuddyObj && visibleBuddies.length === 0}
+          >
+            New chat
+          </button>
         </div>
 
-        <div className="rm-status-bar">
-          {connectionStatus === "connected"
-            ? `Ollama ${ollamaVersion ? `v${ollamaVersion}` : ""} · ${buddies.length} model${buddies.length !== 1 ? "s" : ""} online`
-            : connectionStatus === "checking"
-              ? "Connecting to Ollama…"
-              : "Ollama not found — retrying…"}
-        </div>
-        {(chosenModel || modelRankings.size > 0) && (
-          <div className="rm-badge-legend">
-            <span title="Your Top Pick from RigMatch">⭐ Top Pick</span>
-            <span title="Ranked by RigMatch score">🥇 Rank 1–3</span>
-            <span title="Low hardware fit — may be slow">⚠ Low fit</span>
+        {connectionStatus !== "connected" && (
+          <div className="rm-status-bar" role="status">
+            <span>{connectionStatus === "checking" ? "Connecting to Ollama…" : "Ollama isn't answering. Start it, then reconnect."}</span>
+            {connectionStatus === "disconnected" && (
+              <button type="button" className="rm-btn rm-btn-link" onClick={() => void refresh()}>Reconnect</button>
+            )}
           </div>
         )}
 
@@ -2156,7 +2230,7 @@ export default function App() {
           rather than leaving the absence to be puzzled over.
         */}
         <div className="rm-doing">
-          <strong id="rm-doing-label">What do you want to do?</strong>
+          <p id="rm-doing-label">What do you want to do?</p>
           <div className="rm-doing-chips" role="group" aria-labelledby="rm-doing-label">
             {([
               ["all", "Anything"],
@@ -2172,7 +2246,7 @@ export default function App() {
                 key={id}
                 type="button"
                 aria-pressed={capabilityFilter === id}
-                className={capabilityFilter === id ? "active" : ""}
+                className="rm-chip"
                 onClick={() => setCapabilityFilter(id)}
               >
                 {label}
@@ -2180,6 +2254,12 @@ export default function App() {
             ))}
           </div>
         </div>
+        {connectionStatus === "connected" && !makerKind && (
+          <p className="rm-buddy-count" title={ollamaVersion ? `Through Ollama ${ollamaVersion}` : undefined}>
+            {capabilityFilter === "all" ? "Every model you can chat with" : "Models that can do this"}
+            {" · "}{visibleBuddies.length} model{visibleBuddies.length === 1 ? "" : "s"}
+          </p>
+        )}
         <div className="rm-buddy-list">
           {/*
             The picture-maker, listed where someone looks for it.
@@ -2265,7 +2345,6 @@ export default function App() {
           )}
           {visibleBuddies.map((buddy) => {
             const threads = conversationsForModel(conversations, buddy.modelName);
-            const lastMsg = threads[0]?.messages[threads[0].messages.length - 1];
             const isActive = buddy.modelName === activeBuddy;
             const isTyping = typingModel === buddy.modelName;
             const score = rigScores[buddy.modelName];
@@ -2275,63 +2354,32 @@ export default function App() {
               <div key={buddy.modelName} className="rm-buddy-group">
               <button
                 type="button"
-                className={`rm-buddy-item${isActive ? " active" : ""}${isChosen ? " rm-buddy-chosen" : ""}`}
+                className={`rm-buddy-item${isActive ? " active" : ""}`}
                 aria-expanded={isExpanded}
-                onClick={() => openModel(buddy.modelName)}
+                onClick={() => { openModel(buddy.modelName); setSidebarOpen(false); }}
                 onDoubleClick={() => setProfileModal(buddy)}
               >
-                <span className={`rm-buddy-caret${isExpanded ? " open" : ""}`} aria-hidden="true">▸</span>
                 <div className="rm-buddy-avatar-wrap">
                   <BuddyAvatar family={buddy.avatarFamily} isTyping={isTyping} />
-                  <span className={`rm-online-dot${connectionStatus === "connected" ? " online" : ""}`} />
                 </div>
                 <div className="rm-buddy-info">
-                  <span className="rm-buddy-name">
-                    {isChosen && (
-                      <span className="rm-chosen-badge" title="Your Top Pick from RigMatch">⭐</span>
-                    )}
-                    {modelRankings.has(buddy.modelName) && (
-                      <span className="rm-rank-medal" title={`Ranked #${modelRankings.get(buddy.modelName)} by RigMatch score`}>
-                        {RANK_MEDALS[modelRankings.get(buddy.modelName)!]}
-                      </span>
-                    )}
-                    {score && score.fit < 40 && (
-                      <span className="rm-out-of-league" title="Low hardware fit score from RigMatch — may be slow on this rig">⚠</span>
-                    )}
-                    {buddy.displayName}
-                  </span>
+                  <span className="rm-buddy-name">{buddy.displayName}</span>
+                  {/* The Match from RigMatch when it has one, otherwise the size
+                      and that it has not been scored. Words, not medals. */}
                   <span className="rm-buddy-score-line">
                     {score && score.grade != null
-                      ? <><span className={`rm-score-inline rm-score-${String(score.grade).replace('+', 'plus').replace('-', 'minus')}`}>{score.total} · {score.grade}</span><span className="rm-response-time">{getResponseLabel(score, buddy.sizeGb)}</span></>
-                      : <span className="rm-response-time">{buddy.sizeGb} GB · {getResponseLabel(undefined, buddy.sizeGb)}</span>
-                    }
+                      ? <>Match <b>{score.total}</b> · {score.grade}</>
+                      : <>{buddy.sizeGb} GB · not scored yet</>}
+                    {score && score.fit < 40 ? <span className="rm-out-of-league" title="Low hardware fit score from RigMatch"> · may be slow here</span> : null}
+                    {(rigCapabilities[buddy.modelName] ?? []).includes("vision") && <span title="Can look at pictures you send it"> · reads pictures</span>}
+                    {(rigCapabilities[buddy.modelName] ?? []).includes("audio") && <span title="Can listen to a recording you send it"> · listens</span>}
                   </span>
                   {pickUse && buddy.modelName === pickedModel && (
                     <span className="rm-pick-line">{PICK_LABEL[pickUse]}</span>
                   )}
-                  {(rigCapabilities[buddy.modelName] ?? []).filter((c) => c !== "text").length > 0 && (
-                    <span className="rm-buddy-caps">
-                      {(rigCapabilities[buddy.modelName] ?? []).includes("vision") && (
-                        <span className="rm-cap" title="Can look at pictures you send it">sees</span>
-                      )}
-                      {(rigCapabilities[buddy.modelName] ?? []).includes("audio") && (
-                        <span className="rm-cap" title="Can listen to a recording you send it">hears</span>
-                      )}
-                    </span>
-                  )}
-                  {(isTyping || lastMsg) && (
-                    <span className="rm-buddy-last">
-                      {isTyping
-                        ? "typing…"
-                        : lastMsg
-                          ? (lastMsg.role === "user" ? `You: ${lastMsg.content}` : lastMsg.content).slice(0, 42)
-                          : null}
-                    </span>
-                  )}
+                  {isTyping && <span className="rm-buddy-last">typing…</span>}
                 </div>
-                {threads.length > 1 && (
-                  <span className="rm-thread-count" title={`${threads.length} conversations`}>{threads.length}</span>
-                )}
+                {isChosen && <span className="rm-top-match" title="Your Top Match from RigMatch">Top Match</span>}
               </button>
 
               {/* The subjects under this model. Folded away until the model is
@@ -2359,7 +2407,7 @@ export default function App() {
                           <button
                             type="button"
                             className="rm-thread-open"
-                            onClick={() => { setActiveBuddy(buddy.modelName); setActiveConversationId(thread.id); }}
+                            onClick={() => { setActiveBuddy(buddy.modelName); setActiveConversationId(thread.id); setSidebarOpen(false); }}
                             onDoubleClick={() => setRenamingId(thread.id)}
                             title={`${thread.title} — double-click to rename`}
                           >
@@ -2372,7 +2420,7 @@ export default function App() {
                             title="Delete this conversation"
                             aria-label={`Delete conversation ${thread.title}`}
                             onClick={() => setConfirmDelete(thread)}
-                          >×</button>
+                          >Delete</button>
                         </>
                       )}
                     </div>
@@ -2382,7 +2430,7 @@ export default function App() {
                     className="rm-thread-new"
                     onClick={() => startNewConversation(buddy.modelName)}
                   >
-                    + New chat
+                    New chat
                   </button>
                 </div>
               )}
@@ -2392,30 +2440,18 @@ export default function App() {
         </div>
 
         <div className="rm-buddy-panel-footer">
-          <button type="button" className="rm-deeper-btn" onClick={openDeeper}>
-            Want to go deeper?
-          </button>
-          <button
-            type="button"
-            className="rm-open-rigmatch-btn"
-            title="Open RigMatch — benchmark and rank your models"
-            onClick={() => void invoke("open_rigmatch_ai").catch(() => undefined)}
-          >
-            ⚡ RigMatch
-          </button>
-          <div className="rm-buddy-panel-footer-row">
-            <button type="button" className="rm-settings-btn" onClick={openSettings}>
-              ⚙ Settings
-            </button>
+          <p>Everything stays on this computer.</p>
+          <div className="rm-footer-links">
+            <button type="button" className="rm-btn rm-btn-link" onClick={openSettings}>Settings</button>
+            <button type="button" className="rm-btn rm-btn-link rm-deeper-btn" onClick={openDeeper}>Want to go deeper?</button>
             <button
               type="button"
-              className="rm-donate-btn"
+              className="rm-btn rm-btn-link"
               title="Support RigMatch development"
               onClick={() => window.open("https://buymeacoffee.com/daveeuson", "_blank", "noopener,noreferrer")}
             >
-              ☕
+              Support RigMatch
             </button>
-            <button type="button" className="rm-refresh-btn" onClick={() => void refresh()}>↻</button>
           </div>
         </div>
       </aside>
@@ -2425,6 +2461,10 @@ export default function App() {
         {activeBuddyObj ? (
           <>
             <div className="rm-chat-header">
+              {/* The sidebar is an overlay on a narrow window. */}
+              <button type="button" className="rm-btn rm-btn-line rm-btn-sm rm-chats-btn" onClick={() => setSidebarOpen(true)}>
+                Chats
+              </button>
               <BuddyAvatar
                 family={activeBuddyObj.avatarFamily}
                 customSrc={assistantAvatarSrc}
@@ -2433,77 +2473,91 @@ export default function App() {
                 size="sm"
               />
               <div className="rm-chat-header-info">
-                <strong>
-                  {activeBuddy && modelRankings.has(activeBuddy) && (
-                    <span className="rm-rank-medal" title={`Ranked #${modelRankings.get(activeBuddy)} by RigMatch score`}>{RANK_MEDALS[modelRankings.get(activeBuddy)!]}</span>
-                  )}
-                  {assistantDisplayName}
-                </strong>
-                <em>
-                  {typingModel === activeBuddy
-                    ? "typing…"
-                    : connectionStatus !== "connected"
-                      ? "Offline"
-                      : activeConversation && activeConversation.messages.length > 0
-                        // Which subject you are in matters more than which model,
-                        // once a model can hold several.
-                        ? `${activeConversation.title} · ${activeBuddyObj.displayName}`
-                        : `using ${activeBuddyObj.displayName} through Ollama`}
-                </em>
+                <h1>{activeConversation && activeConversation.messages.length > 0 ? activeConversation.title : "New chat"}</h1>
+                <span className="rm-chat-header-sub">
+                  <span title={`${activeBuddyObj.modelName} through Ollama`}>
+                    {typingModel === activeBuddy
+                      ? `${activeBuddyObj.displayName} is typing…`
+                      : connectionStatus !== "connected" ? `${activeBuddyObj.displayName} · offline` : activeBuddyObj.displayName}
+                  </span>
+                  {" · "}
+                  <label className="rm-personality-select-wrap">
+                    personality
+                    <select
+                      className="rm-personality-select"
+                      value={activePersonality?.id ?? settings.activePersonalityId}
+                      onChange={(event) => selectPersonality(event.target.value)}
+                    >
+                      {settings.personalityProfiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>{profile.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                </span>
               </div>
               <ContextMeter usage={contextUsage} info={activeContextInfo} limit={activeContextLimit} />
-              <span className="rm-chat-header-model" title="Actual local Ollama model">
-                MODEL {activeBuddyObj.modelName}
-              </span>
-              <label className="rm-test-pick">
-                <span className="rm-sr-only">What to test</span>
-                <select
-                  value={chatTest}
-                  onChange={(event) => setChatTest(event.target.value as TestKind)}
-                  disabled={typingModel === activeBuddy}
+              <div className="rm-more" ref={moreRef}>
+                <button
+                  type="button"
+                  className="rm-btn rm-btn-line rm-btn-sm"
+                  aria-haspopup="menu"
+                  aria-expanded={moreOpen}
+                  onClick={() => setMoreOpen((open) => !open)}
                 >
-                  {CHAT_TESTS.map((test) => (
-                    <option key={test.id} value={test.id}>Test {test.label}</option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                className="rm-test-btn"
-                onClick={() => void testModel(chatTest, activeBuddyObj.modelName)}
-                disabled={typingModel === activeBuddy}
-                title="RigMatch runs its own test on this model and scores it"
-              >
-                Test
-              </button>
+                  <Icon name="more" size={16} />
+                  More
+                </button>
+                {moreOpen && (
+                  <div className="rm-more-menu" role="menu">
+                    {/* Tests this model can take: reading and listening only
+                        for a model that reports it can see or hear. */}
+                    {CHAT_TESTS
+                      .filter((test) => (test.id !== "reading" || (rigCapabilities[activeBuddyObj.modelName] ?? []).includes("vision"))
+                        && (test.id !== "listening" || (rigCapabilities[activeBuddyObj.modelName] ?? []).includes("audio")))
+                      .map((test) => (
+                        <button
+                          key={test.id}
+                          type="button"
+                          role="menuitem"
+                          disabled={typingModel === activeBuddy}
+                          onClick={() => { setMoreOpen(false); void testModel(test.id, activeBuddyObj.modelName); }}
+                        >
+                          <strong>Test {test.label}</strong>
+                          <span>{TEST_NOTES[test.id]}</span>
+                        </button>
+                      ))}
+                    <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); setMemoryOpen(true); }}>
+                      <strong>What it remembers</strong>
+                      <span>{memories.length} saved</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setMoreOpen(false); if (activePersonality) openEditPersonality(activePersonality); }}
+                    >
+                      <strong>Edit this personality</strong>
+                      <span>{activePersonality?.name ?? "RigMatch Buddy"}</span>
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); openNewPersonality(); }}>
+                      <strong>New personality</strong>
+                      <span>Name, picture and how it talks</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="danger"
+                      disabled={!activeConversation}
+                      onClick={() => { setMoreOpen(false); if (activeConversation) setConfirmDelete(activeConversation); }}
+                    >
+                      <strong>Delete this chat</strong>
+                      <span>{activeConversation ? activeConversation.title : "Nothing to delete"}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {testNote && <p className="rm-test-note">{testNote}</p>}
-
-            <div className="rm-personality-bar">
-              <div className="rm-personality-select-wrap">
-                <span>Personality</span>
-                <select
-                  className="rm-personality-select"
-                  value={activePersonality?.id ?? settings.activePersonalityId}
-                  onChange={(event) => selectPersonality(event.target.value)}
-                >
-                  {settings.personalityProfiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>{profile.name}</option>
-                  ))}
-                </select>
-              </div>
-              <button
-                type="button"
-                className="rm-profile-tool-btn"
-                onClick={() => activePersonality && openEditPersonality(activePersonality)}
-              >
-                Edit
-              </button>
-              <button type="button" className="rm-profile-tool-btn" onClick={openNewPersonality}>
-                New
-              </button>
-            </div>
 
             {/* Offered before the limit, not after: past it Ollama has already
                 started dropping the oldest turns on its own. */}
@@ -2535,11 +2589,10 @@ export default function App() {
                     alt={assistantDisplayName}
                     size="lg"
                   />
-                  <p>
-                    Start a conversation with <strong>{assistantDisplayName}</strong>.
-                  </p>
+                  <p className="rm-transcript-hello">Say hello. I’m told it’s the hardest part.</p>
                   <p className="rm-transcript-hint">
-                    Personality profile on top of {activeBuddyObj.modelName} · No data leaves your computer
+                    {activePersonality?.name ?? "RigMatch Buddy"} on {activeBuddyObj.displayName}. Change the personality
+                    above. Nothing leaves this computer.
                   </p>
                 </div>
               )}
@@ -2609,7 +2662,7 @@ export default function App() {
                         title="Remember this across all conversations"
                         onClick={() => rememberText(msg.content)}
                       >
-                        ✦ Remember
+                        Remember
                       </button>
                     </div>
                   </div>
@@ -2680,40 +2733,43 @@ export default function App() {
             <div className="rm-compose">
               <textarea
                 className="rm-compose-input"
-                placeholder={`Message ${assistantDisplayName} using ${activeBuddyObj.modelName}...`}
+                placeholder={`Message ${assistantDisplayName}`}
+                aria-label={`Message ${assistantDisplayName}`}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={handleKeyDown}
-                rows={3}
+                rows={1}
                 /* Not disabled while a reply streams — there is no reason you
                    cannot write the next message while waiting for this one. */
               />
               {typingModel ? (
                 <button
                   type="button"
-                  className="rm-send-btn rm-stop-btn"
+                  className="rm-btn rm-btn-danger rm-stop-btn"
                   onClick={stopGenerating}
                   title="Stop this reply and free the graphics card"
                 >
-                  ■ Stop
+                  Stop
                 </button>
               ) : (
                 <>
                   <button
                     type="button"
-                    className="rm-send-btn rm-image-btn"
+                    className="rm-btn rm-btn-line rm-image-btn"
                     onClick={() => void generateImage()}
                     disabled={!draft.trim() || generatingImage}
                     title="Sends this to ComfyUI through RigMatch — not to the model above, which cannot make pictures"
                   >
-                    {generatingImage ? "Making..." : "Make image ↗"}
+                    <Icon name="picture" />
+                    {generatingImage ? "Making…" : "Make a picture"}
                   </button>
                   <button
                     type="button"
-                    className="rm-send-btn"
+                    className="rm-btn rm-btn-gold rm-send-btn"
                     onClick={() => void sendMessage()}
                     disabled={!draft.trim()}
                   >
+                    <Icon name="send" />
                     Send
                   </button>
                 </>
@@ -2820,28 +2876,28 @@ export default function App() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void makeWithRigMatch(openStudio); }
                 }}
-                rows={3}
+                rows={1}
               />
               {making?.kind === openStudio && making.jobId ? (
                 <button
                   type="button"
-                  className="rm-send-btn rm-stop-btn"
+                  className="rm-btn rm-btn-danger rm-stop-btn"
                   onClick={stopMaking}
                   title={`Stop this ${STUDIOS[openStudio].noun} and free the graphics card`}
                 >
-                  ■ Stop
+                  Stop
                 </button>
               ) : (
                 <button
                   type="button"
-                  className="rm-send-btn rm-image-btn"
+                  className="rm-btn rm-btn-gold rm-send-btn"
                   onClick={() => void makeWithRigMatch(openStudio)}
                   disabled={!draft.trim() || making !== null || !makerStatus(openStudio).ready}
                   title={makerStatus(openStudio).ready
                     ? "Runs through ComfyUI on this computer"
                     : STUDIOS[openStudio].notReady}
                 >
-                  {making?.kind === openStudio ? "Making..." : `${STUDIOS[openStudio].verb} ↗`}
+                  {making?.kind === openStudio ? "Making…" : STUDIOS[openStudio].verb}
                 </button>
               )}
             </div>
@@ -2849,10 +2905,12 @@ export default function App() {
         ) : (
           <div className="rm-chat-empty">
             <div className="rm-chat-empty-inner">
-              <span className="rm-chat-empty-icon">⚡</span>
+              <button type="button" className="rm-btn rm-btn-line rm-btn-sm rm-chats-btn" onClick={() => setSidebarOpen(true)}>
+                Chats
+              </button>
               <strong>RigMatch Chat</strong>
               {connectionStatus === "disconnected" ? (
-                <p>Ollama is not running. Start it then click ↻ to reconnect.</p>
+                <p>Ollama isn't running. Start it, then press Reconnect in the sidebar.</p>
               ) : connectionStatus === "checking" ? (
                 <p>Connecting to Ollama…</p>
               ) : buddies.length === 0 ? (
@@ -2860,12 +2918,81 @@ export default function App() {
                   No models installed. Open <strong>RigMatch</strong> to download your first model.
                 </p>
               ) : (
-                <p>Select a buddy from the list to start chatting.</p>
+                <p>Pick a model on the left to start chatting.</p>
               )}
             </div>
           </div>
         )}
       </main>
+
+      {/* What it remembers about you: sent at the start of every conversation,
+          with every model, and only what you asked it to keep. */}
+      {memoryOpen && (
+        <aside className="rm-memory-panel" aria-labelledby="rm-memory-title">
+          <div className="rm-memory-head">
+            <h2 id="rm-memory-title">What it remembers</h2>
+            <button type="button" className="rm-btn rm-btn-line rm-btn-sm" onClick={() => setMemoryOpen(false)}>Close</button>
+          </div>
+          <p className="rm-settings-hint">
+            Sent at the start of every conversation, with every model. Nothing is added unless you ask: use
+            Remember on any message, or write your own below.
+            {memoryNote && memoryNote.omitted > 0 && (
+              <> Only the {memoryNote.used} most recent fit; {memoryNote.omitted} are not being sent.</>
+            )}
+          </p>
+          <div className="rm-memory-list">
+            {memories.length === 0 && <p className="rm-memory-empty">Nothing yet.</p>}
+            {memories.map((memory) => (
+              <div key={memory.id} className={`rm-memory-row${memory.enabled ? "" : " off"}`}>
+                <input
+                  type="checkbox"
+                  checked={memory.enabled}
+                  aria-label={memory.enabled ? "Being sent. Uncheck to keep it without sending it." : "Kept, but not sent"}
+                  onChange={(e) => setMemories((prev) => setMemoryEnabled(prev, memory.id, e.target.checked))}
+                />
+                <input
+                  type="text"
+                  className="rm-memory-text"
+                  defaultValue={memory.text}
+                  aria-label="What it remembers"
+                  onBlur={(e) => setMemories((prev) => updateMemory(prev, memory.id, e.target.value))}
+                />
+                <button
+                  type="button"
+                  className="rm-btn rm-btn-link rm-memory-remove"
+                  aria-label={`Forget: ${memory.text}`}
+                  onClick={() => setMemories((prev) => removeMemory(prev, memory.id))}
+                >Forget</button>
+              </div>
+            ))}
+          </div>
+          <div className="rm-memory-add">
+            <input
+              type="text"
+              placeholder="Something it should always know about you…"
+              aria-label="Something it should always know about you"
+              value={memoryDraft}
+              onChange={(e) => setMemoryDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || !memoryDraft.trim()) return;
+                rememberText(memoryDraft);
+                setMemoryDraft("");
+              }}
+            />
+            <button
+              type="button"
+              className="rm-btn rm-btn-line rm-btn-sm"
+              disabled={!memoryDraft.trim()}
+              onClick={() => { rememberText(memoryDraft); setMemoryDraft(""); }}
+            >Add</button>
+          </div>
+          {memories.length > 0 && (
+            <button type="button" className="rm-btn rm-btn-link rm-memory-forget-all" onClick={() => setMemories([])}>
+              Forget everything
+            </button>
+          )}
+        </aside>
+      )}
       </div>
 
       {/* ── Buddy Profile Modal ─────────────────────────────────────── */}
@@ -2889,9 +3016,9 @@ export default function App() {
               <div className="rm-profile-body">
                 <BuddyAvatar family={pb.avatarFamily} size="lg" />
                 <div className="rm-profile-name-row">
-                  {isChosen && <span className="rm-chosen-badge" title="Your Top Pick from RigMatch">⭐</span>}
-                  {rank !== undefined && <span className="rm-rank-medal" title={`Ranked #${rank} by RigMatch score`}>{RANK_MEDALS[rank]}</span>}
                   <strong className="rm-profile-name">{pb.displayName}</strong>
+                  {isChosen && <span className="rm-top-match">Top Match</span>}
+                  {rank !== undefined && !isChosen && <span className="rm-profile-rank">Ranked #{rank} here</span>}
                 </div>
                 <div className="rm-profile-model-id">{pb.modelName}</div>
                 <div className="rm-profile-stats">
@@ -2932,7 +3059,7 @@ export default function App() {
                     className="rm-btn-primary"
                     onClick={() => { setActiveBuddy(pb.modelName); setProfileModal(null); }}
                   >
-                    💬 Chat Now
+                    Chat now
                   </button>
                   <button
                     type="button"
@@ -3060,7 +3187,7 @@ export default function App() {
                 Cancel
               </button>
               <button type="button" className="rm-btn-primary" onClick={savePersonality}>
-                Save Profile
+                Save
               </button>
             </div>
           </div>
@@ -3086,18 +3213,26 @@ export default function App() {
                 <button
                   type="button"
                   className={`rm-theme-btn${draftSettings.theme === "dark" ? " active" : ""}`}
+                  aria-pressed={draftSettings.theme === "dark"}
                   onClick={() => setDraftSettings((s) => ({ ...s, theme: "dark" }))}
                 >
-                  🌙 Dark
+                  Dark
                 </button>
                 <button
                   type="button"
                   className={`rm-theme-btn${draftSettings.theme === "light" ? " active" : ""}`}
+                  aria-pressed={draftSettings.theme === "light"}
                   onClick={() => setDraftSettings((s) => ({ ...s, theme: "light" }))}
                 >
-                  ☀️ Light
+                  Light
                 </button>
               </div>
+              <label className="rm-settings-field">
+                <span>Stage colors</span>
+                <select value={draftSettings.stage} onChange={(e) => setDraftSettings((s) => ({ ...s, stage: e.target.value as StageId }))}>
+                  {STAGES.map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
+                </select>
+              </label>
 
               {/* ── Sound ── */}
               <div className="rm-settings-section-label">Sound</div>
@@ -3113,66 +3248,8 @@ export default function App() {
               {/* ── What it remembers about you ── */}
               <div className="rm-settings-section-label">What it remembers about you</div>
               <p className="rm-settings-hint">
-                Sent at the start of every conversation, with every model. Nothing is added here unless
-                you ask for it — use <strong>Remember</strong> on any message, or write your own below.
-                {memoryNote && memoryNote.omitted > 0 && (
-                  <> Only the {memoryNote.used} most recent fit; {memoryNote.omitted} are not being sent.</>
-                )}
+                {memories.length} saved. Open a chat, then More › What it remembers, to see, change or forget them.
               </p>
-              <div className="rm-memory-list">
-                {memories.length === 0 && (
-                  <p className="rm-memory-empty">Nothing yet.</p>
-                )}
-                {memories.map((memory) => (
-                  <div key={memory.id} className={`rm-memory-row${memory.enabled ? "" : " off"}`}>
-                    <input
-                      type="checkbox"
-                      checked={memory.enabled}
-                      title={memory.enabled ? "Being sent — click to silence it" : "Kept, but not sent"}
-                      onChange={(e) => setMemories((prev) => setMemoryEnabled(prev, memory.id, e.target.checked))}
-                    />
-                    <input
-                      type="text"
-                      className="rm-memory-text"
-                      defaultValue={memory.text}
-                      onBlur={(e) => setMemories((prev) => updateMemory(prev, memory.id, e.target.value))}
-                    />
-                    <button
-                      type="button"
-                      className="rm-memory-remove"
-                      aria-label={`Forget: ${memory.text}`}
-                      title="Forget this"
-                      onClick={() => setMemories((prev) => removeMemory(prev, memory.id))}
-                    >×</button>
-                  </div>
-                ))}
-              </div>
-              <div className="rm-memory-add">
-                <input
-                  type="text"
-                  placeholder="Something it should always know about you…"
-                  value={memoryDraft}
-                  onChange={(e) => setMemoryDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter" || !memoryDraft.trim()) return;
-                    rememberText(memoryDraft);
-                    setMemoryDraft("");
-                  }}
-                />
-                <button
-                  type="button"
-                  className="rm-btn-sm"
-                  disabled={!memoryDraft.trim()}
-                  onClick={() => { rememberText(memoryDraft); setMemoryDraft(""); }}
-                >Add</button>
-              </div>
-              {memories.length > 0 && (
-                <button
-                  type="button"
-                  className="rm-memory-forget-all"
-                  onClick={() => setMemories([])}
-                >Forget everything</button>
-              )}
 
               {/* ── Memory ── */}
               <div className="rm-settings-section-label">Conversation memory</div>
@@ -3280,7 +3357,6 @@ export default function App() {
                   <div className="rm-hide-model-list">
                     {buddies.map((b) => {
                       const isVisible = !draftSettings.hiddenModels.includes(b.modelName);
-                      const rank = modelRankings.get(b.modelName);
                       return (
                         <div
                           key={b.modelName}
@@ -3293,7 +3369,6 @@ export default function App() {
                         >
                           <span className="rm-model-toggle" aria-hidden="true">{isVisible ? "✓" : ""}</span>
                           <span className="rm-hide-model-name">
-                            {rank !== undefined && <span className="rm-rank-medal" title={`Ranked #${rank} by RigMatch score`}>{RANK_MEDALS[rank]}</span>}
                             {b.displayName}
                           </span>
                           <em className="rm-hide-model-size">{b.sizeGb > 0 ? `${b.sizeGb} GB` : ""}</em>
@@ -3316,7 +3391,7 @@ export default function App() {
                   }
                 }}
               >
-                🗑 Delete All Chat History
+                Delete all chat history
               </button>
             </div>
 
@@ -3325,7 +3400,7 @@ export default function App() {
                 Cancel
               </button>
               <button type="button" className="rm-btn-primary" onClick={applySettings}>
-                Save &amp; Apply
+                Save
               </button>
             </div>
           </div>
