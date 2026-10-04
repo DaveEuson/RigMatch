@@ -741,8 +741,7 @@ export function ModelCabinet({
         </div>
         <div className="model-hub-header-side">
           <span>{modelCountLabel}</span>
-          <button type="button" className="mini-button" onClick={onRefresh}>
-            <RefreshCw aria-hidden="true" />
+          <button type="button" className="btn btn-line btn-sm" onClick={onRefresh}>
             Refresh
           </button>
         </div>
@@ -1011,11 +1010,8 @@ export function ModelCabinet({
                 </span>
               </div>
             )}
-      {shortlistedCount >= 5 && (
-        <div className="lineup-full-banner" role="status">
-          <span>⚡ Speed Dating lineup is full — 5/5 contestants selected. Remove one to swap in another.</span>
-        </div>
-      )}
+      {/* A full lineup is said by the lineup dock and by each row's button,
+          not by a banner above the table. */}
       <div className="table-wrap model-table">
         <table ref={tableRef}>
           <colgroup>
@@ -1027,9 +1023,9 @@ export function ModelCabinet({
             <tr>
               <SortableModelHeader label="Model" sortName="name" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(0, e)} />
               <SortableModelHeader label="Size" sortName="size" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(1, e)} />
-              <SortableModelHeader label="Good For" sortName="skill" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(2, e)} />
-              <SortableModelHeader label="By" sortName="maker" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(3, e)} />
-              <SortableModelHeader label="Made In" sortName="origin" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(4, e)} />
+              <SortableModelHeader label="Good for" sortName="skill" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(2, e)} />
+              <SortableModelHeader label="Maker" sortName="maker" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(3, e)} />
+              <SortableModelHeader label="Made in" sortName="origin" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(4, e)} />
               <SortableModelHeader label="Status" sortName="status" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(5, e)} />
               <SortableModelHeader label="Match" sortName="score" sortKey={sortKey} direction={sortDirection} onSort={changeSort} onResizeStart={(e) => handleColResizeStart(6, e)} />
               {!hidePopularity && (

@@ -1,6 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useRef, type KeyboardEvent } from 'react';
-import { CHANNEL_ICONS } from '../lib/channelIcons';
 import { WORKBENCHES, type WorkbenchId } from '../lib/workbench';
 
 /**
@@ -43,9 +42,9 @@ export function ChannelSwitch({ value, onChange, channels, label = 'What are you
 
   return (
     <div className="channel-switch" role="radiogroup" aria-labelledby="channel-switch-label">
-      <span id="channel-switch-label">{label}</span>
+      {/* Named for a screen reader; to the eye the tabs say it. */}
+      <span id="channel-switch-label" className="sr-only">{label}</span>
       {offered.map((workbench, index) => {
-        const Icon = CHANNEL_ICONS[workbench.id];
         const active = workbench.id === value;
         return (
           <button
@@ -62,7 +61,6 @@ export function ChannelSwitch({ value, onChange, channels, label = 'What are you
               ? 'Every kind of test at once'
               : `Models, the Lab and the winner cover ${workbench.activity} only`}
           >
-            <Icon aria-hidden="true" />
             {workbench.label}
           </button>
         );

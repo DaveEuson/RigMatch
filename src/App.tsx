@@ -4,7 +4,6 @@ import { recordAchievements } from './lib/achievements';
 import {
   ArrowLeft,
   Lightbulb,
-  Sparkles,
   Trophy,
   X,
 } from 'lucide-react';
@@ -91,7 +90,6 @@ import {
 } from './lib/runReports';
 import { WhatsNewPanel } from './components/WhatsNewPanel';
 import type { NavId, NavItem } from './lib/appConfig';
-import { PanelHeader } from './components/CommonChrome';
 import { playJingle } from './lib/sound';
 import { nothingToRunNote } from './lib/skillRunNote';
 import { describeRunFailure, droppedOutMessage, showStoppedMessage } from './lib/runFailure';
@@ -196,7 +194,6 @@ import {
   type ThemeId,
   type UiMode,
 } from './lib/appConfig';
-import { AvatarBust } from './components/Avatars';
 import { ShareScorecard } from './components/ShareScorecard';
 import { ExportHatchModal } from './components/ExportHatchModal';
 import { buildHatchProfile } from './lib/hatchProfile';
@@ -308,6 +305,7 @@ import './styles/shell.css';
 import './styles/controls.css';
 import './styles/runSheet.css';
 import './styles/welcome.css';
+import './styles/advanced.css';
 import { matchMeasures } from './lib/matchCard';
 import { questionSetLabel } from './lib/runSheet';
 
@@ -4667,16 +4665,6 @@ function App() {
             notificationsEnabled={modelNewsNotificationsEnabled}
             notificationPermission={notificationPermission}
             isScanning={isScanningRig}
-            renderHeader={(meta) => (
-              <PanelHeader
-                icon={Sparkles}
-                title="What's New"
-                actionLabel={isScanningRig ? 'Checking' : 'Check Now'}
-                onAction={refreshRig}
-                meta={meta}
-              />
-            )}
-            renderAvatar={(model) => <AvatarBust model={model} size="tiny" />}
             getModelSpecialties={(model) => getModelProfile(model).specialties}
             formatHistoryTime={formatHistoryTime}
             formatGb={formatGb}
