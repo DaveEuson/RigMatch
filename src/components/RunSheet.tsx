@@ -144,6 +144,8 @@ export function RunSheet({
   const [editBase, setEditBase] = useState<Exclude<QuestionSetId, 'custom'> | null>(null);
   const [skipQuickSheet, setSkipQuickSheet] = useState(false);
   const recognizeUploadRef = useRef<HTMLInputElement>(null);
+  // A picture refused for its size or type said nothing: the click just did nothing.
+  const [uploadNote, setUploadNote] = useState('');
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // Opened for "Questions and judge": start at the questions, not the warning.
@@ -183,11 +185,10 @@ export function RunSheet({
   const plan = buildBenchmarkPromptPlan(questionCount, benchmarkQuestions);
   const judgedInPlan = plan.filter((q) => questionMarker(q) === 'judge').length;
   // Who will actually mark them: a judge picked but not usable (no key, no
-  // model) leaves those answers unmarked, since the automatic judge only
-  // stands in while judging is off.
-  const judgeName = choice === 'built-in' ? autoJudgeModel
-    : !judgeActive ? undefined
-      : choice === 'cloud' ? 'the OpenRouter judge' : judgeModel;
+  // model) hands them to the automatic judge, as the built-in checks do.
+  const judgeFallback = choice !== 'built-in' && !judgeActive;
+  const judgeName = choice === 'built-in' || judgeFallback ? autoJudgeModel
+    : choice === 'cloud' ? 'the OpenRouter judge' : judgeModel;
 
   // What this run sends off the machine: a cloud model answers remotely, and
   // the OpenRouter judge is sent each question and answer to mark.
@@ -257,10 +258,8 @@ export function RunSheet({
   const judgeNote = judgedInPlan === 0
     ? 'Every question here can be checked by rules.'
     : judgeName
-      ? `${judgedInPlan} of the ${questionCount} questions have no right answer to check against, so ${judgeName} reads and marks them. That is why they take longer.`
-      : choice === 'built-in'
-        ? `${judgedInPlan} of the ${questionCount} questions need a judge to mark them, and nothing else installed can. Install a second model and RigMatch will use it.`
-        : `${judgedInPlan} of the ${questionCount} questions need a judge to mark them, and the one picked below is not ready, so they stay unmarked.`;
+      ? `${judgedInPlan} of the ${questionCount} questions have no right answer to check against, so ${judgeName} reads and marks them${judgeFallback ? ', since the judge picked below is not ready' : ''}. That is why they take longer.`
+      : `${judgedInPlan} of the ${questionCount} questions need a judge to mark them, and nothing else installed can. Install a second model and RigMatch will use it.`;
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
@@ -694,7 +693,10 @@ export function RunSheet({
                           onChange={(event) => {
                             const file = event.target.files?.[0];
                             event.target.value = '';
-                            if (!file || !file.type.startsWith('image/') || file.size > 8 * 1024 * 1024) return;
+                            if (!file) return;
+                            if (!file.type.startsWith('image/')) { setUploadNote('That file is not a picture.'); return; }
+                            if (file.size > 8 * 1024 * 1024) { setUploadNote('That picture is over 8 MB. Pick a smaller one.'); return; }
+                            setUploadNote('');
                             const reader = new FileReader();
                             reader.onload = () => {
                               if (typeof reader.result === 'string') onSkillSelectionChange({ ...skillSelection, recognizeImage: reader.result });
@@ -702,6 +704,7 @@ export function RunSheet({
                             reader.readAsDataURL(file);
                           }}
                         />
+                        {uploadNote && <p className="run-sheet-note warn" role="status">{uploadNote}</p>}
                       </div>
                     )}
                   </SkillOption>
