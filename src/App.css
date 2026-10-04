@@ -11541,6 +11541,11 @@ tbody tr.computer-row.selected {
   color: var(--red);
 }
 
+.advanced-lab-grade.failed {
+  color: var(--red);
+  background: rgba(var(--red-rgb), 0.12);
+}
+
 .advanced-lab-grade.locked {
   color: var(--blue);
   background: rgba(114, 181, 202, 0.13);
@@ -21131,8 +21136,16 @@ a.whats-next-support:hover {
 }
 
 .comparison-run-progress li.failed {
+  /* Stacked: a long error in the right-hand column squeezed the model's name
+     to one word a line and drew over it. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
   background: rgba(var(--red-rgb), 0.06);
   color: var(--red);
+}
+
+.comparison-run-progress li.failed em {
+  text-align: left;
 }
 
 .comparison-run-progress em {

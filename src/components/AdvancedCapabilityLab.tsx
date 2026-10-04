@@ -362,8 +362,8 @@ export function AdvancedCapabilityLab({
               <strong>App Builder</strong>
             </div>
             {visibleResult && (
-              <b className={`advanced-lab-grade ${getScoreTone(visibleResult.score)}`}>
-                {visibleResult.score} · {visibleResult.grade}
+              <b className={visibleResult.error ? 'advanced-lab-grade failed' : `advanced-lab-grade ${getScoreTone(visibleResult.score)}`}>
+                {visibleResult.error ? 'Failed' : `${visibleResult.score} · ${visibleResult.grade}`}
               </b>
             )}
           </div>
@@ -478,8 +478,8 @@ export function AdvancedCapabilityLab({
               <span>Extra beta creative test</span>
               <strong>Image Generation</strong>
             </div>
-            <b className={visibleImageResult ? `advanced-lab-grade ${getScoreTone(visibleImageResult.score)}` : 'advanced-lab-grade locked'}>
-              {visibleImageResult ? `${visibleImageResult.score} · ${visibleImageResult.grade}` : 'Extra beta'}
+            <b className={!visibleImageResult ? 'advanced-lab-grade locked' : visibleImageResult.error ? 'advanced-lab-grade failed' : `advanced-lab-grade ${getScoreTone(visibleImageResult.score)}`}>
+              {!visibleImageResult ? 'Extra beta' : visibleImageResult.error ? 'Failed' : `${visibleImageResult.score} · ${visibleImageResult.grade}`}
             </b>
           </div>
           <p>

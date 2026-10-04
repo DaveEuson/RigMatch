@@ -1,6 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { History } from 'lucide-react';
 import type { BenchmarkQuestion, BenchmarkQuestionCount } from '../benchmarkSuite';
+import { formatMatchScore } from '../lib/scoring';
 import { MIN_CONTESTANTS } from '../lib/downloadStatus';
 import { balanceLabel, balanceSplit, crowned } from '../lib/balance';
 import { comparisonGroups, rankCoding, rankLabList, rankMatchResults } from '../lib/channelWinners';
@@ -382,7 +383,7 @@ export function SpeedDatePanel({
                 <div className="list-winner">
                   <span>{channel === 'all' ? 'Best Match' : workbench.shortLabel}</span>
                   <strong>{leader}</strong>
-                  <em>{winnerResult ? `${winnerResult.total} · ${winnerResult.grade} · ${balanceLabel(balance)}` : 'Ranked'}</em>
+                  <em>{winnerResult ? `${formatMatchScore(winnerResult)} · ${winnerResult.grade} · ${balanceLabel(balance)}` : 'Ranked'}</em>
                 </div>
                 {/* Directly under the crown, because it is the caveat on the crown.
                     A Best Match drawn from three of your five models is a different
