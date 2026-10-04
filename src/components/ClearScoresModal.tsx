@@ -17,8 +17,8 @@ export function ClearScoresModal({
 }) {
   const clearScoresRef = useDialog<HTMLElement>(onCancel);
   const isAll = pending.mode === 'all';
-  const title = isAll ? 'Clear All Scores?' : `Clear ${pending.model} Score?`;
-  const actionLabel = isAll ? 'Clear All Scores' : 'Clear Score';
+  const title = isAll ? 'Clear all scores?' : `Clear the ${pending.model} score?`;
+  const actionLabel = isAll ? 'Clear all scores' : 'Clear score';
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -26,7 +26,7 @@ export function ClearScoresModal({
         <div className="modal-title danger">
           <Trash2 aria-hidden="true" />
           <div>
-            <span>Score Cleanup</span>
+            <span>Scores</span>
             <strong id="clear-scores-title">{title}</strong>
           </div>
         </div>

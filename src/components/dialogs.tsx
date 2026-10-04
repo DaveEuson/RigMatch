@@ -36,7 +36,7 @@ export function DeleteModelModal({
         <div className="modal-title danger">
           <Trash2 aria-hidden="true" />
           <div>
-            <span>Delete Model</span>
+            <span>Delete a model</span>
             <strong id="delete-model-title">{modelName}</strong>
           </div>
         </div>
@@ -47,12 +47,12 @@ export function DeleteModelModal({
           </p>
           <div className="modal-warning-grid">
             <div>
-              <span>Target Computer</span>
+              <span>Computer</span>
               <strong>{hostName}</strong>
               <em>{host?.baseUrl ?? 'Local provider API'}</em>
             </div>
             <div>
-              <span>Model Size</span>
+              <span>Size</span>
               <strong>{sizeLabel}</strong>
               <em>Disk space returns after Ollama removes the model files.</em>
             </div>
@@ -70,7 +70,7 @@ export function DeleteModelModal({
           </button>
           <button type="button" className="danger-button compact" onClick={onConfirm} disabled={isDeleting}>
             <Trash2 aria-hidden="true" />
-            {isDeleting ? 'Deleting' : 'Delete Model'}
+            {isDeleting ? 'Deleting' : 'Delete model'}
           </button>
         </div>
       </section>
@@ -131,7 +131,7 @@ export function CloseCleanupModal({
         <div className="modal-title danger">
           <Trash2 aria-hidden="true" />
           <div>
-            <span>Before You Close</span>
+            <span>Before you close</span>
             <strong id="close-cleanup-title">Free up disk space?</strong>
           </div>
         </div>
@@ -359,8 +359,8 @@ export function ClearDataModal({
         <div className="modal-title danger">
           <Trash2 aria-hidden="true" />
           <div>
-            <span>Clear Data</span>
-            <strong id="clear-data-title">Reset RigMatch Data?</strong>
+            <span>Clear data</span>
+            <strong id="clear-data-title">Reset RigMatch data?</strong>
           </div>
         </div>
         <div className="modal-body">

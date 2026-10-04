@@ -308,6 +308,7 @@ import './styles/runSheet.css';
 import './styles/welcome.css';
 import './styles/advanced.css';
 import './styles/settings.css';
+import './styles/dialogs.css';
 import { matchMeasures } from './lib/matchCard';
 import { questionSetLabel } from './lib/runSheet';
 

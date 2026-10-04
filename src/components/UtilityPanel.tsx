@@ -293,7 +293,7 @@ export function UtilityPanel({
               <p className="score-explainer-note">Scored benchmarks disable hidden thinking when Ollama supports it, so models are graded on visible answers instead of internal reasoning tokens. Chat mode is not affected.</p>
               <div className="score-explainer-grid">
                 <div>
-                  <span>Answer Quality</span>
+                  <span>Answer quality</span>
                   <strong>How well it follows the prompt</strong>
                   <em>Did it follow instructions, stay on task, and give complete answers? Graded across all test prompts.</em>
                 </div>
@@ -303,7 +303,7 @@ export function UtilityPanel({
                   <em>Tokens per second, measured live on your hardware. Faster = higher speed score.</em>
                 </div>
                 <div>
-                  <span>Hardware Fit</span>
+                  <span>Hardware fit</span>
                   <strong>How well it suits your rig</strong>
                   <em>Models that run comfortably within your VRAM and RAM get a bonus. Models that strain your hardware get penalised.</em>
                 </div>
