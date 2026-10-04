@@ -61,6 +61,11 @@ function subscribe(listener: () => void) {
   return () => { listeners.delete(listener); };
 }
 
+/** The switches as they are now, for code that runs outside a component. */
+export function showExtrasSnapshot(): ShowExtras {
+  return current;
+}
+
 export function useShowExtras(): ShowExtras {
   return useSyncExternalStore(subscribe, () => current, () => OFF);
 }

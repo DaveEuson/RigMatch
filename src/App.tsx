@@ -90,7 +90,7 @@ import {
 } from './lib/runReports';
 import { WhatsNewPanel } from './components/WhatsNewPanel';
 import type { NavId, NavItem } from './lib/appConfig';
-import { playJingle } from './lib/sound';
+import { playCue, playJingle } from './lib/sound';
 import { nothingToRunNote } from './lib/skillRunNote';
 import { describeRunFailure, droppedOutMessage, showStoppedMessage } from './lib/runFailure';
 import { ChannelSwitch } from './components/ChannelSwitch';
@@ -144,7 +144,6 @@ import {
   normalizeBenchmarkResultModel,
   normalizeModelKey,
   ollamaModelMatchesAliases,
-  playDoneJingle,
   removeBenchmarkResults,
   removeListTestScores,
   removeModelScores,
@@ -212,6 +211,7 @@ import { Elapsed } from './components/Elapsed';
 import { FirstRunSplash } from './components/FirstRunSplash';
 import { ModelPoolLineupStrip } from './components/ModelPoolLineupStrip';
 import { WelcomeOverlay } from './components/WelcomeOverlay';
+import { AchievementCues } from './components/TrojanReveal';
 import { LogsView } from './components/LogsView';
 import { ActivityPanel } from './components/ActivityPanel';
 import { SpeedDatePanel } from './components/SpeedDatePanel';
@@ -2120,7 +2120,7 @@ function App() {
           suite: currentSuiteName,
         },
       });
-      playDoneJingle();
+      playJingle('test-complete');
     } catch (error) {
       const errorMessage = getErrorMessage(error);
       await agentArcadeApi.appendLog({
@@ -2149,6 +2149,7 @@ function App() {
         message: errorMessage,
       });
       tellUser(`The test stopped: ${errorMessage}`);
+      playCue('buzz');
       // Re-read the provider. The commonest reason a run dies is that Ollama
       // went away mid-test, and nothing here updated ollama.ready — so the app
       // kept showing "Ollama ready" and "Desktop bridge online" for a provider
@@ -2690,6 +2691,7 @@ function App() {
         }));
       }
       setActivity(`Model download failed: ${getErrorMessage(error)}`);
+      playCue('buzz');
     } finally {
       setPullingModel(null);
       setIsPullingModels(false);
@@ -2961,6 +2963,7 @@ function App() {
 
     stopRunRef.current = false;
     setIsListTesting(true);
+    playCue('curtain');
     setListTestResult(null);
     setReportReady(false);
     setRunProgress({
@@ -4310,6 +4313,7 @@ function App() {
           </a>
         </div>
       )}
+      <AchievementCues />
       {showModeSplash && (
         <WelcomeOverlay
           vramGb={system.gpu.vramGb || 0}
