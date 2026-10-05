@@ -604,7 +604,11 @@ export function SimpleWizard(props: SimpleWizardProps) {
           bar to sit in (a test, say) it falls back to its own header. */}
       {props.trackerSlot ? createPortal(tracker, props.trackerSlot) : <header className="sw-header">{tracker}</header>}
 
-      <div className="sw-content">
+      {/* The main landmark and the page's one h1, so a screen reader can jump
+          straight to the step: Simple Mode had neither, and each step's own
+          title is an h2 under this. */}
+      <main className="sw-content">
+        <h1 className="sr-only">RigMatch Simple Mode, step {stepIndex + 1} of {STEPS.length}: {STEP_LABELS[step]}</h1>
         <HostStrip line={hostSays} />
 
         {props.notice && (
@@ -631,7 +635,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
         {step === 'download' && <DownloadScreen {...props} />}
         {step === 'compare' && <CompareScreen {...props} onRetry={startShow} onChangeLineup={() => setStep('pick')} />}
         {step === 'winner' && <WinnerScreen {...props} onRunAgain={() => setStep('pick')} />}
-      </div>
+      </main>
 
       {footerStep && (
         <footer className="sw-footer">

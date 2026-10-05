@@ -4547,6 +4547,9 @@ function App() {
       <>
 
       <main className="stage-content">
+        {/* The page's one h1, naming the screen, for screen readers: no Advanced
+            screen had one, and their visible titles are h2s under it. */}
+        <h1 className="sr-only">RigMatch Advanced Mode: {TOP_TABS.find((tab) => tab.id === activeTab)?.label ?? 'Models'}</h1>
         {/* Over the screen, not the window: the top bar and its live CPU and GPU
             strip stay in view while a run goes. */}
         {uiMode === 'advanced' && runProgress?.phase === 'running' && (
