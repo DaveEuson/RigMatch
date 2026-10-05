@@ -32,6 +32,7 @@ export function RunReportModal({
   rows,
   benchmarks,
   questionPlan,
+  subtitle,
   onClose,
   onOpenScorecards,
 }: {
@@ -39,6 +40,8 @@ export function RunReportModal({
   rows: ModelRow[];
   benchmarks: Record<string, BenchmarkResult>;
   questionPlan: BenchmarkQuestion[];
+  /** Which questions and when, for a saved test reopened from the history. */
+  subtitle?: string;
   onClose: () => void;
   onOpenScorecards: () => void;
 }) {
@@ -65,6 +68,7 @@ export function RunReportModal({
               {tested.length} model{tested.length === 1 ? '' : 's'}
               {questionCount > 0 && `, ${questionCount} question${questionCount === 1 ? '' : 's'} each`}
             </strong>
+            {subtitle && <em>{subtitle}</em>}
           </div>
           <button type="button" onClick={onClose} aria-label="Close report">
             <X aria-hidden="true" />

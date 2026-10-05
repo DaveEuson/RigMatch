@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 
 const {
   addRunReport, makeReportId, hasTranscripts, reportsWithoutTranscripts,
-  reportStorageCandidates, parseStoredReports, describeReport, MAX_STORED_REPORTS,
+  reportStorageCandidates, parseStoredReports, describeReport, MAX_STORED_REPORTS, REPORTS_WITH_ANSWERS,
 } = await import('../src/lib/runReports.ts');
 
 /**
@@ -64,17 +64,21 @@ test('the ladder keeps the reports even when it cannot keep the answers', () => 
   for (const rung of rungs.slice(0, 3)) assert.equal(rung.length, 2);
 });
 
+// Fifteen reports, newest first, a minute apart.
+const many = (count) => Array.from({ length: count }, (_, i) => at(new Date(Date.parse('2026-09-30T10:00:00.000Z') - i * 60_000).toISOString()));
+
 test('the first thing sacrificed is the answers on older runs', () => {
-  const reports = [at('2026-09-01T10:00:00.000Z'), at('2026-08-31T10:00:00.000Z')];
-  const second = reportStorageCandidates(reports)[1]();
-  assert.ok(hasTranscripts(second[0]), 'newest keeps its answers');
-  assert.ok(!hasTranscripts(second[1]), 'older loses them first');
+  const first = reportStorageCandidates(many(15))[0]();
+  assert.equal(first.length, 15, 'every test stays in the list');
+  assert.ok(first.slice(0, REPORTS_WITH_ANSWERS).every(hasTranscripts), 'the newest keep their answers');
+  assert.ok(!first.slice(REPORTS_WITH_ANSWERS).some(hasTranscripts), 'older ones keep only their scores');
+  const tighter = reportStorageCandidates(many(15))[1]();
+  assert.equal(tighter.filter(hasTranscripts).length, 3);
 });
 
 test('the last rung is a short list of bare scores', () => {
-  const reports = [at('2026-09-03T10:00:00.000Z'), at('2026-09-02T10:00:00.000Z'), at('2026-09-01T10:00:00.000Z')];
-  const last = reportStorageCandidates(reports).at(-1)();
-  assert.equal(last.length, 2);
+  const last = reportStorageCandidates(many(15)).at(-1)();
+  assert.equal(last.length, 10);
   assert.ok(last.every((entry) => !hasTranscripts(entry)));
 });
 
@@ -109,7 +113,7 @@ test('the row says what the run was in one line', () => {
   assert.equal(describeReport(report()), '2 models · a:7b won, 10 questions each');
 });
 
-test('a single-model run is not described in the plural', () => {
-  const one = { ...report(), results: [{ model: 'a:7b', total: 90, grade: 'A' }], questionCount: 1 };
-  assert.equal(describeReport(one), '1 model · a:7b won, 1 question each');
+test('a test of one model is described as that model and its score', () => {
+  const one = { ...report(), results: [{ model: 'a:7b', total: 90, preciseTotal: 90.4, grade: 'A' }], questionCount: 1 };
+  assert.equal(describeReport(one), 'a:7b · 90.4 A · 1 question');
 });

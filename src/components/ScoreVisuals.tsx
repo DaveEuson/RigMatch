@@ -1,7 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { ShieldCheck, Download } from 'lucide-react';
 import type { BenchmarkPromptResult, TestedModelScore } from '../types';
-import { formatPullCount, getPopularityPercent, getScoreTone, getScoreTooltip } from '../lib/format';
+import { formatPullCount, getPopularityPercent, getScoreTone } from '../lib/format';
 import { formatMatchScore } from '../lib/scoring';
 import { formatRunDelta, type RunDelta } from '../lib/runHistory';
 
@@ -174,29 +174,4 @@ export function PromptStatusPill({ status }: { status?: BenchmarkPromptResult['s
   return <span className={`prompt-status-pill ${status}`}>{label}</span>;
 }
 
-export function ScoreTile({
-  label,
-  value,
-  grade,
-  tone,
-}: {
-  label: string;
-  value?: number;
-  grade?: string;
-  tone: 'pink' | 'gold' | 'green';
-}) {
-  const tooltip = getScoreTooltip(label);
-  const hasValue = Number.isFinite(value);
 
-  return (
-    <div
-      className={`score-tile ${tone}${hasValue ? '' : ' empty'}`}
-      title={hasValue ? tooltip : `No ${label.toLowerCase()} score yet. Run a test for this model.`}
-      aria-label={hasValue ? `${label}: ${value}, ${grade}. ${tooltip}` : `${label}: not scored yet.`}
-    >
-      <span>{label}</span>
-      <strong>{hasValue ? value : 'N/A'}</strong>
-      <em>{grade ?? 'N/A'}</em>
-    </div>
-  );
-}

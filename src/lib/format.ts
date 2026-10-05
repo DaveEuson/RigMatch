@@ -49,23 +49,7 @@ export function topPickLabel(grade: string | undefined): string {
   return 'Best tested';
 }
 
-/** Hover/aria explanation for a score label shown on tiles and detail panels. */
-export function getScoreTooltip(label: string) {
-  const key = label.toLowerCase();
-  if (key.includes('sobriety') || key.includes('reliability') || key.includes('quality')) {
-    return 'How well the model follows prompts — instruction discipline, completeness, and avoiding hallucinations.';
-  }
 
-  if (key.includes('speed')) {
-    return 'How quickly this model responds on the selected computer, including throughput and latency.';
-  }
-
-  if (key.includes('compatibility') || key.includes('match')) {
-    return 'Overall Match score: 34% answer quality, 32% speed, 18% finish rate, 16% computer fit.';
-  }
-
-  return 'Score from the latest model test.';
-}
 
 /** Rough human wait-time estimate from a 0-100 speed score. */
 export function getResponseEstimate(speedScore: number): string {
