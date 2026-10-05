@@ -175,8 +175,6 @@
 .app-shell[data-ui-mode='advanced'] .model-name-button strong,
 .app-shell[data-ui-mode='advanced'] .model-name-button > span:first-of-type { color: var(--text-strong); font-weight: 700; }
 .app-shell[data-ui-mode='advanced'] .good-for-chip,
-.app-shell[data-ui-mode='advanced'] .model-family-installed,
-.app-shell[data-ui-mode='advanced'] .model-family-best,
 .app-shell[data-ui-mode='advanced'] .model-params-sub,
 .app-shell[data-ui-mode='advanced'] .model-quant-sub,
 .app-shell[data-ui-mode='advanced'] .model-variant-sub,
@@ -190,9 +188,22 @@
   font: 400 var(--fs-ui) / 1.2 var(--ui);
   font-style: normal;
 }
-.app-shell[data-ui-mode='advanced'] .good-for-tags { gap: 0 var(--s1); }
+/* Two whole lines. The old 42px cap was sized for pills, and plain 14px text
+   at 1.2 showed two and a half, so a third tag sat cut through the middle. */
+.app-shell[data-ui-mode='advanced'] .good-for-tags { gap: 0 var(--s1); max-height: 2.4em; }
+/* The maker as plain text, like the Good for tags beside it. As a bold
+   bordered pill in an 86px column it showed "Aliba…"; as an inline-flex box
+   it could not end in "…" at all and was cut mid-letter ("Alibaba ("). */
+.app-shell[data-ui-mode='advanced'] .model-table .origin-pill {
+  display: block;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: 400 var(--fs-ui) / 1.2 var(--ui);
+}
 .app-shell[data-ui-mode='advanced'] .good-for-chip + .good-for-chip::before { content: "· "; }
-.app-shell[data-ui-mode='advanced'] .model-family-best { color: var(--text-strong); font-family: var(--figure); }
 .app-shell[data-ui-mode='advanced'] .model-new-sub {
   padding: 1px 6px;
   border-radius: 10px;

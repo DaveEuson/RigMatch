@@ -1830,8 +1830,11 @@ tbody tr.computer-row.selected {
    consecutive rows differing only in a tag, with the same maker, the same
    tags, and the same pull count on every one. One row per family, opened on
    demand. */
+.model-family-row {
+  cursor: pointer;
+}
+
 .model-family-row > td {
-  padding: 0;
   background: rgba(var(--gold-rgb), 0.05);
 }
 
@@ -1839,23 +1842,27 @@ tbody tr.computer-row.selected {
   background: rgba(var(--gold-rgb), 0.1);
 }
 
-.model-family-row button {
-  width: 100%;
-  min-height: 34px;
+/* Caret, face and name, laid out like a version row's name so the two line
+   up when the family is open. */
+.model-family-name {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font: var(--fs-ui)/1.2 var(--ui);
-  text-align: left;
-  cursor: pointer;
+  gap: 7px;
+  min-width: 0;
 }
 
-.model-family-row button:hover {
-  background: var(--panel-hover);
+.model-family-name > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.model-family-name strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: var(--fs-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .model-family-caret {
@@ -1882,36 +1889,16 @@ tbody tr.computer-row.selected {
   .model-family-caret { transition: none; }
 }
 
-.model-family-row strong {
-  color: var(--text-strong);
-  font-size: var(--fs-ui);
-}
-
-.model-family-row em {
+/* Smallest to largest version, in the Size column. */
+.model-family-size {
   color: var(--muted);
-  font-size: var(--fs-ui);
-  font-style: normal;
-}
-
-.model-family-installed,
-.model-family-best {
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-size: var(--fs-ui);
-  font-weight: 700;
+  font: var(--fs-ui)/1.2 var(--mono);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.model-family-installed {
-  border: 1px solid rgba(var(--green-rgb), 0.4);
-  background: rgba(var(--green-rgb), 0.12);
-  color: var(--green);
-}
-
-.model-family-best {
-  border: 1px solid rgba(var(--blue-rgb), 0.4);
-  background: rgba(var(--blue-rgb), 0.12);
-  color: var(--blue);
+.model-family-toggle {
+  min-width: 0;
 }
 
 /* The one thing the row could not say for itself: that "e2b" is an effective
@@ -1935,15 +1922,14 @@ tbody tr.computer-row.selected {
    The By column is 86px with overflow:hidden, and the maker pill plus this
    badge together overflowed it — the badge rendered as an empty box with its
    letters cut off. Stacking fits both without widening a column the reader can
-   resize themselves. The family row has the whole width and keeps it inline. */
+   resize themselves. */
 .origin-country {
   display: block;
   width: fit-content;
   margin: 3px 0 0;
 }
 
-.origin-country,
-.model-family-maker b {
+.origin-country {
   padding: 1px 4px;
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -1952,26 +1938,6 @@ tbody tr.computer-row.selected {
   font-weight: 700;
   letter-spacing: 0.04em;
   vertical-align: middle;
-}
-
-.model-family-maker {
-  color: var(--muted);
-  font-size: var(--fs-ui);
-  white-space: nowrap;
-}
-
-.model-family-pulls {
-  color: var(--muted);
-  font: var(--fs-ui)/1 var(--mono);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Says which way the click goes, because a caret alone is a convention not
-   everyone has. Pushed right so it reads as the action, not a label. */
-.model-family-hint {
-  margin-left: auto;
-  color: var(--muted);
-  font-size: var(--fs-ui);
 }
 
 /* --- Filter rail -----------------------------------------------------------
