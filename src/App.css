@@ -5953,10 +5953,12 @@ tbody tr.computer-row.selected {
   opacity: 0.6;
 }
 
+/* A disclosure has to be readable to count as one: it was 12px at 30% white,
+   2.6:1 on the panel. */
 .upgrade-disclosure {
   margin: 0;
-  font-size: 12px;
-  color: rgba(255, 249, 239, 0.3);
+  font-size: var(--fs-ui);
+  color: var(--muted);
   line-height: 1.4;
 }
 

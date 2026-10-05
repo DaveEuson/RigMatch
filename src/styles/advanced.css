@@ -267,7 +267,9 @@
 .app-shell[data-ui-mode='advanced'] .contestant-spotlight-actions > span { color: var(--muted); font-size: var(--fs-ui); }
 .app-shell[data-ui-mode='advanced'] .contestant-spotlight-actions > div { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .app-shell[data-ui-mode='advanced'] .contestant-spotlight-actions > div > .btn-gold { flex-basis: 100%; }
-.app-shell[data-ui-mode='advanced'] .contestant-date-button.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+/* The text colour too: App.css gives the active button dark ink for the green
+   fill it used to have, which on this tint read at 1.5:1. */
+.app-shell[data-ui-mode='advanced'] .contestant-date-button.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text-strong); }
 .app-shell[data-ui-mode='advanced'] .contestant-notes label { color: var(--muted); font: 400 var(--fs-ui) / 1.3 var(--ui); }
 .app-shell[data-ui-mode='advanced'] .contestant-notes-area { border: 1px solid var(--line-strong); border-radius: var(--r-control); background: var(--stage); color: var(--text-strong); font: 400 var(--fs-ui) / 1.45 var(--ui); }
 .app-shell[data-ui-mode='advanced'] .contestant-radar-scores > div { border: 0; background: none; }
