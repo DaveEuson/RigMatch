@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, readConversationsFile, writeConversationsFile, readMemoriesFile, writeMemoriesFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
+import { cutAtTurnMarker } from "./lib/turnMarkers";
 import { createWriteScheduler } from "./lib/writeScheduler";
 import { UI_ICON_ART, type UiIconName } from "./lib/uiIconArt";
 import { classifyChatRequest, companionBeyondNote } from "./lib/chatCapabilityGuard";
@@ -2651,7 +2652,8 @@ export default function App() {
                     {msg.role === "assistant" ? (
                       <div
                         className="rm-message-text rm-message-md"
-                        dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+                        // Replies saved before the stream was cut at turn markers.
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(cutAtTurnMarker(msg.content).text) }}
                       />
                     ) : (
                       <div className="rm-message-text">{msg.content}</div>

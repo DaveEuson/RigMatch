@@ -1600,7 +1600,10 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
         <div className="sw-answer-strip">
           <div className="sw-answer-strip-head">
             <span>
-              {activeModel ? `${getFriendlyModelName(activeModel)}'s answers so far` : 'Answers so far'}
+              {/* Says what the numbers are for as long as they are on screen: the
+                  "scored out of 100" line used to go once the first one arrived,
+                  leaving a row of bare numbers. */}
+              {activeModel ? `${getFriendlyModelName(activeModel)}'s answers so far, each scored out of 100` : 'Answers so far, each scored out of 100'}
             </span>
             {answeredAverage != null && (
               <em>{answered.length} scored · averaging <b>{answeredAverage}</b></em>
@@ -1611,7 +1614,11 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
           ) : (
             <ol aria-label="Answer scores for the model currently answering">
               {answered.map((score, index) => (
-                <li key={index} className={score >= 85 ? 'good' : score >= 70 ? 'fair' : 'poor'}>
+                <li
+                  key={index}
+                  className={score >= 85 ? 'good' : score >= 70 ? 'fair' : 'poor'}
+                  title={`Answer ${index + 1}: ${score} out of 100${score === 0 ? ', it missed the question' : ''}`}
+                >
                   {score}
                 </li>
               ))}
