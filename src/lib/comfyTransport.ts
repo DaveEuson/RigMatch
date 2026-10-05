@@ -9,7 +9,7 @@
  */
 
 import { agentArcadeApi } from '../api.ts';
-import { readComfySettings, writeComfySettings } from './comfySettings.ts';
+import { comfyAddressCandidates, readComfySettings, rememberFoundComfyUrl, writeComfySettings } from './comfySettings.ts';
 import { comfyBusyCount } from './videoGen.ts';
 import type { ComfyTransport } from './imageGenRun.ts';
 import type { VideoTransport } from './videoGenRun.ts';
@@ -32,7 +32,7 @@ export function comfyBaseUrl(): string {
   return readComfySettings().baseUrl;
 }
 
-export async function getComfyStatus(baseUrl: string = comfyBaseUrl()): Promise<ComfyStatus> {
+async function askComfy(baseUrl: string): Promise<ComfyStatus> {
   if (!agentArcadeApi.getComfyStatus) return { reachable: false, checkpoints: [] };
   try {
     return await agentArcadeApi.getComfyStatus(baseUrl);
@@ -41,6 +41,49 @@ export async function getComfyStatus(baseUrl: string = comfyBaseUrl()): Promise<
     // program the user starts themselves.
     return { reachable: false, checkpoints: [] };
   }
+}
+
+/**
+ * Is this ComfyUI, or just something else on the port? 8000 is a common
+ * port for development servers, so an answer there has to show ComfyUI's own
+ * /system_stats shape (a `system` block and a `devices` list) before RigMatch
+ * sends it pictures to render.
+ */
+export function looksLikeComfy(status: ComfyStatus): boolean {
+  if (!status.reachable) return false;
+  const stats = status.stats as { system?: unknown; devices?: unknown } | undefined;
+  return Boolean(stats && typeof stats.system === 'object' && Array.isArray(stats.devices));
+}
+
+/**
+ * The first address that answers as ComfyUI, with its status, or the first
+ * address's "not running" when none does. Kept apart from the bridge so the
+ * order and the identity check are tested with a fake.
+ */
+export async function findComfy(
+  addresses: string[],
+  ask: (baseUrl: string) => Promise<ComfyStatus>,
+): Promise<{ address: string | null; status: ComfyStatus }> {
+  let first: ComfyStatus | null = null;
+  for (const address of addresses) {
+    const status = await ask(address);
+    if (looksLikeComfy(status)) return { address, status };
+    first ??= { ...status, reachable: false };
+  }
+  return { address: null, status: first ?? { reachable: false, checkpoints: [] } };
+}
+
+/**
+ * ComfyUI's status. Given an address, that address alone. Without one, every
+ * place it may be (see comfyAddressCandidates), remembering where it answered
+ * so runs and downloads go there too.
+ */
+export async function getComfyStatus(baseUrl?: string): Promise<ComfyStatus & { address?: string }> {
+  if (baseUrl) return askComfy(baseUrl);
+  const { address, status } = await findComfy(comfyAddressCandidates(), askComfy);
+  if (!address) return status;
+  rememberFoundComfyUrl(address);
+  return { ...status, address };
 }
 
 /**

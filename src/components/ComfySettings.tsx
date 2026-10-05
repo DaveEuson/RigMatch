@@ -27,11 +27,10 @@ const COMFY_LOCATE_FAILURE: Record<'not-running' | 'cannot-tell' | 'no-bridge', 
 /**
  * Where ComfyUI is, and whether RigMatch may disturb it.
  *
- * The address is editable rather than the default being moved. ComfyUI lives
- * on 8188 and RigMatch connects to one the user started, so a different
- * default would not dodge a collision — it would just fail to find anything.
- * What a second instance needs is somewhere to point RigMatch at, which is
- * this field.
+ * The address is editable rather than the default being moved. RigMatch
+ * connects to a ComfyUI the user started, and looks for it by itself on 8188
+ * (portable and manual installs) and 8000 (ComfyUI Desktop). What a copy on
+ * any other port needs is somewhere to point RigMatch at, which is this field.
  */
 export function ComfySettings() {
   const initial = readComfySettings();
@@ -99,7 +98,7 @@ export function ComfySettings() {
   const testConnection = useCallback(async () => {
     if (!normalized) return;
     setProbe({ phase: 'checking', message: '' });
-    writeComfySettings({ baseUrl: normalized });
+    if (normalized !== initial.baseUrl) writeComfySettings({ baseUrl: normalized });
     const status = await getComfyStatus(normalized);
     if (!status.reachable) {
       setProbe({ phase: 'bad', message: 'Nothing answered there. Is ComfyUI running?' });
@@ -111,7 +110,7 @@ export function ComfySettings() {
       phase: 'ok',
       message: `Connected — ${models} checkpoint${models === 1 ? '' : 's'}, ${encoders} text encoder${encoders === 1 ? '' : 's'}.`,
     });
-  }, [normalized]);
+  }, [normalized, initial.baseUrl]);
 
   const saveToken = useCallback(() => {
     writeHuggingFaceToken(token);
@@ -134,8 +133,9 @@ export function ComfySettings() {
         <span>ComfyUI address</span>
         <strong>Image and video generation run here, not on Ollama</strong>
         <em>
-          ComfyUI is a separate free program RigMatch does not install or bundle. Leave this on the
-          default unless you run it somewhere else.
+          ComfyUI is a separate free program RigMatch does not install or bundle. RigMatch looks for it
+          on 8188 (the portable and manual installs) and 8000 (ComfyUI Desktop) by itself, so change
+          this only if yours runs somewhere else.
         </em>
       </div>
 
@@ -146,7 +146,9 @@ export function ComfySettings() {
           value={url}
           spellCheck={false}
           onChange={(event) => setUrl(event.target.value)}
-          onBlur={() => { if (normalized) save({ baseUrl: normalized }); }}
+          // Saved only when changed: saving the address RigMatch found would pin it
+          // there, and it could no longer look on 8188 and 8000 by itself.
+          onBlur={() => { if (normalized && normalized !== initial.baseUrl) save({ baseUrl: normalized }); }}
           placeholder={COMFY_DEFAULT_BASE_URL}
           aria-label="ComfyUI address"
           aria-invalid={!urlValid}

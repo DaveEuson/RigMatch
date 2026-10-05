@@ -29,6 +29,7 @@ import { ListeningLab } from "./ListeningLab";
 import { PromptPicker } from "./PromptPicker";
 import { VideoLineupLab } from "./VideoLineupLab";
 import { ComfyStartButton } from "./ComfyStartButton";
+import { GetComfyLink } from "./GetComfyLink";
 import { GpuContentionNote } from './GpuContentionNote';
 import { useGpuContention } from '../hooks/useGpuContention';
 import { gpuBusyNote } from '../lib/gpuBusyNote';
@@ -511,7 +512,7 @@ export function AdvancedCapabilityLab({
                     {comfyChecking ? 'Looking for ComfyUI...' : comfyStart.phase === 'starting' ? 'Starting ComfyUI…' : 'ComfyUI is not running'}
                   </strong>
                   <span>
-                    Start ComfyUI and it will be found on port 8188. It is a separate free program —
+                    Start ComfyUI and RigMatch finds it by itself. It is a separate free program —
                     RigMatch does not install or bundle it, but it can start the copy you have.
                   </span>
                 </>
@@ -522,6 +523,7 @@ export function AdvancedCapabilityLab({
                   Check again
                 </button>
                 {readiness.kind === 'not-running' && <ComfyStartButton folder={readComfySettings().folder} />}
+                {readiness.kind === 'not-running' && <GetComfyLink className="mini-button outline" />}
               </div>
             </div>
           ) : (

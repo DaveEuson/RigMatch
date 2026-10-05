@@ -5,10 +5,10 @@
  * Both settings exist because of the same fact: ComfyUI is a program the user
  * already runs for their own work, not something RigMatch installs or owns.
  *
- * The port is configurable rather than defaulted differently. Moving the
- * default off 8188 would not avoid a collision — RigMatch connects to a
- * ComfyUI someone else started, so a different default just fails to find it
- * and reports "not running" while ComfyUI sits there answering.
+ * RigMatch connects to a ComfyUI someone else started, so it looks where the
+ * two common builds serve: 8188 for the portable and manual installs, 8000 for
+ * ComfyUI Desktop. Looking in one place reported the other "not running" while
+ * it sat there answering. Any other port is set in Settings.
  */
 
 export const COMFY_URL_STORAGE_KEY = 'rigmatch:comfy-url:v1';
@@ -16,8 +16,19 @@ export const COMFY_DEDICATED_STORAGE_KEY = 'rigmatch:comfy-dedicated:v1';
 /** The verified models root, needed to write a download where ComfyUI reads it. */
 export const COMFY_FOLDER_STORAGE_KEY = 'rigmatch:comfy-folder:v1';
 export const COMFY_AUTOSTART_STORAGE_KEY = 'rigmatch:comfy-autostart:v1';
+/** Where RigMatch last found ComfyUI by looking, used while no address is set. */
+export const COMFY_FOUND_URL_STORAGE_KEY = 'rigmatch:comfy-found-url:v1';
 
+/** The portable and hand-installed builds serve here. */
 export const COMFY_DEFAULT_BASE_URL = 'http://127.0.0.1:8188';
+/**
+ * ComfyUI Desktop, the official one-click installer and the one a newcomer is
+ * sent to, serves here instead (its DEFAULT_SERVER_ARGS). Looking only on 8188
+ * reported a running Desktop copy as "not found".
+ */
+export const COMFY_DESKTOP_BASE_URL = 'http://127.0.0.1:8000';
+/** Where "Get ComfyUI" sends someone: the official download page. */
+export const COMFY_DOWNLOAD_URL = 'https://www.comfy.org/download';
 
 export type ComfySettings = {
   baseUrl: string;
@@ -89,7 +100,8 @@ export function readComfySettings(): ComfySettings {
   let folder = '';
   let autoStart = true;
   try {
-    baseUrl = normalizeComfyUrl(window.localStorage.getItem(COMFY_URL_STORAGE_KEY) ?? '')
+    baseUrl = chosenComfyUrl()
+      ?? normalizeComfyUrl(window.localStorage.getItem(COMFY_FOUND_URL_STORAGE_KEY) ?? '')
       ?? COMFY_DEFAULT_BASE_URL;
     dedicated = window.localStorage.getItem(COMFY_DEDICATED_STORAGE_KEY) === 'true';
     folder = window.localStorage.getItem(COMFY_FOLDER_STORAGE_KEY) ?? '';
@@ -100,6 +112,46 @@ export function readComfySettings(): ComfySettings {
     // test needs it, which is what the person would otherwise do by hand.
   }
   return { baseUrl, dedicated, folder, autoStart };
+}
+
+/**
+ * The address someone set in Settings, or null when RigMatch should look.
+ *
+ * A stored 8188 counts as unset. The Settings field used to save whatever it
+ * held on blur, so many profiles carry the default without anyone choosing
+ * it, and pinning those to 8188 would hide a Desktop copy on 8000.
+ */
+function chosenComfyUrl(): string | null {
+  const stored = normalizeComfyUrl(window.localStorage.getItem(COMFY_URL_STORAGE_KEY) ?? '');
+  return stored && stored !== COMFY_DEFAULT_BASE_URL ? stored : null;
+}
+
+/**
+ * Where to look for ComfyUI, in order: an address set in Settings is the only
+ * place; otherwise wherever it was last found, then 8188, then 8000.
+ */
+export function comfyAddressCandidates(): string[] {
+  if (typeof window === 'undefined') return [COMFY_DEFAULT_BASE_URL, COMFY_DESKTOP_BASE_URL];
+  try {
+    const chosen = chosenComfyUrl();
+    if (chosen) return [chosen];
+    const found = normalizeComfyUrl(window.localStorage.getItem(COMFY_FOUND_URL_STORAGE_KEY) ?? '');
+    return [...new Set([found, COMFY_DEFAULT_BASE_URL, COMFY_DESKTOP_BASE_URL].filter((url): url is string => Boolean(url)))];
+  } catch {
+    return [COMFY_DEFAULT_BASE_URL, COMFY_DESKTOP_BASE_URL];
+  }
+}
+
+/** Remember where ComfyUI answered, so every screen and run talks to that one. */
+export function rememberFoundComfyUrl(url: string): void {
+  if (typeof window === 'undefined') return;
+  const normalized = normalizeComfyUrl(url);
+  if (!normalized) return;
+  try {
+    window.localStorage.setItem(COMFY_FOUND_URL_STORAGE_KEY, normalized);
+  } catch {
+    // Storage disabled: the next look finds it again.
+  }
 }
 
 export function writeComfySettings(settings: Partial<ComfySettings>): void {
