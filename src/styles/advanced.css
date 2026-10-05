@@ -204,6 +204,9 @@
   font: 400 var(--fs-ui) / 1.2 var(--ui);
 }
 .app-shell[data-ui-mode='advanced'] .good-for-chip + .good-for-chip::before { content: "· "; }
+/* Without its old pill border the quantization ran into the provider:
+   "Q4_K_MOllama", "Q4_K_MLM Studio". */
+.app-shell[data-ui-mode='advanced'] .model-quant-sub + .model-provider-sub::before { content: "\00a0· "; }
 .app-shell[data-ui-mode='advanced'] .model-new-sub {
   padding: 1px 6px;
   border-radius: 10px;
