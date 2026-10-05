@@ -87,6 +87,12 @@ export type OllamaModel = {
    * which case callers fall back to reading the name.
    */
   capabilities?: string[];
+  /**
+   * False when the model has no chat format: no template roles and no
+   * built-in renderer (electron/chatFormat.cjs), so it cannot hold a
+   * conversation. Undefined when Ollama said nothing to judge by.
+   */
+  chatFormat?: boolean;
 };
 
 export type LocalModelProvider = 'ollama' | 'lm-studio';

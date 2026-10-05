@@ -19,7 +19,7 @@ function formatInstalledDate(iso: string): string {
   return at.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 import type { ListTestResult, ModelQuickFilterId, ModelSortKey, ModelTaskFilterId, SortDirection } from '../lib/modelCatalog';
-import { CAPABILITY_ONLY_FILTERS, GENERATION_FILTERS, TASK_FILTER_CHIPS, getBenchmarkForModel, getDiskGuard, getFriendlyModelName, getHardwareFit, getModelGoodForTags, getModelProfile, getModelQuickFilters, getModelScore, getModelSearchText, getModelSortLabel, getModelStatusLabel, getParamSortValue, getPlatformFit, getQueueChipModelName, getSizeRisk, isCloudModel, isEmbeddingModel, isUncensoredModel, isVisiblePullProgress, modelMatchesQuickFilter, modelMatchesTask, sortModelRows } from '../lib/modelCatalog';
+import { CAPABILITY_ONLY_FILTERS, GENERATION_FILTERS, TASK_FILTER_CHIPS, getBenchmarkForModel, getDiskGuard, getFriendlyModelName, getHardwareFit, getModelGoodForTags, getModelProfile, getModelQuickFilters, getModelScore, getModelSearchText, getModelSortLabel, getModelStatusLabel, getParamSortValue, getPlatformFit, getQueueChipModelName, getSizeRisk, isCloudModel, isEmbeddingModel, isUncensoredModel, isVisiblePullProgress, lacksChatFormat, noChatFormatReason, modelMatchesQuickFilter, modelMatchesTask, sortModelRows } from '../lib/modelCatalog';
 import { buildQuickFacetGroups, buildSearchSuggestions, splitTaskFilters } from '../lib/modelFacets';
 import type { SearchSuggestion } from '../lib/modelFacets';
 import { familiesToAutoExpand, groupRowsByFamily } from '../lib/modelGroups';
@@ -1074,11 +1074,16 @@ export function ModelCabinet({
               const hardwareFit = getHardwareFit(row, vramGb);
               const platformFit = getPlatformFit(row.displayName, platform);
               const speedDateLineupFullForRow = shortlistedCount >= 5;
-              const canJoinSpeedDate = platformFit.compatible && hardwareFit.recommend;
+              // A model with no chat format cannot be in a show at all; say so on
+              // the button rather than refusing after the click.
+              const noChat = lacksChatFormat(row);
+              const canJoinSpeedDate = !noChat && platformFit.compatible && hardwareFit.recommend;
               const canChangeSpeedDateSlot = canJoinSpeedDate && (shortlisted || !speedDateLineupFullForRow);
               const speedDateSlotLabel = shortlisted
                 ? 'Selected'
-                : !platformFit.compatible
+                : noChat
+                  ? 'Not for shows'
+                  : !platformFit.compatible
                   ? 'OS Only'
                   : !hardwareFit.recommend
                   // Unknown-size models aren't "too big" — we just can't verify the
@@ -1087,7 +1092,9 @@ export function ModelCabinet({
                   : speedDateLineupFullForRow
                     ? '+ Speed Date'
                     : 'Add to Speed Dating';
-              const speedDateSlotTitle = !platformFit.compatible
+              const speedDateSlotTitle = noChat
+                ? noChatFormatReason(row.displayName)
+                : !platformFit.compatible
                 ? platformFit.reason
                 : !hardwareFit.recommend
                 ? hardwareFit.detail
@@ -1104,7 +1111,9 @@ export function ModelCabinet({
                 ? `Remove ${row.displayName} from Speed Dating`
                 : canJoinSpeedDate
                   ? `Add ${row.displayName} to Speed Dating`
-                  : !platformFit.compatible
+                  : noChat
+                    ? `${row.displayName} cannot be in a show: it has no chat format`
+                    : !platformFit.compatible
                     ? `${row.displayName} is not available for Speed Dating on this operating system`
                     : `${row.displayName} is too large for Speed Dating on this computer`;
               const rowClassName = [
@@ -1184,6 +1193,9 @@ export function ModelCabinet({
                     )}
                     {isEmbeddingModel(row.displayName) && (
                       <span className="model-warning-tag" title="Embedding model — not for chat or text generation">Embed only</span>
+                    )}
+                    {lacksChatFormat(row) && (
+                      <span className="model-warning-tag" title={noChatFormatReason(row.displayName)}>No chat format</span>
                     )}
                     {!platformFit.compatible && (
                       <span className="platform-tag" title={platformFit.reason}>macOS only</span>
