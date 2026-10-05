@@ -4,6 +4,23 @@ Every RigMatch release, newest first. These are the same notes the app shows in
 Update Center — this file and the GitHub release pages are generated from
 `src/data/releaseNotes.ts`, so there is only one place to write them.
 
+## 0.9.4 — Easier to Find
+_Beta build_
+
+- Every test is kept. A test of one model used to leave no record once that model was tested again, and every question set was saved as "Custom Suite", so you couldn't tell one test from another. RigMatch now keeps your last 30 tests, with the answers for the newest 12, names each one after its question set ("Difficult Subjects"), and lists them under Results › Runs.
+- Top Pick is now each model's own page: its Match Score and the four measurements behind it, every test it has sat with a button to read that test's answers, and the answers from its latest test. A gold button opens a chat with it. A saved test also reopens with its own questions now; it used to show whichever question set was selected at the time.
+- RigMatch finds ComfyUI Desktop, the official one-click installer, which runs on a different port from the portable version. When a picture or video goal needs ComfyUI, Simple Mode now says how to get it, in three steps, with what it needs and a link to the download.
+- Simple Mode can download picture makers. It used to list only the ones already in ComfyUI, so a 12 GB PC with room for four saw only one. Every maker that fits now has a Download button that says how much it will fetch. Z-Image Turbo and FLUX.2 [klein] share an 8 GB part, so whichever you get second is that much smaller.
+- Models that cannot hold a conversation stay out of shows. Some are made to complete code (starcoder2, codegemma:2b) or to read documents (deepseek-ocr), and their Ollama setup has no chat format, but a show asked them its questions anyway. The Models screen now labels them "No chat format" and leaves them out of shows and the chat, writing, coding and reasoning filters.
+- RigMatch Chat stops a reply where the model's turn ends. A model with no chat format printed "<|im_end|>" and then RigMatch's own instructions to it; Chat now cuts the reply there and stops the model.
+- Download times hold steady. The time left jumped between "about 8 minutes" and "about 74" on the same download, because the speed was measured over a fraction of a second. It is now averaged over a few seconds, and rounded more coarsely the further off it is. In Advanced Mode, the download box also goes away a few seconds after a download finishes, instead of staying until you restart.
+- The note under the top bar that says a picture is drawing, a clip is rendering or a show is running is now highlighted, beside the time so far and a Stop button, so you can tell something is happening. Click it to go to the work.
+- Labels, descriptions and buttons are at least 14 pixels everywhere and no longer in capitals, and the older buttons match the rest of the app. Two nearly invisible pieces of text are fixed: the "In the lineup" button in Models and the affiliate note in My PC. Screen readers get a heading and a main area on every screen.
+- RigMatch loads each screen the first time you open it, so what loads at start is less than half the size it was.
+- On Linux machines without an emoji font, some icons showed as empty boxes. RigMatch uses its own icons everywhere now.
+- The scores under a running show say they are out of 100 for as long as they are on screen, and each one's tooltip names the answer it belongs to.
+- In Advanced Mode, each family row in Models lines up with the column headers. Its size, maker, country, installs, best score and pull count used to run together on one line after the name, so only "Show" sat under a header; each is now in its own column, and Show is under Actions. Match scores like "92.7 A" fit their column now, and a maker name too long for its column ends in "…" instead of being cut off mid-letter.
+
 ## 0.9.3 — A Whole New Look
 _Beta build_
 
