@@ -4256,7 +4256,7 @@ function App() {
   const runningLine = renderActivity ? (
     <>
       <i className="running-dot" aria-hidden="true" />
-      <button type="button" className="running-open" onClick={() => openRender(renderActivity)}>
+      <button type="button" className="running-open" onClick={() => openRender(renderActivity)} title="Open the screen that shows it">
         {renderLabel(renderActivity)} · {renderActivity.model ?? 'ComfyUI'}
         {renderActivity.step ? ` · ${renderActivity.step.index + 1} of ${renderActivity.step.total}` : ''}
       </button>
