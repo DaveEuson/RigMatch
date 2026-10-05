@@ -1,6 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type { ModelContextInfo, VramInfo } from "./contextWindow";
+import { cutAtTurnMarker, safeToShow } from "./turnMarkers";
 
 export type OllamaModel = {
   name: string;
@@ -140,10 +141,35 @@ export async function streamChat(
     active = false;
     void invoke("cancel_chat", { streamId }).catch(() => undefined);
   });
+  // A model with a bare template prints its end-of-turn marker as text and
+  // carries on into a turn of its own (turnMarkers.ts). The reply is cut at the
+  // marker and the generation stopped; a tail that could be the start of one
+  // waits for the next token before it is shown.
+  let received = "";
+  let shown = 0;
+  let ended = false;
+  const show = (upTo: number) => {
+    if (upTo > shown) onToken(received.slice(shown, upTo));
+    shown = Math.max(shown, upTo);
+  };
   channel.onmessage = (event) => {
     if (!active) return;
-    if (event.type === "token") onToken(event.value);
-    else options?.onDone?.({ promptTokens: event.promptTokens, evalTokens: event.evalTokens });
+    if (event.type === "token") {
+      if (ended) return;
+      received += event.value;
+      const cut = cutAtTurnMarker(received);
+      if (cut.ended) {
+        ended = true;
+        received = cut.text;
+        show(received.length);
+        void invoke("cancel_chat", { streamId }).catch(() => undefined);
+        return;
+      }
+      show(safeToShow(received));
+      return;
+    }
+    show(received.length);
+    options?.onDone?.({ promptTokens: event.promptTokens, evalTokens: event.evalTokens });
   };
 
   const invokePromise = invoke<void>("stream_chat", {

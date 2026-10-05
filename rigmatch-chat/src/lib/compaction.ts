@@ -16,6 +16,7 @@
  */
 
 import { estimateTokens } from "./contextWindow.ts";
+import { cutAtTurnMarker } from "./turnMarkers.ts";
 import type { StoredMessage } from "./conversationStore";
 import type { ChatMessage } from "./ollamaApi";
 
@@ -124,7 +125,9 @@ export function buildContextMessages(
   // the same picture or recording still has it in view.
   const body = messages.slice(dropped).map((m) => ({
     role: m.role,
-    content: m.content,
+    // A reply saved before turnMarkers.ts may carry a leaked marker and the
+    // turn after it; sending that back would feed the model its own echo.
+    content: m.role === "assistant" ? cutAtTurnMarker(m.content).text : m.content,
     ...(m.images?.length ? { images: m.images } : {}),
   }));
   // Whether the summary is sent depends on the summary existing, not on the
