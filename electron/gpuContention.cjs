@@ -41,8 +41,9 @@
  */
 const KNOWN_GPU_HEAVY_APPS = [
   // Other local-model runtimes — the most likely and most costly conflict.
-  { match: 'lm studio', label: 'LM Studio' },
-  { match: 'lmstudio', label: 'LM Studio' },
+  // Not LM Studio: RigMatch tests its models, so like Ollama it is supposed to
+  // be running, and naming it warned every LM Studio user before every show.
+  // A model either one holds still shows up in the memory reading.
   { match: 'jan.exe', label: 'Jan' },
   { match: 'gpt4all', label: 'GPT4All' },
   { match: 'koboldcpp', label: 'KoboldCpp' },

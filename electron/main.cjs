@@ -36,6 +36,7 @@ const gpuContention = require('./gpuContention.cjs');
 const { fitWindowToScreen } = require('./windowFit.cjs');
 const { missingLibraries, debianPackagesFor } = require('./companionLibraries.cjs');
 const {
+  AGENT_TOOLS,
   findAgentTask,
   buildToolChatBody,
   isToolsUnsupportedError,
@@ -73,7 +74,16 @@ const {
 const { summarizeMemory, cleanDeviceTreeModel } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
 const { hasChatFormat } = require('./chatFormat.cjs');
-const { lmStudioOrigin, lmStudioModelFromRest, LM_STUDIO_TOKEN_MESSAGE } = require('./lmStudio.cjs');
+const {
+  lmStudioOrigin,
+  lmStudioModelFromRest,
+  LM_STUDIO_TOKEN_MESSAGE,
+  lmStudioChatBody,
+  readLmStudioChat,
+  toOpenAiToolMessages,
+  toolReplyFromOpenAi,
+  loadedInstanceIds,
+} = require('./lmStudio.cjs');
 const { downloadModel, verifyComfyFolder } = require('./comfyModels.cjs');
 const { locateComfyRoots } = require('./comfyLocate.cjs');
 const { findComfyLaunchers, launchComfy } = require('./comfyLaunch.cjs');
@@ -3475,10 +3485,12 @@ async function runBenchmark(request = {}, sender) {
     // running." until the app was restarted, and a full disk is exactly the
     // condition that causes it.
     try {
-      await unloadBenchmarkModel(
-        typeof request.baseUrl === 'string' && request.baseUrl ? request.baseUrl : OLLAMA_LOCAL_URL,
-        request.model,
-      );
+      const runBaseUrl = typeof request.baseUrl === 'string' && request.baseUrl ? request.baseUrl : OLLAMA_LOCAL_URL;
+      if (normalizeLocalProvider(request.provider, runBaseUrl) === 'lm-studio') {
+        await unloadLmStudioModel(runBaseUrl, request.model, activeBenchmark?.lmStudioKeep);
+      } else {
+        await unloadBenchmarkModel(runBaseUrl, request.model);
+      }
     } catch {
       // Best effort: the unload is an optimization, not a correctness
       // requirement. Ollama releases the model on its own keep-alive timer.
@@ -3518,8 +3530,11 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   } catch { judgeModel = ''; }
   const judgeProvider = request.judgeProvider === 'openrouter' ? 'openrouter' : 'local';
   const judgeApiKey = typeof request.judgeApiKey === 'string' ? request.judgeApiKey.trim() : '';
+  // A local judge runs on its own provider (judgeEndpoint, below), not on the
+  // contestant's. It used to be sent to the contestant's server with Ollama's
+  // API, so an LM Studio contestant could never be judged.
   const judgeUsable = Boolean(judgeModel) && (
-    judgeProvider === 'openrouter' ? Boolean(judgeApiKey) : provider === 'ollama'
+    judgeProvider === 'openrouter' ? Boolean(judgeApiKey) : true
   );
   const useJudge = request.qualityMode === 'judge' && judgeUsable;
   /**
@@ -3545,7 +3560,8 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   const autoJudgeModel = (Array.isArray(request.autoJudgeModels) ? request.autoJudgeModels : [])
     .map((name) => String(name || '').trim())
     .find((name) => name && name !== model) || '';
-  const autoJudgeUnmarkable = !useJudge && provider === 'ollama' && Boolean(autoJudgeModel);
+  const autoJudgeUnmarkable = !useJudge && Boolean(autoJudgeModel);
+  const judgeEndpoint = (name) => resolveJudgeEndpoint(request.judgeEndpoints, name, baseUrl, provider);
   const sendProgress = (update) => {
     const payload = {
       id: progressId,
@@ -3577,12 +3593,12 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       model,
       baseUrl,
       questionCount,
-      benchmarkMode: provider === 'lm-studio' ? 'openai-compatible' : 'ollama-parity',
+      benchmarkMode: provider === 'lm-studio' ? 'lm-studio' : 'ollama-parity',
       provider,
       qualityScoring: useJudge ? 'judge' : autoJudgeUnmarkable ? 'heuristic + judge for unmarkable' : 'heuristic',
       judgeModel: useJudge ? judgeModel : autoJudgeUnmarkable ? autoJudgeModel : null,
       judgeProvider: useJudge ? judgeProvider : autoJudgeUnmarkable ? 'local' : null,
-      thinkingDisabled: provider === 'ollama' ? BENCHMARK_THINK_DISABLED : false,
+      thinkingDisabled: BENCHMARK_THINK_DISABLED,
       warmup: {
         enabled: true,
         scored: false,
@@ -3604,6 +3620,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   });
 
   if (provider === 'lm-studio') {
+    if (activeBenchmark) activeBenchmark.lmStudioKeep = await lmStudioLoadedInstances(baseUrl, model);
     await warmLmStudioBenchmarkModel(baseUrl, model);
   } else {
     await warmBenchmarkModel(baseUrl, model);
@@ -3751,7 +3768,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
             try {
               return await (useJudge && judgeProvider === 'openrouter'
                 ? openRouterGenerateText(judgeApiKey, judgeModel, judgePrompt, 200, signal)
-                : runJudgeGenerate(baseUrl, judgeName, judgePrompt, signal));
+                : runLocalJudge(judgeEndpoint(judgeName), judgeName, judgePrompt, signal));
             } catch (error) {
               judgeFailure = error;
               throw error;
@@ -3780,7 +3797,8 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         // it again now, untimed, so the next timing run measures the model and
         // not its reload — two of this question's three runs are still to come.
         const judgedHere = !(useJudge && judgeProvider === 'openrouter');
-        if (judgedHere && provider === 'ollama') await warmBenchmarkModel(baseUrl, model);
+        if (judgedHere && provider === 'lm-studio') await warmLmStudioBenchmarkModel(baseUrl, model);
+        else if (judgedHere) await warmBenchmarkModel(baseUrl, model);
       }
       const toolVerdict = toolAnswer?.verdict || null;
       const sobrietyScore = promptJudgeScore != null
@@ -4034,24 +4052,99 @@ async function warmBenchmarkModel(baseUrl, model) {
   }
 }
 
+/** Untimed, like warmBenchmarkModel: loads the model at the test's context window. */
 async function warmLmStudioBenchmarkModel(baseUrl, model) {
+  const warmed = await lmStudioNativeChat(baseUrl, model, 'Reply READY only.', undefined, BENCHMARK_WARMUP_OPTIONS.num_predict);
+  if (warmed) return;
   await fetchJson(
     `${baseUrl.replace(/\/$/, '')}/chat/completions`,
     {
       method: 'POST',
       body: JSON.stringify({
         model,
-        messages: [
-          { role: 'system', content: 'You are a local model warm-up check.' },
-          { role: 'user', content: 'Reply READY only.' },
-        ],
+        messages: [{ role: 'user', content: 'Reply READY only.' }],
         temperature: 0,
-        max_tokens: 8,
+        max_tokens: BENCHMARK_WARMUP_OPTIONS.num_predict,
         stream: false,
       }),
     },
     BENCHMARK_TIMEOUT_MS,
   );
+}
+
+/** The copies of a model LM Studio has loaded; none before 0.4 or on any failure. */
+async function lmStudioLoadedInstances(baseUrl, model) {
+  const listing = await fetchJson(`${lmStudioOrigin(baseUrl)}/api/v1/models`, {}, 3000).catch(() => null);
+  return loadedInstanceIds(listing, model);
+}
+
+/**
+ * Free the card after an LM Studio model's test, as unloadBenchmarkModel does
+ * for Ollama, so the next contestant gets the same machine. Only the copies
+ * RigMatch caused to load: one the user had loaded in LM Studio before the
+ * test is theirs, and is left as it was. Best effort, like Ollama's.
+ */
+async function unloadLmStudioModel(baseUrl, model, keep = []) {
+  if (!baseUrl || !model) return;
+  try {
+    const keepIds = new Set(keep);
+    const loaded = await lmStudioLoadedInstances(baseUrl, model);
+    for (const instanceId of loaded.filter((id) => !keepIds.has(id))) {
+      await fetchJson(
+        `${lmStudioOrigin(baseUrl)}/api/v1/models/unload`,
+        { method: 'POST', body: JSON.stringify({ instance_id: instanceId }) },
+        8000,
+      );
+    }
+  } catch (error) {
+    await appendAppLog({
+      level: 'warn',
+      source: 'benchmark',
+      message: `Could not unload ${model} from LM Studio after its test; the next model may have less VRAM.`,
+      details: { model, error: serializeError(error) },
+    }).catch(() => {});
+  }
+}
+
+/**
+ * Where a local judge runs: the provider and address the renderer sent for
+ * that model. Without one, a judge is an Ollama model, on the contestant's
+ * Ollama, or on this computer's when the contestant is in LM Studio.
+ */
+function resolveJudgeEndpoint(endpoints, judgeModel, contestantBaseUrl, contestantProvider) {
+  const entry = endpoints && typeof endpoints === 'object' ? endpoints[judgeModel] : null;
+  if (entry && typeof entry.baseUrl === 'string' && entry.baseUrl) {
+    try {
+      assertLocalhostUrl(entry.baseUrl);
+      return { provider: normalizeLocalProvider(entry.provider, entry.baseUrl), baseUrl: entry.baseUrl };
+    } catch {
+      // Not an address RigMatch will send to; use the default below.
+    }
+  }
+  return { provider: 'ollama', baseUrl: contestantProvider === 'ollama' ? contestantBaseUrl : OLLAMA_LOCAL_URL };
+}
+
+/** One verdict from a local judge, on Ollama or LM Studio, which leaves once it has answered. */
+async function runLocalJudge(endpoint, judgeModel, judgePrompt, signal) {
+  if (endpoint.provider !== 'lm-studio') return runJudgeGenerate(endpoint.baseUrl, judgeModel, judgePrompt, signal);
+  const keep = await lmStudioLoadedInstances(endpoint.baseUrl, judgeModel);
+  try {
+    const answer = await lmStudioNativeChat(endpoint.baseUrl, judgeModel, judgePrompt, signal, 200);
+    if (answer) return answer.responseText;
+    const response = await fetchJson(
+      `${endpoint.baseUrl.replace(/\/$/, '')}/chat/completions`,
+      {
+        method: 'POST',
+        signal,
+        body: JSON.stringify({ model: judgeModel, messages: [{ role: 'user', content: judgePrompt }], temperature: 0, max_tokens: 200, stream: false }),
+      },
+      BENCHMARK_TIMEOUT_MS,
+    );
+    return extractOpenAiChatContent(response);
+  } finally {
+    // runJudgeGenerate's keep_alive 0, for LM Studio: see its comment for why.
+    await unloadLmStudioModel(endpoint.baseUrl, judgeModel, keep);
+  }
 }
 
 // Cloud judge: one deterministic OpenRouter chat completion. This is the ONLY
@@ -4213,11 +4306,10 @@ async function runBenchmarkToolPrompt(baseUrl, model, prompt, signal, provider) 
     thinkingDisabled: BENCHMARK_THINK_DISABLED,
     toolAnswer: { unsupported: true, verdict: task ? { score: 0, verdict: 'cannot call tools in Ollama' } : null },
   });
-  if (provider === 'lm-studio') return unsupported('the tool test runs through Ollama.');
-
   const requestUrl = `${baseUrl}/api/chat`;
-  let thinkingDisabled = BENCHMARK_THINK_DISABLED;
-  const send = (messages) => fetchJson(
+  // LM Studio's OpenAI-compatible route has no thinking switch to fall back from.
+  let thinkingDisabled = provider === 'lm-studio' ? false : BENCHMARK_THINK_DISABLED;
+  const send = provider === 'lm-studio' ? (messages) => lmStudioToolChat(baseUrl, model, messages, signal) : (messages) => fetchJson(
     requestUrl,
     {
       method: 'POST',
@@ -4280,7 +4372,18 @@ async function runBenchmarkToolPrompt(baseUrl, model, prompt, signal, provider) 
   };
 }
 
+/**
+ * One question to an LM Studio model, asked and timed the way Ollama's are:
+ * see lmStudioChatBody and readLmStudioChat in lmStudio.cjs.
+ *
+ * LM Studio before 0.4 has no /api/v1/chat. It gets the same bare question
+ * through the OpenAI route, timed by the clock, which is all that route gives.
+ */
 async function runLmStudioBenchmarkPrompt(baseUrl, model, prompt, signal) {
+  const maxOutputTokens = BENCHMARK_GENERATE_OPTIONS.num_predict;
+  const native = await lmStudioNativeChat(baseUrl, model, prompt, signal, maxOutputTokens);
+  if (native) return native;
+
   const startedAt = Date.now();
   const response = await fetchJson(
     `${baseUrl.replace(/\/$/, '')}/chat/completions`,
@@ -4289,15 +4392,9 @@ async function runLmStudioBenchmarkPrompt(baseUrl, model, prompt, signal) {
       signal,
       body: JSON.stringify({
         model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are taking a RigMatch local model compatibility test. Answer the user directly and concisely.',
-          },
-          { role: 'user', content: prompt },
-        ],
+        messages: [{ role: 'user', content: prompt }],
         temperature: 0,
-        max_tokens: 300,
+        max_tokens: maxOutputTokens,
         stream: false,
       }),
     },
@@ -4305,20 +4402,81 @@ async function runLmStudioBenchmarkPrompt(baseUrl, model, prompt, signal) {
   );
   const elapsedMs = Math.max(1, Date.now() - startedAt);
   const responseText = extractOpenAiChatContent(response);
-  const evalCount = normalizePositiveNumber(response?.usage?.completion_tokens) || estimateTokens(responseText);
-  const evalDurationSeconds = elapsedMs / 1000;
-  const doneReason = response?.choices?.[0]?.finish_reason || 'stop';
-
   return {
     responseText,
-    evalCount,
-    evalDurationSeconds,
-    doneReason,
+    evalCount: normalizePositiveNumber(response?.usage?.completion_tokens) || estimateTokens(responseText),
+    evalDurationSeconds: elapsedMs / 1000,
+    doneReason: response?.choices?.[0]?.finish_reason || 'stop',
     totalDurationMs: elapsedMs,
     promptEvalDurationMs: null,
     loadDurationMs: null,
     thinkingDisabled: false,
   };
+}
+
+/**
+ * /api/v1/chat with thinking off, asked again without the switch if the
+ * model refuses it, as Ollama's think:false is. Null when this LM Studio has
+ * no /api/v1/chat: before 0.4 it answers an unknown route with an error.
+ */
+async function lmStudioNativeChat(baseUrl, model, prompt, signal, maxOutputTokens) {
+  const ask = (reasoningOff) => fetchJson(
+    `${lmStudioOrigin(baseUrl)}/api/v1/chat`,
+    {
+      method: 'POST',
+      signal,
+      body: JSON.stringify(lmStudioChatBody({
+        model,
+        prompt,
+        maxOutputTokens,
+        contextLength: BENCHMARK_GENERATE_OPTIONS.num_ctx,
+        reasoningOff,
+      })),
+    },
+    BENCHMARK_TIMEOUT_MS,
+  );
+  let reasoningOff = BENCHMARK_THINK_DISABLED;
+  let response;
+  const startedAt = Date.now();
+  try {
+    response = await ask(reasoningOff);
+  } catch (error) {
+    if (!reasoningOff || !/reasoning/i.test(getLogErrorMessage(error))) throw error;
+    reasoningOff = false;
+    response = await ask(false);
+  }
+  if (!response || response.error || !Array.isArray(response.output)) return null;
+  return {
+    ...readLmStudioChat(response, maxOutputTokens),
+    totalDurationMs: Date.now() - startedAt,
+    thinkingDisabled: reasoningOff,
+  };
+}
+
+/**
+ * One turn of a tool question through LM Studio, with the same tools Ollama
+ * is handed. /api/v0 is asked first because it reports how long generation
+ * took; /v1, which every version has, is timed by the clock.
+ */
+async function lmStudioToolChat(baseUrl, model, messages, signal) {
+  const body = JSON.stringify({
+    model,
+    messages: toOpenAiToolMessages(messages),
+    tools: AGENT_TOOLS,
+    temperature: 0,
+    max_tokens: BENCHMARK_GENERATE_OPTIONS.num_predict,
+    stream: false,
+  });
+  const v0 = await fetchJson(`${lmStudioOrigin(baseUrl)}/api/v0/chat/completions`, { method: 'POST', signal, body }, BENCHMARK_TIMEOUT_MS)
+    .catch((error) => {
+      if (signal?.aborted) throw error;
+      return null;
+    });
+  if (v0 && !v0.error && Array.isArray(v0.choices)) return toolReplyFromOpenAi(v0);
+  const startedAt = Date.now();
+  const reply = toolReplyFromOpenAi(await fetchJson(`${baseUrl.replace(/\/$/, '')}/chat/completions`, { method: 'POST', signal, body }, BENCHMARK_TIMEOUT_MS));
+  if (!reply.eval_duration) reply.eval_duration = Math.max(1, Date.now() - startedAt) * 1e6;
+  return reply;
 }
 
 function isUnsupportedThinkError(error) {

@@ -869,13 +869,36 @@ function App() {
     [modelRows, shortlistIds],
   );
   const installedRowsForCleanup = useMemo(() => deletableRows(modelRows), [modelRows]);
+  // Any installed text model can judge, LM Studio's included: an LM Studio
+  // user with no Ollama models had no judge at all, so their chat and
+  // writing answers went unmarked and could not crown anyone.
+  const judgeCandidateRows = useMemo(
+    () => modelRows.filter((row) => row.installed && row.runtime !== 'comfyui'),
+    [modelRows],
+  );
+  const judgeEndpoints = useMemo(
+    () => Object.fromEntries(judgeCandidateRows.map((row) => [
+      row.displayName,
+      { provider: row.localProvider ?? 'ollama', baseUrl: row.localBaseUrl },
+    ])) as Record<string, { provider: LocalModelProvider; baseUrl?: string }>,
+    [judgeCandidateRows],
+  );
   const {
     qualityMode, setQualityMode, setJudgeModel,
     judgeSource, setJudgeSource, cloudJudgeModel, setCloudJudgeModel,
     openRouterKey, setOpenRouterKey,
     judgeModelOptions, effectiveJudgeModel, autoJudgeModels, effectiveJudge,
     resetJudgeSettings,
-  } = useJudgeSettings({ installedRows: installedRowsForCleanup, vramGb: system.gpu.vramGb });
+  } = useJudgeSettings({ installedRows: judgeCandidateRows, vramGb: system.gpu.vramGb });
+  // Labs' skill tests send their judge to Ollama, so a judge that lives in
+  // LM Studio is swapped there for the best Ollama one, or none. Shows judge
+  // on the judge's own provider (judgeEndpoints) and use effectiveJudge as is.
+  const skillTestJudge = useMemo(() => {
+    if (!effectiveJudge || effectiveJudge.provider !== 'local') return effectiveJudge;
+    if (judgeEndpoints[effectiveJudge.model]?.provider !== 'lm-studio') return effectiveJudge;
+    const ollamaPick = judgeModelOptions.find((name) => judgeEndpoints[name]?.provider !== 'lm-studio');
+    return ollamaPick ? { ...effectiveJudge, model: ollamaPick } : null;
+  }, [effectiveJudge, judgeEndpoints, judgeModelOptions]);
 
   const unscoredRowsForCleanup = useMemo(
     () => installedRowsForCleanup.filter((row) => !getModelScore(row, modelScores)),
@@ -2133,6 +2156,7 @@ function App() {
         judgeProvider: effectiveJudge?.provider,
         judgeApiKey: effectiveJudge?.apiKey,
         autoJudgeModels,
+        judgeEndpoints,
       }), modelToTest);
       setBenchmark(result);
       setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
@@ -2224,7 +2248,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsBenchmarking(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels, judgeEndpoints]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
     // Through the sheet with its quick check ticked, unless someone chose to
@@ -3098,6 +3122,7 @@ function App() {
           judgeProvider: effectiveJudge?.provider,
           judgeApiKey: effectiveJudge?.apiKey,
           autoJudgeModels,
+          judgeEndpoints,
           }), row.displayName);
         } catch (error) {
           const raw = getErrorMessage(error);
@@ -3283,7 +3308,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels, judgeEndpoints]);
 
   /**
    * A skill run that throws must not leave the mini bar spinning forever.
@@ -3439,7 +3464,7 @@ function App() {
         try {
           result = await runAdvancedAppBuilderChallenge(
             job.model, ollama.baseUrl, appPrompt, streamId, undefined,
-            effectiveJudge ? { ...effectiveJudge, taskDescription: appPrompt } : undefined,
+            skillTestJudge ? { ...skillTestJudge, taskDescription: appPrompt } : undefined,
           );
         } finally {
           unsubscribe?.();
@@ -3456,7 +3481,7 @@ function App() {
         try {
           result = await runCodeChallenge(
             job.model, ollama.baseUrl, selection.codeLanguage, codeTask.task, codeTask.reference, streamId,
-            effectiveJudge ? { ...effectiveJudge } : undefined,
+            skillTestJudge ? { ...skillTestJudge } : undefined,
           );
         } finally {
           unsubscribe?.();
@@ -3610,7 +3635,7 @@ function App() {
     // pictureJudge checks the pictures and clips, and modelRows says which
     // models can hear; without them here the run would use whatever was
     // installed when this callback was last built.
-  }, [ollama.baseUrl, skillTestSelection, effectiveJudge, modelRows, videoMachine, pictureJudge]);
+  }, [ollama.baseUrl, skillTestSelection, skillTestJudge, modelRows, videoMachine, pictureJudge]);
 
   /**
    * Chat asking RigMatch to test a model.
@@ -3769,7 +3794,7 @@ function App() {
       // exact same output, but keep temperature moderate — improve passes refine
       // the existing code, they shouldn't re-roll it wildly.
       const retryOptions = { seed: Math.floor(Math.random() * 1_000_000_000), temperature: 0.4 };
-      const retryJudge = effectiveJudge ? { ...effectiveJudge } : undefined;
+      const retryJudge = skillTestJudge ? { ...skillTestJudge } : undefined;
       result = await runAdvancedAppBuilderChallenge(model, ollama.baseUrl, retryPrompt, streamId, retryOptions, retryJudge);
     } catch (error) {
       setActivity(`Improve pass failed: ${getErrorMessage(error)}.`);
@@ -3788,7 +3813,7 @@ function App() {
       return null;
     }
     return { result, html };
-  }, [ollama.baseUrl, effectiveJudge]);
+  }, [ollama.baseUrl, skillTestJudge]);
 
   // "Second chance" for an App Builder result: one improve pass, optionally
   // steered by a user hint. Restores the previous result if the pass fails, so
@@ -3824,7 +3849,7 @@ function App() {
     // A judge is CONFIGURED — used only for the closing tip. The early-stop below
     // checks whether each pass was ACTUALLY judged (a configured judge can still
     // fail on a pass), so a structural 100 can never end the loop.
-    const judgeConfigured = Boolean(effectiveJudge);
+    const judgeConfigured = Boolean(skillTestJudge);
     setDemoPopup(null);
     stopSkillRef.current = false;
     let best = previousDemo;
@@ -3858,7 +3883,7 @@ function App() {
     setActivity(completed > 0
       ? `Auto-improve finished after ${completed} pass${completed === 1 ? '' : 'es'} — best attempt scored ${best.score} (${best.grade}).${judgeConfigured ? '' : ' Tip: turn on Judge grading so auto-improve can tell which attempt actually works.'}`
       : 'Auto-improve could not complete a pass — showing the previous attempt.');
-  }, [runImprovePass, effectiveJudge]);
+  }, [runImprovePass, skillTestJudge]);
 
   useEffect(() => {
     if (!pendingRunMode) { setPendingGpuContention(null); return; }
@@ -5140,7 +5165,7 @@ function App() {
           onChangeCloudJudgeModel={setCloudJudgeModel}
           openRouterKey={openRouterKey}
           onChangeOpenRouterKey={setOpenRouterKey}
-          judgeActive={Boolean(effectiveJudge)}
+          judgeActive={Boolean(skillTestJudge)}
           lineupModels={pendingRunMode === 'single'
             ? [pendingSingleModel ?? selectedModel].filter(Boolean)
             : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName)}
@@ -5193,7 +5218,7 @@ function App() {
           onRetry={(demo, hint) => { if (demo.html) void retryAppBuilder(demo, hint); }}
           onAutoImprove={(demo, times) => { if (demo.html) void autoImproveAppBuilder(demo, times); }}
           improveCounts={improveCounts}
-          judgeActive={Boolean(effectiveJudge)}
+          judgeActive={Boolean(skillTestJudge)}
         />
       )}
 

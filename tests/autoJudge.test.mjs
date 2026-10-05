@@ -183,4 +183,6 @@ test('the judge leaves the GPU before the model under test is timed again', () =
   assert.ok(verdict > 0 && scored > verdict, 'the verdict or scoring line moved; follow it');
   assert.match(main.slice(verdict, scored), /await warmBenchmarkModel\(baseUrl, model\)/,
     'after a local verdict the model under test must be loaded again before its next timed run');
+  assert.match(main.slice(verdict, scored), /await warmLmStudioBenchmarkModel\(baseUrl, model\)/,
+    'an LM Studio contestant is loaded again the same way');
 });

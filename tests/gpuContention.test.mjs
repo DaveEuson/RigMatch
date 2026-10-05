@@ -108,23 +108,26 @@ test("Windows' 39 idle GPU processes never produce advice", () => {
 });
 
 test('genuinely heavy programs are named', () => {
-  assert.deepEqual(matchKnownGpuApps(['C:\\Program Files\\LM Studio\\LM Studio.exe']), ['LM Studio']);
+  assert.deepEqual(matchKnownGpuApps(['C:\\Users\\x\\AppData\\Local\\Programs\\jan\\jan.exe']), ['Jan']);
   assert.deepEqual(matchKnownGpuApps(['/usr/bin/blender']), ['Blender']);
   assert.deepEqual(matchKnownGpuApps(['D:\\obs\\bin\\64bit\\obs64.exe']), ['OBS Studio']);
 });
 
-test('RigMatch and Ollama are never named — they are supposed to be running', () => {
+test('RigMatch and the model runners it tests through are never named — they are supposed to be running', () => {
   const own = [
     'C:\\Users\\x\\AppData\\Local\\Programs\\RigMatch.AI\\RigMatch.AI.exe',
     'C:\\Users\\x\\AppData\\Local\\Programs\\Ollama\\ollama.exe',
     'ollama_llama_server.exe',
+    'C:\\Program Files\\LM Studio\\LM Studio.exe',
+    'LM Studio Helper.exe',
+    'C:\\x\\lmstudio.exe',
   ];
   assert.deepEqual(matchKnownGpuApps(own), []);
 });
 
 test('each app is named once however many processes it spawns', () => {
-  const many = ['lm studio.exe', 'LM Studio Helper.exe', 'C:\\x\\lmstudio.exe'];
-  assert.deepEqual(matchKnownGpuApps(many), ['LM Studio']);
+  const many = ['koboldcpp.exe', 'koboldcpp_cu12.exe', 'C:\\x\\koboldcpp.exe'];
+  assert.deepEqual(matchKnownGpuApps(many), ['KoboldCpp']);
 });
 
 test('malformed process entries are skipped without throwing', () => {

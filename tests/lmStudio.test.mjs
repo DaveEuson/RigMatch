@@ -85,3 +85,107 @@ test('status asks the native API first and keeps the old route for LM Studio bef
   assert.match(status, /lmStudioModelFromRest/);
   assert.match(status, /LM_STUDIO_TOKEN_MESSAGE/, 'a server that wants a token says so');
 });
+
+const {
+  lmStudioChatBody,
+  readLmStudioChat,
+  toOpenAiToolMessages,
+  toolReplyFromOpenAi,
+  loadedInstanceIds,
+} = require('../electron/lmStudio.cjs');
+
+/**
+ * Phase 2: an LM Studio contestant is asked and timed the way an Ollama one
+ * is. Speed used to be tokens over the wall clock, which counted loading the
+ * model and reading the prompt as generation, and every question carried a
+ * system message Ollama's contestants never saw.
+ */
+test('a question is asked bare, with the same cap and context as Ollama, and not kept', () => {
+  const body = lmStudioChatBody({ model: 'm', prompt: 'Why is the sky blue?', maxOutputTokens: 300, contextLength: 2048, reasoningOff: true });
+  assert.deepEqual(body, {
+    model: 'm',
+    input: 'Why is the sky blue?',
+    temperature: 0,
+    max_output_tokens: 300,
+    context_length: 2048,
+    stream: false,
+    store: false,
+    reasoning: 'off',
+  });
+  assert.equal('system_prompt' in body, false);
+  assert.equal('reasoning' in lmStudioChatBody({ model: 'm', prompt: 'p', maxOutputTokens: 8, contextLength: 2048, reasoningOff: false }), false);
+});
+
+test('speed is LM Studio\'s own generation rate, not tokens over the wall clock', () => {
+  const reply = {
+    output: [{ type: 'reasoning', content: 'hmm' }, { type: 'message', content: 'Rayleigh scattering.' }],
+    stats: { input_tokens: 12, total_output_tokens: 120, reasoning_output_tokens: 0, tokens_per_second: 60, time_to_first_token_seconds: 0.25, model_load_time_seconds: 3.5 },
+  };
+  const read = readLmStudioChat(reply, 300);
+  assert.equal(read.responseText, 'Rayleigh scattering.');
+  assert.equal(read.evalCount, 120);
+  assert.equal(read.evalDurationSeconds, 2);
+  assert.equal(read.evalCount / read.evalDurationSeconds, 60);
+  assert.equal(read.promptEvalDurationMs, 250);
+  assert.equal(read.loadDurationMs, 3500);
+  assert.equal(read.doneReason, 'stop');
+});
+
+test('an answer that used the whole allowance is flagged as cut off, as Ollama\'s "length" is', () => {
+  const read = readLmStudioChat({ output: [{ type: 'message', content: 'x' }], stats: { total_output_tokens: 300, tokens_per_second: 50 } }, 300);
+  assert.equal(read.doneReason, 'length');
+  assert.equal(read.loadDurationMs, null, 'no load time when the model was already loaded');
+});
+
+test('tool questions keep their conversation when they go to an OpenAI-style server', () => {
+  const messages = [
+    { role: 'user', content: 'Find the team page, then email Sam.' },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'call_7', type: 'function', function: { name: 'open_page', arguments: '{"url":"https://example.com/team"}' } }] },
+    { role: 'tool', tool_name: 'open_page', content: 'Sam: sam@example.com' },
+  ];
+  const out = toOpenAiToolMessages(messages);
+  assert.equal(out[1].tool_calls[0].id, 'call_7');
+  assert.equal(out[1].tool_calls[0].function.arguments, '{"url":"https://example.com/team"}');
+  assert.deepEqual(out[2], { role: 'tool', tool_call_id: 'call_7', content: 'Sam: sam@example.com' });
+});
+
+test('a call written the Ollama way, with object arguments, is sent as a string', () => {
+  const out = toOpenAiToolMessages([{ role: 'assistant', content: '', tool_calls: [{ function: { name: 'web_search', arguments: { query: 'weather' } } }] }]);
+  assert.equal(out[0].tool_calls[0].function.arguments, '{"query":"weather"}');
+  assert.equal(out[0].tool_calls[0].id, 'call_0');
+});
+
+test('a tool reply comes back in Ollama\'s shape, timed when LM Studio says how long it took', () => {
+  const reply = toolReplyFromOpenAi({
+    choices: [{ message: { content: null, tool_calls: [{ id: 'c', function: { name: 'send_email', arguments: '{"to":"sam@example.com"}' } }] }, finish_reason: 'tool_calls' }],
+    usage: { completion_tokens: 30 },
+    stats: { tokens_per_second: 60, time_to_first_token: 0.1, generation_time: 0.5 },
+  });
+  assert.equal(reply.message.tool_calls[0].function.name, 'send_email');
+  assert.equal(reply.message.content, '');
+  assert.equal(reply.eval_count, 30);
+  assert.equal(reply.eval_duration, 500_000_000);
+  assert.equal(reply.prompt_eval_duration, 100_000_000);
+  assert.equal(reply.done_reason, 'stop');
+  assert.equal(toolReplyFromOpenAi({ choices: [{ message: { content: 'hi' } }] }).eval_duration, 0, 'no stats: the caller times it');
+});
+
+test('cleanup finds the copies of a model LM Studio has loaded', () => {
+  const listing = { models: [
+    { key: 'a', loaded_instances: [{ id: 'a' }, { id: 'a:2' }] },
+    { key: 'b', loaded_instances: [] },
+  ] };
+  assert.deepEqual(loadedInstanceIds(listing, 'a'), ['a', 'a:2']);
+  assert.deepEqual(loadedInstanceIds(listing, 'b'), []);
+  assert.deepEqual(loadedInstanceIds(null, 'a'), []);
+});
+
+test('a show unloads what it loaded in LM Studio and judges on the judge\'s own provider', () => {
+  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
+  assert.match(main, /normalizeLocalProvider\(request\.provider, runBaseUrl\) === 'lm-studio'\)\s*\{\s*await unloadLmStudioModel/);
+  assert.match(main, /activeBenchmark\.lmStudioKeep = await lmStudioLoadedInstances\(baseUrl, model\)/);
+  assert.match(main, /runLocalJudge\(judgeEndpoint\(judgeName\)/);
+  assert.doesNotMatch(main, /provider === 'ollama' && Boolean\(autoJudgeModel\)/, 'an LM Studio contestant can be judged');
+  assert.doesNotMatch(main, /the tool test runs through Ollama/, 'the tool test runs on LM Studio');
+  assert.doesNotMatch(main, /You are taking a RigMatch local model compatibility test/, 'no system message Ollama never sends');
+});
