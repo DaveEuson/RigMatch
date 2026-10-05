@@ -1,6 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Play, Sparkles } from 'lucide-react';
+import { AlertTriangle, Download, Play, Sparkles } from 'lucide-react';
 import { AUDIO_CLIP_SECONDS } from '../lib/audioCatalog';
 import { AUDIO_BENCHMARK_PROMPTS } from '../lib/audioGenScoring';
 import { installedAudioEntries } from '../lib/audioLineup';
@@ -8,7 +8,7 @@ import { startAudioLineup, stopAudioLineup, type AudioLineupStage } from '../lib
 import { drawableModels } from '../lib/pictureRecipes';
 import { readComfySettings } from '../lib/comfySettings';
 import { ensureComfyRunning } from '../lib/comfyStarter';
-import { generationFileLabel, type ComfyFolderListing } from '../lib/generationCatalog';
+import { formatBytesGb, generationFileLabel, type ComfyFolderListing } from '../lib/generationCatalog';
 import { CUSTOM_IMAGE_PROMPT_ID, IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
 import type { ImageLineupEntry } from '../lib/imageLineup';
 import { startImageLineup, stopImageLineup, type ImageLineupStage } from '../lib/imageLineupSession';
@@ -25,6 +25,7 @@ import { ComfyNeeded } from './ComfyNeeded';
 import { Elapsed } from './Elapsed';
 import type { GenerationChannel } from './GenerationTestPanel';
 import { PromptPicker } from './PromptPicker';
+import type { PullProgressUpdate } from '../types';
 
 /** What the Comparison screen's one-prompt run needs from the rest of the app. */
 export type ComparisonRunContext = {
@@ -41,7 +42,82 @@ export type ComparisonRunContext = {
   onCheckComfy: () => void;
   /** The Models screen, where another model can be downloaded. */
   onOpenModels: () => void;
+  /**
+   * Picture makers that fit this PC but are not in ComfyUI yet, offered for
+   * download on the card itself. Simple Mode has no Models screen, so without
+   * these the card could only list what was already installed: one maker, on
+   * a PC that fits four.
+   */
+  toDownload?: PictureMakerToGet[];
+  /** Asks for one, through the same consent dialog the Video Lab uses. */
+  onDownloadModel?: (generationId: string) => void;
+  onStopDownload?: () => void;
+  pullProgressByModel?: Record<string, PullProgressUpdate>;
 };
+
+/** A picture maker that fits but is not installed, and what getting it costs. */
+export type PictureMakerToGet = {
+  id: string;
+  /** Also the key its download progress is filed under. */
+  name: string;
+  note: string;
+  /** Only the files ComfyUI does not have yet: two makers share one encoder. */
+  bytes: number;
+};
+
+const DOWNLOADING: ReadonlySet<string> = new Set(['queued', 'started', 'pulling', 'paused']);
+
+/** The makers that fit and are not installed, each with its download or its progress. */
+function PictureMakersToGet({ context }: { context: ComparisonRunContext }) {
+  const makers = context.toDownload ?? [];
+  if (makers.length === 0) return null;
+  const anyDownloading = makers.some((m) => DOWNLOADING.has(context.pullProgressByModel?.[m.name]?.phase ?? ''));
+  return (
+    <div className="comparison-run-get">
+      <strong>More picture makers that fit this PC</strong>
+      <ul aria-label="Picture makers to download">
+        {makers.map((maker) => {
+          const progress = context.pullProgressByModel?.[maker.name];
+          const downloading = progress && DOWNLOADING.has(progress.phase);
+          return (
+            <li key={maker.id}>
+              <span>
+                <strong>{maker.name}</strong>
+                <em>{maker.note}</em>
+                {progress?.phase === 'failed' && progress.error && <em className="comparison-run-get-error">{progress.error}</em>}
+              </span>
+              {downloading ? (
+                <span className="comparison-run-get-progress" title={progress.status}>
+                  <span>{progress.percent != null ? `${Math.round(progress.percent)}%` : 'Starting'}</span>
+                  {context.onStopDownload && (
+                    <button type="button" className="mini-button outline" onClick={context.onStopDownload}>Stop</button>
+                  )}
+                </span>
+              ) : progress?.phase === 'complete' ? (
+                // It joins the list above as soon as ComfyUI lists it; some
+                // builds only look for new files when they start.
+                <span className="comparison-run-get-done" title="ComfyUI only sees new files once it has looked again.">
+                  Downloaded. Restart ComfyUI if it does not appear above.
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="mini-button"
+                  onClick={() => context.onDownloadModel?.(maker.id)}
+                  disabled={!context.onDownloadModel || anyDownloading}
+                  title={`Downloads ${formatBytesGb(maker.bytes)} into ComfyUI: only the files it does not have yet.`}
+                >
+                  <Download aria-hidden="true" />
+                  {`Download · ${formatBytesGb(maker.bytes)}`}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
 const STAGE: Record<ImageLineupStage | AudioLineupStage, string> = {
   waiting: 'waiting its turn',
@@ -195,6 +271,9 @@ export function ComparisonRunCard({
         note: lastNote(`image:${entry.checkpoint}`, 'drew'),
       }));
   const picked = options.filter((option) => picks.has(option.key));
+  // Offered only where ComfyUI is answering: RigMatch needs it to see which
+  // files are already there and where its models folder is.
+  const canGetMore = channel === 'images' && context.comfyReachable && (context.toDownload?.length ?? 0) > 0;
   const pickedVideo = videoCards.filter(({ entry }) => picks.has(entry.key));
 
   // A model tested on its own from the Models screen runs through the same
@@ -351,13 +430,17 @@ export function ComparisonRunCard({
             {options.length === 0
               ? `No ${copy.noun} model that can run here is installed yet.`
               : `Only one ${copy.noun} model can run here: ${options[0].name}.`}
-            {simple
-              ? ' The Models screen in Advanced Mode lists the ones this PC can run, with their download sizes.'
-              : ' Download another from the Models screen, and they can be compared here.'}
+            {canGetMore
+              ? ' Download one below.'
+              : simple
+                ? ' The Models screen in Advanced Mode lists the ones this PC can run, with their download sizes.'
+                : ' Download another from the Models screen, and they can be compared here.'}
           </span>
-          <button type="button" className="mini-button outline" onClick={context.onOpenModels}>
-            Open Models
-          </button>
+          {!canGetMore && (
+            <button type="button" className="mini-button outline" onClick={context.onOpenModels}>
+              Open Models
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -441,6 +524,8 @@ export function ComparisonRunCard({
           </div>
         </>
       )}
+
+      {canGetMore && !running && <PictureMakersToGet context={context} />}
 
       {steps.length > 0 && (
         <ol className="comparison-run-progress" aria-label="This comparison">
