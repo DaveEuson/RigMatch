@@ -2366,9 +2366,8 @@ tbody tr.computer-row.selected {
   background: rgba(var(--blue-rgb), 0.12);
 }
 
-.fmw-emoji {
-  font-size: 18px;
-  line-height: 1;
+.fmw-icon {
+  color: var(--gold);
 }
 
 .fmw-label {

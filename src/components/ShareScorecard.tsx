@@ -591,10 +591,10 @@ export function ShareScorecard({ model, score, system, onClose }: {
 
         <div className="share-style-tabs run-question-options" role="group" aria-label="Card style">
           <button type="button" className={style === 'datingshow' ? 'active' : ''} onClick={() => setStyle('datingshow')} aria-pressed={style === 'datingshow'}>
-            💛 It's a Match!
+            It's a Match!
           </button>
           <button type="button" className={style === 'scorecard' ? 'active' : ''} onClick={() => setStyle('scorecard')} aria-pressed={style === 'scorecard'}>
-            📊 Scorecard
+            Scorecard
           </button>
         </div>
 
