@@ -338,8 +338,7 @@ textarea {
   color: var(--gold);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: none;
 }
 
 .top-deck-use-model-btn {
@@ -351,8 +350,7 @@ textarea {
   color: #27190a;
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  text-transform: none;
   cursor: pointer;
   box-shadow: 0 5px 12px rgba(0, 0, 0, 0.16);
 }
@@ -531,7 +529,7 @@ textarea {
   color: var(--gold);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .question-status-head strong {
@@ -564,7 +562,7 @@ textarea {
   font-style: normal;
   font-weight: 900;
   text-align: center;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .question-chip-track {
@@ -616,7 +614,7 @@ textarea {
   font-size: var(--fs-ui);
   font-style: normal;
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .question-chip-track li.active {
@@ -778,7 +776,7 @@ textarea {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .setup-doctor-head strong {
@@ -870,7 +868,7 @@ textarea {
   font-style: normal;
   line-height: 1;
   text-align: center;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .rig-details-panel {
@@ -910,7 +908,7 @@ textarea {
 .rig-details-grid span {
   color: var(--green);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .rig-details-head strong {
@@ -926,7 +924,7 @@ textarea {
   color: var(--blue);
   font-size: var(--fs-ui);
   font-style: normal;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 
@@ -1003,7 +1001,7 @@ textarea {
 .prep-copy span {
   color: var(--green);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .prep-copy strong {
@@ -1011,7 +1009,7 @@ textarea {
   margin-top: 3px;
   color: var(--text-strong);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .prep-copy em {
@@ -1074,8 +1072,7 @@ textarea {
 .install-hero-copy span {
   font-size: var(--fs-ui);
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+  text-transform: none;
   color: var(--green);
 }
 
@@ -1320,7 +1317,7 @@ textarea {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .model-pool-lineup-head strong {
@@ -1500,8 +1497,7 @@ button.model-pool-empty-slot.interactive:disabled {
 .picker-header span {
   font-size: var(--fs-ui);
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
   color: var(--pink, #e86491);
 }
 
@@ -1551,7 +1547,7 @@ button.model-pool-empty-slot.interactive:disabled {
   display: block;
   color: var(--text-strong);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .disk-guard em {
@@ -1587,13 +1583,13 @@ button.model-pool-empty-slot.interactive:disabled {
 .queue-status-copy span {
   color: var(--gold);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .queue-status-copy strong {
   color: var(--text-strong);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .queue-status-copy em {
@@ -1703,7 +1699,7 @@ button.model-pool-empty-slot.interactive:disabled {
 .disk-guard span {
   color: var(--green);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .disk-bar {
@@ -1759,7 +1755,7 @@ th {
   color: var(--text-strong);
   background: #1c2024;
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 td {
@@ -2037,8 +2033,7 @@ tbody tr.computer-row.selected {
   padding: 0 8px;
   font-size: var(--fs-ui);
   font-weight: 800;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--muted);
 }
 
@@ -2214,8 +2209,7 @@ tbody tr.computer-row.selected {
   font-style: normal;
   font-size: var(--fs-ui);
   font-weight: 800;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--muted);
 }
 
@@ -2302,8 +2296,7 @@ tbody tr.computer-row.selected {
 .fmw-title > span {
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+  text-transform: none;
   color: var(--blue);
 }
 
@@ -2388,8 +2381,7 @@ tbody tr.computer-row.selected {
   font-size: var(--fs-ui);
   font-weight: 700;
   color: var(--blue);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: none;
 }
 
 .fmw-pick-card {
@@ -2508,7 +2500,7 @@ tbody tr.computer-row.selected {
 .model-sort-status {
   color: var(--muted);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 
@@ -2582,7 +2574,7 @@ tbody tr.computer-row.selected {
   min-height: 24px;
   padding: 0 8px;
   font: var(--fs-ui)/1 var(--ui);
-  text-transform: uppercase;
+  text-transform: none;
   cursor: pointer;
 }
 
@@ -2664,7 +2656,7 @@ tbody tr.computer-row.selected {
   gap: 4px;
   font: inherit;
   text-align: left;
-  text-transform: uppercase;
+  text-transform: none;
   cursor: pointer;
 }
 
@@ -3172,7 +3164,7 @@ tbody tr.computer-row.selected {
   color: var(--blue);
   background: #11161a;
   font: var(--fs-ui)/1 var(--ui);
-  text-transform: uppercase;
+  text-transform: none;
   cursor: pointer;
 }
 
@@ -3213,7 +3205,7 @@ tbody tr.computer-row.selected {
 .danger-button {
   border-radius: 4px;
   font: var(--fs-ui)/1 var(--ui);
-  text-transform: uppercase;
+  text-transform: none;
   cursor: pointer;
 }
 
@@ -3309,8 +3301,7 @@ tbody tr.computer-row.selected {
   color: var(--red);
   font-size: var(--fs-ui);
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
   cursor: help;
 }
 
@@ -3411,7 +3402,7 @@ tbody tr.computer-row.selected {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 800;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .test-process-head strong {
@@ -3501,13 +3492,13 @@ tbody tr.computer-row.selected {
   display: block;
   color: var(--pink);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .run-progress-head strong {
   color: var(--green);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .run-progress-card.failed .run-progress-head strong {
@@ -3717,7 +3708,7 @@ tbody tr.computer-row.selected {
   background: rgba(70, 21, 39, 0.82);
   color: #ff8fa8;
   font: 950 var(--fs-ui)/1 var(--ui);
-  text-transform: uppercase;
+  text-transform: none;
   cursor: pointer;
 }
 
@@ -3832,7 +3823,7 @@ tbody tr.computer-row.selected {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4063,7 +4054,7 @@ tbody tr.computer-row.selected {
 .list-winner span {
   color: var(--green);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .list-winner strong {
@@ -4106,7 +4097,7 @@ tbody tr.computer-row.selected {
 .speed-date-contestant-head span {
   color: var(--pink);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 /* Flex column, not a scrolling grid.
@@ -4280,7 +4271,7 @@ tbody tr.computer-row.selected {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .speed-date-host strong,
@@ -4421,7 +4412,7 @@ tbody tr.computer-row.selected {
   color: var(--gold);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .speed-date-lineup-stats strong {
@@ -4558,7 +4549,7 @@ tbody tr.computer-row.selected {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .speed-date-empty-slot strong {
@@ -4635,7 +4626,7 @@ tbody tr.computer-row.selected {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .speed-date-transcript-head strong {
@@ -4793,7 +4784,7 @@ tbody tr.computer-row.selected {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
   margin-bottom: 4px;
 }
 
@@ -4882,7 +4873,7 @@ tbody tr.computer-row.selected {
   font-size: var(--fs-ui);
   font-weight: 900;
   line-height: 1;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .sbs-answer-meta .prompt-status-pill {
@@ -4992,8 +4983,7 @@ tbody tr.computer-row.selected {
 .model-demo-chips-label {
   font-size: var(--fs-ui);
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: none;
   color: var(--muted);
   margin-right: 2px;
 }
@@ -5046,8 +5036,7 @@ tbody tr.computer-row.selected {
   background: rgba(var(--gold-rgb), 0.08);
   font-size: var(--fs-ui);
   font-weight: 900;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  text-transform: none;
   vertical-align: middle;
 }
 
@@ -5172,7 +5161,7 @@ tbody tr.computer-row.selected {
   display: block;
   color: var(--pink);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .question-suite-head strong {
@@ -5241,7 +5230,7 @@ tbody tr.computer-row.selected {
   color: var(--green);
   font-size: var(--fs-ui);
   font-weight: 800;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .question-row p {
@@ -5499,7 +5488,7 @@ tbody tr.computer-row.selected {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .result-explainer strong {
@@ -5604,8 +5593,7 @@ tbody tr.computer-row.selected {
   color: var(--gold);
   font-size: 0.58rem;
   font-weight: 900;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 
@@ -5684,7 +5672,7 @@ tbody tr.computer-row.selected {
   background: rgba(238, 0, 85, 0.08);
   font-size: 0.58rem;
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
   cursor: pointer;
 }
 
@@ -5797,8 +5785,7 @@ tbody tr.computer-row.selected {
 
 .upgrade-rig-heading span {
   font-size: var(--fs-ui);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
   color: var(--muted);
 }
 
@@ -5851,8 +5838,7 @@ tbody tr.computer-row.selected {
 .upgrade-card-category {
   font-size: var(--fs-ui);
   font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: none;
   padding: 1px 5px;
   border-radius: 3px;
   align-self: flex-start;
@@ -5992,7 +5978,7 @@ tbody tr.computer-row.selected {
   display: block;
   color: var(--pink);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .setup-title strong {
@@ -6001,7 +5987,7 @@ tbody tr.computer-row.selected {
   color: var(--text-strong);
   font-family: var(--display);
   font-size: 22px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 
@@ -6033,7 +6019,7 @@ tbody tr.computer-row.selected {
   margin-top: 4px;
   color: var(--text-strong);
   font-size: 14px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .setup-card p {
@@ -6097,7 +6083,7 @@ tbody tr.computer-row.selected {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .score-explainer-grid strong {
@@ -6123,7 +6109,7 @@ tbody tr.computer-row.selected {
   color: var(--gold);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .score-explainer-grades > div {
@@ -6242,7 +6228,7 @@ tbody tr.computer-row.selected {
   display: block;
   color: var(--gold);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .modal-title strong {
@@ -6251,7 +6237,7 @@ tbody tr.computer-row.selected {
   color: var(--text-strong);
   font-family: var(--display);
   font-size: 22px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .modal-body {
@@ -6450,8 +6436,7 @@ tbody tr.computer-row.selected {
 
 .update-toast-head span {
   font-size: var(--fs-ui);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: none;
   color: var(--muted);
 }
 
@@ -6541,7 +6526,7 @@ tbody tr.computer-row.selected {
   color: var(--muted);
   font-size: var(--fs-ui);
   font-weight: 800;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .run-recognize-thumb img {
@@ -6628,7 +6613,7 @@ tbody tr.computer-row.selected {
   display: block;
   color: var(--pink);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .utility-body {
@@ -6672,7 +6657,7 @@ tbody tr.computer-row.selected {
   display: block;
   color: var(--pink);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .ui-mode-picker > div:first-child strong,
@@ -6681,7 +6666,7 @@ tbody tr.computer-row.selected {
   margin-top: 5px;
   color: var(--text-strong);
   font-size: 14px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .mode-toggle {
@@ -6714,7 +6699,7 @@ tbody tr.computer-row.selected {
 .mode-toggle strong {
   color: inherit;
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .mode-toggle span {
@@ -6772,7 +6757,7 @@ tbody tr.computer-row.selected {
 .theme-card strong {
   color: inherit;
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .theme-card em {
@@ -6836,7 +6821,7 @@ tbody tr.computer-row.selected {
   align-items: center;
   color: var(--muted);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .model-news-copy b {
@@ -6912,7 +6897,7 @@ tbody tr.computer-row.selected {
   color: var(--gold);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .third-party-model-notice strong {
@@ -6920,7 +6905,7 @@ tbody tr.computer-row.selected {
   margin-top: 5px;
   color: var(--text-strong);
   font-size: 14px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .third-party-model-notice em {
@@ -6959,7 +6944,7 @@ tbody tr.computer-row.selected {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .advanced-lab-head strong {
@@ -6967,7 +6952,7 @@ tbody tr.computer-row.selected {
   margin-top: 5px;
   color: var(--text-strong);
   font-size: 18px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .advanced-lab-head em {
@@ -7044,7 +7029,7 @@ tbody tr.computer-row.selected {
   margin-top: 4px;
   color: var(--text-strong);
   font-size: 15px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .advanced-lab-card p {
@@ -7232,8 +7217,7 @@ tbody tr.computer-row.selected {
   display: block;
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: none;
   color: var(--gold);
   margin-bottom: 6px;
 }
@@ -7306,8 +7290,7 @@ tbody tr.computer-row.selected {
 
 .activity-panel-head span {
   font-size: var(--fs-ui);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--gold);
 }
 
@@ -7431,7 +7414,7 @@ tbody tr.computer-row.selected {
   font-size: var(--fs-ui);
   font-style: normal;
   font-weight: 700;
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 0.4px;
 }
 
@@ -7544,8 +7527,7 @@ tbody tr.computer-row.selected {
 
 /* "unverified" tag in the demo header — a muted amber, not a confident grade. */
 .demo-grade-unverified {
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
   font-size: 0.82em;
   font-weight: 700;
   color: var(--gold);
@@ -7709,7 +7691,7 @@ tbody tr.computer-row.selected {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .advanced-lab-image-controls select {
@@ -7773,8 +7755,7 @@ tbody tr.computer-row.selected {
 .third-party-download-conditions strong {
   color: var(--gold);
   font-size: var(--fs-ui);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .third-party-download-conditions ul {
@@ -7843,8 +7824,7 @@ tbody tr.computer-row.selected {
   color: var(--muted);
   font-size: var(--fs-ui);
   font-weight: 900;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .video-lineup-row.picked {
@@ -8027,8 +8007,7 @@ tbody tr.computer-row.selected {
 .video-lineup-results-head strong {
   color: var(--text-strong);
   font-size: var(--fs-ui);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .video-lineup-results-head span {
@@ -8344,8 +8323,7 @@ tbody tr.computer-row.selected {
   color: var(--muted);
   font-size: var(--fs-ui);
   font-weight: 900;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .generation-test-head strong {
@@ -8407,8 +8385,7 @@ tbody tr.computer-row.selected {
   color: var(--muted);
   font-size: var(--fs-ui);
   font-weight: 900;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .generation-test-picture {
@@ -8593,7 +8570,7 @@ tbody tr.computer-row.selected {
   font-size: var(--fs-ui);
   font-weight: 800;
   text-decoration: none;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .third-party-model-links a:hover {
@@ -8644,7 +8621,7 @@ tbody tr.computer-row.selected {
   font-size: var(--fs-ui);
   font-style: normal;
   font-weight: 800;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 
@@ -8667,7 +8644,7 @@ tbody tr.computer-row.selected {
   font-size: var(--fs-ui);
   font-weight: 800;
   text-decoration: none;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .third-party-download-links a:hover {
@@ -8715,7 +8692,7 @@ tbody tr.computer-row.selected {
   color: var(--gold);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .task-picks-grid {
@@ -8743,7 +8720,7 @@ tbody tr.computer-row.selected {
   font-size: var(--fs-ui);
   font-style: normal;
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -8799,7 +8776,7 @@ tbody tr.computer-row.selected {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
   display: block;
 }
 
@@ -8888,7 +8865,7 @@ tbody tr.computer-row.selected {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .update-center-head strong,
@@ -8946,14 +8923,14 @@ tbody tr.computer-row.selected {
 .update-channel-toggle strong {
   color: inherit;
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .update-channel-toggle span {
   color: var(--gold);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .update-channel-toggle em {
@@ -9085,7 +9062,7 @@ tbody tr.computer-row.selected {
   margin-top: 5px;
   color: var(--text-strong);
   font-size: 14px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .utility-stat em,
@@ -9136,7 +9113,7 @@ tbody tr.computer-row.selected {
   display: block;
   color: var(--red);
   font-size: var(--fs-ui);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .danger-zone strong {
@@ -9144,7 +9121,7 @@ tbody tr.computer-row.selected {
   margin-top: 5px;
   color: var(--text-strong);
   font-size: 14px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .danger-zone em {
@@ -9165,7 +9142,7 @@ tbody tr.computer-row.selected {
   color: var(--blue);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .history-timeline-head strong,
@@ -9270,7 +9247,7 @@ tbody tr.computer-row.selected {
 .score-clear-button span {
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .utility-list {
@@ -9463,7 +9440,7 @@ tbody tr.computer-row.selected {
   color: var(--green);
   font-family: var(--display);
   font-size: 22px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .chat-title span {
@@ -10118,8 +10095,7 @@ td {
   color: var(--gold);
   font-size: var(--fs-ui);
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform: none;
   vertical-align: middle;
 }
 
@@ -10142,8 +10118,7 @@ td {
   color: var(--blue);
   font-size: var(--fs-ui);
   font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .task-matrix-head strong {
@@ -10178,8 +10153,7 @@ td {
   color: var(--muted);
   font-size: var(--fs-ui);
   font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .task-matrix tbody th {
@@ -10210,7 +10184,7 @@ td {
   color: var(--gold);
   font-size: var(--fs-ui);
   font-weight: 700;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .task-matrix td.too-few,
@@ -10298,7 +10272,7 @@ td {
   color: var(--muted);
   font-size: var(--fs-ui);
   font-weight: 700;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 
@@ -10414,8 +10388,7 @@ td {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 900;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .run-report-head strong {
@@ -10556,8 +10529,7 @@ td {
   color: var(--text-strong);
   font-size: var(--fs-ui);
   font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .model-compare-head button {
@@ -10679,7 +10651,7 @@ td {
   color: var(--gold);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .contestant-spotlight-copy strong {
@@ -10785,8 +10757,7 @@ td {
   font-size: var(--fs-ui);
   font-weight: 700;
   font-family: inherit;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 .contestant-radar-scores {
@@ -10812,7 +10783,7 @@ td {
   color: var(--gold);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .contestant-radar-scores strong {
@@ -10884,8 +10855,7 @@ td {
   font-size: var(--fs-ui);
   font-style: normal;
   font-weight: 900;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--gold);
   border: 1px solid rgba(255, 200, 87, 0.4);
   border-radius: 999px;
@@ -10906,7 +10876,7 @@ td {
   color: var(--gold);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
   margin-bottom: 3px;
 }
 
@@ -10934,7 +10904,7 @@ td {
      hard on small text, and this one names the field beneath it. */
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .contestant-notes-area {
@@ -10976,7 +10946,7 @@ td {
   color: rgba(var(--primary-rgb), 1);
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
   margin-bottom: 8px;
 }
 
@@ -11042,7 +11012,7 @@ td {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 950;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .profile-question-summary em,
@@ -11589,8 +11559,7 @@ tbody tr.selected {
   color: var(--gold);
   font-size: var(--fs-ui);
   font-weight: 950;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  text-transform: none;
 }
 
 .model-hub-header-copy h2 {
@@ -11681,7 +11650,7 @@ tbody tr.selected {
   color: var(--pink);
   font-size: var(--fs-ui);
   font-weight: 950;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .cruise-title strong {
@@ -11874,8 +11843,7 @@ tbody tr.selected {
   color: var(--gold);
   font-size: var(--fs-ui);
   font-weight: 950;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .whats-next-grid {
@@ -12185,7 +12153,7 @@ a.whats-next-support:hover {
   font-style: normal;
   font-weight: 900;
   line-height: 1;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .good-for-tags {
@@ -12281,8 +12249,7 @@ a.whats-next-support:hover {
   color: rgb(var(--primary-rgb));
   border: 1px solid var(--line);
   vertical-align: middle;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
 }
 
 .run-download-warning {
@@ -12486,8 +12453,7 @@ a.whats-next-support:hover {
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--text);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
 }
 
 .score-grade-rows {
@@ -12821,8 +12787,7 @@ a.whats-next-support:hover {
   color: var(--green);
   font-size: var(--fs-ui);
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform: none;
   vertical-align: middle;
 }
 
@@ -12874,8 +12839,7 @@ a.whats-next-support:hover {
 
 .settings-field > span {
   font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--muted);
 }
 
@@ -12929,8 +12893,7 @@ a.whats-next-support:hover {
 
 .listening-script-card > span {
   font-size: 0.75rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--muted);
 }
 
@@ -12948,8 +12911,7 @@ a.whats-next-support:hover {
 
 .listening-transcript > span {
   font-size: 0.75rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--muted);
 }
 
@@ -12996,8 +12958,7 @@ a.whats-next-support:hover {
   margin: 0 0 6px;
   font-size: 0.7rem;
   font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--muted);
 }
 
@@ -13048,8 +13009,7 @@ a.whats-next-support:hover {
   right: 10px;
   font-size: 0.68rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--gold);
 }
 
@@ -13063,8 +13023,7 @@ a.whats-next-support:hover {
 
 .goal-match-sub {
   font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--muted);
 }
 
@@ -13083,7 +13042,7 @@ a.whats-next-support:hover {
 .closet-head { display: grid; gap: 2px; }
 .closet-head > span {
   font-size: 0.7rem; font-weight: 800; letter-spacing: 0.12em;
-  text-transform: uppercase; color: var(--muted);
+  text-transform: none; color: var(--muted);
 }
 .closet-head > em { font-size: 0.78rem; color: var(--muted); font-style: normal; }
 
@@ -13369,8 +13328,7 @@ a.whats-next-support:hover {
   color: var(--muted);
   font-size: var(--fs-ui);
   font-weight: 900;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 
@@ -13445,7 +13403,7 @@ a.whats-next-support:hover {
   /* A button's label has to be read to be used: 10px, like Use this model. */
   font-size: var(--fs-ui);
   font-weight: 900;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -13516,8 +13474,7 @@ a.whats-next-support:hover {
   color: var(--muted);
   font-size: var(--fs-ui);
   font-weight: 900;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .balance-fader-slot {
@@ -13627,8 +13584,7 @@ a.whats-next-support:hover {
   color: var(--muted);
   font-size: var(--fs-ui);
   font-weight: 900;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .balance-fader-readout {
@@ -13719,8 +13675,7 @@ a.whats-next-support:hover {
 .lab-standings-head strong {
   color: var(--text-strong);
   font-size: var(--fs-ui);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .lab-standings-head span {
@@ -13930,8 +13885,7 @@ a.whats-next-support:hover {
   color: var(--muted);
   font-size: var(--fs-ui);
   font-weight: 900;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .comparison-run-head strong {

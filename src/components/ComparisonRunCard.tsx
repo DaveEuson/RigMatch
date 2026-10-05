@@ -409,10 +409,7 @@ export function ComparisonRunCard({
     <section className="comparison-run" aria-label={`Run ${copy.noun} models on one prompt`}>
       <div className="comparison-run-head">
         <Sparkles aria-hidden="true" />
-        <div>
-          <span>One prompt</span>
-          <strong>{copy.heading}</strong>
-        </div>
+        <strong>{copy.heading}</strong>
       </div>
       <p>
         {simple
