@@ -1,8 +1,11 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { BenchmarkResult, TestedModelScore } from '../types';
+import { formatMatchScore } from './scoring.ts';
 
 /**
- * Comparisons, kept as events you can reopen.
+ * Every test, kept as an event you can reopen: a comparison, or one model on
+ * its own (until 0.9.4 only comparisons were, so a single test left no trace
+ * once the model was tested again).
  *
  * Nothing in the app recorded a run as a thing that happened. RunHistory is
  * keyed per model — "reduced to what a trend needs" — so it knows qwen scored
@@ -22,10 +25,14 @@ import type { BenchmarkResult, TestedModelScore } from '../types';
 export const RUN_REPORTS_STORAGE_KEY = 'rigmatch:run-reports:v1';
 
 /**
- * Five is enough to answer "what did I try last week" and few enough that the
- * transcripts stay a rounding error next to the rest of the saved state.
+ * Thirty tests in the history, answers kept for the newest twelve. Five was
+ * enough when only comparisons were saved; with every single test saved too it
+ * would hold an afternoon. Answers are the bulky part, so the older ones keep
+ * their scores and drop their transcripts, and safeStorage drops more if the
+ * browser still runs out of room.
  */
-export const MAX_STORED_REPORTS = 5;
+export const MAX_STORED_REPORTS = 30;
+export const REPORTS_WITH_ANSWERS = 12;
 
 export type StoredRunReport = {
   /** Stable across reloads: one comparison finished at one instant. */
@@ -78,10 +85,11 @@ export function reportsWithoutTranscripts(reports: StoredRunReport[], keepNewest
  */
 export function reportStorageCandidates(reports: StoredRunReport[]): Array<() => unknown> {
   return [
-    () => reports,
+    () => reportsWithoutTranscripts(reports, REPORTS_WITH_ANSWERS),
+    () => reportsWithoutTranscripts(reports, 3),
     () => reportsWithoutTranscripts(reports, 1),
     () => reportsWithoutTranscripts(reports, 0),
-    () => reportsWithoutTranscripts(reports, 0).slice(0, 2),
+    () => reportsWithoutTranscripts(reports, 0).slice(0, 10),
   ];
 }
 
@@ -96,9 +104,17 @@ export function parseStoredReports(raw: unknown): StoredRunReport[] {
     && Array.isArray((entry as StoredRunReport).results));
 }
 
-/** "3 models · qwen2.5:7b won · 10 questions each" — the row's whole summary. */
+/**
+ * The row's whole summary: "3 models · qwen2.5:7b won · 10 questions each",
+ * or for one model on its own, "yi:9b · 91.4 A · 10 questions".
+ */
 export function describeReport(report: StoredRunReport): string {
   const models = report.results.length;
+  if (models === 1) {
+    const [only] = report.results;
+    const questions = report.questionCount > 0 ? ` · ${report.questionCount} question${report.questionCount === 1 ? '' : 's'}` : '';
+    return `${only.model} · ${formatMatchScore(only)} ${only.grade}${questions}`;
+  }
   const questions = report.questionCount > 0
     ? `, ${report.questionCount} question${report.questionCount === 1 ? '' : 's'} each`
     : '';

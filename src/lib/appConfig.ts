@@ -2,16 +2,11 @@
 import {
   Activity,
   Bell,
-  BookOpen,
   Bot,
   Boxes,
-  Code2,
   History,
-  Lightbulb,
   Network,
-  PenLine,
   Settings,
-  ShieldCheck,
   Trophy,
   type LucideIcon,
 } from 'lucide-react';
@@ -198,35 +193,4 @@ export function getThemeSwatches(id: ThemeId): ThemeSwatches {
   return themeSwatchCache.get(id) ?? ['transparent', 'transparent', 'transparent'];
 }
 
-export const USE_CASE_CARDS: Array<{ icon: LucideIcon; title: string; description: string; prompt: string }> = [
-  {
-    icon: PenLine,
-    title: 'Writing',
-    description: 'Draft emails, letters, summaries, and blog posts',
-    prompt: 'Help me write a short professional email to a client explaining that their project delivery will be delayed by one week.',
-  },
-  {
-    icon: Code2,
-    title: 'Coding',
-    description: 'Explain code, fix bugs, write functions',
-    prompt: 'Explain what this Python function does, then suggest how to make it faster:\n\ndef find_dupes(items):\n    seen = []\n    dupes = []\n    for item in items:\n        if item in seen:\n            dupes.append(item)\n        else:\n            seen.append(item)\n    return dupes',
-  },
-  {
-    icon: BookOpen,
-    title: 'Research',
-    description: 'Summarize topics, explain concepts, answer questions',
-    prompt: "Explain how large language models work in plain English, as if you're talking to someone who has never studied AI.",
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Privacy',
-    description: "Ask anything you wouldn't want searched online",
-    prompt: "I'd like to understand my options for dealing with a difficult situation at work where my manager takes credit for my ideas. What are some approaches I could consider?",
-  },
-  {
-    icon: Lightbulb,
-    title: 'Brainstorm',
-    description: 'Generate ideas, names, plans, and creative options',
-    prompt: "I'm starting a small side project and need a name. It's a tool that helps people track their daily habits and reflect on their progress. Give me 10 name ideas, from professional to playful.",
-  },
-];
+

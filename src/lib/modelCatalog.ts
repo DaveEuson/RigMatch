@@ -1211,18 +1211,7 @@ export function getRemoteRigDetailCards(host: NetworkHost) {
   ];
 }
 
-export function getFootprintFit(sizeGb: number | null, system: SystemProfile) {
-  if (!sizeGb) return 'Unknown model size';
 
-  const vramGb = system.gpu.vramGb || 0;
-  if (vramGb > 0 && sizeGb <= vramGb * 0.55) return 'Comfortable VRAM headroom';
-  if (vramGb > 0 && sizeGb <= vramGb * 0.8) return 'Good VRAM fit';
-  if (vramGb > 0 && sizeGb <= vramGb) return 'Tight VRAM fit';
-  if (vramGb > 0 && sizeGb <= vramGb * 1.15) return 'RAM-assisted trial';
-  if (vramGb > 0 && sizeGb > vramGb * 1.15) return 'Too big for this rig';
-  if (sizeGb <= system.memory.availableGb * 0.45) return 'Likely RAM-assisted';
-  return 'Memory-heavy candidate';
-}
 
 export function isHostBenchmarkReady(host: NetworkHost | undefined, ollama: OllamaStatus) {
   return !getHostBenchmarkBlocker(host, ollama);

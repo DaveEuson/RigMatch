@@ -220,7 +220,8 @@ import { ActivityPanel } from './components/ActivityPanel';
 import { SpeedDatePanel } from './components/SpeedDatePanel';
 import { UtilityPanel } from './components/UtilityPanel';
 import { ModelCabinet } from './components/ModelCabinet';
-import { AgentReveal } from './components/AgentReveal';
+import { ModelPage } from './components/ModelPage';
+import { displaySuiteName, suiteNameFor } from './lib/testHistory';
 import { LiveFlirtSpotlight } from './components/LiveFlirtSpotlight';
 import { extractHtmlDocument } from './lib/labPreview';
 import {
@@ -310,6 +311,7 @@ import './styles/controls.css';
 import './styles/runSheet.css';
 import './styles/welcome.css';
 import './styles/advanced.css';
+import './styles/modelPage.css';
 import './styles/settings.css';
 import './styles/dialogs.css';
 import { matchMeasures } from './lib/matchCard';
@@ -890,12 +892,9 @@ function App() {
     () => buildBenchmarkPromptPlan(benchmarkQuestionCount, benchmarkQuestions),
     [benchmarkQuestionCount, benchmarkQuestions],
   );
-  const currentSuiteName = useMemo(
-    () => JSON.stringify(benchmarkQuestions) === JSON.stringify(DEFAULT_BENCHMARK_QUESTIONS)
-      ? 'Default Suite v0.1'
-      : 'Custom Suite',
-    [benchmarkQuestions],
-  );
+  // The question set by its own name ("Difficult Subjects"), so the history
+  // can say which test was which; it said "Custom Suite" for every preset.
+  const currentSuiteName = useMemo(() => suiteNameFor(benchmarkQuestions), [benchmarkQuestions]);
   /**
    * Append finished runs to the timeline. Called per model as each one
    * completes, so stopping a Speed Dating run part-way still keeps whatever
@@ -920,6 +919,29 @@ function App() {
       return next;
     });
   }, [currentSuiteName, system]);
+  /**
+   * Keep a finished test as a report that can be reopened: its ranking and
+   * its answers. Comparisons always were; a test of one model was not, so it
+   * vanished the moment that model was tested again (Dave's Difficult
+   * Subjects run on yi:9b had nowhere to show up).
+   */
+  const saveTestReport = useCallback((results: BenchmarkResult[], winner: string) => {
+    if (!results.length) return;
+    const completedAt = new Date().toISOString();
+    const report: StoredRunReport = {
+      id: makeReportId(completedAt, winner),
+      completedAt,
+      winner,
+      results: results.map((r) => toTestedModelScore(r, currentSuiteName)).sort(compareTestedModelScores),
+      questionCount: Math.max(...results.map((r) => r.prompts.length)),
+      suiteName: currentSuiteName,
+      // The whole result, not just its prompts: the transcript panel reads
+      // scores off it too, and storing the shape it already expects means a
+      // reopened report renders through exactly the same component.
+      transcripts: Object.fromEntries(results.map((r) => [r.model, r])),
+    };
+    setRunReports((current) => addRunReport(current, report));
+  }, [currentSuiteName]);
   const queuedRows = useMemo(
     () => modelRows.filter((row) => queuedModelIds.has(row.displayName)),
     [modelRows, queuedModelIds],
@@ -2110,6 +2132,7 @@ function App() {
       setModelScores((current) => upsertModelScores(current, [result], currentSuiteName, rigStampForModel, runBalance));
       setClearedTopMatches((current) => removeSetValues(current, [result.model, modelToTest]));
       recordRuns([result]);
+      saveTestReport([result], result.model);
       setRunProgress({
         progressId,
         mode: 'single',
@@ -2193,7 +2216,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsBenchmarking(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
     // Through the sheet with its quick check ticked, unless someone chose to
@@ -3196,22 +3219,7 @@ function App() {
         ...(failures.length ? { failures: [...failures] } : {}),
       });
       if (failures.length) tellUser(droppedOutMessage(failures, getFriendlyModelName));
-      {
-        const completedAt = new Date().toISOString();
-        const stored: StoredRunReport = {
-          id: makeReportId(completedAt, winner.model),
-          completedAt,
-          winner: winner.model,
-          results: results.map((r) => toTestedModelScore(r, currentSuiteName)).sort(compareTestedModelScores),
-          questionCount: winner.prompts.length,
-          suiteName: currentSuiteName,
-          // The whole result, not just its prompts: the transcript panel reads
-          // scores off it too, and storing the shape it already expects means
-          // a reopened report renders through exactly the same component.
-          transcripts: Object.fromEntries(results.map((r) => [r.model, r])),
-        };
-        setRunReports((current) => addRunReport(current, stored));
-      }
+      saveTestReport(results, winner.model);
       // The report bar announces the winner; a toast as well said it twice,
       // on screen and to screen readers, and by the model's raw id.
       setReportReady(true);
@@ -3267,7 +3275,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels]);
 
   /**
    * A skill run that throws must not leave the mini bar spinning forever.
@@ -4806,28 +4814,25 @@ function App() {
           />
         )}
         {activeNavId === 'agent' && (
-          <AgentReveal
-            active={true}
-            agentName={agentName}
+          <ModelPage
             model={selectedModel}
             benchmark={selectedBenchmark}
-            selectedScore={selectedModelScore}
+            score={selectedModelScore}
             modelScores={modelScores}
             host={selectedHost}
             system={system}
-            rows={modelRows}
-            selectedModel={selectedModel}
-            onSelect={setSelectedModel}
-            onTalk={() => setChatOpen(true)}
-            onChoose={() => setChosenModel(selectedModel)}
-            onRunTest={requestBenchmark}
-            onEditQuestions={openQuestionsSheet}
-            onTalkWithPrompt={(prompt) => { setChatInput(prompt); setChatOpen(true); }}
+            runReports={runReports}
+            runHistory={runHistory}
             topPick={topRigPick}
-            onClearTopMatch={clearTopMatch}
-            onClearScore={requestClearScore}
-            onRestoreClearedTopMatches={restoreClearedTopMatches}
             clearedTopMatchCount={clearedTopMatches.size}
+            onSelect={setSelectedModel}
+            onRunTest={requestBenchmark}
+            onChoose={() => setChosenModel(selectedModel)}
+            onOpenTest={(id) => { setOpenReportId(id); setReportOpen(true); }}
+            onEditQuestions={openQuestionsSheet}
+            onClearTopMatch={clearTopMatch}
+            onRestoreClearedTopMatches={restoreClearedTopMatches}
+            onClearScore={requestClearScore}
             onExportForHatch={() => setExportHatchOpen(true)}
           />
         )}
@@ -4984,12 +4989,19 @@ function App() {
               .map((score) => modelRows.find((row) => row.displayName === score.model))
               .filter((row): row is typeof modelRows[number] => Boolean(row))
           : shortlistedRows;
+        // A saved report's own questions, from its answers: a Difficult
+        // Subjects report reopened while General was selected showed General's
+        // questions over Difficult Subjects' answers.
+        const storedPlan = stored?.transcripts
+          ? Object.values(stored.transcripts)[0]?.prompts.map((p) => ({ id: p.id, label: p.label, prompt: p.prompt, type: p.type ?? 'assistant' }))
+          : undefined;
         return (
         <RunReportModal
           result={result}
           rows={rows}
           benchmarks={benchmarks}
-          questionPlan={benchmarkQuestions.slice(0, benchmarkQuestionCount)}
+          subtitle={stored ? `${displaySuiteName(stored.suiteName)} · ${formatHistoryTime(stored.completedAt)}` : undefined}
+          questionPlan={storedPlan ?? benchmarkQuestions.slice(0, benchmarkQuestionCount)}
           onClose={() => { setReportOpen(false); setReportReady(false); setOpenReportId(null); }}
           onOpenScorecards={() => { setReportOpen(false); setReportReady(false); setOpenReportId(null); selectNav('history'); }}
         />
