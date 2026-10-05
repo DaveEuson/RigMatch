@@ -162,7 +162,7 @@
 .badge-splash-state {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-ui);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -186,7 +186,7 @@
 .badge-splash-reward {
   margin: 0;
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 
 .badge-splash-use,
@@ -197,7 +197,7 @@
   border-radius: 999px;
   background: var(--panel-2);
   color: var(--text-strong);
-  font: 700 13px var(--ui);
+  font: 700 var(--fs-ui) var(--ui);
   cursor: pointer;
   transition: background 0.15s ease, transform 0.15s ease;
 }
@@ -226,7 +226,7 @@
 .badge-splash-count {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-ui);
   font-variant-numeric: tabular-nums;
 }
 
@@ -253,7 +253,7 @@
 .achievement-shelf-count {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-ui);
 }
 
 .achievement-shelf-count b {
@@ -283,13 +283,13 @@
   display: grid;
   gap: 2px;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--fs-ui);
   line-height: 1.4;
 }
 
 .achievement-copy b {
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 
 .achievement-copy > span {
@@ -303,7 +303,7 @@
 
 .achievement-copy em {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-ui);
   font-style: normal;
   font-variant-numeric: tabular-nums;
 }
@@ -347,7 +347,7 @@
 .achievement-unlocked ul {
   margin: 2px 0 0;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 
 .achievement-unlocked ul {

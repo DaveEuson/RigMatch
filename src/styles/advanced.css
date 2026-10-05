@@ -187,7 +187,7 @@
   background: none;
   box-shadow: none;
   color: var(--muted);
-  font: 400 13px / 1.2 var(--ui);
+  font: 400 var(--fs-ui) / 1.2 var(--ui);
   font-style: normal;
 }
 .app-shell[data-ui-mode='advanced'] .good-for-tags { gap: 0 var(--s1); }
@@ -198,7 +198,7 @@
   border-radius: 10px;
   background: var(--accent);
   color: var(--bg);
-  font: 700 12px / 1.3 var(--ui);
+  font: 700 var(--fs-ui) / 1.3 var(--ui);
   font-style: normal;
 }
 .app-shell[data-ui-mode='advanced'] .origin-country {
@@ -229,7 +229,7 @@
   border-radius: var(--r-control);
   background: none;
   color: var(--text-strong);
-  font: 400 13px / 1.3 var(--ui);
+  font: 400 var(--fs-ui) / 1.3 var(--ui);
 }
 
 /* The detail panel's contents: name, tag, facts as rows, one gold action. */
@@ -313,7 +313,7 @@
 .app-shell[data-ui-mode='advanced'] .model-news-name strong { color: var(--text-strong); font: 400 20px / 1.25 var(--display); }
 .app-shell[data-ui-mode='advanced'] .model-news-name code { color: var(--muted); background: none; padding: 0; font: 500 13px / 1 var(--figure); }
 .app-shell[data-ui-mode='advanced'] .model-news-copy p { margin: 2px 0 0; color: var(--text); font-size: var(--fs-ui); }
-.app-shell[data-ui-mode='advanced'] .model-news-by { color: var(--muted); font-size: 13px; }
+.app-shell[data-ui-mode='advanced'] .model-news-by { color: var(--muted); font-size: var(--fs-ui); }
 .app-shell[data-ui-mode='advanced'] .model-news-by b { color: var(--text); font: 500 13px / 1 var(--figure); }
 .app-shell[data-ui-mode='advanced'] .whats-new-panel .model-news-meta { display: grid; justify-items: end; gap: 2px; color: var(--muted); font-size: var(--fs-ui); }
 .app-shell[data-ui-mode='advanced'] .model-news-meta .figure { color: var(--text-strong); font: 500 var(--fs-ui) / 1.2 var(--figure); }
@@ -324,7 +324,7 @@
   .app-shell[data-ui-mode='advanced'] .whats-new-panel .model-news-meta { grid-column: 2; justify-items: start; }
   .app-shell[data-ui-mode='advanced'] .whats-new-panel .model-news-item > .btn { grid-column: 2; justify-self: start; }
 }
-.app-shell[data-ui-mode='advanced'] .whats-new-panel .model-news-status { color: var(--muted); font: 400 13px / 1.3 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .whats-new-panel .model-news-status { color: var(--muted); font: 400 var(--fs-ui) / 1.3 var(--ui); }
 /* The page keeps its 24px gutter: the table and rail sat flush to the window. */
 .app-shell[data-ui-mode='advanced'] .model-panel .cabinet-body { gap: var(--s4); padding: 0 var(--s5) var(--s4); }
 @media (max-width: 920px) {
@@ -448,12 +448,12 @@
 .app-shell[data-ui-mode='advanced'] .score-row-portrait { width: 40px; height: 40px; flex: none; border-radius: var(--r-control); box-shadow: var(--portrait-frame); object-fit: cover; }
 .app-shell[data-ui-mode='advanced'] .score-row-name { flex: 1; min-width: 0; }
 .app-shell[data-ui-mode='advanced'] .score-row-name > span { color: var(--text-strong); font-weight: 700; }
-.app-shell[data-ui-mode='advanced'] .score-row-name > em { display: block; color: var(--muted); font: 400 13px / 1.4 var(--ui); font-style: normal; }
+.app-shell[data-ui-mode='advanced'] .score-row-name > em { display: block; color: var(--muted); font: 400 var(--fs-ui) / 1.4 var(--ui); font-style: normal; }
 .app-shell[data-ui-mode='advanced'] .score-row-grade { padding: 0; border: 0; background: none; color: var(--text-strong); font: 500 18px / 1.1 var(--figure); }
 .app-shell[data-ui-mode='advanced'] .score-clear-button { min-height: 28px; padding: 0 8px; border: 0; background: none; color: var(--muted); font: 400 13px / 1 var(--ui); text-decoration: underline; text-underline-offset: 3px; }
 .app-shell[data-ui-mode='advanced'] .score-clear-button:hover { color: var(--red); }
 .app-shell[data-ui-mode='advanced'] .legacy-score-badge { padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 10px; background: none; color: var(--gold); font: 400 12px / 1.5 var(--ui); }
-.app-shell[data-ui-mode='advanced'] .tie-badge { margin-right: 6px; color: var(--muted); font: 400 13px / 1 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .tie-badge { margin-right: 6px; color: var(--muted); font: 400 var(--fs-ui) / 1 var(--ui); }
 .app-shell[data-ui-mode='advanced'] .history-panel .utility-empty,
 .app-shell[data-ui-mode='advanced'] .history-panel .utility-stat,
 .app-shell[data-ui-mode='advanced'] .history-panel .task-picks-section,
@@ -628,5 +628,5 @@
   background: transparent;
 }
 .app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card span { color: var(--muted); font: 400 var(--fs-small) / 1.2 var(--ui); }
-.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card strong { font: 700 13px / 1.25 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card strong { font: 700 var(--fs-ui) / 1.25 var(--ui); }
 .app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card em { color: var(--muted); font: 400 var(--fs-small) / 1.25 var(--ui); font-style: normal; }
