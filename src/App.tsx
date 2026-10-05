@@ -134,6 +134,8 @@ import {
   isHostBenchmarkReady,
   canGenerateText,
   canJoinComparison,
+  lacksChatFormat,
+  noChatFormatReason,
   canHearAudio,
   canReadImages,
   isLikelyImageGenerationModel,
@@ -2854,6 +2856,10 @@ function App() {
   }, [modelRows, system.gpu.vramGb, system.platform, tellUser]);
 
   const toggleShortlist = useCallback((row: ModelRow) => {
+    if (lacksChatFormat(row)) {
+      setActivity(noChatFormatReason(row.displayName));
+      return;
+    }
     if (!canJoinComparison(row)) {
       setActivity(`${row.displayName} cannot join Speed Dating — the comparison is a conversation, and this model does not chat. Generation models race each other in the Lab, where every model gets the same prompt and seed.`);
       return;
