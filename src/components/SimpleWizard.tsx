@@ -804,7 +804,7 @@ function SetupScreen({
                 // Running and able to draw are different claims; this one used
                 // to say "Not found" about a ComfyUI that was answering.
                 : comfySetup.reachable
-                  ? 'Running, but it has no picture model yet. The Models screen in Advanced Mode downloads one into it.'
+                  ? 'Running, but it has no picture model yet. Pick one in the next step and RigMatch downloads it into ComfyUI.'
                   : 'Not running. You picked something that makes pictures or video, which is ComfyUI’s job: a separate free program. Everything else works without it.'}
             >
               {!comfySetup.ready && !comfySetup.reachable && <GetComfySteps platform={system.platform} arch={system.arch} />}
@@ -992,6 +992,8 @@ function PickScreen({
   // The picture and sound runs below offer only makers already in ComfyUI.
   // makers.total also counts ones that fit but need downloading, so "2 image
   // makers run on this PC, try them below" sat over a card offering one.
+  // Picture makers the card below can download; sound makers have no download there.
+  const moreToGet = dream === 'image' && makerRun?.context.comfyReachable ? makerRun.context.toDownload?.length ?? 0 : 0;
   const ready = makerRun && (dream === 'image' || dream === 'audio')
     ? (dream === 'image'
       ? drawableModels(makerRun.context.comfyFolders).length
@@ -1001,8 +1003,8 @@ function PickScreen({
     : ready === null
       ? `${makerCount(makers.total)} ${makers.total === 1 ? 'runs' : 'run'} on this PC. ${dream === 'video' && videoLineup ? `Try ${makers.total === 1 ? 'it' : 'them'} below.` : "They just don't compete here."}`
       : ready > 0
-        ? `${makerCount(ready)} ${ready === 1 ? 'is' : 'are'} installed. Try ${ready === 1 ? 'it' : 'them'} below.`
-        : `${makerCount(makers.total)} ${makers.total === 1 ? 'fits' : 'fit'} this PC, but none is installed yet.`;
+        ? `${makerCount(ready)} ${ready === 1 ? 'is' : 'are'} installed. Try ${ready === 1 ? 'it' : 'them'} below${moreToGet ? `, or download ${moreToGet === 1 ? 'one more that fits' : `${moreToGet} more that fit`}` : ''}.`
+        : `${makerCount(makers.total)} ${makers.total === 1 ? 'fits' : 'fit'} this PC, but none is installed yet.${moreToGet ? ' Download one below.' : ''}`;
   const countLine = dream === 'all'
     ? `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} fit your PC`
     : filtered.length === 0

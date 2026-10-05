@@ -1049,6 +1049,20 @@ function App() {
     return { image: summarize('image'), video: summarize('video'), audio: summarize('audio') };
   }, [modelRows, system.gpu.vramGb]);
 
+  /**
+   * The picture makers that fit this PC and are not in ComfyUI yet, for
+   * Simple Mode's picture card to offer. Sized by what is actually missing:
+   * Z-Image Turbo and FLUX.2 [klein] share one 8 GB encoder.
+   */
+  const pictureMakersToGet = useMemo(() => modelRows
+    .filter((row) => row.generationKind === 'image' && row.generationId && !row.installed
+      && getHardwareFit(row, system.gpu.vramGb).recommend)
+    .flatMap((row) => {
+      const model = generationModelById(row.generationId!);
+      const bytes = model ? downloadPlan(model, comfyFolders).totalBytes : 0;
+      return model && bytes > 0 ? [{ id: model.id, name: row.displayName, note: model.note ?? '', bytes }] : [];
+    }), [modelRows, system.gpu.vramGb, comfyFolders]);
+
   // Simple Mode needs its own share state: Advanced's lives inside the profile
   // panel, which is not mounted in the guided path.
   const [shareWinnerOpen, setShareWinnerOpen] = useState(false);
@@ -4476,6 +4490,11 @@ function App() {
               // No Models screen in Simple Mode: this is the trip to Advanced,
               // and the banner there says why the interface changed.
               onOpenModels: () => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('models'); },
+              // Simple has no Models screen, so the picture card offers these itself.
+              toDownload: pictureMakersToGet,
+              onDownloadModel: requestLabDownload,
+              onStopDownload: stopLabDownload,
+              pullProgressByModel,
             },
             // Ranked where the channel's own fader stands, and flat on speed
             // where nothing installed can judge what came out.

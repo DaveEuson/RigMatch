@@ -15208,6 +15208,49 @@ a.whats-next-support:hover {
   line-height: 1.45;
 }
 
+/* Picture makers that fit but are not installed: rows, each with its download. */
+.comparison-run-get {
+  display: grid;
+  gap: var(--s2);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--line);
+  color: var(--text);
+  font-size: var(--fs-ui);
+}
+
+.comparison-run-get > strong { color: var(--text-strong); }
+
+.comparison-run-get ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.comparison-run-get li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2) var(--s4);
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.comparison-run-get li > span:first-child { display: grid; gap: 2px; min-width: 0; flex: 1 1 260px; }
+.comparison-run-get li strong { color: var(--text-strong); }
+.comparison-run-get li em { color: var(--muted); font-style: normal; }
+.comparison-run-get em.comparison-run-get-error { color: var(--red); }
+
+.comparison-run-get-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  font-family: var(--figure);
+}
+
+.comparison-run-get-done { color: var(--green); }
+
 .comparison-run-progress {
   margin: 0;
   padding: 0;
