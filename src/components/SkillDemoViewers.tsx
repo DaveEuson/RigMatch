@@ -8,6 +8,7 @@ import { useSandboxedPreview } from '../lib/useSandboxedPreview';
 import { getShortModelName } from '../lib/modelCatalog';
 import { AudioClipPlayer } from './AudioClipPlayer';
 import { AvatarBust } from './Avatars';
+import { UiIcon } from './icons/UiIcon';
 import { useDialog } from '../lib/useDialog';
 
 /**
@@ -304,7 +305,7 @@ export function DemoResultModal({ demos, onClose, onRetry, onAutoImprove, improv
         )}
         {demo.kind === 'code' ? (
           <div className="demo-code-wrap">
-            {demo.note && <div className="demo-judge-note">🧑‍⚖️ {demo.note}</div>}
+            {demo.note && <div className="demo-judge-note"><UiIcon name="gavel" size={16} label="Judge" /> {demo.note}</div>}
             <button type="button" className="mini-button outline demo-code-copy" onClick={copyCode}>
               <Code2 aria-hidden="true" />
               {copied === 'copied' ? 'Copied' : 'Copy code'}

@@ -3,6 +3,7 @@ import type { FirstModelUseCase } from '../lib/firstModel';
 import { USE_CASES, getFirstModelPicks } from '../lib/firstModel';
 import { Download, X } from 'lucide-react';
 import { useState } from 'react';
+import { UiIcon } from './icons/UiIcon';
 
 export function FirstModelWizard({ vramGb, onQueueModel }: { vramGb: number; onQueueModel: (modelId: string) => void }) {
   const [useCase, setUseCase] = useState<FirstModelUseCase | null>(null);
@@ -16,7 +17,7 @@ export function FirstModelWizard({ vramGb, onQueueModel }: { vramGb: number; onQ
     <div className="first-model-wizard">
       <div className="fmw-header">
         <div className="fmw-title">
-          <span>🎬 Start here</span>
+          <span>Start here</span>
           <strong>Yeah, a lot of models. Let's narrow it down.</strong>
           <em>Answer one question and we'll pick your first contestant.</em>
         </div>
@@ -35,7 +36,7 @@ export function FirstModelWizard({ vramGb, onQueueModel }: { vramGb: number; onQ
             onClick={() => setUseCase(useCase === uc.id ? null : uc.id)}
             aria-pressed={useCase === uc.id}
           >
-            <span className="fmw-emoji">{uc.emoji}</span>
+            <UiIcon name={uc.icon} size={20} className="fmw-icon" />
             <span className="fmw-label">{uc.label}</span>
             <span className="fmw-desc">{uc.description}</span>
           </button>
@@ -49,7 +50,7 @@ export function FirstModelWizard({ vramGb, onQueueModel }: { vramGb: number; onQ
           </p>
           {picks.map((pick, i) => (
             <div key={pick.id} className={`fmw-pick-card${i === 0 ? ' recommended' : ''}`}>
-              {i === 0 && <span className="fmw-pick-badge">⭐ Best match</span>}
+              {i === 0 && <span className="fmw-pick-badge">Best match</span>}
               <div className="fmw-pick-info">
                 <strong>{pick.name}</strong>
                 <em>{pick.size} · {pick.vramNote}</em>

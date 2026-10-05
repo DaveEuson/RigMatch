@@ -7,14 +7,20 @@
  * component file, and so these picks can be checked without mounting anything.
  */
 
+import type { UiIconName } from '../components/icons/uiIconArt';
+
 export type FirstModelUseCase = 'chat' | 'code' | 'writing' | 'reasoning' | 'speed';
 
-export const USE_CASES: Array<{ id: FirstModelUseCase; emoji: string; label: string; description: string }> = [
-  { id: 'chat',      emoji: '💬', label: 'Chat & Daily Help',   description: 'Ask questions, get summaries, brainstorm ideas' },
-  { id: 'code',      emoji: '💻', label: 'Coding',              description: 'Write code, debug, explain errors' },
-  { id: 'writing',   emoji: '✍️',  label: 'Writing',            description: 'Drafts, emails, creative content' },
-  { id: 'reasoning', emoji: '🧠', label: 'Research & Analysis', description: 'Deep thinking, comparisons, long documents' },
-  { id: 'speed',     emoji: '⚡', label: 'Just the Fastest',    description: 'Quick answers, low-latency, lightweight' },
+/**
+ * Each choice carries one of RigMatch's own icons. They were emoji, which a
+ * Linux machine without an emoji font draws as empty boxes.
+ */
+export const USE_CASES: Array<{ id: FirstModelUseCase; icon: UiIconName; label: string; description: string }> = [
+  { id: 'chat',      icon: 'chat',   label: 'Chat & Daily Help',   description: 'Ask questions, get summaries, brainstorm ideas' },
+  { id: 'code',      icon: 'cpu',    label: 'Coding',              description: 'Write code, debug, explain errors' },
+  { id: 'writing',   icon: 'send',   label: 'Writing',            description: 'Drafts, emails, creative content' },
+  { id: 'reasoning', icon: 'search', label: 'Research & Analysis', description: 'Deep thinking, comparisons, long documents' },
+  { id: 'speed',     icon: 'bolt',   label: 'Just the Fastest',    description: 'Quick answers, low-latency, lightweight' },
 ];
 
 export type FirstModelPick = { id: string; name: string; size: string; why: string; vramNote: string };

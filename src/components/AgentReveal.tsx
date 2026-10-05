@@ -129,7 +129,7 @@ export function AgentReveal({
           {selectedScore && (
             <div className="top-pick-ribbon-actions" style={{ justifyContent: 'flex-start', marginTop: '6px' }}>
               <button type="button" className="pick-this-one-btn" onClick={onChoose} title="Set as your active model">
-                🌹 Use This Model
+                Use This Model
               </button>
               <button type="button" className="test-again-btn" onClick={() => setShareOpen(true)} title="Share this result as an image">
                 <Share2 aria-hidden="true" />

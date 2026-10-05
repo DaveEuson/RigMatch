@@ -3145,7 +3145,7 @@ function App() {
         percent: 100,
         message: stoppedByUser
           ? `Stopped early — ${results.length} of ${runnableRows.length} models tested.`
-          : `${winner.model} gets the rose for this computer. 🌹`,
+          : `${winner.model} gets the rose for this computer.`,
         failedModels: [...failures],
         questionIndex: winner.prompts.length - 1,
         questionTotal: winner.prompts.length,
