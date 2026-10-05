@@ -239,7 +239,7 @@
 .app-shell[data-ui-mode='advanced'] .contestant-spotlight-copy > em { display: block; margin-top: 4px; color: var(--text); font: 400 var(--fs-ui) / 1.4 var(--ui); font-style: normal; }
 .app-shell[data-ui-mode='advanced'] .contestant-spotlight-copy > p { margin: var(--s2) 0 0; color: var(--text); font-size: var(--fs-ui); line-height: 1.5; }
 .app-shell[data-ui-mode='advanced'] .contestant-variant-facts { display: grid; gap: 4px; margin: var(--s2) 0 0; padding: 0; list-style: none; }
-.app-shell[data-ui-mode='advanced'] .contestant-variant-facts li { display: block; padding: 0; border: 0; background: none; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.app-shell[data-ui-mode='advanced'] .contestant-variant-facts li { display: block; padding: 0; border: 0; background: none; color: var(--muted); font-size: var(--fs-ui); line-height: 1.45; }
 .app-shell[data-ui-mode='advanced'] .contestant-variant-facts li strong {
   display: inline;
   margin-right: 6px;
@@ -249,7 +249,7 @@
   color: var(--text-strong);
   font: 500 13px / 1 var(--figure);
 }
-.app-shell[data-ui-mode='advanced'] .contestant-variant-facts li span { color: var(--muted); font-size: 13px; }
+.app-shell[data-ui-mode='advanced'] .contestant-variant-facts li span { color: var(--muted); font-size: var(--fs-ui); }
 .app-shell[data-ui-mode='advanced'] .contestant-facts { display: grid; margin: 0; border-top: 1px solid var(--line); }
 .app-shell[data-ui-mode='advanced'] .contestant-facts > div {
   display: flex;
@@ -273,7 +273,7 @@
 .app-shell[data-ui-mode='advanced'] .contestant-notes label { color: var(--muted); font: 400 var(--fs-ui) / 1.3 var(--ui); }
 .app-shell[data-ui-mode='advanced'] .contestant-notes-area { border: 1px solid var(--line-strong); border-radius: var(--r-control); background: var(--stage); color: var(--text-strong); font: 400 var(--fs-ui) / 1.45 var(--ui); }
 .app-shell[data-ui-mode='advanced'] .contestant-radar-scores > div { border: 0; background: none; }
-.app-shell[data-ui-mode='advanced'] .contestant-radar-scores span { color: var(--muted); font-size: 13px; }
+.app-shell[data-ui-mode='advanced'] .contestant-radar-scores span { color: var(--muted); font-size: var(--fs-ui); }
 .app-shell[data-ui-mode='advanced'] .contestant-radar-scores strong { color: var(--text-strong); font: 500 16px / 1.2 var(--figure); }
 .app-shell[data-ui-mode='advanced'] .model-hub-header-side > span { font-size: var(--fs-ui); }
 .app-shell[data-ui-mode='advanced'] .contestant-variant-facts li { font-weight: 400; }
@@ -617,16 +617,36 @@
   background: var(--panel);
 }
 .app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-head { padding: 0; }
-.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-head > div > span { color: var(--muted); font: 400 var(--fs-small) / 1.3 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-head > div > span { color: var(--muted); font: 400 var(--fs-ui) / 1.3 var(--ui); }
 .app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-head > div > strong { color: var(--text-strong); font: 700 var(--fs-ui) / 1.3 var(--ui); }
-.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-head > div > em { color: var(--muted); font: 400 var(--fs-small) / 1.35 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-head > div > em { color: var(--muted); font: 400 var(--fs-ui) / 1.35 var(--ui); }
 .app-shell[data-ui-mode='advanced'] .global-lineup-strip .lineup-head-actions { display: flex; align-items: center; gap: var(--s2); }
+/* At 14px the head's three lines wrapped to six in a column the cards had
+   squeezed, and each card cut "Not tested yet" short. The count wraps inside
+   its own column, a card's lines wrap rather than being cut, and the "Lineup
+   full" hint, which the cards' remove buttons already make plain, gives its
+   room to the cards below 1440px. */
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-head > div > strong { white-space: normal; }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card > div > :is(span, em) { overflow: visible; white-space: normal; text-overflow: clip; }
+@media (max-width: 1439px) {
+  .app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-head > div > em { display: none; }
+}
+/* Narrower still, "Contestant 3" and the portrait go (the card's place in
+   the row says which it is), and the two buttons sit under the count instead
+   of squeezing it. */
+@media (max-width: 1279px) {
+  .app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card > div > span { display: none; }
+  /* The name matters more than the portrait in a card this narrow. */
+  .app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card { grid-template-columns: minmax(0, 1fr) 28px; }
+  .app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card > .avatar-bust { display: none; }
+  .app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-head { grid-template-columns: minmax(0, 1fr); row-gap: var(--s1); }
+}
 .app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-slots { padding: 0; }
 .app-shell[data-ui-mode='advanced'] .global-lineup-strip :is(.model-pool-lineup-card, .model-pool-empty-slot) {
   border: 1px solid var(--line);
   border-radius: var(--r-control);
   background: transparent;
 }
-.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card span { color: var(--muted); font: 400 var(--fs-small) / 1.2 var(--ui); }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card span { color: var(--muted); font: 400 var(--fs-ui) / 1.2 var(--ui); }
 .app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card strong { font: 700 var(--fs-ui) / 1.25 var(--ui); }
-.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card em { color: var(--muted); font: 400 var(--fs-small) / 1.25 var(--ui); font-style: normal; }
+.app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card em { color: var(--muted); font: 400 var(--fs-ui) / 1.25 var(--ui); font-style: normal; }
