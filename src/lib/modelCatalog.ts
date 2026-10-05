@@ -2027,6 +2027,33 @@ export function isVisiblePullProgress(progress?: PullProgressUpdate) {
   return Boolean(progress && progress.phase !== 'queued');
 }
 
+/** How long the floating download box keeps showing a download that has ended. */
+export const PULL_ENDED_LINGER_MS = { complete: 5_000, failed: 15_000 } as const;
+
+/**
+ * Whether the floating download box still has something to say about this
+ * download: it is running or paused, or it ended moments ago.
+ *
+ * The box used isVisiblePullProgress, which a finished download satisfies for
+ * good (the Models rows keep it to show "Downloaded"), so "Download complete,
+ * 100%" stayed on screen until the app was restarted. A failure lingers longer
+ * than a success: it is the one worth reading.
+ */
+export function isDockWorthyPullProgress(progress: PullProgressUpdate | undefined, now: number): boolean {
+  if (!progress || progress.phase === 'queued') return false;
+  if (progress.phase !== 'complete' && progress.phase !== 'failed') return true;
+  const ended = Date.parse(progress.updatedAt);
+  return Number.isFinite(ended) && now - ended < PULL_ENDED_LINGER_MS[progress.phase];
+}
+
+/** When the next ended download stops counting for the box, or null if none will. */
+export function nextDockExpiry(progressList: PullProgressUpdate[], now: number): number | null {
+  const expiries = progressList
+    .filter((progress) => (progress.phase === 'complete' || progress.phase === 'failed') && isDockWorthyPullProgress(progress, now))
+    .map((progress) => Date.parse(progress.updatedAt) + PULL_ENDED_LINGER_MS[progress.phase as 'complete' | 'failed']);
+  return expiries.length ? Math.min(...expiries) : null;
+}
+
 export function getPullProgressPercent(progress: PullProgressUpdate | undefined, queued: boolean) {
   if (progress?.phase === 'complete') return 100;
   if (typeof progress?.percent === 'number') return Math.max(0, Math.min(100, progress.percent));

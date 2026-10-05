@@ -75,6 +75,7 @@ const { createComfyBridge } = require('./comfy.cjs');
 const { downloadModel, verifyComfyFolder } = require('./comfyModels.cjs');
 const { locateComfyRoots } = require('./comfyLocate.cjs');
 const { findComfyLaunchers, launchComfy } = require('./comfyLaunch.cjs');
+const { smoothRate } = require('./downloadRate.cjs');
 
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const LM_STUDIO_LOCAL_URL = 'http://127.0.0.1:1234/v1';
@@ -3266,14 +3267,17 @@ function normalizePullProgressLine(line, tracker) {
   const now = Date.now();
 
   if (digest !== tracker.lastDigest || (completedBytes !== null && tracker.lastSampleBytes !== null && completedBytes < tracker.lastSampleBytes)) {
+    // A new layer restarts the byte count, not the connection: the speed so
+    // far still describes it, so it carries over instead of starting blank.
     tracker.lastDigest = digest;
     tracker.lastSampleBytes = completedBytes;
     tracker.lastSampleAt = now;
-    tracker.lastSpeedBps = null;
   } else if (completedBytes !== null && tracker.lastSampleBytes !== null && tracker.lastSampleAt > 0) {
-    const elapsedSeconds = Math.max(0.001, (now - tracker.lastSampleAt) / 1000);
+    const elapsedMs = Math.max(1, now - tracker.lastSampleAt);
     const deltaBytes = Math.max(0, completedBytes - tracker.lastSampleBytes);
-    tracker.lastSpeedBps = deltaBytes / elapsedSeconds;
+    // Smoothed: lines arrive milliseconds apart and Ollama's parallel parts
+    // land in bursts, so the raw reading swung tenfold (see downloadRate.cjs).
+    tracker.lastSpeedBps = smoothRate(tracker.lastSpeedBps, (deltaBytes / elapsedMs) * 1000, elapsedMs);
     tracker.lastSampleBytes = completedBytes;
     tracker.lastSampleAt = now;
   } else if (completedBytes !== null) {

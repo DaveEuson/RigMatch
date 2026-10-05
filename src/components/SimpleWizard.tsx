@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { createPortal } from 'react-dom';
 import { Check, HandFist, Lock, Trophy, X } from 'lucide-react';
 import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, RunFailure, RunProgress, SystemProfile } from '../types';
-import { STEPS, STEP_LABELS, footerHint, minPicksFor, nextBlockedHint, pickShortHint, showAnnouncement, showTimeLeft, winnerField, type StepId } from '../lib/wizardCopy';
+import { STEPS, STEP_LABELS, downloadTimeLeft, footerHint, minPicksFor, nextBlockedHint, pickShortHint, showAnnouncement, showTimeLeft, winnerField, type StepId } from '../lib/wizardCopy';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { Explain, ExplainText, InfoViewProvider } from './InfoView';
 import { useExplaining } from '../lib/infoContext';
@@ -804,7 +804,7 @@ function SetupScreen({
                 // Running and able to draw are different claims; this one used
                 // to say "Not found" about a ComfyUI that was answering.
                 : comfySetup.reachable
-                  ? 'Running, but it has no picture model yet. The Models screen in Advanced Mode downloads one into it.'
+                  ? 'Running, but it has no picture model yet. Pick one in the next step and RigMatch downloads it into ComfyUI.'
                   : 'Not running. You picked something that makes pictures or video, which is ComfyUI’s job: a separate free program. Everything else works without it.'}
             >
               {!comfySetup.ready && !comfySetup.reachable && <GetComfySteps platform={system.platform} arch={system.arch} />}
@@ -992,6 +992,8 @@ function PickScreen({
   // The picture and sound runs below offer only makers already in ComfyUI.
   // makers.total also counts ones that fit but need downloading, so "2 image
   // makers run on this PC, try them below" sat over a card offering one.
+  // Picture makers the card below can download; sound makers have no download there.
+  const moreToGet = dream === 'image' && makerRun?.context.comfyReachable ? makerRun.context.toDownload?.length ?? 0 : 0;
   const ready = makerRun && (dream === 'image' || dream === 'audio')
     ? (dream === 'image'
       ? drawableModels(makerRun.context.comfyFolders).length
@@ -1001,8 +1003,8 @@ function PickScreen({
     : ready === null
       ? `${makerCount(makers.total)} ${makers.total === 1 ? 'runs' : 'run'} on this PC. ${dream === 'video' && videoLineup ? `Try ${makers.total === 1 ? 'it' : 'them'} below.` : "They just don't compete here."}`
       : ready > 0
-        ? `${makerCount(ready)} ${ready === 1 ? 'is' : 'are'} installed. Try ${ready === 1 ? 'it' : 'them'} below.`
-        : `${makerCount(makers.total)} ${makers.total === 1 ? 'fits' : 'fit'} this PC, but none is installed yet.`;
+        ? `${makerCount(ready)} ${ready === 1 ? 'is' : 'are'} installed. Try ${ready === 1 ? 'it' : 'them'} below${moreToGet ? `, or download ${moreToGet === 1 ? 'one more that fits' : `${moreToGet} more that fit`}` : ''}.`
+        : `${makerCount(makers.total)} ${makers.total === 1 ? 'fits' : 'fit'} this PC, but none is installed yet.${moreToGet ? ' Download one below.' : ''}`;
   const countLine = dream === 'all'
     ? `${filtered.length} contestant${filtered.length === 1 ? '' : 's'} fit your PC`
     : filtered.length === 0
@@ -1310,7 +1312,7 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel, onStartDownloads
                 ? `${formatBytes(pull.completedBytes)} of ${formatBytes(pull.totalBytes)}`
                 : (pull?.status || 'Downloading…'),
               pull?.speedBps ? formatBytesPerSecond(pull.speedBps) : '',
-              getEtaLabel(pull),
+              downloadTimeLeft(pull),
             ].filter(Boolean).join(' · ');
         return (
           <div key={row.displayName} className={`sw-dl-row ${status}`}>
@@ -1338,16 +1340,6 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel, onStartDownloads
       <p className="sw-muted sw-download-note">Downloads pick up where they left off if you close RigMatch.</p>
     </div>
   );
-}
-
-/** Plain-language time-left estimate for a download row ("about 2 minutes left"). */
-function getEtaLabel(pull?: PullProgressUpdate): string {
-  if (!pull?.speedBps || !pull.totalBytes || pull.completedBytes == null) return '';
-  const secondsLeft = (pull.totalBytes - pull.completedBytes) / pull.speedBps;
-  if (!Number.isFinite(secondsLeft) || secondsLeft <= 0) return '';
-  if (secondsLeft < 60) return 'under a minute left';
-  const minutes = Math.round(secondsLeft / 60);
-  return `about ${minutes} minute${minutes === 1 ? '' : 's'} left`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1608,7 +1600,10 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
         <div className="sw-answer-strip">
           <div className="sw-answer-strip-head">
             <span>
-              {activeModel ? `${getFriendlyModelName(activeModel)}'s answers so far` : 'Answers so far'}
+              {/* Says what the numbers are for as long as they are on screen: the
+                  "scored out of 100" line used to go once the first one arrived,
+                  leaving a row of bare numbers. */}
+              {activeModel ? `${getFriendlyModelName(activeModel)}'s answers so far, each scored out of 100` : 'Answers so far, each scored out of 100'}
             </span>
             {answeredAverage != null && (
               <em>{answered.length} scored · averaging <b>{answeredAverage}</b></em>
@@ -1619,7 +1614,11 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
           ) : (
             <ol aria-label="Answer scores for the model currently answering">
               {answered.map((score, index) => (
-                <li key={index} className={score >= 85 ? 'good' : score >= 70 ? 'fair' : 'poor'}>
+                <li
+                  key={index}
+                  className={score >= 85 ? 'good' : score >= 70 ? 'fair' : 'poor'}
+                  title={`Answer ${index + 1}: ${score} out of 100${score === 0 ? ', it missed the question' : ''}`}
+                >
                   {score}
                 </li>
               ))}

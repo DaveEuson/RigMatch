@@ -160,6 +160,28 @@ export function showTimeLeft(state: {
  * tested" of a model that had nothing to be compared with. Anything short of
  * the whole lineup is "that finished", and a lone finisher is said to be one.
  */
+/**
+ * A download row's time left, in words ("about 8 minutes left").
+ *
+ * Coarser the further off it is: nobody plans around 74 minutes rather than
+ * 75, and a precise-looking number that moves every second reads as noise.
+ * The speed under it is smoothed where it is measured (downloadRate.cjs).
+ */
+export function downloadTimeLeft(pull?: { speedBps?: number | null; totalBytes?: number | null; completedBytes?: number | null }): string {
+  if (!pull?.speedBps || !pull.totalBytes || pull.completedBytes == null) return '';
+  const secondsLeft = (pull.totalBytes - pull.completedBytes) / pull.speedBps;
+  if (!Number.isFinite(secondsLeft) || secondsLeft <= 0) return '';
+  if (secondsLeft < 60) return 'under a minute left';
+  const minutes = secondsLeft / 60;
+  if (minutes < 15) {
+    const rounded = Math.round(minutes);
+    return `about ${rounded} minute${rounded === 1 ? '' : 's'} left`;
+  }
+  if (minutes < 90) return `about ${Math.round(minutes / 5) * 5} minutes left`;
+  const hours = Math.round(minutes / 30) / 2;
+  return `about ${hours} hour${hours === 1 ? '' : 's'} left`;
+}
+
 export function winnerField(finished: number, picked: number): { tested: string; onlyOne: boolean } {
   const partial = finished < picked;
   return {

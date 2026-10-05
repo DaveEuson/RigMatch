@@ -257,7 +257,7 @@ import { toVideoLabResult } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
 import { readHuggingFaceToken } from './lib/huggingFaceToken';
 import { goalById, presetIdForGoal } from './lib/goals';
-import { isVisiblePullProgress, modelMatchesTask } from './lib/modelCatalog';
+import { isDockWorthyPullProgress, modelMatchesTask, nextDockExpiry } from './lib/modelCatalog';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLineupLive } from './lib/videoGenRunner';
 import {
@@ -395,6 +395,15 @@ function App() {
   const [isDeletingModel, setIsDeletingModel] = useState(false);
   const [pullingModel, setPullingModel] = useState<string | null>(null);
   const [pullProgressByModel, setPullProgressByModel] = useState<Record<string, PullProgressUpdate>>({});
+  // The floating download box shows an ended download for a few seconds, then
+  // goes; this clock ticks once when the last of those runs out.
+  const [dockClock, setDockClock] = useState(() => Date.now());
+  useEffect(() => {
+    const expiry = nextDockExpiry(Object.values(pullProgressByModel), Date.now());
+    if (expiry === null) return undefined;
+    const id = window.setTimeout(() => setDockClock(Date.now()), Math.max(0, expiry - Date.now()) + 50);
+    return () => window.clearTimeout(id);
+  }, [pullProgressByModel, dockClock]);
   const {
     cancelRequested: isPullCancelRequested,
     pauseRequested: isPullPauseRequested,
@@ -1048,6 +1057,20 @@ function App() {
     };
     return { image: summarize('image'), video: summarize('video'), audio: summarize('audio') };
   }, [modelRows, system.gpu.vramGb]);
+
+  /**
+   * The picture makers that fit this PC and are not in ComfyUI yet, for
+   * Simple Mode's picture card to offer. Sized by what is actually missing:
+   * Z-Image Turbo and FLUX.2 [klein] share one 8 GB encoder.
+   */
+  const pictureMakersToGet = useMemo(() => modelRows
+    .filter((row) => row.generationKind === 'image' && row.generationId && !row.installed
+      && getHardwareFit(row, system.gpu.vramGb).recommend)
+    .flatMap((row) => {
+      const model = generationModelById(row.generationId!);
+      const bytes = model ? downloadPlan(model, comfyFolders).totalBytes : 0;
+      return model && bytes > 0 ? [{ id: model.id, name: row.displayName, note: model.note ?? '', bytes }] : [];
+    }), [modelRows, system.gpu.vramGb, comfyFolders]);
 
   // Simple Mode needs its own share state: Advanced's lives inside the profile
   // panel, which is not mounted in the guided path.
@@ -4476,6 +4499,11 @@ function App() {
               // No Models screen in Simple Mode: this is the trip to Advanced,
               // and the banner there says why the interface changed.
               onOpenModels: () => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('models'); },
+              // Simple has no Models screen, so the picture card offers these itself.
+              toDownload: pictureMakersToGet,
+              onDownloadModel: requestLabDownload,
+              onStopDownload: stopLabDownload,
+              pullProgressByModel,
             },
             // Ranked where the channel's own fader stands, and flat on speed
             // where nothing installed can judge what came out.
@@ -4905,7 +4933,7 @@ function App() {
       </>
       )}
 
-      {uiMode === 'advanced' && (queuedRows.length > 0 || Boolean(pullingModel) || Object.values(pullProgressByModel).some((progress) => isVisiblePullProgress(progress))) && (
+      {uiMode === 'advanced' && (queuedRows.length > 0 || Boolean(pullingModel) || Object.values(pullProgressByModel).some((progress) => isDockWorthyPullProgress(progress, dockClock))) && (
         <div className="download-dock-float">
           <DownloadTickerDock
             queuedRows={queuedRows}
