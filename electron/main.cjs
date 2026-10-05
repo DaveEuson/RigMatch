@@ -76,6 +76,7 @@ const { downloadModel, verifyComfyFolder } = require('./comfyModels.cjs');
 const { locateComfyRoots } = require('./comfyLocate.cjs');
 const { findComfyLaunchers, launchComfy } = require('./comfyLaunch.cjs');
 const { smoothRate } = require('./downloadRate.cjs');
+const { hasChatFormat } = require('./chatFormat.cjs');
 
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const LM_STUDIO_LOCAL_URL = 'http://127.0.0.1:1234/v1';
@@ -2631,7 +2632,7 @@ async function attachModelCapabilities(baseUrl, models) {
   await Promise.all(models.map(async (model) => {
     const key = `${baseUrl}::${model.name}`;
     if (modelCapabilityCache.has(key)) {
-      model.capabilities = modelCapabilityCache.get(key);
+      Object.assign(model, modelCapabilityCache.get(key));
       return;
     }
     try {
@@ -2643,9 +2644,12 @@ async function attachModelCapabilities(baseUrl, models) {
       const capabilities = Array.isArray(shown?.capabilities)
         ? shown.capabilities.filter((item) => typeof item === 'string').slice(0, 12)
         : undefined;
-      if (capabilities) {
-        modelCapabilityCache.set(key, capabilities);
-        model.capabilities = capabilities;
+      // Whether it can hold a conversation at all: see chatFormat.cjs.
+      const chatFormat = hasChatFormat(shown);
+      if (capabilities || chatFormat !== undefined) {
+        const known = { ...(capabilities ? { capabilities } : {}), ...(chatFormat !== undefined ? { chatFormat } : {}) };
+        modelCapabilityCache.set(key, known);
+        Object.assign(model, known);
       }
     } catch {
       // An older Ollama has no capabilities field, and a slow one is not worth

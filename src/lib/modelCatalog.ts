@@ -193,9 +193,24 @@ const WEAK_TEXT_JUDGE = /\bocr\b|deepseek-ocr|got-ocr|olmocr|bakllava|^llava|\/l
  */
 export function canJoinComparison(row: ModelRow): boolean {
   // A cloud model answers from Ollama's servers, so its speed and fit say
-  // nothing about this PC.
+  // nothing about this PC. A model with no chat format cannot follow the
+  // conversation a show is.
   return row.runtime !== 'comfyui' && canGenerateText(row) && !isEmbeddingModel(row.displayName)
-    && !row.cloudOnly && !isCloudModel(row.displayName);
+    && !row.cloudOnly && !isCloudModel(row.displayName) && !lacksChatFormat(row);
+}
+
+/**
+ * Installed, and plainly without a chat format: made to complete code
+ * (starcoder2, codegemma:2b) or read documents (deepseek-ocr). Only "plainly":
+ * a model Ollama said nothing about is given the benefit of the doubt.
+ */
+export function lacksChatFormat(row: Pick<ModelRow, 'installedModel'>): boolean {
+  return row.installedModel?.chatFormat === false;
+}
+
+/** Why a model cannot be in a show or a test, in one sentence the person can act on. */
+export function noChatFormatReason(name: string): string {
+  return `${name} has no chat format: it was made to complete code or read documents, not to hold a conversation, so a show's questions would score it on something it never claimed to do.`;
 }
 
 /**
@@ -1227,6 +1242,7 @@ export function getModelBenchmarkBlocker(row: ModelRow | undefined, host: Networ
   // questions and grades answers, and a checkpoint has no chat endpoint to
   // ask. The row action cell and the shortlist were gated for this; the
   // detail panel's TEST MODEL calls straight through to here and was not.
+  if (row && lacksChatFormat(row)) return noChatFormatReason(row.displayName);
   if (row && !canJoinComparison(row)) {
     return `${row.displayName} cannot be tested this way — the test asks questions and grades the answers, and this model draws instead of chatting. Run it from the Lab.`;
   }
@@ -1515,6 +1531,15 @@ function allGoodForTags(row: ModelRow): string[] {
       : ['reads prompts for image and video models'];
   }
   const profile = getModelProfile(row.displayName);
+  // What it was made for, not the "coding, chat, utility" a name-based profile
+  // guessed for starcoder2: with no chat format, chat is the one thing it
+  // cannot do.
+  if (lacksChatFormat(row)) {
+    if (isOcrModel(row)) return ['reads documents'];
+    return [...descriptionSpecialties(row.description), ...profile.specialties].some((tag) => /cod/i.test(tag))
+      ? ['code completion']
+      : ['completes text'];
+  }
   const tags = [
     isImageGenerationModel(row) ? 'makes images' : '',
     isLikelyVideoGenerationModel(row.displayName) ? 'makes video' : '',
@@ -1622,7 +1647,7 @@ export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolea
   // model only turns text into numbers, and an OCR model only transcribes a
   // picture, though both carried "chat" from the default profile.
   const embedding = isEmbeddingModel(row.displayName) || (getModelCapabilities(row)?.includes('embedding') ?? false);
-  if (WORD_TASKS.has(task) && (!canGenerateText(row) || embedding || isOcrModel(row))) return false;
+  if (WORD_TASKS.has(task) && (!canGenerateText(row) || embedding || isOcrModel(row) || lacksChatFormat(row))) return false;
   const category = TASK_CATEGORIES.find((c) => c.id === task);
   if (!category || category.keywords.length === 0) return true;
   const specialties = allGoodForTags(row);
