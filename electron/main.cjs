@@ -72,11 +72,11 @@ const {
 } = require('./ollamaCatalog.cjs');
 const { summarizeMemory, cleanDeviceTreeModel } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
+const { hasChatFormat } = require('./chatFormat.cjs');
 const { downloadModel, verifyComfyFolder } = require('./comfyModels.cjs');
 const { locateComfyRoots } = require('./comfyLocate.cjs');
 const { findComfyLaunchers, launchComfy } = require('./comfyLaunch.cjs');
 const { smoothRate } = require('./downloadRate.cjs');
-const { hasChatFormat } = require('./chatFormat.cjs');
 
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const LM_STUDIO_LOCAL_URL = 'http://127.0.0.1:1234/v1';
