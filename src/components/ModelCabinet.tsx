@@ -257,7 +257,9 @@ export function ModelCabinet({
   // cell padding), Match fits its header — the previous 62/80/66 defaults
   // ellipsized all three.
   // Eight now: "Made In" sits after "By". Narrow, because it holds two letters.
-  const [colWidths, setColWidths] = useState([156, 92, 126, 86, 82, 110, 76, 116]);
+  // Match is 90: at 76 a decimal score ("92.7 A") was cut to "92.7 A…".
+  // From gives back 10 of those 14px; its header is the widest thing in it.
+  const [colWidths, setColWidths] = useState([156, 92, 126, 86, 72, 110, 90, 116]);
   // Popularity is the least essential column (the local Ollama API exposes no
   // pull counts), so it yields first on narrower windows instead of forcing
   // horizontal scrolling. Handled in JS because the <col> track would keep
@@ -1458,56 +1460,106 @@ export function ModelCabinet({
               const open = openFamilies.has(family);
               const installedCount = variants.filter((v) => installedModelNames.has(v.displayName) || v.installed).length;
               const bestScore = getModelScore(best, modelScores);
+              const toggleFamily = () => setExpandedFamilies((current) => {
+                const next = new Set(current);
+                if (next.has(family)) next.delete(family);
+                else next.add(family);
+                return next;
+              });
+              // Each fact goes in the column its header names. The row used to
+              // be one wide cell with maker, installs, score and pulls run
+              // together after the name, so nothing in it lined up with the
+              // headers or with the versions it opens onto.
+              const sizes = variants.map((v) => v.sizeGb).filter((gb): gb is number => gb != null && gb > 0);
+              const smallest = sizes.length ? Math.min(...sizes) : null;
+              const largest = sizes.length ? Math.max(...sizes) : null;
+              const familyTags = [...new Set([best, ...variants].flatMap(getModelGoodForTags))];
+              const maker = best.publisher ?? getModelOrigin(best.displayName).organization;
+              const country = getDisplayCountry(best.displayName, best.publisher);
+              const countryCode = country ? getCountryCode(country) : null;
+              // Every family is a group, a family of one included (see
+              // MIN_VARIANTS_TO_GROUP), so "Show 1 version" is on screen.
+              const versionCount = `${variants.length} version${variants.length === 1 ? '' : 's'}`;
               return [
-                <tr key={`family:${family}`} className={open ? 'model-family-row open' : 'model-family-row'}>
-                  <td colSpan={columnCount}>
+                <tr
+                  key={`family:${family}`}
+                  className={open ? 'model-family-row open' : 'model-family-row'}
+                  // The whole row opens it, as the one wide button did. The
+                  // button in Actions is the keyboard's way in; its click
+                  // bubbles here, so this is the only handler.
+                  onClick={toggleFamily}
+                >
+                  <td>
+                    <div className="model-family-name">
+                      <ChevronRight aria-hidden="true" className={open ? 'model-family-caret open' : 'model-family-caret'} />
+                      {/* The family's face, from the version that represents
+                          it. Collapsed, this row stands in for every variant
+                          under it, and a name on its own made the closed list
+                          read as a table of contents rather than as the
+                          models themselves. */}
+                      <AvatarBust generationKind={best.generationKind} model={best.displayName} size="tiny" />
+                      <span>
+                        <strong>{family}</strong>
+                        {/* Popularity is a property of the family, not of a
+                            tag: Ollama counts pulls per family. With the
+                            Popularity column off screen, this is where it
+                            goes. */}
+                        {hidePopularity && best.pulls != null && (
+                          <em className="model-pulls-sub" title={`${best.pulls.toLocaleString()} pulls on Ollama, counted across the whole family`}>
+                            {formatPullCount(best.pulls)} pulls
+                          </em>
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                  <td title={smallest != null ? 'Smallest to largest version' : undefined}>
+                    {smallest != null && largest != null && (
+                      <span className="model-family-size">
+                        {smallest === largest ? `${smallest} GB` : `${smallest}–${largest} GB`}
+                      </span>
+                    )}
+                  </td>
+                  <td className="good-for-cell" title={familyTags.join(', ')}>
+                    <div className="good-for-tags">
+                      {familyTags.map((tag) => (
+                        <span key={tag} className="good-for-chip">{tag}</span>
+                      ))}
+                    </div>
+                  </td>
+                  {/* Who made it and where, once per family: every version
+                      under this row shares both. */}
+                  <td title={country ? `${maker} · ${country}` : maker}>
+                    <span className={`origin-pill origin-${getModelOrigin(best.displayName).family}`}>{maker}</span>
+                  </td>
+                  <td className="made-in-cell">
+                    {countryCode && <span className="origin-country" title={country!}>{countryCode}</span>}
+                  </td>
+                  <td>
+                    {installedCount > 0 && (
+                      <ModelStatusPill installed queued={false} label={`${installedCount} installed`} />
+                    )}
+                  </td>
+                  <td title={bestScore ? 'The best Match Score in this family' : undefined}>
+                    {bestScore && <ModelScorePill score={bestScore} />}
+                  </td>
+                  {!hidePopularity && (
+                    <td className="speed-cell">
+                      {hasAnyPullData && (
+                        <div className="speed-pop-cell">
+                          <PopularityMeter pulls={best.pulls} />
+                        </div>
+                      )}
+                    </td>
+                  )}
+                  {showAdded && <td className="added-cell" />}
+                  <td className="action-cell">
                     <button
                       type="button"
-                      onClick={() => setExpandedFamilies((current) => {
-                        const next = new Set(current);
-                        if (next.has(family)) next.delete(family);
-                        else next.add(family);
-                        return next;
-                      })}
+                      className="mini-button outline model-family-toggle"
                       aria-expanded={open}
+                      aria-label={`${open ? 'Hide' : 'Show'} the ${versionCount} of ${family}`}
                     >
-                      <ChevronRight aria-hidden="true" className={open ? 'model-family-caret open' : 'model-family-caret'} />
-                      {/* The family's face, from the version that represents it.
-                          Collapsed, this row stands in for every variant under
-                          it, and a name on its own made the closed list read as
-                          a table of contents rather than as the models
-                          themselves. */}
-                      <AvatarBust generationKind={best.generationKind} model={best.displayName} size="tiny" />
-                      <strong>{family}</strong>
-                      {/* A group is never smaller than two today, but the
-                          plural is one word and a "1 versions" shipped once is
-                          the kind of thing nobody goes back to fix. */}
-                      <em>{variants.length} version{variants.length === 1 ? '' : 's'}</em>
-                      {/* Who made it and where, once per family — every version
-                          under this row shares both. */}
-                      {(() => {
-                        const maker = best.publisher ?? getModelOrigin(best.displayName).organization;
-                        const country = getDisplayCountry(best.displayName, best.publisher);
-                        const code = country ? getCountryCode(country) : null;
-                        return (
-                          <span className="model-family-maker" title={country ? `${maker} · ${country}` : maker}>
-                            {maker}
-                            {code && <b>{code}</b>}
-                          </span>
-                        );
-                      })()}
-                      {installedCount > 0 && <span className="model-family-installed">{installedCount} installed</span>}
-                      {bestScore && <span className="model-family-best">Best {bestScore.total} · {bestScore.grade}</span>}
-                      {/* Popularity is a property of the family, not of a tag:
-                          Ollama counts pulls per family, which is why every one
-                          of thirty-five Gemma 4 rows read "23.9M pulls". It
-                          belongs here, once, where that is what it means. */}
-                      {best.pulls != null && (
-                        <span className="model-family-pulls" title={`${best.pulls.toLocaleString()} pulls on Ollama, counted across the whole family`}>
-                          {formatPullCount(best.pulls)} pulls
-                        </span>
-                      )}
-                      <span className="model-family-hint">{open ? 'Hide' : 'Show'}</span>
+                      {open ? 'Hide versions' : `Show ${versionCount}`}
                     </button>
                   </td>
                 </tr>,
