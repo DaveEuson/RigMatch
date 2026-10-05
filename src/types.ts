@@ -705,6 +705,8 @@ export type AgentArcadeApi = {
   startOllamaInstall: () => Promise<void>;
   launchOllamaInstaller: (installerPath: string) => Promise<void>;
   onOllamaInstallProgress?: (callback: (progress: OllamaInstallProgress) => void) => () => void;
+  /** The computer's regional format ("de-DE"), for dates and numbers. See lib/formatLocale.ts. */
+  formatLocale?: string;
 };
 
 export type ModelRow = CatalogModel & {

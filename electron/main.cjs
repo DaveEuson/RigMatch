@@ -365,6 +365,12 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Dates and numbers follow the computer's regional format. The page's
+      // own default comes from the one language pack shipped (en-US), so a
+      // German PC showed US dates; the OS setting does not depend on packs.
+      // RIGMATCH_FORMAT_LOCALE sets another one, to check a format without
+      // changing Windows. See src/lib/formatLocale.ts.
+      additionalArguments: [`--rigmatch-format-locale=${process.env.RIGMATCH_FORMAT_LOCALE || app.getSystemLocale()}`],
     },
   });
 

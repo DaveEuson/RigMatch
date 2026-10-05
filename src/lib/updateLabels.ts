@@ -1,5 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { UpdateChannel, UpdateCheckResponse } from '../types';
+import { formatLocale } from './formatLocale.ts';
 
 export function getUpdateChannelLabel(channel: UpdateChannel) {
   return channel === 'nightly' ? 'Nightly' : 'Release';
@@ -59,7 +60,7 @@ export function formatReleaseDate(timestamp: string) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
 
-  return date.toLocaleDateString([], {
+  return date.toLocaleDateString(formatLocale(), {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

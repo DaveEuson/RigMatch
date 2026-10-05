@@ -1,6 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { formatMatchScore } from '../lib/scoring';
 import type { ModelRow, TestedModelScore } from '../types';
+import { formatLocale } from '../lib/formatLocale';
 
 export function ClosetSection({
   rows,
@@ -63,7 +64,7 @@ export function ClosetSection({
                 <strong>{row.displayName}</strong>
                 <em>
                   {score
-                    ? `${formatMatchScore(score)} · ${score.grade} — tested ${new Date(score.completedAt).toLocaleDateString()}`
+                    ? `${formatMatchScore(score)} · ${score.grade} — tested ${new Date(score.completedAt).toLocaleDateString(formatLocale())}`
                     : 'Never tested — taking up space on reputation alone'}
                 </em>
               </div>

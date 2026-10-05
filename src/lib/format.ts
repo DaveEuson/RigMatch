@@ -1,4 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
+import { formatLocale } from './formatLocale.ts';
+
 /**
  * Pure formatting and score-presentation helpers shared across the UI.
  * Extracted from App.tsx; keep this module free of React and app state.
@@ -151,7 +153,7 @@ export function formatMs(value: number) {
 /** A date and a time as a person reads them, "12 Sept 2026, 08:54"; empty when unreadable. */
 export function formatDateTime(iso: string): string {
   const at = new Date(iso);
-  return Number.isNaN(at.getTime()) ? '' : at.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  return Number.isNaN(at.getTime()) ? '' : at.toLocaleString(formatLocale(), { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 export function hashString(value: string) {

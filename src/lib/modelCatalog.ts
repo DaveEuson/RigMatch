@@ -30,6 +30,7 @@ import {
   type ThemeId,
   type UiMode,
 } from './appConfig.ts';
+import { formatLocale } from './formatLocale.ts';
 
 export type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'maker' | 'origin' | 'source' | 'status' | 'score' | 'speed' | 'pulls' | 'added';
 export type SortDirection = 'asc' | 'desc';
@@ -2196,7 +2197,7 @@ export function formatLogTime(timestamp: string) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
 
-  return date.toLocaleTimeString([], {
+  return date.toLocaleTimeString(formatLocale(), {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -2207,7 +2208,7 @@ export function formatHistoryTime(timestamp: string) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
 
-  return date.toLocaleString([], {
+  return date.toLocaleString(formatLocale(), {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',

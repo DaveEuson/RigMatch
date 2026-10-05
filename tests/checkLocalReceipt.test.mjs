@@ -42,7 +42,7 @@ test('the stamp is precise enough that two presses differ', () => {
   // Without seconds, two presses inside the same minute produce an identical
   // line and the button appears to do nothing again — the exact bug, returned.
   // Verified in the browser: 23:23:02 then 23:23:05.
-  const stamp = /toLocaleTimeString\([^)]*\{[^}]*\}/.exec(source)?.[0] ?? '';
+  const stamp = /toLocaleTimeString\((?:formatLocale\(\)|[^)])*\{[^}]*\}/.exec(source)?.[0] ?? '';
   assert.match(stamp, /second:/, 'the receipt would repeat itself within a minute');
 });
 

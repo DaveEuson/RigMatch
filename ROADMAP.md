@@ -1,14 +1,12 @@
 # RigMatch — Roadmap
 
-Ideas parked for later. Nothing here is committed; it's a candid backlog of directions worth exploring. Last reviewed September 2026, at 0.9.2.
+Ideas parked for later. Nothing here is committed; it's a candid backlog of directions worth exploring. Last reviewed October 2026, at 0.9.4.
 
 ---
 
 ## Next
 
-### A smaller download: drop the unused Chromium languages
-
-About 47 MB of every install is Chromium's translations for languages RigMatch does not use. Electron can leave them out (`electronLanguages`), but not yet safely: 18 date and number formatting calls take their locale from Chromium's language list, so trimming it would give everyone US formats. Pass the system locale into those calls first, then trim.
+Nothing queued. The Backburner holds the candidates.
 
 ---
 
@@ -138,6 +136,10 @@ Revisit only if RigMatch starts earning. The order then is Apple first: $99 remo
 ---
 
 ## Done
+
+### A smaller download: one language pack — 0.9.3, formats fixed after 0.9.4
+
+Chromium's translations for languages RigMatch does not use were 48 MB of every install. 0.9.3 keeps only English (`electronLanguages`), which took the unpacked Windows app from 375 MB to 328 MB. It also made every PC write dates and numbers the US way, because the page takes its default locale from the language pack it loaded: a PC set to German showed "10/5/2026, 2:30 PM" instead of "5.10.2026, 14:30". The main process now reads the regional format from the OS, which does not depend on the packs, and all 18 date and number calls use it (`src/lib/formatLocale.ts`). `tests/formatLocale.test.mjs` fails on any new call that leaves it out.
 
 ### The real app on the landing page — September 2026
 

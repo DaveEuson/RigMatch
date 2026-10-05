@@ -1,7 +1,13 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 const { contextBridge, ipcRenderer } = require('electron');
 
+// The regional format for dates and numbers, passed by main.cjs as a command
+// line argument so the page has it before its first render, with no round trip.
+const FORMAT_LOCALE_ARG = '--rigmatch-format-locale=';
+const formatLocaleArg = process.argv.find((arg) => arg.startsWith(FORMAT_LOCALE_ARG));
+
 const api = {
+  formatLocale: formatLocaleArg ? formatLocaleArg.slice(FORMAT_LOCALE_ARG.length) : undefined,
   getSystemProfile: (options) => ipcRenderer.invoke('system:getProfile', options),
   publishAppPreview: (html) => ipcRenderer.invoke('preview:publish', html),
   getGpuContention: () => ipcRenderer.invoke('system:getGpuContention'),

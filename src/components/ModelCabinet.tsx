@@ -16,7 +16,7 @@ import { formatGb, formatPullCount } from '../lib/format';
 function formatInstalledDate(iso: string): string {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return 'Unknown';
-  return at.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return at.toLocaleDateString(formatLocale(), { year: 'numeric', month: 'short', day: 'numeric' });
 }
 import type { ListTestResult, ModelQuickFilterId, ModelSortKey, ModelTaskFilterId, SortDirection } from '../lib/modelCatalog';
 import { CAPABILITY_ONLY_FILTERS, GENERATION_FILTERS, TASK_FILTER_CHIPS, getBenchmarkForModel, getDiskGuard, getFriendlyModelName, getHardwareFit, getModelGoodForTags, getModelProfile, getModelQuickFilters, getModelScore, getModelSearchText, getModelSortLabel, getModelStatusLabel, getParamSortValue, getPlatformFit, getQueueChipModelName, getSizeRisk, isCloudModel, isEmbeddingModel, isUncensoredModel, isVisiblePullProgress, lacksChatFormat, noChatFormatReason, modelMatchesQuickFilter, modelMatchesTask, sortModelRows } from '../lib/modelCatalog';
@@ -46,6 +46,7 @@ import { ModelDemoChips } from './SkillDemoViewers';
 import { SortableModelHeader } from './SortableModelHeader';
 import { Check, ChevronRight, Download, Eraser, Gauge, MessageSquare, Pause, RefreshCw, Search, Settings, ShieldCheck, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { formatLocale } from '../lib/formatLocale';
 
 /**
  * One row of the filter rail: name, tick, and the count it would leave you with.
@@ -1186,7 +1187,7 @@ export function ModelCabinet({
                             the column, and there this is the only place it
                             appears. */}
                         {hidePopularity && row.pulls != null && (
-                          <em className="model-pulls-sub" title={`${row.pulls.toLocaleString()} pulls on Ollama`}>{formatPullCount(row.pulls)} pulls</em>
+                          <em className="model-pulls-sub" title={`${row.pulls.toLocaleString(formatLocale())} pulls on Ollama`}>{formatPullCount(row.pulls)} pulls</em>
                         )}
                       </span>
                     </button>
@@ -1268,7 +1269,7 @@ export function ModelCabinet({
                   {showAdded && (
                     <td className="added-cell">
                       {row.installedModel?.modifiedAt ? (
-                        <span title={new Date(row.installedModel.modifiedAt).toLocaleString()}>
+                        <span title={new Date(row.installedModel.modifiedAt).toLocaleString(formatLocale())}>
                           {formatInstalledDate(row.installedModel.modifiedAt)}
                         </span>
                       ) : (
@@ -1505,7 +1506,7 @@ export function ModelCabinet({
                             Popularity column off screen, this is where it
                             goes. */}
                         {hidePopularity && best.pulls != null && (
-                          <em className="model-pulls-sub" title={`${best.pulls.toLocaleString()} pulls on Ollama, counted across the whole family`}>
+                          <em className="model-pulls-sub" title={`${best.pulls.toLocaleString(formatLocale())} pulls on Ollama, counted across the whole family`}>
                             {formatPullCount(best.pulls)} pulls
                           </em>
                         )}
