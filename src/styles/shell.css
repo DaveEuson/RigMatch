@@ -422,12 +422,21 @@
 .load-reading.full .load-bar i { background: var(--red); }
 .load-reading.full .load-value { color: var(--red); }
 
+/* Whatever is running: a picture, a clip, a show, a download. It was plain
+   text at the far end of the strip, and Dave drew a picture without finding
+   any sign that anything was happening. A tinted pill now, in the stage's
+   accent, with the label at full strength; clicking it opens the screen that
+   shows the work. */
 .load-strip-running {
   display: inline-flex;
   align-items: center;
   gap: var(--s2);
   margin-left: auto;
-  color: var(--text);
+  padding: 2px 4px 2px var(--s3);
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: var(--r-control);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text-strong);
   white-space: nowrap;
 }
 
@@ -442,10 +451,12 @@
 .running-stop {
   border: 0;
   background: none;
-  color: var(--text);
+  color: var(--text-strong);
   font: inherit;
   cursor: pointer;
 }
+
+.running-open { font-weight: 700; }
 
 .running-open:hover {
   color: var(--text-strong);
