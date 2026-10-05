@@ -23,6 +23,7 @@ const path = require('node:path');
 const { once } = require('node:events');
 const { finished } = require('node:stream/promises');
 const { Readable } = require('node:stream');
+const { smoothRate } = require('./downloadRate.cjs');
 
 /**
  * Subfolders a download is ever allowed to target.
@@ -330,6 +331,7 @@ async function fetchIntoPart({ url, partPath, wantBytes, token, signal, onProgre
   let received = 0;
   let lastReport = 0;
   let lastReceived = 0;
+  let smoothedBps = null;
   let lastByteAt = Date.now();
 
   const source = Readable.fromWeb(response.body);
@@ -367,10 +369,13 @@ async function fetchIntoPart({ url, partPath, wantBytes, token, signal, onProgre
       if (now - lastReport >= 400) {
         // The rate is measured here because only this side has the timing. The
         // first report averages since the start; later ones use the window
-        // since the previous report, so stalls show up as a real 0.
+        // since the previous report, smoothed over a few seconds so the time
+        // left does not jump with every burst (downloadRate.cjs). A stall
+        // still falls toward 0 within seconds, and the watchdog ends one.
         const windowMs = lastReport ? now - lastReport : now - startedAt;
         const windowBytes = lastReport ? received - lastReceived : received;
-        const bytesPerSecond = windowMs > 0 ? Math.round((windowBytes / windowMs) * 1000) : null;
+        if (windowMs > 0) smoothedBps = smoothRate(smoothedBps, (windowBytes / windowMs) * 1000, windowMs);
+        const bytesPerSecond = smoothedBps == null ? null : Math.round(smoothedBps);
         lastReport = now;
         lastReceived = received;
         onProgress?.({

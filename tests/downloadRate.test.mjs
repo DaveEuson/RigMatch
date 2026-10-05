@@ -1,52 +1,60 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 
-import { getPullProgressDetailLabel } from '../src/lib/modelCatalog.ts';
+import { downloadTimeLeft } from '../src/lib/wizardCopy.ts';
+
+const require = createRequire(import.meta.url);
+const { smoothRate } = require('../electron/downloadRate.cjs');
 
 /**
- * The line under a download's progress bar must not contradict the bar.
- *
- * Dave's real ComfyUI download sat at 3% with the bar visibly filling while
- * the line beneath read "-- MB/s · waiting for bytes". The bytes were
- * arriving; the ComfyUI path just never sent completedBytes or speedBps, so
- * the line fell through to the "nothing yet" branch and called the user a
- * liar about what they could see.
+ * The time left on a download used to jump from "about 8 minutes" to "about
+ * 74" on the same model: the speed under it was measured between two
+ * progress lines milliseconds apart, while Ollama's parallel parts land in
+ * bursts. These pin the smoothing and the rounding that fixed it.
  */
 
-const pulling = (progress) => getPullProgressDetailLabel('pulling', false, progress);
+const MB = 1_000_000;
 
-test('a moving download never says it is waiting for bytes', () => {
-  const line = pulling({ percent: 3, completedBytes: 120_000_000, totalBytes: 4_000_000_000, speedBps: 8_400_000 });
-  assert.doesNotMatch(line, /waiting for bytes/);
-  assert.match(line, /3%/);
+/** Feed samples of [bytesPerSecond, ms] through the smoother. */
+const run = (samples, start = null) => samples.reduce((bps, [sample, ms]) => smoothRate(bps, sample, ms), start);
+
+test('the first sample is taken as it is, and a non-number keeps the last', () => {
+  assert.equal(smoothRate(null, 5 * MB, 400), 5 * MB);
+  assert.equal(smoothRate(5 * MB, Number.NaN, 400), 5 * MB);
+  assert.equal(smoothRate(5 * MB, -1, 400), 5 * MB);
 });
 
-test('the rate appears once the main process measures one', () => {
-  const line = pulling({ percent: 12, completedBytes: 500_000_000, totalBytes: 4_000_000_000, speedBps: 12_000_000 });
-  assert.doesNotMatch(line, /--\s*MB\/s/, 'a measured rate must not render as "--"');
-  assert.match(line, /\d/, 'the rate should be a number');
+test('a burst lasting milliseconds barely moves a steady speed', () => {
+  // 8 MB/s for ten seconds, then one 4 ms line that read as 900 KB/s.
+  const steady = run(Array.from({ length: 50 }, () => [8 * MB, 200]), 8 * MB);
+  const afterDip = smoothRate(steady, 0.9 * MB, 4);
+  assert.ok(Math.abs(afterDip - 8 * MB) / (8 * MB) < 0.01, `moved to ${afterDip}`);
 });
 
-test('bytes and total are both reported when known', () => {
-  const line = pulling({ percent: 50, completedBytes: 2_000_000_000, totalBytes: 4_000_000_000, speedBps: 9_000_000 });
-  assert.match(line, /of|\//, 'should show progress against the total');
+test('the swing Dave saw no longer swings the estimate tenfold', () => {
+  // Alternating 8 MB/s and 0.9 MB/s lines, 50 ms apart, for a minute; the
+  // last twenty seconds, once it has settled, must hold still.
+  const samples = Array.from({ length: 1200 }, (_, i) => [i % 2 ? 0.9 * MB : 8 * MB, 50]);
+  let bps = null;
+  const seen = [];
+  samples.forEach(([sample, ms], i) => { bps = smoothRate(bps, sample, ms); if (i >= 800) seen.push(bps); });
+  const spread = Math.max(...seen) / Math.min(...seen);
+  assert.ok(spread < 1.1, `still swings ${spread.toFixed(2)}x`);
 });
 
-test('before the first byte it is honest about that', () => {
-  // The genuine "nothing has arrived" case still has to read correctly.
-  const line = getPullProgressDetailLabel('pulling', true, { percent: 0 });
-  assert.match(line, /waiting for bytes/);
+test('a real change in speed shows within seconds', () => {
+  const settled = run(Array.from({ length: 25 }, () => [2 * MB, 400]), 10 * MB);
+  assert.ok(settled < 3.5 * MB, `after ten seconds at 2 MB/s it still reads ${(settled / MB).toFixed(1)} MB/s`);
 });
 
-test('a stalled download keeps its progress and stops short of claiming a rate', () => {
-  // formatBytesPerSecond renders 0 as "-- MB/s", which is the right call for a
-  // stall: there is no rate to report. What must NOT happen is the rest of the
-  // line regressing to "waiting for bytes" when 1.6 GB has already landed.
-  const line = pulling({ percent: 41, completedBytes: 1_600_000_000, totalBytes: 4_000_000_000, speedBps: 0 });
-  assert.match(line, /-- MB\/s/, 'a stall reports no rate rather than a fake one');
-  // formatBytes is binary, so 1.6e9 bytes reads as "1.49 GB".
-  assert.match(line, /1\.49 GB \/ 3\.73 GB/, 'the bytes already received stay on screen');
-  assert.doesNotMatch(line, /waiting for bytes/);
-  assert.match(line, /41%/);
+test('the time left is coarser the further off it is', () => {
+  const left = (seconds) => downloadTimeLeft({ speedBps: MB, totalBytes: seconds * MB + 1, completedBytes: 1 });
+  assert.equal(left(30), 'under a minute left');
+  assert.equal(left(8 * 60), 'about 8 minutes left');
+  assert.equal(left(74 * 60), 'about 75 minutes left');
+  assert.equal(left(3 * 3600 + 600), 'about 3 hours left');
+  assert.equal(left(100 * 60), 'about 1.5 hours left');
+  assert.equal(downloadTimeLeft({ speedBps: 0, totalBytes: 10, completedBytes: 1 }), '');
 });

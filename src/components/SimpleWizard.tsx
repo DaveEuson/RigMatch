@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { createPortal } from 'react-dom';
 import { Check, HandFist, Lock, Trophy, X } from 'lucide-react';
 import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, RunFailure, RunProgress, SystemProfile } from '../types';
-import { STEPS, STEP_LABELS, footerHint, minPicksFor, nextBlockedHint, pickShortHint, showAnnouncement, showTimeLeft, winnerField, type StepId } from '../lib/wizardCopy';
+import { STEPS, STEP_LABELS, downloadTimeLeft, footerHint, minPicksFor, nextBlockedHint, pickShortHint, showAnnouncement, showTimeLeft, winnerField, type StepId } from '../lib/wizardCopy';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { Explain, ExplainText, InfoViewProvider } from './InfoView';
 import { useExplaining } from '../lib/infoContext';
@@ -1312,7 +1312,7 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel, onStartDownloads
                 ? `${formatBytes(pull.completedBytes)} of ${formatBytes(pull.totalBytes)}`
                 : (pull?.status || 'Downloading…'),
               pull?.speedBps ? formatBytesPerSecond(pull.speedBps) : '',
-              getEtaLabel(pull),
+              downloadTimeLeft(pull),
             ].filter(Boolean).join(' · ');
         return (
           <div key={row.displayName} className={`sw-dl-row ${status}`}>
@@ -1340,16 +1340,6 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel, onStartDownloads
       <p className="sw-muted sw-download-note">Downloads pick up where they left off if you close RigMatch.</p>
     </div>
   );
-}
-
-/** Plain-language time-left estimate for a download row ("about 2 minutes left"). */
-function getEtaLabel(pull?: PullProgressUpdate): string {
-  if (!pull?.speedBps || !pull.totalBytes || pull.completedBytes == null) return '';
-  const secondsLeft = (pull.totalBytes - pull.completedBytes) / pull.speedBps;
-  if (!Number.isFinite(secondsLeft) || secondsLeft <= 0) return '';
-  if (secondsLeft < 60) return 'under a minute left';
-  const minutes = Math.round(secondsLeft / 60);
-  return `about ${minutes} minute${minutes === 1 ? '' : 's'} left`;
 }
 
 // ---------------------------------------------------------------------------
