@@ -115,6 +115,9 @@ const PRESENT = [
   // and the Donate button's dialog.
   ['donationware is said plainly', js, 'nothing is locked if you don’t donate'],
   ['the support dialog says donating unlocks nothing', js, 'because nothing is locked'],
+  // 0.9.4: every test is kept and findable, and Top Pick is a model's page.
+  ['tests are listed in a history', js, 'Test history'],
+  ['a model page lists its tests', js, 'Answers from the latest test'],
   // Screen-audit fixes.
   ['the listening test names its blocker', js, 'Record or upload audio first'],
   ['settings rail rows answer to the pointer', css, 'settings-rail-item:hover'],

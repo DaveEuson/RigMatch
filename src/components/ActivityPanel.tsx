@@ -6,6 +6,7 @@ import { useLabResults } from '../hooks/useLabResults';
 import type { Balances } from '../lib/balance';
 import { workbenchById, type ChannelId, type Workbench } from '../lib/workbench';
 import { formatHistoryTime } from '../lib/modelCatalog';
+import { displaySuiteName } from '../lib/testHistory';
 import type { OllamaStatus, PullProgressUpdate, RunProgress, SkillRunStatus, SystemProfile, TestedModelScore } from '../types';
 import { AdvancedCapabilityLab } from './AdvancedCapabilityLab';
 import { AppBuilderPreviewModal } from './AppBuilderPreview';
@@ -146,11 +147,11 @@ type ActivityJob = {
         <article className="activity-card activity-reports">
           <div className="activity-card-head">
             <FileText aria-hidden="true" />
-            <strong>Recent reports</strong>
+            <strong>Test history</strong>
             <b className="activity-state idle">{runReports.length} kept</b>
           </div>
-          {/* Comparisons only. A run report is a group of models that sat the
-              same exam; a single test has a scorecard, not a report. */}
+          {/* Every test: a comparison, or one model on its own. Each row opens
+              the test's ranking and, while they are kept, its answers. */}
           <ul className="activity-report-list">
             {runReports.map((report) => (
               <li key={report.id}>
@@ -158,7 +159,7 @@ type ActivityJob = {
                   <strong>{describeReport(report)}</strong>
                   <em>
                     {new Date(report.completedAt).toLocaleString()}
-                    {report.suiteName ? ` · ${report.suiteName}` : ''}
+                    {` · ${displaySuiteName(report.suiteName)}`}
                   </em>
                   {/* safeStorage drops answer text first when the browser runs
                       out of room, so a report can outlive its transcript. Say
