@@ -4415,7 +4415,7 @@ function App() {
             // and "ComfyUI can draw" are different claims.
             ready: chatImageGeneration.available,
             checkpoint: chatImageGeneration.checkpoint ?? null,
-            onFind: findComfyForDownload,
+            reachable: comfyReachable,
           }}
           initialDream={dreamForGoal(selectedGoals[0])}
           notice={simpleNotice}

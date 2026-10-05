@@ -43,3 +43,25 @@ test('the real portable layout resolves, when one is installed', (t) => {
     `expected the ComfyUI root among ${JSON.stringify(roots)}`);
   assert.equal(roots.length, 1, 'one confident candidate beats a list of maybes');
 });
+
+test('ComfyUI Desktop is found from --base-directory, wherever its python runs', async () => {
+  // Desktop runs main.py from inside its own app folder and keeps models in
+  // the folder chosen at install. Walking up from python never reaches it.
+  const { mkdtempSync, mkdirSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const base = mkdtempSync(join(tmpdir(), 'Comfy Desktop '));
+  try {
+    mkdirSync(join(base, 'models', 'checkpoints'), { recursive: true });
+    const appDir = join(tmpdir(), 'not-comfy-app', 'resources', 'ComfyUI');
+    const quoted = `"${join(appDir, 'main.py')}" --user-directory "${join(base, 'user')}" --base-directory "${base}" --port 8000`;
+    assert.deepEqual(candidatesFrom(join(base, 'missing-venv', 'Scripts'), quoted).map(slash).slice(0, 1), [slash(base)]);
+    // The = form, unquoted, from a launcher that writes it that way.
+    const bare = `main.py --base-directory=${base.replace(/ /g, '_')}`;
+    mkdirSync(join(base.replace(/ /g, '_'), 'models', 'checkpoints'), { recursive: true });
+    assert.ok(candidatesFrom(appDir, bare).map(slash).includes(slash(base.replace(/ /g, '_'))));
+    rmSync(base.replace(/ /g, '_'), { recursive: true, force: true });
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});

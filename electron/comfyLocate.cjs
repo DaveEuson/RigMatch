@@ -52,6 +52,12 @@ function candidatesFrom(startDir, commandLine = '') {
     if (dir && !found.includes(dir) && looksLikeComfyRoot(dir)) found.push(dir);
   };
 
+  // ComfyUI Desktop runs ComfyUI from inside its own app folder and keeps the
+  // models in the folder chosen at install, which it passes as
+  // --base-directory. That folder is the answer whenever it is named.
+  const baseMatch = commandLine.match(/--base-directory(?:=|\s+)(?:"([^"]+)"|(\S+))/);
+  if (baseMatch) push(baseMatch[1] ?? baseMatch[2]);
+
   // The command line names the script — "ComfyUI\main.py" — relative to the
   // directory the process was launched from, which is the portable root.
   const scriptMatch = commandLine.match(/([\w.\-\\/]*)main\.py/i);

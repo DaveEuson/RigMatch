@@ -30,6 +30,7 @@ import { BUY_ME_A_COFFEE_URL } from '../lib/appConfig';
 import { LOW_DISK_GB } from '../lib/loadLevel';
 import { UiIcon } from './icons/UiIcon';
 import { AchievementUnlocked } from './AchievementShelf';
+import { GetComfyLink } from './GetComfyLink';
 import { useShowTheme, type ShowMusicState } from '../hooks/useShowTheme';
 import speedDateShow from '../assets/robot-speed-date-show.webp';
 import ceremonyStage from '../assets/robot-scorecard-ceremony.webp';
@@ -145,8 +146,8 @@ type SimpleWizardProps = {
     /** Reachable AND holding a checkpoint that can actually draw. */
     ready: boolean;
     checkpoint?: string | null;
-    /** Runs the same search Settings runs. */
-    onFind?: () => void | Promise<void>;
+    /** ComfyUI answered at all, whether or not it can draw yet. */
+    reachable?: boolean;
   } | null;
   /** The dream matching the first-run goal choice, so PICK opens on it. */
   initialDream?: DreamFilterId;
@@ -800,13 +801,13 @@ function SetupScreen({
               warn={!comfySetup.ready}
               value={comfySetup.ready
                 ? `Running${comfySetup.checkpoint ? ` with ${comfySetup.checkpoint}` : ''}`
-                : 'Not found. You picked something that makes pictures or video, which is ComfyUI’s job, a separate free program RigMatch does not install. Everything else works without it.'}
+                // Running and able to draw are different claims; this one used
+                // to say "Not found" about a ComfyUI that was answering.
+                : comfySetup.reachable
+                  ? 'Running, but it has no picture model yet. The Models screen in Advanced Mode downloads one into it.'
+                  : 'Not running. You picked something that makes pictures or video, which is ComfyUI’s job: a separate free program. Everything else works without it.'}
             >
-              {!comfySetup.ready && comfySetup.onFind && (
-                <button type="button" className="btn btn-line btn-sm" onClick={() => void comfySetup?.onFind?.()}>
-                  Find ComfyUI for me
-                </button>
-              )}
+              {!comfySetup.ready && !comfySetup.reachable && <GetComfySteps platform={system.platform} arch={system.arch} />}
             </FoundRow>
           )}
         </ul>
@@ -887,6 +888,36 @@ function SetupScreen({
       <p className="sw-muted sw-setup-safety">
         Models download into a folder RigMatch manages. Nothing is installed system-wide, and you can delete them any time.
       </p>
+    </div>
+  );
+}
+
+/**
+ * How to get ComfyUI, for a newcomer who picked a picture or video goal.
+ *
+ * ComfyUI Desktop is the one-click installer, and RigMatch finds it by itself
+ * once it runs (on 8000, beside the portable build's 8188), so the steps end
+ * at "come back" rather than at a settings field. What it needs is said before
+ * the download rather than discovered after it (docs.comfy.org): about 5 GB,
+ * and on a Mac, Apple silicon and macOS 13.
+ */
+function GetComfySteps({ platform, arch }: { platform: string; arch: string }) {
+  const mac = platform === 'darwin';
+  return (
+    <div className="sw-get-comfy">
+      <ol>
+        <li>Get ComfyUI Desktop, the free one-click installer. It needs about 5 GB.</li>
+        <li>Open it and let it finish setting up.</li>
+        <li>Come back here. RigMatch finds it by itself.</li>
+      </ol>
+      <p className="sw-muted">
+        {mac && arch !== 'arm64'
+          ? 'ComfyUI Desktop needs a Mac with Apple silicon (M1 or later). On this Mac it has to be installed by hand, and the download page links the steps.'
+          : mac
+            ? 'On a Mac it needs Apple silicon and macOS 13 or later.'
+            : 'It runs best with an NVIDIA or AMD graphics card.'}
+      </p>
+      <GetComfyLink />
     </div>
   );
 }

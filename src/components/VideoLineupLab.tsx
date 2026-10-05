@@ -25,6 +25,7 @@ import { useVideoLineupSession } from '../hooks/useVideoLineupSession';
 import { useComfyStart } from '../hooks/useComfyStart';
 import { ensureComfyRunning } from '../lib/comfyStarter';
 import { ComfyStartButton } from './ComfyStartButton';
+import { GetComfyLink } from './GetComfyLink';
 import { PromptPicker } from './PromptPicker';
 import { BalanceFader } from './BalanceFader';
 import { VideoLineupResults } from './VideoLineupResults';
@@ -316,8 +317,8 @@ export function VideoLineupLab({
           <span>
             Video makers run on ComfyUI, a separate free program RigMatch does not install. Fit and
             time below come from this machine and need nothing running; seeing which models you
-            already have, downloading them, and racing them all need ComfyUI. Start it and it will be
-            found on port 8188.
+            already have, downloading them, and racing them all need ComfyUI. Start it and RigMatch
+            finds it by itself.
           </span>
           <div className="advanced-lab-actions">
             <button type="button" className="mini-button outline" onClick={onCheckComfy} disabled={comfyChecking}>
@@ -326,6 +327,7 @@ export function VideoLineupLab({
             </button>
             {/* Offered only when a launcher really exists beside the saved folder. */}
             <ComfyStartButton folder={readComfySettings().folder} onStarted={onCheckComfy} />
+            <GetComfyLink className="mini-button outline" />
           </div>
         </div>
       )}

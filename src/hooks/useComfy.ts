@@ -69,11 +69,16 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
   // change of panel is the moment storage may have been written by the Settings
   // screen. exhaustive-deps has no way to express "recompute when this changes"
   // and reports it as unnecessary, which it is not.
+  // The address ComfyUI last answered on is a cache key too: finding a Desktop
+  // copy on 8000 changes readComfySettings().baseUrl, and screens holding these
+  // settings must hear it without waiting for a change of panel.
+  const [answeredAt, setAnsweredAt] = useState('');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const comfySettings = useMemo(() => readComfySettings(), [activeNavId]);
+  const comfySettings = useMemo(() => readComfySettings(), [activeNavId, answeredAt]);
 
   /** One reply, applied the same way whether it came from the poll or a refresh. */
-  const applyStatus = useCallback((status: ComfyStatus) => {
+  const applyStatus = useCallback((status: ComfyStatus & { address?: string }) => {
+    if (status.address) setAnsweredAt(status.address);
     setComfyReachable(status.reachable === true);
     setComfyCheckpoints(status.checkpoints);
     setComfyTextEncoders(status.textEncoders ?? []);
