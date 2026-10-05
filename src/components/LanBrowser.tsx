@@ -8,6 +8,7 @@ import { RigDetailsPanel } from './RigDetailsPanel';
 import { SetupDoctor } from './SetupDoctor';
 import { ThirdPartyModelNotice } from './ThirdPartyModelNotice';
 import { UpgradeRig } from './UpgradeRig';
+import { formatLocale } from '../lib/formatLocale';
 
 export function LanBrowser({
   active,
@@ -56,7 +57,7 @@ export function LanBrowser({
   const wasScanning = useRef(false);
   useEffect(() => {
     if (wasScanning.current && !isScanning) {
-      setLastChecked(new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setLastChecked(new Date().toLocaleTimeString(formatLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       setFoundAtCheck(localModelCount);
     }
     wasScanning.current = isScanning;

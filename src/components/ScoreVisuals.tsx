@@ -4,6 +4,7 @@ import type { BenchmarkPromptResult, TestedModelScore } from '../types';
 import { formatPullCount, getPopularityPercent, getScoreTone } from '../lib/format';
 import { formatMatchScore } from '../lib/scoring';
 import { formatRunDelta, type RunDelta } from '../lib/runHistory';
+import { formatLocale } from '../lib/formatLocale';
 
 /** Small presentational score/status widgets shared across panels. Extracted from App.tsx. */
 
@@ -61,7 +62,7 @@ export function ScoreSparkline({ values }: { values: number[] }) {
 export function ScoreDeltaCell({ delta }: { delta: RunDelta }) {
   const label = formatRunDelta(delta);
   const previous = new Date(delta.previous.completedAt);
-  const exact = Number.isNaN(previous.valueOf()) ? '' : previous.toLocaleString();
+  const exact = Number.isNaN(previous.valueOf()) ? '' : previous.toLocaleString(formatLocale());
   const title = [
     `Previous run: ${delta.previous.total} Match${exact ? ` on ${exact}` : ''}`,
     `Latest run: ${delta.latest.total} Match`,
@@ -101,7 +102,7 @@ export function PopularityMeter({ pulls }: { pulls?: number | null }) {
   return (
     <div
       className={hasPulls ? 'popularity-meter' : 'popularity-meter empty'}
-      title={hasPulls ? `${pullCount.toLocaleString()} pulls from the Ollama library catalog` : 'Ollama local API does not expose public pull counts for this model'}
+      title={hasPulls ? `${pullCount.toLocaleString(formatLocale())} pulls from the Ollama library catalog` : 'Ollama local API does not expose public pull counts for this model'}
     >
       <span>{label}</span>
       <div className="popularity-track" aria-hidden="true">

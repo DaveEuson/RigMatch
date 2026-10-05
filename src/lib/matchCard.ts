@@ -14,6 +14,7 @@
 
 import type { ScoreRigStamp, TestedModelScore } from '../types.ts';
 import { formatMatchScore } from './scoring.ts';
+import { formatLocale } from './formatLocale.ts';
 
 /**
  * The four measurements behind a Match score, in the words the card uses. A
@@ -60,10 +61,10 @@ export function matchCardLines({ score, matchLabel, appVersion }: MatchCardInput
     // run on. A remote score knows the host but not its hardware; a local score
     // knows the card; an unstamped one predates stamping entirely.
     rigLine: rig?.host
-      ? `Measured on ${rig.host} · hardware unknown · ${new Date(score.completedAt).toLocaleDateString()}`
+      ? `Measured on ${rig.host} · hardware unknown · ${new Date(score.completedAt).toLocaleDateString(formatLocale())}`
       : rig?.gpu
-        ? `Measured on ${rig.gpu}${rig.vramGb ? ` · ${rig.vramGb} GB VRAM` : ''} · ${new Date(score.completedAt).toLocaleDateString()}`
-        : `Measured locally · ${new Date(score.completedAt).toLocaleDateString()} · scores are relative to the rig`,
+        ? `Measured on ${rig.gpu}${rig.vramGb ? ` · ${rig.vramGb} GB VRAM` : ''} · ${new Date(score.completedAt).toLocaleDateString(formatLocale())}`
+        : `Measured locally · ${new Date(score.completedAt).toLocaleDateString(formatLocale())} · scores are relative to the rig`,
     footer: `RigMatch ${appVersion} — AI matchmaking for your PC. Nothing leaves the computer.`,
   };
 }

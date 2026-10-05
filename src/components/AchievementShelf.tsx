@@ -13,8 +13,9 @@ import {
 import { setShowExtras, useShowExtras } from '../lib/showExtras';
 import { AchievementBadge } from './AchievementBadge';
 import './AchievementShelf.css';
+import { formatLocale } from '../lib/formatLocale';
 
-const earnedOn = (at: string) => new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+const earnedOn = (at: string) => new Date(at).toLocaleDateString(formatLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
 const byId = (id: AchievementId) => ACHIEVEMENTS.find((a) => a.id === id) as Achievement;
 /** What a badge is called where it can be seen: a hidden one has no name until earned. */
 const badgeName = (a: Achievement, earned: boolean) => (a.hidden && !earned ? 'Hidden achievement' : a.title);

@@ -10,6 +10,7 @@ import { AudioClipPlayer } from './AudioClipPlayer';
 import { AvatarBust } from './Avatars';
 import { UiIcon } from './icons/UiIcon';
 import { useDialog } from '../lib/useDialog';
+import { formatLocale } from '../lib/formatLocale';
 
 /**
  * Ambient indicator that a skill test is running, visible on any tab so you
@@ -81,7 +82,7 @@ export function LiveBuildModal({ build, onClose }: { build: { model: string; kin
         <div className="live-build-meta">
           {build.error
             ? <em className="live-build-error">{build.error}</em>
-            : <em>{streamable ? `${build.text.length.toLocaleString()} characters · ` : ''}{metaText}</em>}
+            : <em>{streamable ? `${build.text.length.toLocaleString(formatLocale())} characters · ` : ''}{metaText}</em>}
         </div>
         {streamable ? (
           <pre ref={scrollRef} className="live-build-stream">
