@@ -12638,8 +12638,8 @@ a.whats-next-support:hover {
   display: grid;
   gap: 6px;
   padding: 10px 12px;
-  border: 1px solid var(--line-bright);
-  border-left: 3px solid var(--red);
+  /* A tinted border all round, not a coloured rail down one side. */
+  border: 1px solid color-mix(in srgb, var(--red) 55%, transparent);
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.22);
 }
@@ -12656,8 +12656,7 @@ a.whats-next-support:hover {
   align-items: flex-start;
   margin: 10px 0;
   padding: 10px 12px;
-  border: 1px solid var(--line-bright);
-  border-left: 3px solid var(--gold);
+  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.2);
 }
