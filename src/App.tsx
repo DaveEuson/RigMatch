@@ -64,7 +64,6 @@ import { audioMakerChoices, chatPicks, videoMakerChoices } from './lib/chatMaker
 import { renderChatAudio, renderChatVideo, type ChatRender } from './lib/chatRenders';
 import { installedAudioEntries } from './lib/audioLineup';
 import { audioModelSpec } from './lib/audioCatalog';
-import { ChannelComparisonPanel } from './components/ChannelComparisonPanel';
 import {
   WORKBENCH_STORAGE_KEY,
   balanceChannel,
@@ -79,7 +78,6 @@ import { useLabResults } from './hooks/useLabResults';
 import { useVideoLineupSession } from './hooks/useVideoLineupSession';
 import { useRenderActivity, useRenderOutcome } from './hooks/useRenderActivity';
 import { endImageTest, renderChannel, renderLabel, startImageTest, type RenderActivity } from './lib/renderActivity';
-import { RunReportModal } from './components/RunReportModal';
 import type { StoredRunReport } from './lib/runReports';
 import {
   RUN_REPORTS_STORAGE_KEY,
@@ -88,7 +86,6 @@ import {
   parseStoredReports,
   reportStorageCandidates,
 } from './lib/runReports';
-import { WhatsNewPanel } from './components/WhatsNewPanel';
 import type { NavId, NavItem } from './lib/appConfig';
 import { playCue, playJingle } from './lib/sound';
 import { nothingToRunNote } from './lib/skillRunNote';
@@ -196,18 +193,15 @@ import {
   type UiMode,
 } from './lib/appConfig';
 import { ShareScorecard } from './components/ShareScorecard';
-import { ExportHatchModal } from './components/ExportHatchModal';
 import { buildHatchProfile } from './lib/hatchProfile';
 import { UpdateAvailableToast } from './components/UpdateAvailableToast';
-import { SimpleWizard, type DreamFilterId, type StepId as WizardStepId, type WizardModel } from './components/SimpleWizard';
+import type { DreamFilterId, StepId as WizardStepId, WizardModel } from './components/SimpleWizard';
 import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, ChoiceCruiseModal } from './components/dialogs';
-import { ChatDock } from './components/ChatDock';
 import { SkillRunMiniBar, LiveBuildModal, DemoResultModal } from './components/SkillDemoViewers';
 import { RunSheet } from './components/RunSheet';
 import { ClearScoresModal } from './components/ClearScoresModal';
 import { ThirdPartyDownloadConsentModal } from './components/ThirdPartyDownloadConsentModal';
 import { SetupGuideDock } from './components/SetupGuideDock';
-import { LanBrowser } from './components/LanBrowser';
 import { DownloadTickerDock } from './components/DownloadTickerDock';
 import { Elapsed } from './components/Elapsed';
 import { FirstRunSplash } from './components/FirstRunSplash';
@@ -215,14 +209,7 @@ import { ModelPoolLineupStrip } from './components/ModelPoolLineupStrip';
 import { WelcomeOverlay } from './components/WelcomeOverlay';
 import { AchievementCues } from './components/TrojanReveal';
 import type { SettingsSectionId } from './lib/settingsSections';
-import { LogsView } from './components/LogsView';
-import { ActivityPanel } from './components/ActivityPanel';
-import { SpeedDatePanel } from './components/SpeedDatePanel';
-import { UtilityPanel } from './components/UtilityPanel';
-import { ModelCabinet } from './components/ModelCabinet';
-import { ModelPage } from './components/ModelPage';
 import { displaySuiteName, suiteNameFor } from './lib/testHistory';
-import { LiveFlirtSpotlight } from './components/LiveFlirtSpotlight';
 import { extractHtmlDocument } from './lib/labPreview';
 import {
   describeLabFailure,
@@ -316,6 +303,25 @@ import './styles/settings.css';
 import './styles/dialogs.css';
 import { matchMeasures } from './lib/matchCard';
 import { questionSetLabel } from './lib/runSheet';
+import { lazyPanel } from './lib/lazyPanel';
+
+// Screens loaded the first time they are shown (lib/lazyPanel.tsx): neither
+// mode needs the other's screens, and most sessions never open Settings,
+// Labs or the run history.
+const SimpleWizard = lazyPanel(() => import('./components/SimpleWizard').then((m) => m.SimpleWizard));
+const ChannelComparisonPanel = lazyPanel(() => import('./components/ChannelComparisonPanel').then((m) => m.ChannelComparisonPanel));
+const RunReportModal = lazyPanel(() => import('./components/RunReportModal').then((m) => m.RunReportModal));
+const WhatsNewPanel = lazyPanel(() => import('./components/WhatsNewPanel').then((m) => m.WhatsNewPanel));
+const ExportHatchModal = lazyPanel(() => import('./components/ExportHatchModal').then((m) => m.ExportHatchModal));
+const ChatDock = lazyPanel(() => import('./components/ChatDock').then((m) => m.ChatDock));
+const LanBrowser = lazyPanel(() => import('./components/LanBrowser').then((m) => m.LanBrowser));
+const LogsView = lazyPanel(() => import('./components/LogsView').then((m) => m.LogsView));
+const ActivityPanel = lazyPanel(() => import('./components/ActivityPanel').then((m) => m.ActivityPanel));
+const SpeedDatePanel = lazyPanel(() => import('./components/SpeedDatePanel').then((m) => m.SpeedDatePanel));
+const UtilityPanel = lazyPanel(() => import('./components/UtilityPanel').then((m) => m.UtilityPanel));
+const ModelCabinet = lazyPanel(() => import('./components/ModelCabinet').then((m) => m.ModelCabinet));
+const ModelPage = lazyPanel(() => import('./components/ModelPage').then((m) => m.ModelPage));
+const LiveFlirtSpotlight = lazyPanel(() => import('./components/LiveFlirtSpotlight').then((m) => m.LiveFlirtSpotlight));
 
 
 // Quick TEST resource warning opt-out ('off' = user chose "don't warn again").
@@ -4547,6 +4553,9 @@ function App() {
       <>
 
       <main className="stage-content">
+        {/* The page's one h1, naming the screen, for screen readers: no Advanced
+            screen had one, and their visible titles are h2s under it. */}
+        <h1 className="sr-only">RigMatch Advanced Mode: {TOP_TABS.find((tab) => tab.id === activeTab)?.label ?? 'Models'}</h1>
         {/* Over the screen, not the window: the top bar and its live CPU and GPU
             strip stay in view while a run goes. */}
         {uiMode === 'advanced' && runProgress?.phase === 'running' && (

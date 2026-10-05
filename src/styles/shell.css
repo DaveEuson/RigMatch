@@ -376,7 +376,7 @@
   border-bottom: 1px solid var(--line);
   background: var(--bg);
   color: var(--muted);
-  font: 400 13px/1 var(--ui);
+  font: 400 var(--fs-ui)/1 var(--ui);
   overflow: hidden;
 }
 
@@ -399,7 +399,7 @@
 
 .load-value {
   color: var(--text-strong);
-  font: 500 13px/1 var(--figure);
+  font: 500 var(--fs-ui)/1 var(--figure);
 }
 
 .load-bar {
