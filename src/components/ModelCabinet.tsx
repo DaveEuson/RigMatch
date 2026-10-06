@@ -1478,8 +1478,8 @@ export function ModelCabinet({
               const maker = best.publisher ?? getModelOrigin(best.displayName).organization;
               const country = getDisplayCountry(best.displayName, best.publisher);
               const countryCode = country ? getCountryCode(country) : null;
-              // A family row only stands for two or more versions (see
-              // MIN_VARIANTS_TO_GROUP), but the plural costs one word.
+              // Every family is a group, a family of one included (see
+              // MIN_VARIANTS_TO_GROUP), so "1 version" is on screen.
               const versionCount = `${variants.length} version${variants.length === 1 ? '' : 's'}`;
               return [
                 <tr
@@ -1556,13 +1556,15 @@ export function ModelCabinet({
                   <td className="action-cell">
                     <button
                       type="button"
-                      className="mini-button outline model-family-toggle"
+                      // A quiet link, not an outlined button: on most rows it
+                      // was the same "Show 1 version" box down the column.
+                      className="model-family-toggle"
                       aria-expanded={open}
-                      // Starts with the words on the button, so "click Show 4
+                      // Starts with the words on it, so saying "click 4
                       // versions" works by voice (WCAG 2.5.3, label in name).
-                      aria-label={`${open ? 'Hide versions' : `Show ${versionCount}`} of ${family}`}
+                      aria-label={open ? `Hide ${versionCount} of ${family}` : `${versionCount} of ${family}`}
                     >
-                      {open ? 'Hide versions' : `Show ${versionCount}`}
+                      {open ? 'Hide' : versionCount}
                     </button>
                   </td>
                 </tr>,

@@ -19,6 +19,6 @@ test('each service in the top bar can be told apart without its name', () => {
 });
 
 test('the family button\'s spoken name starts with the words on it', () => {
-  assert.match(cabinet, /aria-label=\{`\$\{open \? 'Hide versions' : `Show \$\{versionCount\}`\} of \$\{family\}`\}/);
-  assert.match(cabinet, /\{open \? 'Hide versions' : `Show \$\{versionCount\}`\}/);
+  assert.match(cabinet, /aria-label=\{open \? `Hide \$\{versionCount\} of \$\{family\}` : `\$\{versionCount\} of \$\{family\}`\}/);
+  assert.match(cabinet, /\{open \? 'Hide' : versionCount\}/);
 });

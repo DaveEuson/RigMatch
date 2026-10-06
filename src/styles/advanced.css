@@ -811,3 +811,18 @@
 }
 .app-shell[data-ui-mode='advanced'] .speed-date-view-toggle button:not(.active):hover { border-color: var(--text); background: var(--panel-hover); }
 .app-shell[data-ui-mode='advanced'] :is(.speed-date-qa-block, .profile-qa-block):is(.asked, .answered) { background: transparent; }
+/* Models: the family toggle is a quiet link ("1 version", "4 versions"),
+   not an outlined button repeated down the Actions column. */
+.app-shell[data-ui-mode='advanced'] .model-family-toggle {
+  min-height: var(--h-control-sm);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: 400 var(--fs-ui) / 1.2 var(--ui);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.app-shell[data-ui-mode='advanced'] .model-family-toggle:hover { color: var(--text-strong); text-decoration-color: currentColor; }

@@ -34,7 +34,9 @@ test('rows open the model instead of repeating one button down the list', () => 
   const whatsNew = read('src/components/WhatsNewPanel.tsx');
   assert.doesNotMatch(whatsNew, />\s*Details\s*</);
   assert.match(whatsNew, /className="model-news-open"/);
-  assert.match(read('src/lib/modelGroups.ts'), /export const MIN_VARIANTS_TO_GROUP = 2;/);
+  // Models keeps its compact family rows; the toggle is a quiet link.
+  assert.match(read('src/components/ModelCabinet.tsx'), /className="model-family-toggle"/);
+  assert.match(advanced, /\.model-family-toggle \{[^}]*border: 0;[^}]*color: var\(--muted\);/);
 });
 
 test('My PC says each thing once, and says what is true', () => {

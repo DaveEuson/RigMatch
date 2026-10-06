@@ -36,16 +36,19 @@ export type GroupedRow<T> =
   | { kind: 'group'; group: ModelGroup<T> };
 
 /**
- * A family needs two versions before it is folded into one row.
+ * Every family is a group, including the ones with a single version.
  *
- * It was 1, so that every row had one shape. That cost more than it gave:
- * most families on a PC have one version, so most rows carried the same
- * outlined "Show 1 version" button, which read as generated, and a click
- * stood between the reader and that model's Test and Add buttons. A model
- * with one version is now simply its own row, and a family row (caret,
- * "Show 4 versions") marks the cases where there is something to open.
+ * This was 2, on the reasoning that a triangle hiding one row is a control
+ * that does nothing. That reasoning was about the control and not about the
+ * list: mixing collapsible family rows with bare model rows makes the reader
+ * work out which kind each row is before they know what clicking does. One
+ * shape for every row is worth the extra click on a family of one.
+ *
+ * Tried at 2 in 2026-10 to drop the "Show 1 version" button from most rows:
+ * the version rows that replaced them were three times as tall, and the list
+ * stopped being scannable. The toggle became a quiet "1 version" link instead.
  */
-export const MIN_VARIANTS_TO_GROUP = 2;
+export const MIN_VARIANTS_TO_GROUP = 1;
 
 export function groupRowsByFamily<T>(
   rows: T[],
