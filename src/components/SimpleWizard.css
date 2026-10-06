@@ -161,6 +161,7 @@
   text-align: left;
 }
 .sw-setup-explainer strong { color: var(--text-strong); }
+.sw-dl-status svg { width: 14px; height: 14px; vertical-align: -2px; color: var(--green); }
 .sw-setup-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: var(--s3) var(--s4); }
 .sw-setup .sw-cta { min-height: 52px; padding: 0 var(--s6); font-size: 18px; }
 .sw-setup-safety { max-width: 52ch; }

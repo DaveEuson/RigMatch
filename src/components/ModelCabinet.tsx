@@ -1192,7 +1192,7 @@ export function ModelCabinet({
                       </span>
                     </button>
                     {isCloudModel(row.displayName) && (
-                      <span className="model-warning-tag" title="This model runs on remote servers — prompts leave your computer">☁ Cloud</span>
+                      <span className="model-warning-tag" title="This model runs on remote servers — prompts leave your computer">Cloud</span>
                     )}
                     {isEmbeddingModel(row.displayName) && (
                       <span className="model-warning-tag" title="Embedding model — not for chat or text generation">Embed only</span>
@@ -1369,7 +1369,7 @@ export function ModelCabinet({
                               ? `Play ${row.displayName} the listening test`
                               : skill === 'reading'
                                 ? `Show ${row.displayName} a test picture to describe`
-                                : hardwareFit.recommend ? `Test ${row.displayName} on this computer` : hardwareFit.tone === 'unknown' ? `⚠ Size unknown — RigMatch can't gauge fit yet, test anyway?` : `⚠ Too big for your VRAM — will be slow, test anyway?`}
+                                : hardwareFit.recommend ? `Test ${row.displayName} on this computer` : hardwareFit.tone === 'unknown' ? `Size unknown — RigMatch can't gauge fit yet, test anyway?` : `Too big for your VRAM — will be slow, test anyway?`}
                           >
                             <Gauge aria-hidden="true" />
                             {skill && testing ? 'Close' : 'Test'}
@@ -1412,7 +1412,7 @@ export function ModelCabinet({
                           className={queued ? 'mini-button queued download-row-button' : `mini-button outline download-row-button${!hardwareFit.recommend ? ' warn' : ''}`}
                           onClick={() => onQueueModel(row)}
                           disabled={!queued && !platformFit.compatible}
-                          title={!platformFit.compatible ? platformFit.reason : !hardwareFit.recommend ? (hardwareFit.tone === 'unknown' ? `Size unknown — download to find out the footprint?` : `⚠ Too big for your VRAM — download anyway?`) : `${queued ? 'Remove from queue' : `Get ${row.displayName}`}: ${row.sizeGb ? formatGb(row.sizeGb) : 'unknown size'}`}
+                          title={!platformFit.compatible ? platformFit.reason : !hardwareFit.recommend ? (hardwareFit.tone === 'unknown' ? `Size unknown — download to find out the footprint?` : `Too big for your VRAM — download anyway?`) : `${queued ? 'Remove from queue' : `Get ${row.displayName}`}: ${row.sizeGb ? formatGb(row.sizeGb) : 'unknown size'}`}
                           aria-label={!platformFit.compatible ? platformFit.reason : queued ? `Remove ${row.displayName} from the download queue` : `Get ${row.displayName}`}
                         >
                           <span>{!platformFit.compatible ? 'macOS Only' : queued ? 'Remove' : `Get ${getQueueChipModelName(row.displayName)}`}</span>

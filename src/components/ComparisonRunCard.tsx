@@ -1,6 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Download, Play, Sparkles } from 'lucide-react';
+import { AlertTriangle, Download, Play } from 'lucide-react';
 import { AUDIO_CLIP_SECONDS } from '../lib/audioCatalog';
 import { AUDIO_BENCHMARK_PROMPTS } from '../lib/audioGenScoring';
 import { installedAudioEntries } from '../lib/audioLineup';
@@ -408,7 +408,6 @@ export function ComparisonRunCard({
   return (
     <section className="comparison-run" aria-label={`Run ${copy.noun} models on one prompt`}>
       <div className="comparison-run-head">
-        <Sparkles aria-hidden="true" />
         <strong>{copy.heading}</strong>
       </div>
       <p>

@@ -44,7 +44,7 @@ test('the tokens name the three faces and keep the old names working', () => {
 });
 
 test('the interface icons follow the text color, not a fixed cream', () => {
-  assert.equal(UI_ICON_NAMES.length, 31, 'the 30 from the handoff, plus coffee for Donate');
+  assert.equal(UI_ICON_NAMES.length, 32, "the 30 from the handoff, plus coffee for Donate and bell for What's New");
   for (const name of UI_ICON_NAMES) {
     const { body, strokeWidth } = UI_ICON_ART[name];
     assert.ok(strokeWidth > 0, name);

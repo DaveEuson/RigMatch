@@ -116,8 +116,7 @@ export function ModelScorePill({ score }: { score?: TestedModelScore }) {
   if (!score) {
     return (
       <span className="score-pill empty" title="Not tested yet. Run a test to score this model on this computer.">
-        <strong>--</strong>
-        <em>Test</em>
+        <em>Not tested</em>
       </span>
     );
   }

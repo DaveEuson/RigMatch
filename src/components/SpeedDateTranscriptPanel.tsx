@@ -252,7 +252,7 @@ export function SpeedDateTranscriptPanel({
                     >
                       <div className="sbs-answer-head">
                         <div className="sbs-answer-model">
-                          {isBest && <span className="sbs-best-badge" title="Best answer for this question">★</span>}
+                          {isBest && <span className="sbs-best-badge" title="Best answer for this question">Best</span>}
                           <strong>{getShortModelName(row.displayName)}</strong>
                           <em className={`score-row-grade ${getScoreTone(totalScore)}`}>{totalScore}</em>
                         </div>
