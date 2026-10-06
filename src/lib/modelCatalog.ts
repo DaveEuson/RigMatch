@@ -18,6 +18,7 @@ import type {
 import type { NavId } from '../types';
 import { getDisplayCountry, getModelFamily, getModelOrigin } from './modelOrigins.ts';
 import { normalizeModelKey } from './modelKey.ts';
+import { isSpecialistModel } from './chooseLineup.ts';
 import { MATCH_GRADE_BANDS, compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore } from './scoring.ts';
 import { formatBytes, formatBytesPerSecond, formatGb, hashString, formatThroughput } from './format.ts';
 import {
@@ -167,9 +168,13 @@ export function textJudgeCandidates(
   const text = [...rows]
     .filter((row) => canGenerateText(row) && !isEmbeddingModel(nameOf(row)) && nameOf(row))
     .sort((a, b) => (b.sizeGb ?? 0) - (a.sizeGb ?? 0));
+  // A safety classifier or extractor (isSpecialistModel) labels text rather
+  // than marks it, so it goes to the back with the weak judges: the largest
+  // installed model was picked, and gpt-oss-safeguard:20b is often that.
+  const weak = (row: (typeof rows)[number]) => WEAK_TEXT_JUDGE.test(nameOf(row)) || isSpecialistModel(nameOf(row));
   return [
-    ...fitsFirst(text.filter((row) => !WEAK_TEXT_JUDGE.test(nameOf(row)))),
-    ...fitsFirst(text.filter((row) => WEAK_TEXT_JUDGE.test(nameOf(row)))),
+    ...fitsFirst(text.filter((row) => !weak(row))),
+    ...fitsFirst(text.filter(weak)),
   ].map(nameOf);
 }
 

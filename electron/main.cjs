@@ -4108,6 +4108,20 @@ async function unloadLmStudioModel(baseUrl, model, keep = []) {
     const keepIds = new Set(keep);
     const loaded = await lmStudioLoadedInstances(baseUrl, model);
     for (const instanceId of loaded.filter((id) => !keepIds.has(id))) {
+      // LM Studio resolves an instance id that is also the model's name to
+      // the first copy of that model. With one of yours loaded under a name
+      // of your own, RigMatch's copy gets the bare name, and unloading it
+      // unloaded yours (LM Studio 0.4, 2026-10-06). That copy stays loaded
+      // rather than risk yours; with default names it is ":2" and unloads.
+      if (instanceId === model && keepIds.size > 0) {
+        await appendAppLog({
+          level: 'warn',
+          source: 'benchmark',
+          message: `Left ${model} loaded in LM Studio: unloading it by name would have unloaded your own copy.`,
+          details: { model, keep: [...keepIds] },
+        }).catch(() => {});
+        continue;
+      }
       await fetchJson(
         `${lmStudioOrigin(baseUrl)}/api/v1/models/unload`,
         { method: 'POST', body: JSON.stringify({ instance_id: instanceId }) },
@@ -4521,8 +4535,15 @@ function isUnsupportedThinkError(error) {
 function normalizeLocalProvider(provider, baseUrl = '') {
   if (provider === 'lm-studio' || provider === 'lmstudio') return 'lm-studio';
   if (provider === 'ollama') return 'ollama';
-  const normalizedUrl = String(baseUrl || '').toLowerCase();
-  return normalizedUrl.includes(':1234') || normalizedUrl.includes('/v1') ? 'lm-studio' : 'ollama';
+  // LM Studio's address as RigMatch keeps it: port 1234, or the OpenAI path
+  // /v1. Parsed, because a substring test also took port 12345 and any path
+  // with "/v1" in it.
+  try {
+    const url = new URL(String(baseUrl || ''));
+    return url.port === '1234' || /\/v1\/?$/.test(url.pathname) ? 'lm-studio' : 'ollama';
+  } catch {
+    return 'ollama';
+  }
 }
 
 function getLocalProviderLabel(provider) {
@@ -4759,6 +4780,7 @@ async function runAdvancedGenerate(request = {}, sender = null) {
   if (normalizeLocalProvider(request.provider, baseUrl) === 'lm-studio') {
     return runLmStudioAdvancedGenerate({ model, baseUrl, prompt, request, timeoutMs, stream: wantStream ? { sender, streamId } : null });
   }
+  if (body.keep_alive !== '0') ollamaLabResident.set(`${baseUrl}\n${model}`, { baseUrl, model });
 
   // Audio only works through /api/chat.
   //
@@ -4885,6 +4907,30 @@ async function streamAdvancedGenerate(url, body, timeoutMs, sender, streamId, mo
     const decoder = new TextDecoder();
     let buffer = '';
     let bytes = 0;
+    const readLine = (raw) => {
+      const line = raw.trim();
+      // LM Studio sends server-sent events: an "event:" line, then the
+      // same event as "data: {json}". Ollama sends bare JSON lines.
+      if (!line || line.startsWith('event:')) return;
+      let obj;
+      try { obj = JSON.parse(line.startsWith('data:') ? line.slice(5).trim() : line); } catch { return; }
+      // /api/generate says `response`, /api/chat `message.content`, and
+      // LM Studio a message.delta's `content`. Its reasoning.delta is left
+      // out, as Ollama's thinking is.
+      const piece = typeof obj.response === 'string' ? obj.response
+        : typeof obj.message?.content === 'string' ? obj.message.content
+          : obj.type === 'message.delta' && typeof obj.content === 'string' ? obj.content : '';
+      if (piece) {
+        full += piece;
+        emit({ delta: piece, text: full, done: false });
+      }
+      if (typeof obj.image === 'string') image = obj.image;
+      if (Array.isArray(obj.images)) images = obj.images.filter((item) => typeof item === 'string').slice(0, 1);
+      if (typeof obj.error === 'string') errorMsg = obj.error;
+      if (obj.type === 'error') errorMsg = obj.error?.message || 'LM Studio stopped with an error.';
+      if (obj.done) doneReason = obj.done_reason || 'stop';
+      if (obj.type === 'chat.end') doneReason = readLmStudioChat(obj.result, body.max_output_tokens).doneReason;
+    };
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -4893,36 +4939,21 @@ async function streamAdvancedGenerate(url, body, timeoutMs, sender, streamId, mo
       buffer += decoder.decode(value, { stream: true });
       let newlineIndex;
       while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-        const line = buffer.slice(0, newlineIndex).trim();
+        readLine(buffer.slice(0, newlineIndex));
         buffer = buffer.slice(newlineIndex + 1);
-        // LM Studio sends server-sent events: an "event:" line, then the
-        // same event as "data: {json}". Ollama sends bare JSON lines.
-        if (!line || line.startsWith('event:')) continue;
-        let obj;
-        try { obj = JSON.parse(line.startsWith('data:') ? line.slice(5).trim() : line); } catch { continue; }
-        // /api/generate says `response`, /api/chat `message.content`, and
-        // LM Studio a message.delta's `content`. Its reasoning.delta is left
-        // out, as Ollama's thinking is.
-        const piece = typeof obj.response === 'string' ? obj.response
-          : typeof obj.message?.content === 'string' ? obj.message.content
-            : obj.type === 'message.delta' && typeof obj.content === 'string' ? obj.content : '';
-        if (piece) {
-          full += piece;
-          emit({ delta: piece, text: full, done: false });
-        }
-        if (typeof obj.image === 'string') image = obj.image;
-        if (Array.isArray(obj.images)) images = obj.images.filter((item) => typeof item === 'string').slice(0, 1);
-        if (typeof obj.error === 'string') errorMsg = obj.error;
-        if (obj.type === 'error') errorMsg = obj.error?.message || 'LM Studio stopped with an error.';
-        if (obj.done) doneReason = obj.done_reason || 'stop';
-        if (obj.type === 'chat.end') doneReason = readLmStudioChat(obj.result, body.max_output_tokens).doneReason;
       }
     }
+    // A reply that is one JSON object with no newline after it, such as an
+    // LM Studio before 0.4 answering an unknown route with { error }, was
+    // left in the buffer, and the test came back empty with no error.
+    readLine(buffer + decoder.decode());
     emit({ text: full, done: true, error: errorMsg });
   } catch (error) {
     errorMsg = errorMsg || (error?.name === 'AbortError'
       ? (streamEntry.stoppedByUser ? 'Stopped by user.' : `Timed out after ${timeoutMs} ms.`)
-      : (error?.message || 'Advanced generate failed.'));
+      : /fetch failed/i.test(error?.message ?? '')
+        ? `Cannot reach local AI service at ${getUrlOrigin(url)}. Make sure Ollama or LM Studio is installed, running, and serving a local API.`
+        : (error?.message || 'Advanced generate failed.'));
     emit({ text: full, done: true, error: errorMsg });
   } finally {
     clearTimeout(timer);
@@ -4942,21 +4973,48 @@ async function streamAdvancedGenerate(url, body, timeoutMs, sender, streamId, mo
  * alone. No audio: LM Studio reports no model that hears, so the listening
  * test never sends one here.
  *
- * Nothing is unloaded after, as Ollama keeps a Labs model for keep_alive's
- * ten minutes: LM Studio swaps a model it loaded for a request out when the
- * next one loads.
+ * The graphics card is shared fairly, as a show shares it. Ollama models a
+ * Labs request left loaded are unloaded before LM Studio loads one, and the
+ * copies this request loads in LM Studio are unloaded after it; one you had
+ * loaded yourself is left. Neither program frees memory for the other, so a
+ * judge in one beside contestants in the other loaded partly on the
+ * processor, or not at all.
+ *
+ * An LM Studio before 0.4 has no /api/v1/chat. It answers 200 { error:
+ * "Unexpected endpoint…" }, and the test is asked again, unstreamed, on its
+ * OpenAI route, as the show's questions are.
  */
 async function runLmStudioAdvancedGenerate({ model, baseUrl, prompt, request, timeoutMs, stream }) {
   const options = request.options && typeof request.options === 'object' && !Array.isArray(request.options) ? request.options : {};
   const whole = (value) => (Number.isFinite(Number(value)) && Number(value) > 0 ? Math.round(Number(value)) : undefined);
   const maxOutputTokens = whole(options.num_predict);
+  const temperature = Number.isFinite(Number(options.temperature)) ? Number(options.temperature) : 0;
   const images = normalizeChatImages(request.images).map(toImageDataUrl);
   const url = `${lmStudioOrigin(baseUrl)}/api/v1/chat`;
-  // Thinking off when the test turns it off, and asked again without the
-  // switch for a model that has none (a 400), as lmStudioNativeChat does.
-  // That case is asked unstreamed: a refused stream has already told the
-  // renderer it ended.
-  const reasoningOff = request.think === false && !lmStudioNoReasoningSwitch.has(model);
+  const emitDone = (result) => {
+    if (stream?.sender && !stream.sender.isDestroyed()) {
+      stream.sender.send('advanced-generate:progress', { streamId: stream.streamId, model, text: result.response ?? '', done: true, error: result.error });
+    }
+  };
+  // Asked whole rather than streamed: a stream that must change course has
+  // already told the renderer it ended. A streamed test asked this way still
+  // ends with a done event, and its Stop button still stops it.
+  const askWhole = async (target, body, read) => {
+    const entry = stream ? { controller: new AbortController(), stoppedByUser: false } : null;
+    if (entry) activeAdvancedStreams.set(stream.streamId, entry);
+    try {
+      const result = read(await fetchJson(target, { method: 'POST', body: JSON.stringify(body), signal: entry?.controller.signal }, timeoutMs, JSON_RESPONSE_MAX_BYTES));
+      if (stream) emitDone(result);
+      return result;
+    } catch (error) {
+      if (!entry?.stoppedByUser) throw error;
+      const stopped = { response: '', done_reason: 'unknown', error: 'Stopped by user.' };
+      emitDone(stopped);
+      return stopped;
+    } finally {
+      if (entry) activeAdvancedStreams.delete(stream.streamId);
+    }
+  };
   const ask = (off, streamed) => {
     const body = lmStudioChatBody({
       model,
@@ -4964,26 +5022,71 @@ async function runLmStudioAdvancedGenerate({ model, baseUrl, prompt, request, ti
       images,
       maxOutputTokens,
       contextLength: whole(options.num_ctx),
-      temperature: Number.isFinite(Number(options.temperature)) ? Number(options.temperature) : 0,
+      temperature,
       reasoningOff: off,
       stream: Boolean(streamed),
     });
     if (streamed) return streamAdvancedGenerate(url, body, timeoutMs, stream.sender, stream.streamId, model);
-    return fetchJson(url, { method: 'POST', body: JSON.stringify(body) }, timeoutMs, JSON_RESPONSE_MAX_BYTES)
-      .then((response) => ({
-        response: lmStudioChatText(response),
-        done_reason: readLmStudioChat(response, maxOutputTokens).doneReason,
-        error: typeof response?.error === 'string' ? response.error : response?.error?.message,
-      }));
+    return askWhole(url, body, (response) => ({
+      response: lmStudioChatText(response),
+      done_reason: readLmStudioChat(response, maxOutputTokens).doneReason,
+      error: typeof response?.error === 'string' ? response.error : response?.error?.message,
+    }));
   };
-  if (!reasoningOff) return ask(false, stream);
+  // Thinking off when the test turns it off, and asked again without the
+  // switch for a model that has none (a 400), as lmStudioNativeChat does.
+  const reasoningOff = request.think === false && !lmStudioNoReasoningSwitch.has(model);
+  const askNative = async () => {
+    if (!reasoningOff) return ask(false, stream);
+    try {
+      return await ask(true, false);
+    } catch (error) {
+      if (!/reasoning/i.test(getLogErrorMessage(error))) throw error;
+      lmStudioNoReasoningSwitch.add(model);
+      return ask(false, stream);
+    }
+  };
+  const askOpenAi = () => askWhole(`${String(baseUrl).replace(/\/$/, '')}/chat/completions`, {
+    model,
+    messages: [{
+      role: 'user',
+      content: images.length
+        ? [{ type: 'text', text: prompt }, ...images.map((dataUrl) => ({ type: 'image_url', image_url: { url: dataUrl } }))]
+        : prompt,
+    }],
+    temperature,
+    max_tokens: maxOutputTokens,
+    stream: false,
+  }, (response) => ({
+    response: extractOpenAiChatContent(response),
+    done_reason: response?.choices?.[0]?.finish_reason === 'length' ? 'length' : 'stop',
+    error: typeof response?.error === 'string' ? response.error : response?.error?.message,
+  }));
+
+  await releaseOllamaLabModels();
+  // Without a listing to compare against, nothing is unloaded: an empty one
+  // would mark the copy you loaded yourself as RigMatch's.
+  const listing = await fetchJson(`${lmStudioOrigin(baseUrl)}/api/v1/models`, {}, 3000).catch(() => null);
+  const keep = listing ? loadedInstanceIds(listing, model) : null;
   try {
-    return await ask(true, false);
-  } catch (error) {
-    if (!/reasoning/i.test(getLogErrorMessage(error))) throw error;
-    lmStudioNoReasoningSwitch.add(model);
-    return ask(false, stream);
+    const result = await askNative();
+    return /Unexpected endpoint/i.test(result.error ?? '') ? await askOpenAi() : result;
+  } finally {
+    if (keep) await unloadLmStudioModel(baseUrl, model, keep);
   }
+}
+
+/**
+ * Ollama models a Labs request left loaded (keep_alive), by address and name,
+ * so a Labs request to LM Studio can free the card first. Ollama frees its
+ * own models for each other, but not for another program.
+ */
+const ollamaLabResident = new Map();
+
+async function releaseOllamaLabModels() {
+  const resident = [...ollamaLabResident.values()];
+  ollamaLabResident.clear();
+  for (const { baseUrl, model } of resident) await unloadBenchmarkModel(baseUrl, model);
 }
 
 function scoreRigFit(model) {

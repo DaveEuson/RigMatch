@@ -889,6 +889,13 @@ function App() {
     () => modelRows.filter((row) => shortlistIds.has(row.displayName) && canJoinComparison(row)).slice(0, 5),
     [modelRows, shortlistIds],
   );
+  // The models the run sheet is about to test: one, or the installed lineup.
+  const sheetLineupRows = useMemo(
+    () => (pendingRunMode === 'single'
+      ? modelRows.filter((row) => row.displayName === (pendingSingleModel ?? selectedModel))
+      : shortlistedRows.filter((row) => row.installed).slice(0, 5)),
+    [pendingRunMode, pendingSingleModel, selectedModel, modelRows, shortlistedRows],
+  );
   const installedRowsForCleanup = useMemo(() => deletableRows(modelRows), [modelRows]);
   // Any installed text model can judge, LM Studio's included: an LM Studio
   // user with no Ollama models had no judge at all, so their chat and
@@ -1068,8 +1075,13 @@ function App() {
 
     // One card per model name — see collapseModelVariants for the reasoning
     // (first outside review: "many versions of Gemma 4").
-    return collapseModelVariants(mapped, shortlistIds);
-  }, [modelRows, shortlistIds, system.gpu.vramGb, system.platform, ollama.ready]);
+    // The goal first, then one card per name, so a family's card is a size
+    // that can do what was asked. Collapsed first, Gemma 4 was gemma4:12b on
+    // a 24 GB card, which cannot hear, and "Listens" showed no contestants
+    // though e4b and e2b fit and hear.
+    const forGoal = wizardDream === 'all' ? mapped : mapped.filter((model) => model.dreamTags.includes(wizardDream));
+    return collapseModelVariants(forGoal, shortlistIds);
+  }, [modelRows, shortlistIds, system.gpu.vramGb, system.platform, ollama.ready, wizardDream]);
   /**
    * The channel whose results that round is ranked on.
    *
@@ -3402,7 +3414,7 @@ function App() {
     }
 
     // Generation jobs do not come from this model list at all. Every other
-    // skill runs on an Ollama model; images and video run on ComfyUI
+    // skill runs on the model's own program; images and video run on ComfyUI
     // checkpoints, so the candidates are whatever ComfyUI has loaded. Asking
     // Ollama for them is what made the image checkbox silently do nothing — it
     // looked for installed models named flux or sdxl, and Ollama has none.
@@ -3602,6 +3614,10 @@ function App() {
           : job.kind === 'video' ? `video:${job.model}`
           : job.kind === 'vision' ? `vision:${job.model}`
           : job.kind === 'code' ? `code:${job.model}`
+          // Listening has its own key, which the Listening Lab and a row's
+          // test read. It fell through to the bare name, App Builder's, and a
+          // run with both ticked replaced the app with the transcript.
+          : job.kind === 'listening' ? `listening:${job.model}`
           : job.model;
         writeAdvancedLabResults({ ...readAdvancedLabResults(), [key]: result });
         // Every skill test lands in Run Logs, pass or fail, with the rubric that
@@ -5201,18 +5217,19 @@ function App() {
           onChangeCloudJudgeModel={setCloudJudgeModel}
           openRouterKey={openRouterKey}
           onChangeOpenRouterKey={setOpenRouterKey}
-          // The show's questions are marked by effectiveJudge on its own
-          // provider; only the code challenge needs an Ollama judge.
+          // The show's questions and Labs' code are both marked by
+          // effectiveJudge, on the judge's own program.
           judgeActive={Boolean(effectiveJudge)}
           lineupModels={pendingRunMode === 'single'
             ? [pendingSingleModel ?? selectedModel].filter(Boolean)
             : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName)}
           skillSelection={skillTestSelection}
           onSkillSelectionChange={setSkillTestSelection}
-          listenCapable={(pendingRunMode === 'single'
-            ? modelRows.filter((row) => row.displayName === (pendingSingleModel ?? selectedModel))
-            : shortlistedRows.filter((row) => row.installed).slice(0, 5)
-          ).some((row) => canHearAudio(row))}
+          listenCapable={sheetLineupRows.some((row) => canHearAudio(row))}
+          // By what each model's program reports, as the run decides it. The
+          // sheet went by name, which knows gemma3 and not gemma-3 or gemma4,
+          // so a lineup that could read pictures was told none could.
+          readCapable={sheetLineupRows.some((row) => canReadImages(row))}
           comfyCheckpoints={drawableModels(chatListing)}
           videoLineup={(() => {
             // Worked out only while this dialog is open, which is the one place that asks.
