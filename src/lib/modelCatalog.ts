@@ -1081,6 +1081,59 @@ export function getCudaDetail(cuda: SystemProfile['cuda']) {
   return `${driver}; ${latest}.`;
 }
 
+/**
+ * What the fit means on this computer, said as what will happen rather than
+ * as a rating. LM Studio says "Full GPU Offload Possible"; RigMatch said
+ * "Sweet spot", which a newcomer has to be told the meaning of. Sizes are
+ * the download against the card's memory, as getHardwareFit measures them.
+ */
+export function describeFitPlainly(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fitOverride'>, vramGb: number): string {
+  const fit = getHardwareFit(row, vramGb);
+  // Video models are sized by the Video Lab's rules, which say it their way.
+  if (row.fitOverride) return fit.label;
+  const sizeGb = row.sizeGb ?? 0;
+  // Non-breaking, so a narrow panel never splits "12 GB" across two lines.
+  const numbers = sizeGb > 0 && vramGb > 0
+    ? ` (${`${formatGb(sizeGb)} of ${formatGb(vramGb)}`.replace(/ /g, '\u00a0')})`
+    : '';
+  switch (fit.tone) {
+    case 'sweet-spot':
+      return `Runs fully on your graphics card, with room to spare${numbers}`;
+    case 'good':
+      return `Runs fully on your graphics card${numbers}`;
+    case 'tight':
+      if (vramGb <= 0) return 'Small enough to try. RigMatch could not read your graphics card';
+      return sizeGb > vramGb
+        ? `Bigger than your graphics card, so part of it runs on the processor and it is slower${numbers}`
+        : `Only just fits on your graphics card${numbers}`;
+    case 'out-of-league':
+      return `Too big for this PC${numbers}`;
+    default:
+      return sizeGb > 0 ? 'RigMatch could not read your graphics card, so it cannot tell yet' : 'Its size is unknown, so RigMatch cannot tell yet';
+  }
+}
+
+/**
+ * What a model can do, in plain words, from what its provider reports (the
+ * same capabilities every filter reads), falling back to its name where the
+ * provider says nothing. LM Studio shows these as chips on every model; the
+ * panel knew them and never said.
+ */
+export function describeAbilities(row: ModelRow): string[] {
+  if (row.generationKind) return [];
+  const reported = getModelCapabilities(row) ?? [];
+  if (isEmbeddingModel(row.displayName) || (reported.includes('embedding') && !reported.includes('completion'))) {
+    return ['Turns text into search data. It does not chat'];
+  }
+  const abilities: string[] = [];
+  if (canGenerateText(row)) abilities.push(lacksChatFormat(row) ? 'Completes text, but cannot chat' : 'Chat');
+  if (canReadImages(row)) abilities.push('Sees images');
+  if (canHearAudio(row)) abilities.push('Hears audio');
+  if (reported.includes('tools')) abilities.push('Uses tools');
+  if (reported.includes('thinking')) abilities.push('Thinks before answering');
+  return abilities;
+}
+
 export function getSelectedContestantBlurb(
   row: ModelRow,
   profile: ModelProfile,
@@ -1097,12 +1150,14 @@ export function getSelectedContestantBlurb(
     return `${row.displayName} ${makes} on ComfyUI. It does not chat, so it skips Speed Dating — test it from its own row instead.`;
   }
 
+  // The fit is the panel's own Fit line now (describeFitPlainly). Repeating
+  // it here put "2 GB leaves comfortable headroom on 12 GB" on screen twice.
   if (score) {
-    return `${row.displayName} scored ${score.total} (${score.grade}) on this rig. ${hardwareFit.detail}`;
+    return `${row.displayName} scored ${score.total} (${score.grade}) on this rig.`;
   }
 
   if (row.installed) {
-    return `${row.displayName} is installed and ready for a compatibility test. ${hardwareFit.detail}`;
+    return `${row.displayName} is installed and ready to test.`;
   }
 
   if (hardwareFit.recommend) {

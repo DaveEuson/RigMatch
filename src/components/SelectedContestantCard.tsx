@@ -1,12 +1,12 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { formatGb, formatThroughput } from '../lib/format';
 import type { ModelProfile } from '../lib/modelCatalog';
-import { getFriendlyModelName, getHardwareFit, getSelectedContestantBlurb, isVisiblePullProgress } from '../lib/modelCatalog';
+import { describeAbilities, describeFitPlainly, getFriendlyModelName, getHardwareFit, getSelectedContestantBlurb, isVisiblePullProgress } from '../lib/modelCatalog';
 import { getModelOrigin } from '../lib/modelOrigins';
 import type { RunDelta } from '../lib/runHistory';
 import type { ModelRow, PullProgressUpdate, TestedModelScore } from '../types';
 import { AvatarBust } from './Avatars';
-import { describeModelTag } from '../lib/modelVariants.ts';
+import { describeModelTag, describeQuantization } from '../lib/modelVariants.ts';
 import { DownloadProgressInline } from './DownloadProgressInline';
 import { ScoreDeltaCell, ScoreRadar, ScoreSparkline } from './ScoreVisuals';
 
@@ -74,6 +74,16 @@ export function SelectedContestantCard({
   const hardwareFit = getHardwareFit(row, vramGb);
   const noteValue = modelNotes[row.displayName] ?? '';
   const sizeLabel = row.sizeGb ? formatGb(row.sizeGb) : 'Size unknown';
+  // Ollama and LM Studio both report it for an installed model; most tags
+  // never say it, so the download line was the only place it could go.
+  const quantization = row.installedModel?.quantization;
+  const tagFacts = describeModelTag(row.displayName);
+  const quantFact = tagFacts.some((fact) => fact.kind === 'quant') ? null : describeQuantization(quantization);
+  const variantFacts = quantFact ? [...tagFacts, quantFact] : tagFacts;
+  const abilities = describeAbilities(row);
+  // The fit line says what happens; the caution under it is only for a fit
+  // that needs one. A comfortable one said the same thing twice.
+  const fitCaution = hardwareFit.tone !== 'sweet-spot' && hardwareFit.tone !== 'good' ? hardwareFit.detail : null;
   const matchLabel = score ? `${score.total} Match · ${score.grade}` : 'No score yet';
   const statusLabel = installed
     ? 'Installed locally'
@@ -107,15 +117,18 @@ export function SelectedContestantCard({
         <h2 className="contestant-name">{getFriendlyModelName(row.displayName)}</h2>
         <code className="contestant-tag">{row.displayName}</code>
         <em>{[row.params, profile.archetype].filter(Boolean).join(' · ')}</em>
+        {/* What it is for, in its makers' words: the one line from its Ollama
+            page, which the catalog has carried all along without showing. */}
+        {row.description && <p className="contestant-description">{row.description}</p>}
         <p>{getSelectedContestantBlurb(row, profile, score, hardwareFit)}</p>
         {/* What the letters after the colon mean, next to the letters
             themselves. The line above says "e2b · Small-footprint helper",
             which is the family's archetype and identical for every variant —
             so without this the tag is the only thing telling two rows apart
             and the one thing nothing explains. */}
-        {describeModelTag(row.displayName).length > 0 && (
+        {variantFacts.length > 0 && (
           <ul className="contestant-variant-facts" aria-label="What this version means">
-            {describeModelTag(row.displayName).map((fact) => (
+            {variantFacts.map((fact) => (
               <li key={fact.kind}>
                 <strong>{fact.label}</strong>
                 <span>{fact.plain}</span>
@@ -126,9 +139,10 @@ export function SelectedContestantCard({
       </div>
       <dl className="contestant-facts" aria-label="Selected model details">
         <div><dt>Match</dt><dd>{matchLabel}</dd></div>
-        <div><dt>Fit</dt><dd>{hardwareFit.label}</dd></div>
+        <div className="says"><dt>Fit</dt><dd>{describeFitPlainly(row, vramGb)}</dd></div>
+        {abilities.length > 0 && <div className="says"><dt>Can do</dt><dd>{abilities.join(' · ')}</dd></div>}
         <div title={`${origin.organization} · ${origin.country}`}><dt>Maker</dt><dd>{origin.organization}</dd></div>
-        <div><dt>Download</dt><dd className="figure">{sizeLabel}</dd></div>
+        <div><dt>Download</dt><dd className="figure">{quantization ? `${sizeLabel} · ${quantization}` : sizeLabel}</dd></div>
         <div><dt>Status</dt><dd>{statusLabel}</dd></div>
       </dl>
       {score && (
@@ -159,7 +173,7 @@ export function SelectedContestantCard({
       )}
       {vramHint && <p className="contestant-vram-hint">{vramHint}</p>}
       <div className="contestant-spotlight-actions">
-        <span>{hardwareFit.detail}</span>
+        {fitCaution && <span>{fitCaution}</span>}
         <div>
           {installed ? (
             <button

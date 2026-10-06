@@ -276,6 +276,11 @@
 .app-shell[data-ui-mode='advanced'] .contestant-facts dt { color: var(--muted); }
 .app-shell[data-ui-mode='advanced'] .contestant-facts dd { margin: 0; color: var(--text-strong); text-align: right; }
 .app-shell[data-ui-mode='advanced'] .contestant-facts dd.figure { font: 500 var(--fs-ui) / 1.3 var(--figure); }
+/* Rows whose value is a sentence ("Runs fully on your graphics card…"): the
+   label above, the sentence under it, read left to right. Right-aligned, a
+   wrapped sentence ragged along its left edge. */
+.app-shell[data-ui-mode='advanced'] .contestant-facts > div.says { display: grid; gap: 2px; }
+.app-shell[data-ui-mode='advanced'] .contestant-facts > div.says dd { text-align: left; line-height: 1.45; }
 .app-shell[data-ui-mode='advanced'] .contestant-vram-hint { margin: 0; padding: var(--s2) var(--s3); border: 0; border-left: 2px solid var(--gold); background: none; color: var(--text); font-size: var(--fs-ui); }
 .app-shell[data-ui-mode='advanced'] .contestant-spotlight-actions { display: grid; gap: var(--s3); border: 0; background: none; padding: 0; }
 .app-shell[data-ui-mode='advanced'] .contestant-spotlight-actions > span { color: var(--muted); font-size: var(--fs-ui); }
