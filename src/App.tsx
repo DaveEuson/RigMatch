@@ -1004,6 +1004,21 @@ function App() {
     [clearedTopMatches, modelRows, modelScores, system.gpu.vramGb],
   );
 
+  /**
+   * What Simple Mode's show should measure.
+   *
+   * The wizard asks who your dream model is and then ran the same question
+   * round whatever the answer, so a coding buddy and a picture reader were
+   * both crowned on chat. The three answers Ollama can settle on its own now
+   * run their own test; makers need ComfyUI and still fall back to the
+   * questions, which is the next thing to fix rather than a thing to pretend
+   * about.
+   */
+  const [wizardDream, setWizardDream] = useState<DreamFilterId>('all');
+  const wizardRound: 'chat' | 'code' | 'vision' | 'listening' = wizardDream === 'code' ? 'code'
+    : wizardDream === 'read-image' ? 'vision'
+      : wizardDream === 'hear' ? 'listening'
+        : 'chat';
   const wizardModels = useMemo<WizardModel[]>(() => {
     const vramGb = system.gpu.vramGb;
     const fitRank: Record<string, number> = { 'sweet-spot': 0, good: 1, tight: 2 };
@@ -1015,6 +1030,14 @@ function App() {
       // say so instead of listing them.
       .filter((row) => canJoinComparison(row))
       .filter((row) => getPlatformFit(row.displayName, system.platform).compatible)
+      // A model still to download needs Ollama. Without it the card queued a
+      // download that never started, and "Choose for me" filled the lineup
+      // with them, leaving Next disabled with no reason given.
+      .filter((row) => row.installed || ollama.ready)
+      // The coding, picture and listening rounds run through Ollama, so an
+      // LM Studio model would be sent to the wrong program and take an F. It
+      // sits those out; the question round tests it like any other.
+      .filter((row) => wizardRound === 'chat' || row.localProvider !== 'lm-studio')
       .map((row) => ({ row, fit: getHardwareFit(row, vramGb) }))
       .filter((entry) => entry.fit.recommend && entry.fit.tone !== 'unknown')
       // Prefer the best fit tone first, then the LARGEST model that still fits —
@@ -1042,23 +1065,7 @@ function App() {
     // One card per model name — see collapseModelVariants for the reasoning
     // (first outside review: "many versions of Gemma 4").
     return collapseModelVariants(mapped, shortlistIds);
-  }, [modelRows, shortlistIds, system.gpu.vramGb, system.platform]);
-
-  /**
-   * What Simple Mode's show should measure.
-   *
-   * The wizard asks who your dream model is and then ran the same question
-   * round whatever the answer, so a coding buddy and a picture reader were
-   * both crowned on chat. The three answers Ollama can settle on its own now
-   * run their own test; makers need ComfyUI and still fall back to the
-   * questions, which is the next thing to fix rather than a thing to pretend
-   * about.
-   */
-  const [wizardDream, setWizardDream] = useState<DreamFilterId>('all');
-  const wizardRound: 'chat' | 'code' | 'vision' | 'listening' = wizardDream === 'code' ? 'code'
-    : wizardDream === 'read-image' ? 'vision'
-      : wizardDream === 'hear' ? 'listening'
-        : 'chat';
+  }, [modelRows, shortlistIds, system.gpu.vramGb, system.platform, ollama.ready, wizardRound]);
   /**
    * The channel whose results that round is ranked on.
    *
@@ -1149,17 +1156,20 @@ function App() {
   // panel, which is not mounted in the guided path.
   const [shareWinnerOpen, setShareWinnerOpen] = useState(false);
 
-  const openChatWithWinner = useCallback(() => {
-    const model = topRigPick?.row.displayName;
-    if (!model) return;
+  /**
+   * Chat with one model. RigMatch Chat lists Ollama's models only, so one in
+   * LM Studio opens in the app's own chat panel, which reaches both: "Chat
+   * with" an LM Studio winner opened RigMatch Chat on some other model.
+   */
+  const openChatWith = useCallback((model: string) => {
     setSelectedModel(model);
-    setChosenModel(model);
-    if (isDesktopRuntime) {
+    const inLmStudio = modelRows.find((row) => row.displayName === model)?.localProvider === 'lm-studio';
+    if (isDesktopRuntime && !inLmStudio) {
       void agentArcadeApi.openChatApp().then((result) => { if (!result?.ok) setChatOpen(true); });
     } else {
       setChatOpen(true);
     }
-  }, [topRigPick, setChatOpen]);
+  }, [modelRows, setChatOpen]);
 
   /**
    * Cheap provider-only re-check: no hardware scan, no catalog sync. Used on
@@ -1503,6 +1513,22 @@ function App() {
       : null),
     [topRigPick, wizardSkillBoard, wizardShowResult],
   );
+
+  // The winner the screen shows, not the Top Pick. After a skill round, or
+  // with an older higher score saved, the button labelled with the winner
+  // chatted with, and shared, a different model.
+  const openChatWithWinner = useCallback(() => {
+    const model = wizardWinner?.model ?? topRigPick?.row.displayName;
+    if (!model) return;
+    setChosenModel(model);
+    openChatWith(model);
+  }, [wizardWinner, topRigPick, openChatWith]);
+  const shareTarget = useMemo(() => {
+    const row = wizardWinner ? modelRows.find((candidate) => candidate.displayName === wizardWinner.model) : undefined;
+    const score = row ? getModelScore(row, modelScores) : undefined;
+    if (row && score) return { model: row.displayName, score };
+    return topRigPick?.score ? { model: topRigPick.row.displayName, score: topRigPick.score } : null;
+  }, [wizardWinner, modelRows, modelScores, topRigPick]);
 
   /**
    * How the whole lineup placed, best first.
@@ -3135,7 +3161,7 @@ function App() {
           }), row.displayName);
         } catch (error) {
           const raw = getErrorMessage(error);
-          const failure = describeRunFailure(raw);
+          const failure = describeRunFailure(raw, row.localProvider === 'lm-studio' ? 'LM Studio' : 'Ollama');
           // Stop ends the show. Anything else ends only this contestant's run.
           if (stopRunRef.current || failure.kind === 'stopped') {
             stoppedByUser = true;
@@ -3194,7 +3220,9 @@ function App() {
       // in front of the user as the run's failure message. Fail with something
       // readable if a future path ever gets here with nothing.
       if (results.length === 0) {
-        const ended = showStoppedMessage(failures, stoppedByUser, getFriendlyModelName);
+        const ended = showStoppedMessage(failures, stoppedByUser, getFriendlyModelName, (model) => (
+          runnableRows.find((candidate) => candidate.displayName === model)?.localProvider === 'lm-studio' ? 'LM Studio' : 'Ollama'
+        ));
         await agentArcadeApi.appendLog({
           level: stoppedByUser ? 'info' : 'error',
           source: 'renderer',
@@ -3370,7 +3398,12 @@ function App() {
     const canSee = (model: string) => canReadImages(
       modelRows.find((row) => row.displayName === model) ?? { displayName: model },
     );
-    for (const model of models) {
+    // Skill tests run through Ollama (runAdvancedGenerate posts to its
+    // /api/generate), so an LM Studio contestant was sent to the wrong
+    // program and scored an F for it. It sits these out until they run there.
+    const inLmStudio = (model: string) => modelRows.find((row) => row.displayName === model)?.localProvider === 'lm-studio';
+    const sittingOut = models.filter(inLmStudio);
+    for (const model of models.filter((name) => !inLmStudio(name))) {
       if (selection.appBuilder && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
         jobs.push({ model, kind: 'app-builder' });
       }
@@ -3422,7 +3455,9 @@ function App() {
       // stop, and a round where nothing was eligible never did either. Say what
       // happened, in the terms of what was asked for — and nothing at all when
       // no skill was asked for, which is most runs.
-      const nothing = nothingToRunNote(selection);
+      const nothing = sittingOut.length > 0 && nothingToRunNote(selection)
+        ? 'These models are in LM Studio, and this test runs through Ollama for now, so they sit it out.'
+        : nothingToRunNote(selection);
       if (!nothing) return;
       setSkillRunStatus({ phase: 'complete', label: nothing, completed: 0, total: 0 });
       setActivity(nothing);
@@ -4510,6 +4545,7 @@ function App() {
             : undefined}
           system={system}
           ollamaReady={ollama.ready || lmStudio.ready}
+          lmStudioOnly={!ollama.ready && lmStudio.ready}
           isScanning={isScanningRig}
           onCheckComputer={refreshRig}
           onGetOllama={openOllamaDownload}
@@ -4610,10 +4646,10 @@ function App() {
           onShareScore={() => setShareWinnerOpen(true)}
         />
       )}
-      {shareWinnerOpen && topRigPick?.score && (
+      {shareWinnerOpen && shareTarget && (
         <ShareScorecard
-          model={topRigPick.row.displayName}
-          score={topRigPick.score}
+          model={shareTarget.model}
+          score={shareTarget.score}
           system={system}
           onClose={() => setShareWinnerOpen(false)}
         />
@@ -4906,6 +4942,7 @@ function App() {
             onSelect={setSelectedModel}
             onRunTest={requestBenchmark}
             onChoose={() => setChosenModel(selectedModel)}
+            onChat={() => openChatWith(selectedModel)}
             onOpenTest={(id) => { setOpenReportId(id); setReportOpen(true); }}
             onEditQuestions={openQuestionsSheet}
             onClearTopMatch={clearTopMatch}
@@ -5260,6 +5297,8 @@ function App() {
       {chosenModel && (
         <ChoiceCruiseModal
           model={chosenModel}
+          inLmStudio={modelRows.find((r) => r.displayName === chosenModel)?.localProvider === 'lm-studio'}
+          onOpenChat={() => openChatWith(chosenModel)}
           host={selectedHost}
           score={(() => {
             const row = modelRows.find((r) => r.displayName === chosenModel);

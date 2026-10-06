@@ -1,7 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useState } from 'react';
-import { agentArcadeApi } from '../api';
-import { companionLaunchMessage } from '../lib/companionLaunch';
 import { matchMeasures } from '../lib/matchCard';
 import type { RigPick } from '../lib/modelCatalog';
 import { formatHistoryTime, getFriendlyModelName, getModelProfile } from '../lib/modelCatalog';
@@ -42,6 +40,7 @@ export function ModelPage({
   onSelect,
   onRunTest,
   onChoose,
+  onChat,
   onOpenTest,
   onEditQuestions,
   onClearTopMatch,
@@ -62,6 +61,8 @@ export function ModelPage({
   onSelect: (model: string) => void;
   onRunTest: () => void;
   onChoose: () => void;
+  /** Opens the right chat: RigMatch Chat for Ollama, the app's own panel for LM Studio. */
+  onChat: () => void;
   /** Opens a saved test's report: its ranking and answers. */
   onOpenTest: (reportId: string) => void;
   onEditQuestions: () => void;
@@ -85,10 +86,6 @@ export function ModelPage({
   }
   const tests = modelTests(model, runReports, runHistory);
 
-  const openChat = async () => {
-    const problem = companionLaunchMessage(await agentArcadeApi.openChatApp());
-    if (problem) alert(problem);
-  };
 
   return (
     <section className="panel model-page" aria-label={`${name}: scores, tests and answers`}>
@@ -132,7 +129,7 @@ export function ModelPage({
 
       <div className="mp-actions">
         {/* Chatting is what a good match is for, so it is the one gold button. */}
-        <button type="button" className="btn btn-gold" onClick={() => void openChat()}>Chat with {name}</button>
+        <button type="button" className="btn btn-gold" onClick={onChat}>Chat with {name}</button>
         <button type="button" className="btn btn-line" onClick={onRunTest}>{score ? 'Test again' : 'Test it'}</button>
         {score && <button type="button" className="btn btn-line" onClick={() => setShareOpen(true)}>Share</button>}
         <span className="mp-more">
