@@ -658,7 +658,7 @@ export type AgentArcadeApi = {
      */
     autoJudgeModels?: string[];
     /** Where each local judge model runs, so one in LM Studio can mark an Ollama contestant and the reverse. */
-    judgeEndpoints?: Record<string, { provider: LocalModelProvider; baseUrl?: string }>;
+    judgeEndpoints?: Record<string, { provider: LocalModelProvider; baseUrl?: string; weights?: string }>;
   }) => Promise<BenchmarkResult>;
   onBenchmarkProgress?: (callback: (update: BenchmarkProgressUpdate) => void) => () => void;
   getActiveBenchmark: () => Promise<BenchmarkStatus>;

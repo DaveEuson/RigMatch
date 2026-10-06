@@ -189,7 +189,7 @@ test('cleanup finds the copies of a model LM Studio has loaded', () => {
 
 test('a show unloads what it loaded in LM Studio and judges on the judge\'s own provider', () => {
   const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
-  assert.match(main, /normalizeLocalProvider\(request\.provider, runBaseUrl\) === 'lm-studio'\)\s*\{\s*await unloadLmStudioModel/);
+  assert.match(main, /normalizeLocalProvider\(request\.provider, runBaseUrl\) === 'lm-studio'\)\s*\{[\s\S]{0,400}?await unloadLmStudioModel\(runBaseUrl, request\.model, keep\)/);
   assert.match(main, /activeBenchmark\.lmStudioKeep = await lmStudioLoadedInstances\(baseUrl, model\)/);
   assert.match(main, /runLocalJudge\(judgeEndpoint\(judgeName\)/);
   assert.doesNotMatch(main, /provider === 'ollama' && Boolean\(autoJudgeModel\)/, 'an LM Studio contestant can be judged');

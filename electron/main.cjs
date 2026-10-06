@@ -3473,6 +3473,8 @@ async function runBenchmark(request = {}, sender) {
     model: request.model,
     startedAt: Date.now(),
     snapshot: null,
+    // What LM Studio had loaded before this run's warm-up; null until then.
+    lmStudioKeep: null,
   };
   activeBenchmarkAbort = new AbortController();
   broadcastBenchmarkStatus();
@@ -3492,7 +3494,11 @@ async function runBenchmark(request = {}, sender) {
     try {
       const runBaseUrl = typeof request.baseUrl === 'string' && request.baseUrl ? request.baseUrl : OLLAMA_LOCAL_URL;
       if (normalizeLocalProvider(request.provider, runBaseUrl) === 'lm-studio') {
-        await unloadLmStudioModel(runBaseUrl, request.model, activeBenchmark?.lmStudioKeep);
+        // Only after the warm-up was reached. Before it RigMatch has loaded
+        // nothing, and an empty keep list would unload a copy the user had
+        // loaded themselves: a run that failed its first log write did that.
+        const keep = activeBenchmark?.lmStudioKeep;
+        if (Array.isArray(keep)) await unloadLmStudioModel(runBaseUrl, request.model, keep);
       } else {
         await unloadBenchmarkModel(runBaseUrl, request.model);
       }
@@ -3562,9 +3568,12 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   // itself generously, and that score goes on to crown a Match. In a lineup
   // every contestant is the model under test in turn, so picking a single
   // judge up front would guarantee self-grading for one of them.
+  // Nor the same weights in the other provider: the renderer sends each
+  // installed model's weights key (modelWeightsKey) in judgeEndpoints.
+  const ownWeights = request.judgeEndpoints?.[model]?.weights;
   const autoJudgeModel = (Array.isArray(request.autoJudgeModels) ? request.autoJudgeModels : [])
     .map((name) => String(name || '').trim())
-    .find((name) => name && name !== model) || '';
+    .find((name) => name && name !== model && !(ownWeights && request.judgeEndpoints?.[name]?.weights === ownWeights)) || '';
   const autoJudgeUnmarkable = !useJudge && Boolean(autoJudgeModel);
   const judgeEndpoint = (name) => resolveJudgeEndpoint(request.judgeEndpoints, name, baseUrl, provider);
   const sendProgress = (update) => {
@@ -3626,7 +3635,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
 
   if (provider === 'lm-studio') {
     if (activeBenchmark) activeBenchmark.lmStudioKeep = await lmStudioLoadedInstances(baseUrl, model);
-    await warmLmStudioBenchmarkModel(baseUrl, model);
+    await warmLmStudioBenchmarkModel(baseUrl, model, signal);
   } else {
     await warmBenchmarkModel(baseUrl, model);
   }
@@ -3802,7 +3811,9 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         // it again now, untimed, so the next timing run measures the model and
         // not its reload — two of this question's three runs are still to come.
         const judgedHere = !(useJudge && judgeProvider === 'openrouter');
-        if (judgedHere && provider === 'lm-studio') await warmLmStudioBenchmarkModel(baseUrl, model);
+        // Stop during the verdict ends here, not after reloading the model.
+        throwIfCanceled();
+        if (judgedHere && provider === 'lm-studio') await warmLmStudioBenchmarkModel(baseUrl, model, signal);
         else if (judgedHere) await warmBenchmarkModel(baseUrl, model);
       }
       const toolVerdict = toolAnswer?.verdict || null;
@@ -4058,13 +4069,14 @@ async function warmBenchmarkModel(baseUrl, model) {
 }
 
 /** Untimed, like warmBenchmarkModel: loads the model at the test's context window. */
-async function warmLmStudioBenchmarkModel(baseUrl, model) {
-  const warmed = await lmStudioNativeChat(baseUrl, model, 'Reply READY only.', undefined, BENCHMARK_WARMUP_OPTIONS.num_predict);
+async function warmLmStudioBenchmarkModel(baseUrl, model, signal) {
+  const warmed = await lmStudioNativeChat(baseUrl, model, 'Reply READY only.', signal, BENCHMARK_WARMUP_OPTIONS.num_predict);
   if (warmed) return;
   await fetchJson(
     `${baseUrl.replace(/\/$/, '')}/chat/completions`,
     {
       method: 'POST',
+      signal,
       body: JSON.stringify({
         model,
         messages: [{ role: 'user', content: 'Reply READY only.' }],
@@ -4478,10 +4490,14 @@ async function lmStudioToolChat(baseUrl, model, messages, signal) {
     max_tokens: BENCHMARK_GENERATE_OPTIONS.num_predict,
     stream: false,
   });
+  // Only a missing route falls back. A timeout or a model that failed to load
+  // was being asked again on /v1 for another two minutes, so a slow model took
+  // four to fail a tool question. Before 0.4 an unknown route answers 200 with
+  // { error }, which the check below catches.
   const v0 = await fetchJson(`${lmStudioOrigin(baseUrl)}/api/v0/chat/completions`, { method: 'POST', signal, body }, BENCHMARK_TIMEOUT_MS)
     .catch((error) => {
-      if (signal?.aborted) throw error;
-      return null;
+      if (/^404 /.test(getLogErrorMessage(error))) return null;
+      throw error;
     });
   if (v0 && !v0.error && Array.isArray(v0.choices)) return toolReplyFromOpenAi(v0);
   const startedAt = Date.now();
