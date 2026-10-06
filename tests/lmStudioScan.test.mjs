@@ -47,8 +47,9 @@ test('the run sheet says the show is judged when its judge is in LM Studio', () 
   // It was told only whether Labs had an Ollama judge, so an LM Studio-only
   // PC with a judge picked read "nothing else installed can" mark them.
   assert.match(app, /judgeActive=\{Boolean\(effectiveJudge\)\}/);
-  assert.match(app, /codeJudgeActive=\{Boolean\(skillTestJudge\)\}/);
-  assert.match(sheet, /const codeCapable = appBuilderCapable && codeJudgeActive;/);
+  // Code is marked on the judge's own program now, so any judge marks it.
+  assert.doesNotMatch(app + sheet, /codeJudgeActive/);
+  assert.match(sheet, /const codeCapable = appBuilderCapable && judgeActive;/);
 });
 
 test('a run that never reached its warm-up leaves LM Studio as it was', () => {

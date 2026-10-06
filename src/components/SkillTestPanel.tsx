@@ -49,13 +49,16 @@ export function SkillTestPanel({
   kind,
   model,
   context,
+  provider,
   onClose,
 }: {
   id: string;
   kind: RowSkillTest;
-  /** The installed model's name, as Ollama knows it. */
+  /** The installed model's name, as its program knows it. */
   model: string;
   context: SkillTestContext;
+  /** The model's own program when it is not Ollama: LM Studio, at its address. */
+  provider?: { label: string; baseUrl: string };
   onClose: () => void;
 }) {
   const listening = kind === 'listening';
@@ -72,7 +75,8 @@ export function SkillTestPanel({
   const picture = VISION_TEST_IMAGES.find((image) => image.id === pictureId) ?? VISION_TEST_IMAGES[0];
   const running = run.phase === 'running';
   // Why it cannot run right now, in a sentence.
-  const blocked = !context.ollamaReady
+  // A row in LM Studio is only listed while LM Studio answers.
+  const blocked = !provider && !context.ollamaReady
     ? 'Ollama is not running. Start it, and this can run.'
     : context.gpuBusy
       ? 'Another test is using the graphics card. This can run when it finishes.'
@@ -88,8 +92,8 @@ export function SkillTestPanel({
     });
     try {
       const result = listening
-        ? await runAdvancedListeningChallenge(model, context.ollamaBaseUrl, await getListeningTestAudio())
-        : await runAdvancedVisionChallenge(model, context.ollamaBaseUrl, await getVisionTestImageDataUrl(picture.src), { picture: picture.id });
+        ? await runAdvancedListeningChallenge(model, provider?.baseUrl ?? context.ollamaBaseUrl, await getListeningTestAudio())
+        : await runAdvancedVisionChallenge(model, provider?.baseUrl ?? context.ollamaBaseUrl, await getVisionTestImageDataUrl(picture.src), { picture: picture.id });
       if (result.error) {
         setRun({ phase: 'failed', message: result.error });
         return;
@@ -121,7 +125,7 @@ export function SkillTestPanel({
       <header className="generation-test-head">
         {listening ? <Mic aria-hidden="true" /> : <Eye aria-hidden="true" />}
         <div>
-          <span>{listening ? 'Listening test' : 'Picture-reading test'} · runs on Ollama</span>
+          <span>{listening ? 'Listening test' : 'Picture-reading test'} · runs on {provider?.label ?? 'Ollama'}</span>
           <strong>Test {model}</strong>
         </div>
         <button

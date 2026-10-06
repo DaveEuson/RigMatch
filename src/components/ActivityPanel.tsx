@@ -7,7 +7,7 @@ import type { Balances } from '../lib/balance';
 import { workbenchById, type ChannelId, type Workbench } from '../lib/workbench';
 import { formatHistoryTime } from '../lib/modelCatalog';
 import { displaySuiteName } from '../lib/testHistory';
-import type { OllamaStatus, PullProgressUpdate, RunProgress, SkillRunStatus, SystemProfile, TestedModelScore } from '../types';
+import type { OllamaModel, OllamaStatus, PullProgressUpdate, RunProgress, SkillRunStatus, SystemProfile, TestedModelScore } from '../types';
 import { AdvancedCapabilityLab } from './AdvancedCapabilityLab';
 import { AppBuilderPreviewModal } from './AppBuilderPreview';
 import { AvatarBust } from './Avatars';
@@ -28,6 +28,7 @@ export function ActivityPanel({
   modelScores,
   selectedModel,
   ollama,
+  labModels,
   system,
   onOpenModels,
   onOpenScorecards,
@@ -53,6 +54,8 @@ export function ActivityPanel({
   modelScores: Record<string, TestedModelScore>;
   selectedModel: string;
   ollama: OllamaStatus;
+  /** Ollama's and LM Studio's models, each with its address, for the Lab's App Builder. */
+  labModels?: OllamaModel[];
   system: SystemProfile;
   onOpenModels: () => void;
   onOpenScorecards: () => void;
@@ -386,6 +389,7 @@ type ActivityJob = {
       <AdvancedCapabilityLab
         selectedModel={selectedModel}
         ollama={ollama}
+        labModels={labModels}
         system={system}
         onDownloadVideoModel={onDownloadGenerationModel}
         onStopVideoDownload={onStopGenerationDownload}
