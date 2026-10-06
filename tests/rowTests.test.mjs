@@ -36,9 +36,10 @@ test('every other channel keeps the questions', () => {
   }
 });
 
-test('only a model on this machine, and only through Ollama', () => {
+test('only a model on this machine, through whichever program holds it', () => {
   assert.equal(rowSkillTest('listening', hears, false), null);
-  assert.equal(rowSkillTest('listening', { ...hears, localProvider: 'lm-studio' }, true), null);
+  // A vision model in LM Studio reads the picture there.
+  assert.equal(rowSkillTest('reading', { ...sees, localProvider: 'lm-studio' }, true), 'reading');
   assert.equal(rowSkillTest('reading', { ...sees, runtime: 'comfyui' }, true), null);
 });
 

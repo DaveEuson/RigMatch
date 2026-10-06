@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getErrorMessage } from '../lib/format';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { AlertTriangle, Check, Code2, Copy, Lightbulb, Play, RefreshCw } from "lucide-react";
-import type { ComfyStatus, OllamaStatus, PullProgressUpdate, SystemProfile } from "../types";
+import type { ComfyStatus, OllamaModel, OllamaStatus, PullProgressUpdate, SystemProfile } from "../types";
 import { formatGb, getScoreTone } from "../lib/format";
 import { extractHtmlDocument } from "../lib/labPreview";
 import { readAdvancedLabResults, writeAdvancedLabResults, type AdvancedLabResult } from "../lib/labResults";
@@ -93,9 +93,15 @@ export function AdvancedCapabilityLab({
   balances,
   onBalanceChange,
   onOpenComparison,
+  labModels,
 }: {
   selectedModel: string;
   ollama: OllamaStatus;
+  /**
+   * Every local model App Builder can run, Ollama's and LM Studio's, each with
+   * the address it answers on. Without it, Ollama's alone.
+   */
+  labModels?: OllamaModel[];
   system: SystemProfile;
   /** Starts a video model's download, after the consent dialog. */
   onDownloadVideoModel?: (generationId: string) => void;
@@ -110,9 +116,13 @@ export function AdvancedCapabilityLab({
   /** Where a channel with no Lab card sends people instead. */
   onOpenComparison?: () => void;
 }) {
+  const appModels = useMemo(
+    () => labModels ?? ollama.models.map((model) => ({ ...model, baseUrl: model.baseUrl ?? ollama.baseUrl })),
+    [labModels, ollama.models, ollama.baseUrl],
+  );
   const installedModels = useMemo(
-    () => ollama.models.map((model) => model.name || model.model).filter(Boolean),
-    [ollama.models],
+    () => appModels.map((model) => model.name || model.model).filter(Boolean),
+    [appModels],
   );
   const defaultModel = installedModels.includes(selectedModel) ? selectedModel : (installedModels[0] ?? '');
   const [labModel, setLabModel] = useState(defaultModel);
@@ -216,7 +226,7 @@ export function AdvancedCapabilityLab({
   );
 
   const activeModel = installedModels.includes(labModel) ? labModel : defaultModel;
-  const activeModelInfo = ollama.models.find((model) => model.name === activeModel || model.model === activeModel);
+  const activeModelInfo = appModels.find((model) => model.name === activeModel || model.model === activeModel);
   const savedResult = activeModel ? savedResults[activeModel] ?? null : null;
   const visibleResult = runState.result?.model === activeModel ? runState.result : savedResult;
   const previewHtml = useMemo(
@@ -225,7 +235,8 @@ export function AdvancedCapabilityLab({
   );
   const isRunning = runState.phase === 'running';
   const isLargeModel = (activeModelInfo?.sizeGb ?? 0) >= Math.max(8, system.gpu.vramGb || 0);
-  const canRun = ollama.ready && Boolean(activeModel) && !isRunning;
+  // Listed only while its program answers, so a listed model can run.
+  const canRun = Boolean(activeModelInfo) && !isRunning;
   const imageResultKey = `image:${activeCheckpoint}`;
   const visibleImageResult = imageRunState.result?.model === activeCheckpoint
     ? imageRunState.result
@@ -240,12 +251,12 @@ export function AdvancedCapabilityLab({
     && promptReady && !imageRunning && !lineup.running && !imageLineup.running;
 
   const startChallenge = useCallback(async () => {
-    if (!activeModel || !ollama.ready) return;
+    if (!activeModel || !activeModelInfo) return;
     setCopied('idle');
     setPreviewOpen(false);
     setRunState({ phase: 'running', result: null, message: `Asking ${activeModel} to build an app...${await gpuNoteForRun()}` });
     const prompt = resolveAppBuilderPrompt(appPromptId, appCustomPrompt);
-    const result = await runAdvancedAppBuilderChallenge(activeModel, ollama.baseUrl, prompt);
+    const result = await runAdvancedAppBuilderChallenge(activeModel, activeModelInfo.baseUrl ?? ollama.baseUrl, prompt);
     setRunState({
       phase: result.error ? 'failed' : 'complete',
       result,
@@ -259,7 +270,7 @@ export function AdvancedCapabilityLab({
       // Pop the finished app straight into the sandbox when it's runnable.
       if (extractHtmlDocument(result.response)) setPreviewOpen(true);
     }
-  }, [activeModel, appPromptId, appCustomPrompt, ollama.baseUrl, ollama.ready, gpuNoteForRun]);
+  }, [activeModel, activeModelInfo, appPromptId, appCustomPrompt, ollama.baseUrl, gpuNoteForRun]);
 
   const copyResult = useCallback(() => {
     if (!visibleResult?.response) return;
@@ -442,10 +453,10 @@ export function AdvancedCapabilityLab({
               This answer did not contain a runnable single-file app, so the sandboxed preview stays locked.
             </p>
           )}
-          {!ollama.ready && (
+          {!appModels.length && (
             <div className="utility-empty compact">
-              <strong>Ollama is offline</strong>
-              <span>Start Ollama before running advanced local tests.</span>
+              <strong>{ollama.ready ? 'No models to test yet' : 'Ollama is offline'}</strong>
+              <span>{ollama.ready ? 'Download a model, and it can build an app here.' : "Start Ollama, or LM Studio's server, to run this test."}</span>
             </div>
           )}
           {runState.message && (

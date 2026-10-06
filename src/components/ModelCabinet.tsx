@@ -1442,6 +1442,9 @@ export function ModelCabinet({
                           kind={skill}
                           model={row.displayName}
                           context={skillTest}
+                          provider={row.localProvider === 'lm-studio' && row.localBaseUrl
+                            ? { label: row.localProviderLabel ?? 'LM Studio', baseUrl: row.localBaseUrl }
+                            : undefined}
                           onClose={closeTest}
                         />
                       ) : row.generationKind === 'audio' ? (

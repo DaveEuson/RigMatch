@@ -79,7 +79,6 @@ export function RunSheet({
   openRouterKey,
   onChangeOpenRouterKey,
   judgeActive,
-  codeJudgeActive,
   gpuContention,
   measuredPerModelMs,
 }: {
@@ -133,12 +132,6 @@ export function RunSheet({
   openRouterKey: string;
   onChangeOpenRouterKey: (key: string) => void;
   judgeActive: boolean;
-  /**
-   * The code challenge is marked through Ollama (Labs' skill tests), so it
-   * needs a judge there. A judge in LM Studio marks the show's questions but
-   * not the code; judgeActive alone said both or neither.
-   */
-  codeJudgeActive: boolean;
   /** Measured when the sheet opened; null while the probe is still running. */
   gpuContention: GpuContention | null;
   /** Per-model duration from this computer's own runs, when it has any. */
@@ -176,7 +169,9 @@ export function RunSheet({
   const videoCapable = videoLineup.count > 0;
   const visionCapable = lineupModels.some((m) => isVisionModel(m));
   // Code can only be graded by a model that reads it.
-  const codeCapable = appBuilderCapable && codeJudgeActive;
+  // The judge marks code on its own program, Ollama or LM Studio, so any
+  // judge will do. One in LM Studio used to leave code unmarked.
+  const codeCapable = appBuilderCapable && judgeActive;
   const imageOnlyLineup = lineupModels.length > 0 && lineupModels.every(isLikelyImageGenerationModel);
   const anySkillSelected = offersSkills && !isQuick && (
     (skillSelection.appBuilder && appBuilderCapable) || (skillSelection.code && codeCapable)
@@ -596,8 +591,6 @@ export function RunSheet({
                       ? 'No model in this run can write code. Image and embedding models sit this one out.'
                       : !judgeActive
                         ? 'Needs a judge above: code is marked by a model that reads it.'
-                        : !codeJudgeActive
-                          ? 'Code is marked through Ollama, and the judge above is in LM Studio. Install a model in Ollama to judge code.'
                         : 'Solves a coding task in a language you pick, marked by the judge. Adds 1 to 2 minutes a model.'}
                   >
                     {codeCapable && skillSelection.code && (

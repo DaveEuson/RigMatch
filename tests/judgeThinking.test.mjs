@@ -20,6 +20,13 @@ test('the frame judge asks a thinking model not to think', () => {
   assert.match(judge, /think:\s*false/);
 });
 
+test('the app and code judge asks a thinking model not to think', () => {
+  // gemma4:e4b thought through its 400 tokens and cut the verdict off, so no
+  // app was verified and no Code challenge was marked.
+  const judge = between(source('../src/lib/labChallenges.ts'), 'async function runAppJudgeGenerate', 'export async function runAdvancedAppBuilderChallenge');
+  assert.match(judge, /think:\s*false/);
+});
+
 test('the generate bridge passes the thinking toggle to /api/generate, not only to chat', () => {
   const generate = between(source('../electron/main.cjs'), 'async function runAdvancedGenerate', 'async function streamAdvancedGenerate');
   assert.match(generate, /body\.think = request\.think/, 'the toggle reaches the generate body');

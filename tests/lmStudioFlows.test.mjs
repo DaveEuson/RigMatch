@@ -46,17 +46,22 @@ test('an untested LM Studio model does not borrow a newer release\'s score', () 
   assert.equal(getModelScore({ displayName: 'qwen2.5:7b', name: 'qwen2.5', tag: '7b' }, tagged)?.total, 90);
 });
 
-test('Simple Mode offers no downloads without Ollama, and LM Studio models only for the question round', () => {
+test('Simple Mode offers no downloads without Ollama, and LM Studio models in every round', () => {
   assert.match(app, /\.filter\(\(row\) => row\.installed \|\| ollama\.ready\)/);
-  assert.match(app, /\.filter\(\(row\) => wizardRound === 'chat' \|\| row\.localProvider !== 'lm-studio'\)/);
+  assert.doesNotMatch(app, /row\.localProvider !== 'lm-studio'\)/);
   assert.match(app, /lmStudioOnly=\{!ollama\.ready && lmStudio\.ready\}/);
   assert.match(wizard, /<FoundRow label="LM Studio" value="Found and running/);
   assert.match(wizard, /lmStudioOnly \? \(/, 'the setup screen no longer says Ollama is running when only LM Studio is');
 });
 
-test('skill rounds leave LM Studio models out and say why', () => {
-  assert.match(app, /for \(const model of models\.filter\(\(name\) => !inLmStudio\(name\)\)\)/);
-  assert.match(app, /These models are in LM Studio, and this test runs through Ollama for now, so they sit it out\./);
+test('skill rounds run LM Studio models on LM Studio, and their judge on its own program', () => {
+  assert.match(app, /for \(const model of models\) \{/);
+  assert.doesNotMatch(app, /sit it out/);
+  // Every runner is sent the model's own address, never Ollama's by default.
+  for (const runner of ['runAdvancedAppBuilderChallenge', 'runCodeChallenge', 'runAdvancedVisionChallenge', 'runAdvancedListeningChallenge']) {
+    assert.doesNotMatch(app, new RegExp(`${runner}\\(\\s*(job\\.)?model, ollama\\.baseUrl`), runner);
+  }
+  assert.match(app, /baseUrl: judgeEndpoints\[effectiveJudge\.model\]\?\.baseUrl \?\? ollama\.baseUrl/);
 });
 
 test('Chat with an LM Studio model opens the app\'s own chat, and the winner\'s buttons act on the winner', () => {

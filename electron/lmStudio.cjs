@@ -65,14 +65,18 @@ const LM_STUDIO_TOKEN_MESSAGE = 'LM Studio is asking for an API token. Turn off 
  * Now it is the bare question, the same length cap and context window as
  * BENCHMARK_GENERATE_OPTIONS, temperature 0, and thinking off when asked.
  */
-function lmStudioChatBody({ model, prompt, maxOutputTokens, contextLength, reasoningOff }) {
+function lmStudioChatBody({ model, prompt, maxOutputTokens, contextLength, reasoningOff, temperature = 0, images = [], stream = false }) {
   const body = {
     model,
-    input: prompt,
-    temperature: 0,
+    // A picture goes beside the words as its own item, as a data URL. Labs'
+    // picture-reading test is the one caller with any.
+    input: images.length
+      ? [{ type: 'text', content: prompt }, ...images.map((dataUrl) => ({ type: 'image', data_url: dataUrl }))]
+      : prompt,
+    temperature,
     max_output_tokens: maxOutputTokens,
     context_length: contextLength,
-    stream: false,
+    stream,
     // A test is not a conversation to keep in LM Studio's history.
     store: false,
   };

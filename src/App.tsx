@@ -911,15 +911,20 @@ function App() {
     judgeModelOptions, effectiveJudgeModel, autoJudgeModels, effectiveJudge,
     resetJudgeSettings,
   } = useJudgeSettings({ installedRows: judgeCandidateRows, vramGb: system.gpu.vramGb });
-  // Labs' skill tests send their judge to Ollama, so a judge that lives in
-  // LM Studio is swapped there for the best Ollama one, or none. Shows judge
-  // on the judge's own provider (judgeEndpoints) and use effectiveJudge as is.
+  // Labs' judge marks on its own program, as a show's does (judgeEndpoints).
+  // One in LM Studio used to be swapped for an Ollama one, or none, while
+  // Labs spoke only to Ollama.
   const skillTestJudge = useMemo(() => {
     if (!effectiveJudge || effectiveJudge.provider !== 'local') return effectiveJudge;
-    if (judgeEndpoints[effectiveJudge.model]?.provider !== 'lm-studio') return effectiveJudge;
-    const ollamaPick = judgeModelOptions.find((name) => judgeEndpoints[name]?.provider !== 'lm-studio');
-    return ollamaPick ? { ...effectiveJudge, model: ollamaPick } : null;
-  }, [effectiveJudge, judgeEndpoints, judgeModelOptions]);
+    return { ...effectiveJudge, baseUrl: judgeEndpoints[effectiveJudge.model]?.baseUrl ?? ollama.baseUrl };
+  }, [effectiveJudge, judgeEndpoints, ollama.baseUrl]);
+  // Where a model's Labs test goes: its own program's address. Main reads an
+  // LM Studio one and asks LM Studio, so App Builder, Code and picture reading
+  // run where the model lives instead of being sent to Ollama.
+  const labBaseUrl = useCallback(
+    (model: string) => getModelRuntime(modelRows.find((row) => row.displayName === model), ollama).baseUrl,
+    [modelRows, ollama],
+  );
 
   const unscoredRowsForCleanup = useMemo(
     () => installedRowsForCleanup.filter((row) => !getModelScore(row, modelScores)),
@@ -1035,10 +1040,8 @@ function App() {
       // download that never started, and "Choose for me" filled the lineup
       // with them, leaving Next disabled with no reason given.
       .filter((row) => row.installed || ollama.ready)
-      // The coding, picture and listening rounds run through Ollama, so an
-      // LM Studio model would be sent to the wrong program and take an F. It
-      // sits those out; the question round tests it like any other.
-      .filter((row) => wizardRound === 'chat' || row.localProvider !== 'lm-studio')
+      // An LM Studio model takes every round, on LM Studio (labBaseUrl); the
+      // listening round's own filter keeps out models that cannot hear.
       .map((row) => ({ row, fit: getHardwareFit(row, vramGb) }))
       .filter((entry) => entry.fit.recommend && entry.fit.tone !== 'unknown')
       // Prefer the best fit tone first, then the LARGEST model that still fits —
@@ -1066,7 +1069,7 @@ function App() {
     // One card per model name — see collapseModelVariants for the reasoning
     // (first outside review: "many versions of Gemma 4").
     return collapseModelVariants(mapped, shortlistIds);
-  }, [modelRows, shortlistIds, system.gpu.vramGb, system.platform, ollama.ready, wizardRound]);
+  }, [modelRows, shortlistIds, system.gpu.vramGb, system.platform, ollama.ready]);
   /**
    * The channel whose results that round is ranked on.
    *
@@ -3382,12 +3385,8 @@ function App() {
     const canSee = (model: string) => canReadImages(
       modelRows.find((row) => row.displayName === model) ?? { displayName: model },
     );
-    // Skill tests run through Ollama (runAdvancedGenerate posts to its
-    // /api/generate), so an LM Studio contestant was sent to the wrong
-    // program and scored an F for it. It sits these out until they run there.
-    const inLmStudio = (model: string) => modelRows.find((row) => row.displayName === model)?.localProvider === 'lm-studio';
-    const sittingOut = models.filter(inLmStudio);
-    for (const model of models.filter((name) => !inLmStudio(name))) {
+    // Each runs on the model's own program (labBaseUrl), LM Studio's too.
+    for (const model of models) {
       if (selection.appBuilder && !isLikelyImageGenerationModel(model) && !isEmbeddingModel(model)) {
         jobs.push({ model, kind: 'app-builder' });
       }
@@ -3439,9 +3438,7 @@ function App() {
       // stop, and a round where nothing was eligible never did either. Say what
       // happened, in the terms of what was asked for — and nothing at all when
       // no skill was asked for, which is most runs.
-      const nothing = sittingOut.length > 0 && nothingToRunNote(selection)
-        ? 'These models are in LM Studio, and this test runs through Ollama for now, so they sit it out.'
-        : nothingToRunNote(selection);
+      const nothing = nothingToRunNote(selection);
       if (!nothing) return;
       setSkillRunStatus({ phase: 'complete', label: nothing, completed: 0, total: 0 });
       setActivity(nothing);
@@ -3475,6 +3472,7 @@ function App() {
         : job.kind === 'code' ? `Code Challenge — ${job.model}`
         : job.kind === 'image' ? `Image skill test — ${job.model}`
         : job.kind === 'video' ? `Video skill test — ${videoEntries.find((entry) => entry.key === job.model)?.name ?? job.model}`
+        : job.kind === 'listening' ? `Listening skill test — ${job.model}`
         : `Image recognition skill test — ${job.model}`;
       setSkillRunStatus({ phase: 'running', label, completed: index, total: jobs.length });
       setActivity(`Skill test ${index + 1}/${jobs.length}: ${label}. This can take a few minutes per model.`);
@@ -3491,7 +3489,7 @@ function App() {
         });
         try {
           result = await runAdvancedAppBuilderChallenge(
-            job.model, ollama.baseUrl, appPrompt, streamId, undefined,
+            job.model, labBaseUrl(job.model), appPrompt, streamId, undefined,
             skillTestJudge ? { ...skillTestJudge, taskDescription: appPrompt } : undefined,
           );
         } finally {
@@ -3508,7 +3506,7 @@ function App() {
         });
         try {
           result = await runCodeChallenge(
-            job.model, ollama.baseUrl, selection.codeLanguage, codeTask.task, codeTask.reference, streamId,
+            job.model, labBaseUrl(job.model), selection.codeLanguage, codeTask.task, codeTask.reference, streamId,
             skillTestJudge ? { ...skillTestJudge } : undefined,
           );
         } finally {
@@ -3524,7 +3522,7 @@ function App() {
           setLiveBuild({ model: payload.model ?? job.model, kind: 'vision', text: payload.text, done: payload.done, error: payload.error });
         });
         try {
-          result = await runAdvancedVisionChallenge(job.model, ollama.baseUrl, visionImage, {
+          result = await runAdvancedVisionChallenge(job.model, labBaseUrl(job.model), visionImage, {
             streamId,
             // Checked against what is in it only when it is one of RigMatch's own pictures.
             picture: VISION_TEST_IMAGES.find((image) => image.src === selection.recognizeImage)?.id,
@@ -3543,7 +3541,7 @@ function App() {
           setLiveBuild({ model: payload.model ?? job.model, kind: 'vision', text: payload.text, done: payload.done, error: payload.error });
         });
         try {
-          result = await runAdvancedListeningChallenge(job.model, ollama.baseUrl, listeningAudio, streamId);
+          result = await runAdvancedListeningChallenge(job.model, labBaseUrl(job.model), listeningAudio, streamId);
         } finally {
           unsubscribe?.();
         }
@@ -3663,7 +3661,7 @@ function App() {
     // pictureJudge checks the pictures and clips, and modelRows says which
     // models can hear; without them here the run would use whatever was
     // installed when this callback was last built.
-  }, [ollama.baseUrl, skillTestSelection, skillTestJudge, modelRows, videoMachine, pictureJudge]);
+  }, [ollama.baseUrl, labBaseUrl, skillTestSelection, skillTestJudge, modelRows, videoMachine, pictureJudge]);
 
   /**
    * Chat asking RigMatch to test a model.
@@ -3823,7 +3821,7 @@ function App() {
       // the existing code, they shouldn't re-roll it wildly.
       const retryOptions = { seed: Math.floor(Math.random() * 1_000_000_000), temperature: 0.4 };
       const retryJudge = skillTestJudge ? { ...skillTestJudge } : undefined;
-      result = await runAdvancedAppBuilderChallenge(model, ollama.baseUrl, retryPrompt, streamId, retryOptions, retryJudge);
+      result = await runAdvancedAppBuilderChallenge(model, labBaseUrl(model), retryPrompt, streamId, retryOptions, retryJudge);
     } catch (error) {
       setActivity(`Improve pass failed: ${getErrorMessage(error)}.`);
       return null;
@@ -3841,7 +3839,7 @@ function App() {
       return null;
     }
     return { result, html };
-  }, [ollama.baseUrl, skillTestJudge]);
+  }, [labBaseUrl, skillTestJudge]);
 
   // "Second chance" for an App Builder result: one improve pass, optionally
   // steered by a user hint. Restores the previous result if the pass fails, so
@@ -4946,6 +4944,7 @@ function App() {
             modelScores={modelScores}
             selectedModel={selectedModel}
             ollama={ollama}
+            labModels={localModels}
             system={system}
             onOpenModels={() => selectNav('models')}
             onOpenScorecards={() => selectNav('history')}
@@ -5205,7 +5204,6 @@ function App() {
           // The show's questions are marked by effectiveJudge on its own
           // provider; only the code challenge needs an Ollama judge.
           judgeActive={Boolean(effectiveJudge)}
-          codeJudgeActive={Boolean(skillTestJudge)}
           lineupModels={pendingRunMode === 'single'
             ? [pendingSingleModel ?? selectedModel].filter(Boolean)
             : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName)}

@@ -1,9 +1,9 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 /**
  * The Advanced Lab / skill-test challenge layer: the app-builder prompts and
- * presets, the per-challenge scoring rubrics, and the runners that drive Ollama
- * for each challenge (build an app, read an image, transcribe audio, write
- * code). Extracted from App.tsx so both the run flow and the Advanced Lab view
+ * presets, the per-challenge scoring rubrics, and the runners that drive the
+ * model's own program, Ollama or LM Studio, for each challenge (build an app,
+ * read an image, transcribe audio, write code). Extracted from App.tsx so both the run flow and the Advanced Lab view
  * share one implementation.
  *
  * Generating an image is the one skill that is not here, because it is the one
@@ -256,6 +256,8 @@ function scoreAdvancedAppBuilderResponse(response: string, doneReason: string): 
 export type AppBuilderJudgeConfig = {
   model: string;
   provider?: 'local' | 'openrouter';
+  /** A local judge's own address: Ollama's, or LM Studio's for a judge there. */
+  baseUrl?: string;
   apiKey?: string;
   taskDescription?: string;
 };
@@ -277,8 +279,15 @@ async function runAppJudgeGenerate(baseUrl: string, judge: AppBuilderJudgeConfig
   }
   const data = await agentArcadeApi.runAdvancedGenerate({
     model: judge.model,
-    baseUrl,
+    // The judge's program, not the contestant's: a model in LM Studio can be
+    // judged by one in Ollama, and the other way round.
+    baseUrl: judge.baseUrl ?? baseUrl,
     prompt: judgePrompt,
+    // A verdict, not a problem to reason about, as the show's judge is asked.
+    // gemma4:e4b, the judge picked on a 12 GB card, spent all 400 tokens
+    // thinking and cut its JSON off, so every app went unverified and every
+    // Code challenge, which only a judge can mark, saved nothing.
+    think: false,
     keep_alive: '10m',
     timeoutMs: 120000,
     options: { temperature: 0, top_p: 1, num_ctx: 8192, num_predict: 400 },

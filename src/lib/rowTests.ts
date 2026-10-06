@@ -21,8 +21,9 @@ export function rowSkillTest(
   row: CapabilityBearing & { runtime?: 'ollama' | 'comfyui'; localProvider?: string },
   installed: boolean,
 ): RowSkillTest | null {
-  // Both tests run through Ollama, which is what reports hearing and seeing.
-  if (!installed || row.runtime === 'comfyui' || row.localProvider === 'lm-studio') return null;
+  // Through the model's own program, Ollama or LM Studio, on what that
+  // program reports it can do. LM Studio reports no model that hears.
+  if (!installed || row.runtime === 'comfyui') return null;
   if (channel === 'listening' && canHearAudio(row)) return 'listening';
   if (channel === 'reading' && canReadImages(row)) return 'reading';
   return null;
