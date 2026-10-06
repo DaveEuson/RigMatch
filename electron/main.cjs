@@ -1910,7 +1910,12 @@ function extractResponseDetail(text) {
 
   try {
     const parsed = JSON.parse(text);
-    return parsed.error || parsed.message || '';
+    // Ollama says { error: "..." }. OpenAI-style servers, LM Studio among them,
+    // say { error: { message: "..." } }, which printed as "[object Object]" and
+    // hid what went wrong: LM Studio's "does not expose reasoning
+    // configuration" never reached the check that retries without the switch.
+    const detail = parsed.error?.message ?? parsed.error ?? parsed.message ?? '';
+    return typeof detail === 'string' ? detail : JSON.stringify(detail).slice(0, 240);
   } catch {
     return text.slice(0, 240);
   }
@@ -4419,6 +4424,8 @@ async function runLmStudioBenchmarkPrompt(baseUrl, model, prompt, signal) {
  * model refuses it, as Ollama's think:false is. Null when this LM Studio has
  * no /api/v1/chat: before 0.4 it answers an unknown route with an error.
  */
+const lmStudioNoReasoningSwitch = new Set();
+
 async function lmStudioNativeChat(baseUrl, model, prompt, signal, maxOutputTokens) {
   const ask = (reasoningOff) => fetchJson(
     `${lmStudioOrigin(baseUrl)}/api/v1/chat`,
@@ -4435,13 +4442,17 @@ async function lmStudioNativeChat(baseUrl, model, prompt, signal, maxOutputToken
     },
     BENCHMARK_TIMEOUT_MS,
   );
-  let reasoningOff = BENCHMARK_THINK_DISABLED;
+  // A model with no thinking setting refuses the switch with a 400 ("does
+  // not expose reasoning configuration"), so the refusal is remembered rather
+  // than paid again on every question of every timing run.
+  let reasoningOff = BENCHMARK_THINK_DISABLED && !lmStudioNoReasoningSwitch.has(model);
   let response;
   const startedAt = Date.now();
   try {
     response = await ask(reasoningOff);
   } catch (error) {
     if (!reasoningOff || !/reasoning/i.test(getLogErrorMessage(error))) throw error;
+    lmStudioNoReasoningSwitch.add(model);
     reasoningOff = false;
     response = await ask(false);
   }

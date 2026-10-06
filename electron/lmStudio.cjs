@@ -166,10 +166,16 @@ function toolReplyFromOpenAi(response) {
   const choice = response?.choices?.[0] || {};
   const stats = response?.stats || {};
   const ns = (value) => (Number(value) > 0 ? Math.round(Number(value) * 1e9) : 0);
+  const outputTokens = Number(response?.usage?.completion_tokens) || 0;
+  const tokensPerSecond = Number(stats.tokens_per_second) || 0;
   return {
     message: { role: 'assistant', content: choice.message?.content ?? '', tool_calls: choice.message?.tool_calls ?? [] },
-    eval_count: Number(response?.usage?.completion_tokens) || 0,
-    eval_duration: ns(stats.generation_time),
+    eval_count: outputTokens,
+    // From LM Studio's own rate, like every other answer. Its generation_time
+    // also holds the wait for the first token, which Ollama's eval_duration
+    // does not: measured on a real LM Studio, 0.295 s for 38 tokens is 129
+    // tok/s where LM Studio's own figure for the same answer was 142.
+    eval_duration: tokensPerSecond > 0 && outputTokens > 0 ? ns(outputTokens / tokensPerSecond) : ns(stats.generation_time),
     prompt_eval_duration: ns(stats.time_to_first_token),
     done_reason: choice.finish_reason === 'length' ? 'length' : 'stop',
   };
