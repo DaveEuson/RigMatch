@@ -4,7 +4,7 @@ import type { CopyState } from '../lib/clipboard';
 import { copyText } from '../lib/clipboard';
 import { getPlatformName } from '../lib/modelCatalog';
 import type { OllamaInstallProgress, OllamaStatus, SystemProfile } from '../types';
-import { Download, ExternalLink, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Download, ExternalLink, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 
 export function OllamaPrep({
@@ -31,29 +31,10 @@ export function OllamaPrep({
   // A copy button that silently does nothing is worse than no button.
   const [commandCopy, setCommandCopy] = useState<CopyState>('idle');
 
-  // Ready state — compact success strip
-  if (ready || !isDesktopRuntime) {
-    const prepTitle = isDesktopRuntime ? `${platformName} ready` : 'Preview sample data';
-    const prepMessage = isDesktopRuntime
-      ? 'This computer is ready. Tests run through local Ollama on this machine.'
-      : 'Preview sample data is local-only. The desktop app checks your real Ollama install.';
-    return (
-      <div className="ollama-prep ready">
-        <div className="prep-badge" aria-hidden="true"><ShieldCheck /></div>
-        <div className="prep-copy">
-          <span>Local AI Setup</span>
-          <strong>{prepTitle}</strong>
-          <em>{prepMessage}</em>
-        </div>
-        <div className="prep-actions">
-          <button type="button" className="mini-button outline" onClick={onScanRig}>
-            <RefreshCw aria-hidden="true" />
-            Check again
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Ready: nothing to show. This used to be a strip that said what Setup
+  // Doctor says on the next line ("Ollama Service: Running"), with a second
+  // Check again button under the page's own.
+  if (ready || !isDesktopRuntime) return null;
 
   // Not-ready state — full install hero for first-timers
   const ip = ollamaInstallProgress;

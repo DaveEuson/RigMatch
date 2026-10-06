@@ -32,19 +32,18 @@ test('a family of variants becomes one group', () => {
   assert.equal(out[0].group.rows.length, 5);
 });
 
-test('a family of one is still a family, so every row behaves the same way', () => {
-  // Mixing collapsible family rows with bare model rows makes the reader work
-  // out which kind of row they are looking at before they know what a click
-  // will do. One shape for every row.
-  assert.equal(MIN_VARIANTS_TO_GROUP, 1);
+test('a model with one version is its own row, not a family to open', () => {
+  // Folding a family of one put the same "Show 1 version" button on most
+  // rows, and a click between the reader and the model's own actions.
+  assert.equal(MIN_VARIANTS_TO_GROUP, 2);
   const out = group([row('mistral:7b')]);
-  assert.deepEqual(out.map((e) => e.kind), ['group']);
-  assert.equal(out[0].group.rows.length, 1);
+  assert.deepEqual(out.map((e) => e.kind), ['row']);
 });
 
-test('the option still means something for a caller that wants plain rows', () => {
-  const out = group([row('mistral:7b')], { minToGroup: 2 });
-  assert.deepEqual(out.map((e) => e.kind), ['row']);
+test('the option still folds a family of one for a caller that wants it', () => {
+  const out = group([row('mistral:7b')], { minToGroup: 1 });
+  assert.deepEqual(out.map((e) => e.kind), ['group']);
+  assert.equal(out[0].group.rows.length, 1);
 });
 
 test('families keep the position of their best-sorted member', () => {

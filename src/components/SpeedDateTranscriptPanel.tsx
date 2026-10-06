@@ -167,7 +167,7 @@ export function SpeedDateTranscriptPanel({
                 {getPromptDiagnosticText(prompt) && (
                   <em className="prompt-diagnostic-note">{getPromptDiagnosticText(prompt)}</em>
                 )}
-                <p className="speed-date-answer-preview">{prompt.response.trim() || 'No answer returned.'}</p>
+                {/* Once. A highlighted copy sat above this, the same text again. */}
                 <pre>{prompt.response.trim() || 'No answer returned.'}</pre>
               </div>
             </li>

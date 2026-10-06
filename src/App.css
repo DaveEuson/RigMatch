@@ -968,67 +968,6 @@ textarea {
   -webkit-box-orient: vertical;
 }
 
-.ollama-prep {
-  min-height: 78px;
-  padding: 10px;
-  border-bottom: none;
-  background: #0f1418;
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 10px;
-}
-
-.prep-badge {
-  width: 34px;
-  height: 34px;
-  border: 1px solid rgba(var(--primary-rgb), 0.5);
-  color: var(--green);
-  background: rgba(var(--primary-rgb), 0.08);
-  display: grid;
-  place-items: center;
-}
-
-.prep-badge svg {
-  width: 20px;
-  height: 20px;
-}
-
-.prep-copy {
-  min-width: 0;
-}
-
-.prep-copy span {
-  color: var(--green);
-  font-size: var(--fs-ui);
-  text-transform: none;
-}
-
-.prep-copy strong {
-  display: block;
-  margin-top: 3px;
-  color: var(--text-strong);
-  font-size: var(--fs-ui);
-  text-transform: none;
-}
-
-.prep-copy em {
-  display: block;
-  margin-top: 4px;
-  color: var(--text);
-  font-size: var(--fs-ui);
-  font-style: normal;
-  line-height: 1.35;
-  overflow: visible;
-  white-space: normal;
-}
-
-.prep-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 /* Ollama install hero — shown when Ollama is not detected */
 .ollama-install-hero {
   padding: 18px 16px 14px;
@@ -5037,20 +4976,6 @@ tbody tr.computer-row.selected {
   white-space: pre-wrap;
 }
 
-.speed-date-qa-block .speed-date-answer-preview {
-  min-height: 34px;
-  padding: 7px 8px;
-  border: 1px solid rgba(var(--gold-rgb), 0.22);
-  border-radius: 8px;
-  color: #fffaf3;
-  background: rgba(255, 203, 92, 0.12);
-  font-size: var(--fs-ui);
-  font-weight: 850;
-  line-height: 1.35;
-  overflow: visible;
-  white-space: normal;
-  word-break: break-word;
-}
 
 .speed-date-qa-block pre {
   min-height: 46px;
@@ -9595,11 +9520,6 @@ tr:focus-visible,
     padding: 8px;
   }
 
-  .ollama-prep {
-    min-height: 68px;
-    padding: 6px 10px;
-  }
-
   .model-tools {
     min-height: 68px;
     padding: 6px 8px;
@@ -9695,7 +9615,6 @@ tr:focus-visible,
   border-radius: 8px;
 }
 
-.ollama-prep,
 .setup-doctor,
 .doctor-card,
 .rig-details-panel,
@@ -9737,7 +9656,6 @@ tr:focus-visible,
 
 .rig-details-head span,
 .rig-details-grid span,
-.prep-copy span,
 .queue-status-copy span,
 .disk-guard span,
 th,
@@ -9746,7 +9664,6 @@ th,
   text-transform: none;
 }
 
-.prep-copy em,
 .rig-details-grid em {
   font-size: var(--fs-ui);
   line-height: 1.4;
@@ -9973,7 +9890,6 @@ td {
 }
 
 .model-tools,
-.ollama-prep,
 .setup-doctor,
 .rig-details-panel,
 .model-footer,

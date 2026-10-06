@@ -160,15 +160,19 @@ function ModelNewsListItem({
   const specialties = getModelSpecialties(item.displayName).slice(0, 3);
   const [base, tag] = item.displayName.split(':');
 
+  // The row opens the model, and its name is the button for the keyboard. A
+  // "Details" button on every row repeated one outlined word down the list.
   return (
-    <li className={isLatest ? 'model-news-item is-new' : 'model-news-item'}>
+    <li className={isLatest ? 'model-news-item is-new' : 'model-news-item'} onClick={() => onOpenModel(item.displayName)}>
       <div className="model-news-portrait">
         <img src={getModelAvatarSrc(item.displayName)} alt="" />
         {isLatest && <span className="model-news-new">New</span>}
       </div>
       <div className="model-news-copy">
         <div className="model-news-name">
-          <strong>{base}</strong>
+          <button type="button" className="model-news-open" aria-label={`${base}: details`}>
+            <strong>{base}</strong>
+          </button>
           {tag && <code>{item.displayName}</code>}
         </div>
         <p>{specialties.join(' · ') || item.model.pack}</p>
@@ -182,9 +186,6 @@ function ModelNewsListItem({
         <span className="figure">{item.model.sizeGb ? formatGb(item.model.sizeGb) : 'Size not listed'}</span>
         <span className="model-news-status">{item.installed ? 'On your PC' : 'Not downloaded'}</span>
       </div>
-      <button type="button" className="btn btn-line btn-sm" onClick={() => onOpenModel(item.displayName)}>
-        Details
-      </button>
     </li>
   );
 }

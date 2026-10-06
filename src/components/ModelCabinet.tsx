@@ -1478,8 +1478,8 @@ export function ModelCabinet({
               const maker = best.publisher ?? getModelOrigin(best.displayName).organization;
               const country = getDisplayCountry(best.displayName, best.publisher);
               const countryCode = country ? getCountryCode(country) : null;
-              // Every family is a group, a family of one included (see
-              // MIN_VARIANTS_TO_GROUP), so "Show 1 version" is on screen.
+              // A family row only stands for two or more versions (see
+              // MIN_VARIANTS_TO_GROUP), but the plural costs one word.
               const versionCount = `${variants.length} version${variants.length === 1 ? '' : 's'}`;
               return [
                 <tr
