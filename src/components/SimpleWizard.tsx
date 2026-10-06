@@ -182,8 +182,8 @@ type SimpleWizardProps = {
    * named somewhere unreachable is not a fix.
    */
   noticeAction?: { label: string; run: () => void | Promise<void> } | null;
-  /** Fills the lineup with the best-fitting models for people who can't choose. */
-  onChooseForMe: () => void;
+  /** Fills the lineup from the cards on screen, for people who can't choose. */
+  onChooseForMe: (cards: WizardModel[]) => void;
   pullProgressByModel: Record<string, PullProgressUpdate>;
   onStartDownloads: () => void;
   /** Cancels the whole download queue. Advanced Mode has always had this; the
@@ -310,6 +310,10 @@ export function SimpleWizard(props: SimpleWizardProps) {
   }, [props.notice]);
 
   const setupDone = ollamaReady;
+  // Lifted from Setup so the host can say what the page says. He went on
+  // promising "One click and I'll handle the rest" beside "We couldn't find
+  // Ollama", the one place a newcomer has to do something themselves.
+  const [setupAttempted, setSetupAttempted] = useState(false);
   const minPicks = minPicksFor(props.round);
   const pickDone = shortlistedRows.length >= minPicks;
   const {
@@ -500,14 +504,18 @@ export function SimpleWizard(props: SimpleWizardProps) {
     ? shortlistedRows.find((row) => getDownloadRowStatus(row.installed, props.pullProgressByModel[row.displayName]) === 'failed')
     : undefined;
   const questionNumber = (progress?.questionIndex ?? 0) + 1;
-  const judgeOnStage = progress?.questionJudge && shortlistedRows.some((row) => row.displayName === progress.questionJudge)
+  // Only when the judge is marking its own answer. Any judge in the lineup used
+  // to set this off, so with a contestant judging the others the host said
+  // "marking its own homework" over and over, about answers that weren't.
+  const judgeOnStage = progress?.questionJudge && progress.questionJudge === progress.currentModel
     ? progress.questionJudge : null;
   const scriptLine = (() => {
     switch (step) {
       case 'setup':
         return props.isScanning ? hostLine('setupChecking', {}, shortlistedRows.length)
           : ollamaReady && props.system.gpu.vramGb ? hostLine('setupDone', { vram: Math.round(props.system.gpu.vramGb) })
-            : hostLine('setupIdle');
+            : setupAttempted && !ollamaReady ? hostLine('setupNoOllama')
+              : hostLine('setupIdle');
       case 'pick':
         return hostLine(shortlistedRows.length >= 5 ? 'pickFull' : 'pick', {}, shortlistedRows.length);
       case 'download':
@@ -637,7 +645,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
           </div>
         )}
 
-        {step === 'setup' && <SetupScreen {...props} onContinue={() => setStep('pick')} />}
+        {step === 'setup' && <SetupScreen {...props} attempted={setupAttempted} onAttempt={() => setSetupAttempted(true)} onContinue={() => setStep('pick')} />}
         {step === 'pick' && <PickScreen {...props} />}
         {step === 'download' && <DownloadScreen {...props} />}
         {step === 'compare' && <CompareScreen {...props} onRetry={startShow} onChangeLineup={() => setStep('pick')} />}
@@ -743,8 +751,10 @@ function SetupScreen({
   onStartOllamaInstall,
   onLaunchOllamaInstaller,
   comfySetup,
+  attempted,
+  onAttempt,
   onContinue,
-}: SimpleWizardProps & { onContinue: () => void }) {
+}: SimpleWizardProps & { attempted: boolean; onAttempt: () => void; onContinue: () => void }) {
   const checked = ollamaReady; // a successful check makes Ollama ready
   const gpu = system.gpu.model || 'Graphics card not identified';
   const vram = system.gpu.isUnifiedMemory ? 0 : Math.round(system.gpu.vramGb || 0);
@@ -752,11 +762,10 @@ function SetupScreen({
   const memoryGb = Math.round(system.memory.totalGb || 0);
   // Only surface the "couldn't find Ollama" card after the user actually ran a
   // check that came back not-ready — never on first load before they've clicked.
-  const [attempted, setAttempted] = useState(false);
   // For a Linux user on first run this copy button is the only way forward, and
   // it used to fail in total silence.
   const [copiedCommand, setCopiedCommand] = useState<CopyState>('idle');
-  const runCheck = () => { setAttempted(true); onCheckComputer(); };
+  const runCheck = () => { onAttempt(); onCheckComputer(); };
   // Only "missing" when a goal actually needs it. No goal needing ComfyUI means
   // there is nothing missing, however absent ComfyUI happens to be.
   const comfyMissing = Boolean(comfySetup?.needed) && !comfySetup?.ready;
@@ -774,7 +783,7 @@ function SetupScreen({
 
   return (
     <div className="sw-setup">
-      <h2>{checked && !isScanning ? (comfyMissing ? 'Almost there: one more program' : 'Your computer is ready') : "Let's check your computer"}</h2>
+      <h2>{checked && !isScanning ? (comfyMissing ? 'Almost there: one more program' : 'Your computer is ready') : failed ? 'One program to get' : "Let's check your computer"}</h2>
       {/* Said aloud when the check finishes, in the words of the headline. The
           button that started it changes, so nothing else told a screen reader
           the check had finished, or how. */}
@@ -801,12 +810,14 @@ function SetupScreen({
         </>
       )}
 
-      {checked && !isScanning && (
+      {/* Shown when Ollama is missing too: whether this PC is worth the
+          install is the question a newcomer has before running one. */}
+      {(checked || failed) && !isScanning && (
         <ul className="sw-found" aria-label="What RigMatch found">
           <FoundRow label="Graphics card" value={vram ? `${gpu} · ${vram} GB video memory` : gpu} />
           {memoryGb > 0 && <FoundRow label="Memory" value={`${memoryGb} GB`} />}
           <FoundRow label="Disk space" value={`${freeGb} GB free for models`} warn={freeGb < LOW_DISK_GB} />
-          {lmStudioOnly ? (
+          {failed ? null : lmStudioOnly ? (
             <>
               <FoundRow label="LM Studio" value="Found and running. The models you have in it can take part." />
               <FoundRow
@@ -868,7 +879,8 @@ function SetupScreen({
               <button type="button" className="btn btn-gold" onClick={() => onLaunchOllamaInstaller(install.installerPath)}>
                 Run the installer
               </button>
-              <span className="sw-muted">Follow Ollama's prompts, then come back and check again.</span>
+              {/* App polls for Ollama every 15 s until it answers, then re-checks. */}
+              <span className="sw-muted">Follow Ollama's prompts. RigMatch notices when it's running.</span>
             </div>
           ) : installDownloading ? (
             <div className="sw-install-progress">
@@ -907,9 +919,13 @@ function SetupScreen({
         </div>
       )}
 
-      {/* Beginners' real fear is "will this break my computer." Name it once, here. */}
+      {/* Beginners' real fear is "will this break my computer." Name it once,
+          here, and truly: it said nothing at all gets installed, right
+          under "Install Ollama for me". Models go where Ollama keeps them. */}
       <p className="sw-muted sw-setup-safety">
-        Models download into a folder RigMatch manages. Nothing is installed system-wide, and you can delete them any time.
+        {failed && !isLinux
+          ? 'Ollama installs like any other program, and you can uninstall it the usual way. The models it downloads can be deleted from RigMatch any time.'
+          : "Models download into Ollama's own folder. Nothing else is installed, and you can delete them from RigMatch any time."}
       </p>
     </div>
   );
@@ -1056,11 +1072,12 @@ function PickScreen({
       <div className="sw-pick-count">
         <span>{modelsLoading ? 'Bringing out the contestants…' : countLine}</span>
         {/* The escape hatch for "I don't know how to choose", which is most of
-            this audience. Fills the lineup with the best-fitting models. Not
-            gold: Start the show is this step's one next action. */}
+            this audience. Fills the lineup from the cards for this goal. Not
+            gold: Start the show is this step's one next action. No count:
+            with big downloads it picks fewer than five. */}
         {!modelsLoading && filtered.length > 0 && shortlistedRows.length === 0 && (
-          <button type="button" className="btn btn-line btn-sm sw-choose-for-me" onClick={onChooseForMe}>
-            Not sure? Choose 5 for me
+          <button type="button" className="btn btn-line btn-sm sw-choose-for-me" onClick={() => onChooseForMe(filtered)}>
+            Not sure? Choose for me
           </button>
         )}
       </div>
