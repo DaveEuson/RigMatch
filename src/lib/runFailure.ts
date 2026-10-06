@@ -11,7 +11,7 @@ import type { RunFailure, RunFailureKind } from '../types';
  * there running, and pressing Stop was reported as an error. The raw text still
  * goes to the log; this is what the screen says.
  */
-export function describeRunFailure(raw: string): { kind: RunFailureKind; reason: string } {
+export function describeRunFailure(raw: string, provider = 'Ollama'): { kind: RunFailureKind; reason: string } {
   // IPC wraps a rejection as "Error invoking remote method '…': Error: …".
   const text = String(raw ?? '')
     .replace(/^(?:Error(?: invoking remote method '[^']*')?:\s*)+/i, '')
@@ -31,19 +31,26 @@ export function describeRunFailure(raw: string): { kind: RunFailureKind; reason:
   if (/empty answer to every question/i.test(text)) {
     return { kind: 'no-answers', reason: 'It gave an empty answer to every question, so there was nothing to score.' };
   }
-  // Ollama's own words for a runner that died, usually on memory.
+  // LM Studio's words for a model ejected (by its user, or its own idle
+  // timer) while a show was asking it questions.
+  if (/unloaded by user or api request/i.test(text)) {
+    return { kind: 'other', reason: `It was unloaded in ${provider} partway through. Run it again, and leave it loaded until the test ends.` };
+  }
+  // A runner that died, usually on memory: Ollama's words, and LM Studio's.
   if (/runner has unexpectedly stopped|runner process has terminated|out of memory|requires more system memory|CUDA error/i.test(text)) {
-    return { kind: 'crashed', reason: "Ollama's model runner stopped unexpectedly, often because the model ran out of memory." };
+    return { kind: 'crashed', reason: `${provider}'s model runner stopped unexpectedly, often because the model ran out of memory.` };
   }
   if (/cannot reach local ai service|ECONNREFUSED|ECONNRESET|fetch failed|socket hang up|other side closed|\bterminated\b/i.test(text)) {
-    return { kind: 'unreachable', reason: 'The connection to Ollama was lost.' };
+    return { kind: 'unreachable', reason: `The connection to ${provider} was lost.` };
   }
-  // Anything else: Ollama's own message, without the plumbing around it.
+  // Anything else: the provider's own message, without the plumbing around it.
   const detail = text
-    .replace(/^\d{3}\s[^:]*?from\s+https?:\/\/\S+?:\s*/i, '')
-    .replace(/https?:\/\/\S+/g, 'Ollama')
+    // Up to the colon and space that end the address: a lazy match stopped at
+    // the port's colon and left "11434/api/generate:" in front of every message.
+    .replace(/^\d{3}\s[^:]*?from\s+https?:\/\/\S+?:\s+/i, '')
+    .replace(/https?:\/\/\S+/g, provider)
     .trim();
-  return { kind: 'other', reason: detail ? `Ollama reported: ${detail}` : 'Something went wrong while it was answering.' };
+  return { kind: 'other', reason: detail ? `${provider} reported: ${detail}` : 'Something went wrong while it was answering.' };
 }
 
 /** "Gemma4", "Gemma4 and Qwen3", "Gemma4, Qwen3 and Llama3.2". */
@@ -65,11 +72,21 @@ export function droppedOutMessage(failures: RunFailure[], nameOf: (model: string
  * What to say when nobody finished, and what kind of stop it was — which
  * decides whether running it again can help.
  */
-export function showStoppedMessage(failures: RunFailure[], stopped: boolean, nameOf: (model: string) => string): { kind: RunFailureKind; message: string } {
+export function showStoppedMessage(
+  failures: RunFailure[],
+  stopped: boolean,
+  nameOf: (model: string) => string,
+  providerOf: (model: string) => string = () => 'Ollama',
+): { kind: RunFailureKind; message: string } {
   if (stopped) return { kind: 'stopped', message: 'You stopped the show before any model finished.' };
   if (failures.length === 0) return { kind: 'other', message: 'No model finished, so there is nothing to compare.' };
   if (failures.every((f) => f.kind === 'unreachable')) {
-    return { kind: 'unreachable', message: 'The connection to Ollama was lost before any model finished. Check that Ollama is still running, then run the show again.' };
+    const providers = [...new Set(failures.map((f) => providerOf(f.model)))];
+    const lost = joinNames(providers);
+    return {
+      kind: 'unreachable',
+      message: `The connection to ${lost} was lost before any model finished. Check that ${providers.length > 1 ? 'both are' : `${lost} is`} still running, then run the show again.`,
+    };
   }
   const first = failures[0];
   return { kind: first.kind, message: `No model finished. ${nameOf(first.model)}: ${first.reason}` };

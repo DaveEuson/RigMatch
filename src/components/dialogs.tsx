@@ -1,7 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Check, Code2, Coffee, ExternalLink, Heart, MessageSquare, Share2, Terminal, Trash2, X } from 'lucide-react';
-import { agentArcadeApi } from '../api';
 import type { ModelRow, NetworkHost, SystemProfile, TestedModelScore } from '../types';
 import { formatGb } from '../lib/format';
 import { sumModelRowGb, getShortModelName } from '../lib/modelCatalog';
@@ -10,7 +9,6 @@ import { playJingle } from '../lib/sound';
 import { AvatarBust, MachineAvatar } from './Avatars';
 import { ShareScorecard } from './ShareScorecard';
 import { useDialog } from '../lib/useDialog';
-import { companionLaunchMessage } from '../lib/companionLaunch';
 import { UiIcon } from './icons/UiIcon';
 
 export function DeleteModelModal({
@@ -380,12 +378,21 @@ const CONFETTI_PIECES = [
 
 export function ChoiceCruiseModal({
   model,
+  inLmStudio = false,
+  onOpenChat,
   host,
   score,
   system,
   onClose,
 }: {
   model: string;
+  /**
+   * The match lives in LM Studio. Every instruction below was Ollama's, so an
+   * LM Studio match was told to run `ollama run qwen/qwen3-4b`, which would
+   * try to download it from Ollama's library.
+   */
+  inLmStudio?: boolean;
+  onOpenChat: () => void;
   host?: NetworkHost;
   score?: TestedModelScore | null;
   system: SystemProfile;
@@ -425,7 +432,7 @@ export function ChoiceCruiseModal({
           <div>
             <span>It&apos;s a match</span>
             <strong id="choice-cruise-title">{model}</strong>
-            <em>Saved as your Top Match for {hostName}. Your Ollama setup is untouched.</em>
+            <em>Saved as your Top Match for {hostName}. Your {inLmStudio ? 'LM Studio' : 'Ollama'} setup is untouched.</em>
           </div>
           {score && (
             <button
@@ -517,51 +524,53 @@ export function ChoiceCruiseModal({
             <button
               type="button"
               className="whats-next-item whats-next-action"
-              onClick={async () => {
-                const result = await agentArcadeApi.openChatApp();
-                const problem = companionLaunchMessage(result);
-                if (problem) alert(problem);
-              }}
+              onClick={onOpenChat}
             >
               <MessageSquare aria-hidden="true" />
               <div>
-                <strong>RigMatch Chat</strong>
-                <em>Open RigMatch Chat — your AIM-style local AI messenger. {shortModelName} is already online.</em>
+                <strong>{inLmStudio ? 'Chat here' : 'RigMatch Chat'}</strong>
+                <em>{inLmStudio
+                  ? `Opens the chat panel in RigMatch. ${shortModelName} is in LM Studio, which RigMatch Chat cannot reach yet.`
+                  : `Open RigMatch Chat — your AIM-style local AI messenger. ${shortModelName} is already online.`}</em>
               </div>
             </button>
             <div className="whats-next-item">
               <Terminal aria-hidden="true" />
               <div>
                 <strong>Terminal</strong>
-                <code>ollama run {model}</code>
+                <code>{inLmStudio ? `lms load ${model}` : `ollama run ${model}`}</code>
               </div>
             </div>
             <div className="whats-next-item">
               <Code2 aria-hidden="true" />
               <div>
                 <strong>VS Code (Continue.dev)</strong>
-                <em>Install the Continue extension, then select {shortModelName} as your Autocomplete or Chat model. No API key needed.</em>
+                <em>Install the Continue extension{inLmStudio ? ', choose LM Studio as the provider' : ''}, then select {shortModelName} as your Autocomplete or Chat model. No API key needed.</em>
               </div>
             </div>
             <div className="whats-next-item">
               <ExternalLink aria-hidden="true" />
               <div>
                 <strong>Open WebUI</strong>
-                <em>A full ChatGPT-style browser interface. Run it with Docker and it auto-connects to Ollama at localhost:11434.</em>
+                <em>{inLmStudio
+                  ? 'A full ChatGPT-style browser interface. Run it with Docker, then add an OpenAI connection to localhost:1234/v1 in its settings.'
+                  : 'A full ChatGPT-style browser interface. Run it with Docker and it auto-connects to Ollama at localhost:11434.'}</em>
               </div>
             </div>
             <div className="whats-next-item">
               <Code2 aria-hidden="true" />
               <div>
                 <strong>Python / JavaScript</strong>
-                <code>{'import ollama\nollama.chat("' + model + '",\n  [{"role":"user","content":"Hi"}])'}</code>
+                <code>{inLmStudio
+                  ? 'import lmstudio as lms\nmodel = lms.llm("' + model + '")\nmodel.respond("Hi")'
+                  : 'import ollama\nollama.chat("' + model + '",\n  [{"role":"user","content":"Hi"}])'}</code>
               </div>
             </div>
             <div className="whats-next-item">
               <ExternalLink aria-hidden="true" />
               <div>
                 <strong>Any app via REST</strong>
-                <em>Anything that speaks OpenAI format works. Point it at <code>localhost:11434/v1</code> with no API key.</em>
+                <em>Anything that speaks OpenAI format works. Point it at <code>{inLmStudio ? 'localhost:1234/v1' : 'localhost:11434/v1'}</code> with no API key.</em>
               </div>
             </div>
             <a

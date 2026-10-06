@@ -115,7 +115,14 @@ const GOAL_TABS: Array<{ id: DreamFilterId; label: string }> = [
 
 type SimpleWizardProps = {
   system: SystemProfile;
+  /** Ollama or LM Studio answered: either is enough to test what is installed. */
   ollamaReady: boolean;
+  /**
+   * LM Studio answered and Ollama did not. The setup screen said "Ollama found
+   * and running" anyway, and the pick list offered downloads that waited in
+   * line forever, because downloads go through Ollama.
+   */
+  lmStudioOnly?: boolean;
   isScanning: boolean;
   onCheckComputer: () => void;
   onGetOllama: () => void;
@@ -728,6 +735,7 @@ function ApplauseSign({ lit }: { lit: boolean }) {
 function SetupScreen({
   system,
   ollamaReady,
+  lmStudioOnly,
   isScanning,
   onCheckComputer,
   onGetOllama,
@@ -798,7 +806,18 @@ function SetupScreen({
           <FoundRow label="Graphics card" value={vram ? `${gpu} · ${vram} GB video memory` : gpu} />
           {memoryGb > 0 && <FoundRow label="Memory" value={`${memoryGb} GB`} />}
           <FoundRow label="Disk space" value={`${freeGb} GB free for models`} warn={freeGb < LOW_DISK_GB} />
-          <FoundRow label="Ollama" value={<><Explain id="ollama">Ollama</Explain> found and running</>} />
+          {lmStudioOnly ? (
+            <>
+              <FoundRow label="LM Studio" value="Found and running. The models you have in it can take part." />
+              <FoundRow
+                label="Ollama"
+                warn
+                value={<>Not running. RigMatch downloads new models through <Explain id="ollama">Ollama</Explain>, so until it is installed you can test only what is already in LM Studio.</>}
+              />
+            </>
+          ) : (
+            <FoundRow label="Ollama" value={<><Explain id="ollama">Ollama</Explain> found and running</>} />
+          )}
           {comfySetup?.needed && (
             <FoundRow
               label="ComfyUI"

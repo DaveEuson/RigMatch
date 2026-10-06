@@ -413,11 +413,15 @@ export function getModelScore(row: ModelRow, modelScores: Record<string, TestedM
   const displayNorm = normalizeModelKey(row.displayName);
   return Object.values(modelScores).find((s) => {
     const sNorm = normalizeModelKey(s.model);
+    // A dash only extends a tag ("7b" to "7b-instruct"). An LM Studio key has
+    // no tag, and there a dash is part of the name: an untested
+    // "qwen/qwen3-4b" took the score of "qwen/qwen3-4b-2507", and could be
+    // crowned Top Match on it.
+    const tagged = displayNorm.includes(':') && sNorm.includes(':');
     return sNorm === displayNorm ||
       sNorm.startsWith(displayNorm + ':') ||
       displayNorm.startsWith(sNorm + ':') ||
-      sNorm.startsWith(displayNorm + '-') ||
-      displayNorm.startsWith(sNorm + '-');
+      (tagged && (sNorm.startsWith(displayNorm + '-') || displayNorm.startsWith(sNorm + '-')));
   });
 }
 
