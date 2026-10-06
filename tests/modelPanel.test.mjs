@@ -61,7 +61,24 @@ test('a model that cannot chat says so instead of claiming it can', () => {
     describeAbilities(row({ displayName: 'starcoder2:3b', installedModel: { capabilities: ['completion'], chatFormat: false } })),
     ['Completes text, but cannot chat'],
   );
-  assert.deepEqual(describeAbilities(row({ generationKind: 'image' })), [], 'a picture model is described by its own blurb');
+  assert.deepEqual(describeAbilities(row({ generationKind: 'image' })), ['Makes images']);
+  assert.deepEqual(describeAbilities(row({ displayName: 'x/flux2-klein:latest', installedModel: { capabilities: ['image'] } })), ['Makes images']);
+});
+
+test('a model is described the same before and after it is installed', () => {
+  // Nothing reports a chat format until a model is installed, so the catalog
+  // said "Chat" for starcoder2 and "cannot chat" once it had downloaded.
+  const notInstalled = { installed: false, ready: false, installedModel: undefined, capabilities: ['completion'] };
+  assert.deepEqual(describeAbilities(row({ displayName: 'starcoder2:3b', ...notInstalled })), ['Completes text, but cannot chat']);
+  assert.deepEqual(describeAbilities(row({ displayName: 'codegemma:2b', ...notInstalled })), ['Completes text, but cannot chat']);
+  assert.deepEqual(describeAbilities(row({ displayName: 'deepseek-ocr:3b', ...notInstalled, capabilities: ['completion', 'vision'] })), ['Reads the text in pictures. It does not chat']);
+  assert.deepEqual(describeAbilities(row({ displayName: 'codegemma:7b', ...notInstalled })), ['Chat'], 'only the 2b is completion-only');
+});
+
+test('a model ruled out on its size class does not quote numbers that say it fits', () => {
+  const said = describeFitPlainly(row({ displayName: 'llama3.3:70b-instruct-q2_K', params: '70B', sizeGb: 26 }), 32);
+  assert.equal(said, 'Too big for this PC: a 70B model needs a much bigger graphics card');
+  assert.doesNotMatch(said, /26/);
 });
 
 test('an installed model\'s quantization is explained like a tag\'s', () => {

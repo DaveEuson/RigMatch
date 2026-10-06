@@ -1558,7 +1558,9 @@ export function ModelCabinet({
                       type="button"
                       className="mini-button outline model-family-toggle"
                       aria-expanded={open}
-                      aria-label={`${open ? 'Hide' : 'Show'} the ${versionCount} of ${family}`}
+                      // Starts with the words on the button, so "click Show 4
+                      // versions" works by voice (WCAG 2.5.3, label in name).
+                      aria-label={`${open ? 'Hide versions' : `Show ${versionCount}`} of ${family}`}
                     >
                       {open ? 'Hide versions' : `Show ${versionCount}`}
                     </button>

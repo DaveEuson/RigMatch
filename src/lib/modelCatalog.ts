@@ -1111,11 +1111,18 @@ export function describeFitPlainly(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fi
         ? `Bigger than your graphics card, so part of it runs on the processor and it is slower${numbers}`
         : `Only just fits on your graphics card${numbers}`;
     case 'out-of-league':
-      return `Too big for this PC${numbers}`;
+      // Ruled out on its parameter count, not its size: "Too big for this PC
+      // (26 GB of 32 GB)" contradicted itself for a squeezed 70B model.
+      return sizeGb > 0 && vramGb > 0 && sizeGb <= vramGb
+        ? `Too big for this PC: a ${row.params} model needs a much bigger graphics card`
+        : `Too big for this PC${numbers}`;
     default:
       return sizeGb > 0 ? 'RigMatch could not read your graphics card, so it cannot tell yet' : 'Its size is unknown, so RigMatch cannot tell yet';
   }
 }
+
+/** Families with no chat format, found on a real install: fill-in-the-middle code models. */
+const COMPLETION_ONLY_FAMILIES = /^(?:starcoder2?|codegemma:2b)(?::|$)/i;
 
 /**
  * What a model can do, in plain words, from what its provider reports (the
@@ -1124,13 +1131,26 @@ export function describeFitPlainly(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fi
  * panel knew them and never said.
  */
 export function describeAbilities(row: ModelRow): string[] {
-  if (row.generationKind) return [];
+  if (row.generationKind) {
+    return [row.generationKind === 'image' ? 'Makes images'
+      : row.generationKind === 'video' ? 'Makes video'
+        : row.generationKind === 'audio' ? 'Makes audio'
+          : 'Reads prompts for picture and video models'];
+  }
   const reported = getModelCapabilities(row) ?? [];
   if (isEmbeddingModel(row.displayName) || (reported.includes('embedding') && !reported.includes('completion'))) {
     return ['Turns text into search data. It does not chat'];
   }
+  // Ollama's image models report 'image' and nothing else.
+  if (isImageGenerationModel(row)) return ['Makes images'];
+  // Whether a model has a chat format is only known once it is installed, so
+  // before then the families found without one are named here: starcoder2
+  // showed "Chat" in the catalog and "cannot chat" after its download.
+  const notInstalled = row.installedModel?.chatFormat === undefined;
+  if (isOcrModel(row) && (lacksChatFormat(row) || notInstalled)) return ['Reads the text in pictures. It does not chat'];
+  const completionOnly = lacksChatFormat(row) || (notInstalled && COMPLETION_ONLY_FAMILIES.test(row.displayName));
   const abilities: string[] = [];
-  if (canGenerateText(row)) abilities.push(lacksChatFormat(row) ? 'Completes text, but cannot chat' : 'Chat');
+  if (canGenerateText(row)) abilities.push(completionOnly ? 'Completes text, but cannot chat' : 'Chat');
   if (canReadImages(row)) abilities.push('Sees images');
   if (canHearAudio(row)) abilities.push('Hears audio');
   if (reported.includes('tools')) abilities.push('Uses tools');
