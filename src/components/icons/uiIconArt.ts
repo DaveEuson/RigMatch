@@ -1,16 +1,21 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 // Generated from the redesign's interface icon set (design_handoff_rigmatch/icons/ui).
 // Strokes use currentColor; fixed signal colors use the tokens. Edit the source
-// set and regenerate rather than editing these strings by hand. One exception:
-// "coffee" (the Donate button) was drawn here afterwards, in the same style.
+// set and regenerate rather than editing these strings by hand. Two exceptions,
+// drawn here afterwards in the same style: "coffee" (the Donate button) and
+// "bell" (What's New, which had the stock AI sparkle).
 
-export const UI_ICON_NAMES = ["badge","bolt","chat","coffee","cpu","disk","download","err","gavel","gear","gpu","hearts","lab","lineup","memory","models","more","nodes","ok","palette","picture","play","plug","ram","search","send","sparkle","trophy","tv","vram","warn"] as const;
+export const UI_ICON_NAMES = ["badge","bell","bolt","chat","coffee","cpu","disk","download","err","gavel","gear","gpu","hearts","lab","lineup","memory","models","more","nodes","ok","palette","picture","play","plug","ram","search","send","sparkle","trophy","tv","vram","warn"] as const;
 export type UiIconName = (typeof UI_ICON_NAMES)[number];
 
 export const UI_ICON_ART: Record<UiIconName, { strokeWidth: number; body: string }> = {
   "badge": {
     "strokeWidth": 2.2,
     "body": "<circle cx=\"12\" cy=\"9.5\" r=\"6\"></circle><circle cx=\"12\" cy=\"9.5\" r=\"2.6\" style=\"fill:var(--accent)\" stroke=\"none\"></circle><path d=\"M8.5 14.5 7 21l5-2.5 5 2.5-1.5-6.5\"></path>"
+  },
+  "bell": {
+    "strokeWidth": 2.2,
+    "body": "<path d=\"M6 10.5a6 6 0 0 1 12 0V15l1.8 2.5H4.2L6 15Z\"></path><path d=\"M10 20.2a2.1 2.1 0 0 0 4 0\"></path><circle cx=\"17.8\" cy=\"5.2\" r=\"2.4\" style=\"fill:var(--accent)\" stroke=\"none\"></circle>"
   },
   "bolt": {
     "strokeWidth": 2.2,

@@ -1346,7 +1346,7 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel, onStartDownloads
               <div className="sw-dl-track" aria-hidden="true"><i style={{ width: `${status === 'done' ? 100 : status === 'downloading' || status === 'paused' ? Math.max(4, percent) : 0}%` }} /></div>
             </div>
             <span className="sw-dl-status">
-              {status === 'done' ? '✓ On your PC'
+              {status === 'done' ? <><Check aria-hidden="true" /> On your PC</>
                 : status === 'failed' ? "Didn't download"
                 : status === 'paused' ? 'Paused'
                 : status === 'downloading' ? `${Math.round(percent)}%`

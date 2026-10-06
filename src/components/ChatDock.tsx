@@ -1,6 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useRef } from 'react';
-import { ImagePlus, Mic, Sparkles, Square, X } from 'lucide-react';
+import { ImagePlus, Mic, Square, X } from 'lucide-react';
 import type { ChatAction, ChatAttachment, ChatMessage } from '../types';
 
 /**
@@ -126,7 +126,7 @@ export function ChatDock({
               >
                 {message.action.kind === 'stop-image'
                   ? <Square aria-hidden="true" />
-                  : <Sparkles aria-hidden="true" />}
+                  : <ImagePlus aria-hidden="true" />}
                 {actionRunning && message.action.kind === 'generate-image'
                   ? 'Working...'
                   : message.action.label}

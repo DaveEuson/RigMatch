@@ -18,7 +18,9 @@ export type TopTabId = 'models' | 'whatsNew' | 'comparison' | 'labs' | 'results'
 
 export const TOP_TABS: Array<{ id: TopTabId; label: string; icon: UiIconName }> = [
   { id: 'models', label: 'Models', icon: 'models' },
-  { id: 'whatsNew', label: "What's New", icon: 'sparkle' },
+  // A bell: the tab is where new models land, with a switch to be told when
+  // one does. The sparkle it had is the stock sign for "AI made this".
+  { id: 'whatsNew', label: "What's New", icon: 'bell' },
   { id: 'comparison', label: 'Comparison', icon: 'hearts' },
   { id: 'labs', label: 'Labs', icon: 'lab' },
   { id: 'results', label: 'Results', icon: 'trophy' },
