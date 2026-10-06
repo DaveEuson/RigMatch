@@ -18,6 +18,10 @@ export const HOST_LINES = {
     'Good evening and welcome! Before anyone walks on, let me take a look at the stage.',
     'Lights up! First, a quick peek at your computer, so I only bring out contestants who fit.',
   ],
+  // The check found no Ollama: the one step a newcomer does by hand.
+  setupNoOllama: [
+    "One thing before the show: RigMatch needs Ollama, a free program that runs the models. Get it below and I'll spot it when it's running.",
+  ],
   setupChecking: [
     'Peeking under the bonnet. Nobody panic.',
     'Measuring the stage. Contestants, please stay in the green room.',

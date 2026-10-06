@@ -248,6 +248,7 @@ import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById
 import { readHuggingFaceToken } from './lib/huggingFaceToken';
 import { goalById, presetIdForGoal } from './lib/goals';
 import { isDockWorthyPullProgress, modelMatchesTask, nextDockExpiry } from './lib/modelCatalog';
+import { chooseLineup, isSpecialistModel } from './lib/chooseLineup';
 import { modelWeightsKey } from './lib/modelKey.ts';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLineupLive } from './lib/videoGenRunner';
@@ -1028,7 +1029,7 @@ function App() {
       // silently refusing the pick was the cold walkthrough's worst finding.
       // They live in Models and run in the Lab; the video/image dream filters
       // say so instead of listing them.
-      .filter((row) => canJoinComparison(row))
+      .filter((row) => canJoinComparison(row) && !isSpecialistModel(row.displayName))
       .filter((row) => getPlatformFit(row.displayName, system.platform).compatible)
       // A model still to download needs Ollama. Without it the card queued a
       // download that never started, and "Choose for me" filled the lineup
@@ -1246,10 +1247,12 @@ function App() {
         );
       }
 
-      const mode = isDesktopRuntime ? 'desktop bridge' : 'preview fallback';
-      const catalogNote = catalogResponse.error ? ` Catalog fallback: ${catalogResponse.error}` : '';
+      // In plain words: a first run read "Computer check complete via desktop
+      // bridge. Model catalog synced from Ollama library live scan." beside a
+      // page saying Ollama could not be found.
+      const catalogNote = catalogResponse.error ? ` Couldn't update the model list: ${catalogResponse.error}` : '';
       const catalogSyncNote = !catalogResponse.error && catalogResponse.models.length > 0
-        ? ` Model catalog synced from ${catalogResponse.source}.`
+        ? ' Model list updated.'
         : '';
       const lmStudioNote = lmStudioStatus.ready
         ? ` LM Studio found ${lmStudioStatus.models.length} local model${lmStudioStatus.models.length === 1 ? '' : 's'} for testing/chat.`
@@ -1259,8 +1262,8 @@ function App() {
         : '';
       setActivity(
         isDesktopRuntime
-          ? `Computer check complete via ${mode}.${catalogNote}${catalogSyncNote}${lmStudioNote}${modelNewsNote}`
-          : `Preview sample data loaded via ${mode}.${catalogNote}${catalogSyncNote}${lmStudioNote}${modelNewsNote}`,
+          ? `Checked your computer.${ollamaStatus.ready ? '' : " Ollama isn't running."}${catalogNote}${catalogSyncNote}${lmStudioNote}${modelNewsNote}`
+          : `Preview sample data loaded.${catalogNote}${catalogSyncNote}${lmStudioNote}${modelNewsNote}`,
       );
     } catch (error) {
       setActivity(`Computer check failed: ${getErrorMessage(error)}`);
@@ -1516,11 +1519,12 @@ function App() {
 
   // The winner the screen shows, not the Top Pick. After a skill round, or
   // with an older higher score saved, the button labelled with the winner
-  // chatted with, and shared, a different model.
+  // chatted with, and shared, a different model. It opens the chat and only
+  // that: it also raised the "romantic cruise" card, a list of terminal, REST
+  // and Docker recipes, over the chat a newcomer had just asked for.
   const openChatWithWinner = useCallback(() => {
     const model = wizardWinner?.model ?? topRigPick?.row.displayName;
     if (!model) return;
-    setChosenModel(model);
     openChatWith(model);
   }, [wizardWinner, topRigPick, openChatWith]);
   const shareTarget = useMemo(() => {
@@ -2904,33 +2908,13 @@ function App() {
     setPendingThirdPartyDownloadRows(null);
   }, [pendingThirdPartyDownloadRows, queueMissingSpeedDateModels]);
 
-  // "Choose for me": fill the lineup with the best-fitting models this PC can
-  // run, preferring ones already installed (nothing to download) and then the
-  // largest that still fits comfortably.
-  const chooseShortlistForMe = useCallback(() => {
-    const eligible = modelRows.filter((row) =>
-      getPlatformFit(row.displayName, system.platform).compatible
-      && getHardwareFit(row, system.gpu.vramGb).recommend
-      && !isCloudModel(row.displayName)
-      && !isEmbeddingModel(row.displayName)
-      // Capability-checked rather than name-guessed: a model Ollama reports as
-      // image-only cannot answer a benchmark question at all, and would take an
-      // F for a fault that is not its own.
-      && canGenerateText(row));
-
-    // One entry per model name: an auto-picked lineup of five Gemma sizes would
-    // be a rigged show — five near-identical contestants answering the same
-    // questions. The point of "Choose for me" is a varied field.
-    const seenNames = new Set<string>();
-    const ranked = [...eligible].sort((left, right) => {
-      if (left.installed !== right.installed) return left.installed ? -1 : 1;
-      return (right.sizeGb ?? 0) - (left.sizeGb ?? 0);
-    }).filter((row) => {
-      const name = getFriendlyModelName(row.displayName);
-      if (seenNames.has(name)) return false;
-      seenNames.add(name);
-      return true;
-    }).slice(0, 5);
+  // "Choose for me": a lineup from the cards Pick is showing for the chosen
+  // goal (see chooseLineup). Those cards already fit this PC, can hold a
+  // conversation, and come one per model name, so the field is varied rather
+  // than five sizes of Gemma. It used to rank the whole catalog largest first
+  // and ignore the goal, queueing 56 GB of models nobody had seen on screen.
+  const chooseShortlistForMe = useCallback((cards: WizardModel[]) => {
+    const ranked = chooseLineup(cards).map((card) => card.row);
 
     if (ranked.length === 0) {
       // "chat models", not "models": this ranks Speed Dating contestants, and
@@ -2943,7 +2927,7 @@ function App() {
 
     setShortlistIds(new Set(ranked.map((row) => row.displayName)));
     setActivity(`Picked ${ranked.length} contestant${ranked.length === 1 ? '' : 's'} that fit this computer.`);
-  }, [modelRows, system.gpu.vramGb, system.platform, tellUser]);
+  }, [tellUser]);
 
   const toggleShortlist = useCallback((row: ModelRow) => {
     if (lacksChatFormat(row)) {
