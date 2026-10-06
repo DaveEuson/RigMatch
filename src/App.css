@@ -13748,24 +13748,11 @@ a.whats-next-support:hover {
   gap: 10px;
 }
 
+/* One column: the sparkle that had the first one is gone, and the heading
+   left in that 24px column wrapped one word per line. */
 .comparison-run-head {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
   gap: 10px;
-  align-items: center;
-}
-
-.comparison-run-head > svg {
-  width: 22px;
-  height: 22px;
-  color: var(--gold);
-}
-
-.comparison-run-head span {
-  color: var(--muted);
-  font-size: var(--fs-ui);
-  font-weight: 900;
-  text-transform: none;
 }
 
 .comparison-run-head strong {
