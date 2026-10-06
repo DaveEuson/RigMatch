@@ -71,5 +71,6 @@ test('the match window gives LM Studio\'s instructions for an LM Studio match', 
   assert.match(dialogs, /inLmStudio \? `lms load \$\{model\}` : `ollama run \$\{model\}`/);
   assert.match(dialogs, /'localhost:1234\/v1' : 'localhost:11434\/v1'/);
   assert.match(dialogs, /import lmstudio as lms/);
+  assert.doesNotMatch(dialogs, /models and Ollama settings are unchanged/, 'the line under the picture too');
   assert.match(app, /inLmStudio=\{modelRows\.find\(\(r\) => r\.displayName === chosenModel\)\?\.localProvider === 'lm-studio'\}/);
 });

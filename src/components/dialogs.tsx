@@ -515,7 +515,7 @@ export function ChoiceCruiseModal({
         <div className="cruise-caption">
           <span>Romantic cruise launched</span>
           <strong>{hostName} + {shortModelName}</strong>
-          <em>This is just the victory animation. Your installed models and Ollama settings are unchanged.</em>
+          <em>This is just the victory animation. Your installed models and {inLmStudio ? 'LM Studio' : 'Ollama'} settings are unchanged.</em>
         </div>
 
         <div className="cruise-what-next">
