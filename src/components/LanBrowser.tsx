@@ -172,7 +172,12 @@ export function LanBrowser({
       <div className="utility-stat">
         <span>Provider support</span>
         <strong>Ollama downloads; LM Studio tests</strong>
-        <em>RigMatch detects LM Studio's local server for testing and chat. Catalog downloads still go through Ollama.</em>
+        {/* A server that wants a token answers, so it is running but RigMatch
+            cannot use it; that is the one LM Studio error worth showing. Not
+            running is the normal state for most people and says nothing. */}
+        <em>{!lmStudio.ready && lmStudio.error && /API token/.test(lmStudio.error)
+          ? lmStudio.error
+          : "RigMatch detects LM Studio's local server for testing and chat. Catalog downloads still go through Ollama."}</em>
       </div>
       <ThirdPartyModelNotice compact />
       <UpgradeRig system={system} />

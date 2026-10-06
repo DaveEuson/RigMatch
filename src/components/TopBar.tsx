@@ -7,7 +7,8 @@ import { UiIcon, type UiIconName } from './icons/UiIcon';
 import brandIcon from '../assets/rigmatch-brand-icon.svg';
 
 /** How a local service answered the last time it was asked. */
-export type ConnectionState = 'ok' | 'testing' | 'down' | 'untested';
+/** 'off' is a service that is not running and does not need to be: Ollama while LM Studio carries the tests. */
+export type ConnectionState = 'ok' | 'testing' | 'down' | 'untested' | 'off';
 
 export type TopTab = {
   id: string;
@@ -22,6 +23,7 @@ const CONNECTION_WORDS: Record<ConnectionState, string> = {
   testing: 'checking',
   down: 'not answering',
   untested: 'not checked',
+  off: 'not running',
 };
 
 /**
@@ -61,7 +63,8 @@ export function TopBar({
   onOpenTopMatch?: () => void;
   themeId: ThemeId;
   onThemeChange: (id: ThemeId) => void;
-  connections: { ollama: ConnectionState; comfy: ConnectionState };
+  /** lmStudio only when it is running: most people never install it, and a grey chip for it would be clutter. */
+  connections: { ollama: ConnectionState; comfy: ConnectionState; lmStudio?: ConnectionState };
   onOpenConnections: () => void;
   onOpenSettings?: () => void;
   onOpenChat: () => void;
@@ -117,13 +120,20 @@ export function TopBar({
           className="top-bar-connections"
           onClick={onOpenConnections}
           title="Local AI services. Open My PC"
-          aria-label={`Ollama ${CONNECTION_WORDS[connections.ollama]}, ComfyUI ${CONNECTION_WORDS[connections.comfy]}. Open My PC`}
+          aria-label={`Ollama ${CONNECTION_WORDS[connections.ollama]}, ${connections.lmStudio ? `LM Studio ${CONNECTION_WORDS[connections.lmStudio]}, ` : ''}ComfyUI ${CONNECTION_WORDS[connections.comfy]}. Open My PC`}
         >
           <span className="top-bar-service">
             <UiIcon name="plug" size={16} />
             <span className="top-bar-service-name">Ollama</span>
             <i className={`conn-dot ${connections.ollama}`} aria-hidden="true" />
           </span>
+          {connections.lmStudio && (
+            <span className="top-bar-service">
+              <UiIcon name="plug" size={16} />
+              <span className="top-bar-service-name">LM Studio</span>
+              <i className={`conn-dot ${connections.lmStudio}`} aria-hidden="true" />
+            </span>
+          )}
           <span className="top-bar-service">
             <UiIcon name="nodes" size={16} />
             <span className="top-bar-service-name">ComfyUI</span>

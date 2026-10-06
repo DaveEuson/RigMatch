@@ -1966,7 +1966,9 @@ function App() {
   // and Ollama tags mutate — the digest is the only durable identity for the
   // weights that actually earned the number.
   const rigStampForModel = useCallback((model: string): ScoreRigStamp => {
-    const installed = ollama.models.find((m) => m.name === model || m.model === model);
+    // LM Studio has no digest, but its quantization is now known, and a score
+    // without one cannot tell a Q4 run from a Q8 run of the same model.
+    const installed = localModels.find((m) => m.name === model || m.model === model);
 
     // Where this actually ran.
     //
@@ -1992,7 +1994,7 @@ function App() {
       modelDigest: installed?.digest,
       quantization: installed?.quantization,
     };
-  }, [ollama.models, selectedHost, system.gpu.model, system.gpu.vramGb, system.gpu.driverVersion]);
+  }, [localModels, selectedHost, system.gpu.model, system.gpu.vramGb, system.gpu.driverVersion]);
 
 
   const requestBenchmarkForModel = useCallback((model: string, options?: { quick?: boolean }) => {
@@ -3989,6 +3991,27 @@ function App() {
     return () => clearInterval(id);
   }, [ollama.ready, runRigRefresh]);
 
+  // The same for LM Studio, which was only looked for at launch and on Check
+  // Local: start it after RigMatch and its models never appeared. One local
+  // request per 15 s, and none once it answers.
+  useEffect(() => {
+    if (!isDesktopRuntime) return;
+    if (lmStudio.ready) return;
+    const id = setInterval(() => {
+      void (async () => {
+        try {
+          const status = await agentArcadeApi.getLmStudioStatus();
+          if (!status.ready) return;
+          setLmStudio(status);
+          void runRigRefresh({ userInitiated: false });
+        } catch {
+          // Not running is the usual answer here.
+        }
+      })();
+    }, 15_000);
+    return () => clearInterval(id);
+  }, [lmStudio.ready, runRigRefresh]);
+
   // While a test is running, poll just the (cheap) system profile every ~1.6s so
   // the live-stage meters actually move. refreshRig is too heavy to poll — it
   // also re-scrapes the Ollama catalog.
@@ -4276,8 +4299,13 @@ function App() {
   // Simple Mode's step tracker is the wizard's; it renders into the bar.
   const [trackerSlot, setTrackerSlot] = useState<HTMLDivElement | null>(null);
   const rigChecked = Boolean(system.cpu.brand || system.gpu.model);
-  const connections: { ollama: ConnectionState; comfy: ConnectionState } = {
-    ollama: ollama.ready || lmStudio.ready ? 'ok' : isScanningRig ? 'testing' : rigChecked ? 'down' : 'untested',
+  const connections: { ollama: ConnectionState; comfy: ConnectionState; lmStudio?: ConnectionState } = {
+    // Each service says its own state. Ollama used to light up green when only
+    // LM Studio answered, which said Ollama was running when it was not. With
+    // LM Studio carrying the tests, a stopped Ollama is grey, not red: nothing
+    // is broken.
+    ollama: ollama.ready ? 'ok' : isScanningRig ? 'testing' : lmStudio.ready ? 'off' : rigChecked ? 'down' : 'untested',
+    lmStudio: lmStudio.ready ? 'ok' : undefined,
     // Grey until someone sets ComfyUI up: most people never will, and red would
     // read as something broken.
     comfy: comfyReachable ? 'ok' : comfySettings.folder ? 'down' : 'untested',

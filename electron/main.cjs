@@ -73,6 +73,7 @@ const {
 const { summarizeMemory, cleanDeviceTreeModel } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
 const { hasChatFormat } = require('./chatFormat.cjs');
+const { lmStudioOrigin, lmStudioModelFromRest, LM_STUDIO_TOKEN_MESSAGE } = require('./lmStudio.cjs');
 const { downloadModel, verifyComfyFolder } = require('./comfyModels.cjs');
 const { locateComfyRoots } = require('./comfyLocate.cjs');
 const { findComfyLaunchers, launchComfy } = require('./comfyLaunch.cjs');
@@ -2711,9 +2712,28 @@ async function getOllamaStatus(baseUrl = OLLAMA_LOCAL_URL) {
 
 async function getLmStudioStatus(baseUrl = LM_STUDIO_LOCAL_URL) {
   assertLocalhostUrl(baseUrl);
+  const base = baseUrl.replace(/\/$/, '');
   try {
     const startedAt = Date.now();
-    const modelsResponse = await fetchJson(`${baseUrl.replace(/\/$/, '')}/models`, {}, 2500);
+    // 0.4 and later describe each model; older ones only name it. See lmStudio.cjs.
+    const described = await fetchJson(`${lmStudioOrigin(base)}/api/v1/models`, {}, 2500).catch((error) => {
+      // Asking for a token is an answer, not an absence: the OpenAI route
+      // would refuse too, so say what to change rather than fall back.
+      if (/^401 /.test(error.message || '')) throw error;
+      return null;
+    });
+    if (described && Array.isArray(described.models)) {
+      return {
+        ready: true,
+        baseUrl,
+        version: '0.4 or later',
+        pingMs: Date.now() - startedAt,
+        models: described.models.map((model) => lmStudioModelFromRest(model, baseUrl)).filter(Boolean),
+        error: null,
+      };
+    }
+
+    const modelsResponse = await fetchJson(`${base}/models`, {}, 2500);
     const models = (Array.isArray(modelsResponse.data) ? modelsResponse.data : [])
       .map((model) => {
         const id = String(model.id || model.model || model.name || '').trim();
@@ -2734,7 +2754,7 @@ async function getLmStudioStatus(baseUrl = LM_STUDIO_LOCAL_URL) {
     return {
       ready: true,
       baseUrl,
-      version: 'OpenAI-compatible local server',
+      version: 'older than 0.4',
       pingMs: Date.now() - startedAt,
       models,
       error: null,
@@ -2746,7 +2766,7 @@ async function getLmStudioStatus(baseUrl = LM_STUDIO_LOCAL_URL) {
       version: null,
       pingMs: null,
       models: [],
-      error: error.message || 'LM Studio is not reachable',
+      error: /^401 /.test(error.message || '') ? LM_STUDIO_TOKEN_MESSAGE : error.message || 'LM Studio is not reachable',
     };
   }
 }
