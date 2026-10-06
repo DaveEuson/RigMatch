@@ -5,7 +5,7 @@ import { CLOUD_JUDGE_PRESETS } from '../lib/appConfig';
 import { CODE_LANGUAGES, CODE_TASK_PRESETS } from '../lib/codeChallenge';
 import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
 import { APP_BUILDER_PRESETS, VISION_TEST_IMAGES } from '../lib/labChallenges';
-import { isCloudModel, isEmbeddingModel, isLikelyImageGenerationModel, isVisionModel } from '../lib/modelCatalog';
+import { isCloudModel, isEmbeddingModel, isLikelyImageGenerationModel } from '../lib/modelCatalog';
 import { formatDuration } from '../lib/runEstimates';
 import {
   COUNT_OPTIONS, EDITABLE_QUESTION_TYPES, GENERAL_SET_DESCRIPTION, QUESTION_TYPE_LABELS, QUICK_MINUTES_PER_MODEL,
@@ -64,6 +64,7 @@ export function RunSheet({
   skillSelection,
   onSkillSelectionChange,
   listenCapable,
+  readCapable,
   comfyCheckpoints,
   videoLineup,
   balance,
@@ -114,6 +115,8 @@ export function RunSheet({
   onSkillSelectionChange: (selection: SkillTestSelection) => void;
   /** Whether any model in this run reports the audio capability. */
   listenCapable: boolean;
+  /** Whether any model in this run reports, or is known for, reading pictures. */
+  readCapable: boolean;
   /** Checkpoints ComfyUI has loaded; image generation runs on these, not on the lineup. */
   comfyCheckpoints: string[];
   /** The video models that can render here now, and roughly how long all of them take. */
@@ -167,7 +170,7 @@ export function RunSheet({
   const appBuilderCapable = lineupModels.some((m) => !isLikelyImageGenerationModel(m) && !isEmbeddingModel(m));
   const imageCapable = comfyCheckpoints.some(isPictureCheckpoint);
   const videoCapable = videoLineup.count > 0;
-  const visionCapable = lineupModels.some((m) => isVisionModel(m));
+  const visionCapable = readCapable;
   // Code can only be graded by a model that reads it.
   // The judge marks code on its own program, Ollama or LM Studio, so any
   // judge will do. One in LM Studio used to leave code unmarked.

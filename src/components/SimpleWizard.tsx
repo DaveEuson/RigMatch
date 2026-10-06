@@ -314,6 +314,14 @@ export function SimpleWizard(props: SimpleWizardProps) {
   // promising "One click and I'll handle the rest" beside "We couldn't find
   // Ollama", the one place a newcomer has to do something themselves.
   const [setupAttempted, setSetupAttempted] = useState(false);
+  // A finished check counts, the one at launch included: it had already
+  // told the notice that Ollama was missing while the page still offered
+  // "Check my computer" and the host promised one click would do.
+  const [wasScanning, setWasScanning] = useState(props.isScanning);
+  if (wasScanning !== props.isScanning) {
+    setWasScanning(props.isScanning);
+    if (!props.isScanning) setSetupAttempted(true);
+  }
   const minPicks = minPicksFor(props.round);
   const pickDone = shortlistedRows.length >= minPicks;
   const {
@@ -783,7 +791,7 @@ function SetupScreen({
 
   return (
     <div className="sw-setup">
-      <h2>{checked && !isScanning ? (comfyMissing ? 'Almost there: one more program' : 'Your computer is ready') : failed ? 'One program to get' : "Let's check your computer"}</h2>
+      <h2>{checked && !isScanning ? (comfyMissing ? 'Almost there: one more program' : 'Your computer is ready') : failed ? (comfyMissing ? 'Two programs to get' : 'One program to get') : "Let's check your computer"}</h2>
       {/* Said aloud when the check finishes, in the words of the headline. The
           button that started it changes, so nothing else told a screen reader
           the check had finished, or how. */}
@@ -812,7 +820,9 @@ function SetupScreen({
 
       {/* Shown when Ollama is missing too: whether this PC is worth the
           install is the question a newcomer has before running one. */}
-      {(checked || failed) && !isScanning && (
+      {/* Not when the check itself failed: its placeholders ("0 GB free")
+          would read as findings. */}
+      {(checked || (failed && memoryGb > 0)) && !isScanning && (
         <ul className="sw-found" aria-label="What RigMatch found">
           <FoundRow label="Graphics card" value={vram ? `${gpu} · ${vram} GB video memory` : gpu} />
           {memoryGb > 0 && <FoundRow label="Memory" value={`${memoryGb} GB`} />}
@@ -923,8 +933,8 @@ function SetupScreen({
           here, and truly: it said nothing at all gets installed, right
           under "Install Ollama for me". Models go where Ollama keeps them. */}
       <p className="sw-muted sw-setup-safety">
-        {failed && !isLinux
-          ? 'Ollama installs like any other program, and you can uninstall it the usual way. The models it downloads can be deleted from RigMatch any time.'
+        {failed
+          ? 'Ollama installs like any other program, and the models it downloads can be deleted from RigMatch any time.'
           : "Models download into Ollama's own folder. Nothing else is installed, and you can delete them from RigMatch any time."}
       </p>
     </div>
