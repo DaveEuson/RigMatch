@@ -248,6 +248,7 @@ import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById
 import { readHuggingFaceToken } from './lib/huggingFaceToken';
 import { goalById, presetIdForGoal } from './lib/goals';
 import { isDockWorthyPullProgress, modelMatchesTask, nextDockExpiry } from './lib/modelCatalog';
+import { modelWeightsKey } from './lib/modelKey.ts';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLineupLive } from './lib/videoGenRunner';
 import {
@@ -328,6 +329,25 @@ const LiveFlirtSpotlight = lazyPanel(() => import('./components/LiveFlirtSpotlig
 const QUICK_CHECK_WARNING_KEY = 'rigmatch:quick-test-warning:v1';
 const initialHosts = isDesktopRuntime ? [] : demoHosts.filter((host) => host.isLocal);
 const initialSelectedHostId = initialHosts[0]?.id ?? 'localhost';
+
+const LM_STUDIO_HOST_ID = 'lm-studio-localhost';
+/** LM Studio's row in My PC's host table: the full refresh and the reconnect check both add it. */
+function lmStudioHostFor(status: OllamaStatus, hostname: string): NetworkHost {
+  return {
+    id: LM_STUDIO_HOST_ID,
+    hostname: `${hostname} (LM Studio)`,
+    ip: '127.0.0.1',
+    provider: 'LM Studio',
+    discovery: 'lm-studio',
+    version: status.version ?? undefined,
+    models: status.models.length,
+    status: 'Ready',
+    pingMs: status.pingMs,
+    baseUrl: status.baseUrl,
+    isLocal: true,
+    isDemo: !isDesktopRuntime,
+  };
+}
 const welcomeChatMessage: ChatMessage = {
   id: 'welcome',
   role: 'agent',
@@ -879,8 +899,8 @@ function App() {
   const judgeEndpoints = useMemo(
     () => Object.fromEntries(judgeCandidateRows.map((row) => [
       row.displayName,
-      { provider: row.localProvider ?? 'ollama', baseUrl: row.localBaseUrl },
-    ])) as Record<string, { provider: LocalModelProvider; baseUrl?: string }>,
+      { provider: row.localProvider ?? 'ollama', baseUrl: row.localBaseUrl, weights: modelWeightsKey(row.displayName) },
+    ])) as Record<string, { provider: LocalModelProvider; baseUrl?: string; weights?: string }>,
     [judgeCandidateRows],
   );
   const {
@@ -1204,20 +1224,7 @@ function App() {
         isLocal: true,
         isDemo: !isDesktopRuntime,
       };
-      const lmStudioHost: NetworkHost | null = lmStudioStatus.ready ? {
-        id: 'lm-studio-localhost',
-        hostname: `${profile.hostname} (LM Studio)`,
-        ip: '127.0.0.1',
-        provider: 'LM Studio',
-        discovery: 'lm-studio',
-        version: lmStudioStatus.version ?? undefined,
-        models: lmStudioStatus.models.length,
-        status: 'Ready',
-        pingMs: lmStudioStatus.pingMs,
-        baseUrl: lmStudioStatus.baseUrl,
-        isLocal: true,
-        isDemo: !isDesktopRuntime,
-      } : null;
+      const lmStudioHost: NetworkHost | null = lmStudioStatus.ready ? lmStudioHostFor(lmStudioStatus, profile.hostname) : null;
 
       setHosts(lmStudioHost ? [localHost, lmStudioHost] : [localHost]);
       setSelectedHostId(ollamaStatus.ready ? localHost.id : lmStudioHost?.id ?? localHost.id);
@@ -2005,7 +2012,9 @@ function App() {
     // RigMatch cannot ask a remote Ollama what card it has, so the honest stamp
     // names the host and no hardware at all. Everything downstream now treats a
     // stamp with a host as measured elsewhere and asks for a retest here.
-    const remoteHost = selectedHost && !selectedHost.isLocal && !selectedHost.isDemo
+    // An LM Studio model always runs on this computer, so a remote Ollama
+    // being selected says nothing about where its score was measured.
+    const remoteHost = installed?.provider !== 'lm-studio' && selectedHost && !selectedHost.isLocal && !selectedHost.isDemo
       ? selectedHost.hostname
       : undefined;
 
@@ -4026,16 +4035,23 @@ function App() {
       void (async () => {
         try {
           const status = await agentArcadeApi.getLmStudioStatus();
-          if (!status.ready) return;
+          // A server that wants a token is running: say so on My PC.
+          if (!status.ready && !/API token/.test(status.error ?? '')) return;
           setLmStudio(status);
-          void runRigRefresh({ userInitiated: false });
+          if (!status.ready) return;
+          // Only LM Studio's own entry. A full refresh here replaced the host
+          // list (dropping LAN hosts), reset the selected host and rewrote the
+          // activity line, in the middle of whatever show was running.
+          setHosts((current) => current.some((host) => host.id === LM_STUDIO_HOST_ID)
+            ? current
+            : [...current, lmStudioHostFor(status, system.hostname)]);
         } catch {
           // Not running is the usual answer here.
         }
       })();
     }, 15_000);
     return () => clearInterval(id);
-  }, [lmStudio.ready, runRigRefresh]);
+  }, [lmStudio.ready, system.hostname]);
 
   // While a test is running, poll just the (cheap) system profile every ~1.6s so
   // the live-stage meters actually move. refreshRig is too heavy to poll — it
@@ -5151,7 +5167,7 @@ function App() {
           onDownloadMissing={() => requestThirdPartyModelDownloads(shortlistedRows)}
           onChangeQuestionCount={setBenchmarkQuestionCount}
           onChangeQuestions={setBenchmarkQuestions}
-          autoJudgeModel={autoJudgeModels.find((m) => m !== (pendingSingleModel ?? selectedModel)) ?? ''}
+          autoJudgeModel={autoJudgeModels.find((m) => modelWeightsKey(m) !== modelWeightsKey(pendingSingleModel ?? selectedModel)) ?? ''}
           goalPresetId={presetIdForGoal(runGoal)}
           goalDesire={runGoal ? goalById(runGoal)?.desire.toLowerCase() : undefined}
           qualityMode={qualityMode}
@@ -5165,7 +5181,10 @@ function App() {
           onChangeCloudJudgeModel={setCloudJudgeModel}
           openRouterKey={openRouterKey}
           onChangeOpenRouterKey={setOpenRouterKey}
-          judgeActive={Boolean(skillTestJudge)}
+          // The show's questions are marked by effectiveJudge on its own
+          // provider; only the code challenge needs an Ollama judge.
+          judgeActive={Boolean(effectiveJudge)}
+          codeJudgeActive={Boolean(skillTestJudge)}
           lineupModels={pendingRunMode === 'single'
             ? [pendingSingleModel ?? selectedModel].filter(Boolean)
             : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName)}
