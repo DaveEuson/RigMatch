@@ -164,7 +164,14 @@ test('a tool reply comes back in Ollama\'s shape, timed when LM Studio says how 
   assert.equal(reply.message.tool_calls[0].function.name, 'send_email');
   assert.equal(reply.message.content, '');
   assert.equal(reply.eval_count, 30);
-  assert.equal(reply.eval_duration, 500_000_000);
+  assert.equal(reply.eval_duration, 500_000_000, 'timed at LM Studio\'s own rate: 30 tokens at 60 tok/s');
+  // Measured on a real LM Studio: generation_time includes the first-token wait.
+  const real = toolReplyFromOpenAi({
+    choices: [{ message: { tool_calls: [] }, finish_reason: 'tool_calls' }],
+    usage: { completion_tokens: 38 },
+    stats: { tokens_per_second: 141.98, time_to_first_token: 0.034, generation_time: 0.295 },
+  });
+  assert.equal(Math.round(38 / (real.eval_duration / 1e9)), 142);
   assert.equal(reply.prompt_eval_duration, 100_000_000);
   assert.equal(reply.done_reason, 'stop');
   assert.equal(toolReplyFromOpenAi({ choices: [{ message: { content: 'hi' } }] }).eval_duration, 0, 'no stats: the caller times it');
@@ -188,4 +195,20 @@ test('a show unloads what it loaded in LM Studio and judges on the judge\'s own 
   assert.doesNotMatch(main, /provider === 'ollama' && Boolean\(autoJudgeModel\)/, 'an LM Studio contestant can be judged');
   assert.doesNotMatch(main, /the tool test runs through Ollama/, 'the tool test runs on LM Studio');
   assert.doesNotMatch(main, /You are taking a RigMatch local model compatibility test/, 'no system message Ollama never sends');
+});
+
+test('an error from an OpenAI-style server says what went wrong, not "[object Object]"', () => {
+  // Found on a real LM Studio: a model with no thinking setting refuses
+  // reasoning:"off" with { error: { message } }. Printed as [object Object],
+  // the retry without the switch never saw the word "reasoning", and every
+  // LM Studio show and judge on such a model failed on its first question.
+  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
+  const start = main.indexOf('function extractResponseDetail(text) {');
+  const source = main.slice(start, main.indexOf('\n}\n', start) + 2);
+  const extractResponseDetail = new Function(`${source}; return extractResponseDetail;`)();
+  const lmStudio = JSON.stringify({ error: { message: "Model 'llama-3.2-3b-instruct' does not expose reasoning configuration.", type: 'invalid_request', param: 'reasoning' } });
+  assert.match(extractResponseDetail(lmStudio), /does not expose reasoning configuration/);
+  assert.equal(extractResponseDetail(JSON.stringify({ error: 'model "x" not found' })), 'model "x" not found', 'Ollama\'s shape is unchanged');
+  assert.equal(extractResponseDetail(JSON.stringify({ message: 'plain' })), 'plain');
+  assert.equal(extractResponseDetail('not json'), 'not json');
 });
