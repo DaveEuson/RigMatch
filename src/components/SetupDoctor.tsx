@@ -50,8 +50,10 @@ export function SetupDoctor({
     },
     {
       label: 'Scope',
-      value: localHostCount > 0 ? 'Local only' : 'Local setup',
-      detail: 'Remote systems are parked for RigMatch 2.0 so v1 stays simple and reliable.',
+      value: localHostCount > 0 ? 'This computer' : 'Local setup',
+      // It said "Remote systems are parked for RigMatch 2.0 so v1 stays simple
+      // and reliable", a note from the roadmap rather than to the reader.
+      detail: 'Tests run here. Other computers on your network are listed below, but RigMatch tests only this one.',
       tone: 'info',
       action: null,
     },

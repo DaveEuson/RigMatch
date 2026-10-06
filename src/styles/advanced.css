@@ -583,7 +583,6 @@
    overflow visible the lower half of the page could not be reached. */
 .app-shell[data-ui-mode='advanced'] .panel.lan-panel { border: 0; border-radius: 0; background: none; box-shadow: none; overflow-y: auto; }
 .app-shell[data-ui-mode='advanced'] .mypc-heading { margin: var(--s4) var(--s5) var(--s2); color: var(--text-strong); font: 400 var(--fs-h2) / 1.2 var(--display); }
-.app-shell[data-ui-mode='advanced'] .ollama-prep,
 .app-shell[data-ui-mode='advanced'] .ollama-install-hero,
 .app-shell[data-ui-mode='advanced'] .setup-doctor,
 .app-shell[data-ui-mode='advanced'] .rig-details-panel {
@@ -593,7 +592,6 @@
   background: var(--panel);
   box-shadow: none;
 }
-.app-shell[data-ui-mode='advanced'] .prep-badge { border: 0; background: none; }
 /* Setup check: rows, not five boxes. */
 .app-shell[data-ui-mode='advanced'] .setup-doctor-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
 .app-shell[data-ui-mode='advanced'] .setup-doctor-grid > * {
@@ -669,3 +667,162 @@
 .app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card span { color: var(--muted); font: 400 var(--fs-ui) / 1.2 var(--ui); }
 .app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card strong { font: 700 var(--fs-ui) / 1.25 var(--ui); }
 .app-shell[data-ui-mode='advanced'] .global-lineup-strip .model-pool-lineup-card em { color: var(--muted); font: 400 var(--fs-ui) / 1.25 var(--ui); font-style: normal; }
+
+/* --- Call sheet for the older screens -------------------------------------
+   A design-taste audit (2026-10) found these screens reading as generated:
+   a coloured label over nearly every section, and boxes inside boxes. Both
+   break DESIGN.md: the accent is for what is chosen or in progress, and "a
+   panel lifts one thing off the page and never holds another panel".
+
+   Labels: the pink and gold section labels ("Speed Dating Q&A", "Setup
+   Doctor", "Best for coding", "RigMatch asked", "Download Queue", the gold
+   question numbers) become the muted label every other screen uses. Gold
+   stays for the winner (Top Match) and the one next action; status colours
+   (Sample, rig changed, fit notes) keep theirs. */
+.app-shell[data-ui-mode='advanced'] :is(
+  .speed-date-transcript-head span,
+  .speed-date-qa-head span,
+  .speed-date-qa-block span,
+  .speed-date-live-question span,
+  .speed-date-question-plan span,
+  .profile-question-head span,
+  .profile-qa-block span,
+  .task-picks-section > span,
+  .task-pick-card em,
+  .setup-doctor-head span,
+  .advanced-lab-head span,
+  .advanced-lab-card-head span,
+  .queue-status-copy span,
+  .activity-panel-head span,
+  .lan-panel .utility-stat > span,
+  .third-party-model-notice > div > span
+) {
+  color: var(--muted);
+  font-weight: 400;
+  letter-spacing: normal;
+}
+/* Question numbers: a sequence, so they stay, as plain figures rather than
+   gold tiles. */
+.app-shell[data-ui-mode='advanced'] :is(.speed-date-qa-head b, .speed-date-question-plan b, .profile-question-head b) {
+  width: auto;
+  height: auto;
+  border: 0;
+  color: var(--muted);
+  font: 500 var(--fs-ui) / 1.2 var(--figure);
+}
+
+/* Boxes: one panel, rows inside it. */
+.app-shell[data-ui-mode='advanced'] .speed-date-transcript-card {
+  padding: var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  background: var(--panel);
+}
+/* The five contestants were five boxed buttons inside the panel. They are
+   tabs: the selected one is underlined in the accent, as every tab is. */
+.app-shell[data-ui-mode='advanced'] .speed-date-transcript-tabs {
+  gap: var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+.app-shell[data-ui-mode='advanced'] .speed-date-transcript-tabs button {
+  flex: 0 1 auto;
+  min-height: var(--h-control);
+  padding: 0 0 var(--s2);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--s2);
+}
+.app-shell[data-ui-mode='advanced'] .speed-date-transcript-tabs button b { color: var(--muted); font-weight: 400; }
+.app-shell[data-ui-mode='advanced'] :is(.speed-date-transcript-tabs button.active, .speed-date-transcript-tabs button:hover) {
+  border-color: transparent;
+  border-bottom-color: var(--accent);
+  background: transparent;
+}
+.app-shell[data-ui-mode='advanced'] .speed-date-transcript-tabs button:not(.active):hover { border-bottom-color: var(--line-strong); }
+/* Each question was a card; now a row between hairlines. */
+.app-shell[data-ui-mode='advanced'] :is(.speed-date-qa-list, .profile-question-list) { gap: 0; }
+.app-shell[data-ui-mode='advanced'] :is(.speed-date-qa-list li, .profile-question-list li) {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+.app-shell[data-ui-mode='advanced'] :is(.speed-date-qa-list li:first-child, .profile-question-list li:first-child) { border-top: 0; }
+.app-shell[data-ui-mode='advanced'] :is(.speed-date-qa-head, .profile-question-head) { border-bottom: 0; }
+/* Runs: the history list. */
+.app-shell[data-ui-mode='advanced'] .history-timeline li {
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+}
+/* A note inside a panel (ComfyUI is not running, nothing to compare yet) is
+   part of that panel: a hairline above it, not a box of its own. */
+.app-shell[data-ui-mode='advanced'] .utility-empty.compact {
+  padding: var(--s3) 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+/* The Match score legend at the foot of the Models filter column. */
+.app-shell[data-ui-mode='advanced'] .score-legend-strip {
+  padding: var(--s3) 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+}
+/* What's New: the row opens the model; its name is the keyboard's button. */
+.app-shell[data-ui-mode='advanced'] .whats-new-panel .model-news-item {
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  cursor: pointer;
+}
+.app-shell[data-ui-mode='advanced'] .whats-new-panel .model-news-item:hover { background: var(--panel-hover); }
+.app-shell[data-ui-mode='advanced'] .model-news-open {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.app-shell[data-ui-mode='advanced'] .model-news-open:hover strong { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 4px; }
+/* Comparison, after a first look: the tabs' numbers floated beside the
+   names (the order is the tab order), the By Model / Side by Side toggle used
+   the gold kept for the winner and the next step, and each question's two
+   halves were tinted blue and pink, a box each inside the row. */
+.app-shell[data-ui-mode='advanced'] .speed-date-transcript-tabs button { grid-template-columns: minmax(0, 1fr); }
+.app-shell[data-ui-mode='advanced'] .speed-date-transcript-tabs button b { display: none; }
+.app-shell[data-ui-mode='advanced'] .speed-date-view-toggle button {
+  min-height: var(--h-control-sm);
+  padding: 0 var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text-strong);
+}
+.app-shell[data-ui-mode='advanced'] .speed-date-view-toggle button.active {
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text-strong);
+}
+.app-shell[data-ui-mode='advanced'] .speed-date-view-toggle button:not(.active):hover { border-color: var(--text); background: var(--panel-hover); }
+.app-shell[data-ui-mode='advanced'] :is(.speed-date-qa-block, .profile-qa-block):is(.asked, .answered) { background: transparent; }
+/* Models: the family toggle is a quiet link ("1 version", "4 versions"),
+   not an outlined button repeated down the Actions column. */
+.app-shell[data-ui-mode='advanced'] .model-family-toggle {
+  min-height: var(--h-control-sm);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: 400 var(--fs-ui) / 1.2 var(--ui);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.app-shell[data-ui-mode='advanced'] .model-family-toggle:hover { color: var(--text-strong); text-decoration-color: currentColor; }

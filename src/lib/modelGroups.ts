@@ -43,6 +43,10 @@ export type GroupedRow<T> =
  * list: mixing collapsible family rows with bare model rows makes the reader
  * work out which kind each row is before they know what clicking does. One
  * shape for every row is worth the extra click on a family of one.
+ *
+ * Tried at 2 in 2026-10 to drop the "Show 1 version" button from most rows:
+ * the version rows that replaced them were three times as tall, and the list
+ * stopped being scannable. The toggle became a quiet "1 version" link instead.
  */
 export const MIN_VARIANTS_TO_GROUP = 1;
 
