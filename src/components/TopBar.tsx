@@ -122,19 +122,21 @@ export function TopBar({
           title="Local AI services. Open My PC"
           aria-label={`Ollama ${CONNECTION_WORDS[connections.ollama]}, ${connections.lmStudio ? `LM Studio ${CONNECTION_WORDS[connections.lmStudio]}, ` : ''}ComfyUI ${CONNECTION_WORDS[connections.comfy]}. Open My PC`}
         >
-          <span className="top-bar-service">
+          <span className="top-bar-service" title={`Ollama: ${CONNECTION_WORDS[connections.ollama]}`}>
             <UiIcon name="plug" size={16} />
             <span className="top-bar-service-name">Ollama</span>
             <i className={`conn-dot ${connections.ollama}`} aria-hidden="true" />
           </span>
           {connections.lmStudio && (
-            <span className="top-bar-service">
-              <UiIcon name="plug" size={16} />
+            // Its own icon: on narrower windows the names are hidden, and two
+            // plugs (one grey, one green) said nothing about which was which.
+            <span className="top-bar-service" title={`LM Studio: ${CONNECTION_WORDS[connections.lmStudio]}`}>
+              <UiIcon name="models" size={16} />
               <span className="top-bar-service-name">LM Studio</span>
               <i className={`conn-dot ${connections.lmStudio}`} aria-hidden="true" />
             </span>
           )}
-          <span className="top-bar-service">
+          <span className="top-bar-service" title={`ComfyUI: ${CONNECTION_WORDS[connections.comfy]}`}>
             <UiIcon name="nodes" size={16} />
             <span className="top-bar-service-name">ComfyUI</span>
             <i className={`conn-dot ${connections.comfy}`} aria-hidden="true" />
