@@ -162,7 +162,26 @@ export function describeModelTag(displayName: string): VariantFact[] {
   return facts;
 }
 
-
+/**
+ * The quantization a provider reports for an installed model ("Q4_K_M",
+ * "Q8_0", "F16"), explained the way a tag's is.
+ *
+ * Most tags never say it: llama3.2:3b is Q4_K_M, but only Ollama knows that,
+ * so describeModelTag had nothing to explain and the panel never said what
+ * the download was. LM Studio puts it on every download line.
+ */
+export function describeQuantization(name: string | undefined): VariantFact | null {
+  const text = String(name ?? '').trim();
+  if (!text) return null;
+  const bits = text.match(/^i?q(\d)/i);
+  if (bits) {
+    return { kind: 'quant', label: text.toUpperCase(), plain: QUANT_PLAIN[bits[1]] ?? 'A smaller, squeezed-down copy of the same model.' };
+  }
+  if (/^(?:b?f16|f32)$/i.test(text)) {
+    return { kind: 'quant', label: text.toUpperCase(), plain: 'Not squeezed down. The largest and slowest copy, and the closest to what its makers released.' };
+  }
+  return null;
+}
 
 /**
  * What actually separates two variants, in the order a chooser cares about.
