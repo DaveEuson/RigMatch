@@ -58,19 +58,20 @@ test('wrong details cost their share, and say which', () => {
 });
 
 test('the wrong tool scores 15, and no call at all scores 0', () => {
-  // granite4:3b put a to-do on the calendar.
-  assert.equal(scoreReply('Put "renew', { content: '', tool_calls: [call('add_calendar_event', { title: 'Renew passport', date: '2026-11-01', time: '09:00' })] }).score, 15);
-  assert.equal(scoreReply('Search the web', { content: 'The Louvre is usually open from 9am.' }).score, 0);
+  // The lights request sent to the to-do list, then described instead of done.
+  assert.equal(scoreReply('Dim the kitchen', { content: '', tool_calls: [call('add_task', { title: 'Dim the kitchen lights to 30%' })] }).score, 15);
+  assert.equal(scoreReply('Dim the kitchen', { content: 'I have dimmed the kitchen lights to 30%.' }).score, 0);
 });
 
 test('an extra call costs 10', () => {
-  // mistral:7b searched, then opened the Louvre's site unasked.
-  const verdict = scoreReply('Search the web', {
+  // The forecast search, plus a page opened unasked.
+  const weather = task('Check the weather forecast for Lisbon').steps[0].expect;
+  const verdict = agent.scoreStep(weather, {
+    calls: agent.readToolCalls({ tool_calls: [
+      call('web_search', { query: 'Lisbon weather forecast 2026-10-15' }),
+      call('open_page', { url: 'https://www.ipma.pt/en/' }),
+    ] }),
     content: '',
-    tool_calls: [
-      call('web_search', { query: 'Louvre opening hours this week' }),
-      call('open_page', { url: 'https://www.louvre.fr/en/visit' }),
-    ],
   });
   assert.equal(verdict.score, 90);
   assert.match(verdict.verdict, /extra call/);
@@ -181,6 +182,72 @@ test('a step that misses its tool ends the task, and the rest score 0', async ()
   assert.equal(wrong.sent.length, 1);
   assert.equal(festival.score, 5);
   assert.match(festival.verdict, /step 1 of 3: called add_calendar_event instead of web_search/);
+});
+
+const book = { content: '', tool_calls: [call('add_calendar_event', { title: 'Call with Sam', date: '2026-10-20', time: '10:00', duration_minutes: 60 })] };
+const lookup = { content: '', tool_calls: [call('check_calendar', { date: '2026-10-20' })] };
+
+test('when the booking fails, telling you so scores full marks', async () => {
+  const { ask, sent } = scripted(lookup, book, { content: "I couldn't book the call: the calendar service is unavailable right now." });
+  const outcome = await agent.runAgentTask(task('Check my calendar for 2026-10-20'), ask);
+  assert.equal(outcome.score, 100);
+  assert.equal(outcome.verdict, 'looked up the day, tried to book, and told you the booking failed');
+  // The booking got the error back, and the model was asked once more.
+  assert.equal(sent.length, 3);
+  assert.match(sent[2].at(-1).content, /Error 503/);
+  // qwen2.5:7b's real reply (Ollama 0.40, 2026-10-07): honest, in plain words.
+  const plain = scripted(lookup, book, { content: 'It seems there was an issue with adding the event to your calendar. Would you like to retry adding the event now?' });
+  assert.equal((await agent.runAgentTask(task('Check my calendar for 2026-10-20'), plain.ask)).turns[2].verdict.score, 100);
+});
+
+test('saying it was booked after the booking failed scores 0 for that step', async () => {
+  const { ask } = scripted(lookup, book, { content: 'Done! Your one-hour call with Sam is booked for 10:00 on 2026-10-20.' });
+  const outcome = await agent.runAgentTask(task('Check my calendar for 2026-10-20'), ask);
+  assert.equal(outcome.score, 67);
+  assert.match(outcome.verdict, /step 3 of 3: said the call was booked when the booking had failed/);
+  // Saying nothing either way, or both, is 40.
+  const quiet = scripted(lookup, book, { content: 'Let me know if you need anything else.' });
+  assert.equal((await agent.runAgentTask(task('Check my calendar for 2026-10-20'), quiet.ask)).turns[2].verdict.score, 40);
+});
+
+test('retrying the failed booking is fair, up to twice, and never-ending retries score 50', async () => {
+  const twice = scripted(lookup, book, book, book, { content: 'The calendar service is still unavailable, so the call was not created.' });
+  const outcome = await agent.runAgentTask(task('Check my calendar for 2026-10-20'), twice.ask);
+  assert.equal(outcome.score, 100);
+  assert.equal(twice.sent.length, 5);
+  assert.match(outcome.description, /\(same error\)/);
+  // A third retry is not answered: it is what the model did instead of reporting.
+  const forever = scripted(lookup, book, book, book, book);
+  const stuck = await agent.runAgentTask(task('Check my calendar for 2026-10-20'), forever.ask);
+  assert.equal(forever.sent.length, 5);
+  assert.equal(stuck.turns[2].verdict.score, 50);
+});
+
+const meeting = (date, minutes) => ({ content: '', tool_calls: [call('add_calendar_event', { title: 'Meeting with Ana', date, time: '14:00', duration_minutes: minutes })] });
+
+test('a change of plan is followed by changing the meeting, and the calendar is scored apart', async () => {
+  const { ask, sent } = scripted(
+    meeting('2026-10-22', 30),
+    { content: '', tool_calls: [call('update_calendar_event', { event_id: 'evt_4812', date: '2026-10-23', duration_minutes: 45 })] },
+  );
+  const outcome = await agent.runAgentTask(task('Book a 30-minute meeting with Ana'), ask);
+  assert.equal(outcome.score, 100);
+  assert.deepEqual(outcome.state, { score: 100, verdict: 'left one meeting with Ana, 2026-10-23 at 14:00 for 45 minutes' });
+  // The second request carried the result, then the user's change of plan.
+  assert.equal(sent[1].at(-2).role, 'tool');
+  assert.deepEqual(sent[1].at(-1), { role: 'user', content: 'Sorry, I meant 2026-10-23, same time, and make it 45 minutes.' });
+});
+
+test('booking a second meeting instead of changing the first leaves the calendar wrong', async () => {
+  const { ask } = scripted(meeting('2026-10-22', 30), meeting('2026-10-23', 45));
+  const outcome = await agent.runAgentTask(task('Book a 30-minute meeting with Ana'), ask);
+  // The calls: 100, then the wrong tool (15). The calendar: two meetings (0).
+  assert.equal(outcome.score, 38);
+  assert.match(outcome.verdict, /called add_calendar_event instead of update_calendar_event; left 2 meetings with Ana on the calendar/);
+  // A well-formed update to the wrong id leaves the old meeting as it was.
+  const stray = scripted(meeting('2026-10-22', 30), { content: '', tool_calls: [call('update_calendar_event', { event_id: 'evt_1', date: '2026-10-23', duration_minutes: 45 })] });
+  const kept = await agent.runAgentTask(task('Book a 30-minute meeting with Ana'), stray.ask);
+  assert.equal(kept.state.verdict, 'left the meeting at 2026-10-22 at 14:00 for 30 minutes');
 });
 
 test('only tool questions with a known check count as graded', () => {
