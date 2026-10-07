@@ -4,6 +4,19 @@ Every RigMatch release, newest first. These are the same notes the app shows in
 Update Center — this file and the GitHub release pages are generated from
 `src/data/releaseNotes.ts`, so there is only one place to write them.
 
+## 0.9.6 — Straight Answers
+_Beta build_
+
+- The sheet before a show now opens on one screen: "Ready to start the show?", a few lines saying which questions run, who marks them, any skill tests that follow and what your computer is in for, and a Start button. It used to be over two screens of choices before Start. Every setting is still there, under "Change the questions or the judge". Advanced Mode keeps that open once you've opened it.
+- Simple Mode now asks "speed or accuracy" on the Winner screen, after the show: Rank by Accuracy first, Balanced or Speed first, and the crown and the board move as you choose. A chat show never used this choice before. It always ranked at Balanced, and the answer only changed the label beside the score. At Balanced the order is the same as before.
+- A quick check now uses rules only, as the sheet always said, and nothing leaves your computer. It used to send its answers to whichever judge was picked, an OpenRouter judge included, while the sheet said "Nothing leaves this computer".
+- The tool test has two new requests, replacing a web search and a to-do item. In one, booking the call fails every time, and RigMatch marks the model on whether it tells you the booking failed or claims it worked. In the other, you change the meeting after it's booked, and RigMatch checks the calendar the model leaves behind: one meeting, on the new day, at the new length. Qwen 3.5 9B got both right. RigMatch reads replies sentence by sentence, so "No problem! I booked it" counts as a claim that it worked, and a time written "2:00 PM" counts the same as 14:00.
+- A test started outside RigMatch's window, by a script or before the window reloaded, now shows in the strip under the top bar ("Testing qwen3.5:9b · question 3 of 10") with a Stop button. It used to float over the top bar as "Benchmark running", and clicking it did nothing.
+- A judge picked for you no longer marks its own work. In the Labs rounds, App Builder and the Code challenge used one judge for the whole lineup, so that judge marked its own app and code when it was also a contestant. RigMatch now also knows when two models are the same one under different names: Ollama's qwen3:latest and qwen3:8b, a model in both Ollama and LM Studio, and the copies Ollama 0.40 lists under a code name. The judge picked for you is the same every time now; it used to change between two identical runs. When no other model can mark a model's code, RigMatch tells you it skipped it and why.
+- Ollama 0.40 on Windows can make a model unusable. It saves the model behind a link that Windows refuses to open, and Ollama then lists the same model again under a code name like "llamacpp:c97eb11d…". RigMatch now explains the error in plain words instead of showing Ollama's raw message, and shows the code-named copy by its family and size ("Qwen35 9.7B"), which runs. Ollama 0.35.1 opens these models normally. The bug report to Ollama is ollama/ollama#18847.
+- A single model's test now explains a failure in plain words, as the show does. It used to show the raw error, such as "Error invoking remote method 'benchmark:run'…".
+- An OpenRouter judge gets 400 tokens for its verdict instead of 200, which sometimes cut its verdict off before the score.
+
 ## 0.9.5 — On Equal Terms
 _Beta build_
 
