@@ -101,7 +101,7 @@ import {
   createEmptyBenchmark,
   createQueuedPullProgress,
   createRunProgressId,
-  formatBenchmarkBanner,
+  formatRunningTest,
   formatHistoryTime,
   getAgentName,
   getBenchmarkForModel,
@@ -250,6 +250,7 @@ import { goalById, presetIdForGoal } from './lib/goals';
 import { isDockWorthyPullProgress, modelMatchesTask, nextDockExpiry } from './lib/modelCatalog';
 import { chooseLineup, isSpecialistModel } from './lib/chooseLineup';
 import { modelWeightsKey } from './lib/modelKey.ts';
+import { labJudgeFor } from './lib/labJudge.ts';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLineupLive } from './lib/videoGenRunner';
 import {
@@ -420,6 +421,8 @@ function App() {
   const [isScanningRig, setIsScanningRig] = useState(false);
   const [isBenchmarking, setIsBenchmarking] = useState(false);
   const [externalBenchmark, setExternalBenchmark] = useState<BenchmarkStatus | null>(null);
+  /** The outside test Stop was pressed on, so the button says so until it ends. */
+  const [stoppingTestId, setStoppingTestId] = useState<string | null>(null);
   const [isListTesting, setIsListTesting] = useState(false);
   const [isPullingModels, setIsPullingModels] = useState(false);
   const [isPullPaused, setIsPullPaused] = useState(false);
@@ -915,7 +918,7 @@ function App() {
     qualityMode, setQualityMode, setJudgeModel,
     judgeSource, setJudgeSource, cloudJudgeModel, setCloudJudgeModel,
     openRouterKey, setOpenRouterKey,
-    judgeModelOptions, effectiveJudgeModel, autoJudgeModels, effectiveJudge,
+    judgeModelOptions, judgeChosen, effectiveJudgeModel, autoJudgeModels, effectiveJudge,
     resetJudgeSettings,
   } = useJudgeSettings({ installedRows: judgeCandidateRows, vramGb: system.gpu.vramGb });
   // Labs' judge marks on its own program, as a show's does (judgeEndpoints).
@@ -925,6 +928,12 @@ function App() {
     if (!effectiveJudge || effectiveJudge.provider !== 'local') return effectiveJudge;
     return { ...effectiveJudge, baseUrl: judgeEndpoints[effectiveJudge.model]?.baseUrl ?? ollama.baseUrl };
   }, [effectiveJudge, judgeEndpoints, ollama.baseUrl]);
+  /** The judge for one contestant's app or code: never itself, unless the person chose it. */
+  const skillJudgeFor = useCallback((model: string) => labJudgeFor(model, skillTestJudge, {
+    chosen: judgeChosen,
+    candidates: judgeModelOptions,
+    baseUrlOf: (name) => judgeEndpoints[name]?.baseUrl ?? ollama.baseUrl,
+  }), [skillTestJudge, judgeChosen, judgeModelOptions, judgeEndpoints, ollama.baseUrl]);
   // Where a model's Labs test goes: its own program's address. Main reads an
   // LM Studio one and asks LM Studio, so App Builder, Code and picture reading
   // run where the model lives instead of being sent to Ollama.
@@ -3512,9 +3521,10 @@ function App() {
           setLiveBuild({ model: payload.model ?? job.model, kind: 'app', text: payload.text, done: payload.done, error: payload.error });
         });
         try {
+          const judge = skillJudgeFor(job.model);
           result = await runAdvancedAppBuilderChallenge(
             job.model, labBaseUrl(job.model), appPrompt, streamId, undefined,
-            skillTestJudge ? { ...skillTestJudge, taskDescription: appPrompt } : undefined,
+            judge ? { ...judge, taskDescription: appPrompt } : undefined,
           );
         } finally {
           unsubscribe?.();
@@ -3531,7 +3541,7 @@ function App() {
         try {
           result = await runCodeChallenge(
             job.model, labBaseUrl(job.model), selection.codeLanguage, codeTask.task, codeTask.reference, streamId,
-            skillTestJudge ? { ...skillTestJudge } : undefined,
+            skillJudgeFor(job.model) ?? undefined,
           );
         } finally {
           unsubscribe?.();
@@ -3689,7 +3699,7 @@ function App() {
     // pictureJudge checks the pictures and clips, and modelRows says which
     // models can hear; without them here the run would use whatever was
     // installed when this callback was last built.
-  }, [ollama.baseUrl, labBaseUrl, skillTestSelection, skillTestJudge, modelRows, videoMachine, pictureJudge]);
+  }, [ollama.baseUrl, labBaseUrl, skillTestSelection, skillJudgeFor, modelRows, videoMachine, pictureJudge]);
 
   /**
    * Chat asking RigMatch to test a model.
@@ -3848,7 +3858,7 @@ function App() {
       // exact same output, but keep temperature moderate — improve passes refine
       // the existing code, they shouldn't re-roll it wildly.
       const retryOptions = { seed: Math.floor(Math.random() * 1_000_000_000), temperature: 0.4 };
-      const retryJudge = skillTestJudge ? { ...skillTestJudge } : undefined;
+      const retryJudge = skillJudgeFor(model) ?? undefined;
       result = await runAdvancedAppBuilderChallenge(model, labBaseUrl(model), retryPrompt, streamId, retryOptions, retryJudge);
     } catch (error) {
       setActivity(`Improve pass failed: ${getErrorMessage(error)}.`);
@@ -3867,7 +3877,7 @@ function App() {
       return null;
     }
     return { result, html };
-  }, [labBaseUrl, skillTestJudge]);
+  }, [labBaseUrl, skillJudgeFor]);
 
   // "Second chance" for an App Builder result: one improve pass, optionally
   // steered by a user hint. Restores the previous result if the pass fails, so
@@ -4431,6 +4441,29 @@ function App() {
     <>
       <i className="running-dot" aria-hidden="true" />
       <span>Running {skillRunStatus.label}</span>
+    </>
+  ) : externalBenchmark?.running ? (
+    // A test this window didn't start: RigMatch Chat, a script, or one still
+    // going from before a reload. It floated over the top bar as "Benchmark
+    // running", and clicking it did nothing; there is no screen to open for
+    // it, so it is text here, with the one thing a person can do about it.
+    <>
+      <i className="running-dot" aria-hidden="true" />
+      <span title="Started outside this window, by RigMatch Chat, a script, or before the window reloaded">{formatRunningTest(externalBenchmark)}</span>
+      {externalBenchmark.progressId && (
+        <button
+          type="button"
+          className="running-stop"
+          disabled={stoppingTestId === externalBenchmark.progressId}
+          onClick={() => {
+            const id = externalBenchmark.progressId!;
+            setStoppingTestId(id);
+            void agentArcadeApi.cancelBenchmark?.(id).catch(() => setStoppingTestId(null));
+          }}
+        >
+          {stoppingTestId === externalBenchmark.progressId ? 'Stopping' : 'Stop'}
+        </button>
+      )}
     </>
   ) : isPullingModels && pullingModel ? (
     <>
@@ -5167,13 +5200,6 @@ function App() {
           onClose={() => setSetupGuideOpen(false)}
           onInstallOllama={openOllamaDownload}
         />
-      )}
-
-      {externalBenchmark?.running && runProgress?.phase !== 'running' && (
-        <div className="benchmark-running-banner" role="status" aria-live="polite">
-          <span className="benchmark-running-dot" aria-hidden="true" />
-          <span>{formatBenchmarkBanner(externalBenchmark)}</span>
-        </div>
       )}
 
       {pendingRunMode && (

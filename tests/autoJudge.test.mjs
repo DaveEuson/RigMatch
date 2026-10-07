@@ -186,3 +186,42 @@ test('the judge leaves the GPU before the model under test is timed again', () =
   assert.match(main.slice(verdict, scored), /await warmLmStudioBenchmarkModel\(baseUrl, model, signal\)/,
     'an LM Studio contestant is loaded again the same way');
 });
+
+test('the same installed models always give the same judge', () => {
+  // Two models of one size kept the order their rows arrived in, and the
+  // default judge changed between two otherwise identical runs (2026-10-06).
+  const rows = [
+    { displayName: 'qwen3:8b', sizeGb: 5.2 },
+    { displayName: 'llama3.1:8b', sizeGb: 5.2 },
+    { displayName: 'granite4:3b', sizeGb: 2.1 },
+  ];
+  const once = textJudgeCandidates(rows, 12);
+  assert.deepEqual(once, ['llama3.1:8b', 'qwen3:8b', 'granite4:3b']);
+  assert.deepEqual(textJudgeCandidates([...rows].reverse(), 12), once);
+});
+
+test('Labs never has an automatic judge mark its own app and code', async () => {
+  const { labJudgeFor } = await import('../src/lib/labJudge.ts');
+  const candidates = ['qwen/qwen3-8b', 'qwen3:8b', 'gemma4:e4b'];
+  const baseUrlOf = (name) => (name.includes('/') ? 'http://127.0.0.1:1234' : 'http://127.0.0.1:11434');
+  const auto = { provider: 'local', model: 'qwen3:8b', baseUrl: 'http://127.0.0.1:11434' };
+  const pick = (contestant, judge = auto, chosen = false) => labJudgeFor(contestant, judge, { chosen, candidates, baseUrlOf });
+
+  // The contestant, and its copy in LM Studio, both step aside.
+  assert.deepEqual(pick('qwen3:8b'), { provider: 'local', model: 'gemma4:e4b', baseUrl: 'http://127.0.0.1:11434' });
+  // Anyone else is marked by the automatic judge as before.
+  assert.equal(pick('llama3.2:3b'), auto);
+  // A judge the person chose is theirs, as in the show.
+  assert.equal(pick('qwen3:8b', auto, true), auto);
+  // Nobody else to ask: unmarked rather than self-marked.
+  assert.equal(labJudgeFor('qwen3:8b', auto, { chosen: false, candidates: ['qwen3:8b'], baseUrlOf }), null);
+  // A cloud judge is never a contestant.
+  const cloud = { provider: 'openrouter', model: 'anthropic/claude-sonnet-5.5', apiKey: 'k' };
+  assert.equal(pick('qwen3:8b', cloud), cloud);
+  assert.equal(pick('qwen3:8b', null), null);
+
+  // Every App Builder and Code run asks for its contestant's judge.
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf-8');
+  assert.doesNotMatch(app, /skillTestJudge \? \{ \.\.\.skillTestJudge/, 'a skill run still hands every contestant the same judge');
+  assert.equal(app.match(/skillJudgeFor\((?:job\.)?model\)/g)?.length, 3, 'App Builder, Code and the improve pass');
+});

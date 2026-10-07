@@ -3481,9 +3481,16 @@ async function runBenchmark(request = {}, sender) {
   if (benchmarkRunning) {
     throw new Error('A benchmark is already running. Please wait for it to complete.');
   }
+  // Every run gets an id, because Stop names the run it stops. A script, or a
+  // window that reloaded, started runs without one, and the load strip showed
+  // them with no way to stop them. A window ignores progress for ids it
+  // didn't start.
+  if (typeof request.progressId !== 'string' || !request.progressId) {
+    request = { ...request, progressId: `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}` };
+  }
   benchmarkRunning = true;
   activeBenchmark = {
-    progressId: typeof request.progressId === 'string' ? request.progressId : null,
+    progressId: request.progressId,
     model: request.model,
     startedAt: Date.now(),
     snapshot: null,
@@ -3599,9 +3606,12 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       promptTotal: benchmarkPrompts.length,
       ...update,
     };
-    // Mirror the latest progress so a reloaded/late renderer can re-attach.
+    // Mirror the latest progress so a reloaded/late renderer can re-attach,
+    // and tell every window: the load strip's "question 3 of 10" for a test
+    // a window didn't start comes only from here. A few updates a question.
     if (activeBenchmark && activeBenchmark.progressId === progressId) {
       activeBenchmark.snapshot = payload;
+      broadcastBenchmarkStatus();
     }
     if (!progressId || !sender || sender.isDestroyed()) return;
     sender.send('benchmark:progress', payload);

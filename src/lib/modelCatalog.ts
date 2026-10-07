@@ -165,9 +165,13 @@ export function textJudgeCandidates(
   const fitsFirst = (list: typeof rows) => (vramGb > 0
     ? [...list.filter(fits), ...list.filter((row) => !fits(row))]
     : list);
+  // Equal sizes by name, so the same installed models always give the same
+  // order. They used to keep the order the rows arrived in, and the default
+  // judge changed between two otherwise identical runs.
+  const byName = (a: (typeof rows)[number], b: (typeof rows)[number]) => (nameOf(a) < nameOf(b) ? -1 : nameOf(a) > nameOf(b) ? 1 : 0);
   const text = [...rows]
     .filter((row) => canGenerateText(row) && !isEmbeddingModel(nameOf(row)) && nameOf(row))
-    .sort((a, b) => (b.sizeGb ?? 0) - (a.sizeGb ?? 0));
+    .sort((a, b) => (b.sizeGb ?? 0) - (a.sizeGb ?? 0) || byName(a, b));
   // A safety classifier or extractor (isSpecialistModel) labels text rather
   // than marks it, so it goes to the back with the weak judges: the largest
   // installed model was picked, and gpt-oss-safeguard:20b is often that.
@@ -566,16 +570,16 @@ export function isBenchmarkForModel(
     .some((key) => normalizeModelKey(key) === benchmarkKey);
 }
 
-export function formatBenchmarkBanner(status: BenchmarkStatus): string {
-  const model = status.model ?? 'a model';
+/** The load strip's words for a test this window didn't start: "Testing qwen3.5:9b · question 3 of 10". */
+export function formatRunningTest(status: BenchmarkStatus): string {
+  const parts: string[] = [`Testing ${status.model ?? 'a model'}`];
   const snap = status.snapshot;
-  const parts: string[] = [`Benchmark running — ${model}`];
   if (snap) {
     if (typeof snap.promptIndex === 'number' && typeof snap.promptTotal === 'number' && snap.promptTotal > 0) {
-      parts.push(`question ${Math.min(snap.promptTotal, snap.promptIndex + 1)}/${snap.promptTotal}`);
+      parts.push(`question ${Math.min(snap.promptTotal, snap.promptIndex + 1)} of ${snap.promptTotal}`);
     }
     if (typeof snap.runIndex === 'number' && typeof snap.runTotal === 'number' && snap.runTotal > 1) {
-      parts.push(`run ${snap.runIndex + 1}/${snap.runTotal}`);
+      parts.push(`run ${snap.runIndex + 1} of ${snap.runTotal}`);
     }
   }
   return parts.join(' · ');
