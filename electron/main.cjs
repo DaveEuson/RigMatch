@@ -4411,7 +4411,7 @@ async function runBenchmarkToolPrompt(baseUrl, model, prompt, signal, provider) 
   }
 
   // A multi-step task is timed over all of its turns.
-  const replies = outcome.turns.map((turn) => turn.reply);
+  const replies = outcome.turns.flatMap((turn) => [...(turn.retries ?? []), turn.reply]);
   const sum = (key) => replies.reduce((total, reply) => total + (normalizePositiveNumber(reply?.[key]) || 0), 0);
   const responseText = outcome.description;
   const last = replies[replies.length - 1] || {};

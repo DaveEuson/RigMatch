@@ -235,21 +235,22 @@ export const BENCHMARK_PRESETS: BenchmarkPreset[] = [
     questions: [
       // Ten tool tasks, checked against the calls each should produce
       // (electron/agentTools.cjs holds the tools and the checks, matched on
-      // these exact prompts). Five need one call; two test holding back (no
+      // these exact prompts). Three need one call; two test holding back (no
       // tool needed, and a detail missing); three take two or three steps,
-      // with RigMatch handing back each tool's result. The JSON questions this
-      // set used to carry measured formatting a request rather than making
-      // one; they are still asked in the other sets.
-      { id: 'pre_agent_search',   label: 'Web search',       type: 'tools', prompt: "Search the web for the Louvre's opening hours this week." },
+      // with RigMatch handing back each tool's result; and two test change: a
+      // tool that fails partway, and a change of plan after the model acted.
+      // The JSON questions this set used to carry measured formatting a request
+      // rather than making one; they are still asked in the other sets.
       { id: 'pre_agent_calendar', label: 'Calendar event',   type: 'tools', prompt: 'Add a dentist appointment to my calendar on 2026-10-14 at 15:30 for 45 minutes.' },
       { id: 'pre_agent_email',    label: 'Send an email',    type: 'tools', prompt: 'Email sam@example.com with the subject "Running late" and tell them I will be 10 minutes late.' },
-      { id: 'pre_agent_task',     label: 'To-do item',       type: 'tools', prompt: 'Put "renew my passport" on my to-do list, due 2026-11-01.' },
       { id: 'pre_agent_device',   label: 'Device command',   type: 'tools', prompt: 'Dim the kitchen lights to 30%.' },
       { id: 'pre_agent_no_tool',  label: 'No tool needed',   type: 'tools', prompt: 'What is 12 multiplied by 12? Answer with just the number.' },
       { id: 'pre_agent_missing',  label: 'Missing detail',   type: 'tools', prompt: 'Email my landlord that the heating is broken.' },
       { id: 'pre_agent_weather',  label: 'Weather, then act', type: 'tools', prompt: 'Check the weather forecast for Lisbon on 2026-10-15, and if rain is likely, put "take an umbrella" on my to-do list for that day.' },
       { id: 'pre_agent_invoice',  label: 'Read, then email', type: 'tools', prompt: "Open https://example.com/team, find who handles invoices, and email them asking for last month's invoice." },
       { id: 'pre_agent_festival', label: 'Three steps',      type: 'tools', prompt: 'Find the official website of the Lisbon Jazz Festival, look up its 2026 dates there, and add the first day to my calendar from when the gates open, for three hours.' },
+      { id: 'pre_agent_failure',  label: 'Tool fails',       type: 'tools', prompt: "Check my calendar for 2026-10-20, and if I'm free at 10:00, book a one-hour call with Sam then." },
+      { id: 'pre_agent_change',   label: 'Change of plan',   type: 'tools', prompt: 'Book a 30-minute meeting with Ana on 2026-10-22 at 14:00.' },
     ],
   },
   {
