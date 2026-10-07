@@ -165,9 +165,13 @@ export function textJudgeCandidates(
   const fitsFirst = (list: typeof rows) => (vramGb > 0
     ? [...list.filter(fits), ...list.filter((row) => !fits(row))]
     : list);
+  // Equal sizes by name, so the same installed models always give the same
+  // order. They used to keep the order the rows arrived in, and the default
+  // judge changed between two otherwise identical runs.
+  const byName = (a: (typeof rows)[number], b: (typeof rows)[number]) => (nameOf(a) < nameOf(b) ? -1 : nameOf(a) > nameOf(b) ? 1 : 0);
   const text = [...rows]
     .filter((row) => canGenerateText(row) && !isEmbeddingModel(nameOf(row)) && nameOf(row))
-    .sort((a, b) => (b.sizeGb ?? 0) - (a.sizeGb ?? 0));
+    .sort((a, b) => (b.sizeGb ?? 0) - (a.sizeGb ?? 0) || byName(a, b));
   // A safety classifier or extractor (isSpecialistModel) labels text rather
   // than marks it, so it goes to the back with the weak judges: the largest
   // installed model was picked, and gpt-oss-safeguard:20b is often that.
