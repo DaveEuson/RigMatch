@@ -683,7 +683,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
                 plan={props.planLine}
                 // Changing the questions opens the run sheet, which starts the
                 // show; with downloads still to do, the sheet comes after them.
-                onChangePlan={skipDownload && pickDone ? changePlan : undefined}
+                onChangePlan={skipDownload && pickDone && props.round !== 'vision' && props.round !== 'listening' ? changePlan : undefined}
               />
             )
             : <span className="sw-footer-hint">{step === 'download' && downloadBlockedReason ? downloadBlockedReason : footerHint(step, ollamaReady, shortlistedRows.length, minPicks, showFailed)}</span>}
@@ -1815,7 +1815,10 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, bala
             {/* Asked here rather than before the show: it only re-ranks what was
                 measured, and here the crown can be seen moving. The sheet asked
                 it, and a chat show's order never used the answer. */}
-            {!onlyOne && (
+            {/* Only where the scores move with it. A skill round's board
+                re-sorted at the balance while each row kept its raw Lab score,
+                so 70 sat above 95. */}
+            {!onlyOne && (round ?? 'chat') === 'chat' && (
               <div className="sw-rank-by" role="group" aria-label="Rank by">
                 <span>Rank by</span>
                 {[...BALANCE_NOTCHES].reverse().map((notch) => (

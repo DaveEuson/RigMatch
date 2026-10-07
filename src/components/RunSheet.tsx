@@ -9,7 +9,7 @@ import { getFriendlyModelName, isCloudModel, isEmbeddingModel, isLikelyImageGene
 import { formatDuration } from '../lib/runEstimates';
 import {
   COUNT_OPTIONS, EDITABLE_QUESTION_TYPES, GENERAL_SET_DESCRIPTION, QUESTION_TYPE_LABELS, QUICK_MINUTES_PER_MODEL,
-  activeQuestionSet, judgeChoiceOf, questionMarker, questionSetLabel, questionsForSet, sheetButtonLabel,
+  activeQuestionSet, judgeChoiceOf, questionMarker, questionsForSet, sheetButtonLabel, sheetSummary,
   type JudgeChoice, type QuestionSetId,
 } from '../lib/runSheet';
 import { useDialog } from '../lib/useDialog';
@@ -60,6 +60,7 @@ export function RunSheet({
   onChangeQuestionCount,
   onChangeQuestions,
   autoJudgeModel,
+  sameAsContestant,
   goalPresetId,
   goalDesire,
   lineupModels,
@@ -111,6 +112,11 @@ export function RunSheet({
   onChangeQuestions: (questions: BenchmarkQuestion[]) => void;
   /** A local model that marks the prose questions when judging is off. */
   autoJudgeModel?: string;
+  /**
+   * Whether a model is one of this run's contestants under any name: Ollama's
+   * qwen3:8b and LM Studio's qwen/qwen3-8b are one model (modelIdentities).
+   */
+  sameAsContestant?: (model: string) => boolean;
   /** The set that measures the user's main goal, when one does. */
   goalPresetId?: string;
   /** That goal in the user's own words. */
@@ -171,6 +177,7 @@ export function RunSheet({
   const isQuick = offersQuick && quick;
   const setId = activeQuestionSet(benchmarkQuestions);
   const choice = judgeChoiceOf(qualityMode, judgeSource);
+  const isContestant = sameAsContestant ?? ((model: string) => lineupModels.includes(model));
 
   // Skill tests: what this lineup can do. Image generation runs on ComfyUI's
   // checkpoints, so it depends on ComfyUI, not on which models were picked.
@@ -205,7 +212,14 @@ export function RunSheet({
   // What this run sends off the machine: a cloud model answers remotely, and
   // the OpenRouter judge is sent each question and answer to mark.
   const cloudAnswerers = (mode === 'speed-date' ? lineupModels : [selectedModel]).filter((m) => m && isCloudModel(m));
-  const answersLeave = choice === 'cloud' && judgeActive && !isQuick;
+  // Only runs that use the judge send anything: questions it marks, and apps
+  // or code it reads. A quick check sends none (App.tsx, startBenchmark), and
+  // a picture or listening round is checked here.
+  const judgeMarksSomething = !isQuick && (
+    (asksQuestions && !skillsOnly)
+    || (offersSkills && skillSelection.appBuilder && appBuilderCapable)
+    || (offersSkills && skillSelection.code && codeCapable));
+  const answersLeave = choice === 'cloud' && judgeActive && judgeMarksSomething;
   const offDevice = [
     ...(cloudAnswerers.length > 0 ? [`${cloudAnswerers.join(', ')} (cloud model${cloudAnswerers.length === 1 ? '' : 's'})`] : []),
     ...(answersLeave ? ['openrouter.ai, for marking'] : []),
@@ -277,23 +291,23 @@ export function RunSheet({
   // marks it, what follows, and what it asks of the machine. The sheet was
   // 2.3 screens of choices with 23 controls before Start; every setting is
   // still here, folded under one link.
-  const cloudName = CLOUD_JUDGE_PRESETS.find((preset) => preset.id === cloudJudgeModel)?.label ?? cloudJudgeModel;
-  const openEnded = `${judgedInPlan} open-ended answer${judgedInPlan === 1 ? '' : 's'}`;
-  const askedLine = isQuick ? '3 quick ones: a code question, an accuracy trap and a format check'
-    : simpleRound === 'vision' ? 'None. Each describes the same picture'
-      : simpleRound === 'listening' ? 'None. Each writes down the same short clip'
-        : skillsOnly ? 'None. Only the skill tests run'
-          : setId === 'custom' ? `${questionCount} of your own`
-            : `${questionCount} from the ${questionSetLabel(benchmarkQuestions)} set${simpleRound === 'code' ? ', then each builds a small app' : ''}`;
-  const markedLine = simpleRound === 'vision' ? 'Checked against what is in the picture'
-    : simpleRound === 'listening' ? 'Checked against the words in the clip'
-      : skillsOnly ? 'Each skill test checks its own result'
-        : isQuick ? 'Rules check all three'
-          : choice === 'cloud' && judgeActive ? `${cloudName}, through OpenRouter`
-            : choice === 'local' && judgeActive ? `${getFriendlyModelName(judgeModel)}, on this computer${lineupModels.includes(judgeModel) ? '. It is also a contestant' : ''}`
-              : judgedInPlan === 0 ? 'Rules check every answer'
-                : judgeName ? `Rules, plus ${getFriendlyModelName(judgeName)} for the ${openEnded}${judgeFallback ? ". The judge you picked isn't ready" : ''}`
-                  : `Rules. The ${openEnded} stay unmarked: nothing else installed can read them`;
+  const { asked: askedLine, marked: markedLine } = sheetSummary({
+    quick: isQuick,
+    simpleRound,
+    skillsOnly,
+    questions: benchmarkQuestions,
+    questionCount,
+    judgedInPlan,
+    choice,
+    judgeActive,
+    judgeModel,
+    cloudName: CLOUD_JUDGE_PRESETS.find((preset) => preset.id === cloudJudgeModel)?.label ?? cloudJudgeModel,
+    autoJudge: judgeName,
+    judgeFallback,
+    sameAsContestant: isContestant,
+    ownPicture: !VISION_TEST_IMAGES.some((image) => image.src === skillSelection.recognizeImage),
+    nameOf: getFriendlyModelName,
+  });
   const pickedSkills = !anySkillSelected ? [] : [
     skillSelection.appBuilder && appBuilderCapable && 'build an app',
     skillSelection.code && codeCapable && 'the code challenge',
@@ -302,7 +316,9 @@ export function RunSheet({
     skillSelection.recognize && visionCapable && 'read a picture',
     skillSelection.listen && listenCapable && 'listen to a clip',
   ].filter((skill): skill is string => Boolean(skill));
-  const machineLine = `Your ${gpuName}, processor and fans work hard until it finishes.${gpuContention?.level === 'clear' ? ' Nothing else is using the graphics card right now.' : ''}${system.battery.hasBattery && !onBattery ? ' Keep the laptop plugged in for a fair reading.' : ''}`;
+  // One chip on a Mac (and often no fans): "Apple M2, processor and fans"
+  // named the same part twice.
+  const machineLine = `${system.gpu.isUnifiedMemory ? `Your ${gpuName} works` : `Your ${gpuName}, processor and fans work`} hard until it finishes.${gpuContention?.level === 'clear' ? ' Nothing else is using the graphics card right now.' : ''}${system.battery.hasBattery && !onBattery ? ' Keep the laptop plugged in for a fair reading.' : ''}`;
   // Simple Mode asks no speed-or-accuracy question here: it only re-ranks, so
   // it moved to the Winner screen, where the change can be seen.
   const showsFader = !simpleRound;
@@ -313,6 +329,9 @@ export function RunSheet({
     try { return localStorage.getItem(SETTINGS_OPEN_KEY) === 'open'; } catch { return false; }
   });
   const toggleSettings = (open: boolean) => {
+    // A <details> that mounts open fires "toggle" too. Without this check,
+    // opening "Questions and judge" once saved the fold open for every run.
+    if (open === settingsOpen) return;
     setSettingsOpen(open);
     // Advanced Mode keeps it the way it was left; Simple Mode starts folded every time.
     if (!simpleRound) {
@@ -338,7 +357,7 @@ export function RunSheet({
             {pickedSkills.length > 0 && (
               <div><dt>{skillsOnly ? 'Skill tests' : 'Then'}</dt><dd>{pickedSkills.join(', ').replace(/^./, (c) => c.toUpperCase())}</dd></div>
             )}
-            <div><dt>Your PC</dt><dd>{machineLine}</dd></div>
+            <div><dt>This computer</dt><dd>{machineLine}</dd></div>
           </dl>
           {/* On battery a laptop throttles its graphics card, and the score
               comes out low for a reason that has nothing to do with the model.
@@ -379,7 +398,7 @@ export function RunSheet({
 
           {hasSettings && (
             <details className="run-sheet-more" open={settingsOpen} onToggle={(event) => toggleSettings(event.currentTarget.open)}>
-              <summary>{offersSkills ? 'Change the questions, judge or skill tests' : 'Change the questions or the judge'}</summary>
+              <summary>{offersSkills ? 'Change the ranking, questions, judge or skill tests' : 'Change the questions or the judge'}</summary>
               <div className="run-sheet-more-body">
                 {showsFader && (
                   <BalanceFader
@@ -534,7 +553,7 @@ export function RunSheet({
                             {judgeModelOptions.map((m) => <option key={m} value={m}>{m}</option>)}
                           </select>
                         </label>
-                        {lineupModels.includes(judgeModel) ? (
+                        {isContestant(judgeModel) ? (
                           <p className="run-sheet-note warn" role="status">
                             {getFriendlyModelName(judgeModel)} is also being tested. A model marking its own answers can inflate
                             its score; pick a different judge if you can.

@@ -18,8 +18,9 @@ test('a model Windows will not let Ollama open is explained, not quoted', () => 
   const said = describeRunFailure(refused);
   assert.doesNotMatch(said.reason, /CreateFile|reported:/);
   assert.match(said.reason, /^Windows is blocking Ollama from opening this model's files\./);
-  // The copy that runs, by the name getFriendlyModelName gives it below.
-  assert.match(said.reason, /working copy may be in your list under its family and size, such as "Qwen35 9\.7B"/);
+  // The copy that runs, by the kind of name getFriendlyModelName gives it
+  // below. No example: the model that failed may be any model.
+  assert.match(said.reason, /working copy may be in your list under a shorter name made of its family and size\./);
   assert.match(said.reason, /Ollama 0\.35\.1 opens the model normally\.$/);
 });
 

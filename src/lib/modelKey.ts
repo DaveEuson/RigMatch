@@ -31,3 +31,30 @@ export function modelWeightsKey(model: string | null | undefined): string {
     .replace(/[-_:.](?:instruct|it|chat)(?=$|[-_:.])/g, '')
     .replace(/[^a-z0-9]/g, '');
 }
+
+/**
+ * Every way RigMatch can tell two installed models are the same weights.
+ *
+ * The name key misses copies whose names differ: Ollama's `qwen3:latest` and
+ * `qwen3:8b` are one download, and Ollama 0.40 lists a model a second time
+ * under a code name (`llamacpp:c97eb11d…`). Ollama's digest catches the first;
+ * family, size and quantization catch the second. Two models are the same
+ * when any of these match (sameModel). A fine-tune of the same size and
+ * quantization can match too, and then a judge steps aside for a model built
+ * on its own weights, which is the safe way to be wrong.
+ */
+export function modelIdentities(
+  model: string,
+  details?: { digest?: string; family?: string; parameterSize?: string; quantization?: string } | null,
+): string[] {
+  const identities = [modelWeightsKey(model)];
+  const digest = String(details?.digest ?? '').trim().toLowerCase().replace(/^sha256[:-]/, '');
+  if (digest) identities.push(`digest:${digest}`);
+  const build = [details?.family, details?.parameterSize, details?.quantization].map((part) => String(part ?? '').trim().toLowerCase());
+  if (build.every(Boolean)) identities.push(`build:${build.join('|')}`);
+  return identities.filter(Boolean);
+}
+
+export function sameModel(left: readonly string[], right: readonly string[]): boolean {
+  return left.some((identity) => right.includes(identity));
+}

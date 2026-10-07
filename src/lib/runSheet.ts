@@ -116,3 +116,60 @@ export function sheetButtonLabel({ quick, mode, skillsOnly, duration, measured }
   if (!duration) return action;
   return `${action} · ${duration}${quick ? '' : measured ? ' · measured here' : ' · estimate'}`;
 }
+
+/**
+ * The sheet's summary: what the run asks, and who marks it.
+ *
+ * Here rather than in the component so every case can be checked: the first
+ * version said "Rules check all three" for a quick check that was sent to the
+ * judge, and nothing ran the text to notice.
+ */
+export function sheetSummary({
+  quick, simpleRound, skillsOnly, questions, questionCount, judgedInPlan,
+  choice, judgeActive, judgeModel, cloudName, autoJudge, judgeFallback, sameAsContestant, ownPicture, nameOf,
+}: {
+  quick: boolean;
+  simpleRound?: 'chat' | 'code' | 'vision' | 'listening';
+  skillsOnly: boolean;
+  questions: BenchmarkQuestion[];
+  questionCount: number;
+  /** How many asked questions only a judge can mark. */
+  judgedInPlan: number;
+  choice: JudgeChoice;
+  /** Whether the judge picked can mark this run (a model installed, a key given). */
+  judgeActive: boolean;
+  judgeModel: string;
+  cloudName: string;
+  /** The local model that marks what rules cannot, when no judge is in use. */
+  autoJudge?: string;
+  /** A judge was picked but cannot mark this run. */
+  judgeFallback: boolean;
+  /** Whether a model is one of the contestants, under any name. */
+  sameAsContestant: (model: string) => boolean;
+  /** A picture round on a picture the person added, which has no answer key. */
+  ownPicture: boolean;
+  nameOf: (model: string) => string;
+}): { asked: string; marked: string } {
+  const openEnded = `${judgedInPlan} open-ended answer${judgedInPlan === 1 ? '' : 's'}`;
+  const setId = activeQuestionSet(questions);
+  const asked = quick ? '3 quick ones: a code question, an accuracy trap and a format check'
+    : simpleRound === 'vision' ? 'None. Each describes the same picture'
+      : simpleRound === 'listening' ? 'None. Each writes down the same short clip'
+        : skillsOnly ? 'None. Only the skill tests run'
+          : setId === 'custom' ? `${questionCount} of your own`
+            : `${questionCount} from the ${questionSetLabel(questions)} set${simpleRound === 'code' ? ', then each builds a small app' : ''}`;
+  const auto = autoJudge
+    ? `Rules, plus ${nameOf(autoJudge)} for the ${openEnded}${sameAsContestant(autoJudge) ? ` (another model marks ${nameOf(autoJudge)}'s own)` : ''}`
+    : `Rules. The ${openEnded} stay unmarked: nothing else installed can read them`;
+  const marked = simpleRound === 'vision'
+    ? ownPicture ? "Only for an answer that engages with it: your own picture has no answer key to check against" : 'Checked against what is in the picture'
+    : simpleRound === 'listening' ? 'Checked against the words in the clip'
+      : skillsOnly ? 'Each skill test checks its own result'
+        // Quick runs send no judge (App.tsx, startBenchmark): all three have a right answer.
+        : quick ? 'Rules check all three'
+          : choice === 'cloud' && judgeActive ? `${cloudName}, through OpenRouter`
+            : choice === 'local' && judgeActive ? `${nameOf(judgeModel)}, on this computer${sameAsContestant(judgeModel) ? '. It is also a contestant' : ''}`
+              : judgedInPlan === 0 ? 'Rules check every answer'
+                : judgeFallback ? `${auto}. The judge you picked isn't ready` : auto;
+  return { asked, marked };
+}

@@ -249,7 +249,7 @@ import { readHuggingFaceToken } from './lib/huggingFaceToken';
 import { goalById, presetIdForGoal } from './lib/goals';
 import { isDockWorthyPullProgress, modelMatchesTask, nextDockExpiry } from './lib/modelCatalog';
 import { chooseLineup, isSpecialistModel } from './lib/chooseLineup';
-import { modelWeightsKey } from './lib/modelKey.ts';
+import { modelIdentities, sameModel } from './lib/modelKey.ts';
 import { labJudgeFor } from './lib/labJudge.ts';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLineupLive } from './lib/videoGenRunner';
@@ -910,8 +910,8 @@ function App() {
   const judgeEndpoints = useMemo(
     () => Object.fromEntries(judgeCandidateRows.map((row) => [
       row.displayName,
-      { provider: row.localProvider ?? 'ollama', baseUrl: row.localBaseUrl, weights: modelWeightsKey(row.displayName) },
-    ])) as Record<string, { provider: LocalModelProvider; baseUrl?: string; weights?: string }>,
+      { provider: row.localProvider ?? 'ollama', baseUrl: row.localBaseUrl, weights: modelIdentities(row.displayName, row.installedModel) },
+    ])) as Record<string, { provider: LocalModelProvider; baseUrl?: string; weights?: string[] }>,
     [judgeCandidateRows],
   );
   const {
@@ -928,12 +928,15 @@ function App() {
     if (!effectiveJudge || effectiveJudge.provider !== 'local') return effectiveJudge;
     return { ...effectiveJudge, baseUrl: judgeEndpoints[effectiveJudge.model]?.baseUrl ?? ollama.baseUrl };
   }, [effectiveJudge, judgeEndpoints, ollama.baseUrl]);
+  /** Every identity of an installed model, so a copy under another name is known to be the same weights. */
+  const identityOf = useCallback((name: string) => judgeEndpoints[name]?.weights ?? modelIdentities(name), [judgeEndpoints]);
   /** The judge for one contestant's app or code: never itself, unless the person chose it. */
   const skillJudgeFor = useCallback((model: string) => labJudgeFor(model, skillTestJudge, {
     chosen: judgeChosen,
     candidates: judgeModelOptions,
     baseUrlOf: (name) => judgeEndpoints[name]?.baseUrl ?? ollama.baseUrl,
-  }), [skillTestJudge, judgeChosen, judgeModelOptions, judgeEndpoints, ollama.baseUrl]);
+    identityOf,
+  }), [skillTestJudge, judgeChosen, judgeModelOptions, judgeEndpoints, ollama.baseUrl, identityOf]);
   // Where a model's Labs test goes: its own program's address. Main reads an
   // LM Studio one and asks LM Studio, so App Builder, Code and picture reading
   // run where the model lives instead of being sent to Ollama.
@@ -1516,6 +1519,16 @@ function App() {
     const rescored = applyBalance(Object.fromEntries(wizardShowResult.results.map((score) => [score.model, score])), wizardBalance);
     return Object.values(rescored).sort(compareTestedModelScores);
   }, [wizardShowResult, wizardBalance]);
+  /**
+   * The show as the report bar and the report tell it. In Simple Mode that is
+   * the Winner screen's order: after "Rank by", the crown moved while the bar
+   * still said the Balanced winner "came first" and the report ranked it top.
+   */
+  const shownShowResult = useMemo(() => (
+    uiMode === 'beginner' && listTestResult && wizardShowResult === listTestResult && wizardShowRanked?.length
+      ? { ...listTestResult, winner: wizardShowRanked[0].model, results: wizardShowRanked }
+      : listTestResult
+  ), [uiMode, listTestResult, wizardShowResult, wizardShowRanked]);
 
   // What the show will ask, said in the Pick footer beside "Change".
   const wizardPlanLine = wizardRound === 'vision' ? 'One picture to describe.'
@@ -2180,6 +2193,10 @@ function App() {
     activeBenchmarkProgressIdRef.current = progressId;
     const questions = questionsOverride ?? benchmarkPromptPlan;
     const count = questionsOverride ? questionsOverride.length : benchmarkQuestionCount;
+    // A quick check's three questions all have a right answer, and the sheet
+    // says rules mark them and nothing leaves the computer. It used to send
+    // the judge anyway, an OpenRouter one included.
+    const quick = questionsOverride === QUICK_CHECK_QUESTIONS;
 
     if (hostBlocker) {
       setRunProgress({
@@ -2226,10 +2243,8 @@ function App() {
         questionCount: count,
         questions,
         progressId,
-        qualityMode: effectiveJudge ? 'judge' : 'heuristic',
-        judgeModel: effectiveJudge?.model,
-        judgeProvider: effectiveJudge?.provider,
-        judgeApiKey: effectiveJudge?.apiKey,
+        qualityMode: effectiveJudge && !quick ? 'judge' : 'heuristic',
+        ...(quick ? {} : { judgeModel: effectiveJudge?.model, judgeProvider: effectiveJudge?.provider, judgeApiKey: effectiveJudge?.apiKey }),
         autoJudgeModels,
         judgeEndpoints,
       }), modelToTest);
@@ -2299,6 +2314,10 @@ function App() {
         },
       }).catch(() => undefined);
       void loadLogs();
+      // In plain words, as the show says it. A single test passed Ollama's raw
+      // text on, so 0.40's "untrusted mount point" explanation never reached it.
+      const failure = describeRunFailure(errorMessage, runtime.provider === 'lm-studio' ? 'LM Studio' : 'Ollama');
+      if (failure.kind === 'stopped') failure.reason = 'You stopped the test.';
       setRunProgress({
         progressId,
         mode: 'single',
@@ -2308,9 +2327,10 @@ function App() {
         completed: 0,
         total: 1,
         percent: 0,
-        message: errorMessage,
+        message: failure.reason,
+        failureKind: failure.kind,
       });
-      tellUser(`The test stopped: ${errorMessage}`);
+      tellUser(failure.kind === 'stopped' ? failure.reason : `The test stopped. ${failure.reason}`);
       playCue('buzz');
       // Re-read the provider. The commonest reason a run dies is that Ollama
       // went away mid-test, and nothing here updated ollama.ready — so the app
@@ -3054,6 +3074,8 @@ function App() {
     // The quick check runs the lineup on its three questions instead of the set.
     const plan = questionsOverride ?? benchmarkPromptPlan;
     const count = questionsOverride ? questionsOverride.length : benchmarkQuestionCount;
+    // Rules only, and nothing off the machine: see startBenchmark.
+    const quick = questionsOverride === QUICK_CHECK_QUESTIONS;
     const runnableRows = shortlistedRows.filter((row) => row.installed && getPlatformFit(row.displayName, system.platform).compatible).slice(0, 5);
     const hostBlocker = getLineupBenchmarkBlocker(runnableRows, selectedHost, ollama);
     const listRunId = createRunProgressId('speed-date');
@@ -3172,10 +3194,8 @@ function App() {
           questionCount: count,
           questions: plan,
           progressId,
-          qualityMode: effectiveJudge ? 'judge' : 'heuristic',
-          judgeModel: effectiveJudge?.model,
-          judgeProvider: effectiveJudge?.provider,
-          judgeApiKey: effectiveJudge?.apiKey,
+          qualityMode: effectiveJudge && !quick ? 'judge' : 'heuristic',
+          ...(quick ? {} : { judgeModel: effectiveJudge?.model, judgeProvider: effectiveJudge?.provider, judgeApiKey: effectiveJudge?.apiKey }),
           autoJudgeModels,
           judgeEndpoints,
           }), row.displayName);
@@ -3492,6 +3512,8 @@ function App() {
     const listeningAudio = jobs.some((job) => job.kind === 'listening') ? await getListeningTestAudio() : '';
 
     const demos: DemoArtifact[] = [];
+    /** Contestants whose code nobody else installed could mark. */
+    const unjudgedCode: string[] = [];
     // Filled by the first video job, which renders every video model at once.
     let videoOutcomes: LineupOutcome[] | null = null;
     stopSkillRef.current = false;
@@ -3530,6 +3552,13 @@ function App() {
           unsubscribe?.();
         }
       } else if (job.kind === 'code') {
+        // Only a judge can mark code, and one picked automatically never marks
+        // its own (labJudgeFor). With nobody else installed the run used to
+        // fail before writing a line, save nothing and still report success.
+        if (!skillJudgeFor(job.model)) {
+          unjudgedCode.push(job.model);
+          continue;
+        }
         // Stream the model writing the solution, then judge it (judge-only).
         const streamId = `code-${Date.now()}-${index}`;
         activeSkillStreamIdRef.current = streamId;
@@ -3696,10 +3725,14 @@ function App() {
     } else if (!stopSkillRef.current) {
       setActivity(`Skill tests finished (${jobs.length} run${jobs.length === 1 ? '' : 's'}). Lab Grades are saved in Settings → Advanced Lab.`);
     }
+    if (unjudgedCode.length) {
+      const names = unjudgedCode.map(getFriendlyModelName).join(', ');
+      tellUser(`The code challenge skipped ${names}: no other model on this computer can mark its code, and a model marking its own grades itself generously. Install a second model, or pick a judge yourself.`);
+    }
     // pictureJudge checks the pictures and clips, and modelRows says which
     // models can hear; without them here the run would use whatever was
     // installed when this callback was last built.
-  }, [ollama.baseUrl, labBaseUrl, skillTestSelection, skillJudgeFor, modelRows, videoMachine, pictureJudge]);
+  }, [ollama.baseUrl, labBaseUrl, skillTestSelection, skillJudgeFor, modelRows, videoMachine, pictureJudge, tellUser]);
 
   /**
    * Chat asking RigMatch to test a model.
@@ -4449,7 +4482,12 @@ function App() {
     // it, so it is text here, with the one thing a person can do about it.
     <>
       <i className="running-dot" aria-hidden="true" />
-      <span title="Started outside this window, by RigMatch Chat, a script, or before the window reloaded">{formatRunningTest(externalBenchmark)}</span>
+      {/* Where it came from is said aloud too: a title reaches only a mouse.
+          Not "RigMatch Chat": Chat's tests run in this window, on its own line. */}
+      <span title="Started outside this window: by a script, or before the window reloaded">
+        {formatRunningTest(externalBenchmark)}
+        <span className="sr-only"> (started outside this window)</span>
+      </span>
       {externalBenchmark.progressId && (
         <button
           type="button"
@@ -4683,7 +4721,12 @@ function App() {
           onChatWithWinner={openChatWithWinner}
           onOpenScorecard={() => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('history'); }}
           onRunAgain={() => undefined}
-          onSwitchToAdvanced={() => { setCameFromSimple(false); selectUiMode('advanced'); }}
+          onSwitchToAdvanced={() => {
+            setCameFromSimple(false);
+            // Land on the model the Winner screen crowned, which "Rank by" can move.
+            if (wizardWinner?.model) setSelectedModel(wizardWinner.model);
+            selectUiMode('advanced');
+          }}
           initialStep={wizardStep}
           onStepChange={(next) => { setWizardStep(next); setSimpleNotice(null); setSimpleNoticeAction(null); }}
           onShareScore={() => setShareWinnerOpen(true)}
@@ -5121,12 +5164,12 @@ function App() {
         </div>
       )}
       <ActivityToast message={activity} />
-      {reportReady && !reportOpen && listTestResult && (
+      {reportReady && !reportOpen && shownShowResult && (
         <div className="report-ready-bar" role="status">
           <Trophy aria-hidden="true" />
           <span>
-            Report ready: {listTestResult.results.length} model{listTestResult.results.length === 1 ? '' : 's'} compared,
-            {' '}{getFriendlyModelName(listTestResult.winner)} came first
+            Report ready: {shownShowResult.results.length} model{shownShowResult.results.length === 1 ? '' : 's'} compared,
+            {' '}{getFriendlyModelName(shownShowResult.winner)} came first
           </span>
           <button type="button" className="btn btn-line btn-sm" onClick={() => setReportOpen(true)}>
             See the report
@@ -5140,7 +5183,7 @@ function App() {
         // A row in Activity opens that stored run; finishing a run opens the
         // one that just happened. Both render through the same modal.
         const stored = openReportId ? runReports.find((entry) => entry.id === openReportId) : null;
-        const result = stored ? { winner: stored.winner, results: stored.results } : listTestResult;
+        const result = stored ? { winner: stored.winner, results: stored.results } : shownShowResult;
         if (!result) return null;
         const benchmarks = stored?.transcripts ?? benchmarkByModel;
         const rows = stored
@@ -5241,7 +5284,16 @@ function App() {
           onDownloadMissing={() => requestThirdPartyModelDownloads(shortlistedRows)}
           onChangeQuestionCount={setBenchmarkQuestionCount}
           onChangeQuestions={setBenchmarkQuestions}
-          autoJudgeModel={autoJudgeModels.find((m) => modelWeightsKey(m) !== modelWeightsKey(pendingSingleModel ?? selectedModel)) ?? ''}
+          // A test: the first judge that is not the model. A show: the first,
+          // who marks every contestant but itself. It was worked out against
+          // whatever model happened to be selected.
+          autoJudgeModel={pendingRunMode === 'single'
+            ? autoJudgeModels.find((m) => !sameModel(identityOf(m), identityOf(pendingSingleModel ?? selectedModel))) ?? ''
+            : autoJudgeModels[0] ?? ''}
+          sameAsContestant={(model: string) => (pendingRunMode === 'single'
+            ? [pendingSingleModel ?? selectedModel]
+            : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName)
+          ).some((contestant) => sameModel(identityOf(contestant), identityOf(model)))}
           goalPresetId={presetIdForGoal(runGoal)}
           goalDesire={runGoal ? goalById(runGoal)?.desire.toLowerCase() : undefined}
           qualityMode={qualityMode}
