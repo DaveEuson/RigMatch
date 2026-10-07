@@ -210,6 +210,10 @@ export type BenchmarkPromptResult = {
    * and its timing (a refusal in milliseconds) is left out of speed.
    */
   toolsUnsupported?: boolean;
+  /** The judge's one-sentence reason for its mark, when a judge marked it. */
+  judgeReason?: string;
+  /** Why a judge was asked and gave no mark: unreachable, or unreadable. */
+  judgeIssue?: string;
 };
 
 export type BenchmarkResult = {

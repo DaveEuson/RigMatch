@@ -191,6 +191,19 @@ const BENCHMARK_GENERATE_OPTIONS = Object.freeze({
   num_predict: 300,
   num_ctx: 2048,
 });
+/**
+ * The answer allowance for the running test: 300 tokens, as every show asks,
+ * unless a scripted run asks for more (request.answerTokens, 64 to 2,000) so
+ * a long answer is judged whole. The Ajax report does: at 300, six of the
+ * stock model's ten "harmless but edgy" answers were cut off, and a judge
+ * marked them incomplete. The context grows with it, so the question and the
+ * whole answer still fit. The app never sets it.
+ */
+function benchmarkGenerateOptions() {
+  const tokens = activeBenchmark?.answerTokens;
+  if (!tokens) return BENCHMARK_GENERATE_OPTIONS;
+  return { ...BENCHMARK_GENERATE_OPTIONS, num_predict: tokens, num_ctx: Math.max(BENCHMARK_GENERATE_OPTIONS.num_ctx, tokens + 1024) };
+}
 const BENCHMARK_WARMUP_OPTIONS = Object.freeze({
   temperature: 0,
   seed: 1,
@@ -3476,6 +3489,8 @@ async function runBenchmark(request = {}, sender) {
     snapshot: null,
     // What LM Studio had loaded before this run's warm-up; null until then.
     lmStudioKeep: null,
+    // A scripted run's longer answer allowance (benchmarkGenerateOptions).
+    answerTokens: Number.isInteger(request.answerTokens) ? Math.max(64, Math.min(2000, request.answerTokens)) : null,
   };
   activeBenchmarkAbort = new AbortController();
   broadcastBenchmarkStatus();
@@ -3619,7 +3634,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         scored: false,
         keepAlive: BENCHMARK_KEEP_ALIVE,
       },
-      options: BENCHMARK_GENERATE_OPTIONS,
+      options: benchmarkGenerateOptions(),
       prompts: benchmarkPrompts.map((prompt) => ({
         id: prompt.id,
         label: prompt.label,
@@ -3665,6 +3680,11 @@ async function runBenchmarkInner(request = {}, sender, signal) {
     // and reuse it across the repeated timing runs — one judge call per question
     // instead of one per run keeps cost and time in check.
     let promptJudgeScore = null;
+    // Why the judge gave that mark, in its own sentence, or why there is no
+    // mark: it was parsed and thrown away, so a surprising score could not be
+    // checked against the judge's reasoning.
+    let promptJudgeReason = '';
+    let promptJudgeIssue = null;
     sendProgress({
       phase: 'prompt-start',
       promptIndex,
@@ -3782,7 +3802,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
           generate: async (judgePrompt) => {
             try {
               return await (useJudge && judgeProvider === 'openrouter'
-                ? openRouterGenerateText(judgeApiKey, judgeModel, judgePrompt, 200, signal)
+                ? openRouterGenerateText(judgeApiKey, judgeModel, judgePrompt, 400, signal)
                 : runLocalJudge(judgeEndpoint(judgeName), judgeName, judgePrompt, signal));
             } catch (error) {
               judgeFailure = error;
@@ -3791,6 +3811,8 @@ async function runBenchmarkInner(request = {}, sender, signal) {
           },
         });
         promptJudgeScore = verdict ? verdict.score : null;
+        promptJudgeReason = verdict?.reason ?? '';
+        promptJudgeIssue = verdict ? null : judgeFailure ? `The judge could not be reached: ${getLogErrorMessage(judgeFailure)}` : 'The judge answered, but not with a score RigMatch could read.';
         // A judge that timed out or could not be reached will do the same on
         // every answer after this one, at up to two minutes each: a hung judge
         // held a question for 120s while the time-left estimate climbed, and
@@ -3913,6 +3935,8 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       evalDurationMs: Math.round(median(runs.map((run) => run.evalDurationMs))),
       thinkingDisabled: runs.every((run) => run.thinkingDisabled),
       ...(runs.every((run) => run.toolsUnsupported) ? { toolsUnsupported: true } : {}),
+      ...(promptJudgeReason ? { judgeReason: promptJudgeReason } : {}),
+      ...(promptJudgeIssue ? { judgeIssue: promptJudgeIssue } : {}),
     });
     const completedPrompt = promptResults[promptResults.length - 1];
     sendProgress({
@@ -4264,7 +4288,7 @@ async function runBenchmarkPromptParity(baseUrl, model, prompt, signal) {
           model,
           prompt,
           keepAlive: BENCHMARK_KEEP_ALIVE,
-          options: BENCHMARK_GENERATE_OPTIONS,
+          options: benchmarkGenerateOptions(),
         })),
       },
       BENCHMARK_TIMEOUT_MS,
@@ -4291,7 +4315,7 @@ async function runBenchmarkPromptParity(baseUrl, model, prompt, signal) {
           prompt,
           stream: false,
           keep_alive: BENCHMARK_KEEP_ALIVE,
-          options: BENCHMARK_GENERATE_OPTIONS,
+          options: benchmarkGenerateOptions(),
         }),
       },
       BENCHMARK_TIMEOUT_MS,
@@ -4350,7 +4374,7 @@ async function runBenchmarkToolPrompt(baseUrl, model, prompt, signal, provider) 
         model,
         messages,
         keepAlive: BENCHMARK_KEEP_ALIVE,
-        options: BENCHMARK_GENERATE_OPTIONS,
+        options: benchmarkGenerateOptions(),
         disableThinking: thinkingDisabled,
       })),
     },
@@ -4412,7 +4436,7 @@ async function runBenchmarkToolPrompt(baseUrl, model, prompt, signal, provider) 
  * through the OpenAI route, timed by the clock, which is all that route gives.
  */
 async function runLmStudioBenchmarkPrompt(baseUrl, model, prompt, signal) {
-  const maxOutputTokens = BENCHMARK_GENERATE_OPTIONS.num_predict;
+  const maxOutputTokens = benchmarkGenerateOptions().num_predict;
   const native = await lmStudioNativeChat(baseUrl, model, prompt, signal, maxOutputTokens);
   if (native) return native;
 
@@ -4463,7 +4487,7 @@ async function lmStudioNativeChat(baseUrl, model, prompt, signal, maxOutputToken
         model,
         prompt,
         maxOutputTokens,
-        contextLength: BENCHMARK_GENERATE_OPTIONS.num_ctx,
+        contextLength: benchmarkGenerateOptions().num_ctx,
         reasoningOff,
       })),
     },
@@ -4502,7 +4526,7 @@ async function lmStudioToolChat(baseUrl, model, messages, signal) {
     messages: toOpenAiToolMessages(messages),
     tools: AGENT_TOOLS,
     temperature: 0,
-    max_tokens: BENCHMARK_GENERATE_OPTIONS.num_predict,
+    max_tokens: benchmarkGenerateOptions().num_predict,
     stream: false,
   });
   // Only a missing route falls back. A timeout or a model that failed to load
