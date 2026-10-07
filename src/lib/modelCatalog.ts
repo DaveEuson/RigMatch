@@ -566,16 +566,16 @@ export function isBenchmarkForModel(
     .some((key) => normalizeModelKey(key) === benchmarkKey);
 }
 
-export function formatBenchmarkBanner(status: BenchmarkStatus): string {
-  const model = status.model ?? 'a model';
+/** The load strip's words for a test this window didn't start: "Testing qwen3.5:9b · question 3 of 10". */
+export function formatRunningTest(status: BenchmarkStatus): string {
+  const parts: string[] = [`Testing ${status.model ?? 'a model'}`];
   const snap = status.snapshot;
-  const parts: string[] = [`Benchmark running — ${model}`];
   if (snap) {
     if (typeof snap.promptIndex === 'number' && typeof snap.promptTotal === 'number' && snap.promptTotal > 0) {
-      parts.push(`question ${Math.min(snap.promptTotal, snap.promptIndex + 1)}/${snap.promptTotal}`);
+      parts.push(`question ${Math.min(snap.promptTotal, snap.promptIndex + 1)} of ${snap.promptTotal}`);
     }
     if (typeof snap.runIndex === 'number' && typeof snap.runTotal === 'number' && snap.runTotal > 1) {
-      parts.push(`run ${snap.runIndex + 1}/${snap.runTotal}`);
+      parts.push(`run ${snap.runIndex + 1} of ${snap.runTotal}`);
     }
   }
   return parts.join(' · ');
