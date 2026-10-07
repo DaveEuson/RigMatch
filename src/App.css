@@ -12595,7 +12595,6 @@ a.whats-next-support:hover {
   /* State indicators. Each keeps a visible resting form: the dot stays solid,
      the caret stays drawn, the gold text stays gold. */
   .live-mini-dot,
-  .benchmark-running-dot,
   .live-build-pulse,
   .live-build-caret {
     animation: none;
