@@ -24,6 +24,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .run-sheet { animation: none; }
+  .run-sheet-more > summary::before { transition: none; }
 }
 
 .run-sheet-head {
@@ -51,17 +52,45 @@
   overflow-y: auto;
 }
 
-.run-sheet-warning {
-  display: flex;
-  align-items: flex-start;
+/* What the run is, in four lines: what it asks, who marks it, what follows,
+   and what it asks of the machine. A first-timer reads this and presses Start. */
+.run-sheet-summary { display: grid; gap: var(--s2); margin: 0; }
+.run-sheet-summary > div {
+  display: grid;
+  grid-template-columns: 7em minmax(0, 1fr);
+  align-items: baseline;
   gap: var(--s3);
-  padding: var(--s3) var(--s4);
-  border: 1px solid rgba(var(--gold-rgb), 0.35);
-  border-radius: var(--r-control);
-  background: rgba(var(--gold-rgb), 0.08);
 }
-.run-sheet-warning svg { flex: none; margin-top: 1px; }
-.run-sheet-warning p { margin: 0; }
+.run-sheet-summary dt { color: var(--muted); }
+.run-sheet-summary dd { max-width: 62ch; margin: 0; color: var(--text-strong); }
+
+/* Every setting, folded under one link. Advanced Mode remembers it open. */
+.run-sheet-more { border-top: 1px solid var(--line); }
+.run-sheet-more > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: fit-content;
+  min-height: var(--target-min);
+  margin-top: var(--s2);
+  color: var(--text-strong);
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+.run-sheet-more > summary::-webkit-details-marker { display: none; }
+.run-sheet-more > summary::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--t-base);
+}
+.run-sheet-more[open] > summary::before { transform: rotate(45deg); }
+.run-sheet-more > summary:focus-visible { border-radius: var(--r-control); outline: 2px solid var(--focus); outline-offset: 2px; }
+.run-sheet-more-body { display: flex; flex-direction: column; gap: var(--s5); padding-top: var(--s4); }
 .run-sheet .gpu-contention-note {
   margin: 0;
   padding: var(--s3) var(--s4);
@@ -209,6 +238,7 @@
 
 @media (max-width: 640px) {
   .run-sheet-head, .run-sheet-body, .run-sheet-foot { padding-inline: var(--s4); }
+  .run-sheet-summary > div { grid-template-columns: 1fr; gap: 0; }
   .run-sheet-questions li { grid-template-columns: 2em minmax(0, 1fr) auto; }
   .run-sheet-q-type { display: none; }
   .run-sheet-q-mark { min-width: 0; }

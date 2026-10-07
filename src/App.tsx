@@ -1495,6 +1495,19 @@ function App() {
     return listTestResult.results.some((result) => picked.has(result.model)) ? listTestResult : null;
   }, [listTestResult, shortlistedRows]);
 
+  /**
+   * That result in the order the Winner screen's "Rank by" asks for.
+   *
+   * The show never sends the balance to the test, so the old "What matters
+   * more?" in the sheet only changed the label beside the score: a chat show
+   * always crowned at Balanced. At Balanced this is the show's own order.
+   */
+  const wizardShowRanked = useMemo(() => {
+    if (!wizardShowResult) return null;
+    const rescored = applyBalance(Object.fromEntries(wizardShowResult.results.map((score) => [score.model, score])), wizardBalance);
+    return Object.values(rescored).sort(compareTestedModelScores);
+  }, [wizardShowResult, wizardBalance]);
+
   // What the show will ask, said in the Pick footer beside "Change".
   const wizardPlanLine = wizardRound === 'vision' ? 'One picture to describe.'
     : wizardRound === 'listening' ? 'One recording to write down.'
@@ -1510,10 +1523,9 @@ function App() {
           ? { model: top.model, score: top.score, scoreLabel: String(top.score), grade: top.grade }
           : null;
       })()
-      : wizardShowResult
+      : wizardShowRanked
       ? (() => {
-        const top = wizardShowResult.results.find((result) => result.model === wizardShowResult.winner)
-          ?? wizardShowResult.results[0];
+        const top = wizardShowRanked[0];
         return top
           ? { model: top.model, score: top.total, scoreLabel: formatMatchScore(top), grade: top.grade, measures: matchMeasures(top) }
           : null;
@@ -1529,7 +1541,7 @@ function App() {
         measures: matchMeasures(topRigPick.score),
       }
       : null),
-    [topRigPick, wizardSkillBoard, wizardShowResult],
+    [topRigPick, wizardSkillBoard, wizardShowRanked],
   );
 
   // The winner the screen shows, not the Top Pick. After a skill round, or
@@ -1575,8 +1587,8 @@ function App() {
             : asked ? `${formatMatchScore(asked)} Match on the questions` : undefined,
         };
       })
-      : wizardShowResult
-      ? wizardShowResult.results.map((score) => ({
+      : wizardShowRanked
+      ? wizardShowRanked.map((score) => ({
         model: score.model,
         name: getFriendlyModelName(score.model),
         scoreLabel: formatMatchScore(score),
@@ -1599,7 +1611,7 @@ function App() {
         total: score.total,
         grade: score.grade,
       }))),
-    [shortlistedRows, modelScores, wizardSkillBoard, wizardChannel, wizardShowResult],
+    [shortlistedRows, modelScores, wizardSkillBoard, wizardChannel, wizardShowRanked],
   );
   const lineupSession = useVideoLineupSession();
   /** Whatever ComfyUI is rendering for RigMatch now, wherever it was started. */
@@ -4580,13 +4592,13 @@ function App() {
           runProgress={wizardRunProgress}
           onDreamChange={setWizardDream}
           round={wizardRound}
-          onStartShow={(begin) => {
+          onStartShow={(begin, options) => {
             // Through the sheet like every run. The wizard moves to its show
             // step only when the sheet is confirmed.
             simpleBeginRef.current = begin;
             setPendingSingleModel(null);
             setSheetQuick(false);
-            setSheetEditing(false);
+            setSheetEditing(Boolean(options?.settingsOpen));
             setSheetSimple(true);
             setPendingRunMode('speed-date');
           }}

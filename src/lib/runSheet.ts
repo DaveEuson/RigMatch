@@ -84,11 +84,13 @@ export function questionSetLabel(questions: BenchmarkQuestion[]): string {
 
 export const GENERAL_SET_DESCRIPTION = 'Mixed questions covering JSON output, instruction following and everyday tasks.';
 
-export const COUNT_OPTIONS: Array<{ count: BenchmarkQuestionCount; name: string; perModel: string; minutes: number }> = [
-  { count: 10, name: 'Quick', perModel: 'about 3 min a model', minutes: 3 },
-  { count: 20, name: 'Standard', perModel: 'about 5 min', minutes: 5 },
-  { count: 50, name: 'Deep', perModel: 'about 15 min', minutes: 15 },
-  { count: 100, name: 'Full', perModel: '30 min or more', minutes: 30 },
+// No names: "10 · Quick" sat beside a "Quick check" of 3 questions, and its
+// "about 3 min a model" beside a Start button saying "about 15 min".
+export const COUNT_OPTIONS: Array<{ count: BenchmarkQuestionCount; perModel: string; minutes: number }> = [
+  { count: 10, perModel: 'about 3 min a model', minutes: 3 },
+  { count: 20, perModel: 'about 5 min a model', minutes: 5 },
+  { count: 50, perModel: 'about 15 min a model', minutes: 15 },
+  { count: 100, perModel: '30 min or more a model', minutes: 30 },
 ];
 
 /** A quick check is three short questions: about a minute a model. */

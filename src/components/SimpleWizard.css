@@ -573,6 +573,10 @@
 .sw-winner-measures dt { color: var(--muted); font-size: var(--fs-ui); }
 .sw-winner-measures dd { margin: 0; color: var(--text-strong); font: 500 20px / 1 var(--figure); }
 
+/* Speed or accuracy, asked after the show: the crown and the board re-rank as it changes. */
+.sw-rank-by { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: var(--s3); }
+.sw-rank-by > span { margin-right: var(--s1); color: var(--muted); }
+
 .sw-winner-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s4); }
 .sw-winner-chat, .sw-winner-door { min-height: 48px; padding: 0 var(--s5); font-size: 16px; }
 .sw-winner-chat { font-size: 17px; }

@@ -60,7 +60,8 @@ test('Setup is one button that walks the whole step', () => {
 test('the Pick footer says what the show will ask, and Change opens the run sheet', () => {
   assert.match(app, /planLine=\{wizardPlanLine\}/);
   assert.match(app, /questionSetLabel\(benchmarkQuestions\)/);
-  assert.match(wizard, /onChangePlan=\{skipDownload && pickDone \? startShow : undefined\}/);
+  // The same sheet as Start, opened with its settings unfolded (runSheet.test.mjs).
+  assert.match(wizard, /onChangePlan=\{skipDownload && pickDone \? changePlan : undefined\}/);
   assert.equal(questionSetLabel(DEFAULT_BENCHMARK_QUESTIONS), 'General');
   assert.equal(questionSetLabel(questionsForSet('coding')), 'Coding');
   assert.equal(questionSetLabel([{ ...DEFAULT_BENCHMARK_QUESTIONS[0], prompt: 'Something else' }]), 'your questions');
