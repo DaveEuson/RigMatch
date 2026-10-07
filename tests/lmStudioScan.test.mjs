@@ -36,10 +36,12 @@ test('a different size or a newer release is a different model', () => {
 });
 
 test('a model is never judged by its own copy in the other provider', () => {
-  assert.match(main, /const ownWeights = request\.judgeEndpoints\?\.\[model\]\?\.weights;/);
-  assert.match(main, /name !== model && !\(ownWeights && request\.judgeEndpoints\?\.\[name\]\?\.weights === ownWeights\)/);
-  assert.match(app, /weights: modelWeightsKey\(row\.displayName\)/, 'the renderer sends each model\'s weights key');
-  assert.match(app, /autoJudgeModels\.find\(\(m\) => modelWeightsKey\(m\) !== modelWeightsKey\(pendingSingleModel \?\? selectedModel\)\)/,
+  // Every identity of a model (name key, digest, build), and a plain string
+  // from an older renderer still compares.
+  assert.match(main, /const identities = \(name\) => \[\]\.concat\(request\.judgeEndpoints\?\.\[name\]\?\.weights \?\? \[\]\)\.filter\(Boolean\);/);
+  assert.match(main, /name !== model && !identities\(name\)\.some\(\(identity\) => ownWeights\.includes\(identity\)\)/);
+  assert.match(app, /weights: modelIdentities\(row\.displayName, row\.installedModel\)/, 'the renderer sends each model\'s identities');
+  assert.match(app, /autoJudgeModels\.find\(\(m\) => !sameModel\(identityOf\(m\), identityOf\(pendingSingleModel \?\? selectedModel\)\)\)/,
     'and the run sheet names the judge the run will use');
 });
 

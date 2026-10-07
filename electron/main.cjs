@@ -3593,10 +3593,15 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   // judge up front would guarantee self-grading for one of them.
   // Nor the same weights in the other provider: the renderer sends each
   // installed model's weights key (modelWeightsKey) in judgeEndpoints.
-  const ownWeights = request.judgeEndpoints?.[model]?.weights;
+  // The renderer sends every identity of each model (modelIdentities: name
+  // key, digest, build), so `qwen3:latest` is known to be `qwen3:8b`, and a
+  // code-named copy from Ollama 0.40 is known to be its model. A plain string
+  // from an older renderer still compares.
+  const identities = (name) => [].concat(request.judgeEndpoints?.[name]?.weights ?? []).filter(Boolean);
+  const ownWeights = identities(model);
   const autoJudgeModel = (Array.isArray(request.autoJudgeModels) ? request.autoJudgeModels : [])
     .map((name) => String(name || '').trim())
-    .find((name) => name && name !== model && !(ownWeights && request.judgeEndpoints?.[name]?.weights === ownWeights)) || '';
+    .find((name) => name && name !== model && !identities(name).some((identity) => ownWeights.includes(identity))) || '';
   const autoJudgeUnmarkable = !useJudge && Boolean(autoJudgeModel);
   const judgeEndpoint = (name) => resolveJudgeEndpoint(request.judgeEndpoints, name, baseUrl, provider);
   const sendProgress = (update) => {

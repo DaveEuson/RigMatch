@@ -223,5 +223,34 @@ test('Labs never has an automatic judge mark its own app and code', async () => 
   // Every App Builder and Code run asks for its contestant's judge.
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf-8');
   assert.doesNotMatch(app, /skillTestJudge \? \{ \.\.\.skillTestJudge/, 'a skill run still hands every contestant the same judge');
-  assert.equal(app.match(/skillJudgeFor\((?:job\.)?model\)/g)?.length, 3, 'App Builder, Code and the improve pass');
+  // App Builder, the improve pass, and Code twice: once to skip a model
+  // nobody else can mark, once to mark it.
+  assert.equal(app.match(/skillJudgeFor\((?:job\.)?model\)/g)?.length, 4, 'App Builder, Code and the improve pass');
+  assert.match(app, /if \(!skillJudgeFor\(job\.model\)\) \{\s*unjudgedCode\.push\(job\.model\);\s*continue;/);
+  assert.match(app, /tellUser\(`The code challenge skipped \$\{names\}: no other model on this computer can mark its code/);
+});
+
+test('a copy of a model under another name is still that model', async () => {
+  // Bug scan, 2026-10-07: names alone missed Ollama's `qwen3:latest` beside
+  // `qwen3:8b` (one download) and 0.40's code-named copy of qwen3.5:9b.
+  const { modelIdentities, sameModel } = await import('../src/lib/modelKey.ts');
+  const { labJudgeFor } = await import('../src/lib/labJudge.ts');
+  const installed = {
+    'qwen3:8b': { digest: '500a1f067a9f', family: 'qwen3', parameterSize: '8.2B', quantization: 'Q4_K_M' },
+    'qwen3:latest': { digest: '500a1f067a9f', family: 'qwen3', parameterSize: '8.2B', quantization: 'Q4_K_M' },
+    'qwen3.5:9b': { digest: '9cda952e5d8f', family: 'qwen35', parameterSize: '9.7B', quantization: 'Q4_K_M' },
+    'llamacpp:c97eb11d70b1acdc88af01eef566c1fe4f7fbe93eb1afc06871132f293ff425a': { digest: 'c97eb11d70b1', family: 'qwen35', parameterSize: '9.7B', quantization: 'Q4_K_M' },
+    'gemma4:e4b': { digest: 'c6eb396dbd59', family: 'gemma4', parameterSize: '8.0B', quantization: 'Q4_K_M' },
+  };
+  const identityOf = (name) => modelIdentities(name, installed[name]);
+  assert.ok(sameModel(identityOf('qwen3:8b'), identityOf('qwen3:latest')), 'one download under two tags');
+  assert.ok(sameModel(identityOf('qwen3.5:9b'), identityOf('llamacpp:c97eb11d70b1acdc88af01eef566c1fe4f7fbe93eb1afc06871132f293ff425a')), 'a code-named copy');
+  assert.ok(sameModel(modelIdentities('qwen3:8b'), modelIdentities('qwen/qwen3-8b')), 'Ollama and LM Studio, by name');
+  assert.ok(!sameModel(identityOf('qwen3:8b'), identityOf('gemma4:e4b')));
+
+  const auto = { provider: 'local', model: 'qwen3:latest' };
+  const pick = labJudgeFor('qwen3:8b', auto, {
+    chosen: false, candidates: ['qwen3:latest', 'qwen3:8b', 'gemma4:e4b'], baseUrlOf: () => 'http://127.0.0.1:11434', identityOf,
+  });
+  assert.equal(pick.model, 'gemma4:e4b', 'qwen3:latest stepped aside for qwen3:8b');
 });

@@ -48,7 +48,7 @@ export function describeRunFailure(raw: string, provider = 'Ollama'): { kind: Ru
   // because it contains an untrusted mount point". Ollama's own CLI fails the
   // same way, and Ollama lists the model again under a code name that runs.
   if (/untrusted mount point/i.test(text)) {
-    return { kind: 'other', reason: `Windows is blocking ${provider} from opening this model's files. Ollama 0.40 saved them behind a link Windows won't follow, so every app fails on this model the same way. A working copy may be in your list under its family and size, such as "Qwen35 9.7B". Ollama 0.35.1 opens the model normally.` };
+    return { kind: 'other', reason: `Windows is blocking ${provider} from opening this model's files. Ollama 0.40 saved them behind a link Windows won't follow, so every app fails on this model the same way. A working copy may be in your list under a shorter name made of its family and size. Ollama 0.35.1 opens the model normally.` };
   }
   // Anything else: the provider's own message, without the plumbing around it.
   const detail = text

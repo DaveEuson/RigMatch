@@ -21,7 +21,7 @@ import { drawableModels } from '../lib/pictureRecipes';
 import { installedAudioEntries } from '../lib/audioLineup';
 import { LabComparison } from './LabComparison';
 import { useLabResults } from '../hooks/useLabResults';
-import { balanceLabel } from '../lib/balance';
+import { BALANCE_NOTCHES, balanceLabel, notchAt } from '../lib/balance';
 import { ShowMarquee } from './ShowMarquee';
 import { setShowExtras, useShowExtras, useShowStage } from '../lib/showExtras';
 import { TROJAN_HOST_COPY, ajaxHostLine } from '../lib/trojanStage';
@@ -199,7 +199,7 @@ type SimpleWizardProps = {
    * Opens the run sheet for the show. `begin` is called once the sheet is
    * confirmed, which is when the wizard moves to its show step.
    */
-  onStartShow: (begin: () => void) => void;
+  onStartShow: (begin: () => void, options?: { settingsOpen?: boolean }) => void;
   onStopShow: () => void;
   /** What the show will ask, for the Pick footer, e.g. "10 questions, General." */
   planLine?: string;
@@ -459,14 +459,16 @@ export function SimpleWizard(props: SimpleWizardProps) {
 
   // Every run goes through the sheet, which also asks what matters more. The
   // step moves on only once it is confirmed; Cancel leaves the wizard where it was.
-  const startShow = () => {
-    props.onStartShow(() => {
-      // Set synchronously so the derived step can't promote Compare -> Winner
-      // in the gap before the run reports itself as active.
-      setAwaitingRun(true);
-      setStep('compare');
-    });
+  const begin = () => {
+    // Set synchronously so the derived step can't promote Compare -> Winner
+    // in the gap before the run reports itself as active.
+    setAwaitingRun(true);
+    setStep('compare');
   };
+  const startShow = () => props.onStartShow(begin);
+  // "Change" beside "10 questions, General": the same sheet, with its folded
+  // settings open. It opened exactly as Start did once they were folded away.
+  const changePlan = () => props.onStartShow(begin, { settingsOpen: true });
 
   const goNext = () => {
     if (step === 'pick') {
@@ -681,7 +683,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
                 plan={props.planLine}
                 // Changing the questions opens the run sheet, which starts the
                 // show; with downloads still to do, the sheet comes after them.
-                onChangePlan={skipDownload && pickDone ? startShow : undefined}
+                onChangePlan={skipDownload && pickDone && props.round !== 'vision' && props.round !== 'listening' ? changePlan : undefined}
               />
             )
             : <span className="sw-footer-hint">{step === 'download' && downloadBlockedReason ? downloadBlockedReason : footerHint(step, ollamaReady, shortlistedRows.length, minPicks, showFailed)}</span>}
@@ -1712,7 +1714,7 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
 /** When the curtains have parted far enough for the winner to land. */
 const CURTAIN_MS = 900;
 
-function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, balance, round, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
+function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, balance, onBalanceChange, round, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
   // Show effects: the curtains part on the winner, the bulbs flash, the
   // audience applauds. Without them the reveal plays exactly as before.
   const { effects } = useShowExtras();
@@ -1809,6 +1811,28 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, bala
                   </div>
                 ))}
               </dl>
+            )}
+            {/* Asked here rather than before the show: it only re-ranks what was
+                measured, and here the crown can be seen moving. The sheet asked
+                it, and a chat show's order never used the answer. */}
+            {/* Only where the scores move with it. A skill round's board
+                re-sorted at the balance while each row kept its raw Lab score,
+                so 70 sat above 95. */}
+            {!onlyOne && (round ?? 'chat') === 'chat' && (
+              <div className="sw-rank-by" role="group" aria-label="Rank by">
+                <span>Rank by</span>
+                {[...BALANCE_NOTCHES].reverse().map((notch) => (
+                  <button
+                    key={notch.id}
+                    type="button"
+                    className="chip"
+                    aria-pressed={notchAt(balance)?.id === notch.id}
+                    onClick={() => onBalanceChange(Math.round(notch.value))}
+                  >
+                    {notch.label}
+                  </button>
+                ))}
+              </div>
             )}
             {/* Whatever it made is one click away. The app a coding round built is
                 the whole point of having run one. */}

@@ -84,11 +84,13 @@ export function questionSetLabel(questions: BenchmarkQuestion[]): string {
 
 export const GENERAL_SET_DESCRIPTION = 'Mixed questions covering JSON output, instruction following and everyday tasks.';
 
-export const COUNT_OPTIONS: Array<{ count: BenchmarkQuestionCount; name: string; perModel: string; minutes: number }> = [
-  { count: 10, name: 'Quick', perModel: 'about 3 min a model', minutes: 3 },
-  { count: 20, name: 'Standard', perModel: 'about 5 min', minutes: 5 },
-  { count: 50, name: 'Deep', perModel: 'about 15 min', minutes: 15 },
-  { count: 100, name: 'Full', perModel: '30 min or more', minutes: 30 },
+// No names: "10 · Quick" sat beside a "Quick check" of 3 questions, and its
+// "about 3 min a model" beside a Start button saying "about 15 min".
+export const COUNT_OPTIONS: Array<{ count: BenchmarkQuestionCount; perModel: string; minutes: number }> = [
+  { count: 10, perModel: 'about 3 min a model', minutes: 3 },
+  { count: 20, perModel: 'about 5 min a model', minutes: 5 },
+  { count: 50, perModel: 'about 15 min a model', minutes: 15 },
+  { count: 100, perModel: '30 min or more a model', minutes: 30 },
 ];
 
 /** A quick check is three short questions: about a minute a model. */
@@ -113,4 +115,61 @@ export function sheetButtonLabel({ quick, mode, skillsOnly, duration, measured }
   const action = quick ? 'Run the quick check' : mode === 'single' ? 'Run the test' : 'Start the show';
   if (!duration) return action;
   return `${action} · ${duration}${quick ? '' : measured ? ' · measured here' : ' · estimate'}`;
+}
+
+/**
+ * The sheet's summary: what the run asks, and who marks it.
+ *
+ * Here rather than in the component so every case can be checked: the first
+ * version said "Rules check all three" for a quick check that was sent to the
+ * judge, and nothing ran the text to notice.
+ */
+export function sheetSummary({
+  quick, simpleRound, skillsOnly, questions, questionCount, judgedInPlan,
+  choice, judgeActive, judgeModel, cloudName, autoJudge, judgeFallback, sameAsContestant, ownPicture, nameOf,
+}: {
+  quick: boolean;
+  simpleRound?: 'chat' | 'code' | 'vision' | 'listening';
+  skillsOnly: boolean;
+  questions: BenchmarkQuestion[];
+  questionCount: number;
+  /** How many asked questions only a judge can mark. */
+  judgedInPlan: number;
+  choice: JudgeChoice;
+  /** Whether the judge picked can mark this run (a model installed, a key given). */
+  judgeActive: boolean;
+  judgeModel: string;
+  cloudName: string;
+  /** The local model that marks what rules cannot, when no judge is in use. */
+  autoJudge?: string;
+  /** A judge was picked but cannot mark this run. */
+  judgeFallback: boolean;
+  /** Whether a model is one of the contestants, under any name. */
+  sameAsContestant: (model: string) => boolean;
+  /** A picture round on a picture the person added, which has no answer key. */
+  ownPicture: boolean;
+  nameOf: (model: string) => string;
+}): { asked: string; marked: string } {
+  const openEnded = `${judgedInPlan} open-ended answer${judgedInPlan === 1 ? '' : 's'}`;
+  const setId = activeQuestionSet(questions);
+  const asked = quick ? '3 quick ones: a code question, an accuracy trap and a format check'
+    : simpleRound === 'vision' ? 'None. Each describes the same picture'
+      : simpleRound === 'listening' ? 'None. Each writes down the same short clip'
+        : skillsOnly ? 'None. Only the skill tests run'
+          : setId === 'custom' ? `${questionCount} of your own`
+            : `${questionCount} from the ${questionSetLabel(questions)} set${simpleRound === 'code' ? ', then each builds a small app' : ''}`;
+  const auto = autoJudge
+    ? `Rules, plus ${nameOf(autoJudge)} for the ${openEnded}${sameAsContestant(autoJudge) ? ` (another model marks ${nameOf(autoJudge)}'s own)` : ''}`
+    : `Rules. The ${openEnded} stay unmarked: nothing else installed can read them`;
+  const marked = simpleRound === 'vision'
+    ? ownPicture ? "Only for an answer that engages with it: your own picture has no answer key to check against" : 'Checked against what is in the picture'
+    : simpleRound === 'listening' ? 'Checked against the words in the clip'
+      : skillsOnly ? 'Each skill test checks its own result'
+        // Quick runs send no judge (App.tsx, startBenchmark): all three have a right answer.
+        : quick ? 'Rules check all three'
+          : choice === 'cloud' && judgeActive ? `${cloudName}, through OpenRouter`
+            : choice === 'local' && judgeActive ? `${nameOf(judgeModel)}, on this computer${sameAsContestant(judgeModel) ? '. It is also a contestant' : ''}`
+              : judgedInPlan === 0 ? 'Rules check every answer'
+                : judgeFallback ? `${auto}. The judge you picked isn't ready` : auto;
+  return { asked, marked };
 }

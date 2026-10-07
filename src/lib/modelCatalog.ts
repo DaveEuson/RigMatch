@@ -572,7 +572,9 @@ export function isBenchmarkForModel(
 
 /** The load strip's words for a test this window didn't start: "Testing qwen3.5:9b · question 3 of 10". */
 export function formatRunningTest(status: BenchmarkStatus): string {
-  const parts: string[] = [`Testing ${status.model ?? 'a model'}`];
+  // A code-named copy reads by its family and size, not 73 characters of id.
+  const model = status.model && RUNNER_CODE_NAME.test(status.model) ? getFriendlyModelName(status.model) : status.model;
+  const parts: string[] = [`Testing ${model ?? 'a model'}`];
   const snap = status.snapshot;
   if (snap) {
     if (typeof snap.promptIndex === 'number' && typeof snap.promptTotal === 'number' && snap.promptTotal > 0) {
@@ -2084,6 +2086,9 @@ export function getSizeRisk(sizeGb: number | null) {
 }
 
 export function getShortModelName(model: string) {
+  // A code-named copy ("llamacpp:c97eb11d…") cut to 12 characters said
+  // "llamacpp:c97" on the share card and the show.
+  if (RUNNER_CODE_NAME.test(String(model || ''))) return getFriendlyModelName(model);
   return model.replace(':latest', '').replace(/-instruct/gi, '').slice(0, 12);
 }
 

@@ -93,11 +93,11 @@ test('every way to start a run opens the sheet first', () => {
   const show = app.slice(app.indexOf('const requestListTest = useCallback'), app.indexOf('const openQuestionsSheet'));
   assert.match(show, /setPendingRunMode\('speed-date'\)/);
   // Simple Mode's start opens it too, and the wizard moves on only when it is confirmed.
-  assert.match(app, /onStartShow=\{\(begin\) => \{[\s\S]{0,400}setSheetSimple\(true\);\s*setPendingRunMode\('speed-date'\);/);
+  assert.match(app, /onStartShow=\{\(begin, options\) => \{[\s\S]{0,400}setSheetSimple\(true\);\s*setPendingRunMode\('speed-date'\);/);
   const confirm = app.slice(app.indexOf('const confirmPendingRun = useCallback'), app.indexOf('const cancelPendingRun = useCallback'));
   assert.match(confirm, /if \(simple\) \{\s*startSimpleShow\(\);\s*beginSimple\?\.\(\);/);
   const wizard = read('../src/components/SimpleWizard.tsx');
-  assert.match(wizard, /props\.onStartShow\(\(\) => \{[\s\S]{0,300}setAwaitingRun\(true\);\s*setStep\('compare'\);/);
+  assert.match(wizard, /const begin = \(\) => \{[\s\S]{0,300}setAwaitingRun\(true\);\s*setStep\('compare'\);\s*\};\s*const startShow = \(\) => props\.onStartShow\(begin\);/);
 });
 
 test('a quick check runs its three questions and nothing else, on one model or a lineup', () => {
@@ -124,12 +124,124 @@ test('the sheet keeps the promises the old dialog made', () => {
   const sheet = read('../src/components/RunSheet.tsx');
   // What leaves the computer is always stated, in the footer.
   assert.match(sheet, /'Nothing leaves this computer\.'/);
-  // A judge that is also a contestant is called out.
-  assert.match(sheet, /lineupModels\.includes\(judgeModel\)/);
+  // A judge that is also a contestant is called out, under any of its names.
+  assert.match(sheet, /\{isContestant\(judgeModel\) \? \(/);
+  assert.match(read('../src/App.tsx'), /sameAsContestant=\{\(model: string\) =>/);
   // A cloud judge is never assumed: without a key, the run says it uses the built-in checks.
   assert.match(sheet, /Without a key, this run uses the built-in checks\./);
   // Escape closes it.
   assert.match(sheet, /useDialog<HTMLElement>\(onCancel\)/);
   // One gold button.
   assert.equal(sheet.match(/btn-gold/g)?.length, 1);
+});
+
+test('a first-timer reads a summary and presses Start; every setting is one fold away', () => {
+  // Dave's newcomers met 2.3 screens of scrolling, 23 controls and 310 words
+  // before Start (Simple Mode at 1280x800, 2026-10-07).
+  const sheet = read('../src/components/RunSheet.tsx');
+  assert.match(sheet, /<dl className="run-sheet-summary">/);
+  for (const row of ['Questions', 'Marked by', 'This computer']) assert.match(sheet, new RegExp(`<dt>${row}</dt>`));
+  const fold = sheet.slice(sheet.indexOf('<details className="run-sheet-more"'), sheet.indexOf('{missingBlocked && ('));
+  assert.ok(fold.length > 1000, 'the settings are not inside the fold');
+  for (const section of ['title="Question set"', 'title="How many questions"', 'title="Who marks the answers"', 'title="Extra skill tests"', '<BalanceFader']) {
+    assert.ok(fold.includes(section), `${section} is outside the fold`);
+  }
+  // Folded on every open in Simple Mode; Advanced Mode keeps it as it was left.
+  assert.match(sheet, /if \(initialEditing \|\| imageOnlyBlocked\) return true;\s*if \(simpleRound\) return false;/);
+  assert.match(sheet, /if \(!simpleRound\) \{\s*try \{ localStorage\.setItem\(SETTINGS_OPEN_KEY/);
+  // Judges are named the way the rest of the app names models.
+  assert.doesNotMatch(sheet, /read by \$\{autoJudgeModel\}/);
+});
+
+test('Simple Mode asks speed or accuracy on the Winner screen, where the crown moves with it', () => {
+  const sheet = read('../src/components/RunSheet.tsx');
+  assert.match(sheet, /const showsFader = !simpleRound;/);
+  assert.match(sheet, /\{showsFader && \(\s*<BalanceFader/);
+  const wizard = read('../src/components/SimpleWizard.tsx');
+  const rankBy = wizard.slice(wizard.indexOf('className="sw-rank-by"'), wizard.indexOf('<ModelDemoChips model={winner.model}'));
+  assert.match(rankBy, /BALANCE_NOTCHES/);
+  assert.match(rankBy, /onClick=\{\(\) => onBalanceChange\(Math\.round\(notch\.value\)\)\}/);
+  // A chat show never sent the balance to the test, so its order was always
+  // Balanced. The Winner screen's winner and board now come from the show
+  // re-ranked at the balance.
+  const app = read('../src/App.tsx');
+  assert.match(app, /applyBalance\(Object\.fromEntries\(wizardShowResult\.results\.map\(\(score\) => \[score\.model, score\]\)\), wizardBalance\)/);
+  assert.match(app, /\.sort\(compareTestedModelScores\)/);
+  assert.match(app, /: wizardShowRanked\s*\? \(\(\) => \{\s*const top = wizardShowRanked\[0\];/);
+  assert.match(app, /: wizardShowRanked\s*\? wizardShowRanked\.map\(/);
+});
+
+test('"Change" in Simple Mode opens the settings, not the question editor', () => {
+  const wizard = read('../src/components/SimpleWizard.tsx');
+  assert.match(wizard, /const changePlan = \(\) => props\.onStartShow\(begin, \{ settingsOpen: true \}\);/);
+  // Not on a picture or listening round: they ask nothing, so there is nothing to change.
+  assert.match(wizard, /onChangePlan=\{skipDownload && pickDone && props\.round !== 'vision' && props\.round !== 'listening' \? changePlan : undefined\}/);
+  assert.match(read('../src/App.tsx'), /setSheetEditing\(Boolean\(options\?\.settingsOpen\)\);/);
+  assert.match(read('../src/components/RunSheet.tsx'), /useState\(initialEditing && !simpleRound\)/);
+});
+
+test('a count says how many and how long, with no level name to confuse with a quick check', () => {
+  for (const option of COUNT_OPTIONS) {
+    assert.ok(!('name' in option), `${option.count} still has a name`);
+    assert.match(option.perModel, / a model$/);
+  }
+  assert.match(read('../src/components/RunSheet.tsx'), /\{option\.count\} questions · \{option\.perModel\}/);
+});
+
+test('the summary says who marks the run, in every case', async () => {
+  // Bug scan, 2026-10-07: the first version said "Rules check all three" for
+  // a quick check that went to the judge, and no test ever ran the text.
+  const { sheetSummary } = await import('../src/lib/runSheet.ts');
+  const base = {
+    quick: false, simpleRound: undefined, skillsOnly: false, questions: DEFAULT_BENCHMARK_QUESTIONS, questionCount: 10,
+    judgedInPlan: 3, choice: 'built-in', judgeActive: false, judgeModel: '', cloudName: 'Claude Sonnet', autoJudge: 'qwen2.5-coder:7b',
+    judgeFallback: false, sameAsContestant: () => false, ownPicture: false, nameOf: (m) => m.split(':')[0],
+  };
+  const say = (over) => sheetSummary({ ...base, ...over });
+  assert.deepEqual(say({}), { asked: '10 from the General set', marked: 'Rules, plus qwen2.5-coder for the 3 open-ended answers' });
+  // A quick check sends no judge (App.tsx), whatever is picked, so rules it is.
+  assert.equal(say({ quick: true, choice: 'cloud', judgeActive: true }).marked, 'Rules check all three');
+  assert.equal(say({ choice: 'cloud', judgeActive: true }).marked, 'Claude Sonnet, through OpenRouter');
+  assert.equal(say({ choice: 'local', judgeActive: true, judgeModel: 'gemma4:e4b', sameAsContestant: (m) => m === 'gemma4:e4b' }).marked,
+    'gemma4, on this computer. It is also a contestant');
+  // The automatic judge marks every contestant but itself.
+  assert.equal(say({ sameAsContestant: (m) => m === 'qwen2.5-coder:7b' }).marked,
+    "Rules, plus qwen2.5-coder for the 3 open-ended answers (another model marks qwen2.5-coder's own)");
+  assert.equal(say({ choice: 'cloud', judgeActive: false, judgeFallback: true }).marked,
+    "Rules, plus qwen2.5-coder for the 3 open-ended answers. The judge you picked isn't ready");
+  assert.equal(say({ autoJudge: undefined }).marked, 'Rules. The 3 open-ended answers stay unmarked: nothing else installed can read them');
+  assert.equal(say({ judgedInPlan: 0 }).marked, 'Rules check every answer');
+  assert.deepEqual(say({ simpleRound: 'vision' }), { asked: 'None. Each describes the same picture', marked: 'Checked against what is in the picture' });
+  assert.match(say({ simpleRound: 'vision', ownPicture: true }).marked, /your own picture has no answer key/);
+  assert.equal(say({ simpleRound: 'code' }).asked, '10 from the General set, then each builds a small app');
+  assert.equal(say({ skillsOnly: true }).asked, 'None. Only the skill tests run');
+});
+
+test('a quick check sends no judge, so nothing leaves the computer and rules mark it', () => {
+  const app = read('../src/App.tsx');
+  for (const at of ['const startBenchmark = useCallback', 'const runListTest = useCallback']) {
+    const run = app.slice(app.indexOf(at), app.indexOf(at) + 9000);
+    assert.match(run, /const quick = questionsOverride === QUICK_CHECK_QUESTIONS;/, at);
+    assert.match(run, /qualityMode: effectiveJudge && !quick \? 'judge' : 'heuristic',\s*\.\.\.\(quick \? \{\} : \{ judgeModel: effectiveJudge\?\.model, judgeProvider: effectiveJudge\?\.provider, judgeApiKey: effectiveJudge\?\.apiKey \}\),/, at);
+  }
+  // The footer names OpenRouter only for runs the judge marks.
+  const sheet = read('../src/components/RunSheet.tsx');
+  assert.match(sheet, /const answersLeave = choice === 'cloud' && judgeActive && judgeMarksSomething;/);
+});
+
+test('the fold remembers only what a person did to it', () => {
+  // A <details> that mounts open fires "toggle"; that echo saved it open.
+  const sheet = read('../src/components/RunSheet.tsx');
+  assert.match(sheet, /const toggleSettings = \(open: boolean\) => \{[\s\S]{0,300}if \(open === settingsOpen\) return;/);
+});
+
+test('the Winner screen and the report tell the same show', () => {
+  const wizard = read('../src/components/SimpleWizard.tsx');
+  // Rank by only where the scores move with it: a chat show.
+  assert.match(wizard, /\{!onlyOne && \(round \?\? 'chat'\) === 'chat' && \(\s*<div className="sw-rank-by"/);
+  const app = read('../src/App.tsx');
+  assert.match(app, /\{reportReady && !reportOpen && shownShowResult && \(/);
+  assert.match(app, /\{' '\}\{getFriendlyModelName\(shownShowResult\.winner\)\} came first/);
+  assert.match(app, /const result = stored \? \{ winner: stored\.winner, results: stored\.results \} : shownShowResult;/);
+  assert.match(app, /if \(wizardWinner\?\.model\) setSelectedModel\(wizardWinner\.model\);\s*selectUiMode\('advanced'\);/);
 });

@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { modelWeightsKey } from './modelKey.ts';
+import { modelIdentities, sameModel } from './modelKey.ts';
 
 export type LabJudge = { provider: 'local' | 'openrouter'; model: string; apiKey?: string; baseUrl?: string };
 
@@ -19,11 +19,17 @@ export type LabJudge = { provider: 'local' | 'openrouter'; model: string; apiKey
 export function labJudgeFor(
   contestant: string,
   judge: LabJudge | null,
-  { chosen, candidates, baseUrlOf }: { chosen: boolean; candidates: string[]; baseUrlOf: (model: string) => string | undefined },
+  { chosen, candidates, baseUrlOf, identityOf = (model) => modelIdentities(model) }: {
+    chosen: boolean;
+    candidates: string[];
+    baseUrlOf: (model: string) => string | undefined;
+    /** Every identity of an installed model (modelIdentities): its name key, digest and build. */
+    identityOf?: (model: string) => string[];
+  },
 ): LabJudge | null {
   if (!judge || judge.provider !== 'local' || chosen) return judge;
-  const own = modelWeightsKey(contestant);
-  if (modelWeightsKey(judge.model) !== own) return judge;
-  const other = candidates.find((name) => modelWeightsKey(name) !== own);
+  const own = identityOf(contestant);
+  if (!sameModel(identityOf(judge.model), own)) return judge;
+  const other = candidates.find((name) => !sameModel(identityOf(name), own));
   return other ? { ...judge, model: other, baseUrl: baseUrlOf(other) } : null;
 }
