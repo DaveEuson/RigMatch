@@ -71,11 +71,14 @@ export function useJudgeSettings({ installedRows, vramGb }: { installedRows: Mod
   // The judge model actually sent with a run: the user's pick if it's still
   // installed, otherwise the largest installed model. Empty when judging is off
   // or nothing is installed (backend then falls back to the heuristic).
+  // Whether the local judge is the person's own pick. One picked for them steps
+  // aside when it is the contestant (labJudgeFor); one they picked does not.
+  const judgeChosen = Boolean(judgeModel) && judgeModelOptions.includes(judgeModel);
   const effectiveJudgeModel = useMemo(() => {
     if (qualityMode !== 'judge') return '';
-    if (judgeModel && judgeModelOptions.includes(judgeModel)) return judgeModel;
+    if (judgeChosen) return judgeModel;
     return judgeModelOptions[0] ?? '';
-  }, [qualityMode, judgeModel, judgeModelOptions]);
+  }, [qualityMode, judgeChosen, judgeModel, judgeModelOptions]);
 
   const effectiveJudge = useMemo<JudgeConfig | null>(() => {
     if (qualityMode !== 'judge') return null;
@@ -147,6 +150,7 @@ export function useJudgeSettings({ installedRows, vramGb }: { installedRows: Mod
     openRouterKey,
     setOpenRouterKey,
     judgeModelOptions,
+    judgeChosen,
     effectiveJudgeModel,
     autoJudgeModels,
     effectiveJudge,
