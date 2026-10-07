@@ -943,7 +943,29 @@ export function getModelSortLabel(sortKey: ModelSortKey) {
   }
 }
 
+/**
+ * Ollama 0.40 can list a model under its runner and a 64-character code
+ * ("llamacpp:c97eb11d…") instead of its name: it did for qwen3.5:9b on a
+ * Windows PC where the record under the real name was a link Windows refused.
+ * The code is the only name that model runs under, so it stays the model's id;
+ * these are the words the screen uses for it, from what Ollama reports
+ * (family and size), since getFriendlyModelName made it "Llamacpp".
+ */
+const RUNNER_CODE_NAME = /^([a-z0-9_-]+):([0-9a-f]{64})$/i;
+const codeNameLabels = new Map<string, string>();
+
+function rememberCodeNamedModels(installedModels: OllamaModel[]) {
+  for (const model of installedModels) {
+    const id = model.model || model.name;
+    if (!RUNNER_CODE_NAME.test(id)) continue;
+    const label = [model.family, model.parameterSize].filter(Boolean).join(' ');
+    if (label) codeNameLabels.set(id, label);
+  }
+}
+
 export function mergeModelRows(catalog: CatalogModel[], installedModels: OllamaModel[]): ModelRow[] {
+  // Every installed list passes through here (App.tsx), before anything is drawn.
+  rememberCodeNamedModels(installedModels);
   const rows = catalog.map((entry) => {
     const exactName = `${entry.name}:${entry.tag}`;
     const installed = installedModels.find(
@@ -2074,6 +2096,11 @@ export function getShortModelName(model: string) {
  * table, where merging those two would have hidden a real choice.
  */
 export function getFriendlyModelName(model: string): string {
+  const code = String(model || '').match(RUNNER_CODE_NAME);
+  if (code) {
+    const known = codeNameLabels.get(model);
+    return known ? known.charAt(0).toUpperCase() + known.slice(1) : `Unnamed model ${code[2].slice(0, 8)}`;
+  }
   const base = String(model || '')
     .split('/').pop()!            // drop provider namespace
     .split(':')[0]                // drop the size/quant tag
