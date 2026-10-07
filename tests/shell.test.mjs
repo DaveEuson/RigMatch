@@ -63,6 +63,29 @@ test('the strip keeps reading the computer when idle, but only while the window 
   assert.match(block, /}, 5000\);/);
 });
 
+test('a test this window did not start shows on the strip with a Stop, not floating over the top bar', async () => {
+  // Dave, 2026-10-06: a "Benchmark running" pill sat over the step bar at
+  // top: 14px, said "Benchmark", and clicking it went nowhere.
+  const app = read('../src/App.tsx');
+  assert.doesNotMatch(app, /benchmark-running-banner/);
+  assert.doesNotMatch(read('../src/App.css'), /benchmark-running-banner/);
+  const at = app.indexOf(': externalBenchmark?.running ? (');
+  assert.ok(at > 0, 'the strip has no line for an outside test');
+  const line = app.slice(at, at + 1600);
+  assert.match(line, /formatRunningTest\(externalBenchmark\)/);
+  assert.match(line, /agentArcadeApi\.cancelBenchmark\?\.\(id\)/);
+  assert.match(line, /'Stopping' : 'Stop'/);
+  // This window's own show comes first, so its tests never read as outside ones.
+  assert.ok(app.indexOf(") : runProgress?.phase === 'running' ? (") < at);
+
+  const { formatRunningTest } = await import('../src/lib/modelCatalog.ts');
+  assert.equal(
+    formatRunningTest({ running: true, model: 'qwen3.5:9b', snapshot: { promptIndex: 2, promptTotal: 10, runIndex: 0, runTotal: 1 } }),
+    'Testing qwen3.5:9b · question 3 of 10',
+  );
+  assert.equal(formatRunningTest({ running: true }), 'Testing a model');
+});
+
 test('the old shell is gone, and what it carried has a new home', () => {
   for (const file of ['TopDeck', 'SideMenu', 'Ticker']) {
     assert.ok(!existsSync(new URL(`../src/components/${file}.tsx`, import.meta.url)), `${file}.tsx is back`);

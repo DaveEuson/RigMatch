@@ -101,7 +101,7 @@ import {
   createEmptyBenchmark,
   createQueuedPullProgress,
   createRunProgressId,
-  formatBenchmarkBanner,
+  formatRunningTest,
   formatHistoryTime,
   getAgentName,
   getBenchmarkForModel,
@@ -420,6 +420,8 @@ function App() {
   const [isScanningRig, setIsScanningRig] = useState(false);
   const [isBenchmarking, setIsBenchmarking] = useState(false);
   const [externalBenchmark, setExternalBenchmark] = useState<BenchmarkStatus | null>(null);
+  /** The outside test Stop was pressed on, so the button says so until it ends. */
+  const [stoppingTestId, setStoppingTestId] = useState<string | null>(null);
   const [isListTesting, setIsListTesting] = useState(false);
   const [isPullingModels, setIsPullingModels] = useState(false);
   const [isPullPaused, setIsPullPaused] = useState(false);
@@ -4420,6 +4422,29 @@ function App() {
       <i className="running-dot" aria-hidden="true" />
       <span>Running {skillRunStatus.label}</span>
     </>
+  ) : externalBenchmark?.running ? (
+    // A test this window didn't start: RigMatch Chat, a script, or one still
+    // going from before a reload. It floated over the top bar as "Benchmark
+    // running", and clicking it did nothing; there is no screen to open for
+    // it, so it is text here, with the one thing a person can do about it.
+    <>
+      <i className="running-dot" aria-hidden="true" />
+      <span title="Started outside this window, by RigMatch Chat, a script, or before the window reloaded">{formatRunningTest(externalBenchmark)}</span>
+      {externalBenchmark.progressId && (
+        <button
+          type="button"
+          className="running-stop"
+          disabled={stoppingTestId === externalBenchmark.progressId}
+          onClick={() => {
+            const id = externalBenchmark.progressId!;
+            setStoppingTestId(id);
+            void agentArcadeApi.cancelBenchmark?.(id).catch(() => setStoppingTestId(null));
+          }}
+        >
+          {stoppingTestId === externalBenchmark.progressId ? 'Stopping' : 'Stop'}
+        </button>
+      )}
+    </>
   ) : isPullingModels && pullingModel ? (
     <>
       <i className="running-dot" aria-hidden="true" />
@@ -5155,13 +5180,6 @@ function App() {
           onClose={() => setSetupGuideOpen(false)}
           onInstallOllama={openOllamaDownload}
         />
-      )}
-
-      {externalBenchmark?.running && runProgress?.phase !== 'running' && (
-        <div className="benchmark-running-banner" role="status" aria-live="polite">
-          <span className="benchmark-running-dot" aria-hidden="true" />
-          <span>{formatBenchmarkBanner(externalBenchmark)}</span>
-        </div>
       )}
 
       {pendingRunMode && (
