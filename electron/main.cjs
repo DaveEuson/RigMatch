@@ -3796,14 +3796,16 @@ async function runBenchmarkInner(request = {}, sender, signal) {
           message: `${judgeName} is marking ${model}'s answer.`,
         });
         let judgeFailure = null;
+        let judgeOutput = '';
         const verdict = await scoreQualityWithJudge({
           prompt,
           response: responseText,
           generate: async (judgePrompt) => {
             try {
-              return await (useJudge && judgeProvider === 'openrouter'
+              judgeOutput = String(await (useJudge && judgeProvider === 'openrouter'
                 ? openRouterGenerateText(judgeApiKey, judgeModel, judgePrompt, 400, signal)
-                : runLocalJudge(judgeEndpoint(judgeName), judgeName, judgePrompt, signal));
+                : runLocalJudge(judgeEndpoint(judgeName), judgeName, judgePrompt, signal)) ?? '');
+              return judgeOutput;
             } catch (error) {
               judgeFailure = error;
               throw error;
@@ -3812,7 +3814,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         });
         promptJudgeScore = verdict ? verdict.score : null;
         promptJudgeReason = verdict?.reason ?? '';
-        promptJudgeIssue = verdict ? null : judgeFailure ? `The judge could not be reached: ${getLogErrorMessage(judgeFailure)}` : 'The judge answered, but not with a score RigMatch could read.';
+        promptJudgeIssue = verdict ? null : judgeFailure ? `The judge could not be reached: ${getLogErrorMessage(judgeFailure)}` : `The judge answered, but not with a score RigMatch could read: "${judgeOutput.replace(/\s+/g, ' ').trim().slice(0, 160)}"`;
         // A judge that timed out or could not be reached will do the same on
         // every answer after this one, at up to two minutes each: a hung judge
         // held a question for 120s while the time-left estimate climbed, and
