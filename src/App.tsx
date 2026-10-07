@@ -250,6 +250,7 @@ import { goalById, presetIdForGoal } from './lib/goals';
 import { isDockWorthyPullProgress, modelMatchesTask, nextDockExpiry } from './lib/modelCatalog';
 import { chooseLineup, isSpecialistModel } from './lib/chooseLineup';
 import { modelIdentities, sameModel } from './lib/modelKey.ts';
+import { gpuDriverMessage } from './lib/gpuDriver';
 import { labJudgeFor } from './lib/labJudge.ts';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLineupLive } from './lib/videoGenRunner';
@@ -2070,6 +2071,12 @@ function App() {
     // an unrelated message and appear to fix it.
     setSimpleNoticeAction(action ?? null);
   }, []);
+  // Once per problem, in both modes: what the strip's "Driver not working"
+  // means and what to do about it.
+  const gpuDriverProblem = system.gpu.driverProblem;
+  useEffect(() => {
+    if (gpuDriverProblem) tellUser(gpuDriverMessage(gpuDriverProblem));
+  }, [gpuDriverProblem, tellUser]);
 
   // Stamped onto every score at scoring time. Scores are relative to a rig,
   // and Ollama tags mutate — the digest is the only durable identity for the

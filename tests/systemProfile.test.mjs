@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { summarizeMemory, cleanDeviceTreeModel } = require('../electron/systemProfile.cjs');
+const { summarizeMemory, cleanDeviceTreeModel, nvidiaDriverProblem, pickPrimaryGpu } = require('../electron/systemProfile.cjs');
 
 const GB = 1024 * 1024 * 1024;
 
@@ -74,4 +74,48 @@ test('the cleaned Jetson name is one the unified-memory check recognizes', () =>
   // And the vendor is readable from the same string, which is what stops the
   // CUDA check reporting "No NVIDIA GPU detected." on an NVIDIA board.
   assert.match(cleanDeviceTreeModel(`${JETSON}\u0000`), /nvidia/i);
+});
+
+test('an NVIDIA card is the one sized for, even when its driver reports nothing', () => {
+  // Pop!_OS 24.04, RTX 4070 beside a Ryzen's integrated graphics, as
+  // systeminformation reports them (2026-10-07). With the driver broken the
+  // NVIDIA card reads 0 and the integrated chip's 512 MB won: "VRAM 0.5 GB".
+  const nvidia = { vendor: 'NVIDIA Corporation', model: 'AD104 [GeForce RTX 4070]', vram: 12282, bus: 'Onboard' };
+  const amd = { vendor: 'Advanced Micro Devices, Inc. [AMD/ATI]', model: 'Device 13c0', vram: 512, bus: 'Onboard' };
+  assert.equal(pickPrimaryGpu([amd, nvidia]), nvidia);
+  const broken = { ...nvidia, vram: 0 };
+  assert.equal(pickPrimaryGpu([amd, broken]), broken);
+  // Without an NVIDIA card, the largest still wins.
+  assert.equal(pickPrimaryGpu([amd, { vendor: 'Intel', model: 'UHD 770', vram: 128 }]), amd);
+  assert.equal(pickPrimaryGpu([]), undefined);
+});
+
+test('nvidia-smi failures say whether to restart or to fix the driver', () => {
+  assert.equal(nvidiaDriverProblem({ output: '12282', error: null }), null);
+  // A driver updated under a running kernel module.
+  assert.equal(nvidiaDriverProblem({
+    output: 'Failed to initialize NVML: Driver/library version mismatch\nNVML library version: 595.104',
+    error: 'Command failed: nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits',
+  }), 'reboot-required');
+  assert.equal(nvidiaDriverProblem({
+    output: "NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver. Make sure that the latest NVIDIA driver is installed and running.",
+    error: 'Command failed: nvidia-smi',
+  }), 'driver-missing');
+  assert.equal(nvidiaDriverProblem({ output: '', error: 'spawn nvidia-smi ENOENT' }), 'driver-missing');
+});
+
+test('a driver problem shows in the strip and is explained once', async () => {
+  const { gpuDriverMessage, gpuDriverReading } = await import('../src/lib/gpuDriver.ts');
+  assert.match(gpuDriverMessage('reboot-required'), /^Your NVIDIA driver was updated, but the old one is still running\. Restart your computer/);
+  assert.match(gpuDriverMessage('driver-missing'), /Install or repair the NVIDIA driver, then restart your computer\.$/);
+  assert.equal(gpuDriverReading('reboot-required'), 'Restart to use it');
+  assert.equal(gpuDriverReading('driver-missing'), 'Driver not working');
+  const { readFileSync } = await import('node:fs');
+  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
+  assert.match(main, /const primaryGpu = pickPrimaryGpu\(graphics\.controllers\) \|\| await getBoardGpu\(\);/);
+  assert.match(main, /\.\.\.\(driverProblem \? \{ driverProblem \} : \{\}\),/);
+  const strip = readFileSync(new URL('../src/components/LoadStrip.tsx', import.meta.url), 'utf-8');
+  assert.match(strip, /if \(system\.gpu\.driverProblem\) \{/);
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf-8');
+  assert.match(app, /if \(gpuDriverProblem\) tellUser\(gpuDriverMessage\(gpuDriverProblem\)\);/);
 });

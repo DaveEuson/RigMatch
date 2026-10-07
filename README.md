@@ -130,6 +130,8 @@ sudo apt install ./RigMatch-*-linux-amd64.deb
 
 On a Jetson or another ARM64 board, the file ends in `linux-arm64.deb` instead.
 
+Double-clicking the `.deb` can open your software store instead. On Pop!_OS 24.04 the COSMIC Store shows an Install button that does nothing, so use the command above.
+
 **AppImage:** make it executable, then open it:
 
 ```bash
