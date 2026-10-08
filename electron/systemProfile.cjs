@@ -88,11 +88,49 @@ function nvidiaDriverProblem({ output, error }) {
   return 'driver-missing';
 }
 
+/**
+ * Where Ollama keeps its models, as far as this process can tell: the
+ * OLLAMA_MODELS it inherited, else the folder the Linux service installs to,
+ * else the per-user default. Used only to pick which drive's free space to show.
+ */
+function ollamaModelsDir({ env = process.env, platform = process.platform, home = '', exists = () => false } = {}) {
+  if (env.OLLAMA_MODELS) return env.OLLAMA_MODELS;
+  const service = '/usr/share/ollama/.ollama/models';
+  if (platform === 'linux' && exists(service)) return service;
+  return home ? `${home}${platform === 'win32' ? '\\' : '/'}.ollama${platform === 'win32' ? '\\' : '/'}models` : '';
+}
+
+/**
+ * The drive the models folder is on: the mount with the longest path that
+ * prefixes it. The largest drive used to win, which names the data disk when
+ * the models are on the system one. Falls back to the largest.
+ */
+function pickModelsFilesystem(fsSize, modelsDir) {
+  const drives = (fsSize || []).filter((fs) => fs && fs.mount);
+  const largest = [...drives].sort((a, b) => (b.size || 0) - (a.size || 0))[0];
+  if (!modelsDir) return largest;
+  const windows = /^[a-z]:/i.test(modelsDir);
+  const norm = (value) => {
+    const text = String(value).replace(/\\/g, '/').replace(/\/+$/, '');
+    return windows ? text.toLowerCase() : text;
+  };
+  const target = norm(modelsDir);
+  const onDrive = drives
+    .filter((fs) => {
+      const mount = norm(fs.mount);
+      return mount === '' || target === mount || target.startsWith(`${mount}/`);
+    })
+    .sort((a, b) => norm(b.mount).length - norm(a.mount).length)[0];
+  return onDrive || largest;
+}
+
 module.exports = {
   bytesToGb,
   cleanDeviceTreeModel,
   mbToGb,
   nvidiaDriverProblem,
+  ollamaModelsDir,
+  pickModelsFilesystem,
   pickPrimaryGpu,
   summarizeMemory,
 };

@@ -119,3 +119,26 @@ test('a driver problem shows in the strip and is explained once', async () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf-8');
   assert.match(app, /if \(gpuDriverProblem\) tellUser\(gpuDriverMessage\(gpuDriverProblem\)\);/);
 });
+
+test('free space is read from the drive the models are on', async () => {
+  const { createRequire } = await import('node:module');
+  const { pickModelsFilesystem, ollamaModelsDir } = createRequire(import.meta.url)('../electron/systemProfile.cjs');
+  const linux = [
+    { mount: '/', size: 100, available: 5 },
+    { mount: '/mnt/data', size: 900, available: 800 },
+    { mount: '/mnt', size: 10, available: 1 },
+  ];
+  assert.equal(pickModelsFilesystem(linux, '/usr/share/ollama/.ollama/models').mount, '/');
+  assert.equal(pickModelsFilesystem(linux, '/mnt/data/models').mount, '/mnt/data');
+  assert.equal(pickModelsFilesystem(linux, '/mnt/database/models').mount, '/mnt', 'a longer name is not inside the shorter mount');
+  assert.equal(pickModelsFilesystem(linux, '').mount, '/mnt/data', 'unknown folder falls back to the largest');
+  const windows = [{ mount: 'C:', size: 500, available: 10 }, { mount: 'H:', size: 2000, available: 900 }];
+  assert.equal(pickModelsFilesystem(windows, 'h:\\ollama-models').mount, 'H:');
+  assert.equal(pickModelsFilesystem(windows, 'C:\\Users\\Dave\\.ollama\\models').mount, 'C:');
+  assert.equal(pickModelsFilesystem([], '/x'), undefined);
+
+  assert.equal(ollamaModelsDir({ env: { OLLAMA_MODELS: '/data/m' }, platform: 'linux', home: '/home/d' }), '/data/m');
+  assert.equal(ollamaModelsDir({ env: {}, platform: 'linux', home: '/home/d', exists: () => true }), '/usr/share/ollama/.ollama/models');
+  assert.equal(ollamaModelsDir({ env: {}, platform: 'linux', home: '/home/d' }), '/home/d/.ollama/models');
+  assert.equal(ollamaModelsDir({ env: {}, platform: 'win32', home: 'C:\\Users\\d' }), 'C:\\Users\\d\\.ollama\\models');
+});

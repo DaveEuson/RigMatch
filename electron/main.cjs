@@ -71,7 +71,7 @@ const {
   ollamaCapabilitiesFor,
   applyCapabilitySnapshot,
 } = require('./ollamaCatalog.cjs');
-const { summarizeMemory, cleanDeviceTreeModel, nvidiaDriverProblem, pickPrimaryGpu } = require('./systemProfile.cjs');
+const { summarizeMemory, cleanDeviceTreeModel, nvidiaDriverProblem, ollamaModelsDir, pickModelsFilesystem, pickPrimaryGpu } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
 const { hasChatFormat } = require('./chatFormat.cjs');
 const {
@@ -2071,7 +2071,7 @@ async function getSystemProfile({ checkForUpdates = false } = {}) {
   // by looking for "nvidia" in the label, reports "No NVIDIA GPU detected" on an
   // NVIDIA board. Measured on a Jetson Orin Nano, not predicted.
   const primaryGpu = pickPrimaryGpu(graphics.controllers) || await getBoardGpu();
-  const primaryFs = (fsSize || []).sort((a, b) => (b.size || 0) - (a.size || 0))[0] || {};
+  const primaryFs = pickModelsFilesystem(fsSize, ollamaModelsDir({ home: os.homedir(), exists: fsSync.existsSync })) || {};
   const networks = getPrivateNetworkAddresses();
   const cuda = await getCudaStatus(primaryGpu, { checkForUpdates });
   const cpuLoadPercent = await getCpuLoadPercent();
