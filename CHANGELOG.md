@@ -4,6 +4,18 @@ Every RigMatch release, newest first. These are the same notes the app shows in
 Update Center — this file and the GitHub release pages are generated from
 `src/data/releaseNotes.ts`, so there is only one place to write them.
 
+## 0.9.7 — Linux Day
+_Beta build_
+
+- On a computer with an NVIDIA card and integrated graphics, RigMatch no longer sizes models for the integrated one. If the NVIDIA driver stopped answering, the top bar read "VRAM 0.5 GB" (the integrated chip's share) and every pick was sized for it. RigMatch now sticks with the NVIDIA card and says what is wrong: "Driver not working", or "Restart to use it" when a driver update is waiting for a restart. Found on Pop!_OS with an RTX 4070 and a Ryzen.
+- The Update Center now finds RigMatch's own installer in a release. It was looking for files named "RigMatch.AI-..." in a repository of that name, and they are named "RigMatch-..." in "RigMatch", so it matched nothing and always opened the general releases page. On Linux it offers the .deb if you installed the .deb, and the AppImage if you run the AppImage.
+- On Ubuntu, Pop!_OS and other Linux systems, the busy-computer check no longer says "DaVinci Resolve is running" when it isn't. It matched any program with "resolve" in its name, and every system of that kind runs one (systemd-resolved) all the time.
+- The free space RigMatch shows is now the drive your models are on. It used to show the biggest drive, which on a computer with a data disk is usually not where Ollama keeps its models. RigMatch looks where Ollama is told to keep them (OLLAMA_MODELS), then where the Linux service keeps them, then your home folder.
+- If RigMatch Chat or ComfyUI can't be started, RigMatch now says so. A file without permission to run, or on a drive that forbids running programs, could close RigMatch with an error. Chat's message says to make the file executable.
+- RigMatch finds a ComfyUI you started from a Linux virtual environment (venv). Those runs report Python's own location, not ComfyUI's, so it had no way to work out the folder. It now also checks the folder ComfyUI was started in.
+- The Top Match in the top bar now shows the model's name above its score. On a narrower window it showed only a picture and a number. Clicking it opens Results for chat, where that Top Match was crowned. It used to open the results for whichever screen you looked at last, so from Reading or Images it showed an empty board.
+- The download box in the corner is readable now. Pause, Cancel and the percentage overlapped, and the model's name and the speed were cut off ("g.." and "33.1 MB/..."). The name comes first, then the progress bar, then the speed and size on a line that can wrap, with the buttons underneath.
+
 ## 0.9.6 — Straight Answers
 _Beta build_
 
