@@ -4612,7 +4612,12 @@ function App() {
         topMatch={topRigPick?.score
           ? { model: topRigPick.row.displayName, name: getFriendlyModelName(topRigPick.row.displayName), scoreLabel: formatMatchScore(topRigPick.score) }
           : null}
-        onOpenTopMatch={() => selectNav('history')}
+        // The Top Match is the chat round's winner. Results follows the channel
+        // being tested, so from Reading or Images it opened on an empty board.
+        onOpenTopMatch={() => {
+          if (workbenchInfo.id !== 'all' && workbenchInfo.id !== 'chat') chooseWorkbench('chat');
+          selectNav('history');
+        }}
         themeId={themeId}
         onThemeChange={setThemeId}
         connections={connections}

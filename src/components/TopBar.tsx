@@ -109,8 +109,10 @@ export function TopBar({
             title={`Top Match: ${topMatch.name}`}
           >
             <img src={getModelAvatarSrc(topMatch.model)} alt="" width={26} height={26} />
-            <span className="top-match-chip-name">{topMatch.name}</span>
-            <span className="top-match-score">{topMatch.scoreLabel}</span>
+            <span className="top-match-chip-text">
+              <span className="top-match-chip-name">{topMatch.name}</span>
+              <span className="top-match-score">{topMatch.scoreLabel}</span>
+            </span>
           </button>
         )}
         <BadgeCase />

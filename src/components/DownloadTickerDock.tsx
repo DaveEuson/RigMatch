@@ -67,59 +67,65 @@ export function DownloadTickerDock({
             ? 'Download queued'
             : 'Download status';
 
+  // The percentage has its own place beside the name, so the detail line does
+  // not repeat it.
+  const detailText = detailLabel.replace(/^\d+% · /, '');
+  const showPause = !isPaused && isPulling;
+  const showCancel = queuedRows.length > 0 || isPulling;
+
   return (
     <section className={`ticker-download-dock ${dockPhase}`} aria-label="Download status">
-      <button type="button" className="ticker-download-main" onClick={onOpenDownloads} title="Open model downloads">
+      <button type="button" className="ticker-download-main" onClick={onOpenDownloads} title="See all downloads">
         <Download aria-hidden="true" />
-        <div className="ticker-download-copy">
-          <div>
-            <span>{statusLabel}</span>
-            <strong title={activeModel ?? undefined}>{activeModel ? getQueueChipModelName(activeModel) : 'Ollama queue'}</strong>
-          </div>
-          <em>
-            {detailLabel}
-            {queuedBehindCount > 0 ? ` · ${queuedBehindCount} waiting` : ''}
-          </em>
-        </div>
+        <strong title={activeModel ?? undefined}>{activeModel ? getQueueChipModelName(activeModel) : 'Ollama queue'}</strong>
         <b>{percentLabel}</b>
       </button>
       <div className="ticker-download-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
         <i style={{ width: `${trackPercent}%` }} />
       </div>
-      {isPaused ? (
-        <button
-          type="button"
-          className="ticker-download-resume"
-          onClick={onResumeQueue}
-          disabled={isPullCancelRequested || isPulling}
-          title="Resume the paused Ollama download through cached layers"
-        >
-          <Play aria-hidden="true" />
-          Resume
-        </button>
-      ) : isPulling && (
-        <button
-          type="button"
-          className="ticker-download-pause"
-          onClick={onPauseQueue}
-          disabled={isPullPauseRequested || isPullCancelRequested}
-          title="Pause the active Ollama pull and keep it queued"
-        >
-          <Pause aria-hidden="true" />
-          {isPullPauseRequested ? 'Pausing' : 'Pause'}
-        </button>
-      )}
-      {(queuedRows.length > 0 || isPulling) && (
-        <button
-          type="button"
-          className="ticker-download-stop"
-          onClick={onCancelQueue}
-          disabled={isPullCancelRequested}
-          title={isPulling ? 'Cancel the active Ollama pull and clear queued downloads' : 'Cancel all queued downloads'}
-        >
-          <X aria-hidden="true" />
-          {isPullCancelRequested ? 'Canceling' : 'Cancel'}
-        </button>
+      <p className="ticker-download-detail">
+        <span>{statusLabel}</span>
+        {detailText ? ` · ${detailText}` : ''}
+        {queuedBehindCount > 0 ? ` · ${queuedBehindCount} waiting` : ''}
+      </p>
+      {(isPaused || showPause || showCancel) && (
+        <div className="ticker-download-actions">
+          {isPaused ? (
+            <button
+              type="button"
+              className="ticker-download-resume"
+              onClick={onResumeQueue}
+              disabled={isPullCancelRequested || isPulling}
+              title="Resume the paused Ollama download through cached layers"
+            >
+              <Play aria-hidden="true" />
+              Resume
+            </button>
+          ) : showPause && (
+            <button
+              type="button"
+              className="ticker-download-pause"
+              onClick={onPauseQueue}
+              disabled={isPullPauseRequested || isPullCancelRequested}
+              title="Pause the active Ollama pull and keep it queued"
+            >
+              <Pause aria-hidden="true" />
+              {isPullPauseRequested ? 'Pausing' : 'Pause'}
+            </button>
+          )}
+          {showCancel && (
+            <button
+              type="button"
+              className="ticker-download-stop"
+              onClick={onCancelQueue}
+              disabled={isPullCancelRequested}
+              title={isPulling ? 'Cancel the active Ollama pull and clear queued downloads' : 'Cancel all queued downloads'}
+            >
+              <X aria-hidden="true" />
+              {isPullCancelRequested ? 'Canceling' : 'Cancel'}
+            </button>
+          )}
+        </div>
       )}
     </section>
   );
