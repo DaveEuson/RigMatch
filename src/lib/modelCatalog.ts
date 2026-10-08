@@ -1943,17 +1943,7 @@ export function getPlatformFit(displayName: string, platform: string): { compati
   return { compatible: true, reason: '' };
 }
 
-/**
- * A mixture-of-experts model names its active slice (qwen3:30b-a3b) or its
- * expert count (mixtral:8x7b). Only that slice runs for each token, so the
- * total parameter count says little about speed; the download size, which is
- * what has to fit, still does.
- */
-export function isMixtureOfExperts(name: string | undefined) {
-  return /-a\d+(?:\.\d+)?b\b|\b\d+x\d+b\b/i.test(name ?? '');
-}
-
-export function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fitOverride'> & { displayName?: string }, vramGb: number): HardwareFit {
+export function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fitOverride'>, vramGb: number): HardwareFit {
   // A video model is sized by the Video Lab's rules, which know ComfyUI
   // offloads what VRAM cannot hold (asHardwareFit in videoLineup.ts).
   if (row.fitOverride) return row.fitOverride;
@@ -1994,10 +1984,7 @@ export function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fitOve
       };
   }
 
-  // The parameter-count gates below are a stand-in for size; an MoE model's
-  // size is known here, so the size limits decide.
-  const moe = isMixtureOfExperts(row.displayName);
-  if (!moe && paramsB >= 64 && vramGb < 48) {
+  if (paramsB >= 64 && vramGb < 48) {
     return {
       tone: 'out-of-league',
       label: 'Too big',
@@ -2006,7 +1993,7 @@ export function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fitOve
     };
   }
 
-  if (!moe && paramsB >= 32 && vramGb < 24) {
+  if (paramsB >= 32 && vramGb < 24) {
     return {
       tone: 'out-of-league',
       label: 'Too big',
