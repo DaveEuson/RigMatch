@@ -1447,8 +1447,14 @@ function registerHandlers() {
         stdio: 'ignore',
         windowsHide: false,
       });
+      // Without a listener an EACCES or ENOEXEC (no exec bit, a noexec mount)
+      // is an uncaught exception in this process.
+      const started = await new Promise((resolve) => {
+        child.once('error', (error) => resolve({ ok: false, reason: 'spawn-failed', detail: error.message }));
+        child.once('spawn', () => resolve({ ok: true }));
+      });
       child.unref();
-      return { ok: true };
+      return started;
     }
     return { ok: false, reason: 'not-found' };
   });
