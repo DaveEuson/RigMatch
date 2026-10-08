@@ -197,14 +197,16 @@ export function UtilityPanel({
    * The column is scrolled directly rather than with scrollIntoView, which
    * also scrolls every ancestor and pushed the top bar off the window.
    */
-  const [openSection, setOpenSection] = useState<SettingsSectionId>('interface');
+  const [openSection, setOpenSection] = useState<SettingsSectionId>(sectionRequest?.id ?? 'interface');
+  const [handledRequest, setHandledRequest] = useState(sectionRequest);
+  if (sectionRequest !== handledRequest) {
+    setHandledRequest(sectionRequest);
+    if (sectionRequest) setOpenSection(sectionRequest.id);
+  }
   const settingsBodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     settingsBodyRef.current?.scrollTo({ top: 0 });
   }, [openSection]);
-  useEffect(() => {
-    if (sectionRequest) setOpenSection(sectionRequest.id);
-  }, [sectionRequest]);
   const openSectionFromRail = useCallback((id: SettingsSectionId) => {
     if (id === openSection) settingsBodyRef.current?.scrollTo({ top: 0 });
     else setOpenSection(id);

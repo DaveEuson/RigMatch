@@ -63,12 +63,13 @@ test('every cue goes through the switch: nothing calls the synth around it', () 
 test('the Trojan hero gets the reveal and the fanfare; other badges get the sting', () => {
   const reveal = read('../src/components/TrojanReveal.tsx');
   assert.match(reveal, /if \(fresh\.includes\('trojan-hero'\)\) setPending/);
-  assert.match(reveal, /if \(pending\.reveal\) setReveal\(true\);\n\s*else playCue\('sting'\);/);
+  assert.match(reveal, /else if \(fresh\.length > 0\) stingDue\.current = true;/);
+  assert.match(reveal, /if \(busy \|\| !stingDue\.current\) return;\n\s*stingDue\.current = false;\n\s*playCue\('sting'\);/);
   assert.match(reveal, /playCue\('fanfare'\)/);
   assert.match(reveal, />Take a bow</);
   // Badges found as the app opens are recorded as seen, and stay quiet.
   assert.match(reveal, /!state\.seen\.includes\(id\)/);
   // Never mid-run: Ajax finishing first in a lineup must not cover the show.
-  assert.match(reveal, /if \(busy \|\| \(!pending\.reveal && !pending\.sting\)\) return;/);
+  assert.match(reveal, /return pending\.reveal && !busy \?/);
   assert.match(read('../src/App.tsx'), /<AchievementCues busy=\{isBenchmarking \|\| isListTesting\} \/>/);
 });

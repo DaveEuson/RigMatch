@@ -74,25 +74,26 @@ export function TrojanReveal({ onClose }: { onClose: () => void }) {
 export function AchievementCues({ busy }: { busy: boolean }) {
   const state = useAchievements();
   const previous = useRef(state.earned);
-  const [pending, setPending] = useState<{ reveal: boolean; sting: boolean }>({ reveal: false, sting: false });
-  const [reveal, setReveal] = useState(false);
+  const stingDue = useRef(false);
+  const [pending, setPending] = useState<{ reveal: boolean }>({ reveal: false });
 
   useEffect(() => {
     const fresh = (Object.keys(state.earned) as AchievementId[])
       .filter((id) => !previous.current[id] && !state.seen.includes(id));
     previous.current = state.earned;
     if (fresh.includes('trojan-hero')) setPending((p) => ({ ...p, reveal: true }));
-    else if (fresh.length > 0) setPending((p) => ({ ...p, sting: true }));
+    else if (fresh.length > 0) stingDue.current = true;
   }, [state]);
 
   // Held until the run ends: Ajax finishing first in a lineup used to cover
-  // the rest of the show with the reveal and play the fanfare over it.
+  // the rest of the show with the reveal and play the fanfare over it. The
+  // reveal itself is drawn from `pending` once the run is over; only the
+  // fanfare needs an effect.
   useEffect(() => {
-    if (busy || (!pending.reveal && !pending.sting)) return;
-    if (pending.reveal) setReveal(true);
-    else playCue('sting');
-    setPending({ reveal: false, sting: false });
-  }, [busy, pending]);
+    if (busy || !stingDue.current) return;
+    stingDue.current = false;
+    playCue('sting');
+  }, [busy, state]);
 
-  return reveal ? <TrojanReveal onClose={() => setReveal(false)} /> : null;
+  return pending.reveal && !busy ? <TrojanReveal onClose={() => setPending((p) => ({ ...p, reveal: false }))} /> : null;
 }
