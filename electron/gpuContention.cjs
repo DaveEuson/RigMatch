@@ -57,7 +57,9 @@ const KNOWN_GPU_HEAVY_APPS = [
   { match: 'obs64', label: 'OBS Studio' },
   { match: 'obs.exe', label: 'OBS Studio' },
   { match: 'blender', label: 'Blender' },
-  { match: 'resolve', label: 'DaVinci Resolve' },
+  // Exact: "resolve" is also inside systemd-resolved, which every Ubuntu-based
+  // desktop runs, and that used to name DaVinci Resolve on a machine without it.
+  { match: 'resolve', label: 'DaVinci Resolve', exact: true },
   { match: 'premiere', label: 'Adobe Premiere' },
   { match: 'aftereffects', label: 'After Effects' },
   { match: 'handbrake', label: 'HandBrake' },
@@ -282,7 +284,7 @@ function matchKnownGpuApps(processNames, ownProcessNames = []) {
     if (ignore.has(base) || ignore.has(base.replace(/\.exe$/, ''))) continue;
 
     for (const app of KNOWN_GPU_HEAVY_APPS) {
-      if (base.includes(app.match)) {
+      if (app.exact ? base === app.match || base === `${app.match}.exe` : base.includes(app.match)) {
         found.set(app.label, true);
         break;
       }

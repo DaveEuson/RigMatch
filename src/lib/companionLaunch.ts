@@ -8,7 +8,7 @@
  * would connect to the other instance instead. Saying "not found" there sends
  * people looking for a missing file that is sitting right where it should be.
  */
-export type CompanionLaunchResult = { ok: boolean; reason?: string; libraries?: string[]; packages?: string[] };
+export type CompanionLaunchResult = { ok: boolean; reason?: string; libraries?: string[]; packages?: string[]; detail?: string };
 
 export function companionLaunchMessage(result: CompanionLaunchResult | null | undefined): string | null {
   if (result?.ok) return null;
@@ -24,6 +24,15 @@ export function companionLaunchMessage(result: CompanionLaunchResult | null | un
       ...(packages.length
         ? ['Install them, then open Chat again:', `  sudo apt install ${packages.join(' ')}`]
         : ['Install the packages that provide them (RigMatch Chat uses WebKitGTK 4.1), then open Chat again.']),
+    ].join('\n');
+  }
+
+  if (result?.reason === 'spawn-failed') {
+    return [
+      'RigMatch Chat is there but would not start.',
+      '',
+      ...(result.detail ? [result.detail, ''] : []),
+      'If the file is not executable, run chmod +x on it and try again.',
     ].join('\n');
   }
 

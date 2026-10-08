@@ -118,8 +118,15 @@ function launchComfy(launcherPath) {
     })
     : spawn(resolved, [], { cwd, detached: true, stdio: 'ignore' });
 
-  child.unref();
-  return { started: true, launcher: resolved };
+  // An unlaunchable script (no exec bit, no shebang) is an async 'error';
+  // unhandled it would take the main process down.
+  return new Promise((resolve, reject) => {
+    child.once('error', (error) => reject(new Error(`Could not start ${resolved}: ${error.message}`)));
+    child.once('spawn', () => {
+      child.unref();
+      resolve({ started: true, launcher: resolved });
+    });
+  });
 }
 
 module.exports = { findComfyLaunchers, launchComfy, launcherDirsFrom, WINDOWS_LAUNCHERS, UNIX_LAUNCHERS };

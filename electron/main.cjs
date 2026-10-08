@@ -71,7 +71,7 @@ const {
   ollamaCapabilitiesFor,
   applyCapabilitySnapshot,
 } = require('./ollamaCatalog.cjs');
-const { summarizeMemory, cleanDeviceTreeModel, nvidiaDriverProblem, pickPrimaryGpu } = require('./systemProfile.cjs');
+const { summarizeMemory, cleanDeviceTreeModel, nvidiaDriverProblem, ollamaModelsDir, pickModelsFilesystem, pickPrimaryGpu } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
 const { hasChatFormat } = require('./chatFormat.cjs');
 const {
@@ -1447,8 +1447,14 @@ function registerHandlers() {
         stdio: 'ignore',
         windowsHide: false,
       });
+      // Without a listener an EACCES or ENOEXEC (no exec bit, a noexec mount)
+      // is an uncaught exception in this process.
+      const started = await new Promise((resolve) => {
+        child.once('error', (error) => resolve({ ok: false, reason: 'spawn-failed', detail: error.message }));
+        child.once('spawn', () => resolve({ ok: true }));
+      });
       child.unref();
-      return { ok: true };
+      return started;
     }
     return { ok: false, reason: 'not-found' };
   });
@@ -2065,7 +2071,7 @@ async function getSystemProfile({ checkForUpdates = false } = {}) {
   // by looking for "nvidia" in the label, reports "No NVIDIA GPU detected" on an
   // NVIDIA board. Measured on a Jetson Orin Nano, not predicted.
   const primaryGpu = pickPrimaryGpu(graphics.controllers) || await getBoardGpu();
-  const primaryFs = (fsSize || []).sort((a, b) => (b.size || 0) - (a.size || 0))[0] || {};
+  const primaryFs = pickModelsFilesystem(fsSize, ollamaModelsDir({ home: os.homedir(), exists: fsSync.existsSync })) || {};
   const networks = getPrivateNetworkAddresses();
   const cuda = await getCudaStatus(primaryGpu, { checkForUpdates });
   const cpuLoadPercent = await getCpuLoadPercent();
@@ -2558,8 +2564,11 @@ function scoreReleaseAsset(name, terms) {
     if (/\.dmg$/i.test(name)) score += 6;
     if (/\.zip$/i.test(name)) score += 1;
   } else if (process.platform === 'linux') {
-    if (/\.appimage$/i.test(name)) score += 5;
-    if (/\.deb$/i.test(name)) score += 3;
+    // Offer the package the app came from: the installed .deb has no
+    // APPIMAGE variable, and an AppImage would sit beside it as a second copy.
+    const fromAppImage = Boolean(process.env.APPIMAGE);
+    if (/\.appimage$/i.test(name)) score += fromAppImage ? 5 : 3;
+    if (/\.deb$/i.test(name)) score += fromAppImage ? 3 : 5;
   }
 
   if (lower.includes('blockmap') || lower.startsWith('latest') || lower.includes('sha256')) score -= 20;
@@ -2570,22 +2579,22 @@ function scoreReleaseAsset(name, terms) {
 }
 
 function isRigmatchInstallerAsset(name) {
-  return /^RigMatch\.AI-/i.test(name) && /\.(exe|dmg|appimage|deb|zip)$/i.test(name);
+  return /^RigMatch(?:\.AI)?-/i.test(name) && /\.(exe|dmg|appimage|deb|zip)$/i.test(name);
 }
 
 function isRigmatchReleaseDownloadUrl(url) {
   let parsed;
   try { parsed = new URL(url); } catch { return false; }
   if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com') return false;
-  return /^\/DaveEuson\/RigMatch\.AI\/releases\/download\//i.test(parsed.pathname)
-    && /\/RigMatch\.AI-[^/]+\.(exe|dmg|AppImage|deb|zip)$/i.test(parsed.pathname);
+  return /^\/DaveEuson\/RigMatch(?:\.AI)?\/releases\/download\//i.test(parsed.pathname)
+    && /\/RigMatch(?:\.AI)?-[^/]+\.(exe|dmg|AppImage|deb|zip)$/i.test(parsed.pathname);
 }
 
 function isRigmatchReleasePageUrl(url) {
   let parsed;
   try { parsed = new URL(url); } catch { return false; }
   if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com') return false;
-  return /^\/DaveEuson\/RigMatch\.AI\/releases(\/tag\/[^/]+)?\/?$/i.test(parsed.pathname);
+  return /^\/DaveEuson\/RigMatch(?:\.AI)?\/releases(\/tag\/[^/]+)?\/?$/i.test(parsed.pathname);
 }
 
 function getPrivateNetworkAddresses() {

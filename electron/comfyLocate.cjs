@@ -45,8 +45,12 @@ function looksLikeComfyRoot(dir) {
  * Walk up from a starting directory, trying each ancestor and its ComfyUI
  * subfolder. The portable build puts python in a sibling of the ComfyUI
  * directory, so the answer is usually one level up and one across.
+ *
+ * `extraStartDirs` are more places to start from. A venv's python resolves to
+ * /usr/bin/python3 and `python main.py` names no folder, so on Linux the
+ * process's working directory is the only thing that points at ComfyUI.
  */
-function candidatesFrom(startDir, commandLine = '') {
+function candidatesFrom(startDir, commandLine = '', extraStartDirs = []) {
   const found = [];
   const push = (dir) => {
     if (dir && !found.includes(dir) && looksLikeComfyRoot(dir)) found.push(dir);
@@ -63,14 +67,16 @@ function candidatesFrom(startDir, commandLine = '') {
   const scriptMatch = commandLine.match(/([\w.\-\\/]*)main\.py/i);
   const scriptDir = scriptMatch ? path.dirname(scriptMatch[1]) : '';
 
-  let dir = startDir;
-  for (let depth = 0; depth < 5 && dir; depth += 1) {
-    push(dir);
-    push(path.join(dir, 'ComfyUI'));
-    if (scriptDir && scriptDir !== '.') push(path.resolve(dir, scriptDir));
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
+  for (const start of [startDir, ...extraStartDirs]) {
+    let dir = start;
+    for (let depth = 0; depth < 5 && dir; depth += 1) {
+      push(dir);
+      push(path.join(dir, 'ComfyUI'));
+      if (scriptDir && scriptDir !== '.') push(path.resolve(dir, scriptDir));
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
   }
   return found;
 }
@@ -91,9 +97,12 @@ async function processOnPort(port) {
   if (!pid) return { exe: '', commandLine: '' };
   if (process.platform === 'linux') {
     try {
+      let cwd = '';
+      try { cwd = fs.readlinkSync(`/proc/${pid}/cwd`); } catch { /* not ours to read */ }
       return {
         exe: fs.readlinkSync(`/proc/${pid}/exe`),
         commandLine: fs.readFileSync(`/proc/${pid}/cmdline`, 'utf-8').replace(/\0/g, ' ').trim(),
+        cwd,
       };
     } catch {
       return { exe: '', commandLine: '' };
@@ -114,10 +123,10 @@ async function locateComfyRoots(baseUrl = 'http://127.0.0.1:8188') {
   let port = 8188;
   try { port = Number(new URL(baseUrl).port) || 8188; } catch { /* keep the default */ }
 
-  const { exe, commandLine } = await processOnPort(port);
+  const { exe, commandLine, cwd } = await processOnPort(port);
   if (!exe) return { roots: [], source: 'none' };
 
-  const roots = candidatesFrom(path.dirname(exe), commandLine);
+  const roots = candidatesFrom(path.dirname(exe), commandLine, cwd ? [cwd] : []);
   return { roots, source: roots.length ? 'process' : 'none', exe, commandLine };
 }
 

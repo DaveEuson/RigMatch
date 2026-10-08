@@ -377,3 +377,9 @@ test('non-Apple or unexpected ioreg output yields null', () => {
   // Out-of-range values are rejected rather than clamped silently.
   assert.equal(parseIoregGpuStats('"PerformanceStatistics" = {"Device Utilization %"=400}'), null);
 });
+
+test('systemd-resolved is not DaVinci Resolve, but Resolve is', () => {
+  assert.deepEqual(matchKnownGpuApps(['systemd-resolve', 'systemd-resolved']), []);
+  assert.deepEqual(matchKnownGpuApps(['resolve']), ['DaVinci Resolve']);
+  assert.deepEqual(matchKnownGpuApps(['C:\\Program Files\\Blackmagic Design\\DaVinci Resolve\\Resolve.exe']), ['DaVinci Resolve']);
+});
