@@ -139,10 +139,22 @@
   font-weight: 500;
 }
 
-/* A long model name must not push the bar onto two rows; the title has it whole. */
+/* The model's name sits above its score, so a narrow bar still says which model
+   is on top. A long name must not push the bar onto two rows; the title has it
+   whole. */
+.top-match-chip-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  text-align: left;
+  line-height: 1.05;
+}
+
 .top-match-chip-name {
   max-width: 14ch;
   overflow: hidden;
+  color: var(--text);
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -680,7 +692,6 @@
    two rows. The same rules as the next block; :where keeps them the same
    weight, so the narrower tiers further down still win. */
 @media (max-width: 1919px) {
-  .top-bar:where(.advanced) .top-match-chip-name,
   .top-bar:where(.advanced) .top-bar-service-name,
   .top-bar:where(.advanced) .top-bar-settings span,
   .top-bar:where(.advanced) .top-bar-donate span { display: none; }
@@ -691,7 +702,7 @@
 }
 
 @media (max-width: 1599px) {
-  .top-match-chip-name { display: none; }
+  .top-match-chip-name { max-width: 10ch; }
   .top-bar-service-name { display: none; }
   .top-bar-settings span,
   .top-bar-donate span { display: none; }
