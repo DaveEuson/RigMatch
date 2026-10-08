@@ -57,9 +57,42 @@ function cleanDeviceTreeModel(raw) {
   return String(raw ?? '').replace(/\0/g, '').trim();
 }
 
+/**
+ * The graphics card RigMatch sizes models for.
+ *
+ * The largest reported VRAM used to win, which is right until the NVIDIA
+ * driver stops answering: then the NVIDIA card reports 0 and a Ryzen's
+ * integrated graphics wins with its 512 MB carve-out. Measured on an RTX 4070
+ * beside AMD "Device 13c0": the top bar read "VRAM 0.5 GB" and every pick was
+ * sized for it. An NVIDIA card is the one Ollama runs on, so it comes first
+ * whatever it reports.
+ */
+function pickPrimaryGpu(controllers) {
+  const gpus = (controllers || [])
+    .filter((gpu) => gpu && gpu.model && !/microsoft basic/i.test(gpu.model))
+    .sort((a, b) => (b.vram || 0) - (a.vram || 0));
+  return gpus.find((gpu) => /nvidia/i.test(`${gpu.vendor || ''} ${gpu.model}`)) || gpus[0];
+}
+
+/**
+ * Why nvidia-smi could not report an NVIDIA card, from what it printed.
+ *
+ * "Driver/library version mismatch" means the driver package was updated
+ * while the old kernel module is still loaded, which a restart fixes. Any
+ * other failure (not installed, not loaded, no answer) means the driver
+ * needs installing or repairing. Returns null when nvidia-smi answered.
+ */
+function nvidiaDriverProblem({ output, error }) {
+  if (!error) return null;
+  if (/version mismatch/i.test(`${output || ''} ${error}`)) return 'reboot-required';
+  return 'driver-missing';
+}
+
 module.exports = {
   bytesToGb,
   cleanDeviceTreeModel,
   mbToGb,
+  nvidiaDriverProblem,
+  pickPrimaryGpu,
   summarizeMemory,
 };

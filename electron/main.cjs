@@ -71,7 +71,7 @@ const {
   ollamaCapabilitiesFor,
   applyCapabilitySnapshot,
 } = require('./ollamaCatalog.cjs');
-const { summarizeMemory, cleanDeviceTreeModel } = require('./systemProfile.cjs');
+const { summarizeMemory, cleanDeviceTreeModel, nvidiaDriverProblem, pickPrimaryGpu } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
 const { hasChatFormat } = require('./chatFormat.cjs');
 const {
@@ -2057,9 +2057,6 @@ async function getSystemProfile({ checkForUpdates = false } = {}) {
     si.battery().catch(() => ({ hasBattery: false })),
   ]);
 
-  const gpus = (graphics.controllers || [])
-    .filter((gpu) => gpu && gpu.model && !/microsoft basic/i.test(gpu.model))
-    .sort((a, b) => (b.vram || 0) - (a.vram || 0));
 
   // A board whose graphics is not on the PCI bus leaves systeminformation with
   // nothing to report, and everything downstream then fails together: no model
@@ -2067,7 +2064,7 @@ async function getSystemProfile({ checkForUpdates = false } = {}) {
   // below never fires and VRAM resolves to 0; and getCudaStatus, which decides
   // by looking for "nvidia" in the label, reports "No NVIDIA GPU detected" on an
   // NVIDIA board. Measured on a Jetson Orin Nano, not predicted.
-  const primaryGpu = gpus[0] || await getBoardGpu();
+  const primaryGpu = pickPrimaryGpu(graphics.controllers) || await getBoardGpu();
   const primaryFs = (fsSize || []).sort((a, b) => (b.size || 0) - (a.size || 0))[0] || {};
   const networks = getPrivateNetworkAddresses();
   const cuda = await getCudaStatus(primaryGpu, { checkForUpdates });
@@ -2092,9 +2089,13 @@ async function getSystemProfile({ checkForUpdates = false } = {}) {
   // reporting 0 VRAM makes RigMatch recommend only tiny models (phi3:mini on a
   // 4090). Grace-based parts report their shared pool here, which is the right
   // number for "how big a model can this run" even though it is not discrete VRAM.
+  // An NVIDIA card nvidia-smi cannot read has a driver problem, and saying so
+  // beats sizing models for whatever else is in the machine.
+  let driverProblem = null;
   if (vramGb <= 0 && !isMac) {
-    const nvidiaVramMb = await getNvidiaVramMb();
-    if (nvidiaVramMb > 0) vramGb = mbToGb(nvidiaVramMb);
+    const nvidia = await getNvidiaVram();
+    if (nvidia.vramMb > 0) vramGb = mbToGb(nvidia.vramMb);
+    else if (/nvidia/i.test(`${primaryGpu.vendor || ''} ${primaryGpu.model || ''}`)) driverProblem = nvidia.problem;
   }
 
   // Unified memory: the pool IS system RAM, by definition. This was gated on
@@ -2132,6 +2133,7 @@ async function getSystemProfile({ checkForUpdates = false } = {}) {
       vendor: primaryGpu.vendor || (isMac ? 'Apple' : 'Unknown'),
       model: primaryGpu.model || (isAppleSilicon ? 'Apple Silicon GPU' : 'Unknown GPU'),
       vramGb,
+      ...(driverProblem ? { driverProblem } : {}),
       vramUsedGb: primaryGpu.memoryUsed ? mbToGb(primaryGpu.memoryUsed) : null,
       gpuLoadPercent: primaryGpu.utilizationGpu ?? null,
       driverVersion,
@@ -2429,19 +2431,20 @@ async function getBoardGpu() {
 // systeminformation frequently reports 0 VRAM for NVIDIA GPUs on Linux (and some
 // Windows laptop/hybrid setups). Ask nvidia-smi directly so a 16 GB 4090 isn't
 // mistaken for a VRAM-less rig — which otherwise collapses model picks to tiny
-// models. Returns VRAM in MB (MiB), or 0 if nvidia-smi is absent/unparseable.
-async function getNvidiaVramMb() {
-  const { output, error } = await runCommand(
+// models. Returns VRAM in MB (MiB), 0 if nvidia-smi is absent or unparseable,
+// and why it failed (nvidiaDriverProblem).
+async function getNvidiaVram() {
+  const result = await runCommand(
     'nvidia-smi',
     ['--query-gpu=memory.total', '--format=csv,noheader,nounits'],
     3500,
   );
-  if (error) return 0;
-  const values = output
+  if (result.error) return { vramMb: 0, problem: nvidiaDriverProblem(result) };
+  const values = result.output
     .split('\n')
     .map((line) => parseInt(line.trim(), 10))
     .filter((n) => Number.isFinite(n) && n > 0);
-  return values.length ? Math.max(...values) : 0;
+  return { vramMb: values.length ? Math.max(...values) : 0, problem: null };
 }
 
 async function runCommand(command, args = [], timeoutMs = 2500) {

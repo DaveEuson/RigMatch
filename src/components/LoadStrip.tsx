@@ -2,6 +2,7 @@
 import type { ReactNode } from 'react';
 import type { SystemProfile } from '../types';
 import { LOW_DISK_GB, loadLevel } from '../lib/loadLevel';
+import { gpuDriverReading } from '../lib/gpuDriver';
 import { UiIcon, type UiIconName } from './icons/UiIcon';
 
 const round = (value: number) => (value >= 10 ? Math.round(value) : Math.round(value * 10) / 10);
@@ -23,6 +24,11 @@ export function LoadStrip({ system, running }: {
   items.push({ key: 'cpu', icon: 'cpu', label: 'CPU', value: `${Math.round(system.cpu.loadPercent)}%`, percent: system.cpu.loadPercent });
   if (system.gpu.gpuLoadPercent != null) {
     items.push({ key: 'gpu', icon: 'gpu', label: 'GPU', value: `${Math.round(system.gpu.gpuLoadPercent)}%`, percent: system.gpu.gpuLoadPercent });
+  }
+  // Said in place of VRAM: without its driver the card holds nothing, and the
+  // number shown was the integrated graphics' 0.5 GB.
+  if (system.gpu.driverProblem) {
+    items.push({ key: 'gpu-driver', icon: 'gpu', label: 'GPU', value: gpuDriverReading(system.gpu.driverProblem), percent: null, level: 'full' });
   }
   if (vramTotal > 0) {
     const used = system.gpu.vramUsedGb;

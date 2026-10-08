@@ -33,6 +33,11 @@ export type SystemProfile = {
     driverVersion: string;
     bus: string;
     isUnifiedMemory?: boolean;
+    /**
+     * An NVIDIA card nvidia-smi could not read: the driver is missing or not
+     * loaded, or was updated and needs a restart ("version mismatch").
+     */
+    driverProblem?: 'driver-missing' | 'reboot-required';
   };
   storage: {
     sizeGb: number;
