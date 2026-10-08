@@ -76,7 +76,8 @@ test('a Linux venv install is found from the folder it was started in', async ()
     mkdirSync(`${root}/ComfyUI/models/checkpoints`, { recursive: true });
     assert.deepEqual(candidatesFrom('/usr/bin', 'python main.py'), []);
     const roots = candidatesFrom('/usr/bin', 'python main.py', [`${root}/ComfyUI`]);
-    assert.deepEqual(roots.map(slash), [slash(`${root}/ComfyUI`)]);
+    // A Set: Windows spells the same folder with forward and back slashes, once per way it was reached.
+    assert.deepEqual([...new Set(roots.map(slash))], [slash(`${root}/ComfyUI`)]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
