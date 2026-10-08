@@ -65,3 +65,19 @@ test('ComfyUI Desktop is found from --base-directory, wherever its python runs',
     rmSync(base, { recursive: true, force: true });
   }
 });
+
+test('a Linux venv install is found from the folder it was started in', async () => {
+  // python in a venv resolves to /usr/bin/python3 and "python main.py" names
+  // no folder, so the working directory is all that points at ComfyUI.
+  const { mkdtempSync, mkdirSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const root = mkdtempSync(`${tmpdir()}/comfy-venv-`);
+  try {
+    mkdirSync(`${root}/ComfyUI/models/checkpoints`, { recursive: true });
+    assert.deepEqual(candidatesFrom('/usr/bin', 'python main.py'), []);
+    const roots = candidatesFrom('/usr/bin', 'python main.py', [`${root}/ComfyUI`]);
+    assert.deepEqual(roots.map(slash), [slash(`${root}/ComfyUI`)]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
