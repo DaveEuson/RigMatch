@@ -11,6 +11,7 @@ import { getGoalMatches } from '../lib/goalMatches';
 import type { GoalId } from '../lib/goals';
 import { downloadMatchCard } from '../lib/matchCard';
 import type { ListTestResult } from '../lib/modelCatalog';
+import { buildFeedbackUrl } from '../lib/feedback';
 import { buildBugReportUrl, buildDiagnosticsText, buildShareableScorecard, getNavLabel, getRankedModelScores, getRecentModelScores, getTaskTopPicks, getThemeLabel } from '../lib/modelCatalog';
 import { MATCH_GRADE_BAND_ROWS } from '../lib/scoreReference';
 import type { SettingsSectionId } from '../lib/settingsSections';
@@ -38,7 +39,7 @@ import { BalanceFader } from './BalanceFader';
 import { CodingBoard } from './CodingBoard';
 import { LabStandings } from './LabStandings';
 import { ReleaseNotes, UpdateCenter } from './UpdateCenter';
-import { Bug, ChevronRight, Coffee, Copy, Download, ExternalLink, RefreshCw, Trash2, Trophy, X } from 'lucide-react';
+import { Bug, ChevronRight, Coffee, Copy, Download, ExternalLink, MessageSquare, RefreshCw, Trash2, Trophy, X } from 'lucide-react';
 import { getModelAvatarSrc } from '../lib/modelAvatars';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AllDemosButton } from './SkillDemoViewers';
@@ -740,8 +741,8 @@ export function UtilityPanel({
           </div>
           <div className="utility-stat bug-report-stat">
             <span>Beta feedback</span>
-            <strong>Found something broken?</strong>
-            <em>One click opens a prefilled GitHub issue with your hardware specs attached. No telemetry — this is the only way I hear about bugs.</em>
+            <strong>Found something broken, or want to say how it went?</strong>
+            <em>One click opens a prefilled GitHub issue with your hardware specs attached. Nothing is sent until you press Submit there. No telemetry, so this is how I hear about bugs and how it went.</em>
             <div className="bug-report-actions">
               <a
                 className="btn btn-line"
@@ -751,6 +752,17 @@ export function UtilityPanel({
               >
                 <Bug aria-hidden="true" />
                 Report a bug
+                <ExternalLink aria-hidden="true" />
+              </a>
+              <a
+                className="btn btn-line"
+                href={buildFeedbackUrl(system, { ollamaVersion: ollama.version })}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Opens a GitHub page in your browser. Nothing is sent until you press Submit there."
+              >
+                <MessageSquare aria-hidden="true" />
+                Share how it went
                 <ExternalLink aria-hidden="true" />
               </a>
               <button
