@@ -13,7 +13,7 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8');
 
 test('Simple Mode is a main landmark with an h1 naming the step', () => {
   const wizard = read('../src/components/SimpleWizard.tsx');
-  assert.match(wizard, /<main className="sw-content">\s*(\{\/\*[\s\S]*?\*\/\}\s*)?<h1 className="sr-only">RigMatch Simple Mode, step \{stepIndex \+ 1\}/);
+  assert.match(wizard, /<main className="sw-content"[^>]*>\s*(\{\/\*[\s\S]*?\*\/\}\s*)?<h1 className="sr-only">RigMatch Simple Mode, step \{stepIndex \+ 1\}/);
   assert.equal((wizard.match(/<h1\b/g) ?? []).length, 1, 'one h1');
 });
 

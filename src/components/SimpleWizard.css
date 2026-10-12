@@ -56,6 +56,13 @@
   overflow-y: auto;
 }
 
+/* Setup is a host line and a 640px column, on one left axis. In the full 1280px
+   shell they sat in its left half with the right half empty. The step's own
+   width is wide enough for the host's bubble (820px) and its avatar, and the
+   group is centred, so the axis stays and the screen is no longer lopsided.
+   The steps that fill the width are left alone. */
+.sw-content[data-step='setup'] { max-width: 900px; }
+
 .sw-muted { margin: 0; color: var(--muted); font-size: var(--fs-ui); }
 
 /* ---- The host --------------------------------------------------------- */
