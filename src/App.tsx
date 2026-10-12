@@ -2450,6 +2450,10 @@ function App() {
       return;
     }
 
+    // A paused queue that is then cancelled used to leave this set, and the
+    // auto-start effect waits for it to clear: nothing queued afterwards began.
+    setIsPullPaused(false);
+
     if (queuedModelIds.size === 0) {
       setActivity('Download queue is already empty.');
       return;
@@ -2812,7 +2816,14 @@ function App() {
         return;
       }
 
-      setQueuedModelIds(new Set<string>());
+      // Only what this run handled. Wiping the whole set also dropped a model
+      // queued while the run was going, which then sat "Queued" with nothing
+      // left to start it.
+      setQueuedModelIds((current) => {
+        const next = new Set(current);
+        for (const row of queuedRows) next.delete(row.displayName);
+        return next;
+      });
       setActivity(`${completedCount} model${completedCount === 1 ? '' : 's'} downloaded. Refreshing the model list...`);
       await refreshRig();
     } catch (error) {
@@ -4018,8 +4029,9 @@ function App() {
       // A coding buddy is asked and then made to build: the questions measure
       // how it answers, the app measures whether what it writes runs. Either
       // alone crowns a model on half the job.
+      // Stop must stop the builds too, not only the questions before them.
       void runListTest()
-        .then(() => runSkillTestsAfterRun(models, 'app-builder'))
+        .then(() => (stopRunRef.current ? undefined : runSkillTestsAfterRun(models, 'app-builder')))
         .catch(reportSkillRunFailure);
       return;
     }
@@ -4075,12 +4087,17 @@ function App() {
     }
 
     if (mode === 'single') {
-      void startBenchmark(model).then(() => runSkillTestsAfterRun(skillModels)).catch(reportSkillRunFailure);
+      stopRunRef.current = false;
+      void startBenchmark(model)
+        .then(() => (stopRunRef.current ? undefined : runSkillTestsAfterRun(skillModels)))
+        .catch(reportSkillRunFailure);
       return;
     }
 
     if (mode === 'speed-date') {
-      void runListTest().then(() => runSkillTestsAfterRun(skillModels)).catch(reportSkillRunFailure);
+      void runListTest()
+        .then(() => (stopRunRef.current ? undefined : runSkillTestsAfterRun(skillModels)))
+        .catch(reportSkillRunFailure);
     }
   }, [balances, closeRunSheet, pendingGpuContention, pendingRunMode, pendingSingleModel, runChannel, runListTest, runSkillTestsAfterRun, selectedModel, sheetQuick, sheetSimple, shortlistedRows, startBenchmark, startSimpleShow, reportSkillRunFailure, wizardBalance]);
 
@@ -4687,7 +4704,7 @@ function App() {
           }}
           balance={wizardBalance}
           onBalanceChange={(value) => setBalance(wizardChannel === 'app' ? 'code' : wizardChannel, value)}
-          onStopShow={requestStopRun}
+          onStopShow={() => { requestStopRun(); requestStopSkills(); }}
           planLine={wizardPlanLine}
           winner={wizardWinner}
           lineupResults={wizardLineupResults}
@@ -5500,11 +5517,16 @@ function App() {
  * facts" is a quality of a chat model, not a goal someone arrives with.
  */
 /** The wizard dream matching a goal, for opening PICK on the splash answer. */
-function dreamForGoal(goalId: string | undefined): 'talk' | 'write' | 'code' | 'image' | 'video' | undefined {
+function dreamForGoal(goalId: string | undefined): 'talk' | 'write' | 'code' | 'read-image' | 'hear' | 'image' | 'video' | 'audio' | undefined {
   switch (goalId) {
     case 'talk': return 'talk';
     case 'write': return 'write';
     case 'code': return 'code';
+    // These three opened Pick on "Show everyone" and ran a chat show, so the
+    // one thing the person said they wanted was not what was tested.
+    case 'describe-image': return 'read-image';
+    case 'transcribe-file': return 'hear';
+    case 'make-audio': return 'audio';
     case 'make-images': return 'image';
     case 'make-video':
     case 'animate-image': return 'video';
