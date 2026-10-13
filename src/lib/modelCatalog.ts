@@ -306,6 +306,24 @@ export function isListTestResult(value: unknown): value is ListTestResult {
   );
 }
 
+/**
+ * The entries of a saved record that pass the guard, or null when it is not a
+ * record at all.
+ *
+ * The all-or-nothing guards below treated one entry that failed (a score saved
+ * before a field existed, a hand edit) as the whole record being unusable, and
+ * the fallback then wrote the empty state over the file: every saved score gone
+ * for one bad row.
+ */
+export function keepValidEntries<T>(value: unknown, guard: (entry: unknown) => entry is T): Record<string, T> | null {
+  if (!isRecord(value)) return null;
+  const kept: Record<string, T> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (guard(entry)) kept[key] = entry;
+  }
+  return kept;
+}
+
 export function isModelScores(value: unknown): value is Record<string, TestedModelScore> {
   if (!isRecord(value)) return false;
   return Object.values(value).every(isTestedModelScore);
@@ -505,11 +523,15 @@ export function removeListTestScores(current: ListTestResult | null, aliases: st
   const normalizedAliases = aliases.map(normalizeModelKey);
   const remaining = current.results
     .filter((score) => !normalizedAliases.includes(normalizeModelKey(score.model)))
-    .sort((left, right) => right.total - left.total);
+    // The app's own comparator: the integer total alone ordered 87.5 above 87.6,
+    // and the list contradicted the numbers it showed.
+    .sort(compareTestedModelScores);
 
   if (!remaining.length) return null;
 
+  // Spread first, so what else the show recorded (its failures) is kept.
   return {
+    ...current,
     winner: remaining[0].model,
     results: remaining,
   };

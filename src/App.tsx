@@ -1,6 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { recordAchievements } from './lib/achievements';
+import { recordAchievements, resetAchievementsInMemory } from './lib/achievements';
 import {
   ArrowLeft,
   Lightbulb,
@@ -122,7 +122,8 @@ import {
   getSavedUiMode,
   getFriendlyModelName,
   getThemeLabel,
-  isBenchmarkByModel,
+  isTestedModelScore,
+  keepValidEntries,
   isBenchmarkForAliases,
   isBenchmarkForModel,
   isBenchmarkResult,
@@ -137,7 +138,6 @@ import {
   canReadImages,
   isLikelyImageGenerationModel,
   isListTestResult,
-  isModelScores,
   isRecord,
   mergeModelRows,
   normalizeBenchmarkResultModel,
@@ -216,6 +216,7 @@ import {
   describeLabFailure,
   labChallengesWithOutput,
   readAdvancedLabResults,
+  refreshLabResults,
   writeAdvancedLabResults,
   wasJudged,
   checkState,
@@ -1853,6 +1854,12 @@ function App() {
       setModelNotes({});
       setRunHistory(emptyRunHistory());
       resetGoals();
+      // Still in memory after the keys were removed, and written back by the
+      // next save: reports, Lab results (so every per-channel Top Match) and
+      // earned badges all came back after "Clear all data".
+      setRunReports([]);
+      refreshLabResults();
+      resetAchievementsInMemory();
       // The faders and the channel are preferences about data that is gone.
       setBalances(readBalances(null, null));
       setWorkbenchPick(null);
@@ -1903,10 +1910,18 @@ function App() {
     setQueuedModelIds((current) => removeSetValues(current, aliases));
     setClearedTopMatches((current) => removeSetValues(current, aliases));
 
+    // The last show and the last single test belong to the model too. Left in
+    // place, the Winner screen and the report bar kept crowning a model that
+    // was no longer on the PC, and "Chat with the winner" aimed at it.
+    setListTestResult((current) => removeListTestScores(current, aliases));
+    const nextModel = modelRows.find((candidate) => !aliases.includes(candidate.displayName) && candidate.installed)?.displayName
+      ?? modelRows.find((candidate) => !aliases.includes(candidate.displayName))?.displayName
+      ?? 'qwen2.5:7b';
+    setBenchmark((current) => (current && aliases.includes(current.model)
+      ? createEmptyBenchmark(nextModel, current.baseUrl)
+      : current));
+
     if (aliases.includes(selectedModel)) {
-      const nextModel = modelRows.find((candidate) => !aliases.includes(candidate.displayName) && candidate.installed)?.displayName
-        ?? modelRows.find((candidate) => !aliases.includes(candidate.displayName))?.displayName
-        ?? 'qwen2.5:7b';
       setSelectedModel(nextModel);
     }
   }, [modelRows, selectedHostId, selectedModel]);
@@ -5626,17 +5641,24 @@ function getSavedHistory(): PersistedHistory | null {
     if (!saved) return null;
 
     const parsed = JSON.parse(saved) as Partial<PersistedHistory>;
-    const benchmark = isBenchmarkResult(parsed.benchmark) ? parsed.benchmark : null;
-    const hasByModel = isBenchmarkByModel(parsed.benchmarkByModel);
-    const hasScores = isModelScores(parsed.modelScores);
+    // Per entry: one bad row used to discard every saved score, and the next
+    // save wrote the empty state over the file.
+    const withPrompts = (result: BenchmarkResult): BenchmarkResult => (
+      Array.isArray(result.prompts) ? result : { ...result, prompts: [] }
+    );
+    const benchmark = isBenchmarkResult(parsed.benchmark) ? withPrompts(parsed.benchmark) : null;
+    const keptByModel = keepValidEntries(parsed.benchmarkByModel, isBenchmarkResult);
+    const keptScores = keepValidEntries(parsed.modelScores, isTestedModelScore);
+    const hasByModel = keptByModel !== null && Object.keys(keptByModel).length > 0;
+    const hasScores = keptScores !== null && Object.keys(keptScores).length > 0;
     // Nothing usable saved (no benchmark, no per-model results, no scores) — ignore.
     if (!benchmark && !hasByModel && !hasScores) return null;
 
     const benchmarkByModel = hasByModel
-      ? upsertBenchmarkResults({}, Object.values(parsed.benchmarkByModel as Record<string, BenchmarkResult>))
+      ? upsertBenchmarkResults({}, Object.values(keptByModel as Record<string, BenchmarkResult>).map(withPrompts))
       : benchmark ? upsertBenchmarkResults({}, [benchmark]) : {};
     const modelScores = hasScores
-      ? (parsed.modelScores as Record<string, TestedModelScore>)
+      ? (keptScores as Record<string, TestedModelScore>)
       : upsertModelScores({}, Object.values(benchmarkByModel));
 
     const firstByModel = Object.values(benchmarkByModel)[0];

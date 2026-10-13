@@ -157,6 +157,17 @@ export function subscribeLabResults(listener: () => void): () => void {
   return () => { resultListeners.delete(listener); };
 }
 
+/**
+ * Read the results again, after the storage was cleared.
+ *
+ * The snapshot is cached until the next write, so a wipe left every Lab result
+ * and every per-channel Top Match on screen until the app restarted.
+ */
+export function refreshLabResults() {
+  resultsVersion += 1;
+  resultListeners.forEach((listener) => listener());
+}
+
 /** The same object until the next write, as useSyncExternalStore requires. */
 export function labResultsSnapshot(): Record<string, AdvancedLabResult> {
   if (!resultsCache || resultsCache.version !== resultsVersion) {
