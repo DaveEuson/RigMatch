@@ -208,3 +208,14 @@ export function useAchievements(): AchievementState {
 export function achievementSnapshot(): AchievementState {
   return current;
 }
+
+/**
+ * Forget what this session had earned, after the storage was wiped.
+ *
+ * The wipe removed the saved key, but this module held the earned badges in
+ * memory and the next commit wrote them straight back.
+ */
+export function resetAchievementsInMemory() {
+  current = EMPTY;
+  listeners.forEach((listener) => listener());
+}
