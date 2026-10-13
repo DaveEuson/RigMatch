@@ -203,6 +203,7 @@ import { ClearScoresModal } from './components/ClearScoresModal';
 import { ThirdPartyDownloadConsentModal } from './components/ThirdPartyDownloadConsentModal';
 import { SetupGuideDock } from './components/SetupGuideDock';
 import { DownloadTickerDock } from './components/DownloadTickerDock';
+import { pickJustChatModel } from './lib/justChat';
 import { Elapsed } from './components/Elapsed';
 import { FirstRunSplash } from './components/FirstRunSplash';
 import { ModelPoolLineupStrip } from './components/ModelPoolLineupStrip';
@@ -2971,6 +2972,68 @@ function App() {
     setPendingThirdPartyDownloadRows(null);
   }, [pendingThirdPartyDownloadRows, queueMissingSpeedDateModels]);
 
+  /**
+   * "Just let me chat": one model to talk to, no show. Someone who came to
+   * replace a chat service did not come to compare five models for fifteen
+   * minutes. The model is one already on the PC when there is one, and a good
+   * all-round download when there is not, through the same consent and queue
+   * as any other download. Its chat opens by itself when it has arrived.
+   */
+  const justChatChoice = useMemo(
+    () => pickJustChatModel(modelRows, system.gpu.vramGb),
+    [modelRows, system.gpu.vramGb],
+  );
+  const [justChatTarget, setJustChatTarget] = useState<string | null>(null);
+
+  const startJustChat = useCallback(() => {
+    if (!justChatChoice) return;
+    const row = modelRows.find((candidate) => candidate.displayName === justChatChoice.model);
+    if (!row) return;
+    if (row.installed) {
+      openChatWith(row.displayName);
+      return;
+    }
+    // A failed pull leaves its entry behind; a retry starts from a clean one.
+    setPullProgressByModel((current) => removePullProgress(current, row.displayName));
+    setJustChatTarget(row.displayName);
+    requestThirdPartyModelDownloads([row]);
+  }, [justChatChoice, modelRows, openChatWith, requestThirdPartyModelDownloads]);
+
+  // Open the chat when the model arrives, and stop waiting for it if the
+  // download was declined or did not finish.
+  useEffect(() => {
+    if (!justChatTarget) return;
+    const row = modelRows.find((candidate) => candidate.displayName === justChatTarget);
+    if (row?.installed) {
+      setJustChatTarget(null);
+      openChatWith(justChatTarget);
+      return;
+    }
+    const phase = pullProgressByModel[justChatTarget]?.phase;
+    const stillComing = pendingThirdPartyDownloadRows !== null
+      || queuedModelIds.has(justChatTarget)
+      || phase === 'queued' || phase === 'started' || phase === 'pulling' || phase === 'paused';
+    if (!stillComing) setJustChatTarget(null);
+  }, [justChatTarget, modelRows, openChatWith, pendingThirdPartyDownloadRows, pullProgressByModel, queuedModelIds]);
+
+  const justChatForWizard = useMemo(() => {
+    if (!justChatChoice) return null;
+    const progress = pullProgressByModel[justChatChoice.model];
+    const waiting = justChatTarget === justChatChoice.model;
+    const state: 'idle' | 'getting' | 'failed' = justChatChoice.installed
+      ? 'idle'
+      : waiting
+        ? 'getting'
+        : progress?.phase === 'failed' ? 'failed' : 'idle';
+    return {
+      name: justChatChoice.name,
+      sizeGb: justChatChoice.sizeGb,
+      installed: justChatChoice.installed,
+      state,
+      percent: typeof progress?.percent === 'number' ? progress.percent : null,
+    };
+  }, [justChatChoice, justChatTarget, pullProgressByModel]);
+
   // "Choose for me": a lineup from the cards Pick is showing for the chosen
   // goal (see chooseLineup). Those cards already fit this PC, can hold a
   // conversation, and come one per model name, so the field is varied rather
@@ -4731,6 +4794,8 @@ function App() {
             },
           }}
           onChatWithWinner={openChatWithWinner}
+          justChat={justChatForWizard}
+          onJustChat={startJustChat}
           onOpenScorecard={() => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('history'); }}
           onRunAgain={() => undefined}
           onSwitchToAdvanced={() => {

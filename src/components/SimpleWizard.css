@@ -771,3 +771,21 @@
   .sw-curtains i + i,
   .sw-heart-burst i { animation: none; }
 }
+
+/* ---- Just chat --------------------------------------------------------- */
+/* A quiet second door under the one gold button: it must not compete with
+   Choose your models, which is how most people should go. */
+.sw-justchat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  width: 100%;
+  margin-top: var(--s3);
+  padding: var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  background: var(--panel);
+}
+.sw-justchat h3 { margin: 0; color: var(--text-strong); font: 400 20px / 1.2 var(--display); }
+.sw-justchat p { margin: 0; color: var(--text); font-size: 15px; }
+.sw-just-chat-link { margin-left: auto; }
