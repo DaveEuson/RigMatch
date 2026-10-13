@@ -12,7 +12,13 @@ import type { PullProgressUpdate } from '../types';
  * already stopped.
  */
 
-export type DownloadRowStatus = 'done' | 'downloading' | 'paused' | 'failed' | 'queued';
+/**
+ * notStarted: not on this PC and with no download in flight or queued. It used
+ * to read as 'queued', so a pick that never began (consent declined, a stop, a
+ * model skipped for disk space) sat at "Up next" for ever, with Next disabled
+ * and nothing to press.
+ */
+export type DownloadRowStatus = 'done' | 'downloading' | 'paused' | 'failed' | 'queued' | 'notStarted';
 
 /** A comparison needs two contestants; App.tsx's runListTest enforces the same. */
 export const MIN_CONTESTANTS = 2;
@@ -22,7 +28,7 @@ export function getDownloadRowStatus(
   pull: PullProgressUpdate | undefined,
 ): DownloadRowStatus {
   if (installed) return 'done';
-  if (!pull) return 'queued';
+  if (!pull) return 'notStarted';
   if (pull.phase === 'failed') return 'failed';
   if (pull.phase === 'paused') return 'paused';
   if (pull.phase === 'complete' || pull.phase === 'queued') return 'queued';
@@ -32,6 +38,8 @@ export function getDownloadRowStatus(
 export type DownloadStepSummary = {
   installedCount: number;
   failedCount: number;
+  /** Picked models with no download in flight or queued. */
+  notStartedCount: number;
   /**
    * Every picked model is on the machine, so the step has nothing to do and is
    * skipped in both directions. Deliberately distinct from `canContinue`, which
@@ -62,6 +70,7 @@ export function summarizeDownloadStep(
   const installedCount = statuses.filter((s) => s === 'done').length;
   const failedCount = statuses.filter((s) => s === 'failed').length;
   const stillMoving = statuses.some((s) => s === 'downloading' || s === 'queued' || s === 'paused');
+  const notStartedCount = statuses.filter((s) => s === 'notStarted').length;
   const allInstalled = rows.length > 0 && installedCount === rows.length;
 
   // Once nothing is moving, don't strand the user over a download that failed —
@@ -72,7 +81,9 @@ export function summarizeDownloadStep(
 
   const blockedReason = !canContinue && failedCount > 0 && !stillMoving
     ? `${failedCount} download${failedCount === 1 ? '' : 's'} didn't finish, so there aren't enough contestants. Go back and pick another.`
-    : undefined;
+    : !canContinue && notStartedCount > 0 && !stillMoving
+      ? 'Nothing is downloading yet. Press Start the downloads.'
+      : undefined;
 
-  return { installedCount, failedCount, allInstalled, stillMoving, canContinue, blockedReason };
+  return { installedCount, failedCount, notStartedCount, allInstalled, stillMoving, canContinue, blockedReason };
 }

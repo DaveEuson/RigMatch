@@ -260,6 +260,9 @@ type SimpleWizardProps = {
   trackerSlot?: HTMLElement | null;
   /** Opens the shareable scorecard image for the winning model. */
   onShareScore: () => void;
+  /** A conversation already exists, so the way back to it is on the first screen. */
+  continueChat?: { name: string } | null;
+  onContinueChat?: () => void;
   onRunAgain: () => void;
   onSwitchToAdvanced: () => void;
   /** Where the wizard was last time it was mounted. Switching to Advanced and
@@ -671,6 +674,13 @@ export function SimpleWizard(props: SimpleWizardProps) {
             {props.onDismissNotice && (
               <button type="button" className="btn btn-link" onClick={props.onDismissNotice}>Got it</button>
             )}
+          </div>
+        )}
+
+        {step === 'setup' && props.continueChat && props.onContinueChat && (
+          <div className="sw-continue-chat" role="region" aria-label="Continue your chat">
+            <span>Pick up where you left off: your chat with <strong>{props.continueChat.name}</strong>.</span>
+            <button type="button" className="btn btn-line btn-sm" onClick={props.onContinueChat}>Continue chatting</button>
           </div>
         )}
 
@@ -1402,7 +1412,11 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel, onStartDownloads
   // The row said "Start it again" and there was no way to, so a lineup short of
   // contestants was a dead end.
   const statuses = shortlistedRows.map((row) => getDownloadRowStatus(row.installed, pullProgressByModel[row.displayName]));
+  const moving = statuses.some((s) => s === 'downloading' || s === 'queued' || s === 'paused');
   const canRetry = statuses.includes('failed') && !statuses.some((s) => s === 'downloading' || s === 'queued');
+  // A pick with no download behind it: declined, stopped, or skipped for disk
+  // space. Rows read "Up next" for ever and Next stayed disabled.
+  const canStart = !canRetry && statuses.includes('notStarted') && !moving;
   return (
     <div className="sw-download">
       <div className="sw-download-head">
@@ -1427,7 +1441,9 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel, onStartDownloads
               ? 'Paused'
               : status === 'queued'
                 ? 'Waiting in line'
-                : [
+                : status === 'notStarted'
+                  ? 'Not started yet'
+                  : [
               pull?.completedBytes != null && pull?.totalBytes
                 ? `${formatBytes(pull.completedBytes)} of ${formatBytes(pull.totalBytes)}`
                 : (pull?.status || 'Downloading…'),
@@ -1447,14 +1463,17 @@ function DownloadScreen({ shortlistedRows, pullProgressByModel, onStartDownloads
                 : status === 'failed' ? "Didn't download"
                 : status === 'paused' ? 'Paused'
                 : status === 'downloading' ? `${Math.round(percent)}%`
+                : status === 'notStarted' ? 'Not started'
                 : 'Up next'}
             </span>
           </div>
         );
       })}
-      {canRetry && (
+      {(canRetry || canStart) && (
         <div className="sw-download-retry">
-          <button type="button" className="btn btn-line" onClick={onStartDownloads}>Try the downloads again</button>
+          <button type="button" className="btn btn-line" onClick={onStartDownloads}>
+            {canRetry ? 'Try the downloads again' : 'Start the downloads'}
+          </button>
         </div>
       )}
       <p className="sw-muted sw-download-note">Downloads pick up where they left off if you close RigMatch.</p>
@@ -1782,7 +1801,7 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
 /** When the curtains have parted far enough for the winner to land. */
 const CURTAIN_MS = 900;
 
-function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedOut, balance, onBalanceChange, round, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
+function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedOut, balance, onBalanceChange, round, runProgress, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
   // Show effects: the curtains part on the winner, the bulbs flash, the
   // audience applauds. Without them the reveal plays exactly as before.
   const { effects } = useShowExtras();
@@ -1790,6 +1809,24 @@ function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedO
     // Two different nothings: a show that has not run, and a show where nobody
     // passed. The second one has a board to show and a reason to give.
     const board = lineupResults ?? [];
+    // A picture or listening round where no pick could take the test ends at
+    // once. The reason was only ever written to a status line Simple Mode does
+    // not show, and the screen read "Run the show to crown your Top Match".
+    const skillReason = round && round !== 'chat'
+      && runProgress?.phase === 'complete' && runProgress.total === 0 && runProgress.message
+      ? runProgress.message
+      : null;
+    if (board.length === 0 && skillReason) {
+      return (
+        <div className="sw-winner">
+          <h2 className="sw-winner-none">Nobody could take this round</h2>
+          <p className="sw-muted">{skillReason}</p>
+          <div className="sw-winner-actions">
+            <button type="button" className="btn btn-gold" onClick={onRunAgain}>Pick a different lineup</button>
+          </div>
+        </div>
+      );
+    }
     if (board.length === 0) {
       return (
         <div className="sw-winner">

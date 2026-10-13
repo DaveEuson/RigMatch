@@ -144,8 +144,11 @@ export function TopBar({
             <i className={`conn-dot ${connections.comfy}`} aria-hidden="true" />
           </span>
         </button>
-        <button type="button" className="top-bar-icon-btn" onClick={onOpenChat} title="Open RigMatch Chat" aria-label="Open RigMatch Chat">
+        {/* Named, like Donate and Settings: a lone speech bubble was the only
+            way back to a conversation, and a newcomer did not know it was one. */}
+        <button type="button" className="top-bar-chat" onClick={onOpenChat} title="Open RigMatch Chat" aria-label="Open RigMatch Chat">
           <UiIcon name="chat" size={20} />
+          <span>Chat</span>
         </button>
         {/* RigMatch is donationware. The side menu's button went with the side
             menu, and Settings is Advanced only, so nothing said so in Simple. */}

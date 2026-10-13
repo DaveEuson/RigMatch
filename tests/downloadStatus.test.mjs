@@ -27,7 +27,7 @@ test('a paused download is not reported as downloading', () => {
 test('the ordinary states still read the way they did', () => {
   assert.equal(getDownloadRowStatus(true, undefined), 'done');
   assert.equal(getDownloadRowStatus(true, pull('failed')), 'done', 'installed wins over a stale failure');
-  assert.equal(getDownloadRowStatus(false, undefined), 'queued');
+  assert.equal(getDownloadRowStatus(false, undefined), 'notStarted', 'nothing queued it, so it is not waiting in line');
   assert.equal(getDownloadRowStatus(false, pull('queued')), 'queued');
   assert.equal(getDownloadRowStatus(false, pull('downloading')), 'downloading');
 });

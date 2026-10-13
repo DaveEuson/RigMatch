@@ -1045,6 +1045,15 @@ function App() {
    * about.
    */
   const [wizardDream, setWizardDream] = useState<DreamFilterId>('all');
+  // Pick is mounted only while it is the step, and it opened on the goal's chip
+  // every time: picking pictures, going on and coming back put it on chat again,
+  // and the round that followed was a chat round on a picture lineup. Once the
+  // person has been to Pick, it opens where they left it.
+  const [wizardDreamSeen, setWizardDreamSeen] = useState(false);
+  const changeWizardDream = useCallback((dream: DreamFilterId) => {
+    setWizardDream(dream);
+    setWizardDreamSeen(true);
+  }, []);
   const wizardRound: 'chat' | 'code' | 'vision' | 'listening' = wizardDream === 'code' ? 'code'
     : wizardDream === 'read-image' ? 'vision'
       : wizardDream === 'hear' ? 'listening'
@@ -1126,7 +1135,9 @@ function App() {
    */
   const wizardRunProgress: RunProgress | null = useMemo(() => {
     if (wizardRound === 'chat') return runProgress;
-    if (skillRunStatus.phase === 'idle') return null;
+    // The code round asks its questions first, and those run on runProgress.
+    // The screen read "Warming up… 0%" for the whole of that phase.
+    if (skillRunStatus.phase === 'idle') return wizardRound === 'code' ? runProgress : null;
     const total = Math.max(skillRunStatus.total, 1);
     return {
       mode: 'speed-date',
@@ -1550,6 +1561,11 @@ function App() {
           ? { model: top.model, score: top.score, scoreLabel: String(top.score), grade: top.grade }
           : null;
       })()
+      // A picture or listening round that produced nothing must not borrow the
+      // chat show's winner: "named the most of the test picture" about a model
+      // that was never shown one.
+      : wizardRound === 'vision' || wizardRound === 'listening'
+      ? null
       : wizardShowRanked
       ? (() => {
         const top = wizardShowRanked[0];
@@ -1568,7 +1584,7 @@ function App() {
         measures: matchMeasures(topRigPick.score),
       }
       : null),
-    [topRigPick, wizardSkillBoard, wizardShowRanked],
+    [topRigPick, wizardRound, wizardSkillBoard, wizardShowRanked],
   );
 
   // The winner the screen shows, not the Top Pick. After a skill round, or
@@ -1614,6 +1630,8 @@ function App() {
             : asked ? `${formatMatchScore(asked)} Match on the questions` : undefined,
         };
       })
+      : wizardRound === 'vision' || wizardRound === 'listening'
+      ? []
       : wizardShowRanked
       ? wizardShowRanked.map((score) => ({
         model: score.model,
@@ -1638,7 +1656,7 @@ function App() {
         total: score.total,
         grade: score.grade,
       }))),
-    [shortlistedRows, modelScores, wizardSkillBoard, wizardChannel, wizardShowRanked],
+    [shortlistedRows, modelScores, wizardRound, wizardSkillBoard, wizardChannel, wizardShowRanked],
   );
   const lineupSession = useVideoLineupSession();
   /** Whatever ComfyUI is rendering for RigMatch now, wherever it was started. */
@@ -4755,7 +4773,7 @@ function App() {
             checkpoint: chatImageGeneration.checkpoint ?? null,
             reachable: comfyReachable,
           }}
-          initialDream={dreamForGoal(selectedGoals[0])}
+          initialDream={wizardDreamSeen ? wizardDream : dreamForGoal(selectedGoals[0])}
           notice={simpleNotice}
           noticeAction={simpleNoticeAction}
           onDismissNotice={() => { setSimpleNotice(null); setSimpleNoticeAction(null); }}
@@ -4770,7 +4788,7 @@ function App() {
           isListTesting={isListTesting}
           benchmarkActive={isListTesting || isBenchmarking || runProgress?.phase === 'running' || skillRunStatus.phase === 'running' || Boolean(externalBenchmark?.running)}
           runProgress={wizardRunProgress}
-          onDreamChange={setWizardDream}
+          onDreamChange={changeWizardDream}
           round={wizardRound}
           onStartShow={(begin, options) => {
             // Through the sheet like every run. The wizard moves to its show
@@ -4828,6 +4846,10 @@ function App() {
             },
           }}
           onChatWithWinner={openChatWithWinner}
+          continueChat={chatMessages.some((message) => message.role === 'user')
+            ? { name: getFriendlyModelName(selectedModel) }
+            : null}
+          onContinueChat={() => openChatWith(selectedModel)}
           justChat={justChatForWizard}
           onJustChat={startJustChat}
           onOpenScorecard={() => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('history'); }}
@@ -5283,7 +5305,8 @@ function App() {
         </div>
       )}
       <ActivityToast message={activity} />
-      {reportReady && !reportOpen && shownShowResult && (
+      {/* Not over an open chat: it sat on the message box, bottom right, until it was closed. */}
+      {reportReady && !reportOpen && !chatOpen && shownShowResult && (
         <div className="report-ready-bar" role="status">
           <Trophy aria-hidden="true" />
           <span>
@@ -5353,6 +5376,8 @@ function App() {
           // which fails in a way that reads as the app being broken.
           availableModels={modelRows.filter((row) => row.installed && canGenerateText(row)).map((row) => row.displayName)}
           onModelChange={changeChatModel}
+          noShowYet={scoredModelCount === 0}
+          onRunShow={() => { setChatOpen(false); selectUiMode('beginner'); }}
         />
       )}
 
