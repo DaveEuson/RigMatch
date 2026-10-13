@@ -1711,7 +1711,11 @@ async function startOllamaInstall(sender) {
       if (streamError) throw streamError;
       const { done, value } = await reader.read();
       if (done) break;
-      if (received + value.length > OLLAMA_INSTALLER_MAX_BYTES) throw new Error('Installer download too large');
+      if (received + value.length > OLLAMA_INSTALLER_MAX_BYTES) {
+        // Release the connection: throwing alone left the socket streaming.
+        try { await reader.cancel(); } catch { /* already closed */ }
+        throw new Error('Installer download too large');
+      }
       // Respect backpressure: if the write buffer is full, wait for it to drain
       // (or for an error) before pulling more from the network.
       if (!fileStream.write(Buffer.from(value))) {
@@ -1880,6 +1884,14 @@ async function fetchJson(url, options = {}, timeoutMs = 2500, maxBytes = JSON_RE
     return text ? JSON.parse(text) : {};
   } catch (error) {
     if (error?.name === 'AbortError') {
+      // The caller's own signal (Stop) fired: say so. Reporting it as "did not
+      // finish within 120s" turned a stopped LM Studio warm-up into a bogus
+      // timeout.
+      if (externalSignal?.aborted) {
+        const stopped = new Error('Request stopped');
+        stopped.name = 'AbortError';
+        throw stopped;
+      }
       // Deliberately not "reaching". A timeout here means the service accepted
       // the request and did not finish it — which is a different problem from
       // the "cannot reach" case below, and reads as the opposite of the truth.
@@ -3687,9 +3699,14 @@ async function runBenchmarkInner(request = {}, sender, signal) {
 
   if (provider === 'lm-studio') {
     if (activeBenchmark) activeBenchmark.lmStudioKeep = await lmStudioLoadedInstances(baseUrl, model);
-    await warmLmStudioBenchmarkModel(baseUrl, model, signal);
+    try {
+      await warmLmStudioBenchmarkModel(baseUrl, model, signal);
+    } catch (error) {
+      if (signal?.aborted) throw new Error('Benchmark stopped by user');
+      throw error;
+    }
   } else {
-    await warmBenchmarkModel(baseUrl, model);
+    await warmBenchmarkModel(baseUrl, model, signal);
   }
 
   sendProgress({
@@ -3875,7 +3892,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         // Stop during the verdict ends here, not after reloading the model.
         throwIfCanceled();
         if (judgedHere && provider === 'lm-studio') await warmLmStudioBenchmarkModel(baseUrl, model, signal);
-        else if (judgedHere) await warmBenchmarkModel(baseUrl, model);
+        else if (judgedHere) await warmBenchmarkModel(baseUrl, model, signal);
       }
       const toolVerdict = toolAnswer?.verdict || null;
       const sobrietyScore = promptJudgeScore != null
@@ -4087,8 +4104,11 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   return result;
 }
 
-async function warmBenchmarkModel(baseUrl, model) {
+async function warmBenchmarkModel(baseUrl, model, signal) {
   const requestUrl = `${baseUrl}/api/generate`;
+  // Loading is the slowest part of a run, and Stop used to do nothing until it
+  // ended (up to two minutes, twice with the retry).
+  const stopped = () => new Error('Benchmark stopped by user');
   try {
     await fetchJson(
       requestUrl,
@@ -4100,10 +4120,12 @@ async function warmBenchmarkModel(baseUrl, model) {
           keepAlive: BENCHMARK_KEEP_ALIVE,
           options: BENCHMARK_WARMUP_OPTIONS,
         })),
+        signal,
       },
       BENCHMARK_TIMEOUT_MS,
     );
   } catch (error) {
+    if (signal?.aborted) throw stopped();
     if (!isUnsupportedThinkError(error)) throw error;
     await appendAppLog({
       level: 'warn',
@@ -4125,9 +4147,13 @@ async function warmBenchmarkModel(baseUrl, model) {
           keep_alive: BENCHMARK_KEEP_ALIVE,
           options: BENCHMARK_WARMUP_OPTIONS,
         }),
+        signal,
       },
       BENCHMARK_TIMEOUT_MS,
-    );
+    ).catch((error) => {
+      if (signal?.aborted) throw stopped();
+      throw error;
+    });
   }
 }
 
@@ -4155,7 +4181,10 @@ async function warmLmStudioBenchmarkModel(baseUrl, model, signal) {
 /** The copies of a model LM Studio has loaded; none before 0.4 or on any failure. */
 async function lmStudioLoadedInstances(baseUrl, model) {
   const listing = await fetchJson(`${lmStudioOrigin(baseUrl)}/api/v1/models`, {}, 3000).catch(() => null);
-  return loadedInstanceIds(listing, model);
+  // Null when the listing failed, not an empty list: "none loaded" and "could
+  // not look" are different, and treating the second as the first unloaded a
+  // copy the user had loaded themselves.
+  return listing ? loadedInstanceIds(listing, model) : null;
 }
 
 /**
@@ -4167,8 +4196,11 @@ async function lmStudioLoadedInstances(baseUrl, model) {
 async function unloadLmStudioModel(baseUrl, model, keep = []) {
   if (!baseUrl || !model) return;
   try {
+    // Unknown what was loaded before the test: leave everything as it is.
+    if (keep === null) return;
     const keepIds = new Set(keep);
     const loaded = await lmStudioLoadedInstances(baseUrl, model);
+    if (!loaded) return;
     for (const instanceId of loaded.filter((id) => !keepIds.has(id))) {
       // LM Studio resolves an instance id that is also the model's name to
       // the first copy of that model. With one of yours loaded under a name

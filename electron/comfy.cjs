@@ -42,7 +42,20 @@ function serverOrigin(url) {
 function isUnreachable(error) {
   if (error?.unreachable === true) return true;
   const message = String(error?.message ?? '');
-  return /Cannot reach local AI service|did not finish within/.test(message);
+  return /Cannot reach local AI service/.test(message);
+}
+
+/**
+ * Something answered the connection and did not finish in time.
+ *
+ * Not the same as nothing answering. This was folded into "unreachable", so a
+ * ComfyUI busy loading a checkpoint read as "not running" and RigMatch offered
+ * to start a second copy, and a submit that was queued but slow to acknowledge
+ * said "cannot reach" and was sent again, running the job twice.
+ */
+function isSlow(error) {
+  if (error?.busy === true) return true;
+  return /did not finish within/.test(String(error?.message ?? ''));
 }
 
 function createComfyBridge({ fetchJson: rawFetchJson, assertLocalhostUrl }) {
@@ -58,6 +71,12 @@ function createComfyBridge({ fetchJson: rawFetchJson, assertLocalhostUrl }) {
     try {
       return await rawFetchJson(url, options, timeoutMs);
     } catch (error) {
+      if (isSlow(error)) {
+        const busy = new Error(`ComfyUI at ${serverOrigin(url)} is busy and did not answer in time. `
+          + 'It may still be working on it, so check before sending it again.');
+        busy.busy = true;
+        throw busy;
+      }
       if (!isUnreachable(error)) throw error;
       const failure = new Error(`Cannot reach ComfyUI at ${serverOrigin(url)}. `
         + 'Start ComfyUI and try again — RigMatch can start it for you from Settings.');
@@ -88,7 +107,17 @@ function createComfyBridge({ fetchJson: rawFetchJson, assertLocalhostUrl }) {
       stats = await fetchJson(`${base}/system_stats`, {}, timeoutMs);
     } catch (error) {
       if (isUnreachable(error)) return { reachable: false, checkpoints: [], textEncoders: [] };
-      throw error;
+      if (!isSlow(error)) throw error;
+      // Slow is not absent. Ask once more with longer to answer, and if it is
+      // still busy say it is running: a poll missing while ComfyUI loads a
+      // checkpoint is not a reason to offer to start another one.
+      try {
+        stats = await fetchJson(`${base}/system_stats`, {}, Math.max(timeoutMs, 10000));
+      } catch (second) {
+        if (isUnreachable(second)) return { reachable: false, checkpoints: [], textEncoders: [] };
+        if (isSlow(second)) return { reachable: true, busy: true, checkpoints: [], textEncoders: [] };
+        throw second;
+      }
     }
 
     // Older builds do not expose /models/{folder}, and none of these are worth
