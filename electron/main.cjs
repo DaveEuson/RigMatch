@@ -649,7 +649,16 @@ const scoresServer = http.createServer((req, res) => {
     return;
   }
 
-  const url = new URL(req.url || '/', `http://127.0.0.1:${SCORES_SERVER_PORT}`);
+  // A path such as //[ does not parse, and thrown here it was an uncaught
+  // exception in the main process: Electron's error dialog from one request.
+  let url;
+  try {
+    url = new URL(req.url || '/', `http://127.0.0.1:${SCORES_SERVER_PORT}`);
+  } catch {
+    res.statusCode = 400;
+    res.end();
+    return;
+  }
 
   if (req.method === 'POST' && url.pathname === '/generate') {
     handleGenerateRequest(req, res);
@@ -5144,15 +5153,25 @@ async function releaseOllamaLabModels() {
 
 function scoreRigFit(model) {
   const lower = String(model || '').toLowerCase();
-  // Tiny markers that carry no "NNb" parameter token (sub-1B / keyword sizes).
-  if (/\b(mini|nano)\b/.test(lower) || /(?<![\d.])\d+(?:\.\d+)?\s*m\b/.test(lower)) return 96;
   // Read the parameter count from an anchored "NNb" token. A bare substring
-  // match (the old approach) let a small token match inside a larger one —
-  // "2b" inside "22b", "3b" inside "123b" — so a 123B model scored as tiny.
-  const tokens = [...lower.matchAll(/(?<![\d.])(\d+(?:\.\d+)?)\s*b\b/g)];
-  if (tokens.length === 0) return 82; // size unknown
-  const params = parseFloat(tokens[tokens.length - 1][1]);
-  if (!Number.isFinite(params)) return 82;
+  // match let a small token match inside a larger one ("2b" inside "22b").
+  //
+  // Three more things the last token got wrong:
+  // - An expert count, "8x7b", is 56B in total, not 7B.
+  // - An active slice, "a3b" in qwen3:30b-a3b, is how much runs per token. The
+  //   30B has to be held in memory all the same, so the largest token counts.
+  // - A context marker, "-1m" in qwen2.5-14b-instruct-1m, is not a size.
+  const experts = lower.match(/(?<![\d.])(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*b\b/);
+  const tokens = [...lower.matchAll(/(?<![\d.ax])(\d+(?:\.\d+)?)\s*b\b/g)].map((token) => parseFloat(token[1]));
+  const sizes = tokens.filter(Number.isFinite);
+  if (experts) sizes.push(parseFloat(experts[1]) * parseFloat(experts[2]));
+
+  // Tiny markers that carry no "NNb" token (sub-1B and keyword sizes).
+  if (sizes.length === 0) {
+    if (/\b(mini|nano)\b/.test(lower) || /(?<![\d.])\d+(?:\.\d+)?\s*m\b/.test(lower)) return 96;
+    return 82; // size unknown
+  }
+  const params = Math.max(...sizes);
   if (params <= 3) return 96;
   if (params <= 9) return 88;
   if (params <= 15) return 74;

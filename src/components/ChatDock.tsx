@@ -198,7 +198,7 @@ export function ChatDock({
         <input
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder={canSendImages ? 'Ask about an image, or just chat...' : 'Ask the matched local agent...'}
+          placeholder={canSendImages ? 'Ask about an image, or just chat...' : 'Type your message...'}
           aria-label="Message"
         />
         {/* Stop replaces Send while the answer is being written. A local

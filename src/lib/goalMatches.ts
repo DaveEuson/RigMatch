@@ -86,7 +86,7 @@ export function getGoalMatches(
           ...base,
           awaiting: unmarked
             ? 'Answers are in, but nothing here can mark them — turn on the judge in Settings and re-run to crown this one.'
-            : 'No measured winner yet — run a test with enough questions and one gets crowned.',
+            : 'No measured winner for this goal yet. Your overall Top Match still stands: this one is crowned from the questions about this goal, and there are not enough of them yet. Run a test with more of them.',
           needsJudge: unmarked,
         };
       }

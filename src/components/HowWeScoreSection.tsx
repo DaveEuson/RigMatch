@@ -20,7 +20,9 @@ export function HowWeScoreSection() {
       {open && (
         <div className="how-we-score-body">
           <p className="how-we-score-intro">
-            All scoring is deterministic rule-based heuristics running locally. No cloud AI judge, no telemetry.
+            Most answers are marked by fixed rules that run on this computer. Questions with no single right
+            answer are marked by a judge model: one on this computer unless you turn on a cloud judge
+            (OpenRouter) and add a key, which the sheet before a show says before it starts. No telemetry.
             Results reflect <em>your</em> hardware.
           </p>
 

@@ -264,7 +264,10 @@ try {
     localStorage.setItem('rigmatch:openrouter-key:v1', 'sk-gate-should-not-survive');
     localStorage.setItem('rigmatch:model-notes:v1', '{"llama3":"a private note"}');
     localStorage.setItem('rigmatch:comfy-folder:v1', 'C:/comfy');
-    localStorage.setItem('rigmatch:a-key-invented-tomorrow:v9', 'canary');
+    // Not a word that can occur in saved data on its own: Ollama's catalog has a
+    // model called x/canary, which the what's-new list keeps, and the check
+    // below read that as planted data that survived the wipe.
+    localStorage.setItem('rigmatch:a-key-invented-tomorrow:v9', 'gate-canary-7f3a91c2');
     localStorage.setItem('not-ours', 'keep');
   });
 
@@ -297,7 +300,7 @@ try {
   record('the ComfyUI folder does not survive', !('rigmatch:comfy-folder:v1' in after));
   record(
     'nothing that survives holds planted data',
-    !Object.values(after).some((v) => /sk-gate-should-not-survive|a private note|C:\/comfy|canary/.test(String(v))),
+    !Object.values(after).some((v) => /sk-gate-should-not-survive|a private note|C:\/comfy|gate-canary-7f3a91c2/.test(String(v))),
   );
   record(
     'keys belonging to other apps are untouched',
@@ -423,7 +426,12 @@ try {
   );
 
 } finally {
-  if (app) await app.close().catch(() => {});
+  // close() does not always resolve on RigMatch (it left the gate hanging after
+  // every check had printed), so it gets a few seconds and then the process is
+  // ended directly.
+  const appPid = app?.process().pid;
+  if (app) await Promise.race([app.close().catch(() => {}), new Promise((resolve) => setTimeout(resolve, 8000))]);
+  if (appPid) { try { process.kill(appPid, 'SIGKILL'); } catch { /* already gone */ } }
   rmSync(profile, { recursive: true, force: true });
 }
 

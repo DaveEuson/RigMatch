@@ -241,6 +241,20 @@ type SimpleWizardProps = {
   /** Contestants in this show that could not finish; the show went on without them. */
   droppedOut?: RunFailure[];
   onChatWithWinner: () => void;
+  /**
+   * The one model to talk to without running a show, for someone who came to
+   * replace a chat service and not to compare models. Absent when no model
+   * could be offered.
+   */
+  justChat?: {
+    name: string;
+    sizeGb: number | null;
+    installed: boolean;
+    /** idle: nothing started. getting: it is downloading. failed: it did not arrive. */
+    state: 'idle' | 'getting' | 'failed';
+    percent: number | null;
+  } | null;
+  onJustChat?: () => void;
   onOpenScorecard: () => void;
   /** Where the step tracker goes: the app's top bar. */
   trackerSlot?: HTMLElement | null;
@@ -334,6 +348,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
     blockedReason: downloadBlockedReason,
   } = summarizeDownloadStep(
     shortlistedRows.map((row) => getDownloadRowStatus(row.installed, props.pullProgressByModel[row.displayName])),
+    minPicks,
   );
   const downloadDone = pickDone && downloadCanContinue;
   // Once the user starts a show, Compare stays incomplete until that run
@@ -498,6 +513,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
   const pendingGb = shortlistedRows
     .filter((row) => !row.installed)
     .reduce((sum, row) => sum + (row.sizeGb ?? 0), 0);
+  const pendingCount = shortlistedRows.filter((row) => !row.installed).length;
   const downloadSuffix = pendingGb > 0 ? ` · ${pendingGb.toFixed(1)} GB` : ' · already on your PC';
   const showMinutes = Math.max(1, Math.round(shortlistedRows.length * 3));
 
@@ -508,7 +524,9 @@ export function SimpleWizard(props: SimpleWizardProps) {
       ? `Pick ${minPicks} or more`
       : skipDownload
       ? `Start the show · about ${showMinutes} min`
-      : `Download ${shortlistedRows.length} model${shortlistedRows.length === 1 ? '' : 's'}${downloadSuffix}`,
+      // The ones that need fetching: "Download 5 models · 2.1 GB" when three were
+      // already on the PC counted the wrong thing.
+      : `Download ${pendingCount} model${pendingCount === 1 ? '' : 's'}${downloadSuffix}`,
     download: `Start the show · about ${showMinutes} min`,
   };
 
@@ -759,6 +777,40 @@ function ApplauseSign({ lit }: { lit: boolean }) {
 }
 
 // ---------------------------------------------------------------------------
+// Just chat
+
+function JustChatCard({ justChat, onJustChat }: {
+  justChat: NonNullable<SimpleWizardProps['justChat']>;
+  onJustChat: () => void;
+}) {
+  const getting = justChat.state === 'getting';
+  const size = justChat.sizeGb ? `${justChat.sizeGb.toFixed(1)} GB` : null;
+  return (
+    <section className="sw-justchat" aria-label="Just chat">
+      <h3>Just want to chat?</h3>
+      <p>
+        {justChat.installed
+          ? <>You already have <strong>{justChat.name}</strong>, a good all-round model for your PC. It can start now.</>
+          : <>No show needed. RigMatch can get <strong>{justChat.name}</strong>, a good all-round model for your PC{size ? <> ({size} to download)</> : null}, and open a chat as soon as it's ready.</>}
+      </p>
+      {getting ? (
+        <div className="sw-install-progress" role="status">
+          <div className="sw-install-progress-bar"><i style={{ width: `${Math.max(2, justChat.percent ?? 0)}%` }} /></div>
+          <span className="sw-muted">Getting {justChat.name} ready…{justChat.percent != null ? ` ${Math.round(justChat.percent)}%` : ''} Your chat opens when it's done.</span>
+        </div>
+      ) : (
+        <div className="sw-setup-actions">
+          <button type="button" className="btn btn-line" onClick={onJustChat}>
+            {justChat.installed ? `Chat with ${justChat.name} now` : justChat.state === 'failed' ? 'Try again' : 'Just let me chat'}
+          </button>
+          {justChat.state === 'failed' && <span className="sw-muted">That download didn't finish.</span>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Setup
 
 function SetupScreen({
@@ -772,6 +824,8 @@ function SetupScreen({
   onStartOllamaInstall,
   onLaunchOllamaInstaller,
   comfySetup,
+  justChat,
+  onJustChat,
   attempted,
   onAttempt,
   onContinue,
@@ -942,6 +996,14 @@ function SetupScreen({
         </div>
       )}
 
+      {/* The door for someone who only wants a chat box. The show is how
+          RigMatch finds the best model; this is for when one good model now is
+          what they came for. Only once the computer is checked, because it
+          needs to know what fits. */}
+      {checked && !isScanning && !failed && justChat && onJustChat && (
+        <JustChatCard justChat={justChat} onJustChat={onJustChat} />
+      )}
+
       {/* Beginners' real fear is "will this break my computer." Name it once,
           here, and truly: it said nothing at all gets installed, right
           under "Install Ollama for me". Models go where Ollama keeps them. */}
@@ -1008,7 +1070,7 @@ function listNames(names: string[]): string {
 }
 
 function PickScreen({
-  generation, wizardModels, modelsLoading, shortlistIds, shortlistedRows, onTogglePick, onChooseForMe, initialDream,
+  generation, wizardModels, modelsLoading, shortlistIds, shortlistedRows, onTogglePick, onChooseForMe, initialDream, justChat, onJustChat,
   onDreamChange, videoLineup, makerRun, system, pullProgressByModel, benchmarkActive }: SimpleWizardProps) {
   // Opens on the dream matching the splash's primary goal, when there is one
   // — the person already answered this question once.
@@ -1101,6 +1163,11 @@ function PickScreen({
         {!modelsLoading && filtered.length > 0 && shortlistedRows.length === 0 && (
           <button type="button" className="btn btn-line btn-sm sw-choose-for-me" onClick={() => onChooseForMe(filtered)}>
             Not sure? Choose for me
+          </button>
+        )}
+        {!modelsLoading && justChat && onJustChat && justChat.state !== 'getting' && (
+          <button type="button" className="btn btn-link btn-sm sw-just-chat-link" onClick={onJustChat}>
+            {justChat.installed ? `Skip the show: chat with ${justChat.name}` : 'Skip the show: just let me chat'}
           </button>
         )}
       </div>
@@ -1811,7 +1878,13 @@ function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedO
                     : onlyOne
                       // Nothing was compared, so it is not "the best of" anything.
                       ? <>The only one of your picks that finished, so it had nothing to be compared with.</>
-                      : <>The best mix of speed, answer quality and fit for your PC out of the {tested}.</>}
+                      // Follows the Rank by choice above it: the caption used to
+                      // describe a balance the buttons had just changed.
+                      : notchAt(balance)?.id === 'accuracy'
+                        ? <>The most accurate answers of the {tested} on your PC, with speed and fit counted too.</>
+                        : notchAt(balance)?.id === 'speed'
+                          ? <>The fastest of the {tested} on your PC that still answered well, with fit counted too.</>
+                          : <>The best mix of speed, answer quality and fit for your PC out of the {tested}.</>}
             </p>
             {winner.measures && winner.measures.length > 0 && (
               <dl className="sw-winner-measures">

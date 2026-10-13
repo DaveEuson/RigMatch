@@ -203,6 +203,7 @@ import { ClearScoresModal } from './components/ClearScoresModal';
 import { ThirdPartyDownloadConsentModal } from './components/ThirdPartyDownloadConsentModal';
 import { SetupGuideDock } from './components/SetupGuideDock';
 import { DownloadTickerDock } from './components/DownloadTickerDock';
+import { pickJustChatModel } from './lib/justChat';
 import { Elapsed } from './components/Elapsed';
 import { FirstRunSplash } from './components/FirstRunSplash';
 import { ModelPoolLineupStrip } from './components/ModelPoolLineupStrip';
@@ -354,7 +355,9 @@ function lmStudioHostFor(status: OllamaStatus, hostname: string): NetworkHost {
 const welcomeChatMessage: ChatMessage = {
   id: 'welcome',
   role: 'agent',
-  content: 'I am your local AI matchmaker. Run a model test, then I can introduce you to the model that fits this computer best.',
+  // True before and after a test, and for whichever model is picked: the old
+  // line told someone who had just run a show to run one.
+  content: "Hi! I'm the model you picked above. Ask me anything. I run on this computer, so what you type stays here: it's free, and there's no account.",
 };
 
 type PersistedHistory = {
@@ -2450,6 +2453,10 @@ function App() {
       return;
     }
 
+    // A paused queue that is then cancelled used to leave this set, and the
+    // auto-start effect waits for it to clear: nothing queued afterwards began.
+    setIsPullPaused(false);
+
     if (queuedModelIds.size === 0) {
       setActivity('Download queue is already empty.');
       return;
@@ -2812,7 +2819,14 @@ function App() {
         return;
       }
 
-      setQueuedModelIds(new Set<string>());
+      // Only what this run handled. Wiping the whole set also dropped a model
+      // queued while the run was going, which then sat "Queued" with nothing
+      // left to start it.
+      setQueuedModelIds((current) => {
+        const next = new Set(current);
+        for (const row of queuedRows) next.delete(row.displayName);
+        return next;
+      });
       setActivity(`${completedCount} model${completedCount === 1 ? '' : 's'} downloaded. Refreshing the model list...`);
       await refreshRig();
     } catch (error) {
@@ -2970,6 +2984,68 @@ function App() {
     queueMissingSpeedDateModels(pendingThirdPartyDownloadRows);
     setPendingThirdPartyDownloadRows(null);
   }, [pendingThirdPartyDownloadRows, queueMissingSpeedDateModels]);
+
+  /**
+   * "Just let me chat": one model to talk to, no show. Someone who came to
+   * replace a chat service did not come to compare five models for fifteen
+   * minutes. The model is one already on the PC when there is one, and a good
+   * all-round download when there is not, through the same consent and queue
+   * as any other download. Its chat opens by itself when it has arrived.
+   */
+  const justChatChoice = useMemo(
+    () => pickJustChatModel(modelRows, system.gpu.vramGb),
+    [modelRows, system.gpu.vramGb],
+  );
+  const [justChatTarget, setJustChatTarget] = useState<string | null>(null);
+
+  const startJustChat = useCallback(() => {
+    if (!justChatChoice) return;
+    const row = modelRows.find((candidate) => candidate.displayName === justChatChoice.model);
+    if (!row) return;
+    if (row.installed) {
+      openChatWith(row.displayName);
+      return;
+    }
+    // A failed pull leaves its entry behind; a retry starts from a clean one.
+    setPullProgressByModel((current) => removePullProgress(current, row.displayName));
+    setJustChatTarget(row.displayName);
+    requestThirdPartyModelDownloads([row]);
+  }, [justChatChoice, modelRows, openChatWith, requestThirdPartyModelDownloads]);
+
+  // Open the chat when the model arrives, and stop waiting for it if the
+  // download was declined or did not finish.
+  useEffect(() => {
+    if (!justChatTarget) return;
+    const row = modelRows.find((candidate) => candidate.displayName === justChatTarget);
+    if (row?.installed) {
+      setJustChatTarget(null);
+      openChatWith(justChatTarget);
+      return;
+    }
+    const phase = pullProgressByModel[justChatTarget]?.phase;
+    const stillComing = pendingThirdPartyDownloadRows !== null
+      || queuedModelIds.has(justChatTarget)
+      || phase === 'queued' || phase === 'started' || phase === 'pulling' || phase === 'paused';
+    if (!stillComing) setJustChatTarget(null);
+  }, [justChatTarget, modelRows, openChatWith, pendingThirdPartyDownloadRows, pullProgressByModel, queuedModelIds]);
+
+  const justChatForWizard = useMemo(() => {
+    if (!justChatChoice) return null;
+    const progress = pullProgressByModel[justChatChoice.model];
+    const waiting = justChatTarget === justChatChoice.model;
+    const state: 'idle' | 'getting' | 'failed' = justChatChoice.installed
+      ? 'idle'
+      : waiting
+        ? 'getting'
+        : progress?.phase === 'failed' ? 'failed' : 'idle';
+    return {
+      name: justChatChoice.name,
+      sizeGb: justChatChoice.sizeGb,
+      installed: justChatChoice.installed,
+      state,
+      percent: typeof progress?.percent === 'number' ? progress.percent : null,
+    };
+  }, [justChatChoice, justChatTarget, pullProgressByModel]);
 
   // "Choose for me": a lineup from the cards Pick is showing for the chosen
   // goal (see chooseLineup). Those cards already fit this PC, can hold a
@@ -4018,8 +4094,9 @@ function App() {
       // A coding buddy is asked and then made to build: the questions measure
       // how it answers, the app measures whether what it writes runs. Either
       // alone crowns a model on half the job.
+      // Stop must stop the builds too, not only the questions before them.
       void runListTest()
-        .then(() => runSkillTestsAfterRun(models, 'app-builder'))
+        .then(() => (stopRunRef.current ? undefined : runSkillTestsAfterRun(models, 'app-builder')))
         .catch(reportSkillRunFailure);
       return;
     }
@@ -4075,12 +4152,17 @@ function App() {
     }
 
     if (mode === 'single') {
-      void startBenchmark(model).then(() => runSkillTestsAfterRun(skillModels)).catch(reportSkillRunFailure);
+      stopRunRef.current = false;
+      void startBenchmark(model)
+        .then(() => (stopRunRef.current ? undefined : runSkillTestsAfterRun(skillModels)))
+        .catch(reportSkillRunFailure);
       return;
     }
 
     if (mode === 'speed-date') {
-      void runListTest().then(() => runSkillTestsAfterRun(skillModels)).catch(reportSkillRunFailure);
+      void runListTest()
+        .then(() => (stopRunRef.current ? undefined : runSkillTestsAfterRun(skillModels)))
+        .catch(reportSkillRunFailure);
     }
   }, [balances, closeRunSheet, pendingGpuContention, pendingRunMode, pendingSingleModel, runChannel, runListTest, runSkillTestsAfterRun, selectedModel, sheetQuick, sheetSimple, shortlistedRows, startBenchmark, startSimpleShow, reportSkillRunFailure, wizardBalance]);
 
@@ -4687,7 +4769,7 @@ function App() {
           }}
           balance={wizardBalance}
           onBalanceChange={(value) => setBalance(wizardChannel === 'app' ? 'code' : wizardChannel, value)}
-          onStopShow={requestStopRun}
+          onStopShow={() => { requestStopRun(); requestStopSkills(); }}
           planLine={wizardPlanLine}
           winner={wizardWinner}
           lineupResults={wizardLineupResults}
@@ -4735,6 +4817,8 @@ function App() {
             ? { name: getFriendlyModelName(selectedModel) }
             : null}
           onContinueChat={() => openChatWith(selectedModel)}
+          justChat={justChatForWizard}
+          onJustChat={startJustChat}
           onOpenScorecard={() => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('history'); }}
           onRunAgain={() => undefined}
           onSwitchToAdvanced={() => {
@@ -4785,6 +4869,14 @@ function App() {
               <span>
                 The full scorecard lives in <strong>Advanced Mode</strong>, so RigMatch switched you over.
               </span>
+              <button
+                type="button"
+                className="mini-button"
+                onClick={() => setCameFromSimple(false)}
+                aria-label="Dismiss this note and stay in Advanced Mode"
+              >
+                Got it
+              </button>
               <button
                 type="button"
                 className="mini-button"
@@ -5507,11 +5599,16 @@ function App() {
  * facts" is a quality of a chat model, not a goal someone arrives with.
  */
 /** The wizard dream matching a goal, for opening PICK on the splash answer. */
-function dreamForGoal(goalId: string | undefined): 'talk' | 'write' | 'code' | 'image' | 'video' | undefined {
+function dreamForGoal(goalId: string | undefined): 'talk' | 'write' | 'code' | 'read-image' | 'hear' | 'image' | 'video' | 'audio' | undefined {
   switch (goalId) {
     case 'talk': return 'talk';
     case 'write': return 'write';
     case 'code': return 'code';
+    // These three opened Pick on "Show everyone" and ran a chat show, so the
+    // one thing the person said they wanted was not what was tested.
+    case 'describe-image': return 'read-image';
+    case 'transcribe-file': return 'hear';
+    case 'make-audio': return 'audio';
     case 'make-images': return 'image';
     case 'make-video':
     case 'animate-image': return 'video';
