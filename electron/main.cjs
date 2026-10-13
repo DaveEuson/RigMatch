@@ -483,17 +483,28 @@ function createWindow() {
     event.preventDefault();
 
     if (closePromptPendingWindowIds.has(win.id)) {
+      // Asked again after a crash, or long after the prompt went up: nobody is
+      // going to answer it. Without this a hung renderer left the window
+      // unclosable, and the process had to be killed.
+      const askedAt = closePromptStartedAt.get(win.id) ?? 0;
+      if (win.webContents.isCrashed() || Date.now() - askedAt > 15000) {
+        closeApprovedWindowIds.add(win.id);
+        win.close();
+        return;
+      }
       win.focus();
       return;
     }
 
     closePromptPendingWindowIds.add(win.id);
+    closePromptStartedAt.set(win.id, Date.now());
     win.webContents.send('app:closeRequested');
   });
 
   win.on('closed', () => {
     closeApprovedWindowIds.delete(win.id);
     closePromptPendingWindowIds.delete(win.id);
+    closePromptStartedAt.delete(win.id);
   });
 
   setupAutoUpdater();
@@ -548,6 +559,7 @@ let ollamaInstallController = null;
 let lastDownloadedOllamaInstallerPath = null;
 const closeApprovedWindowIds = new Set();
 const closePromptPendingWindowIds = new Set();
+const closePromptStartedAt = new Map();
 
 let latestScores = {};
 let latestChosen = null;
@@ -1335,7 +1347,11 @@ function registerHandlers() {
     }
   });
 
-  ipcMain.handle('app:openChatApp', async (event) => {
+  // One launch at a time. The library check takes seconds, and a second click
+  // in that time passed the "already running" test and started a second
+  // companion, which share a data folder and open a blank window.
+  let openingChatApp = null;
+  const launchChatApp = async (event) => {
     assertTrustedIpcSender(event);
 
     // Opening the companion from a window that does not own the bridge is the
@@ -1432,6 +1448,7 @@ function registerHandlers() {
       cleanEnv.WEBKIT_DISABLE_DMABUF_RENDERER = '1';
     }
 
+    let firstFailure = null;
     for (const candidate of candidates) {
       if (!fsSync.existsSync(candidate)) continue;
       try {
@@ -1446,7 +1463,9 @@ function registerHandlers() {
         const libraries = await companionMissingLibraries(candidate, cleanEnv);
         if (libraries.length) {
           const packages = fsSync.existsSync('/usr/bin/apt-get') ? debianPackagesFor(libraries) : [];
-          return { ok: false, reason: 'missing-libraries', libraries, packages };
+          // Not the end of the search: another copy may have what it needs.
+          firstFailure = firstFailure ?? { ok: false, reason: 'missing-libraries', libraries, packages };
+          continue;
         }
       }
       const child = spawn(candidate, [], {
@@ -1463,9 +1482,17 @@ function registerHandlers() {
         child.once('spawn', () => resolve({ ok: true }));
       });
       child.unref();
-      return started;
+      if (started.ok) return started;
+      // A stale copy first in the list (an old file in ~/.local/bin, say) used
+      // to end the search. Keep the first failure and try the bundled one.
+      firstFailure = firstFailure ?? started;
     }
-    return { ok: false, reason: 'not-found' };
+    return firstFailure ?? { ok: false, reason: 'not-found' };
+  };
+  ipcMain.handle('app:openChatApp', (event) => {
+    if (openingChatApp) return openingChatApp;
+    openingChatApp = launchChatApp(event).finally(() => { openingChatApp = null; });
+    return openingChatApp;
   });
 }
 
@@ -3131,8 +3158,16 @@ async function pullModel(request = {}, sender) {
       controller.abort();
     },
   });
-  const timeoutMs = 1000 * 60 * 45;
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // Silence, not total time. A fixed 45 minutes aborted a 40 GB pull on a slow
+  // link while it was making steady progress. Ollama reports progress many
+  // times a second, so ten minutes of nothing means it has stopped.
+  const stallMs = 1000 * 60 * 10;
+  const onStall = () => controller.abort();
+  let timer = setTimeout(onStall, stallMs);
+  const keepAlive = () => {
+    clearTimeout(timer);
+    timer = setTimeout(onStall, stallMs);
+  };
   let lastStatus = 'Pulled';
 
   emit({
@@ -3198,6 +3233,7 @@ async function pullModel(request = {}, sender) {
     while (true) {
       const { value, done } = await reader.read();
       if (value) {
+        keepAlive();
         buffer += decoder.decode(value, { stream: !done });
       }
 
@@ -3250,7 +3286,7 @@ async function pullModel(request = {}, sender) {
         ? `Paused ${model}. Start Download will resume through Ollama.`
         : abortReason === 'cancel'
           ? `Canceled ${model}.`
-          : `Timed out downloading ${model} from ${getUrlOrigin(baseUrl)} after ${timeoutMs} ms.`
+          : `Stopped downloading ${model} from ${getUrlOrigin(baseUrl)}: nothing arrived for ${Math.round(stallMs / 60000)} minutes.`
       : getLogErrorMessage(error);
     emit({
       phase: 'failed',
@@ -3439,7 +3475,10 @@ function benchmarkStatusPayload() {
 function broadcastBenchmarkStatus() {
   const payload = benchmarkStatusPayload();
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send('benchmark:status', payload);
+    if (win.isDestroyed()) continue;
+    // A crashed or reloading renderer throws here, and this runs before the
+    // benchmark's try block: the throw left benchmarkRunning true for good.
+    try { win.webContents.send('benchmark:status', payload); } catch { /* frame is gone */ }
   }
 }
 
