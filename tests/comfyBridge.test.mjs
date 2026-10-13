@@ -173,3 +173,24 @@ test('every folder a lineup model loads from is listed, by ComfyUI\'s own name',
   assert.deepEqual(status.checkpoints, ['ltx-2.3-22b-dev-fp8.safetensors']);
   assert.deepEqual(status.textEncoders, ['umt5_xxl_fp8_e4m3fn_scaled.safetensors']);
 });
+
+const SLOW = new Error('http://127.0.0.1:8188 accepted the request but did not finish within 3s. The service is reachable — it is just slow.');
+
+test('a ComfyUI that is busy is running, and RigMatch does not offer to start another', async () => {
+  const { bridge, calls } = harness({ '/system_stats': SLOW });
+  const status = await bridge.getStatus(LOCAL);
+  assert.equal(status.reachable, true);
+  assert.equal(status.busy, true);
+  // Asked again with longer to answer before deciding.
+  assert.equal(calls.filter((call) => call.url.includes('/system_stats')).length, 2);
+});
+
+test('a submit that is slow to acknowledge is not "cannot reach", so it is not sent twice', async () => {
+  const { bridge } = harness({ '/prompt': SLOW });
+  await assert.rejects(
+    () => bridge.submit(LOCAL, { 1: { class_type: 'X' } }),
+    (error) => /busy and did not answer in time/.test(error.message)
+      && /check before sending it again/.test(error.message)
+      && !/Cannot reach ComfyUI/.test(error.message),
+  );
+});
