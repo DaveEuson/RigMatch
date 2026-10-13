@@ -53,3 +53,12 @@ test('Simple Mode\'s setup sits on the host\'s line', () => {
   assert.match(rule, /align-items: flex-start;/);
   assert.match(rule, /text-align: left;/);
 });
+
+test('Simple Mode\'s setup group is centred in a width that fits it, on the same left axis', () => {
+  const wizard = read('src/components/SimpleWizard.tsx');
+  assert.match(wizard, /<main className="sw-content" data-step=\{step\}>/);
+  const css = read('src/components/SimpleWizard.css');
+  assert.match(css, /\.sw-content\[data-step='setup'\] \{ max-width: 900px; \}/);
+  // The host (56px avatar, 820px bubble) and the 640px column both fit inside it.
+  assert.ok(56 + 16 + 820 <= 900);
+});

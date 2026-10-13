@@ -633,7 +633,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
       {/* The main landmark and the page's one h1, so a screen reader can jump
           straight to the step: Simple Mode had neither, and each step's own
           title is an h2 under this. */}
-      <main className="sw-content">
+      <main className="sw-content" data-step={step}>
         <h1 className="sr-only">RigMatch Simple Mode, step {stepIndex + 1} of {STEPS.length}: {STEP_LABELS[step]}</h1>
         <HostStrip line={hostSays} />
 
