@@ -6,7 +6,11 @@ Ideas parked for later. Nothing here is committed; it's a candid backlog of dire
 
 ## Next
 
-Nothing queued. The Backburner holds the candidates.
+### RigScore, a speed score comparable across computers
+
+Started 2026-10-12. The community score database below, built in a smaller order:
+a fixed speed test on this PC first, then opt-in submissions by GitHub issue, then
+a leaderboard page. Design and phases in `docs/rigscore.md`.
 
 ---
 
