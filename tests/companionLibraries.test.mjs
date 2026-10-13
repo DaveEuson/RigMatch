@@ -66,9 +66,9 @@ test('without apt it names the libraries and no command', () => {
 
 test('Linux checks the libraries before it starts Chat', () => {
   const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
-  const handler = main.slice(main.indexOf("ipcMain.handle('app:openChatApp'"), main.indexOf('async function companionMissingLibraries'));
+  const handler = main.slice(main.indexOf('const launchChatApp = async'), main.indexOf('async function companionMissingLibraries'));
   const check = handler.indexOf('await companionMissingLibraries(candidate, cleanEnv)');
   assert.ok(check > 0, 'the Chat launch no longer checks for missing libraries');
   assert.ok(check < handler.indexOf('spawn(candidate'), 'Chat starts before its libraries are checked');
-  assert.match(handler, /return \{ ok: false, reason: 'missing-libraries', libraries, packages \}/);
+  assert.match(handler, /firstFailure = firstFailure \?\? \{ ok: false, reason: 'missing-libraries', libraries, packages \};/);
 });

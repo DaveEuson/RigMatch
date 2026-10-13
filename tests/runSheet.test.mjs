@@ -240,7 +240,7 @@ test('the Winner screen and the report tell the same show', () => {
   // Rank by only where the scores move with it: a chat show.
   assert.match(wizard, /\{!onlyOne && \(round \?\? 'chat'\) === 'chat' && \(\s*<div className="sw-rank-by"/);
   const app = read('../src/App.tsx');
-  assert.match(app, /\{reportReady && !reportOpen && shownShowResult && \(/);
+  assert.match(app, /\{reportReady && !reportOpen && !chatOpen && shownShowResult && \(/);
   assert.match(app, /\{' '\}\{getFriendlyModelName\(shownShowResult\.winner\)\} came first/);
   assert.match(app, /const result = stored \? \{ winner: stored\.winner, results: stored\.results \} : shownShowResult;/);
   assert.match(app, /if \(wizardWinner\?\.model\) setSelectedModel\(wizardWinner\.model\);\s*selectUiMode\('advanced'\);/);

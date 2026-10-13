@@ -28,6 +28,8 @@ export function ChatDock({
   onAttach,
   availableModels,
   onModelChange,
+  noShowYet,
+  onRunShow,
 }: {
   agentName: string;
   model: string;
@@ -52,6 +54,9 @@ export function ChatDock({
   /** Installed models the user can switch to without leaving the drawer. */
   availableModels?: string[];
   onModelChange?: (model: string) => void;
+  /** Nothing has been tested yet, so this model was not chosen by a show. */
+  noShowYet?: boolean;
+  onRunShow?: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -152,6 +157,13 @@ export function ChatDock({
             <X aria-hidden="true" />
           </button>
         </div>
+      )}
+      {noShowYet && onRunShow && (
+        <p className="chat-dock-note">
+          You haven't run the show yet, so this is a good all-round model rather than the best one for your PC.
+          {' '}
+          <button type="button" className="btn btn-link btn-sm" onClick={onRunShow}>Find out if there's a better one</button>
+        </p>
       )}
       <form
         className="chat-form"
