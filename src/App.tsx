@@ -354,7 +354,9 @@ function lmStudioHostFor(status: OllamaStatus, hostname: string): NetworkHost {
 const welcomeChatMessage: ChatMessage = {
   id: 'welcome',
   role: 'agent',
-  content: 'I am your local AI matchmaker. Run a model test, then I can introduce you to the model that fits this computer best.',
+  // True before and after a test, and for whichever model is picked: the old
+  // line told someone who had just run a show to run one.
+  content: "Hi! I'm the model you picked above. Ask me anything. I run on this computer, so what you type stays here: it's free, and there's no account.",
 };
 
 type PersistedHistory = {
@@ -4781,6 +4783,14 @@ function App() {
               <span>
                 The full scorecard lives in <strong>Advanced Mode</strong>, so RigMatch switched you over.
               </span>
+              <button
+                type="button"
+                className="mini-button"
+                onClick={() => setCameFromSimple(false)}
+                aria-label="Dismiss this note and stay in Advanced Mode"
+              >
+                Got it
+              </button>
               <button
                 type="button"
                 className="mini-button"
