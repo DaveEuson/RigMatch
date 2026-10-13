@@ -176,6 +176,7 @@
 .top-match-chip:hover,
 .top-bar-connections:hover,
 .top-bar-settings:hover,
+.top-bar-chat:hover,
 .top-bar-donate:hover {
   background: var(--panel-hover);
 }
@@ -265,6 +266,7 @@
 .conn-dot.down { background: var(--red); }
 
 .top-bar-settings,
+.top-bar-chat,
 .top-bar-donate {
   display: inline-flex;
   align-items: center;
@@ -281,7 +283,8 @@
 
 /* Simple's bar has the room to keep the word at every width (measured down to
    1024px), and Simple is where newcomers are. Advanced drops it with Settings'. */
-.top-bar.simple .top-bar-donate span { display: inline; }
+.top-bar.simple .top-bar-donate span,
+.top-bar.simple .top-bar-chat span { display: inline; }
 
 .top-bar-mode {
   display: inline-flex;
@@ -694,6 +697,7 @@
 @media (max-width: 1919px) {
   .top-bar:where(.advanced) .top-bar-service-name,
   .top-bar:where(.advanced) .top-bar-settings span,
+  .top-bar:where(.advanced) .top-bar-chat span,
   .top-bar:where(.advanced) .top-bar-donate span { display: none; }
   .top-bar:where(.advanced) .badge-case > .badge-slot { display: none; }
   .top-bar:where(.advanced) .badge-case > .badge-slot.recent { display: grid; }
@@ -705,6 +709,7 @@
   .top-match-chip-name { max-width: 10ch; }
   .top-bar-service-name { display: none; }
   .top-bar-settings span,
+  .top-bar-chat span,
   .top-bar-donate span { display: none; }
   .top-bar .badge-case > .badge-slot { display: none; }
   .top-bar .badge-case > .badge-slot.recent { display: grid; }
@@ -752,4 +757,15 @@
 @media (max-width: 1200px), (max-height: 780px) {
   .app-shell:not([data-ui-mode='beginner']) { grid-template-rows: auto auto 1fr auto; }
   .app-shell.no-global-lineup:not([data-ui-mode='beginner']) { grid-template-rows: auto auto 1fr; }
+}
+
+/* The chat's note for someone who has not run the show: one quiet line above
+   the message box, not a banner. */
+.chat-dock-note {
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
 }

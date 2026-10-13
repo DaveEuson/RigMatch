@@ -4813,6 +4813,10 @@ function App() {
             },
           }}
           onChatWithWinner={openChatWithWinner}
+          continueChat={chatMessages.some((message) => message.role === 'user')
+            ? { name: getFriendlyModelName(selectedModel) }
+            : null}
+          onContinueChat={() => openChatWith(selectedModel)}
           justChat={justChatForWizard}
           onJustChat={startJustChat}
           onOpenScorecard={() => { setCameFromSimple(true); selectUiMode('advanced'); selectNav('history'); }}
@@ -5268,7 +5272,8 @@ function App() {
         </div>
       )}
       <ActivityToast message={activity} />
-      {reportReady && !reportOpen && shownShowResult && (
+      {/* Not over an open chat: it sat on the message box, bottom right, until it was closed. */}
+      {reportReady && !reportOpen && !chatOpen && shownShowResult && (
         <div className="report-ready-bar" role="status">
           <Trophy aria-hidden="true" />
           <span>
@@ -5338,6 +5343,8 @@ function App() {
           // which fails in a way that reads as the app being broken.
           availableModels={modelRows.filter((row) => row.installed && canGenerateText(row)).map((row) => row.displayName)}
           onModelChange={changeChatModel}
+          noShowYet={scoredModelCount === 0}
+          onRunShow={() => { setChatOpen(false); selectUiMode('beginner'); }}
         />
       )}
 
