@@ -456,7 +456,7 @@ export function UtilityPanel({
                       </>
                     ) : (
                       <>
-                        <strong>No crown yet</strong>
+                        <strong>Not crowned yet</strong>
                         <span className="goal-match-awaiting">{match.awaiting}</span>
                       </>
                     )}

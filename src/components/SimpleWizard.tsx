@@ -1868,7 +1868,13 @@ function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedO
                     : onlyOne
                       // Nothing was compared, so it is not "the best of" anything.
                       ? <>The only one of your picks that finished, so it had nothing to be compared with.</>
-                      : <>The best mix of speed, answer quality and fit for your PC out of the {tested}.</>}
+                      // Follows the Rank by choice above it: the caption used to
+                      // describe a balance the buttons had just changed.
+                      : notchAt(balance)?.id === 'accuracy'
+                        ? <>The most accurate answers of the {tested} on your PC, with speed and fit counted too.</>
+                        : notchAt(balance)?.id === 'speed'
+                          ? <>The fastest of the {tested} on your PC that still answered well, with fit counted too.</>
+                          : <>The best mix of speed, answer quality and fit for your PC out of the {tested}.</>}
             </p>
             {winner.measures && winner.measures.length > 0 && (
               <dl className="sw-winner-measures">
