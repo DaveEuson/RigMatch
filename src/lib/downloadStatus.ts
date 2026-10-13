@@ -53,7 +53,11 @@ export type DownloadStepSummary = {
  * carry on optimizing the wizard: it cannot see inside a cross-module call, so
  * passing prop objects in made it assume they might be mutated and bail.
  */
-export function summarizeDownloadStep(statuses: DownloadRowStatus[]): DownloadStepSummary {
+export function summarizeDownloadStep(
+  statuses: DownloadRowStatus[],
+  /** What the round needs: a picture or listening round grades each model alone, so one is enough. */
+  minContestants: number = MIN_CONTESTANTS,
+): DownloadStepSummary {
   const rows = statuses;
   const installedCount = statuses.filter((s) => s === 'done').length;
   const failedCount = statuses.filter((s) => s === 'failed').length;
@@ -64,7 +68,7 @@ export function summarizeDownloadStep(statuses: DownloadRowStatus[]): DownloadSt
   // let them continue with whoever actually arrived, provided there are enough
   // of them to hold a comparison.
   const canContinue = allInstalled
-    || (rows.length > 0 && failedCount > 0 && !stillMoving && installedCount >= MIN_CONTESTANTS);
+    || (rows.length > 0 && failedCount > 0 && !stillMoving && installedCount >= minContestants);
 
   const blockedReason = !canContinue && failedCount > 0 && !stillMoving
     ? `${failedCount} download${failedCount === 1 ? '' : 's'} didn't finish, so there aren't enough contestants. Go back and pick another.`

@@ -345,6 +345,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
     blockedReason: downloadBlockedReason,
   } = summarizeDownloadStep(
     shortlistedRows.map((row) => getDownloadRowStatus(row.installed, props.pullProgressByModel[row.displayName])),
+    minPicks,
   );
   const downloadDone = pickDone && downloadCanContinue;
   // Once the user starts a show, Compare stays incomplete until that run
@@ -509,6 +510,7 @@ export function SimpleWizard(props: SimpleWizardProps) {
   const pendingGb = shortlistedRows
     .filter((row) => !row.installed)
     .reduce((sum, row) => sum + (row.sizeGb ?? 0), 0);
+  const pendingCount = shortlistedRows.filter((row) => !row.installed).length;
   const downloadSuffix = pendingGb > 0 ? ` · ${pendingGb.toFixed(1)} GB` : ' · already on your PC';
   const showMinutes = Math.max(1, Math.round(shortlistedRows.length * 3));
 
@@ -519,7 +521,9 @@ export function SimpleWizard(props: SimpleWizardProps) {
       ? `Pick ${minPicks} or more`
       : skipDownload
       ? `Start the show · about ${showMinutes} min`
-      : `Download ${shortlistedRows.length} model${shortlistedRows.length === 1 ? '' : 's'}${downloadSuffix}`,
+      // The ones that need fetching: "Download 5 models · 2.1 GB" when three were
+      // already on the PC counted the wrong thing.
+      : `Download ${pendingCount} model${pendingCount === 1 ? '' : 's'}${downloadSuffix}`,
     download: `Start the show · about ${showMinutes} min`,
   };
 
