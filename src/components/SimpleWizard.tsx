@@ -246,6 +246,9 @@ type SimpleWizardProps = {
   trackerSlot?: HTMLElement | null;
   /** Opens the shareable scorecard image for the winning model. */
   onShareScore: () => void;
+  /** A conversation already exists, so the way back to it is on the first screen. */
+  continueChat?: { name: string } | null;
+  onContinueChat?: () => void;
   onRunAgain: () => void;
   onSwitchToAdvanced: () => void;
   /** Where the wizard was last time it was mounted. Switching to Advanced and
@@ -653,6 +656,13 @@ export function SimpleWizard(props: SimpleWizardProps) {
             {props.onDismissNotice && (
               <button type="button" className="btn btn-link" onClick={props.onDismissNotice}>Got it</button>
             )}
+          </div>
+        )}
+
+        {step === 'setup' && props.continueChat && props.onContinueChat && (
+          <div className="sw-continue-chat" role="region" aria-label="Continue your chat">
+            <span>Pick up where you left off: your chat with <strong>{props.continueChat.name}</strong>.</span>
+            <button type="button" className="btn btn-line btn-sm" onClick={props.onContinueChat}>Continue chatting</button>
           </div>
         )}
 
