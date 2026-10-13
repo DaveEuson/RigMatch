@@ -27,6 +27,7 @@ import { setShowExtras, useShowExtras, useShowStage } from '../lib/showExtras';
 import { TROJAN_HOST_COPY, ajaxHostLine } from '../lib/trojanStage';
 import { HOST_LINES, hostLine } from '../lib/hostScript';
 import { BUY_ME_A_COFFEE_URL } from '../lib/appConfig';
+import { buildFeedbackUrl } from '../lib/feedback';
 import { LOW_DISK_GB } from '../lib/loadLevel';
 import { UiIcon } from './icons/UiIcon';
 import { AchievementUnlocked } from './AchievementShelf';
@@ -1714,7 +1715,7 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
 /** When the curtains have parted far enough for the winner to land. */
 const CURTAIN_MS = 900;
 
-function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, balance, onBalanceChange, round, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
+function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedOut, balance, onBalanceChange, round, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
   // Show effects: the curtains part on the winner, the bulbs flash, the
   // audience applauds. Without them the reveal plays exactly as before.
   const { effects } = useShowExtras();
@@ -1850,6 +1851,17 @@ function WinnerScreen({ winner, shortlistedRows, lineupResults, droppedOut, bala
           <button type="button" className="btn btn-link" onClick={onOpenScorecard}>See every answer</button>
           {/* Sharing belongs at the moment of the result. */}
           <button type="button" className="btn btn-link" onClick={onShareScore}>Share</button>
+          {/* Where someone has just seen a result is when they have something to say.
+              It opens GitHub in their browser; nothing is sent from here. */}
+          <a
+            className="btn btn-link"
+            href={buildFeedbackUrl(system, { model: winner.model, scoreLabel: winner.scoreLabel, grade: winner.grade })}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Opens a GitHub page in your browser. Nothing is sent until you press Submit there."
+          >
+            Tell me how it went
+          </a>
           <AllDemosButton className="btn btn-link" label="Everything they made" />
           <button type="button" className="btn btn-link" onClick={onRunAgain}>Run the show again</button>
         </span>
