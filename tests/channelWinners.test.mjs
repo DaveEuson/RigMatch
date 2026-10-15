@@ -73,8 +73,9 @@ test('a description that missed the picture never wins, and one scored by the ol
     // Gemma 4 on the contestant wall: Java code on a white background, quickly.
     'vision:quick': lab('image-recognition', 'gemma4:e2b', 3, { score: 0, adherence: 0, picture: 'lineup' }),
     'vision:right': lab('image-recognition', 'qwen2.5vl:7b', 11, { score: 100, adherence: 1, picture: 'lineup' }),
-    // Scored 100 by the old rubric, whatever it said.
-    'vision:old': lab('image-recognition', 'llava:7b', 2, { score: 100 }),
+    // Scored 100 by the old rubric, whatever it said, on the same picture: the
+    // Top Match compares only descriptions of one picture (comparisonGroups).
+    'vision:old': lab('image-recognition', 'llava:7b', 2, { score: 100, picture: 'lineup' }),
   };
   // With any weight on accuracy, only a description that passed can win.
   assert.equal(labWinner(results, 'reading', 1)?.model, 'qwen2.5vl:7b');

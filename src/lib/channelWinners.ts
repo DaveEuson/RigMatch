@@ -205,13 +205,22 @@ export function comparisonGroups(
     .sort((a, b) => b.latest.localeCompare(a.latest));
 }
 
-/** Best for a Lab-tested channel: the Lab's own accuracy against how long it took. */
+/**
+ * Best for a Lab-tested channel: the Lab's own accuracy against how long it took.
+ *
+ * Decided by the newest comparison, the one the Comparison screen puts first.
+ * Ranking every result of the channel together put a checkpoint that drew a
+ * quick cat last month ahead of the one that drew the lighthouse asked for
+ * today, so the Top Match and the Comparison screen named different winners.
+ */
 export function labWinner(
   results: Record<string, AdvancedLabResult>,
   channel: 'images' | 'listening' | 'reading' | 'audio',
   balance: number,
 ): ChannelWinner | null {
-  const ranked = rankLabResults(results, channel, balance);
+  const newest = comparisonGroups(Object.values(results), channel)[0];
+  if (!newest) return null;
+  const ranked = rankLabList(newest.results, channel, balance);
   const top = crowned(ranked);
   if (!top) return null;
   const accuracy = top.accuracy === null ? 'unjudged' : describeLabAccuracy(channel, top.accuracy, top.item);

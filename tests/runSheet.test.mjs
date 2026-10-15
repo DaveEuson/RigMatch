@@ -222,7 +222,9 @@ test('a quick check sends no judge, so nothing leaves the computer and rules mar
   for (const at of ['const startBenchmark = useCallback', 'const runListTest = useCallback']) {
     const run = app.slice(app.indexOf(at), app.indexOf(at) + 9000);
     assert.match(run, /const quick = questionsOverride === QUICK_CHECK_QUESTIONS;/, at);
-    assert.match(run, /qualityMode: effectiveJudge && !quick \? 'judge' : 'heuristic',\s*\.\.\.\(quick \? \{\} : \{ judgeModel: effectiveJudge\?\.model, judgeProvider: effectiveJudge\?\.provider, judgeApiKey: effectiveJudge\?\.apiKey \}\),/, at);
+    // The judge is the contestant's own (labJudgeFor), and none at all on a quick check.
+    assert.match(run, /const judge = quick \? null : skillJudgeFor\((modelToTest|row\.displayName)\);/, at);
+    assert.match(run, /qualityMode: judge \? 'judge' : 'heuristic',\s*\.\.\.\(judge \? \{ judgeModel: judge\.model, judgeProvider: judge\.provider, judgeApiKey: judge\.apiKey \} : \{\}\),/, at);
   }
   // The footer names OpenRouter only for runs the judge marks.
   const sheet = read('../src/components/RunSheet.tsx');
