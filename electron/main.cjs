@@ -1222,6 +1222,11 @@ function registerHandlers() {
     assertTrustedIpcSender(event);
     return startOllamaInstall(event.sender);
   });
+  // The controller was armed only by a disk error; nothing let the person pull it.
+  ipcMain.handle('ollama:cancelInstall', (event) => {
+    assertTrustedIpcSender(event);
+    ollamaInstallController?.abort();
+  });
   ipcMain.handle('ollama:launchInstaller', (event, installerPath) => {
     assertTrustedIpcSender(event);
     if (!security.isExpectedInstallerPath(installerPath, {
@@ -1764,7 +1769,9 @@ async function startOllamaInstall(sender) {
     // A filesystem error aborts the fetch, so the read rejects with AbortError —
     // report the underlying fs error instead of swallowing it as a silent cancel.
     const cause = streamError || err;
-    if (cause.name !== 'AbortError') send({ phase: 'error', error: cause.message || 'Download failed' });
+    // Stopped by the person: back to the offer, with nothing to report.
+    if (cause.name === 'AbortError') send({ phase: 'idle' });
+    else send({ phase: 'error', error: cause.message || 'Download failed' });
     // A cancelled or failed download left a partial installer in the temp
     // folder, tens of megabytes that nothing would ever launch. Closed first:
     // Windows will not delete a file that is still open.

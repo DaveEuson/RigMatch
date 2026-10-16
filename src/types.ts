@@ -715,6 +715,8 @@ export type AgentArcadeApi = {
   /** RigMatch Chat asking to stop something it started. */
   onBridgeGenerateStop?: (callback: (request: { id: string }) => void) => () => void;
   startOllamaInstall: () => Promise<void>;
+  /** Stop the installer download; the progress goes back to idle. */
+  cancelOllamaInstall: () => Promise<void>;
   launchOllamaInstaller: (installerPath: string) => Promise<void>;
   onOllamaInstallProgress?: (callback: (progress: OllamaInstallProgress) => void) => () => void;
   /** The computer's regional format ("de-DE"), for dates and numbers. See lib/formatLocale.ts. */

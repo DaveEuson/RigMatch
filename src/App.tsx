@@ -1329,6 +1329,13 @@ function App() {
     }
   }, []);
 
+  // Idle at once here too: the main process confirms, but the bar must not sit
+  // on a download that has been stopped while the confirmation travels.
+  const cancelOllamaInstall = useCallback(async () => {
+    setOllamaInstallProgress({ phase: 'idle' });
+    await agentArcadeApi.cancelOllamaInstall().catch(() => undefined);
+  }, []);
+
   const launchOllamaInstaller = useCallback(async (installerPath: string) => {
     try {
       await agentArcadeApi.launchOllamaInstaller(installerPath);
@@ -4789,6 +4796,7 @@ function App() {
           onGetOllama={openOllamaDownload}
           ollamaInstallProgress={ollamaInstallProgress}
           onStartOllamaInstall={startOllamaInstall}
+          onCancelOllamaInstall={cancelOllamaInstall}
           onLaunchOllamaInstaller={launchOllamaInstaller}
           wizardModels={wizardModels}
           comfySetup={{
@@ -5019,6 +5027,7 @@ function App() {
             onInstallOllama={openOllamaDownload}
             ollamaInstallProgress={ollamaInstallProgress}
             onStartOllamaInstall={startOllamaInstall}
+            onCancelOllamaInstall={cancelOllamaInstall}
             onLaunchOllamaInstaller={launchOllamaInstaller}
             onScanRig={refreshRig}
             onOpenSetupGuide={openSetupGuide}

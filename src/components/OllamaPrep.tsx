@@ -13,6 +13,7 @@ export function OllamaPrep({
   onInstallOllama,
   ollamaInstallProgress,
   onStartOllamaInstall,
+  onCancelOllamaInstall,
   onLaunchOllamaInstaller,
   onScanRig,
   onOpenSetupGuide,
@@ -22,6 +23,7 @@ export function OllamaPrep({
   onInstallOllama: () => void;
   ollamaInstallProgress: OllamaInstallProgress;
   onStartOllamaInstall: () => void;
+  onCancelOllamaInstall: () => void;
   onLaunchOllamaInstaller: (path: string) => void;
   onScanRig: () => void;
   onOpenSetupGuide: () => void;
@@ -84,6 +86,7 @@ export function OllamaPrep({
         <div className="install-progress-bar">
           <div className="install-progress-fill" style={{ width: `${ip.percent}%` }} />
           <span>Downloading Ollama… {ip.percent}%</span>
+          <button type="button" className="mini-button outline" onClick={onCancelOllamaInstall}>Stop</button>
         </div>
       ) : hasError && 'error' in ip ? (
         <div className="install-error-row">

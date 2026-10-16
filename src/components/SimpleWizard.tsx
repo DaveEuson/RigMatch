@@ -131,6 +131,7 @@ type SimpleWizardProps = {
   // than power users do, so Simple Mode must not just link out to a website.
   ollamaInstallProgress: OllamaInstallProgress;
   onStartOllamaInstall: () => void;
+  onCancelOllamaInstall: () => void;
   onLaunchOllamaInstaller: (path: string) => void;
   wizardModels: WizardModel[];
   modelsLoading: boolean;
@@ -831,6 +832,7 @@ function SetupScreen({
   onGetOllama,
   ollamaInstallProgress,
   onStartOllamaInstall,
+  onCancelOllamaInstall,
   onLaunchOllamaInstaller,
   comfySetup,
   justChat,
@@ -972,6 +974,7 @@ function SetupScreen({
             <div className="sw-install-progress">
               <div className="sw-install-progress-bar"><i style={{ width: `${install.percent}%` }} /></div>
               <span className="sw-muted">Downloading Ollama… {install.percent}%</span>
+              <button type="button" className="btn btn-line" onClick={onCancelOllamaInstall}>Stop</button>
             </div>
           ) : (
             <div className="sw-setup-actions">
