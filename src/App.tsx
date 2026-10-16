@@ -51,14 +51,13 @@ import type {
 } from './types';
 import {
   SCORE_PRIORITY_STORAGE_KEY,
-  compareBenchmarkResults,
   compareTestedModelScores,
   formatMatchScore,
   toTestedModelScore,
   upsertModelScores,
 } from './lib/scoring';
-import { BALANCE_STORAGE_KEY, applyBalance, readBalances, type Balances } from './lib/balance';
-import { codeWinner, labWinner, rankLabList, videoWinner } from './lib/channelWinners';
+import { BALANCE_STORAGE_KEY, BALANCED, applyBalance, readBalances, type Balances } from './lib/balance';
+import { codeWinner, labWinner, rankLabList, rankMatchResults, videoWinner } from './lib/channelWinners';
 import { companionFallbackNote, companionLaunchMessage } from './lib/companionLaunch';
 import { audioMakerChoices, chatPicks, videoMakerChoices } from './lib/chatMakers';
 import { renderChatAudio, renderChatVideo, type ChatRender } from './lib/chatRenders';
@@ -1004,14 +1003,15 @@ function App() {
    * vanished the moment that model was tested again (Dave's Difficult
    * Subjects run on yi:9b had nowhere to show up).
    */
-  const saveTestReport = useCallback((results: BenchmarkResult[], winner: string) => {
+  /** The run as a report: its results ranked at the fader it ran at, so the winner heads them. */
+  const saveTestReport = useCallback((results: BenchmarkResult[], winner: string, balance: number = BALANCED) => {
     if (!results.length) return;
     const completedAt = new Date().toISOString();
     const report: StoredRunReport = {
       id: makeReportId(completedAt, winner),
       completedAt,
       winner,
-      results: results.map((r) => toTestedModelScore(r, currentSuiteName)).sort(compareTestedModelScores),
+      results: rankMatchResults(results.map((r) => toTestedModelScore(r, currentSuiteName)), balance),
       questionCount: Math.max(...results.map((r) => r.prompts.length)),
       suiteName: currentSuiteName,
       // The whole result, not just its prompts: the transcript panel reads
@@ -1133,25 +1133,7 @@ function App() {
    * left `phase: 'complete'` behind, the latch released on the spot and crowned
    * the previous board while the round was still going.
    */
-  const wizardRunProgress: RunProgress | null = useMemo(() => {
-    if (wizardRound === 'chat') return runProgress;
-    // The code round asks its questions first, and those run on runProgress.
-    // The screen read "Warming up… 0%" for the whole of that phase.
-    if (skillRunStatus.phase === 'idle') return wizardRound === 'code' ? runProgress : null;
-    const total = Math.max(skillRunStatus.total, 1);
-    return {
-      mode: 'speed-date',
-      phase: skillRunStatus.phase,
-      label: skillRunStatus.label,
-      // The label ends "… — <model>"; the screen names who is up now.
-      currentModel: skillRunStatus.label.split(' — ')[1] ?? '',
-      completed: skillRunStatus.completed,
-      total: skillRunStatus.total,
-      percent: Math.round((skillRunStatus.completed / total) * 100),
-      message: skillRunStatus.label,
-    };
-  }, [wizardRound, runProgress, skillRunStatus]);
-
+  // wizardRunProgress is derived below, after the show's results it is read against.
 
   // Advanced's stats strip. Read once from the stored choice, falling back to
   // a rule based on how much height this screen actually has — see
@@ -1563,16 +1545,59 @@ function App() {
     const rescored = applyBalance(Object.fromEntries(wizardShowResult.results.map((score) => [score.model, score])), wizardBalance);
     return Object.values(rescored).sort(compareTestedModelScores);
   }, [wizardShowResult, wizardBalance]);
+
   /**
-   * The show as the report bar and the report tell it. In Simple Mode that is
-   * the Winner screen's order: after "Rank by", the crown moved while the bar
-   * still said the Balanced winner "came first" and the report ranked it top.
+   * What the wizard's Compare screen watches while a skill round runs.
+   *
+   * The picture, listening and app rounds report through `skillRunStatus`,
+   * which the wizard has never seen: its progress bar reads `RunProgress`, and
+   * its "the show is over" latch waits for a run to go active and then idle. So
+   * a picture round ran invisibly — Compare sat at 0% with Meet the winner
+   * disabled for as long as anyone waited — and where an earlier chat run had
+   * left `phase: 'complete'` behind, the latch released on the spot and crowned
+   * the previous board while the round was still going.
+   *
+   * A finished show is this lineup's only while its results are. Once the
+   * lineup changed, "complete" belonged to a show that was no longer on the
+   * stage, and it kept Show and Winner ticked. A round nobody could take
+   * (total 0) stays: the Winner screen says why.
    */
-  const shownShowResult = useMemo(() => (
-    uiMode === 'beginner' && listTestResult && wizardShowResult === listTestResult && wizardShowRanked?.length
-      ? { ...listTestResult, winner: wizardShowRanked[0].model, results: wizardShowRanked }
-      : listTestResult
-  ), [uiMode, listTestResult, wizardShowResult, wizardShowRanked]);
+  const wizardRunProgress: RunProgress | null = useMemo(() => {
+    const progress = (() => {
+      if (wizardRound === 'chat') return runProgress;
+      // The code round asks its questions first, and those run on runProgress.
+      // The screen read "Warming up… 0%" for the whole of that phase.
+      if (skillRunStatus.phase === 'idle') return wizardRound === 'code' ? runProgress : null;
+      const total = Math.max(skillRunStatus.total, 1);
+      return {
+        mode: 'speed-date',
+        phase: skillRunStatus.phase,
+        label: skillRunStatus.label,
+        // The label ends "… — <model>"; the screen names who is up now.
+        currentModel: skillRunStatus.label.split(' — ')[1] ?? '',
+        completed: skillRunStatus.completed,
+        total: skillRunStatus.total,
+        percent: Math.round((skillRunStatus.completed / total) * 100),
+        message: skillRunStatus.label,
+      } satisfies RunProgress;
+    })();
+    if (progress?.phase === 'complete' && progress.total > 0 && !(wizardShowResult || wizardSkillBoard)) return null;
+    return progress;
+  }, [wizardRound, runProgress, skillRunStatus, wizardShowResult, wizardSkillBoard]);
+  /**
+   * The show as the report bar, the report and History tell it: ranked at the
+   * fader, which is where the Top Match is ranked. In Simple Mode that is the
+   * Winner screen's order: after "Rank by", the crown moved while the bar still
+   * said the Balanced winner "came first" and the report ranked it top. In
+   * Advanced Mode it is the show channel's fader, as on the comparison panel.
+   */
+  const shownShowResult = useMemo(() => {
+    if (!listTestResult) return null;
+    const ranked = uiMode === 'beginner'
+      ? (wizardShowResult === listTestResult ? wizardShowRanked : null)
+      : rankMatchResults(listTestResult.results, balances[runChannel]);
+    return ranked?.length ? { ...listTestResult, winner: ranked[0].model, results: ranked } : listTestResult;
+  }, [uiMode, listTestResult, wizardShowResult, wizardShowRanked, balances, runChannel]);
 
   // What the show will ask, said in the Pick footer beside "Change".
   const wizardPlanLine = wizardRound === 'vision' ? 'One picture to describe.'
@@ -1591,7 +1616,9 @@ function App() {
       })()
       // A picture or listening round that produced nothing must not borrow the
       // chat show's winner: "named the most of the test picture" about a model
-      // that was never shown one.
+      // that was never shown one. Nor does a chat round borrow the best score
+      // ever saved: that crowned a model that was never in this lineup, and kept
+      // the Winner step ticked after the lineup changed.
       : wizardRound === 'vision' || wizardRound === 'listening'
       ? null
       : wizardShowRanked
@@ -1601,18 +1628,8 @@ function App() {
           ? { model: top.model, score: top.total, scoreLabel: formatMatchScore(top), grade: top.grade, measures: matchMeasures(top) }
           : null;
       })()
-      : topRigPick?.score
-      ? {
-        model: topRigPick.row.displayName,
-        score: topRigPick.score.total,
-        // The winner screen was printing the raw integer, so the app's most-seen
-        // score was the one surface still disagreeing with the decimal policy.
-        scoreLabel: formatMatchScore(topRigPick.score),
-        grade: topRigPick.score.grade,
-        measures: matchMeasures(topRigPick.score),
-      }
       : null),
-    [topRigPick, wizardRound, wizardSkillBoard, wizardShowRanked],
+    [wizardRound, wizardSkillBoard, wizardShowRanked],
   );
 
   // The winner the screen shows, not the Top Pick. After a skill round, or
@@ -2301,6 +2318,9 @@ function App() {
     setActivity(`Testing ${modelToTest} with ${count} questions for speed, reliability, and computer fit...`);
 
     try {
+      // This model's own judge: one picked automatically steps aside when it is
+      // the model under test (labJudgeFor), as it already did in the Labs.
+      const judge = quick ? null : skillJudgeFor(modelToTest);
       const result = normalizeBenchmarkResultModel(await agentArcadeApi.runBenchmark({
         model: modelToTest,
         baseUrl: runtime.baseUrl,
@@ -2308,8 +2328,8 @@ function App() {
         questionCount: count,
         questions,
         progressId,
-        qualityMode: effectiveJudge && !quick ? 'judge' : 'heuristic',
-        ...(quick ? {} : { judgeModel: effectiveJudge?.model, judgeProvider: effectiveJudge?.provider, judgeApiKey: effectiveJudge?.apiKey }),
+        qualityMode: judge ? 'judge' : 'heuristic',
+        ...(judge ? { judgeModel: judge.model, judgeProvider: judge.provider, judgeApiKey: judge.apiKey } : {}),
         autoJudgeModels,
         judgeEndpoints,
       }), modelToTest);
@@ -2408,7 +2428,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsBenchmarking(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectedHost, selectedModel, system.hostname, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels, judgeEndpoints]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectedHost, selectedModel, system.hostname, skillJudgeFor, rigStampForModel, tellUser, autoJudgeModels, judgeEndpoints]);
 
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
     // Through the sheet with its quick check ticked, unless someone chose to
@@ -3325,6 +3345,9 @@ function App() {
         const runtime = getModelRuntime(row, ollama);
         let result: BenchmarkResult;
         try {
+          // Each contestant's own judge. One judge for the whole lineup meant
+          // that, picked automatically, it marked its own answers on its turn.
+          const judge = quick ? null : skillJudgeFor(row.displayName);
           result = normalizeBenchmarkResultModel(await agentArcadeApi.runBenchmark({
           model: row.displayName,
           baseUrl: runtime.baseUrl,
@@ -3332,8 +3355,8 @@ function App() {
           questionCount: count,
           questions: plan,
           progressId,
-          qualityMode: effectiveJudge && !quick ? 'judge' : 'heuristic',
-          ...(quick ? {} : { judgeModel: effectiveJudge?.model, judgeProvider: effectiveJudge?.provider, judgeApiKey: effectiveJudge?.apiKey }),
+          qualityMode: judge ? 'judge' : 'heuristic',
+          ...(judge ? { judgeModel: judge.model, judgeProvider: judge.provider, judgeApiKey: judge.apiKey } : {}),
           autoJudgeModels,
           judgeEndpoints,
           }), row.displayName);
@@ -3427,9 +3450,13 @@ function App() {
         void refreshProviderStatus();
         return;
       }
-      const winner = results.reduce((best, result) =>
-        compareBenchmarkResults(result, best) < 0 ? result : best,
-      );
+      // Crowned at the fader the show was started at, which is where the Top
+      // Match is ranked. The results come back summarized at Balanced, and
+      // whoever led that order was crowned whatever the fader said: the report,
+      // "gets the rose" and the log named one model while Top Match named another.
+      const runBalance = runBalanceRef.current ?? BALANCED;
+      const ranked = rankMatchResults(results.map((r) => toTestedModelScore(r, currentSuiteName)), runBalance);
+      const winner = results.find((result) => result.model === ranked[0].model) ?? results[0];
 
       setBenchmark(winner);
       setBenchmarkByModel((current) => upsertBenchmarkResults(current, results));
@@ -3455,10 +3482,12 @@ function App() {
         questionScores: Object.fromEntries(winner.prompts.map((prompt) => [prompt.id, prompt.sobrietyScore])),
         lastResult: {
           model: winner.model,
-          total: winner.scores.total,
-          grade: winner.scores.grade,
+          total: ranked[0].total,
+          grade: ranked[0].grade,
         },
       });
+      // Kept at Balanced, the weighting every saved score is kept at, so the
+      // screens can re-rank it at any fader position; the winner is the fader's.
       setListTestResult({
         winner: winner.model,
         results: results
@@ -3467,21 +3496,22 @@ function App() {
         ...(failures.length ? { failures: [...failures] } : {}),
       });
       if (failures.length) tellUser(droppedOutMessage(failures, getFriendlyModelName));
-      saveTestReport(results, winner.model);
+      saveTestReport(results, winner.model, runBalance);
       // The report bar announces the winner; a toast as well said it twice,
       // on screen and to screen readers, and by the model's raw id.
       setReportReady(true);
       await agentArcadeApi.appendLog({
         level: 'info',
         source: 'renderer',
-        message: `Speed Dating finished: ${winner.model} won with ${winner.scores.total} Match (${winner.scores.grade})`,
+        message: `Speed Dating finished: ${winner.model} won with ${ranked[0].total} Match (${ranked[0].grade})`,
         details: {
           computer: selectedHost?.hostname ?? system.hostname,
           modelsTested: results.length,
           questionsEach: winner.questionCount,
           suite: currentSuiteName,
-          ranking: results
-            .map((entry) => `${entry.model}: ${entry.scores.total} ${entry.scores.grade}`)
+          balance: runBalance,
+          ranking: ranked
+            .map((entry) => `${entry.model}: ${entry.total} ${entry.grade}`)
             .join(', '),
         },
       });
@@ -3523,7 +3553,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, effectiveJudge, rigStampForModel, tellUser, autoJudgeModels, judgeEndpoints]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, skillJudgeFor, rigStampForModel, tellUser, autoJudgeModels, judgeEndpoints]);
 
   /**
    * A skill run that throws must not leave the mini bar spinning forever.
@@ -4799,6 +4829,7 @@ function App() {
             reachable: comfyReachable,
           }}
           initialDream={wizardDreamSeen ? wizardDream : dreamForGoal(selectedGoals[0])}
+          dream={wizardDream}
           notice={simpleNotice}
           noticeAction={simpleNoticeAction}
           onDismissNotice={() => { setSimpleNotice(null); setSimpleNoticeAction(null); }}
@@ -5235,7 +5266,7 @@ function App() {
         {(activeNavId === 'history' || activeNavId === 'settings') && (
           <UtilityPanel
             panel={activeNavId}
-            listTestResult={listTestResult}
+            listTestResult={shownShowResult}
             selectedHost={selectedHost}
             selectedModel={selectedModel}
             ollama={ollama}
