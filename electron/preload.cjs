@@ -118,6 +118,7 @@ const api = {
     return () => ipcRenderer.removeListener('updater:status', listener);
   },
   startOllamaInstall: () => ipcRenderer.invoke('ollama:startInstall'),
+  cancelOllamaInstall: () => ipcRenderer.invoke('ollama:cancelInstall'),
   launchOllamaInstaller: (installerPath) => ipcRenderer.invoke('ollama:launchInstaller', installerPath),
   onOllamaInstallProgress: (callback) => {
     const listener = (_event, progress) => callback(progress);

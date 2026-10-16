@@ -443,6 +443,7 @@ const fallbackApi: AgentArcadeApi = {
     previewPullControllers.forEach((controller) => controller.abort());
   },
   async startOllamaInstall() { /* no-op in preview */ },
+  async cancelOllamaInstall() { /* no-op in preview */ },
   async launchOllamaInstaller() { /* no-op in preview */ },
 };
 

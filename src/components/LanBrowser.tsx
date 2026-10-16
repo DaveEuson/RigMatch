@@ -24,6 +24,7 @@ export function LanBrowser({
   onInstallOllama,
   ollamaInstallProgress,
   onStartOllamaInstall,
+  onCancelOllamaInstall,
   onLaunchOllamaInstaller,
   onScanRig,
   onOpenSetupGuide,
@@ -41,6 +42,7 @@ export function LanBrowser({
   onInstallOllama: () => void;
   ollamaInstallProgress: OllamaInstallProgress;
   onStartOllamaInstall: () => void;
+  onCancelOllamaInstall: () => void;
   onLaunchOllamaInstaller: (path: string) => void;
   onScanRig: () => void;
   onOpenSetupGuide: () => void;
@@ -106,6 +108,7 @@ export function LanBrowser({
         onInstallOllama={onInstallOllama}
         ollamaInstallProgress={ollamaInstallProgress}
         onStartOllamaInstall={onStartOllamaInstall}
+        onCancelOllamaInstall={onCancelOllamaInstall}
         onLaunchOllamaInstaller={onLaunchOllamaInstaller}
         onScanRig={onScanRig}
         onOpenSetupGuide={onOpenSetupGuide}
