@@ -1133,25 +1133,7 @@ function App() {
    * left `phase: 'complete'` behind, the latch released on the spot and crowned
    * the previous board while the round was still going.
    */
-  const wizardRunProgress: RunProgress | null = useMemo(() => {
-    if (wizardRound === 'chat') return runProgress;
-    // The code round asks its questions first, and those run on runProgress.
-    // The screen read "Warming up… 0%" for the whole of that phase.
-    if (skillRunStatus.phase === 'idle') return wizardRound === 'code' ? runProgress : null;
-    const total = Math.max(skillRunStatus.total, 1);
-    return {
-      mode: 'speed-date',
-      phase: skillRunStatus.phase,
-      label: skillRunStatus.label,
-      // The label ends "… — <model>"; the screen names who is up now.
-      currentModel: skillRunStatus.label.split(' — ')[1] ?? '',
-      completed: skillRunStatus.completed,
-      total: skillRunStatus.total,
-      percent: Math.round((skillRunStatus.completed / total) * 100),
-      message: skillRunStatus.label,
-    };
-  }, [wizardRound, runProgress, skillRunStatus]);
-
+  // wizardRunProgress is derived below, after the show's results it is read against.
 
   // Advanced's stats strip. Read once from the stored choice, falling back to
   // a rule based on how much height this screen actually has — see
@@ -1535,6 +1517,45 @@ function App() {
     const rescored = applyBalance(Object.fromEntries(wizardShowResult.results.map((score) => [score.model, score])), wizardBalance);
     return Object.values(rescored).sort(compareTestedModelScores);
   }, [wizardShowResult, wizardBalance]);
+
+  /**
+   * What the wizard's Compare screen watches while a skill round runs.
+   *
+   * The picture, listening and app rounds report through `skillRunStatus`,
+   * which the wizard has never seen: its progress bar reads `RunProgress`, and
+   * its "the show is over" latch waits for a run to go active and then idle. So
+   * a picture round ran invisibly — Compare sat at 0% with Meet the winner
+   * disabled for as long as anyone waited — and where an earlier chat run had
+   * left `phase: 'complete'` behind, the latch released on the spot and crowned
+   * the previous board while the round was still going.
+   *
+   * A finished show is this lineup's only while its results are. Once the
+   * lineup changed, "complete" belonged to a show that was no longer on the
+   * stage, and it kept Show and Winner ticked. A round nobody could take
+   * (total 0) stays: the Winner screen says why.
+   */
+  const wizardRunProgress: RunProgress | null = useMemo(() => {
+    const progress = (() => {
+      if (wizardRound === 'chat') return runProgress;
+      // The code round asks its questions first, and those run on runProgress.
+      // The screen read "Warming up… 0%" for the whole of that phase.
+      if (skillRunStatus.phase === 'idle') return wizardRound === 'code' ? runProgress : null;
+      const total = Math.max(skillRunStatus.total, 1);
+      return {
+        mode: 'speed-date',
+        phase: skillRunStatus.phase,
+        label: skillRunStatus.label,
+        // The label ends "… — <model>"; the screen names who is up now.
+        currentModel: skillRunStatus.label.split(' — ')[1] ?? '',
+        completed: skillRunStatus.completed,
+        total: skillRunStatus.total,
+        percent: Math.round((skillRunStatus.completed / total) * 100),
+        message: skillRunStatus.label,
+      } satisfies RunProgress;
+    })();
+    if (progress?.phase === 'complete' && progress.total > 0 && !(wizardShowResult || wizardSkillBoard)) return null;
+    return progress;
+  }, [wizardRound, runProgress, skillRunStatus, wizardShowResult, wizardSkillBoard]);
   /**
    * The show as the report bar, the report and History tell it: ranked at the
    * fader, which is where the Top Match is ranked. In Simple Mode that is the
@@ -1567,7 +1588,9 @@ function App() {
       })()
       // A picture or listening round that produced nothing must not borrow the
       // chat show's winner: "named the most of the test picture" about a model
-      // that was never shown one.
+      // that was never shown one. Nor does a chat round borrow the best score
+      // ever saved: that crowned a model that was never in this lineup, and kept
+      // the Winner step ticked after the lineup changed.
       : wizardRound === 'vision' || wizardRound === 'listening'
       ? null
       : wizardShowRanked
@@ -1577,18 +1600,8 @@ function App() {
           ? { model: top.model, score: top.total, scoreLabel: formatMatchScore(top), grade: top.grade, measures: matchMeasures(top) }
           : null;
       })()
-      : topRigPick?.score
-      ? {
-        model: topRigPick.row.displayName,
-        score: topRigPick.score.total,
-        // The winner screen was printing the raw integer, so the app's most-seen
-        // score was the one surface still disagreeing with the decimal policy.
-        scoreLabel: formatMatchScore(topRigPick.score),
-        grade: topRigPick.score.grade,
-        measures: matchMeasures(topRigPick.score),
-      }
       : null),
-    [topRigPick, wizardRound, wizardSkillBoard, wizardShowRanked],
+    [wizardRound, wizardSkillBoard, wizardShowRanked],
   );
 
   // The winner the screen shows, not the Top Pick. After a skill round, or
@@ -4791,6 +4804,7 @@ function App() {
             reachable: comfyReachable,
           }}
           initialDream={wizardDreamSeen ? wizardDream : dreamForGoal(selectedGoals[0])}
+          dream={wizardDream}
           notice={simpleNotice}
           noticeAction={simpleNoticeAction}
           onDismissNotice={() => { setSimpleNotice(null); setSimpleNoticeAction(null); }}
