@@ -59,7 +59,7 @@ import {
 } from './lib/scoring';
 import { BALANCE_STORAGE_KEY, applyBalance, readBalances, type Balances } from './lib/balance';
 import { codeWinner, labWinner, rankLabList, videoWinner } from './lib/channelWinners';
-import { companionLaunchMessage } from './lib/companionLaunch';
+import { companionFallbackNote, companionLaunchMessage } from './lib/companionLaunch';
 import { audioMakerChoices, chatPicks, videoMakerChoices } from './lib/chatMakers';
 import { renderChatAudio, renderChatVideo, type ChatRender } from './lib/chatRenders';
 import { installedAudioEntries } from './lib/audioLineup';
@@ -74,7 +74,7 @@ import {
   type ChannelId,
   type WorkbenchId,
 } from './lib/workbench';
-import { useLabResults } from './hooks/useLabResults';
+import { useLabResults, useLabSaveFailure } from './hooks/useLabResults';
 import { useVideoLineupSession } from './hooks/useVideoLineupSession';
 import { useRenderActivity, useRenderOutcome } from './hooks/useRenderActivity';
 import { endImageTest, renderChannel, renderLabel, startImageTest, type RenderActivity } from './lib/renderActivity';
@@ -1200,20 +1200,48 @@ function App() {
   // panel, which is not mounted in the guided path.
   const [shareWinnerOpen, setShareWinnerOpen] = useState(false);
 
+  const tellUser = useCallback((message: string, action?: { label: string; run: () => void | Promise<void> }) => {
+    setActivity(message);
+    setSimpleNotice(message);
+    // Cleared when absent, so an offer from a previous problem cannot sit under
+    // an unrelated message and appear to fix it.
+    setSimpleNoticeAction(action ?? null);
+  }, []);
+
+  // A Lab result storage refused is held for the session (labResults.ts). Said
+  // once here, since the test's own screen reports a clean finish either way.
+  const labSaveProblem = useLabSaveFailure();
+  const [announcedLabSaveProblem, setAnnouncedLabSaveProblem] = useState<string | null>(null);
+  if (labSaveProblem !== announcedLabSaveProblem) {
+    setAnnouncedLabSaveProblem(labSaveProblem);
+    if (labSaveProblem) tellUser(labSaveProblem);
+  }
+
   /**
    * Chat with one model. RigMatch Chat lists Ollama's models only, so one in
    * LM Studio opens in the app's own chat panel, which reaches both: "Chat
    * with" an LM Studio winner opened RigMatch Chat on some other model.
+   *
+   * RigMatch Chat is its own window. When it is already open the main process
+   * starts no second copy, and nothing in this window moved, so say where it
+   * is. When it cannot open, the chat opens here and says why.
    */
   const openChatWith = useCallback((model: string) => {
     setSelectedModel(model);
     const inLmStudio = modelRows.find((row) => row.displayName === model)?.localProvider === 'lm-studio';
     if (isDesktopRuntime && !inLmStudio) {
-      void agentArcadeApi.openChatApp().then((result) => { if (!result?.ok) setChatOpen(true); });
+      void agentArcadeApi.openChatApp().then((result) => {
+        if (result?.ok) {
+          if (result.reason === 'already running') tellUser('RigMatch Chat is already open, in its own window.');
+          return;
+        }
+        setChatOpen(true);
+        tellUser(companionFallbackNote(result));
+      });
     } else {
       setChatOpen(true);
     }
-  }, [modelRows, setChatOpen]);
+  }, [modelRows, setChatOpen, tellUser]);
 
   /**
    * Cheap provider-only re-check: no hardware scan, no catalog sync. Used on
@@ -2100,13 +2128,7 @@ function App() {
    * failure was written to state nobody paints. Use this for anything a user
    * must act on; plain setActivity remains right for running commentary.
    */
-  const tellUser = useCallback((message: string, action?: { label: string; run: () => void | Promise<void> }) => {
-    setActivity(message);
-    setSimpleNotice(message);
-    // Cleared when absent, so an offer from a previous problem cannot sit under
-    // an unrelated message and appear to fix it.
-    setSimpleNoticeAction(action ?? null);
-  }, []);
+  // tellUser is defined above openChatWith, the first thing that speaks through it.
   // Once per problem, in both modes: what the strip's "Driver not working"
   // means and what to do about it.
   const gpuDriverProblem = system.gpu.driverProblem;
@@ -4567,12 +4589,15 @@ function App() {
   }, [uiMode, selectUiMode, selectNav]);
   const openChatApp = useCallback(async () => {
     if (isDesktopRuntime) {
-      const problem = companionLaunchMessage(await agentArcadeApi.openChatApp());
+      const result = await agentArcadeApi.openChatApp();
+      const problem = companionLaunchMessage(result);
       if (problem) alert(problem);
+      // Its own window, already open: nothing here moves, so say where it is.
+      else if (result.reason === 'already running') tellUser('RigMatch Chat is already open, in its own window.');
     } else {
       setChatOpen(true);
     }
-  }, [setChatOpen]);
+  }, [setChatOpen, tellUser]);
   // What is running, for the load strip. A render and a run can overlap; the
   // render is what holds the graphics card, so it is the one shown.
   const runningLine = renderActivity ? (

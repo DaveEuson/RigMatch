@@ -105,6 +105,7 @@ export type AdvancedLabResult = {
 };
 
 export function readAdvancedLabResults(): Record<string, AdvancedLabResult> {
+  if (heldResults) return heldResults;
   if (typeof window === 'undefined') return {};
   try {
     const raw = window.localStorage.getItem(ADVANCED_LAB_STORAGE_KEY);
@@ -116,16 +117,42 @@ export function readAdvancedLabResults(): Record<string, AdvancedLabResult> {
   }
 }
 
-export function writeAdvancedLabResults(results: Record<string, AdvancedLabResult>) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(ADVANCED_LAB_STORAGE_KEY, JSON.stringify(results));
-  } catch {
-    // local storage may be unavailable in preview contexts
+/**
+ * Results storage refused, held for the session.
+ *
+ * A write that failed (storage full, or blocked) used to be dropped on the
+ * floor: the test's own screen said it finished, and the result was gone from
+ * every board the moment they re-read storage. It is kept here instead, every
+ * read builds on it, and the next write that fits lands all of it.
+ */
+let heldResults: Record<string, AdvancedLabResult> | null = null;
+/** Why the last write failed, in words for the person; null once one succeeds. */
+let saveFailure: string | null = null;
+
+/** Save every result; false when storage refused and the results are only held in memory. */
+export function writeAdvancedLabResults(results: Record<string, AdvancedLabResult>): boolean {
+  let saved = false;
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem(ADVANCED_LAB_STORAGE_KEY, JSON.stringify(results));
+      saved = true;
+    } catch {
+      // Storage full, or unavailable in a preview context.
+    }
   }
+  heldResults = saved ? null : results;
+  saveFailure = saved
+    ? null
+    : 'This result could not be saved, so it stays only until RigMatch closes: the storage RigMatch uses is full. Clear Data in Settings makes room.';
   resultsVersion += 1;
   for (const listener of resultListeners) listener();
   recordAchievements({ labChallenges: labChallengesWithOutput(results) });
+  return saved;
+}
+
+/** Why the last save failed, for the app to say once; null when the last write landed. */
+export function labSaveFailure(): string | null {
+  return saveFailure;
 }
 
 /**
@@ -164,6 +191,9 @@ export function subscribeLabResults(listener: () => void): () => void {
  * and every per-channel Top Match on screen until the app restarted.
  */
 export function refreshLabResults() {
+  // What storage refused goes with the wipe, or it would come back on the next save.
+  heldResults = null;
+  saveFailure = null;
   resultsVersion += 1;
   resultListeners.forEach((listener) => listener());
 }

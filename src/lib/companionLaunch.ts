@@ -10,6 +10,21 @@
  */
 export type CompanionLaunchResult = { ok: boolean; reason?: string; libraries?: string[]; packages?: string[]; detail?: string };
 
+/**
+ * One line for when the companion did not open and the app's own chat did.
+ *
+ * "Chat with <winner>" fell back to the in-app chat without a word, so a
+ * missing or broken RigMatch Chat looked like a design choice. The full
+ * message, with what to do about it, is behind the top bar's Chat button.
+ */
+export function companionFallbackNote(result: CompanionLaunchResult | null | undefined): string {
+  const why = result?.reason === 'missing-libraries' ? 'it needs system libraries this computer does not have'
+    : result?.reason === 'spawn-failed' ? 'it would not start'
+      : result?.reason === 'bridge-taken' ? 'another RigMatch is already running'
+        : 'the companion was not found';
+  return `RigMatch Chat did not open: ${why}. Chatting here instead; the Chat button in the top bar says more.`;
+}
+
 export function companionLaunchMessage(result: CompanionLaunchResult | null | undefined): string | null {
   if (result?.ok) return null;
 
