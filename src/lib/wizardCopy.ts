@@ -37,6 +37,24 @@ export function minPicksFor(round: 'chat' | 'code' | 'vision' | 'listening' | un
   return round === 'vision' || round === 'listening' ? 1 : MIN_CONTESTANTS;
 }
 
+/** The maker chips: what they run is the card's own button, not the show. */
+export function isMakerDream(dream: string | undefined): boolean {
+  return dream === 'image' || dream === 'video' || dream === 'audio';
+}
+
+/**
+ * What Pick's footer says on a maker chip with nothing picked.
+ *
+ * The footer asked "Pick 2 or more" and sat disabled while the real action
+ * was the card's own button: a maker never joins the show, so there was
+ * nothing it could be asking for.
+ */
+export function makerFooterHint(dream: string | undefined): string {
+  if (!isMakerDream(dream)) return '';
+  const makers = dream === 'image' ? 'Picture makers' : dream === 'video' ? 'Video makers' : 'Sound makers';
+  return `${makers} run from their own card, not in the show. Pick another type to build a lineup.`;
+}
+
 /** What Pick says while the lineup is short. Empty once it is long enough. */
 export function pickShortHint(pickCount: number, minPicks: number): string {
   if (pickCount >= minPicks) return '';

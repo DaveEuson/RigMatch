@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { createPortal } from 'react-dom';
 import { Check, HandFist, Lock, Trophy, X } from 'lucide-react';
 import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, RunFailure, RunProgress, SystemProfile } from '../types';
-import { STEPS, STEP_LABELS, downloadTimeLeft, footerHint, minPicksFor, nextBlockedHint, pickShortHint, showAnnouncement, showTimeLeft, winnerField, type StepId } from '../lib/wizardCopy';
+import { STEPS, STEP_LABELS, downloadTimeLeft, footerHint, makerFooterHint, minPicksFor, nextBlockedHint, pickShortHint, showAnnouncement, showTimeLeft, winnerField, type StepId } from '../lib/wizardCopy';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { Explain, ExplainText, InfoViewProvider } from './InfoView';
 import { useExplaining } from '../lib/infoContext';
@@ -159,6 +159,8 @@ type SimpleWizardProps = {
   } | null;
   /** The dream matching the first-run goal choice, so PICK opens on it. */
   initialDream?: DreamFilterId;
+  /** The chip Pick is on, so the footer knows a maker chip has no lineup to ask for. */
+  dream?: DreamFilterId;
   /** What the show should test: the chip the Pick step is standing on. */
   onDreamChange?: (dream: DreamFilterId) => void;
   /** What this show is measuring, which is what the host announces. */
@@ -582,6 +584,9 @@ export function SimpleWizard(props: SimpleWizardProps) {
   // the running show has no next step to offer, and the winner's doors are
   // its own actions.
   const footerStep = step === 'pick' || step === 'download';
+  // On a maker chip with nothing picked, the footer has nothing to ask for:
+  // the makers run from their card. It asked "Pick 2 or more" and sat disabled.
+  const makerHint = step === 'pick' && shortlistedRows.length === 0 ? makerFooterHint(props.dream) : '';
 
   const tracker = (
     <nav className="sw-steps" aria-label="Wizard steps">
@@ -703,7 +708,9 @@ export function SimpleWizard(props: SimpleWizardProps) {
               {downloadsActive ? 'Stop downloads' : 'Back'}
             </button>
           </div>
-          {step === 'pick'
+          {makerHint
+            ? <span className="sw-footer-hint">{makerHint}</span>
+            : step === 'pick'
             ? (
               <LineupTray
                 shortlistedRows={shortlistedRows}
@@ -717,15 +724,17 @@ export function SimpleWizard(props: SimpleWizardProps) {
             )
             : <span className="sw-footer-hint">{step === 'download' && downloadBlockedReason ? downloadBlockedReason : footerHint(step, ollamaReady, shortlistedRows.length, minPicks, showFailed)}</span>}
           <div className="sw-footer-right">
-            <button
-              type="button"
-              className="btn btn-gold"
-              onClick={goNext}
-              disabled={!stepComplete[step]}
-              title={stepComplete[step] ? undefined : nextBlockedHint(step, downloadBlockedReason, showFailed, shortlistedRows.length, minPicks)}
-            >
-              {nextLabel[step]}
-            </button>
+            {!makerHint && (
+              <button
+                type="button"
+                className="btn btn-gold"
+                onClick={goNext}
+                disabled={!stepComplete[step]}
+                title={stepComplete[step] ? undefined : nextBlockedHint(step, downloadBlockedReason, showFailed, shortlistedRows.length, minPicks)}
+              >
+                {nextLabel[step]}
+              </button>
+            )}
           </div>
         </footer>
       )}
@@ -1527,7 +1536,12 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
   //
   // Both now describe the same thing: which model we are on, and how far
   // through the whole set of questions the run actually is.
-  const modelCount = shortlistedRows.length;
+  //
+  // The show runs the picks that are on the PC (runListTest). A pick whose
+  // download failed and was carried on without stayed on the stage: the count
+  // was one too many, and once the run moved past its place it read "Done".
+  const contestants = shortlistedRows.filter((row) => row.installed);
+  const modelCount = contestants.length;
   const modelNumber = Math.min(completed + 1, Math.max(1, modelCount));
   const totalQuestions = modelCount * totalRounds;
   const questionsDone = completed * totalRounds + (round - 1);
@@ -1676,7 +1690,7 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
           )}
           {/* Show effects: the contestants walk on one after another. */}
           <div className={extras.effects ? 'sw-podiums walk-on' : 'sw-podiums'}>
-            {shortlistedRows.map((row, index) => {
+            {contestants.map((row, index) => {
               // Nobody is answering once the show has stopped.
               const isActive = !failed && row.displayName === activeModel;
               // Sat out: the show went on without it.
