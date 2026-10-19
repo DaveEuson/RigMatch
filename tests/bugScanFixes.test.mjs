@@ -31,7 +31,8 @@ test('a request path that does not parse is a 400, not an exception in the main 
 });
 
 test('stopping a show stops the skill tests chained after it', () => {
-  assert.match(app, /\.then\(\(\) => \(stopRunRef\.current \? undefined : runSkillTestsAfterRun\(models, 'app-builder'\)\)\)/);
+  // The Code round also waits for its questions to have finished (10-18 scan).
+  assert.match(app, /\.then\(\(finished\) => \(finished && !stopRunRef\.current \? runSkillTestsAfterRun\(models, 'app-builder'\) : undefined\)\)/);
   assert.match(app, /\.then\(\(\) => \(stopRunRef\.current \? undefined : runSkillTestsAfterRun\(skillModels\)\)\)/g);
   assert.match(app, /onStopShow=\{\(\) => \{ requestStopRun\(\); requestStopSkills\(\); \}\}/);
 });
