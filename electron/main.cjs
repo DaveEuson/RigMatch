@@ -1687,7 +1687,10 @@ const OLLAMA_INSTALLER_URLS = {
   win32: 'https://ollama.com/download/OllamaSetup.exe',
   darwin: 'https://ollama.com/download/Ollama-darwin.zip',
 };
-const OLLAMA_INSTALLER_MAX_BYTES = 300 * 1024 * 1024; // 300 MB cap
+// A ceiling against a runaway response, not a guess at the installer's size.
+// It was 300 MB, and OllamaSetup.exe is 1.58 GB (0.35.1), so every Windows
+// install stopped at 19% with "too large". 4 GB leaves room for it to grow.
+const OLLAMA_INSTALLER_MAX_BYTES = 4 * 1024 * 1024 * 1024;
 
 async function startOllamaInstall(sender) {
   const send = (payload) => {
@@ -1731,6 +1734,12 @@ async function startOllamaInstall(sender) {
     });
     if (!response.ok) throw new Error(`Download failed: ${response.status} ${response.statusText}`);
     const total = parseInt(response.headers.get('content-length') || '0', 10);
+    // A size the server states up front is refused before a byte is written,
+    // rather than after the cap's worth of it.
+    if (total > OLLAMA_INSTALLER_MAX_BYTES) {
+      try { await response.body?.cancel(); } catch { /* already closed */ }
+      throw new Error('Installer download too large');
+    }
     let received = 0;
     fileStream = fsSync.createWriteStream(dest);
     // Without an 'error' listener, a stream error (disk full, permission lost) is
