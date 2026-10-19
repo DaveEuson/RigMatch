@@ -32,6 +32,7 @@ const {
 } = require('./benchmarkScoring.cjs');
 const { scoreQualityWithJudge } = require('./judgeScoring.cjs');
 const security = require('./security.cjs');
+const { chatMessageText, chatHistory } = require('./chatDock.cjs');
 const gpuContention = require('./gpuContention.cjs');
 const { fitWindowToScreen } = require('./windowFit.cjs');
 const { missingLibraries, debianPackagesFor } = require('./companionLibraries.cjs');
@@ -4735,6 +4736,14 @@ function toImageDataUrl(value) {
   return s.startsWith('data:') ? s : `data:image/png;base64,${s}`;
 }
 
+const CHAT_PERSONA = 'You are the selected local RigMatch assistant. Be warm, concise, and honest about limits.';
+// Room for a whole answer: a streamed reply has Stop if it rambles. 220 cut
+// answers off mid-sentence.
+const CHAT_REPLY_TOKENS = 1024;
+// LM Studio's reply arrives in one piece, thinking included.
+const LM_STUDIO_CHAT_REPLY_TOKENS = 2048;
+const CHAT_TIMEOUT_MS = 240000;
+
 async function sendChat(request = {}, sender = null) {
   // Streaming needs a live renderer to send tokens to, and a stream id to
   // address the Stop button at. Without either, this behaves exactly as before.
@@ -4742,54 +4751,21 @@ async function sendChat(request = {}, sender = null) {
     && typeof request.streamId === 'string' && request.streamId
     && sender && !sender.isDestroyed();
   const model = assertValidModelName(request.model);
-  const message = request.message;
   const baseUrl = request.baseUrl || OLLAMA_LOCAL_URL;
   assertLocalhostUrl(baseUrl);
   const provider = normalizeLocalProvider(request.provider, baseUrl);
   const images = normalizeChatImages(request.images);
-  if (!message && images.length === 0) {
+  if (!request.message && images.length === 0) {
     throw new Error('Message is required');
   }
 
-  // U-01: strip control chars so user input cannot inject additional "Assistant:" turns
-  const safeMessage = String(message || '').replace(/[\x00-\x1F\x7F]+/g, ' ').slice(0, 4000).trim();
+  // Newlines and tabs kept, and the conversation sent: each turn travels as
+  // its own message, so a newline can no longer fake an "Assistant:" turn the
+  // way it could in the one flattened prompt this used to send. A message cut
+  // to fit says so, through `truncated`.
+  const { text: safeMessage, truncated } = chatMessageText(request.message);
   if (!safeMessage && images.length === 0) throw new Error('Message is empty after sanitization');
-
-  if (provider === 'lm-studio') {
-    // OpenAI-style vision payload: content becomes an array when images ride along.
-    const userContent = images.length > 0
-      ? [
-          { type: 'text', text: safeMessage || 'What is in this image?' },
-          ...images.map((img) => ({ type: 'image_url', image_url: { url: toImageDataUrl(img) } })),
-        ]
-      : safeMessage;
-    const response = await fetchJson(
-      `${baseUrl.replace(/\/$/, '')}/chat/completions`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: 'system',
-              content: 'You are the selected local RigMatch assistant. Be warm, concise, and honest about limits.',
-            },
-            { role: 'user', content: userContent },
-          ],
-          temperature: 0.5,
-          max_tokens: 220,
-          stream: false,
-        }),
-      },
-      120000,
-    );
-
-    return {
-      model,
-      message: extractOpenAiChatContent(response),
-      completedAt: new Date().toISOString(),
-    };
-  }
+  const history = chatHistory(request.history);
 
   // A recording has to go through /api/chat.
   //
@@ -4802,46 +4778,67 @@ async function sendChat(request = {}, sender = null) {
   // The data URL still carries its type at this point, so no caller has to
   // declare what it attached.
   const hasAudio = images.some((item) => String(item).toLowerCase().startsWith('data:audio/'));
+  const userText = safeMessage || (hasAudio ? 'What is said in this recording?' : 'What is in this image?');
 
-  if (hasAudio) {
-    const chatResponse = await fetchJson(
-      `${baseUrl}/api/chat`,
+  // An empty bubble says nothing. A reply cut off before its first word was
+  // spent thinking: 220 tokens was the whole allowance, and qwen3 and Gemma 4
+  // used it up before answering.
+  const finish = (text, doneReason, stopped = false) => {
+    if (!text.trim() && !stopped) {
+      throw new Error(doneReason === 'length'
+        ? 'The model used its whole reply allowance, most likely on thinking, before writing anything. Try again, or pick a model that does not think first.'
+        : 'The model sent back an empty reply.');
+    }
+    return { model, message: text, truncated, completedAt: new Date().toISOString() };
+  };
+
+  if (provider === 'lm-studio') {
+    // OpenAI-style vision payload: content becomes an array when images ride along.
+    const userContent = images.length > 0
+      ? [
+          { type: 'text', text: userText },
+          ...images.map((img) => ({ type: 'image_url', image_url: { url: toImageDataUrl(img) } })),
+        ]
+      : userText;
+    const response = await fetchJson(
+      `${baseUrl.replace(/\/$/, '')}/chat/completions`,
       {
         method: 'POST',
         body: JSON.stringify({
           model,
-          messages: [{
-            role: 'user',
-            content: safeMessage || 'What is said in this recording?',
-            images: images.map(toBareBase64),
-          }],
+          messages: [
+            { role: 'system', content: CHAT_PERSONA },
+            ...history,
+            { role: 'user', content: userContent },
+          ],
+          temperature: 0.5,
+          // This route has no switch for thinking, so the allowance has room
+          // for it as well as for the answer.
+          max_tokens: LM_STUDIO_CHAT_REPLY_TOKENS,
           stream: false,
-          // Nothing to reason about in writing down what was said, and Gemma 4
-          // otherwise spends its whole budget thinking and answers with nothing.
-          think: false,
-          options: { temperature: 0.2, num_predict: 800 },
         }),
       },
-      120000,
+      CHAT_TIMEOUT_MS,
     );
-    return {
-      model,
-      message: typeof chatResponse.message?.content === 'string' ? chatResponse.message.content : '',
-      completedAt: new Date().toISOString(),
-    };
+    const lmStudioError = typeof response?.error === 'string' ? response.error : response?.error?.message;
+    if (lmStudioError) throw new Error(lmStudioError);
+    return finish(extractOpenAiChatContent(response), response?.choices?.[0]?.finish_reason);
   }
 
-  const generateBody = {
+  const turn = { role: 'user', content: userText, ...(images.length > 0 ? { images: images.map(toBareBase64) } : {}) };
+  const body = {
     model,
-    prompt: `You are the selected local RigMatch assistant. Be warm, concise, and honest about limits.\n\nUser: ${safeMessage || 'What is in this image?'}\nAssistant:`,
-    stream: false,
-    options: {
-      temperature: 0.5,
-      num_predict: 220,
-    },
+    // A recording is written down on its own, as it always was.
+    messages: hasAudio ? [turn] : [{ role: 'system', content: CHAT_PERSONA }, ...history, turn],
+    stream: Boolean(wantStream),
+    // Thinking off, as the benchmark asks. Nothing to reason about in writing
+    // down what was said, and a chat reply that thinks first spent the whole
+    // allowance doing it and answered with nothing.
+    think: false,
+    options: hasAudio
+      ? { temperature: 0.2, num_predict: 800 }
+      : { temperature: 0.5, num_predict: CHAT_REPLY_TOKENS },
   };
-  // Ollama's /api/generate accepts an images array (bare base64) for vision models.
-  if (images.length > 0) generateBody.images = images.map(toBareBase64);
 
   // Stream the reply when the renderer asked for it.
   //
@@ -4850,40 +4847,34 @@ async function sendChat(request = {}, sender = null) {
   // stop a model that had started rambling. The companion has streamed since it
   // was written, so this is not a new idea, just one the dock never got.
   //
-  // Deliberately the same body the non-streamed path would have sent, through
-  // the same function App Builder uses, so the persona prompt cannot drift
-  // between them and Stop works here for the same reason it works there.
-  if (wantStream) {
-    const streamed = await streamAdvancedGenerate(
-      `${baseUrl}/api/generate`,
-      { ...generateBody, stream: true },
-      120000,
-      sender,
-      request.streamId,
-      model,
-    );
+  // Deliberately the same body the non-streamed path sends, through the same
+  // function App Builder uses, so Stop works here for the same reason it
+  // works there.
+  const ask = async (payload) => {
+    if (wantStream) {
+      const streamed = await streamAdvancedGenerate(`${baseUrl}/api/chat`, payload, CHAT_TIMEOUT_MS, sender, request.streamId, model);
+      return { text: streamed.response || '', error: streamed.error, doneReason: streamed.done_reason };
+    }
+    const response = await fetchJson(`${baseUrl}/api/chat`, { method: 'POST', body: JSON.stringify(payload) }, CHAT_TIMEOUT_MS);
     return {
-      model,
-      message: streamed.response || '',
-      error: streamed.error,
-      completedAt: new Date().toISOString(),
+      text: typeof response.message?.content === 'string' ? response.message.content : '',
+      error: typeof response.error === 'string' ? response.error : undefined,
+      doneReason: response.done_reason,
     };
-  }
-
-  const response = await fetchJson(
-    `${baseUrl}/api/generate`,
-    {
-      method: 'POST',
-      body: JSON.stringify(generateBody),
-    },
-    120000,
-  );
-
-  return {
-    model,
-    message: response.response || '',
-    completedAt: new Date().toISOString(),
   };
+  let reply = await ask(body).catch((error) => ({ text: '', error: getLogErrorMessage(error) }));
+  // An Ollama that does not know the thinking switch refuses the whole
+  // request. Asked again without it, as the benchmark does.
+  if (!reply.text && reply.error && isUnsupportedThinkError(reply.error)) {
+    const withoutThink = { ...body };
+    delete withoutThink.think;
+    reply = await ask(withoutThink);
+  }
+  // Ollama's own words ("model requires more system memory…") rather than an
+  // empty bubble. A Stop is not an error: what was written stays.
+  const stopped = reply.error === 'Stopped by user.';
+  if (reply.error && !stopped) throw new Error(reply.error);
+  return finish(reply.text, reply.doneReason, stopped);
 }
 
 async function runAdvancedGenerate(request = {}, sender = null) {
