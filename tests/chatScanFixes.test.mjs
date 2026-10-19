@@ -157,6 +157,30 @@ test(':latest is dropped only when it is the same weights as another tag', () =>
   assert.deepEqual(names([model('mine:latest', 'x'), model('theirs:7b', 'x')]), ['mine:latest', 'theirs:7b']);
 });
 
+test('every answer and every code block has a Copy button', () => {
+  assert.match(app, /msg\.role === "assistant" && !msg\.fromRigMatch && \(\s*<button type="button" className="rm-copy-btn" onClick=\{\(\) => copyAnswer\(msg\)\}>/);
+  // Code blocks come out of marked as a string, so the button is put in the
+  // HTML and the click is caught on the message.
+  assert.match(app, /\.replace\(\/<pre>\/g, '<div class="rm-code"><button type="button" class="rm-code-copy">Copy<\/button><pre>'\)/);
+  assert.match(app, /className="rm-message-text rm-message-md"\s*onClick=\{copyCodeBlock\}/);
+});
+
+test('a model being loaded is named while the first answer waits', () => {
+  const send = callback('sendMessage');
+  assert.match(send, /isModelLoaded\(settings\.ollamaUrl, activeBuddy\)\.then\(\(loaded\) => \{\s*if \(loaded === false && !answered\) setLoadingModel\(activeBuddy\);/);
+  // Cleared on the first word, and whatever happens to the reply.
+  assert.match(send, /if \(!answered\) \{\s*answered = true;\s*setLoadingModel\(null\);/);
+  assert.match(send, /finally \{\s*answered = true;\s*setLoadingModel\(null\);/);
+  assert.match(app, /Loading \{activeBuddyObj\.displayName\}… the first answer takes longer\./);
+});
+
+test('Escape closes the Chats panel', () => {
+  // The narrow-window chat list is the last thing Escape closes. Checked in a
+  // browser on 2026-10-19 with focus on the Chats button and inside the panel.
+  assert.match(app, /if \(!confirmDelete && !compactPlan && !personalityEditor && !profileModal && !settingsOpen && !sidebarOpen\) return undefined;/);
+  assert.match(app, /else if \(settingsOpen\) setSettingsOpen\(false\);\s*else setSidebarOpen\(false\);/);
+});
+
 test('the Rust side passes the digest through from /api/tags', () => {
   const rust = readFileSync(new URL('../rigmatch-chat/src-tauri/src/lib.rs', import.meta.url), 'utf-8');
   assert.match(rust, /digest: m\["digest"\]\.as_str\(\)\.unwrap_or\(""\)\.to_string\(\)/);

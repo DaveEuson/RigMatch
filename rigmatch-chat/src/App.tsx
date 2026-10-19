@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, readConversationsFile, writeConversationsFile, backUpConversationsFile, readMemoriesFile, writeMemoriesFile, backUpMemoriesFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
+import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, isModelLoaded, readConversationsFile, writeConversationsFile, backUpConversationsFile, readMemoriesFile, writeMemoriesFile, backUpMemoriesFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
 import { cutAtTurnMarker } from "./lib/turnMarkers";
 import { createWriteScheduler } from "./lib/writeScheduler";
 import { deduplicateModels } from "./lib/modelList";
@@ -216,7 +216,23 @@ function aboutHowLong(seconds: number): string {
 }
 
 function renderMarkdown(content: string): string {
-  return DOMPurify.sanitize(marked.parse(content) as string, { USE_PROFILES: { html: true } });
+  // Every code block gets its own Copy. The click is handled on the message
+  // (copyCodeBlock), since this HTML is set as a string, not rendered by React.
+  const html = (marked.parse(content) as string)
+    .replace(/<pre>/g, '<div class="rm-code"><button type="button" class="rm-code-copy">Copy</button><pre>')
+    .replace(/<\/pre>/g, "</pre></div>");
+  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+}
+
+/** Copy a code block's text when its Copy button, inside a rendered answer, is clicked. */
+function copyCodeBlock(event: React.MouseEvent<HTMLElement>): void {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>(".rm-code-copy");
+  const code = button?.parentElement?.querySelector("pre");
+  if (!button || !code) return;
+  void navigator.clipboard.writeText(code.textContent ?? "").then(() => {
+    button.textContent = "Copied";
+    window.setTimeout(() => { button.textContent = "Copy"; }, 1500);
+  }).catch(() => undefined);
 }
 import avatarLlama    from "../assets/model-avatar-llama.png";
 import avatarGemma    from "../assets/model-avatar-gemma.png";
@@ -677,6 +693,10 @@ export default function App() {
     Partial<Record<"conversations" | "memories", { reason: string; copy: string | null }>>
   >({});
   const [typingModel, setTypingModel] = useState<string | null>(null);
+  /** A model Ollama is loading for the reply being waited on, until its first word arrives. */
+  const [loadingModel, setLoadingModel] = useState<string | null>(null);
+  /** The message whose text was just copied, for a moment of "Copied". */
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   // Each model's declared memory, read once per model from /api/show.
   const [contextInfo, setContextInfo] = useState<Record<string, ModelContextInfo | null>>({});
   // What the machine has, read once. Null when it cannot be determined, which
@@ -1560,12 +1580,24 @@ export default function App() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
+    // Said while Ollama loads the model, which off a slow drive takes minutes
+    // and otherwise looks like a hang behind "typing…". Asked alongside the
+    // send rather than before it, so a loaded model is not held up by the check.
+    let answered = false;
+    void isModelLoaded(settings.ollamaUrl, activeBuddy).then((loaded) => {
+      if (loaded === false && !answered) setLoadingModel(activeBuddy);
+    });
+
     try {
       await streamChat(
         settings.ollamaUrl,
         activeBuddy,
         ollamaHistory,
         (token) => {
+          if (!answered) {
+            answered = true;
+            setLoadingModel(null);
+          }
           accumulated += token;
           setConversations((prev) => prev.map((c) => {
             if (c.id !== conversationId) return c;
@@ -1619,6 +1651,8 @@ export default function App() {
           : c)));
       }
     } finally {
+      answered = true;
+      setLoadingModel(null);
       setTypingModel(null);
       // A finished reply is the natural point to be durable. The coalescing
       // window is only there to survive the stream itself, and Tauri's own
@@ -1769,6 +1803,14 @@ export default function App() {
       return threads[0]?.id ?? null;
     });
   }, [conversations, activeBuddy]);
+
+  /** An answer to the clipboard as written, Markdown and all, the way other chat apps copy. */
+  const copyAnswer = useCallback((msg: AppMessage) => {
+    void navigator.clipboard.writeText(cutAtTurnMarker(msg.content).text).then(() => {
+      setCopiedId(msg.id);
+      window.setTimeout(() => setCopiedId((current) => (current === msg.id ? null : current)), 1500);
+    }).catch(() => undefined);
+  }, []);
 
   const rememberText = useCallback((text: string) => {
     setMemories((prev) => addMemory(prev, text, { id: genId(), now: Date.now() }));
@@ -2553,7 +2595,7 @@ export default function App() {
                 <span className="rm-chat-header-sub">
                   <span title={`${activeBuddyObj.modelName} through Ollama`}>
                     {typingModel === activeBuddy
-                      ? `${activeBuddyObj.displayName} is typing…`
+                      ? loadingModel === activeBuddy ? `Loading ${activeBuddyObj.displayName}…` : `${activeBuddyObj.displayName} is typing…`
                       : connectionStatus !== "connected" ? `${activeBuddyObj.displayName} · offline` : activeBuddyObj.displayName}
                   </span>
                   {" · "}
@@ -2708,6 +2750,7 @@ export default function App() {
                     {msg.role === "assistant" ? (
                       <div
                         className="rm-message-text rm-message-md"
+                        onClick={copyCodeBlock}
                         // Replies saved before the stream was cut at turn markers.
                         dangerouslySetInnerHTML={{ __html: renderMarkdown(cutAtTurnMarker(msg.content).text) }}
                       />
@@ -2731,6 +2774,13 @@ export default function App() {
                     )}
                     <div className="rm-message-time">
                       {new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {/* Always shown, not on hover: drag-selecting an answer
+                          picked up the names and times around it. */}
+                      {msg.role === "assistant" && !msg.fromRigMatch && (
+                        <button type="button" className="rm-copy-btn" onClick={() => copyAnswer(msg)}>
+                          {copiedId === msg.id ? "Copied" : "Copy"}
+                        </button>
+                      )}
                       {/* Nothing is remembered unless it is asked for. Shown on
                           hover so it does not clutter every message. */}
                       <button
@@ -2758,6 +2808,11 @@ export default function App() {
                     />
                   </div>
                   <div className="rm-message-bubble">
+                    {loadingModel === activeBuddy && (
+                      <p className="rm-loading-note" role="status">
+                        Loading {activeBuddyObj.displayName}… the first answer takes longer.
+                      </p>
+                    )}
                     <div className="rm-typing-dots">
                       <span />
                       <span />

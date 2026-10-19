@@ -577,6 +577,26 @@ async fn get_ollama_vram(base_url: String) -> Option<f32> {
     Some(total_bytes as f32 / 1_073_741_824.0)
 }
 
+/// Whether Ollama has this model in memory right now, or None when it cannot
+/// say. Asked as a message is sent, so the window can say the first answer
+/// waits on a load: on a slow drive that is minutes of "typing…" otherwise.
+#[tauri::command]
+async fn ollama_model_loaded(base_url: String, model: String) -> Option<bool> {
+    validate_localhost(&base_url).ok()?;
+    let url = format!("{}/api/ps", base_url.trim_end_matches('/'));
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .ok()?;
+    let json: serde_json::Value = client.get(&url).send().await.ok()?.json().await.ok()?;
+    ps_lists_model(&json, &model)
+}
+
+fn ps_lists_model(ps: &serde_json::Value, model: &str) -> Option<bool> {
+    let models = ps["models"].as_array()?;
+    Some(models.iter().any(|m| m["name"].as_str() == Some(model) || m["model"].as_str() == Some(model)))
+}
+
 /// Where RigMatch's bridge listens. RigMatch reads RIGMATCH_BRIDGE_PORT when it
 /// starts, so a copy started on another port for testing can be reached; every
 /// installed copy uses the default.
@@ -890,6 +910,7 @@ pub fn run() {
             stop_rig_generation,
             test_rig_model,
             get_ollama_vram,
+            ollama_model_loaded,
             get_vram_info,
             open_odysseus,
             odysseus_running,
@@ -958,6 +979,18 @@ mod tests {
         assert!(matches!(done.as_slice(), [StreamEvent::Done { prompt_tokens: 812, eval_tokens: 64 }]));
         assert!(stream_line_events("   ").unwrap().is_empty());
         assert!(stream_line_events("not json").unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_model_counts_as_loaded_only_when_api_ps_lists_it() {
+        // Shape from Ollama 0.40's /api/ps.
+        let ps = serde_json::json!({ "models": [
+            { "name": "gemma4:12b", "model": "gemma4:12b", "size_vram": 9_000_000_000u64 },
+        ]});
+        assert_eq!(ps_lists_model(&ps, "gemma4:12b"), Some(true));
+        assert_eq!(ps_lists_model(&ps, "llama3.2:latest"), Some(false));
+        assert_eq!(ps_lists_model(&serde_json::json!({ "models": [] }), "gemma4:12b"), Some(false));
+        assert_eq!(ps_lists_model(&serde_json::json!({}), "gemma4:12b"), None, "an answer it cannot read says nothing");
     }
 
     #[test]

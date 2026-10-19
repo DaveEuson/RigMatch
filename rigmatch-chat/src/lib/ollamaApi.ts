@@ -78,6 +78,15 @@ export async function getVramInfo(): Promise<VramInfo | null> {
   }
 }
 
+/** Whether Ollama has the model in memory now; null when it cannot say. */
+export async function isModelLoaded(baseUrl: string, model: string): Promise<boolean | null> {
+  try {
+    return await invoke<boolean | null>("ollama_model_loaded", { baseUrl, model });
+  } catch {
+    return null;
+  }
+}
+
 /** Conversation history, read from the app data directory. */
 export async function readConversationsFile(): Promise<string | null> {
   return await invoke<string | null>("read_conversations");
