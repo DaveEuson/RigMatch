@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { summarizeMemory, cleanDeviceTreeModel, nvidiaDriverProblem, pickPrimaryGpu } = require('../electron/systemProfile.cjs');
+const { summarizeMemory, cleanDeviceTreeModel, nvidiaDriverProblem, parseNvidiaSmiHeader, pickPrimaryGpu } = require('../electron/systemProfile.cjs');
 
 const GB = 1024 * 1024 * 1024;
 
@@ -102,6 +102,19 @@ test('nvidia-smi failures say whether to restart or to fix the driver', () => {
     error: 'Command failed: nvidia-smi',
   }), 'driver-missing');
   assert.equal(nvidiaDriverProblem({ output: '', error: 'spawn nvidia-smi ENOENT' }), 'driver-missing');
+});
+
+test('nvidia-smi headers before and after driver 610 both give the driver and CUDA versions', () => {
+  // Driver 610 renamed the fields; My PC showed CUDA "Unknown" on 610.88.
+  assert.deepEqual(
+    parseNvidiaSmiHeader('| NVIDIA-SMI 610.88                 KMD Version: 610.88        CUDA UMD Version: 13.3     |'),
+    { driverVersion: '610.88', driverCudaVersion: '13.3' },
+  );
+  assert.deepEqual(
+    parseNvidiaSmiHeader('| NVIDIA-SMI 581.57                 Driver Version: 581.57         CUDA Version: 13.0     |'),
+    { driverVersion: '581.57', driverCudaVersion: '13.0' },
+  );
+  assert.deepEqual(parseNvidiaSmiHeader(''), { driverVersion: null, driverCudaVersion: null });
 });
 
 test('a driver problem shows in the strip and is explained once', async () => {

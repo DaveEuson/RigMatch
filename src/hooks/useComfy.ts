@@ -2,9 +2,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { agentArcadeApi } from '../api';
-import { readComfySettings } from '../lib/comfySettings';
+import { comfyFoundBefore, readComfySettings } from '../lib/comfySettings';
 import { onComfyStarted } from '../lib/comfyStarter';
 import { getComfyStatus } from '../lib/comfyTransport';
+import { comfyBusyCount } from '../lib/videoGen';
 import type { ComfyStatus } from '../types';
 
 export type ComfyFolderListing = NonNullable<ComfyStatus['folders']>;
@@ -48,6 +49,18 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
    * words, and only this tells them apart.
    */
   const [comfyReachable, setComfyReachable] = useState(false);
+  /**
+   * Whether a look has come back. Before it, "not reachable" means only that
+   * nobody has asked yet, and My PC must not say "not found".
+   */
+  const [comfyChecked, setComfyChecked] = useState(false);
+  /** Jobs already in ComfyUI's queue, so My PC can say it is busy. */
+  const [comfyQueue, setComfyQueue] = useState(0);
+  /**
+   * Whether ComfyUI answered here before, this session or an earlier one. A
+   * stopped one is then "not running", not "not found" with a download offer.
+   */
+  const [comfyKnown, setComfyKnown] = useState(() => comfyFoundBefore());
   /** The generation download in flight, so Stop can abort the right stream. */
   const activeComfyDownloadRef = useRef<string | null>(null);
 
@@ -79,6 +92,9 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
   /** One reply, applied the same way whether it came from the poll or a refresh. */
   const applyStatus = useCallback((status: ComfyStatus & { address?: string }) => {
     if (status.address) setAnsweredAt(status.address);
+    setComfyChecked(true);
+    // Busy counts as seen: it answered, just not in time.
+    if (status.reachable === true || status.busy) setComfyKnown(true);
     // Too busy to answer is running, with its models where they were. Read as
     // empty lists, it wiped every installed model until the next look.
     if (status.busy) {
@@ -86,6 +102,7 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
       return;
     }
     setComfyReachable(status.reachable === true);
+    setComfyQueue(status.reachable ? comfyBusyCount(status.execInfo ?? null) : 0);
     setComfyCheckpoints(status.checkpoints ?? []);
     setComfyTextEncoders(status.textEncoders ?? []);
     // An older bridge reports only the first two folders; fill those in so a
@@ -154,6 +171,9 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
     comfyTextEncoders,
     comfyFolders,
     comfyReachable,
+    comfyChecked,
+    comfyQueue,
+    comfyKnown,
     comfySettings,
     refreshComfyStatus,
     beginComfyDownload,

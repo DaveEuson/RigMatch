@@ -72,7 +72,7 @@ const {
   ollamaCapabilitiesFor,
   applyCapabilitySnapshot,
 } = require('./ollamaCatalog.cjs');
-const { summarizeMemory, cleanDeviceTreeModel, nvidiaDriverProblem, ollamaModelsDir, pickModelsFilesystem, pickPrimaryGpu } = require('./systemProfile.cjs');
+const { summarizeMemory, cleanDeviceTreeModel, nvidiaDriverProblem, ollamaModelsDir, parseNvidiaSmiHeader, pickModelsFilesystem, pickPrimaryGpu } = require('./systemProfile.cjs');
 const { readSysfsVram, resolveModelsDir, withSysfsVram } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
 const { hasChatFormat } = require('./chatFormat.cjs');
@@ -2442,8 +2442,7 @@ async function getNvidiaSmiInfo() {
   }
 
   return {
-    driverVersion: extractFirstVersion(result.output, /Driver Version:\s*([\d.]+)/i),
-    driverCudaVersion: extractFirstVersion(result.output, /CUDA Version:\s*([\d.]+)/i),
+    ...parseNvidiaSmiHeader(result.output),
     error: result.error || null,
   };
 }

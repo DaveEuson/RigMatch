@@ -92,7 +92,8 @@ import { playCue, playJingle } from './lib/sound';
 import { nothingToRunNote } from './lib/skillRunNote';
 import { describeRunFailure, droppedOutMessage, showStoppedMessage } from './lib/runFailure';
 import { ChannelSwitch } from './components/ChannelSwitch';
-import { TopBar, type ConnectionState } from './components/TopBar';
+import { TopBar } from './components/TopBar';
+import { comfyConnection, type ConnectionState } from './lib/serviceStatus';
 import { LoadStrip } from './components/LoadStrip';
 import { ActivityToast } from './components/ActivityToast';
 import { TopMatchCard } from './components/TopMatchCard';
@@ -632,7 +633,7 @@ function App() {
   const [activity, setActivity] = useState('Contestants is your hub: browse models, run tests, manage downloads, and start Speed Dating.');
   const [activeNavId, setActiveNavId] = useState<NavId>('models');
   const {
-    comfyCheckpoints, comfyFolders, comfyReachable, comfySettings,
+    comfyCheckpoints, comfyFolders, comfyReachable, comfyChecked, comfyQueue, comfyKnown, comfySettings,
     refreshComfyStatus, beginComfyDownload, endComfyDownload, abortComfyDownload,
   } = useComfy({ activeNavId });
   const {
@@ -4714,14 +4715,23 @@ function App() {
     // is broken.
     ollama: ollama.ready ? 'ok' : isScanningRig ? 'testing' : lmStudio.ready ? 'off' : rigChecked ? 'down' : 'untested',
     lmStudio: lmStudio.ready ? 'ok' : undefined,
-    // Grey until someone sets ComfyUI up: most people never will, and red would
-    // read as something broken.
-    comfy: comfyReachable ? 'ok' : comfySettings.folder ? 'down' : 'untested',
+    comfy: comfyConnection({ checked: comfyChecked, reachable: comfyReachable, folder: comfySettings.folder, known: comfyKnown }),
   };
+  // The pill names ComfyUI, and My PC's ComfyUI row is where its dot is explained.
+  const [focusComfy, setFocusComfy] = useState(false);
+  const clearComfyFocus = useCallback(() => setFocusComfy(false), []);
   const openConnections = useCallback(() => {
     if (uiMode === 'beginner') { setCameFromSimple(true); selectUiMode('advanced'); }
     selectNav('lan');
+    // The rows live on Overview. Left on Logs, the pill opened the log, and the
+    // focus waited to scroll a later Overview visit unasked.
+    setMyPcView('overview');
+    setFocusComfy(true);
   }, [uiMode, selectUiMode, selectNav]);
+  const openComfySettings = useCallback(() => {
+    setSettingsSectionRequest({ id: 'generation', at: Date.now() });
+    selectNav('settings');
+  }, [selectNav]);
   const openChatApp = useCallback(async () => {
     if (isDesktopRuntime) {
       const result = await agentArcadeApi.openChatApp();
@@ -5154,7 +5164,6 @@ function App() {
             ollama={ollama}
             lmStudio={lmStudio}
             hosts={hosts}
-            modelCount={modelRows.length}
             selectedHostId={selectedHostId}
             isScanning={isScanningRig}
             onScan={refreshRig}
@@ -5166,6 +5175,17 @@ function App() {
             onLaunchOllamaInstaller={launchOllamaInstaller}
             onScanRig={refreshRig}
             onOpenSetupGuide={openSetupGuide}
+            comfy={{
+              checked: comfyChecked,
+              reachable: comfyReachable,
+              folder: comfySettings.folder,
+              known: comfyKnown,
+              pictureModels: drawableModels(chatListing).length,
+              queue: comfyQueue,
+            }}
+            onOpenComfySettings={openComfySettings}
+            focusComfy={focusComfy}
+            onComfyFocused={clearComfyFocus}
           />
         )}
         {activeNavId === 'models' && (
@@ -5208,7 +5228,7 @@ function App() {
             // Settings already explains ComfyUI in plain language; window.open
             // was popup-blocked in the browser preview and the review found the
             // button dead. In-app navigation cannot be blocked.
-            onOpenComfyHelp={() => { setSettingsSectionRequest({ id: 'generation', at: Date.now() }); selectNav('settings'); }}
+            onOpenComfyHelp={openComfySettings}
             selectedModel={selectedModel}
             installedModelNames={installedModelNames}
             shortlistIds={shortlistIds}
