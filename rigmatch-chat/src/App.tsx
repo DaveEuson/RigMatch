@@ -4,9 +4,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, readConversationsFile, writeConversationsFile, readMemoriesFile, writeMemoriesFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
+import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, isModelLoaded, readConversationsFile, writeConversationsFile, backUpConversationsFile, readMemoriesFile, writeMemoriesFile, backUpMemoriesFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
 import { cutAtTurnMarker } from "./lib/turnMarkers";
 import { createWriteScheduler } from "./lib/writeScheduler";
+import { deduplicateModels } from "./lib/modelList";
 import { UI_ICON_ART, type UiIconName } from "./lib/uiIconArt";
 import { classifyChatRequest, companionBeyondNote } from "./lib/chatCapabilityGuard";
 import {
@@ -16,6 +17,7 @@ import {
   compactionSplit,
   continuationTitle,
   pickSummarizer,
+  summaryContextSize,
   type SummarizerChoice,
 } from "./lib/compaction";
 import { buildSessionNote } from "./lib/sessionNote";
@@ -35,9 +37,11 @@ import {
   deriveTitle,
   migrateV1,
   parseStore,
+  readStore,
   serializeStore,
   withMessages,
   type Conversation,
+  type StoreRead,
 } from "./lib/conversationStore";
 import {
   DEFAULT_PERSONALITY_ID,
@@ -212,7 +216,23 @@ function aboutHowLong(seconds: number): string {
 }
 
 function renderMarkdown(content: string): string {
-  return DOMPurify.sanitize(marked.parse(content) as string, { USE_PROFILES: { html: true } });
+  // Every code block gets its own Copy. The click is handled on the message
+  // (copyCodeBlock), since this HTML is set as a string, not rendered by React.
+  const html = (marked.parse(content) as string)
+    .replace(/<pre>/g, '<div class="rm-code"><button type="button" class="rm-code-copy">Copy</button><pre>')
+    .replace(/<\/pre>/g, "</pre></div>");
+  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+}
+
+/** Copy a code block's text when its Copy button, inside a rendered answer, is clicked. */
+function copyCodeBlock(event: React.MouseEvent<HTMLElement>): void {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>(".rm-code-copy");
+  const code = button?.parentElement?.querySelector("pre");
+  if (!button || !code) return;
+  void navigator.clipboard.writeText(code.textContent ?? "").then(() => {
+    button.textContent = "Copied";
+    window.setTimeout(() => { button.textContent = "Copy"; }, 1500);
+  }).catch(() => undefined);
 }
 import avatarLlama    from "../assets/model-avatar-llama.png";
 import avatarGemma    from "../assets/model-avatar-gemma.png";
@@ -353,34 +373,33 @@ type BridgePayload = { scores: Record<string, ModelScore>; chosen: string | null
  * The old key is only cleared once the file has been written successfully — if
  * the write fails, the history stays where it was rather than being deleted
  * from one place before it exists in the other.
+ *
+ * A file that is there but cannot be read comes back "unreadable", and the
+ * legacy store is left alone too: migrating it would write over that file.
  */
-async function loadConversations(): Promise<Conversation[]> {
+async function loadConversations(): Promise<StoreRead<Conversation[]>> {
   const options = {
     makeId: (index: number) => `${Date.now().toString(36)}-migrated-${index}`,
     now: Date.now(),
     defaultPersonalityId: DEFAULT_PERSONALITY_ID,
   };
 
-  try {
-    // Handles both the v1 map and the v2 list, so a file written by any
-    // previous build is carried forward rather than replaced.
-    const fromFile = parseStore(await readConversationsFile(), options);
-    if (fromFile) return fromFile;
-  } catch {
-    // Fall through to the legacy store; an unreadable file must not lose it.
-  }
+  // Handles both the v1 map and the v2 list, so a file written by any
+  // previous build is carried forward rather than replaced.
+  const fromFile = await readStore(readConversationsFile, (raw) => parseStore(raw, options));
+  if (fromFile.status !== "missing") return fromFile;
 
   // Older still: the original localStorage map, from before history moved to
   // a file at all.
   let migrated: Conversation[];
   try {
     const legacyRaw = localStorage.getItem(CONVERSATIONS_KEY);
-    if (!legacyRaw) return [];
+    if (!legacyRaw) return { status: "missing" };
     migrated = migrateV1(JSON.parse(legacyRaw) as Record<string, unknown>, options.makeId, options.now, DEFAULT_PERSONALITY_ID);
   } catch {
-    return [];
+    return { status: "missing" };
   }
-  if (migrated.length === 0) return [];
+  if (migrated.length === 0) return { status: "missing" };
 
   try {
     await writeConversationsFile(serializeStore(migrated));
@@ -388,7 +407,7 @@ async function loadConversations(): Promise<Conversation[]> {
   } catch {
     // Keep the legacy copy and try again next launch.
   }
-  return migrated;
+  return { status: "ok", value: migrated };
 }
 
 function loadCachedBridge(): BridgePayload {
@@ -420,23 +439,6 @@ function getAvatarFamily(modelName: string): AvatarFamily {
 function isEmbeddingModel(name: string): boolean {
   const n = name.toLowerCase();
   return n.includes("embed") || n.includes("nomic") || n.includes("bge") || n.includes("all-minilm") || n.includes("mxbai");
-}
-
-// Deduplicate: if a base model has both :latest and explicit tags, drop the :latest alias
-function deduplicateModels(models: OllamaModel[]): OllamaModel[] {
-  const byBase = new Map<string, OllamaModel[]>();
-  for (const m of models) {
-    const base = m.name.split(":")[0] ?? m.name;
-    if (!byBase.has(base)) byBase.set(base, []);
-    byBase.get(base)!.push(m);
-  }
-  const result: OllamaModel[] = [];
-  for (const [, group] of byBase) {
-    if (group.length === 1) { result.push(group[0]); continue; }
-    const nonLatest = group.filter((m) => { const tag = m.name.split(":")[1]; return tag && tag !== "latest"; });
-    result.push(...(nonLatest.length > 0 ? nonLatest : [group[0]!]));
-  }
-  return result;
 }
 
 function speedToToks(speed: number): string {
@@ -682,7 +684,19 @@ export default function App() {
   } | null>(null);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
+  /**
+   * A history or memory file that is there but could not be read, and where a
+   * copy of it was put (null when copying failed too). While one is set its
+   * `…Loaded` flag stays false, so nothing is saved over that file.
+   */
+  const [unreadableStores, setUnreadableStores] = useState<
+    Partial<Record<"conversations" | "memories", { reason: string; copy: string | null }>>
+  >({});
   const [typingModel, setTypingModel] = useState<string | null>(null);
+  /** A model Ollama is loading for the reply being waited on, until its first word arrives. */
+  const [loadingModel, setLoadingModel] = useState<string | null>(null);
+  /** The message whose text was just copied, for a moment of "Copied". */
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   // Each model's declared memory, read once per model from /api/show.
   const [contextInfo, setContextInfo] = useState<Record<string, ModelContextInfo | null>>({});
   // What the machine has, read once. Null when it cannot be determined, which
@@ -970,7 +984,10 @@ export default function App() {
    */
   const activeConversation = useMemo(() => {
     const chosen = conversations.find((c) => c.id === activeConversationId);
-    if (chosen) return chosen;
+    // Only while it belongs to the model in front of us. Several paths change
+    // the model alone (hiding it in Settings, picking another from a profile),
+    // and the next message then went to the new model in the old one's thread.
+    if (chosen && chosen.modelName === activeBuddy) return chosen;
     return activeBuddy ? conversationsForModel(conversations, activeBuddy)[0] ?? null : null;
   }, [conversations, activeConversationId, activeBuddy]);
   const activeConversationKey = activeConversation?.id ?? null;
@@ -1253,9 +1270,16 @@ export default function App() {
 
   useEffect(() => {
     let canceled = false;
-    void loadConversations().then((loaded) => {
+    void loadConversations().then(async (loaded) => {
       if (canceled) return;
-      setConversations(loaded);
+      if (loaded.status === "unreadable") {
+        // Kept as it is: not marked loaded, so the save effect never writes an
+        // empty list over it. The copy is what makes "Start a new history" safe.
+        const copy = await backUpConversationsFile().catch(() => null);
+        if (!canceled) setUnreadableStores((prev) => ({ ...prev, conversations: { reason: loaded.reason, copy } }));
+        return;
+      }
+      setConversations(loaded.status === "ok" ? loaded.value : []);
       setHistoryLoaded(true);
     });
     return () => { canceled = true; };
@@ -1285,16 +1309,28 @@ export default function App() {
   // chat history does not silently take it with it.
   useEffect(() => {
     let canceled = false;
-    void readMemoriesFile()
-      .then((raw) => parseMemories(raw) ?? [])
-      .catch(() => [])
-      .then((loaded) => {
-        if (canceled) return;
-        setMemories(loaded);
-        setMemoriesLoaded(true);
-      });
+    void readStore(readMemoriesFile, parseMemories).then(async (loaded) => {
+      if (canceled) return;
+      if (loaded.status === "unreadable") {
+        const copy = await backUpMemoriesFile().catch(() => null);
+        if (!canceled) setUnreadableStores((prev) => ({ ...prev, memories: { reason: loaded.reason, copy } }));
+        return;
+      }
+      setMemories(loaded.status === "ok" ? loaded.value : []);
+      setMemoriesLoaded(true);
+    });
     return () => { canceled = true; };
   }, []);
+
+  /**
+   * Give up on an unreadable file and save from now on. Offered only once a copy
+   * of it exists; what was said this session is kept and saved.
+   */
+  const startFresh = (store: "conversations" | "memories") => {
+    setUnreadableStores(({ [store]: _done, ...rest }) => rest);
+    if (store === "conversations") setHistoryLoaded(true);
+    else setMemoriesLoaded(true);
+  };
 
   const memoryWriterRef = useRef<ReturnType<typeof createWriteScheduler<Memory[]>> | null>(null);
   if (memoryWriterRef.current == null) {
@@ -1317,7 +1353,10 @@ export default function App() {
   // The last few hundred milliseconds of a reply would otherwise be lost if the
   // window closed inside the coalescing window.
   useEffect(() => {
-    const flush = () => { void writerRef.current?.flush(); };
+    const flush = () => {
+      void writerRef.current?.flush();
+      void memoryWriterRef.current?.flush();
+    };
     window.addEventListener("beforeunload", flush);
     return () => {
       window.removeEventListener("beforeunload", flush);
@@ -1370,14 +1409,24 @@ export default function App() {
     const askId = genId();
     const replyId = genId();
 
+    // The first reply adds the thread if it is new. Later ones only update it:
+    // a chat deleted while its picture was being made stays deleted, rather
+    // than coming back with the next progress line.
+    let placed = false;
     const withReply = (content: string, extra: Partial<AppMessage> = {}) => {
+      const first = !placed;
+      placed = true;
       setConversations((prev) => {
         const now = Date.now();
-        const list = prev.some((c) => c.id === conversationId) ? prev : [...prev, target];
+        const present = prev.some((c) => c.id === conversationId);
+        if (!present && !first) return prev;
+        const list = present ? prev : [...prev, target];
         return list.map((c) => {
           if (c.id !== conversationId) return c;
           const seen = c.messages.some((m) => m.id === replyId);
-          const reply: AppMessage = { id: replyId, role: "assistant", content, ts: Date.now(), ...extra };
+          // RigMatch speaking, as the first line says: the chat model is not
+          // involved, so none of this is sent back to it as its own words.
+          const reply: AppMessage = { id: replyId, role: "assistant", content, ts: Date.now(), fromRigMatch: true, ...extra };
           const messages = seen
             ? c.messages.map((m) => (m.id === replyId ? reply : m))
             : [...c.messages, { id: askId, role: "user" as const, content: prompt, ts: Date.now() }, reply];
@@ -1502,6 +1551,10 @@ export default function App() {
     });
     setActiveConversationId(conversationId);
     setDraft("");
+    // Sent once, with this turn. Left in place it rode along with every later
+    // message too, the same picture or recording over and over. One set aside
+    // for a model that cannot read it was not sent, so it stays for the next.
+    if (usableAttachment) setAttachment(null);
     setTypingModel(activeBuddy);
 
     const profilePrompt = [
@@ -1543,12 +1596,24 @@ export default function App() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
+    // Said while Ollama loads the model, which off a slow drive takes minutes
+    // and otherwise looks like a hang behind "typing…". Asked alongside the
+    // send rather than before it, so a loaded model is not held up by the check.
+    let answered = false;
+    void isModelLoaded(settings.ollamaUrl, activeBuddy).then((loaded) => {
+      if (loaded === false && !answered) setLoadingModel(activeBuddy);
+    });
+
     try {
       await streamChat(
         settings.ollamaUrl,
         activeBuddy,
         ollamaHistory,
         (token) => {
+          if (!answered) {
+            answered = true;
+            setLoadingModel(null);
+          }
           accumulated += token;
           setConversations((prev) => prev.map((c) => {
             if (c.id !== conversationId) return c;
@@ -1571,8 +1636,10 @@ export default function App() {
               [conversationId]: {
                 promptTokens,
                 evalTokens,
-                // The assistant message only exists if something was streamed.
-                messageCount: updatedHistory.length + (accumulated ? 1 : 0),
+                // Counted over the transcript as shown, RigMatch's note
+                // included, because that is the list estimateFrom slices. The
+                // assistant message only exists if something was streamed.
+                messageCount: visibleHistory.length + (accumulated ? 1 : 0),
               },
             }));
           },
@@ -1580,19 +1647,28 @@ export default function App() {
       );
     } catch (err) {
       if ((err as Error)?.name !== "AbortError") {
+        // What actually went wrong, in Ollama's words where it gave any. The
+        // old fixed "Is Ollama still running?" was said just as often with
+        // Ollama running fine and refusing the model for lack of memory.
+        const reason = typeof err === "string" ? err : (err as Error)?.message;
         setConversations((prev) => prev.map((c) => (c.id === conversationId
           ? {
               ...c,
               messages: [...c.messages, {
                 id: genId(),
                 role: "assistant" as const,
-                content: "Something went wrong. Is Ollama still running?",
+                content: reason || "Something went wrong. Is Ollama still running?",
                 ts: Date.now(),
+                // RigMatch speaking: kept out of what the model is sent, or it
+                // would read the error back as its own last reply.
+                fromRigMatch: true,
               }],
             }
           : c)));
       }
     } finally {
+      answered = true;
+      setLoadingModel(null);
       setTypingModel(null);
       // A finished reply is the natural point to be durable. The coalescing
       // window is only there to survive the stream itself, and Tauri's own
@@ -1708,6 +1784,8 @@ export default function App() {
   };
 
   const clearAllHistory = () => {
+    // Asked for in so many words, so an unreadable file is no longer kept.
+    startFresh("conversations");
     setConversations([]);
     setActiveConversationId(null);
     setTokenMarkByKey({});
@@ -1742,6 +1820,14 @@ export default function App() {
     });
   }, [conversations, activeBuddy]);
 
+  /** An answer to the clipboard as written, Markdown and all, the way other chat apps copy. */
+  const copyAnswer = useCallback((msg: AppMessage) => {
+    void navigator.clipboard.writeText(cutAtTurnMarker(msg.content).text).then(() => {
+      setCopiedId(msg.id);
+      window.setTimeout(() => setCopiedId((current) => (current === msg.id ? null : current)), 1500);
+    }).catch(() => undefined);
+  }, []);
+
   const rememberText = useCallback((text: string) => {
     setMemories((prev) => addMemory(prev, text, { id: genId(), now: Date.now() }));
     void memoryWriterRef.current?.flush();
@@ -1750,8 +1836,9 @@ export default function App() {
   /** Start a thread on a model. The sidebar unfolds so it is visible. */
   const startNewConversation = useCallback((modelName: string) => {
     // Reuse an empty thread on this model rather than stacking up identical
-    // "New chat" rows for someone who clicks it twice.
-    const spare = conversations.find((c) => c.modelName === modelName && c.messages.length === 0);
+    // "New chat" rows for someone who clicks it twice. Not one branched off
+    // another chat: it has no messages, but it carries that chat's summary.
+    const spare = conversations.find((c) => c.modelName === modelName && c.messages.length === 0 && !c.summary);
     const conversation = spare ?? createConversation({
       id: genId(),
       modelName,
@@ -1796,15 +1883,21 @@ export default function App() {
     setCompactPlan(null);
     try {
       let text = "";
+      const request = buildSummaryRequest(
+        activeConversation.messages,
+        upTo,
+        activeConversation.summary,
+        activeConversation.summarizedCount ?? 0,
+      );
       await streamChat(
         settings.ollamaUrl,
         summarizer.model,
-        buildSummaryRequest(activeConversation.messages, upTo, activeConversation.summary),
+        request,
         (token) => { text += token; },
         undefined,
         // Summarizing is the one call that must not be truncated: it is reading
-        // the whole of the history that no longer fits.
-        { numCtx: activeContextLimit },
+        // the history that no longer fits, so the window is sized to hold it.
+        { numCtx: summaryContextSize(request, activeContextLimit, contextInfo[summarizer.model]?.maxContext) },
       );
       const summary = text.trim();
       if (!summary) throw new Error("The model returned an empty summary.");
@@ -1814,7 +1907,7 @@ export default function App() {
     } finally {
       setCompacting(false);
     }
-  }, [activeConversation, activeBuddy, buddies, rigScores, settings.ollamaUrl, activeContextLimit, compacting]);
+  }, [activeConversation, activeBuddy, buddies, rigScores, settings.ollamaUrl, activeContextLimit, contextInfo, compacting]);
 
   /** Fold the summary into the open thread and carry on in it. */
   const applyCompaction = useCallback(() => {
@@ -1837,15 +1930,19 @@ export default function App() {
    * has moved on; Compact is better when it has not.
    */
   const branchFromCompaction = useCallback(() => {
-    if (!compactPlan || !activeConversation || !activeBuddy) return;
+    // The chat the summary was written from, not whichever is open now:
+    // switching chats while it was shown used to branch the other one, with
+    // this one's summary and that one's title and model.
+    const source = compactPlan ? conversations.find((c) => c.id === compactPlan.conversationId) : undefined;
+    if (!compactPlan || !source) return;
     const branched: Conversation = {
       ...createConversation({
         id: genId(),
-        modelName: activeBuddy,
-        personalityId: activeConversation.personalityId,
+        modelName: source.modelName,
+        personalityId: source.personalityId,
         now: Date.now(),
       }),
-      title: continuationTitle(activeConversation.title),
+      title: continuationTitle(source.title),
       titleIsAuto: false,
       summary: compactPlan.summary,
       // Nothing of its own yet, so the summary stands in for all of it.
@@ -1853,11 +1950,12 @@ export default function App() {
       summaryBy: compactPlan.by.model,
     };
     setConversations((prev) => [...prev, branched]);
+    setActiveBuddy(source.modelName);
     setActiveConversationId(branched.id);
-    setExpandedModels((prev) => new Set(prev).add(activeBuddy));
+    setExpandedModels((prev) => new Set(prev).add(source.modelName));
     setCompactPlan(null);
     void writerRef.current?.flush();
-  }, [compactPlan, activeConversation, activeBuddy]);
+  }, [compactPlan, conversations]);
 
   const renameConversation = useCallback((id: string, title: string) => {
     const trimmed = title.trim();
@@ -2046,8 +2144,12 @@ export default function App() {
             type="button"
             className="rm-window-btn close"
             // Land anything still inside the coalescing window before the
-            // webview goes away.
-            onClick={() => { void writerRef.current?.flush().finally(() => getCurrentWindow().close()); }}
+            // webview goes away — memory too, or an edit made just before
+            // closing was lost.
+            onClick={() => {
+              void Promise.all([writerRef.current?.flush(), memoryWriterRef.current?.flush()])
+                .finally(() => getCurrentWindow().close());
+            }}
             aria-label="Close"
           >×</button>
         </span>
@@ -2198,6 +2300,28 @@ export default function App() {
           still here until you close the app.
         </div>
       )}
+      {/* A file that is there but could not be read is left exactly as it is,
+          and nothing is saved over it until the user says to. It used to be
+          read as empty, and the first save replaced it. */}
+      {(["conversations", "memories"] as const).map((store) => {
+        const unreadable = unreadableStores[store];
+        if (!unreadable) return null;
+        const what = store === "conversations" ? "conversations" : "memory";
+        return (
+          <div key={store} className="rm-persist-warning" role="status">
+            Your saved {what} could not be opened: {unreadable.reason}. The file is left as it is
+            {unreadable.copy ? `, with a copy at ${unreadable.copy}` : ""}, and nothing new is saved over it.
+            {unreadable.copy && (
+              <>
+                {" "}
+                <button type="button" className="rm-btn-sm" onClick={() => startFresh(store)}>
+                  {store === "conversations" ? "Start a new history" : "Start a new memory"}
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })}
 
       <div className="rm-content">
       {/* ── Buddy List ─────────────────────────────────────────────── */}
@@ -2497,7 +2621,7 @@ export default function App() {
                 <span className="rm-chat-header-sub">
                   <span title={`${activeBuddyObj.modelName} through Ollama`}>
                     {typingModel === activeBuddy
-                      ? `${activeBuddyObj.displayName} is typing…`
+                      ? loadingModel === activeBuddy ? `Loading ${activeBuddyObj.displayName}…` : `${activeBuddyObj.displayName} is typing…`
                       : connectionStatus !== "connected" ? `${activeBuddyObj.displayName} · offline` : activeBuddyObj.displayName}
                   </span>
                   {" · "}
@@ -2652,6 +2776,7 @@ export default function App() {
                     {msg.role === "assistant" ? (
                       <div
                         className="rm-message-text rm-message-md"
+                        onClick={copyCodeBlock}
                         // Replies saved before the stream was cut at turn markers.
                         dangerouslySetInnerHTML={{ __html: renderMarkdown(cutAtTurnMarker(msg.content).text) }}
                       />
@@ -2675,6 +2800,13 @@ export default function App() {
                     )}
                     <div className="rm-message-time">
                       {new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {/* Always shown, not on hover: drag-selecting an answer
+                          picked up the names and times around it. */}
+                      {msg.role === "assistant" && !msg.fromRigMatch && (
+                        <button type="button" className="rm-copy-btn" onClick={() => copyAnswer(msg)}>
+                          {copiedId === msg.id ? "Copied" : "Copy"}
+                        </button>
+                      )}
                       {/* Nothing is remembered unless it is asked for. Shown on
                           hover so it does not clutter every message. */}
                       <button
@@ -2702,6 +2834,11 @@ export default function App() {
                     />
                   </div>
                   <div className="rm-message-bubble">
+                    {loadingModel === activeBuddy && (
+                      <p className="rm-loading-note" role="status">
+                        Loading {activeBuddyObj.displayName}… the first answer takes longer.
+                      </p>
+                    )}
                     <div className="rm-typing-dots">
                       <span />
                       <span />
