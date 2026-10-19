@@ -89,6 +89,20 @@ function nvidiaDriverProblem({ output, error }) {
 }
 
 /**
+ * The driver and CUDA versions from nvidia-smi's header. Driver 610 renamed
+ * "Driver Version" to "KMD Version" and "CUDA Version" to "CUDA UMD Version";
+ * both spellings are read so My PC keeps showing CUDA on either side.
+ */
+function parseNvidiaSmiHeader(output) {
+  const text = String(output || '');
+  const first = (pattern) => text.match(pattern)?.[1] ?? null;
+  return {
+    driverVersion: first(/(?:Driver|KMD) Version:\s*([\d.]+)/i),
+    driverCudaVersion: first(/CUDA (?:UMD )?Version:\s*([\d.]+)/i),
+  };
+}
+
+/**
  * Where Ollama keeps its models, as far as this process can tell: the
  * OLLAMA_MODELS it inherited, else the folder the Linux service installs to,
  * else the per-user default. Used only to pick which drive's free space to show.
@@ -130,6 +144,7 @@ module.exports = {
   mbToGb,
   nvidiaDriverProblem,
   ollamaModelsDir,
+  parseNvidiaSmiHeader,
   pickModelsFilesystem,
   pickPrimaryGpu,
   summarizeMemory,

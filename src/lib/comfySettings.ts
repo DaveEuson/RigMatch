@@ -131,6 +131,21 @@ function chosenComfyUrl(): string | null {
 }
 
 /**
+ * Whether ComfyUI was set up here, as far as storage can tell: it answered
+ * once (RigMatch remembers where) or someone typed its address. Most people
+ * start their own ComfyUI or ComfyUI Desktop and never pick a folder, so the
+ * folder alone called a stopped ComfyUI "not found".
+ */
+export function comfyFoundBefore(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return Boolean(chosenComfyUrl() ?? normalizeComfyUrl(window.localStorage.getItem(COMFY_FOUND_URL_STORAGE_KEY) ?? ''));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Where to look for ComfyUI, in order: an address set in Settings is the only
  * place; otherwise wherever it was last found, then 8188, then 8000.
  */

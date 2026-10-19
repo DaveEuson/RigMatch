@@ -2,13 +2,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { getThemeSwatches, themeOptions, type ThemeId, type UiMode } from '../lib/appConfig';
 import { getModelAvatarSrc } from '../lib/modelAvatars';
+import { CONNECTION_WORDS, comfyDotTitle, type ConnectionState } from '../lib/serviceStatus';
 import { BadgeCase } from './AchievementShelf';
 import { UiIcon, type UiIconName } from './icons/UiIcon';
 import brandIcon from '../assets/rigmatch-brand-icon.svg';
-
-/** How a local service answered the last time it was asked. */
-/** 'off' is a service that is not running and does not need to be: Ollama while LM Studio carries the tests. */
-export type ConnectionState = 'ok' | 'testing' | 'down' | 'untested' | 'off';
 
 export type TopTab = {
   id: string;
@@ -16,14 +13,6 @@ export type TopTab = {
   icon: UiIconName;
   /** A number worth knowing before the click, e.g. new models. */
   count?: number;
-};
-
-const CONNECTION_WORDS: Record<ConnectionState, string> = {
-  ok: 'connected',
-  testing: 'checking',
-  down: 'not answering',
-  untested: 'not checked',
-  off: 'not running',
 };
 
 /**
@@ -138,7 +127,7 @@ export function TopBar({
               <i className={`conn-dot ${connections.lmStudio}`} aria-hidden="true" />
             </span>
           )}
-          <span className="top-bar-service" title={`ComfyUI: ${CONNECTION_WORDS[connections.comfy]}`}>
+          <span className="top-bar-service" title={comfyDotTitle(connections.comfy)}>
             <UiIcon name="nodes" size={16} />
             <span className="top-bar-service-name">ComfyUI</span>
             <i className={`conn-dot ${connections.comfy}`} aria-hidden="true" />
