@@ -24,7 +24,7 @@ export function useAppLogs({
   setActiveNavId,
 }: {
   setActivity: (message: string) => void;
-  setActiveNavId: (id: 'history') => void;
+  setActiveNavId: (id: 'lan') => void;
 }) {
   const [appLogs, setAppLogs] = useState<AppLogEntry[]>([]);
   const [logPath, setLogPath] = useState('');
