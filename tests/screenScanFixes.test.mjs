@@ -84,6 +84,42 @@ test('a model opened from another screen clears the Models filters once, not on 
   assert.match(app, /if \(revealModel && activeNavId !== 'models'\) setRevealModel\(null\);/);
 });
 
+test('low items: Simple report links and the mode-jump banner', () => {
+  // A picture or listening round saves no report; the Show step opened another show's.
+  assert.match(app, /onOpenRunReport=\{\(wizardRound === 'chat' \|\| wizardRound === 'code'\) && \(listTestResult \|\| runReports\.length > 0\)/);
+  // Open Scorecards in the report goes to Advanced from Simple, as See every answer does.
+  assert.match(app, /if \(uiMode === 'beginner'\) \{ setCameFromSimple\(true\); selectUiMode\('advanced'\); \}\s*selectNav\('history'\);/);
+  // The banner names no screen it may not be, and goes once Simple Mode is back.
+  assert.doesNotMatch(app, /The full scorecard lives in/);
+  assert.match(app, /if \(cameFromSimple && uiMode === 'beginner'\) setCameFromSimple\(false\);/);
+  assert.ok(app.indexOf('const [uiMode, setUiMode]') < app.indexOf("if (cameFromSimple && uiMode === 'beginner')"), 'after uiMode exists');
+});
+
+test('low items: chat, splash and Settings', () => {
+  assert.match(app, /onOpenChat=\{\(\) => \{ setChosenModel\(null\); openChatWith\(chosenModel\); \}\}/, 'Chat here is not behind the modal');
+  assert.match(app, /isUpgrade=\{scoredModelCount > 0\}/, 'no "New in this version" after Clear all data');
+  assert.match(app, /if \(settingsSectionRequest && activeNavId !== 'settings'\) setSettingsSectionRequest\(null\);/);
+  const settings = read('components/UtilityPanel.tsx');
+  assert.match(settings, /ollamaUpdateLatest && ollama\.version && !ollamaHasUpdate \? ' — up to date' : ''/);
+  assert.match(settings, /\{ollamaCheckError && <p role="status">\{ollamaCheckError\}<\/p>\}/);
+  assert.match(settings, /<QuickCheckSheetSetting \/>/);
+  assert.match(settings, /if \(event\.target\.checked\) localStorage\.removeItem\(QUICK_CHECK_SHEET_STORAGE_KEY\);/);
+  assert.doesNotMatch(settings, /no data leaves your machine/);
+  assert.match(settings, /Nothing leaves it unless you turn on a cloud judge \(OpenRouter\)/);
+  assert.match(read('components/UpdateCenter.tsx'), /\{au\.phase === 'error' && \(/);
+});
+
+test('low items: Lab, lineup, Compare and Models', () => {
+  assert.match(lab, /disabled=\{!canRunImageTest\} title=\{imageBlocked \?\? undefined\}>/);
+  assert.match(lab, /\{imageBlocked && <span>\{imageBlocked\}<\/span>\}/);
+  assert.match(app, /installedRows=\{modelRows\.filter\(\(row\) => row\.installed && canJoinComparison\(row\) && !shortlistIds\.has\(row\.displayName\)\)\}/);
+  assert.match(read('components/ModelCompareCard.tsx'), /const other = compareWith && compareWith !== subject\.displayName/);
+  assert.match(read('components/ModelCabinet.tsx'), /onClick=\{\(\) => \{\s*setModelQuery\(''\);\s*resetFilters\(\);\s*\}\}\s*>\s*Show All/);
+  const comparison = read('components/LabComparison.tsx');
+  assert.match(comparison, /if \(known\) return known\.src;/);
+  assert.doesNotMatch(comparison, /src=\{group\.key\}/);
+});
+
 test('an installed ComfyUI model\'s side card offers no chat-only actions', () => {
   assert.match(sideCard, /const makesMedia = row\.runtime === 'comfyui';/);
   assert.match(sideCard, /\{installed && makesMedia \? \(/);
