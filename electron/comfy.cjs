@@ -115,7 +115,10 @@ function createComfyBridge({ fetchJson: rawFetchJson, assertLocalhostUrl }) {
         stats = await fetchJson(`${base}/system_stats`, {}, Math.max(timeoutMs, 10000));
       } catch (second) {
         if (isUnreachable(second)) return { reachable: false, checkpoints: [], textEncoders: [] };
-        if (isSlow(second)) return { reachable: true, busy: true, checkpoints: [], textEncoders: [] };
+        // No lists: they were not read. Empty ones told every screen that
+        // nothing was installed and the queue was empty, so a timed run
+        // could start behind the job keeping ComfyUI this busy.
+        if (isSlow(second)) return { reachable: true, busy: true };
         throw second;
       }
     }
@@ -278,6 +281,14 @@ function createComfyBridge({ fetchJson: rawFetchJson, assertLocalhostUrl }) {
    */
   async function interrupt(baseUrl, promptId) {
     assertLocalhostUrl(baseUrl);
+    // A job still waiting in the queue is not running, so /interrupt cannot
+    // reach it: Stop left it queued, and it ran later on its own. It is taken
+    // off the queue first, so one that starts in between is still interrupted.
+    // ComfyUI ignores an id it no longer holds; /interrupt says if it is gone.
+    if (promptId) {
+      await fetchJson(`${origin(baseUrl)}/queue`, { method: 'POST', body: JSON.stringify({ delete: [promptId] }) }, DEFAULT_TIMEOUT_MS)
+        .catch(() => undefined);
+    }
     const body = JSON.stringify(promptId ? { prompt_id: promptId } : {});
     await fetchJson(`${origin(baseUrl)}/interrupt`, { method: 'POST', body }, DEFAULT_TIMEOUT_MS);
     return { stopped: true };

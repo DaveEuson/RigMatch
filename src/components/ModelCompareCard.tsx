@@ -47,7 +47,10 @@ export function ModelCompareCard({
   );
   if (candidates.length === 0) return null;
 
-  const other = compareWith ? rows.find((row) => row.displayName === compareWith) : undefined;
+  // Never the subject itself: picking the compared model's row made it both sides.
+  const other = compareWith && compareWith !== subject.displayName
+    ? rows.find((row) => row.displayName === compareWith)
+    : undefined;
 
   const sideFor = (row: ModelRow): ComparisonSide => {
     const fit = getHardwareFit(row, vramGb);
@@ -85,7 +88,7 @@ export function ModelCompareCard({
       <label className="model-compare-picker">
         <span className="sr-only">Compare {subject.displayName} with</span>
         <select
-          value={compareWith ?? ''}
+          value={other ? other.displayName : ''}
           onChange={(event) => onCompareWith(event.target.value || null)}
         >
           <option value="">Compare {subject.displayName} with…</option>

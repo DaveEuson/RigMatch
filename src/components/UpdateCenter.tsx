@@ -112,6 +112,13 @@ export function UpdateCenter({
         )}
         {result?.releaseNotes && <p>{result.releaseNotes}</p>}
         {result?.error && <p className="update-error">{result.error}</p>}
+        {/* A download or install that failed went unsaid: the button just went back. */}
+        {au.phase === 'error' && (
+          <p className="update-error">
+            The update could not be downloaded or installed. Try again, or use the download page.
+            {au.error ? ` (${au.error})` : ''}
+          </p>
+        )}
       </div>
     </section>
   );

@@ -24,7 +24,7 @@ export function useAppLogs({
   setActiveNavId,
 }: {
   setActivity: (message: string) => void;
-  setActiveNavId: (id: 'history') => void;
+  setActiveNavId: (id: 'lan') => void;
 }) {
   const [appLogs, setAppLogs] = useState<AppLogEntry[]>([]);
   const [logPath, setLogPath] = useState('');
@@ -46,8 +46,10 @@ export function useAppLogs({
     }
   }, [setActivity]);
 
+  // My PC, where the logs are: this opened Results › Scorecards. App turns the
+  // My PC screen to its Logs view.
   const openLogsPanel = useCallback(() => {
-    setActiveNavId('history');
+    setActiveNavId('lan');
     void loadLogs();
   }, [loadLogs, setActiveNavId]);
 

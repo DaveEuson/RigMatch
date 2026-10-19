@@ -348,7 +348,12 @@ export type ChatResponse = {
   model: string;
   message: string;
   completedAt: string;
+  /** The message was too long and only its start was sent. */
+  truncated?: boolean;
 };
+
+/** A turn of the conversation so far, as the chat dock sends it. */
+export type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
 /**
  * Something the user attached to a chat message. Audio and images travel the
@@ -540,8 +545,13 @@ export type GpuContention = {
 export type ComfyStatus = {
   reachable: boolean;
   stats?: unknown;
+  /**
+   * Running, but too busy to answer within the poll's time. The lists below
+   * are then absent: they were not read, and are not empty.
+   */
+  busy?: boolean;
   /** Filenames from /models/checkpoints. Empty is meaningful: running, no models. */
-  checkpoints: string[];
+  checkpoints?: string[];
   /** T5 encoders from /models/text_encoders. An LTX graph cannot run without one. */
   textEncoders?: string[];
   /**
@@ -674,7 +684,7 @@ export type AgentArcadeApi = {
   getActiveBenchmark: () => Promise<BenchmarkStatus>;
   onBenchmarkStatus?: (callback: (status: BenchmarkStatus) => void) => () => void;
   onPullProgress?: (callback: (update: PullProgressUpdate) => void) => () => void;
-  sendChat: (request: { model: string; message: string; baseUrl?: string; provider?: LocalModelProvider; images?: string[] }) => Promise<ChatResponse>;
+  sendChat: (request: { model: string; message: string; baseUrl?: string; provider?: LocalModelProvider; images?: string[]; history?: ChatTurn[] }) => Promise<ChatResponse>;
   getLogs: (limit?: number) => Promise<AppLogResponse>;
   appendLog: (entry: Partial<AppLogEntry>) => Promise<AppLogEntry>;
   clearLogs: () => Promise<AppLogResponse>;

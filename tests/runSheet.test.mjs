@@ -108,7 +108,7 @@ test('a quick check runs its three questions and nothing else, on one model or a
   assert.match(quick, /runListTest\(QUICK_CHECK_QUESTIONS\)/);
   assert.doesNotMatch(quick, /runSkillTestsAfterRun/);
   // The lineup run takes the override the way the one-model run always has.
-  assert.match(app, /const runListTest = useCallback\(async \(questionsOverride\?: BenchmarkQuestion\[\]\) => \{/);
+  assert.match(app, /const runListTest = useCallback\(async \(questionsOverride\?: BenchmarkQuestion\[\]\): Promise<boolean> => \{/);
 });
 
 test('skills-only comes from the sheet, so every skill can skip the questions', () => {

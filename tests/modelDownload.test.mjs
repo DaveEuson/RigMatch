@@ -276,3 +276,33 @@ test('Hugging Face and its CDN are the only hosts bytes may come from', () => {
   assert.ok(!isModelHost('hf.co.evil.example'));
   assert.ok(!isModelHost('nothuggingface.co'));
 });
+
+test('Stop ends the re-check of a part file instead of waiting for it', async () => {
+  // A resumed part is hashed whole before the network is asked, which for a
+  // 40 GB file is minutes. Stop was ignored until it had finished.
+  const root = await comfyRoot();
+  await fs.mkdir(path.dirname(target(root)), { recursive: true });
+  await fs.writeFile(`${target(root)}.part`, PAYLOAD.subarray(0, 500_000));
+  const controller = new AbortController();
+  const hub = fakeHub();
+  await assert.rejects(downloadModel(request(root), (progress) => {
+    if (progress.phase === 'checking') controller.abort();
+  }, controller.signal, { ...INSTANT, fetchImpl: hub.fetchImpl }));
+  assert.equal(hub.calls.length, 0, 'nothing was fetched after Stop');
+  assert.equal(await exists(`${target(root)}.part`), false);
+});
+
+test('Stop cuts short the wait before an automatic resume', async () => {
+  // The waits are 2, 10 and 30 seconds, and Stop sat through them. This one
+  // uses the real wait, set to a minute.
+  const root = await comfyRoot();
+  const controller = new AbortController();
+  const hub = fakeHub({ dropOn: (hit) => (hit === 1 ? 300_000 : undefined) });
+  const startedAt = Date.now();
+  const download = downloadModel(request(root), () => {}, controller.signal, { resumeDelaysMs: [60_000], fetchImpl: hub.fetchImpl });
+  setTimeout(() => controller.abort(), 100);
+  await assert.rejects(download);
+  assert.ok(Date.now() - startedAt < 5_000, 'did not wait out the minute');
+  assert.equal(hub.cdnCalls().length, 1, 'no resume after Stop');
+  assert.equal(await exists(`${target(root)}.part`), false);
+});

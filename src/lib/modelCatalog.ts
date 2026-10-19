@@ -448,8 +448,20 @@ export function getModelScore(row: ModelRow, modelScores: Record<string, TestedM
     return sNorm === displayNorm ||
       sNorm.startsWith(displayNorm + ':') ||
       displayNorm.startsWith(sNorm + ':') ||
-      (tagged && (sNorm.startsWith(displayNorm + '-') || displayNorm.startsWith(sNorm + '-')));
+      (tagged && (isAliasTagOf(sNorm, displayNorm) || isAliasTagOf(displayNorm, sNorm)));
   });
+}
+
+/**
+ * The words Ollama adds to a tag without changing the weights: `7b` is
+ * `7b-instruct` is `7b-instruct-q4_K_M`. Anything else after the dash is a
+ * different download, and any dash used to do: an untested `gemma3:4b-it-qat`
+ * showed `gemma3:4b`'s score.
+ */
+const ALIAS_TAG_SUFFIX = /^(?:(?:instruct|it|chat)(?:-q4_(?:0|k_m))?|q4_(?:0|k_m))$/;
+
+function isAliasTagOf(longer: string, shorter: string): boolean {
+  return longer.startsWith(shorter + '-') && ALIAS_TAG_SUFFIX.test(longer.slice(shorter.length + 1));
 }
 
 export function getBenchmarkForModel(
@@ -540,6 +552,17 @@ export function removeListTestScores(current: ListTestResult | null, aliases: st
 export function isBenchmarkForAliases(benchmark: BenchmarkResult, aliases: string[]) {
   const normalizedAliases = aliases.map(normalizeModelKey);
   return normalizedAliases.includes(normalizeModelKey(benchmark.model));
+}
+
+/**
+ * The stand-in createEmptyBenchmark makes: no questions, no answers, no time.
+ * It is what the screen shows before a test and after clearing scores, never a
+ * result — saved and read back, it became a real 0.0 / N/A score.
+ */
+export function isPlaceholderBenchmark(benchmark: BenchmarkResult): boolean {
+  return !(benchmark.questionCount > 0)
+    && !(Array.isArray(benchmark.prompts) && benchmark.prompts.length > 0)
+    && !(benchmark.elapsedMs > 0);
 }
 
 export function createEmptyBenchmark(model: string, baseUrl: string): BenchmarkResult {
@@ -2066,6 +2089,17 @@ export function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fitOve
   };
 }
 
+/**
+ * What a download button says when the queue will not take the model, or null
+ * when it will. The button used to ask "download anyway?" and then every click
+ * was refused, because the queue only takes a model it recommends.
+ */
+export function downloadBlockedLabel(fit: HardwareFit): string | null {
+  if (fit.recommend) return null;
+  if (fit.tone === 'out-of-league') return 'Too big for this PC';
+  return fit.label === 'Check VRAM' ? 'Graphics memory unknown' : 'Size unknown';
+}
+
 export function sumQueuedGb(rows: ModelRow[], queuedIds: Set<string>) {
   return rows
     .filter((row) => queuedIds.has(row.displayName))
@@ -2209,6 +2243,26 @@ export function nextDockExpiry(progressList: PullProgressUpdate[], now: number):
     .filter((progress) => (progress.phase === 'complete' || progress.phase === 'failed') && isDockWorthyPullProgress(progress, now))
     .map((progress) => Date.parse(progress.updatedAt) + PULL_ENDED_LINGER_MS[progress.phase as 'complete' | 'failed']);
   return expiries.length ? Math.min(...expiries) : null;
+}
+
+/**
+ * Which download the floating box is about: the one the queue is fetching,
+ * else one still going, else the newest that ended moments ago.
+ *
+ * It took the first entry it found, in the order downloads were first seen, so
+ * a model finished an hour ago could fill the box while another downloaded or
+ * failed beside it.
+ */
+export function pickDockProgress(
+  progressByModel: Record<string, PullProgressUpdate>,
+  pullingModel: string | null,
+  now: number,
+): PullProgressUpdate | undefined {
+  if (pullingModel) return progressByModel[pullingModel];
+  const ended = (progress: PullProgressUpdate) => progress.phase === 'complete' || progress.phase === 'failed';
+  return Object.values(progressByModel)
+    .filter((progress) => isDockWorthyPullProgress(progress, now))
+    .sort((a, b) => Number(ended(a)) - Number(ended(b)) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
 }
 
 export function getPullProgressPercent(progress: PullProgressUpdate | undefined, queued: boolean) {

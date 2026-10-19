@@ -1,12 +1,14 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { invoke, Channel } from "@tauri-apps/api/core";
-import type { ModelContextInfo, VramInfo } from "./contextWindow";
+import { readTokenCounts, type ModelContextInfo, type VramInfo } from "./contextWindow";
 import { cutAtTurnMarker, safeToShow } from "./turnMarkers";
 
 export type OllamaModel = {
   name: string;
   size: number;
   modified_at: string;
+  /** The weights' digest. Two tags with the same one are the same model. */
+  digest?: string;
 };
 
 export type ChatMessage = {
@@ -76,6 +78,15 @@ export async function getVramInfo(): Promise<VramInfo | null> {
   }
 }
 
+/** Whether Ollama has the model in memory now; null when it cannot say. */
+export async function isModelLoaded(baseUrl: string, model: string): Promise<boolean | null> {
+  try {
+    return await invoke<boolean | null>("ollama_model_loaded", { baseUrl, model });
+  } catch {
+    return null;
+  }
+}
+
 /** Conversation history, read from the app data directory. */
 export async function readConversationsFile(): Promise<string | null> {
   return await invoke<string | null>("read_conversations");
@@ -85,6 +96,11 @@ export async function writeConversationsFile(contents: string): Promise<void> {
   await invoke<void>("write_conversations", { contents });
 }
 
+/** Copy an unreadable history file aside before anything is saved over it. Resolves to the copy's path. */
+export async function backUpConversationsFile(): Promise<string> {
+  return await invoke<string>("back_up_conversations");
+}
+
 /** Standing memory, kept beside conversations rather than inside them. */
 export async function readMemoriesFile(): Promise<string | null> {
   return await invoke<string | null>("read_memories");
@@ -92,6 +108,10 @@ export async function readMemoriesFile(): Promise<string | null> {
 
 export async function writeMemoriesFile(contents: string): Promise<void> {
   await invoke<void>("write_memories", { contents });
+}
+
+export async function backUpMemoriesFile(): Promise<string> {
+  return await invoke<string>("back_up_memories");
 }
 
 export async function getModelContextInfo(
@@ -169,7 +189,8 @@ export async function streamChat(
       return;
     }
     show(received.length);
-    options?.onDone?.({ promptTokens: event.promptTokens, evalTokens: event.evalTokens });
+    const counts = readTokenCounts(event);
+    if (counts) options?.onDone?.(counts);
   };
 
   const invokePromise = invoke<void>("stream_chat", {

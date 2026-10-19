@@ -3,7 +3,7 @@ import { matchDisplayLabel } from '../lib/goals';
 import type { UtilityPanelId } from '../types';
 import { releaseNotes } from '../data/releaseNotes';
 import type { ThemeId, UiMode } from '../lib/appConfig';
-import { APP_VERSION, BUY_ME_A_COFFEE_URL } from '../lib/appConfig';
+import { APP_VERSION, BUY_ME_A_COFFEE_URL, QUICK_CHECK_SHEET_STORAGE_KEY } from '../lib/appConfig';
 import type { CopyState } from '../lib/clipboard';
 import { copyText } from '../lib/clipboard';
 import { compareVersionStrings, formatGb, getResponseEstimate, getScoreTone } from '../lib/format';
@@ -189,6 +189,8 @@ export function UtilityPanel({
   const [scoreCopied, setScoreCopied] = useState(false);
   const [ollamaUpdateLatest, setOllamaUpdateLatest] = useState<string | null>(null);
   const [isCheckingOllamaUpdate, setIsCheckingOllamaUpdate] = useState(false);
+  /** Why the last Check could not say, when it could not. It failed without a word. */
+  const [ollamaCheckError, setOllamaCheckError] = useState<string | null>(null);
 
   /**
    * Settings shows one section at a time and opens on Preferences. The rail
@@ -231,14 +233,17 @@ export function UtilityPanel({
 
   const checkOllamaUpdate = useCallback(async () => {
     setIsCheckingOllamaUpdate(true);
+    setOllamaCheckError(null);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
       const res = await fetch('https://api.github.com/repos/ollama/ollama/releases/latest', { signal: controller.signal });
-      const data = await res.json() as { tag_name: string };
+      if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
+      const data = await res.json() as { tag_name?: string };
+      if (!data.tag_name) throw new Error('GitHub did not name a release');
       setOllamaUpdateLatest(data.tag_name.replace(/^v/, ''));
     } catch {
-      // network unavailable or timed out
+      setOllamaCheckError('Could not check GitHub for a newer Ollama. Check that this computer is online, then try again in a while.');
     } finally {
       clearTimeout(timer);
       setIsCheckingOllamaUpdate(false);
@@ -332,7 +337,11 @@ export function UtilityPanel({
                   ))}
                 </div>
               </div>
-              <p className="score-explainer-note">All tests run locally — no data leaves your machine.</p>
+              {/* It said no data ever left the machine; a cloud judge, once turned on, gets the answers. */}
+              <p className="score-explainer-note">
+                All tests run on this computer. Nothing leaves it unless you turn on a cloud judge (OpenRouter),
+                which is sent the answers it marks.
+              </p>
             </div>
           </div>
         </div>
@@ -618,6 +627,7 @@ export function UtilityPanel({
           </div>
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
           <ShowExtrasSettings />
+          <QuickCheckSheetSetting />
           </SettingsSection>
           <SettingsSection
             title="Achievements"
@@ -686,7 +696,9 @@ export function UtilityPanel({
                 <span>Ollama</span>
                 <strong>
                   {ollama.version ? `v${ollama.version} installed` : 'Not detected'}
-                  {ollamaUpdateLatest && !ollamaHasUpdate ? ' — up to date' : ''}
+                  {/* "Not detected — up to date" said a missing Ollama was current. */}
+                  {ollamaUpdateLatest && ollama.version && !ollamaHasUpdate ? ' — up to date' : ''}
+                  {ollamaUpdateLatest && !ollama.version ? ` — the latest is v${ollamaUpdateLatest}` : ''}
                 </strong>
                 {ollamaHasUpdate && (
                   <em className="ollama-update-badge">v{ollamaUpdateLatest} available</em>
@@ -702,6 +714,7 @@ export function UtilityPanel({
                 {isCheckingOllamaUpdate ? 'Checking' : 'Check'}
               </button>
             </div>
+            {ollamaCheckError && <p role="status">{ollamaCheckError}</p>}
             {ollamaHasUpdate && (
               <a
                 href="https://ollama.com/download"
@@ -810,5 +823,34 @@ export function UtilityPanel({
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * The way back from the run sheet's "Start quick checks without this sheet
+ * from now on", which had none: once ticked, the sheet never showed again.
+ */
+function QuickCheckSheetSetting() {
+  const [ask, setAsk] = useState(() => {
+    try { return localStorage.getItem(QUICK_CHECK_SHEET_STORAGE_KEY) !== 'off'; } catch { return true; }
+  });
+  return (
+    <label className="advanced-lab-consent">
+      <input
+        type="checkbox"
+        checked={ask}
+        onChange={(event) => {
+          setAsk(event.target.checked);
+          try {
+            if (event.target.checked) localStorage.removeItem(QUICK_CHECK_SHEET_STORAGE_KEY);
+            else localStorage.setItem(QUICK_CHECK_SHEET_STORAGE_KEY, 'off');
+          } catch { /* storage unavailable */ }
+        }}
+      />
+      <span>
+        Show the run sheet before a quick check, so you can see its three questions and change the
+        lineup first. Off once you tick "Start quick checks without this sheet" on the sheet.
+      </span>
+    </label>
   );
 }

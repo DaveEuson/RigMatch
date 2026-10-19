@@ -19,7 +19,8 @@ function formatInstalledDate(iso: string): string {
   return at.toLocaleDateString(formatLocale(), { year: 'numeric', month: 'short', day: 'numeric' });
 }
 import type { ListTestResult, ModelQuickFilterId, ModelSortKey, ModelTaskFilterId, SortDirection } from '../lib/modelCatalog';
-import { CAPABILITY_ONLY_FILTERS, GENERATION_FILTERS, TASK_FILTER_CHIPS, getBenchmarkForModel, getDiskGuard, getFriendlyModelName, getHardwareFit, getModelGoodForTags, getModelProfile, getModelQuickFilters, getModelScore, getModelSearchText, getModelSortLabel, getModelStatusLabel, getParamSortValue, getPlatformFit, getQueueChipModelName, getSizeRisk, isCloudModel, isEmbeddingModel, isUncensoredModel, isVisiblePullProgress, lacksChatFormat, noChatFormatReason, modelMatchesQuickFilter, modelMatchesTask, sortModelRows } from '../lib/modelCatalog';
+import { CAPABILITY_ONLY_FILTERS, GENERATION_FILTERS, TASK_FILTER_CHIPS, downloadBlockedLabel, getBenchmarkForModel, getDiskGuard, getFriendlyModelName, getHardwareFit, getModelGoodForTags, getModelProfile, getModelQuickFilters, getModelScore, getModelSearchText, getModelSortLabel, getModelStatusLabel, getParamSortValue, getPlatformFit, getQueueChipModelName, getSizeRisk, isCloudModel, isEmbeddingModel, isUncensoredModel, isVisiblePullProgress, lacksChatFormat, noChatFormatReason, modelMatchesQuickFilter, modelMatchesTask, sortModelRows } from '../lib/modelCatalog';
+import { downloadCloseAction } from '../lib/downloadStatus';
 import { buildQuickFacetGroups, buildSearchSuggestions, splitTaskFilters } from '../lib/modelFacets';
 import type { SearchSuggestion } from '../lib/modelFacets';
 import { familiesToAutoExpand, groupRowsByFamily } from '../lib/modelGroups';
@@ -120,6 +121,8 @@ export function ModelCabinet({
   onPullQueued,
   onPauseQueue,
   onCancelQueue,
+  onDismissDownload,
+  canPause,
   onToggleShortlist,
   onOpenSpeedDate,
   onOpenTopPick,
@@ -185,6 +188,10 @@ export function ModelCabinet({
   onPullQueued: () => void;
   onPauseQueue: () => void;
   onCancelQueue: () => void;
+  /** Clears a download's message (a failure) without touching the queue. */
+  onDismissDownload: (model: string) => void;
+  /** Whether Pause can do anything for the running download (see canPauseDownload). */
+  canPause: boolean;
   onToggleShortlist: (row: ModelRow) => void;
   onOpenSuiteEditor: () => void;
   onOpenSpeedDate: () => void;
@@ -1076,6 +1083,7 @@ export function ModelCabinet({
               const goodForTags = getModelGoodForTags(row);
               const hardwareFit = getHardwareFit(row, vramGb);
               const platformFit = getPlatformFit(row.displayName, platform);
+              const blockedLabel = downloadBlockedLabel(hardwareFit);
               const speedDateLineupFullForRow = shortlistedCount >= 5;
               // A model with no chat format cannot be in a show at all; say so on
               // the button rather than refusing after the click.
@@ -1332,10 +1340,11 @@ export function ModelCabinet({
                                 type="button"
                                 className="mini-button"
                                 onClick={() => onQueueModel(row)}
-                                title={`Queue ${row.displayName} — ${row.sizeGb} GB into ComfyUI`}
+                                disabled={!queued && Boolean(blockedLabel)}
+                                title={blockedLabel && !queued ? hardwareFit.detail : `Queue ${row.displayName} — ${row.sizeGb} GB into ComfyUI`}
                               >
                                 <Download aria-hidden="true" />
-                                <span>{queued ? 'Queued' : 'Download'}</span>
+                                <span>{queued ? 'Queued' : blockedLabel ?? 'Download'}</span>
                               </button>
                             )
                           )}
@@ -1411,11 +1420,11 @@ export function ModelCabinet({
                           type="button"
                           className={queued ? 'mini-button queued download-row-button' : `mini-button outline download-row-button${!hardwareFit.recommend ? ' warn' : ''}`}
                           onClick={() => onQueueModel(row)}
-                          disabled={!queued && !platformFit.compatible}
-                          title={!platformFit.compatible ? platformFit.reason : !hardwareFit.recommend ? (hardwareFit.tone === 'unknown' ? `Size unknown — download to find out the footprint?` : `Too big for your VRAM — download anyway?`) : `${queued ? 'Remove from queue' : `Get ${row.displayName}`}: ${row.sizeGb ? formatGb(row.sizeGb) : 'unknown size'}`}
-                          aria-label={!platformFit.compatible ? platformFit.reason : queued ? `Remove ${row.displayName} from the download queue` : `Get ${row.displayName}`}
+                          disabled={!queued && (!platformFit.compatible || Boolean(blockedLabel))}
+                          title={!platformFit.compatible ? platformFit.reason : blockedLabel && !queued ? hardwareFit.detail : `${queued ? 'Remove from queue' : `Get ${row.displayName}`}: ${row.sizeGb ? formatGb(row.sizeGb) : 'unknown size'}`}
+                          aria-label={!platformFit.compatible ? platformFit.reason : queued ? `Remove ${row.displayName} from the download queue` : blockedLabel ? `${row.displayName}: ${blockedLabel}` : `Get ${row.displayName}`}
                         >
-                          <span>{!platformFit.compatible ? 'macOS Only' : queued ? 'Remove' : `Get ${getQueueChipModelName(row.displayName)}`}</span>
+                          <span>{!platformFit.compatible ? 'macOS Only' : queued ? 'Remove' : blockedLabel ?? `Get ${getQueueChipModelName(row.displayName)}`}</span>
                         </button>
                       )}
                         </>
@@ -1428,7 +1437,12 @@ export function ModelCabinet({
                         isActive={isPullingRow}
                         isStopping={isPullCancelRequested && isPullingRow}
                         progress={rowPullProgress}
-                        onCancel={() => (isPullingRow ? onCancelQueue() : onQueueModel(row))}
+                        onCancel={() => {
+                          const action = downloadCloseAction(isPullingRow, queued);
+                          if (action === 'stop') onCancelQueue();
+                          else if (action === 'unqueue') onQueueModel(row);
+                          else onDismissDownload(row.displayName);
+                        }}
                       />
                     )}
                   </td>
@@ -1584,9 +1598,11 @@ export function ModelCabinet({
                     <button
                       type="button"
                       className="mini-button outline"
+                      // Every filter, as Reset does: the maker, task, country and
+                      // New filters used to stay on, and the table stayed empty.
                       onClick={() => {
                         setModelQuery('');
-                        setQuickFilter('all');
+                        resetFilters();
                       }}
                     >
                       Show All
@@ -1638,7 +1654,7 @@ export function ModelCabinet({
               <Download aria-hidden="true" />
               {isPulling ? 'Downloading' : isPullPaused ? 'Resume Download' : queuedCount > 0 ? 'Start Download' : 'Download'}
             </button>
-            {isPulling && (
+            {canPause && (
               <button
                 type="button"
                 className="mini-button outline queue-pause-button"
@@ -1684,6 +1700,7 @@ export function ModelCabinet({
           onScoreModel={onScoreModel}
           onQueueModel={onQueueModel}
           onCancelQueue={onCancelQueue}
+          onDismissDownload={onDismissDownload}
           onToggleShortlist={onToggleShortlist}
           onOpenSpeedDate={onOpenSpeedDate}
           modelNotes={modelNotes}

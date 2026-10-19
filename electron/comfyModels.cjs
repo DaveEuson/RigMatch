@@ -175,7 +175,20 @@ const RESUME_DELAYS_MS = [2_000, 10_000, 30_000];
 const STALL_TIMEOUT_MS = 90_000;
 const MAX_REDIRECTS = 5;
 
-const sleepFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/** A wait that Stop cuts short: the last resume waited out 30 s after it. */
+const sleepFor = (ms, signal) => new Promise((resolve) => {
+  if (signal?.aborted) {
+    resolve();
+    return;
+  }
+  const done = () => {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', done);
+    resolve();
+  };
+  const timer = setTimeout(done, ms);
+  signal?.addEventListener('abort', done, { once: true });
+});
 
 /** A failure a later attempt can continue from, because the bytes so far are good. */
 function resumable(error) {
@@ -192,9 +205,13 @@ async function sizeOf(file) {
   }
 }
 
-/** Feed what is already on disk into the hash, so a resumed file is checked whole. */
-async function hashFile(hash, file) {
-  for await (const chunk of createReadStream(file)) hash.update(chunk);
+/**
+ * Feed what is already on disk into the hash, so a resumed file is checked
+ * whole. Stop ends it: re-reading a 40 GB part takes minutes, and Stop
+ * waited for all of them.
+ */
+async function hashFile(hash, file, signal) {
+  for await (const chunk of createReadStream(file, { signal })) hash.update(chunk);
 }
 
 function repoOf(url) {
@@ -273,6 +290,7 @@ function readContentRange(response) {
  * Returns how big the part now is, and the SHA-256 of all of it.
  */
 async function fetchIntoPart({ url, partPath, wantBytes, token, signal, onProgress, fetchImpl, stallTimeoutMs }) {
+  if (signal?.aborted) throw signal.reason ?? new Error('The download was stopped.');
   let have = await sizeOf(partPath);
   // Bigger than the file can be: whatever this is, it is not a prefix of it.
   if (wantBytes && have > wantBytes) {
@@ -289,7 +307,7 @@ async function fetchIntoPart({ url, partPath, wantBytes, token, signal, onProgre
       bytesPerSecond: 0,
       phase: 'checking',
     });
-    await hashFile(hash, partPath);
+    await hashFile(hash, partPath, signal);
   }
   // A download that finished and was never renamed needs no network at all.
   if (wantBytes && have === wantBytes) return { bytes: have, hash: hash.digest('hex') };
@@ -474,7 +492,9 @@ async function downloadModel({ root, folder, filename, url, expectedBytes, sha25
         throw error;
       }
       if (error?.resumable && resumes < resumeDelaysMs.length) {
-        await sleep(resumeDelaysMs[resumes]);
+        // Stop cuts the wait short; the next attempt then refuses at once,
+        // and the abort branch above discards the part.
+        await sleep(resumeDelaysMs[resumes], signal);
         resumes += 1;
         continue;
       }

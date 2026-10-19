@@ -155,6 +155,23 @@ export function estimateTokens(text: string): number {
 }
 
 /**
+ * Ollama's end-of-reply counts, or null when either is not a usable number.
+ *
+ * The Rust side once sent these as `prompt_tokens` while this side read
+ * `promptTokens`; undefined slipped past a `<= 0` check, was stored as the
+ * measured mark, and the meter read "Memory NaN / 4K" with the long-chat
+ * warning never starting. A count that is not a finite, non-negative number is
+ * refused here so that can never be mistaken for a measurement again.
+ */
+export function readTokenCounts(event: unknown): { promptTokens: number; evalTokens: number } | null {
+  if (!event || typeof event !== "object") return null;
+  const { promptTokens, evalTokens } = event as { promptTokens?: unknown; evalTokens?: unknown };
+  const usable = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0;
+  if (!usable(promptTokens) || !usable(evalTokens)) return null;
+  return { promptTokens, evalTokens };
+}
+
+/**
  * Tokens to hold back for the model's own reply. A prompt that fills the window
  * completely leaves nothing to answer with, and Ollama would drop the oldest
  * turns to make room without saying so.

@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import type { PullProgressUpdate } from '../types';
+import type { ModelRow, PullProgressUpdate } from '../types';
 
 /**
  * How the Simple Mode download step reads its own state.
@@ -86,4 +86,26 @@ export function summarizeDownloadStep(
       : undefined;
 
   return { installedCount, failedCount, notStartedCount, allInstalled, stillMoving, canContinue, blockedReason };
+}
+
+/**
+ * What the X beside a download's progress bar does.
+ *
+ * It used to stop the running download and otherwise toggle the queue — so on
+ * a failed download, which is no longer queued, closing the error queued the
+ * multi-gigabyte model again. Only a queued row leaves the queue; anything else
+ * that is not running just has its message dismissed.
+ */
+export function downloadCloseAction(isActive: boolean, queued: boolean): 'stop' | 'unqueue' | 'dismiss' {
+  if (isActive) return 'stop';
+  return queued ? 'unqueue' : 'dismiss';
+}
+
+/**
+ * Whether Pause can do anything for the running download. Pause asks Ollama to
+ * keep its layers for later; a ComfyUI file stream has no such thing, so its
+ * Pause stopped nothing and then stopped the queue after it.
+ */
+export function canPauseDownload(isPulling: boolean, pullingRow: Pick<ModelRow, 'runtime'> | undefined): boolean {
+  return isPulling && Boolean(pullingRow) && pullingRow?.runtime !== 'comfyui';
 }

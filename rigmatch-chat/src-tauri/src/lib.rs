@@ -8,6 +8,10 @@ pub struct OllamaModel {
     pub name: String,
     pub size: u64,
     pub modified_at: String,
+    /// The weights' digest, which is how the window tells `x:latest` that is
+    /// only another name for `x:3b` from a different model under the same base.
+    #[serde(default)]
+    pub digest: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -90,6 +94,7 @@ async fn list_ollama_models(base_url: String) -> Result<Vec<OllamaModel>, String
                 name: m["name"].as_str()?.to_string(),
                 size: m["size"].as_u64().unwrap_or(0),
                 modified_at: m["modified_at"].as_str().unwrap_or("").to_string(),
+                digest: m["digest"].as_str().unwrap_or("").to_string(),
             })
         })
         .collect())
@@ -195,8 +200,12 @@ async fn get_model_context_info(
 /// Streamed output. The final message carries Ollama's own `prompt_eval_count`,
 /// which is the only exact measure of how much of the conversation the model
 /// actually saw — the app previously had no way to know it had been truncated.
+///
+/// `rename_all` renames only the variant tags; `rename_all_fields` is what makes
+/// `prompt_tokens` arrive as the `promptTokens` the window reads. Without it the
+/// counts came through as undefined and the memory meter read "NaN".
 #[derive(Serialize, Clone)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum StreamEvent {
     Token { value: String },
     Done { prompt_tokens: u64, eval_tokens: u64 },
@@ -280,10 +289,17 @@ async fn run_stream(
     let mut res = tokio::select! {
         biased;
         _ = cancel.notified() => return Ok(()),
-        sent = client.post(&url).json(&body).send() => sent.map_err(|e| e.to_string())?,
+        sent = client.post(&url).json(&body).send() => sent.map_err(|e| {
+            format!("Could not reach Ollama. Is it still running? ({e})")
+        })?,
     };
-    if !res.status().is_success() {
-        return Err(format!("Ollama chat returned {}", res.status()));
+    let status = res.status();
+    if !status.is_success() {
+        // Ollama says why in the body: a model that is not installed, or one
+        // that needs more memory than is free. That is the only explanation the
+        // user will get, so it is passed on rather than replaced by the code.
+        let text = res.text().await.unwrap_or_default();
+        return Err(ollama_error(&text).unwrap_or_else(|| format!("Ollama returned {status}.")));
     }
     let mut buffer = String::new();
     loop {
@@ -294,39 +310,78 @@ async fn run_stream(
         let next = tokio::select! {
             biased;
             _ = cancel.notified() => return Ok(()),
-            chunk = res.chunk() => chunk.map_err(|e| e.to_string())?,
+            chunk = res.chunk() => chunk.map_err(|e| {
+                format!("Lost the connection to Ollama part-way through the reply ({e}).")
+            })?,
         };
         let Some(chunk) = next else { break };
         buffer.push_str(&String::from_utf8_lossy(&chunk));
         let lines: Vec<&str> = buffer.split('\n').collect();
         let remainder = lines.last().cloned().unwrap_or("").to_string();
         for line in lines[..lines.len().saturating_sub(1)].iter() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(trimmed) {
-                if let Some(content) = parsed["message"]["content"].as_str() {
-                    if !content.is_empty() {
-                        on_token
-                            .send(StreamEvent::Token { value: content.to_string() })
-                            .map_err(|e| e.to_string())?;
-                    }
-                }
-                if parsed["done"].as_bool().unwrap_or(false) {
-                    on_token
-                        .send(StreamEvent::Done {
-                            prompt_tokens: parsed["prompt_eval_count"].as_u64().unwrap_or(0),
-                            eval_tokens: parsed["eval_count"].as_u64().unwrap_or(0),
-                        })
-                        .map_err(|e| e.to_string())?;
-                    return Ok(());
-                }
+            if send_stream_line(line, &on_token)? {
+                return Ok(());
             }
         }
         buffer = remainder;
     }
-    Ok(())
+    // The last line may have arrived without its newline.
+    if send_stream_line(&buffer, &on_token)? {
+        return Ok(());
+    }
+    // A reply that simply stops is a failure, not a short answer: Ollama ends
+    // every reply it finishes with a `done` line.
+    Err("Ollama stopped part-way through the reply without saying why.".to_string())
+}
+
+/// Ollama's own explanation in an error body or an in-stream error line.
+fn ollama_error(text: &str) -> Option<String> {
+    let parsed: serde_json::Value = serde_json::from_str(text.trim()).ok()?;
+    let error = parsed["error"].as_str()?.trim();
+    (!error.is_empty()).then(|| format!("Ollama said: {error}"))
+}
+
+/// What one line of Ollama's stream asks to be sent to the window.
+///
+/// Err when the line is Ollama reporting a failure mid-stream — a model that
+/// runs out of memory part-way says so in an `{"error": …}` line, which used to
+/// be ignored, so the reply just stopped.
+fn stream_line_events(line: &str) -> Result<Vec<StreamEvent>, String> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+    if let Some(error) = ollama_error(trimmed) {
+        return Err(error);
+    }
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+        return Ok(Vec::new());
+    };
+    let mut events = Vec::new();
+    if let Some(content) = parsed["message"]["content"].as_str() {
+        if !content.is_empty() {
+            events.push(StreamEvent::Token { value: content.to_string() });
+        }
+    }
+    if parsed["done"].as_bool().unwrap_or(false) {
+        events.push(StreamEvent::Done {
+            prompt_tokens: parsed["prompt_eval_count"].as_u64().unwrap_or(0),
+            eval_tokens: parsed["eval_count"].as_u64().unwrap_or(0),
+        });
+    }
+    Ok(events)
+}
+
+/// Send one line's events; true once the reply is done.
+fn send_stream_line(line: &str, on_token: &Channel<StreamEvent>) -> Result<bool, String> {
+    for event in stream_line_events(line)? {
+        let done = matches!(event, StreamEvent::Done { .. });
+        on_token.send(event).map_err(|e| e.to_string())?;
+        if done {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 // ── Conversation storage ────────────────────────────────────────────────────
@@ -364,9 +419,26 @@ fn write_json_file(path: &std::path::Path, contents: &str) -> Result<(), String>
     Ok(())
 }
 
+/// Copy a store file that could not be read aside, before anything can be
+/// written over it, and say where the copy is.
+///
+/// One copy per store, replaced each time. While the original stays in place it
+/// is the same file at every launch; the copy only has to outlive a choice to
+/// start fresh.
+fn back_up_json_file(path: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let backup = path.with_extension("unreadable.json");
+    std::fs::copy(path, &backup).map_err(|e| e.to_string())?;
+    Ok(backup)
+}
+
 #[tauri::command]
 fn read_conversations(app: tauri::AppHandle) -> Result<Option<String>, String> {
     read_json_file(&conversations_path(&app)?)
+}
+
+#[tauri::command]
+fn back_up_conversations(app: tauri::AppHandle) -> Result<String, String> {
+    back_up_json_file(&conversations_path(&app)?).map(|path| path.display().to_string())
 }
 
 #[tauri::command]
@@ -392,6 +464,11 @@ fn read_memories(app: tauri::AppHandle) -> Result<Option<String>, String> {
 #[tauri::command]
 fn write_memories(app: tauri::AppHandle, contents: String) -> Result<(), String> {
     write_json_file(&memories_path(&app)?, &contents)
+}
+
+#[tauri::command]
+fn back_up_memories(app: tauri::AppHandle) -> Result<String, String> {
+    back_up_json_file(&memories_path(&app)?).map(|path| path.display().to_string())
 }
 
 // ── Video memory ────────────────────────────────────────────────────────────
@@ -498,6 +575,26 @@ async fn get_ollama_vram(base_url: String) -> Option<f32> {
         .sum();
     if total_bytes == 0 { return None; }
     Some(total_bytes as f32 / 1_073_741_824.0)
+}
+
+/// Whether Ollama has this model in memory right now, or None when it cannot
+/// say. Asked as a message is sent, so the window can say the first answer
+/// waits on a load: on a slow drive that is minutes of "typing…" otherwise.
+#[tauri::command]
+async fn ollama_model_loaded(base_url: String, model: String) -> Option<bool> {
+    validate_localhost(&base_url).ok()?;
+    let url = format!("{}/api/ps", base_url.trim_end_matches('/'));
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .ok()?;
+    let json: serde_json::Value = client.get(&url).send().await.ok()?.json().await.ok()?;
+    ps_lists_model(&json, &model)
+}
+
+fn ps_lists_model(ps: &serde_json::Value, model: &str) -> Option<bool> {
+    let models = ps["models"].as_array()?;
+    Some(models.iter().any(|m| m["name"].as_str() == Some(model) || m["model"].as_str() == Some(model)))
 }
 
 /// Where RigMatch's bridge listens. RigMatch reads RIGMATCH_BRIDGE_PORT when it
@@ -799,8 +896,10 @@ pub fn run() {
             cancel_chat,
             read_conversations,
             write_conversations,
+            back_up_conversations,
             read_memories,
             write_memories,
+            back_up_memories,
             open_rigmatch_ai,
             get_system_stats,
             get_rig_scores,
@@ -811,6 +910,7 @@ pub fn run() {
             stop_rig_generation,
             test_rig_model,
             get_ollama_vram,
+            ollama_model_loaded,
             get_vram_info,
             open_odysseus,
             odysseus_running,
@@ -842,6 +942,73 @@ mod tests {
         assert_eq!(info.head_count_kv, 8);
         assert_eq!(info.key_length, 128);
         assert_eq!(info.value_length, 128);
+    }
+
+    #[test]
+    fn the_end_of_reply_counts_reach_the_window_under_the_names_it_reads() {
+        // ollamaApi.ts reads event.promptTokens and event.evalTokens. Sent as
+        // prompt_tokens they arrived as undefined and the meter read NaN.
+        let done = serde_json::to_value(StreamEvent::Done { prompt_tokens: 812, eval_tokens: 64 }).unwrap();
+        assert_eq!(done, serde_json::json!({ "type": "done", "promptTokens": 812, "evalTokens": 64 }));
+        let token = serde_json::to_value(StreamEvent::Token { value: "Hi".into() }).unwrap();
+        assert_eq!(token, serde_json::json!({ "type": "token", "value": "Hi" }));
+    }
+
+    #[test]
+    fn ollama_errors_reach_the_window_in_its_own_words() {
+        // The body of a 404 and a 500 from Ollama 0.35, and an in-stream line.
+        assert_eq!(
+            ollama_error(r#"{"error":"model \"gemma4:12b\" not found, try pulling it first"}"#).as_deref(),
+            Some(r#"Ollama said: model "gemma4:12b" not found, try pulling it first"#),
+        );
+        assert_eq!(ollama_error("Internal Server Error"), None);
+        assert_eq!(ollama_error(r#"{"error":""}"#), None);
+        assert_eq!(
+            stream_line_events(r#"{"error":"model requires more system memory (12.1 GiB) than is available (7.9 GiB)"}"#).err().as_deref(),
+            Some("Ollama said: model requires more system memory (12.1 GiB) than is available (7.9 GiB)"),
+        );
+    }
+
+    #[test]
+    fn stream_lines_become_tokens_then_one_done() {
+        let token = stream_line_events(r#"{"message":{"role":"assistant","content":"Hi"},"done":false}"#).unwrap();
+        assert!(matches!(token.as_slice(), [StreamEvent::Token { value }] if value == "Hi"));
+        let done = stream_line_events(
+            r#"{"message":{"role":"assistant","content":""},"done":true,"prompt_eval_count":812,"eval_count":64}"#,
+        ).unwrap();
+        assert!(matches!(done.as_slice(), [StreamEvent::Done { prompt_tokens: 812, eval_tokens: 64 }]));
+        assert!(stream_line_events("   ").unwrap().is_empty());
+        assert!(stream_line_events("not json").unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_model_counts_as_loaded_only_when_api_ps_lists_it() {
+        // Shape from Ollama 0.40's /api/ps.
+        let ps = serde_json::json!({ "models": [
+            { "name": "gemma4:12b", "model": "gemma4:12b", "size_vram": 9_000_000_000u64 },
+        ]});
+        assert_eq!(ps_lists_model(&ps, "gemma4:12b"), Some(true));
+        assert_eq!(ps_lists_model(&ps, "llama3.2:latest"), Some(false));
+        assert_eq!(ps_lists_model(&serde_json::json!({ "models": [] }), "gemma4:12b"), Some(false));
+        assert_eq!(ps_lists_model(&serde_json::json!({}), "gemma4:12b"), None, "an answer it cannot read says nothing");
+    }
+
+    #[test]
+    fn an_unreadable_store_is_copied_aside_byte_for_byte() {
+        let dir = std::env::temp_dir().join(format!("rigmatch-chat-backup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("conversations.json");
+        // Not valid JSON, and not UTF-8 either: the copy must not care.
+        let bytes = b"{\"version\":3,\xff\xfe truncated";
+        std::fs::write(&store, bytes).unwrap();
+
+        let copy = back_up_json_file(&store).expect("copy");
+        assert_eq!(copy, dir.join("conversations.unreadable.json"));
+        assert_eq!(std::fs::read(&copy).unwrap(), bytes);
+        assert_eq!(std::fs::read(&store).unwrap(), bytes, "the original is left in place");
+        // A second launch with the same file replaces the copy rather than failing.
+        assert!(back_up_json_file(&store).is_ok());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

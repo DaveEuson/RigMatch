@@ -259,6 +259,16 @@ export function goalById(id: string | undefined): Goal | undefined {
   return GOALS.find((goal) => goal.id === id);
 }
 
+/**
+ * The goals after "Show the welcome again". The welcome asks for one; the one
+ * picked leads and the others stay. "Show me everyone" clears them, as it says.
+ * Setting the answer as the whole list cut someone with three goals to one.
+ */
+export function goalsAfterWelcome(current: GoalId[], picked: GoalId[]): GoalId[] {
+  const [lead] = picked;
+  return lead ? [lead, ...current.filter((goal) => goal !== lead)] : [];
+}
+
 /** The goal list arranged on its five shelves, in Dave's stated order. */
 export function goalsByCategory(): Array<{
   category: (typeof GOAL_CATEGORIES)[number];

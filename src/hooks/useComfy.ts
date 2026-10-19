@@ -93,15 +93,22 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
   const applyStatus = useCallback((status: ComfyStatus & { address?: string }) => {
     if (status.address) setAnsweredAt(status.address);
     setComfyChecked(true);
+    // Busy counts as seen: it answered, just not in time.
+    if (status.reachable === true || status.busy) setComfyKnown(true);
+    // Too busy to answer is running, with its models where they were. Read as
+    // empty lists, it wiped every installed model until the next look.
+    if (status.busy) {
+      setComfyReachable(true);
+      return;
+    }
     setComfyReachable(status.reachable === true);
-    if (status.reachable === true) setComfyKnown(true);
     setComfyQueue(status.reachable ? comfyBusyCount(status.execInfo ?? null) : 0);
-    setComfyCheckpoints(status.checkpoints);
+    setComfyCheckpoints(status.checkpoints ?? []);
     setComfyTextEncoders(status.textEncoders ?? []);
     // An older bridge reports only the first two folders; fill those in so a
     // model whose files are all checkpoints and encoders still reads installed.
     setComfyFolders(status.folders ?? {
-      checkpoints: status.checkpoints,
+      checkpoints: status.checkpoints ?? [],
       text_encoders: status.textEncoders ?? [],
     });
   }, []);

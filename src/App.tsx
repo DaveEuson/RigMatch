@@ -83,6 +83,8 @@ import {
   addRunReport,
   makeReportId,
   parseStoredReports,
+  removeModelFromReports,
+  reportRows,
   reportStorageCandidates,
 } from './lib/runReports';
 import type { NavId, NavItem } from './lib/appConfig';
@@ -122,11 +124,9 @@ import {
   getSavedUiMode,
   getFriendlyModelName,
   getThemeLabel,
-  isTestedModelScore,
-  keepValidEntries,
   isBenchmarkForAliases,
   isBenchmarkForModel,
-  isBenchmarkResult,
+  isPlaceholderBenchmark,
   isCloudModel,
   isEmbeddingModel,
   isHostBenchmarkReady,
@@ -155,11 +155,12 @@ import {
 import type {
   ListTestResult,
 } from './lib/modelCatalog';
-import { clearAppStorage, dropChat, dropTranscripts, writeLocal, writeLocalJson, writeLocalJsonWithFallback } from './lib/safeStorage';
+import { clearAppStorage, dropChat, dropTranscripts, historySaveNote, writeLocal, writeLocalJson, writeLocalJsonWithFallback } from './lib/safeStorage';
 import { collapseModelVariants } from './lib/wizardVariants';
+import { restoreSavedScores } from './lib/savedHistory';
 // Same constant the Simple Mode download step gates on, so the wizard cannot
 // wave a lineup through that the run then refuses.
-import { MIN_CONTESTANTS } from './lib/downloadStatus';
+import { MIN_CONTESTANTS, canPauseDownload } from './lib/downloadStatus';
 import {
   appendRuns,
   emptyRunHistory,
@@ -179,6 +180,7 @@ import {
   CLEARED_TOP_MATCHES_STORAGE_KEY,
   DEFAULT_SHORTLIST_IDS,
   HISTORY_STORAGE_KEY,
+  QUICK_CHECK_SHEET_STORAGE_KEY,
   LINEUP_STRIP_SCREENS,
   NAV_ITEM_BY_ID,
   SIMPLE_NAV_ORDER,
@@ -217,6 +219,7 @@ import {
   labChallengesWithOutput,
   readAdvancedLabResults,
   refreshLabResults,
+  resultsOfShow,
   writeAdvancedLabResults,
   wasJudged,
   checkState,
@@ -248,12 +251,12 @@ import { batchSeed } from './lib/videoGen';
 import { toVideoLabResult } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
 import { readHuggingFaceToken } from './lib/huggingFaceToken';
-import { goalById, presetIdForGoal } from './lib/goals';
+import { goalById, goalsAfterWelcome, presetIdForGoal } from './lib/goals';
 import { isDockWorthyPullProgress, modelMatchesTask, nextDockExpiry } from './lib/modelCatalog';
 import { chooseLineup, isSpecialistModel } from './lib/chooseLineup';
 import { modelIdentities, sameModel } from './lib/modelKey.ts';
 import { gpuDriverMessage } from './lib/gpuDriver';
-import { labJudgeFor } from './lib/labJudge.ts';
+import { codeJudgeFor, labJudgeFor } from './lib/labJudge.ts';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLineupLive } from './lib/videoGenRunner';
 import {
@@ -331,7 +334,7 @@ const LiveFlirtSpotlight = lazyPanel(() => import('./components/LiveFlirtSpotlig
 
 
 // Quick TEST resource warning opt-out ('off' = user chose "don't warn again").
-const QUICK_CHECK_WARNING_KEY = 'rigmatch:quick-test-warning:v1';
+const QUICK_CHECK_WARNING_KEY = QUICK_CHECK_SHEET_STORAGE_KEY;
 const initialHosts = isDesktopRuntime ? [] : demoHosts.filter((host) => host.isLocal);
 const initialSelectedHostId = initialHosts[0]?.id ?? 'localhost';
 
@@ -415,6 +418,12 @@ function App() {
     () => savedHistory?.benchmarkByModel ?? (initialBenchmark ? upsertBenchmarkResults({}, [initialBenchmark]) : {}),
   );
   const [queuedModelIds, setQueuedModelIds] = useState<Set<string>>(() => new Set());
+  // The queue as it is now, for a download run that started with an older copy:
+  // a model taken off the queue while another downloads must not start on its turn.
+  const queuedModelIdsRef = useRef(queuedModelIds);
+  useEffect(() => {
+    queuedModelIdsRef.current = queuedModelIds;
+  }, [queuedModelIds]);
   // Start empty on desktop: pre-picking five models made the wizard tick "Pick"
   // as done before the user chose anything, showed the alternatives grayed out
   // as "Lineup full", and told people to pick while having already picked for
@@ -483,6 +492,13 @@ function App() {
   /** Which stored report the modal is showing, or null for the newest run. */
   const [openReportId, setOpenReportId] = useState<string | null>(null);
   const [reportReady, setReportReady] = useState(false);
+  const historySaveFailedRef = useRef(false);
+  /**
+   * The saved report "Report ready" is about. Opening it by id shows the run as
+   * it was saved; without one the modal rebuilt it from today's lineup and
+   * answers, which by then could be a different show.
+   */
+  const [readyReportId, setReadyReportId] = useState<string | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   /**
    * The scores as measured. Everything downstream reads `modelScores` below,
@@ -627,6 +643,9 @@ function App() {
   const [ollamaInstallProgress, setOllamaInstallProgress] = useState<OllamaInstallProgress>({ phase: 'idle' });
   const [themeId, setThemeId] = useState<ThemeId>(() => getSavedThemeId());
   const [uiMode, setUiMode] = useState<UiMode>(() => getSavedUiMode());
+  // The mode-jump banner is spent once Simple Mode is back, however it came
+  // back: kept, it returned on its own the next time Advanced Mode opened.
+  if (cameFromSimple && uiMode === 'beginner') setCameFromSimple(false);
   // First-launch splash: ask Simple vs Advanced before showing the app.
   /**
    * What to ask on launch. See firstRunStep: an upgrading user has already
@@ -654,17 +673,25 @@ function App() {
   const [pendingLabDownload, setPendingLabDownload] = useState<ModelRow | null>(null);
   const [labDownloadName, setLabDownloadName] = useState<string | null>(null);
   const [chosenModel, setChosenModel] = useState<string | null>(null);
-  const [exportHatchOpen, setExportHatchOpen] = useState(false);
+  /** The model "Export model profile" was asked for: the one on its page. */
+  const [exportHatchModel, setExportHatchModel] = useState<string | null>(null);
   const [clearedTopMatches, setClearedTopMatches] = useState<Set<string>>(() => getSavedClearedTopMatches());
   const [setupGuideOpen, setSetupGuideOpen] = useState(false);
   const [clearDataOpen, setClearDataOpen] = useState(false);
   const [pendingScoreClear, setPendingScoreClear] = useState<PendingScoreClear | null>(null);
   // A Settings section a link elsewhere asks for, such as ComfyUI help on Models.
   const [settingsSectionRequest, setSettingsSectionRequest] = useState<{ id: SettingsSectionId; at: number } | null>(null);
+  // Spent once Settings is left: kept, every later visit reopened that section.
+  if (settingsSectionRequest && activeNavId !== 'settings') setSettingsSectionRequest(null);
   // The welcome again, from Settings. The first run's own is useGoals' showModeSplash.
   const [welcomeReplay, setWelcomeReplay] = useState(false);
   // My PC's two views: the computer and its connections, or everything logged.
   const [myPcView, setMyPcView] = useState<'overview' | 'logs'>('overview');
+  /** "Logs" after a failed show: My PC, on its Logs view. */
+  const openRunLogs = useCallback(() => {
+    openLogsPanel();
+    setMyPcView('logs');
+  }, [openLogsPanel]);
 
   const selectedHost = hosts.find((host) => host.id === selectedHostId) ?? hosts[0];
 
@@ -942,6 +969,13 @@ function App() {
     baseUrlOf: (name) => judgeEndpoints[name]?.baseUrl ?? ollama.baseUrl,
     identityOf,
   }), [skillTestJudge, judgeChosen, judgeModelOptions, judgeEndpoints, ollama.baseUrl, identityOf]);
+  /** The judge for one contestant's code: as above, or one picked automatically while judging is off. */
+  const codeSkillJudgeFor = useCallback((model: string) => codeJudgeFor(model, skillTestJudge, autoJudgeModels, {
+    chosen: judgeChosen,
+    candidates: judgeModelOptions,
+    baseUrlOf: (name) => judgeEndpoints[name]?.baseUrl ?? ollama.baseUrl,
+    identityOf,
+  }), [skillTestJudge, autoJudgeModels, judgeChosen, judgeModelOptions, judgeEndpoints, ollama.baseUrl, identityOf]);
   // Where a model's Labs test goes: its own program's address. Main reads an
   // LM Studio one and asks LM Studio, so App Builder, Code and picture reading
   // run where the model lives instead of being sent to Ollama.
@@ -954,9 +988,14 @@ function App() {
     () => installedRowsForCleanup.filter((row) => !getModelScore(row, modelScores)),
     [installedRowsForCleanup, modelScores],
   );
+  // The Top Match on screen, when it is on this PC: what "keeping your match" keeps.
+  const cleanupKeep = useMemo(
+    () => topPickToKeep(modelRows, modelScores, system.gpu.vramGb, clearedTopMatches),
+    [modelRows, modelScores, system.gpu.vramGb, clearedTopMatches],
+  );
   const exceptTopPickRowsForCleanup = useMemo(
-    () => rowsExceptTopPick(modelRows, modelScores),
-    [modelRows, modelScores],
+    () => rowsExceptTopPick(modelRows, cleanupKeep),
+    [modelRows, cleanupKeep],
   );
 
   const lowScoredRowsForCleanup = useMemo(
@@ -1005,8 +1044,8 @@ function App() {
    * Subjects run on yi:9b had nowhere to show up).
    */
   /** The run as a report: its results ranked at the fader it ran at, so the winner heads them. */
-  const saveTestReport = useCallback((results: BenchmarkResult[], winner: string, balance: number = BALANCED) => {
-    if (!results.length) return;
+  const saveTestReport = useCallback((results: BenchmarkResult[], winner: string, balance: number = BALANCED): string | undefined => {
+    if (!results.length) return undefined;
     const completedAt = new Date().toISOString();
     const report: StoredRunReport = {
       id: makeReportId(completedAt, winner),
@@ -1021,11 +1060,13 @@ function App() {
       transcripts: Object.fromEntries(results.map((r) => [r.model, r])),
     };
     setRunReports((current) => addRunReport(current, report));
+    return report.id;
   }, [currentSuiteName]);
   const queuedRows = useMemo(
     () => modelRows.filter((row) => queuedModelIds.has(row.displayName)),
     [modelRows, queuedModelIds],
   );
+  const pullCanPause = canPauseDownload(isPullingModels, modelRows.find((row) => row.displayName === pullingModel));
   const diskGuard = useMemo(
     () => getDiskGuard(modelRows, queuedRows, system.storage.availableGb),
     [modelRows, queuedRows, system.storage.availableGb],
@@ -1436,6 +1477,11 @@ function App() {
         writeRunHistory(cleared);
         return cleared;
       });
+      // Reports carry every model's answers. Written here because the save
+      // effect skips an empty list.
+      setRunReports([]);
+      writeLocalJson(RUN_REPORTS_STORAGE_KEY, []);
+      setOpenReportId(null);
       setActivity('All saved match scores, test transcripts, and score history were cleared. Ollama models stayed installed.');
       return;
     }
@@ -1454,6 +1500,11 @@ function App() {
     setRunHistory((current) => {
       const next = removeRuns(current, aliases);
       if (next !== current) writeRunHistory(next);
+      return next;
+    });
+    setRunReports((current) => {
+      const next = removeModelFromReports(current, aliases);
+      if (next.length === 0 && current.length > 0) writeLocalJson(RUN_REPORTS_STORAGE_KEY, []);
       return next;
     });
     setBenchmark((current) =>
@@ -1503,6 +1554,8 @@ function App() {
   const runChannel: ChannelId = workbenchInfo.id === 'code' || workbenchInfo.id === 'reading' ? workbenchInfo.id : 'chat';
 
   const labResults = useLabResults();
+  /** When this session's Simple show began: its board holds only what that show produced. */
+  const [simpleShowStartedAt, setSimpleShowStartedAt] = useState<string | null>(null);
 
   /**
    * The show's results, from whichever round it ran.
@@ -1516,7 +1569,7 @@ function App() {
   const wizardSkillBoard = useMemo(() => {
     if (wizardRound === 'chat') return null;
     const picked = new Set(shortlistedRows.map((row) => row.displayName));
-    const mine = Object.values(labResults).filter((result) => result && picked.has(result.model));
+    const mine = resultsOfShow(labResults, picked, simpleShowStartedAt);
     // Failures stay on the board. Dropping them made a round where nobody
     // passed indistinguishable from a round that never ran — and since the
     // winner screen unlocks on having a winner, five models that all fell short
@@ -1524,7 +1577,7 @@ function App() {
     // last, and none of them is crowned.
     const board = rankLabList(mine, wizardChannel as Exclude<typeof wizardChannel, 'chat'>, wizardBalance);
     return board.length > 0 ? board : null;
-  }, [wizardRound, wizardChannel, shortlistedRows, labResults, wizardBalance]);
+  }, [wizardRound, wizardChannel, shortlistedRows, labResults, wizardBalance, simpleShowStartedAt]);
 
   /**
    * This show's own result, when it was a show of the lineup on screen.
@@ -1654,6 +1707,9 @@ function App() {
     const row = wizardWinner ? modelRows.find((candidate) => candidate.displayName === wizardWinner.model) : undefined;
     const score = row ? getModelScore(row, modelScores) : undefined;
     if (row && score) return { model: row.displayName, score };
+    // A winner with no Match score (a picture or listening round) has no card
+    // to share. Falling back to the Top Pick shared a different model.
+    if (wizardWinner) return null;
     return topRigPick?.score ? { model: topRigPick.row.displayName, score: topRigPick.score } : null;
   }, [wizardWinner, modelRows, modelScores, topRigPick]);
 
@@ -2102,6 +2158,9 @@ function App() {
    */
   /** A model opened from another screen, and when, so the list can bring it into view. */
   const [revealModel, setRevealModel] = useState<{ model: string; at: number } | null>(null);
+  // Spent once the Models screen is left. Kept, it was new again to every later
+  // mount of the list, which cleared the filters on each visit.
+  if (revealModel && activeNavId !== 'models') setRevealModel(null);
   const openModelRow = useCallback((model: string) => {
     setSelectedModel(model);
     const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
@@ -2122,7 +2181,8 @@ function App() {
       setSelectedModel(row.displayName);
       setRevealModel({ model: row.displayName, at: Date.now() });
     }
-    selectNav(render.solo ? 'models' : 'speedDate');
+    // A test with no row of its own, such as the Lab's picture test, is on Labs.
+    selectNav(row ? 'models' : 'speedDate');
   }, [chooseWorkbench, modelRows, selectNav]);
 
   // Simple Mode runs as a wizard: when the rig check passes while the user is
@@ -2450,57 +2510,62 @@ function App() {
     requestBenchmarkForModel(row.displayName, { quick: true });
   }, [requestBenchmarkForModel, startBenchmark]);
 
+  const requestThirdPartyModelDownloads = useCallback((rows: ModelRow[]) => {
+    const missingRows = rows.filter((row) => !row.installed);
+    if (missingRows.length === 0) return;
+    setPendingThirdPartyDownloadRows(missingRows);
+  }, []);
+
+  // Clears what a download left on screen (a failure) without queuing it again.
+  const dismissDownload = useCallback((model: string) => {
+    setPullProgressByModel((current) => removePullProgress(current, model));
+  }, []);
+
   const queueModel = useCallback((row: ModelRow) => {
     if (row.localProvider === 'lm-studio' || row.canDownload === false) {
       setActivity(`${row.displayName} is already available through ${row.localProviderLabel ?? 'a local provider'}; no Ollama download needed.`);
       return;
     }
     setSelectedModel(row.displayName);
-    setQueuedModelIds((current) => {
-      const next = new Set(current);
-      if (next.has(row.displayName)) {
-        next.delete(row.displayName);
-        setPullProgressByModel((current) => removePullProgress(current, row.displayName));
-        const remainingGb = sumQueuedGb(modelRows, next);
-        setActivity(`${row.displayName} removed from the download queue. Queue now totals ${formatGb(remainingGb)}.`);
-      } else {
-        const rowGb = row.sizeGb || 0;
-        const nextQueuedGb = sumQueuedGb(modelRows, next) + rowGb;
-        const freeAfterQueue = system.storage.availableGb - nextQueuedGb;
+    if (queuedModelIds.has(row.displayName)) {
+      const next = new Set(queuedModelIds);
+      next.delete(row.displayName);
+      setQueuedModelIds((current) => removeSetValues(current, [row.displayName]));
+      setPullProgressByModel((current) => removePullProgress(current, row.displayName));
+      setActivity(`${row.displayName} removed from the download queue. Queue now totals ${formatGb(sumQueuedGb(modelRows, next))}.`);
+      return;
+    }
 
-        if (rowGb <= 0) {
-          setActivity(`${row.displayName} has unknown size. Check the model page before downloading.`);
-          return current;
-        }
+    const rowGb = row.sizeGb || 0;
+    const freeAfterQueue = system.storage.availableGb - sumQueuedGb(modelRows, queuedModelIds) - rowGb;
 
-        const platformFit = getPlatformFit(row.displayName, system.platform);
-        if (!platformFit.compatible) {
-          setActivity(`${row.displayName} is macOS-only (MLX format) and cannot be downloaded on ${system.platform === 'win32' ? 'Windows' : 'Linux'}.`);
-          return current;
-        }
+    if (rowGb <= 0) {
+      setActivity(`${row.displayName} has unknown size. Check the model page before downloading.`);
+      return;
+    }
 
-        const hardwareFit = getHardwareFit(row, system.gpu.vramGb);
-        if (!hardwareFit.recommend) {
-          setActivity(`${row.displayName} is ${hardwareFit.label.toLowerCase()} for this rig: ${hardwareFit.detail}`);
-          return current;
-        }
+    const platformFit = getPlatformFit(row.displayName, system.platform);
+    if (!platformFit.compatible) {
+      setActivity(`${row.displayName} is macOS-only (MLX format) and cannot be downloaded on ${system.platform === 'win32' ? 'Windows' : 'Linux'}.`);
+      return;
+    }
 
-        if (freeAfterQueue < 10) {
-          setActivity(`${row.displayName} blocked: ${formatGb(rowGb)} would leave only ${formatGb(freeAfterQueue)} free. Keep at least 10 GB open.`);
-          return current;
-        }
+    const hardwareFit = getHardwareFit(row, system.gpu.vramGb);
+    if (!hardwareFit.recommend) {
+      setActivity(`${row.displayName} is ${hardwareFit.label.toLowerCase()} for this rig: ${hardwareFit.detail}`);
+      return;
+    }
 
-        next.add(row.displayName);
-        setPullProgressByModel((current) => ({
-          ...current,
-          [row.displayName]: createQueuedPullProgress(row.displayName, ollama.baseUrl),
-        }));
-        const warning = freeAfterQueue < 25 ? ' Low-space warning.' : '';
-        setActivity(`${row.displayName} added to the download queue (+${formatGb(rowGb)}). Queue totals ${formatGb(nextQueuedGb)}; ${formatGb(freeAfterQueue)} free after queue.${warning}`);
-      }
-      return next;
-    });
-  }, [modelRows, ollama.baseUrl, system.gpu.vramGb, system.platform, system.storage.availableGb]);
+    if (freeAfterQueue < 10) {
+      setActivity(`${row.displayName} blocked: ${formatGb(rowGb)} would leave only ${formatGb(freeAfterQueue)} free. Keep at least 10 GB open.`);
+      return;
+    }
+
+    // Through the model's terms, like every other way into the queue. The
+    // Models screen used to queue straight away, so its downloads were the only
+    // ones that never showed the licence.
+    requestThirdPartyModelDownloads([row]);
+  }, [modelRows, queuedModelIds, requestThirdPartyModelDownloads, system.gpu.vramGb, system.platform, system.storage.availableGb]);
 
   const cancelDownloadQueue = useCallback(() => {
     if (isPullingModels) {
@@ -2557,6 +2622,11 @@ function App() {
       return;
     }
 
+    if (!pullCanPause) {
+      setActivity(`${pullingModel} is a ComfyUI file and cannot pause. Cancel stops it.`);
+      return;
+    }
+
     if (isPullPauseRequested || isPullCancelRequested) {
       setActivity('Download pause/stop is already requested.');
       return;
@@ -2577,7 +2647,7 @@ function App() {
       };
     });
     setActivity(`Pausing ${pullingModel}. Start Download will resume through Ollama instead of dropping the queue.`);
-  }, [isPullCancelRequested, isPullPauseRequested, isPullingModels, ollama.baseUrl, pullingModel, askPullQueue]);
+  }, [isPullCancelRequested, isPullPauseRequested, isPullingModels, ollama.baseUrl, pullCanPause, pullingModel, askPullQueue]);
 
   /**
    * Fetch a generation model into ComfyUI's own folders.
@@ -2812,14 +2882,36 @@ function App() {
           wasCanceled = true;
           break;
         }
+        // queuedRows is the queue as it was when this run began.
+        if (!queuedModelIdsRef.current.has(row.displayName)) continue;
 
         // A generation model is a .safetensors file for ComfyUI, not something
         // `ollama pull` could ever fetch. Routed here rather than filtered out
         // of the queue, so the reason is visible instead of the row silently
         // doing nothing.
         if (row.runtime === 'comfyui') {
+          // Named as the download in progress, so its X stops the file (through
+          // cancelDownloadQueue) instead of only taking it off the queue.
+          setPullingModel(row.displayName);
           const done = await downloadGenerationModel(row);
-          if (done) completedCount += 1;
+          if (done) {
+            completedCount += 1;
+            setPullProgressByModel((current) => ({
+              ...current,
+              [row.displayName]: {
+                ...(current[row.displayName] ?? createQueuedPullProgress(row.displayName, ollama.baseUrl)),
+                phase: 'complete',
+                status: 'Downloaded. Restart ComfyUI so it can see the new files.',
+                percent: 100,
+                updatedAt: new Date().toISOString(),
+              },
+            }));
+          } else if (pullQueueShouldStop()) {
+            // Stopped: nothing to show, rather than "Stopping" for ever.
+            setPullProgressByModel((current) => removePullProgress(current, row.displayName));
+            wasCanceled = true;
+            break;
+          }
           continue;
         }
 
@@ -3053,14 +3145,8 @@ function App() {
     });
 
     const blockedNote = blockedReasons.length > 0 ? ` ${blockedReasons.length} could not be queued.` : '';
-    setActivity(`${queuedRowsForDownload.length} missing Speed Dating contestant${queuedRowsForDownload.length === 1 ? '' : 's'} queued for download.${blockedNote}`);
+    setActivity(`${queuedRowsForDownload.length === 1 ? queuedRowsForDownload[0].displayName : `${queuedRowsForDownload.length} models`} added to the download queue.${blockedNote}`);
   }, [modelRows, ollama.baseUrl, queuedModelIds, system.gpu.vramGb, system.platform, system.storage.availableGb, tellUser]);
-
-  const requestThirdPartyModelDownloads = useCallback((rows: ModelRow[]) => {
-    const missingRows = rows.filter((row) => !row.installed);
-    if (missingRows.length === 0) return;
-    setPendingThirdPartyDownloadRows(missingRows);
-  }, []);
 
   const confirmThirdPartyModelDownloads = useCallback(() => {
     if (!pendingThirdPartyDownloadRows) return;
@@ -3236,7 +3322,8 @@ function App() {
     setPendingRunMode('speed-date');
   }, []);
 
-  const runListTest = useCallback(async (questionsOverride?: BenchmarkQuestion[]) => {
+  /** Resolves true only when the show finished with results: the Code round builds after nothing else. */
+  const runListTest = useCallback(async (questionsOverride?: BenchmarkQuestion[]): Promise<boolean> => {
     // The quick check runs the lineup on its three questions instead of the set.
     const plan = questionsOverride ?? benchmarkPromptPlan;
     const count = questionsOverride ? questionsOverride.length : benchmarkQuestionCount;
@@ -3276,7 +3363,7 @@ function App() {
         failureKind: 'too-few',
       });
       setActivity(why);
-      return;
+      return false;
     }
 
     if (hostBlocker) {
@@ -3292,7 +3379,7 @@ function App() {
         failureKind: 'other',
       });
       setActivity(hostBlocker);
-      return;
+      return false;
     }
 
     stopRunRef.current = false;
@@ -3456,7 +3543,7 @@ function App() {
         if (uiMode !== 'beginner') tellUser(ended.message);
         setActivity(ended.message);
         void refreshProviderStatus();
-        return;
+        return false;
       }
       // Crowned at the fader the show was started at, which is where the Top
       // Match is ranked. The results come back summarized at Balanced, and
@@ -3504,7 +3591,7 @@ function App() {
         ...(failures.length ? { failures: [...failures] } : {}),
       });
       if (failures.length) tellUser(droppedOutMessage(failures, getFriendlyModelName));
-      saveTestReport(results, winner.model, runBalance);
+      setReadyReportId(saveTestReport(results, winner.model, runBalance) ?? null);
       // The report bar announces the winner; a toast as well said it twice,
       // on screen and to screen readers, and by the model's raw id.
       setReportReady(true);
@@ -3525,6 +3612,7 @@ function App() {
       });
       playJingle('speed-date-complete');
       if (uiMode === 'beginner') selectNav('history');
+      return true;
     } catch (error) {
       const errorMessage = getErrorMessage(error);
       await agentArcadeApi.appendLog({
@@ -3557,6 +3645,7 @@ function App() {
       // See the note in startBenchmark's catch: without this, ollama.ready
       // stays stale-true and the reconnect poll never starts.
       void refreshProviderStatus();
+      return false;
     } finally {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
@@ -3731,7 +3820,8 @@ function App() {
         // Only a judge can mark code, and one picked automatically never marks
         // its own (labJudgeFor). With nobody else installed the run used to
         // fail before writing a line, save nothing and still report success.
-        if (!skillJudgeFor(job.model)) {
+        const codeJudge = codeSkillJudgeFor(job.model);
+        if (!codeJudge) {
           unjudgedCode.push(job.model);
           continue;
         }
@@ -3746,7 +3836,7 @@ function App() {
         try {
           result = await runCodeChallenge(
             job.model, labBaseUrl(job.model), selection.codeLanguage, codeTask.task, codeTask.reference, streamId,
-            skillJudgeFor(job.model) ?? undefined,
+            codeJudge,
           );
         } finally {
           unsubscribe?.();
@@ -3908,7 +3998,7 @@ function App() {
     // pictureJudge checks the pictures and clips, and modelRows says which
     // models can hear; without them here the run would use whatever was
     // installed when this callback was last built.
-  }, [ollama.baseUrl, labBaseUrl, skillTestSelection, skillJudgeFor, modelRows, videoMachine, pictureJudge, tellUser]);
+  }, [ollama.baseUrl, labBaseUrl, skillTestSelection, skillJudgeFor, codeSkillJudgeFor, modelRows, videoMachine, pictureJudge, tellUser]);
 
   /**
    * Chat asking RigMatch to test a model.
@@ -4180,6 +4270,7 @@ function App() {
     // to finished, and a 'complete' left over from the previous show is
     // finished the instant this one begins.
     setSkillRunStatus({ phase: 'idle', label: '', completed: 0, total: 0 });
+    setSimpleShowStartedAt(new Date().toISOString());
     if (wizardRound === 'chat') { void runListTest(); return; }
     // The models picked for the show, in the order they were picked.
     const models = shortlistedRows.filter((row) => row.installed).map((row) => row.displayName);
@@ -4188,8 +4279,10 @@ function App() {
       // how it answers, the app measures whether what it writes runs. Either
       // alone crowns a model on half the job.
       // Stop must stop the builds too, not only the questions before them.
+      // Only after questions that finished: a round where every model failed
+      // or the show stopped went on to build apps anyway.
       void runListTest()
-        .then(() => (stopRunRef.current ? undefined : runSkillTestsAfterRun(models, 'app-builder')))
+        .then((finished) => (finished && !stopRunRef.current ? runSkillTestsAfterRun(models, 'app-builder') : undefined))
         .catch(reportSkillRunFailure);
       return;
     }
@@ -4379,7 +4472,8 @@ function App() {
         : msgs;
     }
     const history: PersistedHistory = {
-      benchmark,
+      // The empty stand-in shown after clearing is not a result to keep.
+      benchmark: benchmark && isPlaceholderBenchmark(benchmark) ? null : benchmark,
       benchmarkByModel,
       listTestResult,
       // The measurement, not the current view of it.
@@ -4398,12 +4492,16 @@ function App() {
       () => dropTranscripts(dropChat(history)),
       () => ({ ...dropChat(history), benchmarkByModel: {}, benchmark: null }),
     ]);
-    if (written > 0) {
-      setActivity(written >= 3
-        ? 'Saved scores, but there was not enough browser storage left for the answer transcripts.'
-        : 'Storage is nearly full, so some saved answer text was dropped. Scores were kept.');
+    const note = historySaveNote(written);
+    if (written < 0) {
+      // Once until a save lands again, not at every change of state.
+      if (!historySaveFailedRef.current && note) tellUser(note);
+      historySaveFailedRef.current = true;
+    } else {
+      historySaveFailedRef.current = false;
+      if (note) setActivity(note);
     }
-  }, [benchmark, benchmarkByModel, chatMessagesByModel, listTestResult, savedModelScores, selectedModel]);
+  }, [benchmark, benchmarkByModel, chatMessagesByModel, listTestResult, savedModelScores, selectedModel, tellUser]);
 
   useEffect(() => {
     if (!isDesktopRuntime) return;
@@ -4637,8 +4735,13 @@ function App() {
   const openChatApp = useCallback(async () => {
     if (isDesktopRuntime) {
       const result = await agentArcadeApi.openChatApp();
-      const problem = companionLaunchMessage(result);
-      if (problem) alert(problem);
+      const problem = companionLaunchMessage(result, import.meta.env.DEV);
+      if (problem) {
+        // The chat built into RigMatch, as "Chat with" falls back to. This
+        // button explained the failure and left no chat open at all.
+        setChatOpen(true);
+        alert(`${problem}\n\nRigMatch's own chat is open in the meantime.`);
+      }
       // Its own window, already open: nothing here moves, so say where it is.
       else if (result.reason === 'already running') tellUser('RigMatch Chat is already open, in its own window.');
     } else {
@@ -4764,9 +4867,11 @@ function App() {
           onClose={() => setWelcomeReplay(false)}
           onFinish={({ goals, advanced }) => {
             setWelcomeReplay(false);
-            saveGoalsFromSettings(goals);
-            selectUiMode(advanced ? 'advanced' : 'beginner');
-            if (!advanced) setWizardStep('setup');
+            saveGoalsFromSettings(goalsAfterWelcome(selectedGoals, goals));
+            // "Let's go" keeps the mode; only the Advanced door changes it. It
+            // switched an Advanced user to Simple.
+            if (advanced) selectUiMode('advanced');
+            else if (uiMode === 'beginner') setWizardStep('setup');
           }}
         />
       )}
@@ -4776,7 +4881,9 @@ function App() {
         <FirstRunSplash
           vramGb={system.gpu.vramGb || 0}
           initialGoals={selectedGoals}
-          isUpgrade
+          // After Clear all data the question comes back too, and "New in this
+          // version… your saved scores are untouched" was false twice over.
+          isUpgrade={scoredModelCount > 0}
           onSaveGoals={saveGoalsFromIntro}
           onCancel={dismissGoalsIntro}
         />
@@ -4820,8 +4927,10 @@ function App() {
           trackerSlot={trackerSlot}
           // Only when there is one to open — that is what keeps the Compare
           // step disabled rather than dead on a machine that has never run one.
-          onOpenRunReport={listTestResult || runReports.length > 0
-            ? () => { setOpenReportId(runReports[0]?.id ?? null); setReportOpen(true); }
+          // A picture or listening round saves no report, so the newest one
+          // was some other show's.
+          onOpenRunReport={(wizardRound === 'chat' || wizardRound === 'code') && (listTestResult || runReports.length > 0)
+            ? () => { setOpenReportId(readyReportId ?? runReports[0]?.id ?? null); setReportOpen(true); }
             : undefined}
           system={system}
           ollamaReady={ollama.ready || lmStudio.ready}
@@ -4936,7 +5045,7 @@ function App() {
           }}
           initialStep={wizardStep}
           onStepChange={(next) => { setWizardStep(next); setSimpleNotice(null); setSimpleNoticeAction(null); }}
-          onShareScore={() => setShareWinnerOpen(true)}
+          onShareScore={shareTarget ? () => setShareWinnerOpen(true) : undefined}
         />
       )}
       {shareWinnerOpen && shareTarget && (
@@ -4973,8 +5082,9 @@ function App() {
               happened and offer the return trip. */}
           {cameFromSimple && (
             <div className="mode-jump-banner" role="status">
+              {/* Not "the full scorecard": Models and My PC come here too. */}
               <span>
-                The full scorecard lives in <strong>Advanced Mode</strong>, so RigMatch switched you over.
+                This screen lives in <strong>Advanced Mode</strong>, so RigMatch switched you over.
               </span>
               <button
                 type="button"
@@ -5147,6 +5257,8 @@ function App() {
             onDeleteModel={requestDeleteModel}
             onClearScore={requestClearScore}
             onQueueModel={queueModel}
+            onDismissDownload={dismissDownload}
+            canPause={pullCanPause}
             onPullQueued={pullQueuedModels}
             onPauseQueue={pauseDownloadQueue}
             onCancelQueue={cancelDownloadQueue}
@@ -5227,7 +5339,7 @@ function App() {
             questionPlan={benchmarkPromptPlan}
             onQuestionCountChange={setBenchmarkQuestionCount}
             onOpenSuiteEditor={openQuestionsSheet}
-            onOpenLogs={openLogsPanel}
+            onOpenLogs={openRunLogs}
             onOpenModelPool={() => selectNav('models')}
             onOpenHistory={() => selectNav('history')}
             onRemoveCandidate={toggleShortlist}
@@ -5260,7 +5372,7 @@ function App() {
             onClearTopMatch={clearTopMatch}
             onRestoreClearedTopMatches={restoreClearedTopMatches}
             onClearScore={requestClearScore}
-            onExportForHatch={() => setExportHatchOpen(true)}
+            onExportForHatch={() => setExportHatchModel(selectedModel)}
           />
         )}
         {activeNavId === 'activity' && (
@@ -5358,7 +5470,9 @@ function App() {
         <ModelPoolLineupStrip
           className="speed-date-lineup-builder global-lineup-strip"
           rows={shortlistedRows}
-          installedRows={modelRows.filter((row) => row.installed && !shortlistIds.has(row.displayName))}
+          // Only models a show can run: ComfyUI checkpoints came first in the list,
+          // and every one was refused once picked.
+          installedRows={modelRows.filter((row) => row.installed && canJoinComparison(row) && !shortlistIds.has(row.displayName))}
           modelScores={modelScores}
           disabled={isBenchmarking || isListTesting}
           isListTesting={isListTesting}
@@ -5382,6 +5496,8 @@ function App() {
             isPullCancelRequested={isPullCancelRequested}
             isPullPauseRequested={isPullPauseRequested}
             isPullPaused={isPullPaused}
+            canPause={pullCanPause}
+            now={dockClock}
             onResumeQueue={pullQueuedModels}
             onPauseQueue={pauseDownloadQueue}
             onCancelQueue={cancelDownloadQueue}
@@ -5398,7 +5514,7 @@ function App() {
             Report ready: {shownShowResult.results.length} model{shownShowResult.results.length === 1 ? '' : 's'} compared,
             {' '}{getFriendlyModelName(shownShowResult.winner)} came first
           </span>
-          <button type="button" className="btn btn-line btn-sm" onClick={() => setReportOpen(true)}>
+          <button type="button" className="btn btn-line btn-sm" onClick={() => { setOpenReportId(readyReportId); setReportOpen(true); }}>
             See the report
           </button>
           <button type="button" className="report-ready-dismiss" onClick={() => setReportReady(false)} aria-label="Dismiss report notice">
@@ -5412,12 +5528,9 @@ function App() {
         const stored = openReportId ? runReports.find((entry) => entry.id === openReportId) : null;
         const result = stored ? { winner: stored.winner, results: stored.results } : shownShowResult;
         if (!result) return null;
-        const benchmarks = stored?.transcripts ?? benchmarkByModel;
-        const rows = stored
-          ? result.results
-              .map((score) => modelRows.find((row) => row.displayName === score.model))
-              .filter((row): row is typeof modelRows[number] => Boolean(row))
-          : shortlistedRows;
+        // A saved report's answers, or none: today's answers are another run's.
+        const benchmarks = stored ? (stored.transcripts ?? {}) : benchmarkByModel;
+        const rows = stored ? reportRows(result.results, modelRows) : shortlistedRows;
         // A saved report's own questions, from its answers: a Difficult
         // Subjects report reopened while General was selected showed General's
         // questions over Difficult Subjects' answers.
@@ -5432,7 +5545,13 @@ function App() {
           subtitle={stored ? `${displaySuiteName(stored.suiteName)} · ${formatHistoryTime(stored.completedAt)}` : undefined}
           questionPlan={storedPlan ?? benchmarkQuestions.slice(0, benchmarkQuestionCount)}
           onClose={() => { setReportOpen(false); setReportReady(false); setOpenReportId(null); }}
-          onOpenScorecards={() => { setReportOpen(false); setReportReady(false); setOpenReportId(null); selectNav('history'); }}
+          onOpenScorecards={() => {
+            setReportOpen(false); setReportReady(false); setOpenReportId(null);
+            // Simple Mode has no Scorecards screen, so this did nothing there. It
+            // goes where the Winner screen's "See every answer" goes.
+            if (uiMode === 'beginner') { setCameFromSimple(true); selectUiMode('advanced'); }
+            selectNav('history');
+          }}
         />
         );
       })()}
@@ -5616,7 +5735,8 @@ function App() {
         <ChoiceCruiseModal
           model={chosenModel}
           inLmStudio={modelRows.find((r) => r.displayName === chosenModel)?.localProvider === 'lm-studio'}
-          onOpenChat={() => openChatWith(chosenModel)}
+          // The modal closes first: the in-app chat opened behind it.
+          onOpenChat={() => { setChosenModel(null); openChatWith(chosenModel); }}
           host={selectedHost}
           score={(() => {
             const row = modelRows.find((r) => r.displayName === chosenModel);
@@ -5627,10 +5747,12 @@ function App() {
         />
       )}
 
-      {exportHatchOpen && (
+      {exportHatchModel && (
         <ExportHatchModal
           result={buildHatchProfile({
-            recommendedTag: topRigPick && topRigPick.row.localProvider !== 'lm-studio' ? topRigPick.row.displayName : null,
+            recommendedTag: exportHatchModel,
+            only: true,
+            isTopMatch: exportHatchModel === topRigPick?.row.displayName,
             // Ollama-pullable chat models only — LM Studio / cloud / image / embedding can't be `ollama pull`-ed.
             candidates: modelRows
               .filter((row) => row.localProvider !== 'lm-studio'
@@ -5644,9 +5766,9 @@ function App() {
             gpuLabel: system.gpu.model && system.gpu.model !== 'Unknown GPU' ? system.gpu.model : 'this computer',
             vramGb: system.gpu.vramGb,
             ramGb: system.memory.totalGb,
-            reason: topRigPick?.reason ?? null,
+            reason: exportHatchModel === topRigPick?.row.displayName ? topRigPick.reason : null,
           })}
-          onClose={() => setExportHatchOpen(false)}
+          onClose={() => setExportHatchModel(null)}
         />
       )}
 
@@ -5682,7 +5804,7 @@ function App() {
           isDeleting={isCloseCleanupDeleting}
           message={closeCleanupMessage}
           exceptTopPickRows={exceptTopPickRowsForCleanup}
-          topPickName={topPickToKeep(modelScores)}
+          topPickName={cleanupKeep}
           onDeleteUnscored={() => { void deleteRowsThenClose(unscoredRowsForCleanup, 'unscored'); }}
           onDeleteLowScored={() => { void deleteRowsThenClose(lowScoredRowsForCleanup, 'low-scored'); }}
           onDeleteExceptTopPick={() => { void deleteRowsThenClose(exceptTopPickRowsForCleanup, 'all but your Top Pick'); }}
@@ -5751,25 +5873,9 @@ function getSavedHistory(): PersistedHistory | null {
     if (!saved) return null;
 
     const parsed = JSON.parse(saved) as Partial<PersistedHistory>;
-    // Per entry: one bad row used to discard every saved score, and the next
-    // save wrote the empty state over the file.
-    const withPrompts = (result: BenchmarkResult): BenchmarkResult => (
-      Array.isArray(result.prompts) ? result : { ...result, prompts: [] }
-    );
-    const benchmark = isBenchmarkResult(parsed.benchmark) ? withPrompts(parsed.benchmark) : null;
-    const keptByModel = keepValidEntries(parsed.benchmarkByModel, isBenchmarkResult);
-    const keptScores = keepValidEntries(parsed.modelScores, isTestedModelScore);
-    const hasByModel = keptByModel !== null && Object.keys(keptByModel).length > 0;
-    const hasScores = keptScores !== null && Object.keys(keptScores).length > 0;
-    // Nothing usable saved (no benchmark, no per-model results, no scores) — ignore.
-    if (!benchmark && !hasByModel && !hasScores) return null;
-
-    const benchmarkByModel = hasByModel
-      ? upsertBenchmarkResults({}, Object.values(keptByModel as Record<string, BenchmarkResult>).map(withPrompts))
-      : benchmark ? upsertBenchmarkResults({}, [benchmark]) : {};
-    const modelScores = hasScores
-      ? (keptScores as Record<string, TestedModelScore>)
-      : upsertModelScores({}, Object.values(benchmarkByModel));
+    const scores = restoreSavedScores(parsed);
+    if (!scores) return null;
+    const { benchmark, benchmarkByModel, modelScores } = scores;
 
     const firstByModel = Object.values(benchmarkByModel)[0];
     const selectedModel = typeof parsed.selectedModel === 'string'
