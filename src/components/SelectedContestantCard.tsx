@@ -100,6 +100,8 @@ export function SelectedContestantCard({
   const origin = getModelOrigin(row.displayName);
   const showDownloadProgress = !installed && (queued || isPulling || isVisiblePullProgress(pullProgress));
   const blockedLabel = queued ? null : downloadBlockedLabel(hardwareFit);
+  /** A ComfyUI model: it is tested from its row, not asked questions. */
+  const makesMedia = row.runtime === 'comfyui';
   const trend = scoreTrend[row.displayName] ?? [];
   const delta = scoreDeltas[row.displayName] ?? null;
 
@@ -179,7 +181,11 @@ export function SelectedContestantCard({
       <div className="contestant-spotlight-actions">
         {fitCaution && <span>{fitCaution}</span>}
         <div>
-          {installed ? (
+          {installed && makesMedia ? (
+            // Test, Quick check, the lineup and Top Match are chat-model
+            // things, and each one refused a ComfyUI model after the click.
+            <span>{row.displayName} makes {row.generationKind === 'video' ? 'videos' : row.generationKind === 'audio' ? 'audio' : 'pictures'}. Test it with Test on its row in the list.</span>
+          ) : installed ? (
             <button
               type="button"
               className="btn btn-gold"
@@ -200,7 +206,7 @@ export function SelectedContestantCard({
               {queued ? 'Remove from the queue' : blockedLabel ?? `Download${row.sizeGb ? ` · ${sizeLabel}` : ''}`}
             </button>
           )}
-          {installed && (
+          {installed && !makesMedia && (
             <button
               type="button"
               className="btn btn-line btn-sm"
@@ -211,7 +217,7 @@ export function SelectedContestantCard({
               Quick check
             </button>
           )}
-          {(!speedDateLineupFull || shortlisted) && (
+          {!makesMedia && (!speedDateLineupFull || shortlisted) && (
             <button
               type="button"
               className={shortlisted ? 'btn btn-line btn-sm contestant-date-button active' : 'btn btn-line btn-sm contestant-date-button'}
@@ -225,7 +231,7 @@ export function SelectedContestantCard({
           <button type="button" className="btn btn-line btn-sm" onClick={onOpenSpeedDate}>
             Open Comparison
           </button>
-          {installed && (
+          {installed && !makesMedia && (
             <button
               type="button"
               className="btn btn-line btn-sm"
