@@ -15,7 +15,7 @@
  * the difference is visible rather than silent.
  */
 
-import { estimateTokens } from "./contextWindow.ts";
+import { CONTEXT_STEPS, REPLY_HEADROOM_TOKENS, estimateTokens } from "./contextWindow.ts";
 import { cutAtTurnMarker } from "./turnMarkers.ts";
 import type { StoredMessage } from "./conversationStore";
 import type { ChatMessage } from "./ollamaApi";
@@ -60,7 +60,11 @@ export function compactionSplit(
   options: { keepRecent?: number; keepTokenBudget?: number } = {},
 ): number | null {
   const { keepRecent = KEEP_RECENT_MESSAGES, keepTokenBudget = KEEP_RECENT_TOKENS } = options;
-  if (messages.length < MIN_MESSAGES_TO_COMPACT) return null;
+  // Positions are counted over the whole transcript, RigMatch's own notes
+  // included, because that is how the transcript marks where memory begins and
+  // how buildContextMessages reads `summarizedCount`. The notes themselves are
+  // never sent, so they do not count as turns kept or as conversation.
+  if (messages.filter((m) => !m.fromRigMatch).length < MIN_MESSAGES_TO_COMPACT) return null;
 
   // Count alone is not enough. Six recent messages can be longer than
   // everything before them — measured on one conversation, keeping a fixed six
@@ -68,30 +72,48 @@ export function compactionSplit(
   // many recent messages as fit a token budget, up to the count cap.
   let kept = 0;
   let tokens = 0;
+  let target = messages.length;
   for (let i = messages.length - 1; i >= 0 && kept < keepRecent; i--) {
+    if (messages[i].fromRigMatch) continue;
     tokens += estimateTokens(messages[i].content);
     if (tokens > keepTokenBudget && kept >= MIN_KEEP_RECENT) break;
     kept += 1;
+    target = i;
   }
 
-  const target = messages.length - kept;
   if (target < 1 || target <= alreadySummarized) return null;
   return target;
+}
+
+/** One message as the model is shown it, or null for RigMatch's own notes. */
+function asSent(m: StoredMessage): string | null {
+  if (m.fromRigMatch) return null;
+  // A reply saved before turnMarkers.ts may carry a leaked marker and the turn
+  // after it; sending that back would feed the model its own echo.
+  return m.role === "assistant" ? cutAtTurnMarker(m.content).text : m.content;
 }
 
 /**
  * The request that produces a summary.
  *
  * A previous summary is included so a second compaction builds on it instead of
- * silently losing whatever the first one covered.
+ * silently losing whatever the first one covered — and stands in for the turns
+ * it covered, which start at `summarizedCount`. Sending them again as well made
+ * a second summary re-read the whole chat from the start, the request most
+ * likely to overflow the window it exists to relieve.
  */
 export function buildSummaryRequest(
   messages: StoredMessage[],
   upToIndex: number,
   previousSummary?: string,
+  summarizedCount = 0,
 ): ChatMessage[] {
-  const transcript = messages.slice(0, upToIndex)
-    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+  const from = previousSummary ? Math.max(0, Math.min(summarizedCount, upToIndex)) : 0;
+  const transcript = messages.slice(from, upToIndex)
+    .flatMap((m) => {
+      const content = asSent(m);
+      return content === null ? [] : [`${m.role === "user" ? "User" : "Assistant"}: ${content}`];
+    })
     .join("\n\n");
   const body = previousSummary
     ? `Notes from earlier in this conversation:\n${previousSummary}\n\nThe conversation continued:\n${transcript}`
@@ -100,6 +122,23 @@ export function buildSummaryRequest(
     { role: "system", content: SUMMARY_INSTRUCTION },
     { role: "user", content: body },
   ];
+}
+
+/**
+ * The window to ask for when summarizing.
+ *
+ * The chat's own size is the floor, so a request that fits does not make Ollama
+ * reload the model at a different one. One that does not fit gets the next size
+ * up that holds it and the summary — summarizing is the one call that must not
+ * be truncated, since what it is reading is the history that no longer fits.
+ * Never past what the model declares, when that is known.
+ */
+export function summaryContextSize(request: ChatMessage[], floor: number, maxContext?: number): number {
+  const needed = request.reduce((sum, m) => sum + estimateTokens(m.content), 0) + REPLY_HEADROOM_TOKENS;
+  const cap = maxContext && maxContext > 0 ? maxContext : CONTEXT_STEPS[CONTEXT_STEPS.length - 1];
+  if (needed <= floor) return floor;
+  const step = CONTEXT_STEPS.find((s) => s >= needed) ?? CONTEXT_STEPS[CONTEXT_STEPS.length - 1];
+  return Math.max(floor, Math.min(step, cap));
 }
 
 /**
@@ -115,21 +154,22 @@ export function buildContextMessages(
   summary: string | undefined,
   summarizedCount: number,
 ): ChatMessage[] {
+  // `summarizedCount` is a position in the whole transcript, the same one
+  // compactionSplit returned, so it is applied before RigMatch's notes are
+  // taken out. Taking them out first shifted every position after a note, and
+  // the context then dropped turns the summary never covered.
+  const dropped = Math.max(0, Math.min(summarizedCount, messages.length));
   // RigMatch's own notes are for the reader, not the model. Left in the
   // transcript and out of the context: a model sent "starcoder2:3b writes text —
   // it cannot make pictures" will answer it, which is a conversation with the
   // app rather than with the user.
-  messages = messages.filter((m) => !m.fromRigMatch);
-  const dropped = Math.max(0, Math.min(summarizedCount, messages.length));
   // Attachments ride along when a turn had one, so a follow-up question about
   // the same picture or recording still has it in view.
-  const body = messages.slice(dropped).map((m) => ({
-    role: m.role,
-    // A reply saved before turnMarkers.ts may carry a leaked marker and the
-    // turn after it; sending that back would feed the model its own echo.
-    content: m.role === "assistant" ? cutAtTurnMarker(m.content).text : m.content,
-    ...(m.images?.length ? { images: m.images } : {}),
-  }));
+  const body = messages.slice(dropped).flatMap((m) => {
+    const content = asSent(m);
+    if (content === null) return [];
+    return [{ role: m.role, content, ...(m.images?.length ? { images: m.images } : {}) }];
+  });
   // Whether the summary is sent depends on the summary existing, not on the
   // count: a thread branched off another one carries a summary of the *other*
   // conversation and none of its own messages yet, so a count of zero there

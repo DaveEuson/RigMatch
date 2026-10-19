@@ -16,6 +16,7 @@ import {
   compactionSplit,
   continuationTitle,
   pickSummarizer,
+  summaryContextSize,
   type SummarizerChoice,
 } from "./lib/compaction";
 import { buildSessionNote } from "./lib/sessionNote";
@@ -1603,8 +1604,10 @@ export default function App() {
               [conversationId]: {
                 promptTokens,
                 evalTokens,
-                // The assistant message only exists if something was streamed.
-                messageCount: updatedHistory.length + (accumulated ? 1 : 0),
+                // Counted over the transcript as shown, RigMatch's note
+                // included, because that is the list estimateFrom slices. The
+                // assistant message only exists if something was streamed.
+                messageCount: visibleHistory.length + (accumulated ? 1 : 0),
               },
             }));
           },
@@ -1837,15 +1840,21 @@ export default function App() {
     setCompactPlan(null);
     try {
       let text = "";
+      const request = buildSummaryRequest(
+        activeConversation.messages,
+        upTo,
+        activeConversation.summary,
+        activeConversation.summarizedCount ?? 0,
+      );
       await streamChat(
         settings.ollamaUrl,
         summarizer.model,
-        buildSummaryRequest(activeConversation.messages, upTo, activeConversation.summary),
+        request,
         (token) => { text += token; },
         undefined,
         // Summarizing is the one call that must not be truncated: it is reading
-        // the whole of the history that no longer fits.
-        { numCtx: activeContextLimit },
+        // the history that no longer fits, so the window is sized to hold it.
+        { numCtx: summaryContextSize(request, activeContextLimit, contextInfo[summarizer.model]?.maxContext) },
       );
       const summary = text.trim();
       if (!summary) throw new Error("The model returned an empty summary.");
@@ -1855,7 +1864,7 @@ export default function App() {
     } finally {
       setCompacting(false);
     }
-  }, [activeConversation, activeBuddy, buddies, rigScores, settings.ollamaUrl, activeContextLimit, compacting]);
+  }, [activeConversation, activeBuddy, buddies, rigScores, settings.ollamaUrl, activeContextLimit, contextInfo, compacting]);
 
   /** Fold the summary into the open thread and carry on in it. */
   const applyCompaction = useCallback(() => {

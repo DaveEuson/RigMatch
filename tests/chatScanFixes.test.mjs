@@ -6,6 +6,12 @@ import { readFileSync } from 'node:fs';
 import { readTokenCounts } from '../rigmatch-chat/src/lib/contextWindow.ts';
 import { parseStore, readStore } from '../rigmatch-chat/src/lib/conversationStore.ts';
 import { parseMemories } from '../rigmatch-chat/src/lib/memory.ts';
+import {
+  buildContextMessages,
+  buildSummaryRequest,
+  compactionSplit,
+  summaryContextSize,
+} from '../rigmatch-chat/src/lib/compaction.ts';
 
 /**
  * RigMatch Chat fixes from the 2026-10-18 bug scan. App.tsx is a React
@@ -84,4 +90,54 @@ test("a failed reply shows Ollama's reason and is not sent back as the model's w
   assert.match(failure, /const reason = typeof err === "string" \? err : \(err as Error\)\?\.message;/);
   assert.match(failure, /content: reason \|\| "Something went wrong\. Is Ollama still running\?"/);
   assert.match(failure, /fromRigMatch: true/);
+});
+
+const msg = (role, content, extra = {}) => ({ id: `${role}-${content}`, role, content, ts: 1, ...extra });
+const turns = (n) => Array.from({ length: n }, (_, i) => msg(i % 2 === 0 ? 'user' : 'assistant', `m${i}`));
+
+test('a second summary reads only what the first did not cover', () => {
+  const messages = turns(10);
+  const [, user] = buildSummaryRequest(messages, 8, 'notes on m0-m3', 4);
+  assert.match(user.content, /notes on m0-m3/);
+  const said = (name) => user.content.split('\n').some((line) => line.endsWith(`: ${name}`));
+  for (const covered of ['m0', 'm1', 'm2', 'm3']) assert.ok(!said(covered), `${covered} is in the old summary`);
+  for (const fresh of ['m4', 'm5', 'm6', 'm7']) assert.ok(said(fresh), `${fresh} is new since then`);
+  assert.ok(!said('m8'), 'turns being kept are not summarized');
+});
+
+test("RigMatch's notes are not summarized and do not shift what is kept", () => {
+  // A guard note sits after the second user turn, as sendMessage puts it.
+  const note = msg('assistant', 'starcoder2:3b writes text. It cannot make pictures.', { fromRigMatch: true });
+  const messages = [...turns(3), note, ...turns(10).slice(3).map((m) => ({ ...m, id: `${m.id}-b` }))];
+  const upTo = compactionSplit(messages, 0, { keepRecent: 4 });
+  // Four real turns kept, counted in transcript positions.
+  assert.equal(upTo, messages.length - 4);
+
+  const [, summaryAsk] = buildSummaryRequest(messages, upTo);
+  assert.doesNotMatch(summaryAsk.content, /cannot make pictures/);
+
+  const sent = buildContextMessages(messages, 'summary', upTo);
+  // Exactly the turns the summary does not cover: none dropped, none repeated.
+  assert.deepEqual(sent.slice(1).map((m) => m.content), messages.slice(upTo).map((m) => m.content));
+});
+
+test('a note before the summary point no longer costs the model a turn it should see', () => {
+  const note = msg('assistant', 'RigMatch note', { fromRigMatch: true });
+  const messages = [msg('user', 'a'), note, msg('assistant', 'b'), msg('user', 'c'), msg('assistant', 'd')];
+  // Summary covers positions 0-2 (a, the note, b). c and d must be sent.
+  const sent = buildContextMessages(messages, 'covers a and b', 3);
+  assert.deepEqual(sent.map((m) => m.content), ['Summary of earlier in this conversation:\ncovers a and b', 'c', 'd']);
+});
+
+test('the summary request gets a window that holds it, and no smaller than the chat uses', () => {
+  const small = [{ role: 'system', content: 'x' }, { role: 'user', content: 'y'.repeat(4000) }];
+  assert.equal(summaryContextSize(small, 8192), 8192, 'a request that fits keeps the chat size, so no reload');
+  const large = [{ role: 'user', content: 'y'.repeat(4 * 20000) }];
+  assert.equal(summaryContextSize(large, 8192), 32768);
+  assert.equal(summaryContextSize(large, 8192, 16384), 16384, 'never past what the model declares');
+});
+
+test('the token mark counts the note sendMessage shows, the list the meter slices', () => {
+  assert.match(callback('sendMessage'), /messageCount: visibleHistory\.length \+ \(accumulated \? 1 : 0\)/);
+  assert.match(callback('runCompaction'), /buildSummaryRequest\(\s*activeConversation\.messages,\s*upTo,\s*activeConversation\.summary,\s*activeConversation\.summarizedCount \?\? 0,\s*\)/);
 });
