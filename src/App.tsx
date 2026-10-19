@@ -5707,7 +5707,8 @@ function App() {
         <ChoiceCruiseModal
           model={chosenModel}
           inLmStudio={modelRows.find((r) => r.displayName === chosenModel)?.localProvider === 'lm-studio'}
-          onOpenChat={() => openChatWith(chosenModel)}
+          // The modal closes first: the in-app chat opened behind it.
+          onOpenChat={() => { setChosenModel(null); openChatWith(chosenModel); }}
           host={selectedHost}
           score={(() => {
             const row = modelRows.find((r) => r.displayName === chosenModel);
