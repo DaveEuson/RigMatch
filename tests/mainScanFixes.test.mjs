@@ -112,3 +112,18 @@ test('quitting mid-show stops the run and unloads its model, for three seconds a
   assert.ok(unloaded > 0 && run.indexOf('await unloadLmStudioModel(runBaseUrl, request.model, keep);') > 0);
   assert.ok(run.indexOf('finished();') > unloaded, 'finished only after the unload');
 });
+
+test('a judge in the other program waits for the contestant to leave', () => {
+  const judging = main.indexOf("phase: 'judging',");
+  const verdict = main.indexOf('const verdict = await scoreQualityWithJudge({', judging);
+  assert.ok(judging > 0 && verdict > judging, 'the judging block moved; follow it');
+  const before = main.slice(judging, verdict);
+  assert.match(before, /if \(judgedHere && judgeEndpoint\(judgeName\)\.provider !== provider\) \{\n\s*if \(provider === 'lm-studio'\) await unloadLmStudioModel\(baseUrl, model, activeBenchmark\?\.lmStudioKeep \?\? null\);\n\s*else await unloadBenchmarkModel\(baseUrl, model\);/);
+  // The warm-up after the verdict brings it back, as it does for a judge in the same program.
+  const scored = main.indexOf('const sobrietyScore = promptJudgeScore != null', verdict);
+  assert.match(main.slice(verdict, scored), /if \(judgedHere && provider === 'lm-studio'\) await warmLmStudioBenchmarkModel\(baseUrl, model, signal\);\n\s*else if \(judgedHere\) await warmBenchmarkModel\(baseUrl, model, signal\);/);
+});
+
+test('an LM Studio contestant does not share the card with models Labs left in Ollama', () => {
+  assert.match(main, /if \(provider === 'lm-studio'\) \{\n(\s*\/\/.*\n)*\s*await releaseOllamaLabModels\(\);\n\s*if \(activeBenchmark\) activeBenchmark\.lmStudioKeep = await lmStudioLoadedInstances\(baseUrl, model\);/);
+});

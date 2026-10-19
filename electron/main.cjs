@@ -3790,6 +3790,9 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   });
 
   if (provider === 'lm-studio') {
+    // Ollama models a Labs test left loaded would share the card with this
+    // contestant, as they would with a Labs test in LM Studio.
+    await releaseOllamaLabModels();
     if (activeBenchmark) activeBenchmark.lmStudioKeep = await lmStudioLoadedInstances(baseUrl, model);
     try {
       await warmLmStudioBenchmarkModel(baseUrl, model, signal);
@@ -3942,6 +3945,15 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         });
         let judgeFailure = null;
         let judgeOutput = '';
+        const judgedHere = !(useJudge && judgeProvider === 'openrouter');
+        // A judge in the other program loaded beside the contestant: Ollama
+        // and LM Studio free memory for their own models, not for each
+        // other's, so the two squeezed the card until verdicts timed out. The
+        // contestant leaves first; the warm-up after the verdict brings it back.
+        if (judgedHere && judgeEndpoint(judgeName).provider !== provider) {
+          if (provider === 'lm-studio') await unloadLmStudioModel(baseUrl, model, activeBenchmark?.lmStudioKeep ?? null);
+          else await unloadBenchmarkModel(baseUrl, model);
+        }
         const verdict = await scoreQualityWithJudge({
           prompt,
           response: responseText,
@@ -3980,7 +3992,6 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         // while the judge still held the GPU comes back split onto the CPU. Load
         // it again now, untimed, so the next timing run measures the model and
         // not its reload — two of this question's three runs are still to come.
-        const judgedHere = !(useJudge && judgeProvider === 'openrouter');
         // Stop during the verdict ends here, not after reloading the model.
         throwIfCanceled();
         if (judgedHere && provider === 'lm-studio') await warmLmStudioBenchmarkModel(baseUrl, model, signal);
