@@ -2066,6 +2066,17 @@ export function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fitOve
   };
 }
 
+/**
+ * What a download button says when the queue will not take the model, or null
+ * when it will. The button used to ask "download anyway?" and then every click
+ * was refused, because the queue only takes a model it recommends.
+ */
+export function downloadBlockedLabel(fit: HardwareFit): string | null {
+  if (fit.recommend) return null;
+  if (fit.tone === 'out-of-league') return 'Too big for this PC';
+  return fit.label === 'Check VRAM' ? 'Graphics memory unknown' : 'Size unknown';
+}
+
 export function sumQueuedGb(rows: ModelRow[], queuedIds: Set<string>) {
   return rows
     .filter((row) => queuedIds.has(row.displayName))
@@ -2209,6 +2220,26 @@ export function nextDockExpiry(progressList: PullProgressUpdate[], now: number):
     .filter((progress) => (progress.phase === 'complete' || progress.phase === 'failed') && isDockWorthyPullProgress(progress, now))
     .map((progress) => Date.parse(progress.updatedAt) + PULL_ENDED_LINGER_MS[progress.phase as 'complete' | 'failed']);
   return expiries.length ? Math.min(...expiries) : null;
+}
+
+/**
+ * Which download the floating box is about: the one the queue is fetching,
+ * else one still going, else the newest that ended moments ago.
+ *
+ * It took the first entry it found, in the order downloads were first seen, so
+ * a model finished an hour ago could fill the box while another downloaded or
+ * failed beside it.
+ */
+export function pickDockProgress(
+  progressByModel: Record<string, PullProgressUpdate>,
+  pullingModel: string | null,
+  now: number,
+): PullProgressUpdate | undefined {
+  if (pullingModel) return progressByModel[pullingModel];
+  const ended = (progress: PullProgressUpdate) => progress.phase === 'complete' || progress.phase === 'failed';
+  return Object.values(progressByModel)
+    .filter((progress) => isDockWorthyPullProgress(progress, now))
+    .sort((a, b) => Number(ended(a)) - Number(ended(b)) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
 }
 
 export function getPullProgressPercent(progress: PullProgressUpdate | undefined, queued: boolean) {

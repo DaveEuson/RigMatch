@@ -158,7 +158,7 @@ import { clearAppStorage, dropChat, dropTranscripts, writeLocal, writeLocalJson,
 import { collapseModelVariants } from './lib/wizardVariants';
 // Same constant the Simple Mode download step gates on, so the wizard cannot
 // wave a lineup through that the run then refuses.
-import { MIN_CONTESTANTS } from './lib/downloadStatus';
+import { MIN_CONTESTANTS, canPauseDownload } from './lib/downloadStatus';
 import {
   appendRuns,
   emptyRunHistory,
@@ -414,6 +414,12 @@ function App() {
     () => savedHistory?.benchmarkByModel ?? (initialBenchmark ? upsertBenchmarkResults({}, [initialBenchmark]) : {}),
   );
   const [queuedModelIds, setQueuedModelIds] = useState<Set<string>>(() => new Set());
+  // The queue as it is now, for a download run that started with an older copy:
+  // a model taken off the queue while another downloads must not start on its turn.
+  const queuedModelIdsRef = useRef(queuedModelIds);
+  useEffect(() => {
+    queuedModelIdsRef.current = queuedModelIds;
+  }, [queuedModelIds]);
   // Start empty on desktop: pre-picking five models made the wizard tick "Pick"
   // as done before the user chose anything, showed the alternatives grayed out
   // as "Lineup full", and told people to pick while having already picked for
@@ -1025,6 +1031,7 @@ function App() {
     () => modelRows.filter((row) => queuedModelIds.has(row.displayName)),
     [modelRows, queuedModelIds],
   );
+  const pullCanPause = canPauseDownload(isPullingModels, modelRows.find((row) => row.displayName === pullingModel));
   const diskGuard = useMemo(
     () => getDiskGuard(modelRows, queuedRows, system.storage.availableGb),
     [modelRows, queuedRows, system.storage.availableGb],
@@ -2449,57 +2456,62 @@ function App() {
     requestBenchmarkForModel(row.displayName, { quick: true });
   }, [requestBenchmarkForModel, startBenchmark]);
 
+  const requestThirdPartyModelDownloads = useCallback((rows: ModelRow[]) => {
+    const missingRows = rows.filter((row) => !row.installed);
+    if (missingRows.length === 0) return;
+    setPendingThirdPartyDownloadRows(missingRows);
+  }, []);
+
+  // Clears what a download left on screen (a failure) without queuing it again.
+  const dismissDownload = useCallback((model: string) => {
+    setPullProgressByModel((current) => removePullProgress(current, model));
+  }, []);
+
   const queueModel = useCallback((row: ModelRow) => {
     if (row.localProvider === 'lm-studio' || row.canDownload === false) {
       setActivity(`${row.displayName} is already available through ${row.localProviderLabel ?? 'a local provider'}; no Ollama download needed.`);
       return;
     }
     setSelectedModel(row.displayName);
-    setQueuedModelIds((current) => {
-      const next = new Set(current);
-      if (next.has(row.displayName)) {
-        next.delete(row.displayName);
-        setPullProgressByModel((current) => removePullProgress(current, row.displayName));
-        const remainingGb = sumQueuedGb(modelRows, next);
-        setActivity(`${row.displayName} removed from the download queue. Queue now totals ${formatGb(remainingGb)}.`);
-      } else {
-        const rowGb = row.sizeGb || 0;
-        const nextQueuedGb = sumQueuedGb(modelRows, next) + rowGb;
-        const freeAfterQueue = system.storage.availableGb - nextQueuedGb;
+    if (queuedModelIds.has(row.displayName)) {
+      const next = new Set(queuedModelIds);
+      next.delete(row.displayName);
+      setQueuedModelIds((current) => removeSetValues(current, [row.displayName]));
+      setPullProgressByModel((current) => removePullProgress(current, row.displayName));
+      setActivity(`${row.displayName} removed from the download queue. Queue now totals ${formatGb(sumQueuedGb(modelRows, next))}.`);
+      return;
+    }
 
-        if (rowGb <= 0) {
-          setActivity(`${row.displayName} has unknown size. Check the model page before downloading.`);
-          return current;
-        }
+    const rowGb = row.sizeGb || 0;
+    const freeAfterQueue = system.storage.availableGb - sumQueuedGb(modelRows, queuedModelIds) - rowGb;
 
-        const platformFit = getPlatformFit(row.displayName, system.platform);
-        if (!platformFit.compatible) {
-          setActivity(`${row.displayName} is macOS-only (MLX format) and cannot be downloaded on ${system.platform === 'win32' ? 'Windows' : 'Linux'}.`);
-          return current;
-        }
+    if (rowGb <= 0) {
+      setActivity(`${row.displayName} has unknown size. Check the model page before downloading.`);
+      return;
+    }
 
-        const hardwareFit = getHardwareFit(row, system.gpu.vramGb);
-        if (!hardwareFit.recommend) {
-          setActivity(`${row.displayName} is ${hardwareFit.label.toLowerCase()} for this rig: ${hardwareFit.detail}`);
-          return current;
-        }
+    const platformFit = getPlatformFit(row.displayName, system.platform);
+    if (!platformFit.compatible) {
+      setActivity(`${row.displayName} is macOS-only (MLX format) and cannot be downloaded on ${system.platform === 'win32' ? 'Windows' : 'Linux'}.`);
+      return;
+    }
 
-        if (freeAfterQueue < 10) {
-          setActivity(`${row.displayName} blocked: ${formatGb(rowGb)} would leave only ${formatGb(freeAfterQueue)} free. Keep at least 10 GB open.`);
-          return current;
-        }
+    const hardwareFit = getHardwareFit(row, system.gpu.vramGb);
+    if (!hardwareFit.recommend) {
+      setActivity(`${row.displayName} is ${hardwareFit.label.toLowerCase()} for this rig: ${hardwareFit.detail}`);
+      return;
+    }
 
-        next.add(row.displayName);
-        setPullProgressByModel((current) => ({
-          ...current,
-          [row.displayName]: createQueuedPullProgress(row.displayName, ollama.baseUrl),
-        }));
-        const warning = freeAfterQueue < 25 ? ' Low-space warning.' : '';
-        setActivity(`${row.displayName} added to the download queue (+${formatGb(rowGb)}). Queue totals ${formatGb(nextQueuedGb)}; ${formatGb(freeAfterQueue)} free after queue.${warning}`);
-      }
-      return next;
-    });
-  }, [modelRows, ollama.baseUrl, system.gpu.vramGb, system.platform, system.storage.availableGb]);
+    if (freeAfterQueue < 10) {
+      setActivity(`${row.displayName} blocked: ${formatGb(rowGb)} would leave only ${formatGb(freeAfterQueue)} free. Keep at least 10 GB open.`);
+      return;
+    }
+
+    // Through the model's terms, like every other way into the queue. The
+    // Models screen used to queue straight away, so its downloads were the only
+    // ones that never showed the licence.
+    requestThirdPartyModelDownloads([row]);
+  }, [modelRows, queuedModelIds, requestThirdPartyModelDownloads, system.gpu.vramGb, system.platform, system.storage.availableGb]);
 
   const cancelDownloadQueue = useCallback(() => {
     if (isPullingModels) {
@@ -2556,6 +2568,11 @@ function App() {
       return;
     }
 
+    if (!pullCanPause) {
+      setActivity(`${pullingModel} is a ComfyUI file and cannot pause. Cancel stops it.`);
+      return;
+    }
+
     if (isPullPauseRequested || isPullCancelRequested) {
       setActivity('Download pause/stop is already requested.');
       return;
@@ -2576,7 +2593,7 @@ function App() {
       };
     });
     setActivity(`Pausing ${pullingModel}. Start Download will resume through Ollama instead of dropping the queue.`);
-  }, [isPullCancelRequested, isPullPauseRequested, isPullingModels, ollama.baseUrl, pullingModel, askPullQueue]);
+  }, [isPullCancelRequested, isPullPauseRequested, isPullingModels, ollama.baseUrl, pullCanPause, pullingModel, askPullQueue]);
 
   /**
    * Fetch a generation model into ComfyUI's own folders.
@@ -2811,14 +2828,36 @@ function App() {
           wasCanceled = true;
           break;
         }
+        // queuedRows is the queue as it was when this run began.
+        if (!queuedModelIdsRef.current.has(row.displayName)) continue;
 
         // A generation model is a .safetensors file for ComfyUI, not something
         // `ollama pull` could ever fetch. Routed here rather than filtered out
         // of the queue, so the reason is visible instead of the row silently
         // doing nothing.
         if (row.runtime === 'comfyui') {
+          // Named as the download in progress, so its X stops the file (through
+          // cancelDownloadQueue) instead of only taking it off the queue.
+          setPullingModel(row.displayName);
           const done = await downloadGenerationModel(row);
-          if (done) completedCount += 1;
+          if (done) {
+            completedCount += 1;
+            setPullProgressByModel((current) => ({
+              ...current,
+              [row.displayName]: {
+                ...(current[row.displayName] ?? createQueuedPullProgress(row.displayName, ollama.baseUrl)),
+                phase: 'complete',
+                status: 'Downloaded. Restart ComfyUI so it can see the new files.',
+                percent: 100,
+                updatedAt: new Date().toISOString(),
+              },
+            }));
+          } else if (pullQueueShouldStop()) {
+            // Stopped: nothing to show, rather than "Stopping" for ever.
+            setPullProgressByModel((current) => removePullProgress(current, row.displayName));
+            wasCanceled = true;
+            break;
+          }
           continue;
         }
 
@@ -3052,14 +3091,8 @@ function App() {
     });
 
     const blockedNote = blockedReasons.length > 0 ? ` ${blockedReasons.length} could not be queued.` : '';
-    setActivity(`${queuedRowsForDownload.length} missing Speed Dating contestant${queuedRowsForDownload.length === 1 ? '' : 's'} queued for download.${blockedNote}`);
+    setActivity(`${queuedRowsForDownload.length === 1 ? queuedRowsForDownload[0].displayName : `${queuedRowsForDownload.length} models`} added to the download queue.${blockedNote}`);
   }, [modelRows, ollama.baseUrl, queuedModelIds, system.gpu.vramGb, system.platform, system.storage.availableGb, tellUser]);
-
-  const requestThirdPartyModelDownloads = useCallback((rows: ModelRow[]) => {
-    const missingRows = rows.filter((row) => !row.installed);
-    if (missingRows.length === 0) return;
-    setPendingThirdPartyDownloadRows(missingRows);
-  }, []);
 
   const confirmThirdPartyModelDownloads = useCallback(() => {
     if (!pendingThirdPartyDownloadRows) return;
@@ -5127,6 +5160,8 @@ function App() {
             onDeleteModel={requestDeleteModel}
             onClearScore={requestClearScore}
             onQueueModel={queueModel}
+            onDismissDownload={dismissDownload}
+            canPause={pullCanPause}
             onPullQueued={pullQueuedModels}
             onPauseQueue={pauseDownloadQueue}
             onCancelQueue={cancelDownloadQueue}
@@ -5362,6 +5397,8 @@ function App() {
             isPullCancelRequested={isPullCancelRequested}
             isPullPauseRequested={isPullPauseRequested}
             isPullPaused={isPullPaused}
+            canPause={pullCanPause}
+            now={dockClock}
             onResumeQueue={pullQueuedModels}
             onPauseQueue={pauseDownloadQueue}
             onCancelQueue={cancelDownloadQueue}

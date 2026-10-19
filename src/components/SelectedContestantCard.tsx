@@ -1,7 +1,8 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { formatGb, formatThroughput } from '../lib/format';
 import type { ModelProfile } from '../lib/modelCatalog';
-import { describeAbilities, describeFitPlainly, getFriendlyModelName, getHardwareFit, getSelectedContestantBlurb, isVisiblePullProgress } from '../lib/modelCatalog';
+import { describeAbilities, describeFitPlainly, downloadBlockedLabel, getFriendlyModelName, getHardwareFit, getSelectedContestantBlurb, isVisiblePullProgress } from '../lib/modelCatalog';
+import { downloadCloseAction } from '../lib/downloadStatus';
 import { getModelOrigin } from '../lib/modelOrigins';
 import type { RunDelta } from '../lib/runHistory';
 import type { ModelRow, PullProgressUpdate, TestedModelScore } from '../types';
@@ -26,6 +27,7 @@ export function SelectedContestantCard({
   onScoreModel,
   onQueueModel,
   onCancelQueue,
+  onDismissDownload,
   onToggleShortlist,
   onOpenSpeedDate,
   modelNotes,
@@ -51,6 +53,7 @@ export function SelectedContestantCard({
   onScoreModel: (row: ModelRow) => void;
   onQueueModel: (row: ModelRow) => void;
   onCancelQueue: () => void;
+  onDismissDownload: (model: string) => void;
   onToggleShortlist: (row: ModelRow) => void;
   onOpenSpeedDate: () => void;
   modelNotes: Record<string, string>;
@@ -96,6 +99,7 @@ export function SelectedContestantCard({
   const canChangeSpeedDateSlot = shortlisted || (canJoinSpeedDate && !speedDateLineupFull);
   const origin = getModelOrigin(row.displayName);
   const showDownloadProgress = !installed && (queued || isPulling || isVisiblePullProgress(pullProgress));
+  const blockedLabel = queued ? null : downloadBlockedLabel(hardwareFit);
   const trend = scoreTrend[row.displayName] ?? [];
   const delta = scoreDeltas[row.displayName] ?? null;
 
@@ -188,11 +192,12 @@ export function SelectedContestantCard({
           ) : (
             <button
               type="button"
-              className={queued ? 'btn btn-line' : 'btn btn-gold'}
+              className={queued || blockedLabel ? 'btn btn-line' : 'btn btn-gold'}
               onClick={() => onQueueModel(row)}
-              title={!hardwareFit.recommend && !queued ? (hardwareFit.tone === 'unknown' ? 'Size unknown: download to find out the footprint?' : 'Too big for your graphics memory. Download anyway?') : queued ? 'Remove this model from the download queue' : 'Add this model to the download queue'}
+              disabled={Boolean(blockedLabel)}
+              title={blockedLabel ? hardwareFit.detail : queued ? 'Remove this model from the download queue' : 'Add this model to the download queue'}
             >
-              {queued ? 'Remove from the queue' : `Download${row.sizeGb ? ` · ${sizeLabel}` : ''}`}
+              {queued ? 'Remove from the queue' : blockedLabel ?? `Download${row.sizeGb ? ` · ${sizeLabel}` : ''}`}
             </button>
           )}
           {installed && (
@@ -238,7 +243,12 @@ export function SelectedContestantCard({
             isActive={isPulling}
             isStopping={isPullStopping}
             progress={pullProgress}
-            onCancel={() => (isPulling ? onCancelQueue() : onQueueModel(row))}
+            onCancel={() => {
+              const action = downloadCloseAction(isPulling, queued);
+              if (action === 'stop') onCancelQueue();
+              else if (action === 'unqueue') onQueueModel(row);
+              else onDismissDownload(row.displayName);
+            }}
           />
         )}
       </div>
