@@ -337,7 +337,11 @@ export function UtilityPanel({
                   ))}
                 </div>
               </div>
-              <p className="score-explainer-note">All tests run locally — no data leaves your machine.</p>
+              {/* Not "no data leaves your machine": a cloud judge, once turned on, gets the answers. */}
+              <p className="score-explainer-note">
+                All tests run on this computer. Nothing leaves it unless you turn on a cloud judge (OpenRouter),
+                which is sent the answers it marks.
+              </p>
             </div>
           </div>
         </div>
