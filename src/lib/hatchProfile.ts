@@ -64,14 +64,24 @@ export function buildHatchProfile(opts: {
   vramGb: number;
   ramGb: number;
   reason?: string | null;
+  /**
+   * Export exactly recommendedTag, or say why not. A model's own page asks for
+   * that model; falling back to another one exported the Top Match instead.
+   */
+  only?: boolean;
+  /** Whether recommendedTag is the Top Match, which the profile's note says. */
+  isTopMatch?: boolean;
 }): BuildHatchResult {
-  const { recommendedTag, device, gpuLabel, vramGb, ramGb, reason } = opts;
+  const { recommendedTag, device, gpuLabel, vramGb, ramGb, reason, only = false, isTopMatch = true } = opts;
   const valid = opts.candidates.filter((candidate) => isValidOllamaPullTag(candidate.tag));
 
   // Prefer RigMatch's own pick when it's a valid Ollama candidate; otherwise the
   // best candidate — highest Match total, else the largest overall (candidates
   // are already the caller's fitting set, so largest ≈ most capable here).
   let recommended: HatchCandidate | null = null;
+  if (only && recommendedTag && !valid.some((c) => c.tag === recommendedTag)) {
+    return { ok: false, reason: `${recommendedTag} is not an Ollama chat model RigMatch can export for Hatch, which pulls models through Ollama.` };
+  }
   if (recommendedTag && valid.some((c) => c.tag === recommendedTag)) {
     recommended = valid.find((c) => c.tag === recommendedTag) ?? null;
   } else {
@@ -99,7 +109,7 @@ export function buildHatchProfile(opts: {
     ? (score.total >= 85 ? 'high' : score.total >= 68 ? 'medium' : 'low')
     : 'estimated';
   const note = (score
-    ? `RigMatch's top match for ${gpuLabel} — grade ${score.grade}, ${score.total}/100 across speed, answer quality, and hardware fit.`
+    ? `RigMatch's ${isTopMatch ? 'top match' : 'tested pick'} for ${gpuLabel} — grade ${score.grade}, ${score.total}/100 across speed, answer quality, and hardware fit.`
     : (reason || `${recommended.tag} is sized to fit ${gpuLabel} by RigMatch's hardware check.`)).slice(0, 200);
 
   const profile: HatchProfile = {

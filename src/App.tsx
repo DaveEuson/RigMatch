@@ -668,7 +668,8 @@ function App() {
   const [pendingLabDownload, setPendingLabDownload] = useState<ModelRow | null>(null);
   const [labDownloadName, setLabDownloadName] = useState<string | null>(null);
   const [chosenModel, setChosenModel] = useState<string | null>(null);
-  const [exportHatchOpen, setExportHatchOpen] = useState(false);
+  /** The model "Export model profile" was asked for: the one on its page. */
+  const [exportHatchModel, setExportHatchModel] = useState<string | null>(null);
   const [clearedTopMatches, setClearedTopMatches] = useState<Set<string>>(() => getSavedClearedTopMatches());
   const [setupGuideOpen, setSetupGuideOpen] = useState(false);
   const [clearDataOpen, setClearDataOpen] = useState(false);
@@ -5329,7 +5330,7 @@ function App() {
             onClearTopMatch={clearTopMatch}
             onRestoreClearedTopMatches={restoreClearedTopMatches}
             onClearScore={requestClearScore}
-            onExportForHatch={() => setExportHatchOpen(true)}
+            onExportForHatch={() => setExportHatchModel(selectedModel)}
           />
         )}
         {activeNavId === 'activity' && (
@@ -5695,10 +5696,12 @@ function App() {
         />
       )}
 
-      {exportHatchOpen && (
+      {exportHatchModel && (
         <ExportHatchModal
           result={buildHatchProfile({
-            recommendedTag: topRigPick && topRigPick.row.localProvider !== 'lm-studio' ? topRigPick.row.displayName : null,
+            recommendedTag: exportHatchModel,
+            only: true,
+            isTopMatch: exportHatchModel === topRigPick?.row.displayName,
             // Ollama-pullable chat models only — LM Studio / cloud / image / embedding can't be `ollama pull`-ed.
             candidates: modelRows
               .filter((row) => row.localProvider !== 'lm-studio'
@@ -5712,9 +5715,9 @@ function App() {
             gpuLabel: system.gpu.model && system.gpu.model !== 'Unknown GPU' ? system.gpu.model : 'this computer',
             vramGb: system.gpu.vramGb,
             ramGb: system.memory.totalGb,
-            reason: topRigPick?.reason ?? null,
+            reason: exportHatchModel === topRigPick?.row.displayName ? topRigPick.reason : null,
           })}
-          onClose={() => setExportHatchOpen(false)}
+          onClose={() => setExportHatchModel(null)}
         />
       )}
 
