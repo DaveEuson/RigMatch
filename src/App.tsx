@@ -2151,6 +2151,9 @@ function App() {
    */
   /** A model opened from another screen, and when, so the list can bring it into view. */
   const [revealModel, setRevealModel] = useState<{ model: string; at: number } | null>(null);
+  // Spent once the Models screen is left. Kept, it was new again to every later
+  // mount of the list, which cleared the filters on each visit.
+  if (revealModel && activeNavId !== 'models') setRevealModel(null);
   const openModelRow = useCallback((model: string) => {
     setSelectedModel(model);
     const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
