@@ -249,7 +249,7 @@ import { batchSeed } from './lib/videoGen';
 import { toVideoLabResult } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
 import { readHuggingFaceToken } from './lib/huggingFaceToken';
-import { goalById, presetIdForGoal } from './lib/goals';
+import { goalById, goalsAfterWelcome, presetIdForGoal } from './lib/goals';
 import { isDockWorthyPullProgress, modelMatchesTask, nextDockExpiry } from './lib/modelCatalog';
 import { chooseLineup, isSpecialistModel } from './lib/chooseLineup';
 import { modelIdentities, sameModel } from './lib/modelKey.ts';
@@ -4842,9 +4842,11 @@ function App() {
           onClose={() => setWelcomeReplay(false)}
           onFinish={({ goals, advanced }) => {
             setWelcomeReplay(false);
-            saveGoalsFromSettings(goals);
-            selectUiMode(advanced ? 'advanced' : 'beginner');
-            if (!advanced) setWizardStep('setup');
+            saveGoalsFromSettings(goalsAfterWelcome(selectedGoals, goals));
+            // "Let's go" keeps the mode; only the Advanced door changes it. It
+            // switched an Advanced user to Simple.
+            if (advanced) selectUiMode('advanced');
+            else if (uiMode === 'beginner') setWizardStep('setup');
           }}
         />
       )}
