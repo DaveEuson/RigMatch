@@ -83,6 +83,7 @@ import {
   addRunReport,
   makeReportId,
   parseStoredReports,
+  removeModelFromReports,
   reportStorageCandidates,
 } from './lib/runReports';
 import type { NavId, NavItem } from './lib/appConfig';
@@ -121,11 +122,9 @@ import {
   getSavedUiMode,
   getFriendlyModelName,
   getThemeLabel,
-  isTestedModelScore,
-  keepValidEntries,
   isBenchmarkForAliases,
   isBenchmarkForModel,
-  isBenchmarkResult,
+  isPlaceholderBenchmark,
   isCloudModel,
   isEmbeddingModel,
   isHostBenchmarkReady,
@@ -156,6 +155,7 @@ import type {
 } from './lib/modelCatalog';
 import { clearAppStorage, dropChat, dropTranscripts, writeLocal, writeLocalJson, writeLocalJsonWithFallback } from './lib/safeStorage';
 import { collapseModelVariants } from './lib/wizardVariants';
+import { restoreSavedScores } from './lib/savedHistory';
 // Same constant the Simple Mode download step gates on, so the wizard cannot
 // wave a lineup through that the run then refuses.
 import { MIN_CONTESTANTS, canPauseDownload } from './lib/downloadStatus';
@@ -959,9 +959,14 @@ function App() {
     () => installedRowsForCleanup.filter((row) => !getModelScore(row, modelScores)),
     [installedRowsForCleanup, modelScores],
   );
+  // The Top Match on screen, when it is on this PC: what "keeping your match" keeps.
+  const cleanupKeep = useMemo(
+    () => topPickToKeep(modelRows, modelScores, system.gpu.vramGb, clearedTopMatches),
+    [modelRows, modelScores, system.gpu.vramGb, clearedTopMatches],
+  );
   const exceptTopPickRowsForCleanup = useMemo(
-    () => rowsExceptTopPick(modelRows, modelScores),
-    [modelRows, modelScores],
+    () => rowsExceptTopPick(modelRows, cleanupKeep),
+    [modelRows, cleanupKeep],
   );
 
   const lowScoredRowsForCleanup = useMemo(
@@ -1442,6 +1447,11 @@ function App() {
         writeRunHistory(cleared);
         return cleared;
       });
+      // Reports carry every model's answers. Written here because the save
+      // effect skips an empty list.
+      setRunReports([]);
+      writeLocalJson(RUN_REPORTS_STORAGE_KEY, []);
+      setOpenReportId(null);
       setActivity('All saved match scores, test transcripts, and score history were cleared. Ollama models stayed installed.');
       return;
     }
@@ -1460,6 +1470,11 @@ function App() {
     setRunHistory((current) => {
       const next = removeRuns(current, aliases);
       if (next !== current) writeRunHistory(next);
+      return next;
+    });
+    setRunReports((current) => {
+      const next = removeModelFromReports(current, aliases);
+      if (next.length === 0 && current.length > 0) writeLocalJson(RUN_REPORTS_STORAGE_KEY, []);
       return next;
     });
     setBenchmark((current) =>
@@ -4411,7 +4426,8 @@ function App() {
         : msgs;
     }
     const history: PersistedHistory = {
-      benchmark,
+      // The empty stand-in shown after clearing is not a result to keep.
+      benchmark: benchmark && isPlaceholderBenchmark(benchmark) ? null : benchmark,
       benchmarkByModel,
       listTestResult,
       // The measurement, not the current view of it.
@@ -5699,7 +5715,7 @@ function App() {
           isDeleting={isCloseCleanupDeleting}
           message={closeCleanupMessage}
           exceptTopPickRows={exceptTopPickRowsForCleanup}
-          topPickName={topPickToKeep(modelScores)}
+          topPickName={cleanupKeep}
           onDeleteUnscored={() => { void deleteRowsThenClose(unscoredRowsForCleanup, 'unscored'); }}
           onDeleteLowScored={() => { void deleteRowsThenClose(lowScoredRowsForCleanup, 'low-scored'); }}
           onDeleteExceptTopPick={() => { void deleteRowsThenClose(exceptTopPickRowsForCleanup, 'all but your Top Pick'); }}
@@ -5768,25 +5784,9 @@ function getSavedHistory(): PersistedHistory | null {
     if (!saved) return null;
 
     const parsed = JSON.parse(saved) as Partial<PersistedHistory>;
-    // Per entry: one bad row used to discard every saved score, and the next
-    // save wrote the empty state over the file.
-    const withPrompts = (result: BenchmarkResult): BenchmarkResult => (
-      Array.isArray(result.prompts) ? result : { ...result, prompts: [] }
-    );
-    const benchmark = isBenchmarkResult(parsed.benchmark) ? withPrompts(parsed.benchmark) : null;
-    const keptByModel = keepValidEntries(parsed.benchmarkByModel, isBenchmarkResult);
-    const keptScores = keepValidEntries(parsed.modelScores, isTestedModelScore);
-    const hasByModel = keptByModel !== null && Object.keys(keptByModel).length > 0;
-    const hasScores = keptScores !== null && Object.keys(keptScores).length > 0;
-    // Nothing usable saved (no benchmark, no per-model results, no scores) — ignore.
-    if (!benchmark && !hasByModel && !hasScores) return null;
-
-    const benchmarkByModel = hasByModel
-      ? upsertBenchmarkResults({}, Object.values(keptByModel as Record<string, BenchmarkResult>).map(withPrompts))
-      : benchmark ? upsertBenchmarkResults({}, [benchmark]) : {};
-    const modelScores = hasScores
-      ? (keptScores as Record<string, TestedModelScore>)
-      : upsertModelScores({}, Object.values(benchmarkByModel));
+    const scores = restoreSavedScores(parsed);
+    if (!scores) return null;
+    const { benchmark, benchmarkByModel, modelScores } = scores;
 
     const firstByModel = Object.values(benchmarkByModel)[0];
     const selectedModel = typeof parsed.selectedModel === 'string'

@@ -542,6 +542,17 @@ export function isBenchmarkForAliases(benchmark: BenchmarkResult, aliases: strin
   return normalizedAliases.includes(normalizeModelKey(benchmark.model));
 }
 
+/**
+ * The stand-in createEmptyBenchmark makes: no questions, no answers, no time.
+ * It is what the screen shows before a test and after clearing scores, never a
+ * result — saved and read back, it became a real 0.0 / N/A score.
+ */
+export function isPlaceholderBenchmark(benchmark: BenchmarkResult): boolean {
+  return !(benchmark.questionCount > 0)
+    && !(Array.isArray(benchmark.prompts) && benchmark.prompts.length > 0)
+    && !(benchmark.elapsedMs > 0);
+}
+
 export function createEmptyBenchmark(model: string, baseUrl: string): BenchmarkResult {
   return {
     model,

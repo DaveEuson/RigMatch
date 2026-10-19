@@ -9,7 +9,7 @@
  */
 
 import type { ModelRow, TestedModelScore } from '../types.ts';
-import { getModelAliases, getRankedModelScores } from './modelCatalog.ts';
+import { getRigPick } from './modelCatalog.ts';
 
 /**
  * Installed models RigMatch can actually delete.
@@ -27,29 +27,36 @@ export function deletableRows(modelRows: ModelRow[]): ModelRow[] {
 }
 
 /**
- * Everything deletable except the current Top Pick.
+ * The model a sweep spares: the Top Match the screen shows, when it is on
+ * this PC.
  *
- * The sweep most people want on the way out: reclaim the shelf, keep the match.
- * With nothing scored there is no winner to spare, so this is every deletable
- * model — the caller is expected to label that case differently, because
- * "keep my match" and "delete everything" must not look like the same button.
+ * It used to be the top raw score, which is not the Top Match: that one is
+ * ranked among models that fit and skips one the person cleared. So the sweep
+ * could delete the Top Match on screen, and when the top scorer had already
+ * been deleted it kept nothing at all while saying "keeping your match". This
+ * is getRigPick, the Top Match's own rule, over the installed models: the same
+ * model whenever the shown one is installed, and never one that is gone.
  */
-export function rowsExceptTopPick(
+export function topPickToKeep(
   modelRows: ModelRow[],
   modelScores: Record<string, TestedModelScore>,
-): ModelRow[] {
-  const rows = deletableRows(modelRows);
-  const keep = getRankedModelScores(modelScores)[0]?.model;
-  if (!keep) return rows;
-  // Matched through aliases, because a score is filed under whichever name the
-  // run used and a row can answer to several — missing the match here would
-  // delete the very model this sweep exists to protect.
-  return rows.filter((row) => !getModelAliases(row).includes(keep));
+  vramGb: number,
+  clearedMatches?: Set<string>,
+): string | undefined {
+  const pick = getRigPick(modelRows.filter((row) => row.installed), modelScores, vramGb, clearedMatches);
+  return pick?.tone === 'scored' ? pick.row.displayName : undefined;
 }
 
-/** The Top Pick a sweep would spare, if one has been crowned. */
-export function topPickToKeep(
-  modelScores: Record<string, TestedModelScore>,
-): string | undefined {
-  return getRankedModelScores(modelScores)[0]?.model;
+/**
+ * Everything deletable except the model topPickToKeep spares.
+ *
+ * The sweep most people want on the way out: reclaim the shelf, keep the match.
+ * With no match to keep this is every deletable model — the caller is expected
+ * to label that case differently, because "keep my match" and "delete
+ * everything" must not look like the same button.
+ */
+export function rowsExceptTopPick(modelRows: ModelRow[], keep: string | undefined): ModelRow[] {
+  const rows = deletableRows(modelRows);
+  if (!keep) return rows;
+  return rows.filter((row) => row.displayName !== keep);
 }

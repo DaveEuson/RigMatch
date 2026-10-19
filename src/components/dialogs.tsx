@@ -118,6 +118,8 @@ export function CloseCleanupModal({
   const unscoredGb = sumModelRowGb(unscoredRows);
   const lowScoredGb = sumModelRowGb(lowScoredRows);
   const exceptTopPickGb = sumModelRowGb(exceptTopPickRows);
+  // "Everything, including X" only when X is one of the models it deletes.
+  const topPickDeletable = Boolean(topPickName && installedRows.some((row) => row.displayName === topPickName));
   // Wiping everything is the one action here with nothing left to fall back
   // on, so it arms before it fires. The other sweeps all leave something
   // behind; this one does not, and it is sitting next to Cancel on the way out
@@ -180,7 +182,7 @@ export function CloseCleanupModal({
                 <em>
                   {topPickName
                     ? `${exceptTopPickRows.length} of ${installedRows.length} · frees ${formatGb(exceptTopPickGb)}, keeping your match`
-                    : `${exceptTopPickRows.length} of ${installedRows.length} · frees ${formatGb(exceptTopPickGb)} — nothing is scored yet, so there is no match to keep`}
+                    : `${exceptTopPickRows.length} of ${installedRows.length} · frees ${formatGb(exceptTopPickGb)} — no Top Match is installed, so there is none to keep`}
                 </em>
               </div>
               <button
@@ -193,7 +195,7 @@ export function CloseCleanupModal({
                 {isDeleting ? 'Deleting…' : 'Delete'}
               </button>
             </li>
-            {topPickName && (
+            {topPickDeletable && topPickName && (
               <li>
                 <div>
                   <strong>Everything, including {getShortModelName(topPickName)}</strong>

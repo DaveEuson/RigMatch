@@ -1,5 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { BenchmarkResult, TestedModelScore } from '../types';
+import { normalizeModelKey } from './modelKey.ts';
 import { formatMatchScore } from './scoring.ts';
 
 /**
@@ -91,6 +92,30 @@ export function reportStorageCandidates(reports: StoredRunReport[]): Array<() =>
     () => reportsWithoutTranscripts(reports, 0),
     () => reportsWithoutTranscripts(reports, 0).slice(0, 10),
   ];
+}
+
+/**
+ * The reports with one model's results and answers taken out, for "Clear
+ * score". A report left with nobody in it goes; one whose winner was cleared
+ * is headed by the next in its ranking. The same list back when the model is
+ * in none of them.
+ *
+ * Clearing a score used to leave every report it was in, transcripts and all,
+ * while the dialog said its transcripts were cleared.
+ */
+export function removeModelFromReports(reports: StoredRunReport[], aliases: string[]): StoredRunReport[] {
+  const keys = new Set(aliases.map(normalizeModelKey));
+  const cleared = (model: string) => keys.has(normalizeModelKey(model));
+  if (!reports.some((report) => report.results.some((result) => cleared(result.model)))) return reports;
+  return reports.flatMap((report) => {
+    if (!report.results.some((result) => cleared(result.model))) return [report];
+    const results = report.results.filter((result) => !cleared(result.model));
+    if (results.length === 0) return [];
+    const transcripts = report.transcripts
+      ? Object.fromEntries(Object.entries(report.transcripts).filter(([model]) => !cleared(model)))
+      : undefined;
+    return [{ ...report, results, transcripts, winner: cleared(report.winner) ? results[0].model : report.winner }];
+  });
 }
 
 /** Anything that is not a well-formed report list reads as no reports at all. */
