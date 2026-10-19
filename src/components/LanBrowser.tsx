@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import { isDesktopRuntime } from '../api';
 import type { NetworkHost, OllamaInstallProgress, OllamaStatus, SystemProfile } from '../types';
 import { MachineAvatar } from './Avatars';
@@ -28,6 +28,10 @@ export function LanBrowser({
   onLaunchOllamaInstaller,
   onScanRig,
   onOpenSetupGuide,
+  comfy,
+  onOpenComfySettings,
+  focusComfy = false,
+  onComfyFocused,
 }: {
   active: boolean;
   system: SystemProfile;
@@ -46,7 +50,34 @@ export function LanBrowser({
   onLaunchOllamaInstaller: (path: string) => void;
   onScanRig: () => void;
   onOpenSetupGuide: () => void;
+  comfy: ComponentProps<typeof SetupDoctor>['comfy'];
+  onOpenComfySettings: () => void;
+  /** The top bar's services pill was clicked: bring the ComfyUI row into view. */
+  focusComfy?: boolean;
+  /** Called once it is in view, so a later visit opens at the top. */
+  onComfyFocused?: () => void;
 }) {
+  const panelRef = useRef<HTMLElement>(null);
+  // Only the one box that scrolls moves: scrollIntoView also scrolls every
+  // ancestor and pushed the top bar off the window. That box is this panel in
+  // a tall window and the document in a short one (shell.css). Nearest edge
+  // only, so the Ollama setup above stays on screen when it fits.
+  useEffect(() => {
+    const row = panelRef.current?.querySelector<HTMLElement>('[data-doctor-row="ComfyUI"]');
+    if (!focusComfy || !row) return;
+    let scroller = document.scrollingElement as HTMLElement | null;
+    for (let node = row.parentElement; node; node = node.parentElement) {
+      if (/auto|scroll/.test(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight) { scroller = node; break; }
+    }
+    if (scroller) {
+      const view = scroller === document.scrollingElement ? { top: 0, bottom: window.innerHeight } : scroller.getBoundingClientRect();
+      const box = row.getBoundingClientRect();
+      const margin = 16;
+      if (box.bottom > view.bottom) scroller.scrollBy({ top: box.bottom - view.bottom + margin });
+      else if (box.top < view.top) scroller.scrollBy({ top: box.top - view.top - margin });
+    }
+    onComfyFocused?.();
+  }, [focusComfy, onComfyFocused]);
   const hostMeta = ollama.ready || lmStudio.ready ? 'Local AI ready' : 'Local AI offline';
   // Check Local has to show that it ran: on a fast machine with nothing
   // changed, a rescan returned a screen identical to the one before. The
@@ -90,7 +121,7 @@ export function LanBrowser({
   ].filter(Boolean).join(' ');
 
   return (
-    <section className={panelClassName}>
+    <section className={panelClassName} ref={panelRef}>
       <header className="page-head">
         <div>
           <h2>My PC</h2>
@@ -118,8 +149,10 @@ export function LanBrowser({
         hosts={hosts}
         modelCount={modelCount}
         system={system}
+        comfy={comfy}
         onCheckComputer={onScanRig}
         onOpenSetupGuide={onOpenSetupGuide}
+        onOpenComfySettings={onOpenComfySettings}
       />
       <h3 className="mypc-heading">Computers RigMatch can see</h3>
       <div className="table-wrap mypc-hosts">

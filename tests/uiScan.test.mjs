@@ -13,9 +13,11 @@ test('each service in the top bar can be told apart without its name', () => {
   // Below 1600px the names are hidden, and Ollama and LM Studio were the same plug.
   assert.match(topBar, /<UiIcon name="plug" size=\{16\} \/>\s*<span className="top-bar-service-name">Ollama/);
   assert.match(topBar, /<UiIcon name="models" size=\{16\} \/>\s*<span className="top-bar-service-name">LM Studio/);
-  for (const name of ['Ollama', 'LM Studio', 'ComfyUI']) {
+  for (const name of ['Ollama', 'LM Studio']) {
     assert.match(topBar, new RegExp(`title=\\{\`${name}: \\$\\{CONNECTION_WORDS`), `${name} has a tooltip`);
   }
+  // ComfyUI's also says what My PC offers about it (serviceStatus.test.mjs).
+  assert.match(topBar, /title=\{comfyDotTitle\(connections\.comfy\)\}/, 'ComfyUI has a tooltip');
 });
 
 test('the family button\'s spoken name starts with the words on it', () => {

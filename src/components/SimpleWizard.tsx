@@ -32,6 +32,7 @@ import { LOW_DISK_GB } from '../lib/loadLevel';
 import { UiIcon } from './icons/UiIcon';
 import { AchievementUnlocked } from './AchievementShelf';
 import { GetComfyLink } from './GetComfyLink';
+import { comfyRequirements } from '../lib/serviceStatus';
 import { useShowTheme, type ShowMusicState } from '../hooks/useShowTheme';
 import speedDateShow from '../assets/robot-speed-date-show.webp';
 import ceremonyStage from '../assets/robot-scorecard-ceremony.webp';
@@ -1038,7 +1039,6 @@ function SetupScreen({
  * and on a Mac, Apple silicon and macOS 13.
  */
 function GetComfySteps({ platform, arch }: { platform: string; arch: string }) {
-  const mac = platform === 'darwin';
   return (
     <div className="sw-get-comfy">
       <ol>
@@ -1046,13 +1046,7 @@ function GetComfySteps({ platform, arch }: { platform: string; arch: string }) {
         <li>Open it and let it finish setting up.</li>
         <li>Come back here. RigMatch finds it by itself.</li>
       </ol>
-      <p className="sw-muted">
-        {mac && arch !== 'arm64'
-          ? 'ComfyUI Desktop needs a Mac with Apple silicon (M1 or later). On this Mac it has to be installed by hand, and the download page links the steps.'
-          : mac
-            ? 'On a Mac it needs Apple silicon and macOS 13 or later.'
-            : 'It runs best with an NVIDIA or AMD graphics card.'}
-      </p>
+      <p className="sw-muted">{comfyRequirements(platform, arch)}</p>
       <GetComfyLink />
     </div>
   );
