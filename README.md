@@ -61,7 +61,7 @@ Choose what you want a model for (Chat, Writing, Code, Reads pictures, Listens, 
 
 RigMatch asks before it downloads anything, then shows live progress while your lineup installs. Stop anytime; downloads resume if you close the app. If every model in your lineup is already on your PC, this step is skipped.
 
-<p align="center"><img src="docs/images/03-download.png" alt="Download step — lineup install progress" width="100%"></p>
+<p align="center"><img src="docs/images/03-download.png" alt="Download step — three models already on the PC and one waiting to start" width="100%"></p>
 
 ### 4 · Show — Speed Dating, live on stage
 
