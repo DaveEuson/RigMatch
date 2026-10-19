@@ -641,6 +641,9 @@ function App() {
   const [ollamaInstallProgress, setOllamaInstallProgress] = useState<OllamaInstallProgress>({ phase: 'idle' });
   const [themeId, setThemeId] = useState<ThemeId>(() => getSavedThemeId());
   const [uiMode, setUiMode] = useState<UiMode>(() => getSavedUiMode());
+  // The mode-jump banner is spent once Simple Mode is back, however it came
+  // back: kept, it returned on its own the next time Advanced Mode opened.
+  if (cameFromSimple && uiMode === 'beginner') setCameFromSimple(false);
   // First-launch splash: ask Simple vs Advanced before showing the app.
   /**
    * What to ask on launch. See firstRunStep: an upgrading user has already
@@ -4903,7 +4906,9 @@ function App() {
           trackerSlot={trackerSlot}
           // Only when there is one to open — that is what keeps the Compare
           // step disabled rather than dead on a machine that has never run one.
-          onOpenRunReport={listTestResult || runReports.length > 0
+          // A picture or listening round saves no report, so the newest one
+          // was some other show's.
+          onOpenRunReport={(wizardRound === 'chat' || wizardRound === 'code') && (listTestResult || runReports.length > 0)
             ? () => { setOpenReportId(readyReportId ?? runReports[0]?.id ?? null); setReportOpen(true); }
             : undefined}
           system={system}
@@ -5056,8 +5061,9 @@ function App() {
               happened and offer the return trip. */}
           {cameFromSimple && (
             <div className="mode-jump-banner" role="status">
+              {/* Not "the full scorecard": Models and My PC come here too. */}
               <span>
-                The full scorecard lives in <strong>Advanced Mode</strong>, so RigMatch switched you over.
+                This screen lives in <strong>Advanced Mode</strong>, so RigMatch switched you over.
               </span>
               <button
                 type="button"
@@ -5506,7 +5512,13 @@ function App() {
           subtitle={stored ? `${displaySuiteName(stored.suiteName)} · ${formatHistoryTime(stored.completedAt)}` : undefined}
           questionPlan={storedPlan ?? benchmarkQuestions.slice(0, benchmarkQuestionCount)}
           onClose={() => { setReportOpen(false); setReportReady(false); setOpenReportId(null); }}
-          onOpenScorecards={() => { setReportOpen(false); setReportReady(false); setOpenReportId(null); selectNav('history'); }}
+          onOpenScorecards={() => {
+            setReportOpen(false); setReportReady(false); setOpenReportId(null);
+            // Simple Mode has no Scorecards screen, so this did nothing there. It
+            // goes where the Winner screen's "See every answer" goes.
+            if (uiMode === 'beginner') { setCameFromSimple(true); selectUiMode('advanced'); }
+            selectNav('history');
+          }}
         />
         );
       })()}
