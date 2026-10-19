@@ -77,3 +77,11 @@ test('an unreadable history or memory is never marked loaded, so it is never sav
   // Starting fresh is offered only once a copy exists.
   assert.match(app, /\{unreadable\.copy && \([\s\S]*?onClick=\{\(\) => startFresh\(store\)\}/);
 });
+
+test("a failed reply shows Ollama's reason and is not sent back as the model's words", () => {
+  const send = callback('sendMessage');
+  const failure = send.slice(send.indexOf('} catch (err) {'));
+  assert.match(failure, /const reason = typeof err === "string" \? err : \(err as Error\)\?\.message;/);
+  assert.match(failure, /content: reason \|\| "Something went wrong\. Is Ollama still running\?"/);
+  assert.match(failure, /fromRigMatch: true/);
+});

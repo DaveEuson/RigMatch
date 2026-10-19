@@ -1612,14 +1612,21 @@ export default function App() {
       );
     } catch (err) {
       if ((err as Error)?.name !== "AbortError") {
+        // What actually went wrong, in Ollama's words where it gave any. The
+        // old fixed "Is Ollama still running?" was said just as often with
+        // Ollama running fine and refusing the model for lack of memory.
+        const reason = typeof err === "string" ? err : (err as Error)?.message;
         setConversations((prev) => prev.map((c) => (c.id === conversationId
           ? {
               ...c,
               messages: [...c.messages, {
                 id: genId(),
                 role: "assistant" as const,
-                content: "Something went wrong. Is Ollama still running?",
+                content: reason || "Something went wrong. Is Ollama still running?",
                 ts: Date.now(),
+                // RigMatch speaking: kept out of what the model is sent, or it
+                // would read the error back as its own last reply.
+                fromRigMatch: true,
               }],
             }
           : c)));

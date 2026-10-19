@@ -284,10 +284,17 @@ async fn run_stream(
     let mut res = tokio::select! {
         biased;
         _ = cancel.notified() => return Ok(()),
-        sent = client.post(&url).json(&body).send() => sent.map_err(|e| e.to_string())?,
+        sent = client.post(&url).json(&body).send() => sent.map_err(|e| {
+            format!("Could not reach Ollama. Is it still running? ({e})")
+        })?,
     };
-    if !res.status().is_success() {
-        return Err(format!("Ollama chat returned {}", res.status()));
+    let status = res.status();
+    if !status.is_success() {
+        // Ollama says why in the body: a model that is not installed, or one
+        // that needs more memory than is free. That is the only explanation the
+        // user will get, so it is passed on rather than replaced by the code.
+        let text = res.text().await.unwrap_or_default();
+        return Err(ollama_error(&text).unwrap_or_else(|| format!("Ollama returned {status}.")));
     }
     let mut buffer = String::new();
     loop {
@@ -298,39 +305,78 @@ async fn run_stream(
         let next = tokio::select! {
             biased;
             _ = cancel.notified() => return Ok(()),
-            chunk = res.chunk() => chunk.map_err(|e| e.to_string())?,
+            chunk = res.chunk() => chunk.map_err(|e| {
+                format!("Lost the connection to Ollama part-way through the reply ({e}).")
+            })?,
         };
         let Some(chunk) = next else { break };
         buffer.push_str(&String::from_utf8_lossy(&chunk));
         let lines: Vec<&str> = buffer.split('\n').collect();
         let remainder = lines.last().cloned().unwrap_or("").to_string();
         for line in lines[..lines.len().saturating_sub(1)].iter() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(trimmed) {
-                if let Some(content) = parsed["message"]["content"].as_str() {
-                    if !content.is_empty() {
-                        on_token
-                            .send(StreamEvent::Token { value: content.to_string() })
-                            .map_err(|e| e.to_string())?;
-                    }
-                }
-                if parsed["done"].as_bool().unwrap_or(false) {
-                    on_token
-                        .send(StreamEvent::Done {
-                            prompt_tokens: parsed["prompt_eval_count"].as_u64().unwrap_or(0),
-                            eval_tokens: parsed["eval_count"].as_u64().unwrap_or(0),
-                        })
-                        .map_err(|e| e.to_string())?;
-                    return Ok(());
-                }
+            if send_stream_line(line, &on_token)? {
+                return Ok(());
             }
         }
         buffer = remainder;
     }
-    Ok(())
+    // The last line may have arrived without its newline.
+    if send_stream_line(&buffer, &on_token)? {
+        return Ok(());
+    }
+    // A reply that simply stops is a failure, not a short answer: Ollama ends
+    // every reply it finishes with a `done` line.
+    Err("Ollama stopped part-way through the reply without saying why.".to_string())
+}
+
+/// Ollama's own explanation in an error body or an in-stream error line.
+fn ollama_error(text: &str) -> Option<String> {
+    let parsed: serde_json::Value = serde_json::from_str(text.trim()).ok()?;
+    let error = parsed["error"].as_str()?.trim();
+    (!error.is_empty()).then(|| format!("Ollama said: {error}"))
+}
+
+/// What one line of Ollama's stream asks to be sent to the window.
+///
+/// Err when the line is Ollama reporting a failure mid-stream — a model that
+/// runs out of memory part-way says so in an `{"error": …}` line, which used to
+/// be ignored, so the reply just stopped.
+fn stream_line_events(line: &str) -> Result<Vec<StreamEvent>, String> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+    if let Some(error) = ollama_error(trimmed) {
+        return Err(error);
+    }
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+        return Ok(Vec::new());
+    };
+    let mut events = Vec::new();
+    if let Some(content) = parsed["message"]["content"].as_str() {
+        if !content.is_empty() {
+            events.push(StreamEvent::Token { value: content.to_string() });
+        }
+    }
+    if parsed["done"].as_bool().unwrap_or(false) {
+        events.push(StreamEvent::Done {
+            prompt_tokens: parsed["prompt_eval_count"].as_u64().unwrap_or(0),
+            eval_tokens: parsed["eval_count"].as_u64().unwrap_or(0),
+        });
+    }
+    Ok(events)
+}
+
+/// Send one line's events; true once the reply is done.
+fn send_stream_line(line: &str, on_token: &Channel<StreamEvent>) -> Result<bool, String> {
+    for event in stream_line_events(line)? {
+        let done = matches!(event, StreamEvent::Done { .. });
+        on_token.send(event).map_err(|e| e.to_string())?;
+        if done {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 // ── Conversation storage ────────────────────────────────────────────────────
@@ -880,6 +926,33 @@ mod tests {
         assert_eq!(done, serde_json::json!({ "type": "done", "promptTokens": 812, "evalTokens": 64 }));
         let token = serde_json::to_value(StreamEvent::Token { value: "Hi".into() }).unwrap();
         assert_eq!(token, serde_json::json!({ "type": "token", "value": "Hi" }));
+    }
+
+    #[test]
+    fn ollama_errors_reach_the_window_in_its_own_words() {
+        // The body of a 404 and a 500 from Ollama 0.35, and an in-stream line.
+        assert_eq!(
+            ollama_error(r#"{"error":"model \"gemma4:12b\" not found, try pulling it first"}"#).as_deref(),
+            Some(r#"Ollama said: model "gemma4:12b" not found, try pulling it first"#),
+        );
+        assert_eq!(ollama_error("Internal Server Error"), None);
+        assert_eq!(ollama_error(r#"{"error":""}"#), None);
+        assert_eq!(
+            stream_line_events(r#"{"error":"model requires more system memory (12.1 GiB) than is available (7.9 GiB)"}"#).err().as_deref(),
+            Some("Ollama said: model requires more system memory (12.1 GiB) than is available (7.9 GiB)"),
+        );
+    }
+
+    #[test]
+    fn stream_lines_become_tokens_then_one_done() {
+        let token = stream_line_events(r#"{"message":{"role":"assistant","content":"Hi"},"done":false}"#).unwrap();
+        assert!(matches!(token.as_slice(), [StreamEvent::Token { value }] if value == "Hi"));
+        let done = stream_line_events(
+            r#"{"message":{"role":"assistant","content":""},"done":true,"prompt_eval_count":812,"eval_count":64}"#,
+        ).unwrap();
+        assert!(matches!(done.as_slice(), [StreamEvent::Done { prompt_tokens: 812, eval_tokens: 64 }]));
+        assert!(stream_line_events("   ").unwrap().is_empty());
+        assert!(stream_line_events("not json").unwrap().is_empty());
     }
 
     #[test]
