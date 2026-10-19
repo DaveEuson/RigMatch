@@ -545,8 +545,13 @@ export type GpuContention = {
 export type ComfyStatus = {
   reachable: boolean;
   stats?: unknown;
+  /**
+   * Running, but too busy to answer within the poll's time. The lists below
+   * are then absent: they were not read, and are not empty.
+   */
+  busy?: boolean;
   /** Filenames from /models/checkpoints. Empty is meaningful: running, no models. */
-  checkpoints: string[];
+  checkpoints?: string[];
   /** T5 encoders from /models/text_encoders. An LTX graph cannot run without one. */
   textEncoders?: string[];
   /**

@@ -96,6 +96,8 @@ export async function comfyQueueDepth(baseUrl: string = comfyBaseUrl()): Promise
   if (!agentArcadeApi.getComfyStatus) return 0;
   try {
     const status = await agentArcadeApi.getComfyStatus(baseUrl);
+    // Too busy to answer: something is running, though not how much.
+    if (status.busy) return 1;
     return comfyBusyCount(status.execInfo ?? null);
   } catch {
     // Unreadable queue counts as idle: failing to ask must not block a run.

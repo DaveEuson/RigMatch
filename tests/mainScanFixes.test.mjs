@@ -127,3 +127,10 @@ test('a judge in the other program waits for the contestant to leave', () => {
 test('an LM Studio contestant does not share the card with models Labs left in Ollama', () => {
   assert.match(main, /if \(provider === 'lm-studio'\) \{\n(\s*\/\/.*\n)*\s*await releaseOllamaLabModels\(\);\n\s*if \(activeBenchmark\) activeBenchmark\.lmStudioKeep = await lmStudioLoadedInstances\(baseUrl, model\);/);
 });
+
+test('a busy ComfyUI keeps the models the screens last listed', () => {
+  const hook = read('../src/hooks/useComfy.ts');
+  const apply = hook.slice(hook.indexOf('const applyStatus = useCallback('), hook.indexOf('}, []);', hook.indexOf('const applyStatus = useCallback(')));
+  assert.match(apply, /if \(status\.busy\) \{\n\s*setComfyReachable\(true\);\n\s*return;\n\s*\}/);
+  assert.ok(apply.indexOf('if (status.busy)') < apply.indexOf('setComfyCheckpoints('), 'before any list is replaced');
+});

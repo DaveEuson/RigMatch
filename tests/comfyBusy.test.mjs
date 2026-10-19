@@ -58,3 +58,11 @@ test('comfyBusyCount reads the shape ComfyUI actually returns', async () => {
   // GET /prompt answers {"exec_info": {"queue_remaining": 0}} — verified live.
   assert.equal(comfyBusyCount({ exec_info: { queue_remaining: 3 } }), 3);
 });
+
+test('a ComfyUI too busy to answer is not an empty queue', async () => {
+  // The bridge's marker for two timed-out looks: no lists, no queue reading.
+  // Read as depth 0, a timed run started behind whatever kept it that busy.
+  agentArcadeApi.getComfyStatus = async () => ({ reachable: true, busy: true });
+  assert.equal(await comfyQueueDepth(), 1);
+  assert.match(await describeComfyBusy(), /already working on/);
+});

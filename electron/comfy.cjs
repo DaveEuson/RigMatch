@@ -115,7 +115,10 @@ function createComfyBridge({ fetchJson: rawFetchJson, assertLocalhostUrl }) {
         stats = await fetchJson(`${base}/system_stats`, {}, Math.max(timeoutMs, 10000));
       } catch (second) {
         if (isUnreachable(second)) return { reachable: false, checkpoints: [], textEncoders: [] };
-        if (isSlow(second)) return { reachable: true, busy: true, checkpoints: [], textEncoders: [] };
+        // No lists: they were not read. Empty ones told every screen that
+        // nothing was installed and the queue was empty, so a timed run
+        // could start behind the job keeping ComfyUI this busy.
+        if (isSlow(second)) return { reachable: true, busy: true };
         throw second;
       }
     }

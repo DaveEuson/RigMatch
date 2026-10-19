@@ -183,6 +183,9 @@ test('a ComfyUI that is busy is running, and RigMatch does not offer to start an
   assert.equal(status.busy, true);
   // Asked again with longer to answer before deciding.
   assert.equal(calls.filter((call) => call.url.includes('/system_stats')).length, 2);
+  // Nothing was listed, so nothing is reported: empty lists read as "no models
+  // installed, queue empty" (2026-10-18 scan).
+  assert.deepEqual(status, { reachable: true, busy: true });
 });
 
 test('a submit that is slow to acknowledge is not "cannot reach", so it is not sent twice', async () => {

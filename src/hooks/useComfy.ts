@@ -79,13 +79,19 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
   /** One reply, applied the same way whether it came from the poll or a refresh. */
   const applyStatus = useCallback((status: ComfyStatus & { address?: string }) => {
     if (status.address) setAnsweredAt(status.address);
+    // Too busy to answer is running, with its models where they were. Read as
+    // empty lists, it wiped every installed model until the next look.
+    if (status.busy) {
+      setComfyReachable(true);
+      return;
+    }
     setComfyReachable(status.reachable === true);
-    setComfyCheckpoints(status.checkpoints);
+    setComfyCheckpoints(status.checkpoints ?? []);
     setComfyTextEncoders(status.textEncoders ?? []);
     // An older bridge reports only the first two folders; fill those in so a
     // model whose files are all checkpoints and encoders still reads installed.
     setComfyFolders(status.folders ?? {
-      checkpoints: status.checkpoints,
+      checkpoints: status.checkpoints ?? [],
       text_encoders: status.textEncoders ?? [],
     });
   }, []);
