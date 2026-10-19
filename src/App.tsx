@@ -4867,7 +4867,9 @@ function App() {
         <FirstRunSplash
           vramGb={system.gpu.vramGb || 0}
           initialGoals={selectedGoals}
-          isUpgrade
+          // After Clear all data the question comes back too, and "New in this
+          // version… your saved scores are untouched" was false twice over.
+          isUpgrade={scoredModelCount > 0}
           onSaveGoals={saveGoalsFromIntro}
           onCancel={dismissGoalsIntro}
         />
