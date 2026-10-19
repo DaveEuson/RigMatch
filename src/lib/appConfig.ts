@@ -74,6 +74,8 @@ export { RUN_HISTORY_STORAGE_KEY } from './runHistory.ts';
 export const THEME_STORAGE_KEY = 'agentArcadeTheme';
 export const TUTORIAL_STORAGE_KEY = 'rigmatch:first-run-tutorial:v1';
 export const UI_MODE_STORAGE_KEY = 'rigmatch:ui-mode:v1';
+/** 'off' after "Start quick checks without this sheet from now on"; Settings turns it back on. */
+export const QUICK_CHECK_SHEET_STORAGE_KEY = 'rigmatch:quick-test-warning:v1';
 
 /**
  * Whether the disk-space offer appears on the way out.

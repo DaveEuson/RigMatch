@@ -17,6 +17,7 @@ import { CUSTOM_IMAGE_PROMPT_ID, IMAGE_BENCHMARK_PROMPTS } from "../lib/imageGen
 import { samplingProfileFor } from '../lib/samplingProfile';
 import { IMAGE_RUN_SETTINGS, judgeCandidates, toLabResult } from "../lib/imageGenChallenge";
 import { runImageLabChallenge } from "../lib/imageGenRunner";
+import { describeImageTest, endImageTest, startImageTest } from "../lib/renderActivity";
 import { comfyBridgeAvailable, describeComfyBusy, getComfyStatus } from "../lib/comfyTransport";
 import { readComfySettings } from "../lib/comfySettings";
 import { onComfyStarted } from "../lib/comfyStarter";
@@ -249,12 +250,24 @@ export function AdvancedCapabilityLab({
   const promptReady = !usingCustomPrompt || customPromptReady;
   const canRunImageTest = readiness.kind === 'ready' && Boolean(activeCheckpoint)
     && promptReady && !imageRunning && !lineup.running && !imageLineup.running;
+  // Why Run is greyed, said beside it: it sat disabled with no reason.
+  const imageBlocked = imageRunning ? null
+    : !activeCheckpoint ? 'ComfyUI lists no picture model to run.'
+    : !promptReady ? 'Write your prompt first.'
+    : lineup.running ? 'A video comparison is rendering. This can run when it finishes.'
+    : imageLineup.running ? 'A picture comparison is running. This can run when it finishes.'
+    : null;
 
   const startChallenge = useCallback(async () => {
     if (!activeModel || !activeModelInfo) return;
     setCopied('idle');
     setPreviewOpen(false);
-    setRunState({ phase: 'running', result: null, message: `Asking ${activeModel} to build an app...${await gpuNoteForRun()}` });
+    // Running before the first await: the GPU check takes seconds, and Run took
+    // a second click in that time and built the app twice.
+    const asking = `Asking ${activeModel} to build an app...`;
+    setRunState({ phase: 'running', result: null, message: asking });
+    const gpuNote = await gpuNoteForRun();
+    if (gpuNote) setRunState({ phase: 'running', result: null, message: `${asking}${gpuNote}` });
     const prompt = resolveAppBuilderPrompt(appPromptId, appCustomPrompt);
     const result = await runAdvancedAppBuilderChallenge(activeModel, activeModelInfo.baseUrl ?? ollama.baseUrl, prompt);
     setRunState({
@@ -280,27 +293,36 @@ export function AdvancedCapabilityLab({
     });
   }, [visibleResult]);
 
-  const startImageChallenge = useCallback(async () => {
+  // A plain function, as a row's own test is: the compiler memoizes it, and a
+  // useCallback around its try/finally could not be preserved.
+  const startImageChallenge = async () => {
     if (!canRunImageTest) return;
-    // Asked before anything is submitted: queuing behind someone else's render
-    // produces a time that measures the queue, and a wrong number that looks
-    // like a measurement is worse than refusing.
-    const busy = await describeComfyBusy();
-    if (busy) {
-      setImageRunState({ phase: 'failed', result: null, message: busy });
-      return;
-    }
+    // Claimed before the first await, so a second click cannot draw a second
+    // picture, one that nothing could stop.
     const controller = new AbortController();
     imageAbortRef.current = controller;
-    setImageRunState({
-      phase: 'running',
-      result: null,
-      message: `Generating ${IMAGE_RUN_SETTINGS.width}x${IMAGE_RUN_SETTINGS.height} with ${activeCheckpoint}...${await gpuNoteForRun()}`,
-    });
-
-    let run;
+    const checking = 'Checking that ComfyUI is free…';
+    setImageRunState({ phase: 'running', result: null, message: checking });
+    // Known to the render tracker, as a row's own test is: the status bar shows
+    // it, and its Stop is still there after leaving this screen.
+    const trackKey = `lab-${imageResultKey}`;
+    startImageTest({ key: trackKey, name: activeCheckpoint, message: checking, stop: () => controller.abort() });
+    let outcome: { message: string; failed: boolean } | undefined;
     try {
-      run = await runImageLabChallenge({
+      // Asked before anything is submitted: queuing behind someone else's render
+      // produces a time that measures the queue, and a wrong number that looks
+      // like a measurement is worse than refusing.
+      const busy = await describeComfyBusy();
+      if (busy || controller.signal.aborted) {
+        setImageRunState(busy ? { phase: 'failed', result: null, message: busy } : { phase: 'idle', result: null, message: '' });
+        if (busy) outcome = { message: busy, failed: true };
+        return;
+      }
+      const drawing = `Generating ${IMAGE_RUN_SETTINGS.width}x${IMAGE_RUN_SETTINGS.height} with ${activeCheckpoint}...${await gpuNoteForRun()}`;
+      setImageRunState({ phase: 'running', result: null, message: drawing });
+      describeImageTest(trackKey, drawing);
+
+      const run = await runImageLabChallenge({
         checkpoint: activeCheckpoint,
         promptId: imagePromptId,
         customPrompt,
@@ -308,30 +330,38 @@ export function AdvancedCapabilityLab({
         ollamaBaseUrl: ollama.baseUrl,
         signal: controller.signal,
       });
-    } finally {
-      imageAbortRef.current = null;
-    }
-    // With where the fader stood as it started, like every other test.
-    const result = { ...toLabResult(run, imagePromptId, customPrompt), balance: imageLock ? 0 : balances.images };
-
-    setImageRunState({
-      phase: result.error ? 'failed' : 'complete',
-      result,
+      if (controller.signal.aborted) {
+        // Stopped on purpose, which is not the model failing.
+        setImageRunState({ phase: 'idle', result: null, message: '' });
+        outcome = { message: `Stopped before ${activeCheckpoint} finished.`, failed: false };
+        return;
+      }
+      // With where the fader stood as it started, like every other test.
+      const result = { ...toLabResult(run, imagePromptId, customPrompt), balance: imageLock ? 0 : balances.images };
       // An unjudged run is a real result with a missing part, so it says so
       // rather than presenting the score as if adherence had been measured.
-      message: result.error
+      const message = result.error
         ? result.error
         : `${activeCheckpoint} drew it in ${(run.elapsedMs / 1000).toFixed(1)}s${
           run.judged
             ? `, and ${activeJudge} confirmed ${Math.round((run.adherence ?? 0) * 100)}% of the prompt.`
             : '. No vision model was available to check the picture, so this run is unjudged.'
-        }`,
-    });
+        }`;
+      setImageRunState({ phase: result.error ? 'failed' : 'complete', result, message });
+      outcome = { message: result.error ? `${activeCheckpoint} failed: ${result.error}` : message, failed: Boolean(result.error) };
 
-    if (!result.error) {
-      writeAdvancedLabResults({ ...readAdvancedLabResults(), [imageResultKey]: result });
+      if (!result.error) {
+        writeAdvancedLabResults({ ...readAdvancedLabResults(), [imageResultKey]: result });
+      }
+    } catch (error) {
+      const message = getErrorMessage(error);
+      setImageRunState({ phase: 'failed', result: null, message });
+      outcome = { message: `${activeCheckpoint} failed: ${message}`, failed: true };
+    } finally {
+      imageAbortRef.current = null;
+      endImageTest(trackKey, outcome);
     }
-  }, [activeCheckpoint, activeJudge, balances.images, canRunImageTest, customPrompt, imageLock, imagePromptId, imageResultKey, ollama.baseUrl, gpuNoteForRun]);
+  };
 
   const stopImageRun = useCallback(() => {
     imageAbortRef.current?.abort();
@@ -608,10 +638,11 @@ export function AdvancedCapabilityLab({
                   // say — left phase:'running' forever: a permanent spinner and an
                   // unhandled rejection, with nothing on screen to explain it.
                   setImageRunState({ phase: 'failed', result: null, message: getErrorMessage(error) });
-                })} disabled={!canRunImageTest}>
+                })} disabled={!canRunImageTest} title={imageBlocked ?? undefined}>
                   <RefreshCw className={imageRunning ? 'spin' : ''} aria-hidden="true" />
                   {imageRunning ? 'Generating' : 'Run Image Test'}
                 </button>
+                {imageBlocked && <span>{imageBlocked}</span>}
                 {imageRunning && (
                   <button type="button" className="mini-button outline" onClick={stopImageRun}>
                     Stop

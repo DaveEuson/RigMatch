@@ -15,9 +15,21 @@ test('a successful launch says nothing', () => {
 });
 
 test('a missing companion tells you how to get one', () => {
-  const message = companionLaunchMessage({ ok: false, reason: 'not-found' });
-  assert.match(message, /not found/i);
-  assert.match(message, /tauri build/);
+  // A source checkout builds it.
+  const fromSource = companionLaunchMessage({ ok: false, reason: 'not-found' }, true);
+  assert.match(fromSource, /not found/i);
+  assert.match(fromSource, /tauri build/);
+  // An installed RigMatch has no source to build: it reinstalls.
+  const installed = companionLaunchMessage({ ok: false, reason: 'not-found' });
+  assert.match(installed, /not found/i);
+  assert.match(installed, /installing RigMatch again/);
+  assert.doesNotMatch(installed, /tauri build/);
+});
+
+test('the top bar\'s Chat falls back to the in-app chat when RigMatch Chat does not open', async () => {
+  const { readFileSync } = await import('node:fs');
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf-8');
+  assert.match(app, /const problem = companionLaunchMessage\(result, import\.meta\.env\.DEV\);\s*if \(problem\) \{[\s\S]{0,200}?setChatOpen\(true\);/);
 });
 
 test('a taken bridge does not send you looking for a missing file', () => {

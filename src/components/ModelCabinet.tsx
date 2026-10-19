@@ -1598,9 +1598,11 @@ export function ModelCabinet({
                     <button
                       type="button"
                       className="mini-button outline"
+                      // Every filter, as Reset does: the maker, task, country and
+                      // New filters used to stay on, and the table stayed empty.
                       onClick={() => {
                         setModelQuery('');
-                        setQuickFilter('all');
+                        resetFilters();
                       }}
                     >
                       Show All

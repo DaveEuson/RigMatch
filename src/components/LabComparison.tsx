@@ -33,6 +33,17 @@ function heading(channel: Channel, key: string): string {
 }
 
 /**
+ * What to draw above a reading group: the test picture's own file, or the
+ * uploaded picture itself. The key of a built-in picture is its id, and as a
+ * src it drew a broken image over every built-in test picture.
+ */
+function pictureSrc(key: string): string | null {
+  const known = VISION_TEST_IMAGES.find((image) => image.id === key);
+  if (known) return known.src;
+  return key.startsWith('data:') ? key : null;
+}
+
+/**
  * Lab results side by side: the pictures, clips, transcripts or descriptions
  * themselves, ranked at the fader.
  *
@@ -72,8 +83,8 @@ export function LabComparison({
         return (
           <section key={group.key} className="lab-comparison-group" aria-label={heading(channel, group.key)}>
             <div className="lab-comparison-head">
-              {channel === 'reading' && group.key && (
-                <img className="lab-comparison-picture" src={group.key} alt="The picture every model was asked to describe" />
+              {channel === 'reading' && pictureSrc(group.key) && (
+                <img className="lab-comparison-picture" src={pictureSrc(group.key)!} alt="The picture every model was asked to describe" />
               )}
               <div>
                 <strong>{heading(channel, group.key)}</strong>

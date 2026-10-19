@@ -242,8 +242,11 @@ export function ListeningLab({
       scriptId,
       typedReference,
     });
+    // Running before the first await, so a second click cannot start it again.
+    const playing = `Playing the audio to ${activeModel}...`;
+    setRunState({ phase: 'running', result: null, message: playing });
     const gpuNote = gpuNoteForRun ? await gpuNoteForRun() : '';
-    setRunState({ phase: 'running', result: null, message: `Playing the audio to ${activeModel}...${gpuNote}` });
+    if (gpuNote) setRunState({ phase: 'running', result: null, message: `${playing}${gpuNote}` });
 
     const audio = source === 'sample' ? await getListeningTestAudio() : captured?.base64 ?? '';
     const result = await runAdvancedListeningChallenge(activeModel, ollama.baseUrl, audio, undefined, reference);
@@ -263,7 +266,10 @@ export function ListeningLab({
     }
   }, [activeModel, balance, canRun, captured, ollama.baseUrl, scriptId, source, typedReference, gpuNoteForRun]);
 
-  const visible = runState.result ?? savedResults[`listening:${activeModel}`] ?? null;
+  // The last run's result only while its model is the one picked: after picking
+  // another, the previous model's transcript and score sat under the new name.
+  const visible = (runState.result?.model === activeModel ? runState.result : null)
+    ?? savedResults[`listening:${activeModel}`] ?? null;
   const typedTooShort = source === 'upload' && typedReference.trim() !== '' && !isScriptLongEnough(typedReference);
 
   return (
@@ -419,7 +425,9 @@ export function ListeningLab({
         {blockedReason && <span className="advanced-lab-blocked">{blockedReason}</span>}
       </div>
 
-      {runState.message && <p className={`advanced-lab-message ${runState.phase}`}>{runState.message}</p>}
+      {runState.message && (running || !runState.result || runState.result.model === activeModel) && (
+        <p className={`advanced-lab-message ${runState.phase}`}>{runState.message}</p>
+      )}
       {visible && !visible.error && (
         <div className="advanced-lab-result">
           <div className="listening-transcript">

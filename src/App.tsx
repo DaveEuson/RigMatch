@@ -179,6 +179,7 @@ import {
   CLEARED_TOP_MATCHES_STORAGE_KEY,
   DEFAULT_SHORTLIST_IDS,
   HISTORY_STORAGE_KEY,
+  QUICK_CHECK_SHEET_STORAGE_KEY,
   LINEUP_STRIP_SCREENS,
   NAV_ITEM_BY_ID,
   SIMPLE_NAV_ORDER,
@@ -249,7 +250,7 @@ import { batchSeed } from './lib/videoGen';
 import { toVideoLabResult } from './lib/videoGenChallenge';
 import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById } from './lib/generationCatalog';
 import { readHuggingFaceToken } from './lib/huggingFaceToken';
-import { goalById, presetIdForGoal } from './lib/goals';
+import { goalById, goalsAfterWelcome, presetIdForGoal } from './lib/goals';
 import { isDockWorthyPullProgress, modelMatchesTask, nextDockExpiry } from './lib/modelCatalog';
 import { chooseLineup, isSpecialistModel } from './lib/chooseLineup';
 import { modelIdentities, sameModel } from './lib/modelKey.ts';
@@ -332,7 +333,7 @@ const LiveFlirtSpotlight = lazyPanel(() => import('./components/LiveFlirtSpotlig
 
 
 // Quick TEST resource warning opt-out ('off' = user chose "don't warn again").
-const QUICK_CHECK_WARNING_KEY = 'rigmatch:quick-test-warning:v1';
+const QUICK_CHECK_WARNING_KEY = QUICK_CHECK_SHEET_STORAGE_KEY;
 const initialHosts = isDesktopRuntime ? [] : demoHosts.filter((host) => host.isLocal);
 const initialSelectedHostId = initialHosts[0]?.id ?? 'localhost';
 
@@ -641,6 +642,9 @@ function App() {
   const [ollamaInstallProgress, setOllamaInstallProgress] = useState<OllamaInstallProgress>({ phase: 'idle' });
   const [themeId, setThemeId] = useState<ThemeId>(() => getSavedThemeId());
   const [uiMode, setUiMode] = useState<UiMode>(() => getSavedUiMode());
+  // The mode-jump banner is spent once Simple Mode is back, however it came
+  // back: kept, it returned on its own the next time Advanced Mode opened.
+  if (cameFromSimple && uiMode === 'beginner') setCameFromSimple(false);
   // First-launch splash: ask Simple vs Advanced before showing the app.
   /**
    * What to ask on launch. See firstRunStep: an upgrading user has already
@@ -668,17 +672,25 @@ function App() {
   const [pendingLabDownload, setPendingLabDownload] = useState<ModelRow | null>(null);
   const [labDownloadName, setLabDownloadName] = useState<string | null>(null);
   const [chosenModel, setChosenModel] = useState<string | null>(null);
-  const [exportHatchOpen, setExportHatchOpen] = useState(false);
+  /** The model "Export model profile" was asked for: the one on its page. */
+  const [exportHatchModel, setExportHatchModel] = useState<string | null>(null);
   const [clearedTopMatches, setClearedTopMatches] = useState<Set<string>>(() => getSavedClearedTopMatches());
   const [setupGuideOpen, setSetupGuideOpen] = useState(false);
   const [clearDataOpen, setClearDataOpen] = useState(false);
   const [pendingScoreClear, setPendingScoreClear] = useState<PendingScoreClear | null>(null);
   // A Settings section a link elsewhere asks for, such as ComfyUI help on Models.
   const [settingsSectionRequest, setSettingsSectionRequest] = useState<{ id: SettingsSectionId; at: number } | null>(null);
+  // Spent once Settings is left: kept, every later visit reopened that section.
+  if (settingsSectionRequest && activeNavId !== 'settings') setSettingsSectionRequest(null);
   // The welcome again, from Settings. The first run's own is useGoals' showModeSplash.
   const [welcomeReplay, setWelcomeReplay] = useState(false);
   // My PC's two views: the computer and its connections, or everything logged.
   const [myPcView, setMyPcView] = useState<'overview' | 'logs'>('overview');
+  /** "Logs" after a failed show: My PC, on its Logs view. */
+  const openRunLogs = useCallback(() => {
+    openLogsPanel();
+    setMyPcView('logs');
+  }, [openLogsPanel]);
 
   const selectedHost = hosts.find((host) => host.id === selectedHostId) ?? hosts[0];
 
@@ -2145,6 +2157,9 @@ function App() {
    */
   /** A model opened from another screen, and when, so the list can bring it into view. */
   const [revealModel, setRevealModel] = useState<{ model: string; at: number } | null>(null);
+  // Spent once the Models screen is left. Kept, it was new again to every later
+  // mount of the list, which cleared the filters on each visit.
+  if (revealModel && activeNavId !== 'models') setRevealModel(null);
   const openModelRow = useCallback((model: string) => {
     setSelectedModel(model);
     const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
@@ -2165,7 +2180,8 @@ function App() {
       setSelectedModel(row.displayName);
       setRevealModel({ model: row.displayName, at: Date.now() });
     }
-    selectNav(render.solo ? 'models' : 'speedDate');
+    // A test with no row of its own, such as the Lab's picture test, is on Labs.
+    selectNav(row ? 'models' : 'speedDate');
   }, [chooseWorkbench, modelRows, selectNav]);
 
   // Simple Mode runs as a wizard: when the rig check passes while the user is
@@ -3305,7 +3321,8 @@ function App() {
     setPendingRunMode('speed-date');
   }, []);
 
-  const runListTest = useCallback(async (questionsOverride?: BenchmarkQuestion[]) => {
+  /** Resolves true only when the show finished with results: the Code round builds after nothing else. */
+  const runListTest = useCallback(async (questionsOverride?: BenchmarkQuestion[]): Promise<boolean> => {
     // The quick check runs the lineup on its three questions instead of the set.
     const plan = questionsOverride ?? benchmarkPromptPlan;
     const count = questionsOverride ? questionsOverride.length : benchmarkQuestionCount;
@@ -3345,7 +3362,7 @@ function App() {
         failureKind: 'too-few',
       });
       setActivity(why);
-      return;
+      return false;
     }
 
     if (hostBlocker) {
@@ -3361,7 +3378,7 @@ function App() {
         failureKind: 'other',
       });
       setActivity(hostBlocker);
-      return;
+      return false;
     }
 
     stopRunRef.current = false;
@@ -3525,7 +3542,7 @@ function App() {
         if (uiMode !== 'beginner') tellUser(ended.message);
         setActivity(ended.message);
         void refreshProviderStatus();
-        return;
+        return false;
       }
       // Crowned at the fader the show was started at, which is where the Top
       // Match is ranked. The results come back summarized at Balanced, and
@@ -3594,6 +3611,7 @@ function App() {
       });
       playJingle('speed-date-complete');
       if (uiMode === 'beginner') selectNav('history');
+      return true;
     } catch (error) {
       const errorMessage = getErrorMessage(error);
       await agentArcadeApi.appendLog({
@@ -3626,6 +3644,7 @@ function App() {
       // See the note in startBenchmark's catch: without this, ollama.ready
       // stays stale-true and the reconnect poll never starts.
       void refreshProviderStatus();
+      return false;
     } finally {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
@@ -4259,8 +4278,10 @@ function App() {
       // how it answers, the app measures whether what it writes runs. Either
       // alone crowns a model on half the job.
       // Stop must stop the builds too, not only the questions before them.
+      // Only after questions that finished: a round where every model failed
+      // or the show stopped went on to build apps anyway.
       void runListTest()
-        .then(() => (stopRunRef.current ? undefined : runSkillTestsAfterRun(models, 'app-builder')))
+        .then((finished) => (finished && !stopRunRef.current ? runSkillTestsAfterRun(models, 'app-builder') : undefined))
         .catch(reportSkillRunFailure);
       return;
     }
@@ -4704,8 +4725,13 @@ function App() {
   const openChatApp = useCallback(async () => {
     if (isDesktopRuntime) {
       const result = await agentArcadeApi.openChatApp();
-      const problem = companionLaunchMessage(result);
-      if (problem) alert(problem);
+      const problem = companionLaunchMessage(result, import.meta.env.DEV);
+      if (problem) {
+        // The chat built into RigMatch, as "Chat with" falls back to. This
+        // button explained the failure and left no chat open at all.
+        setChatOpen(true);
+        alert(`${problem}\n\nRigMatch's own chat is open in the meantime.`);
+      }
       // Its own window, already open: nothing here moves, so say where it is.
       else if (result.reason === 'already running') tellUser('RigMatch Chat is already open, in its own window.');
     } else {
@@ -4831,9 +4857,11 @@ function App() {
           onClose={() => setWelcomeReplay(false)}
           onFinish={({ goals, advanced }) => {
             setWelcomeReplay(false);
-            saveGoalsFromSettings(goals);
-            selectUiMode(advanced ? 'advanced' : 'beginner');
-            if (!advanced) setWizardStep('setup');
+            saveGoalsFromSettings(goalsAfterWelcome(selectedGoals, goals));
+            // "Let's go" keeps the mode; only the Advanced door changes it. It
+            // switched an Advanced user to Simple.
+            if (advanced) selectUiMode('advanced');
+            else if (uiMode === 'beginner') setWizardStep('setup');
           }}
         />
       )}
@@ -4843,7 +4871,9 @@ function App() {
         <FirstRunSplash
           vramGb={system.gpu.vramGb || 0}
           initialGoals={selectedGoals}
-          isUpgrade
+          // After Clear all data the question comes back too, and "New in this
+          // version… your saved scores are untouched" was false twice over.
+          isUpgrade={scoredModelCount > 0}
           onSaveGoals={saveGoalsFromIntro}
           onCancel={dismissGoalsIntro}
         />
@@ -4887,7 +4917,9 @@ function App() {
           trackerSlot={trackerSlot}
           // Only when there is one to open — that is what keeps the Compare
           // step disabled rather than dead on a machine that has never run one.
-          onOpenRunReport={listTestResult || runReports.length > 0
+          // A picture or listening round saves no report, so the newest one
+          // was some other show's.
+          onOpenRunReport={(wizardRound === 'chat' || wizardRound === 'code') && (listTestResult || runReports.length > 0)
             ? () => { setOpenReportId(readyReportId ?? runReports[0]?.id ?? null); setReportOpen(true); }
             : undefined}
           system={system}
@@ -5040,8 +5072,9 @@ function App() {
               happened and offer the return trip. */}
           {cameFromSimple && (
             <div className="mode-jump-banner" role="status">
+              {/* Not "the full scorecard": Models and My PC come here too. */}
               <span>
-                The full scorecard lives in <strong>Advanced Mode</strong>, so RigMatch switched you over.
+                This screen lives in <strong>Advanced Mode</strong>, so RigMatch switched you over.
               </span>
               <button
                 type="button"
@@ -5286,7 +5319,7 @@ function App() {
             questionPlan={benchmarkPromptPlan}
             onQuestionCountChange={setBenchmarkQuestionCount}
             onOpenSuiteEditor={openQuestionsSheet}
-            onOpenLogs={openLogsPanel}
+            onOpenLogs={openRunLogs}
             onOpenModelPool={() => selectNav('models')}
             onOpenHistory={() => selectNav('history')}
             onRemoveCandidate={toggleShortlist}
@@ -5319,7 +5352,7 @@ function App() {
             onClearTopMatch={clearTopMatch}
             onRestoreClearedTopMatches={restoreClearedTopMatches}
             onClearScore={requestClearScore}
-            onExportForHatch={() => setExportHatchOpen(true)}
+            onExportForHatch={() => setExportHatchModel(selectedModel)}
           />
         )}
         {activeNavId === 'activity' && (
@@ -5417,7 +5450,9 @@ function App() {
         <ModelPoolLineupStrip
           className="speed-date-lineup-builder global-lineup-strip"
           rows={shortlistedRows}
-          installedRows={modelRows.filter((row) => row.installed && !shortlistIds.has(row.displayName))}
+          // Only models a show can run: ComfyUI checkpoints came first in the list,
+          // and every one was refused once picked.
+          installedRows={modelRows.filter((row) => row.installed && canJoinComparison(row) && !shortlistIds.has(row.displayName))}
           modelScores={modelScores}
           disabled={isBenchmarking || isListTesting}
           isListTesting={isListTesting}
@@ -5490,7 +5525,13 @@ function App() {
           subtitle={stored ? `${displaySuiteName(stored.suiteName)} · ${formatHistoryTime(stored.completedAt)}` : undefined}
           questionPlan={storedPlan ?? benchmarkQuestions.slice(0, benchmarkQuestionCount)}
           onClose={() => { setReportOpen(false); setReportReady(false); setOpenReportId(null); }}
-          onOpenScorecards={() => { setReportOpen(false); setReportReady(false); setOpenReportId(null); selectNav('history'); }}
+          onOpenScorecards={() => {
+            setReportOpen(false); setReportReady(false); setOpenReportId(null);
+            // Simple Mode has no Scorecards screen, so this did nothing there. It
+            // goes where the Winner screen's "See every answer" goes.
+            if (uiMode === 'beginner') { setCameFromSimple(true); selectUiMode('advanced'); }
+            selectNav('history');
+          }}
         />
         );
       })()}
@@ -5674,7 +5715,8 @@ function App() {
         <ChoiceCruiseModal
           model={chosenModel}
           inLmStudio={modelRows.find((r) => r.displayName === chosenModel)?.localProvider === 'lm-studio'}
-          onOpenChat={() => openChatWith(chosenModel)}
+          // The modal closes first: the in-app chat opened behind it.
+          onOpenChat={() => { setChosenModel(null); openChatWith(chosenModel); }}
           host={selectedHost}
           score={(() => {
             const row = modelRows.find((r) => r.displayName === chosenModel);
@@ -5685,10 +5727,12 @@ function App() {
         />
       )}
 
-      {exportHatchOpen && (
+      {exportHatchModel && (
         <ExportHatchModal
           result={buildHatchProfile({
-            recommendedTag: topRigPick && topRigPick.row.localProvider !== 'lm-studio' ? topRigPick.row.displayName : null,
+            recommendedTag: exportHatchModel,
+            only: true,
+            isTopMatch: exportHatchModel === topRigPick?.row.displayName,
             // Ollama-pullable chat models only — LM Studio / cloud / image / embedding can't be `ollama pull`-ed.
             candidates: modelRows
               .filter((row) => row.localProvider !== 'lm-studio'
@@ -5702,9 +5746,9 @@ function App() {
             gpuLabel: system.gpu.model && system.gpu.model !== 'Unknown GPU' ? system.gpu.model : 'this computer',
             vramGb: system.gpu.vramGb,
             ramGb: system.memory.totalGb,
-            reason: topRigPick?.reason ?? null,
+            reason: exportHatchModel === topRigPick?.row.displayName ? topRigPick.reason : null,
           })}
-          onClose={() => setExportHatchOpen(false)}
+          onClose={() => setExportHatchModel(null)}
         />
       )}
 

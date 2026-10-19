@@ -18,6 +18,8 @@ export const COMFY_FOLDER_STORAGE_KEY = 'rigmatch:comfy-folder:v1';
 export const COMFY_AUTOSTART_STORAGE_KEY = 'rigmatch:comfy-autostart:v1';
 /** Where RigMatch last found ComfyUI by looking, used while no address is set. */
 export const COMFY_FOUND_URL_STORAGE_KEY = 'rigmatch:comfy-found-url:v1';
+/** Set when someone saves an address in Settings, so a typed 8188 counts as chosen. */
+export const COMFY_URL_CHOSEN_STORAGE_KEY = 'rigmatch:comfy-url-chosen:v1';
 
 /** The portable and hand-installed builds serve here. */
 export const COMFY_DEFAULT_BASE_URL = 'http://127.0.0.1:8188';
@@ -123,7 +125,9 @@ export function readComfySettings(): ComfySettings {
  */
 function chosenComfyUrl(): string | null {
   const stored = normalizeComfyUrl(window.localStorage.getItem(COMFY_URL_STORAGE_KEY) ?? '');
-  return stored && stored !== COMFY_DEFAULT_BASE_URL ? stored : null;
+  // Unless someone typed it: 8188 then could not win over a copy found on 8000.
+  const typed = window.localStorage.getItem(COMFY_URL_CHOSEN_STORAGE_KEY) === 'true';
+  return stored && (stored !== COMFY_DEFAULT_BASE_URL || typed) ? stored : null;
 }
 
 /**
@@ -159,7 +163,11 @@ export function writeComfySettings(settings: Partial<ComfySettings>): void {
   try {
     if (settings.baseUrl !== undefined) {
       const normalized = normalizeComfyUrl(settings.baseUrl);
-      if (normalized) window.localStorage.setItem(COMFY_URL_STORAGE_KEY, normalized);
+      if (normalized) {
+        window.localStorage.setItem(COMFY_URL_STORAGE_KEY, normalized);
+        // Only Settings writes an address, and only one someone typed.
+        window.localStorage.setItem(COMFY_URL_CHOSEN_STORAGE_KEY, 'true');
+      }
     }
     if (settings.dedicated !== undefined) {
       window.localStorage.setItem(COMFY_DEDICATED_STORAGE_KEY, settings.dedicated ? 'true' : 'false');

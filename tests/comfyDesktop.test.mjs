@@ -22,7 +22,7 @@ globalThis.window = {
 
 const {
   COMFY_DEFAULT_BASE_URL, COMFY_DESKTOP_BASE_URL, COMFY_DOWNLOAD_URL, COMFY_URL_STORAGE_KEY,
-  comfyAddressCandidates, readComfySettings, rememberFoundComfyUrl,
+  comfyAddressCandidates, readComfySettings, rememberFoundComfyUrl, writeComfySettings,
 } = await import('../src/lib/comfySettings.ts');
 const { findComfy, looksLikeComfy } = await import('../src/lib/comfyTransport.ts');
 
@@ -57,6 +57,14 @@ test('a stored 8188 counts as unset, so it cannot hide a Desktop copy on 8000', 
   store.clear();
   store.set(COMFY_URL_STORAGE_KEY, COMFY_DEFAULT_BASE_URL);
   assert.deepEqual(comfyAddressCandidates(), [COMFY_DEFAULT_BASE_URL, COMFY_DESKTOP_BASE_URL]);
+});
+
+test('8188 typed in Settings wins over a copy found on 8000', () => {
+  store.clear();
+  rememberFoundComfyUrl(COMFY_DESKTOP_BASE_URL);
+  writeComfySettings({ baseUrl: '8188' });
+  assert.deepEqual(comfyAddressCandidates(), [COMFY_DEFAULT_BASE_URL]);
+  assert.equal(readComfySettings().baseUrl, COMFY_DEFAULT_BASE_URL);
 });
 
 test('a Desktop copy on 8000 is found when nothing answers on 8188', async () => {
