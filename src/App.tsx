@@ -179,6 +179,7 @@ import {
   CLEARED_TOP_MATCHES_STORAGE_KEY,
   DEFAULT_SHORTLIST_IDS,
   HISTORY_STORAGE_KEY,
+  QUICK_CHECK_SHEET_STORAGE_KEY,
   LINEUP_STRIP_SCREENS,
   NAV_ITEM_BY_ID,
   SIMPLE_NAV_ORDER,
@@ -332,7 +333,7 @@ const LiveFlirtSpotlight = lazyPanel(() => import('./components/LiveFlirtSpotlig
 
 
 // Quick TEST resource warning opt-out ('off' = user chose "don't warn again").
-const QUICK_CHECK_WARNING_KEY = 'rigmatch:quick-test-warning:v1';
+const QUICK_CHECK_WARNING_KEY = QUICK_CHECK_SHEET_STORAGE_KEY;
 const initialHosts = isDesktopRuntime ? [] : demoHosts.filter((host) => host.isLocal);
 const initialSelectedHostId = initialHosts[0]?.id ?? 'localhost';
 

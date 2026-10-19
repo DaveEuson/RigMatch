@@ -3,7 +3,7 @@ import { matchDisplayLabel } from '../lib/goals';
 import type { UtilityPanelId } from '../types';
 import { releaseNotes } from '../data/releaseNotes';
 import type { ThemeId, UiMode } from '../lib/appConfig';
-import { APP_VERSION, BUY_ME_A_COFFEE_URL } from '../lib/appConfig';
+import { APP_VERSION, BUY_ME_A_COFFEE_URL, QUICK_CHECK_SHEET_STORAGE_KEY } from '../lib/appConfig';
 import type { CopyState } from '../lib/clipboard';
 import { copyText } from '../lib/clipboard';
 import { compareVersionStrings, formatGb, getResponseEstimate, getScoreTone } from '../lib/format';
@@ -623,6 +623,7 @@ export function UtilityPanel({
           </div>
           <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
           <ShowExtrasSettings />
+          <QuickCheckSheetSetting />
           </SettingsSection>
           <SettingsSection
             title="Achievements"
@@ -818,5 +819,34 @@ export function UtilityPanel({
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * The way back from the run sheet's "Start quick checks without this sheet
+ * from now on", which had none: once ticked, the sheet never showed again.
+ */
+function QuickCheckSheetSetting() {
+  const [ask, setAsk] = useState(() => {
+    try { return localStorage.getItem(QUICK_CHECK_SHEET_STORAGE_KEY) !== 'off'; } catch { return true; }
+  });
+  return (
+    <label className="advanced-lab-consent">
+      <input
+        type="checkbox"
+        checked={ask}
+        onChange={(event) => {
+          setAsk(event.target.checked);
+          try {
+            if (event.target.checked) localStorage.removeItem(QUICK_CHECK_SHEET_STORAGE_KEY);
+            else localStorage.setItem(QUICK_CHECK_SHEET_STORAGE_KEY, 'off');
+          } catch { /* storage unavailable */ }
+        }}
+      />
+      <span>
+        Show the run sheet before a quick check, so you can see its three questions and change the
+        lineup first. Off once you tick "Start quick checks without this sheet" on the sheet.
+      </span>
+    </label>
   );
 }
