@@ -679,6 +679,8 @@ function App() {
   const [pendingScoreClear, setPendingScoreClear] = useState<PendingScoreClear | null>(null);
   // A Settings section a link elsewhere asks for, such as ComfyUI help on Models.
   const [settingsSectionRequest, setSettingsSectionRequest] = useState<{ id: SettingsSectionId; at: number } | null>(null);
+  // Spent once Settings is left: kept, every later visit reopened that section.
+  if (settingsSectionRequest && activeNavId !== 'settings') setSettingsSectionRequest(null);
   // The welcome again, from Settings. The first run's own is useGoals' showModeSplash.
   const [welcomeReplay, setWelcomeReplay] = useState(false);
   // My PC's two views: the computer and its connections, or everything logged.
