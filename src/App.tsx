@@ -617,7 +617,7 @@ function App() {
   const [activity, setActivity] = useState('Contestants is your hub: browse models, run tests, manage downloads, and start Speed Dating.');
   const [activeNavId, setActiveNavId] = useState<NavId>('models');
   const {
-    comfyCheckpoints, comfyFolders, comfyReachable, comfyChecked, comfyQueue, comfySettings,
+    comfyCheckpoints, comfyFolders, comfyReachable, comfyChecked, comfyQueue, comfyKnown, comfySettings,
     refreshComfyStatus, beginComfyDownload, endComfyDownload, abortComfyDownload,
   } = useComfy({ activeNavId });
   const {
@@ -4617,7 +4617,7 @@ function App() {
     // is broken.
     ollama: ollama.ready ? 'ok' : isScanningRig ? 'testing' : lmStudio.ready ? 'off' : rigChecked ? 'down' : 'untested',
     lmStudio: lmStudio.ready ? 'ok' : undefined,
-    comfy: comfyConnection({ checked: comfyChecked, reachable: comfyReachable, folder: comfySettings.folder }),
+    comfy: comfyConnection({ checked: comfyChecked, reachable: comfyReachable, folder: comfySettings.folder, known: comfyKnown }),
   };
   // The pill names ComfyUI, and My PC's ComfyUI row is where its dot is explained.
   const [focusComfy, setFocusComfy] = useState(false);
@@ -4625,6 +4625,9 @@ function App() {
   const openConnections = useCallback(() => {
     if (uiMode === 'beginner') { setCameFromSimple(true); selectUiMode('advanced'); }
     selectNav('lan');
+    // The rows live on Overview. Left on Logs, the pill opened the log, and the
+    // focus waited to scroll a later Overview visit unasked.
+    setMyPcView('overview');
     setFocusComfy(true);
   }, [uiMode, selectUiMode, selectNav]);
   const openComfySettings = useCallback(() => {
@@ -5051,7 +5054,6 @@ function App() {
             ollama={ollama}
             lmStudio={lmStudio}
             hosts={hosts}
-            modelCount={modelRows.length}
             selectedHostId={selectedHostId}
             isScanning={isScanningRig}
             onScan={refreshRig}
@@ -5067,6 +5069,7 @@ function App() {
               checked: comfyChecked,
               reachable: comfyReachable,
               folder: comfySettings.folder,
+              known: comfyKnown,
               pictureModels: drawableModels(chatListing).length,
               queue: comfyQueue,
             }}

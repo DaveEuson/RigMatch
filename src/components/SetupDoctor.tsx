@@ -1,7 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { ReactNode } from 'react';
 import { isDesktopRuntime } from '../api';
-import { comfyDoctorRow, type ComfyLook } from '../lib/serviceStatus';
+import { comfyDoctorRow, localAiDoctor, type ComfyLook } from '../lib/serviceStatus';
 import type { NetworkHost, OllamaStatus, SystemProfile } from '../types';
 import { ExternalLink } from 'lucide-react';
 import { ComfyStartButton } from './ComfyStartButton';
@@ -9,8 +9,8 @@ import { GetComfyLink } from './GetComfyLink';
 
 export function SetupDoctor({
   ollama,
+  lmStudio,
   hosts,
-  modelCount,
   system,
   comfy,
   onCheckComputer,
@@ -18,8 +18,8 @@ export function SetupDoctor({
   onOpenComfySettings,
 }: {
   ollama: OllamaStatus;
+  lmStudio: OllamaStatus;
   hosts: NetworkHost[];
-  modelCount: number;
   system: SystemProfile;
   /** ComfyUI as the top bar's dot sees it, plus what it holds. */
   comfy: ComfyLook & { pictureModels: number; queue: number };
@@ -33,6 +33,10 @@ export function SetupDoctor({
   // why, or where to get it. The Get link and the Start button were only on
   // Simple Mode's setup and inside picture tests.
   const comfyRow = comfyDoctorRow({ ...comfy, platform: system.platform, arch: system.arch });
+  const local = localAiDoctor({
+    ollama: { ready: ollama.ready, models: ollama.models.length },
+    lmStudio: { ready: lmStudio.ready, models: lmStudio.models.length },
+  });
   const doctorRows: {
     label: string;
     value: string;
@@ -50,17 +54,13 @@ export function SetupDoctor({
     },
     {
       label: 'Ollama Service',
-      value: ollama.ready ? 'Running' : 'Needs setup',
-      detail: ollama.ready ? `${ollama.models.length} installed model${ollama.models.length === 1 ? '' : 's'} visible.` : 'Install or start Ollama, then check again.',
-      tone: ollama.ready ? 'ready' : 'warn',
-      action: ollama.ready ? null : { label: 'Setup', onClick: onOpenSetupGuide },
+      ...local.ollama,
+      action: local.ollama.setup ? { label: 'Setup', onClick: onOpenSetupGuide } : null,
     },
     {
       label: 'Model Pool',
-      value: ollama.models.length > 0 ? 'Contestants ready' : 'No local models',
-      detail: ollama.models.length > 0 ? `${modelCount} model${modelCount === 1 ? '' : 's'} in the model pool.` : 'Download one model before the first compatibility test.',
-      tone: ollama.models.length > 0 ? 'ready' : 'warn',
-      action: ollama.models.length > 0 ? null : { label: 'Check', onClick: onCheckComputer },
+      ...local.pool,
+      action: local.pool.check ? { label: 'Check', onClick: onCheckComputer } : null,
     },
     {
       label: 'ComfyUI',
@@ -71,7 +71,7 @@ export function SetupDoctor({
       extra: (
         <span className="doctor-actions">
           {comfyRow.kind === 'not-found' && <GetComfyLink />}
-          {comfyRow.kind === 'not-running' && <ComfyStartButton folder={comfy.folder} />}
+          {comfyRow.kind === 'not-running' && comfy.folder && <ComfyStartButton folder={comfy.folder} />}
           <button type="button" className="btn btn-link" onClick={onOpenComfySettings} title="Open Settings for the ComfyUI address and models folder">
             ComfyUI settings
           </button>
@@ -101,7 +101,7 @@ export function SetupDoctor({
       <div className="setup-doctor-head">
         <div>
           <span>Setup Doctor</span>
-          <strong>{ollama.ready ? 'Ready for local model tests' : 'One setup step before the show starts'}</strong>
+          <strong>{local.headline}</strong>
         </div>
         <button type="button" className="mini-button outline" onClick={onOpenSetupGuide}>
           <ExternalLink aria-hidden="true" />

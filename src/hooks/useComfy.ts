@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { agentArcadeApi } from '../api';
-import { readComfySettings } from '../lib/comfySettings';
+import { comfyFoundBefore, readComfySettings } from '../lib/comfySettings';
 import { onComfyStarted } from '../lib/comfyStarter';
 import { getComfyStatus } from '../lib/comfyTransport';
 import { comfyBusyCount } from '../lib/videoGen';
@@ -56,6 +56,11 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
   const [comfyChecked, setComfyChecked] = useState(false);
   /** Jobs already in ComfyUI's queue, so My PC can say it is busy. */
   const [comfyQueue, setComfyQueue] = useState(0);
+  /**
+   * Whether ComfyUI answered here before, this session or an earlier one. A
+   * stopped one is then "not running", not "not found" with a download offer.
+   */
+  const [comfyKnown, setComfyKnown] = useState(() => comfyFoundBefore());
   /** The generation download in flight, so Stop can abort the right stream. */
   const activeComfyDownloadRef = useRef<string | null>(null);
 
@@ -89,6 +94,7 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
     if (status.address) setAnsweredAt(status.address);
     setComfyChecked(true);
     setComfyReachable(status.reachable === true);
+    if (status.reachable === true) setComfyKnown(true);
     setComfyQueue(status.reachable ? comfyBusyCount(status.execInfo ?? null) : 0);
     setComfyCheckpoints(status.checkpoints);
     setComfyTextEncoders(status.textEncoders ?? []);
@@ -160,6 +166,7 @@ export function useComfy({ activeNavId }: { activeNavId: string }) {
     comfyReachable,
     comfyChecked,
     comfyQueue,
+    comfyKnown,
     comfySettings,
     refreshComfyStatus,
     beginComfyDownload,

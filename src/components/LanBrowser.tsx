@@ -16,7 +16,6 @@ export function LanBrowser({
   ollama,
   lmStudio,
   hosts,
-  modelCount,
   selectedHostId,
   isScanning,
   onScan,
@@ -38,7 +37,6 @@ export function LanBrowser({
   ollama: OllamaStatus;
   lmStudio: OllamaStatus;
   hosts: NetworkHost[];
-  modelCount: number;
   selectedHostId: string;
   isScanning: boolean;
   onScan: () => void;
@@ -146,8 +144,8 @@ export function LanBrowser({
       />
       <SetupDoctor
         ollama={ollama}
+        lmStudio={lmStudio}
         hosts={hosts}
-        modelCount={modelCount}
         system={system}
         comfy={comfy}
         onCheckComputer={onScanRig}

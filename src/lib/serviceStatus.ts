@@ -22,8 +22,13 @@ export type ComfyLook = {
   checked: boolean;
   /** Whether ComfyUI answered at that look. */
   reachable: boolean;
-  /** The models folder from Settings: set means ComfyUI was set up here. */
+  /** The models folder from Settings, which a Start button needs. */
   folder: string;
+  /**
+   * ComfyUI answered here before, this session or an earlier one. Most people
+   * never pick a folder, so this is the usual sign it was set up.
+   */
+  known: boolean;
 };
 
 /**
@@ -32,10 +37,10 @@ export type ComfyLook = {
  * run. Grey either way: most people never install ComfyUI, and red would read
  * as something broken. Red is kept for a ComfyUI set up here that stopped.
  */
-export function comfyConnection({ checked, reachable, folder }: ComfyLook): ConnectionState {
+export function comfyConnection({ checked, reachable, folder, known }: ComfyLook): ConnectionState {
   if (reachable) return 'ok';
   if (!checked) return 'testing';
-  return folder ? 'down' : 'missing';
+  return folder || known ? 'down' : 'missing';
 }
 
 /** The ComfyUI dot's tooltip: the state, and what My PC offers about it. */
@@ -98,11 +103,14 @@ export function comfyDoctorRow(look: ComfyLook & {
   if (!look.checked) {
     return { kind: 'checking', value: 'Checking', detail: 'Looking for ComfyUI on this PC.', tone: 'info' };
   }
-  if (look.folder) {
+  if (look.folder || look.known) {
     return {
       kind: 'not-running',
       value: 'Not running',
-      detail: 'Set up on this PC, but not answering. Start it, and RigMatch notices within 15 seconds.',
+      // Without a folder there is no launcher to offer, so the start is theirs.
+      detail: look.folder
+        ? 'Set up on this PC, but not answering. Start it, and RigMatch notices within 15 seconds.'
+        : 'It answered here before, but not now. Start it the way you normally do, and RigMatch notices within 15 seconds.',
       tone: 'warn',
     };
   }
@@ -111,5 +119,33 @@ export function comfyDoctorRow(look: ComfyLook & {
     value: 'Not found',
     detail: `Pictures, video and sound need ComfyUI, a separate free program of about 5 GB. Everything else works without it. ${comfyRequirements(look.platform, look.arch)}`,
     tone: 'info',
+  };
+}
+
+type DoctorRow = { value: string; detail: string; tone: 'ready' | 'warn' | 'info' };
+
+/**
+ * Setup Doctor's headline and its Ollama and Model Pool rows. They read Ollama
+ * alone, so with only LM Studio running My PC said "Needs setup" and "No local
+ * models" while the top bar and Simple Mode said ready; and the pool counted
+ * the whole catalog, not what is installed.
+ */
+export function localAiDoctor({ ollama, lmStudio }: {
+  ollama: { ready: boolean; models: number };
+  lmStudio: { ready: boolean; models: number };
+}): { headline: string; ollama: DoctorRow & { setup: boolean }; pool: DoctorRow & { check: boolean } } {
+  // Only a running program's models can be tested.
+  const installed = (ollama.ready ? ollama.models : 0) + (lmStudio.ready ? lmStudio.models : 0);
+  const plural = (count: number) => `${count} installed model${count === 1 ? '' : 's'}`;
+  return {
+    headline: ollama.ready || lmStudio.ready ? 'Ready for local model tests' : 'One setup step before the show starts',
+    ollama: ollama.ready
+      ? { value: 'Running', detail: `${plural(ollama.models)} visible.`, tone: 'ready', setup: false }
+      : lmStudio.ready
+        ? { value: 'Not running', detail: 'LM Studio is carrying the tests. New models download through Ollama.', tone: 'info', setup: true }
+        : { value: 'Needs setup', detail: 'Install or start Ollama, then check again.', tone: 'warn', setup: true },
+    pool: installed > 0
+      ? { value: 'Contestants ready', detail: `${plural(installed)} ready to test.`, tone: 'ready', check: false }
+      : { value: 'No local models', detail: 'Download one model before the first compatibility test.', tone: 'warn', check: true },
   };
 }
