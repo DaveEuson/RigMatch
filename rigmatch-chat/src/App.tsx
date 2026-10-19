@@ -1502,6 +1502,10 @@ export default function App() {
     });
     setActiveConversationId(conversationId);
     setDraft("");
+    // Sent once, with this turn. Left in place it rode along with every later
+    // message too, the same picture or recording over and over. One set aside
+    // for a model that cannot read it was not sent, so it stays for the next.
+    if (usableAttachment) setAttachment(null);
     setTypingModel(activeBuddy);
 
     const profilePrompt = [
