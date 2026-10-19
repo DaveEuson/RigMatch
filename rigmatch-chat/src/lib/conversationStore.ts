@@ -239,6 +239,43 @@ export function parseStore(
   return null;
 }
 
+/**
+ * What reading a store file came to. Only "ok" and "missing" are safe to save
+ * over; "unreadable" means a file is there and holds something this build could
+ * not use.
+ */
+export type StoreRead<T> =
+  | { status: "ok"; value: T }
+  | { status: "missing" }
+  | { status: "unreadable"; reason: string };
+
+/**
+ * Read a store file (conversations or memory) and say which of the three it was.
+ *
+ * A file that was locked, damaged or written by a newer version used to come
+ * back as an empty list, and the first save then wrote that empty list over
+ * it. Telling "nothing saved yet" apart from "could not read what is saved" is
+ * what lets the caller hold off.
+ */
+export async function readStore<T>(
+  read: () => Promise<string | null>,
+  parse: (raw: string) => T | null,
+): Promise<StoreRead<T>> {
+  let raw: string | null;
+  try {
+    raw = await read();
+  } catch (error) {
+    return { status: "unreadable", reason: String((error as Error)?.message ?? error) };
+  }
+  // Zero bytes holds nothing to lose.
+  if (raw === null || !raw.trim()) return { status: "missing" };
+  const value = parse(raw);
+  if (value === null) {
+    return { status: "unreadable", reason: "the file is damaged, or was saved by a newer RigMatch Chat" };
+  }
+  return { status: "ok", value };
+}
+
 /** Newest first — the order the sidebar lists them in. */
 export function sortConversations(conversations: Conversation[]): Conversation[] {
   return [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);

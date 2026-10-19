@@ -368,9 +368,26 @@ fn write_json_file(path: &std::path::Path, contents: &str) -> Result<(), String>
     Ok(())
 }
 
+/// Copy a store file that could not be read aside, before anything can be
+/// written over it, and say where the copy is.
+///
+/// One copy per store, replaced each time. While the original stays in place it
+/// is the same file at every launch; the copy only has to outlive a choice to
+/// start fresh.
+fn back_up_json_file(path: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let backup = path.with_extension("unreadable.json");
+    std::fs::copy(path, &backup).map_err(|e| e.to_string())?;
+    Ok(backup)
+}
+
 #[tauri::command]
 fn read_conversations(app: tauri::AppHandle) -> Result<Option<String>, String> {
     read_json_file(&conversations_path(&app)?)
+}
+
+#[tauri::command]
+fn back_up_conversations(app: tauri::AppHandle) -> Result<String, String> {
+    back_up_json_file(&conversations_path(&app)?).map(|path| path.display().to_string())
 }
 
 #[tauri::command]
@@ -396,6 +413,11 @@ fn read_memories(app: tauri::AppHandle) -> Result<Option<String>, String> {
 #[tauri::command]
 fn write_memories(app: tauri::AppHandle, contents: String) -> Result<(), String> {
     write_json_file(&memories_path(&app)?, &contents)
+}
+
+#[tauri::command]
+fn back_up_memories(app: tauri::AppHandle) -> Result<String, String> {
+    back_up_json_file(&memories_path(&app)?).map(|path| path.display().to_string())
 }
 
 // ── Video memory ────────────────────────────────────────────────────────────
@@ -803,8 +825,10 @@ pub fn run() {
             cancel_chat,
             read_conversations,
             write_conversations,
+            back_up_conversations,
             read_memories,
             write_memories,
+            back_up_memories,
             open_rigmatch_ai,
             get_system_stats,
             get_rig_scores,
@@ -856,6 +880,24 @@ mod tests {
         assert_eq!(done, serde_json::json!({ "type": "done", "promptTokens": 812, "evalTokens": 64 }));
         let token = serde_json::to_value(StreamEvent::Token { value: "Hi".into() }).unwrap();
         assert_eq!(token, serde_json::json!({ "type": "token", "value": "Hi" }));
+    }
+
+    #[test]
+    fn an_unreadable_store_is_copied_aside_byte_for_byte() {
+        let dir = std::env::temp_dir().join(format!("rigmatch-chat-backup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("conversations.json");
+        // Not valid JSON, and not UTF-8 either: the copy must not care.
+        let bytes = b"{\"version\":3,\xff\xfe truncated";
+        std::fs::write(&store, bytes).unwrap();
+
+        let copy = back_up_json_file(&store).expect("copy");
+        assert_eq!(copy, dir.join("conversations.unreadable.json"));
+        assert_eq!(std::fs::read(&copy).unwrap(), bytes);
+        assert_eq!(std::fs::read(&store).unwrap(), bytes, "the original is left in place");
+        // A second launch with the same file replaces the copy rather than failing.
+        assert!(back_up_json_file(&store).is_ok());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

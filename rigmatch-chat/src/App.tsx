@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, readConversationsFile, writeConversationsFile, readMemoriesFile, writeMemoriesFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
+import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, readConversationsFile, writeConversationsFile, backUpConversationsFile, readMemoriesFile, writeMemoriesFile, backUpMemoriesFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
 import { cutAtTurnMarker } from "./lib/turnMarkers";
 import { createWriteScheduler } from "./lib/writeScheduler";
 import { UI_ICON_ART, type UiIconName } from "./lib/uiIconArt";
@@ -35,9 +35,11 @@ import {
   deriveTitle,
   migrateV1,
   parseStore,
+  readStore,
   serializeStore,
   withMessages,
   type Conversation,
+  type StoreRead,
 } from "./lib/conversationStore";
 import {
   DEFAULT_PERSONALITY_ID,
@@ -353,34 +355,33 @@ type BridgePayload = { scores: Record<string, ModelScore>; chosen: string | null
  * The old key is only cleared once the file has been written successfully — if
  * the write fails, the history stays where it was rather than being deleted
  * from one place before it exists in the other.
+ *
+ * A file that is there but cannot be read comes back "unreadable", and the
+ * legacy store is left alone too: migrating it would write over that file.
  */
-async function loadConversations(): Promise<Conversation[]> {
+async function loadConversations(): Promise<StoreRead<Conversation[]>> {
   const options = {
     makeId: (index: number) => `${Date.now().toString(36)}-migrated-${index}`,
     now: Date.now(),
     defaultPersonalityId: DEFAULT_PERSONALITY_ID,
   };
 
-  try {
-    // Handles both the v1 map and the v2 list, so a file written by any
-    // previous build is carried forward rather than replaced.
-    const fromFile = parseStore(await readConversationsFile(), options);
-    if (fromFile) return fromFile;
-  } catch {
-    // Fall through to the legacy store; an unreadable file must not lose it.
-  }
+  // Handles both the v1 map and the v2 list, so a file written by any
+  // previous build is carried forward rather than replaced.
+  const fromFile = await readStore(readConversationsFile, (raw) => parseStore(raw, options));
+  if (fromFile.status !== "missing") return fromFile;
 
   // Older still: the original localStorage map, from before history moved to
   // a file at all.
   let migrated: Conversation[];
   try {
     const legacyRaw = localStorage.getItem(CONVERSATIONS_KEY);
-    if (!legacyRaw) return [];
+    if (!legacyRaw) return { status: "missing" };
     migrated = migrateV1(JSON.parse(legacyRaw) as Record<string, unknown>, options.makeId, options.now, DEFAULT_PERSONALITY_ID);
   } catch {
-    return [];
+    return { status: "missing" };
   }
-  if (migrated.length === 0) return [];
+  if (migrated.length === 0) return { status: "missing" };
 
   try {
     await writeConversationsFile(serializeStore(migrated));
@@ -388,7 +389,7 @@ async function loadConversations(): Promise<Conversation[]> {
   } catch {
     // Keep the legacy copy and try again next launch.
   }
-  return migrated;
+  return { status: "ok", value: migrated };
 }
 
 function loadCachedBridge(): BridgePayload {
@@ -682,6 +683,14 @@ export default function App() {
   } | null>(null);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
+  /**
+   * A history or memory file that is there but could not be read, and where a
+   * copy of it was put (null when copying failed too). While one is set its
+   * `…Loaded` flag stays false, so nothing is saved over that file.
+   */
+  const [unreadableStores, setUnreadableStores] = useState<
+    Partial<Record<"conversations" | "memories", { reason: string; copy: string | null }>>
+  >({});
   const [typingModel, setTypingModel] = useState<string | null>(null);
   // Each model's declared memory, read once per model from /api/show.
   const [contextInfo, setContextInfo] = useState<Record<string, ModelContextInfo | null>>({});
@@ -1253,9 +1262,16 @@ export default function App() {
 
   useEffect(() => {
     let canceled = false;
-    void loadConversations().then((loaded) => {
+    void loadConversations().then(async (loaded) => {
       if (canceled) return;
-      setConversations(loaded);
+      if (loaded.status === "unreadable") {
+        // Kept as it is: not marked loaded, so the save effect never writes an
+        // empty list over it. The copy is what makes "Start a new history" safe.
+        const copy = await backUpConversationsFile().catch(() => null);
+        if (!canceled) setUnreadableStores((prev) => ({ ...prev, conversations: { reason: loaded.reason, copy } }));
+        return;
+      }
+      setConversations(loaded.status === "ok" ? loaded.value : []);
       setHistoryLoaded(true);
     });
     return () => { canceled = true; };
@@ -1285,16 +1301,28 @@ export default function App() {
   // chat history does not silently take it with it.
   useEffect(() => {
     let canceled = false;
-    void readMemoriesFile()
-      .then((raw) => parseMemories(raw) ?? [])
-      .catch(() => [])
-      .then((loaded) => {
-        if (canceled) return;
-        setMemories(loaded);
-        setMemoriesLoaded(true);
-      });
+    void readStore(readMemoriesFile, parseMemories).then(async (loaded) => {
+      if (canceled) return;
+      if (loaded.status === "unreadable") {
+        const copy = await backUpMemoriesFile().catch(() => null);
+        if (!canceled) setUnreadableStores((prev) => ({ ...prev, memories: { reason: loaded.reason, copy } }));
+        return;
+      }
+      setMemories(loaded.status === "ok" ? loaded.value : []);
+      setMemoriesLoaded(true);
+    });
     return () => { canceled = true; };
   }, []);
+
+  /**
+   * Give up on an unreadable file and save from now on. Offered only once a copy
+   * of it exists; what was said this session is kept and saved.
+   */
+  const startFresh = (store: "conversations" | "memories") => {
+    setUnreadableStores(({ [store]: _done, ...rest }) => rest);
+    if (store === "conversations") setHistoryLoaded(true);
+    else setMemoriesLoaded(true);
+  };
 
   const memoryWriterRef = useRef<ReturnType<typeof createWriteScheduler<Memory[]>> | null>(null);
   if (memoryWriterRef.current == null) {
@@ -1712,6 +1740,8 @@ export default function App() {
   };
 
   const clearAllHistory = () => {
+    // Asked for in so many words, so an unreadable file is no longer kept.
+    startFresh("conversations");
     setConversations([]);
     setActiveConversationId(null);
     setTokenMarkByKey({});
@@ -2202,6 +2232,28 @@ export default function App() {
           still here until you close the app.
         </div>
       )}
+      {/* A file that is there but could not be read is left exactly as it is,
+          and nothing is saved over it until the user says to. It used to be
+          read as empty, and the first save replaced it. */}
+      {(["conversations", "memories"] as const).map((store) => {
+        const unreadable = unreadableStores[store];
+        if (!unreadable) return null;
+        const what = store === "conversations" ? "conversations" : "memory";
+        return (
+          <div key={store} className="rm-persist-warning" role="status">
+            Your saved {what} could not be opened: {unreadable.reason}. The file is left as it is
+            {unreadable.copy ? `, with a copy at ${unreadable.copy}` : ""}, and nothing new is saved over it.
+            {unreadable.copy && (
+              <>
+                {" "}
+                <button type="button" className="rm-btn-sm" onClick={() => startFresh(store)}>
+                  {store === "conversations" ? "Start a new history" : "Start a new memory"}
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })}
 
       <div className="rm-content">
       {/* ── Buddy List ─────────────────────────────────────────────── */}
