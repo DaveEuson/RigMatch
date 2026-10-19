@@ -5449,7 +5449,9 @@ function App() {
         <ModelPoolLineupStrip
           className="speed-date-lineup-builder global-lineup-strip"
           rows={shortlistedRows}
-          installedRows={modelRows.filter((row) => row.installed && !shortlistIds.has(row.displayName))}
+          // Only models a show can run: ComfyUI checkpoints came first in the list,
+          // and every one was refused once picked.
+          installedRows={modelRows.filter((row) => row.installed && canJoinComparison(row) && !shortlistIds.has(row.displayName))}
           modelScores={modelScores}
           disabled={isBenchmarking || isListTesting}
           isListTesting={isListTesting}
