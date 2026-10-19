@@ -195,8 +195,12 @@ async fn get_model_context_info(
 /// Streamed output. The final message carries Ollama's own `prompt_eval_count`,
 /// which is the only exact measure of how much of the conversation the model
 /// actually saw — the app previously had no way to know it had been truncated.
+///
+/// `rename_all` renames only the variant tags; `rename_all_fields` is what makes
+/// `prompt_tokens` arrive as the `promptTokens` the window reads. Without it the
+/// counts came through as undefined and the memory meter read "NaN".
 #[derive(Serialize, Clone)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum StreamEvent {
     Token { value: String },
     Done { prompt_tokens: u64, eval_tokens: u64 },
@@ -842,6 +846,16 @@ mod tests {
         assert_eq!(info.head_count_kv, 8);
         assert_eq!(info.key_length, 128);
         assert_eq!(info.value_length, 128);
+    }
+
+    #[test]
+    fn the_end_of_reply_counts_reach_the_window_under_the_names_it_reads() {
+        // ollamaApi.ts reads event.promptTokens and event.evalTokens. Sent as
+        // prompt_tokens they arrived as undefined and the meter read NaN.
+        let done = serde_json::to_value(StreamEvent::Done { prompt_tokens: 812, eval_tokens: 64 }).unwrap();
+        assert_eq!(done, serde_json::json!({ "type": "done", "promptTokens": 812, "evalTokens": 64 }));
+        let token = serde_json::to_value(StreamEvent::Token { value: "Hi".into() }).unwrap();
+        assert_eq!(token, serde_json::json!({ "type": "token", "value": "Hi" }));
     }
 
     #[test]

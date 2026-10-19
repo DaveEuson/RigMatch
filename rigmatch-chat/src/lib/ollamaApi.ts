@@ -1,6 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { invoke, Channel } from "@tauri-apps/api/core";
-import type { ModelContextInfo, VramInfo } from "./contextWindow";
+import { readTokenCounts, type ModelContextInfo, type VramInfo } from "./contextWindow";
 import { cutAtTurnMarker, safeToShow } from "./turnMarkers";
 
 export type OllamaModel = {
@@ -169,7 +169,8 @@ export async function streamChat(
       return;
     }
     show(received.length);
-    options?.onDone?.({ promptTokens: event.promptTokens, evalTokens: event.evalTokens });
+    const counts = readTokenCounts(event);
+    if (counts) options?.onDone?.(counts);
   };
 
   const invokePromise = invoke<void>("stream_chat", {
