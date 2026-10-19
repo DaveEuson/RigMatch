@@ -142,3 +142,103 @@ test('free space is read from the drive the models are on', async () => {
   assert.equal(ollamaModelsDir({ env: {}, platform: 'linux', home: '/home/d' }), '/home/d/.ollama/models');
   assert.equal(ollamaModelsDir({ env: {}, platform: 'win32', home: 'C:\\Users\\d' }), 'C:\\Users\\d\\.ollama\\models');
 });
+
+test('AMD cards on Linux take their VRAM from sysfs, matched by PCI address', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+  const { readSysfsVram, withSysfsVram, mbToGb } = require('../electron/systemProfile.cjs');
+  const root = mkdtempSync(join(tmpdir(), 'rigmatch-sysfs-'));
+  const device = (name, files) => {
+    const dir = join(root, 'sys', 'class', 'drm', name, 'device');
+    mkdirSync(dir, { recursive: true });
+    for (const [file, text] of Object.entries(files)) writeFileSync(join(dir, file), text);
+  };
+  try {
+    // The machine from issue #145: RX 7900 XTX at 03:00.0, Radeon 610M at 12:00.0.
+    device('card0', { mem_info_vram_total: '25753026560\n', uevent: 'DRIVER=amdgpu\nPCI_ID=1002:744C\nPCI_SLOT_NAME=0000:03:00.0\n' });
+    device('card1', { mem_info_vram_total: '536870912\n', uevent: 'DRIVER=amdgpu\nPCI_ID=1002:164E\nPCI_SLOT_NAME=0000:12:00.0\n' });
+    device('card2', { uevent: 'DRIVER=nvidia\nPCI_SLOT_NAME=0000:01:00.0\n' });
+    device('card0-DP-1', { mem_info_vram_total: '1\n', uevent: 'PCI_SLOT_NAME=0000:99:00.0\n' });
+    assert.deepEqual(readSysfsVram(root), { '0000:03:00.0': 25753026560, '0000:12:00.0': 536870912 },
+      'only amdgpu cards, and connector folders are not cards');
+    assert.deepEqual(readSysfsVram(join(root, 'nowhere')), {}, 'no /sys/class/drm, nothing found');
+
+    const issue = [
+      { vendor: 'Advanced Micro Devices, Inc. [AMD/ATI]', model: 'Navi 31 [Radeon RX 7900 XT/7900 XTX/7900 GRE/7900M]', busAddress: '03:00.0', vram: 1 },
+      { vendor: 'Advanced Micro Devices, Inc. [AMD/ATI]', model: 'Raphael [Radeon 610M]', busAddress: '12:00.0', vram: 512 },
+    ];
+    assert.match(pickPrimaryGpu(issue).model, /610M/, 'the bug as reported');
+    const fixed = withSysfsVram(issue, readSysfsVram(root));
+    assert.match(pickPrimaryGpu(fixed).model, /7900 XTX/);
+    assert.equal(pickPrimaryGpu(fixed).vram, 24560);
+    assert.equal(mbToGb(pickPrimaryGpu(fixed).vram), 24);
+    assert.equal(fixed[1].vram, 512, "the APU's carve-out is what sysfs reports for it too");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sysfs VRAM only ever raises a figure, and only on Linux', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { withSysfsVram } = require('../electron/systemProfile.cjs');
+  const rtx = { vendor: 'NVIDIA', model: 'GeForce RTX 4070', busAddress: '01:00.0', vram: 12282 };
+  assert.deepEqual(withSysfsVram([rtx], {}), [rtx]);
+  assert.equal(withSysfsVram([{ model: 'x', busAddress: '03:00.0', vram: 16384 }], { '0000:03:00.0': 8 * GB })[0].vram, 16384,
+    "a larger systeminformation figure stands");
+  assert.equal(withSysfsVram([{ model: 'x', vram: 0 }], { '0000:03:00.0': 8 * GB })[0].vram, 0, 'no address, no match');
+  assert.equal(withSysfsVram([{ model: 'x', busAddress: '0001:0A:00.0' }], { '0001:0a:00.0': 8 * GB })[0].vram, 8192,
+    'an address that carries its own PCI domain');
+  assert.deepEqual(withSysfsVram(undefined, {}), []);
+
+  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
+  const wiring = main.indexOf("if (process.platform === 'linux') graphics.controllers = withSysfsVram(graphics.controllers, readSysfsVram());");
+  assert.ok(wiring > 0, 'getSystemProfile reads sysfs on Linux only');
+  assert.ok(wiring < main.indexOf('const primaryGpu = pickPrimaryGpu(graphics.controllers)'), 'before the card is picked');
+});
+
+test('the models folder is resolved through symlinks before its drive is picked', () => {
+  const { pickModelsFilesystem, resolveModelsDir } = require('../electron/systemProfile.cjs');
+  // fsSize on the Bazzite machine from issue #146.
+  const bazzite = [
+    { fs: 'composefs', type: 'overlay', mount: '/', size: 0, available: 0 },
+    { fs: '/dev/nvme0n1p3', type: 'btrfs', mount: '/var/home', size: 2500000000000, available: 2302227152896 },
+  ];
+  assert.equal(pickModelsFilesystem(bazzite, '/var/home/u/.ollama/models').mount, '/var/home', 'a specific mount beats root');
+  assert.equal(pickModelsFilesystem(bazzite, '/usr/share/ollama/.ollama/models').mount, '/', 'root is still a mount');
+  assert.equal(pickModelsFilesystem(bazzite, '/home/u/.ollama/models').mount, '/', 'the bug as reported');
+
+  // /home is a symlink to /var/home; anything not in `real` does not exist.
+  const fakeRealpath = (real) => (target) => {
+    const resolved = target.replace(/^\/home(?=\/|$)/, '/var/home');
+    if (!real.includes(resolved)) throw Object.assign(new Error(`ENOENT: ${target}`), { code: 'ENOENT' });
+    return resolved;
+  };
+  const existing = fakeRealpath(['/', '/var', '/var/home', '/var/home/u', '/var/home/u/.ollama', '/var/home/u/.ollama/models']);
+  const dir = resolveModelsDir('/home/u/.ollama/models', existing);
+  assert.equal(dir, '/var/home/u/.ollama/models');
+  assert.equal(pickModelsFilesystem(bazzite, dir).available, 2302227152896);
+
+  const notPulledYet = fakeRealpath(['/', '/var', '/var/home', '/var/home/u']);
+  assert.equal(resolveModelsDir('/home/u/.ollama/models', notPulledYet), '/var/home/u/.ollama/models',
+    'a folder Ollama has not made yet resolves through its nearest parent');
+  assert.equal(resolveModelsDir('/home/u/.ollama/models', fakeRealpath([])), '/home/u/.ollama/models', 'nothing resolves, nothing changes');
+  assert.equal(resolveModelsDir(''), '');
+});
+
+test('the models folder resolves through a real link on this machine', async () => {
+  const { mkdtempSync, mkdirSync, symlinkSync, realpathSync, rmSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+  const { resolveModelsDir } = require('../electron/systemProfile.cjs');
+  const base = mkdtempSync(join(tmpdir(), 'rigmatch-home-'));
+  try {
+    mkdirSync(join(base, 'var', 'home', 'u', '.ollama'), { recursive: true });
+    // A junction on Windows (no admin needed), a directory symlink elsewhere.
+    symlinkSync(join(base, 'var', 'home'), join(base, 'home'), 'junction');
+    assert.equal(resolveModelsDir(join(base, 'home', 'u', '.ollama', 'models')),
+      join(realpathSync(join(base, 'var', 'home')), 'u', '.ollama', 'models'));
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
