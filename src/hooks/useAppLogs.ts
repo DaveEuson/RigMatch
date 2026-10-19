@@ -46,8 +46,10 @@ export function useAppLogs({
     }
   }, [setActivity]);
 
+  // My PC, where the logs are: this opened Results › Scorecards. App turns the
+  // My PC screen to its Logs view.
   const openLogsPanel = useCallback(() => {
-    setActiveNavId('history');
+    setActiveNavId('lan');
     void loadLogs();
   }, [loadLogs, setActiveNavId]);
 

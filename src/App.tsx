@@ -679,6 +679,11 @@ function App() {
   const [welcomeReplay, setWelcomeReplay] = useState(false);
   // My PC's two views: the computer and its connections, or everything logged.
   const [myPcView, setMyPcView] = useState<'overview' | 'logs'>('overview');
+  /** "Logs" after a failed show: My PC, on its Logs view. */
+  const openRunLogs = useCallback(() => {
+    openLogsPanel();
+    setMyPcView('logs');
+  }, [openLogsPanel]);
 
   const selectedHost = hosts.find((host) => host.id === selectedHostId) ?? hosts[0];
 
@@ -5291,7 +5296,7 @@ function App() {
             questionPlan={benchmarkPromptPlan}
             onQuestionCountChange={setBenchmarkQuestionCount}
             onOpenSuiteEditor={openQuestionsSheet}
-            onOpenLogs={openLogsPanel}
+            onOpenLogs={openRunLogs}
             onOpenModelPool={() => selectNav('models')}
             onOpenHistory={() => selectNav('history')}
             onRemoveCandidate={toggleShortlist}
