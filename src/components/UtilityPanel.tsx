@@ -189,6 +189,8 @@ export function UtilityPanel({
   const [scoreCopied, setScoreCopied] = useState(false);
   const [ollamaUpdateLatest, setOllamaUpdateLatest] = useState<string | null>(null);
   const [isCheckingOllamaUpdate, setIsCheckingOllamaUpdate] = useState(false);
+  /** Why the last Check could not say, when it could not. It failed without a word. */
+  const [ollamaCheckError, setOllamaCheckError] = useState<string | null>(null);
 
   /**
    * Settings shows one section at a time and opens on Preferences. The rail
@@ -231,14 +233,17 @@ export function UtilityPanel({
 
   const checkOllamaUpdate = useCallback(async () => {
     setIsCheckingOllamaUpdate(true);
+    setOllamaCheckError(null);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
       const res = await fetch('https://api.github.com/repos/ollama/ollama/releases/latest', { signal: controller.signal });
-      const data = await res.json() as { tag_name: string };
+      if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
+      const data = await res.json() as { tag_name?: string };
+      if (!data.tag_name) throw new Error('GitHub did not name a release');
       setOllamaUpdateLatest(data.tag_name.replace(/^v/, ''));
     } catch {
-      // network unavailable or timed out
+      setOllamaCheckError('Could not check GitHub for a newer Ollama. Check that this computer is online, then try again in a while.');
     } finally {
       clearTimeout(timer);
       setIsCheckingOllamaUpdate(false);
@@ -686,7 +691,9 @@ export function UtilityPanel({
                 <span>Ollama</span>
                 <strong>
                   {ollama.version ? `v${ollama.version} installed` : 'Not detected'}
-                  {ollamaUpdateLatest && !ollamaHasUpdate ? ' — up to date' : ''}
+                  {/* "Not detected — up to date" said a missing Ollama was current. */}
+                  {ollamaUpdateLatest && ollama.version && !ollamaHasUpdate ? ' — up to date' : ''}
+                  {ollamaUpdateLatest && !ollama.version ? ` — the latest is v${ollamaUpdateLatest}` : ''}
                 </strong>
                 {ollamaHasUpdate && (
                   <em className="ollama-update-badge">v{ollamaUpdateLatest} available</em>
@@ -702,6 +709,7 @@ export function UtilityPanel({
                 {isCheckingOllamaUpdate ? 'Checking' : 'Check'}
               </button>
             </div>
+            {ollamaCheckError && <p role="status">{ollamaCheckError}</p>}
             {ollamaHasUpdate && (
               <a
                 href="https://ollama.com/download"
