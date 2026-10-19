@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { ImagePlus, Mic, Square, X } from 'lucide-react';
 import type { ChatAction, ChatAttachment, ChatMessage } from '../types';
 
@@ -59,20 +59,27 @@ export function ChatDock({
   onRunShow?: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Why the last file was not attached. A refused file used to vanish, which
+  // reads as a button that does nothing.
+  const [attachNote, setAttachNote] = useState('');
 
   const handleFile = (file: File | null | undefined) => {
     if (!file || !onAttach) return;
     const kind = file.type.startsWith('image/') ? 'image'
       : file.type.startsWith('audio/') ? 'audio'
         : null;
-    if (!kind) return;
-    if (kind === 'image' && !canSendImages) return;
-    if (kind === 'audio' && !canSendAudio) return;
+    const refuse = (why: string) => setAttachNote(`${file.name} was not attached: ${why}`);
+    if (!kind) return refuse('only a picture or a recording can be sent.');
+    if (kind === 'image' && !canSendImages) return refuse(`${model} cannot read pictures.`);
+    if (kind === 'audio' && !canSendAudio) return refuse(`${model} cannot hear recordings.`);
     // Guard against huge files: models choke on very large inputs, and the
     // base64 lives in memory until sent. Audio gets more room because a minute
     // of speech is already several megabytes.
-    const limit = (kind === 'audio' ? 25 : 8) * 1024 * 1024;
-    if (file.size > limit) return;
+    const limitMb = kind === 'audio' ? 25 : 8;
+    if (file.size > limitMb * 1024 * 1024) {
+      return refuse(`it is ${(file.size / (1024 * 1024)).toFixed(1)} MB, and the limit for a ${kind === 'audio' ? 'recording' : 'picture'} is ${limitMb} MB.`);
+    }
+    setAttachNote('');
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') onAttach({ dataUrl: reader.result, kind, name: file.name });
@@ -158,6 +165,7 @@ export function ChatDock({
           </button>
         </div>
       )}
+      {attachNote && <p className="chat-dock-note" role="status">{attachNote}</p>}
       {noShowYet && onRunShow && (
         <p className="chat-dock-note">
           You haven't run the show yet, so this is a good all-round model rather than the best one for your PC.
@@ -169,6 +177,7 @@ export function ChatDock({
         className="chat-form"
         onSubmit={(event) => {
           event.preventDefault();
+          setAttachNote('');
           void onSend();
         }}
       >

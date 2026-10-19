@@ -104,7 +104,7 @@ export function ComfySettings() {
       setProbe({ phase: 'bad', message: 'Nothing answered there. Is ComfyUI running?' });
       return;
     }
-    const models = status.checkpoints.length;
+    const models = status.checkpoints?.length ?? 0;
     const encoders = status.textEncoders?.length ?? 0;
     setProbe({
       phase: 'ok',

@@ -5,7 +5,7 @@ import { agentArcadeApi } from '../api';
 import { getErrorMessage } from '../lib/format';
 import { chatBeyondNote, classifyChatRequest } from '../lib/chatCapabilityGuard';
 import { canHearAudio, canReadImages, getModelRuntime } from '../lib/modelCatalog';
-import type { ChatAction, ChatAttachment, ChatMessage, ModelRow, OllamaStatus } from '../types';
+import type { ChatAction, ChatAttachment, ChatMessage, ChatTurn, ModelRow, OllamaStatus } from '../types';
 
 /**
  * The conversation with the selected model.
@@ -106,6 +106,15 @@ export function useChat({
     // Pinned before the await: the user can select another model while the
     // response is in flight, and the reply belongs to the model that was asked.
     const chatModel = selectedModel;
+    // The conversation so far, so a follow-up has something to follow: only
+    // the last message was sent, and every model forgot the question. Turns
+    // only (ids ending -user and -agent): the welcome, RigMatch's own notes and
+    // errors are not things anyone said. Pictures stay behind; they went once,
+    // with their message. The main process keeps the last 12 too.
+    const history: ChatTurn[] = (chatMessagesByModel[chatModel] ?? [])
+      .filter((m) => /-(user|agent)$/.test(m.id) && m.content)
+      .slice(-12)
+      .map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }));
     // Said before the model answers, not after.
     //
     // Ollama serves text: ask any of these models for a picture and it will
@@ -162,7 +171,9 @@ export function useChat({
       if (streamId) {
         setStreamingReply({ id: replyId, model: chatModel, streamId });
         unsubscribe = agentArcadeApi.onAdvancedGenerateProgress?.((event) => {
-          if (event.streamId !== streamId || typeof event.text !== 'string') return;
+          // Nothing written yet is not a bubble: a stream that failed before
+          // its first word ends with empty text, and the error says the rest.
+          if (event.streamId !== streamId || typeof event.text !== 'string' || !event.text) return;
           setChatMessagesByModel((prev) => {
             const thread = prev[chatModel] ?? [welcomeMessage];
             const last = thread[thread.length - 1];
@@ -181,18 +192,25 @@ export function useChat({
           message: userMessage.content,
           baseUrl: runtime.baseUrl,
           provider: runtime.provider,
+          history,
           ...(attached ? { images: attached } : {}),
           ...(streamId ? { stream: true, streamId } : {}),
         });
         // The final text replaces whatever the last token left, so a stopped or
-        // truncated stream does not leave a half-word on screen.
+        // truncated stream does not leave a half-word on screen. Empty only
+        // when Stop came before the first word: the main process throws for
+        // an empty answer otherwise.
         setChatMessagesByModel((prev) => {
           const thread = prev[chatModel] ?? [welcomeMessage];
           const last = thread[thread.length - 1];
-          const reply = { id: replyId, role: 'agent' as const, content: response.message };
+          const reply = { id: replyId, role: 'agent' as const, content: response.message || 'Stopped.' };
+          // A long paste was cut to fit, and the answer is to its start only.
+          const cut: ChatMessage[] = response.truncated
+            ? [{ id: `${Date.now()}-truncated`, role: 'agent', content: 'Your message was too long to send whole, so the model only read its beginning.' }]
+            : [];
           return {
             ...prev,
-            [chatModel]: last?.id === replyId ? [...thread.slice(0, -1), reply] : [...thread, reply],
+            [chatModel]: [...(last?.id === replyId ? thread.slice(0, -1) : thread), reply, ...cut],
           };
         });
       } finally {
@@ -206,11 +224,13 @@ export function useChat({
         ...prev,
         [chatModel]: [
           ...(prev[chatModel] ?? [welcomeMessage]),
-          { id: `${Date.now()}-error`, role: 'agent', content: `I could not reach the selected model: ${errMsg}` },
+          // The model's own error, which can come from a model that was
+          // reached perfectly well ("requires more system memory").
+          { id: `${Date.now()}-error`, role: 'agent', content: `The model did not answer: ${errMsg}` },
         ],
       }));
     }
-  }, [chatAttachment, chatInput, ollama, selectedModel, selectedRow, welcomeMessage, setActivity, imageGeneration]);
+  }, [chatAttachment, chatInput, chatMessagesByModel, ollama, selectedModel, selectedRow, welcomeMessage, setActivity, imageGeneration]);
 
   /**
    * Drop an attachment the newly selected model cannot take, and say so.

@@ -128,7 +128,7 @@ test('Stop names the prompt it is stopping', async () => {
   // started from ComfyUI's own interface.
   const { bridge, calls } = harness({ '/interrupt': {} });
   await bridge.interrupt(LOCAL, 'abc');
-  assert.deepEqual(JSON.parse(calls[0].body), { prompt_id: 'abc' });
+  assert.deepEqual(JSON.parse(calls.find((call) => call.url.endsWith('/interrupt')).body), { prompt_id: 'abc' });
 });
 
 test('a non-local ComfyUI URL is refused', async () => {
@@ -183,6 +183,9 @@ test('a ComfyUI that is busy is running, and RigMatch does not offer to start an
   assert.equal(status.busy, true);
   // Asked again with longer to answer before deciding.
   assert.equal(calls.filter((call) => call.url.includes('/system_stats')).length, 2);
+  // Nothing was listed, so nothing is reported: empty lists read as "no models
+  // installed, queue empty" (2026-10-18 scan).
+  assert.deepEqual(status, { reachable: true, busy: true });
 });
 
 test('a submit that is slow to acknowledge is not "cannot reach", so it is not sent twice', async () => {
@@ -193,4 +196,21 @@ test('a submit that is slow to acknowledge is not "cannot reach", so it is not s
       && /check before sending it again/.test(error.message)
       && !/Cannot reach ComfyUI/.test(error.message),
   );
+});
+
+test('Stop takes a queued job off the queue as well as interrupting', async () => {
+  // /interrupt reaches only the running job. One still waiting stayed in the
+  // queue and ran after Stop (2026-10-18 scan).
+  const { bridge, calls } = harness({ '/queue': {}, '/interrupt': {} });
+  await bridge.interrupt(LOCAL, 'abc');
+  assert.deepEqual(calls.map((call) => [call.url.replace(/^https?:\/\/[^/]+/, ''), call.method]), [['/queue', 'POST'], ['/interrupt', 'POST']]);
+  assert.deepEqual(JSON.parse(calls[0].body), { delete: ['abc'] });
+  // A ComfyUI that refuses the queue edit is still interrupted.
+  const refused = harness({ '/queue': new Error('405 Method Not Allowed'), '/interrupt': {} });
+  await refused.bridge.interrupt(LOCAL, 'abc');
+  assert.ok(refused.calls.some((call) => call.url.endsWith('/interrupt')));
+  // Without an id there is nothing to take off the queue.
+  const bare = harness({ '/interrupt': {} });
+  await bare.bridge.interrupt(LOCAL);
+  assert.deepEqual(bare.calls.map((call) => call.url.replace(/^https?:\/\/[^/]+/, '')), ['/interrupt']);
 });
