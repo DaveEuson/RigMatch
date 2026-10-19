@@ -250,6 +250,13 @@ export function AdvancedCapabilityLab({
   const promptReady = !usingCustomPrompt || customPromptReady;
   const canRunImageTest = readiness.kind === 'ready' && Boolean(activeCheckpoint)
     && promptReady && !imageRunning && !lineup.running && !imageLineup.running;
+  // Why Run is greyed, said beside it: it sat disabled with no reason.
+  const imageBlocked = imageRunning ? null
+    : !activeCheckpoint ? 'ComfyUI lists no picture model to run.'
+    : !promptReady ? 'Write your prompt first.'
+    : lineup.running ? 'A video comparison is rendering. This can run when it finishes.'
+    : imageLineup.running ? 'A picture comparison is running. This can run when it finishes.'
+    : null;
 
   const startChallenge = useCallback(async () => {
     if (!activeModel || !activeModelInfo) return;
@@ -631,10 +638,11 @@ export function AdvancedCapabilityLab({
                   // say — left phase:'running' forever: a permanent spinner and an
                   // unhandled rejection, with nothing on screen to explain it.
                   setImageRunState({ phase: 'failed', result: null, message: getErrorMessage(error) });
-                })} disabled={!canRunImageTest}>
+                })} disabled={!canRunImageTest} title={imageBlocked ?? undefined}>
                   <RefreshCw className={imageRunning ? 'spin' : ''} aria-hidden="true" />
                   {imageRunning ? 'Generating' : 'Run Image Test'}
                 </button>
+                {imageBlocked && <span>{imageBlocked}</span>}
                 {imageRunning && (
                   <button type="button" className="mini-button outline" onClick={stopImageRun}>
                     Stop
