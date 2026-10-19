@@ -92,3 +92,23 @@ test('the dock says why a file was not attached', () => {
   assert.match(dock, /return refuse\(`it is \$\{\(file\.size \/ \(1024 \* 1024\)\)\.toFixed\(1\)\} MB, and the limit for a/);
   assert.match(dock, /\{attachNote && <p className="chat-dock-note" role="status">\{attachNote\}<\/p>\}/);
 });
+
+test('quitting mid-show stops the run and unloads its model, for three seconds at most', () => {
+  const quit = main.slice(main.indexOf("app.on('will-quit'"), main.indexOf('\n});\n', main.indexOf("app.on('will-quit'")));
+  assert.match(main, /const QUIT_CLEANUP_TIMEOUT_MS = 3000;/);
+  assert.match(quit, /if \(!activeBenchmarkFinished && ollamaLabResident\.size === 0\) return;/, 'nothing to do, nothing held up');
+  // A second quit while the cleanup runs waits for it as well.
+  assert.match(quit, /if \(quitCleanup === 'running'\) \{\n\s*event\.preventDefault\(\);\n\s*return;\n\s*\}/);
+  assert.match(quit, /quitCleanup = 'running';\n\s*event\.preventDefault\(\);/);
+  assert.match(quit, /canceledBenchmarkIds\.add\(activeBenchmark\.progressId\);\n\s*activeBenchmarkAbort\?\.abort\(\);/, 'stopped as Stop stops it');
+  assert.match(quit, /Promise\.allSettled\(\[activeBenchmarkFinished, releaseOllamaLabModels\(\)\]\)/);
+  assert.match(quit, /Promise\.race\(\[cleanup, cap\]\)\.finally\(\(\) => \{\n\s*quitCleanup = 'done';\n\s*app\.quit\(\);/);
+
+  // The run's own finally unloads the model (Ollama or LM Studio), and only
+  // then says it has finished.
+  const run = main.slice(main.indexOf('async function runBenchmark('), main.indexOf('\n}\n', main.indexOf('async function runBenchmark(')));
+  assert.match(run, /activeBenchmarkFinished = new Promise\(\(resolve\) => \{ finished = resolve; \}\);/);
+  const unloaded = run.indexOf('await unloadBenchmarkModel(runBaseUrl, request.model);');
+  assert.ok(unloaded > 0 && run.indexOf('await unloadLmStudioModel(runBaseUrl, request.model, keep);') > 0);
+  assert.ok(run.indexOf('finished();') > unloaded, 'finished only after the unload');
+});

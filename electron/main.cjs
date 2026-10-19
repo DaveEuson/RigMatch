@@ -989,6 +989,36 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+// Closing RigMatch mid-show left the contestant loaded for
+// BENCHMARK_KEEP_ALIVE, ten minutes of a full graphics card after the app had
+// gone, with Labs' Ollama models loaded beside it. The run is stopped as Stop
+// stops it, and its own finally unloads the model, in Ollama or LM Studio;
+// Labs' models go too. Three seconds at most, so a wedged server cannot keep a
+// closed app alive. will-quit rather than before-quit: it comes after every
+// window has closed, so a Mac's Cmd+Q still asks the window first, and a close
+// the person cancels stops nothing.
+const QUIT_CLEANUP_TIMEOUT_MS = 3000;
+// null, then 'running', then 'done'. A second quit while it runs waits too.
+let quitCleanup = null;
+app.on('will-quit', (event) => {
+  if (quitCleanup === 'done') return;
+  if (quitCleanup === 'running') {
+    event.preventDefault();
+    return;
+  }
+  if (!activeBenchmarkFinished && ollamaLabResident.size === 0) return;
+  quitCleanup = 'running';
+  event.preventDefault();
+  if (activeBenchmark?.progressId) canceledBenchmarkIds.add(activeBenchmark.progressId);
+  activeBenchmarkAbort?.abort();
+  const cleanup = Promise.allSettled([activeBenchmarkFinished, releaseOllamaLabModels()]);
+  const cap = new Promise((resolve) => setTimeout(resolve, QUIT_CLEANUP_TIMEOUT_MS));
+  void Promise.race([cleanup, cap]).finally(() => {
+    quitCleanup = 'done';
+    app.quit();
+  });
+});
+
 function registerHandlers() {
   handleLogged('system:getProfile', 'system', (_event, options) => getSystemProfile({
     checkForUpdates: options?.checkForUpdates === true,
@@ -3589,6 +3619,8 @@ async function runBenchmark(request = {}, sender) {
     answerTokens: Number.isInteger(request.answerTokens) ? Math.max(64, Math.min(2000, request.answerTokens)) : null,
   };
   activeBenchmarkAbort = new AbortController();
+  let finished;
+  activeBenchmarkFinished = new Promise((resolve) => { finished = resolve; });
   broadcastBenchmarkStatus();
   try {
     return await runBenchmarkInner(request, sender, activeBenchmarkAbort.signal);
@@ -3622,6 +3654,8 @@ async function runBenchmark(request = {}, sender) {
     if (activeBenchmark?.progressId) canceledBenchmarkIds.delete(activeBenchmark.progressId);
     activeBenchmark = null;
     activeBenchmarkAbort = null;
+    activeBenchmarkFinished = null;
+    finished();
     broadcastBenchmarkStatus();
   }
 }
@@ -3631,6 +3665,8 @@ async function runBenchmark(request = {}, sender) {
 // aborts the in-flight generation so Stop takes effect mid-question.
 const canceledBenchmarkIds = new Set();
 let activeBenchmarkAbort = null;
+// Settles once the running benchmark has unloaded its model, for a quit to wait on.
+let activeBenchmarkFinished = null;
 
 async function runBenchmarkInner(request = {}, sender, signal) {
   const model = assertValidModelName(request.model);
