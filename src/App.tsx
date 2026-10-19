@@ -2180,7 +2180,8 @@ function App() {
       setSelectedModel(row.displayName);
       setRevealModel({ model: row.displayName, at: Date.now() });
     }
-    selectNav(render.solo ? 'models' : 'speedDate');
+    // A test with no row of its own, such as the Lab's picture test, is on Labs.
+    selectNav(row ? 'models' : 'speedDate');
   }, [chooseWorkbench, modelRows, selectNav]);
 
   // Simple Mode runs as a wizard: when the rig check passes while the user is
