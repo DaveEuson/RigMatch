@@ -49,8 +49,8 @@ export function DownloadProgressInline({
               className="icon-action download-progress-cancel-button"
               onClick={onCancel}
               disabled={isStopping}
-              title={isActive ? `Cancel the ${model} download and clear the queue` : `Remove ${model} from the download queue`}
-              aria-label={isActive ? `Cancel the ${model} download` : `Remove ${model} from the download queue`}
+              title={isActive ? `Cancel the ${model} download and clear the queue` : queued ? `Remove ${model} from the download queue` : `Dismiss this ${model} download message`}
+              aria-label={isActive ? `Cancel the ${model} download` : queued ? `Remove ${model} from the download queue` : `Dismiss the ${model} download message`}
             >
               <X aria-hidden="true" />
             </button>

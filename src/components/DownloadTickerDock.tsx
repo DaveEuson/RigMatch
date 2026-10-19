@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { getPullProgressDetailLabel, getPullProgressPercent, getPullTrackPercent, getQueueChipModelName, isVisiblePullProgress } from '../lib/modelCatalog';
+import { getPullProgressDetailLabel, getPullProgressPercent, getPullTrackPercent, getQueueChipModelName, pickDockProgress } from '../lib/modelCatalog';
 import type { ModelRow, PullProgressUpdate } from '../types';
 import { Download, Pause, Play, X } from 'lucide-react';
 
@@ -11,6 +11,8 @@ export function DownloadTickerDock({
   isPullCancelRequested,
   isPullPauseRequested,
   isPullPaused,
+  canPause,
+  now,
   onResumeQueue,
   onPauseQueue,
   onCancelQueue,
@@ -23,13 +25,15 @@ export function DownloadTickerDock({
   isPullCancelRequested: boolean;
   isPullPauseRequested: boolean;
   isPullPaused: boolean;
+  /** Pause only means something for an Ollama pull; see canPauseDownload. */
+  canPause: boolean;
+  now: number;
   onResumeQueue: () => void;
   onPauseQueue: () => void;
   onCancelQueue: () => void;
   onOpenDownloads: () => void;
 }) {
-  const visibleProgress = Object.values(pullProgressByModel).filter((progress) => isVisiblePullProgress(progress));
-  const activeProgress = pullingModel ? pullProgressByModel[pullingModel] : visibleProgress[0];
+  const activeProgress = pickDockProgress(pullProgressByModel, pullingModel, now);
   const activeModel = pullingModel ?? activeProgress?.model ?? queuedRows[0]?.displayName ?? null;
   const phase = activeProgress?.phase ?? (activeModel ? 'queued' : 'queued');
   const isPaused = phase === 'paused' || isPullPaused;
@@ -70,7 +74,7 @@ export function DownloadTickerDock({
   // The percentage has its own place beside the name, so the detail line does
   // not repeat it.
   const detailText = detailLabel.replace(/^\d+% · /, '');
-  const showPause = !isPaused && isPulling;
+  const showPause = !isPaused && canPause;
   const showCancel = queuedRows.length > 0 || isPulling;
 
   return (
