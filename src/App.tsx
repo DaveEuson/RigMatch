@@ -4721,8 +4721,13 @@ function App() {
   const openChatApp = useCallback(async () => {
     if (isDesktopRuntime) {
       const result = await agentArcadeApi.openChatApp();
-      const problem = companionLaunchMessage(result);
-      if (problem) alert(problem);
+      const problem = companionLaunchMessage(result, import.meta.env.DEV);
+      if (problem) {
+        // The chat built into RigMatch, as "Chat with" falls back to. This
+        // button explained the failure and left no chat open at all.
+        setChatOpen(true);
+        alert(`${problem}\n\nRigMatch's own chat is open in the meantime.`);
+      }
       // Its own window, already open: nothing here moves, so say where it is.
       else if (result.reason === 'already running') tellUser('RigMatch Chat is already open, in its own window.');
     } else {

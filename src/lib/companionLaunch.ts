@@ -25,7 +25,12 @@ export function companionFallbackNote(result: CompanionLaunchResult | null | und
   return `RigMatch Chat did not open: ${why}. Chatting here instead; the Chat button in the top bar says more.`;
 }
 
-export function companionLaunchMessage(result: CompanionLaunchResult | null | undefined): string | null {
+/**
+ * `fromSource` is a development run, where the companion is built rather than
+ * installed. An installed RigMatch was told to run `npx tauri build`, a
+ * command for a source checkout it does not have.
+ */
+export function companionLaunchMessage(result: CompanionLaunchResult | null | undefined, fromSource = false): string | null {
   if (result?.ok) return null;
 
   // Linux only: RigMatch Chat is a WebKitGTK app, and the system lacks a
@@ -63,10 +68,16 @@ export function companionLaunchMessage(result: CompanionLaunchResult | null | un
     ].join('\n');
   }
 
-  return [
-    'RigMatch Chat companion not found.',
-    '',
-    'Download it from the Releases page or build it from source:',
-    '  cd rigmatch-chat && npx tauri build',
-  ].join('\n');
+  return fromSource
+    ? [
+      'RigMatch Chat companion not found.',
+      '',
+      'Download it from the Releases page or build it from source:',
+      '  cd rigmatch-chat && npx tauri build',
+    ].join('\n')
+    : [
+      'RigMatch Chat was not found beside RigMatch.',
+      '',
+      'It comes with RigMatch: installing RigMatch again from the Releases page puts it back.',
+    ].join('\n');
 }
