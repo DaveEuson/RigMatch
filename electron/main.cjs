@@ -73,6 +73,7 @@ const {
   applyCapabilitySnapshot,
 } = require('./ollamaCatalog.cjs');
 const { summarizeMemory, cleanDeviceTreeModel, nvidiaDriverProblem, ollamaModelsDir, parseNvidiaSmiHeader, pickModelsFilesystem, pickPrimaryGpu } = require('./systemProfile.cjs');
+const { readSysfsVram, resolveModelsDir, withSysfsVram } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
 const { hasChatFormat } = require('./chatFormat.cjs');
 const {
@@ -2158,6 +2159,9 @@ async function getSystemProfile({ checkForUpdates = false } = {}) {
     si.battery().catch(() => ({ hasBattery: false })),
   ]);
 
+  // systeminformation sizes Linux cards from lspci, which put an RX 7900 XTX
+  // at 1 MB; the amdgpu driver's own figure in sysfs replaces it.
+  if (process.platform === 'linux') graphics.controllers = withSysfsVram(graphics.controllers, readSysfsVram());
 
   // A board whose graphics is not on the PCI bus leaves systeminformation with
   // nothing to report, and everything downstream then fails together: no model
@@ -2166,7 +2170,7 @@ async function getSystemProfile({ checkForUpdates = false } = {}) {
   // by looking for "nvidia" in the label, reports "No NVIDIA GPU detected" on an
   // NVIDIA board. Measured on a Jetson Orin Nano, not predicted.
   const primaryGpu = pickPrimaryGpu(graphics.controllers) || await getBoardGpu();
-  const primaryFs = pickModelsFilesystem(fsSize, ollamaModelsDir({ home: os.homedir(), exists: fsSync.existsSync })) || {};
+  const primaryFs = pickModelsFilesystem(fsSize, resolveModelsDir(ollamaModelsDir({ home: os.homedir(), exists: fsSync.existsSync }))) || {};
   const networks = getPrivateNetworkAddresses();
   const cuda = await getCudaStatus(primaryGpu, { checkForUpdates });
   const cpuLoadPercent = await getCpuLoadPercent();

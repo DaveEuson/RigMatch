@@ -5,6 +5,9 @@
  * testable without booting Electron.
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
+
 function bytesToGb(bytes) {
   if (!Number.isFinite(bytes)) return 0;
   return Math.round((bytes / 1024 / 1024 / 1024) * 10) / 10;
@@ -55,6 +58,55 @@ function summarizeMemory(mem) {
  */
 function cleanDeviceTreeModel(raw) {
   return String(raw ?? '').replace(/\0/g, '').trim();
+}
+
+/**
+ * Each amdgpu card's VRAM in bytes, keyed by PCI address ("0000:03:00.0"), as
+ * the kernel driver reports it under /sys/class/drm. The one helper here that
+ * reads files; `root` lets the tests point it at a fixture tree.
+ *
+ * systeminformation sizes Linux cards from lspci, and on Bazzite it gave an
+ * RX 7900 XTX 1 MB beside a Radeon 610M's 512 MB, so the integrated part was
+ * picked and every model was sized for half a gigabyte (issue #145). The
+ * address is read from the device's uevent rather than from where the cardN
+ * symlink points, which gives the same answer and keeps the fixture a plain
+ * folder tree: Windows cannot name a folder "0000:03:00.0".
+ */
+function readSysfsVram(root = '/') {
+  const drm = path.join(root, 'sys', 'class', 'drm');
+  const vram = {};
+  let cards = [];
+  try {
+    cards = fs.readdirSync(drm).filter((name) => /^card\d+$/.test(name));
+  } catch {
+    return vram;
+  }
+  for (const card of cards) {
+    const device = path.join(drm, card, 'device');
+    try {
+      const bytes = Number(fs.readFileSync(path.join(device, 'mem_info_vram_total'), 'utf8'));
+      const address = fs.readFileSync(path.join(device, 'uevent'), 'utf8').match(/^PCI_SLOT_NAME=(.+)$/m)?.[1];
+      if (bytes > 0 && address) vram[address.trim().toLowerCase()] = bytes;
+    } catch {
+      // Not an amdgpu card: only that driver writes mem_info_vram_total.
+    }
+  }
+  return vram;
+}
+
+/**
+ * The controllers with sysfs VRAM (from readSysfsVram) wherever
+ * systeminformation's figure is missing or smaller. systeminformation leaves
+ * the PCI domain off ("03:00.0"); sysfs includes it. An APU's sysfs figure is
+ * only its carve-out, so a discrete card still outranks it.
+ */
+function withSysfsVram(controllers, vramByAddress = {}) {
+  return (controllers || []).map((gpu) => {
+    const address = String(gpu?.busAddress || '').toLowerCase();
+    const bytes = vramByAddress[address.split(':').length === 2 ? `0000:${address}` : address];
+    const mb = Math.round((bytes || 0) / 1024 / 1024);
+    return mb > (gpu?.vram || 0) ? { ...gpu, vram: mb } : gpu;
+  });
 }
 
 /**
@@ -138,6 +190,27 @@ function pickModelsFilesystem(fsSize, modelsDir) {
   return onDrive || largest;
 }
 
+/**
+ * The models folder with its symlinks resolved, for pickModelsFilesystem to
+ * match against the mounts. On Bazzite /home links to /var/home, so
+ * ~/.ollama/models matched only "/", an overlay with 0 bytes free, while the
+ * models sat on a btrfs mount with 2.1 TB (issue #146). A folder that does not
+ * exist yet resolves through its nearest existing parent.
+ */
+function resolveModelsDir(dir, realpath = fs.realpathSync) {
+  if (!dir) return dir;
+  const p = /^[a-z]:|\\/i.test(dir) ? path.win32 : path.posix;
+  const missing = [];
+  for (let head = dir; ; head = p.dirname(head)) {
+    try {
+      return p.join(realpath(head), ...missing);
+    } catch {
+      if (p.dirname(head) === head) return dir;
+      missing.unshift(p.basename(head));
+    }
+  }
+}
+
 module.exports = {
   bytesToGb,
   cleanDeviceTreeModel,
@@ -147,5 +220,8 @@ module.exports = {
   parseNvidiaSmiHeader,
   pickModelsFilesystem,
   pickPrimaryGpu,
+  readSysfsVram,
+  resolveModelsDir,
   summarizeMemory,
+  withSysfsVram,
 };
