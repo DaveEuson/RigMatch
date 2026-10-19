@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { createEmptyBenchmark, isPlaceholderBenchmark } from '../src/lib/modelCatalog.ts';
+import { createEmptyBenchmark, getModelScore, isPlaceholderBenchmark } from '../src/lib/modelCatalog.ts';
 import { restoreSavedScores } from '../src/lib/savedHistory.ts';
 import { dropChat, dropTranscripts } from '../src/lib/safeStorage.ts';
 import { removeModelFromReports } from '../src/lib/runReports.ts';
@@ -91,6 +91,20 @@ test('Clear score takes the model out of every report, answers included', () => 
   assert.equal(next[0].winner, 'yi:9b', 'the next in the ranking heads it');
   assert.equal(next[1], reports[1], 'a report it was not in is untouched');
   assert.equal(removeModelFromReports(reports, ['mistral:7b']), reports, 'nothing to clear, same list');
+});
+
+test('an untested model does not take another tag\'s score through a dash', () => {
+  const scoreOf = (model, total) => ({ [model]: { model, total, grade: 'A' } });
+  const row = (displayName) => ({ displayName, name: displayName.split(':')[0], tag: displayName.split(':')[1] });
+  // Different weights: quantization-aware training, another quant, another release.
+  assert.equal(getModelScore(row('gemma3:4b-it-qat'), scoreOf('gemma3:4b', 81)), undefined);
+  assert.equal(getModelScore(row('gemma3:4b'), scoreOf('gemma3:4b-it-qat', 81)), undefined);
+  assert.equal(getModelScore(row('qwen2.5:7b-instruct-q8_0'), scoreOf('qwen2.5:7b', 70)), undefined);
+  assert.equal(getModelScore(row('llama3.1:8b-text'), scoreOf('llama3.1:8b', 70)), undefined);
+  // The same weights under the words Ollama adds.
+  assert.equal(getModelScore(row('qwen2.5:7b'), scoreOf('qwen2.5:7b-instruct', 90))?.total, 90);
+  assert.equal(getModelScore(row('gemma3:4b-it-q4_K_M'), scoreOf('gemma3:4b', 77))?.total, 77);
+  assert.equal(getModelScore(row('mistral:7b'), scoreOf('mistral:7b-instruct-q4_0', 66))?.total, 66);
 });
 
 test('Clear all scores empties the reports, and the empty list is written', () => {
