@@ -50,7 +50,8 @@ test('Send is the gold button, and the header still moves and closes the framele
   assert.match(chat, /className="rm-btn rm-btn-gold rm-send-btn"/);
   assert.match(chat, /<header className="rm-header" data-tauri-drag-region>/);
   assert.match(chat, /getCurrentWindow\(\)\.minimize\(\)/);
-  assert.match(chat, /writerRef\.current\?\.flush\(\)\.finally\(\(\) => getCurrentWindow\(\)\.close\(\)\)/);
+  // Conversations and memory both land before the window goes.
+  assert.match(chat, /Promise\.all\(\[writerRef\.current\?\.flush\(\), memoryWriterRef\.current\?\.flush\(\)\]\)\s*\.finally\(\(\) => getCurrentWindow\(\)\.close\(\)\)/);
 });
 
 test('no emoji stand in for words', () => {

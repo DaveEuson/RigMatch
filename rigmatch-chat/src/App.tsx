@@ -984,7 +984,10 @@ export default function App() {
    */
   const activeConversation = useMemo(() => {
     const chosen = conversations.find((c) => c.id === activeConversationId);
-    if (chosen) return chosen;
+    // Only while it belongs to the model in front of us. Several paths change
+    // the model alone (hiding it in Settings, picking another from a profile),
+    // and the next message then went to the new model in the old one's thread.
+    if (chosen && chosen.modelName === activeBuddy) return chosen;
     return activeBuddy ? conversationsForModel(conversations, activeBuddy)[0] ?? null : null;
   }, [conversations, activeConversationId, activeBuddy]);
   const activeConversationKey = activeConversation?.id ?? null;
@@ -1350,7 +1353,10 @@ export default function App() {
   // The last few hundred milliseconds of a reply would otherwise be lost if the
   // window closed inside the coalescing window.
   useEffect(() => {
-    const flush = () => { void writerRef.current?.flush(); };
+    const flush = () => {
+      void writerRef.current?.flush();
+      void memoryWriterRef.current?.flush();
+    };
     window.addEventListener("beforeunload", flush);
     return () => {
       window.removeEventListener("beforeunload", flush);
@@ -1403,14 +1409,24 @@ export default function App() {
     const askId = genId();
     const replyId = genId();
 
+    // The first reply adds the thread if it is new. Later ones only update it:
+    // a chat deleted while its picture was being made stays deleted, rather
+    // than coming back with the next progress line.
+    let placed = false;
     const withReply = (content: string, extra: Partial<AppMessage> = {}) => {
+      const first = !placed;
+      placed = true;
       setConversations((prev) => {
         const now = Date.now();
-        const list = prev.some((c) => c.id === conversationId) ? prev : [...prev, target];
+        const present = prev.some((c) => c.id === conversationId);
+        if (!present && !first) return prev;
+        const list = present ? prev : [...prev, target];
         return list.map((c) => {
           if (c.id !== conversationId) return c;
           const seen = c.messages.some((m) => m.id === replyId);
-          const reply: AppMessage = { id: replyId, role: "assistant", content, ts: Date.now(), ...extra };
+          // RigMatch speaking, as the first line says: the chat model is not
+          // involved, so none of this is sent back to it as its own words.
+          const reply: AppMessage = { id: replyId, role: "assistant", content, ts: Date.now(), fromRigMatch: true, ...extra };
           const messages = seen
             ? c.messages.map((m) => (m.id === replyId ? reply : m))
             : [...c.messages, { id: askId, role: "user" as const, content: prompt, ts: Date.now() }, reply];
@@ -1820,8 +1836,9 @@ export default function App() {
   /** Start a thread on a model. The sidebar unfolds so it is visible. */
   const startNewConversation = useCallback((modelName: string) => {
     // Reuse an empty thread on this model rather than stacking up identical
-    // "New chat" rows for someone who clicks it twice.
-    const spare = conversations.find((c) => c.modelName === modelName && c.messages.length === 0);
+    // "New chat" rows for someone who clicks it twice. Not one branched off
+    // another chat: it has no messages, but it carries that chat's summary.
+    const spare = conversations.find((c) => c.modelName === modelName && c.messages.length === 0 && !c.summary);
     const conversation = spare ?? createConversation({
       id: genId(),
       modelName,
@@ -1913,15 +1930,19 @@ export default function App() {
    * has moved on; Compact is better when it has not.
    */
   const branchFromCompaction = useCallback(() => {
-    if (!compactPlan || !activeConversation || !activeBuddy) return;
+    // The chat the summary was written from, not whichever is open now:
+    // switching chats while it was shown used to branch the other one, with
+    // this one's summary and that one's title and model.
+    const source = compactPlan ? conversations.find((c) => c.id === compactPlan.conversationId) : undefined;
+    if (!compactPlan || !source) return;
     const branched: Conversation = {
       ...createConversation({
         id: genId(),
-        modelName: activeBuddy,
-        personalityId: activeConversation.personalityId,
+        modelName: source.modelName,
+        personalityId: source.personalityId,
         now: Date.now(),
       }),
-      title: continuationTitle(activeConversation.title),
+      title: continuationTitle(source.title),
       titleIsAuto: false,
       summary: compactPlan.summary,
       // Nothing of its own yet, so the summary stands in for all of it.
@@ -1929,11 +1950,12 @@ export default function App() {
       summaryBy: compactPlan.by.model,
     };
     setConversations((prev) => [...prev, branched]);
+    setActiveBuddy(source.modelName);
     setActiveConversationId(branched.id);
-    setExpandedModels((prev) => new Set(prev).add(activeBuddy));
+    setExpandedModels((prev) => new Set(prev).add(source.modelName));
     setCompactPlan(null);
     void writerRef.current?.flush();
-  }, [compactPlan, activeConversation, activeBuddy]);
+  }, [compactPlan, conversations]);
 
   const renameConversation = useCallback((id: string, title: string) => {
     const trimmed = title.trim();
@@ -2122,8 +2144,12 @@ export default function App() {
             type="button"
             className="rm-window-btn close"
             // Land anything still inside the coalescing window before the
-            // webview goes away.
-            onClick={() => { void writerRef.current?.flush().finally(() => getCurrentWindow().close()); }}
+            // webview goes away — memory too, or an edit made just before
+            // closing was lost.
+            onClick={() => {
+              void Promise.all([writerRef.current?.flush(), memoryWriterRef.current?.flush()])
+                .finally(() => getCurrentWindow().close());
+            }}
             aria-label="Close"
           >×</button>
         </span>

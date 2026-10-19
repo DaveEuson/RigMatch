@@ -181,6 +181,34 @@ test('Escape closes the Chats panel', () => {
   assert.match(app, /else if \(settingsOpen\) setSettingsOpen\(false\);\s*else setSidebarOpen\(false\);/);
 });
 
+test("Make a picture's lines are RigMatch's, and a deleted chat stays deleted", () => {
+  const make = callback('makeWithRigMatch');
+  assert.match(make, /const reply: AppMessage = \{ id: replyId, role: "assistant", content, ts: Date\.now\(\), fromRigMatch: true, \.\.\.extra \};/);
+  // Only the first reply may add the thread; a progress line after a delete
+  // must not bring it back.
+  assert.match(make, /const first = !placed;\s*placed = true;/);
+  assert.match(make, /if \(!present && !first\) return prev;/);
+});
+
+test('the open thread always belongs to the model in front of you', () => {
+  assert.match(app, /if \(chosen && chosen\.modelName === activeBuddy\) return chosen;/);
+});
+
+test('Continue in a new chat branches the chat the summary came from', () => {
+  const branch = callback('branchFromCompaction');
+  assert.match(branch, /conversations\.find\(\(c\) => c\.id === compactPlan\.conversationId\)/);
+  assert.doesNotMatch(branch, /activeConversation/);
+});
+
+test("New chat does not reuse a thread carrying another chat's summary", () => {
+  assert.match(callback('startNewConversation'), /c\.messages\.length === 0 && !c\.summary/);
+});
+
+test('memory edits are written before the window closes', () => {
+  assert.match(app, /const flush = \(\) => \{\s*void writerRef\.current\?\.flush\(\);\s*void memoryWriterRef\.current\?\.flush\(\);/);
+  assert.match(app, /Promise\.all\(\[writerRef\.current\?\.flush\(\), memoryWriterRef\.current\?\.flush\(\)\]\)\s*\.finally\(\(\) => getCurrentWindow\(\)\.close\(\)\)/);
+});
+
 test('the Rust side passes the digest through from /api/tags', () => {
   const rust = readFileSync(new URL('../rigmatch-chat/src-tauri/src/lib.rs', import.meta.url), 'utf-8');
   assert.match(rust, /digest: m\["digest"\]\.as_str\(\)\.unwrap_or\(""\)\.to_string\(\)/);
