@@ -3305,7 +3305,8 @@ function App() {
     setPendingRunMode('speed-date');
   }, []);
 
-  const runListTest = useCallback(async (questionsOverride?: BenchmarkQuestion[]) => {
+  /** Resolves true only when the show finished with results: the Code round builds after nothing else. */
+  const runListTest = useCallback(async (questionsOverride?: BenchmarkQuestion[]): Promise<boolean> => {
     // The quick check runs the lineup on its three questions instead of the set.
     const plan = questionsOverride ?? benchmarkPromptPlan;
     const count = questionsOverride ? questionsOverride.length : benchmarkQuestionCount;
@@ -3345,7 +3346,7 @@ function App() {
         failureKind: 'too-few',
       });
       setActivity(why);
-      return;
+      return false;
     }
 
     if (hostBlocker) {
@@ -3361,7 +3362,7 @@ function App() {
         failureKind: 'other',
       });
       setActivity(hostBlocker);
-      return;
+      return false;
     }
 
     stopRunRef.current = false;
@@ -3525,7 +3526,7 @@ function App() {
         if (uiMode !== 'beginner') tellUser(ended.message);
         setActivity(ended.message);
         void refreshProviderStatus();
-        return;
+        return false;
       }
       // Crowned at the fader the show was started at, which is where the Top
       // Match is ranked. The results come back summarized at Balanced, and
@@ -3594,6 +3595,7 @@ function App() {
       });
       playJingle('speed-date-complete');
       if (uiMode === 'beginner') selectNav('history');
+      return true;
     } catch (error) {
       const errorMessage = getErrorMessage(error);
       await agentArcadeApi.appendLog({
@@ -3626,6 +3628,7 @@ function App() {
       // See the note in startBenchmark's catch: without this, ollama.ready
       // stays stale-true and the reconnect poll never starts.
       void refreshProviderStatus();
+      return false;
     } finally {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
@@ -4259,8 +4262,10 @@ function App() {
       // how it answers, the app measures whether what it writes runs. Either
       // alone crowns a model on half the job.
       // Stop must stop the builds too, not only the questions before them.
+      // Only after questions that finished: a round where every model failed
+      // or the show stopped went on to build apps anyway.
       void runListTest()
-        .then(() => (stopRunRef.current ? undefined : runSkillTestsAfterRun(models, 'app-builder')))
+        .then((finished) => (finished && !stopRunRef.current ? runSkillTestsAfterRun(models, 'app-builder') : undefined))
         .catch(reportSkillRunFailure);
       return;
     }
