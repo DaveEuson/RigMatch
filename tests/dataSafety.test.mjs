@@ -33,8 +33,11 @@ test('removing a model from the last show keeps the order the board shows, and i
 
 test('loading history keeps entries one by one, and a deleted model leaves the last show', () => {
   const app = read('../src/App.tsx');
-  assert.match(app, /const keptScores = keepValidEntries\(parsed\.modelScores, isTestedModelScore\);/);
-  assert.match(app, /Array\.isArray\(result\.prompts\) \? result : \{ \.\.\.result, prompts: \[\] \}/);
+  // The score half of loading lives in savedHistory.ts, where it can be tested.
+  const saved = read('../src/lib/savedHistory.ts');
+  assert.match(saved, /const keptScores = keepValidEntries\(parsed\.modelScores, isTestedModelScore\);/);
+  assert.match(saved, /Array\.isArray\(result\.prompts\) \? result : \{ \.\.\.result, prompts: \[\] \}/);
+  assert.match(app, /const scores = restoreSavedScores\(parsed\);/);
   assert.match(app, /setListTestResult\(\(current\) => removeListTestScores\(current, aliases\)\);\n\s*const nextModel/);
 });
 

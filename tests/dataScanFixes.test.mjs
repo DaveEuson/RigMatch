@@ -5,8 +5,11 @@ import { readFileSync } from 'node:fs';
 
 import { createEmptyBenchmark, getModelScore, isPlaceholderBenchmark } from '../src/lib/modelCatalog.ts';
 import { restoreSavedScores } from '../src/lib/savedHistory.ts';
-import { dropChat, dropTranscripts } from '../src/lib/safeStorage.ts';
-import { removeModelFromReports } from '../src/lib/runReports.ts';
+import { dropChat, dropTranscripts, historySaveNote } from '../src/lib/safeStorage.ts';
+import { removeModelFromReports, reportRows } from '../src/lib/runReports.ts';
+import { resultsOfShow } from '../src/lib/labResults.ts';
+import { codeJudgeFor } from '../src/lib/labJudge.ts';
+import { describeRunError } from '../src/lib/format.ts';
 
 /**
  * Scores and saved data from the 2026-10-18 bug scan: what clearing leaves
@@ -113,4 +116,74 @@ test('Clear all scores empties the reports, and the empty list is written', () =
   const all = body.slice(0, body.indexOf("return;\n    }"));
   assert.match(all, /setRunReports\(\[\]\);\s*writeLocalJson\(RUN_REPORTS_STORAGE_KEY, \[\]\);/);
   assert.match(body, /setRunReports\(\(current\) => \{\s*const next = removeModelFromReports\(current, aliases\);/);
+});
+
+test('a failed Simple skill round is not ranked on a model\'s old result', () => {
+  const lab = (model, completedAt, score = 80) => ({ model, challenge: 'image-recognition', score, grade: 'B', elapsedMs: 1, response: '', checks: [], completedAt });
+  const results = {
+    'vision:old:7b': lab('old:7b', '2026-10-01T09:00:00.000Z', 99),
+    'vision:new:7b': lab('new:7b', '2026-10-18T12:05:00.000Z', 60),
+    'vision:other:7b': lab('other:7b', '2026-10-18T12:06:00.000Z'),
+  };
+  const picked = new Set(['old:7b', 'new:7b']);
+  assert.deepEqual(resultsOfShow(results, picked, '2026-10-18T12:00:00.000Z').map((r) => r.model), ['new:7b'],
+    'old:7b failed this round; its 99 from another day does not stand in');
+  assert.deepEqual(resultsOfShow(results, picked, null).map((r) => r.model), ['old:7b', 'new:7b'], 'no show this session: every saved one');
+  assert.match(app, /const mine = resultsOfShow\(labResults, picked, simpleShowStartedAt\);/);
+  const start = app.indexOf('const startSimpleShow = useCallback(');
+  assert.ok(app.indexOf('setSimpleShowStartedAt(new Date().toISOString());', start) < app.indexOf('void runListTest()', start));
+});
+
+test('the Code challenge gets an automatic judge while judging is off, never the contestant', () => {
+  const options = { chosen: false, candidates: ['big:14b', 'small:3b'], baseUrlOf: () => 'http://127.0.0.1:11434' };
+  assert.equal(codeJudgeFor('small:3b', null, ['big:14b', 'small:3b'], options)?.model, 'big:14b');
+  assert.equal(codeJudgeFor('big:14b', null, ['big:14b', 'small:3b'], options)?.model, 'small:3b', 'steps aside for itself');
+  assert.equal(codeJudgeFor('big:14b', null, ['big:14b'], { ...options, candidates: ['big:14b'] }), null, 'nobody else to mark it');
+  assert.equal(codeJudgeFor('big:14b', null, [], options), null);
+  const chosen = { provider: 'local', model: 'big:14b' };
+  assert.equal(codeJudgeFor('big:14b', chosen, [], { ...options, chosen: true })?.model, 'big:14b', 'a judge the person chose stays theirs');
+  assert.match(app, /const codeJudge = codeSkillJudgeFor\(job\.model\);\s*if \(!codeJudge\) \{/);
+});
+
+test('Share after a skill round shares the winner or nothing', () => {
+  const start = app.indexOf('const shareTarget = useMemo(');
+  const body = app.slice(start, app.indexOf('\n  }, [', start));
+  assert.ok(body.indexOf('if (wizardWinner) return null;') < body.indexOf('topRigPick?.score'),
+    'a winner without a Match score never falls back to another model');
+  assert.match(app, /onShareScore=\{shareTarget \? \(\) => setShareWinnerOpen\(true\) : undefined\}/);
+  const wizard = readFileSync(new URL('../src/components/SimpleWizard.tsx', import.meta.url), 'utf-8');
+  assert.match(wizard, /\{onShareScore && <button type="button" className="btn btn-link" onClick=\{onShareScore\}>Share<\/button>\}/);
+});
+
+test('a reopened report keeps models no longer listed, and its own answers only', () => {
+  const rows = [{ displayName: 'yi:9b', installed: true }];
+  const shown = reportRows([{ model: 'lmstudio/qwen3-8b' }, { model: 'yi:9b' }], rows);
+  assert.deepEqual(shown.map((row) => row.displayName), ['lmstudio/qwen3-8b', 'yi:9b']);
+  assert.equal(shown[1], rows[0]);
+  assert.equal(shown[0].installed, false);
+  assert.match(app, /const rows = stored \? reportRows\(result\.results, modelRows\) : shortlistedRows;/);
+  assert.match(app, /const benchmarks = stored \? \(stored\.transcripts \?\? \{\}\) : benchmarkByModel;/);
+});
+
+test('"Report ready" opens the report that was saved, by id', () => {
+  assert.match(app, /setReadyReportId\(saveTestReport\(results, winner\.model, runBalance\) \?\? null\);/);
+  assert.match(app, /onClick=\{\(\) => \{ setOpenReportId\(readyReportId\); setReportOpen\(true\); \}\}>\s*See the report/);
+});
+
+test('the MLX message is for Ollama failing to load an MLX model, off a Mac', () => {
+  assert.match(describeRunError('llama runner failed: mlx not supported', false), /Apple Silicon/i);
+  assert.match(describeRunError('this model requires MLX', false), /Apple Silicon/i);
+  assert.equal(describeRunError('llama runner failed: mlx not supported', true), 'llama runner failed: mlx not supported',
+    'on a Mac it is not a Windows or Linux problem');
+  const named = 'Could not reach mlx-community/Qwen3-8B-4bit: model is unsupported by this endpoint';
+  assert.doesNotMatch(describeRunError(named, false), /Apple Silicon/i, 'a model name is not the error');
+  assert.doesNotMatch(describeRunError('the judge said "mlx" once', false), /Apple Silicon/i);
+});
+
+test('a history save that fails at every rung tells the user, once', () => {
+  assert.match(historySaveNote(-1), /could not save your scores/);
+  assert.equal(historySaveNote(0), null);
+  assert.match(historySaveNote(1), /some saved answer text was dropped/);
+  assert.match(historySaveNote(3), /not enough browser storage left for the answer transcripts/);
+  assert.match(app, /if \(!historySaveFailedRef\.current && note\) tellUser\(note\);/);
 });

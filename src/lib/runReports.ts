@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import type { BenchmarkResult, TestedModelScore } from '../types';
+import type { BenchmarkResult, ModelRow, TestedModelScore } from '../types';
 import { normalizeModelKey } from './modelKey.ts';
 import { formatMatchScore } from './scoring.ts';
 
@@ -115,6 +115,30 @@ export function removeModelFromReports(reports: StoredRunReport[], aliases: stri
       ? Object.fromEntries(Object.entries(report.transcripts).filter(([model]) => !cleared(model)))
       : undefined;
     return [{ ...report, results, transcripts, winner: cleared(report.winner) ? results[0].model : report.winner }];
+  });
+}
+
+/**
+ * The rows a saved report is shown with: one per model in it, in its order.
+ *
+ * A model no longer listed (LM Studio closed, the model deleted) was dropped,
+ * taking its answers with it, and with every row gone the report said its
+ * answers "were not kept", blaming storage for answers it still had.
+ */
+export function reportRows(results: Array<{ model: string }>, modelRows: ModelRow[]): ModelRow[] {
+  return results.map(({ model }) => modelRows.find((row) => row.displayName === model) ?? {
+    id: model,
+    name: model.split(':')[0],
+    tag: model.split(':')[1] ?? 'latest',
+    displayName: model,
+    params: '',
+    sizeGb: null,
+    pack: 'Saved report',
+    source: 'Saved report',
+    live: false,
+    installed: false,
+    ready: false,
+    installLabel: 'Not on this computer now',
   });
 }
 

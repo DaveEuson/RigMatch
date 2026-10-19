@@ -170,6 +170,21 @@ export function getErrorMessage(error: unknown) {
   return describeRunError(message.replace(/^Error invoking remote method '[^']+':\s*/i, '').replace(/^Error:\s*/, ''));
 }
 
+/** Whether the renderer is on a Mac; false where there is no navigator (tests, main). */
+function runningOnMac(): boolean {
+  return typeof navigator !== 'undefined' && /\bMac/.test(navigator.userAgent ?? '');
+}
+
+/**
+ * "mlx" as the thing that could not run, not as part of a name or a path:
+ * "llama runner failed: mlx not supported", "model requires MLX". A word
+ * followed by "-" or "/" is a name (mlx-community/…), and is never this.
+ */
+function isMlxLoadError(lower: string): boolean {
+  return /\bmlx\b(?![-/])/.test(lower)
+    && /(not supported|unsupported|requires?|only (?:on|supported)|runner|failed to load|cannot load|can't load|unable to load)/.test(lower);
+}
+
 /**
  * Turn common raw failures into plain-language guidance instead of a
  * stack-trace wall. Falls through to the original message.
@@ -180,10 +195,13 @@ export function getErrorMessage(error: unknown) {
  * showed the raw Electron IPC wrapper. The original text is appended where it
  * might still help someone diagnosing, but it never leads.
  */
-export function describeRunError(message: string): string {
+export function describeRunError(message: string, onMac: boolean = runningOnMac()): string {
   const lower = message.toLowerCase();
 
-  if (lower.includes('mlx')) {
+  // Only Ollama failing to load an MLX model, and only off a Mac. Any message
+  // with "mlx" in it used to become this, a model name such as
+  // mlx-community/… included, and on a Mac it blamed Windows or Linux.
+  if (!onMac && isMlxLoadError(lower)) {
     return 'This looks like an Apple Silicon (macOS) model — it runs on Apple\'s MLX framework, which Ollama can\'t load on Windows or Linux. Image models like x/flux2 are macOS-only for now.';
   }
 

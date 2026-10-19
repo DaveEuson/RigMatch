@@ -262,7 +262,8 @@ type SimpleWizardProps = {
   /** Where the step tracker goes: the app's top bar. */
   trackerSlot?: HTMLElement | null;
   /** Opens the shareable scorecard image for the winning model. */
-  onShareScore: () => void;
+  /** Absent when the winner has no Match score to put on a card. */
+  onShareScore?: () => void;
   /** A conversation already exists, so the way back to it is on the first screen. */
   continueChat?: { name: string } | null;
   onContinueChat?: () => void;
@@ -1977,7 +1978,7 @@ function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedO
         <span className="sw-winner-links">
           <button type="button" className="btn btn-link" onClick={onOpenScorecard}>See every answer</button>
           {/* Sharing belongs at the moment of the result. */}
-          <button type="button" className="btn btn-link" onClick={onShareScore}>Share</button>
+          {onShareScore && <button type="button" className="btn btn-link" onClick={onShareScore}>Share</button>}
           {/* Where someone has just seen a result is when they have something to say.
               It opens GitHub in their browser; nothing is sent from here. */}
           <a

@@ -84,6 +84,7 @@ import {
   makeReportId,
   parseStoredReports,
   removeModelFromReports,
+  reportRows,
   reportStorageCandidates,
 } from './lib/runReports';
 import type { NavId, NavItem } from './lib/appConfig';
@@ -153,7 +154,7 @@ import {
 import type {
   ListTestResult,
 } from './lib/modelCatalog';
-import { clearAppStorage, dropChat, dropTranscripts, writeLocal, writeLocalJson, writeLocalJsonWithFallback } from './lib/safeStorage';
+import { clearAppStorage, dropChat, dropTranscripts, historySaveNote, writeLocal, writeLocalJson, writeLocalJsonWithFallback } from './lib/safeStorage';
 import { collapseModelVariants } from './lib/wizardVariants';
 import { restoreSavedScores } from './lib/savedHistory';
 // Same constant the Simple Mode download step gates on, so the wizard cannot
@@ -216,6 +217,7 @@ import {
   labChallengesWithOutput,
   readAdvancedLabResults,
   refreshLabResults,
+  resultsOfShow,
   writeAdvancedLabResults,
   wasJudged,
   checkState,
@@ -252,7 +254,7 @@ import { isDockWorthyPullProgress, modelMatchesTask, nextDockExpiry } from './li
 import { chooseLineup, isSpecialistModel } from './lib/chooseLineup';
 import { modelIdentities, sameModel } from './lib/modelKey.ts';
 import { gpuDriverMessage } from './lib/gpuDriver';
-import { labJudgeFor } from './lib/labJudge.ts';
+import { codeJudgeFor, labJudgeFor } from './lib/labJudge.ts';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
 import { runVideoLineupLive } from './lib/videoGenRunner';
 import {
@@ -488,6 +490,13 @@ function App() {
   /** Which stored report the modal is showing, or null for the newest run. */
   const [openReportId, setOpenReportId] = useState<string | null>(null);
   const [reportReady, setReportReady] = useState(false);
+  const historySaveFailedRef = useRef(false);
+  /**
+   * The saved report "Report ready" is about. Opening it by id shows the run as
+   * it was saved; without one the modal rebuilt it from today's lineup and
+   * answers, which by then could be a different show.
+   */
+  const [readyReportId, setReadyReportId] = useState<string | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   /**
    * The scores as measured. Everything downstream reads `modelScores` below,
@@ -947,6 +956,13 @@ function App() {
     baseUrlOf: (name) => judgeEndpoints[name]?.baseUrl ?? ollama.baseUrl,
     identityOf,
   }), [skillTestJudge, judgeChosen, judgeModelOptions, judgeEndpoints, ollama.baseUrl, identityOf]);
+  /** The judge for one contestant's code: as above, or one picked automatically while judging is off. */
+  const codeSkillJudgeFor = useCallback((model: string) => codeJudgeFor(model, skillTestJudge, autoJudgeModels, {
+    chosen: judgeChosen,
+    candidates: judgeModelOptions,
+    baseUrlOf: (name) => judgeEndpoints[name]?.baseUrl ?? ollama.baseUrl,
+    identityOf,
+  }), [skillTestJudge, autoJudgeModels, judgeChosen, judgeModelOptions, judgeEndpoints, ollama.baseUrl, identityOf]);
   // Where a model's Labs test goes: its own program's address. Main reads an
   // LM Studio one and asks LM Studio, so App Builder, Code and picture reading
   // run where the model lives instead of being sent to Ollama.
@@ -1015,8 +1031,8 @@ function App() {
    * Subjects run on yi:9b had nowhere to show up).
    */
   /** The run as a report: its results ranked at the fader it ran at, so the winner heads them. */
-  const saveTestReport = useCallback((results: BenchmarkResult[], winner: string, balance: number = BALANCED) => {
-    if (!results.length) return;
+  const saveTestReport = useCallback((results: BenchmarkResult[], winner: string, balance: number = BALANCED): string | undefined => {
+    if (!results.length) return undefined;
     const completedAt = new Date().toISOString();
     const report: StoredRunReport = {
       id: makeReportId(completedAt, winner),
@@ -1031,6 +1047,7 @@ function App() {
       transcripts: Object.fromEntries(results.map((r) => [r.model, r])),
     };
     setRunReports((current) => addRunReport(current, report));
+    return report.id;
   }, [currentSuiteName]);
   const queuedRows = useMemo(
     () => modelRows.filter((row) => queuedModelIds.has(row.displayName)),
@@ -1524,6 +1541,8 @@ function App() {
   const runChannel: ChannelId = workbenchInfo.id === 'code' || workbenchInfo.id === 'reading' ? workbenchInfo.id : 'chat';
 
   const labResults = useLabResults();
+  /** When this session's Simple show began: its board holds only what that show produced. */
+  const [simpleShowStartedAt, setSimpleShowStartedAt] = useState<string | null>(null);
 
   /**
    * The show's results, from whichever round it ran.
@@ -1537,7 +1556,7 @@ function App() {
   const wizardSkillBoard = useMemo(() => {
     if (wizardRound === 'chat') return null;
     const picked = new Set(shortlistedRows.map((row) => row.displayName));
-    const mine = Object.values(labResults).filter((result) => result && picked.has(result.model));
+    const mine = resultsOfShow(labResults, picked, simpleShowStartedAt);
     // Failures stay on the board. Dropping them made a round where nobody
     // passed indistinguishable from a round that never ran — and since the
     // winner screen unlocks on having a winner, five models that all fell short
@@ -1545,7 +1564,7 @@ function App() {
     // last, and none of them is crowned.
     const board = rankLabList(mine, wizardChannel as Exclude<typeof wizardChannel, 'chat'>, wizardBalance);
     return board.length > 0 ? board : null;
-  }, [wizardRound, wizardChannel, shortlistedRows, labResults, wizardBalance]);
+  }, [wizardRound, wizardChannel, shortlistedRows, labResults, wizardBalance, simpleShowStartedAt]);
 
   /**
    * This show's own result, when it was a show of the lineup on screen.
@@ -1675,6 +1694,9 @@ function App() {
     const row = wizardWinner ? modelRows.find((candidate) => candidate.displayName === wizardWinner.model) : undefined;
     const score = row ? getModelScore(row, modelScores) : undefined;
     if (row && score) return { model: row.displayName, score };
+    // A winner with no Match score (a picture or listening round) has no card
+    // to share. Falling back to the Top Pick shared a different model.
+    if (wizardWinner) return null;
     return topRigPick?.score ? { model: topRigPick.row.displayName, score: topRigPick.score } : null;
   }, [wizardWinner, modelRows, modelScores, topRigPick]);
 
@@ -3551,7 +3573,7 @@ function App() {
         ...(failures.length ? { failures: [...failures] } : {}),
       });
       if (failures.length) tellUser(droppedOutMessage(failures, getFriendlyModelName));
-      saveTestReport(results, winner.model, runBalance);
+      setReadyReportId(saveTestReport(results, winner.model, runBalance) ?? null);
       // The report bar announces the winner; a toast as well said it twice,
       // on screen and to screen readers, and by the model's raw id.
       setReportReady(true);
@@ -3778,7 +3800,8 @@ function App() {
         // Only a judge can mark code, and one picked automatically never marks
         // its own (labJudgeFor). With nobody else installed the run used to
         // fail before writing a line, save nothing and still report success.
-        if (!skillJudgeFor(job.model)) {
+        const codeJudge = codeSkillJudgeFor(job.model);
+        if (!codeJudge) {
           unjudgedCode.push(job.model);
           continue;
         }
@@ -3793,7 +3816,7 @@ function App() {
         try {
           result = await runCodeChallenge(
             job.model, labBaseUrl(job.model), selection.codeLanguage, codeTask.task, codeTask.reference, streamId,
-            skillJudgeFor(job.model) ?? undefined,
+            codeJudge,
           );
         } finally {
           unsubscribe?.();
@@ -3955,7 +3978,7 @@ function App() {
     // pictureJudge checks the pictures and clips, and modelRows says which
     // models can hear; without them here the run would use whatever was
     // installed when this callback was last built.
-  }, [ollama.baseUrl, labBaseUrl, skillTestSelection, skillJudgeFor, modelRows, videoMachine, pictureJudge, tellUser]);
+  }, [ollama.baseUrl, labBaseUrl, skillTestSelection, skillJudgeFor, codeSkillJudgeFor, modelRows, videoMachine, pictureJudge, tellUser]);
 
   /**
    * Chat asking RigMatch to test a model.
@@ -4227,6 +4250,7 @@ function App() {
     // to finished, and a 'complete' left over from the previous show is
     // finished the instant this one begins.
     setSkillRunStatus({ phase: 'idle', label: '', completed: 0, total: 0 });
+    setSimpleShowStartedAt(new Date().toISOString());
     if (wizardRound === 'chat') { void runListTest(); return; }
     // The models picked for the show, in the order they were picked.
     const models = shortlistedRows.filter((row) => row.installed).map((row) => row.displayName);
@@ -4446,12 +4470,16 @@ function App() {
       () => dropTranscripts(dropChat(history)),
       () => ({ ...dropChat(history), benchmarkByModel: {}, benchmark: null }),
     ]);
-    if (written > 0) {
-      setActivity(written >= 3
-        ? 'Saved scores, but there was not enough browser storage left for the answer transcripts.'
-        : 'Storage is nearly full, so some saved answer text was dropped. Scores were kept.');
+    const note = historySaveNote(written);
+    if (written < 0) {
+      // Once until a save lands again, not at every change of state.
+      if (!historySaveFailedRef.current && note) tellUser(note);
+      historySaveFailedRef.current = true;
+    } else {
+      historySaveFailedRef.current = false;
+      if (note) setActivity(note);
     }
-  }, [benchmark, benchmarkByModel, chatMessagesByModel, listTestResult, savedModelScores, selectedModel]);
+  }, [benchmark, benchmarkByModel, chatMessagesByModel, listTestResult, savedModelScores, selectedModel, tellUser]);
 
   useEffect(() => {
     if (!isDesktopRuntime) return;
@@ -4860,7 +4888,7 @@ function App() {
           // Only when there is one to open — that is what keeps the Compare
           // step disabled rather than dead on a machine that has never run one.
           onOpenRunReport={listTestResult || runReports.length > 0
-            ? () => { setOpenReportId(runReports[0]?.id ?? null); setReportOpen(true); }
+            ? () => { setOpenReportId(readyReportId ?? runReports[0]?.id ?? null); setReportOpen(true); }
             : undefined}
           system={system}
           ollamaReady={ollama.ready || lmStudio.ready}
@@ -4975,7 +5003,7 @@ function App() {
           }}
           initialStep={wizardStep}
           onStepChange={(next) => { setWizardStep(next); setSimpleNotice(null); setSimpleNoticeAction(null); }}
-          onShareScore={() => setShareWinnerOpen(true)}
+          onShareScore={shareTarget ? () => setShareWinnerOpen(true) : undefined}
         />
       )}
       {shareWinnerOpen && shareTarget && (
@@ -5431,7 +5459,7 @@ function App() {
             Report ready: {shownShowResult.results.length} model{shownShowResult.results.length === 1 ? '' : 's'} compared,
             {' '}{getFriendlyModelName(shownShowResult.winner)} came first
           </span>
-          <button type="button" className="btn btn-line btn-sm" onClick={() => setReportOpen(true)}>
+          <button type="button" className="btn btn-line btn-sm" onClick={() => { setOpenReportId(readyReportId); setReportOpen(true); }}>
             See the report
           </button>
           <button type="button" className="report-ready-dismiss" onClick={() => setReportReady(false)} aria-label="Dismiss report notice">
@@ -5445,12 +5473,9 @@ function App() {
         const stored = openReportId ? runReports.find((entry) => entry.id === openReportId) : null;
         const result = stored ? { winner: stored.winner, results: stored.results } : shownShowResult;
         if (!result) return null;
-        const benchmarks = stored?.transcripts ?? benchmarkByModel;
-        const rows = stored
-          ? result.results
-              .map((score) => modelRows.find((row) => row.displayName === score.model))
-              .filter((row): row is typeof modelRows[number] => Boolean(row))
-          : shortlistedRows;
+        // A saved report's answers, or none: today's answers are another run's.
+        const benchmarks = stored ? (stored.transcripts ?? {}) : benchmarkByModel;
+        const rows = stored ? reportRows(result.results, modelRows) : shortlistedRows;
         // A saved report's own questions, from its answers: a Difficult
         // Subjects report reopened while General was selected showed General's
         // questions over Difficult Subjects' answers.
