@@ -7,6 +7,8 @@ export type OllamaModel = {
   name: string;
   size: number;
   modified_at: string;
+  /** The weights' digest. Two tags with the same one are the same model. */
+  digest?: string;
 };
 
 export type ChatMessage = {

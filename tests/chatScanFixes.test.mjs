@@ -12,6 +12,7 @@ import {
   compactionSplit,
   summaryContextSize,
 } from '../rigmatch-chat/src/lib/compaction.ts';
+import { deduplicateModels } from '../rigmatch-chat/src/lib/modelList.ts';
 
 /**
  * RigMatch Chat fixes from the 2026-10-18 bug scan. App.tsx is a React
@@ -140,4 +141,23 @@ test('the summary request gets a window that holds it, and no smaller than the c
 test('the token mark counts the note sendMessage shows, the list the meter slices', () => {
   assert.match(callback('sendMessage'), /messageCount: visibleHistory\.length \+ \(accumulated \? 1 : 0\)/);
   assert.match(callback('runCompaction'), /buildSummaryRequest\(\s*activeConversation\.messages,\s*upTo,\s*activeConversation\.summary,\s*activeConversation\.summarizedCount \?\? 0,\s*\)/);
+});
+
+test(':latest is dropped only when it is the same weights as another tag', () => {
+  const model = (name, digest) => ({ name, size: 1, modified_at: '', digest });
+  const names = (models) => deduplicateModels(models).map((m) => m.name);
+
+  // llama3.2 (the 3B) and llama3.2:1b are different models; both stay.
+  assert.deepEqual(names([model('llama3.2:latest', 'a3b'), model('llama3.2:1b', 'b1b')]), ['llama3.2:latest', 'llama3.2:1b']);
+  // gemma3 pulled as both gemma3 and gemma3:4b is one model twice.
+  assert.deepEqual(names([model('gemma3:latest', 'g4b'), model('gemma3:4b', 'g4b')]), ['gemma3:4b']);
+  // No digest to compare (an older Ollama): keep both rather than guess.
+  assert.deepEqual(names([model('qwen3:latest', ''), model('qwen3:8b', '')]), ['qwen3:latest', 'qwen3:8b']);
+  // The same digest under another base is not an alias of this one.
+  assert.deepEqual(names([model('mine:latest', 'x'), model('theirs:7b', 'x')]), ['mine:latest', 'theirs:7b']);
+});
+
+test('the Rust side passes the digest through from /api/tags', () => {
+  const rust = readFileSync(new URL('../rigmatch-chat/src-tauri/src/lib.rs', import.meta.url), 'utf-8');
+  assert.match(rust, /digest: m\["digest"\]\.as_str\(\)\.unwrap_or\(""\)\.to_string\(\)/);
 });

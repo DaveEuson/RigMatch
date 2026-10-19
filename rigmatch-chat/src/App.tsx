@@ -7,6 +7,7 @@ import DOMPurify from "dompurify";
 import { listModels, streamChat, getVersion, getModelContextInfo, getVramInfo, readConversationsFile, writeConversationsFile, backUpConversationsFile, readMemoriesFile, writeMemoriesFile, backUpMemoriesFile, assertLocalhostUrl, type OllamaModel, type ChatMessage } from "./lib/ollamaApi";
 import { cutAtTurnMarker } from "./lib/turnMarkers";
 import { createWriteScheduler } from "./lib/writeScheduler";
+import { deduplicateModels } from "./lib/modelList";
 import { UI_ICON_ART, type UiIconName } from "./lib/uiIconArt";
 import { classifyChatRequest, companionBeyondNote } from "./lib/chatCapabilityGuard";
 import {
@@ -422,23 +423,6 @@ function getAvatarFamily(modelName: string): AvatarFamily {
 function isEmbeddingModel(name: string): boolean {
   const n = name.toLowerCase();
   return n.includes("embed") || n.includes("nomic") || n.includes("bge") || n.includes("all-minilm") || n.includes("mxbai");
-}
-
-// Deduplicate: if a base model has both :latest and explicit tags, drop the :latest alias
-function deduplicateModels(models: OllamaModel[]): OllamaModel[] {
-  const byBase = new Map<string, OllamaModel[]>();
-  for (const m of models) {
-    const base = m.name.split(":")[0] ?? m.name;
-    if (!byBase.has(base)) byBase.set(base, []);
-    byBase.get(base)!.push(m);
-  }
-  const result: OllamaModel[] = [];
-  for (const [, group] of byBase) {
-    if (group.length === 1) { result.push(group[0]); continue; }
-    const nonLatest = group.filter((m) => { const tag = m.name.split(":")[1]; return tag && tag !== "latest"; });
-    result.push(...(nonLatest.length > 0 ? nonLatest : [group[0]!]));
-  }
-  return result;
 }
 
 function speedToToks(speed: number): string {

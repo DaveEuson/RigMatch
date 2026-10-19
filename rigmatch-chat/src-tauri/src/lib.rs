@@ -8,6 +8,10 @@ pub struct OllamaModel {
     pub name: String,
     pub size: u64,
     pub modified_at: String,
+    /// The weights' digest, which is how the window tells `x:latest` that is
+    /// only another name for `x:3b` from a different model under the same base.
+    #[serde(default)]
+    pub digest: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -90,6 +94,7 @@ async fn list_ollama_models(base_url: String) -> Result<Vec<OllamaModel>, String
                 name: m["name"].as_str()?.to_string(),
                 size: m["size"].as_u64().unwrap_or(0),
                 modified_at: m["modified_at"].as_str().unwrap_or("").to_string(),
+                digest: m["digest"].as_str().unwrap_or("").to_string(),
             })
         })
         .collect())
