@@ -448,8 +448,20 @@ export function getModelScore(row: ModelRow, modelScores: Record<string, TestedM
     return sNorm === displayNorm ||
       sNorm.startsWith(displayNorm + ':') ||
       displayNorm.startsWith(sNorm + ':') ||
-      (tagged && (sNorm.startsWith(displayNorm + '-') || displayNorm.startsWith(sNorm + '-')));
+      (tagged && (isAliasTagOf(sNorm, displayNorm) || isAliasTagOf(displayNorm, sNorm)));
   });
+}
+
+/**
+ * The words Ollama adds to a tag without changing the weights: `7b` is
+ * `7b-instruct` is `7b-instruct-q4_K_M`. Anything else after the dash is a
+ * different download, and any dash used to do: an untested `gemma3:4b-it-qat`
+ * showed `gemma3:4b`'s score.
+ */
+const ALIAS_TAG_SUFFIX = /^(?:(?:instruct|it|chat)(?:-q4_(?:0|k_m))?|q4_(?:0|k_m))$/;
+
+function isAliasTagOf(longer: string, shorter: string): boolean {
+  return longer.startsWith(shorter + '-') && ALIAS_TAG_SUFFIX.test(longer.slice(shorter.length + 1));
 }
 
 export function getBenchmarkForModel(
@@ -540,6 +552,17 @@ export function removeListTestScores(current: ListTestResult | null, aliases: st
 export function isBenchmarkForAliases(benchmark: BenchmarkResult, aliases: string[]) {
   const normalizedAliases = aliases.map(normalizeModelKey);
   return normalizedAliases.includes(normalizeModelKey(benchmark.model));
+}
+
+/**
+ * The stand-in createEmptyBenchmark makes: no questions, no answers, no time.
+ * It is what the screen shows before a test and after clearing scores, never a
+ * result — saved and read back, it became a real 0.0 / N/A score.
+ */
+export function isPlaceholderBenchmark(benchmark: BenchmarkResult): boolean {
+  return !(benchmark.questionCount > 0)
+    && !(Array.isArray(benchmark.prompts) && benchmark.prompts.length > 0)
+    && !(benchmark.elapsedMs > 0);
 }
 
 export function createEmptyBenchmark(model: string, baseUrl: string): BenchmarkResult {

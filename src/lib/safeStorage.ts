@@ -119,6 +119,21 @@ export function writeLocalJsonWithFallback(key: string, candidates: Array<() => 
   return -1;
 }
 
+/**
+ * What to say after the saved history landed on rung `written` of its ladder
+ * (writeLocalJsonWithFallback), or null when all of it was saved. A write that
+ * failed at every rung used to say nothing, and the scores were gone at the
+ * next launch.
+ */
+export function historySaveNote(written: number): string | null {
+  if (written < 0) {
+    return 'RigMatch could not save your scores: there is no storage space left for them. They stay until RigMatch closes. Clearing old scores or chats in Settings makes room.';
+  }
+  if (written >= 3) return 'Saved scores, but there was not enough browser storage left for the answer transcripts.';
+  if (written > 0) return 'Storage is nearly full, so some saved answer text was dropped. Scores were kept.';
+  return null;
+}
+
 /** The shape safeStorage needs to shrink a saved history; App owns the full type. */
 type TrimmableHistory = {
   benchmark?: unknown;

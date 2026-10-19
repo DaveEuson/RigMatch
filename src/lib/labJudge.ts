@@ -33,3 +33,25 @@ export function labJudgeFor(
   const other = candidates.find((name) => !sameModel(identityOf(name), own));
   return other ? { ...judge, model: other, baseUrl: baseUrlOf(other) } : null;
 }
+
+/**
+ * The judge for a contestant's code, which only a judge can mark: the judge in
+ * use, or with judging off (the default) one picked from the installed models
+ * the way the show's questions get one (autoJudgeModels), never the contestant.
+ *
+ * The Code challenge asked labJudgeFor alone, which has nobody to offer when
+ * judging is off, so it skipped every model and said no other model was
+ * installed to mark them.
+ */
+export function codeJudgeFor(
+  contestant: string,
+  judge: LabJudge | null,
+  autoCandidates: string[],
+  options: Parameters<typeof labJudgeFor>[2],
+): LabJudge | null {
+  if (judge) return labJudgeFor(contestant, judge, options);
+  const [first] = autoCandidates;
+  if (!first) return null;
+  return labJudgeFor(contestant, { provider: 'local', model: first, baseUrl: options.baseUrlOf(first) },
+    { ...options, chosen: false, candidates: autoCandidates });
+}

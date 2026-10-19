@@ -1,5 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import type { BenchmarkResult, TestedModelScore } from '../types';
+import type { BenchmarkResult, ModelRow, TestedModelScore } from '../types';
+import { normalizeModelKey } from './modelKey.ts';
 import { formatMatchScore } from './scoring.ts';
 
 /**
@@ -91,6 +92,54 @@ export function reportStorageCandidates(reports: StoredRunReport[]): Array<() =>
     () => reportsWithoutTranscripts(reports, 0),
     () => reportsWithoutTranscripts(reports, 0).slice(0, 10),
   ];
+}
+
+/**
+ * The reports with one model's results and answers taken out, for "Clear
+ * score". A report left with nobody in it goes; one whose winner was cleared
+ * is headed by the next in its ranking. The same list back when the model is
+ * in none of them.
+ *
+ * Clearing a score used to leave every report it was in, transcripts and all,
+ * while the dialog said its transcripts were cleared.
+ */
+export function removeModelFromReports(reports: StoredRunReport[], aliases: string[]): StoredRunReport[] {
+  const keys = new Set(aliases.map(normalizeModelKey));
+  const cleared = (model: string) => keys.has(normalizeModelKey(model));
+  if (!reports.some((report) => report.results.some((result) => cleared(result.model)))) return reports;
+  return reports.flatMap((report) => {
+    if (!report.results.some((result) => cleared(result.model))) return [report];
+    const results = report.results.filter((result) => !cleared(result.model));
+    if (results.length === 0) return [];
+    const transcripts = report.transcripts
+      ? Object.fromEntries(Object.entries(report.transcripts).filter(([model]) => !cleared(model)))
+      : undefined;
+    return [{ ...report, results, transcripts, winner: cleared(report.winner) ? results[0].model : report.winner }];
+  });
+}
+
+/**
+ * The rows a saved report is shown with: one per model in it, in its order.
+ *
+ * A model no longer listed (LM Studio closed, the model deleted) was dropped,
+ * taking its answers with it, and with every row gone the report said its
+ * answers "were not kept", blaming storage for answers it still had.
+ */
+export function reportRows(results: Array<{ model: string }>, modelRows: ModelRow[]): ModelRow[] {
+  return results.map(({ model }) => modelRows.find((row) => row.displayName === model) ?? {
+    id: model,
+    name: model.split(':')[0],
+    tag: model.split(':')[1] ?? 'latest',
+    displayName: model,
+    params: '',
+    sizeGb: null,
+    pack: 'Saved report',
+    source: 'Saved report',
+    live: false,
+    installed: false,
+    ready: false,
+    installLabel: 'Not on this computer now',
+  });
 }
 
 /** Anything that is not a well-formed report list reads as no reports at all. */

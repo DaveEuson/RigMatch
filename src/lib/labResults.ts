@@ -156,6 +156,23 @@ export function labSaveFailure(): string | null {
 }
 
 /**
+ * A show's own results: the picked models' results finished since it began,
+ * or every one of theirs when no show has begun this session.
+ *
+ * A failed attempt is not saved, so the result it left behind was the model's
+ * old one, and a Simple Mode round where a model failed ranked it, and could
+ * crown it, on a test from another day.
+ */
+export function resultsOfShow(
+  results: Record<string, AdvancedLabResult | undefined>,
+  picked: Set<string>,
+  since: string | null,
+): AdvancedLabResult[] {
+  return Object.values(results).filter((result): result is AdvancedLabResult =>
+    Boolean(result) && picked.has(result!.model) && (!since || result!.completedAt >= since));
+}
+
+/**
  * The challenges where a model made something, for the achievements that ask
  * for a picture or a sound. A failed attempt is saved too, and is not one.
  */
