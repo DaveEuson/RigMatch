@@ -94,7 +94,7 @@ export function ModelPage({
   const vramGb = system.gpu.vramGb || 0;
   // The same call the Models list makes for this row, so both show one letter.
   const fitGrade = row
-    ? gradeRow(row, { vramGb, unifiedMemory: Boolean(system.gpu.isUnifiedMemory) }, { score, benchmark, bandwidthGbps: measuredBandwidth(rows, modelScores, vramGb) })
+    ? gradeRow(row, { vramGb, unifiedMemory: Boolean(system.gpu.isUnifiedMemory), gpu: system.gpu.model }, { score, benchmark, bandwidthGbps: measuredBandwidth(rows, modelScores, vramGb) })
     : null;
   const command = row && row.runtime !== 'comfyui' ? pullCommand(model, row.localProvider === 'lm-studio' ? 'lm-studio' : 'ollama') : null;
 

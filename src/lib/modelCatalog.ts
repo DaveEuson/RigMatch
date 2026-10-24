@@ -1185,6 +1185,7 @@ export function describeFitPlainly(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fi
       return `Runs fully on your graphics card${numbers}`;
     case 'tight':
       if (vramGb <= 0) return 'Small enough to try. RigMatch could not read your graphics card';
+      if (vramGb < USABLE_VRAM_MIN_GB) return 'Small enough to run on the processor. Your graphics card is too small to hold a model';
       return sizeGb > vramGb
         ? `Bigger than your graphics card, so part of it runs on the processor and it is slower${numbers}`
         : `Only just fits on your graphics card${numbers}`;
@@ -1988,6 +1989,9 @@ export function getPlatformFit(displayName: string, platform: string): { compati
   return { compatible: true, reason: '' };
 }
 
+/** Graphics memory below this holds no model: an integrated GPU's carve-out, or an old 1 GB card. */
+export const USABLE_VRAM_MIN_GB = 2;
+
 export function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fitOverride'>, vramGb: number): HardwareFit {
   // A video model is sized by the Video Lab's rules, which know ComfyUI
   // offloads what VRAM cannot hold (asHardwareFit in videoLineup.ts).
@@ -2025,6 +2029,27 @@ export function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fitOve
         tone: 'unknown',
         label: 'Check VRAM',
         detail: `${formatGb(sizeGb)} needs a known GPU profile before RigMatch recommends it.`,
+        recommend: false,
+      };
+  }
+
+  // An integrated GPU's carve-out (128 MB to 2 GB) or an old 1 GB card holds
+  // no model, so it runs on the processor exactly as with no GPU at all. Sized
+  // against the carve-out, a 0.5 GB Radeon 610M called llama3.2:3b too big
+  // on a PC where it runs fine. Unlike "no GPU found", the card is known, so a
+  // model too big for the processor is plainly too big rather than unknown.
+  if (vramGb < USABLE_VRAM_MIN_GB) {
+    return sizeGb <= 4
+      ? {
+        tone: 'tight',
+        label: 'Small pick',
+        detail: `${formatGb(sizeGb)} runs on the processor: ${formatGb(vramGb)} of graphics memory is too little to hold a model.`,
+        recommend: true,
+      }
+      : {
+        tone: 'out-of-league',
+        label: `Too big · ${formatGb(sizeGb)}`,
+        detail: `${formatGb(sizeGb)} is too much for the processor alone, and ${formatGb(vramGb)} of graphics memory is too little to help.`,
         recommend: false,
       };
   }

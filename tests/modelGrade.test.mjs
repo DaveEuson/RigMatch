@@ -2,8 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { activeShare, describeSpeed, gradeModel, gradeRow, measuredBandwidth, pullCommand, rigBandwidth } = await import('../src/lib/modelGrade.ts');
-const { getHardwareFit } = await import('../src/lib/modelCatalog.ts');
+const { activeShare, describeSpeed, gradeModel, gradeRow, measuredBandwidth, mixtureSpillFit, pullCommand, rigBandwidth } = await import('../src/lib/modelGrade.ts');
+const { describeFitPlainly, getHardwareFit } = await import('../src/lib/modelCatalog.ts');
 const { MATCH_GRADE_BANDS } = await import('../src/lib/scoring.ts');
 
 /**
@@ -29,7 +29,7 @@ test('an 8B model on a 12 GB card is an A, explained in plain words', () => {
 test('the grade never disagrees with the fit pill beside it', () => {
   const sizes = [null, 0.3, 1, 2.5, 4, 5.2, 7.4, 9.3, 11, 12.5, 13.8, 14, 19, 26, 43];
   const params = ['1B', '3B', '8B', '14B', '27B', '32B', '70B', 'Unknown'];
-  for (const vramGb of [0, 2, 4, 8, 12, 16, 24, 48]) {
+  for (const vramGb of [0, 0.5, 1.9, 2, 4, 8, 12, 16, 24, 48]) {
     for (const sizeGb of sizes) {
       for (const p of params) {
         const model = row(`probe:${p}`, p, sizeGb);
@@ -247,4 +247,67 @@ test('the copy button and the CLI print the same download command', () => {
   assert.equal(pullCommand('qwen3:8b', 'lm-studio'), 'lms get qwen3-8b');
   assert.equal(pullCommand('gemma3:latest', 'lm-studio'), 'lms get gemma3');
   assert.equal(pullCommand('qwen/qwen3-4b', 'lm-studio'), 'lms get qwen/qwen3-4b', "LM Studio's own key is kept");
+});
+
+test('the fit pill itself treats a carve-out under 2 GB as no graphics card', () => {
+  // The pill, the download guard and Simple Mode all read getHardwareFit, so
+  // they agree with the grade: llama3.2:3b on a 0.5 GB Radeon 610M is a small
+  // pick for the processor, not "Too big".
+  const small = getHardwareFit({ params: '3B', sizeGb: 2 }, 0.5);
+  assert.equal(small.tone, 'tight');
+  assert.equal(small.label, 'Small pick');
+  assert.equal(small.recommend, true);
+  const big = getHardwareFit({ params: '8B', sizeGb: 5.2 }, 0.5);
+  assert.equal(big.tone, 'out-of-league', 'the card is known, so a big model is too big, not unknown');
+  assert.equal(big.recommend, false);
+  assert.equal(describeFitPlainly({ params: '3B', sizeGb: 2 }, 0.5), 'Small enough to run on the processor. Your graphics card is too small to hold a model');
+  assert.equal(getHardwareFit({ params: '1B', sizeGb: 1 }, 2).tone, 'sweet-spot', '2 GB is a real card');
+});
+
+test('told there is no graphics card, a model too big for the processor is an F', () => {
+  const none = { vramGb: 0, noGpu: true };
+  const big = gradeModel(row('qwen3:14b', '14B', 9.3), none);
+  assert.equal(big.letter, 'F');
+  assert.equal(big.summary, 'Too big to run without a graphics card');
+  assert.match(gradeModel(row('llama3.2:3b', '3B', 2), none).summary, /^No graphics card, so it runs on the processor/);
+  assert.equal(gradeModel(row('qwen3:14b', '14B', 9.3), { vramGb: 0 }).letter, '?', 'an unread card stays "?"');
+});
+
+test('a model that can do more ranks above one the same size that cannot', () => {
+  const plain = gradeModel(row('older:9b', '9B', 5.5, { capabilities: ['completion'] }), rtx4070);
+  const current = gradeModel(row('current:9b', '9B', 5.5, { capabilities: ['completion', 'tools', 'thinking'] }), rtx4070);
+  assert.ok(current.points > plain.points, `${current.points} vs ${plain.points}`);
+  // Enough to put an 8B that calls tools and thinks above a 12B that does neither.
+  const eight = gradeModel(row('qwen3:8b', '8B', 4.8, { capabilities: ['completion', 'tools', 'thinking'] }), rtx4070);
+  const twelve = gradeModel(row('stablelm2:12b', '12B', 6.5, { capabilities: ['completion'] }), rtx4070);
+  assert.ok(eight.points > twelve.points, `${eight.points} vs ${twelve.points}`);
+});
+
+test('a mixture of experts spills into system memory only when it would still run well', () => {
+  const card = { vramGb: 12, ramGb: 32 };
+  const qwen30 = row('qwen3:30b', '30B', 17.7);
+  const spill = mixtureSpillFit(qwen30, card);
+  assert.equal(spill.tone, 'tight');
+  assert.equal(spill.label, 'RAM assist · 17.7 GB');
+  assert.equal(spill.recommend, true);
+  assert.match(spill.detail, /^Bigger than your 12 GB of graphics memory, but it runs only part of itself per word/);
+  const graded = gradeModel({ ...qwen30, fitOverride: spill }, card);
+  assert.equal(graded.letter, 'C');
+  assert.ok(graded.tokensPerSecond >= 10);
+  assert.equal(mixtureSpillFit(row('qwen3:32b', '32B', 18.8), card), null, 'dense: every word reads all of it');
+  assert.equal(mixtureSpillFit(row('mixtral:8x7b', '47B', 24.2), card), null, 'under 10 tokens a second spilled');
+  assert.equal(mixtureSpillFit(qwen30, { vramGb: 12, ramGb: 8 }), null, 'no room in system memory');
+  assert.equal(mixtureSpillFit(qwen30, { vramGb: 12 }), null, 'system memory unknown');
+  assert.equal(mixtureSpillFit(qwen30, { vramGb: 16, unifiedMemory: true, ramGb: 16 }), null, 'a Mac swaps rather than spills');
+  assert.equal(mixtureSpillFit(row('qwen3:8b', '8B', 4.8), card), null, 'it fits already');
+});
+
+test('a Mac is as fast as its chip', () => {
+  const speed = (gpu) => gradeModel(row('qwen3:14b', '14B', 8.7), { vramGb: 64, unifiedMemory: true, gpu }).tokensPerSecond;
+  const [base, pro, max, ultra] = ['Apple M3', 'Apple M3 Pro', 'Apple M3 Max', 'Apple M2 Ultra'].map(speed);
+  assert.ok(pro > base * 1.8 && max > base * 3.5 && ultra > base * 7, `${base} ${pro} ${max} ${ultra}`);
+  assert.equal(speed(undefined), base, 'no name: a base chip');
+  // A discrete card's name says nothing here: "Radeon Pro" is not an M-series Pro.
+  assert.equal(gradeModel(row('qwen3:14b', '14B', 8.7), { vramGb: 16, gpu: 'AMD Radeon Pro W6800' }).tokensPerSecond,
+    gradeModel(row('qwen3:14b', '14B', 8.7), { vramGb: 16 }).tokensPerSecond);
 });

@@ -111,6 +111,7 @@ import {
   getBenchmarkForModel,
   getDiskGuard,
   getHardwareFit,
+  USABLE_VRAM_MIN_GB,
   getLineupBenchmarkBlocker,
   getModelAliases,
   getModelBenchmarkBlocker,
@@ -276,6 +277,7 @@ import {
   type LineupOutcome,
   type VideoLineupEntry,
 } from './lib/videoLineup';
+import { mixtureSpillFit } from './lib/modelGrade';
 import { formatVideoEstimate, videoFit } from './lib/videoFit';
 import { readVideoCalibration } from './lib/videoCalibrationStore';
 import { runImageLabChallenge } from './lib/imageGenRunner';
@@ -736,7 +738,16 @@ function App() {
 
   const modelRows = useMemo(
     () => {
-      const rows = mergeModelRows(catalog, localModels);
+      // A mixture of experts too big for graphics memory can still run with
+      // part of it in system memory; the override reaches the fit pill, the
+      // download guard and Simple Mode alike (mixtureSpillFit).
+      const spillHardware = {
+        vramGb: system.gpu.vramGb, unifiedMemory: Boolean(system.gpu.isUnifiedMemory), ramGb: system.memory.totalGb, gpu: system.gpu.model,
+      };
+      const rows = mergeModelRows(catalog, localModels).map((row) => {
+        const spill = mixtureSpillFit(row, spillHardware);
+        return spill ? { ...row, fitOverride: spill } : row;
+      });
       // Generation models join the same list rather than living on a screen of
       // their own. Someone who wants to make a video searches for "makes
       // video"; that video comes from Hugging Face and runs on ComfyUI is our
@@ -767,7 +778,7 @@ function App() {
         });
       return [...generation, ...rows];
     },
-    [catalog, localModels, comfyFolders, videoMachine],
+    [catalog, localModels, comfyFolders, videoMachine, system.gpu.vramGb, system.gpu.isUnifiedMemory, system.memory.totalGb, system.gpu.model],
   );
 
   const selectedRow = modelRows.find(
@@ -1144,7 +1155,8 @@ function App() {
         fitTier: fit.tone === 'sweet-spot' ? 'great' : fit.tone === 'good' ? 'well' : 'slower',
         // The grid only ever shows models that fit, so every tier label reads the
         // same. State the numbers a beginner actually needs to judge it.
-        fitDetail: row.sizeGb && vramGb > 0
+        // Not "2 of 0.5 GB": under USABLE_VRAM_MIN_GB the model runs on the processor.
+        fitDetail: row.sizeGb && vramGb >= USABLE_VRAM_MIN_GB
           ? `${Math.round(row.sizeGb * 10) / 10} of ${formatGb(vramGb)}`
           : row.sizeGb
             ? `${formatGb(row.sizeGb)} on disk`
@@ -5292,6 +5304,7 @@ function App() {
             diskGuard={diskGuard}
             vramGb={system.gpu.vramGb}
             unifiedMemory={Boolean(system.gpu.isUnifiedMemory)}
+            gpuModel={system.gpu.model}
             platform={system.platform}
             queuedCount={queuedRows.length}
             isBenchmarking={isBenchmarking || isListTesting}
