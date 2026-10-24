@@ -39,6 +39,7 @@ const PURPOSE: Record<string, string> = {
   // confidently invented answer both score 0 where the heuristic gave both 72.
   candour: 'difficult subjects',
   edgy: 'harmless but edgy requests',
+  drawing: 'drawing pictures in code',
 };
 
 /**

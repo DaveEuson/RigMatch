@@ -17,6 +17,7 @@ export const QUESTION_TYPE_LABELS: Record<BenchmarkQuestionType, string> = {
   candour: 'Difficult subject',
   tools: 'Tool call',
   edgy: 'Harmless but edgy request',
+  drawing: 'Drawing (SVG)',
 };
 
 /**
@@ -35,7 +36,8 @@ const ASKS_FOR_CLAMP = /clampScore/i;
  * Follows heuristicCanGrade in electron/benchmarkScoring.cjs, asked before
  * there is an answer: chat and writing have nothing to match, a coding
  * question is checkable only when it asks for clampScore, and a difficult or
- * edgy question needs a reader for any answer that is not a refusal.
+ * edgy question needs a reader for any answer that is not a refusal. So does
+ * a drawing that passes its checks.
  */
 export function questionMarker(question: Pick<BenchmarkQuestion, 'type' | 'prompt'>): 'rules' | 'judge' {
   switch (question.type) {
@@ -43,6 +45,7 @@ export function questionMarker(question: Pick<BenchmarkQuestion, 'type' | 'promp
     case 'writing':
     case 'candour':
     case 'edgy':
+    case 'drawing':
       return 'judge';
     case 'coding':
       return ASKS_FOR_CLAMP.test(question.prompt) ? 'rules' : 'judge';
@@ -82,7 +85,7 @@ export function questionSetLabel(questions: BenchmarkQuestion[]): string {
   return BENCHMARK_PRESETS.find((preset) => preset.id === id)?.label ?? 'General';
 }
 
-export const GENERAL_SET_DESCRIPTION = 'Mixed questions covering JSON output, instruction following and everyday tasks.';
+export const GENERAL_SET_DESCRIPTION = 'Mixed questions covering JSON output, instruction following and everyday tasks, and one drawing.';
 
 // No names: "10 · Quick" sat beside a "Quick check" of 3 questions, and its
 // "about 3 min a model" beside a Start button saying "about 15 min".

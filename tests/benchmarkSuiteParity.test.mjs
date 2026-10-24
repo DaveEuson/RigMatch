@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
-import { BENCHMARK_QUESTION_LEVELS, BENCHMARK_PRESETS, DEFAULT_BENCHMARK_QUESTIONS } from '../src/benchmarkSuite.ts';
+import { BENCHMARK_QUESTION_LEVELS, BENCHMARK_PRESETS, DEFAULT_BENCHMARK_QUESTIONS, buildBenchmarkPromptPlan } from '../src/benchmarkSuite.ts';
 
 const require = createRequire(import.meta.url);
 const cjs = require('../electron/benchmarkSuite.cjs');
@@ -22,7 +22,7 @@ const cjs = require('../electron/benchmarkSuite.cjs');
  */
 
 test('both copies accept exactly the same question types', () => {
-  const types = ['json', 'truth', 'format', 'assistant', 'coding', 'writing', 'candour', 'tools', 'edgy'];
+  const types = ['json', 'truth', 'format', 'assistant', 'coding', 'writing', 'candour', 'tools', 'edgy', 'drawing'];
   for (const type of types) {
     const plan = cjs.buildBenchmarkPromptPlan(1, [{ id: 't', label: 't', type, prompt: 'p' }]);
     assert.equal(plan[0].type, type,
@@ -86,5 +86,16 @@ test('both copies plan the same number of prompts', () => {
   for (const count of BENCHMARK_QUESTION_LEVELS) {
     const plan = cjs.buildBenchmarkPromptPlan(count, DEFAULT_BENCHMARK_QUESTIONS);
     assert.equal(plan.length, count, `asked for ${count} prompts, planned ${plan.length}`);
+  }
+});
+
+test('both copies repeat the drawing the same way in a longer run', () => {
+  // The drawing is the one question that changes between rounds (another
+  // subject, or Summaries in its place), so the two plans could disagree
+  // about it while agreeing about every other question.
+  for (const count of BENCHMARK_QUESTION_LEVELS) {
+    const fromTs = buildBenchmarkPromptPlan(count, DEFAULT_BENCHMARK_QUESTIONS);
+    const fromCjs = cjs.buildBenchmarkPromptPlan(count, DEFAULT_BENCHMARK_QUESTIONS);
+    assert.deepEqual(fromCjs, fromTs, `${count}: the copies plan different questions`);
   }
 });

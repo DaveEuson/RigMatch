@@ -27,6 +27,7 @@ import { ClosetSection } from './ClosetSection';
 import { ComfySettings } from './ComfySettings';
 import { GoalsSummary } from './GoalsSummary';
 import { HistoryTimeline } from './HistoryTimeline';
+import { YourTaste } from './YourTaste';
 import { HowWeScoreSection } from './HowWeScoreSection';
 import { SettingsSection } from './SettingsSection';
 import { ModelDemoChips } from './SkillDemoViewers';
@@ -588,6 +589,7 @@ export function UtilityPanel({
               <span>Compare two or more models to rank the best match.</span>
             </div>
           )}
+          <YourTaste />
         </div>
       )}
 

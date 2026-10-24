@@ -5,6 +5,7 @@ import { formatHistoryTime } from '../lib/modelCatalog';
 import { formatMatchScore } from '../lib/scoring';
 import type { BenchmarkResult } from '../types';
 import { PromptStatusPill } from './ScoreVisuals';
+import { DrawingAnswer } from './DrawingGallery';
 import { MessageSquare, Settings } from 'lucide-react';
 
 export function ProfileQuestionTranscript({
@@ -91,7 +92,9 @@ export function ProfileQuestionTranscript({
               {getPromptDiagnosticText(prompt) && (
                 <em className="prompt-diagnostic-note">{getPromptDiagnosticText(prompt)}</em>
               )}
-              <pre>{prompt.response.trim() || 'No answer returned.'}</pre>
+              {prompt.type === 'drawing'
+                ? <DrawingAnswer prompt={prompt} />
+                : <pre>{prompt.response.trim() || 'No answer returned.'}</pre>}
             </div>
           </li>
         ))}

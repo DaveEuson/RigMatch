@@ -1,6 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import {
   demoBenchmark,
+  demoDrawingFor,
   demoCatalog,
   demoHosts,
   demoLmStudio,
@@ -253,6 +254,10 @@ const fallbackApi: AgentArcadeApi = {
     const questionCount = normalizeBenchmarkQuestionCount(request.questionCount);
     const promptPlan = buildBenchmarkPromptPlan(questionCount, request.questions);
     const progressId = request.progressId;
+    const demoDrawing = demoDrawingFor(request.model);
+    const scoreFor = (prompt: { type: string }, index: number) => (
+      prompt.type === 'drawing' ? demoDrawing.score : Math.max(40, scores.sobriety - index * 2)
+    );
 
     if (progressId) {
       emitBenchmarkProgress({
@@ -290,8 +295,9 @@ const fallbackApi: AgentArcadeApi = {
           prompt: prompt.prompt,
           elapsedMs: 650 + index * 35,
           tokensPerSecond: Math.max(22, scores.speed + 12 - index * 7),
-          sobrietyScore: Math.max(40, scores.sobriety - index * 2),
-          message: `${prompt.label} scored ${Math.max(40, scores.sobriety - index * 2)}.`,
+          sobrietyScore: scoreFor(prompt, index),
+          ...(prompt.type === 'drawing' ? { drawing: demoDrawing.drawing } : {}),
+          message: `${prompt.label} scored ${scoreFor(prompt, index)}.`,
         });
       }
     } else {
@@ -312,10 +318,13 @@ const fallbackApi: AgentArcadeApi = {
     const demoPrompts = promptPlan.map((prompt, index) => ({
       ...prompt,
       tokensPerSecond: Math.max(22, scores.speed + 12 - index * 7),
-      sobrietyScore: Math.max(40, scores.sobriety - index * 2),
+      sobrietyScore: scoreFor(prompt, index),
       elapsedMs: 650 + index * 35,
-      response: demoBenchmark.prompts[index % demoBenchmark.prompts.length]?.response ?? '',
+      response: prompt.type === 'drawing'
+        ? demoDrawing.response
+        : demoBenchmark.prompts[index % demoBenchmark.prompts.length]?.response ?? '',
       doneReason: 'preview',
+      ...(prompt.type === 'drawing' ? { drawing: demoDrawing.drawing } : {}),
     }));
 
     return {

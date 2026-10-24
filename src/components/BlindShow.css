@@ -1,0 +1,208 @@
+/* RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE. */
+
+/* A blind show's ending. Opaque over the whole window: the screens underneath
+   already hold the result, and a pick made after seeing it is the judge's.
+   Under the toasts (199+), which are masked while it is up. */
+.blind-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  overflow: auto;
+  background: var(--bg);
+}
+
+.blind-overlay-panel {
+  max-width: 1280px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: var(--s5, 24px) var(--s4, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3, 12px);
+}
+
+.blind-pick,
+.blind-reveal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3, 12px);
+}
+
+.blind-overlay .page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s3, 12px);
+}
+
+.blind-overlay .page-head h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font: 400 var(--fs-h1, 28px) / 1.15 var(--display);
+}
+
+/* Focused by script when the reveal opens, never by Tab: no ring around a heading. */
+.blind-overlay .page-head h2:focus {
+  outline: none;
+}
+
+.blind-overlay .page-head p {
+  max-width: 68ch;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font: 400 15px / 1.45 var(--ui);
+}
+
+.blind-overlay .page-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2, 8px);
+}
+
+.blind-pick-questions {
+  display: flex;
+  align-items: center;
+  gap: var(--s3, 12px);
+  color: var(--text);
+  font: 400 var(--fs-ui, 14px) / 1.3 var(--ui);
+}
+
+.blind-pick-prompt {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text);
+  font: 400 15px / 1.45 var(--ui);
+}
+
+.blind-pick-prompt strong {
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
+.blind-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--s3, 12px);
+}
+
+.blind-pick-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2, 8px);
+  min-width: 0;
+  padding: var(--s3, 12px);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-panel, 12px);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.blind-pick-card:hover {
+  background: var(--panel-hover, var(--panel));
+}
+
+.blind-pick-card.chosen {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold);
+}
+
+.blind-pick-card:focus-within {
+  outline: 2px solid var(--accent, var(--gold));
+  outline-offset: 2px;
+}
+
+.blind-pick-label {
+  display: flex;
+  align-items: center;
+  gap: var(--s2, 8px);
+  min-height: 24px;
+  color: var(--text-strong);
+  font: 700 15px / 1.2 var(--ui);
+}
+
+.blind-pick-label input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--gold);
+}
+
+.blind-pick-answer {
+  max-height: 46vh;
+  overflow: auto;
+  color: var(--text);
+  font: 400 14px / 1.5 var(--ui);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.blind-reveal-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.blind-reveal-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3, 12px);
+  min-height: 64px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.blind-reveal-seat {
+  width: 7.5em;
+  flex: none;
+  color: var(--muted);
+  font: 400 var(--fs-ui, 14px) / 1.2 var(--ui);
+}
+
+.blind-reveal-name {
+  display: flex;
+  flex: 1 1 160px;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.blind-reveal-name strong {
+  color: var(--text-strong);
+  font: 700 16px / 1.25 var(--ui);
+}
+
+.blind-reveal-name em {
+  color: var(--muted);
+  font: 400 13px / 1.3 var(--ui);
+  font-style: normal;
+  overflow-wrap: anywhere;
+}
+
+.blind-reveal-tags {
+  display: flex;
+  gap: 6px;
+}
+
+.blind-reveal-tag {
+  padding: 2px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--text-strong);
+  font: 400 12px / 1.5 var(--ui);
+}
+
+.blind-reveal-tag.mine {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.blind-reveal-score {
+  min-width: 7em;
+  color: var(--text-strong);
+  font: 500 18px / 1.1 var(--figure, var(--ui));
+  text-align: right;
+}

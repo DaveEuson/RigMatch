@@ -2,6 +2,7 @@
 import type { PendingScoreClear } from '../types';
 
 import { useDialog } from '../lib/useDialog';
+import { readBlindTaste } from '../lib/blindMode';
 import { Trash2, X } from 'lucide-react';
 
 export function ClearScoresModal({
@@ -17,6 +18,9 @@ export function ClearScoresModal({
 }) {
   const clearScoresRef = useDialog<HTMLElement>(onCancel);
   const isAll = pending.mode === 'all';
+  // Said only to someone who has made blind picks; to anyone else it is a
+  // term for a feature they have not met.
+  const blindPicks = isAll ? readBlindTaste().picks.length : 0;
   const title = isAll ? 'Clear all scores?' : `Clear the ${pending.model} score?`;
   const actionLabel = isAll ? 'Clear all scores' : 'Clear score';
 
@@ -35,7 +39,8 @@ export function ClearScoresModal({
             {isAll ? (
               <>
                 This clears <strong>{scoreCount}</strong> saved score{scoreCount === 1 ? '' : 's'}, Speed Dating rankings,
-                and test transcripts.
+                {blindPicks > 0 && <> your <strong>{blindPicks}</strong> blind pick{blindPicks === 1 ? '' : 's'},</>}
+                {' '}and test transcripts.
               </>
             ) : (
               <>
