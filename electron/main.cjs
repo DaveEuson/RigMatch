@@ -3846,8 +3846,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
     // checked against the judge's reasoning.
     let promptJudgeReason = '';
     let promptJudgeIssue = null;
-    // A drawing is asked once: one answer of up to 1,200 tokens costs about
-    // what three timing runs of a 300-token answer do.
+    // A drawing is asked once: one long answer instead of three timing runs.
     const repeats = prompt.type === 'drawing' ? 1 : BENCHMARK_REPEATS;
     // The cleaned picture and the line saying how it was scored, for a drawing.
     let promptDrawing = null;
