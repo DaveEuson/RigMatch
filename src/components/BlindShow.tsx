@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { maskName } from '../lib/blindMode';
 import { normalizeModelKey } from '../lib/modelKey';
 import { getFriendlyModelName } from '../lib/modelCatalog';
@@ -43,6 +43,11 @@ export function BlindOverlay({ session, onPick, onSkip, onClose }: {
 
 /** Who each contestant was, what the judge made of them, and whether the viewer agreed. */
 function BlindReveal({ session, onClose }: { session: BlindSession; onClose: () => void }) {
+  // The Reveal button that had focus is gone with the pick step, which left
+  // focus on <body> and a screen reader saying nothing. The heading says what
+  // just happened, and the reveal reads on from it.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => headingRef.current?.focus(), []);
   const same = (a: string | null, b: string | null) => Boolean(a && b && normalizeModelKey(a) === normalizeModelKey(b));
   const agreed = same(session.picked, session.judgeWinner);
   const picked = session.picked ? getFriendlyModelName(session.picked) : '';
@@ -50,7 +55,7 @@ function BlindReveal({ session, onClose }: { session: BlindSession; onClose: () 
     <section className="blind-reveal" aria-labelledby="blind-overlay-title">
       <header className="page-head">
         <div>
-          <h2 id="blind-overlay-title">You picked {picked}</h2>
+          <h2 id="blind-overlay-title" ref={headingRef} tabIndex={-1}>You picked {picked}</h2>
           <p>
             {agreed
               ? 'The judge picked the same one.'

@@ -97,6 +97,45 @@ test('free text loses every spelling of a lineup name', () => {
   assert.equal(maskText('qwen3:14b', new Map()), 'qwen3:14b');
 });
 
+test('only whole names are masked, never part of a word', () => {
+  const names = blindNames(['phi:latest', 'yi:6b', 'qwen3:8b']);
+  assert.equal(maskText('graphics and philosophy, playing', names), 'graphics and philosophy, playing');
+  assert.equal(maskText('phi answered, then yi:6b, then qwen3:8b.', names), 'Contestant 1 answered, then Contestant 2, then Contestant 3.');
+  assert.equal(maskText('(phi) and "yi-6b"', names), '(Contestant 1) and "Contestant 2"');
+});
+
+test('friendly names are masked too, and a name two seats share becomes "a contestant"', () => {
+  // The failure line and the dropped-out toast print getFriendlyModelName: "Qwen3", not "qwen3:8b".
+  const one = blindNames(['qwen3:8b', 'llama3.2:3b']);
+  assert.equal(maskText("Qwen3 couldn't finish. It stopped answering.", one), "Contestant 1 couldn't finish. It stopped answering.");
+  assert.equal(maskText("Llama3.2 couldn't finish, so the show went on without it.", one), "Contestant 2 couldn't finish, so the show went on without it.");
+  // qwen3:8b and qwen3:14b are both "Qwen3": naming either seat would be a guess.
+  const two = blindNames(['qwen3:8b', 'qwen3:14b', 'llama3.2:3b']);
+  assert.equal(maskText("Qwen3 couldn't finish.", two), "A contestant couldn't finish.");
+  assert.equal(maskText("Speed Dating went on. Qwen3 and Llama3.2 couldn't finish, so then qwen3 sat out.", two),
+    "Speed Dating went on. A contestant and Contestant 3 couldn't finish, so then a contestant sat out.");
+  // The full tags still name their own seats.
+  assert.equal(maskText('qwen3:14b then qwen3:8b', two), 'Contestant 2 then Contestant 1');
+});
+
+test('the run sheet named the judge, so a blind show never does', async () => {
+  const { maskProgress } = await import('../src/lib/blindMode.ts');
+  // The usual judge is seat 3; on its own turn another model marks instead.
+  const names = blindNames(['qwen3:8b', 'llama3.2:3b', 'qwen2.5-coder:7b']);
+  const turn = (judge, model) => maskProgress({
+    currentModel: model, label: 'Speed Dating', questionJudge: judge, message: `${judge} is marking ${model}'s answer.`,
+  }, names);
+  for (const masked of [turn('qwen2.5-coder:7b', 'qwen3:8b'), turn('gemma3:12b', 'qwen2.5-coder:7b')]) {
+    assert.equal(masked.questionJudge, undefined, 'the podium falls back to "Being marked"');
+    assert.doesNotMatch(masked.message, /gemma|qwen|is marking/i, masked.message);
+  }
+  assert.equal(turn('gemma3:12b', 'qwen2.5-coder:7b').message, "Contestant 3's answer is being marked.");
+  assert.equal(
+    maskProgress({ currentModel: 'qwen3:8b', label: '', message: "Judge gemma3:12b stopped answering; the rest of qwen3:8b's answers are marked without it" }, names).message,
+    "The judge stopped answering; the rest of Contestant 1's answers are marked without it",
+  );
+});
+
 test('the host calls a blind contestant by seat, never by name', async () => {
   const { getHostBanter } = await import('../src/lib/hostBanter.ts');
   for (const phase of ['warming', 'asking', 'answering', 'scored']) {
@@ -149,7 +188,7 @@ test('blind progress is renamed and carries no score', async () => {
   };
   const masked = maskProgress(progress, names);
   assert.equal(masked.currentModel, 'Contestant 1');
-  assert.equal(masked.questionJudge, 'Contestant 2');
+  assert.equal(masked.questionJudge, undefined);
   assert.equal(masked.message, 'Coding has been marked.');
   assert.equal(masked.lastResult, undefined);
   assert.equal(masked.questionScores, undefined);
@@ -209,4 +248,11 @@ test('picks are saved, survive a bad row, and go with Clear scores', async () =>
   } finally {
     delete globalThis.window;
   }
+});
+
+test('the reveal takes focus, so it is read out when the pick step goes', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('../src/components/BlindShow.tsx', import.meta.url), 'utf8');
+  assert.match(source, /<h2 id="blind-overlay-title" ref=\{headingRef\} tabIndex=\{-1\}>You picked/);
+  assert.match(source, /useEffect\(\(\) => headingRef\.current\?\.focus\(\), \[\]\);/);
 });

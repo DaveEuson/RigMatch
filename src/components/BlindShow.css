@@ -42,6 +42,11 @@
   font: 400 var(--fs-h1, 28px) / 1.15 var(--display);
 }
 
+/* Focused by script when the reveal opens, never by Tab: no ring around a heading. */
+.blind-overlay .page-head h2:focus {
+  outline: none;
+}
+
 .blind-overlay .page-head p {
   max-width: 68ch;
   margin: 6px 0 0;

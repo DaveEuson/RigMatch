@@ -16,6 +16,7 @@
  */
 import { writeLocal, writeLocalJson } from './safeStorage.ts';
 import { normalizeModelKey } from './modelKey.ts';
+import { getFriendlyModelName } from './modelCatalog.ts';
 
 /** The switch on the lineup screen, remembered between runs. Off unless set. */
 export const BLIND_MODE_STORAGE_KEY = 'rigmatch:blind-mode:v1';
@@ -89,26 +90,39 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** What a name shared by two seats becomes: either seat would be a guess, and a wrong one. */
+const SHARED_NAME = 'a contestant';
+
 /**
  * Replace every lineup name inside free text, for lines built before masking
  * could reach them: activity notes, host lines, log lines.
  *
  * Longest names first, so "qwen3:14b" is not half-replaced by "qwen3". Also
- * matches the name without its ":latest" tag and with "-" or "_" for ":",
- * because that is how some lines spell it.
+ * matches the name without its ":latest" tag, with "-" or "_" for ":", and
+ * the friendly name the screens print ("Qwen3"), because that is how some
+ * lines spell it. Only whole names: "phi" must not turn "philosophy" into
+ * "Contestant 1losophy". Two seats can share a friendly name (qwen3:8b and
+ * qwen3:14b are both "Qwen3"), and that one becomes "a contestant".
  */
 export function maskText(text: string, names: Map<string, string>): string {
   if (!text || names.size === 0) return text;
   const spellings = new Map<string, string>();
   for (const [model, label] of names) {
     const bare = model.replace(/:latest$/i, '');
-    for (const spelling of [model, bare, bare.replace(/:/g, '-'), bare.replace(/:/g, '_')]) {
-      if (spelling.length >= 2 && !spellings.has(spelling.toLowerCase())) spellings.set(spelling.toLowerCase(), label);
+    for (const spelling of [model, bare, bare.replace(/:/g, '-'), bare.replace(/:/g, '_'), getFriendlyModelName(model)]) {
+      if (spelling.length < 2) continue;
+      const key = spelling.toLowerCase();
+      const had = spellings.get(key);
+      spellings.set(key, had === undefined || had === label ? label : SHARED_NAME);
     }
   }
   const ordered = [...spellings.keys()].sort((a, b) => b.length - a.length);
-  const pattern = new RegExp(ordered.map(escapeRegExp).join('|'), 'gi');
-  return text.replace(pattern, (match) => spellings.get(match.toLowerCase()) ?? match);
+  const pattern = new RegExp(`(?<![a-z0-9])(?:${ordered.map(escapeRegExp).join('|')})(?![a-z0-9])`, 'gi');
+  return text.replace(pattern, (match: string, offset: number) => {
+    const label = spellings.get(match.toLowerCase()) ?? match;
+    const opensSentence = offset === 0 || /[.!?]\s+$/.test(text.slice(0, offset));
+    return label === SHARED_NAME && opensSentence ? 'A contestant' : label;
+  });
 }
 
 /**
@@ -161,16 +175,24 @@ export type MaskableProgress = {
  *
  * lastResult and questionScores are a contestant's score as it lands, which is
  * the judge's verdict arriving before the viewer has made theirs.
+ *
+ * The judge goes too. A model never marks its own answers, so on the turn of
+ * the contestant who is usually the judge, the judge changes, and the Run
+ * sheet has already said who the judge is: "Contestant 3 is marking it" and
+ * then another name on seat 3's turn is seat 3's name.
  */
 export function maskProgress<T extends MaskableProgress>(progress: T, names: Map<string, string>): T {
-  const { lastResult: _lastResult, questionScores: _questionScores, ...rest } = progress;
+  const { lastResult: _lastResult, questionScores: _questionScores, questionJudge: _questionJudge, ...rest } = progress;
   return {
     ...rest,
     currentModel: maskName(progress.currentModel, names),
     label: maskText(progress.label, names),
-    // The run's own lines say "Coding scored 78." as each answer is marked.
-    message: maskText(progress.message, names).replace(/\bscored \d+(?:\.\d+)?(?:\s*\([^)]*\))?/gi, 'has been marked'),
-    ...(progress.questionJudge ? { questionJudge: maskName(progress.questionJudge, names) } : {}),
+    // The run's own lines (main.cjs) say "Coding scored 78." as each answer is
+    // marked, and name the judge as they mark.
+    message: maskText(progress.message, names)
+      .replace(/\bscored \d+(?:\.\d+)?(?:\s*\([^)]*\))?/gi, 'has been marked')
+      .replace(/^.+? is marking (.+?)'s answer\./, "$1's answer is being marked.")
+      .replace(/^Judge .+? stopped answering;/, 'The judge stopped answering;'),
     ...(progress.failedModels
       ? { failedModels: progress.failedModels.map((failure) => ({ ...failure, model: maskName(failure.model, names), reason: maskText(failure.reason, names) })) }
       : {}),
