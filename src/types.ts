@@ -219,7 +219,15 @@ export type BenchmarkPromptResult = {
   judgeReason?: string;
   /** Why a judge was asked and gave no mark: unreachable, or unreadable. */
   judgeIssue?: string;
+  /** A drawing question's picture, as the main process checked and cleaned it. */
+  drawing?: PromptDrawing;
 };
+
+/**
+ * A drawing round's answer (electron/drawingRound.cjs). `svg` is the cleaned
+ * picture, null when there is none to show; `note` says how it was scored.
+ */
+export type PromptDrawing = { svg: string | null; note: string };
 
 export type BenchmarkResult = {
   model: string;
@@ -326,6 +334,8 @@ export type BenchmarkProgressUpdate = {
   sobrietyScore?: number;
   /** The model marking the answer, while phase is 'judging'. */
   judge?: string;
+  /** A drawing question's picture, on prompt-complete. */
+  drawing?: PromptDrawing;
   message?: string;
 };
 
@@ -681,6 +691,9 @@ export type AgentArcadeApi = {
     judgeEndpoints?: Record<string, { provider: LocalModelProvider; baseUrl?: string; weights?: string[] }>;
   }) => Promise<BenchmarkResult>;
   onBenchmarkProgress?: (callback: (update: BenchmarkProgressUpdate) => void) => () => void;
+  /** A drawing to draw as a PNG for a judge that can see; answered with reportDrawingPicture. */
+  onDrawingPictureRequest?: (callback: (request: { id: string; svg: string }) => void) => () => void;
+  reportDrawingPicture?: (result: { id: string; png: string | null }) => Promise<{ ok: boolean }>;
   getActiveBenchmark: () => Promise<BenchmarkStatus>;
   onBenchmarkStatus?: (callback: (status: BenchmarkStatus) => void) => () => void;
   onPullProgress?: (callback: (update: PullProgressUpdate) => void) => () => void;

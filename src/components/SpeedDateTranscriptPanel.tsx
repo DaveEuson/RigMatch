@@ -5,6 +5,7 @@ import { getBenchmarkForModel, getShortModelName } from '../lib/modelCatalog';
 import { getPromptDiagnosticText } from '../lib/promptDiagnostic';
 import type { BenchmarkPromptResult, BenchmarkResult, ModelRow, RunProgress, TranscriptViewMode } from '../types';
 import { PromptStatusPill } from './ScoreVisuals';
+import { DrawingAnswer, DrawingTile } from './DrawingGallery';
 import { MessageSquare } from 'lucide-react';
 import { useState } from 'react';
 
@@ -168,7 +169,9 @@ export function SpeedDateTranscriptPanel({
                   <em className="prompt-diagnostic-note">{getPromptDiagnosticText(prompt)}</em>
                 )}
                 {/* Once. A highlighted copy sat above this, the same text again. */}
-                <pre>{prompt.response.trim() || 'No answer returned.'}</pre>
+                {prompt.type === 'drawing'
+                  ? <DrawingAnswer prompt={prompt} />
+                  : <pre>{prompt.response.trim() || 'No answer returned.'}</pre>}
               </div>
             </li>
           ))}
@@ -270,7 +273,14 @@ export function SpeedDateTranscriptPanel({
                           {getPromptDiagnosticText(prompt) && (
                             <p className="sbs-answer-missing">{getPromptDiagnosticText(prompt)}</p>
                           )}
-                          <p className="sbs-answer-text">{prompt.response.trim() || 'No answer returned.'}</p>
+                          {prompt.type === 'drawing' ? (
+                            <>
+                              <DrawingTile drawing={prompt.drawing} alt={`${getShortModelName(row.displayName)}'s drawing`} />
+                              {prompt.drawing?.note && <p className="drawing-note">{prompt.drawing.note}</p>}
+                            </>
+                          ) : (
+                            <p className="sbs-answer-text">{prompt.response.trim() || 'No answer returned.'}</p>
+                          )}
                         </>
                       ) : (
                         <p className="sbs-answer-missing">Not tested yet for this question.</p>

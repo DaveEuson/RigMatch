@@ -309,7 +309,8 @@ test('the main process scores tool calls by rule and keeps refusals out of speed
   const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
   assert.match(main, /prompt\.type === 'tools'\s*\?\s*await runBenchmarkToolPrompt\(baseUrl, model, prompt\.prompt, signal, provider\)/);
   assert.match(main, /: toolVerdict \? toolVerdict\.score : scoreSobriety\(prompt, responseText\)/);
-  const timed = main.indexOf('const timedResults = promptResults.filter((result) => !result.toolsUnsupported);');
+  // The filter goes on to leave out an empty drawing too (drawingRound.test.mjs).
+  const timed = main.indexOf('const timedResults = promptResults.filter((result) => !result.toolsUnsupported');
   assert.ok(timed > 0, 'refused tool questions are timed into speed again');
   assert.match(main.slice(timed, timed + 400), /average\(timedResults\.map\(\(result\) => result\.tokensPerSecond\)\)/);
   // A refusal is an answer scoring 0, not an error that ends the model's run.

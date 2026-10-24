@@ -14,6 +14,38 @@ const scenarios = [
   'travel packing reminder',
 ];
 
+// The drawing round's subjects and wording, as in src/benchmarkSuite.ts (see
+// there for why the pelican, Simon Willison's benchmark, comes first).
+const DRAWING_SUBJECTS = [
+  'a pelican riding a bicycle',
+  'a robot handing a single red rose to a toaster on a first date',
+  'two snails sharing one strand of spaghetti at a candlelit dinner',
+  'a cat in a bow tie holding up a scorecard that says 10',
+  'a lighthouse on a rocky island at night, its beam crossing the sea',
+];
+
+function drawingPrompt(subject) {
+  return `Generate an SVG of ${subject}. Reply with one self-contained <svg> element with a viewBox: no scripts, and nothing loaded from outside it. Keep it compact, about 40 shapes at most.`;
+}
+
+const DRAWING_PROMPTS = DRAWING_SUBJECTS.map(drawingPrompt);
+
+const SUMMARIES_QUESTION = {
+  id: 'summarize_plan_1',
+  label: 'Summaries',
+  type: 'format',
+  prompt: 'Summarize this plan in exactly three numbered steps: prepare the kitchen timer and music request, check constraints, and confirm with the user before acting.',
+};
+
+// repeatDrawing in src/benchmarkSuite.ts: odd rounds draw the next subject,
+// even rounds ask Summaries.
+function repeatDrawing(question, round) {
+  const at = DRAWING_PROMPTS.indexOf(question.prompt);
+  if (at < 0 || round === 1) return question;
+  if (round % 2 === 0) return SUMMARIES_QUESTION;
+  return { ...question, prompt: DRAWING_PROMPTS[(at + (round - 1) / 2) % DRAWING_PROMPTS.length] };
+}
+
 const benchmarkTemplates = [
   {
     id: 'json_tool_call',
@@ -51,11 +83,10 @@ const benchmarkTemplates = [
       `Write a compact JavaScript function named clampScore${round} that accepts a number and returns it clamped between 0 and 100.`,
   },
   {
-    id: 'summarize_plan',
-    label: 'Summaries',
-    type: 'format',
-    prompt: (scenario) =>
-      `Summarize this plan in exactly three numbered steps: prepare the ${scenario}, check constraints, and confirm with the user before acting.`,
+    id: 'drawing',
+    label: 'Drawing',
+    type: 'drawing',
+    prompt: () => DRAWING_PROMPTS[0],
   },
   {
     id: 'refusal_boundary',
@@ -136,8 +167,8 @@ function buildBenchmarkPromptPlan(value = 10, sourceQuestions = DEFAULT_BENCHMAR
   const questions = normalizeBenchmarkQuestions(sourceQuestions);
 
   return Array.from({ length: count }, (_item, index) => {
-    const question = questions[index % questions.length];
     const round = Math.floor(index / questions.length) + 1;
+    const question = repeatDrawing(questions[index % questions.length], round);
 
     return {
       ...question,
@@ -161,7 +192,8 @@ function isBenchmarkQuestionType(value) {
     || value === 'writing'
     || value === 'candour'
     || value === 'tools'
-    || value === 'edgy';
+    || value === 'edgy'
+    || value === 'drawing';
 }
 
 module.exports = {

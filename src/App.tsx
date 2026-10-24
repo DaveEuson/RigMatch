@@ -13,9 +13,11 @@ import {
   DEFAULT_BENCHMARK_QUESTIONS,
   normalizeBenchmarkQuestions,
   QUICK_CHECK_QUESTIONS,
+  upgradeSavedQuestions,
   type BenchmarkQuestion,
   type BenchmarkQuestionCount,
 } from './benchmarkSuite';
+import { lineupDrawings, useDrawingPictureResponder } from './lib/drawings';
 import {
   demoBenchmark,
   demoRunHistory,
@@ -828,6 +830,8 @@ function App() {
    * job's AbortController, kept below, is what it reaches.
    */
   const chatRenderStops = useRef(new Map<string, AbortController>());
+  // A judge that can see is shown each drawing as a picture this window draws.
+  useDrawingPictureResponder();
   useEffect(() => {
     if (!agentArcadeApi.onBridgeGenerateRequest) return undefined;
     return agentArcadeApi.onBridgeGenerateRequest(({ id, prompt, kind }) => {
@@ -1766,6 +1770,10 @@ function App() {
         grade: score.grade,
       }))),
     [shortlistedRows, modelScores, wizardRound, wizardSkillBoard, wizardChannel, wizardShowRanked],
+  );
+  const wizardDrawings = useMemo(
+    () => lineupDrawings(wizardLineupResults.map((result) => result.model), benchmarkByModel),
+    [wizardLineupResults, benchmarkByModel],
   );
   const lineupSession = useVideoLineupSession();
   /** Whatever ComfyUI is rendering for RigMatch now, wherever it was started. */
@@ -4989,6 +4997,7 @@ function App() {
           planLine={wizardPlanLine}
           winner={wizardWinner}
           lineupResults={wizardLineupResults}
+          drawings={wizardDrawings}
           droppedOut={wizardSkillBoard ? undefined : wizardShowResult?.failures}
           generation={generationSummary}
           videoLineup={{
@@ -5861,7 +5870,7 @@ function getSavedBenchmarkQuestions() {
   try {
     const saved = window.localStorage.getItem(TEST_SUITE_STORAGE_KEY);
     if (!saved) return [...DEFAULT_BENCHMARK_QUESTIONS];
-    return normalizeBenchmarkQuestions(JSON.parse(saved));
+    return upgradeSavedQuestions(normalizeBenchmarkQuestions(JSON.parse(saved)));
   } catch {
     return [...DEFAULT_BENCHMARK_QUESTIONS];
   }

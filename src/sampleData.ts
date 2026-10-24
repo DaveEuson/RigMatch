@@ -336,3 +336,50 @@ export function demoRunHistory(now: number = Date.now()): RunHistory {
     run('llama3.2:3b', 24, 86, newRig),
   ]);
 }
+
+/**
+ * The drawing round in the browser preview: three pictures of a pelican riding
+ * a bicycle, from careful to crude, and one answer cut off before its SVG
+ * ended, so every way a drawing can land is on screen. Written already in the
+ * cleaned form electron/drawingRound.cjs stores. Picked by the model's name,
+ * so a contestant draws the same picture every preview show; the demo lineup
+ * is spread over all four.
+ */
+const DEMO_DRAWING_PICKS: Record<string, number> = {
+  'qwen2.5:7b': 0,
+  'gemma3:4b': 1,
+  'llama3.2:3b': 2,
+  'mistral:7b': 3,
+  'phi3:mini': 1,
+};
+
+const DEMO_DRAWINGS: Array<{ svg: string | null; score: number; note: string }> = [
+  {
+    svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160"><title>A pelican riding a bicycle</title><line x1="10" y1="141" x2="190" y2="141" stroke="#9a9a9a" stroke-width="2"></line><circle cx="55" cy="115" r="25" fill="none" stroke="#333" stroke-width="4"></circle><circle cx="145" cy="115" r="25" fill="none" stroke="#333" stroke-width="4"></circle><path d="M55 115 L95 115 L80 80 Z M95 115 L125 80 L80 80 M125 80 L145 115 M125 80 L129 68" fill="none" stroke="#c0392b" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"></path><rect x="71" y="74" width="18" height="5" rx="2" fill="#333"></rect><circle cx="95" cy="115" r="4" fill="#333"></circle><path d="M88 70 L92 96 L99 113" fill="none" stroke="#f2a33a" stroke-width="3" stroke-linecap="round"></path><ellipse cx="85" cy="58" rx="27" ry="16" fill="#f5f5f0" stroke="#555" stroke-width="2"></ellipse><path d="M70 55 Q86 44 101 58 Q86 67 70 55 Z" fill="#dcdcd2" stroke="#555" stroke-width="1.5"></path><path d="M100 58 L127 69" stroke="#555" stroke-width="3" stroke-linecap="round"></path><path d="M104 50 Q117 40 112 28" fill="none" stroke="#555" stroke-width="9" stroke-linecap="round"></path><path d="M104 50 Q117 40 112 28" fill="none" stroke="#f5f5f0" stroke-width="6" stroke-linecap="round"></path><circle cx="112" cy="26" r="8" fill="#f5f5f0" stroke="#555" stroke-width="2"></circle><circle cx="114" cy="24" r="1.6" fill="#222"></circle><path d="M118 24 L152 30 L118 31 Z" fill="#f2a33a" stroke="#b9741b" stroke-width="1.5"></path><path d="M119 31 Q135 43 150 31" fill="#f7c46c" stroke="#b9741b" stroke-width="1.5"></path></svg>',
+    score: 86,
+    note: 'Judged from the picture. A clear pelican on a working bicycle, beak and pouch included.',
+  },
+  {
+    svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100"><rect width="120" height="100" fill="#cfe8f3"></rect><circle cx="100" cy="18" r="10" fill="#f7d154"></circle><rect y="82" width="120" height="18" fill="#9cc77a"></rect><circle cx="32" cy="72" r="14" fill="none" stroke="#2f5d8a" stroke-width="3"></circle><circle cx="88" cy="72" r="14" fill="none" stroke="#2f5d8a" stroke-width="3"></circle><polyline points="32,72 55,72 46,52 75,52 88,72" fill="none" stroke="#2f5d8a" stroke-width="3"></polyline><ellipse cx="52" cy="40" rx="16" ry="11" fill="#fff" stroke="#444"></ellipse><circle cx="68" cy="28" r="6" fill="#fff" stroke="#444"></circle><polygon points="73,27 96,31 73,33" fill="#f0a020"></polygon></svg>',
+    score: 64,
+    note: 'Judged from the picture. Recognizable as a bird on a bike, but the pelican has no legs on the pedals.',
+  },
+  {
+    svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="25" cy="75" r="15" fill="none" stroke="#000" stroke-width="3"></circle><circle cx="75" cy="75" r="15" fill="none" stroke="#000" stroke-width="3"></circle><line x1="25" y1="75" x2="75" y2="75" stroke="#000" stroke-width="3"></line><ellipse cx="50" cy="45" rx="18" ry="12" fill="#ddd" stroke="#000"></ellipse><polygon points="66,40 92,44 66,48" fill="orange"></polygon></svg>',
+    score: 38,
+    note: 'Judged from the SVG code, because the judge cannot see pictures. Two wheels and a blob; only the beak says pelican.',
+  },
+  {
+    svg: null,
+    score: 10,
+    note: 'No drawing: the SVG does not parse, usually because it was cut off before it ended.',
+  },
+];
+
+export function demoDrawingFor(model: string): { response: string; score: number; drawing: { svg: string | null; note: string } } {
+  const pick = DEMO_DRAWINGS[DEMO_DRAWING_PICKS[model] ?? [...model].reduce((sum, char) => sum + char.charCodeAt(0), 0) % DEMO_DRAWINGS.length];
+  const response = pick.svg
+    ? `Here is the drawing:\n\n\`\`\`svg\n${pick.svg}\n\`\`\``
+    : '```svg\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160">\n  <circle cx="55" cy="115" r="25" fill="none" stroke="#333"/>\n  <path d="M55 115 L95 115 L80 80';
+  return { response, score: pick.score, drawing: { svg: pick.svg, note: pick.note } };
+}
