@@ -205,6 +205,12 @@ export const RIG_REFERENCE_MACHINE = 'RTX 4070 12 GB on Ollama 0.35.1';
  * speeds with "points after the reference is measured" rather than a number
  * made up to fill the gap.
  *
+ * Light was measured on 2026-10-24 with the runner in RigMatch itself (My PC ›
+ * Speed score), three times back to back with nothing else loaded in Ollama.
+ * Each run is already the median of three timed runs; the three agreed within
+ * 0.4% on writing and 1.4% on reading, and the numbers here are the median of
+ * the three for each half. Steam and the desktop were open, as on most PCs.
+ *
  * Pending, and what measuring each needs:
  *  - Standard and Heavy: qwen3:8b (5.2 GB) and qwen3:14b (9.3 GB) installed on
  *    the reference machine.
@@ -213,7 +219,21 @@ export const RIG_REFERENCE_MACHINE = 'RTX 4070 12 GB on Ollama 0.35.1';
  *    it some other way.
  */
 export const RIG_REFERENCES: Record<RigTierId, RigReferenceRecord | null> = {
-  light: null,
+  light: {
+    decodeTps: 139.9,
+    prefillTps: 8579.5,
+    measuredOn: '2026-10-24',
+    gpu: 'NVIDIA GeForce RTX 4070',
+    vramGb: 12,
+    model: 'llama3.2:3b',
+    modelDigest: 'sha256-dde5aa3fc5ffc17176b5e8bdc82f587b24b2678c6c66101bf7da77af9f7ccdff',
+    quantization: 'Q4_K_M',
+    ollamaVersion: '0.35.1',
+    driverVersion: '610.88',
+    appVersion: '0.9.9',
+    workloadVersion: 1,
+    numCtx: 4096,
+  },
   standard: null,
   heavy: null,
   extreme: null,

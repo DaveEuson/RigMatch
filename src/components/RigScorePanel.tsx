@@ -228,7 +228,7 @@ export function RigScorePanel({
                       {[result.stamp.quantization, shortDigest(result.stamp.modelDigest),
                         result.coldLoadSeconds ? `loads in ${result.coldLoadSeconds.toFixed(1)} s` : null].filter(Boolean).join(' · ')}
                     </small>
-                  ) : <small>{formatGb(tier.sizeGb)} download</small>}
+                  ) : <small>{availability.kind === 'ready' ? 'Installed' : `${formatGb(tier.sizeGb)} download`}</small>}
                 </td>
                 <td data-label="Writing">
                   {result ? (
@@ -323,7 +323,11 @@ export function RigScorePanel({
                   <td data-label="Tier">{tierById(result.tier).label}</td>
                   <td data-label="Writing"><span className="figure">{formatTps(result.measure.decodeTps)} tok/s</span></td>
                   <td data-label="Reading the prompt"><span className="figure">{formatTps(result.measure.prefillTps)} tok/s</span></td>
-                  <td data-label="Points">{pointsText(rigPoints(result.measure, result.stamp))}</td>
+                  <td data-label="Points">
+                    <span className={rigPoints(result.measure, result.stamp).kind === 'points' ? 'figure' : 'rigscore-dim'}>
+                      {pointsText(rigPoints(result.measure, result.stamp))}
+                    </span>
+                  </td>
                   <td data-label="Latest run against this one">
                     {isLatest && <span className="rigscore-dim">Latest</span>}
                     {sinceThen?.comparable && (

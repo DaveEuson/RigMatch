@@ -35,16 +35,16 @@ The submission carries the rig stamp and the scores only: no host name, prompts,
 
 ## Phases
 
-1. **Core** (this branch): `src/lib/rigScore.ts` and its tests. Tier models, the workload, the medians, the points, and whether two results can be compared.
-2. **Runner**: an IPC that pulls a tier's model if it is missing (saying the size first), runs the fixed workload, and returns a `TierMeasure` and a `RigStamp`. Uses the per-run timings the benchmark already records (`evalCount`, `evalDuration`, `promptEvalDuration`, `loadDuration`).
-3. **Reference**: measure the reference machine for each tier and write the numbers in.
-4. **Screen**: the results screen in Advanced Mode, with history, and a shareable card.
+1. **Core** (done): `src/lib/rigScore.ts` and its tests. Tier models, the workload, the medians, the points, and whether two results can be compared.
+2. **Runner** (done): `electron/rigScoreRunner.cjs` behind the `rigscore:run` IPC. It runs the fixed workload on the local Ollama and returns the per-run timings and the machine's stamp; `src/lib/rigScoreRun.ts` turns them into a `TierMeasure` and a `RigStamp`. It never pulls: a missing model comes back as not installed, and the screen offers the download through the usual consent dialog, with its size.
+3. **Reference** (Light done, 2026-10-24): measure the reference machine for each tier and write the numbers into `RIG_REFERENCES`. Standard and Heavy need qwen3:8b and qwen3:14b on the reference machine; Extreme needs a 24 GB card, which the reference machine does not have.
+4. **Screen** (done, card to follow): My PC › Speed score in Advanced Mode, with the tiers, the stamp, a plain-English speed scale and the history. The shareable card is still to do.
 5. **Submit and compare**: the GitHub submission, the table, the leaderboard page.
 
 ## Open
 
-- **The reference machine.** The suggestion is the RTX 4070 12 GB on Ollama 0.35.1, Dave's own machine, so the number is one that can be checked. It needs measuring in phase 3.
-- **The fixed passage** for the prompt-processing half has to be written and checked to land near 1500 tokens on every tokenizer in the tier models.
-- **Pinning by digest.** The tags can move. The first measurement records the digest, and a later one with a different digest is flagged, not mixed in.
+- **The reference machine** is the RTX 4070 12 GB on Ollama 0.35.1, Dave's own machine, so the number is one that can be checked. Light is measured; the other tiers are pending (phase 3).
+- **The fixed passage** is written (`src/lib/rigScorePassage.ts`) and lands at 1,486 tokens on llama3.2 and 1,495 on qwen3. Each run opens with its own line, because Ollama skips the part of a prompt it has just read.
+- **Pinning by digest.** The tags can move. Each result records the digest of the weights file (the modelfile's FROM line, not the manifest's), and a result on other weights gets no points against the reference and is not compared in the history.
 - **Machines with unified memory** (Apple Silicon, Jetson) have no VRAM figure, so every tier is offered, and a tier too large for the memory has to fail clearly.
 - **Remote hosts** are out. RigMatch cannot read another computer's card, so a score from one has no honest stamp.
