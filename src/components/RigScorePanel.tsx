@@ -137,6 +137,12 @@ export function RigScorePanel({
       </header>
 
       <div className="rigscore-notes" role="status">
+        {running && (
+          <p>
+            <strong>Testing the {tierById(running.tier).label} tier.</strong> {progressText(state.progress)}
+            {running.queued.length > 0 && ` Then ${running.queued.map((id) => tierById(id).label).join(', ')}.`}
+          </p>
+        )}
         {!isDesktopRuntime && <p>This is the browser preview, so these numbers are samples, not a measurement of your computer.</p>}
         {isDesktopRuntime && !ollama.ready && <p>Ollama is not running, so the speed test cannot start. My PC › Overview shows how to start it.</p>}
         {busy && !running && <p>A test is running. The speed test waits until it has finished, so the two do not share the graphics card.</p>}
