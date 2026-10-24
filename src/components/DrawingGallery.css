@@ -47,4 +47,5 @@
    podium's portrait rules (.sw-podium img, .sw-podium.answering img). */
 .sw-podium .drawing-tile { width: 128px; }
 .sw-podium .drawing-tile .drawing-picture { width: 100%; height: 100%; border-radius: 0; box-shadow: none; object-fit: contain; }
-.sbs-answer-card .drawing-tile { width: min(220px, 100%); }
+.sbs-answer-card .drawing-tile,
+.blind-pick-answer .drawing-tile { width: min(220px, 100%); }

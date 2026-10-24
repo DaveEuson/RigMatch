@@ -14,6 +14,7 @@ const {
   parseSvg,
   sanitizeSvg,
   checkDrawing,
+  drawingTimedOut,
   drawingJudgeMode,
   drawingNote,
 } = require('../electron/drawingRound.cjs');
@@ -321,9 +322,94 @@ test('scoreQualityWithJudge passes the picture choice through to the prompt it s
 test('the note under a drawing says which way it was judged', () => {
   const passed = checkDrawing(PELICAN);
   assert.match(drawingNote({ check: passed, judgedFrom: 'picture', judged: true, reason: 'Clear.' }), /^Judged from the picture\. Clear\.$/);
-  assert.match(drawingNote({ check: passed, judgedFrom: 'code', judged: true, reason: '' }), /^Judged from the SVG code/);
+  // Said of the route: a cloud or LM Studio judge may see well, and is sent text.
+  assert.equal(drawingNote({ check: passed, judgedFrom: 'code', judged: true, reason: '' }), 'Judged from the SVG code: this judge was sent text, not the picture.');
   assert.match(drawingNote({ check: passed, judgedFrom: 'code', judged: false }), /^Not marked/);
   assert.match(drawingNote({ check: checkDrawing('nothing'), judgedFrom: 'code', judged: false }), /^No drawing/);
+  assert.equal(drawingNote({ check: drawingTimedOut(), judgedFrom: 'code', judged: false }), 'Ran out of time at 90 s, so it is not marked.');
+});
+
+// ── Release-sweep findings ─────────────────────────────────────────────────
+
+test('a drawing unfinished at its deadline is unmarked, not a 0 that also counts as unstable', async () => {
+  const timedOut = drawingTimedOut();
+  assert.equal(timedOut.ok, false);
+  assert.equal(timedOut.problem, 'timeout');
+  assert.equal(timedOut.svg, null);
+  const { readFileSync } = await import('node:fs');
+  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
+  // The deadline is reported as such rather than as an empty answer...
+  assert.match(main, /doneReason: 'timeout',[\s\S]{0,200}timedOut: true,/);
+  assert.match(main, /prompt\.type !== 'drawing' \? null : ranOutOfTime \? drawingTimedOut\(\) : checkDrawing\(responseText\)/);
+  // ...marked as nothing, so it stays out of answer quality...
+  assert.match(main, /: !ranOutOfTime && \(toolVerdict \|\| heuristicCanGrade\(prompt\.type, prompt\.prompt, responseText\)\) \? 'heuristic' : 'unjudged'/);
+  // ...and out of stability, which already counts nothing about speed.
+  assert.match(main, /const stabilityRuns = rawRuns\.filter\(\(run\) => !run\.timedOut\);/);
+  assert.match(main, /\.\.\.\(ranOutOfTime \? \{ timedOut: true \} : \{\}\)/);
+});
+
+test('the release smoke keeps the app’s drawing deadline and reports a timeout instead of throwing', async () => {
+  const { readFileSync } = await import('node:fs');
+  const smoke = readFileSync(new URL('../scripts/smoke-benchmark.mjs', import.meta.url), 'utf-8');
+  assert.match(smoke, /timeoutMs: drawing \? Math\.min\(args\.timeoutMs, DRAWING_TIMEOUT_MS\) : args\.timeoutMs/);
+  assert.match(smoke, /if \(!drawing \|\| error\?\.name !== 'TimeoutError'\) throw error;/);
+  assert.match(smoke, /status: 'timeout'/);
+  // Not a release blocker, and not unstable: the app treats it the same way.
+  assert.match(smoke, /const timedRows = rigmatchRows\.filter\(\(row\) => row\.status !== 'timeout'\);/);
+  assert.match(smoke, /const releaseBlockers = timedRows/);
+});
+
+test('symbols, markers, patterns and masks are kept, under the same rules as everything else', () => {
+  const symbolBuilt = sanitizeSvg([
+    '<svg viewBox="0 0 200 120">',
+    '<symbol id="wheel" viewBox="0 0 50 50"><circle cx="25" cy="25" r="22" fill="none" stroke="#333"/></symbol>',
+    '<use href="#wheel" x="10" y="60" width="50" height="50"/><use href="#wheel" x="120" y="60" width="50" height="50"/>',
+    '</svg>',
+  ].join(''));
+  assert.match(symbolBuilt, /<symbol id="wheel" viewBox="0 0 50 50">/);
+  assert.equal((symbolBuilt.match(/<use /g) ?? []).length, 2);
+  // Drawn only through its copies: a drawing built from symbols is a drawing, not "empty".
+  assert.equal(checkDrawing(`\`\`\`svg\n${symbolBuilt}\n\`\`\``).ok, true);
+
+  const decorated = sanitizeSvg([
+    '<svg viewBox="0 0 100 100"><defs>',
+    '<marker id="tip" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" markerUnits="strokeWidth" orient="auto"><path d="M0 0L10 5L0 10Z"/></marker>',
+    '<pattern id="dots" width="10" height="10" patternUnits="userSpaceOnUse" patternContentUnits="userSpaceOnUse" patternTransform="rotate(10)"><circle cx="5" cy="5" r="2"/></pattern>',
+    '<mask id="m" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse"><rect width="100" height="100" fill="white"/></mask>',
+    '</defs>',
+    '<path d="M10 10L90 90" stroke="#000" marker-start="url(#tip)" marker-mid="url(#tip)" marker-end="url(#tip)"/>',
+    '<rect width="50" height="50" fill="url(#dots)" mask="url(#m)" style="marker-end: url(#tip); mask: url(#m)"/>',
+    '<path d="M1 1L9 9" marker-end="url(https://evil.example/m.svg#tip)" mask="url(&quot;https://evil.example/x&quot;)"/>',
+    '</svg>',
+  ].join(''));
+  for (const kept of ['<marker id="tip" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" markerUnits="strokeWidth" orient="auto">',
+    '<pattern id="dots" width="10" height="10" patternUnits="userSpaceOnUse" patternContentUnits="userSpaceOnUse" patternTransform="rotate(10)">',
+    '<mask id="m" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">',
+    'marker-start="url(#tip)" marker-mid="url(#tip)" marker-end="url(#tip)"',
+    'fill="url(#dots)" mask="url(#m)" style="marker-end: url(#tip); mask: url(#m)"']) {
+    assert.ok(decorated.includes(kept), `${kept} was not kept: ${decorated}`);
+  }
+  assert.ok(!decorated.includes('evil'), decorated);
+  assertClean(decorated, 'markers, patterns and masks');
+
+  // A symbol that holds a <use> cannot be copied, as any other target cannot.
+  const looped = sanitizeSvg('<svg viewBox="0 0 9 9"><circle id="c" r="1"/><symbol id="s"><use href="#c"/></symbol><use href="#s"/></svg>');
+  assert.equal((looped.match(/<use /g) ?? []).length, 1, looped);
+});
+
+test('an automatic judge for a drawing is one that can see, whenever one is not the contestant', async () => {
+  const { readFileSync } = await import('node:fs');
+  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
+  // The candidates already leave out the contestant and any copy of its weights.
+  assert.match(main, /const autoJudgeCandidates = [\s\S]{0,200}\.filter\(\(name\) => name && name !== model && !identities\(name\)\.some/);
+  assert.match(main, /for \(const name of autoJudgeCandidates\) \{[\s\S]{0,200}\.includes\('vision'\)\) \{\s*drawingAutoJudge = name;/);
+  assert.match(main, /const judgeName = useJudge \? judgeModel : drawingCheck \? await drawingAutoJudgeName\(\) : autoJudgeModel;/);
+});
+
+test('the blind pick shows a drawing as a picture, never as its markup', async () => {
+  const { readFileSync } = await import('node:fs');
+  const blind = readFileSync(new URL('../src/components/BlindShow.tsx', import.meta.url), 'utf-8');
+  assert.match(blind, /answer\?\.type === 'drawing'\s*\? <DrawingTile drawing=\{answer\.drawing\} alt=\{`Drawing by \$\{entry\.label\}`\} \/>/);
 });
 
 test('the run asks a drawing once, on its own budget, and an empty one never drags speed down', async () => {
@@ -418,6 +504,7 @@ test('the release smoke gives a drawing the app’s budget and asks it once', as
   const { readFileSync } = await import('node:fs');
   const smoke = readFileSync(new URL('../scripts/smoke-benchmark.mjs', import.meta.url), 'utf-8');
   assert.match(smoke, /require\('\.\.\/electron\/drawingRound\.cjs'\)/);
-  assert.match(smoke, /prompt\.type === 'drawing' \? \{ \.\.\.BENCHMARK_OPTIONS, num_predict: DRAWING_ANSWER_TOKENS \} : BENCHMARK_OPTIONS/);
+  assert.match(smoke, /const drawing = prompt\.type === 'drawing';/);
+  assert.match(smoke, /options: drawing \? \{ \.\.\.BENCHMARK_OPTIONS, num_predict: DRAWING_ANSWER_TOKENS \} : BENCHMARK_OPTIONS/);
   assert.match(smoke, /const repeat = prompt\.type === 'drawing' \? 1 : args\.repeat;/);
 });

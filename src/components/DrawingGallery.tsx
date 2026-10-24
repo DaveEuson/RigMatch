@@ -8,21 +8,22 @@ import './DrawingGallery.css';
  *
  * Only ever an <img> of the cleaned SVG (lib/drawings.ts): nothing in a
  * drawing can run or load from here. Carries no model name of its own, so the
- * stage can show it while names are hidden.
+ * stage can show it while names are hidden. A span, so it can sit inside a
+ * label, as the blind pick's answers do.
  */
 export function DrawingTile({ drawing, alt }: { drawing: PromptDrawing | undefined; alt: string }) {
   const src = drawingDataUrl(drawing?.svg);
   if (!src) {
     return (
-      <div className="drawing-tile none" title={drawing?.note || undefined}>
+      <span className="drawing-tile none" title={drawing?.note || undefined}>
         No drawing
-      </div>
+      </span>
     );
   }
   return (
-    <div className="drawing-tile">
+    <span className="drawing-tile">
       <img className="drawing-picture" src={src} alt={alt} draggable={false} />
-    </div>
+    </span>
   );
 }
 

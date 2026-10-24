@@ -367,7 +367,7 @@ const DEMO_DRAWINGS: Array<{ svg: string | null; score: number; note: string }> 
   {
     svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="25" cy="75" r="15" fill="none" stroke="#000" stroke-width="3"></circle><circle cx="75" cy="75" r="15" fill="none" stroke="#000" stroke-width="3"></circle><line x1="25" y1="75" x2="75" y2="75" stroke="#000" stroke-width="3"></line><ellipse cx="50" cy="45" rx="18" ry="12" fill="#ddd" stroke="#000"></ellipse><polygon points="66,40 92,44 66,48" fill="orange"></polygon></svg>',
     score: 38,
-    note: 'Judged from the SVG code, because the judge cannot see pictures. Two wheels and a blob; only the beak says pelican.',
+    note: 'Judged from the SVG code: this judge was sent text, not the picture. Two wheels and a blob; only the beak says pelican.',
   },
   {
     svg: null,

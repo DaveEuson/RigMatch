@@ -31,7 +31,7 @@ const {
   clamp,
 } = require('./benchmarkScoring.cjs');
 const { scoreQualityWithJudge } = require('./judgeScoring.cjs');
-const { DRAWING_ANSWER_TOKENS, DRAWING_TIMEOUT_MS, checkDrawing, drawingJudgeMode, drawingNote } = require('./drawingRound.cjs');
+const { DRAWING_ANSWER_TOKENS, DRAWING_TIMEOUT_MS, checkDrawing, drawingTimedOut, drawingJudgeMode, drawingNote } = require('./drawingRound.cjs');
 const security = require('./security.cjs');
 const { chatMessageText, chatHistory } = require('./chatDock.cjs');
 const gpuContention = require('./gpuContention.cjs');
@@ -3646,11 +3646,33 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   // from an older renderer still compares.
   const identities = (name) => [].concat(request.judgeEndpoints?.[name]?.weights ?? []).filter(Boolean);
   const ownWeights = identities(model);
-  const autoJudgeModel = (Array.isArray(request.autoJudgeModels) ? request.autoJudgeModels : [])
+  const autoJudgeCandidates = (Array.isArray(request.autoJudgeModels) ? request.autoJudgeModels : [])
     .map((name) => String(name || '').trim())
-    .find((name) => name && name !== model && !identities(name).some((identity) => ownWeights.includes(identity))) || '';
+    .filter((name) => name && name !== model && !identities(name).some((identity) => ownWeights.includes(identity)));
+  const autoJudgeModel = autoJudgeCandidates[0] || '';
   const autoJudgeUnmarkable = !useJudge && Boolean(autoJudgeModel);
   const judgeEndpoint = (name) => resolveJudgeEndpoint(request.judgeEndpoints, name, baseUrl, provider);
+  /**
+   * The automatic judge for a drawing: the first candidate that can see.
+   *
+   * Taking the first candidate, as other questions do, judged the top model
+   * by the next one in the list, which may only read code, while every other
+   * contestant's picture was looked at: one show, two kinds of mark. Falls
+   * back to the usual judge when no candidate can see. Found once a run.
+   */
+  let drawingAutoJudge = null;
+  const drawingAutoJudgeName = async () => {
+    if (drawingAutoJudge !== null) return drawingAutoJudge;
+    drawingAutoJudge = autoJudgeModel;
+    for (const name of autoJudgeCandidates) {
+      const endpoint = judgeEndpoint(name);
+      if (endpoint.provider === 'ollama' && (await judgeCapabilities(endpoint.baseUrl, name)).includes('vision')) {
+        drawingAutoJudge = name;
+        break;
+      }
+    }
+    return drawingAutoJudge;
+  };
   const sendProgress = (update) => {
     const payload = {
       id: progressId,
@@ -3797,6 +3819,8 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       let thinkingDisabled = BENCHMARK_THINK_DISABLED;
       // A tool question's calls and verdict; null for every other type.
       let toolAnswer = null;
+      // A drawing still unfinished at its deadline (runDrawingPrompt).
+      let ranOutOfTime = false;
 
       try {
         const generateResult = prompt.type === 'tools'
@@ -3807,6 +3831,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
             ? await runLmStudioBenchmarkPrompt(baseUrl, model, prompt.prompt, signal)
             : await runBenchmarkPromptParity(baseUrl, model, prompt.prompt, signal);
         toolAnswer = generateResult.toolAnswer || null;
+        ranOutOfTime = Boolean(generateResult.timedOut);
         responseText = generateResult.responseText;
         evalCount = generateResult.evalCount;
         evalDurationSeconds = generateResult.evalDurationSeconds;
@@ -3857,13 +3882,13 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       // A drawing is checked before any judge. One with no SVG, a broken or
       // empty one, or one without its viewBox is scored by rule and never
       // waits for a verdict.
-      const drawingCheck = prompt.type === 'drawing' ? checkDrawing(responseText) : null;
+      const drawingCheck = prompt.type !== 'drawing' ? null : ranOutOfTime ? drawingTimedOut() : checkDrawing(responseText);
       let drawingJudgedFrom = 'code';
       // A tool call is checked by rule even when a judge is on: the right tool
       // and the right date are facts, and a judge would be shown a description
       // of the call rather than the call.
       if ((useJudge || autoJudgeThis) && !toolAnswer && runIndex === 0 && !judgeGaveUp && drawingCheck?.ok !== false) {
-        const judgeName = useJudge ? judgeModel : autoJudgeModel;
+        const judgeName = useJudge ? judgeModel : drawingCheck ? await drawingAutoJudgeName() : autoJudgeModel;
         // Said while it happens. Marking an answer takes the judge model's own
         // time, and the contestant was shown "Thinking it over…" throughout.
         sendProgress({
@@ -3956,9 +3981,11 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       // Say which of the three this number actually is. Without it the UI
       // cannot tell a graded answer from a length proxy, and was crowning
       // "best for talking" on the latter.
+      // A drawing that ran out of time is unmarked, not a 0: on a slow PC every
+      // drawing would otherwise score 0 for the same slowness speed counts.
       const scoredBy = promptJudgeScore != null
         ? 'judge'
-        : toolVerdict || heuristicCanGrade(prompt.type, prompt.prompt, responseText) ? 'heuristic' : 'unjudged';
+        : !ranOutOfTime && (toolVerdict || heuristicCanGrade(prompt.type, prompt.prompt, responseText)) ? 'heuristic' : 'unjudged';
       const promptStatus = getBenchmarkPromptStatus(responseText, doneReason);
       const diagnostic = toolVerdict
         ? `${model} ${toolVerdict.verdict}.`
@@ -3989,6 +4016,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         loadDurationMs,
         thinkingDisabled,
         toolsUnsupported: Boolean(toolAnswer?.unsupported),
+        ...(ranOutOfTime ? { timedOut: true } : {}),
       });
       rawRuns.push({ prompt, ...runs[runs.length - 1] });
 
@@ -4102,7 +4130,10 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   const unmarkedCount = promptResults.length - markedResults.length;
   const avgSobriety = average((markedResults.length > 0 ? markedResults : promptResults)
     .map((result) => result.sobrietyScore));
-  const stabilityScore = Math.round((rawRuns.filter(isStableBenchmarkRun).length / rawRuns.length) * 100);
+  // A drawing that ran out of time says the PC is slow, which speed already
+  // counts; it is neither a stable nor an unstable answer.
+  const stabilityRuns = rawRuns.filter((run) => !run.timedOut);
+  const stabilityScore = Math.round((stabilityRuns.filter(isStableBenchmarkRun).length / Math.max(1, stabilityRuns.length)) * 100);
   // Scale official Ollama generation speed: 5 tok/s = 0, 100 tok/s = 100.
   const speedScore = clamp(Math.round((avgTokens - 5) / 95 * 100));
   const fitScore = scoreRigFit(model);
@@ -4441,6 +4472,7 @@ async function runDrawingPrompt(baseUrl, model, prompt, signal, provider) {
       promptEvalDurationMs: null,
       loadDurationMs: null,
       thinkingDisabled: BENCHMARK_THINK_DISABLED,
+      timedOut: true,
     };
   } finally {
     clearTimeout(timer);
