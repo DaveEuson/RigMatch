@@ -11,7 +11,14 @@ export const TOAST_MS = 5000;
  * Simple Mode never saw it. Now both get a toast. The live region is always
  * in the page, so a new message is read out rather than appearing silently.
  */
-export function ActivityToast({ message }: { message: string }) {
+export function ActivityToast({ message, mask }: {
+  message: string;
+  /**
+   * Applied as it is drawn, not to `message`: a blind show's names coming back
+   * at the reveal would otherwise read as a new message and pop the last one up again.
+   */
+  mask?: (text: string) => string;
+}) {
   const [shown, setShown] = useState<string | null>(null);
   const [seen, setSeen] = useState(message);
   if (message !== seen) {
@@ -27,7 +34,7 @@ export function ActivityToast({ message }: { message: string }) {
     <div className="activity-toast-region" role="status" aria-live="polite">
       {shown && (
         <div className="activity-toast">
-          <span>{shown}</span>
+          <span>{mask ? mask(shown) : shown}</span>
           <button type="button" aria-label="Dismiss" onClick={() => setShown(null)}>×</button>
         </div>
       )}

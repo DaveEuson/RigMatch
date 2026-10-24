@@ -14,10 +14,12 @@ const round = (value: number) => (value >= 10 ? Math.round(value) : Math.round(v
  * It is the stats deck's job in a 32px line. A reading the machine did not
  * give is left out rather than shown as zero.
  */
-export function LoadStrip({ system, running }: {
+export function LoadStrip({ system, running, hideReadings = false }: {
   system: SystemProfile;
   /** What is running right now, e.g. "Running Speed Dating · qwen2.5:7b", with its controls. */
   running?: ReactNode;
+  /** In a blind show: how much memory a contestant fills says how big it is. */
+  hideReadings?: boolean;
 }) {
   const vramTotal = system.gpu.isUnifiedMemory ? 0 : system.gpu.vramGb;
   const items: Array<{ key: string; icon: UiIconName; label: string; value: string; percent: number | null; level?: 'ok' | 'busy' | 'full' }> = [];
@@ -56,7 +58,8 @@ export function LoadStrip({ system, running }: {
   return (
     <div className="load-strip" role="group" aria-label="How hard this computer is working">
       <ul className="load-strip-readings">
-        {items.map((item) => {
+        {hideReadings && <li className="load-reading ok"><span className="load-label">Readings hidden in a blind show</span></li>}
+        {(hideReadings ? [] : items).map((item) => {
           const level = item.level ?? (item.percent != null ? loadLevel(item.percent) : 'ok');
           return (
             <li key={item.key} className={`load-reading ${level}`}>

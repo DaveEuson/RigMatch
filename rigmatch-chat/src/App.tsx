@@ -35,12 +35,19 @@ import {
   conversationsForModel,
   createConversation,
   deriveTitle,
+  keepColumn,
   migrateV1,
   parseStore,
   readStore,
   serializeStore,
+  splitTurns,
+  startSplit,
+  streamKey,
+  untilLastAsk,
+  updateColumn,
   withMessages,
   type Conversation,
+  type SplitColumn,
   type StoreRead,
 } from "./lib/conversationStore";
 import {
@@ -692,9 +699,22 @@ export default function App() {
   const [unreadableStores, setUnreadableStores] = useState<
     Partial<Record<"conversations" | "memories", { reason: string; copy: string | null }>>
   >({});
-  const [typingModel, setTypingModel] = useState<string | null>(null);
-  /** A model Ollama is loading for the reply being waited on, until its first word arrives. */
-  const [loadingModel, setLoadingModel] = useState<string | null>(null);
+  /**
+   * The model answering on each side right now: the chat's only side, or
+   * either of two when it asks two. Each side streams, stops and fails on its
+   * own, so a slow model never holds up the other one's answer.
+   */
+  //
+  // Keyed by chat as well as side (streamKey): two chats asking two can each
+  // have a second side answering, and Stop in one must never reach the other.
+  const [streaming, setStreaming] = useState<Record<string, string>>({});
+  /** Anything answering in any chat, for the ding when the last one lands. */
+  const busy = Object.keys(streaming).length > 0;
+  /** A side whose model Ollama is loading for the reply being waited on, until its first word arrives. */
+  const [loading, setLoading] = useState<Record<string, string>>({});
+  /** Choosing the second model for a chat that asks two, and the one chosen so far. */
+  const [pickingSecond, setPickingSecond] = useState(false);
+  const [secondChoice, setSecondChoice] = useState("");
   /** The message whose text was just copied, for a moment of "Copied". */
   const [copiedId, setCopiedId] = useState<string | null>(null);
   // Each model's declared memory, read once per model from /api/show.
@@ -762,24 +782,59 @@ export default function App() {
   const [picks, setPicks] = useState<Partial<Record<PickUse, string>>>({});
 
   /**
+   * The thread on screen: the one explicitly chosen, otherwise the model's most
+   * recent.
+   *
+   * Derived rather than assigned by an effect, because two things arrive
+   * independently — the model comes from the refresh (top pick, or best score)
+   * and the history comes from disk — so neither could select a thread on its
+   * own without a round of cascading renders. The fallback also covers deleting
+   * the open thread: the id stops matching and the next one down takes over,
+   * with nothing left holding a reference to something that no longer exists.
+   */
+  const activeConversation = useMemo(() => {
+    const chosen = conversations.find((c) => c.id === activeConversationId);
+    // Only while it belongs to the model in front of us. Several paths change
+    // the model alone (hiding it in Settings, picking another from a profile),
+    // and the next message then went to the new model in the old one's thread.
+    if (chosen && chosen.modelName === activeBuddy) return chosen;
+    return activeBuddy ? conversationsForModel(conversations, activeBuddy)[0] ?? null : null;
+  }, [conversations, activeConversationId, activeBuddy]);
+  /** The second model, when the open chat asks two. */
+  const secondModel = activeConversation?.split?.modelName ?? null;
+  /** The model answering on one side of the open chat right now, or null. Never another chat's. */
+  const answeringHere = (column: SplitColumn): string | null =>
+    (activeConversation ? streaming[streamKey(activeConversation.id, column)] : undefined) ?? null;
+  const loadingHere = (column: SplitColumn): boolean =>
+    Boolean(activeConversation && loading[streamKey(activeConversation.id, column)]);
+  const typingModel = answeringHere("main");
+  /** Something is answering in the open chat. Another chat's answer does not hold this one up. */
+  const busyHere = typingModel !== null || answeringHere("split") !== null;
+
+  /**
    * What the active model can actually be handed.
    *
    * Driven by the capabilities RigMatch publishes over the bridge — the same
    * data behind the sees and hears chips — so the offer and the label match
    * what the model reports. No capability, no button: an attach control that
-   * produces "Failed to load image or audio file" is worse than none.
+   * produces "Failed to load image or audio file" is worse than none. A chat
+   * asking two offers only what both can read: the same message goes to each.
    */
-  const attachCapability = useMemo(() => {
+  const ableToRead = useMemo(() => {
     const able = activeBuddy ? rigCapabilities[activeBuddy] ?? [] : [];
-    const sees = able.includes("vision");
-    const hears = able.includes("audio");
+    return secondModel ? able.filter((ability) => (rigCapabilities[secondModel] ?? []).includes(ability)) : able;
+  }, [activeBuddy, secondModel, rigCapabilities]);
+  const attachCapability = useMemo(() => {
+    const sees = ableToRead.includes("vision");
+    const hears = ableToRead.includes("audio");
+    const who = secondModel ? "Both models" : "This model";
     if (sees && hears) {
-      return { accept: "image/*,audio/*", label: "Attach picture or recording", title: "This model can read pictures and listen to recordings" };
+      return { accept: "image/*,audio/*", label: "Attach picture or recording", title: `${who} can read pictures and listen to recordings` };
     }
-    if (sees) return { accept: "image/*", label: "Attach a picture", title: "This model can read pictures" };
-    if (hears) return { accept: "audio/*", label: "Attach a recording", title: "This model can listen to recordings" };
+    if (sees) return { accept: "image/*", label: "Attach a picture", title: `${who} can read pictures` };
+    if (hears) return { accept: "audio/*", label: "Attach a recording", title: `${who} can listen to recordings` };
     return null;
-  }, [activeBuddy, rigCapabilities]);
+  }, [ableToRead, secondModel]);
 
   /**
    * Read a chosen file into base64, refusing what would not survive the trip.
@@ -806,10 +861,9 @@ export default function App() {
    */
   const usableAttachment = useMemo(() => {
     if (!attachment) return null;
-    const able = activeBuddy ? rigCapabilities[activeBuddy] ?? [] : [];
-    const readable = attachment.kind === "audio" ? able.includes("audio") : able.includes("vision");
+    const readable = attachment.kind === "audio" ? ableToRead.includes("audio") : ableToRead.includes("vision");
     return readable ? attachment : null;
-  }, [attachment, activeBuddy, rigCapabilities]);
+  }, [attachment, ableToRead]);
 
   const takeAttachment = useCallback(async (file: File | undefined) => {
     if (!file) return;
@@ -842,10 +896,11 @@ export default function App() {
   const [personalityEditor, setPersonalityEditor] = useState<PersonalityDraft | null>(null);
   const [sysStats, setSysStats] = useState<SystemStats | null>(null);
   const [vramUsedGb, setVramUsedGb] = useState<number | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const abortRefs = useRef<Record<string, AbortController>>({});
+  const composeRef = useRef<HTMLTextAreaElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const avatarFileRef = useRef<HTMLInputElement>(null);
-  const prevTypingRef = useRef<string | null>(null);
+  const prevBusyRef = useRef(false);
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -971,27 +1026,9 @@ export default function App() {
       ?? settings.personalityProfiles[0],
     [conversationPersonalityId, settings.activePersonalityId, settings.personalityProfiles],
   );
-  /**
-   * The thread on screen: the one explicitly chosen, otherwise the model's most
-   * recent.
-   *
-   * Derived rather than assigned by an effect, because two things arrive
-   * independently — the model comes from the refresh (top pick, or best score)
-   * and the history comes from disk — so neither could select a thread on its
-   * own without a round of cascading renders. The fallback also covers deleting
-   * the open thread: the id stops matching and the next one down takes over,
-   * with nothing left holding a reference to something that no longer exists.
-   */
-  const activeConversation = useMemo(() => {
-    const chosen = conversations.find((c) => c.id === activeConversationId);
-    // Only while it belongs to the model in front of us. Several paths change
-    // the model alone (hiding it in Settings, picking another from a profile),
-    // and the next message then went to the new model in the old one's thread.
-    if (chosen && chosen.modelName === activeBuddy) return chosen;
-    return activeBuddy ? conversationsForModel(conversations, activeBuddy)[0] ?? null : null;
-  }, [conversations, activeConversationId, activeBuddy]);
   const activeConversationKey = activeConversation?.id ?? null;
   const activeMessages = activeConversation?.messages ?? EMPTY_MESSAGES;
+  const secondMessages = activeConversation?.split?.messages ?? EMPTY_MESSAGES;
 
   /**
    * A maker's workspace keeps its newest result in view. A clip's player is
@@ -1026,22 +1063,52 @@ export default function App() {
       body.removeEventListener("load", follow, true);
     };
   }, [openStudio, activeMessages, imageBytes]);
-  // How much memory the active model is actually being given. "auto" sizes it
-  // from the model's own limit against a KV budget; a pinned number is still
-  // clamped to what the model declares, since asking beyond that does nothing.
+  // How much memory a model is actually being given. "auto" sizes it from the
+  // model's own limit against a KV budget; a pinned number is still clamped to
+  // what the model declares, since asking beyond that does nothing. Worked out
+  // the same way for either side of a chat asking two, so moving a model
+  // between one and two columns never changes its size and forces a reload.
   const activeContextInfo = activeBuddy ? contextInfo[activeBuddy] ?? null : null;
-  // The weights share the pool with the KV cache, so a 7B leaves far less room
-  // for context than a 3B on the same card. `sizeGb` is the download size,
-  // which is what gets loaded.
+  const contextLimitFor = useCallback((model: string) => {
+    const info = contextInfo[model] ?? null;
+    if (settings.contextSize === "auto") {
+      // The weights share the pool with the KV cache, so a 7B leaves far less
+      // room for context than a 3B on the same card. `sizeGb` is the download
+      // size, which is what gets loaded.
+      const sizeGb = buddies.find((b) => b.modelName === model)?.sizeGb ?? 0;
+      return chooseContextSize(info, kvBudgetFromVram(vram, sizeGb * 1e9));
+    }
+    if (!info) return settings.contextSize;
+    return Math.min(settings.contextSize, info.maxContext);
+  }, [contextInfo, settings.contextSize, buddies, vram]);
+  const activeContextLimit = useMemo(() => contextLimitFor(activeBuddy ?? ""), [contextLimitFor, activeBuddy]);
+  /** What is left for the active model's context, for Settings to explain the choice. */
   const activeKvBudget = useMemo(
     () => kvBudgetFromVram(vram, (activeBuddyObj?.sizeGb ?? 0) * 1e9),
     [vram, activeBuddyObj?.sizeGb],
   );
-  const activeContextLimit = useMemo(() => {
-    if (settings.contextSize === "auto") return chooseContextSize(activeContextInfo, activeKvBudget);
-    if (!activeContextInfo) return settings.contextSize;
-    return Math.min(settings.contextSize, activeContextInfo.maxContext);
-  }, [settings.contextSize, activeContextInfo, activeKvBudget]);
+
+  /**
+   * Said when the two models of a chat asking two will not both fit in the
+   * graphics card. Ollama then swaps them in and out, so answers come slower —
+   * worth knowing, and no reason to stop anyone trying. Null when they fit, or
+   * when this PC's graphics memory is unknown.
+   */
+  const splitFitNote = useMemo(() => {
+    if (!activeBuddy || !secondModel || !vram) return null;
+    // Each model's weights plus the memory it holds this chat in, at the size
+    // it will be asked for — the same estimate the memory meter shows. One
+    // model on both sides is loaded once.
+    const bytes = [...new Set([activeBuddy, secondModel])].reduce((sum, model) => {
+      const info = contextInfo[model];
+      const weights = (buddies.find((b) => b.modelName === model)?.sizeGb ?? 0) * 1e9;
+      return sum + weights + (info ? kvCacheBytes(info, contextLimitFor(model)) : 0);
+    }, 0);
+    if (kvBudgetFromVram(vram, bytes) !== 0) return null;
+    return `${getDisplayName(activeBuddy)} and ${getDisplayName(secondModel)} need about ${formatGib(bytes)} together, `
+      + `and this PC has ${formatGib(vram.totalBytes)} of ${vram.unified ? "memory" : "graphics memory"}. `
+      + "They may take turns, so answers can be slower.";
+  }, [activeBuddy, secondModel, buddies, vram, contextInfo, contextLimitFor]);
 
   // Exact where Ollama has told us, estimated only for what it has not seen yet.
   //
@@ -1102,7 +1169,7 @@ export default function App() {
   // deeper?" listened before: Settings, the personality editor, a model's
   // profile, Delete and the narrow-window chat list all ignored it.
   useEffect(() => {
-    if (!confirmDelete && !compactPlan && !personalityEditor && !profileModal && !settingsOpen && !sidebarOpen) return undefined;
+    if (!confirmDelete && !compactPlan && !personalityEditor && !profileModal && !settingsOpen && !sidebarOpen && !pickingSecond) return undefined;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || moreOpen) return;
       if (confirmDelete) setConfirmDelete(null);
@@ -1110,11 +1177,12 @@ export default function App() {
       else if (personalityEditor) setPersonalityEditor(null);
       else if (profileModal) setProfileModal(null);
       else if (settingsOpen) setSettingsOpen(false);
-      else setSidebarOpen(false);
+      else if (sidebarOpen) setSidebarOpen(false);
+      else { setPickingSecond(false); composeRef.current?.focus(); }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [confirmDelete, compactPlan, personalityEditor, profileModal, settingsOpen, sidebarOpen, moreOpen]);
+  }, [confirmDelete, compactPlan, personalityEditor, profileModal, settingsOpen, sidebarOpen, moreOpen, pickingSecond]);
 
   // The More menu closes on Escape and on a click anywhere else.
   useEffect(() => {
@@ -1258,13 +1326,16 @@ export default function App() {
 
 
   useEffect(() => {
-    if (!activeBuddy || activeBuddy in contextInfo) return;
+    const missing = [activeBuddy, secondModel].filter((model): model is string => !!model && !(model in contextInfo));
+    if (missing.length === 0) return;
     let canceled = false;
-    void getModelContextInfo(settings.ollamaUrl, activeBuddy).then((info) => {
-      if (!canceled) setContextInfo((prev) => ({ ...prev, [activeBuddy]: info }));
-    });
+    for (const model of missing) {
+      void getModelContextInfo(settings.ollamaUrl, model).then((info) => {
+        if (!canceled) setContextInfo((prev) => ({ ...prev, [model]: info }));
+      });
+    }
     return () => { canceled = true; };
-  }, [activeBuddy, contextInfo, settings.ollamaUrl]);
+  }, [activeBuddy, secondModel, contextInfo, settings.ollamaUrl]);
 
   // ── Persist conversations ────────────────────────────────────────────────
 
@@ -1369,17 +1440,19 @@ export default function App() {
   useEffect(() => {
     const el = transcriptRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [activeMessages, typingModel]);
+  }, [activeMessages, secondMessages, streaming]);
 
   // ── Ding on message received ──────────────────────────────────────────────
 
+  // Once, when the last answer still coming in has arrived: a chat asking two
+  // rings when both have, not twice.
   useEffect(() => {
-    const prev = prevTypingRef.current;
-    prevTypingRef.current = typingModel;
-    if (prev !== null && typingModel === null) {
+    const prev = prevBusyRef.current;
+    prevBusyRef.current = busy;
+    if (prev && !busy) {
       playDing(settings.muted);
     }
-  }, [typingModel, settings.muted]);
+  }, [busy, settings.muted]);
 
   // ── Send message ──────────────────────────────────────────────────────────
 
@@ -1496,18 +1569,21 @@ export default function App() {
     if (making?.jobId) void invoke("stop_rig_generation", { id: making.jobId }).catch(() => undefined);
   }, [making]);
 
-  const sendMessage = useCallback(async () => {
-    if (!activeBuddy || !draft.trim() || typingModel) return;
-
-    // Typing into a model that has no thread open starts one, rather than
-    // refusing — the empty state is a chat waiting to happen, not an error.
-    const target = activeConversation
-      ?? createConversation({
-        id: genId(),
-        modelName: activeBuddy,
-        personalityId: activePersonality?.id ?? DEFAULT_PERSONALITY_ID,
-        now: Date.now(),
-      });
+  /**
+   * Ask one model for the next answer on one side of the open chat: a normal
+   * chat's only side, or either side of a chat asking two.
+   *
+   * `asked` is that side's thread up to and including the question, so the
+   * same call sends a new message and asks a question again. Each side has its
+   * own stream, its own Stop and its own failure, which is what keeps a slow or
+   * broken model from holding up the other one.
+   */
+  const answerInColumn = useCallback(async ({ target, column, model, asked }: {
+    target: Conversation;
+    column: SplitColumn;
+    model: string;
+    asked: AppMessage[];
+  }) => {
     const conversationId = target.id;
 
     // Said before the model answers, not after.
@@ -1516,9 +1592,9 @@ export default function App() {
     // length, or announces it has made one. Both read as success. The note goes
     // in ahead of the reply so the description arrives already framed as words,
     // and points at the maker in this same window rather than "somewhere else".
-    const beyond = classifyChatRequest(draft.trim());
-    const able = rigCapabilities[activeBuddy] ?? [];
-    const guardNote = companionBeyondNote(beyond, activeBuddy, {
+    const beyond = classifyChatRequest(asked[asked.length - 1]?.content ?? "");
+    const able = rigCapabilities[model] ?? [];
+    const guardNote = companionBeyondNote(beyond, model, {
       canSee: able.includes("vision"),
       canHear: able.includes("audio"),
       makerReady: imageMaker.ready,
@@ -1527,42 +1603,32 @@ export default function App() {
       audioModel: audioMaker.ready ? audioMaker.model : null,
     });
 
-    const userMsg: AppMessage = {
-      id: genId(),
-      role: "user",
-      content: draft.trim(),
-      ts: Date.now(),
-      ...(usableAttachment ? { images: [usableAttachment.base64], attachmentName: usableAttachment.name } : {}),
-    };
     // Carried in the transcript but NOT in what the model is sent: it is
     // RigMatch talking to the user, and feeding the app's own commentary back
     // as context would have the model answer it.
     const noteMsg: AppMessage | null = guardNote
       ? { id: genId(), role: "assistant", content: guardNote, ts: Date.now(), fromRigMatch: true }
       : null;
-    const updatedHistory = [...target.messages, userMsg];
 
-    const visibleHistory = noteMsg ? [...updatedHistory, noteMsg] : updatedHistory;
+    // Asking again replaces what followed the question; a new message simply
+    // ends with it. Either way this is the whole side from here.
+    const visibleHistory = noteMsg ? [...asked, noteMsg] : asked;
     setConversations((prev) => {
       const now = Date.now();
       const existing = prev.some((c) => c.id === conversationId);
       const next = existing ? prev : [...prev, target];
-      return next.map((c) => (c.id === conversationId ? withMessages(c, visibleHistory, now) : c));
+      // The title and the time in the list follow the first model's side.
+      return next.map((c) => (c.id !== conversationId
+        ? c
+        : column === "main" ? withMessages(c, visibleHistory, now) : updateColumn(c, column, () => visibleHistory)));
     });
-    setActiveConversationId(conversationId);
-    setDraft("");
-    // Sent once, with this turn. Left in place it rode along with every later
-    // message too, the same picture or recording over and over. One set aside
-    // for a model that cannot read it was not sent, so it stays for the next.
-    if (usableAttachment) setAttachment(null);
-    setTypingModel(activeBuddy);
 
     const profilePrompt = [
       settings.systemPrompt.trim(),
       activePersonality?.instructions.trim()
         ? `Personality profile: ${activePersonality.name}\n${activePersonality.instructions.trim()}`
         : "",
-      `You are currently powered by the local Ollama model "${activeBuddy}". Do not claim to be a different model.`,
+      `You are currently powered by the local Ollama model "${model}". Do not claim to be a different model.`,
       // Questions like "how many chats have we had?" are about the app, not the
       // conversation. Without these facts the model has no way to know and
       // invents an answer — it claimed to be in its first chat while sitting in
@@ -1574,9 +1640,9 @@ export default function App() {
       memoryNote?.text ?? "",
       buildSessionNote({
         // A thread being started by this very message is not in `conversations`
-        // yet — that update is queued below — so it has to count itself.
-        threadCount: conversationsForModel(conversations, activeBuddy).length
-          + (conversations.some((c) => c.id === target.id) ? 0 : 1),
+        // yet — that update is queued above — so it counts itself, once. The
+        // second model of a chat asking two counts it too: it is in this one.
+        threadCount: conversationsForModel(conversations, model).filter((c) => c.id !== conversationId).length + 1,
         startedAt: target.createdAt,
         now: Date.now(),
       }),
@@ -1586,51 +1652,66 @@ export default function App() {
         ? [{ role: "system" as const, content: profilePrompt }]
         : []),
       // Compacted threads send their summary in place of the turns it covers.
-      // The transcript above still shows all of them.
-      ...buildContextMessages(updatedHistory, target.summary, target.summarizedCount ?? 0),
+      // The transcript above still shows all of them. The second model of a
+      // chat asking two is sent what came before it joined, then its own side.
+      ...buildContextMessages(
+        column === "split" && target.split
+          ? [...target.messages.slice(0, target.split.from), ...visibleHistory]
+          : visibleHistory,
+        target.summary,
+        target.summarizedCount ?? 0,
+      ),
     ];
     const assistantId = genId();
     let accumulated = "";
 
-    abortRef.current?.abort();
+    // This chat's side, not every chat's: another chat asking the same model
+    // has its own stream, and stopping or replacing this one must not touch it.
+    const key = streamKey(conversationId, column);
+    abortRefs.current[key]?.abort();
     const ctrl = new AbortController();
-    abortRef.current = ctrl;
+    abortRefs.current[key] = ctrl;
+    setStreaming((prev) => ({ ...prev, [key]: model }));
+    // Still this side's own stream: a Stop and then Regenerate starts another,
+    // which nothing from this one may end.
+    const current = () => abortRefs.current[key] === ctrl;
+    const doneLoading = () => setLoading(({ [key]: _done, ...rest }) => rest);
 
     // Said while Ollama loads the model, which off a slow drive takes minutes
     // and otherwise looks like a hang behind "typing…". Asked alongside the
     // send rather than before it, so a loaded model is not held up by the check.
     let answered = false;
-    void isModelLoaded(settings.ollamaUrl, activeBuddy).then((loaded) => {
-      if (loaded === false && !answered) setLoadingModel(activeBuddy);
+    void isModelLoaded(settings.ollamaUrl, model).then((loaded) => {
+      if (loaded === false && !answered && current()) setLoading((prev) => ({ ...prev, [key]: model }));
     });
 
     try {
       await streamChat(
         settings.ollamaUrl,
-        activeBuddy,
+        model,
         ollamaHistory,
         (token) => {
           if (!answered) {
             answered = true;
-            setLoadingModel(null);
+            doneLoading();
           }
           accumulated += token;
-          setConversations((prev) => prev.map((c) => {
-            if (c.id !== conversationId) return c;
-            const last = c.messages[c.messages.length - 1];
-            const messages = last?.id === assistantId
-              ? [...c.messages.slice(0, -1), { ...last, content: accumulated }]
-              : [...c.messages, { id: assistantId, role: "assistant" as const, content: accumulated, ts: Date.now() }];
-            // Not withMessages: the title is already settled by the user's
-            // message, and updatedAt would reshuffle the sidebar on every token.
-            return { ...c, messages };
-          }));
+          // Not withMessages: the title is already settled by the user's
+          // message, and updatedAt would reshuffle the sidebar on every token.
+          setConversations((prev) => prev.map((c) => (c.id !== conversationId ? c : updateColumn(c, column, (messages) => {
+            const last = messages[messages.length - 1];
+            return last?.id === assistantId
+              ? [...messages.slice(0, -1), { ...last, content: accumulated }]
+              : [...messages, { id: assistantId, role: "assistant" as const, content: accumulated, ts: Date.now() }];
+          }))));
         },
         ctrl.signal,
         {
-          numCtx: activeContextLimit,
+          numCtx: contextLimitFor(model),
           onDone: ({ promptTokens, evalTokens }) => {
-            if (promptTokens <= 0) return;
+            // The gauge is for a chat with one model. One asking two has
+            // none, and these counts would describe only one of its sides.
+            if (promptTokens <= 0 || target.split) return;
             setTokenMarkByKey((prev) => ({
               ...prev,
               [conversationId]: {
@@ -1651,39 +1732,34 @@ export default function App() {
         // old fixed "Is Ollama still running?" was said just as often with
         // Ollama running fine and refusing the model for lack of memory.
         const reason = typeof err === "string" ? err : (err as Error)?.message;
-        setConversations((prev) => prev.map((c) => (c.id === conversationId
-          ? {
-              ...c,
-              messages: [...c.messages, {
-                id: genId(),
-                role: "assistant" as const,
-                content: reason || "Something went wrong. Is Ollama still running?",
-                ts: Date.now(),
-                // RigMatch speaking: kept out of what the model is sent, or it
-                // would read the error back as its own last reply.
-                fromRigMatch: true,
-              }],
-            }
-          : c)));
+        setConversations((prev) => prev.map((c) => (c.id !== conversationId ? c : updateColumn(c, column, (messages) => [
+          ...messages,
+          {
+            id: genId(),
+            role: "assistant" as const,
+            content: reason || "Something went wrong. Is Ollama still running?",
+            ts: Date.now(),
+            // RigMatch speaking: kept out of what the model is sent, or it
+            // would read the error back as its own last reply.
+            fromRigMatch: true,
+          },
+        ]))));
       }
     } finally {
       answered = true;
-      setLoadingModel(null);
-      setTypingModel(null);
+      if (current()) {
+        delete abortRefs.current[key];
+        setStreaming(({ [key]: _done, ...rest }) => rest);
+        doneLoading();
+      }
       // A finished reply is the natural point to be durable. The coalescing
       // window is only there to survive the stream itself, and Tauri's own
       // close button does not reliably raise beforeunload.
       void writerRef.current?.flush();
     }
   }, [
-    activeBuddy,
-    activeContextLimit,
-    activeConversation,
+    contextLimitFor,
     activePersonality,
-    // Without this the send closes over the attachment as it was when the
-    // callback was last built, so a file chosen after that would be dropped —
-    // or worse, a previous one sent again.
-    usableAttachment,
     // The guard reads all three. Stale capabilities would warn about a model
     // that can hear, or point at a maker that is no longer ready.
     rigCapabilities,
@@ -1694,25 +1770,160 @@ export default function App() {
     audioMaker.ready,
     audioMaker.model,
     conversations,
-    draft,
     memoryNote,
     settings.ollamaUrl,
     settings.systemPrompt,
-    typingModel,
+  ]);
+
+  const sendMessage = useCallback(async () => {
+    if (!activeBuddy || !draft.trim() || busyHere) return;
+
+    // Typing into a model that has no thread open starts one, rather than
+    // refusing — the empty state is a chat waiting to happen, not an error.
+    const target = activeConversation
+      ?? createConversation({
+        id: genId(),
+        modelName: activeBuddy,
+        personalityId: activePersonality?.id ?? DEFAULT_PERSONALITY_ID,
+        now: Date.now(),
+      });
+    const userMsg: AppMessage = {
+      id: genId(),
+      role: "user",
+      content: draft.trim(),
+      ts: Date.now(),
+      ...(usableAttachment ? { images: [usableAttachment.base64], attachmentName: usableAttachment.name } : {}),
+    };
+    setActiveConversationId(target.id);
+    setDraft("");
+    // Sent once, with this turn. Left in place it rode along with every later
+    // message too, the same picture or recording over and over. One set aside
+    // for a model that cannot read it was not sent, so it stays for the next.
+    if (usableAttachment) setAttachment(null);
+    // A chat asking two sends the same message to both, each on its own side
+    // with its own history. The question keeps one id on both sides, which is
+    // how the two answers are put side by side.
+    await Promise.all([
+      answerInColumn({ target, column: "main", model: activeBuddy, asked: [...target.messages, userMsg] }),
+      ...(target.split
+        ? [answerInColumn({ target, column: "split", model: target.split.modelName, asked: [...target.split.messages, userMsg] })]
+        : []),
+    ]);
+  }, [
+    activeBuddy,
+    activeConversation,
+    activePersonality,
+    // Without this the send closes over the attachment as it was when the
+    // callback was last built, so a file chosen after that would be dropped —
+    // or worse, a previous one sent again.
+    usableAttachment,
+    answerInColumn,
+    busyHere,
+    draft,
   ]);
 
   /**
-   * Stop the reply in progress. The abort reaches Ollama now, so the GPU is
-   * actually released rather than carrying on with a reply nobody will read.
-   * Whatever has already been streamed stays — it is a real partial answer, and
-   * often the reason for stopping is that it was already enough.
+   * Stop the replies in progress in one chat: one side's, or both. The abort
+   * reaches Ollama now, so the GPU is actually released rather than carrying on
+   * with a reply nobody will read. Whatever has already been streamed stays —
+   * it is a real partial answer, and often the reason for stopping is that it
+   * was already enough.
    */
-  const stopGenerating = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setTypingModel(null);
+  const stopColumns = useCallback((conversationId: string, columns: SplitColumn[]) => {
+    const keys = columns.map((column) => streamKey(conversationId, column));
+    for (const key of keys) {
+      abortRefs.current[key]?.abort();
+      delete abortRefs.current[key];
+    }
+    const without = (prev: Record<string, string>) => {
+      const next = { ...prev };
+      for (const key of keys) delete next[key];
+      return next;
+    };
+    setStreaming(without);
+    setLoading(without);
     void writerRef.current?.flush();
   }, []);
+  const stopGenerating = useCallback(() => {
+    if (activeConversation) stopColumns(activeConversation.id, ["main", "split"]);
+  }, [activeConversation, stopColumns]);
+
+  /**
+   * Ask again, on one side of a chat asking two or on both. That side's last
+   * answer is replaced; the other side's is left as it is, and so is anything
+   * from before the second model joined.
+   */
+  const regenerate = useCallback((columns: SplitColumn[]) => {
+    const target = activeConversation;
+    if (!target?.split) return;
+    for (const column of columns) {
+      if (streaming[streamKey(target.id, column)]) continue;
+      const asked = untilLastAsk(column === "main" ? target.messages : target.split.messages);
+      if (!asked || (column === "main" && asked.length <= target.split.from)) continue;
+      void answerInColumn({ target, column, model: column === "main" ? target.modelName : target.split.modelName, asked });
+    }
+  }, [activeConversation, streaming, answerInColumn]);
+
+  /** Start asking a second model too, in the open chat or, with none open, a new one. */
+  const askSecondModel = useCallback((model: string) => {
+    if (!activeBuddy || !model || busyHere) return;
+    const base = activeConversation ?? createConversation({
+      id: genId(),
+      modelName: activeBuddy,
+      personalityId: activePersonality?.id ?? DEFAULT_PERSONALITY_ID,
+      now: Date.now(),
+    });
+    const split = startSplit(base, model);
+    setConversations((prev) => (prev.some((c) => c.id === split.id)
+      ? prev.map((c) => (c.id === split.id ? split : c))
+      : [...prev, split]));
+    setActiveConversationId(split.id);
+    setPickingSecond(false);
+    // The picker goes away with the choice; the message box is what comes next.
+    composeRef.current?.focus();
+    void writerRef.current?.flush();
+  }, [activeBuddy, activeConversation, activePersonality, busyHere]);
+
+  /**
+   * Back to one model, carrying on with the side that was kept. The other
+   * side's answers are not thrown away: they become a chat of their own with
+   * that model, which can be deleted like any other.
+   */
+  const keepOne = useCallback((column: SplitColumn) => {
+    const target = activeConversation;
+    if (!target?.split || busyHere) return;
+    const now = Date.now();
+    const kept = keepColumn(target, column, now);
+    const other: SplitColumn = column === "main" ? "split" : "main";
+    const otherOwn = other === "main" ? target.messages.slice(target.split.from) : target.split.messages;
+    const leftOver = otherOwn.some((m) => m.role === "assistant" && !m.fromRigMatch)
+      ? { ...keepColumn(target, other, now), id: genId() }
+      : null;
+    setConversations((prev) => [...prev.map((c) => (c.id === target.id ? kept : c)), ...(leftOver ? [leftOver] : [])]);
+    setTokenMarkByKey(({ [target.id]: _stale, ...rest }) => rest);
+    if (kept.modelName !== activeBuddy) {
+      setActiveBuddy(kept.modelName);
+      setExpandedModels((prev) => new Set(prev).add(kept.modelName));
+      // The list has to be showing the model for its chat to open.
+      if (!visibleBuddies.some((b) => b.modelName === kept.modelName)) setCapabilityFilter("all");
+    }
+    setActiveConversationId(kept.id);
+    // The button pressed goes away with the columns; focus lands in the
+    // message box rather than on the page.
+    composeRef.current?.focus();
+    void writerRef.current?.flush();
+  }, [activeConversation, activeBuddy, busyHere, visibleBuddies]);
+
+  /**
+   * Models that can be the second one: every model Chat lists, RigMatch's
+   * best on this PC first, so a show's winner and runner-up are at the top.
+   */
+  const secondChoices = useMemo(() => buddies
+    .filter((b) => b.modelName !== activeBuddy && !settings.hiddenModels.includes(b.modelName))
+    .sort((a, b) => (rigScores[b.modelName]?.total ?? -1) - (rigScores[a.modelName]?.total ?? -1)
+      || a.displayName.localeCompare(b.displayName)), [buddies, activeBuddy, settings.hiddenModels, rigScores]);
+  /** The model the picker would add: the one chosen, while it is still offered, else the top one. */
+  const chosenSecond = secondChoices.find((b) => b.modelName === secondChoice)?.modelName ?? secondChoices[0]?.modelName ?? "";
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -1837,8 +2048,9 @@ export default function App() {
   const startNewConversation = useCallback((modelName: string) => {
     // Reuse an empty thread on this model rather than stacking up identical
     // "New chat" rows for someone who clicks it twice. Not one branched off
-    // another chat: it has no messages, but it carries that chat's summary.
-    const spare = conversations.find((c) => c.modelName === modelName && c.messages.length === 0 && !c.summary);
+    // another chat: it has no messages, but it carries that chat's summary. Nor
+    // an empty one asking two, which would open asking two.
+    const spare = conversations.find((c) => c.modelName === modelName && c.messages.length === 0 && !c.summary && !c.split);
     const conversation = spare ?? createConversation({
       id: genId(),
       modelName,
@@ -2094,6 +2306,103 @@ export default function App() {
     : "";
   const ramPct = sysStats ? sysStats.ramUsedGb / sysStats.ramTotalGb : 0;
   const ramClass = ramPct > 0.88 ? "hot" : ramPct > 0.70 ? "warm" : "";
+
+  /** The open chat laid out side by side, when it asks two models. */
+  const splitView = activeConversation?.split ? splitTurns(activeConversation) : null;
+
+  /**
+   * Who an answer is from. A chat with one model shows the personality; one
+   * asking two shows the models, since which model said it is the point.
+   */
+  const faceFor = (model: string): { name: string; family: AvatarFamily; src?: string } => (secondModel
+    ? { name: getDisplayName(model), family: getAvatarFamily(model) }
+    : { name: assistantDisplayName, family: getAvatarFamily(model), src: assistantAvatarSrc });
+
+  const renderMessage = (msg: AppMessage, face: ReturnType<typeof faceFor>, folded = false) => (
+    <div key={msg.id} className={`rm-message rm-message-${msg.role}${folded ? " rm-message-folded" : ""}`}>
+      {msg.role === "assistant" && (
+        <div className="rm-message-avatar">
+          <BuddyAvatar family={face.family} customSrc={face.src} alt={face.name} size="sm" />
+        </div>
+      )}
+      <div className={msg.fromRigMatch ? "rm-message-bubble rm-from-rigmatch" : "rm-message-bubble"}>
+        <div className="rm-message-sender">
+          {/* Attributed to RigMatch, not to the model. A note in the
+              model's voice would be the app putting words in its
+              mouth — the opposite of what this feature is for. */}
+          {msg.fromRigMatch
+            ? "RigMatch"
+            : msg.role === "user" ? settings.userName : face.name}
+        </div>
+        {msg.role === "assistant" ? (
+          <div
+            className="rm-message-text rm-message-md"
+            onClick={copyCodeBlock}
+            // Replies saved before the stream was cut at turn markers.
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(cutAtTurnMarker(msg.content).text) }}
+          />
+        ) : (
+          <div className="rm-message-text">{msg.content}</div>
+        )}
+        {/* What was sent with this turn. The bytes are gone after a
+            restart by design, so the name is what remains. */}
+        {msg.attachmentName && (
+          <div className="rm-attach-sent">
+            {msg.images?.length ? "Sent" : "Sent earlier"}: {msg.attachmentName}
+          </div>
+        )}
+        {msg.imagePath && (
+          <GeneratedImage
+            path={msg.imagePath}
+            jobId={msg.imageJobId}
+            bytes={msg.imageJobId ? imageBytes[msg.imageJobId] : undefined}
+            onLoaded={(id, dataUrl) => setImageBytes((prev) => ({ ...prev, [id]: dataUrl }))}
+          />
+        )}
+        <div className="rm-message-time">
+          {new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          {/* Always shown, not on hover: drag-selecting an answer
+              picked up the names and times around it. */}
+          {msg.role === "assistant" && !msg.fromRigMatch && (
+            <button type="button" className="rm-copy-btn" onClick={() => copyAnswer(msg)}>
+              {copiedId === msg.id ? "Copied" : "Copy"}
+            </button>
+          )}
+          {/* Nothing is remembered unless it is asked for. Shown on
+              hover so it does not clutter every message. */}
+          <button
+            type="button"
+            className="rm-remember-btn"
+            title="Remember this across all conversations"
+            onClick={() => rememberText(msg.content)}
+          >
+            Remember
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  /** An answer on its way. While Ollama is still loading the model, it says so. */
+  const renderTyping = (face: ReturnType<typeof faceFor>, modelLoading: boolean) => (
+    <div className="rm-message rm-message-assistant">
+      <div className="rm-message-avatar">
+        <BuddyAvatar family={face.family} customSrc={face.src} alt={face.name} isTyping size="sm" />
+      </div>
+      <div className="rm-message-bubble">
+        {modelLoading && (
+          <p className="rm-loading-note" role="status">
+            Loading {secondModel ? face.name : activeBuddyObj?.displayName}… the first answer takes longer.
+          </p>
+        )}
+        <div className="rm-typing-dots">
+          <span />
+          <span />
+          <span />
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="rm-app" data-stage={settings.stage} data-chat-light={settings.theme === "light" ? "" : undefined}>
@@ -2489,7 +2798,7 @@ export default function App() {
           {visibleBuddies.map((buddy) => {
             const threads = conversationsForModel(conversations, buddy.modelName);
             const isActive = buddy.modelName === activeBuddy;
-            const isTyping = typingModel === buddy.modelName;
+            const isTyping = Object.values(streaming).includes(buddy.modelName);
             const score = rigScores[buddy.modelName];
             const isChosen = buddy.modelName === chosenModel;
             const isExpanded = expandedModels.has(buddy.modelName);
@@ -2556,7 +2865,10 @@ export default function App() {
                             title={`${thread.title} — double-click to rename`}
                           >
                             <span className="rm-thread-title">{thread.title}</span>
-                            <span className="rm-thread-meta">{formatWhen(thread.updatedAt)}</span>
+                            <span className="rm-thread-meta">
+                              {formatWhen(thread.updatedAt)}
+                              {thread.split ? ` · with ${getDisplayName(thread.split.modelName)}` : ""}
+                            </span>
                           </button>
                           <button
                             type="button"
@@ -2619,10 +2931,12 @@ export default function App() {
               <div className="rm-chat-header-info">
                 <h1>{activeConversation && activeConversation.messages.length > 0 ? activeConversation.title : "New chat"}</h1>
                 <span className="rm-chat-header-sub">
-                  <span title={`${activeBuddyObj.modelName} through Ollama`}>
-                    {typingModel === activeBuddy
-                      ? loadingModel === activeBuddy ? `Loading ${activeBuddyObj.displayName}…` : `${activeBuddyObj.displayName} is typing…`
-                      : connectionStatus !== "connected" ? `${activeBuddyObj.displayName} · offline` : activeBuddyObj.displayName}
+                  <span title={`${secondModel ? `${activeBuddyObj.modelName} and ${secondModel}` : activeBuddyObj.modelName} through Ollama`}>
+                    {secondModel
+                      ? `${activeBuddyObj.displayName} and ${getDisplayName(secondModel)}${connectionStatus !== "connected" ? " · offline" : ""}`
+                      : typingModel === activeBuddy
+                        ? loadingHere("main") ? `Loading ${activeBuddyObj.displayName}…` : `${activeBuddyObj.displayName} is typing…`
+                        : connectionStatus !== "connected" ? `${activeBuddyObj.displayName} · offline` : activeBuddyObj.displayName}
                   </span>
                   {" · "}
                   <label className="rm-personality-select-wrap">
@@ -2639,7 +2953,9 @@ export default function App() {
                   </label>
                 </span>
               </div>
-              <ContextMeter usage={contextUsage} info={activeContextInfo} limit={activeContextLimit} />
+              {/* For a chat with one model. Two models each hold their own
+                  memory of a chat asking two, and one gauge cannot show both. */}
+              {!secondModel && <ContextMeter usage={contextUsage} info={activeContextInfo} limit={activeContextLimit} />}
               <div className="rm-more" ref={moreRef}>
                 <button
                   type="button"
@@ -2653,6 +2969,17 @@ export default function App() {
                 </button>
                 {moreOpen && (
                   <div className="rm-more-menu" role="menu">
+                    {!secondModel && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={busyHere || secondChoices.length === 0}
+                        onClick={() => { setMoreOpen(false); setSecondChoice(""); setPickingSecond(true); }}
+                      >
+                        <strong>Ask a second model too</strong>
+                        <span>{secondChoices.length === 0 ? "No other model installed" : "Each message goes to both, answers side by side"}</span>
+                      </button>
+                    )}
                     {/* Tests this model can take: reading and listening only
                         for a model that reports it can see or hear. */}
                     {CHAT_TESTS
@@ -2703,9 +3030,48 @@ export default function App() {
 
             {testNote && <p className="rm-test-note">{testNote}</p>}
 
+            {/* Choosing the second model. The models RigMatch scored best on
+                this PC come first, so a show's winner and runner-up are the
+                first two to pick from. Nothing happens until Add: an arrow key
+                in the list changes the choice, it does not commit to it. */}
+            {pickingSecond && !secondModel && (
+              <div className="rm-split-pick">
+                <label>
+                  Also ask
+                  <select
+                    value={chosenSecond}
+                    autoFocus
+                    onChange={(event) => setSecondChoice(event.target.value)}
+                  >
+                    {secondChoices.map((buddy) => (
+                      <option key={buddy.modelName} value={buddy.modelName}>
+                        {buddy.displayName} · {rigScores[buddy.modelName] ? `Match ${rigScores[buddy.modelName].total}` : `${buddy.sizeGb} GB`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="rm-btn-sm"
+                  onClick={() => askSecondModel(chosenSecond)}
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  className="rm-btn-sm"
+                  onClick={() => { setPickingSecond(false); composeRef.current?.focus(); }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+            {splitFitNote && <p className="rm-test-note">{splitFitNote}</p>}
+
             {/* Offered before the limit, not after: past it Ollama has already
-                started dropping the oldest turns on its own. */}
-            {contextUsage.nearLimit && canCompact && !compactPlan && (
+                started dropping the oldest turns on its own. Not in a chat
+                asking two: summarizing one side would leave the other as it is. */}
+            {contextUsage.nearLimit && canCompact && !compactPlan && !secondModel && (
               <div className={`rm-compact-bar${contextUsage.willTruncate ? " urgent" : ""}`}>
                 <span>
                   {contextUsage.willTruncate
@@ -2725,7 +3091,7 @@ export default function App() {
             )}
 
             <div className="rm-transcript" ref={transcriptRef}>
-              {activeMessages.length === 0 && (
+              {activeMessages.length === 0 && !secondModel && (
                 <div className="rm-transcript-empty">
                   <BuddyAvatar
                     family={activeBuddyObj.avatarFamily}
@@ -2745,7 +3111,7 @@ export default function App() {
               {activeConversation?.summary && (activeConversation.summarizedCount ?? 0) === 0 && (
                 <SummaryMarker conversation={activeConversation} />
               )}
-              {activeMessages.map((msg, index) => (
+              {(splitView ? splitView.shared : activeMessages).map((msg, index) => (
                 <Fragment key={msg.id}>
                   {/* Where the model's memory actually begins. Without this the
                       transcript shows turns the model cannot see and gives no
@@ -2753,99 +3119,91 @@ export default function App() {
                   {activeConversation?.summary && index === activeConversation.summarizedCount && (
                     <SummaryMarker conversation={activeConversation} />
                   )}
-                <div className={`rm-message rm-message-${msg.role}${activeConversation?.summary && index < (activeConversation.summarizedCount ?? 0) ? " rm-message-folded" : ""}`}>
-                  {msg.role === "assistant" && (
-                    <div className="rm-message-avatar">
-                      <BuddyAvatar
-                        family={activeBuddyObj.avatarFamily}
-                        customSrc={assistantAvatarSrc}
-                        alt={assistantDisplayName}
-                        size="sm"
-                      />
-                    </div>
-                  )}
-                  <div className={msg.fromRigMatch ? "rm-message-bubble rm-from-rigmatch" : "rm-message-bubble"}>
-                    <div className="rm-message-sender">
-                      {/* Attributed to RigMatch, not to the model. A note in the
-                          model's voice would be the app putting words in its
-                          mouth — the opposite of what this feature is for. */}
-                      {msg.fromRigMatch
-                        ? "RigMatch"
-                        : msg.role === "user" ? settings.userName : assistantDisplayName}
-                    </div>
-                    {msg.role === "assistant" ? (
-                      <div
-                        className="rm-message-text rm-message-md"
-                        onClick={copyCodeBlock}
-                        // Replies saved before the stream was cut at turn markers.
-                        dangerouslySetInnerHTML={{ __html: renderMarkdown(cutAtTurnMarker(msg.content).text) }}
-                      />
-                    ) : (
-                      <div className="rm-message-text">{msg.content}</div>
-                    )}
-                    {/* What was sent with this turn. The bytes are gone after a
-                        restart by design, so the name is what remains. */}
-                    {msg.attachmentName && (
-                      <div className="rm-attach-sent">
-                        {msg.images?.length ? "Sent" : "Sent earlier"}: {msg.attachmentName}
-                      </div>
-                    )}
-                    {msg.imagePath && (
-                      <GeneratedImage
-                        path={msg.imagePath}
-                        jobId={msg.imageJobId}
-                        bytes={msg.imageJobId ? imageBytes[msg.imageJobId] : undefined}
-                        onLoaded={(id, dataUrl) => setImageBytes((prev) => ({ ...prev, [id]: dataUrl }))}
-                      />
-                    )}
-                    <div className="rm-message-time">
-                      {new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      {/* Always shown, not on hover: drag-selecting an answer
-                          picked up the names and times around it. */}
-                      {msg.role === "assistant" && !msg.fromRigMatch && (
-                        <button type="button" className="rm-copy-btn" onClick={() => copyAnswer(msg)}>
-                          {copiedId === msg.id ? "Copied" : "Copy"}
-                        </button>
-                      )}
-                      {/* Nothing is remembered unless it is asked for. Shown on
-                          hover so it does not clutter every message. */}
-                      <button
-                        type="button"
-                        className="rm-remember-btn"
-                        title="Remember this across all conversations"
-                        onClick={() => rememberText(msg.content)}
-                      >
-                        Remember
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                  {renderMessage(msg, faceFor(activeBuddyObj.modelName), Boolean(activeConversation?.summary) && index < (activeConversation?.summarizedCount ?? 0))}
                 </Fragment>
               ))}
-              {typingModel === activeBuddy && (
-                <div className="rm-message rm-message-assistant">
-                  <div className="rm-message-avatar">
-                    <BuddyAvatar
-                      family={activeBuddyObj.avatarFamily}
-                      customSrc={assistantAvatarSrc}
-                      alt={assistantDisplayName}
-                      isTyping
-                      size="sm"
-                    />
-                  </div>
-                  <div className="rm-message-bubble">
-                    {loadingModel === activeBuddy && (
-                      <p className="rm-loading-note" role="status">
-                        Loading {activeBuddyObj.displayName}… the first answer takes longer.
+              {!splitView && typingModel === activeBuddy && renderTyping(faceFor(activeBuddyObj.modelName), loadingHere("main"))}
+
+              {/* A chat asking two: each question once, then both answers
+                  side by side, or one above the other in a narrow window.
+                  Stop, Regenerate and Keep sit under the newest answers,
+                  where the decision is made. */}
+              {splitView && secondModel && (
+                <>
+                  {splitView.shared.length > 0 && (
+                    <p className="rm-split-start" role="note">
+                      <span className="rm-summary-rule" aria-hidden="true" />
+                      <span>From here, {getDisplayName(secondModel)} answers too</span>
+                      <span className="rm-summary-rule" aria-hidden="true" />
+                    </p>
+                  )}
+                  {splitView.turns.length === 0 && (
+                    <div className="rm-transcript-empty">
+                      <p className="rm-transcript-hello">
+                        Ask {activeBuddyObj.displayName} and {getDisplayName(secondModel)} at once.
                       </p>
-                    )}
-                    <div className="rm-typing-dots">
-                      <span />
-                      <span />
-                      <span />
+                      <p className="rm-transcript-hint">
+                        Each message goes to both, and their answers sit side by side. Keep the one you like
+                        to carry on with it alone.
+                      </p>
+                      <button type="button" className="rm-btn rm-btn-line rm-btn-sm" onClick={() => keepOne("main")}>
+                        Just {activeBuddyObj.displayName}
+                      </button>
                     </div>
-                  </div>
-                </div>
+                  )}
+                  {splitView.turns.map((turn, turnIndex) => {
+                    const newest = turnIndex === splitView.turns.length - 1;
+                    return (
+                      <Fragment key={turn.ask?.id ?? `turn-${turnIndex}`}>
+                        {turn.ask && renderMessage(turn.ask, faceFor(activeBuddyObj.modelName))}
+                        <div className="rm-split-row">
+                          {(["main", "split"] as const).map((column) => {
+                            const model = column === "main" ? activeBuddyObj.modelName : secondModel;
+                            const other = column === "main" ? secondModel : activeBuddyObj.modelName;
+                            const replies = turn[column];
+                            // This chat's own stream on this side, never another
+                            // chat's that happens to use the same model.
+                            const answering = newest && answeringHere(column) !== null;
+                            return (
+                              <section key={column} className="rm-split-cell" aria-label={`${getDisplayName(model)}'s answer`}>
+                                {replies.map((msg) => renderMessage(msg, faceFor(model)))}
+                                {answering && !replies.some((m) => m.role === "assistant" && !m.fromRigMatch)
+                                  && renderTyping(faceFor(model), loadingHere(column))}
+                                {newest && (
+                                  <div className="rm-split-actions">
+                                    {/* One button that is Stop while answering and
+                                        Regenerate after, so focus stays on it
+                                        through both, rather than falling to the page. */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (!answering) regenerate([column]);
+                                        else if (activeConversation) stopColumns(activeConversation.id, [column]);
+                                      }}
+                                      title={answering ? `Stop ${getDisplayName(model)} and free the graphics card` : undefined}
+                                    >
+                                      {answering ? "Stop" : "Regenerate"}
+                                    </button>
+                                    {!answering && (
+                                      <button
+                                        type="button"
+                                        onClick={() => keepOne(column)}
+                                        disabled={busyHere}
+                                        title={`Carry on with ${getDisplayName(model)} alone. ${getDisplayName(other)}'s answers are saved as a chat of their own.`}
+                                      >
+                                        Keep this one
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </section>
+                            );
+                          })}
+                        </div>
+                      </Fragment>
+                    );
+                  })}
+                </>
               )}
             </div>
 
@@ -2868,7 +3226,7 @@ export default function App() {
                 />
                 {attachment && !usableAttachment && (
                   <span className="rm-attach-dropped">
-                    {attachment.name} is set aside — {activeBuddy} cannot read it. Pick a model that can, or choose another file.
+                    {attachment.name} is set aside — {secondModel ? "one of the two models" : activeBuddy} cannot read it. Pick a model that can, or choose another file.
                   </span>
                 )}
                 {usableAttachment ? (
@@ -2890,9 +3248,10 @@ export default function App() {
             )}
             <div className="rm-compose">
               <textarea
+                ref={composeRef}
                 className="rm-compose-input"
-                placeholder={`Message ${assistantDisplayName}`}
-                aria-label={`Message ${assistantDisplayName}`}
+                placeholder={secondModel ? `Message ${activeBuddyObj.displayName} and ${getDisplayName(secondModel)}` : `Message ${assistantDisplayName}`}
+                aria-label={secondModel ? `Message ${activeBuddyObj.displayName} and ${getDisplayName(secondModel)}` : `Message ${assistantDisplayName}`}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -2900,27 +3259,45 @@ export default function App() {
                 /* Not disabled while a reply streams — there is no reason you
                    cannot write the next message while waiting for this one. */
               />
-              {typingModel ? (
+              {/* Only this chat's answers: another chat still answering
+                  neither blocks sending here nor is stopped from here. */}
+              {busyHere ? (
                 <button
                   type="button"
                   className="rm-btn rm-btn-danger rm-stop-btn"
-                  onClick={stopGenerating}
-                  title="Stop this reply and free the graphics card"
+                  onClick={() => { stopGenerating(); composeRef.current?.focus(); }}
+                  title={secondModel ? "Stop both answers and free the graphics card" : "Stop this reply and free the graphics card"}
                 >
                   Stop
                 </button>
               ) : (
                 <>
-                  <button
-                    type="button"
-                    className="rm-btn rm-btn-line rm-image-btn"
-                    onClick={() => void generateImage()}
-                    disabled={!draft.trim() || generatingImage}
-                    title="Sends this to ComfyUI through RigMatch — not to the model above, which cannot make pictures"
-                  >
-                    <Icon name="picture" />
-                    {generatingImage ? "Making…" : "Make a picture"}
-                  </button>
+                  {/* A chat asking two has no picture maker: a picture is not
+                      something to ask two models for. Asking both again takes
+                      its place. */}
+                  {secondModel ? (
+                    (splitView?.turns.length ?? 0) > 0 && (
+                      <button
+                        type="button"
+                        className="rm-btn rm-btn-line"
+                        // Stop takes this button's place, so focus moves to the box.
+                        onClick={() => { regenerate(["main", "split"]); composeRef.current?.focus(); }}
+                      >
+                        Regenerate both
+                      </button>
+                    )
+                  ) : (
+                    <button
+                      type="button"
+                      className="rm-btn rm-btn-line rm-image-btn"
+                      onClick={() => void generateImage()}
+                      disabled={!draft.trim() || generatingImage}
+                      title="Sends this to ComfyUI through RigMatch — not to the model above, which cannot make pictures"
+                    >
+                      <Icon name="picture" />
+                      {generatingImage ? "Making…" : "Make a picture"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="rm-btn rm-btn-gold rm-send-btn"

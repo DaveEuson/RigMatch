@@ -31,6 +31,7 @@ const {
   clamp,
 } = require('./benchmarkScoring.cjs');
 const { scoreQualityWithJudge } = require('./judgeScoring.cjs');
+const { DRAWING_ANSWER_TOKENS, DRAWING_TIMEOUT_MS, checkDrawing, drawingJudgeMode, drawingNote } = require('./drawingRound.cjs');
 const security = require('./security.cjs');
 const { chatMessageText, chatHistory } = require('./chatDock.cjs');
 const gpuContention = require('./gpuContention.cjs');
@@ -1132,6 +1133,15 @@ function registerHandlers() {
   handleLogged('network:scanLan', 'network', () => scanLanForOllama());
   handleLogged('network:addHostByAddress', 'network', (_event, address) => addHostByAddress(address));
   handleLogged('benchmark:run', 'benchmark', (event, request) => runBenchmark(request, event.sender));
+  // The window's answer to requestDrawingPicture. Anything but plain base64 of
+  // a sensible size is no picture, and the judge reads the code instead.
+  handleLogged('drawing:pictureResult', 'benchmark', (_event, result) => {
+    const done = pendingDrawingPictures.get(String(result?.id ?? ''));
+    if (!done) return { ok: false };
+    const png = typeof result?.png === 'string' && result.png.length < 4_000_000 && /^[A-Za-z0-9+/]+=*$/.test(result.png) ? result.png : null;
+    done(png);
+    return { ok: true };
+  });
   // Stop button support: flag the running benchmark AND abort its in-flight
   // generation so Stop takes effect mid-question, not just at the next boundary.
   // Only record the id if it's the one actually running, so the set can't grow
@@ -3745,6 +3755,11 @@ async function runBenchmarkInner(request = {}, sender, signal) {
     // checked against the judge's reasoning.
     let promptJudgeReason = '';
     let promptJudgeIssue = null;
+    // A drawing is asked once: one answer of up to 1,200 tokens costs about
+    // what three timing runs of a 300-token answer do.
+    const repeats = prompt.type === 'drawing' ? 1 : BENCHMARK_REPEATS;
+    // The cleaned picture and the line saying how it was scored, for a drawing.
+    let promptDrawing = null;
     sendProgress({
       phase: 'prompt-start',
       promptIndex,
@@ -3752,11 +3767,11 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       promptLabel: prompt.label,
       promptType: prompt.type,
       prompt: prompt.prompt,
-      runTotal: BENCHMARK_REPEATS,
+      runTotal: repeats,
       message: `Asking ${prompt.label}.`,
     });
 
-    for (let runIndex = 0; runIndex < BENCHMARK_REPEATS; runIndex += 1) {
+    for (let runIndex = 0; runIndex < repeats; runIndex += 1) {
       throwIfCanceled();
       sendProgress({
         phase: 'prompt-run',
@@ -3766,9 +3781,9 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         promptType: prompt.type,
         prompt: prompt.prompt,
         runIndex,
-        runTotal: BENCHMARK_REPEATS,
-        message: BENCHMARK_REPEATS > 1
-          ? `Asking ${prompt.label} — timing run ${runIndex + 1} of ${BENCHMARK_REPEATS}.`
+        runTotal: repeats,
+        message: repeats > 1
+          ? `Asking ${prompt.label} — timing run ${runIndex + 1} of ${repeats}.`
           : `Asking ${prompt.label}.`,
       });
       const promptStart = Date.now();
@@ -3787,6 +3802,8 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       try {
         const generateResult = prompt.type === 'tools'
           ? await runBenchmarkToolPrompt(baseUrl, model, prompt.prompt, signal, provider)
+          : prompt.type === 'drawing'
+            ? await runDrawingPrompt(baseUrl, model, prompt.prompt, signal, provider)
           : provider === 'lm-studio'
             ? await runLmStudioBenchmarkPrompt(baseUrl, model, prompt.prompt, signal)
             : await runBenchmarkPromptParity(baseUrl, model, prompt.prompt, signal);
@@ -3838,10 +3855,15 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       // Judge grades the representative (first-run) answer; later runs reuse it.
       // On any judge failure, promptJudgeScore stays null and we use the heuristic.
       const autoJudgeThis = autoJudgeUnmarkable && !heuristicCanGrade(prompt.type, prompt.prompt);
+      // A drawing is checked before any judge. One with no SVG, a broken or
+      // empty one, or one without its viewBox is scored by rule and never
+      // waits for a verdict.
+      const drawingCheck = prompt.type === 'drawing' ? checkDrawing(responseText) : null;
+      let drawingJudgedFrom = 'code';
       // A tool call is checked by rule even when a judge is on: the right tool
       // and the right date are facts, and a judge would be shown a description
       // of the call rather than the call.
-      if ((useJudge || autoJudgeThis) && !toolAnswer && runIndex === 0 && !judgeGaveUp) {
+      if ((useJudge || autoJudgeThis) && !toolAnswer && runIndex === 0 && !judgeGaveUp && drawingCheck?.ok !== false) {
         const judgeName = useJudge ? judgeModel : autoJudgeModel;
         // Said while it happens. Marking an answer takes the judge model's own
         // time, and the contestant was shown "Thinking it over…" throughout.
@@ -3858,6 +3880,17 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         let judgeFailure = null;
         let judgeOutput = '';
         const judgedHere = !(useJudge && judgeProvider === 'openrouter');
+        // A judge that can see is shown the drawing itself, drawn to a PNG by
+        // the window that started the run; any other judge reads its SVG.
+        let picture = null;
+        if (drawingCheck) {
+          const endpoint = judgeEndpoint(judgeName);
+          const capabilities = judgedHere && endpoint.provider === 'ollama' ? await judgeCapabilities(endpoint.baseUrl, judgeName) : [];
+          if (drawingJudgeMode({ local: judgedHere, provider: endpoint.provider, capabilities }) === 'picture') {
+            picture = await requestDrawingPicture(sender, drawingCheck.svg);
+          }
+          drawingJudgedFrom = picture ? 'picture' : 'code';
+        }
         // A judge in the other program loaded beside the contestant: Ollama
         // and LM Studio free memory for their own models, not for each
         // other's, so the two squeezed the card until verdicts timed out. The
@@ -3868,12 +3901,14 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         }
         const verdict = await scoreQualityWithJudge({
           prompt,
-          response: responseText,
+          // A drawing's judge reads the cleaned SVG, not the chat around it.
+          response: drawingCheck ? drawingCheck.svg : responseText,
+          picture: Boolean(picture),
           generate: async (judgePrompt) => {
             try {
               judgeOutput = String(await (useJudge && judgeProvider === 'openrouter'
                 ? openRouterGenerateText(judgeApiKey, judgeModel, judgePrompt, 400, signal)
-                : runLocalJudge(judgeEndpoint(judgeName), judgeName, judgePrompt, signal)) ?? '');
+                : runLocalJudge(judgeEndpoint(judgeName), judgeName, judgePrompt, signal, picture)) ?? '');
               return judgeOutput;
             } catch (error) {
               judgeFailure = error;
@@ -3908,6 +3943,12 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         throwIfCanceled();
         if (judgedHere && provider === 'lm-studio') await warmLmStudioBenchmarkModel(baseUrl, model, signal);
         else if (judgedHere) await warmBenchmarkModel(baseUrl, model, signal);
+      }
+      if (drawingCheck) {
+        promptDrawing = {
+          svg: drawingCheck.svg,
+          note: drawingNote({ check: drawingCheck, judgedFrom: drawingJudgedFrom, judged: promptJudgeScore != null, reason: promptJudgeReason }),
+        };
       }
       const toolVerdict = toolAnswer?.verdict || null;
       const sobrietyScore = promptJudgeScore != null
@@ -4007,6 +4048,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       ...(runs.every((run) => run.toolsUnsupported) ? { toolsUnsupported: true } : {}),
       ...(promptJudgeReason ? { judgeReason: promptJudgeReason } : {}),
       ...(promptJudgeIssue ? { judgeIssue: promptJudgeIssue } : {}),
+      ...(promptDrawing ? { drawing: promptDrawing } : {}),
     });
     const completedPrompt = promptResults[promptResults.length - 1];
     sendProgress({
@@ -4019,6 +4061,8 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       elapsedMs: completedPrompt.elapsedMs,
       tokensPerSecond: completedPrompt.tokensPerSecond,
       sobrietyScore: completedPrompt.sobrietyScore,
+      // So the stage can show the picture as soon as it is drawn.
+      ...(completedPrompt.drawing ? { drawing: completedPrompt.drawing } : {}),
       message: completedPrompt.status === 'no-response'
         ? `${prompt.label} returned no visible answer. ${completedPrompt.diagnostic}`
         : `${prompt.label} scored ${completedPrompt.sobrietyScore}.`,
@@ -4035,7 +4079,11 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   // A tool question Ollama refused for this model comes back in milliseconds
   // with nothing generated; timed, it would read as the fastest answer of the
   // run. It scores 0 for answer quality and stays out of speed.
-  const timedResults = promptResults.filter((result) => !result.toolsUnsupported);
+  // Nor does a drawing that came back empty: one dropped at its deadline
+  // (runDrawingPrompt) generated for 90 seconds and reports no tokens, which
+  // would read as a rate near zero. It already scores 0 as no drawing.
+  const timedResults = promptResults.filter((result) => !result.toolsUnsupported
+    && !(result.type === 'drawing' && result.status === 'no-response'));
   const avgTokens = average(timedResults.map((result) => result.tokensPerSecond));
   const avgLatency = average(timedResults.map((result) => result.elapsedMs));
   const firstTokenSamples = rawRuns.map((r) => r.firstTokenMs).filter(Number.isFinite);
@@ -4265,9 +4313,13 @@ function resolveJudgeEndpoint(endpoints, judgeModel, contestantBaseUrl, contesta
   return { provider: 'ollama', baseUrl: contestantProvider === 'ollama' ? contestantBaseUrl : OLLAMA_LOCAL_URL };
 }
 
-/** One verdict from a local judge, on Ollama or LM Studio, which leaves once it has answered. */
-async function runLocalJudge(endpoint, judgeModel, judgePrompt, signal) {
-  if (endpoint.provider !== 'lm-studio') return runJudgeGenerate(endpoint.baseUrl, judgeModel, judgePrompt, signal);
+/**
+ * One verdict from a local judge, on Ollama or LM Studio, which leaves once it has answered.
+ * `picture` (base64 PNG) goes only to an Ollama judge: drawingJudgeMode picks
+ * picture judging for nothing else.
+ */
+async function runLocalJudge(endpoint, judgeModel, judgePrompt, signal, picture = null) {
+  if (endpoint.provider !== 'lm-studio') return runJudgeGenerate(endpoint.baseUrl, judgeModel, judgePrompt, signal, picture);
   const keep = await lmStudioLoadedInstances(endpoint.baseUrl, judgeModel);
   try {
     const answer = await lmStudioNativeChat(endpoint.baseUrl, judgeModel, judgePrompt, signal, 200);
@@ -4338,7 +4390,7 @@ async function openRouterGenerateText(apiKey, model, prompt, maxTokens = 400, si
  * score came out as 9. The judge paying a reload per verdict is the cheaper
  * side of that trade.
  */
-async function runJudgeGenerate(baseUrl, judgeModel, judgePrompt, signal) {
+async function runJudgeGenerate(baseUrl, judgeModel, judgePrompt, signal, picture = null) {
   const response = await fetchJson(
     `${baseUrl}/api/generate`,
     {
@@ -4347,6 +4399,7 @@ async function runJudgeGenerate(baseUrl, judgeModel, judgePrompt, signal) {
       body: JSON.stringify({
         model: judgeModel,
         prompt: judgePrompt,
+        ...(picture ? { images: [picture] } : {}),
         stream: false,
         think: false,
         keep_alive: 0,
@@ -4358,7 +4411,81 @@ async function runJudgeGenerate(baseUrl, judgeModel, judgePrompt, signal) {
   return String(response.response || '');
 }
 
-async function runBenchmarkPromptParity(baseUrl, model, prompt, signal) {
+/**
+ * A drawing: one answer with room for a whole SVG, and a deadline of its own.
+ *
+ * Past DRAWING_TIMEOUT_MS the answer is dropped and scores as no drawing,
+ * rather than failing the question: a small or thinking model that writes and
+ * writes would otherwise hold the show for two minutes and then drop out of it.
+ * The context window is the run's own, so asking for more tokens never makes
+ * Ollama reload the model mid-run.
+ */
+async function runDrawingPrompt(baseUrl, model, prompt, signal, provider) {
+  const deadline = new AbortController();
+  const stop = () => deadline.abort();
+  if (signal?.aborted) stop();
+  else signal?.addEventListener('abort', stop, { once: true });
+  const timer = setTimeout(stop, DRAWING_TIMEOUT_MS);
+  const startedAt = Date.now();
+  try {
+    return provider === 'lm-studio'
+      ? await runLmStudioBenchmarkPrompt(baseUrl, model, prompt, deadline.signal, DRAWING_ANSWER_TOKENS)
+      : await runBenchmarkPromptParity(baseUrl, model, prompt, deadline.signal, { ...benchmarkGenerateOptions(), num_predict: DRAWING_ANSWER_TOKENS });
+  } catch (error) {
+    if (signal?.aborted || !deadline.signal.aborted) throw error;
+    return {
+      responseText: '',
+      evalCount: 0,
+      evalDurationSeconds: (Date.now() - startedAt) / 1000,
+      doneReason: 'timeout',
+      totalDurationMs: Date.now() - startedAt,
+      promptEvalDurationMs: null,
+      loadDurationMs: null,
+      thinkingDisabled: BENCHMARK_THINK_DISABLED,
+    };
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', stop);
+  }
+}
+
+/** What a judge model can do, from Ollama's /api/show, through the Models list's cache. */
+async function judgeCapabilities(baseUrl, judgeModel) {
+  const probe = { name: judgeModel };
+  await attachModelCapabilities(baseUrl, [probe]);
+  return probe.capabilities ?? [];
+}
+
+/** Drawings waiting on the window to turn them into a PNG, by id. */
+const pendingDrawingPictures = new Map();
+const DRAWING_PICTURE_TIMEOUT_MS = 10000;
+
+/**
+ * A drawing as a PNG, for a judge that can see, drawn by the renderer.
+ *
+ * The window draws it because the main process has no canvas, and it draws it
+ * through an <img>, where an SVG runs no script and loads nothing. Resolves to
+ * base64 PNG, or null when the window is gone or does not answer in time; the
+ * judge then reads the SVG code instead.
+ */
+function requestDrawingPicture(sender, svg) {
+  if (!svg || !sender || sender.isDestroyed()) return Promise.resolve(null);
+  const id = `drawing-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      pendingDrawingPictures.delete(id);
+      resolve(null);
+    }, DRAWING_PICTURE_TIMEOUT_MS);
+    pendingDrawingPictures.set(id, (png) => {
+      clearTimeout(timer);
+      pendingDrawingPictures.delete(id);
+      resolve(png);
+    });
+    sender.send('drawing:pictureRequest', { id, svg });
+  });
+}
+
+async function runBenchmarkPromptParity(baseUrl, model, prompt, signal, options = benchmarkGenerateOptions()) {
   const requestUrl = `${baseUrl}/api/generate`;
   let thinkingDisabled = BENCHMARK_THINK_DISABLED;
   let response;
@@ -4373,7 +4500,7 @@ async function runBenchmarkPromptParity(baseUrl, model, prompt, signal) {
           model,
           prompt,
           keepAlive: BENCHMARK_KEEP_ALIVE,
-          options: benchmarkGenerateOptions(),
+          options,
         })),
       },
       BENCHMARK_TIMEOUT_MS,
@@ -4400,7 +4527,7 @@ async function runBenchmarkPromptParity(baseUrl, model, prompt, signal) {
           prompt,
           stream: false,
           keep_alive: BENCHMARK_KEEP_ALIVE,
-          options: benchmarkGenerateOptions(),
+          options,
         }),
       },
       BENCHMARK_TIMEOUT_MS,
@@ -4520,8 +4647,7 @@ async function runBenchmarkToolPrompt(baseUrl, model, prompt, signal, provider) 
  * LM Studio before 0.4 has no /api/v1/chat. It gets the same bare question
  * through the OpenAI route, timed by the clock, which is all that route gives.
  */
-async function runLmStudioBenchmarkPrompt(baseUrl, model, prompt, signal) {
-  const maxOutputTokens = benchmarkGenerateOptions().num_predict;
+async function runLmStudioBenchmarkPrompt(baseUrl, model, prompt, signal, maxOutputTokens = benchmarkGenerateOptions().num_predict) {
   const native = await lmStudioNativeChat(baseUrl, model, prompt, signal, maxOutputTokens);
   if (native) return native;
 

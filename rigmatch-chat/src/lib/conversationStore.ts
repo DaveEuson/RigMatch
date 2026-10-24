@@ -67,7 +67,50 @@ export type Conversation = {
   summarizedCount?: number;
   /** Which model wrote the summary, so the transcript can say. */
   summaryBy?: string;
+  /**
+   * A second model answering every message too, when this chat asks two. An
+   * older Chat's next save deletes it (see SplitThread).
+   */
+  split?: SplitThread;
 };
+
+/**
+ * The second model's side of a chat that asks two models at once.
+ *
+ * The conversation's own `modelName` and `messages` stay the first model's
+ * thread, so a chat asking two is still an ordinary chat to everything that
+ * does not know about this.
+ *
+ * Going back to an older Chat (0.9.9 or before) DELETES this side: that build
+ * reads the first model's side, rebuilds each conversation without fields it
+ * does not know, and its next save writes the file without them. Accepted
+ * rather than bumping STORE_VERSION, which would make an older Chat refuse the
+ * whole history instead: the Update Center only moves forward, and the release
+ * notes say so.
+ */
+export type SplitThread = {
+  modelName: string;
+  /**
+   * How many of the conversation's messages came before the second model
+   * joined. It is sent them, so a follow-up makes sense to it, but only the
+   * first model answered them.
+   */
+  from: number;
+  /** Its own thread since then: the same questions, its own answers. */
+  messages: StoredMessage[];
+};
+
+/** The first model's side of a chat asking two, or the second's. */
+export type SplitColumn = "main" | "split";
+
+/**
+ * Names one answer in flight: this chat, this side. A side alone is not
+ * enough — two chats asking two each have a second side, and Stop in one used
+ * to reach the other's answer.
+ */
+export function streamKey(conversationId: string, column: SplitColumn): string {
+  return `${conversationId}:${column}`;
+}
 
 /**
  * 1 — `{ "model::personality": Message[] }`, one thread per model.
@@ -86,9 +129,11 @@ export function serializeStore(conversations: Conversation[]): string {
   // about the same picture needs them in context — and ruinous in a file that
   // is rewritten on every keystroke. The name survives so the transcript can
   // still say what was sent.
+  const strip = (messages: StoredMessage[]) => messages.map(({ images: _bytes, ...message }) => message);
   const withoutBytes = conversations.map((conversation) => ({
     ...conversation,
-    messages: conversation.messages.map(({ images: _bytes, ...message }) => message),
+    messages: strip(conversation.messages),
+    ...(conversation.split ? { split: { ...conversation.split, messages: strip(conversation.split.messages) } } : {}),
   }));
   return JSON.stringify({ version: STORE_VERSION, conversations: withoutBytes });
 }
@@ -170,6 +215,21 @@ export function migrateV1(
   return conversations;
 }
 
+/**
+ * The second model's side, or nothing when it is missing or damaged. Damage
+ * here costs only that side: the first model's thread is read regardless.
+ */
+function cleanSplit(value: unknown, mainLength: number): SplitThread | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const s = value as Partial<SplitThread>;
+  const messages = cleanMessages(s.messages);
+  if (!messages || typeof s.modelName !== "string" || !s.modelName) return undefined;
+  // Clamped like summarizedCount: a start past the end would send the second
+  // model turns that are not there.
+  const from = typeof s.from === "number" ? Math.max(0, Math.min(Math.floor(s.from), mainLength)) : 0;
+  return { modelName: s.modelName, from, messages };
+}
+
 function cleanConversation(value: unknown, index: number, makeId: (i: number) => string, now: number): Conversation | null {
   if (!value || typeof value !== "object") return null;
   const c = value as Partial<Conversation>;
@@ -182,6 +242,7 @@ function cleanConversation(value: unknown, index: number, makeId: (i: number) =>
   const summarizedCount = summary && typeof c.summarizedCount === "number"
     ? Math.max(0, Math.min(Math.floor(c.summarizedCount), messages.length))
     : undefined;
+  const split = cleanSplit(c.split, messages.length);
 
   return {
     id: typeof c.id === "string" && c.id ? c.id : makeId(index),
@@ -195,6 +256,7 @@ function cleanConversation(value: unknown, index: number, makeId: (i: number) =>
     ...(summary ? { summary } : {}),
     ...(summarizedCount !== undefined ? { summarizedCount } : {}),
     ...(typeof c.summaryBy === "string" && c.summaryBy ? { summaryBy: c.summaryBy } : {}),
+    ...(split ? { split } : {}),
   };
 }
 
@@ -314,4 +376,82 @@ export function createConversation(options: {
     updatedAt: options.now,
     messages: [],
   };
+}
+
+/** Start asking a second model too, from here on. What came before stays the first model's. */
+export function startSplit(conversation: Conversation, modelName: string): Conversation {
+  return { ...conversation, split: { modelName, from: conversation.messages.length, messages: [] } };
+}
+
+/**
+ * The second model's whole conversation: what came before it joined, then its
+ * own turns. What it is sent, and what it carries on with if it is kept.
+ */
+export function splitThread(conversation: Conversation): StoredMessage[] {
+  const split = conversation.split;
+  return split ? [...conversation.messages.slice(0, split.from), ...split.messages] : conversation.messages;
+}
+
+/** Change one side's messages, leaving everything else as it is. */
+export function updateColumn(
+  conversation: Conversation,
+  column: SplitColumn,
+  update: (messages: StoredMessage[]) => StoredMessage[],
+): Conversation {
+  if (column === "main") return { ...conversation, messages: update(conversation.messages) };
+  // The second side was kept or dropped while an answer was still arriving.
+  if (!conversation.split) return conversation;
+  return { ...conversation, split: { ...conversation.split, messages: update(conversation.split.messages) } };
+}
+
+/** Back to one model: the side that was kept, as an ordinary chat with that model. */
+export function keepColumn(conversation: Conversation, column: SplitColumn, now: number): Conversation {
+  const { split: _dropped, ...single } = conversation;
+  if (column === "main" || !conversation.split) return { ...single, updatedAt: now };
+  return { ...single, modelName: conversation.split.modelName, messages: splitThread(conversation), updatedAt: now };
+}
+
+/**
+ * One question in a chat asking two, and what each model said to it: the
+ * rows of the side-by-side view. A note RigMatch added, or an error, belongs to
+ * the side it happened on.
+ */
+export type SplitTurn = { ask: StoredMessage | null; main: StoredMessage[]; split: StoredMessage[] };
+
+/**
+ * A chat asking two, laid out for reading: what came before the split once,
+ * then each question with both answers.
+ *
+ * Matched by the question's id, which both sides share, rather than by
+ * position, so an answer that failed on one side cannot shift every later row.
+ */
+export function splitTurns(conversation: Conversation): { shared: StoredMessage[]; turns: SplitTurn[] } {
+  const split = conversation.split;
+  if (!split) return { shared: conversation.messages, turns: [] };
+  const group = (messages: StoredMessage[]) => {
+    const turns: Array<{ ask: StoredMessage | null; replies: StoredMessage[] }> = [];
+    for (const message of messages) {
+      if (message.role === "user") turns.push({ ask: message, replies: [] });
+      else if (turns.length > 0) turns[turns.length - 1].replies.push(message);
+      else turns.push({ ask: null, replies: [message] });
+    }
+    return turns;
+  };
+  const key = (ask: StoredMessage | null) => ask?.id ?? "";
+  const second = new Map(group(split.messages).map((turn) => [key(turn.ask), turn]));
+  const turns: SplitTurn[] = group(conversation.messages.slice(split.from)).map((turn) => {
+    const other = second.get(key(turn.ask));
+    second.delete(key(turn.ask));
+    return { ask: turn.ask, main: turn.replies, split: other?.replies ?? [] };
+  });
+  for (const turn of second.values()) turns.push({ ask: turn.ask, main: [], split: turn.replies });
+  return { shared: conversation.messages.slice(0, split.from), turns };
+}
+
+/** The messages up to and including the last question: what asking again starts from. */
+export function untilLastAsk(messages: StoredMessage[]): StoredMessage[] | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].role === "user") return messages.slice(0, i + 1);
+  }
+  return null;
 }

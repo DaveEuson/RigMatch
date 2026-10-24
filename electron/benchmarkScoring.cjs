@@ -1,5 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 const { findAgentTask } = require('./agentTools.cjs');
+const { checkDrawing } = require('./drawingRound.cjs');
 
 const BENCHMARK_THINK_DISABLED = true;
 
@@ -96,6 +97,10 @@ function scoreSobriety(prompt, response) {
     return 72;
   }
 
+  // A drawing that fails its checks (no SVG, cut off, empty, no viewBox) has a
+  // score of its own. One that passes needs a judge to say what it shows.
+  if (prompt.type === 'drawing') return checkDrawing(text).score;
+
   if (prompt.type === 'format') {
     const lines = text.split('\n');
     const bulletLines = lines.filter((line) => /^\s*[-*\u2022]\s/.test(line)).length;
@@ -176,6 +181,12 @@ function heuristicCanGrade(type, prompt, response) {
   if (type === 'candour' || type === 'edgy') {
     if (response === undefined) return false;
     return candourEngagement(response) !== 'engaged';
+  }
+  // The same split for a drawing: a failed check is a real finding, and a
+  // drawing that passed is a picture only something that looks can mark.
+  if (type === 'drawing') {
+    if (response === undefined) return false;
+    return !checkDrawing(response).ok;
   }
   // A tool call is checked against the call its task expects, which exists
   // only for agentTools' own prompts. An imported tool question has none.
