@@ -193,6 +193,8 @@ export function SpeedDatePanel({
             {runReadiness}
             {' '}
             {standingLine(lineupStanding(leader ?? undefined, lineupNames), winnerResult?.total)}
+            {/* What the switch does, said where it can be read while it is on. */}
+            {blindOn && onBlindChange && ' Blind show is on: names stay hidden until you pick your favourite.'}
           </p>
         </div>
         <div className="page-head-actions">

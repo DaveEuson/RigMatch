@@ -315,11 +315,34 @@ export function writeBlindTaste(taste: BlindTaste): boolean {
   return written;
 }
 
-/** Save one pick and return the new taste. */
-export function saveBlindPick(picked: string, contestants: readonly string[]): BlindTaste {
-  const next = recordBlindPick(readBlindTaste(), picked, contestants);
-  writeBlindTaste(next);
-  return next;
+/**
+ * Save one pick. False when it could not be: storage full or blocked, or a
+ * pick that cannot count. The reveal says so rather than "saved".
+ */
+export function saveBlindPick(picked: string, contestants: readonly string[]): boolean {
+  const taste = readBlindTaste();
+  const next = recordBlindPick(taste, picked, contestants);
+  return next !== taste && writeBlindTaste(next);
+}
+
+/**
+ * What to say about a pick after it was saved, or not: the same promise
+ * historySaveNote keeps for scores, that a failed save is never silent.
+ */
+export function blindPickSaveNote(saved: boolean): string {
+  return saved
+    ? 'Your pick is saved to Your taste on Results.'
+    : 'RigMatch could not save your pick: there is no storage space left for it. Clearing old scores or chats in Settings makes room.';
+}
+
+/**
+ * How many saved picks a clear would change: every pick for "Clear all
+ * scores" (aliases null), or the picks a model was in for its own "Clear score".
+ */
+export function countBlindPicks(taste: BlindTaste, aliases: readonly string[] | null): number {
+  if (!aliases) return taste.picks.length;
+  const keys = new Set(aliases.map(normalizeModelKey));
+  return taste.picks.filter((pick) => pick.contestants.some((model) => keys.has(normalizeModelKey(model)))).length;
 }
 
 /** For "Clear all scores" and "Clear all data": the picks go with the scores. */

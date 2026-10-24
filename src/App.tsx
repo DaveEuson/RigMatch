@@ -204,7 +204,7 @@ import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, Choi
 import { SkillRunMiniBar, LiveBuildModal, DemoResultModal } from './components/SkillDemoViewers';
 import { RunSheet } from './components/RunSheet';
 import { ClearScoresModal } from './components/ClearScoresModal';
-import { clearBlindTaste, clearModelFromBlindTaste, maskProgress, maskRows, maskText, shuffleLineup } from './lib/blindMode';
+import { clearBlindTaste, clearModelFromBlindTaste, countBlindPicks, maskProgress, maskRows, maskText, readBlindTaste, shuffleLineup } from './lib/blindMode';
 import { BlindShowContext } from './lib/blindShowContext';
 import { useBlindShow } from './lib/useBlindShow';
 import { BlindOverlay } from './components/BlindShow';
@@ -1471,6 +1471,16 @@ function App() {
     setPendingScoreClear(null);
   }, []);
 
+  /** Every name one model's "Clear score" removes, so the dialog counts what the clear does. */
+  const scoreClearAliases = useCallback((model: string) => {
+    const targetRow = modelRows.find((row) =>
+      row.displayName === model ||
+      row.id === model ||
+      normalizeModelKey(row.displayName) === normalizeModelKey(model),
+    );
+    return targetRow ? getModelAliases(targetRow) : [model];
+  }, [modelRows]);
+
   const confirmClearScores = useCallback(() => {
     if (!pendingScoreClear) return;
 
@@ -1500,12 +1510,7 @@ function App() {
       return;
     }
 
-    const targetRow = modelRows.find((row) =>
-      row.displayName === pendingScoreClear.model ||
-      row.id === pendingScoreClear.model ||
-      normalizeModelKey(row.displayName) === normalizeModelKey(pendingScoreClear.model),
-    );
-    const aliases = targetRow ? getModelAliases(targetRow) : [pendingScoreClear.model];
+    const aliases = scoreClearAliases(pendingScoreClear.model);
 
     setModelScores((current) => removeModelScores(current, aliases));
     setBenchmarkByModel((current) => removeBenchmarkResults(current, aliases));
@@ -1530,7 +1535,7 @@ function App() {
     setRunProgress(null);
     setPendingScoreClear(null);
     setActivity(`${pendingScoreClear.model} score and test transcript cleared. The model is still installed.`);
-  }, [modelRows, ollama.baseUrl, pendingScoreClear, selectedModel]);
+  }, [scoreClearAliases, ollama.baseUrl, pendingScoreClear, selectedModel]);
 
 
   const selectUiMode = useCallback((nextMode: UiMode) => {
@@ -5883,6 +5888,7 @@ function App() {
         <ClearScoresModal
           pending={pendingScoreClear}
           scoreCount={scoredModelCount}
+          blindPicks={countBlindPicks(readBlindTaste(), pendingScoreClear.mode === 'all' ? null : scoreClearAliases(pendingScoreClear.model))}
           onCancel={cancelClearScores}
           onConfirm={confirmClearScores}
         />

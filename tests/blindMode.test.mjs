@@ -256,3 +256,69 @@ test('the reveal takes focus, so it is read out when the pick step goes', async 
   assert.match(source, /<h2 id="blind-overlay-title" ref=\{headingRef\} tabIndex=\{-1\}>You picked/);
   assert.match(source, /useEffect\(\(\) => headingRef\.current\?\.focus\(\), \[\]\);/);
 });
+
+test('two contestants that share a friendly name are told apart by their tag', async () => {
+  const { getLineupModelName } = await import('../src/lib/modelCatalog.ts');
+  const lineup = ['qwen3:8b', 'qwen3:14b', 'llama3.2:3b'];
+  assert.equal(getLineupModelName('qwen3:8b', lineup), 'Qwen3 8B');
+  assert.equal(getLineupModelName('qwen3:14b', lineup), 'Qwen3 14B');
+  assert.equal(getLineupModelName('llama3.2:3b', lineup), 'Llama3.2', 'no clash, no tag');
+  assert.equal(getLineupModelName('qwen3:8b', ['qwen3:8b', 'gemma3:4b']), 'Qwen3');
+  assert.equal(getLineupModelName('llama3.2:latest', ['llama3.2:latest', 'llama3.2:1b']), 'Llama3.2 latest');
+  assert.equal(getLineupModelName('qwen/qwen3-8b', ['qwen/qwen3-8b', 'qwen/qwen3-14b']), 'Qwen3 8B', 'LM Studio ids too');
+  assert.equal(getLineupModelName('qwen3:8b', ['qwen3:8b', 'Qwen3:8B']), 'Qwen3', 'the same model twice is no clash');
+});
+
+test('a pick that could not be saved says so', async () => {
+  globalThis.window = {
+    localStorage: {
+      getItem: () => null,
+      setItem: () => { throw new Error('QuotaExceededError'); },
+      removeItem: () => {},
+    },
+    dispatchEvent: () => true,
+  };
+  try {
+    const { blindPickSaveNote, saveBlindPick } = await import('../src/lib/blindMode.ts');
+    assert.equal(saveBlindPick('a', ['a', 'b']), false, 'storage full');
+    assert.match(blindPickSaveNote(false), /could not save your pick/);
+    assert.match(blindPickSaveNote(true), /saved to Your taste/);
+    window.localStorage.setItem = () => {};
+    assert.equal(saveBlindPick('a', ['a', 'b']), true);
+    assert.equal(saveBlindPick('z', ['a', 'b']), false, 'a pick that cannot count is not "saved"');
+  } finally {
+    delete globalThis.window;
+  }
+});
+
+test('a clear counts the blind picks it changes', async () => {
+  const { countBlindPicks } = await import('../src/lib/blindMode.ts');
+  const taste = { version: 1, picks: [pick('a', ['a', 'b']), pick('b', ['b', 'c']), pick('c', ['A', 'c'])] };
+  assert.equal(countBlindPicks(taste, null), 3, 'Clear all scores');
+  assert.equal(countBlindPicks(taste, ['a']), 2, 'every pick a was in, won or lost');
+  assert.equal(countBlindPicks(taste, ['nobody']), 0);
+});
+
+test('the reveal, the pick step and the switch keep their promises', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const read = (file) => readFile(new URL(file, import.meta.url), 'utf8');
+  const show = await read('../src/components/BlindShow.tsx');
+  // Names that two seats share carry their tag; the save is reported, not assumed.
+  assert.match(show, /const nameOf = \(model: string\) => getLineupModelName\(model, session\.lineup\);/);
+  assert.match(show, /\{blindPickSaveNote\(session\.saved\)\}/);
+  assert.doesNotMatch(show, /Your pick is saved to Your taste/);
+  // The crown named is the Match winner, the one the reveal's scores rank.
+  assert.match(show, />Match winner</);
+  assert.doesNotMatch(show, /Judge's winner/);
+  // Previous and Next never disable themselves under the focus.
+  assert.match(show, /aria-disabled=\{questionIndex === 0\}/);
+  assert.match(show, /aria-disabled=\{questionIndex >= questions\.length - 1\}/);
+  assert.doesNotMatch(show, /(?<!aria-)disabled=\{questionIndex/);
+  // The switch's help reaches a keyboard and a screen reader, not only a mouse.
+  assert.match(show, /aria-describedby="blind-switch-help"/);
+  assert.match(show, /<span id="blind-switch-help" className="sr-only">/);
+  const modal = await read('../src/components/ClearScoresModal.tsx');
+  assert.match(modal, /It also comes out of <strong>\{blindPicks\}<\/strong> blind pick/);
+  const app = await read('../src/App.tsx');
+  assert.match(app, /blindPicks=\{countBlindPicks\(readBlindTaste\(\), pendingScoreClear\.mode === 'all' \? null : scoreClearAliases\(pendingScoreClear\.model\)\)\}/);
+});

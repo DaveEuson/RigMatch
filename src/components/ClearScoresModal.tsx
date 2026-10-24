@@ -2,25 +2,28 @@
 import type { PendingScoreClear } from '../types';
 
 import { useDialog } from '../lib/useDialog';
-import { readBlindTaste } from '../lib/blindMode';
 import { Trash2, X } from 'lucide-react';
 
 export function ClearScoresModal({
   pending,
   scoreCount,
+  blindPicks = 0,
   onCancel,
   onConfirm,
 }: {
   pending: PendingScoreClear;
   scoreCount: number;
+  /**
+   * The saved blind picks this clear changes (countBlindPicks). Said only to
+   * someone who has made them; to anyone else it is a term for a feature
+   * they have not met.
+   */
+  blindPicks?: number;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
   const clearScoresRef = useDialog<HTMLElement>(onCancel);
   const isAll = pending.mode === 'all';
-  // Said only to someone who has made blind picks; to anyone else it is a
-  // term for a feature they have not met.
-  const blindPicks = isAll ? readBlindTaste().picks.length : 0;
   const title = isAll ? 'Clear all scores?' : `Clear the ${pending.model} score?`;
   const actionLabel = isAll ? 'Clear all scores' : 'Clear score';
 
@@ -45,6 +48,13 @@ export function ClearScoresModal({
             ) : (
               <>
                 This clears the saved scorecard and test transcript for <strong>{pending.model}</strong>.
+                {/* A pick it won is dropped, and the rest are re-rated without it:
+                    Your taste changes for every model it met. */}
+                {blindPicks > 0 && (
+                  <>
+                    {' '}It also comes out of <strong>{blindPicks}</strong> blind pick{blindPicks === 1 ? '' : 's'}, so Your taste is re-rated without it.
+                  </>
+                )}
               </>
             )}{' '}
             It does <strong>not</strong> delete any installed Ollama model.
