@@ -455,11 +455,12 @@ function sanitizeSvg(svg) {
   return root ? serializeSvg(root).svg : null;
 }
 
+// Short enough to read on the tile that stands in for the picture.
 const PROBLEMS = {
-  missing: { score: 0, note: 'No drawing: the answer had no SVG in it.' },
-  'too-big': { score: 10, note: `No drawing: it was over the ${DRAWING_SVG_MAX_CHARS.toLocaleString('en-US')}-character limit for a drawing.` },
-  broken: { score: 10, note: 'No drawing: the SVG does not parse, usually because it was cut off before it ended.' },
-  empty: { score: 5, note: 'No drawing: the SVG has nothing in it to see.' },
+  missing: { score: 0, note: 'No drawing: the answer had no SVG.' },
+  'too-big': { score: 10, note: `No drawing: over the ${DRAWING_SVG_MAX_CHARS.toLocaleString('en-US')}-character limit.` },
+  broken: { score: 10, note: 'No drawing: the SVG was cut off or does not parse.' },
+  empty: { score: 5, note: 'No drawing: the SVG draws nothing.' },
   'no-viewbox': { score: 30, note: 'Scored by rule: the SVG has no viewBox, which the question asked for.' },
   // Not a finding about the drawing: a slow PC, not a bad answer. The run
   // leaves it unmarked and out of stability, so slowness is not charged twice

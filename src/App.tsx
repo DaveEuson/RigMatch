@@ -17,7 +17,7 @@ import {
   type BenchmarkQuestion,
   type BenchmarkQuestionCount,
 } from './benchmarkSuite';
-import { lineupDrawings, useDrawingPictureResponder } from './lib/drawings';
+import { galleryDrawings, showDrawingsFrom, useDrawingPictureResponder, useShowDrawingCollector } from './lib/drawings';
 import {
   demoBenchmark,
   demoRunHistory,
@@ -839,6 +839,8 @@ function App() {
   const chatRenderStops = useRef(new Map<string, AbortController>());
   // A judge that can see is shown each drawing as a picture this window draws.
   useDrawingPictureResponder();
+  // The stage's drawings outlive the stage, which unmounts when the show is minimized.
+  useShowDrawingCollector();
   useEffect(() => {
     if (!agentArcadeApi.onBridgeGenerateRequest) return undefined;
     return agentArcadeApi.onBridgeGenerateRequest(({ id, prompt, kind }) => {
@@ -1796,9 +1798,15 @@ function App() {
       }))),
     [shortlistedRows, modelScores, wizardRound, wizardSkillBoard, wizardChannel, wizardShowRanked],
   );
+  // This show's drawings, and only for a round that asked the questions: a
+  // picture or listening round asks no drawing, and the last show's pictures
+  // under its board read as part of it.
   const wizardDrawings = useMemo(
-    () => lineupDrawings(wizardLineupResults.map((result) => result.model), benchmarkByModel),
-    [wizardLineupResults, benchmarkByModel],
+    () => galleryDrawings(
+      wizardLineupResults.map((result) => result.model),
+      wizardRound === 'chat' || wizardRound === 'code' ? wizardShowResult?.drawings : undefined,
+    ),
+    [wizardLineupResults, wizardRound, wizardShowResult],
   );
   const lineupSession = useVideoLineupSession();
   /** Whatever ComfyUI is rendering for RigMatch now, wherever it was started. */
@@ -3634,6 +3642,8 @@ function App() {
           .map((r) => toTestedModelScore(r, currentSuiteName))
           .sort(compareTestedModelScores),
         ...(failures.length ? { failures: [...failures] } : {}),
+        // On the show itself, so its galleries never show another run's pictures.
+        ...(showDrawingsFrom(results) ? { drawings: showDrawingsFrom(results) } : {}),
       });
       if (failures.length) tellUser(droppedOutMessage(failures, getFriendlyModelName));
       // In the same render as the result, so no screen shows it before the pick step covers them.

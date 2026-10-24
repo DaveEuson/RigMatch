@@ -9,10 +9,9 @@
  * and loads nothing from outside, whatever is in it.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { agentArcadeApi } from '../api.ts';
-import type { BenchmarkPromptResult, BenchmarkResult, PromptDrawing } from '../types.ts';
-import { getBenchmarkForModel } from './modelCatalog.ts';
+import type { BenchmarkProgressUpdate, BenchmarkResult, PromptDrawing, ShowDrawing } from '../types.ts';
 
 /**
  * Twice the main process's cap on what a model wrote, since cleaning spells
@@ -24,6 +23,12 @@ const DRAWING_MAX_CHARS = 64000;
 export function drawingDataUrl(svg: string | null | undefined): string | null {
   if (!svg || svg.length > DRAWING_MAX_CHARS || !svg.startsWith('<svg')) return null;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/** Why there is no drawing, from its note ("No drawing: the SVG draws nothing." → "The SVG draws nothing."). */
+export function noDrawingReason(note: string | undefined): string {
+  const reason = (note ?? '').replace(/^No drawing:\s*/, '').trim();
+  return reason ? reason[0].toUpperCase() + reason.slice(1) : '';
 }
 
 /** "a pelican riding a bicycle", from a built-in drawing question; null for any other wording. */
@@ -82,53 +87,78 @@ export function showIdOf(progressId: string | undefined): string | null {
 }
 
 /**
- * The show's drawings so far: by model, and by seat (the contestant's place in
+ * A show's drawings so far: by model, and by seat (the contestant's place in
  * the run, from its progress id), for a stage whose rows are renamed.
  */
-export type ShowDrawings = { byModel: Record<string, PromptDrawing>; bySeat: Record<number, PromptDrawing> };
+export type ShowDrawings = { showId: string | null; byModel: Record<string, PromptDrawing>; bySeat: Record<number, PromptDrawing> };
 
-const NO_DRAWINGS: ShowDrawings = { byModel: {}, bySeat: {} };
+const NO_DRAWINGS: ShowDrawings = { showId: null, byModel: {}, bySeat: {} };
 
-/**
- * Each contestant's drawing in the show that is on, as it is drawn.
- *
- * From the progress updates rather than the results, because a contestant's
- * result arrives only after its last question and the stage should show the
- * picture the moment it exists.
- */
-export function useShowDrawings(progressId: string | undefined): ShowDrawings {
-  const showId = showIdOf(progressId);
-  const [drawings, setDrawings] = useState<{ showId: string | null } & ShowDrawings>({ showId: null, ...NO_DRAWINGS });
-  useEffect(() => {
-    if (!showId || !agentArcadeApi.onBenchmarkProgress) return undefined;
-    return agentArcadeApi.onBenchmarkProgress((update) => {
-      const drawing = update.drawing;
-      if (!drawing || !update.id?.startsWith(`${showId}-`)) return;
-      const seat = Number(update.id.slice(showId.length + 1));
-      setDrawings((current) => {
-        const kept = current.showId === showId ? current : NO_DRAWINGS;
-        return {
-          showId,
-          byModel: { ...kept.byModel, [update.model]: drawing },
-          bySeat: Number.isInteger(seat) ? { ...kept.bySeat, [seat]: drawing } : kept.bySeat,
-        };
-      });
-    });
-  }, [showId]);
-  return drawings.showId === showId ? drawings : NO_DRAWINGS;
+/** The drawings after one progress update; a drawing from another show starts them over. */
+export function addShowDrawing(current: ShowDrawings, update: Pick<BenchmarkProgressUpdate, 'id' | 'model' | 'drawing'>): ShowDrawings {
+  const showId = showIdOf(update.id);
+  if (!update.drawing || !showId) return current;
+  const kept = current.showId === showId ? current : NO_DRAWINGS;
+  const seat = Number(update.id.slice(showId.length + 1));
+  return {
+    showId,
+    byModel: { ...kept.byModel, [update.model]: update.drawing },
+    bySeat: Number.isInteger(seat) ? { ...kept.bySeat, [seat]: update.drawing } : kept.bySeat,
+  };
 }
 
 /**
- * `score` is absent when nothing marked the drawing: the number stored then is
- * a placeholder, and showing it under the picture would read as a verdict.
+ * The drawings of the latest show, kept while the app is open. Collected here
+ * rather than by the stage: the stage unmounts when the show is minimized,
+ * and came back from Show with no pictures.
  */
-export type LineupDrawing = { model: string; drawing: PromptDrawing; prompt: BenchmarkPromptResult; score?: number };
+let showDrawings = NO_DRAWINGS;
+const showDrawingListeners = new Set<() => void>();
+const subscribeToShowDrawings = (listener: () => void) => {
+  showDrawingListeners.add(listener);
+  return () => { showDrawingListeners.delete(listener); };
+};
 
-/** Each model's first drawing in its latest result, in the order given; models with none are left out. */
-export function lineupDrawings(models: string[], results: Record<string, BenchmarkResult>): LineupDrawing[] {
-  return models.flatMap((model) => {
-    const prompt = getBenchmarkForModel(results, model)?.prompts.find((entry) => entry.type === 'drawing' && entry.drawing);
+/** Collects each show's drawings as they are drawn. Mounted once, in App. */
+export function useShowDrawingCollector(): void {
+  useEffect(() => {
+    if (!agentArcadeApi.onBenchmarkProgress) return undefined;
+    return agentArcadeApi.onBenchmarkProgress((update) => {
+      const next = addShowDrawing(showDrawings, update);
+      if (next === showDrawings) return;
+      showDrawings = next;
+      showDrawingListeners.forEach((listener) => listener());
+    });
+  }, []);
+}
+
+/**
+ * Each contestant's drawing in the show a progress id belongs to, from the
+ * moment it is drawn: a contestant's result arrives only after its last
+ * question, and the stage shows the picture as soon as it exists.
+ */
+export function useShowDrawings(progressId: string | undefined): ShowDrawings {
+  const drawings = useSyncExternalStore(subscribeToShowDrawings, () => showDrawings);
+  return drawings.showId !== null && drawings.showId === showIdOf(progressId) ? drawings : NO_DRAWINGS;
+}
+
+/**
+ * A show's drawings by model, from its results: the first drawing each gave.
+ * A drawing nothing marked keeps no score: the number stored then is a
+ * placeholder, and under the picture it would read as a verdict.
+ */
+export function showDrawingsFrom(results: BenchmarkResult[]): Record<string, ShowDrawing> | undefined {
+  const entries = results.flatMap((result): Array<[string, ShowDrawing]> => {
+    const prompt = result.prompts.find((entry) => entry.type === 'drawing' && entry.drawing);
     if (!prompt?.drawing) return [];
-    return [{ model, drawing: prompt.drawing, prompt, ...(prompt.scoredBy === 'unjudged' ? {} : { score: prompt.sobrietyScore }) }];
+    return [[result.model, { drawing: prompt.drawing, prompt: prompt.prompt, ...(prompt.scoredBy === 'unjudged' ? {} : { score: prompt.sobrietyScore }) }]];
   });
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+export type GalleryDrawing = ShowDrawing & { model: string };
+
+/** A show's drawings in the order given; models without one are left out. */
+export function galleryDrawings(models: string[], drawings: Record<string, ShowDrawing> | undefined): GalleryDrawing[] {
+  return models.flatMap((model) => (drawings?.[model] ? [{ model, ...drawings[model] }] : []));
 }

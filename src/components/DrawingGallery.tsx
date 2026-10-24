@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { drawingDataUrl, drawingSubject } from '../lib/drawings';
+import { drawingDataUrl, drawingSubject, noDrawingReason } from '../lib/drawings';
 import type { BenchmarkPromptResult, PromptDrawing } from '../types';
 import './DrawingGallery.css';
 
@@ -14,9 +14,12 @@ import './DrawingGallery.css';
 export function DrawingTile({ drawing, alt }: { drawing: PromptDrawing | undefined; alt: string }) {
   const src = drawingDataUrl(drawing?.svg);
   if (!src) {
+    // Why, in words on the tile: a 0 under a blank square says nothing.
+    const reason = noDrawingReason(drawing?.note);
     return (
-      <span className="drawing-tile none" title={drawing?.note || undefined}>
-        No drawing
+      <span className="drawing-tile none">
+        <b>No drawing</b>
+        {reason && <small>{reason}</small>}
       </span>
     );
   }
@@ -28,11 +31,10 @@ export function DrawingTile({ drawing, alt }: { drawing: PromptDrawing | undefin
 }
 
 /** A drawing question's answer in a transcript: the picture, how it was scored, and the code behind it. */
-export function DrawingAnswer({ prompt }: { prompt: BenchmarkPromptResult }) {
-  const subject = drawingSubject(prompt.prompt);
+export function DrawingAnswer({ prompt, by }: { prompt: BenchmarkPromptResult; by: string }) {
   return (
     <div className="drawing-answer">
-      <DrawingTile drawing={prompt.drawing} alt={subject ? `Drawing of ${subject}` : 'Drawing'} />
+      <DrawingTile drawing={prompt.drawing} alt={`Drawing by ${by}`} />
       {prompt.drawing?.note && <p className="drawing-note">{prompt.drawing.note}</p>}
       {prompt.response.trim() && (
         <details className="drawing-code">
@@ -57,10 +59,11 @@ export function DrawingGallery({ prompt, entries }: { prompt: string | undefined
         {entries.map((entry) => (
           <li key={entry.key}>
             <figure>
-              <DrawingTile drawing={entry.drawing} alt={`${entry.name}'s drawing${subject ? ` of ${subject}` : ''}`} />
+              <DrawingTile drawing={entry.drawing} alt={`Drawing by ${entry.name}`} />
               <figcaption>
                 <span>{entry.name}</span>
-                {entry.score != null && <b>{entry.score}</b>}
+                {/* Named and out of 100: a bare number under the Match board read as a Match. */}
+                {entry.score != null && <b>Drawing {entry.score}/100</b>}
               </figcaption>
             </figure>
           </li>

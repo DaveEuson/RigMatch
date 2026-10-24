@@ -26,7 +26,8 @@ const { questionMarker } = await import('../src/lib/runSheet.ts');
 
 // lib/drawings.ts imports the API, which reads `window` on import.
 globalThis.window = { localStorage: { getItem: () => null, setItem: () => {} } };
-const { drawingDataUrl, drawingSubject, showIdOf, lineupDrawings } = await import('../src/lib/drawings.ts');
+const { drawingDataUrl, drawingSubject, showIdOf, addShowDrawing, showDrawingsFrom, galleryDrawings, noDrawingReason } = await import('../src/lib/drawings.ts');
+const { removeListTestScores } = await import('../src/lib/modelCatalog.ts');
 
 const PELICAN = '<svg viewBox="0 0 200 160" width="400" height="320"><circle cx="55" cy="115" r="25" fill="none" stroke="#333"/><path d="M55 115 L95 115" stroke="#c00"/></svg>';
 
@@ -479,23 +480,67 @@ test('only a cleaned SVG becomes an image source', () => {
   assert.equal(drawingDataUrl(`<svg>${'x'.repeat(70000)}</svg>`), null);
 });
 
-test('the stage groups drawings by show, and the results take each model’s first drawing', () => {
+test('the stage collects a show’s drawings by model and seat, and a new show starts over', () => {
   assert.equal(showIdOf('speed-date-1729000000000-ab12cd-3'), 'speed-date-1729000000000-ab12cd');
   assert.equal(showIdOf('speed-date-1729000000000-ab12cd-complete'), 'speed-date-1729000000000-ab12cd');
   assert.equal(showIdOf(undefined), null);
+  const pelican = { svg: sanitizeSvg(PELICAN), note: '' };
+  const none = { svg: null, note: 'No drawing: the SVG draws nothing.' };
+  const empty = { showId: null, byModel: {}, bySeat: {} };
+  let drawings = addShowDrawing(empty, { id: 'speed-date-1-aa-0', model: 'qwen3:8b', drawing: pelican });
+  drawings = addShowDrawing(drawings, { id: 'speed-date-1-aa-1', model: 'gemma3:4b', drawing: none });
+  assert.equal(drawings.showId, 'speed-date-1-aa');
+  assert.deepEqual(Object.keys(drawings.byModel), ['qwen3:8b', 'gemma3:4b']);
+  assert.equal(drawings.bySeat[1], none, 'by seat, for a blind show whose rows carry seat names');
+  // An update with no drawing changes nothing; another show's drawing starts over.
+  assert.equal(addShowDrawing(drawings, { id: 'speed-date-1-aa-1', model: 'gemma3:4b' }), drawings);
+  const next = addShowDrawing(drawings, { id: 'speed-date-2-bb-0', model: 'mistral:7b', drawing: pelican });
+  assert.deepEqual(Object.keys(next.byModel), ['mistral:7b']);
+});
+
+test('a show keeps its own drawings, scored only when something marked them', () => {
   const drawing = { svg: sanitizeSvg(PELICAN), note: 'Judged from the picture.' };
-  const results = {
-    'qwen3:8b': { model: 'qwen3:8b', prompts: [{ id: 'a', type: 'json', sobrietyScore: 90 }, { id: 'drawing_1', type: 'drawing', sobrietyScore: 81, drawing }] },
-    'gemma3:4b': { model: 'gemma3:4b', prompts: [{ id: 'a', type: 'json', sobrietyScore: 70 }] },
-  };
-  const found = lineupDrawings(['gemma3:4b', 'qwen3:8b'], results);
-  assert.equal(found.length, 1);
-  assert.equal(found[0].model, 'qwen3:8b');
-  assert.equal(found[0].drawing, drawing);
-  assert.equal(found[0].score, 81);
-  // A drawing nothing marked keeps its placeholder out of sight.
-  results['qwen3:8b'].prompts[1].scoredBy = 'unjudged';
-  assert.equal(lineupDrawings(['qwen3:8b'], results)[0].score, undefined);
+  const prompt = 'Generate an SVG of a pelican riding a bicycle. Reply with one';
+  const results = [
+    { model: 'qwen3:8b', prompts: [{ id: 'a', type: 'json', sobrietyScore: 90 }, { id: 'drawing_1', type: 'drawing', prompt, sobrietyScore: 81, scoredBy: 'judge', drawing }] },
+    { model: 'gemma3:4b', prompts: [{ id: 'a', type: 'json', sobrietyScore: 70 }] },
+    { model: 'mistral:7b', prompts: [{ id: 'drawing_1', type: 'drawing', prompt, sobrietyScore: 50, scoredBy: 'unjudged', drawing }] },
+  ];
+  const kept = showDrawingsFrom(results);
+  assert.deepEqual(Object.keys(kept), ['qwen3:8b', 'mistral:7b']);
+  assert.deepEqual(kept['qwen3:8b'], { drawing, prompt, score: 81 });
+  // A placeholder under a picture would read as a verdict.
+  assert.equal(kept['mistral:7b'].score, undefined);
+  assert.equal(showDrawingsFrom([results[1]]), undefined, 'a show with no drawing records none');
+  // In the board's order; a model the show has no drawing for is left out.
+  assert.deepEqual(galleryDrawings(['mistral:7b', 'gemma3:4b', 'qwen3:8b'], kept).map((entry) => entry.model), ['mistral:7b', 'qwen3:8b']);
+  assert.deepEqual(galleryDrawings(['qwen3:8b'], undefined), []);
+
+  // Clearing a model's scores takes its drawing off the show too.
+  const show = { winner: 'qwen3:8b', results: [{ model: 'qwen3:8b', total: 90 }, { model: 'mistral:7b', total: 80 }], drawings: kept };
+  assert.deepEqual(Object.keys(removeListTestScores(show, ['qwen3:8b']).drawings), ['mistral:7b']);
+});
+
+test('the galleries read this show, and a round that asked no questions shows none', async () => {
+  const { readFileSync } = await import('node:fs');
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf-8');
+  const panel = readFileSync(new URL('../src/components/SpeedDatePanel.tsx', import.meta.url), 'utf-8');
+  assert.match(app, /\.\.\.\(showDrawingsFrom\(results\) \? \{ drawings: showDrawingsFrom\(results\) \} : \{\}\)/);
+  assert.match(app, /wizardRound === 'chat' \|\| wizardRound === 'code' \? wizardShowResult\?\.drawings : undefined/);
+  assert.match(panel, /galleryDrawings\(listTestResult\.results\.map\(\(result\) => result\.model\), listTestResult\.drawings\)/);
+  assert.doesNotMatch(app + panel, /lineupDrawings|benchmarkByModel\)\s*:\s*\[\]/);
+  // Collected for the life of the app, so Minimize and Show keep the pictures.
+  assert.match(app, /useShowDrawingCollector\(\);/);
+});
+
+test('a missing drawing says why on its tile', () => {
+  assert.equal(noDrawingReason('No drawing: the SVG was cut off or does not parse.'), 'The SVG was cut off or does not parse.');
+  assert.equal(noDrawingReason(drawingTimedOut().note), 'Ran out of time at 90 s, so it is not marked.');
+  assert.equal(noDrawingReason(undefined), '');
+  // Every reason is short enough to read on a 128px tile.
+  for (const answer of ['no svg', '<svg viewBox="0 0 9 9"><rect', '<svg viewBox="0 0 9 9"></svg>', `${' '.repeat(70000)}`]) {
+    assert.ok(noDrawingReason(checkDrawing(answer).note).length <= 55, checkDrawing(answer).note);
+  }
 });
 
 test('the release smoke gives a drawing the app’s budget and asks it once', async () => {

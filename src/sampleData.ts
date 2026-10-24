@@ -372,7 +372,7 @@ const DEMO_DRAWINGS: Array<{ svg: string | null; score: number; note: string }> 
   {
     svg: null,
     score: 10,
-    note: 'No drawing: the SVG does not parse, usually because it was cut off before it ended.',
+    note: 'No drawing: the SVG was cut off or does not parse.',
   },
 ];
 
