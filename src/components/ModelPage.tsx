@@ -3,13 +3,15 @@ import { useState } from 'react';
 import { matchMeasures } from '../lib/matchCard';
 import type { RigPick } from '../lib/modelCatalog';
 import { formatHistoryTime, getFriendlyModelName, getModelProfile } from '../lib/modelCatalog';
+import { gradeRow, measuredBandwidth, pullCommand } from '../lib/modelGrade';
 import { formatMatchScore } from '../lib/scoring';
 import { getResponseEstimate } from '../lib/format';
 import { modelTests, type ModelTest } from '../lib/testHistory';
 import type { RunHistory } from '../lib/runHistory';
 import type { StoredRunReport } from '../lib/runReports';
-import type { BenchmarkResult, NetworkHost, SystemProfile, TestedModelScore } from '../types';
+import type { BenchmarkResult, ModelRow, NetworkHost, SystemProfile, TestedModelScore } from '../types';
 import { AvatarBust } from './Avatars';
+import { CopyCommandButton, FitGradeChip } from './FitGrade';
 import { ProfileQuestionTranscript } from './ProfileQuestionTranscript';
 import { ResultExplanationCard } from './ResultExplanationCard';
 import { ShareScorecard } from './ShareScorecard';
@@ -31,6 +33,7 @@ export function ModelPage({
   benchmark,
   score,
   modelScores,
+  rows,
   host,
   system,
   runReports,
@@ -52,6 +55,8 @@ export function ModelPage({
   benchmark: BenchmarkResult | null;
   score?: TestedModelScore;
   modelScores: Record<string, TestedModelScore>;
+  /** The Models list's rows, for this model's Fit grade and the speed the others measured. */
+  rows: ModelRow[];
   host?: NetworkHost;
   system: SystemProfile;
   runReports: StoredRunReport[];
@@ -85,6 +90,13 @@ export function ModelPage({
     if (current) switcher.push(current);
   }
   const tests = modelTests(model, runReports, runHistory);
+  const row = rows.find((entry) => entry.displayName === model || entry.id === model);
+  const vramGb = system.gpu.vramGb || 0;
+  // The same call the Models list makes for this row, so both show one letter.
+  const fitGrade = row
+    ? gradeRow(row, { vramGb, unifiedMemory: Boolean(system.gpu.isUnifiedMemory) }, { score, benchmark, bandwidthGbps: measuredBandwidth(rows, modelScores, vramGb) })
+    : null;
+  const command = row && row.runtime !== 'comfyui' ? pullCommand(model, row.localProvider === 'lm-studio' ? 'lm-studio' : 'ollama') : null;
 
 
   return (
@@ -126,6 +138,21 @@ export function ModelPage({
           )}
         </div>
       </header>
+
+      {fitGrade && (
+        <div className="mp-fit">
+          <FitGradeChip grade={fitGrade} model={model} />
+          <p>
+            <b>Fit grade</b> · {fitGrade.summary}
+          </p>
+          {command && (
+            <span className="mp-command">
+              <code>{command}</code>
+              <CopyCommandButton command={command} variant="text" />
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="mp-actions">
         {/* Chatting is what a good match is for, so it is the one gold button. */}

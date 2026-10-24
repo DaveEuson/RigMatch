@@ -5238,6 +5238,7 @@ function App() {
             benchmarkByModel={benchmarkByModel}
             diskGuard={diskGuard}
             vramGb={system.gpu.vramGb}
+            unifiedMemory={Boolean(system.gpu.isUnifiedMemory)}
             platform={system.platform}
             queuedCount={queuedRows.length}
             isBenchmarking={isBenchmarking || isListTesting}
@@ -5357,6 +5358,7 @@ function App() {
             benchmark={selectedBenchmark}
             score={selectedModelScore}
             modelScores={modelScores}
+            rows={modelRows}
             host={selectedHost}
             system={system}
             runReports={runReports}
