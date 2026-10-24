@@ -851,6 +851,24 @@ fn open_odysseus(local: bool) -> Result<(), String> {
     open_in_browser(if local { ODYSSEUS_LOCAL } else { ODYSSEUS_SITE })
 }
 
+/// A link from an answer, checked before it reaches the browser: http and
+/// https only, so a model's answer cannot have the system open a file or start
+/// some other handler.
+fn web_link(link: &str) -> Result<String, String> {
+    let parsed = url::Url::parse(link).map_err(|_| format!("Not a web address: {link}"))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(format!("Not a web address: {link}"));
+    }
+    Ok(parsed.to_string())
+}
+
+/// A link in an answer, opened in the system's browser. Followed inside Chat's
+/// own window it replaced Chat with the page, with no way back to the chat.
+#[tauri::command]
+fn open_link(url: String) -> Result<(), String> {
+    open_in_browser(&web_link(&url)?)
+}
+
 /// Whether Odysseus is answering on its default port. macOS's AirPlay receiver
 /// listens on 7000 too, so the page has to say it is Odysseus.
 #[tauri::command]
@@ -914,6 +932,7 @@ pub fn run() {
             get_vram_info,
             open_odysseus,
             odysseus_running,
+            open_link,
         ])
         .run(tauri::generate_context!())
         .expect("error while running RigMatch Chat");
@@ -922,6 +941,16 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_web_addresses_go_to_the_browser() {
+        assert_eq!(web_link("https://ollama.com/library").unwrap(), "https://ollama.com/library");
+        assert!(web_link("http://example.com/a?b=c&d=e").is_ok());
+        assert!(web_link("file:///C:/Windows/System32/calc.exe").is_err());
+        assert!(web_link("javascript:alert(1)").is_err());
+        assert!(web_link("ms-settings:").is_err());
+        assert!(web_link("not a link").is_err());
+    }
 
     /// Shapes taken from a live Ollama 0.32.7, not invented — each one is here
     /// because it broke a simpler version of the parser.
