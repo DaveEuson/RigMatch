@@ -2,6 +2,7 @@
 import type { NetworkHost } from '../types';
 import { getModelFamily } from '../lib/modelOrigins';
 import { MODEL_AVATAR_ASSETS, GENERIC_MODEL_AVATAR, HOST_AVATAR_SRC, getGenerationAvatarSrc } from '../lib/modelAvatars';
+import { useBlindName } from '../lib/blindShowContext';
 
 export function AvatarBust({ model, size, extraClass, generationKind }: {
   model: string;
@@ -14,10 +15,15 @@ export function AvatarBust({ model, size, extraClass, generationKind }: {
    */
   generationKind?: 'image' | 'video' | 'audio' | 'text-encoder';
 }) {
-  const family = generationKind ? `gen-${generationKind}` : getModelFamily(model);
-  const avatarSrc = generationKind
-    ? getGenerationAvatarSrc(generationKind)
-    : MODEL_AVATAR_ASSETS[getModelFamily(model)] ?? GENERIC_MODEL_AVATAR;
+  // A blind show's contestants all wear the generic portrait: the maker's
+  // avatar is the name in another form.
+  const blind = useBlindName()(model) !== model;
+  const family = blind ? 'blind' : generationKind ? `gen-${generationKind}` : getModelFamily(model);
+  const avatarSrc = blind
+    ? GENERIC_MODEL_AVATAR
+    : generationKind
+      ? getGenerationAvatarSrc(generationKind)
+      : MODEL_AVATAR_ASSETS[getModelFamily(model)] ?? GENERIC_MODEL_AVATAR;
 
   return (
     <span

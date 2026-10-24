@@ -22,6 +22,8 @@ import { SpeedDateTranscriptPanel } from './SpeedDateTranscriptPanel';
 import { TaskMatrix } from './TaskMatrix';
 import { TestProcessCard } from './TestProcessCard';
 import { BalanceFader } from './BalanceFader';
+import { BlindSwitch } from './BlindShow';
+import { useBlindMasking } from '../lib/blindShowContext';
 import { CodingBoard } from './CodingBoard';
 import { LabComparison } from './LabComparison';
 import { DrawingGallery } from './DrawingGallery';
@@ -64,6 +66,8 @@ export function SpeedDatePanel({
   balance,
   onBalanceChange,
   labResults,
+  blindOn = false,
+  onBlindChange,
 }: {
   active: boolean;
   host?: NetworkHost;
@@ -92,6 +96,9 @@ export function SpeedDatePanel({
   onBalanceChange: (value: number) => void;
   /** Saved Lab results: Reading pictures ranks the lineup's own descriptions. */
   labResults: Record<string, AdvancedLabResult>;
+  /** Blind mode: names hidden until the viewer has picked a favourite. */
+  blindOn?: boolean;
+  onBlindChange?: (on: boolean) => void;
 }) {
   /**
    * null means "follow the default".
@@ -101,6 +108,9 @@ export function SpeedDatePanel({
    * which point it stops moving under them.
    */
   const [chosenView, setChosenView] = useState<ComparisonViewId | null>(null);
+  // A blind show in progress: the rows and progress arrive renamed to seats,
+  // and the views below (answers with scores, the lineup with sizes) wait.
+  const blindShow = Boolean(useBlindMasking());
   const channel = workbench.id;
   const lineupNames = shortlistedRows.map((row) => row.displayName);
   // The run's own results, re-ranked at this channel's fader: nothing runs
@@ -203,6 +213,7 @@ export function SpeedDatePanel({
           <button type="button" className="btn btn-line" onClick={onOpenSuiteEditor} disabled={isListTesting}>
             Questions and judge
           </button>
+          {onBlindChange && <BlindSwitch on={blindOn} onChange={onBlindChange} disabled={isListTesting} />}
           <button type="button" className="btn btn-gold" onClick={onRunListTest} disabled={!canRunListTest}>
             {isListTesting
               ? 'Running…'
@@ -240,7 +251,7 @@ export function SpeedDatePanel({
           />
         )}
 
-        <div className="comparison-layout">
+        {!blindShow && <div className="comparison-layout">
           <nav className="screen-tabs comparison-rail" aria-label="Comparison sections">
             {comparisonRail.map((item) => (
               <button
@@ -445,7 +456,7 @@ export function SpeedDatePanel({
           </div>
         ))}
           </div>
-        </div>
+        </div>}
       </div>
     </section>
   );

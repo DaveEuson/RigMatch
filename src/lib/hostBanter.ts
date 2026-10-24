@@ -13,6 +13,7 @@ export type HostBanterContext = {
   phase: HostBanterPhase;
   index: number; // question index — drives stable line variety across questions
   stage?: 'studio' | 'trojan'; // the Trojan stage's host talks like a YouTuber
+  blind?: boolean; // blind mode: the seat only, never the name
 };
 
 const POOLS: Record<HostBanterPhase, string[]> = {
@@ -70,9 +71,11 @@ const TROJAN_POOLS: Record<HostBanterPhase, string[]> = {
 };
 
 export function getHostBanter(ctx: HostBanterContext): string {
-  const who = ctx.contestantNumber > 0
-    ? `Contestant #${ctx.contestantNumber} (${ctx.model})`
-    : (ctx.model || 'our next contestant');
+  const who = ctx.blind
+    ? (ctx.contestantNumber > 0 ? `Contestant ${ctx.contestantNumber}` : 'our next contestant')
+    : ctx.contestantNumber > 0
+      ? `Contestant #${ctx.contestantNumber} (${ctx.model})`
+      : (ctx.model || 'our next contestant');
   const pools = ctx.stage === 'trojan' ? TROJAN_POOLS : POOLS;
   const pool = pools[ctx.phase] ?? pools.asking;
   const pick = pool[(Math.abs(ctx.index || 0) + Math.max(0, ctx.contestantNumber)) % pool.length];
