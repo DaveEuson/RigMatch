@@ -156,6 +156,16 @@ export function formatDateTime(iso: string): string {
   return Number.isNaN(at.getTime()) ? '' : at.toLocaleString(formatLocale(), { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+/**
+ * A calendar day written as YYYY-MM-DD, as a person reads it ("24 Oct 2026").
+ * Read at local noon: parsed as UTC midnight, the 24th showed as the 23rd
+ * everywhere west of Greenwich.
+ */
+export function formatDay(day: string): string {
+  const at = new Date(`${day}T12:00:00`);
+  return Number.isNaN(at.getTime()) ? day : at.toLocaleDateString(formatLocale(), { dateStyle: 'medium' });
+}
+
 export function hashString(value: string) {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {

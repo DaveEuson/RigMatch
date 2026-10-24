@@ -9,7 +9,9 @@
  * can meet is tested without Electron.
  */
 import { formatGb } from './format.ts';
+import { speedBand, type SpeedBand } from './rigScoreScale.ts';
 import {
+  RIG_HEADLINE_TIER,
   RIG_TIERS,
   RIG_WORKLOAD,
   measureTier,
@@ -61,7 +63,10 @@ export type RigRunReply =
   }
   | { status: 'not-installed' }
   | { status: 'too-big'; machine?: RigMachine; error?: string }
+  /** Something else was loaded before the test began, so it did not begin. */
   | { status: 'busy'; loadedModels: string[] }
+  /** Something came to share the card while the test ran, so nothing was kept. */
+  | { status: 'shared'; loadedModels: string[]; sameModel?: boolean }
   | { status: 'stopped' }
   | { status: 'failed'; error: string };
 
@@ -77,9 +82,9 @@ export type RigResult = {
   id: string;
   completedAt: string;
   tier: RigTierId;
+  /** Its loadSeconds is the cold load, timed on the warm-up. */
   measure: TierMeasure;
   stamp: RigStamp;
-  coldLoadSeconds: number | null;
   gpuShare: number | null;
 };
 
@@ -129,6 +134,25 @@ export function tiersToRun(machine: RigMachineFit, installed: readonly string[])
   return RIG_TIERS.filter((tier) => tierAvailability(tier, machine, installed).kind === 'ready');
 }
 
+export type RigHeadline = {
+  /** The Standard tier's result, or until it has one, the first tier that does. */
+  result: RigResult | null;
+  isHeadlineTier: boolean;
+  /**
+   * The speed band, for the headline tier only. Light's 3B model writes fast on
+   * a card that would make the 8B headline crawl, so its band would flatter.
+   */
+  band: SpeedBand | null;
+};
+
+export function rigHeadline(latest: Partial<Record<RigTierId, RigResult>>): RigHeadline {
+  const result = latest[RIG_HEADLINE_TIER]
+    ?? RIG_TIERS.map((tier) => latest[tier.id]).find((entry): entry is RigResult => Boolean(entry))
+    ?? null;
+  const isHeadlineTier = result?.tier === RIG_HEADLINE_TIER;
+  return { result, isHeadlineTier, band: result && isHeadlineTier ? speedBand(result.measure.decodeTps) : null };
+}
+
 function listNames(names: string[]): string {
   if (names.length <= 1) return names[0] ?? 'another model';
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
@@ -150,14 +174,25 @@ export function assembleTierResult(tier: RigTier, reply: RigRunReply, completedA
     case 'busy':
       return {
         kind: 'busy',
-        message: `Ollama has ${listNames(reply.loadedModels)} loaded. It shares the graphics card and would slow the test. Ollama lets an idle model go after about five minutes, so close what is using it or wait, then run again.`,
+        message: `Ollama has ${listNames(reply.loadedModels)} loaded by another program. It shares the graphics card and would slow the test, so RigMatch leaves it alone and waits. Ollama lets an idle model go after about five minutes, so close what is using it or wait, then run again.`,
       };
+    case 'shared': {
+      const who = [
+        ...reply.loadedModels,
+        ...(reply.sameModel ? [`another program's use of ${tier.model}`] : []),
+      ];
+      return {
+        kind: 'busy',
+        message: `Not saved: ${listNames(who)} came to share the graphics card while the test ran, so the numbers would be low. Run again when nothing else is using Ollama.`,
+      };
+    }
     case 'stopped':
       return { kind: 'stopped', message: 'Stopped. Nothing was saved for this tier.' };
     case 'failed':
       return { kind: 'failed', message: `The test did not finish: ${reply.error}` };
     case 'done': {
-      const measure = measureTier(reply.runs);
+      // The load is the warm-up's: the timed runs find the model already loaded.
+      const measure = measureTier(reply.runs, RIG_WORKLOAD.measuredRuns, reply.coldLoadSeconds ?? 0);
       if (!measure) {
         return {
           kind: 'failed',
@@ -185,7 +220,6 @@ export function assembleTierResult(tier: RigTier, reply: RigRunReply, completedA
           tier: tier.id,
           measure,
           stamp,
-          coldLoadSeconds: reply.coldLoadSeconds,
           gpuShare: reply.gpuShare,
         },
       };

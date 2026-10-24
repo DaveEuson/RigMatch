@@ -306,6 +306,7 @@ import { attachmentBlockedReason } from './lib/chatCapabilityGuard';
 import { usePullControl } from './hooks/usePullControl';
 import { useGpuContention } from './hooks/useGpuContention';
 import { gpuBusyNote } from './lib/gpuBusyNote';
+import { RIG_SCORE_BUSY, rigScoreSession, useRigScoreSession } from './lib/rigScoreLive';
 import { pullOutcome } from './lib/pullControl';
 import './App.css';
 import './styles/shell.css';
@@ -1828,8 +1829,10 @@ function App() {
   };
   /** The vision model that checks pictures and clips, from what is installed. */
   const pictureJudge = useMemo(() => judgeCandidates(ollama.models)[0] ?? '', [ollama.models]);
+  // The speed test on My PC (lib/rigScoreLive.ts) holds the card too.
+  const rigScoreRunning = Boolean(useRigScoreSession().running);
   /** Something else holds the graphics card, so a render timed now would measure the contention. */
-  const gpuBusy = isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running);
+  const gpuBusy = isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running) || rigScoreRunning;
   /** One winner per channel, from its own measurement at its own fader. Chat and All keep the Top Match. */
   const channelWinner = useMemo(() => {
     const judged = (value: number) => (pictureJudged ? value : 0);
@@ -2373,6 +2376,11 @@ function App() {
   }, []);
 
   const startBenchmark = useCallback(async (modelOverride?: string | null, questionsOverride?: BenchmarkQuestion[]) => {
+    // The main process refuses it during a speed test; say so before trying.
+    if (rigScoreSession.getState().running) {
+      tellUser(RIG_SCORE_BUSY);
+      return;
+    }
     const modelToTest = modelOverride ?? selectedModel;
     const rowToTest = modelRows.find((row) => row.displayName === modelToTest || row.id === modelToTest);
     const runtime = getModelRuntime(rowToTest, ollama);
@@ -3362,6 +3370,12 @@ function App() {
 
   /** Resolves true only when the show finished with results: the Code round builds after nothing else. */
   const runListTest = useCallback(async (questionsOverride?: BenchmarkQuestion[]): Promise<boolean> => {
+    // The main process refuses every contestant during a speed test, and the
+    // show would end with no results; say so before starting.
+    if (rigScoreSession.getState().running) {
+      tellUser(RIG_SCORE_BUSY);
+      return false;
+    }
     // The quick check runs the lineup on its three questions instead of the set.
     const plan = questionsOverride ?? benchmarkPromptPlan;
     const count = questionsOverride ? questionsOverride.length : benchmarkQuestionCount;
@@ -4823,6 +4837,16 @@ function App() {
       <i className="running-dot" aria-hidden="true" />
       <span>Running {skillRunStatus.label}</span>
     </>
+  ) : rigScoreRunning ? (
+    // The speed test on My PC, from any screen: it holds the card, so the
+    // run buttons elsewhere are off while it goes, and this says why.
+    <>
+      <i className="running-dot" aria-hidden="true" />
+      <button type="button" className="running-open" onClick={() => { if (uiMode === 'advanced') { selectNav('lan'); setMyPcView('speed'); } }}>
+        Running the speed test
+      </button>
+      <button type="button" className="running-stop" onClick={rigScoreSession.stop}>Stop</button>
+    </>
   ) : externalBenchmark?.running ? (
     // A test this window didn't start: RigMatch Chat, a script, or one still
     // going from before a reload. It floated over the top bar as "Benchmark
@@ -5217,7 +5241,8 @@ function App() {
           <RigScorePanel
             system={system}
             ollama={ollama}
-            busy={gpuBusy}
+            // Its own run is not a reason to wait.
+            busy={gpuBusy && !rigScoreRunning}
             pullProgressByModel={pullProgressByModel}
             // A missing tier model goes through the same consent dialog and
             // queue as any other download; RigScore never pulls on its own.
@@ -5551,9 +5576,9 @@ function App() {
           installedRows={modelRows.filter((row) => row.installed && canJoinComparison(row) && !shortlistIds.has(row.displayName))}
           // A saved score beside a seat says who sits there.
           modelScores={blindMasking ? {} : modelScores}
-          disabled={isBenchmarking || isListTesting}
+          disabled={isBenchmarking || isListTesting || rigScoreRunning}
           isListTesting={isListTesting}
-          canRunSpeedDate={shortlistedRows.length >= MIN_CONTESTANTS && shortlistedRows.every((row) => row.installed) && !isBenchmarking && !isListTesting}
+          canRunSpeedDate={shortlistedRows.length >= MIN_CONTESTANTS && shortlistedRows.every((row) => row.installed) && !isBenchmarking && !isListTesting && !rigScoreRunning}
           onRemove={toggleShortlist}
           onAdd={toggleShortlist}
           onRunListTest={requestListTest}

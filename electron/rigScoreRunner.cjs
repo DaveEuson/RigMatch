@@ -25,6 +25,14 @@ const RIG_TIER_IDS = new Set(['light', 'standard', 'heavy', 'extreme']);
  * model itself when it finishes, however it finishes.
  */
 const RIG_KEEP_ALIVE = '2m';
+const RIG_KEEP_ALIVE_MS = 2 * 60 * 1000;
+/**
+ * Ollama sets a model's expiry to the end of its last request plus that
+ * request's keep_alive. An expiry further out than ours (with a minute's
+ * slack) means another program asked for the same model, with its own
+ * keep_alive: Ollama's default is five minutes.
+ */
+const OTHER_CLIENT_SLACK_MS = 60 * 1000;
 /** The warm-up loads the model: 18 GB from a slow disk takes minutes. */
 const RIG_LOAD_TIMEOUT_MS = 10 * 60 * 1000;
 /** A timed run on a card that spilled into system memory can run at 2 tok/s. */
@@ -122,9 +130,23 @@ function isOutOfMemory(error) {
 }
 
 /**
+ * Who else is in memory, from an /api/ps listing: other models by name, and
+ * whether another program is using this very model (its expiry is further out
+ * than this runner's keep_alive would set).
+ */
+function sharedWith(listing, model, now) {
+  const entries = Array.isArray(listing?.models) ? listing.models : [];
+  const others = entries.map((entry) => entry?.name || entry?.model).filter((name) => name && !sameModel(name, model));
+  const own = entries.find((entry) => sameModel(entry?.name || entry?.model || '', model));
+  const expires = Date.parse(own?.expires_at ?? '');
+  const sameModelElsewhere = Number.isFinite(expires) && expires > now + RIG_KEEP_ALIVE_MS + OTHER_CLIENT_SLACK_MS;
+  return { others, sameModelElsewhere };
+}
+
+/**
  * Run one tier. Resolves with a status rather than throwing for every outcome
- * a person can meet (not installed, too big, busy, stopped, failed), so the
- * screen can say each in its own words.
+ * a person can meet (not installed, too big, busy, shared, stopped, failed),
+ * so the screen can say each in its own words.
  *
  * deps:
  *  - request: what the renderer sent (normalizeRigRequest checks it)
@@ -132,10 +154,11 @@ function isOutOfMemory(error) {
  *  - fetchJson(url, options, timeoutMs): main.cjs's, which honours options.signal
  *  - readMachine(): { gpu, vramGb, driverVersion, isUnifiedMemory, appVersion }
  *  - unloadModel(baseUrl, model): keep_alive 0, then wait for the card to free
- *  - beforeRun(): frees what RigMatch itself left loaded (Labs' models)
+ *  - beforeRun(): frees what RigMatch itself left loaded (Labs, its chat)
  *  - isUnsupportedThinkError(error): an Ollama too old for think:false
  *  - signal: aborts the run (Stop)
  *  - onProgress(update)
+ *  - now(): the clock, for reading Ollama's expiry times
  */
 async function runRigTier({
   request,
@@ -147,36 +170,57 @@ async function runRigTier({
   isUnsupportedThinkError = () => false,
   signal,
   onProgress = () => {},
+  now = () => Date.now(),
 }) {
   const plan = normalizeRigRequest(request);
   if (signal?.aborted) return { status: 'stopped' };
   onProgress({ phase: 'checking' });
 
-  const machine = await readMachine();
-  // The screen offers only the tiers that fit; this is the same rule, checked
-  // again with a fresh reading, so a stale screen cannot measure a spill.
-  if (!machine.isUnifiedMemory && plan.minVramGb > 0 && !(Number(machine.vramGb) >= plan.minVramGb)) {
-    return { status: 'too-big', machine };
+  // Set once the first request is sent: only then is there a model of ours to unload.
+  let loading = false;
+  // Another program is using this model too, so it is not ours to unload.
+  let leaveLoaded = false;
+  try {
+    const machine = await readMachine();
+    // The screen offers only the tiers that fit; this is the same rule, checked
+    // again with a fresh reading, so a stale screen cannot measure a spill.
+    if (!machine.isUnifiedMemory && plan.minVramGb > 0 && !(Number(machine.vramGb) >= plan.minVramGb)) {
+      return { status: 'too-big', machine };
+    }
+
+    const tags = await fetchJson(`${baseUrl}/api/tags`, { signal }, 4000);
+    if (!listedNames(tags).some((name) => sameModel(name, plan.model))) return { status: 'not-installed' };
+
+    const [version, show] = await Promise.all([
+      fetchJson(`${baseUrl}/api/version`, { signal }, 3000).catch(() => null),
+      fetchJson(`${baseUrl}/api/show`, { method: 'POST', body: JSON.stringify({ model: plan.model }), signal }, 8000).catch(() => null),
+    ]);
+
+    // Another model in memory shares the card and slows this one, so the test
+    // would measure the two together. RigMatch's own leftovers (Labs, its
+    // chat) are freed first. Anything still loaded belongs to another program,
+    // the tier's own model included (Open WebUI mid-reply on it, say), and is
+    // left alone: the test waits.
+    await beforeRun();
+    if (signal?.aborted) return { status: 'stopped' };
+    const resident = listedNames(await fetchJson(`${baseUrl}/api/ps`, { signal }, 3000));
+    if (resident.length) return { status: 'busy', loadedModels: resident };
+
+    return await timedRuns({ plan, baseUrl, fetchJson, isUnsupportedThinkError, signal, onProgress, now, machine, version, show, markLoading: () => { loading = true; }, markShared: () => { leaveLoaded = true; } });
+  } catch (error) {
+    if (signal?.aborted) return { status: 'stopped' };
+    if (loading && isOutOfMemory(error)) return { status: 'too-big', error: String(error?.message ?? error) };
+    return { status: 'failed', error: String(error?.message ?? error) };
+  } finally {
+    if (loading && !leaveLoaded) {
+      onProgress({ phase: 'unloading' });
+      try { await unloadModel(baseUrl, plan.model); } catch { /* best effort: keep_alive frees it soon anyway */ }
+    }
   }
+}
 
-  const tags = await fetchJson(`${baseUrl}/api/tags`, { signal }, 4000);
-  if (!listedNames(tags).some((name) => sameModel(name, plan.model))) return { status: 'not-installed' };
-
-  const [version, show] = await Promise.all([
-    fetchJson(`${baseUrl}/api/version`, { signal }, 3000).catch(() => null),
-    fetchJson(`${baseUrl}/api/show`, { method: 'POST', body: JSON.stringify({ model: plan.model }), signal }, 8000).catch(() => null),
-  ]);
-
-  // Another model in memory shares the card and slows this one, so the test
-  // would measure the two together. RigMatch's own leftovers are freed; a
-  // model something else loaded is that program's, and is left alone.
-  await beforeRun();
-  const resident = listedNames(await fetchJson(`${baseUrl}/api/ps`, { signal }, 3000).catch(() => null));
-  const others = resident.filter((name) => !sameModel(name, plan.model));
-  if (others.length) return { status: 'busy', loadedModels: others };
-  // Already loaded (a chat with it, say): unloaded first, so the load is timed.
-  if (resident.length) await unloadModel(baseUrl, plan.model);
-
+/** The warm-up and the timed runs, checking after each that nothing else came to share the card. */
+async function timedRuns({ plan, baseUrl, fetchJson, isUnsupportedThinkError, signal, onProgress, now, machine, version, show, markLoading, markShared }) {
   let thinkSwitch = true;
   const generate = async (prompt, timeoutMs) => {
     const body = buildBenchmarkGenerateBody({ model: plan.model, prompt, keepAlive: RIG_KEEP_ALIVE, options: plan.options });
@@ -195,32 +239,30 @@ async function runRigTier({
   const runs = [];
   let coldLoadSeconds = null;
   let gpuShare = null;
-  try {
-    for (let index = 0; index < plan.prompts.length; index += 1) {
-      if (signal?.aborted) return { status: 'stopped' };
-      const warmup = index < plan.warmupRuns;
-      onProgress(warmup
-        ? { phase: 'loading' }
-        : { phase: 'run', run: index - plan.warmupRuns + 1, of: plan.measuredRuns });
-      const reply = await generate(plan.prompts[index], index === 0 ? RIG_LOAD_TIMEOUT_MS : RIG_RUN_TIMEOUT_MS);
-      if (index === 0) {
-        coldLoadSeconds = seconds(reply?.load_duration) || null;
-        // How much of the model sits on the graphics card. Below all of it,
-        // the rest runs from system memory and the speed says so.
-        const loaded = await fetchJson(`${baseUrl}/api/ps`, { signal }, 3000).catch(() => null);
-        const entry = (loaded?.models ?? []).find((item) => sameModel(item?.name || item?.model || '', plan.model));
-        const size = normalizePositiveNumber(entry?.size);
-        if (size) gpuShare = Math.min(1, Math.max(0, (Number(entry.size_vram) || 0) / size));
-      }
-      if (!warmup) runs.push(readRigRun(reply));
-    }
-  } catch (error) {
+  for (let index = 0; index < plan.prompts.length; index += 1) {
     if (signal?.aborted) return { status: 'stopped' };
-    if (isOutOfMemory(error)) return { status: 'too-big', machine, error: String(error?.message ?? error) };
-    return { status: 'failed', error: String(error?.message ?? error) };
-  } finally {
-    onProgress({ phase: 'unloading' });
-    try { await unloadModel(baseUrl, plan.model); } catch { /* best effort: keep_alive frees it soon anyway */ }
+    const warmup = index < plan.warmupRuns;
+    onProgress(warmup
+      ? { phase: 'loading' }
+      : { phase: 'run', run: index - plan.warmupRuns + 1, of: plan.measuredRuns });
+    markLoading();
+    const reply = await generate(plan.prompts[index], index === 0 ? RIG_LOAD_TIMEOUT_MS : RIG_RUN_TIMEOUT_MS);
+    if (index === 0) coldLoadSeconds = seconds(reply?.load_duration) || null;
+
+    // After every run: did anything else come to share the card? A chat or a
+    // picture render started meanwhile would be measured along with this.
+    const listing = await fetchJson(`${baseUrl}/api/ps`, { signal }, 3000).catch(() => null);
+    if (index === 0) {
+      // How much of the model sits on the graphics card. Below all of it, the
+      // rest runs from system memory and the speed says so.
+      const entry = (listing?.models ?? []).find((item) => sameModel(item?.name || item?.model || '', plan.model));
+      const size = normalizePositiveNumber(entry?.size);
+      if (size) gpuShare = Math.min(1, Math.max(0, (Number(entry.size_vram) || 0) / size));
+    }
+    const { others, sameModelElsewhere } = sharedWith(listing, plan.model, now());
+    if (sameModelElsewhere) markShared();
+    if (others.length || sameModelElsewhere) return { status: 'shared', loadedModels: others, sameModel: sameModelElsewhere };
+    if (!warmup) runs.push(readRigRun(reply));
   }
 
   return {
@@ -242,5 +284,6 @@ module.exports = {
   weightsDigest,
   sameModel,
   isOutOfMemory,
+  sharedWith,
   runRigTier,
 };

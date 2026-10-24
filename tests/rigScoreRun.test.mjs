@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 const {
   RIG_TIERS, RIG_WORKLOAD, RIG_REFERENCES, rigPoints, referenceStamp,
 } = await import('../src/lib/rigScore.ts');
-const { rigRunRequest, tierAvailability, tiersToRun, assembleTierResult } = await import('../src/lib/rigScoreRun.ts');
+const { rigRunRequest, tierAvailability, tiersToRun, assembleTierResult, rigHeadline } = await import('../src/lib/rigScoreRun.ts');
+const { formatDay } = await import('../src/lib/format.ts');
 const { RIG_PASSAGE, rigPrompt } = await import('../src/lib/rigScorePassage.ts');
 
 const tier = (id) => RIG_TIERS.find((entry) => entry.id === id);
@@ -73,7 +74,7 @@ test('a finished run becomes a measure and a stamp', () => {
   assert.equal(result.stamp.numCtx, RIG_WORKLOAD.numCtx);
   assert.equal(result.stamp.modelDigest, 'sha256-aaa');
   assert.equal(result.stamp.driverVersion, '610.88');
-  assert.equal(result.coldLoadSeconds, 1.2);
+  assert.equal(result.measure.loadSeconds, 1.2, 'the cold load from the warm-up, not the 0.02 s of the timed runs');
 });
 
 test('too few usable runs is a failure with no score, never a zero', () => {
@@ -96,7 +97,14 @@ test('every way a tier can end without a result is said in words', () => {
 
   const busy = said({ status: 'busy', loadedModels: ['mistral:7b', 'gemma3:4b'] });
   assert.equal(busy.kind, 'busy');
-  assert.match(busy.message, /Ollama has mistral:7b and gemma3:4b loaded\./);
+  assert.match(busy.message, /Ollama has mistral:7b and gemma3:4b loaded by another program\./);
+
+  assert.match(busy.message, /another program/);
+
+  const shared = said({ status: 'shared', loadedModels: ['gemma3:4b'], sameModel: false });
+  assert.equal(shared.kind, 'busy', 'treated as a busy card, so the queue stops');
+  assert.match(shared.message, /^Not saved: gemma3:4b came to share the graphics card while the test ran/);
+  assert.match(said({ status: 'shared', loadedModels: [], sameModel: true }).message, /another program's use of qwen3:8b/);
 
   assert.equal(said({ status: 'stopped' }).kind, 'stopped');
   const failed = said({ status: 'failed', error: 'connection refused' });
@@ -129,6 +137,48 @@ test('points are 1000 at the reference, and only for the same work', () => {
   const newerOllama = at(150, 3000, { ollamaVersion: '0.40.5' });
   assert.equal(newerOllama.kind, 'points');
   assert.deepEqual(newerOllama.notes, ['Ollama 0.35.1 against 0.40.5.']);
+});
+
+test("against the reference, another computer's card is not a caveat; a different driver on the same card is", () => {
+  const at = (extra) => {
+    const { result } = assembleTierResult(tier('light'), done([timed(150, 3000), timed(150, 3000), timed(150, 3000)], extra), 'x');
+    return rigPoints(result.measure, result.stamp, references);
+  };
+  const otherCard = at({ machine: { ...machine, gpu: 'NVIDIA GeForce RTX 3060', driverVersion: '581.15' } });
+  assert.deepEqual(otherCard.notes, [], 'no "Graphics card" or "Driver" note: the card is what points measure');
+  const newDriver = at({ machine: { ...machine, driverVersion: '612.10' } });
+  assert.deepEqual(newDriver.notes, ['Driver 610.88 against 612.10.']);
+});
+
+test('the headline and its speed band are the Standard tier; a Light result alone gets no band', () => {
+  const measured = (id, decode) => assembleTierResult(tier(id), done([timed(decode, 3000), timed(decode, 3000), timed(decode, 3000)]), `2026-10-24T2${id.length}:00:00Z`).result;
+  assert.deepEqual(rigHeadline({}), { result: null, isHeadlineTier: false, band: null });
+
+  // A fast 3B model on a card that would make the 8B headline crawl.
+  const lightOnly = rigHeadline({ light: measured('light', 96) });
+  assert.equal(lightOnly.result.tier, 'light');
+  assert.equal(lightOnly.isHeadlineTier, false);
+  assert.equal(lightOnly.band, null, 'no "Excellent" for the headline from a 3B model');
+
+  const both = rigHeadline({ light: measured('light', 96), standard: measured('standard', 30) });
+  assert.equal(both.result.tier, 'standard');
+  assert.equal(both.isHeadlineTier, true);
+  assert.equal(both.band.id, 'fast');
+});
+
+test('the reference day is written as a day, and not moved a day west of Greenwich', () => {
+  const zone = process.env.TZ;
+  process.env.TZ = 'America/Los_Angeles';
+  try {
+    const written = formatDay('2026-10-24');
+    assert.match(written, /24/);
+    assert.match(written, /2026/);
+    assert.doesNotMatch(written, /23/);
+    assert.doesNotMatch(written, /:/, 'no time of day');
+  } finally {
+    if (zone === undefined) delete process.env.TZ; else process.env.TZ = zone;
+  }
+  assert.equal(formatDay('not a day'), 'not a day');
 });
 
 test('the written-down references are complete where measured and pending where not', () => {

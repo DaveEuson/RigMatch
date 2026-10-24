@@ -3568,7 +3568,12 @@ async function runRigScore(request = {}, sender) {
       fetchJson,
       readMachine: readRigMachine,
       unloadModel: unloadBenchmarkModel,
-      beforeRun: releaseOllamaLabModels,
+      // RigMatch's own leftovers: Labs' models and its chat's. A model any
+      // other program loaded is left alone, and the test waits for it.
+      beforeRun: async () => {
+        await releaseOllamaLabModels();
+        await releaseOllamaChatModels();
+      },
       isUnsupportedThinkError,
       signal: activeRigScore.abort.signal,
       onProgress: (update) => {
@@ -4975,6 +4980,8 @@ async function sendChat(request = {}, sender = null) {
     return finish(extractOpenAiChatContent(response), response?.choices?.[0]?.finish_reason);
   }
 
+  // RigMatch loaded it, so a speed test may free it (ollamaChatResident).
+  ollamaChatResident.set(`${baseUrl}\n${model}`, { baseUrl, model });
   const turn = { role: 'user', content: userText, ...(images.length > 0 ? { images: images.map(toBareBase64) } : {}) };
   const body = {
     model,
@@ -5376,6 +5383,19 @@ const ollamaLabResident = new Map();
 async function releaseOllamaLabModels() {
   const resident = [...ollamaLabResident.values()];
   ollamaLabResident.clear();
+  for (const { baseUrl, model } of resident) await unloadBenchmarkModel(baseUrl, model);
+}
+
+/**
+ * Ollama models RigMatch's own chat asked for, so a speed test can tell them
+ * from a copy another program loaded: RigMatch frees its own, and waits for
+ * anyone else's. The chat reloads its model with its next message.
+ */
+const ollamaChatResident = new Map();
+
+async function releaseOllamaChatModels() {
+  const resident = [...ollamaChatResident.values()];
+  ollamaChatResident.clear();
   for (const { baseUrl, model } of resident) await unloadBenchmarkModel(baseUrl, model);
 }
 

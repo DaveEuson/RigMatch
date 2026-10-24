@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const {
-  normalizeRigRequest, readRigRun, weightsDigest, sameModel, isOutOfMemory, runRigTier,
+  normalizeRigRequest, readRigRun, weightsDigest, sameModel, isOutOfMemory, sharedWith, runRigTier,
 } = require('../electron/rigScoreRunner.cjs');
 const { RIG_TIERS, RIG_WORKLOAD } = await import('../src/lib/rigScore.ts');
 const { rigRunRequest, assembleTierResult } = await import('../src/lib/rigScoreRun.ts');
@@ -26,17 +26,29 @@ const reply = (decodeTps, prefillTps, loadSeconds = 0.02) => ({
 
 const aborted = () => Object.assign(new Error('Request stopped'), { name: 'AbortError' });
 
-/** A stand-in Ollama: every call is recorded, and /api/generate answers from `generate`. */
-function fakeOllama({ installed = ['llama3.2:3b'], loaded = [], generate, sizeVram = 1 } = {}) {
+/** The runner's clock, fixed, so Ollama's expiry times can be set around it. */
+const NOW = Date.parse('2026-10-24T21:00:00Z');
+const expiresIn = (ms) => new Date(NOW + ms).toISOString();
+/** What this runner's keep_alive of 2 minutes sets, just after a request. */
+const OUR_EXPIRY = expiresIn(115_000);
+/** Ollama's default keep_alive, as another program's request leaves it. */
+const THEIR_EXPIRY = expiresIn(5 * 60_000);
+
+/**
+ * A stand-in Ollama: every call is recorded, and /api/generate answers from
+ * `generate(body, index, state)`, which can change what /api/ps lists.
+ */
+function fakeOllama({ installed = ['llama3.2:3b'], loaded = [], generate, sizeVram = 1, unreachable = false } = {}) {
   const calls = [];
   const unloads = [];
-  const state = { loaded: loaded.map((name) => ({ name, size: 100, size_vram: 100 })) };
+  const state = { loaded: loaded.map((name) => ({ name, size: 100, size_vram: 100, expires_at: THEIR_EXPIRY })) };
   let generated = 0;
   const fetchJson = async (url, options = {}) => {
     const path = new URL(url).pathname;
     const body = options.body ? JSON.parse(options.body) : null;
     calls.push({ path, body });
     if (options.signal?.aborted) throw aborted();
+    if (unreachable) throw new Error('fetch failed: connect ECONNREFUSED 127.0.0.1:11434');
     switch (path) {
       case '/api/tags': return { models: installed.map((name) => ({ name, model: name })) };
       case '/api/version': return { version: '0.35.1' };
@@ -48,8 +60,9 @@ function fakeOllama({ installed = ['llama3.2:3b'], loaded = [], generate, sizeVr
       case '/api/generate': {
         const index = generated;
         generated += 1;
-        state.loaded = [{ name: body.model, size: 100, size_vram: Math.round(100 * sizeVram) }];
-        return generate(body, index);
+        const others = state.loaded.filter((entry) => entry.name !== body.model);
+        state.loaded = [...others, { name: body.model, size: 100, size_vram: Math.round(100 * sizeVram), expires_at: OUR_EXPIRY }];
+        return generate(body, index, state);
       }
       default: throw new Error(`unexpected ${path}`);
     }
@@ -68,6 +81,7 @@ const run = (ollama, overrides = {}) => runRigTier({
   fetchJson: ollama.fetchJson,
   unloadModel: ollama.unloadModel,
   readMachine: async () => machine,
+  now: () => NOW,
   ...overrides,
 });
 
@@ -136,7 +150,7 @@ test('a tier runs a warm-up then three timed runs, unloads after, and only the t
     workloadVersion: RIG_WORKLOAD.version, numCtx: RIG_WORKLOAD.numCtx, ollamaVersion: '0.35.1',
     driverVersion: '610.88', gpu: 'NVIDIA GeForce RTX 4070', vramGb: 12, appVersion: '0.9.9',
   });
-  assert.equal(outcome.result.coldLoadSeconds, 1.8);
+  assert.equal(outcome.result.measure.loadSeconds, 1.8, "the measure's load time is the cold load, not the timed runs' few milliseconds");
 });
 
 test('a model that is not installed is reported, never pulled', async () => {
@@ -180,17 +194,89 @@ test('another model in memory makes the test wait; RigMatch does not unload what
   let freed = 0;
   const answer = await run(ollama, { beforeRun: async () => { freed += 1; } });
   assert.deepEqual(answer, { status: 'busy', loadedModels: ['mistral:7b'] });
-  assert.equal(freed, 1, "RigMatch's own Lab leftovers are freed first");
+  assert.equal(freed, 1, "RigMatch's own leftovers are freed first");
   assert.equal(ollama.generates().length, 0);
   assert.deepEqual(ollama.unloads, []);
 });
 
-test('the same model already loaded is unloaded first, so its load is timed', async () => {
-  const ollama = fakeOllama({ loaded: ['llama3.2:3b'], generate: (_body, index) => reply(100, 3000, index === 0 ? 2 : 0.02) });
+test("the tier's own model loaded by another program makes the test wait too, and is not evicted", async () => {
+  // Open WebUI mid-reply on llama3.2:3b, say: unloading it would cut that reply off.
+  const ollama = fakeOllama({ loaded: ['llama3.2:3b'], generate: () => reply(100, 3000) });
   const answer = await run(ollama);
+  assert.deepEqual(answer, { status: 'busy', loadedModels: ['llama3.2:3b'] });
+  assert.equal(ollama.generates().length, 0);
+  assert.deepEqual(ollama.unloads, [], 'it is not RigMatch\'s to unload');
+});
+
+test("RigMatch's own copy (Labs, its chat) is freed by beforeRun, and then the test runs and times the load", async () => {
+  const ollama = fakeOllama({ loaded: ['llama3.2:3b'], generate: (_body, index) => reply(100, 3000, index === 0 ? 2 : 0.02) });
+  const answer = await run(ollama, { beforeRun: async () => { ollama.state.loaded = []; } });
   assert.equal(answer.status, 'done');
-  assert.deepEqual(ollama.unloads, ['llama3.2:3b', 'llama3.2:3b'], 'before the warm-up, and after the last run');
   assert.equal(answer.coldLoadSeconds, 2);
+  assert.deepEqual(ollama.unloads, ['llama3.2:3b'], 'only its own copy, after the last run');
+});
+
+test('a model that comes to share the card mid-test means nothing is kept, and the test model is still unloaded', async () => {
+  const ollama = fakeOllama({
+    generate: (_body, index, state) => {
+      // A chat in another program loads gemma3 during the second timed run.
+      if (index === 2) state.loaded.push({ name: 'gemma3:4b', size: 100, size_vram: 100, expires_at: THEIR_EXPIRY });
+      return reply(100, 3000);
+    },
+  });
+  const answer = await run(ollama);
+  assert.deepEqual(answer, { status: 'shared', loadedModels: ['gemma3:4b'], sameModel: false });
+  assert.equal(ollama.generates().length, 3, 'it stops at the run that found it');
+  assert.deepEqual(ollama.unloads, ['llama3.2:3b']);
+});
+
+test('another program using the same model mid-test means nothing is kept, and the model is left loaded for it', async () => {
+  const ollama = fakeOllama({
+    generate: (body, index, state) => {
+      // Its request refreshed the expiry with Ollama's five-minute default.
+      if (index === 1) state.loaded.find((entry) => entry.name === body.model).expires_at = THEIR_EXPIRY;
+      return reply(100, 3000);
+    },
+  });
+  const answer = await run(ollama);
+  assert.deepEqual(answer, { status: 'shared', loadedModels: [], sameModel: true });
+  assert.deepEqual(ollama.unloads, [], 'unloading it would cut the other program off');
+});
+
+test("who shares the card is read from /api/ps: other models by name, the same model by its expiry", () => {
+  const listing = (expiresAt, ...others) => ({ models: [{ name: 'llama3.2:3b', expires_at: expiresAt }, ...others.map((name) => ({ name }))] });
+  assert.deepEqual(sharedWith(listing(OUR_EXPIRY), 'llama3.2:3b', NOW), { others: [], sameModelElsewhere: false });
+  assert.deepEqual(sharedWith(listing(expiresIn(170_000)), 'llama3.2:3b', NOW), { others: [], sameModelElsewhere: false }, 'inside the slack');
+  assert.deepEqual(sharedWith(listing(THEIR_EXPIRY, 'gemma3:4b'), 'llama3.2:3b', NOW), { others: ['gemma3:4b'], sameModelElsewhere: true });
+  assert.deepEqual(sharedWith(listing('2318-08-29T00:00:00Z'), 'llama3.2:3b', NOW).sameModelElsewhere, true, 'keep_alive -1 is forever');
+  assert.deepEqual(sharedWith(null, 'llama3.2:3b', NOW), { others: [], sameModelElsewhere: false });
+});
+
+test('Stop while Ollama is being checked is a stop, not a failure, and nothing is unloaded', async () => {
+  const during = async (step) => {
+    const controller = new AbortController();
+    const ollama = fakeOllama({ generate: () => reply(100, 3000) });
+    const answer = await run(ollama, {
+      signal: controller.signal,
+      readMachine: async () => { if (step === 'machine') controller.abort(); return machine; },
+      beforeRun: async () => { if (step === 'beforeRun') controller.abort(); },
+    });
+    return { answer, ollama };
+  };
+  for (const step of ['machine', 'beforeRun']) {
+    const { answer, ollama } = await during(step);
+    assert.deepEqual(answer, { status: 'stopped' }, `stopped during ${step}`);
+    assert.equal(ollama.generates().length, 0);
+    assert.deepEqual(ollama.unloads, []);
+  }
+});
+
+test('an Ollama that does not answer is a failure in words, never a thrown error that logs the prompts', async () => {
+  const ollama = fakeOllama({ unreachable: true, generate: () => reply(100, 3000) });
+  const answer = await run(ollama);
+  assert.equal(answer.status, 'failed');
+  assert.match(answer.error, /ECONNREFUSED/);
+  assert.deepEqual(ollama.unloads, []);
 });
 
 test('Stop ends the run mid-question, saves nothing and still unloads the model', async () => {
@@ -246,6 +332,10 @@ test('the main process runs one speed test at a time, never beside a show, on th
   assert.match(runner, /if \(activeRigScore\) throw new Error/);
   assert.match(runner, /baseUrl: OLLAMA_LOCAL_URL,/, 'local only: a remote card cannot be read');
   assert.match(runner, /finally \{\n\s*activeRigScore = null;\n\s*finished\(\);/);
+  // RigMatch frees its own copies first: Labs' models and its chat's.
+  assert.match(runner, /beforeRun: async \(\) => \{\n\s*await releaseOllamaLabModels\(\);\n\s*await releaseOllamaChatModels\(\);/);
+  const chat = main.slice(main.indexOf('async function sendChat('), main.indexOf('async function runAdvancedGenerate('));
+  assert.match(chat, /ollamaChatResident\.set\(`\$\{baseUrl\}\\n\$\{model\}`, \{ baseUrl, model \}\);/, 'the chat records what it loaded');
   const bench = main.slice(main.indexOf('async function runBenchmark('), main.indexOf('async function runBenchmark(') + 600);
   assert.match(bench, /if \(activeRigScore\) \{\n\s*throw new Error/);
   assert.match(main, /handleLogged\('rigscore:run', 'rigscore'/);

@@ -1,7 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { agentArcadeApi, isDesktopRuntime } from '../api';
-import { formatDateTime, formatGb, formatThroughputValue } from '../lib/format';
+import { formatDateTime, formatDay, formatGb, formatThroughputValue } from '../lib/format';
 import { formatLocale } from '../lib/formatLocale';
 import {
   RIG_HEADLINE_TIER,
@@ -15,15 +15,12 @@ import {
   type RigTierId,
 } from '../lib/rigScore';
 import { describeChange, historyRows, latestByTier } from '../lib/rigScoreHistory';
-import { tierAvailability, tiersToRun, type RigProgress, type RigResult } from '../lib/rigScoreRun';
+import { rigHeadline, tierAvailability, tiersToRun, type RigProgress } from '../lib/rigScoreRun';
 import { RIG_SPEED_BANDS, bandRange, promptWaitSeconds, speedBand } from '../lib/rigScoreScale';
-import { createRigSession } from '../lib/rigScoreSession';
+import { rigScoreSession as session, useRigScoreSession } from '../lib/rigScoreLive';
 import type { GpuContention, OllamaStatus, PullProgressUpdate, SystemProfile } from '../types';
 import { GpuContentionNote } from './GpuContentionNote';
 import './RigScorePanel.css';
-
-/** One session for the app's life, so a run outlives a visit to another tab. */
-const session = createRigSession(agentArcadeApi);
 
 const tierById = (id: RigTierId): RigTier => RIG_TIERS.find((tier) => tier.id === id) ?? RIG_TIERS[0];
 
@@ -73,7 +70,8 @@ export function RigScorePanel({
   /** Opens the download consent dialog for a tier's model; false when it cannot. */
   onDownloadModel: (model: string) => boolean;
 }) {
-  const state = useSyncExternalStore(session.subscribe, session.getState);
+  // App's session, so a run outlives a visit to another tab and App knows the card is busy.
+  const state = useRigScoreSession();
   const [contention, setContention] = useState<GpuContention | null>(null);
   const [downloadNote, setDownloadNote] = useState<string | null>(null);
 
@@ -92,13 +90,11 @@ export function RigScorePanel({
   const canRun = ollama.ready && !busy && !running && Boolean(agentArcadeApi.runRigScore);
 
   // The headline is the Standard tier. Until it has a result, the hero shows
-  // the tier that has one and says what the Standard tier needs.
-  const heroResult = latest[RIG_HEADLINE_TIER]
-    ?? RIG_TIERS.map((tier) => latest[tier.id]).find((result): result is RigResult => Boolean(result))
-    ?? null;
+  // the tier that has one, says what the Standard tier needs, and gives no
+  // speed band: a 3B model writing fast says little about the 8B headline.
+  const { result: heroResult, band: heroBand } = rigHeadline(latest);
   const heroTier = heroResult ? tierById(heroResult.tier) : tierById(RIG_HEADLINE_TIER);
   const heroPoints = heroResult ? rigPoints(heroResult.measure, heroResult.stamp) : null;
-  const heroBand = heroResult ? speedBand(heroResult.measure.decodeTps) : null;
   const headlineTier = tierById(RIG_HEADLINE_TIER);
   const headlineAvailability = tierAvailability(headlineTier, machine, installed);
 
@@ -154,7 +150,7 @@ export function RigScorePanel({
 
       <div className="rigscore-hero">
         <div className="rigscore-headline">
-          {heroResult && heroPoints && heroBand ? (
+          {heroResult && heroPoints ? (
             <>
               <span className="rigscore-kicker">RigScore · {heroTier.label} tier · {heroTier.model}</span>
               {heroPoints.kind === 'points' ? (
@@ -162,7 +158,7 @@ export function RigScorePanel({
               ) : (
                 <p className="rigscore-number"><strong>{formatTps(heroResult.measure.decodeTps)}</strong> <span>tok/s writing</span></p>
               )}
-              <p className="rigscore-band"><b>{heroBand.label}.</b> {heroBand.feel}</p>
+              {heroBand && <p className="rigscore-band"><b>{heroBand.label}.</b> {heroBand.feel}</p>}
               {heroPoints.kind === 'pending' && <p className="rigscore-sub">Points after the reference is measured.</p>}
               {heroPoints.kind === 'not-comparable' && <p className="rigscore-sub">No points: {heroPoints.notes.join(' ')}</p>}
               {heroPoints.kind === 'points' && heroPoints.notes.length > 0 && (
@@ -170,7 +166,8 @@ export function RigScorePanel({
               )}
               {heroResult.tier !== RIG_HEADLINE_TIER && (
                 <p className="rigscore-sub">
-                  The headline is the {headlineTier.label} tier ({headlineTier.model}).{' '}
+                  This is the {heroTier.label} tier ({heroTier.model}). The headline and its speed band come from the{' '}
+                  {headlineTier.label} tier ({headlineTier.model}).{' '}
                   {headlineAvailability.kind === 'needs-download' && `It needs a ${formatGb(headlineAvailability.sizeGb)} download first.`}
                   {headlineAvailability.kind === 'too-big' && `This PC's graphics card is too small for it, so it is not run.`}
                   {headlineAvailability.kind === 'ready' && 'Run it to see it here.'}
@@ -232,7 +229,7 @@ export function RigScorePanel({
                   {result ? (
                     <small>
                       {[result.stamp.quantization, shortDigest(result.stamp.modelDigest),
-                        result.coldLoadSeconds ? `loads in ${result.coldLoadSeconds.toFixed(1)} s` : null].filter(Boolean).join(' · ')}
+                        result.measure.loadSeconds > 0 ? `loads in ${result.measure.loadSeconds.toFixed(1)} s` : null].filter(Boolean).join(' · ')}
                     </small>
                   ) : <small>{availability.kind === 'ready' ? 'Installed' : `${formatGb(tier.sizeGb)} download`}</small>}
                 </td>
@@ -358,7 +355,7 @@ export function RigScorePanel({
 
       <p className="rigscore-footnote">
         1,000 points is the reference PC, an {RIG_REFERENCE_MACHINE}
-        {reference ? `, measured ${reference.measuredOn}` : ''}. Twice as fast at both writing and reading is 2,000.
+        {reference ? `, measured ${formatDay(reference.measuredOn)}` : ''}. Twice as fast at both writing and reading is 2,000.
         Writing is how fast the answer comes out; reading is how fast the model takes in your prompt.
         Two runs are compared only when the model files, the test version and the context size match;
         a different Ollama or driver is named beside the comparison. Results stay on this PC.

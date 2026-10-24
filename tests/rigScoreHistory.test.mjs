@@ -13,8 +13,8 @@ const stamp = (extra = {}) => ({
 });
 const result = (id, completedAt, decodeTps, prefillTps, extra = {}) => ({
   id, completedAt, tier: extra.tier ?? 'light',
-  measure: { decodeTps, prefillTps, loadSeconds: 0.02, runs: 3 },
-  stamp: stamp(extra), coldLoadSeconds: 1.5, gpuShare: 1,
+  measure: { decodeTps, prefillTps, loadSeconds: 1.5, runs: 3 },
+  stamp: stamp(extra), gpuShare: 1,
 });
 
 test('the history lives under the app namespace, so Clear Data removes it', () => {
@@ -96,6 +96,16 @@ test('older runs are compared with the latest only when weights, test version an
   assert.match(byId.otherWeights.sinceThen.notes.join(' '), /model files differ/);
   assert.match(byId.otherTest.sinceThen.notes.join(' '), /different versions of the test/);
   assert.match(byId.otherContext.sinceThen.notes.join(' '), /context sizes/);
+});
+
+test('a new graphics card between two runs is compared, and named', () => {
+  const rows = historyRows([
+    result('before', '2026-10-20T10:00:00Z', 100, 2000, { gpu: 'NVIDIA GeForce RTX 3060', vramGb: 12 }),
+    result('after', '2026-10-24T10:00:00Z', 140, 8500),
+  ]);
+  const before = rows.find((row) => row.result.id === 'before');
+  assert.equal(before.sinceThen.comparable, true, 'the same work on new hardware is what the score is for');
+  assert.deepEqual(before.sinceThen.notes, ['Graphics card NVIDIA GeForce RTX 3060 against NVIDIA GeForce RTX 4070.']);
 });
 
 test('runs of different tiers are never compared with each other', () => {

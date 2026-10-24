@@ -27,7 +27,7 @@ function bodyOf(source, declaration, closer = '\n  }') {
 test('the Code round builds apps only after its question round finished', () => {
   const run = bodyOf(app, 'const runListTest = useCallback(', '\n  }, [');
   assert.match(run, /Promise<boolean>/);
-  assert.equal((run.match(/return false;/g) ?? []).length, 4, 'too few, a host blocker, nobody finished, a crash');
+  assert.equal((run.match(/return false;/g) ?? []).length, 5, 'a speed test running, too few, a host blocker, nobody finished, a crash');
   assert.match(run, /if \(uiMode === 'beginner'\) selectNav\('history'\);\s*return true;/);
   assert.match(app, /\.then\(\(finished\) => \(finished && !stopRunRef\.current \? runSkillTestsAfterRun\(models, 'app-builder'\) : undefined\)\)/);
 });

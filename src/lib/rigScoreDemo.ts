@@ -51,7 +51,6 @@ export function createRigScoreDemo(installed: () => string[], vramGb: number) {
         runs,
         coldLoadSeconds: 1.8,
         gpuShare: 1,
-        ollamaVersion: 'preview',
         quantization: 'Q4_K_M',
         machine,
       };

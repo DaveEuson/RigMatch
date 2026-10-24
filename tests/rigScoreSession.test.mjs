@@ -77,6 +77,40 @@ test('a busy card or Stop ends the queue: the next tier would meet the same card
   assert.match(second.getState().messages.light, /Stopped/);
 });
 
+test('a model that came to share the card mid-test ends the queue and saves nothing', async () => {
+  const fake = bridge({ light: { status: 'shared', loadedModels: ['gemma3:4b'], sameModel: false }, standard: done });
+  const { made, writes } = session(fake);
+  await made.runTiers([tier('light'), tier('standard')]);
+  assert.deepEqual(fake.asked.map((request) => request.tier), ['light']);
+  assert.equal(made.getState().history.length, 0);
+  assert.equal(writes.length, 0);
+  assert.match(made.getState().messages.light, /^Not saved: gemma3:4b/);
+});
+
+test('App sees a running speed test, counts it as the card being busy, and shows refuse to start beside it', async () => {
+  const { readFileSync } = await import('node:fs');
+  const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf-8').replace(/\r\n/g, '\n');
+  const app = read('../src/App.tsx');
+  const live = read('../src/lib/rigScoreLive.ts');
+  const panel = read('../src/components/RigScorePanel.tsx');
+  // One session, outside the lazily loaded screen, so App can see it.
+  assert.match(live, /export const rigScoreSession = createRigSession\(agentArcadeApi\);/);
+  assert.match(panel, /from '\.\.\/lib\/rigScoreLive'/);
+  assert.doesNotMatch(panel, /createRigSession\(/, 'the screen makes no session of its own');
+  assert.match(app, /import \{ RIG_SCORE_BUSY, rigScoreSession, useRigScoreSession \} from '\.\/lib\/rigScoreLive';/);
+  // gpuBusy gates Labs, the lab buttons and RigMatch Chat's requests to test.
+  assert.match(app, /const gpuBusy = [^\n]*\|\| rigScoreRunning;/);
+  assert.match(app, /if \(gpuBusy \|\| skillRunStatus\.phase === 'running'\) \{\n\s*await answer\(\{ started: false/);
+  // Both ways a show starts say so instead of starting.
+  for (const start of ['const startBenchmark = useCallback(async', 'const runListTest = useCallback(async']) {
+    const body = app.slice(app.indexOf(start), app.indexOf(start) + 600);
+    assert.match(body, /if \(rigScoreSession\.getState\(\)\.running\) \{\n\s*tellUser\(RIG_SCORE_BUSY\);/, start);
+  }
+  assert.match(app, /disabled=\{isBenchmarking \|\| isListTesting \|\| rigScoreRunning\}/);
+  // The load strip names it from any screen, with a Stop.
+  assert.match(app, /Running the speed test\n\s*<\/button>\n\s*<button type="button" className="running-stop" onClick=\{rigScoreSession\.stop\}>Stop<\/button>/);
+});
+
 test('progress from a run that is not this one is ignored', async () => {
   let release;
   const fake = bridge({ light: () => new Promise((resolve) => { release = () => resolve(done); }) });

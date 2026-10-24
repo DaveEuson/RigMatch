@@ -70,6 +70,11 @@ export type TierMeasure = {
   prefillTps: number;
   /** Generation, tokens per second. */
   decodeTps: number;
+  /**
+   * How long the model took to load, from disk to ready. The runner times it
+   * on the warm-up, which finds the model unloaded; the timed runs find it
+   * loaded and report a few milliseconds. 0 when Ollama did not say.
+   */
   loadSeconds: number;
   /** How many runs the medians came from. */
   runs: number;
@@ -90,8 +95,16 @@ function median(values: number[]): number {
  * an error) says nothing about speed, and a zero duration would divide by it.
  * The median is used so one slow run, a background task waking, does not move
  * the number.
+ *
+ * `loadSeconds` is the cold load when the caller timed one (the warm-up's);
+ * without it, the median of the runs' own load times, which is only a load
+ * time when the runs found the model unloaded.
  */
-export function measureTier(runs: RigRun[], minRuns: number = RIG_WORKLOAD.measuredRuns): TierMeasure | null {
+export function measureTier(
+  runs: RigRun[],
+  minRuns: number = RIG_WORKLOAD.measuredRuns,
+  loadSeconds?: number,
+): TierMeasure | null {
   const usable = runs.filter((run) => (
     run.evalCount >= MIN_DECODED_TOKENS && run.evalSeconds > 0
     && run.promptEvalCount > 0 && run.promptEvalSeconds > 0
@@ -100,7 +113,7 @@ export function measureTier(runs: RigRun[], minRuns: number = RIG_WORKLOAD.measu
   return {
     prefillTps: median(usable.map((run) => run.promptEvalCount / run.promptEvalSeconds)),
     decodeTps: median(usable.map((run) => run.evalCount / run.evalSeconds)),
-    loadSeconds: median(usable.map((run) => run.loadSeconds)),
+    loadSeconds: loadSeconds ?? median(usable.map((run) => run.loadSeconds)),
     runs: usable.length,
   };
 }
@@ -168,6 +181,8 @@ export function compareStamps(a: RigStamp, b: RigStamp): Comparability {
   if (a.driverVersion && b.driverVersion && a.driverVersion !== b.driverVersion) {
     notes.push(`Driver ${a.driverVersion} against ${b.driverVersion}.`);
   }
+  // A new card between two runs on one PC is the biggest difference of all.
+  if (a.gpu && b.gpu && a.gpu !== b.gpu) notes.push(`Graphics card ${a.gpu} against ${b.gpu}.`);
 
   return blockers.length
     ? { comparable: false, notes: blockers }
@@ -277,7 +292,11 @@ export function rigPoints(
 ): RigPoints {
   const reference = references[stamp.tier];
   if (!reference) return { kind: 'pending' };
-  const verdict = compareStamps(referenceStamp(stamp.tier, reference), stamp);
+  // Another computer's card is what points measure, not a caveat, and its
+  // driver comes with it. Both are named only on the reference card itself.
+  const base = referenceStamp(stamp.tier, reference);
+  const against = stamp.gpu === reference.gpu ? base : { ...base, gpu: undefined, vramGb: undefined, driverVersion: undefined };
+  const verdict = compareStamps(against, stamp);
   if (!verdict.comparable) return { kind: 'not-comparable', notes: verdict.notes };
   return { kind: 'points', points: tierPoints(measure, reference), notes: verdict.notes };
 }
