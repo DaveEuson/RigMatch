@@ -19,8 +19,8 @@ const card = { gpu: 'NVIDIA GeForce RTX 4070', vramGb: 12, unifiedMemory: false,
 // Nothing listens on the discard port, so the CLI sees no Ollama and answers fast.
 const noOllama = { ...process.env, OLLAMA_HOST: '127.0.0.1:9' };
 
-const runCli = (args, file = join(root, 'cli', 'rigmatch-fit.ts')) => new Promise((resolve) => {
-  execFile(process.execPath, [file, ...args], { cwd: root, env: noOllama, timeout: 30_000 }, (error, stdout, stderr) => {
+const runCli = (args, file = join(root, 'cli', 'rigmatch-fit.ts'), env = noOllama) => new Promise((resolve) => {
+  execFile(process.execPath, [file, ...args], { cwd: root, env, timeout: 30_000 }, (error, stdout, stderr) => {
     resolve({ code: error ? error.code ?? 1 : 0, stdout, stderr });
   });
 });
@@ -125,6 +125,47 @@ test('the command runs from source: --json, --provider and its errors', async ()
   assert.equal(badVram.code, 1);
   assert.match(badVram.stderr, /--vram takes a number of GB/);
   assert.match((await runCli(['--help'])).stdout, /^rigmatch-fit \d+\.\d+\.\d+: which local AI models/);
+});
+
+test('the command marks what Ollama lists as installed', async () => {
+  // A stand-in for Ollama's /api/tags, shaped like 0.35's reply. The real one
+  // on the PC this was written on had no models, so this is the only path
+  // that exercises the marks end to end.
+  const { createServer } = await import('node:http');
+  const GiB = 1024 ** 3;
+  const tags = { models: [
+    { name: 'qwen3:8b', size: 5.2 * GiB, details: { parameter_size: '8.2B' } },
+    { name: 'hf.co/someone/custom-7b-GGUF:Q4_K_M', size: 4.4 * GiB, details: { parameter_size: '7.2B' } },
+    { name: 'nomic-embed-text:latest', size: 0.27 * GiB, details: { parameter_size: '137M' } },
+  ] };
+  const requests = [];
+  const server = createServer((request, response) => {
+    requests.push(request.url);
+    response.setHeader('content-type', 'application/json');
+    response.end(request.url === '/api/tags' ? JSON.stringify(tags) : '{}');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  try {
+    for (const host of [`127.0.0.1:${port}`, `http://127.0.0.1:${port}/`, `0.0.0.0:${port}`]) {
+      const env = { ...process.env, OLLAMA_HOST: host };
+      const json = await runCli(['--vram', '12', '--json'], undefined, env);
+      assert.equal(json.code, 0, json.stderr);
+      const parsed = JSON.parse(json.stdout);
+      assert.equal(parsed.ollamaReachable, true, `OLLAMA_HOST=${host}`);
+      const installed = parsed.models.filter((model) => model.installed).map((model) => model.model).sort();
+      assert.deepEqual(installed, ['hf.co/someone/custom-7b-GGUF:Q4_K_M', 'qwen3:8b'], 'embedding models stay out even when installed');
+      assert.equal(parsed.models.find((model) => model.model.startsWith('hf.co/')).sizeGb, 4.4);
+    }
+    const table = await runCli(['--vram', '12', '--all'], undefined, { ...process.env, OLLAMA_HOST: `127.0.0.1:${port}` });
+    assert.match(table.stdout, /Ollama is running: 2 of these are installed, marked \*\./);
+    assert.match(table.stdout, /^[A-D] +qwen3:8b \* +5\.2 GB/m);
+    assert.ok(requests.every((url) => url === '/api/tags'), `only /api/tags is asked: ${requests.join(', ')}`);
+    assert.equal((await runCli(['--vram', '12', '--provider', 'lmstudio'], undefined, { ...process.env, OLLAMA_HOST: `127.0.0.1:${port}` })).code, 0);
+    assert.equal(requests.length, 4, 'LM Studio mode does not ask Ollama');
+  } finally {
+    server.close();
+  }
 });
 
 test('the built command is plain JS that needs only Node and systeminformation', async () => {
