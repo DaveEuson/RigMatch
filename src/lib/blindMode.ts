@@ -345,6 +345,26 @@ export function countBlindPicks(taste: BlindTaste, aliases: readonly string[] | 
   return taste.picks.filter((pick) => pick.contestants.some((model) => keys.has(normalizeModelKey(model)))).length;
 }
 
+/**
+ * "See the results" on the reveal asks for Your taste to be scrolled to and
+ * focused. Results may not be mounted yet when it asks, so the request waits
+ * here until Your taste takes it (takeTasteFocus), on mount or on the event.
+ */
+let tasteFocusRequested = false;
+export const BLIND_TASTE_FOCUS_EVENT = 'rigmatch:blind-taste-focus';
+
+export function requestTasteFocus(): void {
+  tasteFocusRequested = true;
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(BLIND_TASTE_FOCUS_EVENT));
+}
+
+/** True once per request: whoever takes it does the scrolling. */
+export function takeTasteFocus(): boolean {
+  const requested = tasteFocusRequested;
+  tasteFocusRequested = false;
+  return requested;
+}
+
 /** For "Clear all scores" and "Clear all data": the picks go with the scores. */
 export function clearBlindTaste(): void {
   if (typeof window === 'undefined') return;

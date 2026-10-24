@@ -452,6 +452,8 @@
 .app-shell[data-ui-mode='advanced'] .results-toolbar-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .app-shell[data-ui-mode='advanced'] .results-heading { margin: var(--s2) 0 0; color: var(--text-strong); font: 400 var(--fs-h2) / 1.2 var(--display); }
 .app-shell[data-ui-mode='advanced'] .your-taste-note { margin: 0; color: var(--muted); font: 400 var(--fs-ui) / 1.4 var(--ui); }
+/* Focused by the reveal's "See the results", never by Tab: no ring around a heading. */
+.app-shell[data-ui-mode='advanced'] .results-heading[tabindex='-1']:focus { outline: none; }
 
 /* The ranking: rows with a place, a portrait, the name and the score. */
 .app-shell[data-ui-mode='advanced'] .history-panel .utility-list { display: grid; gap: 0; margin: 0; padding: 0; border-top: 1px solid var(--line); list-style: none; }

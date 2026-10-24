@@ -57,3 +57,9 @@ test('names are shortened through the caller’s own formatter', () => {
   assert.match(standingLine(lineupStanding('gemma3:4b', LINEUP), 90, short), /^gemma3 is leading/);
   assert.match(standingLine(lineupStanding('qwen2.5:7b', LINEUP), 90, short), /^qwen2\.5 won/);
 });
+
+test('the saved winner is matched by model key, not by spelling', () => {
+  assert.deepEqual(lineupStanding('Gemma3:4B', LINEUP), { kind: 'leading', model: 'Gemma3:4B' });
+  // A blind show's seats never match a real name; the panel hides the line then.
+  assert.equal(lineupStanding('gemma3:4b', ['Contestant 1', 'Contestant 2']).kind, 'previous');
+});

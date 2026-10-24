@@ -105,6 +105,12 @@
   font: 500 12px/1 var(--figure);
 }
 
+/* Sealed for a blind show (TopBar `sealed`): it looks as off as it is. */
+.top-bar[inert] .top-bar-tabs,
+.top-bar[inert] .top-bar-tools {
+  opacity: 0.45;
+}
+
 .top-bar-tools {
   display: flex;
   flex: none;

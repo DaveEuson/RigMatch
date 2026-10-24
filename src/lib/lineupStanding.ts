@@ -13,6 +13,7 @@
  * so it is labeled rather than hidden — a beginner who ran a show yesterday
  * should still see that it happened.
  */
+import { normalizeModelKey } from './modelKey.ts';
 
 export type LineupStanding =
   /** The saved winner is in this lineup: a live standing. */
@@ -24,7 +25,8 @@ export type LineupStanding =
 
 export function lineupStanding(winner: string | undefined | null, lineup: string[]): LineupStanding {
   if (!winner) return { kind: 'none' };
-  return lineup.includes(winner)
+  // By model key, not spelling: "Qwen3:8B" and "qwen3:8b" are one contestant.
+  return lineup.some((model) => normalizeModelKey(model) === normalizeModelKey(winner))
     ? { kind: 'leading', model: winner }
     : { kind: 'previous', model: winner };
 }
