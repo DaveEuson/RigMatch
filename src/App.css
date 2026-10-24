@@ -2443,6 +2443,10 @@ tbody tr.computer-row.selected {
   font-style: normal;
 }
 
+.score-legend-strip .score-legend-next {
+  margin-top: var(--s2);
+}
+
 .model-filter-note {
   grid-column: 1 / -1;
   min-height: 30px;
@@ -11082,12 +11086,12 @@ tbody tr.selected {
 }
 
 .fit-grade {
-  display: inline-grid;
+  display: inline-flex;
   flex: none;
-  place-items: center;
-  width: 22px;
+  align-items: center;
+  gap: 3px;
   height: 22px;
-  padding: 0;
+  padding: 0 6px;
   border: 1px solid rgba(255, 249, 239, 0.18);
   border-radius: 6px;
   background: rgba(255, 249, 239, 0.05);
@@ -11104,6 +11108,7 @@ tbody tr.selected {
 .fit-grade.grade-d { border-color: rgba(var(--red-rgb), 0.38); }
 .fit-grade.grade-f { border-color: rgba(var(--red-rgb), 0.68); color: var(--red); background: rgba(var(--red-rgb), 0.12); }
 .fit-grade.grade-unknown { border-style: dashed; }
+.fit-grade-word { font-size: 11px; font-weight: 700; opacity: 0.8; }
 
 /* Opened by its grade button and anchored to it (the invoker is the popover's
    implicit anchor); flips above the button near the bottom of the window. */

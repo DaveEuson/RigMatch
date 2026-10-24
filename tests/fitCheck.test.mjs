@@ -60,6 +60,16 @@ test('ranking is best first, and marks what Ollama has installed', () => {
   assert.ok(!ranked.some((model) => model.row.name === 'nomic-embed-text:latest'), 'still no embedding models');
   assert.equal(ranked.filter((model) => model.installed).length, 2);
   assert.equal(rankModels(catalogRows(), card, { provider: 'lm-studio' }).find((m) => m.row.name === 'qwen3:8b').command, 'lms get qwen3-8b');
+
+  // `ollama pull gemma3` lists as gemma3:latest, which is the 4b under another
+  // name: it marks that row rather than adding a second, unmarked one.
+  const pulledBare = rankModels(catalogRows(), card, { installed: [{ name: 'gemma3:latest', sizeGb: 3.3 }] });
+  assert.equal(pulledBare.find((model) => model.row.name === 'gemma3:4b').installed, true);
+  assert.ok(!pulledBare.some((model) => model.row.name === 'gemma3:latest'), 'no extra gemma3:latest row');
+  assert.deepEqual(pulledBare.filter((model) => model.installed).map((model) => model.row.name), ['gemma3:4b']);
+  // A family whose latest is a size of its own keeps latest as its own row.
+  const withOwnLatest = catalogRows({ solo: { badges: [], sizes: { latest: { inputs: ['text'], sizeGb: 2 }, '1b': { inputs: ['text'], sizeGb: 0.8 } } } });
+  assert.deepEqual(withOwnLatest.map((row) => [row.name, row.aliases]), [['solo:1b', undefined], ['solo:latest', undefined]]);
 });
 
 test('the table shows the best 20 that run here, and says what it left out', () => {
@@ -193,6 +203,11 @@ test('the command marks what Ollama lists as installed', async () => {
     assert.equal(mine.code, 0, mine.stderr);
     assert.match(mine.stdout, /your 2 installed models, best first\./);
     assert.match(mine.stdout, /^[A-F] +hf\.co\/someone\/custom-7b-GGUF:Q4_K_M \* /m);
+    const mineJson = await runCli(['--vram', '12', '--installed', '--json'], undefined, { ...process.env, OLLAMA_HOST: `127.0.0.1:${port}` });
+    assert.equal(mineJson.code, 0, mineJson.stderr);
+    const listed = JSON.parse(mineJson.stdout).models;
+    assert.deepEqual(listed.map((model) => model.model).sort(), ['hf.co/someone/custom-7b-GGUF:Q4_K_M', 'qwen3:8b'], '--installed filters the JSON too');
+    assert.ok(listed.every((model) => model.installed));
     const clash = await runCli(['--installed', '--provider', 'lmstudio'], undefined, { ...process.env, OLLAMA_HOST: `127.0.0.1:${port}` });
     assert.equal(clash.code, 1);
     assert.match(clash.stderr, /--installed lists what Ollama has, so it works only with --provider ollama\./);
@@ -213,7 +228,8 @@ test('the built command is plain JS that needs only Node and systeminformation',
     });
     const built = join(out, 'rigmatch-fit.mjs');
     const source = readFileSync(built, 'utf8');
-    assert.ok(source.startsWith('#!/usr/bin/env node\n'), 'runs as a bin on macOS and Linux');
+    assert.ok(source.startsWith('#!/usr/bin/env node\n// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.\n'),
+      'runs as a bin on macOS and Linux, and says whose it is');
     const imports = [...source.matchAll(/^import .* from "([^"]+)";$/gm)].map((match) => match[1]);
     assert.ok(imports.length > 0);
     for (const name of imports) assert.match(name, /^(node:|systeminformation$)/, `nothing else is imported: ${name}`);

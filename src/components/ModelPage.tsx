@@ -142,9 +142,7 @@ export function ModelPage({
       {fitGrade && (
         <div className="mp-fit">
           <FitGradeChip grade={fitGrade} model={model} />
-          <p>
-            <b>Fit grade</b> · {fitGrade.summary}
-          </p>
+          <p>{fitGrade.summary}</p>
           {command && (
             <span className="mp-command">
               <code>{command}</code>

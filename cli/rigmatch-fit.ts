@@ -28,7 +28,7 @@ Usage: rigmatch-fit [options]
 
   --all               List every model, including ones that will not fit
   --installed         List only the models Ollama already has, graded
-  --json              Print every model as JSON, for scripts
+  --json              Print every model as JSON, for scripts (with --installed, only those)
   --provider <name>   ollama (default) or lmstudio: which download command to print
   --vram <GB>         Grade for a graphics card with this much memory instead of this one
   -h, --help          Show this
@@ -137,7 +137,7 @@ async function main(): Promise<number> {
   const models = rankModels(catalogRows(), hardware, { installed, provider });
   const ollamaReachable = installed !== null;
   console.log(values.json
-    ? JSON.stringify(toJson(models, hardware, { provider, ollamaReachable, version: pkg.version }), null, 2)
+    ? JSON.stringify(toJson(values.installed ? models.filter((model) => model.installed) : models, hardware, { provider, ollamaReachable, version: pkg.version }), null, 2)
     : formatTable(models, hardware, { provider, ollamaReachable, all: values.all, installedOnly: values.installed }));
   return 0;
 }

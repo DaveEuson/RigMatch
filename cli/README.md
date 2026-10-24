@@ -23,7 +23,7 @@ A      phi3:14b       7.9 GB  ~38 tok/s  Good fit    ollama pull phi3:14b
 |---|---|
 | `--all` | List every model, including the ones that will not fit |
 | `--installed` | List only the models Ollama already has, graded |
-| `--json` | Print every model as JSON, for scripts |
+| `--json` | Print every model as JSON, for scripts (with `--installed`, only those) |
 | `--provider lmstudio` | Print LM Studio's `lms get` commands instead of `ollama pull` |
 | `--vram 16` | Grade for a card with 16 GB instead of this one |
 

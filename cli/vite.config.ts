@@ -16,7 +16,12 @@ export default defineConfig({
     target: 'node20',
     minify: false,
     rolldownOptions: {
-      output: { entryFileNames: 'rigmatch-fit.mjs', banner: '#!/usr/bin/env node' },
+      output: {
+        entryFileNames: 'rigmatch-fit.mjs',
+        // The shebang first, so the file runs as a bin; the notice second, so
+        // the published file says whose it is like every source file does.
+        banner: '#!/usr/bin/env node\n// RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.',
+      },
       // No module here runs for its side effects, so whatever the CLI does not
       // call is dropped. Without this, modelCatalog.ts's import of appConfig.ts
       // kept the app's menu icons, and with them all of React.

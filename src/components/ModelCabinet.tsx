@@ -272,9 +272,10 @@ export function ModelCabinet({
   // Eight now: "Made In" sits after "By". Narrow, because it holds two letters.
   // Match is 90: at 76 a decimal score ("92.7 A") was cut to "92.7 A…".
   // From gives back 10 of those 14px; its header is the widest thing in it.
-  // Size is 104: the Fit grade sits in front of the size, and "14.58 GB"
-  // beside it needed 94.
-  const [colWidths, setColWidths] = useState([156, 104, 126, 86, 72, 110, 90, 116]);
+  // Size is 120: the "Fit B" chip sits in front of the size, and with
+  // "14.58 GB" beside it the pair needs about 100 inside the cell's padding.
+  // Good for gives back 14 of that: App.css already holds its cells to 112.
+  const [colWidths, setColWidths] = useState([156, 120, 112, 86, 72, 110, 90, 116]);
   // Popularity is the least essential column (the local Ollama API exposes no
   // pull counts), so it yields first on narrower windows instead of forcing
   // horizontal scrolling. Handled in JS because the <col> track would keep

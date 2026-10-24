@@ -33,6 +33,9 @@ export function FitGradeChip({ grade, model, family = false }: { grade: FitGrade
         title={`${heading}: ${grade.summary}`}
         aria-label={`${label} for ${model}${family ? ', the best fit in its family' : ''}. ${grade.summary}`}
       >
+        {/* "Fit" on the chip itself: a bare letter beside the Match pill's
+            "92.7 A" read as a second Match grade. */}
+        <span className="fit-grade-word">Fit</span>
         {grade.letter}
       </button>
       <div id={id} popover="auto" className="fit-grade-pop" role="note" onClick={(event) => event.stopPropagation()}>

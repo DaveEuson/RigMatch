@@ -84,7 +84,6 @@
   gap: var(--s1) var(--s3);
 }
 .mp-fit p { margin: 0; color: var(--text); }
-.mp-fit p b { color: var(--text-strong); }
 .mp-command { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .mp-command code { background: none; padding: 0; color: var(--muted); font: 500 var(--fs-ui) / 1.2 var(--figure); }
 .mp-command .copy-command-button { display: inline-flex; align-items: center; gap: var(--s1); }

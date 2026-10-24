@@ -35,8 +35,11 @@ export type FitHardware = {
 /** What Ollama's /api/tags lists, or null when nothing answered. */
 export type InstalledModel = { name: string; sizeGb: number; params?: string };
 
+/** A catalog size, with the other names Ollama lists it under. */
+export type CatalogRow = GradeRow & { aliases?: string[] };
+
 export type RankedModel = {
-  row: GradeRow;
+  row: CatalogRow;
   grade: FitGrade;
   installed: boolean;
   command: string;
@@ -57,23 +60,27 @@ const SIZE_TAG = /^(?:\d+(?:\.\d+)?[mb]|e\d+(?:\.\d+)?b|\d+x\d+(?:\.\d+)?b)$/i;
  * One row per downloadable size in the snapshot.
  *
  * `latest` is kept only where no plain size weighs the same, since it is
- * usually one of them under another name. Embedding models and image makers
- * are left out: the question here is which model to chat with.
+ * usually one of them under another name; that size then answers to
+ * family:latest as well, which is what Ollama lists after `ollama pull gemma3`.
+ * Embedding models and image makers are left out: the question here is which
+ * model to chat with.
  */
-export function catalogRows(families: Record<string, SnapshotFamily> = snapshot.families as Record<string, SnapshotFamily>): GradeRow[] {
-  const rows: GradeRow[] = [];
+export function catalogRows(families: Record<string, SnapshotFamily> = snapshot.families as Record<string, SnapshotFamily>): CatalogRow[] {
+  const rows: CatalogRow[] = [];
   for (const [family, facts] of Object.entries(families)) {
     const sizes = Object.entries(facts.sizes ?? {}).filter(([, size]) => !size.cloudOnly && (size.sizeGb ?? 0) > 0);
     const plain = sizes.filter(([tag]) => SIZE_TAG.test(tag));
     const latest = sizes.find(([tag]) => tag === 'latest');
-    const kept = latest && !plain.some(([, size]) => size.sizeGb === latest[1].sizeGb) ? [...plain, latest] : plain;
+    const twin = latest && plain.find(([, size]) => size.sizeGb === latest[1].sizeGb);
+    const kept = latest && !twin ? [...plain, latest] : plain;
     for (const [tag, size] of kept) {
       const name = `${family}:${tag}`;
       const capabilities = capabilitiesFor({
         name: family, tag, inputs: size.inputs, badges: facts.badges, description: facts.description,
       }) ?? undefined;
-      const row: GradeRow = {
+      const row: CatalogRow = {
         name, displayName: name, params: ollamaCatalog.inferParamsFromTag(tag), sizeGb: size.sizeGb ?? null, capabilities, description: facts.description,
+        ...(twin && twin[0] === tag ? { aliases: [`${family}:latest`] } : {}),
       };
       if (isChatModel(row)) rows.push(row);
     }
@@ -86,18 +93,18 @@ function isChatModel(row: GradeRow): boolean {
 }
 
 /**
- * Grade every model and sort best first: by points, then the bigger model,
- * then the name. Installed models Ollama lists that the snapshot does not
- * know (a Hugging Face import, a custom build) are graded too.
+ * Grade every model and sort best first: by letter, then by what it can do,
+ * then by points and size. Installed models Ollama lists that the snapshot
+ * does not know (a Hugging Face import, a custom build) are graded too.
  */
 export function rankModels(
-  catalog: GradeRow[],
+  catalog: CatalogRow[],
   hardware: Pick<FitHardware, 'vramGb' | 'unifiedMemory'>,
   { installed = null, provider = 'ollama' }: { installed?: InstalledModel[] | null; provider?: Provider } = {},
 ): RankedModel[] {
   const have = new Set((installed ?? []).map((model) => model.name));
-  const known = new Set(catalog.map((row) => row.name));
-  const extra: GradeRow[] = (installed ?? [])
+  const known = new Set(catalog.flatMap((row) => [row.name, ...(row.aliases ?? [])]));
+  const extra: CatalogRow[] = (installed ?? [])
     .filter((model) => !known.has(model.name))
     .map((model) => ({ name: model.name, displayName: model.name, params: model.params ?? '', sizeGb: model.sizeGb || null }))
     .filter(isChatModel);
@@ -105,7 +112,7 @@ export function rankModels(
     .map((row) => ({
       row,
       grade: gradeModel(row, hardware),
-      installed: have.has(row.name),
+      installed: have.has(row.name) || (row.aliases ?? []).some((alias) => have.has(alias)),
       command: pullCommand(row.name, provider),
     }))
     // Within a letter, models that can do more come first. The snapshot has
