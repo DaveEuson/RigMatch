@@ -346,6 +346,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
 .rm-compact-bar.urgent { background: color-mix(in srgb, var(--red) 14%, var(--panel)); }
 .rm-split-pick label { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; }
 .rm-split-pick select { flex: 1; min-width: 0; }
+.rm-split-wait, .rm-split-note { color: var(--muted); font-size: 13px; }
+.rm-split-pick .rm-btn-sm:disabled { opacity: 0.5; }
 
 /* ---- Transcript ------------------------------------------------------------------ */
 .rm-transcript { display: flex; flex: 1; flex-direction: column; gap: 14px; min-height: 0; padding: 20px; overflow-y: auto; container-type: inline-size; }
@@ -382,8 +384,11 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
 .rm-code-copy { display: block; min-height: 24px; margin-left: auto; color: var(--text-strong); font: 600 13px / 1 var(--ui); text-decoration: underline; text-underline-offset: 3px; }
 .rm-message-md a { color: var(--text-strong); }
 .rm-message-md h1, .rm-message-md h2, .rm-message-md h3 { margin: 8px 0 4px; color: var(--text-strong); font: 400 17px / 1.3 var(--display); }
-.rm-message-md table { border-collapse: collapse; margin: 6px 0; }
-.rm-message-md th, .rm-message-md td { padding: 4px 8px; border: 1px solid var(--line); }
+/* A wide table or picture scrolls or shrinks inside its bubble, like code does. */
+.rm-message-md table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 6px 0; }
+.rm-message-md img { max-width: 100%; height: auto; }
+/* Words stay whole in a cell; a table too wide for them scrolls instead. */
+.rm-message-md th, .rm-message-md td { padding: 4px 8px; border: 1px solid var(--line); overflow-wrap: normal; }
 .rm-message-time { display: flex; align-items: center; gap: 10px; margin-top: 4px; color: var(--muted); font: 500 12px / 1 var(--figure); }
 .rm-remember-btn { min-height: 24px; color: var(--muted); font: 400 13px / 1 var(--ui); text-decoration: underline; text-underline-offset: 3px; opacity: 0; }
 .rm-message:hover .rm-remember-btn, .rm-remember-btn:focus-visible { opacity: 1; }
@@ -407,7 +412,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
 /* A chat asking two: both answers to a question side by side. */
 .rm-split-start { display: flex; align-items: center; gap: 10px; color: var(--muted); }
 .rm-split-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
-.rm-split-cell { display: grid; gap: 8px; min-width: 0; }
+/* The column is the cell's width, not its widest line: an implicit auto column
+   let one long code line push a bubble far past its half of the row. */
+.rm-split-cell { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
 .rm-split-cell .rm-message { max-width: none; }
 .rm-split-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; padding-left: 50px; }
 .rm-split-actions button { min-height: 24px; color: var(--text-strong); font: 600 13px / 1 var(--ui); text-decoration: underline; text-underline-offset: 3px; }

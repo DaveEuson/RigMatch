@@ -36,6 +36,7 @@ import {
   createConversation,
   deriveTitle,
   keepColumn,
+  lostAttachment,
   migrateV1,
   parseStore,
   readStore,
@@ -715,6 +716,8 @@ export default function App() {
   /** Choosing the second model for a chat that asks two, and the one chosen so far. */
   const [pickingSecond, setPickingSecond] = useState(false);
   const [secondChoice, setSecondChoice] = useState("");
+  /** "May take turns" notes put away this session, by model pair. */
+  const [dismissedFitNotes, setDismissedFitNotes] = useState<Set<string>>(() => new Set());
   /** The message whose text was just copied, for a moment of "Copied". */
   const [copiedId, setCopiedId] = useState<string | null>(null);
   // Each model's declared memory, read once per model from /api/show.
@@ -810,6 +813,16 @@ export default function App() {
   const typingModel = answeringHere("main");
   /** Something is answering in the open chat. Another chat's answer does not hold this one up. */
   const busyHere = typingModel !== null || answeringHere("split") !== null;
+
+  // The second-model picker belongs to the chat it was opened in. Left open, it
+  // came back in the next chat to show one and took the focus there. Closed
+  // during render when the open chat changes, as React suggests over an effect.
+  const openChatKey = activeConversation?.id ?? `new:${activeBuddy ?? ""}`;
+  const [pickerChatKey, setPickerChatKey] = useState(openChatKey);
+  if (pickerChatKey !== openChatKey) {
+    setPickerChatKey(openChatKey);
+    setPickingSecond(false);
+  }
 
   /**
    * What the active model can actually be handed.
@@ -1105,10 +1118,19 @@ export default function App() {
       return sum + weights + (info ? kvCacheBytes(info, contextLimitFor(model)) : 0);
     }, 0);
     if (kvBudgetFromVram(vram, bytes) !== 0) return null;
-    return `${getDisplayName(activeBuddy)} and ${getDisplayName(secondModel)} need about ${formatGib(bytes)} together, `
-      + `and this PC has ${formatGib(vram.totalBytes)} of ${vram.unified ? "memory" : "graphics memory"}. `
-      + "They may take turns, so answers can be slower.";
-  }, [activeBuddy, secondModel, buddies, vram, contextInfo, contextLimitFor]);
+    // Measured against what models can use here, the share the memory meter
+    // budgets with, not the card's whole size: "need 10 GB, this PC has 12 GB,
+    // they may take turns" read as a contradiction.
+    const usable = kvBudgetFromVram(vram, 0) ?? 0;
+    const key = `${activeBuddy}|${secondModel}`;
+    if (dismissedFitNotes.has(key)) return null;
+    return {
+      key,
+      text: `${getDisplayName(activeBuddy)} and ${getDisplayName(secondModel)} need about ${formatGib(bytes)} together, `
+        + `more than the ${formatGib(usable)} of ${vram.unified ? "memory" : "graphics memory"} models can use on this PC. `
+        + "They may take turns, so answers can be slower.",
+    };
+  }, [activeBuddy, secondModel, buddies, vram, contextInfo, contextLimitFor, dismissedFitNotes]);
 
   // Exact where Ollama has told us, estimated only for what it has not seen yet.
   //
@@ -1183,6 +1205,29 @@ export default function App() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [confirmDelete, compactPlan, personalityEditor, profileModal, settingsOpen, sidebarOpen, moreOpen, pickingSecond]);
+
+  // A link in an answer opens in the system's browser. Followed here it
+  // replaced Chat with the page, in a window with no Back to return by. Chat
+  // draws no links of its own, so every one is a model's.
+  useEffect(() => {
+    const onLinkClick = (event: MouseEvent) => {
+      // Middle-click opens too; right-click is left to its menu.
+      if (event.type === "auxclick" && event.button !== 1) return;
+      const link = (event.target as Element | null)?.closest?.("a[href]");
+      if (!(link instanceof HTMLAnchorElement)) return;
+      event.preventDefault();
+      const url = new URL(link.href, window.location.href);
+      if ((url.protocol === "http:" || url.protocol === "https:") && url.origin !== window.location.origin) {
+        void invoke("open_link", { url: url.href }).catch(() => undefined);
+      }
+    };
+    document.addEventListener("click", onLinkClick, true);
+    document.addEventListener("auxclick", onLinkClick, true);
+    return () => {
+      document.removeEventListener("click", onLinkClick, true);
+      document.removeEventListener("auxclick", onLinkClick, true);
+    };
+  }, []);
 
   // The More menu closes on Escape and on a click anywhere else.
   useEffect(() => {
@@ -1795,6 +1840,9 @@ export default function App() {
       ...(usableAttachment ? { images: [usableAttachment.base64], attachmentName: usableAttachment.name } : {}),
     };
     setActiveConversationId(target.id);
+    // A first message makes the chat it was typed in; a picker open there is
+    // still in the same chat, so it stays open.
+    if (!activeConversation) setPickerChatKey(target.id);
     setDraft("");
     // Sent once, with this turn. Left in place it rode along with every later
     // message too, the same picture or recording over and over. One set aside
@@ -1860,6 +1908,9 @@ export default function App() {
       if (streaming[streamKey(target.id, column)]) continue;
       const asked = untilLastAsk(column === "main" ? target.messages : target.split.messages);
       if (!asked || (column === "main" && asked.length <= target.split.from)) continue;
+      // Its picture or recording is gone after a restart (only the name is
+      // saved), and asking without it got an answer about nothing.
+      if (lostAttachment(asked[asked.length - 1])) continue;
       void answerInColumn({ target, column, model: column === "main" ? target.modelName : target.split.modelName, asked });
     }
   }, [activeConversation, streaming, answerInColumn]);
@@ -1997,6 +2048,12 @@ export default function App() {
   const clearAllHistory = () => {
     // Asked for in so many words, so an unreadable file is no longer kept.
     startFresh("conversations");
+    // Every answer still coming in goes too. Left running, they held the
+    // graphics card for chats that no longer exist, with no Stop to press.
+    for (const controller of Object.values(abortRefs.current)) controller.abort();
+    abortRefs.current = {};
+    setStreaming({});
+    setLoading({});
     setConversations([]);
     setActiveConversationId(null);
     setTokenMarkByKey({});
@@ -2065,13 +2122,16 @@ export default function App() {
   }, [conversations, settings.activePersonalityId]);
 
   const deleteConversation = useCallback((id: string) => {
+    // Its answers stop with it. Once the chat was gone so was its Stop button,
+    // and Ollama kept generating for nobody until it finished.
+    stopColumns(id, ["main", "split"]);
     setConversations((prev) => prev.filter((c) => c.id !== id));
     setTokenMarkByKey(({ [id]: _removed, ...rest }) => rest);
     // Land it immediately: a deletion still sitting in the coalescing window
     // when the app closes would come back on the next launch.
     setActiveConversationId((current) => (current === id ? null : current));
     void writerRef.current?.flush();
-  }, []);
+  }, [stopColumns]);
 
   /**
    * Summarize the older turns of the open thread.
@@ -2309,6 +2369,14 @@ export default function App() {
 
   /** The open chat laid out side by side, when it asks two models. */
   const splitView = activeConversation?.split ? splitTurns(activeConversation) : null;
+
+  /**
+   * What Delete removes. A chat asking two holds the second model's answers
+   * too; its questions are the first side's, so they are counted once.
+   */
+  const deleteCount = confirmDelete
+    ? confirmDelete.messages.length + (confirmDelete.split?.messages.filter((m) => m.role !== "user").length ?? 0)
+    : 0;
 
   /**
    * Who an answer is from. A chat with one model shows the personality; one
@@ -2583,8 +2651,8 @@ export default function App() {
           >
             <strong>Delete “{confirmDelete.title}”?</strong>
             <p>
-              {confirmDelete.messages.length} message{confirmDelete.messages.length === 1 ? "" : "s"} with{" "}
-              {getDisplayName(confirmDelete.modelName)}. This cannot be undone.
+              {deleteCount} message{deleteCount === 1 ? "" : "s"} with {getDisplayName(confirmDelete.modelName)}
+              {confirmDelete.split ? ` and ${getDisplayName(confirmDelete.split.modelName)}` : ""}. This cannot be undone.
             </p>
             <div className="rm-modal-actions">
               <button type="button" className="rm-btn-sm" onClick={() => setConfirmDelete(null)}>Cancel</button>
@@ -3050,10 +3118,15 @@ export default function App() {
                     ))}
                   </select>
                 </label>
+                {/* A chat cannot gain a second side mid-answer. Add used to do
+                    nothing then, with no word why. */}
+                {busyHere && <span id="rm-split-wait" className="rm-split-wait">Once this answer finishes</span>}
                 <button
                   type="button"
                   className="rm-btn-sm"
                   onClick={() => askSecondModel(chosenSecond)}
+                  disabled={busyHere}
+                  aria-describedby={busyHere ? "rm-split-wait" : undefined}
                 >
                   Add
                 </button>
@@ -3066,7 +3139,20 @@ export default function App() {
                 </button>
               </div>
             )}
-            {splitFitNote && <p className="rm-test-note">{splitFitNote}</p>}
+            {/* Said once and put away: on a short window it took a third of
+                the height for as long as the chat was open. */}
+            {splitFitNote && (
+              <div className="rm-compact-bar" role="note">
+                <span>{splitFitNote.text}</span>
+                <button
+                  type="button"
+                  className="rm-btn-sm"
+                  onClick={() => setDismissedFitNotes((prev) => new Set(prev).add(splitFitNote.key))}
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
 
             {/* Offered before the limit, not after: past it Ollama has already
                 started dropping the oldest turns on its own. Not in a chat
@@ -3153,6 +3239,8 @@ export default function App() {
                   )}
                   {splitView.turns.map((turn, turnIndex) => {
                     const newest = turnIndex === splitView.turns.length - 1;
+                    // The newest question's file, when only its name survived a restart.
+                    const missing = newest ? lostAttachment(turn.ask) : null;
                     return (
                       <Fragment key={turn.ask?.id ?? `turn-${turnIndex}`}>
                         {turn.ask && renderMessage(turn.ask, faceFor(activeBuddyObj.modelName))}
@@ -3181,6 +3269,8 @@ export default function App() {
                                         else if (activeConversation) stopColumns(activeConversation.id, [column]);
                                       }}
                                       title={answering ? `Stop ${getDisplayName(model)} and free the graphics card` : undefined}
+                                      disabled={!answering && Boolean(missing)}
+                                      aria-describedby={!answering && missing ? `rm-lost-${turn.ask?.id}` : undefined}
                                     >
                                       {answering ? "Stop" : "Regenerate"}
                                     </button>
@@ -3200,6 +3290,12 @@ export default function App() {
                             );
                           })}
                         </div>
+                        {missing && (
+                          <p id={`rm-lost-${turn.ask?.id}`} className="rm-split-note">
+                            {missing} is not kept once Chat closes, so this question cannot be asked again as it was.
+                            Attach it again and send the question to ask both.
+                          </p>
+                        )}
                       </Fragment>
                     );
                   })}
@@ -3282,6 +3378,8 @@ export default function App() {
                         className="rm-btn rm-btn-line"
                         // Stop takes this button's place, so focus moves to the box.
                         onClick={() => { regenerate(["main", "split"]); composeRef.current?.focus(); }}
+                        // Said under the newest answers when its file is gone.
+                        disabled={Boolean(lostAttachment(splitView?.turns[splitView.turns.length - 1]?.ask))}
                       >
                         Regenerate both
                       </button>
