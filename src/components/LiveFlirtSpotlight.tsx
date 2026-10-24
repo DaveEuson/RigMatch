@@ -8,7 +8,8 @@ import { useBlindMasking } from '../lib/blindShowContext';
 import { useShowTheme } from '../hooks/useShowTheme';
 import { CompareScreen, HostStrip } from './SimpleWizard';
 import { Maximize2, Minimize2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { sealSiblings } from '../lib/sealSiblings';
 
 /**
  * Advanced Mode's live show: Simple Mode's show, laid over the screen while a
@@ -29,6 +30,11 @@ export function LiveFlirtSpotlight({
   onStop?: () => void;
 }) {
   const [minimized, setMinimized] = useState(false);
+  // While the stage is up full size, the screen under it is out of reach, not
+  // just out of sight: it was still in the Tab order and read aloud, and in a
+  // blind show it holds each contestant's name and score as they finish.
+  const [cover, setCover] = useState<HTMLElement | null>(null);
+  useEffect(() => (cover ? sealSiblings(cover) : undefined), [cover]);
   // The theme song, if it is on, for as long as this is up: it is mounted only
   // while a run goes. Speed Dating only; a single model's test is not a show.
   const extras = useShowExtras();
@@ -76,6 +82,7 @@ export function LiveFlirtSpotlight({
 
   return (
     <section
+      ref={setCover}
       className={stage === 'trojan' ? 'live-show sw-shell stage-trojan' : 'live-show sw-shell'}
       aria-label={isShow ? 'Speed Dating, live' : 'Model test, live'}
     >

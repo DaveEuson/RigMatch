@@ -134,15 +134,10 @@ export function ModelScorePill({ score }: { score?: TestedModelScore }) {
 
 export function ScoreLegend() {
   return (
-    <div className="score-legend-strip" aria-label="Match score and Fit grade legend">
+    <div className="score-legend-strip" aria-label="Match score legend">
       <span>Match score</span>
       <strong>Answer quality + speed + finish rate + computer fit.</strong>
-      <em>S is best, then A/B/C. Scores are local to this computer.</em>
-      {/* The Size column's "Fit B" is a different scale, given before any
-          test, so it is explained here beside the one it could be mistaken for. */}
-      <span className="score-legend-next">Fit grade</span>
-      <strong>How well a model should run on this computer, before any test.</strong>
-      <em>A is the best pick, F will not fit. Click one for the reasons.</em>
+      <em>S is best, then A/B/C. Scores are local to this computer. The Fit letter is a different scale, explained under the fit filters.</em>
     </div>
   );
 }

@@ -60,11 +60,13 @@ export function CopyCommandButton({ command, variant = 'icon' }: { command: stri
   const [copied, setCopied] = useState<boolean | null>(null);
   useEffect(() => {
     if (copied === null) return undefined;
-    const timer = window.setTimeout(() => setCopied(null), 1600);
+    // A failure stays up longer: it is the one the reader has to act on.
+    const timer = window.setTimeout(() => setCopied(null), copied ? 1600 : 4000);
     return () => window.clearTimeout(timer);
   }, [copied]);
   const title = copied === null ? `Copy “${command}”` : copied ? 'Copied' : 'Could not reach the clipboard';
-  return (
+  const note = copied === null ? null : copied ? 'Copied' : 'Couldn’t copy';
+  const button = (
     <button
       type="button"
       className={variant === 'icon' ? 'icon-action copy-command-button' : 'btn btn-link copy-command-button'}
@@ -73,7 +75,17 @@ export function CopyCommandButton({ command, variant = 'icon' }: { command: stri
       aria-label={copied === null ? `Copy the command ${command}` : title}
     >
       {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-      {variant === 'text' && <span>{copied === null ? 'Copy' : copied ? 'Copied' : 'Not copied'}</span>}
+      {variant === 'text' && <span>{note ?? 'Copy'}</span>}
     </button>
+  );
+  if (variant === 'text') return button;
+  // The icon said "Copied" only in its tooltip, so a click looked like nothing
+  // happened, and a failure looked the same. The word sits beside it for a
+  // moment, in a status region so a screen reader hears it too.
+  return (
+    <span className="copy-command">
+      {button}
+      <span className="copy-command-note" role="status">{note}</span>
+    </span>
   );
 }

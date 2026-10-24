@@ -111,6 +111,7 @@ import {
   getBenchmarkForModel,
   getDiskGuard,
   getHardwareFit,
+  USABLE_VRAM_MIN_GB,
   getLineupBenchmarkBlocker,
   getModelAliases,
   getModelBenchmarkBlocker,
@@ -204,7 +205,7 @@ import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, Choi
 import { SkillRunMiniBar, LiveBuildModal, DemoResultModal } from './components/SkillDemoViewers';
 import { RunSheet } from './components/RunSheet';
 import { ClearScoresModal } from './components/ClearScoresModal';
-import { clearBlindTaste, clearModelFromBlindTaste, countBlindPicks, maskProgress, maskRows, maskText, readBlindTaste, shuffleLineup } from './lib/blindMode';
+import { clearBlindTaste, clearModelFromBlindTaste, countBlindPicks, maskProgress, maskRows, maskText, readBlindTaste, requestTasteFocus, shuffleLineup } from './lib/blindMode';
 import { BlindShowContext } from './lib/blindShowContext';
 import { useBlindShow } from './lib/useBlindShow';
 import { BlindOverlay } from './components/BlindShow';
@@ -277,6 +278,7 @@ import {
   type LineupOutcome,
   type VideoLineupEntry,
 } from './lib/videoLineup';
+import { footprintFit, mixtureSpillFit } from './lib/modelGrade';
 import { formatVideoEstimate, videoFit } from './lib/videoFit';
 import { readVideoCalibration } from './lib/videoCalibrationStore';
 import { runImageLabChallenge } from './lib/imageGenRunner';
@@ -569,10 +571,12 @@ function App() {
   // Achievements are read from what is already kept, so a run, a retest or a
   // judged show earns its badge the moment it is saved. The first look, as the
   // app opens, is quiet: anything found then was earned before this launch. The
-  // preview page's sample data earns nothing.
+  // preview page's sample data earns nothing. A show saves each contestant's run
+  // as it finishes, so the look waits for the show to end: "First date" is
+  // "Finish your first show", and it appeared after the first of two models.
   const achievementsLookedRef = useRef(false);
   useEffect(() => {
-    if (!isDesktopRuntime) return;
+    if (!isDesktopRuntime || isListTesting) return;
     const quiet = !achievementsLookedRef.current;
     achievementsLookedRef.current = true;
     recordAchievements({
@@ -582,7 +586,7 @@ function App() {
       labChallenges: quiet ? labChallengesWithOutput(readAdvancedLabResults()) : undefined,
       platform: system.platform,
     }, { quiet });
-  }, [runHistory, benchmarkByModel, system.platform]);
+  }, [runHistory, benchmarkByModel, system.platform, isListTesting]);
   // Held here, not inside SimpleWizard: switching to Advanced unmounts the wizard,
   // and the user should come back to the step they left.
   const [wizardStep, setWizardStep] = useState<WizardStepId>('setup');
@@ -740,7 +744,16 @@ function App() {
 
   const modelRows = useMemo(
     () => {
-      const rows = mergeModelRows(catalog, localModels);
+      // A mixture of experts too big for graphics memory can still run with
+      // part of it in system memory; the override reaches the fit pill, the
+      // download guard and Simple Mode alike (mixtureSpillFit).
+      const spillHardware = {
+        vramGb: system.gpu.vramGb, unifiedMemory: Boolean(system.gpu.isUnifiedMemory), ramGb: system.memory.totalGb, gpu: system.gpu.model,
+      };
+      const rows = mergeModelRows(catalog, localModels).map((row) => {
+        const spill = mixtureSpillFit(row, spillHardware);
+        return spill ? { ...row, fitOverride: spill } : row;
+      });
       // Generation models join the same list rather than living on a screen of
       // their own. Someone who wants to make a video searches for "makes
       // video"; that video comes from Hugging Face and runs on ComfyUI is our
@@ -763,15 +776,24 @@ function App() {
             installLabel: entry.installedFile ? 'Installed' : 'Download',
             canDownload: !entry.installedFile,
             pulls: null,
+            // Both say which part of the download has to fit (footprintFit):
+            // the Size column shows the whole download, and the fit reads a
+            // smaller number. A Mac's video fit already says how much it needs.
             ...(lineup
-              ? { fitOverride: asHardwareFit(videoFit(lineup.sizing, videoMachine, { hasToken: hasToken || entry.installedFile })) }
+              ? {
+                fitOverride: videoMachine.unifiedMemory
+                  ? asHardwareFit(videoFit(lineup.sizing, videoMachine, { hasToken: hasToken || entry.installedFile }))
+                  : footprintFit(asHardwareFit(videoFit(lineup.sizing, videoMachine, { hasToken: hasToken || entry.installedFile })), lineup.sizing.ditGb, entry.sizeGb),
+              }
               : {}),
-            ...(footprint != null ? { fitOverride: getHardwareFit({ params: entry.params, sizeGb: footprint }, videoMachine.vramGb) } : {}),
+            ...(footprint != null
+              ? { fitOverride: footprintFit(getHardwareFit({ params: entry.params, sizeGb: footprint }, videoMachine.vramGb), footprint, entry.sizeGb) }
+              : {}),
           };
         });
       return [...generation, ...rows];
     },
-    [catalog, localModels, comfyFolders, videoMachine],
+    [catalog, localModels, comfyFolders, videoMachine, system.gpu.vramGb, system.gpu.isUnifiedMemory, system.memory.totalGb, system.gpu.model],
   );
 
   const selectedRow = modelRows.find(
@@ -1150,7 +1172,8 @@ function App() {
         fitTier: fit.tone === 'sweet-spot' ? 'great' : fit.tone === 'good' ? 'well' : 'slower',
         // The grid only ever shows models that fit, so every tier label reads the
         // same. State the numbers a beginner actually needs to judge it.
-        fitDetail: row.sizeGb && vramGb > 0
+        // Not "2 of 0.5 GB": under USABLE_VRAM_MIN_GB the model runs on the processor.
+        fitDetail: row.sizeGb && vramGb >= USABLE_VRAM_MIN_GB
           ? `${Math.round(row.sizeGb * 10) / 10} of ${formatGb(vramGb)}`
           : row.sizeGb
             ? `${formatGb(row.sizeGb)} on disk`
@@ -4830,6 +4853,16 @@ function App() {
       setChatOpen(true);
     }
   }, [setChatOpen, tellUser]);
+  // The reveal's "See the results": Results, with the pick just saved in view.
+  // It used to close on Comparison, though the reveal had just said the pick
+  // was on Results. A Lab channel's Results has no Your taste, so Reads
+  // images opens chat's, as the Top Match chip does.
+  const closeBlindReveal = useCallback(() => {
+    endBlindShow();
+    if (workbenchInfo.id === 'reading') chooseWorkbench('chat');
+    selectNav('history');
+    requestTasteFocus();
+  }, [endBlindShow, workbenchInfo.id, chooseWorkbench, selectNav]);
   // What is running, for the load strip. A render and a run can overlap; the
   // render is what holds the graphics card, so it is the one shown.
   const runningLine = renderActivity ? (
@@ -5015,6 +5048,9 @@ function App() {
         onOpenSettings={() => { setSettingsSectionRequest(null); selectNav('settings'); }}
         onOpenChat={() => { void openChatApp(); }}
         onOpenSupport={() => setSupportModalOpen(true)}
+        // The whole blind session, reveal included: the overlay leaves an
+        // element that is already inert to its owner.
+        sealed={Boolean(blind.session)}
       />
       <LoadStrip system={system} running={runningLine} hideReadings={Boolean(blindMasking)} />
       {uiMode === 'beginner' && (
@@ -5353,6 +5389,7 @@ function App() {
             diskGuard={diskGuard}
             vramGb={system.gpu.vramGb}
             unifiedMemory={Boolean(system.gpu.isUnifiedMemory)}
+            gpuModel={system.gpu.model}
             platform={system.platform}
             queuedCount={queuedRows.length}
             isBenchmarking={isBenchmarking || isListTesting}
@@ -5634,7 +5671,7 @@ function App() {
             Report ready: {shownShowResult.results.length} model{shownShowResult.results.length === 1 ? '' : 's'} compared,
             {' '}{getFriendlyModelName(shownShowResult.winner)} came first
           </span>
-          <button type="button" className="btn btn-line btn-sm" onClick={() => { setOpenReportId(readyReportId); setReportOpen(true); }}>
+          <button type="button" className="btn btn-line btn-sm" onClick={() => { setOpenReportId(readyReportId); setReportOpen(true); setReportReady(false); }}>
             See the report
           </button>
           <button type="button" className="report-ready-dismiss" onClick={() => setReportReady(false)} aria-label="Dismiss report notice">
@@ -5948,7 +5985,7 @@ function App() {
         />
       )}
       {blind.session && blind.session.stage !== 'running' && (
-        <BlindOverlay session={blind.session} onPick={blind.pick} onSkip={blind.end} onClose={blind.end} />
+        <BlindOverlay session={blind.session} onPick={blind.pick} onSkip={blind.end} onClose={closeBlindReveal} />
       )}
 
     </div>

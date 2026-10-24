@@ -76,7 +76,20 @@ function parseSizeToGb(detail) {
     : Math.round(value * 10) / 10;
 }
 
+/**
+ * Total parameters of the expert-count tags. "8x7b" is eight 7B experts that
+ * share their attention layers, 46.7B in all, not 7B (the first number the
+ * plain pattern below would find) and not 56B. Unlisted ones are estimated
+ * at 80% of the product, which is where Mixtral's two land.
+ */
+const EXPERT_TAG_TOTALS = { '8x7b': '47B', '8x22b': '141B', '16x17b': '109B', '128x17b': '400B' };
+
 function inferParamsFromTag(tag) {
+  const experts = String(tag || '').toLowerCase().match(/^(\d+)x(\d+(?:\.\d+)?)b/);
+  if (experts) {
+    return EXPERT_TAG_TOTALS[`${experts[1]}x${experts[2]}b`]
+      ?? `${Math.round(Number(experts[1]) * Number(experts[2]) * 0.8)}B`;
+  }
   const match = String(tag || '').match(/(\d+(?:\.\d+)?)(m|b)/i);
   if (!match) return tag === 'latest' ? 'Latest' : 'Unknown';
   return `${match[1]}${match[2].toUpperCase()}`;

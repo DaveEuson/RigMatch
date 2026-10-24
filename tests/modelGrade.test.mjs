@@ -2,8 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { activeShare, describeSpeed, gradeModel, gradeRow, measuredBandwidth, pullCommand, rigBandwidth } = await import('../src/lib/modelGrade.ts');
-const { getHardwareFit } = await import('../src/lib/modelCatalog.ts');
+const { activeShare, describeSpeed, footprintFit, gradeModel, gradeRow, measuredBandwidth, mixtureSpillFit, pullCommand, rigBandwidth } = await import('../src/lib/modelGrade.ts');
+const { describeFitPlainly, getHardwareFit } = await import('../src/lib/modelCatalog.ts');
 const { MATCH_GRADE_BANDS } = await import('../src/lib/scoring.ts');
 
 /**
@@ -29,7 +29,7 @@ test('an 8B model on a 12 GB card is an A, explained in plain words', () => {
 test('the grade never disagrees with the fit pill beside it', () => {
   const sizes = [null, 0.3, 1, 2.5, 4, 5.2, 7.4, 9.3, 11, 12.5, 13.8, 14, 19, 26, 43];
   const params = ['1B', '3B', '8B', '14B', '27B', '32B', '70B', 'Unknown'];
-  for (const vramGb of [0, 2, 4, 8, 12, 16, 24, 48]) {
+  for (const vramGb of [0, 0.5, 1.9, 2, 4, 8, 12, 16, 24, 48]) {
     for (const sizeGb of sizes) {
       for (const p of params) {
         const model = row(`probe:${p}`, p, sizeGb);
@@ -89,15 +89,20 @@ test('Fit grade letters are their own scale, not the Match Score\'s', () => {
   assert.ok(!seen.has('S') && !seen.has('B+'));
 });
 
-test('no graphics card: a small model runs on the processor, a big one waits for a known GPU', () => {
+test('no graphics memory: a small model runs on the processor, a big one is too big', () => {
   const small = gradeModel(row('qwen3:1.7b', '1.7B', 1.4), { vramGb: 0 });
   assert.match(small.summary, /^No graphics memory found, so it runs on the processor · about \d+ words a second/);
   assert.ok(small.points <= 69, 'a "Small pick" is a tight fit');
   assert.ok(!small.summary.includes('long chats'), 'chat memory comes out of RAM, which nothing here measures');
 
-  const big = gradeModel(row('qwen3:8b', '8B', 5.2), { vramGb: 0 });
-  assert.equal(big.letter, '?');
-  assert.equal(big.summary, 'Graphics memory unknown, so RigMatch cannot grade it yet');
+  // It said "? Graphics memory unknown, cannot grade it yet" for every model
+  // over 4 GB, deepseek-r1:70b included, beside "runs on the processor" rows.
+  for (const [name, params, size] of [['qwen3:8b', '8B', 5.2], ['deepseek-r1:70b', '70B', 43]]) {
+    const big = gradeModel(row(name, params, size), { vramGb: 0 });
+    assert.equal(big.letter, 'F', name);
+    assert.equal(big.summary, 'Too big to run without a graphics card');
+    assert.equal(big.fit.tone, getHardwareFit(row(name, params, size), 0).tone, 'the pill says the same');
+  }
 });
 
 test('a mixture of experts is faster than its size, but has to fit whole', () => {
@@ -229,11 +234,44 @@ test('a Models row is graded by its whole tag, with what the list has measured',
 
   const tested = listRow('llama3.1', '8b', '8B', 4.9, { installed: true });
   const scores = { 'llama3.1:8b': { model: 'llama3.1:8b', total: 80, grade: 'B+', speed: 70, sobriety: 70, stability: 100, fit: 88, completedAt: '2026-10-24T00:00:00Z', tokensPerSecond: 80 } };
-  assert.equal(measuredBandwidth([tested, moe], scores, 12), 392);
-  assert.equal(measuredBandwidth([moe], scores, 12), null);
+  assert.equal(measuredBandwidth([tested, moe], scores, { vramGb: 12 }), 392);
+  assert.equal(measuredBandwidth([moe], scores, { vramGb: 12 }), null);
   const fromBenchmark = gradeRow(listRow('qwen3', '8b', '8B', 5.2), { vramGb: 12 }, { benchmark: { avgTokensPerSecond: 50 } });
   assert.equal(fromBenchmark.speedSource, 'measured');
   assert.equal(fromBenchmark.tokensPerSecond, 50);
+});
+
+test('a score from another computer is not "tested here"', () => {
+  const listRow = (family, tag, params, sizeGb) => ({
+    id: `${family}:${tag}`, name: family, tag, params, sizeGb, pack: '', source: 'Ollama', live: false,
+    displayName: `${family}:${tag}`, installed: true, ready: true, installLabel: '',
+  });
+  const llama = listRow('llama3.1', '8b', '8B', 4.9);
+  const card = { vramGb: 12, gpu: 'NVIDIA GeForce RTX 4070' };
+  const scored = (rig) => ({
+    model: 'llama3.1:8b', total: 80, grade: 'B+', speed: 70, sobriety: 41, stability: 100, fit: 88,
+    completedAt: '2026-10-24T00:00:00Z', tokensPerSecond: 80, rig: { appVersion: '0.9.9', ...rig },
+  });
+  const benchmark = { avgTokensPerSecond: 80 };
+
+  const here = gradeRow(llama, card, { score: scored({ gpu: 'NVIDIA GeForce RTX 4070', vramGb: 12 }), benchmark });
+  assert.equal(here.speedSource, 'measured');
+  assert.match(here.summary, /when tested here · answers scored 41 in its test here$/);
+
+  for (const [why, rig] of [
+    ['on a networked computer', { host: 'gaming-pc.local' }],
+    ['before a GPU swap', { gpu: 'NVIDIA GeForce RTX 3060', vramGb: 12 }],
+    ['on a card with other memory', { gpu: 'NVIDIA GeForce RTX 4070', vramGb: 8 }],
+  ]) {
+    const elsewhere = gradeRow(llama, card, { score: scored(rig), benchmark });
+    assert.equal(elsewhere.speedSource, 'estimate', why);
+    assert.doesNotMatch(elsewhere.summary, /tested here/, why);
+    assert.equal(measuredBandwidth([llama], { 'llama3.1:8b': scored(rig) }, card), null, `${why}: no calibration from it either`);
+  }
+  // A new build of the same model on the same card is still this computer's measurement.
+  assert.equal(gradeRow(llama, card, { score: scored({ gpu: 'NVIDIA GeForce RTX 4070', vramGb: 12, modelDigest: 'old' }) }).speedSource, 'measured');
+  // An older score with no stamp at all is taken as this computer's, as the app's badges take it.
+  assert.equal(gradeRow(llama, card, { score: { ...scored({}), rig: undefined } }).speedSource, 'measured');
 });
 
 test('speeds read as rounded words, because they are forecasts', () => {
@@ -247,4 +285,85 @@ test('the copy button and the CLI print the same download command', () => {
   assert.equal(pullCommand('qwen3:8b', 'lm-studio'), 'lms get qwen3-8b');
   assert.equal(pullCommand('gemma3:latest', 'lm-studio'), 'lms get gemma3');
   assert.equal(pullCommand('qwen/qwen3-4b', 'lm-studio'), 'lms get qwen/qwen3-4b', "LM Studio's own key is kept");
+});
+
+test('the fit pill itself treats a carve-out under 2 GB as no graphics card', () => {
+  // The pill, the download guard and Simple Mode all read getHardwareFit, so
+  // they agree with the grade: llama3.2:3b on a 0.5 GB Radeon 610M is a small
+  // pick for the processor, not "Too big".
+  const small = getHardwareFit({ params: '3B', sizeGb: 2 }, 0.5);
+  assert.equal(small.tone, 'tight');
+  assert.equal(small.label, 'Small pick');
+  assert.equal(small.recommend, true);
+  const big = getHardwareFit({ params: '8B', sizeGb: 5.2 }, 0.5);
+  assert.equal(big.tone, 'out-of-league', 'the card is known, so a big model is too big, not unknown');
+  assert.equal(big.recommend, false);
+  assert.equal(describeFitPlainly({ params: '3B', sizeGb: 2 }, 0.5), 'Small enough to run on the processor. Your graphics card is too small to hold a model');
+  assert.equal(getHardwareFit({ params: '1B', sizeGb: 1 }, 2).tone, 'sweet-spot', '2 GB is a real card');
+});
+
+test('told there is no graphics card, the grades are the same and only the words differ', () => {
+  const none = { vramGb: 0, noGpu: true };
+  const big = gradeModel(row('qwen3:14b', '14B', 9.3), none);
+  assert.equal(big.letter, 'F');
+  assert.equal(big.summary, 'Too big to run without a graphics card');
+  assert.match(gradeModel(row('llama3.2:3b', '3B', 2), none).summary, /^No graphics card, so it runs on the processor/);
+  for (const [name, params, size] of [['qwen3:14b', '14B', 9.3], ['llama3.2:3b', '3B', 2], ['qwen3:0.6b', '0.6B', 0.5]]) {
+    assert.equal(gradeModel(row(name, params, size), { vramGb: 0 }).points, gradeModel(row(name, params, size), none).points, name);
+  }
+});
+
+test('a model that can do more ranks above one the same size that cannot', () => {
+  const plain = gradeModel(row('older:9b', '9B', 5.5, { capabilities: ['completion'] }), rtx4070);
+  const current = gradeModel(row('current:9b', '9B', 5.5, { capabilities: ['completion', 'tools', 'thinking'] }), rtx4070);
+  assert.ok(current.points > plain.points, `${current.points} vs ${plain.points}`);
+  // Enough to put an 8B that calls tools and thinks above a 12B that does neither.
+  const eight = gradeModel(row('qwen3:8b', '8B', 4.8, { capabilities: ['completion', 'tools', 'thinking'] }), rtx4070);
+  const twelve = gradeModel(row('stablelm2:12b', '12B', 6.5, { capabilities: ['completion'] }), rtx4070);
+  assert.ok(eight.points > twelve.points, `${eight.points} vs ${twelve.points}`);
+});
+
+test('a mixture of experts spills into system memory only when it would still run well', () => {
+  const card = { vramGb: 12, ramGb: 32 };
+  const qwen30 = row('qwen3:30b', '30B', 17.7);
+  const spill = mixtureSpillFit(qwen30, card);
+  assert.equal(spill.tone, 'tight');
+  assert.equal(spill.label, 'RAM assist · 17.7 GB');
+  assert.equal(spill.recommend, true);
+  assert.match(spill.detail, /^Bigger than your 12 GB of graphics memory, but it runs only part of itself per word/);
+  const graded = gradeModel({ ...qwen30, fitOverride: spill }, card);
+  assert.equal(graded.letter, 'C');
+  assert.ok(graded.tokensPerSecond >= 10);
+  assert.equal(mixtureSpillFit(row('qwen3:32b', '32B', 18.8), card), null, 'dense: every word reads all of it');
+  assert.equal(mixtureSpillFit(row('mixtral:8x7b', '47B', 24.2), card), null, 'under 10 tokens a second spilled');
+  assert.equal(mixtureSpillFit(qwen30, { vramGb: 12, ramGb: 8 }), null, 'no room in system memory');
+  assert.equal(mixtureSpillFit(qwen30, { vramGb: 12 }), null, 'system memory unknown');
+  assert.equal(mixtureSpillFit(qwen30, { vramGb: 16, unifiedMemory: true, ramGb: 16 }), null, 'a Mac swaps rather than spills');
+  assert.equal(mixtureSpillFit(row('qwen3:8b', '8B', 4.8), card), null, 'it fits already');
+});
+
+test('a Mac is as fast as its chip', () => {
+  const speed = (gpu) => gradeModel(row('qwen3:14b', '14B', 8.7), { vramGb: 64, unifiedMemory: true, gpu }).tokensPerSecond;
+  const [base, pro, max, ultra] = ['Apple M3', 'Apple M3 Pro', 'Apple M3 Max', 'Apple M2 Ultra'].map(speed);
+  assert.ok(pro > base * 1.8 && max > base * 3.5 && ultra > base * 7, `${base} ${pro} ${max} ${ultra}`);
+  assert.equal(speed(undefined), base, 'no name: a base chip');
+  // A discrete card's name says nothing here: "Radeon Pro" is not an M-series Pro.
+  assert.equal(gradeModel(row('qwen3:14b', '14B', 8.7), { vramGb: 16, gpu: 'AMD Radeon Pro W6800' }).tokensPerSecond,
+    gradeModel(row('qwen3:14b', '14B', 8.7), { vramGb: 16 }).tokensPerSecond);
+});
+
+test('a picture or video model says which part of its download has to fit', () => {
+  // Z-Image Turbo: a 14.58 GB download in the Size column, sized by the 8 GB
+  // it holds at once. The reason used to say only "8 GB should fit".
+  const picture = footprintFit(getHardwareFit({ params: '6B', sizeGb: 8.04 }, 12), 8.04, 14.58);
+  assert.equal(picture.detail, 'Of its 14.58 GB download, about 8 GB has to be in graphics memory at once. 8 GB should fit 12 GB with useful headroom.');
+  assert.equal(picture.tone, 'good', 'the fit itself is unchanged');
+  const zImage = gradeModel(row('Z-Image Turbo', '6B', 14.58, { generationKind: 'image', fitOverride: picture }), rtx4070);
+  assert.equal(zImage.summary, picture.detail, 'the grade gives the same reason as the Size column');
+
+  const offload = { tone: 'tight', label: 'Fits with offloading', detail: 'Its 14.3 GB model is bigger than this card’s VRAM, so ComfyUI streams it from system memory. It runs, just slower.', recommend: true };
+  assert.match(footprintFit(offload, 14.3, 38.03).detail, /^Of its 38\.03 GB download, about 14\.3 GB has to be in graphics memory at once\. Its 14\.3 GB model/);
+  const token = { tone: 'unknown', label: 'Needs a token', detail: 'Its publisher gates the download.', recommend: true };
+  assert.equal(footprintFit(token, 14.3, 38.03), token, 'nothing to say about size until it can be downloaded');
+  assert.equal(footprintFit(offload, 14.3, 14.5), offload, 'when the two are the same, there is nothing to explain');
 });

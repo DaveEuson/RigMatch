@@ -20,7 +20,7 @@ import { parseArgs } from 'node:util';
 import si from 'systeminformation';
 import pkg from './package.json' with { type: 'json' };
 import systemProfile from '../electron/systemProfile.cjs';
-import { catalogRows, formatTable, rankModels, toJson, type FitHardware, type InstalledModel, type Provider } from './fitCheck.ts';
+import { catalogRows, formatTable, ollamaUrl, rankModels, toJson, type FitHardware, type InstalledModel, type Provider } from './fitCheck.ts';
 
 const HELP = `rigmatch-fit ${pkg.version}: which local AI models will run well on this computer
 
@@ -54,7 +54,11 @@ async function detectHardware(vramFlag: string | undefined): Promise<FitHardware
   if (vramFlag !== undefined) {
     const vramGb = Number(vramFlag);
     if (!Number.isFinite(vramGb) || vramGb < 0) throw new Error(`--vram takes a number of GB, such as --vram 12, not "${vramFlag}".`);
-    return { ...common, gpu: `A ${vramGb} GB graphics card`, vramGb, unifiedMemory: false, ramGb: toGb(os.totalmem()), source: 'flag' };
+    // 0 means no graphics card at all, which is graded as such: a model too
+    // big for the processor is an F, not the "?" an unreadable card gets.
+    return vramGb === 0
+      ? { ...common, gpu: 'No graphics card', vramGb: 0, unifiedMemory: false, ramGb: toGb(os.totalmem()), source: 'flag', noGpu: true }
+      : { ...common, gpu: `A ${vramGb} GB graphics card`, vramGb, unifiedMemory: false, ramGb: toGb(os.totalmem()), source: 'flag' };
   }
   const [mem, graphics] = await Promise.all([si.mem(), si.graphics()]);
   const pool = await systemProfile.resolveGpuPool({
@@ -71,20 +75,8 @@ async function detectHardware(vramFlag: string | undefined): Promise<FitHardware
     unifiedMemory: pool.hasUnifiedMemory,
     ramGb: toGb(mem.total),
     source: 'detected',
-    driverProblem: pool.driverProblem,
+    driverProblem: pool.driverProblem as FitHardware['driverProblem'],
   };
-}
-
-/**
- * Where Ollama listens: OLLAMA_HOST if set ("0.0.0.0" means this machine),
- * else its default port. The same reading of OLLAMA_HOST Ollama's own CLI uses.
- */
-function ollamaUrl(): string {
-  const host = process.env.OLLAMA_HOST?.trim() || '127.0.0.1:11434';
-  const url = new URL(/^https?:\/\//i.test(host) ? host : `http://${host}`);
-  if (url.hostname === '0.0.0.0') url.hostname = '127.0.0.1';
-  if (!url.port) url.port = '11434';
-  return url.origin;
 }
 
 /** The installed models, or null when Ollama does not answer within a second and a half. */
@@ -134,18 +126,35 @@ async function main(): Promise<number> {
     detectHardware(values.vram),
     provider === 'ollama' ? installedOllamaModels() : Promise.resolve(null),
   ]);
-  const models = rankModels(catalogRows(), hardware, { installed, provider });
   const ollamaReachable = installed !== null;
+  if (values.installed && !ollamaReachable) {
+    throw new Error(`Ollama did not answer at ${ollamaUrl()}, so there is nothing installed to list. Start Ollama, or leave out --installed.`);
+  }
+  const models = rankModels(catalogRows(), hardware, { installed, provider });
   console.log(values.json
     ? JSON.stringify(toJson(values.installed ? models.filter((model) => model.installed) : models, hardware, { provider, ollamaReachable, version: pkg.version }), null, 2)
-    : formatTable(models, hardware, { provider, ollamaReachable, all: values.all, installedOnly: values.installed }));
+    : formatTable(models, hardware, {
+      provider, ollamaReachable, all: values.all, installedOnly: values.installed,
+      // Only a terminal has a width; piped into a file or another program, nothing is cut.
+      columns: process.stdout.isTTY ? process.stdout.columns : undefined,
+    }));
   return 0;
 }
 
+/**
+ * Exit as soon as everything is written. Node's fetch keeps trying to connect
+ * for 10 seconds after the 1.5-second abort when nothing listens, which held
+ * the prompt for about 9 seconds after the table had printed.
+ */
+function finish(code: number): void {
+  process.exitCode = code;
+  process.stdout.write('', () => process.stderr.write('', () => process.exit(code)));
+}
+
 main().then(
-  (code) => { process.exitCode = code; },
+  finish,
   (error: unknown) => {
     console.error(`rigmatch-fit: ${error instanceof Error ? error.message : String(error)}`);
-    process.exitCode = 1;
+    finish(1);
   },
 );

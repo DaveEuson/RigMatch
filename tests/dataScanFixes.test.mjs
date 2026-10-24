@@ -167,7 +167,8 @@ test('a reopened report keeps models no longer listed, and its own answers only'
 
 test('"Report ready" opens the report that was saved, by id', () => {
   assert.match(app, /setReadyReportId\(saveTestReport\(results, winner\.model, runBalance\) \?\? null\);/);
-  assert.match(app, /onClick=\{\(\) => \{ setOpenReportId\(readyReportId\); setReportOpen\(true\); \}\}>\s*See the report/);
+  // Opening it also retires the notice, so it is gone whatever happens next.
+  assert.match(app, /onClick=\{\(\) => \{ setOpenReportId\(readyReportId\); setReportOpen\(true\); setReportReady\(false\); \}\}>\s*See the report/);
 });
 
 test('the MLX message is for Ollama failing to load an MLX model, off a Mac', () => {

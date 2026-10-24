@@ -193,7 +193,11 @@ export function SpeedDatePanel({
           <p>
             {runReadiness}
             {' '}
-            {standingLine(lineupStanding(leader ?? undefined, lineupNames), winnerResult?.total)}
+            {/* Not during a blind show: the lineup is seats by then, so the
+                saved winner never matched it, and the line named that winner
+                ("granite4:3b won your last show — it is not in tonight's
+                lineup") behind the pick step. */}
+            {!blindShow && standingLine(lineupStanding(leader ?? undefined, lineupNames), winnerResult?.total)}
             {/* What the switch does, said where it can be read while it is on. */}
             {blindOn && onBlindChange && ' Blind show is on: names stay hidden until you pick your favourite.'}
           </p>

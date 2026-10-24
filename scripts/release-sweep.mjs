@@ -484,14 +484,15 @@ check('security', 'the renderer cannot ask for any permission it likes', () => {
   // Electron grants every permission request unless a handler refuses, which
   // sat oddly beside the sandbox, the CSP and the host allowlists. RigMatch
   // needs the microphone for the listening test, notifications for What's
-  // New's switch, and nothing else.
+  // New's switch, clipboard writes for the Copy buttons, and nothing else.
   const main = read('electron/main.cjs');
   must(/setPermissionRequestHandler/.test(main), 'no permission request handler: camera, geolocation and the rest are granted by default');
   must(/setPermissionCheckHandler/.test(main), 'no permission check handler: a denied permission still queries as granted');
-  const allowed = main.match(/ALLOWED_PERMISSIONS = new Set\(\[([^\]]*)\]\)/)?.[1] ?? '';
+  must(/security\.permissionRefusal/.test(main), 'the handlers no longer ask security.permissionRefusal');
+  const allowed = read('electron/security.cjs').match(/ALLOWED_PERMISSIONS = new Set\(\[([^\]]*)\]\)/)?.[1] ?? '';
   const names = [...allowed.matchAll(/'([^']+)'/g)].map((m) => m[1]);
   must(names.length > 0, 'the permission allowlist is empty or gone');
-  const unexpected = names.filter((name) => !['media', 'audioCapture', 'notifications'].includes(name));
+  const unexpected = names.filter((name) => !['media', 'audioCapture', 'notifications', 'clipboard-sanitized-write'].includes(name));
   must(unexpected.length === 0, `unexpected permission(s) allowed: ${unexpected.join(', ')}`);
   return names.join(' + ');
 });

@@ -108,7 +108,8 @@ test('the app records badges from its saved runs, results and Lab, quietly at la
   const at = app.indexOf('recordAchievements({');
   assert.ok(at > 0, 'the app never records achievements');
   const call = app.slice(at - 400, at + 500);
-  assert.match(call, /if \(!isDesktopRuntime\) return;/, 'the preview page sample data would earn badges');
+  assert.match(call, /if \(!isDesktopRuntime \|\| isListTesting\) return;/, 'the preview page would earn badges, or a show would earn "First date" mid-show');
+  assert.match(call, /\[runHistory, benchmarkByModel, system\.platform, isListTesting\]\);/, 'the look must run again when the show ends');
   assert.match(call, /runs: Object\.values\(runHistory\.runs\)\.flat\(\)/);
   assert.match(call, /results: Object\.values\(benchmarkByModel\)/);
   assert.match(call, /\{ quiet \}/);
