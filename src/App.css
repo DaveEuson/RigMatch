@@ -4122,6 +4122,13 @@ tbody tr.computer-row.selected {
   min-height: 0;
 }
 
+/* The Ranking's fader is not one of those: allowed to shrink, it was squeezed
+   to 67px around 189px of fader and spilled over the Best Match row and the
+   list. The column scrolls instead. */
+.comparison-view > .balance-fader {
+  flex-shrink: 0;
+}
+
 /* The rail lies down on a narrow window, where its 196px is width the
    transcript needs more than it does. Only on width: laying it down on a
    *short* panel was measured and is worse — the horizontal strip costs 68px of

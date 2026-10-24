@@ -89,3 +89,39 @@ test('trusted renderer URL validation allows packaged file and local dev origins
   assert.equal(security.isTrustedRendererUrl('https://evil.test', { isDev: true, packagedIndexPath }), false);
   assert.equal(security.isTrustedRendererUrl(pathToFileURL(path.resolve('other.html')).toString(), { packagedIndexPath }), false);
 });
+
+// The live sweep on 2026-10-24: every Copy button copied nothing, and the main
+// log said `[permissions] refused "clipboard-sanitized-write"`.
+const packagedIndexPath = path.resolve('dist/index.html');
+const appUrl = pathToFileURL(packagedIndexPath).toString();
+const isTrustedUrl = (url) => security.isTrustedRendererUrl(url, { packagedIndexPath });
+const refusal = (permission, details) => security.permissionRefusal(permission, details, { isTrustedUrl });
+
+test("RigMatch's own page may write to the clipboard", () => {
+  assert.equal(refusal('clipboard-sanitized-write', { requestingUrl: appUrl, isMainFrame: true }), null);
+  assert.equal(
+    security.permissionRefusal('clipboard-sanitized-write', { requestingUrl: 'http://127.0.0.1:5173/', isMainFrame: true }, {
+      isTrustedUrl: (url) => security.isTrustedRendererUrl(url, { isDev: true, packagedIndexPath }),
+    }),
+    null,
+    'the dev server is RigMatch too',
+  );
+});
+
+test('a frame or another page may not write to the clipboard', () => {
+  // The App Builder and demo previews run model-written code in frames.
+  assert.match(refusal('clipboard-sanitized-write', { requestingUrl: appUrl, isMainFrame: false }), /own page/);
+  assert.match(refusal('clipboard-sanitized-write', { requestingUrl: 'blob:file:///4b2c', isMainFrame: false }), /own page/);
+  assert.match(refusal('clipboard-sanitized-write', { requestingUrl: 'https://evil.test/', isMainFrame: true }), /own page/);
+  assert.match(refusal('clipboard-sanitized-write', { requestingUrl: appUrl }), /own page/, 'unknown frame: refused');
+  assert.match(refusal('clipboard-sanitized-write', {}), /own page/);
+});
+
+test('the rest of the allowlist is unchanged', () => {
+  assert.equal(refusal('notifications', {}), null);
+  assert.equal(refusal('media', { mediaTypes: ['audio'] }), null);
+  assert.match(refusal('media', { mediaTypes: ['audio', 'video'] }), /only audio/);
+  for (const permission of ['clipboard-read', 'geolocation', 'midi', 'usb', 'serial']) {
+    assert.match(refusal(permission, { requestingUrl: appUrl, isMainFrame: true }), /not in ALLOWED_PERMISSIONS/, permission);
+  }
+});

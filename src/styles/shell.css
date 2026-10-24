@@ -652,16 +652,32 @@
 /* Above the lineup dock on Advanced screens, which it used to cover. */
 .app-shell.has-global-lineup .activity-toast-region { bottom: 132px; }
 
-/* "Report ready", after a show. */
+/* "Report ready", after a show. A row of its own between the screen and the
+   lineup, not a box floating over them: floating, it sat on What's New's Next
+   button, a Your taste rating and the Winner's lineup scores until dismissed.
+   The screen gives up the row's height instead. */
 .report-ready-bar,
 .report-ready-bar * { text-transform: none !important; letter-spacing: normal !important; }
+.app-shell:has(> .report-ready-bar) {
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-areas: "topbar" "strip" "stage" "notice" "lineup";
+}
+.app-shell.no-global-lineup:has(> .report-ready-bar),
+.app-shell[data-ui-mode='beginner']:has(> .report-ready-bar) {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-areas: "topbar" "strip" "stage" "notice";
+}
 .app-shell .report-ready-bar {
+  grid-area: notice;
+  position: static;
+  max-width: none;
   gap: var(--s3);
-  padding: var(--s3) var(--s4);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-panel);
+  padding: var(--s2) var(--s5);
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
   background: var(--panel);
-  box-shadow: var(--shadow-float);
+  box-shadow: none;
 }
 .app-shell .report-ready-bar span { color: var(--text-strong); font: 400 var(--fs-ui) / 1.4 var(--ui); }
 

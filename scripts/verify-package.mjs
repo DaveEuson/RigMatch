@@ -42,6 +42,9 @@ if (!mainProcess) {
   console.error('electron/main.cjs is not in the package — the app has no main process');
   process.exit(1);
 }
+// The permission allowlist lives here, beside the other security checks.
+const securityEntry = entries.find((entry) => /[\\/]electron[\\/]security\.cjs$/.test(entry));
+const securityModule = securityEntry ? readEntry(securityEntry) : '';
 
 // The renderer's libraries are bundled into dist/assets, so the package should
 // carry their license text and not their node_modules folders as well.
@@ -126,7 +129,9 @@ const PRESENT = [
   // handler that is the whole of the renderer's posture toward the microphone.
   ['permission requests are gated', mainProcess, 'setPermissionRequestHandler'],
   ['permission checks are gated too', mainProcess, 'setPermissionCheckHandler'],
-  ['only the microphone and notifications are allowed', mainProcess, "ALLOWED_PERMISSIONS = new Set(['media', 'audioCapture', 'notifications'])"],
+  ['permissions are decided by the allowlist', mainProcess, 'security.permissionRefusal'],
+  ['only the microphone, notifications and clipboard writes are allowed', securityModule, "ALLOWED_PERMISSIONS = new Set(['media', 'audioCapture', 'notifications', 'clipboard-sanitized-write'])"],
+  ['clipboard writes are for RigMatch’s own page only', securityModule, 'details.isMainFrame === true && isTrustedUrl(details.requestingUrl)'],
   ['ComfyUI can be located automatically', mainProcess, 'comfy:locateFolder'],
   ['the scores bridge stays on loopback', mainProcess, "'127.0.0.1'"],
 

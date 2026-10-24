@@ -569,10 +569,12 @@ function App() {
   // Achievements are read from what is already kept, so a run, a retest or a
   // judged show earns its badge the moment it is saved. The first look, as the
   // app opens, is quiet: anything found then was earned before this launch. The
-  // preview page's sample data earns nothing.
+  // preview page's sample data earns nothing. A show saves each contestant's run
+  // as it finishes, so the look waits for the show to end: "First date" is
+  // "Finish your first show", and it appeared after the first of two models.
   const achievementsLookedRef = useRef(false);
   useEffect(() => {
-    if (!isDesktopRuntime) return;
+    if (!isDesktopRuntime || isListTesting) return;
     const quiet = !achievementsLookedRef.current;
     achievementsLookedRef.current = true;
     recordAchievements({
@@ -582,7 +584,7 @@ function App() {
       labChallenges: quiet ? labChallengesWithOutput(readAdvancedLabResults()) : undefined,
       platform: system.platform,
     }, { quiet });
-  }, [runHistory, benchmarkByModel, system.platform]);
+  }, [runHistory, benchmarkByModel, system.platform, isListTesting]);
   // Held here, not inside SimpleWizard: switching to Advanced unmounts the wizard,
   // and the user should come back to the step they left.
   const [wizardStep, setWizardStep] = useState<WizardStepId>('setup');
@@ -5625,7 +5627,7 @@ function App() {
             Report ready: {shownShowResult.results.length} model{shownShowResult.results.length === 1 ? '' : 's'} compared,
             {' '}{getFriendlyModelName(shownShowResult.winner)} came first
           </span>
-          <button type="button" className="btn btn-line btn-sm" onClick={() => { setOpenReportId(readyReportId); setReportOpen(true); }}>
+          <button type="button" className="btn btn-line btn-sm" onClick={() => { setOpenReportId(readyReportId); setReportOpen(true); setReportReady(false); }}>
             See the report
           </button>
           <button type="button" className="report-ready-dismiss" onClick={() => setReportReady(false)} aria-label="Dismiss report notice">
