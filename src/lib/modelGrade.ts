@@ -80,10 +80,16 @@ const GPU_BANDWIDTH_GBPS: Array<{ minVramGb: number; gbps: number }> = [
   { minVramGb: 14, gbps: 420 },
   { minVramGb: 10, gbps: 300 },
   { minVramGb: 6, gbps: 220 },
-  { minVramGb: 2, gbps: 120 },
-  // Under 2 GB is an integrated GPU's carve-out, which is system memory.
-  { minVramGb: 0, gbps: 35 },
+  { minVramGb: 0, gbps: 120 },
 ];
+/**
+ * Under this, the "graphics memory" is an integrated GPU's carve-out of system
+ * memory (128 MB to 2 GB) or a card too small to hold a model, so models run
+ * on the processor and are graded as if there were no graphics card. Graded
+ * against the carve-out instead, a 0.5 GB Radeon 610M made llama3.2:3b an F
+ * on a PC where it runs fine, and a C on the same PC with no GPU at all.
+ */
+const USABLE_VRAM_MIN_GB = 2;
 /** Apple Silicon base chips and Jetsons; Pro and Max chips are faster, which a test on this PC picks up. */
 const UNIFIED_BANDWIDTH_GBPS = 90;
 /** Dual-channel DDR4/DDR5, for whatever spills out of graphics memory or runs on the processor. */
@@ -137,23 +143,70 @@ function paramsBillions(row: Pick<GradeRow, 'params' | 'sizeGb'>): number | null
 }
 
 /**
+ * Billions of parameters each word runs on, for mixture-of-experts models
+ * whose Ollama tag is a plain size. qwen3:30b is Qwen3-30B-A3B under its
+ * library name, gpt-oss:20b runs 3.6B of its 21B, and so on: the tag says
+ * nothing, so a table does. Keyed by family:tag, or by family alone for a
+ * family with one size. From each model's own card.
+ */
+const MIXTURE_ACTIVE_B: Record<string, number> = {
+  'qwen3:30b': 3.3, 'qwen3:235b': 22, 'qwen3-coder:30b': 3.3, 'qwen3-coder:480b': 35,
+  'qwen3-vl:30b': 3, 'qwen3-vl:235b': 22, 'qwen3-next:80b': 3,
+  'gpt-oss:20b': 3.6, 'gpt-oss:120b': 5.1, 'gpt-oss-safeguard:20b': 3.6, 'gpt-oss-safeguard:120b': 5.1,
+  'deepseek-v2:16b': 2.4, 'deepseek-v2:236b': 21, 'deepseek-coder-v2:16b': 2.4, 'deepseek-coder-v2:236b': 21,
+  'deepseek-v2.5:236b': 21, 'deepseek-v3:671b': 37, 'deepseek-v3.1:671b': 37, 'deepseek-r1:671b': 37,
+  'granite3-moe:1b': 0.4, 'granite3-moe:3b': 0.8, 'granite3.1-moe:1b': 0.4, 'granite3.1-moe:3b': 0.8,
+  'dbrx:132b': 36, 'glm-4.7-flash': 3,
+};
+
+/**
+ * "with 3B active parameters", "activating just 12B parameters", "118B-A8B":
+ * how newer family pages describe a mixture. Read only when the description
+ * names a total within 15% of the model's own, since one page can cover a
+ * dense size and a mixture (nemotron-3-nano has both).
+ */
+function describedActiveB(description: string | undefined, totalB: number): number | null {
+  const text = description ?? '';
+  const match = text.match(/(\d+(?:\.\d+)?)B-A(\d+(?:\.\d+)?)B\b/i)
+    ?? text.match(/(\d+(?:\.\d+)?)B\b[^.]{0,60}?\b(?:with|activating)(?: just)? (\d+(?:\.\d+)?)B (?:active|activated|param)/i);
+  if (!match) return null;
+  const [described, active] = [Number.parseFloat(match[1]), Number.parseFloat(match[2])];
+  return Math.abs(described - totalB) <= totalB * 0.15 && active < described ? active : null;
+}
+
+/**
  * The share of the model read for each word. A mixture-of-experts model runs
  * a few experts per word: qwen3:30b-a3b reads 3B of its 30B, and Mixtral's
  * "8x7b" runs two of eight experts plus the layers they share. It still has
  * to fit whole, so this changes the speed and nothing about the fit.
  */
-export function activeShare(name: string, totalB: number | null): number {
+export function activeShare(name: string, totalB: number | null, description?: string): number {
   const lower = name.toLowerCase();
   const active = lower.match(/(?<![\d.a-z])a(\d+(?:\.\d+)?)b\b/);
   if (active && totalB && totalB > 0) return clamp(Number.parseFloat(active[1]) / totalB, 0.02, 1);
+  const [family, tag = ''] = lower.split(':');
+  const known = MIXTURE_ACTIVE_B[`${family}:${tag}`] ?? MIXTURE_ACTIVE_B[family];
+  if (known && totalB && totalB > 0) return clamp(known / totalB, 0.02, 1);
   const experts = lower.match(/(?<![\d.])(\d+)x\d+(?:\.\d+)?b\b/);
   if (experts) return clamp(2 / Number.parseInt(experts[1], 10) + 0.03, 0.02, 1);
-  return 1;
+  const described = totalB ? describedActiveB(description, totalB) : null;
+  return described && totalB ? clamp(described / totalB, 0.02, 1) : 1;
 }
 
-function readGbPerToken(row: { name: string; displayName?: string; params: string; sizeGb: number | null }, sizeGb: number): number {
-  const share = activeShare(fullName(row), paramsBillions(row));
+type SizedRow = { name: string; displayName?: string; params: string; sizeGb: number | null; description?: string };
+
+function shareOf(row: SizedRow): number {
+  return activeShare(fullName(row), paramsBillions(row), row.description);
+}
+
+function readGbPerToken(row: SizedRow, sizeGb: number): number {
+  const share = shareOf(row);
   return sizeGb * (share < 1 ? Math.min(1, share * EXPERT_ROUTING_COST) : 1);
+}
+
+/** Graphics memory a model can be held in: none when it is only a carve-out (USABLE_VRAM_MIN_GB). */
+function usableVram(hardware: GradeHardware): number {
+  return !hardware.unifiedMemory && hardware.vramGb < USABLE_VRAM_MIN_GB ? 0 : hardware.vramGb;
 }
 
 /**
@@ -163,12 +216,14 @@ function readGbPerToken(row: { name: string; displayName?: string; params: strin
  * lets one test make every other estimate on the list a real one.
  */
 export function rigBandwidth(
-  samples: Array<{ name: string; displayName?: string; params: string; sizeGb: number | null; tokensPerSecond?: number | null }>,
+  samples: Array<SizedRow & { tokensPerSecond?: number | null }>,
   vramGb: number,
 ): number | null {
+  // On the processor every model reads from system memory, so any run counts.
+  const pool = vramGb < USABLE_VRAM_MIN_GB ? 0 : vramGb;
   const rates = samples
     .filter((sample) => (sample.tokensPerSecond ?? 0) > 0 && (sample.sizeGb ?? 0) > 0)
-    .filter((sample) => vramGb <= 0 || (sample.sizeGb ?? 0) <= vramGb)
+    .filter((sample) => pool <= 0 || (sample.sizeGb ?? 0) <= pool)
     .map((sample) => (sample.tokensPerSecond ?? 0) * readGbPerToken(sample, sample.sizeGb ?? 0))
     .sort((a, b) => a - b);
   if (rates.length === 0) return null;
@@ -183,16 +238,18 @@ function estimateTokensPerSecond(
 ): number | null {
   if (!row.sizeGb) return null;
   const readGb = readGbPerToken(row, row.sizeGb);
+  // A measured figure is this PC's own speed, processor or GPU, so it wins.
+  if (hardware.vramGb <= 0) return Math.min((bandwidthGbps ?? SYSTEM_RAM_GBPS) / readGb, MAX_ESTIMATED_TOKENS_PER_SECOND);
   const gpu = bandwidthGbps
     ?? (hardware.unifiedMemory ? UNIFIED_BANDWIDTH_GBPS : GPU_BANDWIDTH_GBPS.find((band) => hardware.vramGb >= band.minVramGb)?.gbps ?? SYSTEM_RAM_GBPS);
-  let rate: number;
-  if (hardware.vramGb <= 0) rate = SYSTEM_RAM_GBPS / readGb;
-  else if (hardware.unifiedMemory || row.sizeGb <= hardware.vramGb) rate = gpu / readGb;
-  else {
-    // Part of it spills into system memory, and that part sets the pace.
-    const onGpu = Math.min(1, (hardware.vramGb * 0.9) / row.sizeGb);
-    rate = 1 / ((readGb * onGpu) / gpu + (readGb * (1 - onGpu)) / SYSTEM_RAM_GBPS);
-  }
+  // What a model can be held in before it spills: all of a card, or the
+  // share of a Mac's memory macOS leaves it.
+  const holds = hardware.unifiedMemory ? hardware.vramGb * UNIFIED_USABLE_SHARE : hardware.vramGb;
+  if (row.sizeGb <= holds) return Math.min(gpu / readGb, MAX_ESTIMATED_TOKENS_PER_SECOND);
+  // Part of it spills into system memory (or, on a Mac, gets squeezed and
+  // swapped), and that part sets the pace.
+  const onGpu = Math.min(1, (holds * 0.9) / row.sizeGb);
+  const rate = 1 / ((readGb * onGpu) / gpu + (readGb * (1 - onGpu)) / SYSTEM_RAM_GBPS);
   return Math.min(rate, MAX_ESTIMATED_TOKENS_PER_SECOND);
 }
 
@@ -212,7 +269,7 @@ function qualityPoints(row: GradeRow, evidence: GradeEvidence): { points: number
     return { points: clamp(evidence.score.sobriety), reason: `answers scored ${Math.round(evidence.score.sobriety)} in its test here` };
   }
   const totalB = paramsBillions(row) ?? 1;
-  const effectiveB = Math.sqrt(totalB * totalB * activeShare(fullName(row), totalB));
+  const effectiveB = Math.sqrt(totalB * totalB * shareOf(row));
   const older = OLDER_FAMILIES.has(familyOf(fullName(row)));
   const points = clamp(40 + 15 * Math.log2(Math.max(effectiveB, 0.05)) - (older ? 20 : 0));
   const reason = older
@@ -257,14 +314,21 @@ function fitReason(row: GradeRow, fit: HardwareFit, hardware: GradeHardware, spa
     return row.sizeGb ? 'Graphics memory unknown, so RigMatch cannot grade it yet' : 'Download size unknown, so RigMatch cannot grade it yet';
   }
   const memory = `${round1(hardware.vramGb)} GB of ${hardware.unifiedMemory ? 'shared' : 'graphics'} memory`;
+  const carveOut = usableVram(hardware) <= 0 && hardware.vramGb > 0;
   if (fit.tone === 'out-of-league') {
-    return hardware.vramGb > 0 ? `Too big for your ${memory}` : 'Too big to run without a graphics card';
+    return carveOut ? `Too big for the processor alone, and your ${memory} is too little to help`
+      : hardware.vramGb > 0 ? `Too big for your ${memory}` : 'Too big to run without a graphics card';
   }
+  if (carveOut) return `Your ${memory} is too little to hold a model, so it runs on the processor`;
   if (hardware.vramGb <= 0) return 'No graphics memory found, so it runs on the processor';
   if (hardware.unifiedMemory) {
     // The fit is sized against all of a Mac's memory, but macOS and the open
     // apps need their share of it too.
-    if ((row.sizeGb ?? 0) > hardware.vramGb) return `Bigger than your ${memory}, so it will be slow`;
+    const size = row.sizeGb ?? 0;
+    if (size > hardware.vramGb) return `Bigger than your ${memory}, so it will be slow`;
+    if (size > hardware.vramGb * UNIFIED_USABLE_SHARE) {
+      return `Needs more of your ${memory} than a model can have beside the system, so it will be slow`;
+    }
     return fit.tone === 'tight' || (spareGb ?? 0) < 1
       ? `Fits, but leaves little of your ${memory} for other apps`
       : `Fits in your shared memory with ${round1(spareGb ?? 0)} GB spare`;
@@ -284,18 +348,31 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
  *
  * The fit decides first, through getHardwareFit, so the grade can never
  * disagree with the fit pill beside it: "Too big" is an F, an unknown size is
- * "?", and a tight fit is a C at best however good the model is. The rest is
- * answer quality 50%, speed 25%, fit 15% and room to chat 10%. A model that
- * cannot hold a chat (an embedding, image or video model) is graded on its
- * fit alone, since words a second mean nothing for it.
+ * "?", and a tight fit is a C at best however good the model is. So is a
+ * model past the share of a Mac's memory it can have. The rest is answer
+ * quality 50%, speed 25%, fit 15% and room to chat 10%. A model that cannot
+ * hold a chat (an embedding, image or video model) is graded on its fit
+ * alone, since words a second mean nothing for it.
+ *
+ * The one exception to matching the pill: an integrated GPU's carve-out is
+ * graded as no graphics card (USABLE_VRAM_MIN_GB), because that is how the
+ * model will run.
  */
 export function gradeModel(row: GradeRow, hardware: GradeHardware, evidence: GradeEvidence = {}): FitGrade {
-  const fit = getHardwareFit(row, hardware.vramGb);
-  const pool = hardware.unifiedMemory ? hardware.vramGb * UNIFIED_USABLE_SHARE : hardware.vramGb;
+  const vramGb = usableVram(hardware);
+  const sized = getHardwareFit(row, vramGb);
+  // With only a carve-out, the size is known and the answer is too: past what
+  // RigMatch recommends for the processor, not "unknown graphics memory".
+  const fit: HardwareFit = vramGb <= 0 && hardware.vramGb > 0 && sized.tone === 'unknown' && row.sizeGb
+    ? { tone: 'out-of-league', label: 'Too big', detail: sized.detail, recommend: false }
+    : sized;
+  const usable = { ...hardware, vramGb };
+  const pool = hardware.unifiedMemory ? vramGb * UNIFIED_USABLE_SHARE : vramGb;
   const spareGb = row.sizeGb && pool > 0 ? round1(Math.max(0, pool - row.sizeGb)) : null;
+  const pastSharedLimit = Boolean(hardware.unifiedMemory && row.sizeGb && row.sizeGb > pool);
   const verdict: FitGrade['verdict'] = fit.tone === 'unknown' ? 'unknown'
     : fit.tone === 'out-of-league' ? 'wont-fit'
-      : fit.tone === 'tight' ? 'barely-runs' : 'runs-well';
+      : fit.tone === 'tight' || pastSharedLimit ? 'barely-runs' : 'runs-well';
   const base: Pick<FitGrade, 'fit' | 'verdict' | 'spareGb' | 'tokensPerSecond' | 'speedSource'> = {
     fit, verdict, spareGb, tokensPerSecond: null, speedSource: null,
   };
@@ -307,23 +384,24 @@ export function gradeModel(row: GradeRow, hardware: GradeHardware, evidence: Gra
   if (fit.tone === 'out-of-league') {
     return { ...base, letter: 'F', points: 0, reasons: [firstReason], summary: firstReason };
   }
-  const fitPts = fit.tone === 'sweet-spot' ? 100 : fit.tone === 'good' ? 75 : 35;
+  const squeezed = fit.tone === 'tight' || pastSharedLimit;
+  const fitPts = squeezed ? 35 : fit.tone === 'sweet-spot' ? 100 : 75;
   const textModel = canGenerateText({ ...row, displayName: fullName(row) }) && !isEmbeddingModel(fullName(row));
   if (!textModel) {
     // The fit's own tier, as a letter: A, B, or C for a tight one.
-    const points = fit.tone === 'sweet-spot' ? 100 : fit.tone === 'good' ? 78 : 60;
+    const points = squeezed ? 60 : fit.tone === 'sweet-spot' ? 100 : 78;
     return { ...base, letter: letterFor(points), points, reasons: [firstReason], summary: firstReason };
   }
 
   const measured = evidence.score?.tokensPerSecond ?? evidence.tokensPerSecond ?? null;
-  const tokensPerSecond = measured && measured > 0 ? measured : estimateTokensPerSecond(row, hardware, evidence.bandwidthGbps);
+  const tokensPerSecond = measured && measured > 0 ? measured : estimateTokensPerSecond(row, usable, evidence.bandwidthGbps);
   const speedSource = measured && measured > 0 ? 'measured' : evidence.bandwidthGbps ? 'this-pc' : 'estimate';
   const quality = qualityPoints(row, evidence);
   // On the processor a chat's memory comes out of system RAM, which nothing
   // here measures, so room to chat neither helps nor hurts.
-  const context = hardware.vramGb <= 0 ? 50 : contextPoints(spareGb ?? 0, paramsBillions(row) ?? 1);
+  const context = vramGb <= 0 ? 50 : contextPoints(spareGb ?? 0, paramsBillions(row) ?? 1);
   const raw = quality.points * 0.5 + speedPoints(tokensPerSecond ?? 0) * 0.25 + fitPts * 0.15 + context * 0.1;
-  const points = Math.round(fit.tone === 'tight' ? Math.min(raw, 69) : raw);
+  const points = Math.round(squeezed ? Math.min(raw, 69) : raw);
 
   const reasons = [firstReason];
   if (tokensPerSecond) {

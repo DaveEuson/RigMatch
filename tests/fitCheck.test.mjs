@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const { catalogRows, formatTable, rankModels, runsHere, toJson } = await import('../cli/fitCheck.ts');
+const { catalogRows, formatTable, rankModels, inDefaultList, toJson } = await import('../cli/fitCheck.ts');
 
 /**
  * The command-line fit check: which models it lists, how it ranks and marks
@@ -49,7 +49,8 @@ test('ranking is best first, and marks what Ollama has installed', () => {
   ];
   const ranked = rankModels(catalogRows(), card, { installed });
   for (let i = 1; i < ranked.length; i += 1) {
-    assert.ok((ranked[i - 1].grade.points ?? -1) >= (ranked[i].grade.points ?? -1), 'sorted by points');
+    const order = 'ABCDF?';
+    assert.ok(order.indexOf(ranked[i - 1].grade.letter) <= order.indexOf(ranked[i].grade.letter), 'best letter first');
   }
   assert.equal(ranked.find((model) => model.row.name === 'qwen3:8b').installed, true);
   const custom = ranked.find((model) => model.row.name.startsWith('hf.co/'));
@@ -75,7 +76,7 @@ test('the table shows the best 20 that run here, and says what it left out', () 
   assert.equal(body.length, 20);
   for (const line of body) assert.match(line, /^[A-D] +\S+( \*)? +[\d.]+ GB +~\d+ tok\/s +\S.* +ollama pull \S+$/);
   assert.equal(lines[header + 21], '');
-  const running = ranked.filter(runsHere).length;
+  const running = ranked.filter(inDefaultList).length;
   assert.match(table, new RegExp(`The best 20 of ${running} models that run here\\.`));
   assert.ok(!/guard|shieldgemma/.test(body.join('\n')), 'safety classifiers wait for --all');
   assert.ok(/^[\x20-\x7e\n·]*$/.test(table.replace(/·/g, '')), 'plain ASCII apart from the separator dot');

@@ -29,7 +29,7 @@ test('an 8B model on a 12 GB card is an A, explained in plain words', () => {
 test('the grade never disagrees with the fit pill beside it', () => {
   const sizes = [null, 0.3, 1, 2.5, 4, 5.2, 7.4, 9.3, 11, 12.5, 13.8, 14, 19, 26, 43];
   const params = ['1B', '3B', '8B', '14B', '27B', '32B', '70B', 'Unknown'];
-  for (const vramGb of [0, 0.5, 4, 8, 12, 16, 24, 48]) {
+  for (const vramGb of [0, 2, 4, 8, 12, 16, 24, 48]) {
     for (const sizeGb of sizes) {
       for (const p of params) {
         const model = row(`probe:${p}`, p, sizeGb);
@@ -45,6 +45,35 @@ test('the grade never disagrees with the fit pill beside it', () => {
       }
     }
   }
+});
+
+test('a carve-out under 2 GB grades exactly like no graphics card', () => {
+  // A Radeon 610M's 512 MB, an Intel UHD's 128 MB, an old 1 GB card: graded
+  // against that, llama3.2:3b was an F on a PC where it runs on the processor
+  // fine, and a C on the same PC with no GPU at all.
+  const sizes = [0.3, 1, 2, 2.5, 4, 5.2, 9.3, 20];
+  for (const vramGb of [0.125, 0.5, 1, 1.9]) {
+    for (const sizeGb of sizes) {
+      const model = row(`probe:${sizeGb}`, `${Math.round(sizeGb / 0.6)}B`, sizeGb);
+      const carve = gradeModel(model, { vramGb });
+      const none = gradeModel(model, { vramGb: 0 });
+      const where = `${sizeGb} GB on a ${vramGb} GB carve-out`;
+      assert.equal(carve.tokensPerSecond, none.tokensPerSecond, where);
+      if (none.letter === '?') {
+        // No GPU at all might be a GPU nobody could read; a carve-out is known to be too small.
+        assert.equal(carve.letter, 'F', where);
+        assert.match(carve.summary, /^Too big for the processor alone, and your [\d.]+ GB of graphics memory is too little to help$/);
+      } else {
+        assert.equal(carve.letter, none.letter, where);
+        assert.equal(carve.points, none.points, where);
+      }
+    }
+  }
+  const llama = gradeModel(row('llama3.2:3b', '3B', 2), { vramGb: 0.5 });
+  assert.equal(llama.letter, gradeModel(row('llama3.2:3b', '3B', 2), { vramGb: 0 }).letter);
+  assert.notEqual(llama.letter, 'F');
+  assert.match(llama.summary, /^Your 0\.5 GB of graphics memory is too little to hold a model, so it runs on the processor · about \d+ words a second/);
+  assert.equal(gradeModel(row('qwen3:1.7b', '1.7B', 1.4), { vramGb: 2 }).reasons[0], 'Fits in your graphics memory with 0.6 GB spare', '2 GB is a real card');
 });
 
 test('Fit grade letters are their own scale, not the Match Score\'s', () => {
@@ -71,32 +100,34 @@ test('no graphics card: a small model runs on the processor, a big one waits for
   assert.equal(big.summary, 'Graphics memory unknown, so RigMatch cannot grade it yet');
 });
 
-test('an integrated GPU with a tiny carve-out is graded as what it is', () => {
-  // A Radeon 610M's 512 MB: the case PR #119 stopped being picked over a real card.
-  const igpu = { vramGb: 0.5 };
-  const tiny = gradeModel(row('qwen3:0.6b', '0.6B', 0.5), igpu);
-  assert.equal(tiny.verdict, 'barely-runs');
-  assert.match(tiny.summary, /^Only just fits your 0\.5 GB of graphics memory/);
-  assert.equal(gradeModel(row('qwen3:1.7b', '1.7B', 1.4), igpu).letter, 'F');
-  assert.equal(gradeModel(row('qwen3:8b', '8B', 5.2), igpu).summary, 'Too big for your 0.5 GB of graphics memory');
-  // The carve-out is system memory, so it is no faster than running on the processor.
-  const onCpu = gradeModel(row('qwen3:0.6b', '0.6B', 0.5), { vramGb: 0 });
-  assert.equal(tiny.tokensPerSecond, onCpu.tokensPerSecond);
-});
-
 test('a mixture of experts is faster than its size, but has to fit whole', () => {
   assert.equal(activeShare('qwen3:30b-a3b', 30), 0.1);
   assert.equal(activeShare('mixtral:8x7b', 47), 0.28);
   assert.equal(activeShare('llama3.2:3b', 3), 1, 'a plain size is not an active one');
-  assert.equal(activeShare('qwen3:30b', 30), 1);
+  assert.equal(activeShare('qwen3:32b', 32), 1);
+  // The library's own names say nothing; these are mixtures all the same.
+  assert.equal(activeShare('qwen3:30b', 30), 0.11);
+  assert.equal(activeShare('gpt-oss:20b', 20), 0.18);
+  assert.equal(activeShare('deepseek-v2:16b', 16), 0.15);
+  assert.equal(activeShare('glm-4.7-flash:latest', 31), 3 / 31, 'a one-size family by name alone');
+  assert.equal(activeShare('qwen3:latest', 8), 1, 'latest is the 8b, which is dense');
+  // Newer family pages say it in words.
+  const nvidia = 'An open 30B MoE model from NVIDIA with 3B activated parameters that delivers strong reasoning.';
+  assert.equal(activeShare('nemotron-cascade-2:30b', 30, nvidia), 0.1);
+  assert.equal(activeShare('nemotron-cascade-2:4b', 4, nvidia), 1, 'a dense size on the same page is not the mixture');
+  assert.equal(activeShare('laguna-s-2.1:latest', 118, 'Our most capable model, 70.2% on Terminal-Bench at 118B-A8B.'), 8 / 118);
+  assert.equal(activeShare('phi4:14b', 14, 'Phi-4 is a 14B parameter, state-of-the-art open model with 128k context.'), 1);
 
-  const dense = gradeModel(row('qwen3:30b', '30B', 18), { vramGb: 24 });
-  const moe = gradeModel(row('qwen3:30b-a3b', '30B', 18), { vramGb: 24 });
+  const card = { vramGb: 24 };
+  const dense = gradeModel(row('qwen3:32b', '32B', 18), card);
+  const moe = gradeModel(row('qwen3:30b', '30B', 18), card);
   assert.ok(moe.tokensPerSecond > dense.tokensPerSecond * 3, `${moe.tokensPerSecond} vs ${dense.tokensPerSecond}`);
+  const tagged = gradeModel(row('qwen3:30b-a3b', '30B', 18), card).tokensPerSecond;
+  assert.ok(Math.abs(moe.tokensPerSecond - tagged) < tagged * 0.1, `the same weights under either name: ${moe.tokensPerSecond} vs ${tagged}`);
   assert.deepEqual(moe.fit, dense.fit, 'the same file, the same fit');
   assert.ok(moe.tokensPerSecond <= 200, 'capped: small active slices are not free');
 
-  assert.equal(gradeModel(row('qwen3:30b-a3b', '30B', 18), rtx4070).letter, 'F');
+  assert.equal(gradeModel(row('qwen3:30b', '30B', 18), rtx4070).letter, 'F');
 });
 
 test('an unknown size is "?", not a guess', () => {
@@ -153,11 +184,35 @@ test('a model that cannot chat is graded on its fit alone', () => {
   assert.equal(video.summary, offload.detail);
 });
 
-test('shared memory is described as shared, with room left for the system', () => {
+test('shared memory is described as shared, and a model past its share is a C at best', () => {
   const mac = { vramGb: 16, unifiedMemory: true };
   assert.equal(gradeModel(row('qwen3:8b', '8B', 5.2), mac).reasons[0], 'Fits in your shared memory with 6 GB spare');
-  assert.equal(gradeModel(row('x:20b', '20B', 12.5), mac).reasons[0], 'Fits, but leaves little of your 16 GB of shared memory for other apps');
+  assert.equal(gradeModel(row('x:14b', '14B', 10.5), mac).reasons[0], 'Fits, but leaves little of your 16 GB of shared memory for other apps');
   assert.equal(gradeModel(row('qwen3:30b-a3b', '30B', 18), mac).reasons[0], 'Bigger than your 16 GB of shared memory, so it will be slow');
+
+  // 12.5 GB is past the 11.2 GB a 16 GB Mac can give a model (70%), though
+  // the fit pill, sized against all 16, calls it a good fit.
+  const over = gradeModel(row('x:20b', '20B', 12.5), mac);
+  assert.equal(over.fit.tone, 'good');
+  assert.equal(over.verdict, 'barely-runs');
+  assert.ok(over.points <= 69, `${over.letter} ${over.points}`);
+  assert.equal(over.reasons[0], 'Needs more of your 16 GB of shared memory than a model can have beside the system, so it will be slow');
+  const within = gradeModel(row('x:20b', '20B', 11), mac);
+  assert.ok(over.tokensPerSecond < within.tokensPerSecond * 0.75, `spills: ${over.tokensPerSecond} vs ${within.tokensPerSecond}`);
+});
+
+test('on the processor, a measured speed is used, not called one and ignored', () => {
+  const cpu = { vramGb: 0 };
+  const model = row('qwen3:1.7b', '1.7B', 1.4);
+  const guessed = gradeModel(model, cpu);
+  const measured = gradeModel(model, cpu, { bandwidthGbps: 70 });
+  assert.equal(guessed.speedSource, 'estimate');
+  assert.equal(measured.speedSource, 'this-pc');
+  assert.equal(measured.tokensPerSecond, 50);
+  assert.equal(guessed.tokensPerSecond, 25);
+  assert.match(measured.summary, /about 40 words a second, going by models tested here/);
+  // A carve-out PC measures on the processor too, so every run counts.
+  assert.equal(rigBandwidth([{ name: 'llama3.2:3b', params: '3B', sizeGb: 2, tokensPerSecond: 20 }], 0.5), 40);
 });
 
 test('a Models row is graded by its whole tag, with what the list has measured', () => {
@@ -167,7 +222,7 @@ test('a Models row is graded by its whole tag, with what the list has measured',
     displayName: `${family}:${tag}`, installed: false, ready: false, installLabel: '', ...extra,
   });
   const moe = listRow('qwen3', '30b-a3b', '30B', 18);
-  const dense = listRow('qwen3', '30b', '30B', 18);
+  const dense = listRow('qwen3', '32b', '32B', 18);
   const card = { vramGb: 24 };
   assert.ok(gradeRow(moe, card, {}).tokensPerSecond > gradeRow(dense, card, {}).tokensPerSecond * 3, 'the a3b in the tag is read');
   assert.doesNotMatch(gradeRow(listRow('llama2', '13b', '13B', 7.4), card, {}).summary, /strong/, 'the family in name is read');

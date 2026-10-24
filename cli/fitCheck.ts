@@ -72,7 +72,9 @@ export function catalogRows(families: Record<string, SnapshotFamily> = snapshot.
       const capabilities = capabilitiesFor({
         name: family, tag, inputs: size.inputs, badges: facts.badges, description: facts.description,
       }) ?? undefined;
-      const row: GradeRow = { name, displayName: name, params: ollamaCatalog.inferParamsFromTag(tag), sizeGb: size.sizeGb ?? null, capabilities };
+      const row: GradeRow = {
+        name, displayName: name, params: ollamaCatalog.inferParamsFromTag(tag), sizeGb: size.sizeGb ?? null, capabilities, description: facts.description,
+      };
       if (isChatModel(row)) rows.push(row);
     }
   }
@@ -106,18 +108,44 @@ export function rankModels(
       installed: have.has(row.name),
       command: pullCommand(row.name, provider),
     }))
-    .sort((a, b) => (b.grade.points ?? -1) - (a.grade.points ?? -1)
+    // Within a letter, models that can do more come first. The snapshot has
+    // no pull counts or release dates, and tool use, thinking and images are
+    // the nearest honest sign of a current model: without this, a 12 GB card's
+    // A list opened with falcon2, yi and glm4 on a size tie-break.
+    .sort((a, b) => GRADE_ORDER.indexOf(a.grade.letter) - GRADE_ORDER.indexOf(b.grade.letter)
+      || abilities(b.row) - abilities(a.row)
+      || (b.grade.points ?? -1) - (a.grade.points ?? -1)
       || (b.row.sizeGb ?? 0) - (a.row.sizeGb ?? 0)
       || a.row.name.localeCompare(b.row.name));
 }
 
+const GRADE_ORDER = ['A', 'B', 'C', 'D', 'F', '?'];
+const abilities = (row: GradeRow) => (row.capabilities ?? []).filter((c) => ['tools', 'thinking', 'vision', 'audio'].includes(c)).length;
+
 /**
- * The models worth showing by default: anything that runs here and talks.
- * Safety classifiers and document readers are left to --all, as Simple Mode
- * leaves them out of a newcomer's lineup (isSpecialistModel).
+ * Families built for one job rather than for talking to: code completion and
+ * coding agents, SQL, maths, function calling, medicine and translation. Read
+ * from the family name, or from its page's description where the name does
+ * not say ("for agentic coding"). The safety classifiers and document readers
+ * Simple Mode leaves out are caught by isSpecialistModel.
  */
-export function runsHere(model: RankedModel): boolean {
-  return model.grade.letter !== 'F' && model.grade.letter !== '?' && !isSpecialistModel(model.row.name);
+const NICHE_FAMILY = /code|coder|devstral|sql|math|nexusraven|firefunction|tool-use|medllama|medgemma|meditron|translategemma/i;
+const NICHE_DESCRIPTION = /code completion|text-to-sql|function calling|\bfor (?:agentic )?coding\b/i;
+
+/** A model for conversation in general, as opposed to one job (NICHE_FAMILY). */
+export function isGeneralModel(row: GradeRow): boolean {
+  const name = row.displayName ?? row.name;
+  return !isSpecialistModel(name) && !NICHE_FAMILY.test(name.split(':')[0]) && !NICHE_DESCRIPTION.test(row.description ?? '');
+}
+
+/**
+ * The models the default list draws from: general ones that run here. The
+ * question it answers is "which model should I chat with"; --all has the
+ * rest. Without this the top of a 12 GB card's list was codegeex4, yi-coder
+ * and nexusraven, and with no GPU it was starcoder2 and duckdb-nsql.
+ */
+export function inDefaultList(model: RankedModel): boolean {
+  return model.grade.letter !== 'F' && model.grade.letter !== '?' && isGeneralModel(model.row);
 }
 
 const pad = (text: string, width: number) => text + ' '.repeat(Math.max(0, width - text.length));
@@ -145,7 +173,7 @@ export function formatTable(
     provider?: Provider; ollamaReachable?: boolean; all?: boolean; installedOnly?: boolean; limit?: number;
   } = {},
 ): string {
-  const running = models.filter(runsHere);
+  const running = models.filter(inDefaultList);
   const installed = models.filter((model) => model.installed);
   const shown = installedOnly ? installed : all ? models : running.slice(0, limit);
   const markedHere = shown.filter((model) => model.installed).length;
