@@ -87,7 +87,7 @@ The reveal: your Top Match under the lights with its grade, Match Score and the 
 
 The full control room, with its tabs in the top bar. Your Top Match carries over.
 
-- **Models**: every model RigMatch knows, with filters for what it can do and whether it fits your PC, plus downloads
+- **Models**: every model RigMatch knows, each with a Fit grade for your PC (A to F, with the reasons a click away), filters for what it can do, plus downloads
 - **What's New**: models that just appeared in Ollama's catalog
 - **Comparison**: run a show with the models, questions and judge you choose, and add skill tests such as Build an app or the Code challenge
 - **Labs**: picture, video and sound makers given the same prompt, and listening tests
@@ -200,6 +200,32 @@ npm install
 npm run dev        # development
 npm run build      # production build
 ```
+
+## Command-line fit check
+
+The Fit grade from the Models list, in a terminal: which models will run well on this computer, best first, with the command that gets each one. It reads your graphics card the way the app does and asks a local Ollama, if one is running, which models you already have. Nothing is downloaded and nothing leaves your computer.
+
+```bash
+npm install
+npm run build:cli
+node cli/dist/rigmatch-fit.mjs
+```
+
+```text
+Grade  Model          Size    Speed      Fit         Get it
+A      qwen3.5:9b     6.6 GB  ~46 tok/s  Sweet spot  ollama pull qwen3.5:9b
+A      gemma2:9b      5.4 GB  ~56 tok/s  Sweet spot  ollama pull gemma2:9b
+```
+
+| Option | Does |
+|---|---|
+| `--all` | List every model, including the ones that will not fit |
+| `--installed` | List only the models Ollama already has, graded |
+| `--json` | Print every model as JSON, for scripts (with `--installed`, only those) |
+| `--provider lmstudio` | Print LM Studio's `lms get` commands instead of `ollama pull` |
+| `--vram 16` | Grade for a card with 16 GB instead of this one |
+
+A is the best pick for this computer and F will not fit. The grade weighs answer quality (by size and model family), estimated speed, and the room left in graphics memory. It is a different scale from the Match Score, which RigMatch measures by actually running the model. The bundled file runs on Node 20 or later on Windows, macOS and Linux; its only dependency is [systeminformation](https://www.npmjs.com/package/systeminformation).
 
 ## How the Match Score works
 

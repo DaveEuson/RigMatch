@@ -125,7 +125,7 @@ test('a driver problem shows in the strip and is explained once', async () => {
   assert.equal(gpuDriverReading('driver-missing'), 'Driver not working');
   const { readFileSync } = await import('node:fs');
   const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
-  assert.match(main, /const primaryGpu = pickPrimaryGpu\(graphics\.controllers\) \|\| await getBoardGpu\(\);/);
+  assert.match(main, /const \{ primaryGpu, vramGb, hasUnifiedMemory, driverProblem \} = await resolveGpuPool\(\{/);
   assert.match(main, /\.\.\.\(driverProblem \? \{ driverProblem \} : \{\}\),/);
   const strip = readFileSync(new URL('../src/components/LoadStrip.tsx', import.meta.url), 'utf-8');
   assert.match(strip, /if \(system\.gpu\.driverProblem\) \{/);
@@ -204,10 +204,51 @@ test('sysfs VRAM only ever raises a figure, and only on Linux', async () => {
     'an address that carries its own PCI domain');
   assert.deepEqual(withSysfsVram(undefined, {}), []);
 
-  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
-  const wiring = main.indexOf("if (process.platform === 'linux') graphics.controllers = withSysfsVram(graphics.controllers, readSysfsVram());");
-  assert.ok(wiring > 0, 'getSystemProfile reads sysfs on Linux only');
-  assert.ok(wiring < main.indexOf('const primaryGpu = pickPrimaryGpu(graphics.controllers)'), 'before the card is picked');
+  const pool = readFileSync(new URL('../electron/systemProfile.cjs', import.meta.url), 'utf-8');
+  const wiring = pool.indexOf("const cards = platform === 'linux' ? withSysfsVram(controllers, readSysfsVram(sysfsRoot)) : controllers;");
+  assert.ok(wiring > 0, 'resolveGpuPool reads sysfs on Linux only');
+  assert.ok(wiring < pool.indexOf('const primaryGpu = pickPrimaryGpu(cards)'), 'before the card is picked');
+});
+
+test('resolveGpuPool sizes the pool the way getSystemProfile always did', async () => {
+  const { resolveGpuPool } = require('../electron/systemProfile.cjs');
+  const noSmi = async () => ({ output: '', error: 'spawn nvidia-smi ENOENT' });
+  const noTree = () => { throw new Error('ENOENT'); };
+  const base = { memTotal: 16 * GB, arch: 'x64', run: noSmi, readFile: noTree };
+
+  const rtx = await resolveGpuPool({ ...base, platform: 'win32', controllers: [{ vendor: 'NVIDIA', model: 'GeForce RTX 4070', vram: 12282 }] });
+  assert.equal(rtx.vramGb, 12);
+  assert.equal(rtx.hasUnifiedMemory, false);
+  assert.equal(rtx.driverProblem, null);
+
+  // systeminformation said 0 and nvidia-smi answered.
+  const smi = async (command, args) => ({ output: args.some((a) => a.includes('memory.total')) ? '24564\n' : 'RTX 4090', error: null });
+  assert.equal((await resolveGpuPool({ ...base, platform: 'linux', run: smi, sysfsRoot: '/nowhere', controllers: [{ vendor: 'NVIDIA', model: 'RTX 4090', vram: 0 }] })).vramGb, 24);
+
+  // nvidia-smi could not read an NVIDIA card: a driver problem, not a VRAM-less PC.
+  const broken = await resolveGpuPool({ ...base, platform: 'win32', controllers: [{ vendor: 'NVIDIA', model: 'RTX 3060', vram: 0 }] });
+  assert.equal(broken.vramGb, 0);
+  assert.equal(broken.driverProblem, 'driver-missing');
+
+  // Apple Silicon: no VRAM figure, so the pool is system memory.
+  const mac = await resolveGpuPool({ ...base, platform: 'darwin', arch: 'arm64', controllers: [{ vendor: 'Apple', model: 'Apple M2', vram: 0 }] });
+  assert.equal(mac.hasUnifiedMemory, true);
+  assert.equal(mac.vramGb, 16);
+
+  // A Jetson: no PCI graphics at all, named by the device tree, sized from RAM.
+  const jetson = await resolveGpuPool({
+    ...base, platform: 'linux', arch: 'arm64', sysfsRoot: '/nowhere', memTotal: 7.4 * GB, controllers: [],
+    readFile: () => 'NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super\0',
+  });
+  assert.equal(jetson.primaryGpu.vendor, 'NVIDIA');
+  assert.equal(jetson.hasUnifiedMemory, true);
+  assert.equal(jetson.vramGb, 7.4);
+
+  // Nothing at all: an empty card, 0 GB, and no complaint about a driver.
+  const none = await resolveGpuPool({ ...base, platform: 'win32', controllers: [] });
+  assert.deepEqual(none.primaryGpu, {});
+  assert.equal(none.vramGb, 0);
+  assert.equal(none.driverProblem, null);
 });
 
 test('the models folder is resolved through symlinks before its drive is picked', () => {
