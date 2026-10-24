@@ -27,6 +27,8 @@ export type BlindSession = {
   judge: BlindJudgeScore[];
   judgeWinner: string | null;
   picked: string | null;
+  /** Whether the pick reached storage; the reveal says so either way. */
+  saved: boolean;
 };
 
 export function useBlindShow() {
@@ -39,7 +41,7 @@ export function useBlindShow() {
   }, []);
 
   const begin = useCallback((lineup: string[]) => {
-    setSession({ lineup, names: blindNames(lineup), stage: 'running', results: [], judge: [], judgeWinner: null, picked: null });
+    setSession({ lineup, names: blindNames(lineup), stage: 'running', results: [], judge: [], judgeWinner: null, picked: null, saved: false });
   }, []);
 
   /**
@@ -59,8 +61,8 @@ export function useBlindShow() {
   // pick must count once.
   const pick = useCallback((model: string) => {
     if (!session || session.stage !== 'picking') return;
-    saveBlindPick(model, session.results.map((result) => result.model));
-    setSession({ ...session, stage: 'reveal', picked: model });
+    const saved = saveBlindPick(model, session.results.map((result) => result.model));
+    setSession({ ...session, stage: 'reveal', picked: model, saved });
   }, [session]);
 
   /** What the screens may show: names hidden until the reveal, then nothing hidden. */

@@ -2175,6 +2175,22 @@ export function getFriendlyModelName(model: string): string {
   return base.charAt(0).toUpperCase() + base.slice(1);
 }
 
+/**
+ * The friendly name, plus the tag when another model in `lineup` has the same
+ * friendly name. qwen3:8b and qwen3:14b are both "Qwen3", so a reveal saying
+ * "You picked Qwen3. The judge picked Qwen3." read as agreement when it was not.
+ */
+export function getLineupModelName(model: string, lineup: readonly string[]): string {
+  const friendly = getFriendlyModelName(model);
+  const clash = lineup.some((other) => normalizeModelKey(other) !== normalizeModelKey(model)
+    && getFriendlyModelName(other).toLowerCase() === friendly.toLowerCase());
+  if (!clash) return friendly;
+  // Ollama's tag ("qwen3:8b"), or LM Studio's size suffix ("qwen/qwen3-8b").
+  const last = model.split('/').pop()!;
+  const tag = last.includes(':') ? last.split(':').pop()! : last.match(/-(\d+(?:\.\d+)?[bm])$/i)?.[1] ?? last;
+  return `${friendly} ${/^\d+(\.\d+)?[bm]$/i.test(tag) ? tag.toUpperCase() : tag}`;
+}
+
 export function getQueueChipModelName(model: string) {
   return model.replace(':latest', '').replace(/-instruct/gi, '');
 }

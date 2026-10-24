@@ -68,6 +68,12 @@
   font: 400 var(--fs-ui, 14px) / 1.3 var(--ui);
 }
 
+/* Looks like .btn:disabled, stays focusable. */
+.blind-pick-questions .btn[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .blind-pick-prompt {
   margin: 0;
   display: flex;

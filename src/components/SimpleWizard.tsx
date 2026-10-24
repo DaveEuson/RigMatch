@@ -10,7 +10,7 @@ import { useExplaining } from '../lib/infoContext';
 import { formatBytes, formatBytesPerSecond } from '../lib/format';
 import { roundLabel } from '../lib/roundLabels';
 import { getModelAvatarSrc, HOST_AVATAR_SRC } from '../lib/modelAvatars';
-import { getFriendlyModelName, type DreamTag } from '../lib/modelCatalog';
+import { getFriendlyModelName, getLineupModelName, type DreamTag } from '../lib/modelCatalog';
 import { MIN_CONTESTANTS, getDownloadRowStatus, summarizeDownloadStep } from '../lib/downloadStatus';
 import type { ComfyFolderListing } from '../lib/generationCatalog';
 import { IMAGE_BENCHMARK_PROMPTS } from '../lib/imageGenScoring';
@@ -1837,7 +1837,8 @@ function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedO
       prompt={drawings?.[0]?.prompt.prompt}
       entries={(drawings ?? []).map(({ model, drawing, score }) => ({
         key: model,
-        name: getFriendlyModelName(model),
+        // "Qwen3 8B" and "Qwen3 14B" when both drew, not two pictures both called "Qwen3".
+        name: getLineupModelName(model, (drawings ?? []).map((entry) => entry.model)),
         drawing,
         score,
       }))}

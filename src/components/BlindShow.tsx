@@ -1,8 +1,8 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { useEffect, useRef, useState } from 'react';
-import { maskName } from '../lib/blindMode';
+import { blindPickSaveNote, maskName } from '../lib/blindMode';
 import { normalizeModelKey } from '../lib/modelKey';
-import { getFriendlyModelName } from '../lib/modelCatalog';
+import { getLineupModelName } from '../lib/modelCatalog';
 import { useDialog } from '../lib/useDialog';
 import type { BlindSession } from '../lib/useBlindShow';
 import type { BenchmarkPromptResult } from '../types';
@@ -50,17 +50,22 @@ function BlindReveal({ session, onClose }: { session: BlindSession; onClose: () 
   useEffect(() => headingRef.current?.focus(), []);
   const same = (a: string | null, b: string | null) => Boolean(a && b && normalizeModelKey(a) === normalizeModelKey(b));
   const agreed = same(session.picked, session.judgeWinner);
-  const picked = session.picked ? getFriendlyModelName(session.picked) : '';
+  // With the tag where two contestants share a name, or "You picked Qwen3.
+  // The best Match score went to Qwen3." reads as agreement when it is not.
+  const nameOf = (model: string) => getLineupModelName(model, session.lineup);
+  const picked = session.picked ? nameOf(session.picked) : '';
   return (
     <section className="blind-reveal" aria-labelledby="blind-overlay-title">
       <header className="page-head">
         <div>
           <h2 id="blind-overlay-title" ref={headingRef} tabIndex={-1}>You picked {picked}</h2>
+          {/* The Match winner, said as one: on the Code channel Comparison
+              crowns the coding leader, which can be a different model. */}
           <p>
             {agreed
-              ? 'The judge picked the same one.'
-              : `The judge picked ${session.judgeWinner ? getFriendlyModelName(session.judgeWinner) : 'another contestant'}.`}
-            {' '}Your pick is saved to Your taste on Results.
+              ? 'The judge agrees: it has the best Match score.'
+              : `The best Match score went to ${session.judgeWinner ? nameOf(session.judgeWinner) : 'another contestant'}.`}
+            {' '}{blindPickSaveNote(session.saved)}
           </p>
         </div>
         <div className="page-head-actions">
@@ -76,12 +81,12 @@ function BlindReveal({ session, onClose }: { session: BlindSession; onClose: () 
               <span className="blind-reveal-seat">{label}</span>
               <AvatarBust model={model} size="small" />
               <span className="blind-reveal-name">
-                <strong>{getFriendlyModelName(model)}</strong>
+                <strong>{nameOf(model)}</strong>
                 <em>{model}</em>
               </span>
               <span className="blind-reveal-tags">
                 {same(model, session.picked) && <span className="blind-reveal-tag mine">Your pick</span>}
-                {same(model, session.judgeWinner) && <span className="blind-reveal-tag judge">Judge's winner</span>}
+                {same(model, session.judgeWinner) && <span className="blind-reveal-tag judge">Match winner</span>}
               </span>
               <strong className="blind-reveal-score">
                 {judged ? `${judged.total} Match · ${judged.grade}` : 'Did not finish'}
@@ -94,21 +99,30 @@ function BlindReveal({ session, onClose }: { session: BlindSession; onClose: () 
   );
 }
 
-/** The blind-mode switch on the lineup screen. Styled as the What's New switch. */
+const BLIND_SWITCH_HELP = 'Hide the model names until the show ends, then pick the answers you liked best before the scores are shown. Your picks build your own ranking on Results.';
+
+/**
+ * The blind-mode switch on the lineup screen. Styled as the What's New switch.
+ * The help is the description too: a title reaches only a mouse.
+ */
 export function BlindSwitch({ on, disabled, onChange }: { on: boolean; disabled?: boolean; onChange: (on: boolean) => void }) {
   return (
-    <button
-      type="button"
-      className="news-switch blind-switch"
-      role="switch"
-      aria-checked={on}
-      disabled={disabled}
-      onClick={() => onChange(!on)}
-      title="Hide the model names until the show ends, then pick the answers you liked best before the scores are shown. Your picks build your own ranking on Results."
-    >
-      <span className="news-switch-track" aria-hidden="true"><i /></span>
-      Blind show
-    </button>
+    <>
+      <button
+        type="button"
+        className="news-switch blind-switch"
+        role="switch"
+        aria-checked={on}
+        aria-describedby="blind-switch-help"
+        disabled={disabled}
+        onClick={() => onChange(!on)}
+        title={BLIND_SWITCH_HELP}
+      >
+        <span className="news-switch-track" aria-hidden="true"><i /></span>
+        Blind show
+      </button>
+      <span id="blind-switch-help" className="sr-only">{BLIND_SWITCH_HELP}</span>
+    </>
   );
 }
 
@@ -162,12 +176,14 @@ export function BlindPickStep({
       </header>
 
       {questions.length > 1 && (
+        // aria-disabled, not disabled: a button that disables itself under the
+        // focus (Next on the last question) drops focus to the page.
         <nav className="blind-pick-questions" aria-label="Questions">
-          <button type="button" className="btn btn-line btn-sm" disabled={questionIndex === 0} onClick={() => setQuestionIndex((i) => i - 1)}>
+          <button type="button" className="btn btn-line btn-sm" aria-disabled={questionIndex === 0} onClick={() => setQuestionIndex((i) => Math.max(0, i - 1))}>
             Previous
           </button>
-          <span>Question {questionIndex + 1} of {questions.length}</span>
-          <button type="button" className="btn btn-line btn-sm" disabled={questionIndex >= questions.length - 1} onClick={() => setQuestionIndex((i) => i + 1)}>
+          <span aria-live="polite">Question {questionIndex + 1} of {questions.length}</span>
+          <button type="button" className="btn btn-line btn-sm" aria-disabled={questionIndex >= questions.length - 1} onClick={() => setQuestionIndex((i) => Math.min(questions.length - 1, i + 1))}>
             Next
           </button>
         </nav>
