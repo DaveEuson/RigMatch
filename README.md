@@ -203,7 +203,7 @@ npm run build      # production build
 
 ## Command-line fit check
 
-The Fit grade from the Models list, in a terminal: which models will run well on this computer, best first, with the command that gets each one. It reads your graphics card the way the app does and asks a local Ollama, if one is running, which models you already have. Nothing is downloaded and nothing leaves your computer.
+The Fit grade from the Models list, in a terminal: which models will run well on this computer, best first, with the command that gets each one. It grades the chat models in a snapshot of Ollama's library bundled with each release (this one from October 2026), reads your graphics card the way the app does, and asks a local Ollama, if one is running, which models you already have. Nothing is downloaded and nothing leaves your computer.
 
 ```bash
 npm install
@@ -212,14 +212,17 @@ node cli/dist/rigmatch-fit.mjs
 ```
 
 ```text
-Grade  Model          Size    Speed      Fit         Get it
-A      qwen3.5:9b     6.6 GB  ~46 tok/s  Sweet spot  ollama pull qwen3.5:9b
-A      gemma2:9b      5.4 GB  ~56 tok/s  Sweet spot  ollama pull gemma2:9b
+Grade  Model             Size    Speed      Fit         Command
+A      qwen3.5:9b *      6.1 GB  ~49 tok/s  Sweet spot  ollama run qwen3.5:9b
+A      qwen3-vl:8b       5.7 GB  ~53 tok/s  Sweet spot  ollama pull qwen3-vl:8b
+A      mistral-nemo:12b  6.6 GB  ~46 tok/s  Sweet spot  ollama pull mistral-nemo:12b
+A      deepseek-r1:8b    4.8 GB  ~63 tok/s  Sweet spot  ollama pull deepseek-r1:8b
+A      qwen3:8b          4.8 GB  ~63 tok/s  Sweet spot  ollama pull qwen3:8b
 ```
 
 | Option | Does |
 |---|---|
-| `--all` | List every model, including the ones that will not fit |
+| `--all` | List every model, including coding and other specialist models, and the ones that will not fit |
 | `--installed` | List only the models Ollama already has, graded |
 | `--json` | Print every model as JSON, for scripts (with `--installed`, only those) |
 | `--provider lmstudio` | Print LM Studio's `lms get` commands instead of `ollama pull` |
