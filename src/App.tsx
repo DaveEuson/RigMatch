@@ -264,6 +264,7 @@ import { modelIdentities, sameModel } from './lib/modelKey.ts';
 import { gpuDriverMessage } from './lib/gpuDriver';
 import { codeJudgeFor, labJudgeFor } from './lib/labJudge.ts';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
+import { countModelNews } from './lib/modelNews';
 import { runVideoLineupLive } from './lib/videoGenRunner';
 import {
   allLineupEntries,
@@ -1363,8 +1364,9 @@ function App() {
       const lmStudioNote = lmStudioStatus.ready
         ? ` LM Studio found ${lmStudioStatus.models.length} local model${lmStudioStatus.models.length === 1 ? '' : 's'} for testing/chat.`
         : '';
-      const modelNewsNote = nextNewsState.latestNewModelIds.length > 0
-        ? ` ${nextNewsState.latestNewModelIds.length} new model${nextNewsState.latestNewModelIds.length === 1 ? '' : 's'} found.`
+      const newModelCount = countModelNews(catalogResponse.models, nextNewsState.latestNewModelIds);
+      const modelNewsNote = newModelCount > 0
+        ? ` ${newModelCount} new model${newModelCount === 1 ? '' : 's'} found.`
         : '';
       setActivity(
         isDesktopRuntime
@@ -4950,7 +4952,7 @@ function App() {
       <TopBar
         uiMode={uiMode}
         onUiModeChange={selectUiMode}
-        tabs={uiMode === 'advanced' ? TOP_TABS.map((tab) => ({ ...tab, count: tab.id === 'whatsNew' ? modelNews.latestNewModelIds.length : undefined })) : undefined}
+        tabs={uiMode === 'advanced' ? TOP_TABS.map((tab) => ({ ...tab, count: tab.id === 'whatsNew' ? countModelNews(catalog, modelNews.latestNewModelIds) : undefined })) : undefined}
         activeTab={activeTab ?? undefined}
         onSelectTab={selectTab}
         tracker={uiMode === 'beginner' ? <div className="top-bar-tracker-slot" ref={setTrackerSlot} /> : undefined}

@@ -30,14 +30,15 @@
 .btn svg { width: 18px; height: 18px; flex: none; }
 /* The older button shape is a link in a few places too (Get ComfyUI). */
 a.mini-button { text-decoration: none; }
-.btn:disabled { cursor: not-allowed; opacity: 0.5; }
+/* aria-disabled keeps a button focusable where disabling it would drop focus. */
+.btn:is(:disabled, [aria-disabled='true']) { cursor: not-allowed; opacity: 0.5; }
 .btn-sm { min-height: var(--h-control-sm); padding: 0 var(--s3); }
 
 .btn-gold { background: var(--gold); border-color: var(--gold); color: var(--gold-ink); }
 .btn-gold:not(:disabled):hover { background: #f5ca72; border-color: #f5ca72; }
 
 .btn-line { border-color: var(--line-strong); }
-.btn-line:not(:disabled):hover { background: var(--panel-hover); border-color: var(--text); }
+.btn-line:not(:disabled, [aria-disabled='true']):hover { background: var(--panel-hover); border-color: var(--text); }
 
 .btn-danger { border-color: var(--red); color: var(--red); }
 .btn-danger:not(:disabled):hover { background: rgba(var(--red-rgb), 0.12); }

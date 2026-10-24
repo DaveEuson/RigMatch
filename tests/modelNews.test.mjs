@@ -4,11 +4,13 @@ import assert from 'node:assert/strict';
 
 import {
   MODEL_NEWS_PAGE_SIZE,
+  countModelNews,
   getEmptyModelNewsState,
   getModelNewsId,
   getModelNewsItems,
   getModelNewsPage,
   groupModelNews,
+  notifyNewModelDrops,
   reconcileModelNews,
 } from '../src/lib/modelNews.ts';
 
@@ -166,4 +168,48 @@ test('pages count families, not tags', () => {
   const second = getModelNewsPage(grouped, 2, 20);
   assert.equal(second.pageCount, 2);
   assert.deepEqual([second.first, second.last, second.total], [21, 31, 31]);
+});
+
+// Counts. The tabs counted tags while the pager counted rows, so the same list
+// read "Recently seen 312" and "Showing 1–20 of 140 families".
+
+test("the count is the number of rows What's New lists, a family once", () => {
+  const catalog = [
+    model('llama3', '8b'),
+    ...phononTags.map((tag) => model('phonon', tag)),
+    model('gemma3', '4b'),
+  ];
+  const newIds = [...phononTags.map((tag) => `phonon:${tag}`), 'gemma3:4b'];
+  const rows = groupModelNews(newsItemsFor(catalog, newIds).filter((item) => newIds.includes(item.id)));
+
+  assert.equal(countModelNews(catalog, newIds), 2, 'phonon and gemma3, not eleven tags');
+  assert.equal(countModelNews(catalog, newIds), rows.length, 'the badge and the tab agree with the pager');
+  assert.equal(countModelNews(catalog, []), 0);
+});
+
+function captureNotification(run) {
+  const bodies = [];
+  const saved = globalThis.Notification;
+  globalThis.Notification = class {
+    static permission = 'granted';
+    constructor(_title, options) { bodies.push(options.body); }
+  };
+  try {
+    run();
+  } finally {
+    globalThis.Notification = saved;
+  }
+  return bodies;
+}
+
+test('the notification counts models the same way and names families', () => {
+  const catalog = [...phononTags.map((tag) => model('phonon', tag)), model('gemma3', '4b')];
+  const bodies = captureNotification(() => notifyNewModelDrops(catalog, catalog.map((entry) => entry.id)));
+  assert.deepEqual(bodies, ['2 new models found: phonon, gemma3.']);
+});
+
+test('one new tag is still named in full', () => {
+  // "qwen3 is now in the catalog" would be wrong when only one size is new.
+  const bodies = captureNotification(() => notifyNewModelDrops([model('qwen3', '235b')], ['qwen3:235b']));
+  assert.deepEqual(bodies, ['qwen3:235b is now in the RigMatch catalog.']);
 });
