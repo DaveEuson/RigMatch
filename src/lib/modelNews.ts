@@ -115,7 +115,23 @@ export function getModelNewsItems(catalog: CatalogModel[], modelNews: ModelNewsS
  * in one click rather than behind a "1 version" toggle.
  */
 export function groupModelNews(items: ModelNewsItem[]): Array<GroupedRow<ModelNewsItem>> {
-  return groupRowsByFamily(items, { familyOf: (item) => item.model.name || item.displayName, minToGroup: 2 });
+  return groupRowsByFamily(items, { familyOf: (item) => getModelNewsFamily(item.model), minToGroup: 2 });
+}
+
+function getModelNewsFamily(model: Pick<CatalogModel, 'name' | 'tag'>) {
+  return model.name || getCatalogModelDisplayName(model);
+}
+
+/**
+ * How many models these ids are, counted as What's New lists them: a family is
+ * one model however many tags it has. The tab counts, the pager, the top-bar
+ * badge and the "N new models found" notes all count this way. The tabs
+ * counted tags while the pager counted rows, so "Recently seen 312" sat over
+ * "Showing 1–20 of 140".
+ */
+export function countModelNews(catalog: CatalogModel[], ids: string[]) {
+  const wanted = new Set(ids);
+  return new Set(catalog.filter((model) => wanted.has(getModelNewsId(model))).map(getModelNewsFamily)).size;
 }
 
 /** Rows per page of What's New. A family counts as one row however many tags it has. */
@@ -163,14 +179,14 @@ export function getNotificationDetail(enabled: boolean, permission: ModelNotific
 export function notifyNewModelDrops(catalog: CatalogModel[], modelIds: string[]) {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || modelIds.length === 0) return;
 
-  const names = modelIds
+  const found = modelIds
     .map((id) => catalog.find((model) => getModelNewsId(model) === id))
-    .filter((model): model is CatalogModel => Boolean(model))
-    .map(getCatalogModelDisplayName)
-    .slice(0, 3);
+    .filter((model): model is CatalogModel => Boolean(model));
+  const count = countModelNews(catalog, modelIds);
+  const families = [...new Set(found.map(getModelNewsFamily))].slice(0, 3);
   const body = modelIds.length === 1
-    ? `${names[0] ?? 'A new model'} is now in the RigMatch catalog.`
-    : `${modelIds.length} new models found${names.length ? `: ${names.join(', ')}` : ''}.`;
+    ? `${found[0] ? getCatalogModelDisplayName(found[0]) : 'A new model'} is now in the RigMatch catalog.`
+    : `${count} new model${count === 1 ? '' : 's'} found${families.length ? `: ${families.join(', ')}` : ''}.`;
 
   try {
     const notification = new Notification('New Ollama models in RigMatch', {

@@ -79,8 +79,11 @@ export function WhatsNewPanel({
     setView(next);
   };
   const { scope } = view;
+  // The tabs count rows, as the pager does: a family is one model.
+  const newRows = groupModelNews(latestDrops);
+  const recentRows = groupModelNews(newsItems);
   const { entries: shown, page, pageCount, total, first, last } = getModelNewsPage(
-    groupModelNews(scope === 'new' ? latestDrops : newsItems),
+    scope === 'new' ? newRows : recentRows,
     view.page,
   );
   const [openFamilies, setOpenFamilies] = useState<Set<string>>(() => new Set());
@@ -127,10 +130,10 @@ export function WhatsNewPanel({
 
       <div className="screen-tabs news-tabs" role="group" aria-label="Which models" ref={tabsRef}>
         <button type="button" aria-pressed={scope === 'new'} onClick={() => changeView({ scope: 'new', page: 1 })}>
-          New this scan <span className="news-count">{latestDrops.length}</span>
+          New this scan <span className="news-count">{newRows.length}</span>
         </button>
         <button type="button" aria-pressed={scope === 'recent'} onClick={() => changeView({ scope: 'recent', page: 1 })}>
-          Recently seen <span className="news-count">{newsItems.length}</span>
+          Recently seen <span className="news-count">{recentRows.length}</span>
         </button>
         <span className="news-tabs-note">
           {catalog.length} watched · {liveCount} live in this scan · {notificationsEnabled ? 'notifications on' : 'notifications off'}
@@ -174,13 +177,16 @@ export function WhatsNewPanel({
           </ol>
           {pageCount > 1 && (
             <nav className="news-pager" aria-label="What's New pages">
-              <span>Showing {first}–{last} of {total} {total === 1 ? 'family' : 'families'}</span>
+              <span>Showing {first}–{last} of {total} models</span>
+              {/* aria-disabled, not disabled: a disabled button drops focus to
+                  the page, so pressing Next onto the last page lost your place
+                  in the tab order. */}
               <div className="news-pager-steps">
-                <button type="button" className="btn btn-line" disabled={page <= 1} onClick={() => turnPage(page - 1)}>
+                <button type="button" className="btn btn-line" aria-disabled={page <= 1} onClick={() => page > 1 && turnPage(page - 1)}>
                   Previous
                 </button>
                 <span className="news-pager-page" aria-live="polite">Page {page} of {pageCount}</span>
-                <button type="button" className="btn btn-line" disabled={page >= pageCount} onClick={() => turnPage(page + 1)}>
+                <button type="button" className="btn btn-line" aria-disabled={page >= pageCount} onClick={() => page < pageCount && turnPage(page + 1)}>
                   Next
                 </button>
               </div>
