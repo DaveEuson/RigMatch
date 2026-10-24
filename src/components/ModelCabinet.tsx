@@ -21,6 +21,7 @@ function formatInstalledDate(iso: string): string {
 import type { ListTestResult, ModelQuickFilterId, ModelSortKey, ModelTaskFilterId, SortDirection } from '../lib/modelCatalog';
 import { CAPABILITY_ONLY_FILTERS, GENERATION_FILTERS, TASK_FILTER_CHIPS, downloadBlockedLabel, getBenchmarkForModel, getDiskGuard, getFriendlyModelName, getHardwareFit, getModelGoodForTags, getModelProfile, getModelQuickFilters, getModelScore, getModelSearchText, getModelSortLabel, getModelStatusLabel, getParamSortValue, getPlatformFit, getQueueChipModelName, getSizeRisk, isCloudModel, isEmbeddingModel, isUncensoredModel, isVisiblePullProgress, lacksChatFormat, noChatFormatReason, modelMatchesQuickFilter, modelMatchesTask, sortModelRows } from '../lib/modelCatalog';
 import { downloadCloseAction } from '../lib/downloadStatus';
+import { gradeRow, measuredBandwidth, pullCommand } from '../lib/modelGrade';
 import { buildQuickFacetGroups, buildSearchSuggestions, splitTaskFilters } from '../lib/modelFacets';
 import type { SearchSuggestion } from '../lib/modelFacets';
 import { familiesToAutoExpand, groupRowsByFamily } from '../lib/modelGroups';
@@ -37,6 +38,7 @@ import { ComfyStartButton } from './ComfyStartButton';
 import { DiskGuard } from './DiskGuard';
 import { DownloadProgressInline } from './DownloadProgressInline';
 import { FirstModelWizard } from './FirstModelWizard';
+import { CopyCommandButton, FitGradeChip } from './FitGrade';
 import { GenerationTestPanel, type GenerationTestContext } from './GenerationTestPanel';
 import { AudioTestPanel } from './AudioTestPanel';
 import { SkillTestPanel, type SkillTestContext } from './SkillTestPanel';
@@ -103,6 +105,7 @@ export function ModelCabinet({
   benchmarkByModel,
   diskGuard,
   vramGb,
+  unifiedMemory = false,
   platform,
   queuedCount,
   isBenchmarking,
@@ -166,6 +169,8 @@ export function ModelCabinet({
   benchmarkByModel: Record<string, BenchmarkResult>;
   diskGuard: ReturnType<typeof getDiskGuard>;
   vramGb: number;
+  /** Apple Silicon or a Jetson: the Fit grade says "shared memory" and leaves the system its share. */
+  unifiedMemory?: boolean;
   platform: string;
   queuedCount: number;
   isBenchmarking: boolean;
@@ -267,7 +272,10 @@ export function ModelCabinet({
   // Eight now: "Made In" sits after "By". Narrow, because it holds two letters.
   // Match is 90: at 76 a decimal score ("92.7 A") was cut to "92.7 A…".
   // From gives back 10 of those 14px; its header is the widest thing in it.
-  const [colWidths, setColWidths] = useState([156, 92, 126, 86, 72, 110, 90, 116]);
+  // Size is 120: the "Fit B" chip sits in front of the size, and with
+  // "14.58 GB" beside it the pair needs about 100 inside the cell's padding.
+  // Good for gives back 14 of that: App.css already holds its cells to 112.
+  const [colWidths, setColWidths] = useState([156, 120, 112, 86, 72, 110, 90, 116]);
   // Popularity is the least essential column (the local Ollama API exposes no
   // pull counts), so it yields first on narrower windows instead of forcing
   // horizontal scrolling. Handled in JS because the <col> track would keep
@@ -328,6 +336,8 @@ export function ModelCabinet({
   const selectedInstalled = selectedRow ? installedModelNames.has(selectedRow.displayName) || selectedRow.installed : false;
   const selectedPullProgress = selectedRow ? pullProgressByModel[selectedRow.displayName] : undefined;
   const selectedPulling = Boolean(selectedRow && pullingModel === selectedRow.displayName);
+  // One test on this PC turns every row's speed estimate into a calibrated one.
+  const rigGbps = useMemo(() => measuredBandwidth(rows, modelScores, vramGb), [rows, modelScores, vramGb]);
   const query = modelQuery.trim().toLowerCase();
   /**
    * Faceted counts: every chip counts the rows that pass the OTHER active
@@ -1082,6 +1092,7 @@ export function ModelCabinet({
               const isNewModel = newModelIds.has(getModelNewsId(row));
               const goodForTags = getModelGoodForTags(row);
               const hardwareFit = getHardwareFit(row, vramGb);
+              const fitGrade = gradeRow(row, { vramGb, unifiedMemory }, { score, benchmark: rowBenchmark, bandwidthGbps: rigGbps });
               const platformFit = getPlatformFit(row.displayName, platform);
               const blockedLabel = downloadBlockedLabel(hardwareFit);
               const speedDateLineupFullForRow = shortlistedCount >= 5;
@@ -1214,8 +1225,11 @@ export function ModelCabinet({
                   </td>
                   <td title={platformFit.compatible ? `${sizeRisk.message} ${hardwareFit.detail}` : platformFit.reason}>
                     <div className="size-fit-cell">
-                      <span className={`size-pill ${sizeRisk.tone}`}>
-                        {row.sizeGb ? `${row.sizeGb} GB` : '?'}
+                      <span className="size-grade-line">
+                        {platformFit.compatible && <FitGradeChip grade={fitGrade} model={row.displayName} />}
+                        <span className={`size-pill ${sizeRisk.tone}`}>
+                          {row.sizeGb ? `${row.sizeGb} GB` : '?'}
+                        </span>
                       </span>
                       {platformFit.compatible
                         // Strip the "· X GB" suffix — the size pill above already
@@ -1416,6 +1430,7 @@ export function ModelCabinet({
                           <ModelDemoChips model={row.displayName} label="" className="inline" />
                         </>
                       ) : (
+                        <>
                         <button
                           type="button"
                           className={queued ? 'mini-button queued download-row-button' : `mini-button outline download-row-button${!hardwareFit.recommend ? ' warn' : ''}`}
@@ -1426,6 +1441,12 @@ export function ModelCabinet({
                         >
                           <span>{!platformFit.compatible ? 'macOS Only' : queued ? 'Remove' : blockedLabel ?? `Get ${getQueueChipModelName(row.displayName)}`}</span>
                         </button>
+                        {/* For getting it some other way: a terminal, a script,
+                            another PC. Installed rows have it on the model page.
+                            Not where Get is refused: copying would walk round
+                            the same "too big" the button just said. */}
+                        {!row.cloudOnly && platformFit.compatible && !blockedLabel && <CopyCommandButton command={pullCommand(row.displayName)} />}
+                        </>
                       )}
                         </>
                       )}
@@ -1498,6 +1519,18 @@ export function ModelCabinet({
               // Every family is a group, a family of one included (see
               // MIN_VARIANTS_TO_GROUP), so "1 version" is on screen.
               const versionCount = `${variants.length} version${variants.length === 1 ? '' : 's'}`;
+              // The family's grade is its best version's, as its Match column is.
+              const familyGrade = variants
+                .filter((v) => getPlatformFit(v.displayName, platform).compatible)
+                .map((v) => ({
+                  model: v.displayName,
+                  grade: gradeRow(v, { vramGb, unifiedMemory }, {
+                    score: getModelScore(v, modelScores),
+                    benchmark: getBenchmarkForModel(benchmarkByModel, v.displayName, v),
+                    bandwidthGbps: rigGbps,
+                  }),
+                }))
+                .sort((a, b) => (b.grade.points ?? -1) - (a.grade.points ?? -1))[0];
               return [
                 <tr
                   key={`family:${family}`}
@@ -1531,11 +1564,14 @@ export function ModelCabinet({
                     </div>
                   </td>
                   <td title={smallest != null ? 'Smallest to largest version' : undefined}>
-                    {smallest != null && largest != null && (
-                      <span className="model-family-size">
-                        {smallest === largest ? `${smallest} GB` : `${smallest}–${largest} GB`}
-                      </span>
-                    )}
+                    <span className="size-grade-line">
+                      {familyGrade && <FitGradeChip grade={familyGrade.grade} model={familyGrade.model} family />}
+                      {smallest != null && largest != null && (
+                        <span className="model-family-size">
+                          {smallest === largest ? `${smallest} GB` : `${smallest}–${largest} GB`}
+                        </span>
+                      )}
+                    </span>
                   </td>
                   <td className="good-for-cell" title={familyTags.join(', ')}>
                     <div className="good-for-tags">

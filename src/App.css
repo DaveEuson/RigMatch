@@ -2443,6 +2443,10 @@ tbody tr.computer-row.selected {
   font-style: normal;
 }
 
+.score-legend-strip .score-legend-next {
+  margin-top: var(--s2);
+}
+
 .model-filter-note {
   grid-column: 1 / -1;
   min-height: 30px;
@@ -11071,6 +11075,64 @@ tbody tr.selected {
   border-radius: 999px;
   background: rgba(255, 249, 239, 0.055);
 }
+
+/* The Fit grade sits in front of the size it is mostly about. */
+.size-grade-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 5px;
+  min-width: 0;
+}
+
+.fit-grade {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid rgba(255, 249, 239, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 249, 239, 0.05);
+  color: var(--muted);
+  font-size: var(--fs-small);
+  font-weight: 900;
+  line-height: 1;
+  cursor: help;
+}
+
+.fit-grade.grade-a { border-color: rgba(var(--green-rgb), 0.62); color: var(--green); background: rgba(var(--green-rgb), 0.14); }
+.fit-grade.grade-b { border-color: rgba(var(--blue-rgb), 0.58); color: var(--blue); background: rgba(var(--blue-rgb), 0.12); }
+.fit-grade.grade-c { border-color: rgba(var(--gold-rgb), 0.62); color: var(--gold); background: rgba(var(--gold-rgb), 0.12); }
+.fit-grade.grade-d { border-color: rgba(var(--red-rgb), 0.38); }
+.fit-grade.grade-f { border-color: rgba(var(--red-rgb), 0.68); color: var(--red); background: rgba(var(--red-rgb), 0.12); }
+.fit-grade.grade-unknown { border-style: dashed; }
+.fit-grade-word { font-size: 11px; font-weight: 700; opacity: 0.8; }
+
+/* Opened by its grade button and anchored to it (the invoker is the popover's
+   implicit anchor); flips above the button near the bottom of the window. */
+.fit-grade-pop {
+  position-area: bottom span-right;
+  position-try-fallbacks: flip-block, flip-inline;
+  inset: auto;
+  width: min(320px, calc(100vw - 32px));
+  margin: 6px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line-bright);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+}
+
+.fit-grade-pop strong { display: block; margin-bottom: 4px; font-size: var(--fs-ui); }
+.fit-grade-pop ul { display: grid; gap: 2px; margin: 0 0 8px; padding-left: 18px; }
+.fit-grade-pop em { display: block; color: var(--muted); font-style: normal; }
 
 .fit-pill {
   max-width: 100%;

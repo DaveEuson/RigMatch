@@ -76,6 +76,19 @@
 .mp-score b { color: var(--text-strong); font: 500 40px / 1 var(--figure); }
 .mp-score span { color: var(--muted); }
 
+/* The Fit grade and the command that gets the model: two plain lines. */
+.mp-fit {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s1) var(--s3);
+}
+.mp-fit p { margin: 0; color: var(--text); }
+.mp-command { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.mp-command code { background: none; padding: 0; color: var(--muted); font: 500 var(--fs-ui) / 1.2 var(--figure); }
+.mp-command .copy-command-button { display: inline-flex; align-items: center; gap: var(--s1); }
+.mp-command .copy-command-button svg { width: 14px; height: 14px; }
+
 .mp-actions {
   display: flex;
   flex-wrap: wrap;
