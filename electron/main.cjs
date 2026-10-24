@@ -31,6 +31,7 @@ const {
   clamp,
 } = require('./benchmarkScoring.cjs');
 const { scoreQualityWithJudge } = require('./judgeScoring.cjs');
+const { runRigTier } = require('./rigScoreRunner.cjs');
 const security = require('./security.cjs');
 const { chatMessageText, chatHistory } = require('./chatDock.cjs');
 const gpuContention = require('./gpuContention.cjs');
@@ -554,6 +555,9 @@ const BRIDGE_ALLOWED_ORIGINS = new Set([
 const SCORES_MAX_ENTRIES = 500;   // N-07: reject oversized payloads from renderer
 let benchmarkRunning = false;     // N-06: single-benchmark mutex
 let activeBenchmark = null;       // authoritative running state mirrored to the renderer
+// RigScore's speed test (rigScoreRunner.cjs): { progressId, abort, finished }
+// while one tier runs. Never beside a show: both would share the card.
+let activeRigScore = null;
 let lastLogClearAt = 0;           // N-03: rate-limit log clearing
 const activePullControllers = new Map(); // keyed by progressId for safe per-download cancellation
 let catalogFetchPromise = null;   // dedup concurrent catalog fetches
@@ -1007,12 +1011,14 @@ app.on('will-quit', (event) => {
     event.preventDefault();
     return;
   }
-  if (!activeBenchmarkFinished && ollamaLabResident.size === 0) return;
+  if (!activeBenchmarkFinished && !activeRigScore && ollamaLabResident.size === 0) return;
   quitCleanup = 'running';
   event.preventDefault();
   if (activeBenchmark?.progressId) canceledBenchmarkIds.add(activeBenchmark.progressId);
   activeBenchmarkAbort?.abort();
-  const cleanup = Promise.allSettled([activeBenchmarkFinished, releaseOllamaLabModels()]);
+  // A speed test stops the same way, and its own finally unloads the model.
+  activeRigScore?.abort.abort();
+  const cleanup = Promise.allSettled([activeBenchmarkFinished, activeRigScore?.finished, releaseOllamaLabModels()]);
   const cap = new Promise((resolve) => setTimeout(resolve, QUIT_CLEANUP_TIMEOUT_MS));
   void Promise.race([cleanup, cap]).finally(() => {
     quitCleanup = 'done';
@@ -1147,6 +1153,13 @@ function registerHandlers() {
   ipcMain.handle('benchmark:getActive', (event) => {
     assertTrustedIpcSender(event);
     return benchmarkStatusPayload();
+  });
+  handleLogged('rigscore:run', 'rigscore', (event, request) => runRigScore(request, event.sender));
+  ipcMain.handle('rigscore:cancel', (event, progressId) => {
+    assertTrustedIpcSender(event);
+    if (typeof progressId === 'string' && progressId && activeRigScore?.progressId === progressId) {
+      activeRigScore.abort.abort();
+    }
   });
   handleLogged('chat:send', 'chat', (event, request) => sendChat(request, event.sender));
   /**
@@ -3599,9 +3612,62 @@ async function unloadBenchmarkModel(baseUrl, model) {
   }
 }
 
+/**
+ * The machine half of a RigScore stamp: the card, its memory and driver, and
+ * this app's version. Read fresh for each tier, so a driver updated between
+ * two runs is named on the second.
+ */
+async function readRigMachine() {
+  const profile = await getSystemProfile().catch(() => null);
+  const gpu = profile?.gpu;
+  const driver = profile?.cuda?.driverVersion || gpu?.driverVersion;
+  return {
+    gpu: gpu?.model && !/^Unknown/i.test(gpu.model) ? gpu.model : undefined,
+    vramGb: Number.isFinite(gpu?.vramGb) ? gpu.vramGb : 0,
+    driverVersion: driver && driver !== 'Unknown' ? driver : undefined,
+    isUnifiedMemory: Boolean(gpu?.isUnifiedMemory),
+    appVersion: app.getVersion(),
+  };
+}
+
+/**
+ * One RigScore tier on the local Ollama (rigScoreRunner.cjs). Local only: a
+ * remote host's card cannot be read, so its score would carry no honest stamp.
+ */
+async function runRigScore(request = {}, sender) {
+  if (benchmarkRunning) throw new Error('A test is running. The speed test waits until it has finished.');
+  if (activeRigScore) throw new Error('A speed test is already running.');
+  const progressId = typeof request?.progressId === 'string' && request.progressId
+    ? request.progressId
+    : `rig-${Date.now().toString(36)}`;
+  let finished;
+  activeRigScore = { progressId, abort: new AbortController(), finished: new Promise((resolve) => { finished = resolve; }) };
+  try {
+    return await runRigTier({
+      request,
+      baseUrl: OLLAMA_LOCAL_URL,
+      fetchJson,
+      readMachine: readRigMachine,
+      unloadModel: unloadBenchmarkModel,
+      beforeRun: releaseOllamaLabModels,
+      isUnsupportedThinkError,
+      signal: activeRigScore.abort.signal,
+      onProgress: (update) => {
+        if (!sender.isDestroyed()) sender.send('rigscore:progress', { id: progressId, ...update });
+      },
+    });
+  } finally {
+    activeRigScore = null;
+    finished();
+  }
+}
+
 async function runBenchmark(request = {}, sender) {
   if (benchmarkRunning) {
     throw new Error('A benchmark is already running. Please wait for it to complete.');
+  }
+  if (activeRigScore) {
+    throw new Error('A speed test is running. Please wait for it to finish, or stop it on My PC.');
   }
   // Every run gets an id, because Stop names the run it stops. A script, or a
   // window that reloaded, started runs without one, and the load strip showed

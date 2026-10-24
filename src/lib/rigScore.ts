@@ -179,3 +179,85 @@ export function tiersThatFit(vramGb: number, isUnifiedMemory = false): RigTier[]
   if (isUnifiedMemory) return [...RIG_TIERS];
   return RIG_TIERS.filter((tier) => vramGb >= tier.minVramGb);
 }
+
+/** A tier's reference, with everything needed to check a result against it. */
+export type RigReferenceRecord = RigReference & {
+  /** The day it was measured, as YYYY-MM-DD. */
+  measuredOn: string;
+  gpu: string;
+  vramGb: number;
+  model: string;
+  modelDigest: string;
+  quantization: string;
+  ollamaVersion: string;
+  driverVersion: string;
+  appVersion: string;
+  workloadVersion: number;
+  numCtx: number;
+};
+
+/** The machine that scores 1000: Dave's own, so the number is one anyone can check. */
+export const RIG_REFERENCE_MACHINE = 'RTX 4070 12 GB on Ollama 0.35.1';
+
+/**
+ * 1000 points, per tier, measured once with RigMatch's own runner and written
+ * down. A tier still null has not been measured, and the screen shows its raw
+ * speeds with "points after the reference is measured" rather than a number
+ * made up to fill the gap.
+ *
+ * Pending, and what measuring each needs:
+ *  - Standard and Heavy: qwen3:8b (5.2 GB) and qwen3:14b (9.3 GB) installed on
+ *    the reference machine.
+ *  - Extreme: qwen3:30b-a3b (18 GB) on a card with 24 GB. The reference card has
+ *    12, so this tier needs a second reference machine, or a decision to score
+ *    it some other way.
+ */
+export const RIG_REFERENCES: Record<RigTierId, RigReferenceRecord | null> = {
+  light: null,
+  standard: null,
+  heavy: null,
+  extreme: null,
+};
+
+/** The reference as a stamp, so it is checked by the same rule as any two results. */
+export function referenceStamp(tier: RigTierId, reference: RigReferenceRecord): RigStamp {
+  return {
+    tier,
+    model: reference.model,
+    modelDigest: reference.modelDigest,
+    quantization: reference.quantization,
+    workloadVersion: reference.workloadVersion,
+    numCtx: reference.numCtx,
+    ollamaVersion: reference.ollamaVersion,
+    driverVersion: reference.driverVersion,
+    gpu: reference.gpu,
+    vramGb: reference.vramGb,
+    appVersion: reference.appVersion,
+  };
+}
+
+export type RigPoints =
+  /** Points, with anything that differs from the reference named. */
+  | { kind: 'points'; points: number; notes: string[] }
+  /** The tier's reference has not been measured yet. */
+  | { kind: 'pending' }
+  /** Different weights, test or context from the reference: no points, and why. */
+  | { kind: 'not-comparable'; notes: string[] };
+
+/**
+ * A result's points, only when it measured the same work as the reference.
+ *
+ * Points are a ratio to the reference, so a result on other weights (a tag
+ * that moved), another test version or another context has no honest ratio.
+ */
+export function rigPoints(
+  measure: TierMeasure,
+  stamp: RigStamp,
+  references: Record<RigTierId, RigReferenceRecord | null> = RIG_REFERENCES,
+): RigPoints {
+  const reference = references[stamp.tier];
+  if (!reference) return { kind: 'pending' };
+  const verdict = compareStamps(referenceStamp(stamp.tier, reference), stamp);
+  if (!verdict.comparable) return { kind: 'not-comparable', notes: verdict.notes };
+  return { kind: 'points', points: tierPoints(measure, reference), notes: verdict.notes };
+}
