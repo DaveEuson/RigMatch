@@ -776,9 +776,9 @@
   border-radius: 0;
   background: transparent;
 }
-/* The Match score legend at the foot of the Models filter column. */
+/* The Match score legend at the foot of the Models filter column, inset like the facets above it. */
 .app-shell[data-ui-mode='advanced'] .score-legend-strip {
-  padding: var(--s3) 0 0;
+  padding: var(--s3) var(--s4) 0;
   border: 0;
   border-top: 1px solid var(--line);
   border-radius: 0;

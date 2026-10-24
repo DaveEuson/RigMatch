@@ -2443,8 +2443,17 @@ tbody tr.computer-row.selected {
   font-style: normal;
 }
 
-.score-legend-strip .score-legend-next {
-  margin-top: var(--s2);
+/* The Fit grade, explained under the fit filters it belongs with. */
+.fit-grade-note {
+  margin: 4px 0 0;
+  padding: 0 var(--s4);
+  color: var(--muted);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+}
+
+.fit-grade-note b {
+  color: var(--text);
 }
 
 .model-filter-note {

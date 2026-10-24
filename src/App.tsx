@@ -277,7 +277,7 @@ import {
   type LineupOutcome,
   type VideoLineupEntry,
 } from './lib/videoLineup';
-import { mixtureSpillFit } from './lib/modelGrade';
+import { footprintFit, mixtureSpillFit } from './lib/modelGrade';
 import { formatVideoEstimate, videoFit } from './lib/videoFit';
 import { readVideoCalibration } from './lib/videoCalibrationStore';
 import { runImageLabChallenge } from './lib/imageGenRunner';
@@ -770,10 +770,19 @@ function App() {
             installLabel: entry.installedFile ? 'Installed' : 'Download',
             canDownload: !entry.installedFile,
             pulls: null,
+            // Both say which part of the download has to fit (footprintFit):
+            // the Size column shows the whole download, and the fit reads a
+            // smaller number. A Mac's video fit already says how much it needs.
             ...(lineup
-              ? { fitOverride: asHardwareFit(videoFit(lineup.sizing, videoMachine, { hasToken: hasToken || entry.installedFile })) }
+              ? {
+                fitOverride: videoMachine.unifiedMemory
+                  ? asHardwareFit(videoFit(lineup.sizing, videoMachine, { hasToken: hasToken || entry.installedFile }))
+                  : footprintFit(asHardwareFit(videoFit(lineup.sizing, videoMachine, { hasToken: hasToken || entry.installedFile })), lineup.sizing.ditGb, entry.sizeGb),
+              }
               : {}),
-            ...(footprint != null ? { fitOverride: getHardwareFit({ params: entry.params, sizeGb: footprint }, videoMachine.vramGb) } : {}),
+            ...(footprint != null
+              ? { fitOverride: footprintFit(getHardwareFit({ params: entry.params, sizeGb: footprint }, videoMachine.vramGb), footprint, entry.sizeGb) }
+              : {}),
           };
         });
       return [...generation, ...rows];

@@ -793,6 +793,14 @@ export function ModelCabinet({
                   onToggle={() => setQuickFilter(quickFilter === item.id ? 'all' : item.id as ModelQuickFilterId)}
                 />
               ))}
+              {/* Under the fit filters, the first thing in the rail: at the
+                  foot of the Match legend it sat 1,500 px down, past every
+                  filter, where nobody looking at a "Fit B" would find it. */}
+              {group.id === 'fit' && (
+                <p className="fit-grade-note">
+                  Each model's <b>Fit</b> letter says how well it should run here before any test: A is the best pick, F will not fit. Click one for the reasons.
+                </p>
+              )}
             </div>
           ))}
           <div className="model-facet-group">

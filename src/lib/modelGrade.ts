@@ -306,6 +306,20 @@ export function mixtureSpillFit(row: GradeRow, hardware: GradeHardware): Hardwar
   };
 }
 
+/**
+ * A picture or video model's fit, in words that match the Size column.
+ *
+ * Those models are sized by what they hold in graphics memory at once, which
+ * is less than the download the Size column shows: a picture model swaps its
+ * text encoder out before it draws, and a video model streams around its
+ * diffusion model. Unexplained, Z-Image Turbo's "14.58 GB" sat beside "8 GB
+ * should fit", and Wan 2.2 A14B's "38.03 GB" beside "Its 14.3 GB model".
+ */
+export function footprintFit(fit: HardwareFit, holdsGb: number, downloadGb: number | null | undefined): HardwareFit {
+  if (!downloadGb || fit.tone === 'unknown' || downloadGb - holdsGb < 0.5) return fit;
+  return { ...fit, detail: `Of its ${downloadGb} GB download, about ${formatGb(holdsGb)} has to be in graphics memory at once. ${fit.detail}` };
+}
+
 /** 2 tokens a second scores 0 and 40 scores 100: past reading speed, faster stops mattering much. */
 function speedPoints(tokensPerSecond: number): number {
   return clamp((100 * Math.log(tokensPerSecond / 2)) / Math.log(20));

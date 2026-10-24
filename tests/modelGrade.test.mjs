@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { activeShare, describeSpeed, gradeModel, gradeRow, measuredBandwidth, mixtureSpillFit, pullCommand, rigBandwidth } = await import('../src/lib/modelGrade.ts');
+const { activeShare, describeSpeed, footprintFit, gradeModel, gradeRow, measuredBandwidth, mixtureSpillFit, pullCommand, rigBandwidth } = await import('../src/lib/modelGrade.ts');
 const { describeFitPlainly, getHardwareFit } = await import('../src/lib/modelCatalog.ts');
 const { MATCH_GRADE_BANDS } = await import('../src/lib/scoring.ts');
 
@@ -350,4 +350,20 @@ test('a Mac is as fast as its chip', () => {
   // A discrete card's name says nothing here: "Radeon Pro" is not an M-series Pro.
   assert.equal(gradeModel(row('qwen3:14b', '14B', 8.7), { vramGb: 16, gpu: 'AMD Radeon Pro W6800' }).tokensPerSecond,
     gradeModel(row('qwen3:14b', '14B', 8.7), { vramGb: 16 }).tokensPerSecond);
+});
+
+test('a picture or video model says which part of its download has to fit', () => {
+  // Z-Image Turbo: a 14.58 GB download in the Size column, sized by the 8 GB
+  // it holds at once. The reason used to say only "8 GB should fit".
+  const picture = footprintFit(getHardwareFit({ params: '6B', sizeGb: 8.04 }, 12), 8.04, 14.58);
+  assert.equal(picture.detail, 'Of its 14.58 GB download, about 8 GB has to be in graphics memory at once. 8 GB should fit 12 GB with useful headroom.');
+  assert.equal(picture.tone, 'good', 'the fit itself is unchanged');
+  const zImage = gradeModel(row('Z-Image Turbo', '6B', 14.58, { generationKind: 'image', fitOverride: picture }), rtx4070);
+  assert.equal(zImage.summary, picture.detail, 'the grade gives the same reason as the Size column');
+
+  const offload = { tone: 'tight', label: 'Fits with offloading', detail: 'Its 14.3 GB model is bigger than this card’s VRAM, so ComfyUI streams it from system memory. It runs, just slower.', recommend: true };
+  assert.match(footprintFit(offload, 14.3, 38.03).detail, /^Of its 38\.03 GB download, about 14\.3 GB has to be in graphics memory at once\. Its 14\.3 GB model/);
+  const token = { tone: 'unknown', label: 'Needs a token', detail: 'Its publisher gates the download.', recommend: true };
+  assert.equal(footprintFit(token, 14.3, 38.03), token, 'nothing to say about size until it can be downloaded');
+  assert.equal(footprintFit(offload, 14.3, 14.5), offload, 'when the two are the same, there is nothing to explain');
 });
