@@ -1082,7 +1082,8 @@ export default function App() {
    */
   const splitFitNote = useMemo(() => {
     if (!activeBuddy || !secondModel || !vram) return null;
-    const bytes = [activeBuddy, secondModel]
+    // One model on both sides is loaded once.
+    const bytes = [...new Set([activeBuddy, secondModel])]
       .reduce((sum, model) => sum + (buddies.find((b) => b.modelName === model)?.sizeGb ?? 0) * 1e9, 0);
     if (kvBudgetFromVram(vram, bytes) !== 0) return null;
     return `${getDisplayName(activeBuddy)} and ${getDisplayName(secondModel)} need about ${formatGib(bytes)} together, `
