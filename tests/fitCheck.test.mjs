@@ -62,12 +62,13 @@ test('ranking is best first, and marks what Ollama has installed', () => {
 });
 
 test('the table shows the best 20 that run here, and says what it left out', () => {
-  const ranked = rankModels(catalogRows(), card, { installed: [{ name: 'qwen3:8b', sizeGb: 5.2 }] });
+  const ranked = rankModels(catalogRows(), card, { installed: [{ name: 'qwen3.5:9b', sizeGb: 6.6 }] });
   const table = formatTable(ranked, card, { ollamaReachable: true });
   const lines = table.split('\n');
   assert.equal(lines[0], 'RigMatch fit check');
   assert.equal(lines[1], 'NVIDIA GeForce RTX 4070 · 12 GB graphics memory · 32 GB system memory');
-  assert.equal(lines[2], 'Ollama is running: 1 of these are installed, marked *.');
+  assert.equal(lines[2], 'Ollama is running: 1 of these is installed, marked *.');
+  assert.match(table, /^A +qwen3\.5:9b \* /m);
   const header = lines.findIndex((line) => line.startsWith('Grade'));
   assert.match(lines[header], /^Grade +Model +Size +Speed +Fit +Get it$/);
   const body = lines.slice(header + 1, header + 21);
@@ -83,6 +84,30 @@ test('the table shows the best 20 that run here, and says what it left out', () 
   assert.match(all, /^F +\S+/m, '--all includes what will not fit');
   assert.match(all, /Ollama is not running here, so installed models are not marked\./);
   assert.match(formatTable(ranked, { ...card, source: 'flag', driverProblem: 'driver-missing' }), /--vram[\s\S]*did not answer/);
+});
+
+test('installed models outside the list are counted honestly, and --installed lists them', () => {
+  // Dave's PC said "5 of these are installed, marked *" over a list with no
+  // star in it: what you have is rarely among the best 20 for the card.
+  const have = (...names) => rankModels(catalogRows(), card, { installed: names.map((name) => ({ name, sizeGb: 1 })) });
+  const outside = have('qwen3:0.6b', 'qwen3:30b');
+  assert.equal(formatTable(outside, card, { ollamaReachable: true }).split('\n')[2],
+    'Ollama is running with 2 models installed, none of them in this list. --installed lists them.');
+  const mixed = have('qwen3.5:9b', 'qwen3:0.6b', 'qwen3:30b');
+  assert.equal(formatTable(mixed, card, { ollamaReachable: true }).split('\n')[2],
+    'Ollama is running with 3 models installed: 1 in this list, marked *. --installed lists all 3.');
+
+  const mine = formatTable(mixed, card, { ollamaReachable: true, installedOnly: true });
+  const lines = mine.split('\n');
+  assert.equal(lines[2], 'Ollama is running: your 3 installed models, best first.');
+  const header = lines.findIndex((line) => line.startsWith('Grade'));
+  assert.deepEqual(lines.slice(header + 1, header + 4).map((line) => line.split(/ +/).slice(0, 2).join(' ')),
+    ['A qwen3.5:9b', 'C qwen3:0.6b', 'F qwen3:30b'], 'every installed model, a will-not-fit one included, best first');
+  assert.equal(lines[header + 4], '');
+  assert.match(mine, /^3 installed models\. Fit grade A is the best pick/m);
+  const none = formatTable(have(), card, { installedOnly: true });
+  assert.match(none, /Ollama is not running here, so there is no telling what is installed\.\n\nNo installed models to list\.\n/);
+  assert.doesNotMatch(none, /^Grade/m, 'no header over an empty table');
 });
 
 test('--json carries every model with the fields a script needs', () => {
@@ -163,6 +188,13 @@ test('the command marks what Ollama lists as installed', async () => {
     assert.ok(requests.every((url) => url === '/api/tags'), `only /api/tags is asked: ${requests.join(', ')}`);
     assert.equal((await runCli(['--vram', '12', '--provider', 'lmstudio'], undefined, { ...process.env, OLLAMA_HOST: `127.0.0.1:${port}` })).code, 0);
     assert.equal(requests.length, 4, 'LM Studio mode does not ask Ollama');
+    const mine = await runCli(['--vram', '12', '--installed'], undefined, { ...process.env, OLLAMA_HOST: `127.0.0.1:${port}` });
+    assert.equal(mine.code, 0, mine.stderr);
+    assert.match(mine.stdout, /your 2 installed models, best first\./);
+    assert.match(mine.stdout, /^[A-F] +hf\.co\/someone\/custom-7b-GGUF:Q4_K_M \* /m);
+    const clash = await runCli(['--installed', '--provider', 'lmstudio'], undefined, { ...process.env, OLLAMA_HOST: `127.0.0.1:${port}` });
+    assert.equal(clash.code, 1);
+    assert.match(clash.stderr, /--installed lists what Ollama has, so it works only with --provider ollama\./);
   } finally {
     server.close();
   }

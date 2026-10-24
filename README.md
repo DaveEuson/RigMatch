@@ -220,6 +220,7 @@ A      gemma2:9b      5.4 GB  ~56 tok/s  Sweet spot  ollama pull gemma2:9b
 | Option | Does |
 |---|---|
 | `--all` | List every model, including the ones that will not fit |
+| `--installed` | List only the models Ollama already has, graded |
 | `--json` | Print every model as JSON, for scripts |
 | `--provider lmstudio` | Print LM Studio's `lms get` commands instead of `ollama pull` |
 | `--vram 16` | Grade for a card with 16 GB instead of this one |

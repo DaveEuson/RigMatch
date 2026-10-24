@@ -7,8 +7,12 @@
   "bin": {
     "rigmatch-fit": "dist/rigmatch-fit.mjs"
   },
+  "scripts": {
+    "prepack": "npm --prefix .. run build:cli && node -e \"require('node:fs').copyFileSync('../LICENSE', 'LICENSE')\""
+  },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20"

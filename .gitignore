@@ -58,3 +58,7 @@ design/
 # Local builds still need it: `npm run prepare:companions` copies it from
 # rigmatch-chat/src-tauri/target/release, and says so if you have not built it.
 companions/
+
+# Copied from the repo root by cli/package.json's prepack, so the npm package
+# carries the licence without a second copy in the tree to keep in step.
+cli/LICENSE

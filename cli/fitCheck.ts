@@ -121,6 +121,7 @@ export function runsHere(model: RankedModel): boolean {
 }
 
 const pad = (text: string, width: number) => text + ' '.repeat(Math.max(0, width - text.length));
+const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 const gb = (value: number) => `${Math.round(value * 10) / 10} GB`;
 
 /** "Sweet spot", not "Good fit · 9.3 GB": the size has its own column. */
@@ -140,11 +141,14 @@ export function describeHardware(hardware: FitHardware): string {
 export function formatTable(
   models: RankedModel[],
   hardware: FitHardware,
-  { provider = 'ollama', ollamaReachable = false, all = false, limit = 20 }: { provider?: Provider; ollamaReachable?: boolean; all?: boolean; limit?: number } = {},
+  { provider = 'ollama', ollamaReachable = false, all = false, installedOnly = false, limit = 20 }: {
+    provider?: Provider; ollamaReachable?: boolean; all?: boolean; installedOnly?: boolean; limit?: number;
+  } = {},
 ): string {
   const running = models.filter(runsHere);
-  const shown = all ? models : running.slice(0, limit);
-  const installedCount = models.filter((model) => model.installed).length;
+  const installed = models.filter((model) => model.installed);
+  const shown = installedOnly ? installed : all ? models : running.slice(0, limit);
+  const markedHere = shown.filter((model) => model.installed).length;
   const lines = ['RigMatch fit check', describeHardware(hardware)];
   if (hardware.source === 'flag') lines.push('Graded for the graphics memory you gave with --vram, not this computer\'s.');
   if (hardware.driverProblem) {
@@ -153,9 +157,16 @@ export function formatTable(
   if (provider === 'lm-studio') {
     lines.push('LM Studio names models its own way, so each command is a search: lms get shows what it found before downloading.');
   } else {
-    lines.push(!ollamaReachable ? 'Ollama is not running here, so installed models are not marked.'
-      : installedCount > 0 ? `Ollama is running: ${installedCount} of these are installed, marked *.`
-        : 'Ollama is running, with none of these installed yet.');
+    // Installed models are often not among the best 20 for this PC, so the
+    // line says how many of them the list actually shows.
+    const count = installed.length;
+    lines.push(!ollamaReachable
+      ? `Ollama is not running here, so ${installedOnly ? 'there is no telling what is installed' : 'installed models are not marked'}.`
+      : count === 0 ? 'Ollama is running, with none of these installed yet.'
+        : installedOnly ? `Ollama is running: your ${plural(count, 'installed model')}, best first.`
+          : markedHere === count ? `Ollama is running: ${count} of these ${count === 1 ? 'is' : 'are'} installed, marked *.`
+            : markedHere === 0 ? `Ollama is running with ${plural(count, 'model')} installed, none of them in this list. --installed lists them.`
+              : `Ollama is running with ${plural(count, 'model')} installed: ${markedHere} in this list, marked *. --installed lists all ${count}.`);
   }
   lines.push('');
 
@@ -170,12 +181,12 @@ export function formatTable(
   ]);
   const widths = header.map((title, column) => Math.max(title.length, ...cells.map((row) => row[column].length)));
   const render = (row: string[]) => row.map((cell, column) => (column === row.length - 1 ? cell : pad(cell, widths[column]))).join('  ').trimEnd();
-  lines.push(render(header), ...cells.map(render));
-  if (shown.length === 0) lines.push('Nothing in the catalog runs on this computer.');
+  if (shown.length > 0) lines.push(render(header), ...cells.map(render));
+  else lines.push(installedOnly ? 'No installed models to list.' : 'Nothing in the catalog runs on this computer.');
 
   lines.push('');
-  lines.push(all
-    ? `All ${models.length} models. Fit grade A is the best pick for this computer, F will not fit.`
+  lines.push(installedOnly || all
+    ? `${installedOnly ? plural(shown.length, 'installed model') : `All ${models.length} models`}. Fit grade A is the best pick for this computer, F will not fit.`
     : `The best ${shown.length} of ${running.length} models that run here. --all lists every model, --json prints them for scripts.`);
   lines.push('Speeds are estimates from the size and the card. RigMatch measures the real ones: https://github.com/DaveEuson/RigMatch');
   return lines.join('\n');

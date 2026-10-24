@@ -4,6 +4,7 @@
  *
  *   npx rigmatch-fit                  the best 20 for this PC
  *   npx rigmatch-fit --all            every model, including the ones that will not fit
+ *   npx rigmatch-fit --installed      only the models Ollama already has
  *   npx rigmatch-fit --json           every model, for scripts
  *   npx rigmatch-fit --provider lmstudio
  *   npx rigmatch-fit --vram 16        grade for a 16 GB card instead of this one
@@ -26,6 +27,7 @@ const HELP = `rigmatch-fit ${pkg.version}: which local AI models will run well o
 Usage: rigmatch-fit [options]
 
   --all               List every model, including ones that will not fit
+  --installed         List only the models Ollama already has, graded
   --json              Print every model as JSON, for scripts
   --provider <name>   ollama (default) or lmstudio: which download command to print
   --vram <GB>         Grade for a graphics card with this much memory instead of this one
@@ -103,6 +105,7 @@ async function main(): Promise<number> {
   const { values } = parseArgs({
     options: {
       all: { type: 'boolean', default: false },
+      installed: { type: 'boolean', default: false },
       json: { type: 'boolean', default: false },
       provider: { type: 'string', default: 'ollama' },
       vram: { type: 'string' },
@@ -123,6 +126,9 @@ async function main(): Promise<number> {
     throw new Error(`--provider is ollama or lmstudio, not "${values.provider}".`);
   }
   const provider: Provider = providerName === 'lmstudio' ? 'lm-studio' : 'ollama';
+  if (values.installed && provider !== 'ollama') {
+    throw new Error('--installed lists what Ollama has, so it works only with --provider ollama.');
+  }
 
   const [hardware, installed] = await Promise.all([
     detectHardware(values.vram),
@@ -132,7 +138,7 @@ async function main(): Promise<number> {
   const ollamaReachable = installed !== null;
   console.log(values.json
     ? JSON.stringify(toJson(models, hardware, { provider, ollamaReachable, version: pkg.version }), null, 2)
-    : formatTable(models, hardware, { provider, ollamaReachable, all: values.all }));
+    : formatTable(models, hardware, { provider, ollamaReachable, all: values.all, installedOnly: values.installed }));
   return 0;
 }
 
