@@ -35,6 +35,9 @@ export const TASK_GROUPS = [
   { id: 'instructions', label: 'Following instructions', questionTypes: ['format'] },
   { id: 'candour', label: 'Difficult subjects', questionTypes: ['candour'] },
   { id: 'edgy', label: 'Harmless but edgy', questionTypes: ['edgy'] },
+  // A group of its own and no goal's crown: one picture a show is a fun
+  // comparison, not three answers' worth of verdict.
+  { id: 'drawing', label: 'Drawing', questionTypes: ['drawing'] },
 ] as const satisfies ReadonlyArray<{
   id: string;
   label: string;

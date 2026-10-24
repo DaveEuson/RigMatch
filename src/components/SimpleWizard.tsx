@@ -31,6 +31,8 @@ import { buildFeedbackUrl } from '../lib/feedback';
 import { LOW_DISK_GB } from '../lib/loadLevel';
 import { UiIcon } from './icons/UiIcon';
 import { AchievementUnlocked } from './AchievementShelf';
+import { DrawingGallery, DrawingTile } from './DrawingGallery';
+import { useShowDrawings, type LineupDrawing } from '../lib/drawings';
 import { GetComfyLink } from './GetComfyLink';
 import { comfyRequirements } from '../lib/serviceStatus';
 import { useShowTheme, type ShowMusicState } from '../hooks/useShowTheme';
@@ -244,6 +246,8 @@ type SimpleWizardProps = {
   }>;
   /** Contestants in this show that could not finish; the show went on without them. */
   droppedOut?: RunFailure[];
+  /** The drawing round's pictures from the contestants on the board, side by side under it. */
+  drawings?: LineupDrawing[];
   onChatWithWinner: () => void;
   /**
    * The one model to talk to without running a show, for someone who came to
@@ -1511,6 +1515,8 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
     : runProgress?.questionPrompt ?? 'The host is lining up the next question…';
   const completed = runProgress?.completed ?? 0;
   const [showPrompt, setShowPrompt] = useState(false);
+  // Each contestant's drawing, on their podium from the moment it is drawn.
+  const drawings = useShowDrawings(runProgress?.progressId);
 
   const extras = useShowExtras();
   // The bulbs dance to the theme song while it plays.
@@ -1701,6 +1707,9 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
               const wasAnswering = failed && row.displayName === activeModel;
               const state = dropped ? 'dropped' : isActive ? 'answering' : isDone ? 'done' : wasAnswering ? 'stopped' : 'waiting';
               const rowScore = runProgress?.lastResult?.model === row.displayName ? runProgress?.lastResult?.total : undefined;
+              // By seat when the name finds nothing: a show that hides names
+              // renames each row to its seat, and runs the seats in order.
+              const drawing = drawings.byModel[row.displayName] ?? drawings.bySeat[index];
               return (
                 <div key={row.displayName} className={`sw-podium ${state}`} style={{ '--i': index } as CSSProperties}>
                   <img src={getModelAvatarSrc(row.displayName)} alt="" />
@@ -1717,6 +1726,7 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
                           : state === 'stopped' ? 'Stopped partway'
                             : failed ? 'Did not run' : 'Up next'}
                   </span>
+                  {drawing && <DrawingTile drawing={drawing} alt="Their drawing" />}
                 </div>
               );
             })}
@@ -1813,10 +1823,23 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
 /** When the curtains have parted far enough for the winner to land. */
 const CURTAIN_MS = 900;
 
-function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedOut, balance, onBalanceChange, round, runProgress, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
+function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedOut, drawings, balance, onBalanceChange, round, runProgress, onChatWithWinner, onOpenScorecard, onShareScore, onRunAgain, onSwitchToAdvanced }: SimpleWizardProps) {
   // Show effects: the curtains part on the winner, the bulbs flash, the
   // audience applauds. Without them the reveal plays exactly as before.
   const { effects } = useShowExtras();
+  // Under the board, never instead of it: the pictures are the fun part, the
+  // board is the result.
+  const gallery = (
+    <DrawingGallery
+      prompt={drawings?.[0]?.prompt.prompt}
+      entries={(drawings ?? []).map(({ model, drawing, score }) => ({
+        key: model,
+        name: getFriendlyModelName(model),
+        drawing,
+        score,
+      }))}
+    />
+  );
   if (!winner) {
     // Two different nothings: a show that has not run, and a show where nobody
     // passed. The second one has a board to show and a reason to give.
@@ -1864,6 +1887,7 @@ function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedO
         {/* A show nobody won still happened, and can still earn a badge. */}
         <AchievementUnlocked />
         <Scoreboard results={board} />
+        {gallery}
       </div>
     );
   }
@@ -2002,6 +2026,7 @@ function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedO
           note={`${round && round !== 'chat' ? ROUND_LINES[round].note : 'Every one of these ran the same questions on your PC.'} A close second may still suit you better, so try chatting with either.`}
         />
       )}
+      {gallery}
       {/* Who sat out, and why. They are not ranked: they did not answer
           everything, so there is nothing fair to rank them on. */}
       {(droppedOut?.length ?? 0) > 0 && (

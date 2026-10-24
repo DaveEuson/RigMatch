@@ -2,7 +2,7 @@
 export const BENCHMARK_QUESTION_LEVELS = [10, 20, 50, 100] as const;
 
 export type BenchmarkQuestionCount = (typeof BENCHMARK_QUESTION_LEVELS)[number];
-export type BenchmarkQuestionType = 'json' | 'truth' | 'format' | 'assistant' | 'coding' | 'writing' | 'candour' | 'tools' | 'edgy';
+export type BenchmarkQuestionType = 'json' | 'truth' | 'format' | 'assistant' | 'coding' | 'writing' | 'candour' | 'tools' | 'edgy' | 'drawing';
 
 export type BenchmarkQuestion = {
   id: string;
@@ -30,6 +30,53 @@ const scenarios = [
   'game room lighting scene',
   'travel packing reminder',
 ];
+
+/**
+ * What the drawing round asks for, one SVG each.
+ *
+ * The pelican is Simon Willison's: "Generate an SVG of a pelican riding a
+ * bicycle" is the benchmark he runs on every new model
+ * (https://simonwillison.net/tags/pelican-riding-a-bicycle/), and it comes
+ * first so a ten-question show asks the one people can compare against his.
+ * The rest are RigMatch's own, all things a model can draw with basic shapes.
+ * A longer show moves along the list (repeatDrawing), so a hundred questions
+ * draw each one once. electron/drawingRound.cjs checks, cleans and judges the
+ * answers.
+ */
+export const DRAWING_SUBJECTS = [
+  'a pelican riding a bicycle',
+  'a robot handing a single red rose to a toaster on a first date',
+  'two snails sharing one strand of spaghetti at a candlelit dinner',
+  'a cat in a bow tie holding up a scorecard that says 10',
+  'a lighthouse on a rocky island at night, its beam crossing the sea',
+] as const;
+
+export function drawingPrompt(subject: string): string {
+  return `Generate an SVG of ${subject}. Reply with one self-contained <svg> element with a viewBox: no scripts, and nothing loaded from outside it. Keep it compact, about 40 shapes at most.`;
+}
+
+const DRAWING_PROMPTS = DRAWING_SUBJECTS.map(drawingPrompt);
+
+/** The General set's second format question, whose place the drawing took. */
+const SUMMARIES_QUESTION: BenchmarkQuestion = {
+  id: 'summarize_plan_1',
+  label: 'Summaries',
+  type: 'format',
+  prompt: 'Summarize this plan in exactly three numbered steps: prepare the kitchen timer and music request, check constraints, and confirm with the user before acting.',
+};
+
+/**
+ * A built-in drawing as a longer show asks it again. Odd rounds draw, one
+ * subject further along each time; even rounds ask Summaries, the question the
+ * drawing replaced, so twenty questions still ask three format questions and
+ * every group still reaches a verdict at twenty. A user's own drawing repeats.
+ */
+function repeatDrawing(question: BenchmarkQuestion, round: number): BenchmarkQuestion {
+  const at = DRAWING_PROMPTS.indexOf(question.prompt);
+  if (at < 0 || round === 1) return question;
+  if (round % 2 === 0) return SUMMARIES_QUESTION;
+  return { ...question, prompt: DRAWING_PROMPTS[(at + (round - 1) / 2) % DRAWING_PROMPTS.length] };
+}
 
 const benchmarkTemplates: BenchmarkTemplate[] = [
   {
@@ -68,11 +115,13 @@ const benchmarkTemplates: BenchmarkTemplate[] = [
       `Write a compact JavaScript function named clampScore${round} that accepts a number and returns it clamped between 0 and 100.`,
   },
   {
-    id: 'summarize_plan',
-    label: 'Summaries',
-    type: 'format',
-    prompt: (scenario) =>
-      `Summarize this plan in exactly three numbered steps: prepare the ${scenario}, check constraints, and confirm with the user before acting.`,
+    // In the place of the second format question (Summaries), so the default
+    // show still asks ten. Ten questions crown no group either way, and a
+    // longer show asks Summaries again in alternate rounds (repeatDrawing).
+    id: 'drawing',
+    label: 'Drawing',
+    type: 'drawing',
+    prompt: () => DRAWING_PROMPTS[0],
   },
   {
     id: 'refusal_boundary',
@@ -121,6 +170,27 @@ function buildGeneratedBenchmarkQuestions(count: number): BenchmarkQuestion[] {
 
 export const DEFAULT_BENCHMARK_QUESTIONS = buildGeneratedBenchmarkQuestions(10);
 
+/**
+ * The General set before the drawing round took the Summaries question's place.
+ *
+ * The question set is written to storage on every launch, so everyone who ran
+ * an earlier version has this exact set saved. Kept as it was, it would never
+ * ask the drawing, and the run sheet would name it "your questions".
+ */
+const RETIRED_GENERAL_QUESTIONS = DEFAULT_BENCHMARK_QUESTIONS.map((question) => (
+  question.type === 'drawing' ? SUMMARIES_QUESTION : question
+));
+
+/** A saved set that is an untouched earlier General becomes today's General; anything else is kept. */
+export function upgradeSavedQuestions(questions: BenchmarkQuestion[]): BenchmarkQuestion[] {
+  const retired = questions.length === RETIRED_GENERAL_QUESTIONS.length
+    && questions.every((question, index) => {
+      const old = RETIRED_GENERAL_QUESTIONS[index];
+      return question.id === old.id && question.label === old.label && question.type === old.type && question.prompt === old.prompt;
+    });
+  return retired ? [...DEFAULT_BENCHMARK_QUESTIONS] : questions;
+}
+
 export function normalizeBenchmarkQuestionCount(value: unknown): BenchmarkQuestionCount {
   const numeric = Number(value);
   return BENCHMARK_QUESTION_LEVELS.includes(numeric as BenchmarkQuestionCount)
@@ -159,8 +229,8 @@ export function buildBenchmarkPromptPlan(
   const questions = normalizeBenchmarkQuestions(sourceQuestions);
 
   return Array.from({ length: count }, (_, index) => {
-    const question = questions[index % questions.length];
     const round = Math.floor(index / questions.length) + 1;
+    const question = repeatDrawing(questions[index % questions.length], round);
 
     return {
       ...question,
@@ -340,5 +410,6 @@ function isBenchmarkQuestionType(value: unknown): value is BenchmarkQuestionType
     || value === 'writing'
     || value === 'candour'
     || value === 'tools'
-    || value === 'edgy';
+    || value === 'edgy'
+    || value === 'drawing';
 }

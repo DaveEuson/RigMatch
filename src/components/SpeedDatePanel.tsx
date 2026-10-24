@@ -24,6 +24,8 @@ import { TestProcessCard } from './TestProcessCard';
 import { BalanceFader } from './BalanceFader';
 import { CodingBoard } from './CodingBoard';
 import { LabComparison } from './LabComparison';
+import { DrawingGallery } from './DrawingGallery';
+import { lineupDrawings } from '../lib/drawings';
 import { ChevronRight, Download, Plus, Trophy } from 'lucide-react';
 import { useState } from 'react';
 
@@ -121,6 +123,8 @@ export function SpeedDatePanel({
       : matchRanking[0]?.model ?? null;
   const winnerResult = channel === 'code' || channel === 'reading' ? undefined : matchRanking[0];
   const hasRanking = channel === 'reading' ? readingGroups.length > 0 : Boolean(listTestResult);
+  // The drawing round's pictures, side by side under the ranking.
+  const rankingDrawings = listTestResult ? lineupDrawings(listTestResult.results.map((result) => result.model), benchmarkByModel) : [];
   const selectedSlots = Array.from({ length: 5 }, (_, index) => shortlistedRows[index]);
   const uninstalledLineupRows = shortlistedRows.filter((row) => !row.installed);
   const canRunListTest = shortlistedRows.length >= MIN_CONTESTANTS && uninstalledLineupRows.length === 0 && !isListTesting;
@@ -418,6 +422,10 @@ export function SpeedDatePanel({
               // showing one comparison; a later single test on one of these
               // models would otherwise silently rewrite a cell of it.
               scores={Object.fromEntries(listTestResult.results.map((result) => [result.model, result]))}
+            />
+            <DrawingGallery
+              prompt={rankingDrawings[0]?.prompt.prompt}
+              entries={rankingDrawings.map(({ model, drawing, score }) => ({ key: model, name: model, drawing, score }))}
             />
             <button type="button" className="primary-button compact speed-date-next-btn" onClick={onOpenHistory}>
               <History aria-hidden="true" />

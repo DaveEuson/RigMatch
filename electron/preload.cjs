@@ -82,6 +82,13 @@ const api = {
     ipcRenderer.on('benchmark:progress', listener);
     return () => ipcRenderer.removeListener('benchmark:progress', listener);
   },
+  /** A drawing round's SVG to draw as a PNG for a judge that can see (main.cjs, requestDrawingPicture). */
+  onDrawingPictureRequest: (callback) => {
+    const listener = (_event, request) => callback(request);
+    ipcRenderer.on('drawing:pictureRequest', listener);
+    return () => ipcRenderer.removeListener('drawing:pictureRequest', listener);
+  },
+  reportDrawingPicture: (result) => ipcRenderer.invoke('drawing:pictureResult', result),
   getActiveBenchmark: () => ipcRenderer.invoke('benchmark:getActive'),
   onBenchmarkStatus: (callback) => {
     const listener = (_event, status) => callback(status);

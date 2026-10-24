@@ -97,7 +97,7 @@ test('every benchmark question type is covered by exactly one group', () => {
   // two would be double-counted.
   const seen = TASK_GROUPS.flatMap((g) => g.questionTypes);
   assert.deepEqual([...seen].sort(),
-    ['assistant', 'candour', 'coding', 'edgy', 'format', 'json', 'tools', 'truth', 'writing']);
+    ['assistant', 'candour', 'coding', 'drawing', 'edgy', 'format', 'json', 'tools', 'truth', 'writing']);
   assert.equal(new Set(seen).size, seen.length, 'no question type in two groups');
 });
 
@@ -116,15 +116,19 @@ test('the default ten-question run is too thin for any per-task verdict', async 
   const ten = summarizeTaskScores(asResults(DEFAULT_BENCHMARK_QUESTIONS));
   assert.equal(ten.coding.questions, 2);
   assert.equal(ten.tools.questions, 2, 'json stands alone as the tools group');
-  assert.equal(ten.instructions.questions, 2, 'format alone measures instruction-following');
+  assert.equal(ten.instructions.questions, 1, 'format alone measures instruction-following; the drawing took the second');
+  assert.equal(ten.drawing.questions, 1);
   assert.deepEqual(
     Object.entries(ten).filter(([, v]) => isVerdictWorthy(v)).map(([k]) => k),
     [],
     'at ten questions nothing is worth calling a verdict',
   );
 
-  // Twenty — the next level up — clears the bar for all five.
-  const twenty = summarizeTaskScores(asResults([...DEFAULT_BENCHMARK_QUESTIONS, ...DEFAULT_BENCHMARK_QUESTIONS]));
+  // Twenty — the next level up — clears the bar for all five. Built the way a
+  // show builds it: the drawing's place asks Summaries in the second round,
+  // which is what keeps instructions at three.
+  const { buildBenchmarkPromptPlan } = await import('../src/benchmarkSuite.ts');
+  const twenty = summarizeTaskScores(asResults(buildBenchmarkPromptPlan(20, DEFAULT_BENCHMARK_QUESTIONS)));
   assert.deepEqual(
     Object.entries(twenty).filter(([, v]) => isVerdictWorthy(v)).map(([k]) => k).sort(),
     ['chat', 'coding', 'facts', 'instructions', 'tools'],
