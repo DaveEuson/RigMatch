@@ -299,7 +299,11 @@
 .app-shell[data-ui-mode='advanced'] .model-filter-note span { font-weight: 400; }
 
 /* ---- What's New -------------------------------------------------------------- */
-.app-shell[data-ui-mode='advanced'] .whats-new-panel { padding: var(--s4) var(--s5) var(--s5); border: 0; border-radius: 0; background: none; box-shadow: none; gap: var(--s3); overflow-y: auto; }
+/* The panel scrolls as a whole, so every row is as tall as its content. App.css
+   sizes it for two children (head, list) with the second at minmax(0, 1fr); the
+   scope tabs landed in that track and shrank to nothing under a long list,
+   which then covered the tab buttons and took their clicks. */
+.app-shell[data-ui-mode='advanced'] .whats-new-panel { padding: var(--s4) var(--s5) var(--s5); border: 0; border-radius: 0; background: none; box-shadow: none; gap: var(--s3); overflow-y: auto; grid-template-rows: none; align-content: start; }
 .app-shell[data-ui-mode='advanced'] .news-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s3) var(--s5); }
 .app-shell[data-ui-mode='advanced'] .news-head h2 { margin: 0; color: var(--text-strong); font: 400 var(--fs-h1) / 1.1 var(--display); }
 .app-shell[data-ui-mode='advanced'] .news-head p { max-width: 72ch; margin: 4px 0 0; color: var(--text); font-size: var(--fs-ui); }
@@ -794,6 +798,14 @@
   cursor: pointer;
 }
 .app-shell[data-ui-mode='advanced'] .model-news-open:hover strong { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 4px; }
+/* A family's tags, listed under its row: no portrait (the family row has it),
+   so the tag lines up with the family name above. */
+.app-shell[data-ui-mode='advanced'] .whats-new-panel .model-news-item.is-version { padding: var(--s2) 0; }
+.app-shell[data-ui-mode='advanced'] .model-news-item.is-version .model-news-open code { color: var(--text-strong); font-size: var(--fs-ui); }
+.app-shell[data-ui-mode='advanced'] .model-news-item.is-version .model-news-open:hover code { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 4px; }
+.app-shell[data-ui-mode='advanced'] .news-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s3) var(--s4); padding-top: var(--s4); color: var(--muted); font-size: var(--fs-ui); }
+.app-shell[data-ui-mode='advanced'] .news-pager-steps { display: flex; align-items: center; gap: var(--s3); }
+.app-shell[data-ui-mode='advanced'] .news-pager-page { min-width: 9ch; color: var(--text-strong); text-align: center; }
 /* Comparison, after a first look: the tabs' numbers floated beside the
    names (the order is the tab order), the By Model / Side by Side toggle used
    the gold kept for the winner and the next step, and each question's two
