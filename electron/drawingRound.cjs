@@ -27,18 +27,41 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
 
 /**
- * The elements a drawing keeps. Anything else goes with everything inside it:
- * script, foreignObject (HTML inside the SVG), image and use (they load or
- * repeat other content), a, and the animate family (which can rewrite an href).
+ * The elements a drawing keeps, matched exactly (SVG names are case-sensitive).
+ * Anything else goes with everything inside it: script, style, foreignObject
+ * (HTML inside the SVG), image and use (they load or repeat other content), a,
+ * and the animate family, set included (they can rewrite an href).
  */
 const KEPT_ELEMENTS = new Set([
-  'svg', 'g', 'defs', 'title', 'desc', 'style',
+  'svg', 'g', 'defs', 'title', 'desc',
   'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text', 'tspan',
   'linearGradient', 'radialGradient', 'stop', 'clipPath',
 ]);
+
+/**
+ * The attributes a kept element keeps: shape, paint and text, nothing that
+ * runs or loads. Everything else goes, every on* handler included, whatever
+ * its case. href is kept only as a link to something in the drawing (#id),
+ * and style only as plain declarations (see keepAttribute).
+ */
+const KEPT_ATTRIBUTES = new Set([
+  'id', 'class', 'version', 'xml:space', 'href', 'xlink:href', 'style',
+  'viewBox', 'preserveAspectRatio', 'transform',
+  'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'fx', 'fy', 'fr',
+  'width', 'height', 'd', 'points', 'pathLength', 'dx', 'dy', 'rotate', 'textLength', 'lengthAdjust',
+  'offset', 'gradientUnits', 'gradientTransform', 'spreadMethod', 'stop-color', 'stop-opacity',
+  'clipPathUnits', 'clip-path', 'clip-rule',
+  'fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-linecap',
+  'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset',
+  'opacity', 'color', 'display', 'visibility', 'paint-order', 'vector-effect', 'shape-rendering',
+  'font-family', 'font-size', 'font-weight', 'font-style', 'font-variant', 'text-anchor',
+  'dominant-baseline', 'alignment-baseline', 'baseline-shift', 'letter-spacing', 'word-spacing',
+  'text-decoration', 'writing-mode',
+]);
+
 const SHAPES = new Set(['path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text']);
 /** Shapes in here are not drawn: they are paint, clipping or metadata. */
-const UNDRAWN = new Set(['defs', 'clipPath', 'linearGradient', 'radialGradient', 'title', 'desc', 'style']);
+const UNDRAWN = new Set(['defs', 'clipPath', 'linearGradient', 'radialGradient', 'title', 'desc']);
 const XML_ENTITIES = /&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/;
 
 /**
@@ -157,29 +180,42 @@ function escapeXml(value) {
   return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/** A url() that points anywhere but this document, in an attribute or in CSS. */
-const EXTERNAL_URL = /url\((?!\s*['"]?\s*#)[^)]*\)/gi;
-const SCHEME = /(?:javascript|vbscript|data)\s*:/i;
+const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 
 /**
- * Whether an attribute survives. Event handlers never do; links survive only
- * as in-document references (#gradient); a value that loads anything from
- * outside the drawing goes.
+ * An attribute value as the browser will read it. Every check runs on this,
+ * so `&#106;avascript:` is seen as the `javascript:` it spells.
  */
-function keepAttribute(name, value) {
-  if (/^on/i.test(name)) return false;
-  if (name === 'href' || name === 'xlink:href') return value.trim().startsWith('#');
-  // The root is given both namespaces itself (serializeSvg), so none is kept.
-  if (name === 'xmlns' || name.startsWith('xmlns:')) return false;
-  if (name.includes(':') && name !== 'xml:space') return false;
-  EXTERNAL_URL.lastIndex = 0;
-  if (EXTERNAL_URL.test(value) || SCHEME.test(value)) return false;
-  if (name === 'style' && /@import|expression\s*\(/i.test(value)) return false;
-  return true;
+function decodeEntities(value) {
+  return value.replace(/&(?:#(\d+)|#x([0-9a-fA-F]+)|(amp|lt|gt|quot|apos));/g, (_entity, decimal, hex, named) => (
+    named ? NAMED_ENTITIES[named] : String.fromCodePoint(Math.min(Number.parseInt(decimal ?? hex, decimal ? 10 : 16), 0x10ffff))
+  ));
 }
 
-function cleanCss(css) {
-  return css.replace(/@import[^;]*;?/gi, '').replace(EXTERNAL_URL, 'none');
+/** A link to something in this drawing, and nothing else. */
+const FRAGMENT = /^#[A-Za-z_][\w.-]*$/;
+/** Plain CSS declarations: no quotes, escapes, at-rules, comments or markup to hide anything in. */
+const PLAIN_STYLE = /^[\w\s#%.,:;()!+-]*$/;
+
+/**
+ * Whether an attribute survives: it is on the list, and its value, decoded,
+ * loads nothing and links to nothing outside the drawing. The one url() a
+ * value may hold is a paint or clip from this drawing, url(#id).
+ */
+function keepAttribute(name, value) {
+  if (!KEPT_ATTRIBUTES.has(name)) return false;
+  const decoded = decodeEntities(value).trim();
+  if (name === 'href' || name === 'xlink:href') return FRAGMENT.test(decoded);
+  if (name === 'style' && !PLAIN_STYLE.test(decoded)) return false;
+  const urls = decoded.match(/url\s*\([^)]*\)?/gi) ?? [];
+  return urls.every((url) => /^url\(\s*#[A-Za-z_][\w.-]*\s*\)$/i.test(url));
+}
+
+/** Whether an element holds any text that is kept, from the parse rather than from markup. */
+function hasText(node) {
+  return node.children.some((child) => (typeof child === 'string'
+    ? decodeEntities(child).trim() !== ''
+    : KEPT_ELEMENTS.has(child.name) && hasText(child)));
 }
 
 function readViewBox(value) {
@@ -196,13 +232,13 @@ function serializeSvg(root) {
   let shapes = 0;
   const hasViewBox = root.attrs.some(([name, value]) => name === 'viewBox' && readViewBox(value));
 
-  const write = (node, undrawn, inStyle) => {
-    if (typeof node === 'string') return inStyle ? cleanCss(node) : node;
+  const write = (node, undrawn) => {
+    if (typeof node === 'string') return node;
     if (!KEPT_ELEMENTS.has(node.name)) return '';
     const isRoot = node === root;
     const hidden = undrawn || UNDRAWN.has(node.name);
-    const children = node.children.map((child) => write(child, hidden, node.name === 'style')).join('');
-    if (!hidden && SHAPES.has(node.name) && (node.name !== 'text' || children.replace(/<[^>]*>/g, '').trim())) shapes += 1;
+    const children = node.children.map((child) => write(child, hidden)).join('');
+    if (!hidden && SHAPES.has(node.name) && (node.name !== 'text' || hasText(node))) shapes += 1;
     const attrs = node.attrs
       // With a viewBox, the drawing's own width and height are dropped so it
       // scales to whatever frame shows it.
@@ -216,7 +252,7 @@ function serializeSvg(root) {
     return `<${node.name}${ns}${attrs}>${children}</${node.name}>`;
   };
 
-  const svg = write(root, false, false);
+  const svg = write(root, false);
   return { svg, shapes, hasViewBox };
 }
 
@@ -281,6 +317,8 @@ module.exports = {
   DRAWING_ANSWER_TOKENS,
   DRAWING_TIMEOUT_MS,
   DRAWING_SVG_MAX_CHARS,
+  KEPT_ELEMENTS,
+  KEPT_ATTRIBUTES,
   extractSvg,
   parseSvg,
   sanitizeSvg,

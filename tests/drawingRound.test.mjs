@@ -6,6 +6,8 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const {
   DRAWING_SVG_MAX_CHARS,
+  KEPT_ELEMENTS,
+  KEPT_ATTRIBUTES,
   extractSvg,
   parseSvg,
   sanitizeSvg,
@@ -67,20 +69,73 @@ const HOSTILE = [
   '</svg>',
 ].join('');
 
+const BANNED = ['<script', 'alert', 'onload', 'onclick', 'onmouseover', 'onbegin', 'foreignObject', '<image', '<use', '<a ', '<animate', '<set', '<style', '@import', 'evil.example', 'javascript', '&#', 'xmlns:ev', '<div'];
+
+function assertClean(clean, input) {
+  for (const banned of BANNED) {
+    assert.ok(!clean.toLowerCase().includes(banned.toLowerCase()), `cleaning ${input.slice(0, 80)} left ${banned}: ${clean}`);
+  }
+  // The structural guarantee, whatever the input: read back, the cleaned
+  // drawing holds only listed elements and listed attributes.
+  const walk = (node) => {
+    assert.ok(KEPT_ELEMENTS.has(node.name), `<${node.name}> is not on the list`);
+    for (const [name] of node.attrs) {
+      assert.ok(KEPT_ATTRIBUTES.has(name) || (node.name === 'svg' && (name === 'xmlns' || name === 'xmlns:xlink')), `${name} on <${node.name}> is not on the list`);
+    }
+    node.children.filter((child) => typeof child !== 'string').forEach(walk);
+  };
+  walk(parseSvg(clean));
+}
+
 test('a hostile SVG loses every script, handler, embedded page and outside link', () => {
   const clean = sanitizeSvg(HOSTILE);
   assert.ok(clean, 'the hostile SVG is well formed, so it is cleaned rather than rejected');
-  for (const banned of ['<script', 'alert', 'onload', 'onclick', 'onmouseover', 'foreignObject', '<image', '<use', '<a ', '<animate', '@import', 'evil.example', 'javascript:', 'xmlns:ev', '<div']) {
-    assert.ok(!clean.toLowerCase().includes(banned.toLowerCase()), `the cleaned drawing still contains ${banned}: ${clean}`);
-  }
+  assertClean(clean, HOSTILE);
 });
 
 test('cleaning keeps the picture: shapes, in-document paint and text', () => {
   const clean = sanitizeSvg(HOSTILE);
   assert.match(clean, /<circle cx="50" cy="50" r="40" fill="url\(#g\)"><\/circle>/);
-  assert.match(clean, /\.y \{ fill: url\(#g\) \}/);
   assert.match(clean, /<linearGradient id="g">/);
   assert.match(clean, /<text x="10" y="90">pelican<\/text>/);
+  assert.match(sanitizeSvg('<svg viewBox="0 0 9 9"><rect width="9" height="9" style="fill: #fc0; stroke: url(#g)"/></svg>'), /style="fill: #fc0; stroke: url\(#g\)"/);
+});
+
+test('tags split or doubled to slip past a single strip do not parse at all', () => {
+  for (const input of [
+    '<svg viewBox="0 0 9 9"><scr<script>ipt>alert(1)</script></svg>',
+    '<svg viewBox="0 0 9 9"><<script>script>alert(1)<</script>/script></svg>',
+    '<svg viewBox="0 0 9 9"><rect width="9" height="9" on<script>load="alert(1)"/></svg>',
+    '<svg viewBox="0 0 9 9"><rect width="9" height="9"/><script>alert(1)</svg>',
+  ]) {
+    assert.equal(sanitizeSvg(input), null, input);
+    assert.equal(checkDrawing(input).svg, null, `${input} must not reach the screen`);
+  }
+});
+
+test('mixed case, encoded and animated ways in are all removed', () => {
+  const inputs = [
+    // Mixed case: SVG names are case-sensitive, and only exact ones are kept.
+    '<svg viewBox="0 0 9 9"><ScRiPt>alert(1)</ScRiPt><SCRIPT>alert(2)</SCRIPT><rect width="9" height="9" OnLoad="alert(3)" ONCLICK="alert(4)"/></svg>',
+    // Entity-encoded javascript: in links, decimal and hex.
+    '<svg viewBox="0 0 9 9"><linearGradient id="g" href="&#106;avascript:alert(1)"/><linearGradient id="h" xlink:href="&#x6A;&#x61;vascript:alert(2)"/><rect width="9" height="9"/></svg>',
+    // An encoded outside url() in a paint, and a CSS escape in a style.
+    '<svg viewBox="0 0 9 9"><rect width="9" height="9" fill="u&#114;l(https://evil.example/p)" style="fill: u\\72l(https://evil.example/q)"/></svg>',
+    // <set> and <animate> that would turn a link into javascript: once drawn.
+    '<svg viewBox="0 0 9 9"><linearGradient id="g"><set attributeName="href" to="javascript:alert(1)"/></linearGradient><rect width="9" height="9"><animate attributeName="xlink:href" values="javascript:alert(2)" begin="0s" onbegin="alert(3)"/></rect></svg>',
+    // A link that only looks local once decoded is still checked as decoded.
+    '<svg viewBox="0 0 9 9"><linearGradient id="g" href="&#35;javascript:alert(1)"/><rect width="9" height="9"/></svg>',
+    // Script written as text is text: escaped, and never markup.
+    '<svg viewBox="0 0 9 9"><text x="1" y="5">&lt;script&gt;alert(1)&lt;/script&gt;</text></svg>',
+  ];
+  for (const input of inputs) {
+    const clean = sanitizeSvg(input);
+    assert.ok(clean, `well formed, so cleaned rather than rejected: ${input}`);
+    assertClean(clean.replace('&lt;script&gt;alert(1)&lt;/script&gt;', ''), input);
+  }
+  // The encoded links are not kept; a plain or encoded #fragment is.
+  assert.doesNotMatch(sanitizeSvg(inputs[1]), /href/);
+  assert.match(sanitizeSvg('<svg viewBox="0 0 9 9"><linearGradient id="g" href="&#35;h"/><rect width="9" height="9"/></svg>'), /href="&#35;h"/);
 });
 
 test('the cleaned root declares its namespace, so an <img> draws it, and drops its fixed size', () => {
