@@ -1832,11 +1832,11 @@ function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedO
   const gallery = (
     <DrawingGallery
       prompt={drawings?.[0]?.prompt.prompt}
-      entries={(drawings ?? []).map(({ model, drawing, prompt }) => ({
+      entries={(drawings ?? []).map(({ model, drawing, score }) => ({
         key: model,
         name: getFriendlyModelName(model),
         drawing,
-        score: prompt.sobrietyScore,
+        score,
       }))}
     />
   );

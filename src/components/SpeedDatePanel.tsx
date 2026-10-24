@@ -425,7 +425,7 @@ export function SpeedDatePanel({
             />
             <DrawingGallery
               prompt={rankingDrawings[0]?.prompt.prompt}
-              entries={rankingDrawings.map(({ model, drawing, prompt }) => ({ key: model, name: model, drawing, score: prompt.sobrietyScore }))}
+              entries={rankingDrawings.map(({ model, drawing, score }) => ({ key: model, name: model, drawing, score }))}
             />
             <button type="button" className="primary-button compact speed-date-next-btn" onClick={onOpenHistory}>
               <History aria-hidden="true" />

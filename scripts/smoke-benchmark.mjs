@@ -14,6 +14,7 @@ const {
   average,
   clamp,
 } = require('../electron/benchmarkScoring.cjs');
+const { DRAWING_ANSWER_TOKENS } = require('../electron/drawingRound.cjs');
 
 const DEFAULT_BASE_URL = 'http://localhost:11434';
 const DEFAULT_TIMEOUT_MS = 120000;
@@ -145,7 +146,9 @@ async function smokeModel({ args, model, prompts }) {
       rows.push(await runPromptCase({ args, model, prompt, runIndex: 1, thinkMode: 'ollama-default' }));
     }
 
-    for (let runIndex = 1; runIndex <= args.repeat; runIndex += 1) {
+    // A drawing is asked once, as the app asks it (runDrawingPrompt in main.cjs).
+    const repeat = prompt.type === 'drawing' ? 1 : args.repeat;
+    for (let runIndex = 1; runIndex <= repeat; runIndex += 1) {
       rows.push(await runPromptCase({ args, model, prompt, runIndex, thinkMode: 'rigmatch' }));
     }
   }
@@ -179,7 +182,9 @@ async function runPromptCase({ args, model, prompt, runIndex, thinkMode }) {
     prompt: prompt.prompt,
     timeoutMs: args.timeoutMs,
     keepAlive: args.keepAlive,
-    options: BENCHMARK_OPTIONS,
+    // A whole SVG's worth of tokens for a drawing, as the app gives it: at
+    // 300 a drawing is cut off, which this script counts as a release blocker.
+    options: prompt.type === 'drawing' ? { ...BENCHMARK_OPTIONS, num_predict: DRAWING_ANSWER_TOKENS } : BENCHMARK_OPTIONS,
     thinkMode,
   });
   const elapsedMs = Math.round(performance.now() - startedAt);

@@ -118,12 +118,17 @@ export function useShowDrawings(progressId: string | undefined): ShowDrawings {
   return drawings.showId === showId ? drawings : NO_DRAWINGS;
 }
 
-export type LineupDrawing = { model: string; drawing: PromptDrawing; prompt: BenchmarkPromptResult };
+/**
+ * `score` is absent when nothing marked the drawing: the number stored then is
+ * a placeholder, and showing it under the picture would read as a verdict.
+ */
+export type LineupDrawing = { model: string; drawing: PromptDrawing; prompt: BenchmarkPromptResult; score?: number };
 
 /** Each model's first drawing in its latest result, in the order given; models with none are left out. */
 export function lineupDrawings(models: string[], results: Record<string, BenchmarkResult>): LineupDrawing[] {
   return models.flatMap((model) => {
     const prompt = getBenchmarkForModel(results, model)?.prompts.find((entry) => entry.type === 'drawing' && entry.drawing);
-    return prompt?.drawing ? [{ model, drawing: prompt.drawing, prompt }] : [];
+    if (!prompt?.drawing) return [];
+    return [{ model, drawing: prompt.drawing, prompt, ...(prompt.scoredBy === 'unjudged' ? {} : { score: prompt.sobrietyScore }) }];
   });
 }

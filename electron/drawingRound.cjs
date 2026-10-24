@@ -19,6 +19,10 @@ const DRAWING_ANSWER_TOKENS = 1200;
 const DRAWING_TIMEOUT_MS = 90000;
 /** Far more than 1,200 tokens can write, so only an imported or edited answer meets it. */
 const DRAWING_SVG_MAX_CHARS = 32000;
+/** The whole answer, checked before anything reads it: room for the SVG and the chat around it. */
+const DRAWING_ANSWER_MAX_CHARS = 2 * DRAWING_SVG_MAX_CHARS;
+/** Copies of a shape a drawing may place with <use>: a bicycle's wheels, not a render bomb. */
+const DRAWING_MAX_USES = 64;
 /** Past these the SVG is a render bomb rather than a picture. */
 const DRAWING_MAX_ELEMENTS = 2000;
 const DRAWING_MAX_DEPTH = 48;
@@ -28,12 +32,14 @@ const XLINK_NS = 'http://www.w3.org/1999/xlink';
 
 /**
  * The elements a drawing keeps, matched exactly (SVG names are case-sensitive).
- * Anything else goes with everything inside it: script, style, foreignObject
- * (HTML inside the SVG), image and use (they load or repeat other content), a,
- * and the animate family, set included (they can rewrite an href).
+ * Anything else goes with everything inside it: script, style (its simple rules
+ * are copied onto the elements first, see readStyleRules), foreignObject (HTML
+ * inside the SVG), image (it loads other content), a, and the animate family,
+ * set included (they can rewrite an href). use stays only as a copy of a shape
+ * in the same drawing (see keepUse).
  */
 const KEPT_ELEMENTS = new Set([
-  'svg', 'g', 'defs', 'title', 'desc',
+  'svg', 'g', 'defs', 'title', 'desc', 'use',
   'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text', 'tspan',
   'linearGradient', 'radialGradient', 'stop', 'clipPath',
 ]);
@@ -42,7 +48,7 @@ const KEPT_ELEMENTS = new Set([
  * The attributes a kept element keeps: shape, paint and text, nothing that
  * runs or loads. Everything else goes, every on* handler included, whatever
  * its case. href is kept only as a link to something in the drawing (#id),
- * and style only as plain declarations (see keepAttribute).
+ * and style is rebuilt from declarations that pass cleanDeclaration.
  */
 const KEPT_ATTRIBUTES = new Set([
   'id', 'class', 'version', 'xml:space', 'href', 'xlink:href', 'style',
@@ -65,28 +71,70 @@ const UNDRAWN = new Set(['defs', 'clipPath', 'linearGradient', 'radialGradient',
 const XML_ENTITIES = /&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/;
 
 /**
- * The SVG in an answer: from its first <svg to the </svg> that closes it,
- * whether it sits in a code fence or in the open. An answer cut off before it
- * closed returns what there is, so the check reports it broken, not missing.
+ * The answer without the notes a thinking model that ignores think:false
+ * writes inline, which can mention <svg> long before the drawing. Found by
+ * position, so it costs one pass however the answer is shaped.
  */
-function extractSvg(answer) {
-  // A thinking model that ignores think:false writes its notes inline, and
-  // they can mention <svg> long before the drawing.
-  const text = String(answer ?? '').replace(/<think>[\s\S]*?<\/think>/gi, '');
+function withoutThinking(text) {
+  let kept = '';
+  let at = 0;
+  for (let open = text.indexOf('<think>'); open >= 0; open = text.indexOf('<think>', at)) {
+    const close = text.indexOf('</think>', open);
+    if (close < 0) break;
+    kept += text.slice(at, open);
+    at = close + '</think>'.length;
+  }
+  return kept + text.slice(at);
+}
+
+/** The inside of each ``` code block, the last one running to the end when it never closes. */
+function fencedBlocks(text) {
+  const blocks = [];
+  for (let at = text.indexOf('```'); at >= 0;) {
+    const body = text.indexOf('\n', at);
+    if (body < 0) break;
+    const close = text.indexOf('```', body);
+    blocks.push(text.slice(body + 1, close < 0 ? text.length : close));
+    if (close < 0) break;
+    at = text.indexOf('```', close + 3);
+  }
+  return blocks;
+}
+
+/**
+ * The earliest complete <svg>...</svg> in some text, or, when none closes,
+ * everything from the first <svg. Each </svg> closes the nearest open <svg,
+ * so a mention that never closes ("one self-contained <svg> element") is
+ * stepped over instead of swallowing the drawing after it.
+ */
+function findSvg(text) {
   const tags = /<svg(?=[\s>/])|<\/svg\s*>/gi;
-  let start = -1;
-  let depth = 0;
+  const open = [];
+  let first = -1;
+  let found = null;
   for (let match = tags.exec(text); match; match = tags.exec(text)) {
     if (match[0][1] !== '/') {
-      if (depth === 0) start = match.index;
-      depth += 1;
-    } else if (depth > 0) {
-      depth -= 1;
-      if (depth === 0) return text.slice(start, match.index + match[0].length);
+      if (first < 0) first = match.index;
+      open.push(match.index);
+    } else if (open.length > 0) {
+      const start = open.pop();
+      if (!found || start < found.start) found = { start, end: match.index + match[0].length };
     }
   }
-  if (start < 0) return null;
-  return text.slice(start).replace(/\s*```[\s\S]*$/, '');
+  if (found) return text.slice(found.start, found.end);
+  return first < 0 ? null : text.slice(first).trimEnd();
+}
+
+/**
+ * The SVG in an answer. A code block that holds one is where the drawing is,
+ * so it is read first; otherwise the whole answer. An answer cut off before
+ * the SVG closed returns what there is, so the check reports it broken, not
+ * missing.
+ */
+function extractSvg(answer) {
+  const text = withoutThinking(String(answer ?? ''));
+  const block = fencedBlocks(text).find((inside) => /<svg/i.test(inside));
+  return findSvg(block ?? text);
 }
 
 const OPEN_TAG = /<([A-Za-z][\w.:-]*)((?:\s+[^\s=/>]+\s*=\s*(?:"[^"<]*"|'[^'<]*'))*)\s*(\/?)>/y;
@@ -194,21 +242,97 @@ function decodeEntities(value) {
 
 /** A link to something in this drawing, and nothing else. */
 const FRAGMENT = /^#[A-Za-z_][\w.-]*$/;
-/** Plain CSS declarations: no quotes, escapes, at-rules, comments or markup to hide anything in. */
-const PLAIN_STYLE = /^[\w\s#%.,:;()!+-]*$/;
+
+/** The one url() a value may hold: a paint or clip from this drawing, url(#id). */
+function onlyLocalUrls(value) {
+  return (value.match(/url\s*\([^)]*\)?/gi) ?? []).every((url) => /^url\(\s*#[A-Za-z_][\w.-]*\s*\)$/i.test(url));
+}
 
 /**
  * Whether an attribute survives: it is on the list, and its value, decoded,
- * loads nothing and links to nothing outside the drawing. The one url() a
- * value may hold is a paint or clip from this drawing, url(#id).
+ * loads nothing and links to nothing outside the drawing. style is handled
+ * apart, declaration by declaration (styleFor).
  */
 function keepAttribute(name, value) {
-  if (!KEPT_ATTRIBUTES.has(name)) return false;
+  if (name === 'style' || !KEPT_ATTRIBUTES.has(name)) return false;
   const decoded = decodeEntities(value).trim();
   if (name === 'href' || name === 'xlink:href') return FRAGMENT.test(decoded);
-  if (name === 'style' && !PLAIN_STYLE.test(decoded)) return false;
-  const urls = decoded.match(/url\s*\([^)]*\)?/gi) ?? [];
-  return urls.every((url) => /^url\(\s*#[A-Za-z_][\w.-]*\s*\)$/i.test(url));
+  return onlyLocalUrls(decoded);
+}
+
+/** What a drawing may set through CSS: paint, stroke, text and placement. */
+const STYLE_PROPERTIES = new Set([
+  'fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-linecap',
+  'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset', 'opacity', 'color',
+  'display', 'visibility', 'stop-color', 'stop-opacity', 'clip-path', 'clip-rule', 'paint-order',
+  'font-size', 'font-family', 'font-weight', 'font-style', 'text-anchor', 'dominant-baseline',
+  'letter-spacing', 'transform',
+]);
+/**
+ * Colours, numbers with units, keywords, and calls such as rgb() or rotate():
+ * no quotes, escapes, at-signs, colons, slashes or braces to hide anything in.
+ */
+const STYLE_VALUE = /^[\w\s#%.,()+-]+$/;
+
+/** One declaration as it may be kept, [property, value], or null. */
+function cleanDeclaration(property, rawValue) {
+  const name = property.trim().toLowerCase();
+  if (!STYLE_PROPERTIES.has(name)) return null;
+  let value = rawValue.trim();
+  if (value.toLowerCase().endsWith('!important')) value = value.slice(0, -'!important'.length).trim();
+  // Font names are the one value models quote, and a quote is never needed.
+  if (name === 'font-family') value = value.replace(/["']/g, '');
+  if (!STYLE_VALUE.test(value) || /expression|javascript/i.test(value) || !onlyLocalUrls(value)) return null;
+  return [name, value];
+}
+
+/** The kept declarations in a block of CSS ("fill: red; stroke: blue"). */
+function readDeclarations(css) {
+  return css.split(';').flatMap((part) => {
+    const colon = part.indexOf(':');
+    const declaration = colon > 0 ? cleanDeclaration(part.slice(0, colon), part.slice(colon + 1)) : null;
+    return declaration ? [declaration] : [];
+  });
+}
+
+/** CSS without its comments, found by position. */
+function withoutComments(css) {
+  let kept = '';
+  let at = 0;
+  for (let open = css.indexOf('/*'); open >= 0; open = css.indexOf('/*', at)) {
+    const close = css.indexOf('*/', open + 2);
+    kept += css.slice(at, open);
+    at = close < 0 ? css.length : close + 2;
+  }
+  return kept + css.slice(at);
+}
+
+const SPECIFICITY = { '#': 3, '.': 2, '': 1 };
+
+/**
+ * The rules in a drawing's <style> that it can keep: ones that select simply,
+ * by element, .class or #id, with their kept declarations. At-rules, nested
+ * blocks and any other selector are left out. The <style> element itself is
+ * never kept; these rules are copied onto the elements they select instead,
+ * because models colour whole drawings this way, and without them every
+ * shape comes out black.
+ */
+function readStyleRules(css) {
+  const rules = [];
+  for (const chunk of withoutComments(css).split('}')) {
+    const brace = chunk.indexOf('{');
+    if (brace < 0) continue;
+    const selectors = chunk.slice(0, brace);
+    const body = chunk.slice(brace + 1);
+    if (selectors.includes('@') || body.includes('{')) continue;
+    const declarations = readDeclarations(body);
+    if (declarations.length === 0) continue;
+    for (const selector of selectors.split(',')) {
+      const simple = /^([.#]?)([A-Za-z_][\w-]*)$/.exec(selector.trim());
+      if (simple) rules.push({ kind: simple[1], name: simple[2], declarations });
+    }
+  }
+  return rules;
 }
 
 /** Whether an element holds any text that is kept, from the parse rather than from markup. */
@@ -223,6 +347,19 @@ function readViewBox(value) {
   return numbers.length === 4 && numbers.every(Number.isFinite) && numbers[2] > 0 && numbers[3] > 0;
 }
 
+const attribute = (node, name) => {
+  const found = node.attrs.find(([key]) => key === name);
+  return found ? decodeEntities(found[1]).trim() : '';
+};
+
+/** The kept elements under a node, the node first. */
+function* keptElements(node) {
+  yield node;
+  for (const child of node.children) {
+    if (typeof child !== 'string' && KEPT_ELEMENTS.has(child.name)) yield* keptElements(child);
+  }
+}
+
 /**
  * The cleaned drawing, rebuilt from the parse rather than edited in place, so
  * nothing the reader did not understand can survive into it. Counts the shapes
@@ -230,21 +367,64 @@ function readViewBox(value) {
  */
 function serializeSvg(root) {
   let shapes = 0;
+  let uses = 0;
   const hasViewBox = root.attrs.some(([name, value]) => name === 'viewBox' && readViewBox(value));
+  const elements = [...keptElements(root)];
+  const byId = new Map();
+  for (const element of elements) {
+    const id = attribute(element, 'id');
+    if (id && !byId.has(id)) byId.set(id, element);
+  }
+  const rules = elements
+    .flatMap((element) => element.children.filter((child) => typeof child !== 'string' && child.name === 'style'))
+    .flatMap((style) => readStyleRules(decodeEntities(style.children.filter((child) => typeof child === 'string').join(''))));
+
+  /**
+   * The element's style: the rules that select it, the most specific last,
+   * then its own style attribute, which wins as it does in a browser. Rules
+   * beat presentation attributes there too, so carrying them in style keeps
+   * the drawing as the model drew it.
+   */
+  const styleFor = (node) => {
+    const classes = attribute(node, 'class').split(/\s+/);
+    const id = attribute(node, 'id');
+    const matched = rules
+      .map((rule, order) => ({ rule, order }))
+      .filter(({ rule }) => (rule.kind === '#' ? rule.name === id : rule.kind === '.' ? classes.includes(rule.name) : rule.name === node.name))
+      .sort((a, b) => SPECIFICITY[a.rule.kind] - SPECIFICITY[b.rule.kind] || a.order - b.order);
+    const declarations = new Map();
+    for (const { rule } of matched) for (const [name, value] of rule.declarations) declarations.set(name, value);
+    for (const [name, value] of readDeclarations(attribute(node, 'style'))) declarations.set(name, value);
+    return [...declarations].map(([name, value]) => `${name}: ${value}`).join('; ');
+  };
+
+  /**
+   * A <use> stays only as a copy of a kept shape or group in this drawing
+   * that holds no <use> of its own (so copies cannot copy copies, or loop),
+   * and only so many times.
+   */
+  const keepUse = (node) => {
+    const href = attribute(node, 'href') || attribute(node, 'xlink:href');
+    const target = FRAGMENT.test(href) ? byId.get(href.slice(1)) : undefined;
+    if (!target || target.name === 'svg' || [...keptElements(target)].some((element) => element.name === 'use')) return false;
+    uses += 1;
+    return uses <= DRAWING_MAX_USES;
+  };
 
   const write = (node, undrawn) => {
     if (typeof node === 'string') return node;
-    if (!KEPT_ELEMENTS.has(node.name)) return '';
+    if (!KEPT_ELEMENTS.has(node.name) || (node.name === 'use' && !keepUse(node))) return '';
     const isRoot = node === root;
     const hidden = undrawn || UNDRAWN.has(node.name);
     const children = node.children.map((child) => write(child, hidden)).join('');
-    if (!hidden && SHAPES.has(node.name) && (node.name !== 'text' || hasText(node))) shapes += 1;
+    if (!hidden && (SHAPES.has(node.name) || node.name === 'use') && (node.name !== 'text' || hasText(node))) shapes += 1;
+    const style = styleFor(node);
     const attrs = node.attrs
       // With a viewBox, the drawing's own width and height are dropped so it
       // scales to whatever frame shows it.
       .filter(([name, value]) => keepAttribute(name, value) && !(isRoot && hasViewBox && (name === 'width' || name === 'height')))
       .map(([name, value]) => ` ${name}="${value.replace(/"/g, '&quot;')}"`)
-      .join('');
+      .join('') + (style ? ` style="${style}"` : '');
     // An <img> draws an SVG only when it says which namespace it is in, and
     // models often leave that out. xlink is declared too, so a kept
     // xlink:href="#..." can never be an unbound prefix that breaks the image.
@@ -264,11 +444,14 @@ function sanitizeSvg(svg) {
 
 const PROBLEMS = {
   missing: { score: 0, note: 'No drawing: the answer had no SVG in it.' },
-  'too-big': { score: 10, note: `No drawing: the SVG was over the ${DRAWING_SVG_MAX_CHARS.toLocaleString('en-US')}-character limit.` },
+  'too-big': { score: 10, note: `No drawing: it was over the ${DRAWING_SVG_MAX_CHARS.toLocaleString('en-US')}-character limit for a drawing.` },
   broken: { score: 10, note: 'No drawing: the SVG does not parse, usually because it was cut off before it ended.' },
   empty: { score: 5, note: 'No drawing: the SVG has nothing in it to see.' },
   'no-viewbox': { score: 30, note: 'Scored by rule: the SVG has no viewBox, which the question asked for.' },
 };
+
+/** The last answer checked and what the check found (checkDrawing). */
+let lastCheck = null;
 
 /**
  * The checks every drawing gets before a judge sees it: there is an SVG, it is
@@ -280,8 +463,20 @@ const PROBLEMS = {
  * a placeholder: it is marked unjudged until a judge grades it.
  */
 function checkDrawing(answer) {
+  // The run asks this of the same answer three times (the scorer, the
+  // grader and the run itself), so the last answer is remembered.
+  const text = String(answer ?? '');
+  if (lastCheck?.answer === text) return lastCheck.result;
+  const result = checkDrawingText(text);
+  lastCheck = { answer: text, result };
+  return result;
+}
+
+function checkDrawingText(text) {
   const fail = (problem, svg = null) => ({ ok: false, problem, score: PROBLEMS[problem].score, svg, note: PROBLEMS[problem].note });
-  const raw = extractSvg(answer);
+  // Length first, before anything reads the answer.
+  if (text.length > DRAWING_ANSWER_MAX_CHARS) return fail('too-big');
+  const raw = extractSvg(text);
   if (!raw) return fail('missing');
   if (raw.length > DRAWING_SVG_MAX_CHARS) return fail('too-big');
   const root = parseSvg(raw);
@@ -317,6 +512,8 @@ module.exports = {
   DRAWING_ANSWER_TOKENS,
   DRAWING_TIMEOUT_MS,
   DRAWING_SVG_MAX_CHARS,
+  DRAWING_ANSWER_MAX_CHARS,
+  DRAWING_MAX_USES,
   KEPT_ELEMENTS,
   KEPT_ATTRIBUTES,
   extractSvg,

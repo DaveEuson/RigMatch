@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const {
   DRAWING_SVG_MAX_CHARS,
+  DRAWING_MAX_USES,
   KEPT_ELEMENTS,
   KEPT_ATTRIBUTES,
   extractSvg,
@@ -146,7 +147,93 @@ test('the cleaned root declares its namespace, so an <img> draws it, and drops i
   assert.equal(sanitizeSvg(clean), clean, 'cleaning a clean drawing changes nothing');
 });
 
+// ── Colours from <style>, and copies with <use> ────────────────────────────
+
+test('simple <style> rules are copied onto the shapes they colour, in cascade order', () => {
+  // The shape gemma3:4b and mistral:7b answered the pelican in: every colour
+  // in a <style> block, and nothing on the shapes themselves.
+  const clean = sanitizeSvg([
+    '<svg viewBox="0 0 200 160"><style><![CDATA[',
+    '/* the bird */ .body { fill: #f5f5f0; stroke: #555; stroke-width: 2 }',
+    'circle { fill: none; stroke: #333 } #sun { fill: yellow !important }',
+    '.beak, .pouch { fill: rgb(242, 163, 58) } text { font-family: "Comic Sans MS", sans-serif }',
+    ']]></style>',
+    '<ellipse class="body" cx="85" cy="58" rx="27" ry="16"/>',
+    '<circle cx="55" cy="115" r="25"/><circle id="sun" cx="10" cy="10" r="5"/>',
+    '<path class="beak" d="M1 1L5 5" fill="black" style="stroke: red"/>',
+    '<text x="1" y="9">Hi</text></svg>',
+  ].join(''));
+  assert.doesNotMatch(clean, /<style/);
+  assert.match(clean, /<ellipse class="body" [^>]*style="fill: #f5f5f0; stroke: #555; stroke-width: 2"/);
+  assert.match(clean, /<circle cx="55" cy="115" r="25" style="fill: none; stroke: #333">/);
+  // An #id beats an element rule, whatever their order.
+  assert.match(clean, /<circle id="sun" [^>]*style="fill: yellow; stroke: #333">/);
+  // A rule beats the fill attribute, and the shape's own style beats the rule.
+  assert.match(clean, /<path class="beak" d="M1 1L5 5" fill="black" style="fill: rgb\(242, 163, 58\); stroke: red">/);
+  assert.match(clean, /<text x="1" y="9" style="font-family: Comic Sans MS, sans-serif">Hi<\/text>/);
+});
+
+test('rules and declarations that could load or hide anything are left out', () => {
+  const clean = sanitizeSvg([
+    '<svg viewBox="0 0 9 9"><style>',
+    '@import url(https://evil.example/a.css);',
+    '@media screen { .a { fill: red } }',
+    '.a { fill: url(https://evil.example/p) ; stroke: url(#ok); behavior: url(x.htc); -moz-binding: url(y) }',
+    '.a { stroke-width: expression(alert(1)); opacity: 0\\2e 5; fill-opacity: "1" }',
+    'svg .a, rect.a, .a:hover, * { fill: green }',
+    '</style><rect class="a" width="9" height="9" style="fill: url(javascript:alert(1)); color: #123"/></svg>',
+  ].join(''));
+  assert.match(clean, /<rect class="a" width="9" height="9" style="stroke: url\(#ok\); color: #123">/);
+  for (const banned of ['evil', 'alert', 'behavior', 'binding', 'expression', 'green', 'red', '@', '\\', '<style']) {
+    assert.ok(!clean.includes(banned), `${banned} survived: ${clean}`);
+  }
+});
+
+test('a <use> copies a shape from the same drawing, and nothing else', () => {
+  const wheels = sanitizeSvg('<svg viewBox="0 0 200 160"><defs><circle id="wheel" r="25" fill="none" stroke="#333"/></defs><use href="#wheel" x="55" y="115"/><use xlink:href="#wheel" x="145" y="115"/></svg>');
+  assert.match(wheels, /<use href="#wheel" x="55" y="115"><\/use><use xlink:href="#wheel" x="145" y="115"><\/use>/);
+  // Two wheels drawn from a definition are a drawing, not an empty SVG.
+  assert.equal(checkDrawing(`\`\`\`svg\n${wheels}\n\`\`\``).ok, true);
+
+  const dropped = [
+    '<use href="https://evil.example/sprite.svg#wheel"/>',
+    '<use href="#missing"/>',
+    '<use href="&#106;avascript:alert(1)"/>',
+    // A copy of a copy, and a copy of a group that holds a copy: both could
+    // multiply, and the second loops back on itself.
+    '<use id="u1" href="#wheel"/><use href="#u1"/>',
+    '<g id="loop"><use href="#loop"/></g>',
+  ];
+  for (const use of dropped) {
+    const clean = sanitizeSvg(`<svg viewBox="0 0 9 9"><circle id="wheel" r="2"/>${use}</svg>`);
+    const kept = (clean.match(/<use /g) ?? []).length;
+    assert.equal(kept, use.startsWith('<use id="u1"') ? 1 : 0, `${use} -> ${clean}`);
+  }
+
+  const many = sanitizeSvg(`<svg viewBox="0 0 9 9"><circle id="dot" r="1"/>${'<use href="#dot"/>'.repeat(DRAWING_MAX_USES + 10)}</svg>`);
+  assert.equal((many.match(/<use /g) ?? []).length, DRAWING_MAX_USES);
+});
+
 // ── The checks before any judge ────────────────────────────────────────────
+
+test('an <svg> mentioned before the drawing does not break it', () => {
+  // Echoed from the question itself, which asks for "one self-contained <svg> element".
+  const fenced = `Here's one self-contained \`<svg>\` element with a viewBox:\n\`\`\`svg\n${PELICAN}\n\`\`\`\nIt has a viewBox, as asked.`;
+  assert.equal(extractSvg(fenced), PELICAN);
+  assert.equal(checkDrawing(fenced).ok, true);
+  const open = `I will write one <svg> element with a viewBox.\n${PELICAN}`;
+  assert.equal(extractSvg(open), PELICAN);
+  assert.equal(checkDrawing(open).ok, true);
+});
+
+test('a long answer is measured before anything reads it', () => {
+  const started = Date.now();
+  assert.equal(checkDrawing(`${' '.repeat(200000)}<svg`).problem, 'too-big');
+  assert.equal(checkDrawing(`<svg viewBox="0 0 1 1">${' \n'.repeat(30000)}`).problem, 'broken');
+  assert.equal(checkDrawing(`\`\`\`${' '.repeat(60000)}`).problem, 'missing');
+  assert.equal(checkDrawing(`<think>${'<svg '.repeat(6000)}`).problem, 'broken');
+  assert.ok(Date.now() - started < 1000, `took ${Date.now() - started} ms`);
+});
 
 test('a good drawing passes, cleaned, with a placeholder score left for the judge', () => {
   const check = checkDrawing(`\`\`\`svg\n${PELICAN}\n\`\`\``);
@@ -312,5 +399,18 @@ test('the stage groups drawings by show, and the results take each model’s fir
   assert.equal(found.length, 1);
   assert.equal(found[0].model, 'qwen3:8b');
   assert.equal(found[0].drawing, drawing);
-  assert.equal(found[0].prompt.sobrietyScore, 81);
+  assert.equal(found[0].score, 81);
+  // A drawing nothing marked keeps its placeholder out of sight.
+  results['qwen3:8b'].prompts[1].scoredBy = 'unjudged';
+  assert.equal(lineupDrawings(['qwen3:8b'], results)[0].score, undefined);
+});
+
+test('the release smoke gives a drawing the app’s budget and asks it once', async () => {
+  // The smoke runs the default plan, drawing included; at 300 tokens a
+  // pelican is cut off, and a cut-off answer fails smoke:bench:strict.
+  const { readFileSync } = await import('node:fs');
+  const smoke = readFileSync(new URL('../scripts/smoke-benchmark.mjs', import.meta.url), 'utf-8');
+  assert.match(smoke, /require\('\.\.\/electron\/drawingRound\.cjs'\)/);
+  assert.match(smoke, /prompt\.type === 'drawing' \? \{ \.\.\.BENCHMARK_OPTIONS, num_predict: DRAWING_ANSWER_TOKENS \} : BENCHMARK_OPTIONS/);
+  assert.match(smoke, /const repeat = prompt\.type === 'drawing' \? 1 : args\.repeat;/);
 });
