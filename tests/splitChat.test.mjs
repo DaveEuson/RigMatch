@@ -11,6 +11,7 @@ import {
   splitThread,
   splitTurns,
   startSplit,
+  streamKey,
   untilLastAsk,
   updateColumn,
 } from '../rigmatch-chat/src/lib/conversationStore.ts';
@@ -134,8 +135,50 @@ test('asking again starts from the last question', () => {
   assert.equal(untilLastAsk([]), null);
 });
 
+const app = readFileSync(new URL('../rigmatch-chat/src/App.tsx', import.meta.url), 'utf8');
+/** The body of one `const name = useCallback(...)` in App.tsx. */
+const callback = (name) => {
+  const start = app.indexOf(`const ${name} = useCallback(`);
+  assert.notEqual(start, -1, `${name} not found in App.tsx`);
+  return app.slice(start, app.indexOf('\n  }, [', start));
+};
+
+test('an answer in flight is named by its chat as well as its side', () => {
+  assert.notEqual(streamKey('chat-a', 'split'), streamKey('chat-b', 'split'));
+  assert.notEqual(streamKey('chat-a', 'main'), streamKey('chat-a', 'split'));
+});
+
+test('Stop and Regenerate in one chat never reach another chat asking the same model', () => {
+  // Two chats asking two, both with the same second model: the second chat's
+  // newest row showed Stop for the first chat's answer, and stopped it.
+  // Every stream, abort and loading note is keyed by chat and side.
+  assert.match(app, /const \[streaming, setStreaming\] = useState<Record<string, string>>\(\{\}\);/);
+  assert.match(app, /const abortRefs = useRef<Record<string, AbortController>>\(\{\}\);/);
+  assert.doesNotMatch(app, /streaming\[column\]|abortRefs\.current\[column\]|loading\[column\]/);
+  const answer = callback('answerInColumn');
+  assert.match(answer, /const key = streamKey\(conversationId, column\);/);
+  assert.match(answer, /abortRefs\.current\[key\] = ctrl;/);
+  assert.match(callback('stopColumns'), /columns\.map\(\(column\) => streamKey\(conversationId, column\)\)/);
+  assert.match(callback('regenerate'), /if \(streaming\[streamKey\(target\.id, column\)\]\) continue;/);
+  // What the open chat shows comes from its own streams only.
+  assert.match(app, /streaming\[streamKey\(activeConversation\.id, column\)\]/);
+  assert.match(app, /const answering = newest && answeringHere\(column\) !== null;/);
+  assert.match(app, /else if \(activeConversation\) stopColumns\(activeConversation\.id, \[column\]\);/);
+});
+
+test('choosing the second model takes a press of Add, and focus is never dropped', () => {
+  // An arrow key in the list fires change in Chromium; it must only move the
+  // choice, not start a chat with a model nobody picked.
+  assert.match(app, /onChange=\{\(event\) => setSecondChoice\(event\.target\.value\)\}/);
+  assert.match(app, /onClick=\{\(\) => askSecondModel\(chosenSecond\)\}/);
+  assert.match(callback('askSecondModel'), /composeRef\.current\?\.focus\(\);/);
+  // Keep this one takes the columns, and the button, away.
+  assert.match(callback('keepOne'), /composeRef\.current\?\.focus\(\);/);
+  // Stop and Regenerate are one button, so focus stays on it as it changes.
+  assert.match(app, /\{answering \? "Stop" : "Regenerate"\}/);
+});
+
 test('Chat offers asking two and lays the answers side by side', () => {
-  const app = readFileSync(new URL('../rigmatch-chat/src/App.tsx', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../rigmatch-chat/src/styles.css', import.meta.url), 'utf8');
   assert.match(app, /Ask a second model too/);
   assert.match(app, /Keep this one/);

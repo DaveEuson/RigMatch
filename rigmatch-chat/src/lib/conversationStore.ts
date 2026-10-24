@@ -67,7 +67,10 @@ export type Conversation = {
   summarizedCount?: number;
   /** Which model wrote the summary, so the transcript can say. */
   summaryBy?: string;
-  /** A second model answering every message too, when this chat asks two. */
+  /**
+   * A second model answering every message too, when this chat asks two. An
+   * older Chat's next save deletes it (see SplitThread).
+   */
   split?: SplitThread;
 };
 
@@ -76,8 +79,14 @@ export type Conversation = {
  *
  * The conversation's own `modelName` and `messages` stay the first model's
  * thread, so a chat asking two is still an ordinary chat to everything that
- * does not know about this — an older Chat included, which shows the first
- * model's side and leaves this one out.
+ * does not know about this.
+ *
+ * Going back to an older Chat (0.9.9 or before) DELETES this side: that build
+ * reads the first model's side, rebuilds each conversation without fields it
+ * does not know, and its next save writes the file without them. Accepted
+ * rather than bumping STORE_VERSION, which would make an older Chat refuse the
+ * whole history instead: the Update Center only moves forward, and the release
+ * notes say so.
  */
 export type SplitThread = {
   modelName: string;
@@ -93,6 +102,15 @@ export type SplitThread = {
 
 /** The first model's side of a chat asking two, or the second's. */
 export type SplitColumn = "main" | "split";
+
+/**
+ * Names one answer in flight: this chat, this side. A side alone is not
+ * enough — two chats asking two each have a second side, and Stop in one used
+ * to reach the other's answer.
+ */
+export function streamKey(conversationId: string, column: SplitColumn): string {
+  return `${conversationId}:${column}`;
+}
 
 /**
  * 1 — `{ "model::personality": Message[] }`, one thread per model.

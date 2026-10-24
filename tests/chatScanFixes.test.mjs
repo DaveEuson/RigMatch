@@ -170,7 +170,7 @@ test('every answer and every code block has a Copy button', () => {
 test('a model being loaded is named while the first answer waits', () => {
   // Per side, so the second model of a chat asking two says it is loading too.
   const send = callback('answerInColumn');
-  assert.match(send, /isModelLoaded\(settings\.ollamaUrl, model\)\.then\(\(loaded\) => \{\s*if \(loaded === false && !answered && current\(\)\) setLoading\(\(prev\) => \(\{ \.\.\.prev, \[column\]: model \}\)\);/);
+  assert.match(send, /isModelLoaded\(settings\.ollamaUrl, model\)\.then\(\(loaded\) => \{\s*if \(loaded === false && !answered && current\(\)\) setLoading\(\(prev\) => \(\{ \.\.\.prev, \[key\]: model \}\)\);/);
   // Cleared on the first word, and whatever happens to the reply.
   assert.match(send, /if \(!answered\) \{\s*answered = true;\s*doneLoading\(\);/);
   assert.match(send, /finally \{\s*answered = true;\s*if \(current\(\)\) \{[\s\S]*?doneLoading\(\);\s*\}/);
@@ -182,7 +182,7 @@ test('Escape closes the Chats panel', () => {
   // browser on 2026-10-19 with focus on the Chats button and inside the panel.
   // Then the second-model picker, which sits in the chat rather than over it.
   assert.match(app, /if \(!confirmDelete && !compactPlan && !personalityEditor && !profileModal && !settingsOpen && !sidebarOpen && !pickingSecond\) return undefined;/);
-  assert.match(app, /else if \(settingsOpen\) setSettingsOpen\(false\);\s*else if \(sidebarOpen\) setSidebarOpen\(false\);\s*else setPickingSecond\(false\);/);
+  assert.match(app, /else if \(settingsOpen\) setSettingsOpen\(false\);\s*else if \(sidebarOpen\) setSidebarOpen\(false\);\s*else \{ setPickingSecond\(false\); composeRef\.current\?\.focus\(\); \}/);
 });
 
 test("Make a picture's lines are RigMatch's, and a deleted chat stays deleted", () => {

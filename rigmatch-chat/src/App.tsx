@@ -42,6 +42,7 @@ import {
   serializeStore,
   splitTurns,
   startSplit,
+  streamKey,
   untilLastAsk,
   updateColumn,
   withMessages,
@@ -703,13 +704,17 @@ export default function App() {
    * either of two when it asks two. Each side streams, stops and fails on its
    * own, so a slow model never holds up the other one's answer.
    */
-  const [streaming, setStreaming] = useState<Partial<Record<SplitColumn, string>>>({});
-  const typingModel = streaming.main ?? null;
+  //
+  // Keyed by chat as well as side (streamKey): two chats asking two can each
+  // have a second side answering, and Stop in one must never reach the other.
+  const [streaming, setStreaming] = useState<Record<string, string>>({});
+  /** Anything answering in any chat, for the ding when the last one lands. */
   const busy = Object.keys(streaming).length > 0;
   /** A side whose model Ollama is loading for the reply being waited on, until its first word arrives. */
-  const [loading, setLoading] = useState<Partial<Record<SplitColumn, string>>>({});
-  /** Choosing the second model for a chat that asks two. */
+  const [loading, setLoading] = useState<Record<string, string>>({});
+  /** Choosing the second model for a chat that asks two, and the one chosen so far. */
   const [pickingSecond, setPickingSecond] = useState(false);
+  const [secondChoice, setSecondChoice] = useState("");
   /** The message whose text was just copied, for a moment of "Copied". */
   const [copiedId, setCopiedId] = useState<string | null>(null);
   // Each model's declared memory, read once per model from /api/show.
@@ -797,6 +802,14 @@ export default function App() {
   }, [conversations, activeConversationId, activeBuddy]);
   /** The second model, when the open chat asks two. */
   const secondModel = activeConversation?.split?.modelName ?? null;
+  /** The model answering on one side of the open chat right now, or null. Never another chat's. */
+  const answeringHere = (column: SplitColumn): string | null =>
+    (activeConversation ? streaming[streamKey(activeConversation.id, column)] : undefined) ?? null;
+  const loadingHere = (column: SplitColumn): boolean =>
+    Boolean(activeConversation && loading[streamKey(activeConversation.id, column)]);
+  const typingModel = answeringHere("main");
+  /** Something is answering in the open chat. Another chat's answer does not hold this one up. */
+  const busyHere = typingModel !== null || answeringHere("split") !== null;
 
   /**
    * What the active model can actually be handed.
@@ -883,7 +896,8 @@ export default function App() {
   const [personalityEditor, setPersonalityEditor] = useState<PersonalityDraft | null>(null);
   const [sysStats, setSysStats] = useState<SystemStats | null>(null);
   const [vramUsedGb, setVramUsedGb] = useState<number | null>(null);
-  const abortRefs = useRef<Partial<Record<SplitColumn, AbortController>>>({});
+  const abortRefs = useRef<Record<string, AbortController>>({});
+  const composeRef = useRef<HTMLTextAreaElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const avatarFileRef = useRef<HTMLInputElement>(null);
   const prevBusyRef = useRef(false);
@@ -1082,14 +1096,19 @@ export default function App() {
    */
   const splitFitNote = useMemo(() => {
     if (!activeBuddy || !secondModel || !vram) return null;
-    // One model on both sides is loaded once.
-    const bytes = [...new Set([activeBuddy, secondModel])]
-      .reduce((sum, model) => sum + (buddies.find((b) => b.modelName === model)?.sizeGb ?? 0) * 1e9, 0);
+    // Each model's weights plus the memory it holds this chat in, at the size
+    // it will be asked for — the same estimate the memory meter shows. One
+    // model on both sides is loaded once.
+    const bytes = [...new Set([activeBuddy, secondModel])].reduce((sum, model) => {
+      const info = contextInfo[model];
+      const weights = (buddies.find((b) => b.modelName === model)?.sizeGb ?? 0) * 1e9;
+      return sum + weights + (info ? kvCacheBytes(info, contextLimitFor(model)) : 0);
+    }, 0);
     if (kvBudgetFromVram(vram, bytes) !== 0) return null;
     return `${getDisplayName(activeBuddy)} and ${getDisplayName(secondModel)} need about ${formatGib(bytes)} together, `
       + `and this PC has ${formatGib(vram.totalBytes)} of ${vram.unified ? "memory" : "graphics memory"}. `
       + "They may take turns, so answers can be slower.";
-  }, [activeBuddy, secondModel, buddies, vram]);
+  }, [activeBuddy, secondModel, buddies, vram, contextInfo, contextLimitFor]);
 
   // Exact where Ollama has told us, estimated only for what it has not seen yet.
   //
@@ -1159,7 +1178,7 @@ export default function App() {
       else if (profileModal) setProfileModal(null);
       else if (settingsOpen) setSettingsOpen(false);
       else if (sidebarOpen) setSidebarOpen(false);
-      else setPickingSecond(false);
+      else { setPickingSecond(false); composeRef.current?.focus(); }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -1646,21 +1665,24 @@ export default function App() {
     const assistantId = genId();
     let accumulated = "";
 
-    abortRefs.current[column]?.abort();
+    // This chat's side, not every chat's: another chat asking the same model
+    // has its own stream, and stopping or replacing this one must not touch it.
+    const key = streamKey(conversationId, column);
+    abortRefs.current[key]?.abort();
     const ctrl = new AbortController();
-    abortRefs.current[column] = ctrl;
-    setStreaming((prev) => ({ ...prev, [column]: model }));
+    abortRefs.current[key] = ctrl;
+    setStreaming((prev) => ({ ...prev, [key]: model }));
     // Still this side's own stream: a Stop and then Regenerate starts another,
     // which nothing from this one may end.
-    const current = () => abortRefs.current[column] === ctrl;
-    const doneLoading = () => setLoading(({ [column]: _done, ...rest }) => rest);
+    const current = () => abortRefs.current[key] === ctrl;
+    const doneLoading = () => setLoading(({ [key]: _done, ...rest }) => rest);
 
     // Said while Ollama loads the model, which off a slow drive takes minutes
     // and otherwise looks like a hang behind "typing…". Asked alongside the
     // send rather than before it, so a loaded model is not held up by the check.
     let answered = false;
     void isModelLoaded(settings.ollamaUrl, model).then((loaded) => {
-      if (loaded === false && !answered && current()) setLoading((prev) => ({ ...prev, [column]: model }));
+      if (loaded === false && !answered && current()) setLoading((prev) => ({ ...prev, [key]: model }));
     });
 
     try {
@@ -1726,8 +1748,8 @@ export default function App() {
     } finally {
       answered = true;
       if (current()) {
-        delete abortRefs.current[column];
-        setStreaming(({ [column]: _done, ...rest }) => rest);
+        delete abortRefs.current[key];
+        setStreaming(({ [key]: _done, ...rest }) => rest);
         doneLoading();
       }
       // A finished reply is the natural point to be durable. The coalescing
@@ -1754,7 +1776,7 @@ export default function App() {
   ]);
 
   const sendMessage = useCallback(async () => {
-    if (!activeBuddy || !draft.trim() || busy) return;
+    if (!activeBuddy || !draft.trim() || busyHere) return;
 
     // Typing into a model that has no thread open starts one, rather than
     // refusing — the empty state is a chat waiting to happen, not an error.
@@ -1796,32 +1818,35 @@ export default function App() {
     // or worse, a previous one sent again.
     usableAttachment,
     answerInColumn,
-    busy,
+    busyHere,
     draft,
   ]);
 
   /**
-   * Stop the replies in progress: one side's, or every side's. The abort
+   * Stop the replies in progress in one chat: one side's, or both. The abort
    * reaches Ollama now, so the GPU is actually released rather than carrying on
    * with a reply nobody will read. Whatever has already been streamed stays —
    * it is a real partial answer, and often the reason for stopping is that it
    * was already enough.
    */
-  const stopColumns = useCallback((columns: SplitColumn[]) => {
-    for (const column of columns) {
-      abortRefs.current[column]?.abort();
-      delete abortRefs.current[column];
+  const stopColumns = useCallback((conversationId: string, columns: SplitColumn[]) => {
+    const keys = columns.map((column) => streamKey(conversationId, column));
+    for (const key of keys) {
+      abortRefs.current[key]?.abort();
+      delete abortRefs.current[key];
     }
-    const without = <T,>(prev: Partial<Record<SplitColumn, T>>) => {
+    const without = (prev: Record<string, string>) => {
       const next = { ...prev };
-      for (const column of columns) delete next[column];
+      for (const key of keys) delete next[key];
       return next;
     };
     setStreaming(without);
     setLoading(without);
     void writerRef.current?.flush();
   }, []);
-  const stopGenerating = useCallback(() => stopColumns(["main", "split"]), [stopColumns]);
+  const stopGenerating = useCallback(() => {
+    if (activeConversation) stopColumns(activeConversation.id, ["main", "split"]);
+  }, [activeConversation, stopColumns]);
 
   /**
    * Ask again, on one side of a chat asking two or on both. That side's last
@@ -1832,7 +1857,7 @@ export default function App() {
     const target = activeConversation;
     if (!target?.split) return;
     for (const column of columns) {
-      if (streaming[column]) continue;
+      if (streaming[streamKey(target.id, column)]) continue;
       const asked = untilLastAsk(column === "main" ? target.messages : target.split.messages);
       if (!asked || (column === "main" && asked.length <= target.split.from)) continue;
       void answerInColumn({ target, column, model: column === "main" ? target.modelName : target.split.modelName, asked });
@@ -1841,7 +1866,7 @@ export default function App() {
 
   /** Start asking a second model too, in the open chat or, with none open, a new one. */
   const askSecondModel = useCallback((model: string) => {
-    if (!activeBuddy || !model || busy) return;
+    if (!activeBuddy || !model || busyHere) return;
     const base = activeConversation ?? createConversation({
       id: genId(),
       modelName: activeBuddy,
@@ -1854,8 +1879,10 @@ export default function App() {
       : [...prev, split]));
     setActiveConversationId(split.id);
     setPickingSecond(false);
+    // The picker goes away with the choice; the message box is what comes next.
+    composeRef.current?.focus();
     void writerRef.current?.flush();
-  }, [activeBuddy, activeConversation, activePersonality, busy]);
+  }, [activeBuddy, activeConversation, activePersonality, busyHere]);
 
   /**
    * Back to one model, carrying on with the side that was kept. The other
@@ -1864,7 +1891,7 @@ export default function App() {
    */
   const keepOne = useCallback((column: SplitColumn) => {
     const target = activeConversation;
-    if (!target?.split || busy) return;
+    if (!target?.split || busyHere) return;
     const now = Date.now();
     const kept = keepColumn(target, column, now);
     const other: SplitColumn = column === "main" ? "split" : "main";
@@ -1881,8 +1908,11 @@ export default function App() {
       if (!visibleBuddies.some((b) => b.modelName === kept.modelName)) setCapabilityFilter("all");
     }
     setActiveConversationId(kept.id);
+    // The button pressed goes away with the columns; focus lands in the
+    // message box rather than on the page.
+    composeRef.current?.focus();
     void writerRef.current?.flush();
-  }, [activeConversation, activeBuddy, busy, visibleBuddies]);
+  }, [activeConversation, activeBuddy, busyHere, visibleBuddies]);
 
   /**
    * Models that can be the second one: every model Chat lists, RigMatch's
@@ -1892,6 +1922,8 @@ export default function App() {
     .filter((b) => b.modelName !== activeBuddy && !settings.hiddenModels.includes(b.modelName))
     .sort((a, b) => (rigScores[b.modelName]?.total ?? -1) - (rigScores[a.modelName]?.total ?? -1)
       || a.displayName.localeCompare(b.displayName)), [buddies, activeBuddy, settings.hiddenModels, rigScores]);
+  /** The model the picker would add: the one chosen, while it is still offered, else the top one. */
+  const chosenSecond = secondChoices.find((b) => b.modelName === secondChoice)?.modelName ?? secondChoices[0]?.modelName ?? "";
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -2903,7 +2935,7 @@ export default function App() {
                     {secondModel
                       ? `${activeBuddyObj.displayName} and ${getDisplayName(secondModel)}${connectionStatus !== "connected" ? " · offline" : ""}`
                       : typingModel === activeBuddy
-                        ? loading.main === activeBuddy ? `Loading ${activeBuddyObj.displayName}…` : `${activeBuddyObj.displayName} is typing…`
+                        ? loadingHere("main") ? `Loading ${activeBuddyObj.displayName}…` : `${activeBuddyObj.displayName} is typing…`
                         : connectionStatus !== "connected" ? `${activeBuddyObj.displayName} · offline` : activeBuddyObj.displayName}
                   </span>
                   {" · "}
@@ -2941,8 +2973,8 @@ export default function App() {
                       <button
                         type="button"
                         role="menuitem"
-                        disabled={busy || secondChoices.length === 0}
-                        onClick={() => { setMoreOpen(false); setPickingSecond(true); }}
+                        disabled={busyHere || secondChoices.length === 0}
+                        onClick={() => { setMoreOpen(false); setSecondChoice(""); setPickingSecond(true); }}
                       >
                         <strong>Ask a second model too</strong>
                         <span>{secondChoices.length === 0 ? "No other model installed" : "Each message goes to both, answers side by side"}</span>
@@ -3000,17 +3032,17 @@ export default function App() {
 
             {/* Choosing the second model. The models RigMatch scored best on
                 this PC come first, so a show's winner and runner-up are the
-                first two to pick from. */}
+                first two to pick from. Nothing happens until Add: an arrow key
+                in the list changes the choice, it does not commit to it. */}
             {pickingSecond && !secondModel && (
               <div className="rm-split-pick">
                 <label>
                   Also ask
                   <select
-                    value=""
+                    value={chosenSecond}
                     autoFocus
-                    onChange={(event) => askSecondModel(event.target.value)}
+                    onChange={(event) => setSecondChoice(event.target.value)}
                   >
-                    <option value="" disabled>Choose a model</option>
                     {secondChoices.map((buddy) => (
                       <option key={buddy.modelName} value={buddy.modelName}>
                         {buddy.displayName} · {rigScores[buddy.modelName] ? `Match ${rigScores[buddy.modelName].total}` : `${buddy.sizeGb} GB`}
@@ -3018,7 +3050,20 @@ export default function App() {
                     ))}
                   </select>
                 </label>
-                <button type="button" className="rm-btn-sm" onClick={() => setPickingSecond(false)}>Cancel</button>
+                <button
+                  type="button"
+                  className="rm-btn-sm"
+                  onClick={() => askSecondModel(chosenSecond)}
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  className="rm-btn-sm"
+                  onClick={() => { setPickingSecond(false); composeRef.current?.focus(); }}
+                >
+                  Cancel
+                </button>
               </div>
             )}
             {splitFitNote && <p className="rm-test-note">{splitFitNote}</p>}
@@ -3077,7 +3122,7 @@ export default function App() {
                   {renderMessage(msg, faceFor(activeBuddyObj.modelName), Boolean(activeConversation?.summary) && index < (activeConversation?.summarizedCount ?? 0))}
                 </Fragment>
               ))}
-              {!splitView && typingModel === activeBuddy && renderTyping(faceFor(activeBuddyObj.modelName), loading.main === activeBuddy)}
+              {!splitView && typingModel === activeBuddy && renderTyping(faceFor(activeBuddyObj.modelName), loadingHere("main"))}
 
               {/* A chat asking two: each question once, then both answers
                   side by side, or one above the other in a narrow window.
@@ -3116,30 +3161,38 @@ export default function App() {
                             const model = column === "main" ? activeBuddyObj.modelName : secondModel;
                             const other = column === "main" ? secondModel : activeBuddyObj.modelName;
                             const replies = turn[column];
-                            const answering = newest && streaming[column] === model;
+                            // This chat's own stream on this side, never another
+                            // chat's that happens to use the same model.
+                            const answering = newest && answeringHere(column) !== null;
                             return (
                               <section key={column} className="rm-split-cell" aria-label={`${getDisplayName(model)}'s answer`}>
                                 {replies.map((msg) => renderMessage(msg, faceFor(model)))}
                                 {answering && !replies.some((m) => m.role === "assistant" && !m.fromRigMatch)
-                                  && renderTyping(faceFor(model), loading[column] === model)}
+                                  && renderTyping(faceFor(model), loadingHere(column))}
                                 {newest && (
                                   <div className="rm-split-actions">
-                                    {answering ? (
-                                      <button type="button" onClick={() => stopColumns([column])} title={`Stop ${getDisplayName(model)} and free the graphics card`}>
-                                        Stop
+                                    {/* One button that is Stop while answering and
+                                        Regenerate after, so focus stays on it
+                                        through both, rather than falling to the page. */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (!answering) regenerate([column]);
+                                        else if (activeConversation) stopColumns(activeConversation.id, [column]);
+                                      }}
+                                      title={answering ? `Stop ${getDisplayName(model)} and free the graphics card` : undefined}
+                                    >
+                                      {answering ? "Stop" : "Regenerate"}
+                                    </button>
+                                    {!answering && (
+                                      <button
+                                        type="button"
+                                        onClick={() => keepOne(column)}
+                                        disabled={busyHere}
+                                        title={`Carry on with ${getDisplayName(model)} alone. ${getDisplayName(other)}'s answers are saved as a chat of their own.`}
+                                      >
+                                        Keep this one
                                       </button>
-                                    ) : (
-                                      <>
-                                        <button type="button" onClick={() => regenerate([column])}>Regenerate</button>
-                                        <button
-                                          type="button"
-                                          onClick={() => keepOne(column)}
-                                          disabled={busy}
-                                          title={`Carry on with ${getDisplayName(model)} alone. ${getDisplayName(other)}'s answers are saved as a chat of their own.`}
-                                        >
-                                          Keep this one
-                                        </button>
-                                      </>
                                     )}
                                   </div>
                                 )}
@@ -3195,6 +3248,7 @@ export default function App() {
             )}
             <div className="rm-compose">
               <textarea
+                ref={composeRef}
                 className="rm-compose-input"
                 placeholder={secondModel ? `Message ${activeBuddyObj.displayName} and ${getDisplayName(secondModel)}` : `Message ${assistantDisplayName}`}
                 aria-label={secondModel ? `Message ${activeBuddyObj.displayName} and ${getDisplayName(secondModel)}` : `Message ${assistantDisplayName}`}
@@ -3205,11 +3259,13 @@ export default function App() {
                 /* Not disabled while a reply streams — there is no reason you
                    cannot write the next message while waiting for this one. */
               />
-              {busy ? (
+              {/* Only this chat's answers: another chat still answering
+                  neither blocks sending here nor is stopped from here. */}
+              {busyHere ? (
                 <button
                   type="button"
                   className="rm-btn rm-btn-danger rm-stop-btn"
-                  onClick={stopGenerating}
+                  onClick={() => { stopGenerating(); composeRef.current?.focus(); }}
                   title={secondModel ? "Stop both answers and free the graphics card" : "Stop this reply and free the graphics card"}
                 >
                   Stop
@@ -3221,7 +3277,12 @@ export default function App() {
                       its place. */}
                   {secondModel ? (
                     (splitView?.turns.length ?? 0) > 0 && (
-                      <button type="button" className="rm-btn rm-btn-line" onClick={() => regenerate(["main", "split"])}>
+                      <button
+                        type="button"
+                        className="rm-btn rm-btn-line"
+                        // Stop takes this button's place, so focus moves to the box.
+                        onClick={() => { regenerate(["main", "split"]); composeRef.current?.focus(); }}
+                      >
                         Regenerate both
                       </button>
                     )
