@@ -230,6 +230,13 @@ export type BenchmarkPromptResult = {
  */
 export type PromptDrawing = { svg: string | null; note: string };
 
+/**
+ * One contestant's drawing as a show recorded it (ListTestResult.drawings):
+ * the picture, the question it answered, and its score, absent when nothing
+ * marked it.
+ */
+export type ShowDrawing = { drawing: PromptDrawing; prompt: string; score?: number };
+
 export type BenchmarkResult = {
   model: string;
   baseUrl: string;

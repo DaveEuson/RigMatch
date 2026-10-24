@@ -448,6 +448,15 @@ export function splitTurns(conversation: Conversation): { shared: StoredMessage[
   return { shared: conversation.messages.slice(0, split.from), turns };
 }
 
+/**
+ * The name of a question's attachment when its bytes are gone, as they are
+ * after a restart (serializeStore keeps only the name). Asking it again would
+ * send the words without the picture or recording they are about.
+ */
+export function lostAttachment(message: StoredMessage | null | undefined): string | null {
+  return message?.attachmentName && !message.images?.length ? message.attachmentName : null;
+}
+
 /** The messages up to and including the last question: what asking again starts from. */
 export function untilLastAsk(messages: StoredMessage[]): StoredMessage[] | null {
   for (let i = messages.length - 1; i >= 0; i -= 1) {

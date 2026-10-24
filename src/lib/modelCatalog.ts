@@ -12,6 +12,7 @@ import type {
   OllamaStatus,
   PullProgressUpdate,
   RunFailure,
+  ShowDrawing,
   SystemProfile,
   TestedModelScore,
 } from '../types';
@@ -41,6 +42,11 @@ export type ListTestResult = {
   results: TestedModelScore[];
   /** Contestants that could not finish; the show went on without them. */
   failures?: RunFailure[];
+  /**
+   * This show's drawings, by model. Kept on the show rather than read from
+   * each model's latest test, which a later test or skill round replaces.
+   */
+  drawings?: Record<string, ShowDrawing>;
 };
 export type ModelProfile = {
   agentName: string;
@@ -542,10 +548,15 @@ export function removeListTestScores(current: ListTestResult | null, aliases: st
   if (!remaining.length) return null;
 
   // Spread first, so what else the show recorded (its failures) is kept.
+  // A cleared model's drawing goes with its score.
   return {
     ...current,
     winner: remaining[0].model,
     results: remaining,
+    ...(current.drawings ? {
+      drawings: Object.fromEntries(Object.entries(current.drawings)
+        .filter(([model]) => !normalizedAliases.includes(normalizeModelKey(model)))),
+    } : {}),
   };
 }
 
@@ -2173,6 +2184,22 @@ export function getFriendlyModelName(model: string): string {
     .replace(/-\d+(\.\d+)?b$/i, ''); // trailing "-7b" style size
   if (!base) return model;
   return base.charAt(0).toUpperCase() + base.slice(1);
+}
+
+/**
+ * The friendly name, plus the tag when another model in `lineup` has the same
+ * friendly name. qwen3:8b and qwen3:14b are both "Qwen3", so a reveal saying
+ * "You picked Qwen3. The judge picked Qwen3." read as agreement when it was not.
+ */
+export function getLineupModelName(model: string, lineup: readonly string[]): string {
+  const friendly = getFriendlyModelName(model);
+  const clash = lineup.some((other) => normalizeModelKey(other) !== normalizeModelKey(model)
+    && getFriendlyModelName(other).toLowerCase() === friendly.toLowerCase());
+  if (!clash) return friendly;
+  // Ollama's tag ("qwen3:8b"), or LM Studio's size suffix ("qwen/qwen3-8b").
+  const last = model.split('/').pop()!;
+  const tag = last.includes(':') ? last.split(':').pop()! : last.match(/-(\d+(?:\.\d+)?[bm])$/i)?.[1] ?? last;
+  return `${friendly} ${/^\d+(\.\d+)?[bm]$/i.test(tag) ? tag.toUpperCase() : tag}`;
 }
 
 export function getQueueChipModelName(model: string) {

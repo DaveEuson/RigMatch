@@ -170,7 +170,7 @@ export function SpeedDateTranscriptPanel({
                 )}
                 {/* Once. A highlighted copy sat above this, the same text again. */}
                 {prompt.type === 'drawing'
-                  ? <DrawingAnswer prompt={prompt} />
+                  ? <DrawingAnswer prompt={prompt} by={getShortModelName(activeRow?.displayName ?? '')} />
                   : <pre>{prompt.response.trim() || 'No answer returned.'}</pre>}
               </div>
             </li>
@@ -275,7 +275,7 @@ export function SpeedDateTranscriptPanel({
                           )}
                           {prompt.type === 'drawing' ? (
                             <>
-                              <DrawingTile drawing={prompt.drawing} alt={`${getShortModelName(row.displayName)}'s drawing`} />
+                              <DrawingTile drawing={prompt.drawing} alt={`Drawing by ${getShortModelName(row.displayName)}`} />
                               {prompt.drawing?.note && <p className="drawing-note">{prompt.drawing.note}</p>}
                             </>
                           ) : (

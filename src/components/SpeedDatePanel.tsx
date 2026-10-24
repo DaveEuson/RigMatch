@@ -27,7 +27,7 @@ import { useBlindMasking } from '../lib/blindShowContext';
 import { CodingBoard } from './CodingBoard';
 import { LabComparison } from './LabComparison';
 import { DrawingGallery } from './DrawingGallery';
-import { lineupDrawings } from '../lib/drawings';
+import { galleryDrawings } from '../lib/drawings';
 import { ChevronRight, Download, Plus, Trophy } from 'lucide-react';
 import { useState } from 'react';
 
@@ -133,8 +133,9 @@ export function SpeedDatePanel({
       : matchRanking[0]?.model ?? null;
   const winnerResult = channel === 'code' || channel === 'reading' ? undefined : matchRanking[0];
   const hasRanking = channel === 'reading' ? readingGroups.length > 0 : Boolean(listTestResult);
-  // The drawing round's pictures, side by side under the ranking.
-  const rankingDrawings = listTestResult ? lineupDrawings(listTestResult.results.map((result) => result.model), benchmarkByModel) : [];
+  // This show's drawings, side by side under its ranking. Kept on the show:
+  // a model's latest test may since be another run, without its picture.
+  const rankingDrawings = listTestResult ? galleryDrawings(listTestResult.results.map((result) => result.model), listTestResult.drawings) : [];
   const selectedSlots = Array.from({ length: 5 }, (_, index) => shortlistedRows[index]);
   const uninstalledLineupRows = shortlistedRows.filter((row) => !row.installed);
   const canRunListTest = shortlistedRows.length >= MIN_CONTESTANTS && uninstalledLineupRows.length === 0 && !isListTesting;
@@ -193,6 +194,8 @@ export function SpeedDatePanel({
             {runReadiness}
             {' '}
             {standingLine(lineupStanding(leader ?? undefined, lineupNames), winnerResult?.total)}
+            {/* What the switch does, said where it can be read while it is on. */}
+            {blindOn && onBlindChange && ' Blind show is on: names stay hidden until you pick your favourite.'}
           </p>
         </div>
         <div className="page-head-actions">
@@ -435,7 +438,7 @@ export function SpeedDatePanel({
               scores={Object.fromEntries(listTestResult.results.map((result) => [result.model, result]))}
             />
             <DrawingGallery
-              prompt={rankingDrawings[0]?.prompt.prompt}
+              prompt={rankingDrawings[0]?.prompt}
               entries={rankingDrawings.map(({ model, drawing, score }) => ({ key: model, name: model, drawing, score }))}
             />
             <button type="button" className="primary-button compact speed-date-next-btn" onClick={onOpenHistory}>

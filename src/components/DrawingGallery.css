@@ -12,11 +12,17 @@
 }
 .drawing-tile img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .drawing-tile.none {
+  align-content: center;
+  gap: var(--s1);
+  padding: var(--s2);
   border: 1px dashed var(--line-strong);
   background: transparent;
   color: var(--muted);
   font-size: var(--fs-ui);
+  text-align: center;
 }
+.drawing-tile.none b { color: var(--text); font-weight: 700; }
+.drawing-tile.none small { font-size: var(--fs-small); line-height: 1.35; }
 
 .drawing-answer { display: grid; gap: var(--s2); justify-items: start; }
 .drawing-answer .drawing-tile { width: min(280px, 100%); }
@@ -39,12 +45,13 @@
    ranking row. */
 .drawing-gallery ol > li { display: block; min-height: 0; padding: 0; border-radius: 0; background: none; }
 .drawing-gallery figure { display: grid; gap: var(--s2); margin: 0; }
-.drawing-gallery li figcaption { display: flex; justify-content: space-between; gap: var(--s2); color: var(--text); font-size: var(--fs-ui); }
+.drawing-gallery li figcaption { display: grid; gap: 2px; color: var(--text); font-size: var(--fs-ui); }
 .drawing-gallery li figcaption span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.drawing-gallery li figcaption b { color: var(--text-strong); font-family: var(--figure); text-align: right; }
+.drawing-gallery li figcaption b { color: var(--muted); font-weight: 400; text-align: left; }
 
 /* On the stage, under the contestant who drew it. Three classes, to undo the
    podium's portrait rules (.sw-podium img, .sw-podium.answering img). */
 .sw-podium .drawing-tile { width: 128px; }
 .sw-podium .drawing-tile .drawing-picture { width: 100%; height: 100%; border-radius: 0; box-shadow: none; object-fit: contain; }
-.sbs-answer-card .drawing-tile { width: min(220px, 100%); }
+.sbs-answer-card .drawing-tile,
+.blind-pick-answer .drawing-tile { width: min(220px, 100%); }

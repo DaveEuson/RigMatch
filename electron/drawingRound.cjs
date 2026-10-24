@@ -46,12 +46,13 @@ const XLINK_NS = 'http://www.w3.org/1999/xlink';
  * are copied onto the elements first, see readStyleRules), foreignObject (HTML
  * inside the SVG), image (it loads other content), a, and the animate family,
  * set included (they can rewrite an href). use stays only as a copy of a shape
- * in the same drawing (see keepUse).
+ * or symbol in the same drawing (see keepUse). symbol, marker, pattern and mask
+ * are kept as things the drawing refers to by #id, never drawn on their own.
  */
 const KEPT_ELEMENTS = new Set([
-  'svg', 'g', 'defs', 'title', 'desc', 'use',
+  'svg', 'g', 'defs', 'title', 'desc', 'use', 'symbol',
   'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text', 'tspan',
-  'linearGradient', 'radialGradient', 'stop', 'clipPath',
+  'linearGradient', 'radialGradient', 'stop', 'clipPath', 'marker', 'pattern', 'mask',
 ]);
 
 /**
@@ -67,6 +68,8 @@ const KEPT_ATTRIBUTES = new Set([
   'width', 'height', 'd', 'points', 'pathLength', 'dx', 'dy', 'rotate', 'textLength', 'lengthAdjust',
   'offset', 'gradientUnits', 'gradientTransform', 'spreadMethod', 'stop-color', 'stop-opacity',
   'clipPathUnits', 'clip-path', 'clip-rule',
+  'marker-start', 'marker-mid', 'marker-end', 'markerWidth', 'markerHeight', 'markerUnits', 'refX', 'refY', 'orient',
+  'patternUnits', 'patternContentUnits', 'patternTransform', 'mask', 'maskUnits', 'maskContentUnits',
   'fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-linecap',
   'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset',
   'opacity', 'color', 'display', 'visibility', 'paint-order', 'vector-effect', 'shape-rendering',
@@ -76,8 +79,8 @@ const KEPT_ATTRIBUTES = new Set([
 ]);
 
 const SHAPES = new Set(['path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text']);
-/** Shapes in here are not drawn: they are paint, clipping or metadata. */
-const UNDRAWN = new Set(['defs', 'clipPath', 'linearGradient', 'radialGradient', 'title', 'desc']);
+/** Shapes in here are not drawn where they stand: they are paint, clipping, metadata, or drawn by reference. */
+const UNDRAWN = new Set(['defs', 'clipPath', 'linearGradient', 'radialGradient', 'title', 'desc', 'symbol', 'marker', 'pattern', 'mask']);
 const XML_ENTITIES = /&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/;
 
 /**
@@ -276,7 +279,7 @@ const STYLE_PROPERTIES = new Set([
   'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset', 'opacity', 'color',
   'display', 'visibility', 'stop-color', 'stop-opacity', 'clip-path', 'clip-rule', 'paint-order',
   'font-size', 'font-family', 'font-weight', 'font-style', 'text-anchor', 'dominant-baseline',
-  'letter-spacing', 'transform',
+  'letter-spacing', 'transform', 'marker-start', 'marker-mid', 'marker-end', 'mask',
 ]);
 /**
  * Colours, numbers with units, keywords, and calls such as rgb() or rotate():
@@ -452,13 +455,23 @@ function sanitizeSvg(svg) {
   return root ? serializeSvg(root).svg : null;
 }
 
+// Short enough to read on the tile that stands in for the picture.
 const PROBLEMS = {
-  missing: { score: 0, note: 'No drawing: the answer had no SVG in it.' },
-  'too-big': { score: 10, note: `No drawing: it was over the ${DRAWING_SVG_MAX_CHARS.toLocaleString('en-US')}-character limit for a drawing.` },
-  broken: { score: 10, note: 'No drawing: the SVG does not parse, usually because it was cut off before it ended.' },
-  empty: { score: 5, note: 'No drawing: the SVG has nothing in it to see.' },
+  missing: { score: 0, note: 'No drawing: the answer had no SVG.' },
+  'too-big': { score: 10, note: `No drawing: over the ${DRAWING_SVG_MAX_CHARS.toLocaleString('en-US')}-character limit.` },
+  broken: { score: 10, note: 'No drawing: the SVG was cut off or does not parse.' },
+  empty: { score: 5, note: 'No drawing: the SVG draws nothing.' },
   'no-viewbox': { score: 30, note: 'Scored by rule: the SVG has no viewBox, which the question asked for.' },
+  // Not a finding about the drawing: a slow PC, not a bad answer. The run
+  // leaves it unmarked and out of stability, so slowness is not charged twice
+  // (it is already in the speed score).
+  timeout: { score: 0, note: `Ran out of time at ${DRAWING_TIMEOUT_MS / 1000} s, so it is not marked.` },
 };
+
+/** What the run records for a drawing still unfinished at its deadline. */
+function drawingTimedOut() {
+  return { ok: false, problem: 'timeout', score: PROBLEMS.timeout.score, svg: null, note: PROBLEMS.timeout.note };
+}
 
 /** The last answer checked and what the check found (checkDrawing). */
 let lastCheck = null;
@@ -512,9 +525,11 @@ function drawingJudgeMode({ local, provider, capabilities }) {
 function drawingNote({ check, judgedFrom, judged, reason }) {
   if (!check.ok) return check.note;
   if (!judged) return 'Not marked: no judge could look at it, so it does not count toward the score.';
+  // Said of the route, not the judge: a model that cannot see, a cloud or LM
+  // Studio judge, and a picture that failed to draw are all sent text.
   const how = judgedFrom === 'picture'
     ? 'Judged from the picture.'
-    : 'Judged from the SVG code, because the judge cannot see pictures.';
+    : 'Judged from the SVG code: this judge was sent text, not the picture.';
   return reason ? `${how} ${reason}` : how;
 }
 
@@ -530,6 +545,7 @@ module.exports = {
   parseSvg,
   sanitizeSvg,
   checkDrawing,
+  drawingTimedOut,
   drawingJudgeMode,
   drawingNote,
 };

@@ -17,7 +17,7 @@ import {
   type BenchmarkQuestion,
   type BenchmarkQuestionCount,
 } from './benchmarkSuite';
-import { lineupDrawings, useDrawingPictureResponder } from './lib/drawings';
+import { galleryDrawings, showDrawingsFrom, useDrawingPictureResponder, useShowDrawingCollector } from './lib/drawings';
 import {
   demoBenchmark,
   demoRunHistory,
@@ -204,7 +204,7 @@ import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, Choi
 import { SkillRunMiniBar, LiveBuildModal, DemoResultModal } from './components/SkillDemoViewers';
 import { RunSheet } from './components/RunSheet';
 import { ClearScoresModal } from './components/ClearScoresModal';
-import { clearBlindTaste, clearModelFromBlindTaste, maskProgress, maskRows, maskText, shuffleLineup } from './lib/blindMode';
+import { clearBlindTaste, clearModelFromBlindTaste, countBlindPicks, maskProgress, maskRows, maskText, readBlindTaste, shuffleLineup } from './lib/blindMode';
 import { BlindShowContext } from './lib/blindShowContext';
 import { useBlindShow } from './lib/useBlindShow';
 import { BlindOverlay } from './components/BlindShow';
@@ -264,6 +264,7 @@ import { modelIdentities, sameModel } from './lib/modelKey.ts';
 import { gpuDriverMessage } from './lib/gpuDriver';
 import { codeJudgeFor, labJudgeFor } from './lib/labJudge.ts';
 import { deletableRows, rowsExceptTopPick, topPickToKeep } from './lib/modelCleanup';
+import { countModelNews } from './lib/modelNews';
 import { runVideoLineupLive } from './lib/videoGenRunner';
 import {
   allLineupEntries,
@@ -842,6 +843,8 @@ function App() {
   const chatRenderStops = useRef(new Map<string, AbortController>());
   // A judge that can see is shown each drawing as a picture this window draws.
   useDrawingPictureResponder();
+  // The stage's drawings outlive the stage, which unmounts when the show is minimized.
+  useShowDrawingCollector();
   useEffect(() => {
     if (!agentArcadeApi.onBridgeGenerateRequest) return undefined;
     return agentArcadeApi.onBridgeGenerateRequest(({ id, prompt, kind }) => {
@@ -1366,8 +1369,9 @@ function App() {
       const lmStudioNote = lmStudioStatus.ready
         ? ` LM Studio found ${lmStudioStatus.models.length} local model${lmStudioStatus.models.length === 1 ? '' : 's'} for testing/chat.`
         : '';
-      const modelNewsNote = nextNewsState.latestNewModelIds.length > 0
-        ? ` ${nextNewsState.latestNewModelIds.length} new model${nextNewsState.latestNewModelIds.length === 1 ? '' : 's'} found.`
+      const newModelCount = countModelNews(catalogResponse.models, nextNewsState.latestNewModelIds);
+      const modelNewsNote = newModelCount > 0
+        ? ` ${newModelCount} new model${newModelCount === 1 ? '' : 's'} found.`
         : '';
       setActivity(
         isDesktopRuntime
@@ -1472,6 +1476,16 @@ function App() {
     setPendingScoreClear(null);
   }, []);
 
+  /** Every name one model's "Clear score" removes, so the dialog counts what the clear does. */
+  const scoreClearAliases = useCallback((model: string) => {
+    const targetRow = modelRows.find((row) =>
+      row.displayName === model ||
+      row.id === model ||
+      normalizeModelKey(row.displayName) === normalizeModelKey(model),
+    );
+    return targetRow ? getModelAliases(targetRow) : [model];
+  }, [modelRows]);
+
   const confirmClearScores = useCallback(() => {
     if (!pendingScoreClear) return;
 
@@ -1501,12 +1515,7 @@ function App() {
       return;
     }
 
-    const targetRow = modelRows.find((row) =>
-      row.displayName === pendingScoreClear.model ||
-      row.id === pendingScoreClear.model ||
-      normalizeModelKey(row.displayName) === normalizeModelKey(pendingScoreClear.model),
-    );
-    const aliases = targetRow ? getModelAliases(targetRow) : [pendingScoreClear.model];
+    const aliases = scoreClearAliases(pendingScoreClear.model);
 
     setModelScores((current) => removeModelScores(current, aliases));
     setBenchmarkByModel((current) => removeBenchmarkResults(current, aliases));
@@ -1531,7 +1540,7 @@ function App() {
     setRunProgress(null);
     setPendingScoreClear(null);
     setActivity(`${pendingScoreClear.model} score and test transcript cleared. The model is still installed.`);
-  }, [modelRows, ollama.baseUrl, pendingScoreClear, selectedModel]);
+  }, [scoreClearAliases, ollama.baseUrl, pendingScoreClear, selectedModel]);
 
 
   const selectUiMode = useCallback((nextMode: UiMode) => {
@@ -1799,9 +1808,15 @@ function App() {
       }))),
     [shortlistedRows, modelScores, wizardRound, wizardSkillBoard, wizardChannel, wizardShowRanked],
   );
+  // This show's drawings, and only for a round that asked the questions: a
+  // picture or listening round asks no drawing, and the last show's pictures
+  // under its board read as part of it.
   const wizardDrawings = useMemo(
-    () => lineupDrawings(wizardLineupResults.map((result) => result.model), benchmarkByModel),
-    [wizardLineupResults, benchmarkByModel],
+    () => galleryDrawings(
+      wizardLineupResults.map((result) => result.model),
+      wizardRound === 'chat' || wizardRound === 'code' ? wizardShowResult?.drawings : undefined,
+    ),
+    [wizardLineupResults, wizardRound, wizardShowResult],
   );
   const lineupSession = useVideoLineupSession();
   /** Whatever ComfyUI is rendering for RigMatch now, wherever it was started. */
@@ -3650,6 +3665,8 @@ function App() {
           .map((r) => toTestedModelScore(r, currentSuiteName))
           .sort(compareTestedModelScores),
         ...(failures.length ? { failures: [...failures] } : {}),
+        // On the show itself, so its galleries never show another run's pictures.
+        ...(showDrawingsFrom(results) ? { drawings: showDrawingsFrom(results) } : {}),
       });
       if (failures.length) tellUser(droppedOutMessage(failures, getFriendlyModelName));
       // In the same render as the result, so no screen shows it before the pick step covers them.
@@ -4976,7 +4993,7 @@ function App() {
       <TopBar
         uiMode={uiMode}
         onUiModeChange={selectUiMode}
-        tabs={uiMode === 'advanced' ? TOP_TABS.map((tab) => ({ ...tab, count: tab.id === 'whatsNew' ? modelNews.latestNewModelIds.length : undefined })) : undefined}
+        tabs={uiMode === 'advanced' ? TOP_TABS.map((tab) => ({ ...tab, count: tab.id === 'whatsNew' ? countModelNews(catalog, modelNews.latestNewModelIds) : undefined })) : undefined}
         activeTab={activeTab ?? undefined}
         onSelectTab={selectTab}
         tracker={uiMode === 'beginner' ? <div className="top-bar-tracker-slot" ref={setTrackerSlot} /> : undefined}
@@ -5925,6 +5942,7 @@ function App() {
         <ClearScoresModal
           pending={pendingScoreClear}
           scoreCount={scoredModelCount}
+          blindPicks={countBlindPicks(readBlindTaste(), pendingScoreClear.mode === 'all' ? null : scoreClearAliases(pendingScoreClear.model))}
           onCancel={cancelClearScores}
           onConfirm={confirmClearScores}
         />

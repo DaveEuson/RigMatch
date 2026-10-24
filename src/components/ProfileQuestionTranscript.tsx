@@ -93,7 +93,7 @@ export function ProfileQuestionTranscript({
                 <em className="prompt-diagnostic-note">{getPromptDiagnosticText(prompt)}</em>
               )}
               {prompt.type === 'drawing'
-                ? <DrawingAnswer prompt={prompt} />
+                ? <DrawingAnswer prompt={prompt} by={model} />
                 : <pre>{prompt.response.trim() || 'No answer returned.'}</pre>}
             </div>
           </li>
