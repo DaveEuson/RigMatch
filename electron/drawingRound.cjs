@@ -13,9 +13,19 @@
 //
 // Pure and dependency-free (no DOM here), so tests run it as it ships.
 
-/** Answer tokens for a drawing: a compact SVG fits, an endless one is cut off. */
-const DRAWING_ANSWER_TOKENS = 1200;
-/** A drawing that takes longer than this scores as no drawing; the show goes on. */
+/**
+ * Answer tokens for a drawing. Measured on nine models (2026-10-24, RTX 4070):
+ * every pelican that ended on its own took 142 to 960 tokens, and the one that
+ * did not end (llama3.2:3b) loops whatever the cap. 1,900 is twice the longest,
+ * and with the question (72 to 91 tokens) it still fits the run's 2,048-token
+ * context, so a drawing never makes Ollama reload the model. At 1,200, answers
+ * to the older, wordier prompt were cut off.
+ */
+const DRAWING_ANSWER_TOKENS = 1900;
+/**
+ * The real limit on a slow PC: a drawing that takes longer than this scores as
+ * no drawing and the show goes on. At 21 tokens a second, 1,900 tokens take 90 s.
+ */
 const DRAWING_TIMEOUT_MS = 90000;
 /** Far more than 1,200 tokens can write, so only an imported or edited answer meets it. */
 const DRAWING_SVG_MAX_CHARS = 32000;

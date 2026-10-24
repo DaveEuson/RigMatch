@@ -25,7 +25,7 @@ const DRAWING_SUBJECTS = [
 ];
 
 function drawingPrompt(subject) {
-  return `Generate an SVG of ${subject}. Reply with one self-contained <svg> element with a viewBox: no scripts, and nothing loaded from outside it. Keep it compact, about 40 shapes at most.`;
+  return `Generate an SVG of ${subject}. Reply with one self-contained <svg> element with a viewBox, in a single code block: no scripts, nothing loaded from outside it, and no comments. Keep it simple, under about 60 shapes, and write nothing outside the code block.`;
 }
 
 const DRAWING_PROMPTS = DRAWING_SUBJECTS.map(drawingPrompt);

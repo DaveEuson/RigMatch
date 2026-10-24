@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const {
+  DRAWING_ANSWER_TOKENS,
   DRAWING_SVG_MAX_CHARS,
   DRAWING_MAX_USES,
   KEPT_ELEMENTS,
@@ -333,6 +334,11 @@ test('the run asks a drawing once, on its own budget, and an empty one never dra
   assert.match(main, /const repeats = prompt\.type === 'drawing' \? 1 : BENCHMARK_REPEATS;/);
   assert.match(main, /prompt\.type === 'drawing'\s*\?\s*await runDrawingPrompt\(/);
   assert.match(main, /num_predict: DRAWING_ANSWER_TOKENS/);
+  // The drawing runs in the run's own context, so the answer and the question
+  // (91 tokens at most across nine models) must fit in it, or Ollama would
+  // have to reload the model at a larger one mid-run.
+  const context = Number(/BENCHMARK_GENERATE_OPTIONS = Object\.freeze\(\{[^}]*num_ctx: (\d+)/.exec(main)[1]);
+  assert.ok(DRAWING_ANSWER_TOKENS + 120 <= context, `${DRAWING_ANSWER_TOKENS} answer tokens leave no room for the question in ${context}`);
   assert.match(main, /setTimeout\(stop, DRAWING_TIMEOUT_MS\)/);
   assert.match(main, /!\(result\.type === 'drawing' && result\.status === 'no-response'\)/);
   // The drawing reaches the stage as soon as it is drawn.
@@ -347,7 +353,8 @@ test('the General set asks one drawing, the pelican, and still asks ten question
   assert.equal(drawings.length, 1);
   assert.match(drawings[0].prompt, /^Generate an SVG of a pelican riding a bicycle\./);
   assert.match(drawings[0].prompt, /viewBox/);
-  assert.match(drawings[0].prompt, /no scripts, and nothing loaded from outside it/);
+  assert.match(drawings[0].prompt, /no scripts, nothing loaded from outside it, and no comments/);
+  assert.match(drawings[0].prompt, /under about 60 shapes, and write nothing outside the code block/);
 });
 
 test('a longer show alternates the drawing with Summaries, a new subject each time it draws', () => {
