@@ -1190,13 +1190,15 @@ export function describeFitPlainly(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fi
         ? `Bigger than your graphics card, so part of it runs on the processor and it is slower${numbers}`
         : `Only just fits on your graphics card${numbers}`;
     case 'out-of-league':
+      if (vramGb < USABLE_VRAM_MIN_GB) return 'Too big to run on the processor alone';
       // Ruled out on its parameter count, not its size: "Too big for this PC
       // (26 GB of 32 GB)" contradicted itself for a squeezed 70B model.
-      return sizeGb > 0 && vramGb > 0 && sizeGb <= vramGb
+      return sizeGb > 0 && sizeGb <= vramGb
         ? `Too big for this PC: a ${row.params} model needs a much bigger graphics card`
         : `Too big for this PC${numbers}`;
     default:
-      return sizeGb > 0 ? 'RigMatch could not read your graphics card, so it cannot tell yet' : 'Its size is unknown, so RigMatch cannot tell yet';
+      // With a size known, getHardwareFit always has an answer now.
+      return 'Its size is unknown, so RigMatch cannot tell yet';
   }
 }
 
@@ -2017,39 +2019,25 @@ export function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fitOve
       };
   }
 
-  if (vramGb <= 0) {
-    return sizeGb <= 4
-      ? {
-        tone: 'tight',
-        label: 'Small pick',
-        detail: `${formatGb(sizeGb)} is small enough to consider while VRAM is unknown.`,
-        recommend: true,
-      }
-      : {
-        tone: 'unknown',
-        label: 'Check VRAM',
-        detail: `${formatGb(sizeGb)} needs a known GPU profile before RigMatch recommends it.`,
-        recommend: false,
-      };
-  }
-
-  // An integrated GPU's carve-out (128 MB to 2 GB) or an old 1 GB card holds
-  // no model, so it runs on the processor exactly as with no GPU at all. Sized
-  // against the carve-out, a 0.5 GB Radeon 610M called llama3.2:3b too big
-  // on a PC where it runs fine. Unlike "no GPU found", the card is known, so a
-  // model too big for the processor is plainly too big rather than unknown.
+  // No graphics memory found, an integrated GPU's carve-out (128 MB to 2 GB)
+  // or an old 1 GB card: none holds a model, so it runs on the processor, and
+  // the answer is the same for all three. Sized against a carve-out, a 0.5 GB
+  // Radeon 610M called llama3.2:3b too big on a PC where it runs fine. A model
+  // past what the processor runs well is too big; it used to be "Check VRAM"
+  // with nothing found, which read as "cannot tell" even for a 70B model.
   if (vramGb < USABLE_VRAM_MIN_GB) {
+    const card = vramGb > 0 ? `${formatGb(vramGb)} of graphics memory is too little to hold a model` : 'no graphics memory was found';
     return sizeGb <= 4
       ? {
         tone: 'tight',
         label: 'Small pick',
-        detail: `${formatGb(sizeGb)} runs on the processor: ${formatGb(vramGb)} of graphics memory is too little to hold a model.`,
+        detail: `${formatGb(sizeGb)} runs on the processor: ${card}.`,
         recommend: true,
       }
       : {
         tone: 'out-of-league',
         label: `Too big · ${formatGb(sizeGb)}`,
-        detail: `${formatGb(sizeGb)} is too much for the processor alone, and ${formatGb(vramGb)} of graphics memory is too little to help.`,
+        detail: `${formatGb(sizeGb)} is too much for the processor alone, and ${card}.`,
         recommend: false,
       };
   }
@@ -2122,7 +2110,7 @@ export function getHardwareFit(row: Pick<ModelRow, 'params' | 'sizeGb' | 'fitOve
 export function downloadBlockedLabel(fit: HardwareFit): string | null {
   if (fit.recommend) return null;
   if (fit.tone === 'out-of-league') return 'Too big for this PC';
-  return fit.label === 'Check VRAM' ? 'Graphics memory unknown' : 'Size unknown';
+  return 'Size unknown';
 }
 
 export function sumQueuedGb(rows: ModelRow[], queuedIds: Set<string>) {

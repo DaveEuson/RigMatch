@@ -27,6 +27,7 @@ import {
   type CapabilityBearing, type HardwareFit,
 } from './modelCatalog.ts';
 import { formatGb } from './format.ts';
+import { scoreDrift } from './scoring.ts';
 
 export type FitGradeLetter = 'A' | 'B' | 'C' | 'D' | 'F' | '?';
 
@@ -56,10 +57,7 @@ export type GradeHardware = {
   gpu?: string;
   /** System memory, which decides whether a mixture of experts can spill into it. */
   ramGb?: number;
-  /**
-   * There is definitely no graphics card (--vram 0). Without it, 0 GB means
-   * RigMatch could not read the card, and a big model is "?" rather than F.
-   */
+  /** There is no graphics card (--vram 0), rather than none found: only the wording differs. */
   noGpu?: boolean;
 };
 
@@ -372,7 +370,7 @@ export function describeSpeed(tokensPerSecond: number): string {
 function fitReason(row: GradeRow, fit: HardwareFit, hardware: GradeHardware, spareGb: number | null): string {
   if (row.fitOverride) return fit.detail;
   if (fit.tone === 'unknown') {
-    return row.sizeGb ? 'Graphics memory unknown, so RigMatch cannot grade it yet' : 'Download size unknown, so RigMatch cannot grade it yet';
+    return 'Download size unknown, so RigMatch cannot grade it yet';
   }
   const memory = `${round1(hardware.vramGb)} GB of ${hardware.unifiedMemory ? 'shared' : 'graphics'} memory`;
   const carveOut = usableVram(hardware) <= 0 && hardware.vramGb > 0;
@@ -416,17 +414,10 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
  * quality 50%, speed 25%, fit 15% and room to chat 10%. A model that cannot
  * hold a chat (an embedding, image or video model) is graded on its fit
  * alone, since words a second mean nothing for it.
- *
- * The one place it can differ from the pill: told there is no graphics card
- * at all (--vram 0), a model too big for the processor is an F rather than
- * the "?" an unread card gets. The app never says that, so its pill agrees.
  */
 export function gradeModel(row: GradeRow, hardware: GradeHardware, evidence: GradeEvidence = {}): FitGrade {
   const vramGb = usableVram(hardware);
-  const sized = getHardwareFit(row, hardware.vramGb);
-  const fit: HardwareFit = hardware.noGpu && sized.tone === 'unknown' && row.sizeGb
-    ? { tone: 'out-of-league', label: `Too big · ${formatGb(row.sizeGb)}`, detail: sized.detail, recommend: false }
-    : sized;
+  const fit = getHardwareFit(row, hardware.vramGb);
   const usable = { ...hardware, vramGb };
   const pool = hardware.unifiedMemory ? vramGb * UNIFIED_USABLE_SHARE : vramGb;
   const spareGb = row.sizeGb && pool > 0 ? round1(Math.max(0, pool - row.sizeGb)) : null;
@@ -485,30 +476,46 @@ export function gradeModel(row: GradeRow, hardware: GradeHardware, evidence: Gra
 }
 
 /**
- * rigBandwidth over the Models list: every row with a saved score that
- * recorded its speed. Saved scores rather than benchmarks, because the model
- * page has the scores and only its own model's benchmark, and the two screens
- * have to land on the same letter.
+ * A saved score only says something about this computer if it was measured
+ * on it. One from a networked computer, or from before a GPU swap, gave every
+ * grade the other machine's speed and answers as "when tested here", beside
+ * the Models list's own "Measured on another computer — retest here" badge.
+ * A new build of the same model on the same card still counts.
  */
-export function measuredBandwidth(rows: ModelRow[], scores: Record<string, TestedModelScore>, vramGb: number): number | null {
+function measuredHere(score: TestedModelScore | undefined, hardware: GradeHardware): TestedModelScore | undefined {
+  if (!score) return undefined;
+  const drift = scoreDrift(score, { gpuModel: hardware.gpu, vramGb: hardware.vramGb });
+  return drift === 'measured-elsewhere' || drift === 'hardware-changed' ? undefined : score;
+}
+
+/**
+ * rigBandwidth over the Models list: every row with a saved score from this
+ * computer that recorded its speed. Saved scores rather than benchmarks,
+ * because the model page has the scores and only its own model's benchmark,
+ * and the two screens have to land on the same letter.
+ */
+export function measuredBandwidth(rows: ModelRow[], scores: Record<string, TestedModelScore>, hardware: GradeHardware): number | null {
   return rigBandwidth(
-    rows.map((row) => ({ ...row, tokensPerSecond: getModelScore(row, scores)?.tokensPerSecond })),
-    vramGb,
+    rows.map((row) => ({ ...row, tokensPerSecond: measuredHere(getModelScore(row, scores), hardware)?.tokensPerSecond })),
+    hardware.vramGb,
   );
 }
 
 /**
- * One Models row's grade, with what this PC has measured: its own saved
- * score, its last benchmark's speed when there is no score, and the speed
- * measuredBandwidth reads off the rest. The list and the model page call
- * this, not gradeModel, so they cannot show different letters.
+ * One Models row's grade, with what this computer has measured: its own
+ * saved score, its last benchmark's speed when there is no score, and the
+ * speed measuredBandwidth reads off the rest. A score from elsewhere counts
+ * for nothing, and neither does the benchmark it came from. The list and the
+ * model page call this, not gradeModel, so they cannot show different letters.
  */
 export function gradeRow(
   row: ModelRow,
   hardware: GradeHardware,
   { score, benchmark, bandwidthGbps }: { score?: TestedModelScore; benchmark?: BenchmarkResult | null; bandwidthGbps?: number | null },
 ): FitGrade {
-  return gradeModel(row, hardware, { score, tokensPerSecond: benchmark?.avgTokensPerSecond, bandwidthGbps });
+  const here = measuredHere(score, hardware);
+  const benchmarkHere = score && !here ? null : benchmark?.avgTokensPerSecond;
+  return gradeModel(row, hardware, { score: here, tokensPerSecond: benchmarkHere, bandwidthGbps });
 }
 
 /**

@@ -340,7 +340,10 @@ export function ModelCabinet({
   const selectedPullProgress = selectedRow ? pullProgressByModel[selectedRow.displayName] : undefined;
   const selectedPulling = Boolean(selectedRow && pullingModel === selectedRow.displayName);
   // One test on this PC turns every row's speed estimate into a calibrated one.
-  const rigGbps = useMemo(() => measuredBandwidth(rows, modelScores, vramGb), [rows, modelScores, vramGb]);
+  const rigGbps = useMemo(
+    () => measuredBandwidth(rows, modelScores, { vramGb, unifiedMemory, gpu: gpuModel }),
+    [rows, modelScores, vramGb, unifiedMemory, gpuModel],
+  );
   const query = modelQuery.trim().toLowerCase();
   /**
    * Faceted counts: every chip counts the rows that pass the OTHER active
