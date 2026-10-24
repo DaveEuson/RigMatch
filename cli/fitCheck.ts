@@ -7,16 +7,18 @@
  * the tests can feed in a 12 GB card and read the table back without a GPU.
  *
  * The models are the catalog snapshot the app ships for when it is offline
- * (electron/ollamaCapabilities.json, refreshed at release time), and every
- * grade comes from src/lib/modelGrade.ts — the same module the Models list
- * uses, so the terminal and the app cannot disagree about a model.
+ * (electron/ollamaCapabilities.json, taken at release time), and every grade
+ * comes from src/lib/modelGrade.ts, the module the Models list uses. An
+ * installed model is graded on what Ollama reports for it, as the app does
+ * (mergeModelRows), so the two agree about the models you have.
  */
 
 import snapshot from '../electron/ollamaCapabilities.json' with { type: 'json' };
 import ollamaCatalog from '../electron/ollamaCatalog.cjs';
-import { gradeModel, pullCommand, type FitGrade, type GradeRow } from '../src/lib/modelGrade.ts';
+import { gradeModel, mixtureSpillFit, pullCommand, type FitGrade, type GradeRow } from '../src/lib/modelGrade.ts';
 import { canGenerateText, isEmbeddingModel } from '../src/lib/modelCatalog.ts';
 import { isSpecialistModel } from '../src/lib/chooseLineup.ts';
+import { gpuDriverMessage, type GpuDriverProblem } from '../src/lib/gpuDriver.ts';
 
 export type Provider = 'ollama' | 'lm-studio';
 
@@ -29,11 +31,32 @@ export type FitHardware = {
   arch: string;
   /** 'detected', or 'flag' when --vram replaced the card. */
   source: 'detected' | 'flag';
-  driverProblem?: string | null;
+  /** --vram 0: there is no graphics card, as opposed to one nobody could read. */
+  noGpu?: boolean;
+  driverProblem?: GpuDriverProblem | null;
 };
 
-/** What Ollama's /api/tags lists, or null when nothing answered. */
+/** What Ollama's /api/tags lists: sizes in GiB, as the app reads them. */
 export type InstalledModel = { name: string; sizeGb: number; params?: string };
+
+/**
+ * Where Ollama listens, read from OLLAMA_HOST the way Ollama's own client
+ * reads it (envconfig.Host): with no scheme the port defaults to 11434, with
+ * http:// to 80 and with https:// to 443, and a path is kept, so a proxy at
+ * https://example.com/ollama works. "0.0.0.0" means this machine.
+ */
+export function ollamaUrl(raw = process.env.OLLAMA_HOST): string {
+  const value = raw?.trim() || '127.0.0.1:11434';
+  const scheme = value.match(/^(https?):\/\//i)?.[1].toLowerCase();
+  const rest = scheme ? value.slice(scheme.length + 3) : value;
+  const slash = rest.indexOf('/');
+  const hostPort = slash < 0 ? rest : rest.slice(0, slash);
+  const path = slash < 0 ? '' : rest.slice(slash).replace(/\/+$/, '');
+  const withPort = hostPort.match(/^(\[[^\]]+\]|[^:]+):(\d+)$/);
+  const host = (withPort ? withPort[1] : hostPort) || '127.0.0.1';
+  const port = withPort ? withPort[2] : scheme === 'https' ? '443' : scheme === 'http' ? '80' : '11434';
+  return `${scheme ?? 'http'}://${host === '0.0.0.0' ? '127.0.0.1' : host}:${port}${path}`;
+}
 
 /** A catalog size, with the other names Ollama lists it under. */
 export type CatalogRow = GradeRow & { aliases?: string[] };
@@ -42,6 +65,7 @@ export type RankedModel = {
   row: CatalogRow;
   grade: FitGrade;
   installed: boolean;
+  /** `ollama run` for a model you have, under the name Ollama lists it by; a download command otherwise. */
   command: string;
 };
 
@@ -55,6 +79,13 @@ const capabilitiesFor = ollamaCatalog.ollamaCapabilitiesFor as (facts: {
 
 /** A plain size: "8b", "0.6b", "135m", "e4b", "8x7b" — not a quantization, a cloud tag or an MLX build. */
 const SIZE_TAG = /^(?:\d+(?:\.\d+)?[mb]|e\d+(?:\.\d+)?b|\d+x\d+(?:\.\d+)?b)$/i;
+
+/**
+ * ollama.com's sizes are decimal GB (5.2 GB is 5.2 billion bytes), while
+ * graphics memory and Ollama's own sizes for installed models are GiB. Graded
+ * in the wrong unit, every download looked 7% bigger than it is.
+ */
+const toGiB = (decimalGb: number) => Math.round(((decimalGb * 1e9) / 1024 ** 3) * 10) / 10;
 
 /**
  * One row per downloadable size in the snapshot.
@@ -78,9 +109,11 @@ export function catalogRows(families: Record<string, SnapshotFamily> = snapshot.
       const capabilities = capabilitiesFor({
         name: family, tag, inputs: size.inputs, badges: facts.badges, description: facts.description,
       }) ?? undefined;
+      // "Latest" and "Unknown" are labels, not sizes; the grade reads the download instead.
+      const params = ollamaCatalog.inferParamsFromTag(tag);
       const row: CatalogRow = {
-        name, displayName: name, params: ollamaCatalog.inferParamsFromTag(tag), sizeGb: size.sizeGb ?? null, capabilities, description: facts.description,
-        ...(twin && twin[0] === tag ? { aliases: [`${family}:latest`] } : {}),
+        name, displayName: name, params: /^\d/.test(params) ? params : '', sizeGb: toGiB(size.sizeGb ?? 0), capabilities,
+        description: facts.description, ...(twin && twin[0] === tag ? { aliases: [`${family}:latest`] } : {}),
       };
       if (isChatModel(row)) rows.push(row);
     }
@@ -93,51 +126,59 @@ function isChatModel(row: GradeRow): boolean {
 }
 
 /**
- * Grade every model and sort best first: by letter, then by what it can do,
- * then by points and size. Installed models Ollama lists that the snapshot
- * does not know (a Hugging Face import, a custom build) are graded too.
+ * Grade every model, best first: by points, then the bigger model, then the
+ * name. An installed model is graded on Ollama's own size and parameter count
+ * for it, and installed models the snapshot does not know (a Hugging Face
+ * import, a custom build) are graded too. A mixture of experts too big for
+ * graphics memory gets the app's "RAM assist" fit where it would still run at
+ * a usable speed (mixtureSpillFit).
  */
 export function rankModels(
   catalog: CatalogRow[],
-  hardware: Pick<FitHardware, 'vramGb' | 'unifiedMemory'>,
+  hardware: Pick<FitHardware, 'vramGb' | 'unifiedMemory'> & Partial<Pick<FitHardware, 'gpu' | 'ramGb' | 'noGpu'>>,
   { installed = null, provider = 'ollama' }: { installed?: InstalledModel[] | null; provider?: Provider } = {},
 ): RankedModel[] {
-  const have = new Set((installed ?? []).map((model) => model.name));
+  const byName = new Map((installed ?? []).map((model) => [model.name, model]));
   const known = new Set(catalog.flatMap((row) => [row.name, ...(row.aliases ?? [])]));
   const extra: CatalogRow[] = (installed ?? [])
     .filter((model) => !known.has(model.name))
     .map((model) => ({ name: model.name, displayName: model.name, params: model.params ?? '', sizeGb: model.sizeGb || null }))
     .filter(isChatModel);
   return [...catalog, ...extra]
-    .map((row) => ({
-      row,
-      grade: gradeModel(row, hardware),
-      installed: have.has(row.name) || (row.aliases ?? []).some((alias) => have.has(alias)),
-      command: pullCommand(row.name, provider),
-    }))
-    // Within a letter, models that can do more come first. The snapshot has
-    // no pull counts or release dates, and tool use, thinking and images are
-    // the nearest honest sign of a current model: without this, a 12 GB card's
-    // A list opened with falcon2, yi and glm4 on a size tie-break.
-    .sort((a, b) => GRADE_ORDER.indexOf(a.grade.letter) - GRADE_ORDER.indexOf(b.grade.letter)
-      || abilities(b.row) - abilities(a.row)
-      || (b.grade.points ?? -1) - (a.grade.points ?? -1)
+    .map((listed) => {
+      const have = [listed.name, ...(listed.aliases ?? [])].map((name) => byName.get(name)).find(Boolean);
+      const merged: CatalogRow = have
+        ? { ...listed, sizeGb: have.sizeGb || listed.sizeGb, params: have.params || listed.params }
+        : listed;
+      const spill = mixtureSpillFit(merged, hardware);
+      const row = spill ? { ...merged, fitOverride: spill } : merged;
+      return {
+        row,
+        grade: gradeModel(row, hardware),
+        installed: Boolean(have),
+        command: have && provider === 'ollama' ? `ollama run ${have.name}` : pullCommand(row.name, provider),
+      };
+    })
+    .sort((a, b) => (b.grade.points ?? -1) - (a.grade.points ?? -1)
       || (b.row.sizeGb ?? 0) - (a.row.sizeGb ?? 0)
       || a.row.name.localeCompare(b.row.name));
 }
 
-const GRADE_ORDER = ['A', 'B', 'C', 'D', 'F', '?'];
-const abilities = (row: GradeRow) => (row.capabilities ?? []).filter((c) => ['tools', 'thinking', 'vision', 'audio'].includes(c)).length;
-
 /**
  * Families built for one job rather than for talking to: code completion and
- * coding agents, SQL, maths, function calling, medicine and translation. Read
- * from the family name, or from its page's description where the name does
- * not say ("for agentic coding"). The safety classifiers and document readers
- * Simple Mode leaves out are caught by isSpecialistModel.
+ * coding agents, SQL, maths, function calling, classification and decision
+ * models, document reading and extraction, fact-checking, medicine and
+ * translation. Read from the family name, or from its page's description
+ * where the name does not say ("a 4B decision model … for fast
+ * classification"). The safety classifiers and OCR models Simple Mode leaves
+ * out are caught by isSpecialistModel.
  */
 const NICHE_FAMILY = /code|coder|devstral|sql|math|nexusraven|firefunction|tool-use|medllama|medgemma|meditron|translategemma/i;
-const NICHE_DESCRIPTION = /code completion|text-to-sql|function calling|\bfor (?:agentic )?coding\b/i;
+const NICHE_DESCRIPTION = new RegExp([
+  'code completion', 'text-to-sql', 'function calling', String.raw`\bfor (?:agentic )?coding\b`, 'agentic software engineer',
+  'classification', 'decision model', 'into decisions', 'document understanding', 'information extraction',
+  'fact-checking', 'to markdown', 'semantic search', 'detect risks', 'safety reasoning',
+].join('|'), 'i');
 
 /** A model for conversation in general, as opposed to one job (NICHE_FAMILY). */
 export function isGeneralModel(row: GradeRow): boolean {
@@ -162,40 +203,60 @@ const gb = (value: number) => `${Math.round(value * 10) / 10} GB`;
 /** "Sweet spot", not "Good fit · 9.3 GB": the size has its own column. */
 const fitLabel = (grade: FitGrade) => grade.fit.label.replace(/\s*·.*$/, '');
 
-export function describeHardware(hardware: FitHardware): string {
-  const memory = hardware.unifiedMemory
-    ? `${gb(hardware.vramGb)} shared memory`
-    : hardware.vramGb > 0 ? `${gb(hardware.vramGb)} graphics memory` : 'no graphics memory found';
-  return `${hardware.gpu} · ${memory} · ${gb(hardware.ramGb)} system memory`;
+/** Words to lines no wider than the terminal. Unlimited when it is not a terminal. */
+function wrap(text: string, columns: number | undefined): string[] {
+  if (!columns || text.length <= columns) return [text];
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    if (line && line.length + 1 + word.length > columns) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = line ? `${line} ${word}` : word;
+    }
+  }
+  return [...lines, line];
 }
 
 /**
- * The table people read. Plain ASCII, so a Windows console on an old code page
- * prints it as cleanly as a Mac terminal does.
+ * The card line, in plain ASCII. Windows PowerShell 5.1 reads a captured
+ * program's output in the console's code page, and the "·" these used turned
+ * into "┬╖" there.
+ */
+export function describeHardware(hardware: FitHardware): string {
+  const memory = hardware.unifiedMemory
+    ? `${gb(hardware.vramGb)} shared memory`
+    : hardware.vramGb > 0 ? `${gb(hardware.vramGb)} graphics memory` : hardware.noGpu ? null : 'no graphics memory found';
+  return [hardware.gpu, memory, `${gb(hardware.ramGb)} system memory`].filter(Boolean).join(', ');
+}
+
+/**
+ * The table people read: ASCII only, and no wider than the terminal. When it
+ * would wrap, the command column goes first (it repeats the model's name)
+ * with one line saying how to get any of them, then the Fit column.
  */
 export function formatTable(
   models: RankedModel[],
   hardware: FitHardware,
-  { provider = 'ollama', ollamaReachable = false, all = false, installedOnly = false, limit = 20 }: {
-    provider?: Provider; ollamaReachable?: boolean; all?: boolean; installedOnly?: boolean; limit?: number;
+  { provider = 'ollama', ollamaReachable = false, all = false, installedOnly = false, limit = 20, columns }: {
+    provider?: Provider; ollamaReachable?: boolean; all?: boolean; installedOnly?: boolean; limit?: number; columns?: number;
   } = {},
 ): string {
   const running = models.filter(inDefaultList);
   const installed = models.filter((model) => model.installed);
   const shown = installedOnly ? installed : all ? models : running.slice(0, limit);
   const markedHere = shown.filter((model) => model.installed).length;
-  const lines = ['RigMatch fit check', describeHardware(hardware)];
-  if (hardware.source === 'flag') lines.push('Graded for the graphics memory you gave with --vram, not this computer\'s.');
-  if (hardware.driverProblem) {
-    lines.push('Your NVIDIA card did not answer, so models are sized as if it had no graphics memory. Repair or update its driver, then run this again.');
-  }
+  const prose: string[] = ['RigMatch fit check', describeHardware(hardware)];
+  if (hardware.source === 'flag') prose.push('Graded for the graphics memory you gave with --vram, not this computer\'s.');
+  if (hardware.driverProblem) prose.push(gpuDriverMessage(hardware.driverProblem));
   if (provider === 'lm-studio') {
-    lines.push('LM Studio names models its own way, so each command is a search: lms get shows what it found before downloading.');
+    prose.push('LM Studio names models its own way, so each command is a search: lms get shows what it found before downloading.');
   } else {
     // Installed models are often not among the best 20 for this PC, so the
     // line says how many of them the list actually shows.
     const count = installed.length;
-    lines.push(!ollamaReachable
+    prose.push(!ollamaReachable
       ? `Ollama is not running here, so ${installedOnly ? 'there is no telling what is installed' : 'installed models are not marked'}.`
       : count === 0 ? 'Ollama is running, with none of these installed yet.'
         : installedOnly ? `Ollama is running: your ${plural(count, 'installed model')}, best first.`
@@ -203,9 +264,10 @@ export function formatTable(
             : markedHere === 0 ? `Ollama is running with ${plural(count, 'model')} installed, none of them in this list. --installed lists them.`
               : `Ollama is running with ${plural(count, 'model')} installed: ${markedHere} in this list, marked *. --installed lists all ${count}.`);
   }
+  const lines = prose.flatMap((text) => wrap(text, columns));
   lines.push('');
 
-  const header = ['Grade', 'Model', 'Size', 'Speed', 'Fit', provider === 'lm-studio' ? 'Search in LM Studio' : 'Get it'];
+  const header = ['Grade', 'Model', 'Size', 'Speed', 'Fit', provider === 'lm-studio' ? 'Search in LM Studio' : 'Command'];
   const cells = shown.map((model) => [
     model.grade.letter,
     `${model.row.name}${model.installed ? ' *' : ''}`,
@@ -214,20 +276,28 @@ export function formatTable(
     fitLabel(model.grade),
     model.command,
   ]);
-  const widths = header.map((title, column) => Math.max(title.length, ...cells.map((row) => row[column].length)));
-  const render = (row: string[]) => row.map((cell, column) => (column === row.length - 1 ? cell : pad(cell, widths[column]))).join('  ').trimEnd();
+  const widthOf = (keep: number[]) => keep.reduce((sum, column) => sum + Math.max(header[column].length, ...cells.map((row) => row[column].length)), 0)
+    + 2 * (keep.length - 1);
+  const fits = (keep: number[]) => !columns || widthOf(keep) <= columns;
+  const keep = [[0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4], [0, 1, 2, 3]].find(fits) ?? [0, 1, 2, 3];
+  const widths = keep.map((column) => Math.max(header[column].length, ...cells.map((row) => row[column].length)));
+  const render = (row: string[]) => keep.map((column, at) => (at === keep.length - 1 ? row[column] : pad(row[column], widths[at]))).join('  ').trimEnd();
   if (shown.length > 0) lines.push(render(header), ...cells.map(render));
   else lines.push(installedOnly ? 'No installed models to list.' : 'Nothing in the catalog runs on this computer.');
 
-  lines.push('');
-  lines.push(installedOnly || all
+  const footer: string[] = [];
+  if (shown.length > 0 && !keep.includes(5)) {
+    footer.push(provider === 'lm-studio' ? 'Get one with: lms get <model>' : 'Get one with: ollama pull <model>. Run one you have with: ollama run <model>');
+  }
+  footer.push(installedOnly || all
     ? `${installedOnly ? plural(shown.length, 'installed model') : `All ${models.length} models`}. Fit grade A is the best pick for this computer, F will not fit.`
     : `The best ${shown.length} of ${running.length} models that run here. --all lists every model, --json prints them for scripts.`);
-  lines.push('Speeds are estimates from the size and the card. RigMatch measures the real ones: https://github.com/DaveEuson/RigMatch');
+  footer.push('Speeds are estimates from the size and the card. RigMatch measures the real ones: https://github.com/DaveEuson/RigMatch');
+  lines.push('', ...footer.flatMap((text) => wrap(text, columns)));
   return lines.join('\n');
 }
 
-/** What --json prints: every model, graded, best first. */
+/** What --json prints: the models, graded, best first, in ASCII like the table. */
 export function toJson(
   models: RankedModel[],
   hardware: FitHardware,
@@ -261,7 +331,7 @@ export function toJson(
       speedSource: grade.speedSource,
       installed,
       command,
-      why: grade.summary,
+      why: grade.reasons.join('; '),
     })),
   };
 }

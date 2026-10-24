@@ -96,7 +96,9 @@ test('Get on a model the queue would refuse is disabled and says why', () => {
   const fits = getHardwareFit({ params: '3B', sizeGb: 2 }, 8);
   assert.equal(downloadBlockedLabel(tooBig), 'Too big for this PC');
   assert.equal(downloadBlockedLabel(unknown), 'Size unknown');
-  assert.equal(downloadBlockedLabel(getHardwareFit({ params: '7B', sizeGb: 5 }, 0)), 'Graphics memory unknown');
+  // With no graphics memory found, 5 GB is past what the processor runs well:
+  // too big, as on a small integrated GPU, rather than "unknown".
+  assert.equal(downloadBlockedLabel(getHardwareFit({ params: '7B', sizeGb: 5 }, 0)), 'Too big for this PC');
   assert.equal(downloadBlockedLabel(fits), null);
   for (const source of [cabinet, sideCard]) assert.doesNotMatch(source, /download anyway/i);
   assert.match(cabinet, /disabled=\{!queued && \(!platformFit\.compatible \|\| Boolean\(blockedLabel\)\)\}/);

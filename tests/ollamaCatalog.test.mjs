@@ -81,6 +81,11 @@ test('inferParamsFromTag / inferParamsFromModelName', () => {
   assert.equal(inferParamsFromTag('3.8b-instruct'), '3.8B');
   assert.equal(inferParamsFromTag('270m'), '270M');
   assert.equal(inferParamsFromTag('latest'), 'Latest');
+  // Experts share their attention layers: 8x7b is 46.7B in all, not 7B or 56B.
+  assert.equal(inferParamsFromTag('8x7b'), '47B');
+  assert.equal(inferParamsFromTag('8x22b'), '141B');
+  assert.equal(inferParamsFromTag('16x17b'), '109B');
+  assert.equal(inferParamsFromTag('4x3b'), '10B', 'an unlisted mixture: 80% of the product');
   assert.equal(inferParamsFromTag('weird'), 'Unknown');
 
   assert.equal(inferParamsFromModelName('qwen2.5:7b'), '7B');

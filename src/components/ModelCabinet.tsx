@@ -106,6 +106,7 @@ export function ModelCabinet({
   diskGuard,
   vramGb,
   unifiedMemory = false,
+  gpuModel,
   platform,
   queuedCount,
   isBenchmarking,
@@ -171,6 +172,8 @@ export function ModelCabinet({
   vramGb: number;
   /** Apple Silicon or a Jetson: the Fit grade says "shared memory" and leaves the system its share. */
   unifiedMemory?: boolean;
+  /** The chip's name, which sets a Mac's memory speed in the Fit grade. */
+  gpuModel?: string;
   platform: string;
   queuedCount: number;
   isBenchmarking: boolean;
@@ -337,7 +340,10 @@ export function ModelCabinet({
   const selectedPullProgress = selectedRow ? pullProgressByModel[selectedRow.displayName] : undefined;
   const selectedPulling = Boolean(selectedRow && pullingModel === selectedRow.displayName);
   // One test on this PC turns every row's speed estimate into a calibrated one.
-  const rigGbps = useMemo(() => measuredBandwidth(rows, modelScores, vramGb), [rows, modelScores, vramGb]);
+  const rigGbps = useMemo(
+    () => measuredBandwidth(rows, modelScores, { vramGb, unifiedMemory, gpu: gpuModel }),
+    [rows, modelScores, vramGb, unifiedMemory, gpuModel],
+  );
   const query = modelQuery.trim().toLowerCase();
   /**
    * Faceted counts: every chip counts the rows that pass the OTHER active
@@ -787,6 +793,14 @@ export function ModelCabinet({
                   onToggle={() => setQuickFilter(quickFilter === item.id ? 'all' : item.id as ModelQuickFilterId)}
                 />
               ))}
+              {/* Under the fit filters, the first thing in the rail: at the
+                  foot of the Match legend it sat 1,500 px down, past every
+                  filter, where nobody looking at a "Fit B" would find it. */}
+              {group.id === 'fit' && (
+                <p className="fit-grade-note">
+                  Each model's <b>Fit</b> letter says how well it should run here before any test: A is the best pick, F will not fit. Click one for the reasons.
+                </p>
+              )}
             </div>
           ))}
           <div className="model-facet-group">
@@ -1092,7 +1106,7 @@ export function ModelCabinet({
               const isNewModel = newModelIds.has(getModelNewsId(row));
               const goodForTags = getModelGoodForTags(row);
               const hardwareFit = getHardwareFit(row, vramGb);
-              const fitGrade = gradeRow(row, { vramGb, unifiedMemory }, { score, benchmark: rowBenchmark, bandwidthGbps: rigGbps });
+              const fitGrade = gradeRow(row, { vramGb, unifiedMemory, gpu: gpuModel }, { score, benchmark: rowBenchmark, bandwidthGbps: rigGbps });
               const platformFit = getPlatformFit(row.displayName, platform);
               const blockedLabel = downloadBlockedLabel(hardwareFit);
               const speedDateLineupFullForRow = shortlistedCount >= 5;
@@ -1524,7 +1538,7 @@ export function ModelCabinet({
                 .filter((v) => getPlatformFit(v.displayName, platform).compatible)
                 .map((v) => ({
                   model: v.displayName,
-                  grade: gradeRow(v, { vramGb, unifiedMemory }, {
+                  grade: gradeRow(v, { vramGb, unifiedMemory, gpu: gpuModel }, {
                     score: getModelScore(v, modelScores),
                     benchmark: getBenchmarkForModel(benchmarkByModel, v.displayName, v),
                     bandwidthGbps: rigGbps,

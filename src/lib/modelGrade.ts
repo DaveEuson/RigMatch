@@ -23,8 +23,11 @@
 
 import type { BenchmarkResult, ModelRow, TestedModelScore } from '../types';
 import {
-  canGenerateText, getHardwareFit, getModelScore, getParamSortValue, isEmbeddingModel, type CapabilityBearing, type HardwareFit,
+  USABLE_VRAM_MIN_GB, canGenerateText, getHardwareFit, getModelCapabilities, getModelScore, getParamSortValue, isEmbeddingModel,
+  type CapabilityBearing, type HardwareFit,
 } from './modelCatalog.ts';
+import { formatGb } from './format.ts';
+import { scoreDrift } from './scoring.ts';
 
 export type FitGradeLetter = 'A' | 'B' | 'C' | 'D' | 'F' | '?';
 
@@ -50,6 +53,12 @@ export type GradeHardware = {
   vramGb: number;
   /** Apple Silicon or a Jetson: the graphics memory is system memory. */
   unifiedMemory?: boolean;
+  /** The graphics card or chip's name, which sets a Mac's memory speed ("Apple M3 Max"). */
+  gpu?: string;
+  /** System memory, which decides whether a mixture of experts can spill into it. */
+  ramGb?: number;
+  /** There is no graphics card (--vram 0), rather than none found: only the wording differs. */
+  noGpu?: boolean;
 };
 
 export type GradeEvidence = {
@@ -83,15 +92,20 @@ const GPU_BANDWIDTH_GBPS: Array<{ minVramGb: number; gbps: number }> = [
   { minVramGb: 0, gbps: 120 },
 ];
 /**
- * Under this, the "graphics memory" is an integrated GPU's carve-out of system
- * memory (128 MB to 2 GB) or a card too small to hold a model, so models run
- * on the processor and are graded as if there were no graphics card. Graded
- * against the carve-out instead, a 0.5 GB Radeon 610M made llama3.2:3b an F
- * on a PC where it runs fine, and a C on the same PC with no GPU at all.
+ * The same for shared memory, by chip: about 70% of each one's rated memory
+ * speed. A base M-series chip is rated 100–120 GB/s, a Pro 150–275, a Max
+ * 300–550 and an Ultra 800, so one figure for every Mac made a Max look four
+ * times slower than it is. Jetsons and DGX Spark are named the same way.
  */
-const USABLE_VRAM_MIN_GB = 2;
-/** Apple Silicon base chips and Jetsons; Pro and Max chips are faster, which a test on this PC picks up. */
-const UNIFIED_BANDWIDTH_GBPS = 90;
+const UNIFIED_BANDWIDTH_GBPS: Array<{ chip: RegExp; gbps: number }> = [
+  { chip: /\bultra\b/i, gbps: 650 },
+  { chip: /\bmax\b/i, gbps: 330 },
+  { chip: /\bpro\b/i, gbps: 180 },
+  { chip: /\bgb10\b|dgx spark/i, gbps: 200 },
+  { chip: /\bagx\b/i, gbps: 140 },
+];
+/** A base Apple chip, a Jetson Orin Nano or NX, or a chip with no name. */
+const UNIFIED_BASE_GBPS = 90;
 /** Dual-channel DDR4/DDR5, for whatever spills out of graphics memory or runs on the processor. */
 const SYSTEM_RAM_GBPS = 35;
 /** The share of a Mac's memory a model can use, as videoFit.ts sizes it. */
@@ -241,7 +255,9 @@ function estimateTokensPerSecond(
   // A measured figure is this PC's own speed, processor or GPU, so it wins.
   if (hardware.vramGb <= 0) return Math.min((bandwidthGbps ?? SYSTEM_RAM_GBPS) / readGb, MAX_ESTIMATED_TOKENS_PER_SECOND);
   const gpu = bandwidthGbps
-    ?? (hardware.unifiedMemory ? UNIFIED_BANDWIDTH_GBPS : GPU_BANDWIDTH_GBPS.find((band) => hardware.vramGb >= band.minVramGb)?.gbps ?? SYSTEM_RAM_GBPS);
+    ?? (hardware.unifiedMemory
+      ? UNIFIED_BANDWIDTH_GBPS.find((band) => band.chip.test(hardware.gpu ?? ''))?.gbps ?? UNIFIED_BASE_GBPS
+      : GPU_BANDWIDTH_GBPS.find((band) => hardware.vramGb >= band.minVramGb)?.gbps ?? SYSTEM_RAM_GBPS);
   // What a model can be held in before it spills: all of a card, or the
   // share of a Mac's memory macOS leaves it.
   const holds = hardware.unifiedMemory ? hardware.vramGb * UNIFIED_USABLE_SHARE : hardware.vramGb;
@@ -251,6 +267,57 @@ function estimateTokensPerSecond(
   const onGpu = Math.min(1, (holds * 0.9) / row.sizeGb);
   const rate = 1 / ((readGb * onGpu) / gpu + (readGb * (1 - onGpu)) / SYSTEM_RAM_GBPS);
   return Math.min(rate, MAX_ESTIMATED_TOKENS_PER_SECOND);
+}
+
+/** What a model can do beyond text, in Ollama's words (getModelCapabilities). */
+const ABILITIES = ['tools', 'thinking', 'vision', 'audio'];
+
+/** Slower than this and a chat feels broken, so a spill that cannot keep it up stays "Too big". */
+const MIN_SPILL_TOKENS_PER_SECOND = 10;
+/** System memory left for the system and other apps when a model spills into it. */
+const SPILL_RESERVED_RAM_GB = 6;
+
+/**
+ * "RAM assist" for a mixture of experts that is too big for graphics memory.
+ *
+ * getHardwareFit calls anything past 1.15× VRAM too big, which is right for a
+ * dense model: every word reads all of it, and the part in system memory sets
+ * a crawling pace. A mixture reads a few experts per word, so gpt-oss:20b on a
+ * 12 GB card spills 2 GB and still runs at about 27 tokens a second. This
+ * returns the fit to use instead (applied as the row's fitOverride, so the
+ * fit pill, the download button and the grade agree), or null to keep the
+ * usual one: when it is not a mixture, would not fit in system memory beside
+ * the system, or would run under MIN_SPILL_TOKENS_PER_SECOND. Not on a Mac,
+ * where past its share of memory a model is swapped, not spilled.
+ */
+export function mixtureSpillFit(row: GradeRow, hardware: GradeHardware): HardwareFit | null {
+  if (row.fitOverride || !row.sizeGb || hardware.unifiedMemory || !hardware.ramGb) return null;
+  if (hardware.vramGb < USABLE_VRAM_MIN_GB || shareOf(row) >= 1) return null;
+  if (getHardwareFit({ ...row, fitOverride: undefined }, hardware.vramGb).tone !== 'out-of-league') return null;
+  const spilled = row.sizeGb - hardware.vramGb * 0.9;
+  if (spilled > hardware.ramGb - SPILL_RESERVED_RAM_GB) return null;
+  const speed = estimateTokensPerSecond(row, hardware, null);
+  if (!speed || speed < MIN_SPILL_TOKENS_PER_SECOND) return null;
+  return {
+    tone: 'tight',
+    label: `RAM assist · ${formatGb(row.sizeGb)}`,
+    detail: `Bigger than your ${formatGb(hardware.vramGb)} of graphics memory, but it runs only part of itself per word, so the ${formatGb(Math.max(0, spilled))} that does not fit can wait in system memory`,
+    recommend: true,
+  };
+}
+
+/**
+ * A picture or video model's fit, in words that match the Size column.
+ *
+ * Those models are sized by what they hold in graphics memory at once, which
+ * is less than the download the Size column shows: a picture model swaps its
+ * text encoder out before it draws, and a video model streams around its
+ * diffusion model. Unexplained, Z-Image Turbo's "14.58 GB" sat beside "8 GB
+ * should fit", and Wan 2.2 A14B's "38.03 GB" beside "Its 14.3 GB model".
+ */
+export function footprintFit(fit: HardwareFit, holdsGb: number, downloadGb: number | null | undefined): HardwareFit {
+  if (!downloadGb || fit.tone === 'unknown' || downloadGb - holdsGb < 0.5) return fit;
+  return { ...fit, detail: `Of its ${downloadGb} GB download, about ${formatGb(holdsGb)} has to be in graphics memory at once. ${fit.detail}` };
 }
 
 /** 2 tokens a second scores 0 and 40 scores 100: past reading speed, faster stops mattering much. */
@@ -263,6 +330,11 @@ function speedPoints(tokensPerSecond: number): number {
  * otherwise a curve on size (1B 40, 4B 70, 8B 85, 14B and up near 100), with
  * a mixture-of-experts model counted at the geometric mean of its total and
  * active size, and an older family counted 20 points lower.
+ *
+ * Each thing the model can do beyond text (call tools, think before
+ * answering, read images, hear) adds 5. Nothing else in the catalog says how
+ * current a model is (there are no pull counts or release dates), and size
+ * alone ranked 2024's falcon2:11b and yi:9b above qwen3.5:9b and gemma4.
  */
 function qualityPoints(row: GradeRow, evidence: GradeEvidence): { points: number; reason: string } {
   if (evidence.score && Number.isFinite(evidence.score.sobriety)) {
@@ -271,7 +343,8 @@ function qualityPoints(row: GradeRow, evidence: GradeEvidence): { points: number
   const totalB = paramsBillions(row) ?? 1;
   const effectiveB = Math.sqrt(totalB * totalB * shareOf(row));
   const older = OLDER_FAMILIES.has(familyOf(fullName(row)));
-  const points = clamp(40 + 15 * Math.log2(Math.max(effectiveB, 0.05)) - (older ? 20 : 0));
+  const abilities = (getModelCapabilities(row) ?? []).filter((ability) => ABILITIES.includes(ability)).length;
+  const points = clamp(40 + 15 * Math.log2(Math.max(effectiveB, 0.05)) - (older ? 20 : 0) + abilities * 5);
   const reason = older
     ? 'an older model: newer ones this size answer better'
     : effectiveB < 2 ? 'tiny, so expect simple answers'
@@ -311,7 +384,7 @@ export function describeSpeed(tokensPerSecond: number): string {
 function fitReason(row: GradeRow, fit: HardwareFit, hardware: GradeHardware, spareGb: number | null): string {
   if (row.fitOverride) return fit.detail;
   if (fit.tone === 'unknown') {
-    return row.sizeGb ? 'Graphics memory unknown, so RigMatch cannot grade it yet' : 'Download size unknown, so RigMatch cannot grade it yet';
+    return 'Download size unknown, so RigMatch cannot grade it yet';
   }
   const memory = `${round1(hardware.vramGb)} GB of ${hardware.unifiedMemory ? 'shared' : 'graphics'} memory`;
   const carveOut = usableVram(hardware) <= 0 && hardware.vramGb > 0;
@@ -320,7 +393,9 @@ function fitReason(row: GradeRow, fit: HardwareFit, hardware: GradeHardware, spa
       : hardware.vramGb > 0 ? `Too big for your ${memory}` : 'Too big to run without a graphics card';
   }
   if (carveOut) return `Your ${memory} is too little to hold a model, so it runs on the processor`;
-  if (hardware.vramGb <= 0) return 'No graphics memory found, so it runs on the processor';
+  if (hardware.vramGb <= 0) {
+    return hardware.noGpu ? 'No graphics card, so it runs on the processor' : 'No graphics memory found, so it runs on the processor';
+  }
   if (hardware.unifiedMemory) {
     // The fit is sized against all of a Mac's memory, but macOS and the open
     // apps need their share of it too.
@@ -353,19 +428,10 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
  * quality 50%, speed 25%, fit 15% and room to chat 10%. A model that cannot
  * hold a chat (an embedding, image or video model) is graded on its fit
  * alone, since words a second mean nothing for it.
- *
- * The one exception to matching the pill: an integrated GPU's carve-out is
- * graded as no graphics card (USABLE_VRAM_MIN_GB), because that is how the
- * model will run.
  */
 export function gradeModel(row: GradeRow, hardware: GradeHardware, evidence: GradeEvidence = {}): FitGrade {
   const vramGb = usableVram(hardware);
-  const sized = getHardwareFit(row, vramGb);
-  // With only a carve-out, the size is known and the answer is too: past what
-  // RigMatch recommends for the processor, not "unknown graphics memory".
-  const fit: HardwareFit = vramGb <= 0 && hardware.vramGb > 0 && sized.tone === 'unknown' && row.sizeGb
-    ? { tone: 'out-of-league', label: 'Too big', detail: sized.detail, recommend: false }
-    : sized;
+  const fit = getHardwareFit(row, hardware.vramGb);
   const usable = { ...hardware, vramGb };
   const pool = hardware.unifiedMemory ? vramGb * UNIFIED_USABLE_SHARE : vramGb;
   const spareGb = row.sizeGb && pool > 0 ? round1(Math.max(0, pool - row.sizeGb)) : null;
@@ -424,30 +490,46 @@ export function gradeModel(row: GradeRow, hardware: GradeHardware, evidence: Gra
 }
 
 /**
- * rigBandwidth over the Models list: every row with a saved score that
- * recorded its speed. Saved scores rather than benchmarks, because the model
- * page has the scores and only its own model's benchmark, and the two screens
- * have to land on the same letter.
+ * A saved score only says something about this computer if it was measured
+ * on it. One from a networked computer, or from before a GPU swap, gave every
+ * grade the other machine's speed and answers as "when tested here", beside
+ * the Models list's own "Measured on another computer — retest here" badge.
+ * A new build of the same model on the same card still counts.
  */
-export function measuredBandwidth(rows: ModelRow[], scores: Record<string, TestedModelScore>, vramGb: number): number | null {
+function measuredHere(score: TestedModelScore | undefined, hardware: GradeHardware): TestedModelScore | undefined {
+  if (!score) return undefined;
+  const drift = scoreDrift(score, { gpuModel: hardware.gpu, vramGb: hardware.vramGb });
+  return drift === 'measured-elsewhere' || drift === 'hardware-changed' ? undefined : score;
+}
+
+/**
+ * rigBandwidth over the Models list: every row with a saved score from this
+ * computer that recorded its speed. Saved scores rather than benchmarks,
+ * because the model page has the scores and only its own model's benchmark,
+ * and the two screens have to land on the same letter.
+ */
+export function measuredBandwidth(rows: ModelRow[], scores: Record<string, TestedModelScore>, hardware: GradeHardware): number | null {
   return rigBandwidth(
-    rows.map((row) => ({ ...row, tokensPerSecond: getModelScore(row, scores)?.tokensPerSecond })),
-    vramGb,
+    rows.map((row) => ({ ...row, tokensPerSecond: measuredHere(getModelScore(row, scores), hardware)?.tokensPerSecond })),
+    hardware.vramGb,
   );
 }
 
 /**
- * One Models row's grade, with what this PC has measured: its own saved
- * score, its last benchmark's speed when there is no score, and the speed
- * measuredBandwidth reads off the rest. The list and the model page call
- * this, not gradeModel, so they cannot show different letters.
+ * One Models row's grade, with what this computer has measured: its own
+ * saved score, its last benchmark's speed when there is no score, and the
+ * speed measuredBandwidth reads off the rest. A score from elsewhere counts
+ * for nothing, and neither does the benchmark it came from. The list and the
+ * model page call this, not gradeModel, so they cannot show different letters.
  */
 export function gradeRow(
   row: ModelRow,
   hardware: GradeHardware,
   { score, benchmark, bandwidthGbps }: { score?: TestedModelScore; benchmark?: BenchmarkResult | null; bandwidthGbps?: number | null },
 ): FitGrade {
-  return gradeModel(row, hardware, { score, tokensPerSecond: benchmark?.avgTokensPerSecond, bandwidthGbps });
+  const here = measuredHere(score, hardware);
+  const benchmarkHere = score && !here ? null : benchmark?.avgTokensPerSecond;
+  return gradeModel(row, hardware, { score: here, tokensPerSecond: benchmarkHere, bandwidthGbps });
 }
 
 /**
