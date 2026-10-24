@@ -7,6 +7,7 @@ import { useDialog } from '../lib/useDialog';
 import type { BlindSession } from '../lib/useBlindShow';
 import type { BenchmarkPromptResult } from '../types';
 import { AvatarBust } from './Avatars';
+import { DrawingTile } from './DrawingGallery';
 import './BlindShow.css';
 
 /**
@@ -214,7 +215,10 @@ export function BlindPickStep({
                 {entry.label}
               </span>
               <span id={answerId} className="blind-pick-answer">
-                {answer?.response?.trim() || (answer ? 'No answer.' : 'Did not get to this question.')}
+                {/* A drawing is judged by eye: the picture, never its markup. */}
+                {answer?.type === 'drawing'
+                  ? <DrawingTile drawing={answer.drawing} alt={`Drawing by ${entry.label}`} />
+                  : answer?.response?.trim() || (answer ? 'No answer.' : 'Did not get to this question.')}
               </span>
             </label>
           );

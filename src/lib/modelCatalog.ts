@@ -12,6 +12,7 @@ import type {
   OllamaStatus,
   PullProgressUpdate,
   RunFailure,
+  ShowDrawing,
   SystemProfile,
   TestedModelScore,
 } from '../types';
@@ -41,6 +42,11 @@ export type ListTestResult = {
   results: TestedModelScore[];
   /** Contestants that could not finish; the show went on without them. */
   failures?: RunFailure[];
+  /**
+   * This show's drawings, by model. Kept on the show rather than read from
+   * each model's latest test, which a later test or skill round replaces.
+   */
+  drawings?: Record<string, ShowDrawing>;
 };
 export type ModelProfile = {
   agentName: string;
@@ -542,10 +548,15 @@ export function removeListTestScores(current: ListTestResult | null, aliases: st
   if (!remaining.length) return null;
 
   // Spread first, so what else the show recorded (its failures) is kept.
+  // A cleared model's drawing goes with its score.
   return {
     ...current,
     winner: remaining[0].model,
     results: remaining,
+    ...(current.drawings ? {
+      drawings: Object.fromEntries(Object.entries(current.drawings)
+        .filter(([model]) => !normalizedAliases.includes(normalizeModelKey(model)))),
+    } : {}),
   };
 }
 

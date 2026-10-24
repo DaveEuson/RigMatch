@@ -32,7 +32,7 @@ import { LOW_DISK_GB } from '../lib/loadLevel';
 import { UiIcon } from './icons/UiIcon';
 import { AchievementUnlocked } from './AchievementShelf';
 import { DrawingGallery, DrawingTile } from './DrawingGallery';
-import { useShowDrawings, type LineupDrawing } from '../lib/drawings';
+import { useShowDrawings, type GalleryDrawing } from '../lib/drawings';
 import { GetComfyLink } from './GetComfyLink';
 import { comfyRequirements } from '../lib/serviceStatus';
 import { useShowTheme, type ShowMusicState } from '../hooks/useShowTheme';
@@ -247,8 +247,8 @@ type SimpleWizardProps = {
   }>;
   /** Contestants in this show that could not finish; the show went on without them. */
   droppedOut?: RunFailure[];
-  /** The drawing round's pictures from the contestants on the board, side by side under it. */
-  drawings?: LineupDrawing[];
+  /** This show's drawings, from the contestants on the board, side by side under it. */
+  drawings?: GalleryDrawing[];
   onChatWithWinner: () => void;
   /**
    * The one model to talk to without running a show, for someone who came to
@@ -1728,7 +1728,8 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
                           : state === 'stopped' ? 'Stopped partway'
                             : failed ? 'Did not run' : 'Up next'}
                   </span>
-                  {drawing && <DrawingTile drawing={drawing} alt="Their drawing" />}
+                  {/* By the name on the podium, which a blind show has made its seat. */}
+                  {drawing && <DrawingTile drawing={drawing} alt={`Drawing by ${getFriendlyModelName(row.displayName)}`} />}
                 </div>
               );
             })}
@@ -1834,7 +1835,7 @@ function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedO
   // board is the result.
   const gallery = (
     <DrawingGallery
-      prompt={drawings?.[0]?.prompt.prompt}
+      prompt={drawings?.[0]?.prompt}
       entries={(drawings ?? []).map(({ model, drawing, score }) => ({
         key: model,
         // "Qwen3 8B" and "Qwen3 14B" when both drew, not two pictures both called "Qwen3".

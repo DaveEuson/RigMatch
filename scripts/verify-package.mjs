@@ -150,6 +150,16 @@ const PRESENT = [
   // node_modules folders, the only copy before, no longer do.
   ['React license ships with the bundle', notices, 'react-dom 19'],
   ['lucide icon license ships with the bundle', notices, 'lucide-react 1'],
+
+  // 0.9.10: the drawing round, blind shows, the Fit grade and What's New pages.
+  ['a judge that can see is sent each drawing', mainProcess, "'drawing:pictureResult'"],
+  ['a drawing has a deadline of its own', mainProcess, 'runDrawingPrompt'],
+  ['the drawing cleaner ships beside the main process', listing, '/electron/drawingRound.cjs'],
+  ['the drawing round is asked', js, 'Generate an SVG of'],
+  ['drawings line up side by side', css, 'drawing-gallery'],
+  ['a blind show asks for a favourite', js, 'Pick your favourite'],
+  ['each model shows a Fit grade', css, 'fit-grade-pop'],
+  ["What's New is paged", css, 'news-pager-steps'],
 ];
 
 /** Things that must NOT be in the bundle. */

@@ -14,7 +14,7 @@ const {
   average,
   clamp,
 } = require('../electron/benchmarkScoring.cjs');
-const { DRAWING_ANSWER_TOKENS } = require('../electron/drawingRound.cjs');
+const { DRAWING_ANSWER_TOKENS, DRAWING_TIMEOUT_MS } = require('../electron/drawingRound.cjs');
 
 const DEFAULT_BASE_URL = 'http://localhost:11434';
 const DEFAULT_TIMEOUT_MS = 120000;
@@ -156,8 +156,12 @@ async function smokeModel({ args, model, prompts }) {
   const rigmatchRows = rows.filter((row) => row.thinkMode === 'rigmatch');
   const quality = Math.round(average(rigmatchRows.map((row) => row.sobrietyScore)));
   const speed = clamp(Math.round((average(rigmatchRows.map((row) => row.tokensPerSecond)) - 5) / 95 * 100));
-  const stability = Math.round((rigmatchRows.filter((row) => row.status === 'ok').length / Math.max(1, rigmatchRows.length)) * 100);
-  const releaseBlockers = rigmatchRows
+  // A drawing that ran out of time is what the app leaves unmarked and out of
+  // stability: the PC was slow, not the answer wrong. It shows in the table,
+  // and is not a release blocker.
+  const timedRows = rigmatchRows.filter((row) => row.status !== 'timeout');
+  const stability = Math.round((timedRows.filter((row) => row.status === 'ok').length / Math.max(1, timedRows.length)) * 100);
+  const releaseBlockers = timedRows
     .filter((row) => row.status !== 'ok')
     .map((row) => `${row.promptId}/${row.thinkMode}: ${row.status} (${row.doneReason || 'unknown'})`);
 
@@ -176,17 +180,42 @@ async function smokeModel({ args, model, prompts }) {
 
 async function runPromptCase({ args, model, prompt, runIndex, thinkMode }) {
   const startedAt = performance.now();
-  const data = await runGenerate({
-    baseUrl: args.baseUrl,
-    model,
-    prompt: prompt.prompt,
-    timeoutMs: args.timeoutMs,
-    keepAlive: args.keepAlive,
-    // A whole SVG's worth of tokens for a drawing, as the app gives it: at
-    // 300 a drawing is cut off, which this script counts as a release blocker.
-    options: prompt.type === 'drawing' ? { ...BENCHMARK_OPTIONS, num_predict: DRAWING_ANSWER_TOKENS } : BENCHMARK_OPTIONS,
-    thinkMode,
-  });
+  const drawing = prompt.type === 'drawing';
+  let data;
+  try {
+    data = await runGenerate({
+      baseUrl: args.baseUrl,
+      model,
+      prompt: prompt.prompt,
+      // The app's own deadline for a drawing (runDrawingPrompt in main.cjs).
+      timeoutMs: drawing ? Math.min(args.timeoutMs, DRAWING_TIMEOUT_MS) : args.timeoutMs,
+      keepAlive: args.keepAlive,
+      // A whole SVG's worth of tokens for a drawing, as the app gives it: at
+      // 300 a drawing is cut off, which this script counts as a release blocker.
+      options: drawing ? { ...BENCHMARK_OPTIONS, num_predict: DRAWING_ANSWER_TOKENS } : BENCHMARK_OPTIONS,
+      thinkMode,
+    });
+  } catch (error) {
+    if (!drawing || error?.name !== 'TimeoutError') throw error;
+    return {
+      model,
+      promptId: prompt.id,
+      label: prompt.label,
+      type: prompt.type,
+      runIndex,
+      thinkMode,
+      status: 'timeout',
+      doneReason: 'timeout',
+      responseLength: 0,
+      evalCount: 0,
+      evalDurationMs: 0,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      tokensPerSecond: null,
+      sobrietyScore: null,
+      diagnostic: `Ran out of time at ${DRAWING_TIMEOUT_MS / 1000} s; the app leaves it unmarked.`,
+      preview: '',
+    };
+  }
   const elapsedMs = Math.round(performance.now() - startedAt);
   const responseText = String(data.response || '');
   const evalCount = normalizeNumber(data.eval_count) || estimateTokens(responseText);

@@ -14,6 +14,7 @@ const {
   parseSvg,
   sanitizeSvg,
   checkDrawing,
+  drawingTimedOut,
   drawingJudgeMode,
   drawingNote,
 } = require('../electron/drawingRound.cjs');
@@ -25,7 +26,8 @@ const { questionMarker } = await import('../src/lib/runSheet.ts');
 
 // lib/drawings.ts imports the API, which reads `window` on import.
 globalThis.window = { localStorage: { getItem: () => null, setItem: () => {} } };
-const { drawingDataUrl, drawingSubject, showIdOf, lineupDrawings } = await import('../src/lib/drawings.ts');
+const { drawingDataUrl, drawingSubject, showIdOf, addShowDrawing, showDrawingsFrom, galleryDrawings, noDrawingReason } = await import('../src/lib/drawings.ts');
+const { removeListTestScores } = await import('../src/lib/modelCatalog.ts');
 
 const PELICAN = '<svg viewBox="0 0 200 160" width="400" height="320"><circle cx="55" cy="115" r="25" fill="none" stroke="#333"/><path d="M55 115 L95 115" stroke="#c00"/></svg>';
 
@@ -321,9 +323,94 @@ test('scoreQualityWithJudge passes the picture choice through to the prompt it s
 test('the note under a drawing says which way it was judged', () => {
   const passed = checkDrawing(PELICAN);
   assert.match(drawingNote({ check: passed, judgedFrom: 'picture', judged: true, reason: 'Clear.' }), /^Judged from the picture\. Clear\.$/);
-  assert.match(drawingNote({ check: passed, judgedFrom: 'code', judged: true, reason: '' }), /^Judged from the SVG code/);
+  // Said of the route: a cloud or LM Studio judge may see well, and is sent text.
+  assert.equal(drawingNote({ check: passed, judgedFrom: 'code', judged: true, reason: '' }), 'Judged from the SVG code: this judge was sent text, not the picture.');
   assert.match(drawingNote({ check: passed, judgedFrom: 'code', judged: false }), /^Not marked/);
   assert.match(drawingNote({ check: checkDrawing('nothing'), judgedFrom: 'code', judged: false }), /^No drawing/);
+  assert.equal(drawingNote({ check: drawingTimedOut(), judgedFrom: 'code', judged: false }), 'Ran out of time at 90 s, so it is not marked.');
+});
+
+// ── Release-sweep findings ─────────────────────────────────────────────────
+
+test('a drawing unfinished at its deadline is unmarked, not a 0 that also counts as unstable', async () => {
+  const timedOut = drawingTimedOut();
+  assert.equal(timedOut.ok, false);
+  assert.equal(timedOut.problem, 'timeout');
+  assert.equal(timedOut.svg, null);
+  const { readFileSync } = await import('node:fs');
+  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
+  // The deadline is reported as such rather than as an empty answer...
+  assert.match(main, /doneReason: 'timeout',[\s\S]{0,200}timedOut: true,/);
+  assert.match(main, /prompt\.type !== 'drawing' \? null : ranOutOfTime \? drawingTimedOut\(\) : checkDrawing\(responseText\)/);
+  // ...marked as nothing, so it stays out of answer quality...
+  assert.match(main, /: !ranOutOfTime && \(toolVerdict \|\| heuristicCanGrade\(prompt\.type, prompt\.prompt, responseText\)\) \? 'heuristic' : 'unjudged'/);
+  // ...and out of stability, which already counts nothing about speed.
+  assert.match(main, /const stabilityRuns = rawRuns\.filter\(\(run\) => !run\.timedOut\);/);
+  assert.match(main, /\.\.\.\(ranOutOfTime \? \{ timedOut: true \} : \{\}\)/);
+});
+
+test('the release smoke keeps the app’s drawing deadline and reports a timeout instead of throwing', async () => {
+  const { readFileSync } = await import('node:fs');
+  const smoke = readFileSync(new URL('../scripts/smoke-benchmark.mjs', import.meta.url), 'utf-8');
+  assert.match(smoke, /timeoutMs: drawing \? Math\.min\(args\.timeoutMs, DRAWING_TIMEOUT_MS\) : args\.timeoutMs/);
+  assert.match(smoke, /if \(!drawing \|\| error\?\.name !== 'TimeoutError'\) throw error;/);
+  assert.match(smoke, /status: 'timeout'/);
+  // Not a release blocker, and not unstable: the app treats it the same way.
+  assert.match(smoke, /const timedRows = rigmatchRows\.filter\(\(row\) => row\.status !== 'timeout'\);/);
+  assert.match(smoke, /const releaseBlockers = timedRows/);
+});
+
+test('symbols, markers, patterns and masks are kept, under the same rules as everything else', () => {
+  const symbolBuilt = sanitizeSvg([
+    '<svg viewBox="0 0 200 120">',
+    '<symbol id="wheel" viewBox="0 0 50 50"><circle cx="25" cy="25" r="22" fill="none" stroke="#333"/></symbol>',
+    '<use href="#wheel" x="10" y="60" width="50" height="50"/><use href="#wheel" x="120" y="60" width="50" height="50"/>',
+    '</svg>',
+  ].join(''));
+  assert.match(symbolBuilt, /<symbol id="wheel" viewBox="0 0 50 50">/);
+  assert.equal((symbolBuilt.match(/<use /g) ?? []).length, 2);
+  // Drawn only through its copies: a drawing built from symbols is a drawing, not "empty".
+  assert.equal(checkDrawing(`\`\`\`svg\n${symbolBuilt}\n\`\`\``).ok, true);
+
+  const decorated = sanitizeSvg([
+    '<svg viewBox="0 0 100 100"><defs>',
+    '<marker id="tip" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" markerUnits="strokeWidth" orient="auto"><path d="M0 0L10 5L0 10Z"/></marker>',
+    '<pattern id="dots" width="10" height="10" patternUnits="userSpaceOnUse" patternContentUnits="userSpaceOnUse" patternTransform="rotate(10)"><circle cx="5" cy="5" r="2"/></pattern>',
+    '<mask id="m" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse"><rect width="100" height="100" fill="white"/></mask>',
+    '</defs>',
+    '<path d="M10 10L90 90" stroke="#000" marker-start="url(#tip)" marker-mid="url(#tip)" marker-end="url(#tip)"/>',
+    '<rect width="50" height="50" fill="url(#dots)" mask="url(#m)" style="marker-end: url(#tip); mask: url(#m)"/>',
+    '<path d="M1 1L9 9" marker-end="url(https://evil.example/m.svg#tip)" mask="url(&quot;https://evil.example/x&quot;)"/>',
+    '</svg>',
+  ].join(''));
+  for (const kept of ['<marker id="tip" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" markerUnits="strokeWidth" orient="auto">',
+    '<pattern id="dots" width="10" height="10" patternUnits="userSpaceOnUse" patternContentUnits="userSpaceOnUse" patternTransform="rotate(10)">',
+    '<mask id="m" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">',
+    'marker-start="url(#tip)" marker-mid="url(#tip)" marker-end="url(#tip)"',
+    'fill="url(#dots)" mask="url(#m)" style="marker-end: url(#tip); mask: url(#m)"']) {
+    assert.ok(decorated.includes(kept), `${kept} was not kept: ${decorated}`);
+  }
+  assert.ok(!decorated.includes('evil'), decorated);
+  assertClean(decorated, 'markers, patterns and masks');
+
+  // A symbol that holds a <use> cannot be copied, as any other target cannot.
+  const looped = sanitizeSvg('<svg viewBox="0 0 9 9"><circle id="c" r="1"/><symbol id="s"><use href="#c"/></symbol><use href="#s"/></svg>');
+  assert.equal((looped.match(/<use /g) ?? []).length, 1, looped);
+});
+
+test('an automatic judge for a drawing is one that can see, whenever one is not the contestant', async () => {
+  const { readFileSync } = await import('node:fs');
+  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
+  // The candidates already leave out the contestant and any copy of its weights.
+  assert.match(main, /const autoJudgeCandidates = [\s\S]{0,200}\.filter\(\(name\) => name && name !== model && !identities\(name\)\.some/);
+  assert.match(main, /for \(const name of autoJudgeCandidates\) \{[\s\S]{0,200}\.includes\('vision'\)\) \{\s*drawingAutoJudge = name;/);
+  assert.match(main, /const judgeName = useJudge \? judgeModel : drawingCheck \? await drawingAutoJudgeName\(\) : autoJudgeModel;/);
+});
+
+test('the blind pick shows a drawing as a picture, never as its markup', async () => {
+  const { readFileSync } = await import('node:fs');
+  const blind = readFileSync(new URL('../src/components/BlindShow.tsx', import.meta.url), 'utf-8');
+  assert.match(blind, /answer\?\.type === 'drawing'\s*\? <DrawingTile drawing=\{answer\.drawing\} alt=\{`Drawing by \$\{entry\.label\}`\} \/>/);
 });
 
 test('the run asks a drawing once, on its own budget, and an empty one never drags speed down', async () => {
@@ -393,23 +480,67 @@ test('only a cleaned SVG becomes an image source', () => {
   assert.equal(drawingDataUrl(`<svg>${'x'.repeat(70000)}</svg>`), null);
 });
 
-test('the stage groups drawings by show, and the results take each model’s first drawing', () => {
+test('the stage collects a show’s drawings by model and seat, and a new show starts over', () => {
   assert.equal(showIdOf('speed-date-1729000000000-ab12cd-3'), 'speed-date-1729000000000-ab12cd');
   assert.equal(showIdOf('speed-date-1729000000000-ab12cd-complete'), 'speed-date-1729000000000-ab12cd');
   assert.equal(showIdOf(undefined), null);
+  const pelican = { svg: sanitizeSvg(PELICAN), note: '' };
+  const none = { svg: null, note: 'No drawing: the SVG draws nothing.' };
+  const empty = { showId: null, byModel: {}, bySeat: {} };
+  let drawings = addShowDrawing(empty, { id: 'speed-date-1-aa-0', model: 'qwen3:8b', drawing: pelican });
+  drawings = addShowDrawing(drawings, { id: 'speed-date-1-aa-1', model: 'gemma3:4b', drawing: none });
+  assert.equal(drawings.showId, 'speed-date-1-aa');
+  assert.deepEqual(Object.keys(drawings.byModel), ['qwen3:8b', 'gemma3:4b']);
+  assert.equal(drawings.bySeat[1], none, 'by seat, for a blind show whose rows carry seat names');
+  // An update with no drawing changes nothing; another show's drawing starts over.
+  assert.equal(addShowDrawing(drawings, { id: 'speed-date-1-aa-1', model: 'gemma3:4b' }), drawings);
+  const next = addShowDrawing(drawings, { id: 'speed-date-2-bb-0', model: 'mistral:7b', drawing: pelican });
+  assert.deepEqual(Object.keys(next.byModel), ['mistral:7b']);
+});
+
+test('a show keeps its own drawings, scored only when something marked them', () => {
   const drawing = { svg: sanitizeSvg(PELICAN), note: 'Judged from the picture.' };
-  const results = {
-    'qwen3:8b': { model: 'qwen3:8b', prompts: [{ id: 'a', type: 'json', sobrietyScore: 90 }, { id: 'drawing_1', type: 'drawing', sobrietyScore: 81, drawing }] },
-    'gemma3:4b': { model: 'gemma3:4b', prompts: [{ id: 'a', type: 'json', sobrietyScore: 70 }] },
-  };
-  const found = lineupDrawings(['gemma3:4b', 'qwen3:8b'], results);
-  assert.equal(found.length, 1);
-  assert.equal(found[0].model, 'qwen3:8b');
-  assert.equal(found[0].drawing, drawing);
-  assert.equal(found[0].score, 81);
-  // A drawing nothing marked keeps its placeholder out of sight.
-  results['qwen3:8b'].prompts[1].scoredBy = 'unjudged';
-  assert.equal(lineupDrawings(['qwen3:8b'], results)[0].score, undefined);
+  const prompt = 'Generate an SVG of a pelican riding a bicycle. Reply with one';
+  const results = [
+    { model: 'qwen3:8b', prompts: [{ id: 'a', type: 'json', sobrietyScore: 90 }, { id: 'drawing_1', type: 'drawing', prompt, sobrietyScore: 81, scoredBy: 'judge', drawing }] },
+    { model: 'gemma3:4b', prompts: [{ id: 'a', type: 'json', sobrietyScore: 70 }] },
+    { model: 'mistral:7b', prompts: [{ id: 'drawing_1', type: 'drawing', prompt, sobrietyScore: 50, scoredBy: 'unjudged', drawing }] },
+  ];
+  const kept = showDrawingsFrom(results);
+  assert.deepEqual(Object.keys(kept), ['qwen3:8b', 'mistral:7b']);
+  assert.deepEqual(kept['qwen3:8b'], { drawing, prompt, score: 81 });
+  // A placeholder under a picture would read as a verdict.
+  assert.equal(kept['mistral:7b'].score, undefined);
+  assert.equal(showDrawingsFrom([results[1]]), undefined, 'a show with no drawing records none');
+  // In the board's order; a model the show has no drawing for is left out.
+  assert.deepEqual(galleryDrawings(['mistral:7b', 'gemma3:4b', 'qwen3:8b'], kept).map((entry) => entry.model), ['mistral:7b', 'qwen3:8b']);
+  assert.deepEqual(galleryDrawings(['qwen3:8b'], undefined), []);
+
+  // Clearing a model's scores takes its drawing off the show too.
+  const show = { winner: 'qwen3:8b', results: [{ model: 'qwen3:8b', total: 90 }, { model: 'mistral:7b', total: 80 }], drawings: kept };
+  assert.deepEqual(Object.keys(removeListTestScores(show, ['qwen3:8b']).drawings), ['mistral:7b']);
+});
+
+test('the galleries read this show, and a round that asked no questions shows none', async () => {
+  const { readFileSync } = await import('node:fs');
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf-8');
+  const panel = readFileSync(new URL('../src/components/SpeedDatePanel.tsx', import.meta.url), 'utf-8');
+  assert.match(app, /\.\.\.\(showDrawingsFrom\(results\) \? \{ drawings: showDrawingsFrom\(results\) \} : \{\}\)/);
+  assert.match(app, /wizardRound === 'chat' \|\| wizardRound === 'code' \? wizardShowResult\?\.drawings : undefined/);
+  assert.match(panel, /galleryDrawings\(listTestResult\.results\.map\(\(result\) => result\.model\), listTestResult\.drawings\)/);
+  assert.doesNotMatch(app + panel, /lineupDrawings|benchmarkByModel\)\s*:\s*\[\]/);
+  // Collected for the life of the app, so Minimize and Show keep the pictures.
+  assert.match(app, /useShowDrawingCollector\(\);/);
+});
+
+test('a missing drawing says why on its tile', () => {
+  assert.equal(noDrawingReason('No drawing: the SVG was cut off or does not parse.'), 'The SVG was cut off or does not parse.');
+  assert.equal(noDrawingReason(drawingTimedOut().note), 'Ran out of time at 90 s, so it is not marked.');
+  assert.equal(noDrawingReason(undefined), '');
+  // Every reason is short enough to read on a 128px tile.
+  for (const answer of ['no svg', '<svg viewBox="0 0 9 9"><rect', '<svg viewBox="0 0 9 9"></svg>', `${' '.repeat(70000)}`]) {
+    assert.ok(noDrawingReason(checkDrawing(answer).note).length <= 55, checkDrawing(answer).note);
+  }
 });
 
 test('the release smoke gives a drawing the app’s budget and asks it once', async () => {
@@ -418,6 +549,7 @@ test('the release smoke gives a drawing the app’s budget and asks it once', as
   const { readFileSync } = await import('node:fs');
   const smoke = readFileSync(new URL('../scripts/smoke-benchmark.mjs', import.meta.url), 'utf-8');
   assert.match(smoke, /require\('\.\.\/electron\/drawingRound\.cjs'\)/);
-  assert.match(smoke, /prompt\.type === 'drawing' \? \{ \.\.\.BENCHMARK_OPTIONS, num_predict: DRAWING_ANSWER_TOKENS \} : BENCHMARK_OPTIONS/);
+  assert.match(smoke, /const drawing = prompt\.type === 'drawing';/);
+  assert.match(smoke, /options: drawing \? \{ \.\.\.BENCHMARK_OPTIONS, num_predict: DRAWING_ANSWER_TOKENS \} : BENCHMARK_OPTIONS/);
   assert.match(smoke, /const repeat = prompt\.type === 'drawing' \? 1 : args\.repeat;/);
 });
