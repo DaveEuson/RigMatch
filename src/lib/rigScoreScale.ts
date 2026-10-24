@@ -20,7 +20,11 @@
  *    tokens) in ten seconds, so long answers stop being a wait too.
  *
  * The bands and the points are separate on purpose: points compare this PC
- * with the reference, the band says what using it is like.
+ * with the reference, the band says what using it is like. They still line up
+ * with LocalScore's guide on the headline tier: the reference writes Standard
+ * at 66 tok/s (1,000 points, Excellent), so 250 points is about 17 (Usable,
+ * near Fast) and 100 points about 7 (Usable, near Slow), if writing and
+ * reading scale together.
  */
 
 export type SpeedBandId = 'excellent' | 'fast' | 'usable' | 'slow';

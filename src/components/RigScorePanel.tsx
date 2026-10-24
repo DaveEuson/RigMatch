@@ -104,7 +104,7 @@ export function RigScorePanel({
       : `RigMatch could not offer ${model} yet: the model list has not loaded. Try again in a moment.`);
   };
 
-  const reference = RIG_REFERENCES.light ?? RIG_REFERENCES.standard;
+  const reference = RIG_REFERENCES[RIG_HEADLINE_TIER] ?? RIG_REFERENCES.light;
 
   return (
     <section className="panel rigscore-page" aria-label="Speed score">

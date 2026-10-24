@@ -209,6 +209,8 @@ export type RigReferenceRecord = RigReference & {
   appVersion: string;
   workloadVersion: number;
   numCtx: number;
+  /** How much of the model sat on the graphics card when it was measured: 1 is all of it. */
+  gpuShare: number;
 };
 
 /** The machine that scores 1000: Dave's own, so the number is one anyone can check. */
@@ -220,18 +222,22 @@ export const RIG_REFERENCE_MACHINE = 'RTX 4070 12 GB on Ollama 0.35.1';
  * speeds with "points after the reference is measured" rather than a number
  * made up to fill the gap.
  *
- * Light was measured on 2026-10-24 with the runner in RigMatch itself (My PC ›
- * Speed score), three times back to back with nothing else loaded in Ollama.
- * Each run is already the median of three timed runs; the three agreed within
- * 0.4% on writing and 1.4% on reading, and the numbers here are the median of
- * the three for each half. Steam and the desktop were open, as on most PCs.
+ * Each tier was measured on 2026-10-24 with the runner in RigMatch itself (My
+ * PC › Speed score), three times back to back, after Ollama had nothing loaded
+ * for two minutes; nothing else loaded during any run. Each run is already the
+ * median of three timed runs, and the numbers here are the median of the three
+ * for each half. Steam and the desktop were open, as on most PCs, holding
+ * about 2.2 GB of the card.
+ *  - Light: the three agreed within 0.4% on writing and 1.4% on reading.
+ *  - Standard: within 0.9% and 2.2%.
+ *  - Heavy: within 0.5% and 0.9%. All of it sat on the card (8.98 GiB of the
+ *    12), so it measures the card and not a spill, but with under 1 GiB to
+ *    spare: a desktop holding much more would push part of it into system
+ *    memory, and the result would say so (RigResult.gpuShare).
  *
- * Pending, and what measuring each needs:
- *  - Standard and Heavy: qwen3:8b (5.2 GB) and qwen3:14b (9.3 GB) installed on
- *    the reference machine.
- *  - Extreme: qwen3:30b-a3b (18 GB) on a card with 24 GB. The reference card has
- *    12, so this tier needs a second reference machine, or a decision to score
- *    it some other way.
+ * Pending: Extreme, qwen3:30b-a3b (18 GB) on a card with 24 GB. The reference
+ * card has 12, so this tier needs a second reference machine, or a decision to
+ * score it some other way.
  */
 export const RIG_REFERENCES: Record<RigTierId, RigReferenceRecord | null> = {
   light: {
@@ -248,9 +254,40 @@ export const RIG_REFERENCES: Record<RigTierId, RigReferenceRecord | null> = {
     appVersion: '0.9.9',
     workloadVersion: 1,
     numCtx: 4096,
+    gpuShare: 1,
   },
-  standard: null,
-  heavy: null,
+  standard: {
+    decodeTps: 66.2,
+    prefillTps: 3774.6,
+    measuredOn: '2026-10-24',
+    gpu: 'NVIDIA GeForce RTX 4070',
+    vramGb: 12,
+    model: 'qwen3:8b',
+    modelDigest: 'sha256-a3de86cd1c132c822487ededd47a324c50491393e6565cd14bafa40d0b8e686f',
+    quantization: 'Q4_K_M',
+    ollamaVersion: '0.35.1',
+    driverVersion: '610.88',
+    appVersion: '0.9.9',
+    workloadVersion: 1,
+    numCtx: 4096,
+    gpuShare: 1,
+  },
+  heavy: {
+    decodeTps: 38.4,
+    prefillTps: 2068.8,
+    measuredOn: '2026-10-24',
+    gpu: 'NVIDIA GeForce RTX 4070',
+    vramGb: 12,
+    model: 'qwen3:14b',
+    modelDigest: 'sha256-a8cc1361f3145dc01f6d77c6c82c9116b9ffe3c97b34716fe20418455876c40e',
+    quantization: 'Q4_K_M',
+    ollamaVersion: '0.35.1',
+    driverVersion: '610.88',
+    appVersion: '0.9.9',
+    workloadVersion: 1,
+    numCtx: 4096,
+    gpuShare: 1,
+  },
   extreme: null,
 };
 

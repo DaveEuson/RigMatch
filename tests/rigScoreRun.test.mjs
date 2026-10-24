@@ -115,7 +115,7 @@ test('every way a tier can end without a result is said in words', () => {
 const reference = {
   prefillTps: 3000, decodeTps: 150, measuredOn: '2026-10-24', gpu: 'NVIDIA GeForce RTX 4070', vramGb: 12,
   model: 'llama3.2:3b', modelDigest: 'sha256-aaa', quantization: 'Q4_K_M', ollamaVersion: '0.35.1',
-  driverVersion: '610.88', appVersion: '0.9.9', workloadVersion: RIG_WORKLOAD.version, numCtx: RIG_WORKLOAD.numCtx,
+  driverVersion: '610.88', appVersion: '0.9.9', workloadVersion: RIG_WORKLOAD.version, numCtx: RIG_WORKLOAD.numCtx, gpuShare: 1,
 };
 const references = { light: reference, standard: null, heavy: null, extreme: null };
 
@@ -192,6 +192,32 @@ test('the written-down references are complete where measured and pending where 
     assert.equal(written.workloadVersion, RIG_WORKLOAD.version);
     assert.equal(written.numCtx, RIG_WORKLOAD.numCtx);
     assert.equal(referenceStamp(entry.id, written).tier, entry.id);
+    assert.equal(written.gpuShare, 1, `${entry.id} was measured with all of it on the card, not a spill`);
   }
+  // One machine, one day, one Ollama: the three measured tiers share their stamp.
+  for (const id of ['light', 'standard', 'heavy']) {
+    assert.ok(RIG_REFERENCES[id], `${id} is measured`);
+    assert.equal(RIG_REFERENCES[id].gpu, 'NVIDIA GeForce RTX 4070');
+    assert.equal(RIG_REFERENCES[id].ollamaVersion, '0.35.1');
+    assert.equal(RIG_REFERENCES[id].driverVersion, '610.88');
+    assert.equal(RIG_REFERENCES[id].measuredOn, '2026-10-24');
+  }
+  assert.equal(new Set(['light', 'standard', 'heavy'].map((id) => RIG_REFERENCES[id].modelDigest)).size, 3, 'each tier its own weights');
+  // The tiers get slower as they get bigger, as they must on one card.
+  assert.ok(RIG_REFERENCES.light.decodeTps > RIG_REFERENCES.standard.decodeTps && RIG_REFERENCES.standard.decodeTps > RIG_REFERENCES.heavy.decodeTps);
   assert.equal(RIG_REFERENCES.extreme, null, 'the reference card has 12 GB; the Extreme tier needs 24');
+});
+
+test("a Standard result on the reference PC headlines with points and a speed band", () => {
+  const standard = RIG_REFERENCES.standard;
+  const runs = [timed(standard.decodeTps, standard.prefillTps), timed(standard.decodeTps, standard.prefillTps), timed(standard.decodeTps, standard.prefillTps)];
+  const { result } = assembleTierResult(tier('standard'), done(runs, { modelDigest: standard.modelDigest }), '2026-10-24T22:00:00.000Z');
+  const headline = rigHeadline({ standard: result });
+  assert.equal(headline.isHeadlineTier, true);
+  assert.equal(headline.band.id, 'excellent', '66 tok/s writing');
+  assert.deepEqual(rigPoints(result.measure, result.stamp), { kind: 'points', points: 1000, notes: [] });
+
+  // The same speeds on other weights (a moved tag) get no points.
+  const { result: moved } = assembleTierResult(tier('standard'), done(runs, { modelDigest: 'sha256-other' }), 'x');
+  assert.equal(rigPoints(moved.measure, moved.stamp).kind, 'not-comparable');
 });
