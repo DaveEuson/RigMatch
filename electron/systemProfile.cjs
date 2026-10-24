@@ -7,6 +7,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { isUnifiedMemoryGpu } = require('./gpuContention.cjs');
 
 function bytesToGb(bytes) {
   if (!Number.isFinite(bytes)) return 0;
@@ -155,6 +156,124 @@ function parseNvidiaSmiHeader(output) {
 }
 
 /**
+ * The GPU of a machine that has one but does not advertise it on the PCI bus.
+ *
+ * Only reached when systeminformation found no controller at all, which on an
+ * ordinary desktop means there is genuinely nothing to find. Returns {} in that
+ * case, leaving the existing "Unknown GPU" behavior exactly as it was.
+ *
+ * The device tree is tried first because it needs no vendor tooling and names
+ * the vendor as well as the part. nvidia-smi is second: it exists on newer
+ * JetPack and answers "Orin (nvgpu)", but is absent from older images, and
+ * answers [N/A] to every memory question on Tegra — which is why it cannot be
+ * the only source and why the unified-memory path, not nvidia-smi, is what
+ * ultimately supplies the memory figure.
+ */
+async function getBoardGpu({ platform, run, readFile }) {
+  if (platform !== 'linux') return {};
+
+  try {
+    const model = cleanDeviceTreeModel(readFile('/proc/device-tree/model'));
+    if (model) return { model, vendor: /nvidia/i.test(model) ? 'NVIDIA' : '' };
+  } catch {
+    // No device tree: an ordinary x86 machine, or a kernel without it.
+  }
+
+  const { output, error } = await run(
+    'nvidia-smi',
+    ['--query-gpu=name', '--format=csv,noheader'],
+    3500,
+  );
+  if (error) return {};
+  const name = output.split('\n').map((line) => line.trim()).find(Boolean);
+  return name ? { model: name, vendor: 'NVIDIA' } : {};
+}
+
+// systeminformation frequently reports 0 VRAM for NVIDIA GPUs on Linux (and some
+// Windows laptop/hybrid setups). Ask nvidia-smi directly so a 16 GB 4090 isn't
+// mistaken for a VRAM-less rig — which otherwise collapses model picks to tiny
+// models. Returns VRAM in MB (MiB), 0 if nvidia-smi is absent or unparseable,
+// and why it failed (nvidiaDriverProblem).
+async function getNvidiaVram(run) {
+  const result = await run(
+    'nvidia-smi',
+    ['--query-gpu=memory.total', '--format=csv,noheader,nounits'],
+    3500,
+  );
+  if (result.error) return { vramMb: 0, problem: nvidiaDriverProblem(result) };
+  const values = result.output
+    .split('\n')
+    .map((line) => parseInt(line.trim(), 10))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  return { vramMb: values.length ? Math.max(...values) : 0, problem: null };
+}
+
+/**
+ * The graphics card RigMatch sizes models for, and the memory pool they have
+ * to fit into, resolved in order of reliability.
+ *
+ * Shared by the app (getSystemProfile in main.cjs) and the command-line fit
+ * check (cli/), so both size every model against the same number. `run` is
+ * main.cjs's runCommand shape — (command, args, timeoutMs) resolving to
+ * { output, error } — and `readFile` reads one file as text; both are passed
+ * in so this runs without Electron, a real nvidia-smi or a real /proc.
+ */
+async function resolveGpuPool({
+  controllers,
+  memTotal,
+  platform,
+  arch,
+  run,
+  readFile = (file) => fs.readFileSync(file, 'utf-8'),
+  sysfsRoot = '/',
+}) {
+  // systeminformation sizes Linux cards from lspci, which put an RX 7900 XTX
+  // at 1 MB; the amdgpu driver's own figure in sysfs replaces it.
+  const cards = platform === 'linux' ? withSysfsVram(controllers, readSysfsVram(sysfsRoot)) : controllers;
+
+  // A board whose graphics is not on the PCI bus leaves systeminformation with
+  // nothing to report, and everything downstream then fails together: no model
+  // string means isUnifiedMemoryGpu cannot match, so the unified-memory rescue
+  // below never fires and VRAM resolves to 0; and getCudaStatus, which decides
+  // by looking for "nvidia" in the label, reports "No NVIDIA GPU detected" on an
+  // NVIDIA board. Measured on a Jetson Orin Nano, not predicted.
+  const primaryGpu = pickPrimaryGpu(cards) || await getBoardGpu({ platform, run, readFile });
+
+  // Apple Silicon is not the only unified-memory hardware: NVIDIA's Grace-based
+  // parts (GB10 in the DGX Spark, GH200) and the Jetson line share one pool with
+  // the CPU while running Linux on aarch64, and were being treated as if they
+  // had discrete VRAM.
+  const hasUnifiedMemory = isUnifiedMemoryGpu({ model: primaryGpu.model, platform, arch });
+
+  let vramGb = primaryGpu.vram ? mbToGb(primaryGpu.vram) : 0;
+
+  // nvidia-smi where systeminformation came up empty. Without this an NVIDIA GPU
+  // reporting 0 VRAM makes RigMatch recommend only tiny models (phi3:mini on a
+  // 4090). Grace-based parts report their shared pool here, which is the right
+  // number for "how big a model can this run" even though it is not discrete VRAM.
+  // An NVIDIA card nvidia-smi cannot read has a driver problem, and saying so
+  // beats sizing models for whatever else is in the machine.
+  let driverProblem = null;
+  if (vramGb <= 0 && platform !== 'darwin') {
+    const nvidia = await getNvidiaVram(run);
+    if (nvidia.vramMb > 0) vramGb = mbToGb(nvidia.vramMb);
+    else if (/nvidia/i.test(`${primaryGpu.vendor || ''} ${primaryGpu.model || ''}`)) driverProblem = nvidia.problem;
+  }
+
+  // Unified memory: the pool IS system RAM, by definition. This was gated on
+  // Apple Silicon alone, so a unified part whose vendor tool is missing — a
+  // Jetson exposing tegrastats but not nvidia-smi, say — fell through to 0 and
+  // RigMatch would have recommended only the smallest models on a machine with
+  // plenty of memory. Apple Silicon reaches this the same way it always did:
+  // systeminformation reports no vram there, and nvidia-smi does not exist.
+  if (vramGb <= 0 && hasUnifiedMemory) {
+    vramGb = bytesToGb(memTotal);
+  }
+
+  return { primaryGpu, vramGb, hasUnifiedMemory, driverProblem };
+}
+
+/**
  * Where Ollama keeps its models, as far as this process can tell: the
  * OLLAMA_MODELS it inherited, else the folder the Linux service installs to,
  * else the per-user default. Used only to pick which drive's free space to show.
@@ -221,6 +340,7 @@ module.exports = {
   pickModelsFilesystem,
   pickPrimaryGpu,
   readSysfsVram,
+  resolveGpuPool,
   resolveModelsDir,
   summarizeMemory,
   withSysfsVram,

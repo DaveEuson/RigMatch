@@ -72,8 +72,7 @@ const {
   ollamaCapabilitiesFor,
   applyCapabilitySnapshot,
 } = require('./ollamaCatalog.cjs');
-const { summarizeMemory, cleanDeviceTreeModel, nvidiaDriverProblem, ollamaModelsDir, parseNvidiaSmiHeader, pickModelsFilesystem, pickPrimaryGpu } = require('./systemProfile.cjs');
-const { readSysfsVram, resolveModelsDir, withSysfsVram } = require('./systemProfile.cjs');
+const { summarizeMemory, ollamaModelsDir, parseNvidiaSmiHeader, pickModelsFilesystem, resolveGpuPool, resolveModelsDir } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
 const { hasChatFormat } = require('./chatFormat.cjs');
 const {
@@ -2159,17 +2158,15 @@ async function getSystemProfile({ checkForUpdates = false } = {}) {
     si.battery().catch(() => ({ hasBattery: false })),
   ]);
 
-  // systeminformation sizes Linux cards from lspci, which put an RX 7900 XTX
-  // at 1 MB; the amdgpu driver's own figure in sysfs replaces it.
-  if (process.platform === 'linux') graphics.controllers = withSysfsVram(graphics.controllers, readSysfsVram());
-
-  // A board whose graphics is not on the PCI bus leaves systeminformation with
-  // nothing to report, and everything downstream then fails together: no model
-  // string means isUnifiedMemoryGpu cannot match, so the unified-memory rescue
-  // below never fires and VRAM resolves to 0; and getCudaStatus, which decides
-  // by looking for "nvidia" in the label, reports "No NVIDIA GPU detected" on an
-  // NVIDIA board. Measured on a Jetson Orin Nano, not predicted.
-  const primaryGpu = pickPrimaryGpu(graphics.controllers) || await getBoardGpu();
+  // The card, its memory pool and any driver problem, resolved the way the
+  // command-line fit check resolves them (resolveGpuPool in systemProfile.cjs).
+  const { primaryGpu, vramGb, hasUnifiedMemory, driverProblem } = await resolveGpuPool({
+    controllers: graphics.controllers,
+    memTotal: mem.total,
+    platform: process.platform,
+    arch: os.arch(),
+    run: runCommand,
+  });
   const primaryFs = pickModelsFilesystem(fsSize, resolveModelsDir(ollamaModelsDir({ home: os.homedir(), exists: fsSync.existsSync }))) || {};
   const networks = getPrivateNetworkAddresses();
   const cuda = await getCudaStatus(primaryGpu, { checkForUpdates });
@@ -2177,41 +2174,6 @@ async function getSystemProfile({ checkForUpdates = false } = {}) {
 
   const isMac = process.platform === 'darwin';
   const isAppleSilicon = isMac && os.arch() === 'arm64';
-  // Apple Silicon is not the only unified-memory hardware: NVIDIA's Grace-based
-  // parts (GB10 in the DGX Spark, GH200) and the Jetson line share one pool with
-  // the CPU while running Linux on aarch64, and were being treated as if they
-  // had discrete VRAM.
-  const hasUnifiedMemory = gpuContention.isUnifiedMemoryGpu({
-    model: primaryGpu.model,
-    platform: process.platform,
-    arch: os.arch(),
-  });
-
-  // The pool a model has to fit into, resolved in order of reliability.
-  let vramGb = primaryGpu.vram ? mbToGb(primaryGpu.vram) : 0;
-
-  // nvidia-smi where systeminformation came up empty. Without this an NVIDIA GPU
-  // reporting 0 VRAM makes RigMatch recommend only tiny models (phi3:mini on a
-  // 4090). Grace-based parts report their shared pool here, which is the right
-  // number for "how big a model can this run" even though it is not discrete VRAM.
-  // An NVIDIA card nvidia-smi cannot read has a driver problem, and saying so
-  // beats sizing models for whatever else is in the machine.
-  let driverProblem = null;
-  if (vramGb <= 0 && !isMac) {
-    const nvidia = await getNvidiaVram();
-    if (nvidia.vramMb > 0) vramGb = mbToGb(nvidia.vramMb);
-    else if (/nvidia/i.test(`${primaryGpu.vendor || ''} ${primaryGpu.model || ''}`)) driverProblem = nvidia.problem;
-  }
-
-  // Unified memory: the pool IS system RAM, by definition. This was gated on
-  // Apple Silicon alone, so a unified part whose vendor tool is missing — a
-  // Jetson exposing tegrastats but not nvidia-smi, say — fell through to 0 and
-  // RigMatch would have recommended only the smallest models on a machine with
-  // plenty of memory. Apple Silicon reaches this the same way it always did:
-  // systeminformation reports no vram there, and nvidia-smi does not exist.
-  if (vramGb <= 0 && hasUnifiedMemory) {
-    vramGb = bytesToGb(mem.total);
-  }
 
   // macOS uses Metal; Windows exposes actual driver version strings.
   const driverVersion = primaryGpu.driverVersion ||
@@ -2496,59 +2458,6 @@ async function getLatestCudaToolkitVersion() {
 
   latestCudaCacheAt = now;
   return latestCudaCache;
-}
-
-/**
- * The GPU of a machine that has one but does not advertise it on the PCI bus.
- *
- * Only reached when systeminformation found no controller at all, which on an
- * ordinary desktop means there is genuinely nothing to find. Returns {} in that
- * case, leaving the existing "Unknown GPU" behavior exactly as it was.
- *
- * The device tree is tried first because it needs no vendor tooling and names
- * the vendor as well as the part. nvidia-smi is second: it exists on newer
- * JetPack and answers "Orin (nvgpu)", but is absent from older images, and
- * answers [N/A] to every memory question on Tegra — which is why it cannot be
- * the only source and why the unified-memory path, not nvidia-smi, is what
- * ultimately supplies the memory figure.
- */
-async function getBoardGpu() {
-  if (process.platform !== 'linux') return {};
-
-  try {
-    const model = cleanDeviceTreeModel(fsSync.readFileSync('/proc/device-tree/model', 'utf-8'));
-    if (model) return { model, vendor: /nvidia/i.test(model) ? 'NVIDIA' : '' };
-  } catch {
-    // No device tree: an ordinary x86 machine, or a kernel without it.
-  }
-
-  const { output, error } = await runCommand(
-    'nvidia-smi',
-    ['--query-gpu=name', '--format=csv,noheader'],
-    3500,
-  );
-  if (error) return {};
-  const name = output.split('\n').map((line) => line.trim()).find(Boolean);
-  return name ? { model: name, vendor: 'NVIDIA' } : {};
-}
-
-// systeminformation frequently reports 0 VRAM for NVIDIA GPUs on Linux (and some
-// Windows laptop/hybrid setups). Ask nvidia-smi directly so a 16 GB 4090 isn't
-// mistaken for a VRAM-less rig — which otherwise collapses model picks to tiny
-// models. Returns VRAM in MB (MiB), 0 if nvidia-smi is absent or unparseable,
-// and why it failed (nvidiaDriverProblem).
-async function getNvidiaVram() {
-  const result = await runCommand(
-    'nvidia-smi',
-    ['--query-gpu=memory.total', '--format=csv,noheader,nounits'],
-    3500,
-  );
-  if (result.error) return { vramMb: 0, problem: nvidiaDriverProblem(result) };
-  const values = result.output
-    .split('\n')
-    .map((line) => parseInt(line.trim(), 10))
-    .filter((n) => Number.isFinite(n) && n > 0);
-  return { vramMb: values.length ? Math.max(...values) : 0, problem: null };
 }
 
 async function runCommand(command, args = [], timeoutMs = 2500) {
