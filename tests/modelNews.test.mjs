@@ -3,8 +3,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  MODEL_NEWS_PAGE_SIZE,
   getEmptyModelNewsState,
   getModelNewsId,
+  getModelNewsItems,
+  getModelNewsPage,
+  groupModelNews,
   reconcileModelNews,
 } from '../src/lib/modelNews.ts';
 
@@ -76,4 +80,90 @@ test('a model with no id falls back to name:tag', () => {
   const b = getModelNewsId({ id: '', name: 'llama3', tag: '70b' });
   assert.notEqual(a, b, 'different tags are different models');
   assert.ok(a && b, 'neither is empty');
+});
+
+// Paging. On 2026-10-23 one scan brought 20 new tags, and the list had no
+// pages: one family (phonon:de, phonon:en, phonon:40m-es, ...) filled the
+// screen a row per tag.
+
+const numbers = (count) => Array.from({ length: count }, (_, i) => i + 1);
+
+test('a page is the slice its number says, with "Showing 21–40 of 63" figures', () => {
+  const page = getModelNewsPage(numbers(63), 2, 20);
+  assert.deepEqual(page.entries, numbers(40).slice(20));
+  assert.deepEqual(
+    { page: page.page, pageCount: page.pageCount, total: page.total, first: page.first, last: page.last },
+    { page: 2, pageCount: 4, total: 63, first: 21, last: 40 },
+  );
+
+  const lastPage = getModelNewsPage(numbers(63), 4, 20);
+  assert.deepEqual(lastPage.entries, [61, 62, 63], 'the last page holds what is left');
+  assert.deepEqual([lastPage.first, lastPage.last], [61, 63]);
+});
+
+test('a remembered page past the end lands on the last page that exists', () => {
+  // The page survives leaving the screen; a scan can shrink the list under it.
+  assert.equal(getModelNewsPage(numbers(63), 9, 20).page, 4);
+  assert.equal(getModelNewsPage(numbers(63), 0, 20).page, 1);
+  assert.equal(getModelNewsPage(numbers(63), Number.NaN, 20).page, 1);
+});
+
+test('an empty list is page 1 of 1 with nothing showing', () => {
+  const page = getModelNewsPage([], 3);
+  assert.deepEqual(
+    { entries: page.entries, page: page.page, pageCount: page.pageCount, first: page.first, last: page.last },
+    { entries: [], page: 1, pageCount: 1, first: 0, last: 0 },
+  );
+});
+
+test('the default page size is the one the screen uses', () => {
+  assert.equal(getModelNewsPage(numbers(MODEL_NEWS_PAGE_SIZE + 1), 1).pageCount, 2);
+  assert.equal(getModelNewsPage(numbers(MODEL_NEWS_PAGE_SIZE), 1).pageCount, 1);
+});
+
+const phononTags = ['40m-es', '40m-fr', '40m-multilingual', '40m-pt', 'de', 'en', 'es', 'fr', 'multilingual', 'pt'];
+
+function newsItemsFor(catalog, newIds) {
+  // Through the real path: a bootstrap scan, then a scan that finds newIds.
+  const before = catalog.filter((entry) => !newIds.includes(entry.id));
+  const first = reconcileModelNews(before, getEmptyModelNewsState()).state;
+  // Later than the bootstrap, so the new ones sort first.
+  const state = { ...first, firstSeenById: { ...first.firstSeenById } };
+  for (const id of newIds) state.firstSeenById[id] = '2026-10-23T14:26:00.000Z';
+  for (const id of Object.keys(first.firstSeenById)) state.firstSeenById[id] = '2026-10-01T09:00:00.000Z';
+  return getModelNewsItems(catalog, state, new Set());
+}
+
+test("a family that lands as many tags is one row, at its newest tag's place", () => {
+  const catalog = [
+    model('llama3', '8b'),
+    ...phononTags.map((tag) => model('phonon', tag)),
+    model('gemma3', '4b'),
+  ];
+  const items = newsItemsFor(catalog, phononTags.map((tag) => `phonon:${tag}`));
+  const grouped = groupModelNews(items);
+
+  assert.equal(grouped.length, 3, 'phonon, llama3, gemma3');
+  assert.equal(grouped[0].kind, 'group', 'the newest family comes first');
+  assert.equal(grouped[0].group.family, 'phonon');
+  assert.equal(grouped[0].group.rows.length, phononTags.length, 'every tag is still reachable under it');
+  assert.equal(grouped[0].group.best, grouped[0].group.rows[0], 'the face is the newest tag');
+});
+
+test('a family of one stays a plain row that opens the model', () => {
+  const items = newsItemsFor([model('llama3', '8b'), model('gemma3', '4b')], []);
+  const grouped = groupModelNews(items);
+  assert.deepEqual(grouped.map((entry) => entry.kind), ['row', 'row']);
+});
+
+test('pages count families, not tags', () => {
+  // 30 one-tag families plus phonon's ten tags is 40 tags but 31 rows.
+  const singles = numbers(30).map((n) => model(`family${n}`, '7b'));
+  const catalog = [...phononTags.map((tag) => model('phonon', tag)), ...singles];
+  const grouped = groupModelNews(newsItemsFor(catalog, catalog.map((entry) => entry.id)));
+
+  assert.equal(grouped.length, 31);
+  const second = getModelNewsPage(grouped, 2, 20);
+  assert.equal(second.pageCount, 2);
+  assert.deepEqual([second.first, second.last, second.total], [21, 31, 31]);
 });

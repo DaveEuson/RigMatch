@@ -1,5 +1,6 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { CatalogModel } from '../types';
+import { groupRowsByFamily, type GroupedRow } from './modelGroups.ts';
 import { writeLocalJson } from './safeStorage.ts';
 
 export const MODEL_NEWS_STORAGE_KEY = 'rigmatch:model-news:v1';
@@ -102,6 +103,37 @@ export function getModelNewsItems(catalog: CatalogModel[], modelNews: ModelNewsS
       if (dateDelta !== 0) return dateDelta;
       return (right.model.pulls ?? 0) - (left.model.pulls ?? 0);
     });
+}
+
+/**
+ * One row per family. A family can land as fourteen tags in one scan
+ * (phonon:de, phonon:en, phonon:40m-es, ...), and as fourteen rows it filled
+ * the screen with one maker, one size and one "seen" time.
+ *
+ * Unlike Models (MIN_VARIANTS_TO_GROUP), a family of one stays a plain row:
+ * here every row has the same shape either way, and a lone model should open
+ * in one click rather than behind a "1 version" toggle.
+ */
+export function groupModelNews(items: ModelNewsItem[]): Array<GroupedRow<ModelNewsItem>> {
+  return groupRowsByFamily(items, { familyOf: (item) => item.model.name || item.displayName, minToGroup: 2 });
+}
+
+/** Rows per page of What's New. A family counts as one row however many tags it has. */
+export const MODEL_NEWS_PAGE_SIZE = 20;
+
+/**
+ * One page of a list, with the page clamped to the ones that exist: the list
+ * shrinks under a remembered page when a scan finds less than the last one.
+ * `first` and `last` are 1-based, for "Showing 21–40 of 63"; both are 0 for an
+ * empty list.
+ */
+export function getModelNewsPage<T>(entries: T[], page: number, pageSize = MODEL_NEWS_PAGE_SIZE) {
+  const total = entries.length;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const current = Math.min(Math.max(1, Math.floor(page) || 1), pageCount);
+  const start = (current - 1) * pageSize;
+  const shown = entries.slice(start, start + pageSize);
+  return { entries: shown, page: current, pageCount, total, first: shown.length ? start + 1 : 0, last: start + shown.length };
 }
 
 export function getModelNewsId(model: Pick<CatalogModel, 'id' | 'name' | 'tag'>) {
