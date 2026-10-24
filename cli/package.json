@@ -1,0 +1,27 @@
+{
+  "name": "rigmatch-fit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Which local AI models will run well on this computer: RigMatch's fit grade, in a terminal",
+  "type": "module",
+  "bin": {
+    "rigmatch-fit": "dist/rigmatch-fit.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "systeminformation": "^5.31.7"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "Dave Euson <daveeuson@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DaveEuson/RigMatch.git",
+    "directory": "cli"
+  },
+  "homepage": "https://github.com/DaveEuson/RigMatch#command-line-fit-check"
+}
