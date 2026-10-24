@@ -34,6 +34,7 @@ import { AchievementUnlocked } from './AchievementShelf';
 import { GetComfyLink } from './GetComfyLink';
 import { comfyRequirements } from '../lib/serviceStatus';
 import { useShowTheme, type ShowMusicState } from '../hooks/useShowTheme';
+import { useBlindMasking } from '../lib/blindShowContext';
 import speedDateShow from '../assets/robot-speed-date-show.webp';
 import ceremonyStage from '../assets/robot-scorecard-ceremony.webp';
 import './SimpleWizard.css';
@@ -1499,6 +1500,7 @@ export type ShowStageProps = Pick<SimpleWizardProps, 'shortlistedRows' | 'runPro
 };
 
 export function CompareScreen({ shortlistedRows, runProgress, round: showRound, benchmarkActive, onRetry, onChangeLineup, onStopShow }: ShowStageProps) {
+  const blindShow = Boolean(useBlindMasking());
   const failed = runProgress?.phase === 'failed';
   const activeModel = runProgress?.currentModel ?? '';
   const round = (runProgress?.questionIndex ?? 0) + 1;
@@ -1748,7 +1750,8 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
           </div>
         </div>
 
-        <div className="sw-answer-strip">
+        {/* Not in a blind show: each number is the judge's verdict on a contestant. */}
+        {!blindShow && <div className="sw-answer-strip">
           <div className="sw-answer-strip-head">
             <span>
               {/* Says what the numbers are for as long as they are on screen: the
@@ -1775,7 +1778,7 @@ export function CompareScreen({ shortlistedRows, runProgress, round: showRound, 
               ))}
             </ol>
           )}
-        </div>
+        </div>}
 
         {/* No gold here: while the show runs there is no next step, only a way
             to stop it. The music switch is here too, for whoever wants quiet

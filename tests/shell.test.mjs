@@ -93,7 +93,8 @@ test('the old shell is gone, and what it carried has a new home', () => {
   const app = read('../src/App.tsx');
   // The ticker's jobs: activity as a toast, downloads as a floating dock, a
   // render or run on the strip with its Stop, Chat in the top bar.
-  assert.match(app, /<ActivityToast message=\{activity\} \/>/);
+  // (Blind mode masks names as the toast is drawn, not in `activity`.)
+  assert.match(app, /<ActivityToast message=\{activity\} mask=\{blindMasking \? /);
   assert.match(app, /<div className="download-dock-float">/);
   assert.match(app, /className="running-stop" onClick=\{renderActivity\.stop\}/);
   assert.match(app, /onOpenChat=\{\(\) => \{ void openChatApp\(\); \}\}/);

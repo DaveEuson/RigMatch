@@ -202,6 +202,10 @@ import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, Choi
 import { SkillRunMiniBar, LiveBuildModal, DemoResultModal } from './components/SkillDemoViewers';
 import { RunSheet } from './components/RunSheet';
 import { ClearScoresModal } from './components/ClearScoresModal';
+import { clearBlindTaste, clearModelFromBlindTaste, maskProgress, maskRows, maskText, shuffleLineup } from './lib/blindMode';
+import { BlindShowContext } from './lib/blindShowContext';
+import { useBlindShow } from './lib/useBlindShow';
+import { BlindOverlay } from './components/BlindShow';
 import { ThirdPartyDownloadConsentModal } from './components/ThirdPartyDownloadConsentModal';
 import { SetupGuideDock } from './components/SetupGuideDock';
 import { DownloadTickerDock } from './components/DownloadTickerDock';
@@ -438,6 +442,9 @@ function App() {
   /** The outside test Stop was pressed on, so the button says so until it ends. */
   const [stoppingTestId, setStoppingTestId] = useState<string | null>(null);
   const [isListTesting, setIsListTesting] = useState(false);
+  // Blind mode: the switch, and the show it is hiding names in right now.
+  const blind = useBlindShow();
+  const { setBlindOn, blindOn, begin: beginBlindShow, finish: finishBlindShow, end: endBlindShow } = blind;
   const [isPullingModels, setIsPullingModels] = useState(false);
   const [isPullPaused, setIsPullPaused] = useState(false);
   const [isDeletingModel, setIsDeletingModel] = useState(false);
@@ -1482,6 +1489,7 @@ function App() {
       setRunReports([]);
       writeLocalJson(RUN_REPORTS_STORAGE_KEY, []);
       setOpenReportId(null);
+      clearBlindTaste();
       setActivity('All saved match scores, test transcripts, and score history were cleared. Ollama models stayed installed.');
       return;
     }
@@ -1502,6 +1510,7 @@ function App() {
       if (next !== current) writeRunHistory(next);
       return next;
     });
+    clearModelFromBlindTaste(aliases);
     setRunReports((current) => {
       const next = removeModelFromReports(current, aliases);
       if (next.length === 0 && current.length > 0) writeLocalJson(RUN_REPORTS_STORAGE_KEY, []);
@@ -1645,6 +1654,22 @@ function App() {
     if (progress?.phase === 'complete' && progress.total > 0 && !(wizardShowResult || wizardSkillBoard)) return null;
     return progress;
   }, [wizardRound, runProgress, skillRunStatus, wizardShowResult, wizardSkillBoard]);
+  // What a blind show's screens are given: the lineup and the run renamed to
+  // their seats, the live scores taken out. The real values when it is off.
+  const blindMasking = blind.masking;
+  const blindLineup = blind.session?.lineup;
+  const showRows = useMemo(
+    () => (blindMasking && blindLineup ? maskRows(shortlistedRows, blindLineup, blindMasking.names) : shortlistedRows),
+    [blindMasking, blindLineup, shortlistedRows],
+  );
+  const showProgress = useMemo(
+    () => (blindMasking && runProgress ? maskProgress(runProgress, blindMasking.names) : runProgress),
+    [blindMasking, runProgress],
+  );
+  const showWizardProgress = useMemo(
+    () => (blindMasking && wizardRunProgress ? maskProgress(wizardRunProgress, blindMasking.names) : wizardRunProgress),
+    [blindMasking, wizardRunProgress],
+  );
   /**
    * The show as the report bar, the report and History tell it: ranked at the
    * fader, which is where the Top Match is ranked. In Simple Mode that is the
@@ -1980,6 +2005,9 @@ function App() {
       resetJudgeSettings();
       setModelNotes({});
       setRunHistory(emptyRunHistory());
+      // The picks, and the switch: it is a setting, and settings go.
+      clearBlindTaste();
+      setBlindOn(false);
       resetGoals();
       // Still in memory after the keys were removed, and written back by the
       // next save: reports, Lab results (so every per-channel Top Match) and
@@ -1995,7 +2023,7 @@ function App() {
     } catch (error) {
       setActivity(`Could not clear all data: ${getErrorMessage(error)}`);
     }
-  }, [ollama.baseUrl, selectedModel, adoptClearedLogs, resetModelNews, resetJudgeSettings, resetChat, resetGoals]);
+  }, [ollama.baseUrl, selectedModel, adoptClearedLogs, resetModelNews, resetJudgeSettings, resetChat, resetGoals, setBlindOn]);
 
   const requestDeleteModel = useCallback((row: ModelRow) => {
     if (row.localProvider === 'lm-studio') {
@@ -3329,7 +3357,11 @@ function App() {
     const count = questionsOverride ? questionsOverride.length : benchmarkQuestionCount;
     // Rules only, and nothing off the machine: see startBenchmark.
     const quick = questionsOverride === QUICK_CHECK_QUESTIONS;
-    const runnableRows = shortlistedRows.filter((row) => row.installed && getPlatformFit(row.displayName, system.platform).compatible).slice(0, 5);
+    // Advanced Mode only: Simple Mode has no switch for it (see BlindSwitch).
+    const blindShow = blindOn && uiMode === 'advanced';
+    const lineupRows = shortlistedRows.filter((row) => row.installed && getPlatformFit(row.displayName, system.platform).compatible).slice(0, 5);
+    // A blind show seats the lineup at random, or Contestant 1 is whoever was picked first.
+    const runnableRows = blindShow ? shuffleLineup(lineupRows) : lineupRows;
     const hostBlocker = getLineupBenchmarkBlocker(runnableRows, selectedHost, ollama);
     const listRunId = createRunProgressId('speed-date');
     const firstProgressId = `${listRunId}-0`;
@@ -3385,6 +3417,7 @@ function App() {
     stopRunRef.current = false;
     setIsListTesting(true);
     playCue('curtain');
+    if (blindShow) beginBlindShow(runnableRows.map((row) => row.displayName));
     setListTestResult(null);
     setReportReady(false);
     setRunProgress({
@@ -3494,7 +3527,10 @@ function App() {
           completed: index + 1,
           total: runnableRows.length,
           percent: isStopped ? 100 : Math.round(((index + 1) / runnableRows.length) * 100),
-          message: isStopped ? `Stopped early — ${index + 1} of ${runnableRows.length} models tested.` : `${result.model} scored ${result.scores.total} (${result.scores.grade}).`,
+          // Blind: no score until the viewer has picked.
+          message: isStopped
+            ? `Stopped early — ${index + 1} of ${runnableRows.length} models tested.`
+            : blindShow ? `${index + 1} of ${runnableRows.length} contestants have answered.` : `${result.model} scored ${result.scores.total} (${result.scores.grade}).`,
           questionIndex: result.prompts.length - 1,
           questionTotal: result.prompts.length,
           questionLabel: result.prompts[result.prompts.length - 1]?.label,
@@ -3542,6 +3578,7 @@ function App() {
         // repeated the same sentence word for word.
         if (uiMode !== 'beginner') tellUser(ended.message);
         setActivity(ended.message);
+        endBlindShow();
         void refreshProviderStatus();
         return false;
       }
@@ -3591,6 +3628,8 @@ function App() {
         ...(failures.length ? { failures: [...failures] } : {}),
       });
       if (failures.length) tellUser(droppedOutMessage(failures, getFriendlyModelName));
+      // In the same render as the result, so no screen shows it before the pick step covers them.
+      if (blindShow) finishBlindShow(results, ranked.map(({ model, total, grade }) => ({ model, total, grade })), winner.model);
       setReadyReportId(saveTestReport(results, winner.model, runBalance) ?? null);
       // The report bar announces the winner; a toast as well said it twice,
       // on screen and to screen readers, and by the model's raw id.
@@ -3642,6 +3681,7 @@ function App() {
         lastResult: current?.lastResult,
       }));
       if (uiMode !== 'beginner') tellUser(`The show stopped. ${failure.reason}`);
+      endBlindShow();
       // See the note in startBenchmark's catch: without this, ollama.ready
       // stays stale-true and the reconnect poll never starts.
       void refreshProviderStatus();
@@ -3650,7 +3690,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, skillJudgeFor, rigStampForModel, tellUser, autoJudgeModels, judgeEndpoints]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, skillJudgeFor, rigStampForModel, tellUser, autoJudgeModels, judgeEndpoints, blindOn, beginBlindShow, finishBlindShow, endBlindShow]);
 
   /**
    * A skill run that throws must not leave the mini bar spinning forever.
@@ -4670,12 +4710,13 @@ function App() {
     const score = topRigPick?.score?.total ?? null;
     const prev = prevTopScoreRef.current;
     if (score !== null && score !== prev) {
-      if (prev !== null && score > prev && Date.now() - runActiveAtRef.current < 10_000) {
+      // Not in a blind show: a fanfare as a contestant finishes is its score.
+      if (prev !== null && score > prev && !blindMasking && Date.now() - runActiveAtRef.current < 10_000) {
         playJingle('new-winner');
       }
       prevTopScoreRef.current = score;
     }
-  }, [topRigPick?.score?.total]);
+  }, [topRigPick?.score?.total, blindMasking]);
 
   const visibleNavItems = useMemo(() => {
     const hasScores = scoredModelCount > 0;
@@ -4764,7 +4805,7 @@ function App() {
     <>
       <i className="running-dot" aria-hidden="true" />
       <button type="button" className="running-open" onClick={() => (uiMode === 'advanced' ? selectNav('speedDate') : undefined)}>
-        Running {runProgress.label}{runProgress.currentModel ? ` · ${runProgress.currentModel}` : ''}
+        Running {runProgress.label}{showProgress?.currentModel ? ` · ${showProgress.currentModel}` : ''}
       </button>
     </>
   ) : skillRunStatus.phase === 'running' ? (
@@ -4823,6 +4864,7 @@ function App() {
   }, [runProgress?.phase]);
 
   return (
+    <BlindShowContext.Provider value={blindMasking}>
     <div
       className={`app-shell ${showGlobalLineup ? 'has-global-lineup' : 'no-global-lineup'}${!isDesktopRuntime ? ' has-demo-banner' : ''}`}
       data-theme={themeId}
@@ -4848,7 +4890,8 @@ function App() {
           </a>
         </div>
       )}
-      <AchievementCues busy={isBenchmarking || isListTesting} />
+      {/* A blind show's pick counts as busy: a badge for testing a model would name it. */}
+      <AchievementCues busy={isBenchmarking || isListTesting || Boolean(blindMasking)} />
       {showModeSplash && (
         <WelcomeOverlay
           vramGb={system.gpu.vramGb || 0}
@@ -4903,7 +4946,8 @@ function App() {
         activeTab={activeTab ?? undefined}
         onSelectTab={selectTab}
         tracker={uiMode === 'beginner' ? <div className="top-bar-tracker-slot" ref={setTrackerSlot} /> : undefined}
-        topMatch={topRigPick?.score
+        // Hidden in a blind show: it re-ranks as each contestant finishes.
+        topMatch={topRigPick?.score && !blindMasking
           ? { model: topRigPick.row.displayName, name: getFriendlyModelName(topRigPick.row.displayName), scoreLabel: formatMatchScore(topRigPick.score) }
           : null}
         // The Top Match is the chat round's winner. Results follows the channel
@@ -4921,7 +4965,7 @@ function App() {
         onOpenChat={() => { void openChatApp(); }}
         onOpenSupport={() => setSupportModalOpen(true)}
       />
-      <LoadStrip system={system} running={runningLine} />
+      <LoadStrip system={system} running={runningLine} hideReadings={Boolean(blindMasking)} />
       {uiMode === 'beginner' && (
         <SimpleWizard
           trackerSlot={trackerSlot}
@@ -4957,12 +5001,12 @@ function App() {
           }}
           initialDream={wizardDreamSeen ? wizardDream : dreamForGoal(selectedGoals[0])}
           dream={wizardDream}
-          notice={simpleNotice}
+          notice={blindMasking && simpleNotice ? maskText(simpleNotice, blindMasking.names) : simpleNotice}
           noticeAction={simpleNoticeAction}
           onDismissNotice={() => { setSimpleNotice(null); setSimpleNoticeAction(null); }}
           modelsLoading={modelRows.length === 0}
           shortlistIds={shortlistIds}
-          shortlistedRows={shortlistedRows}
+          shortlistedRows={showRows}
           onTogglePick={toggleShortlist}
           onChooseForMe={chooseShortlistForMe}
           pullProgressByModel={pullProgressByModel}
@@ -4970,7 +5014,7 @@ function App() {
           onCancelDownloads={cancelDownloadQueue}
           isListTesting={isListTesting}
           benchmarkActive={isListTesting || isBenchmarking || runProgress?.phase === 'running' || skillRunStatus.phase === 'running' || Boolean(externalBenchmark?.running)}
-          runProgress={wizardRunProgress}
+          runProgress={showWizardProgress}
           onDreamChange={changeWizardDream}
           round={wizardRound}
           onStartShow={(begin, options) => {
@@ -5067,9 +5111,9 @@ function App() {
             strip stay in view while a run goes. */}
         {uiMode === 'advanced' && runProgress?.phase === 'running' && (
           <LiveFlirtSpotlight
-            progress={runProgress}
+            progress={showProgress ?? runProgress}
             rows={runProgress.mode === 'speed-date'
-              ? shortlistedRows
+              ? showRows
               : modelRows.filter((row) => row.displayName === runProgress.currentModel)}
             onStop={requestStopRun}
           />
@@ -5328,11 +5372,11 @@ function App() {
             active={true}
             host={selectedHost}
             allModelRows={modelRows}
-            shortlistedRows={shortlistedRows}
+            shortlistedRows={showRows}
             modelScores={modelScores}
             benchmarkByModel={benchmarkByModel}
             listTestResult={listTestResult}
-            runProgress={runProgress}
+            runProgress={showProgress}
             isListTesting={isListTesting}
             vramGb={system.gpu.vramGb}
             questionCount={benchmarkQuestionCount}
@@ -5349,6 +5393,8 @@ function App() {
             balance={balances[activeChannel]}
             onBalanceChange={(value) => setBalance(activeChannel, value)}
             labResults={labResults}
+            blindOn={blind.blindOn}
+            onBlindChange={blind.setBlindOn}
           />
         )}
         {activeNavId === 'agent' && (
@@ -5469,11 +5515,12 @@ function App() {
       {showGlobalLineup && (
         <ModelPoolLineupStrip
           className="speed-date-lineup-builder global-lineup-strip"
-          rows={shortlistedRows}
+          rows={showRows}
           // Only models a show can run: ComfyUI checkpoints came first in the list,
           // and every one was refused once picked.
           installedRows={modelRows.filter((row) => row.installed && canJoinComparison(row) && !shortlistIds.has(row.displayName))}
-          modelScores={modelScores}
+          // A saved score beside a seat says who sits there.
+          modelScores={blindMasking ? {} : modelScores}
           disabled={isBenchmarking || isListTesting}
           isListTesting={isListTesting}
           canRunSpeedDate={shortlistedRows.length >= MIN_CONTESTANTS && shortlistedRows.every((row) => row.installed) && !isBenchmarking && !isListTesting}
@@ -5505,9 +5552,10 @@ function App() {
           />
         </div>
       )}
-      <ActivityToast message={activity} />
-      {/* Not over an open chat: it sat on the message box, bottom right, until it was closed. */}
-      {reportReady && !reportOpen && !chatOpen && shownShowResult && (
+      <ActivityToast message={activity} mask={blindMasking ? (text) => maskText(text, blindMasking.names) : undefined} />
+      {/* Not over an open chat: it sat on the message box, bottom right, until it was closed.
+          Not before a blind show's reveal, either: it names the winner. */}
+      {reportReady && !reportOpen && !chatOpen && shownShowResult && !blind.session && (
         <div className="report-ready-bar" role="status">
           <Trophy aria-hidden="true" />
           <span>
@@ -5826,8 +5874,12 @@ function App() {
           onConfirm={confirmClearScores}
         />
       )}
+      {blind.session && blind.session.stage !== 'running' && (
+        <BlindOverlay session={blind.session} onPick={blind.pick} onSkip={blind.end} onClose={blind.end} />
+      )}
 
     </div>
+    </BlindShowContext.Provider>
   );
 }
 

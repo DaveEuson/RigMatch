@@ -71,5 +71,6 @@ test('the Trojan hero gets the reveal and the fanfare; other badges get the stin
   assert.match(reveal, /!state\.seen\.includes\(id\)/);
   // Never mid-run: Ajax finishing first in a lineup must not cover the show.
   assert.match(reveal, /return pending\.reveal && !busy \?/);
-  assert.match(read('../src/App.tsx'), /<AchievementCues busy=\{isBenchmarking \|\| isListTesting\} \/>/);
+  // Nor before a blind show's pick: the reveal would name Ajax.
+  assert.match(read('../src/App.tsx'), /<AchievementCues busy=\{isBenchmarking \|\| isListTesting \|\| Boolean\(blindMasking\)\} \/>/);
 });

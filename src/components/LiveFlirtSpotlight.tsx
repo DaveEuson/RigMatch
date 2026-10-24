@@ -4,6 +4,7 @@ import { getHostBanter } from '../lib/hostBanter';
 import { getFriendlyModelName } from '../lib/modelCatalog';
 import type { ModelRow, RunProgress } from '../types';
 import { useShowExtras, useShowStage } from '../lib/showExtras';
+import { useBlindMasking } from '../lib/blindShowContext';
 import { useShowTheme } from '../hooks/useShowTheme';
 import { CompareScreen, HostStrip } from './SimpleWizard';
 import { Maximize2, Minimize2 } from 'lucide-react';
@@ -32,6 +33,7 @@ export function LiveFlirtSpotlight({
   // while a run goes. Speed Dating only; a single model's test is not a show.
   const extras = useShowExtras();
   const stage = useShowStage();
+  const blind = Boolean(useBlindMasking());
   const isShow = progress.mode === 'speed-date';
   useShowTheme(isShow ? 'running' : 'idle', extras.music);
 
@@ -52,6 +54,7 @@ export function LiveFlirtSpotlight({
     phase,
     index: Math.max(0, progress.questionIndex ?? 0),
     stage,
+    blind,
   });
 
   if (minimized) {
@@ -79,10 +82,14 @@ export function LiveFlirtSpotlight({
       <div className="live-show-body">
         <div className="live-show-top">
           <HostStrip line={hostLine} />
-          <button type="button" className="btn btn-line btn-sm" onClick={() => setMinimized(true)} title="Keep the run going and use the rest of RigMatch">
-            <Minimize2 aria-hidden="true" />
-            Minimize
-          </button>
+          {/* Not in a blind show: behind this, Results and the logs fill in
+              with each contestant's name and score as they finish. */}
+          {!blind && (
+            <button type="button" className="btn btn-line btn-sm" onClick={() => setMinimized(true)} title="Keep the run going and use the rest of RigMatch">
+              <Minimize2 aria-hidden="true" />
+              Minimize
+            </button>
+          )}
         </div>
         <CompareScreen
           shortlistedRows={stageRows}
