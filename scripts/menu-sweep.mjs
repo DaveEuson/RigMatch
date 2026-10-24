@@ -43,6 +43,7 @@ const SCREENS = [
   { name: 'Top Pick', tab: 'Results', view: 'Top Pick' },
   { name: 'Runs', tab: 'Results', view: 'Runs' },
   { name: 'My PC', tab: 'My PC' },
+  { name: 'Speed score', tab: 'My PC', view: 'Speed score' },
   { name: 'Settings', settings: true },
 ];
 

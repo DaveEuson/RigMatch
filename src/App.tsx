@@ -331,6 +331,7 @@ const ExportHatchModal = lazyPanel(() => import('./components/ExportHatchModal')
 const ChatDock = lazyPanel(() => import('./components/ChatDock').then((m) => m.ChatDock));
 const LanBrowser = lazyPanel(() => import('./components/LanBrowser').then((m) => m.LanBrowser));
 const LogsView = lazyPanel(() => import('./components/LogsView').then((m) => m.LogsView));
+const RigScorePanel = lazyPanel(() => import('./components/RigScorePanel').then((m) => m.RigScorePanel));
 const ActivityPanel = lazyPanel(() => import('./components/ActivityPanel').then((m) => m.ActivityPanel));
 const SpeedDatePanel = lazyPanel(() => import('./components/SpeedDatePanel').then((m) => m.SpeedDatePanel));
 const UtilityPanel = lazyPanel(() => import('./components/UtilityPanel').then((m) => m.UtilityPanel));
@@ -694,8 +695,9 @@ function App() {
   if (settingsSectionRequest && activeNavId !== 'settings') setSettingsSectionRequest(null);
   // The welcome again, from Settings. The first run's own is useGoals' showModeSplash.
   const [welcomeReplay, setWelcomeReplay] = useState(false);
-  // My PC's two views: the computer and its connections, or everything logged.
-  const [myPcView, setMyPcView] = useState<'overview' | 'logs'>('overview');
+  // My PC's views: the computer and its connections, its speed score
+  // (RigScorePanel), or everything logged.
+  const [myPcView, setMyPcView] = useState<'overview' | 'speed' | 'logs'>('overview');
   /** "Logs" after a failed show: My PC, on its Logs view. */
   const openRunLogs = useCallback(() => {
     openLogsPanel();
@@ -5185,6 +5187,7 @@ function App() {
           {activeTab === 'mypc' && (
             <div className="screen-tabs" role="group" aria-label="My PC view">
               <button type="button" aria-pressed={myPcView === 'overview'} onClick={() => setMyPcView('overview')}>Overview</button>
+              <button type="button" aria-pressed={myPcView === 'speed'} onClick={() => setMyPcView('speed')}>Speed score</button>
               <button type="button" aria-pressed={myPcView === 'logs'} onClick={() => { setMyPcView('logs'); void loadLogs(); }}>
                 Logs <span className="news-count">{appLogs.length}</span>
               </button>
@@ -5209,6 +5212,22 @@ function App() {
               onClear={() => { void clearLogs(); }}
             />
           </section>
+        )}
+        {activeNavId === 'lan' && myPcView === 'speed' && (
+          <RigScorePanel
+            system={system}
+            ollama={ollama}
+            busy={gpuBusy}
+            pullProgressByModel={pullProgressByModel}
+            // A missing tier model goes through the same consent dialog and
+            // queue as any other download; RigScore never pulls on its own.
+            onDownloadModel={(model) => {
+              const row = modelRows.find((candidate) => candidate.displayName === model);
+              if (!row) return false;
+              requestThirdPartyModelDownloads([row]);
+              return true;
+            }}
+          />
         )}
         {activeNavId === 'lan' && myPcView === 'overview' && (
           <LanBrowser

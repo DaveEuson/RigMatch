@@ -30,8 +30,12 @@ if (testFiles.length === 0) {
   process.exit(1);
 }
 
-const result = spawnSync(process.execPath, ['--test', ...testFiles], {
+// Relative paths: Windows caps a command line at 32,767 characters, and 211
+// absolute paths from a checkout under %TEMP% passed it, so the suite exited 1
+// without running a test or saying why.
+const result = spawnSync(process.execPath, ['--test', ...testFiles.map((file) => path.relative(process.cwd(), file))], {
   stdio: 'inherit',
 });
 
+if (result.error) console.error(`Could not start the tests: ${result.error.message}`);
 process.exit(result.status ?? 1);

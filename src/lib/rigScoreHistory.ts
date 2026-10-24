@@ -109,9 +109,9 @@ export function historyRows(history: RigResult[]): RigHistoryRow[] {
   });
 }
 
-/** "4% faster", "2% slower", or "the same" inside half a percent. */
+/** "4% faster", "2% slower", or "No change" inside half a percent. */
 export function describeChange(changePct: number): string {
   const rounded = Math.round(changePct);
-  if (rounded === 0) return 'the same';
+  if (rounded === 0) return 'No change';
   return rounded > 0 ? `${rounded}% faster` : `${Math.abs(rounded)}% slower`;
 }
