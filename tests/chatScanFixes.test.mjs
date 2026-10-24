@@ -51,7 +51,9 @@ test('an attachment is sent with one message, not every message after it', () =>
   const built = send.indexOf('const userMsg: AppMessage');
   const cleared = send.indexOf('if (usableAttachment) setAttachment(null);');
   assert.ok(built !== -1 && cleared > built, 'sendMessage clears the attachment once the turn holds it');
-  assert.ok(cleared < send.indexOf('await streamChat('), 'cleared before the reply streams');
+  // The reply streams in answerInColumn, once per side of a chat asking two.
+  assert.ok(cleared < send.indexOf('answerInColumn('), 'cleared before the reply streams');
+  assert.match(callback('answerInColumn'), /await streamChat\(/);
 });
 
 test('a store file that is there but unreadable is told apart from no file at all', async () => {
@@ -86,7 +88,7 @@ test('an unreadable history or memory is never marked loaded, so it is never sav
 });
 
 test("a failed reply shows Ollama's reason and is not sent back as the model's words", () => {
-  const send = callback('sendMessage');
+  const send = callback('answerInColumn');
   const failure = send.slice(send.indexOf('} catch (err) {'));
   assert.match(failure, /const reason = typeof err === "string" \? err : \(err as Error\)\?\.message;/);
   assert.match(failure, /content: reason \|\| "Something went wrong\. Is Ollama still running\?"/);
@@ -139,7 +141,7 @@ test('the summary request gets a window that holds it, and no smaller than the c
 });
 
 test('the token mark counts the note sendMessage shows, the list the meter slices', () => {
-  assert.match(callback('sendMessage'), /messageCount: visibleHistory\.length \+ \(accumulated \? 1 : 0\)/);
+  assert.match(callback('answerInColumn'), /messageCount: visibleHistory\.length \+ \(accumulated \? 1 : 0\)/);
   assert.match(callback('runCompaction'), /buildSummaryRequest\(\s*activeConversation\.messages,\s*upTo,\s*activeConversation\.summary,\s*activeConversation\.summarizedCount \?\? 0,\s*\)/);
 });
 
@@ -166,19 +168,21 @@ test('every answer and every code block has a Copy button', () => {
 });
 
 test('a model being loaded is named while the first answer waits', () => {
-  const send = callback('sendMessage');
-  assert.match(send, /isModelLoaded\(settings\.ollamaUrl, activeBuddy\)\.then\(\(loaded\) => \{\s*if \(loaded === false && !answered\) setLoadingModel\(activeBuddy\);/);
+  // Per side, so the second model of a chat asking two says it is loading too.
+  const send = callback('answerInColumn');
+  assert.match(send, /isModelLoaded\(settings\.ollamaUrl, model\)\.then\(\(loaded\) => \{\s*if \(loaded === false && !answered && current\(\)\) setLoading\(\(prev\) => \(\{ \.\.\.prev, \[column\]: model \}\)\);/);
   // Cleared on the first word, and whatever happens to the reply.
-  assert.match(send, /if \(!answered\) \{\s*answered = true;\s*setLoadingModel\(null\);/);
-  assert.match(send, /finally \{\s*answered = true;\s*setLoadingModel\(null\);/);
-  assert.match(app, /Loading \{activeBuddyObj\.displayName\}… the first answer takes longer\./);
+  assert.match(send, /if \(!answered\) \{\s*answered = true;\s*doneLoading\(\);/);
+  assert.match(send, /finally \{\s*answered = true;\s*if \(current\(\)\) \{[\s\S]*?doneLoading\(\);\s*\}/);
+  assert.match(app, /Loading \{secondModel \? face\.name : activeBuddyObj\?\.displayName\}… the first answer takes longer\./);
 });
 
 test('Escape closes the Chats panel', () => {
   // The narrow-window chat list is the last thing Escape closes. Checked in a
   // browser on 2026-10-19 with focus on the Chats button and inside the panel.
-  assert.match(app, /if \(!confirmDelete && !compactPlan && !personalityEditor && !profileModal && !settingsOpen && !sidebarOpen\) return undefined;/);
-  assert.match(app, /else if \(settingsOpen\) setSettingsOpen\(false\);\s*else setSidebarOpen\(false\);/);
+  // Then the second-model picker, which sits in the chat rather than over it.
+  assert.match(app, /if \(!confirmDelete && !compactPlan && !personalityEditor && !profileModal && !settingsOpen && !sidebarOpen && !pickingSecond\) return undefined;/);
+  assert.match(app, /else if \(settingsOpen\) setSettingsOpen\(false\);\s*else if \(sidebarOpen\) setSidebarOpen\(false\);\s*else setPickingSecond\(false\);/);
 });
 
 test("Make a picture's lines are RigMatch's, and a deleted chat stays deleted", () => {
