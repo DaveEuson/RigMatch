@@ -204,7 +204,7 @@ import { DeleteModelModal, CloseCleanupModal, ClearDataModal, SupportModal, Choi
 import { SkillRunMiniBar, LiveBuildModal, DemoResultModal } from './components/SkillDemoViewers';
 import { RunSheet } from './components/RunSheet';
 import { ClearScoresModal } from './components/ClearScoresModal';
-import { clearBlindTaste, clearModelFromBlindTaste, countBlindPicks, maskProgress, maskRows, maskText, readBlindTaste, shuffleLineup } from './lib/blindMode';
+import { clearBlindTaste, clearModelFromBlindTaste, countBlindPicks, maskProgress, maskRows, maskText, readBlindTaste, requestTasteFocus, shuffleLineup } from './lib/blindMode';
 import { BlindShowContext } from './lib/blindShowContext';
 import { useBlindShow } from './lib/useBlindShow';
 import { BlindOverlay } from './components/BlindShow';
@@ -4814,6 +4814,16 @@ function App() {
       setChatOpen(true);
     }
   }, [setChatOpen, tellUser]);
+  // The reveal's "See the results": Results, with the pick just saved in view.
+  // It used to close on Comparison, though the reveal had just said the pick
+  // was on Results. A Lab channel's Results has no Your taste, so Reads
+  // images opens chat's, as the Top Match chip does.
+  const closeBlindReveal = useCallback(() => {
+    endBlindShow();
+    if (workbenchInfo.id === 'reading') chooseWorkbench('chat');
+    selectNav('history');
+    requestTasteFocus();
+  }, [endBlindShow, workbenchInfo.id, chooseWorkbench, selectNav]);
   // What is running, for the load strip. A render and a run can overlap; the
   // render is what holds the graphics card, so it is the one shown.
   const runningLine = renderActivity ? (
@@ -4989,6 +4999,9 @@ function App() {
         onOpenSettings={() => { setSettingsSectionRequest(null); selectNav('settings'); }}
         onOpenChat={() => { void openChatApp(); }}
         onOpenSupport={() => setSupportModalOpen(true)}
+        // The whole blind session, reveal included: the overlay leaves an
+        // element that is already inert to its owner.
+        sealed={Boolean(blind.session)}
       />
       <LoadStrip system={system} running={runningLine} hideReadings={Boolean(blindMasking)} />
       {uiMode === 'beginner' && (
@@ -5904,7 +5917,7 @@ function App() {
         />
       )}
       {blind.session && blind.session.stage !== 'running' && (
-        <BlindOverlay session={blind.session} onPick={blind.pick} onSkip={blind.end} onClose={blind.end} />
+        <BlindOverlay session={blind.session} onPick={blind.pick} onSkip={blind.end} onClose={closeBlindReveal} />
       )}
 
     </div>

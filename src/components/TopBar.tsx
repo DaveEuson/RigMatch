@@ -39,7 +39,14 @@ export function TopBar({
   onOpenSettings,
   onOpenChat,
   onOpenSupport,
+  sealed = false,
 }: {
+  /**
+   * A blind show is on: nothing up here works until it ends. Every screen it
+   * leads to fills in with names and scores as contestants finish, and the
+   * mode switch would leave the stage for screens that were never masked.
+   */
+  sealed?: boolean;
   uiMode: UiMode;
   onUiModeChange: (mode: UiMode) => void;
   /** Advanced: the screens. */
@@ -62,7 +69,7 @@ export function TopBar({
 }) {
   const advanced = uiMode === 'advanced';
   return (
-    <header className={advanced ? 'top-bar advanced' : 'top-bar simple'}>
+    <header className={advanced ? 'top-bar advanced' : 'top-bar simple'} inert={sealed} aria-hidden={sealed || undefined}>
       <div className="top-bar-brand">
         <img src={brandIcon} alt="" width={32} height={32} />
         <span className="top-bar-wordmark">RigMatch</span>

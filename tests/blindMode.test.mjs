@@ -322,3 +322,70 @@ test('the reveal, the pick step and the switch keep their promises', async () =>
   const app = await read('../src/App.tsx');
   assert.match(app, /blindPicks=\{countBlindPicks\(readBlindTaste\(\), pendingScoreClear\.mode === 'all' \? null : scoreClearAliases\(pendingScoreClear\.model\)\)\}/);
 });
+
+/** Just enough DOM for sealSiblings: attributes and a parent's children. */
+function fakeElement(name, attributes = {}) {
+  const attrs = new Map(Object.entries(attributes));
+  return {
+    name,
+    parentElement: null,
+    hasAttribute: (key) => attrs.has(key),
+    getAttribute: (key) => (attrs.has(key) ? attrs.get(key) : null),
+    setAttribute: (key, value) => attrs.set(key, value),
+    removeAttribute: (key) => attrs.delete(key),
+    attrs,
+  };
+}
+
+test('a cover seals everything beside it, and gives back only what it sealed', async () => {
+  const { sealSiblings } = await import('../src/lib/sealSiblings.ts');
+  const results = fakeElement('results');
+  const decorative = fakeElement('decorative', { 'aria-hidden': 'false' });
+  const ownedElsewhere = fakeElement('top bar', { inert: '', 'aria-hidden': 'true' });
+  const cover = fakeElement('stage');
+  const parent = { children: [results, decorative, ownedElsewhere, cover] };
+  for (const element of parent.children) element.parentElement = parent;
+
+  const release = sealSiblings(cover);
+  for (const element of [results, decorative]) {
+    assert.equal(element.getAttribute('inert'), '', `${element.name} is out of the Tab order`);
+    assert.equal(element.getAttribute('aria-hidden'), 'true', `${element.name} is out of the accessibility tree`);
+  }
+  assert.equal(cover.hasAttribute('inert'), false, 'the cover itself stays live');
+
+  release();
+  assert.equal(results.hasAttribute('inert'), false);
+  assert.equal(results.hasAttribute('aria-hidden'), false);
+  assert.equal(decorative.getAttribute('aria-hidden'), 'false', 'an aria-hidden it found is put back as it was');
+  assert.equal(ownedElsewhere.getAttribute('inert'), '', 'an element someone else made inert is left to them');
+  assert.equal(ownedElsewhere.getAttribute('aria-hidden'), 'true');
+  // Detached: nothing to seal, nothing to release.
+  assert.doesNotThrow(() => sealSiblings(fakeElement('alone'))());
+});
+
+test('"See the results" focuses Your taste once', async () => {
+  const { requestTasteFocus, takeTasteFocus } = await import('../src/lib/blindMode.ts');
+  assert.equal(takeTasteFocus(), false, 'nothing asked yet');
+  requestTasteFocus();
+  assert.equal(takeTasteFocus(), true);
+  assert.equal(takeTasteFocus(), false, 'taken once, not on every later visit to Results');
+});
+
+test('nothing behind a blind show can be reached until it is over', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const read = (file) => readFile(new URL(file, import.meta.url), 'utf8');
+  // The live stage seals the screen under it, blind or not; the pick and reveal seal the window.
+  assert.match(await read('../src/components/LiveFlirtSpotlight.tsx'), /useEffect\(\(\) => \(cover \? sealSiblings\(cover\) : undefined\), \[cover\]\);[\s\S]*<section\s+ref=\{setCover\}/);
+  const show = await read('../src/components/BlindShow.tsx');
+  assert.match(show, /useEffect\(\(\) => \(cover \? sealSiblings\(cover\) : undefined\), \[cover\]\);/);
+  assert.match(show, /<div ref=\{setCover\} className="blind-overlay"/);
+  // The top bar is off for the whole blind session, reveal included.
+  assert.match(await read('../src/components/TopBar.tsx'), /<header className=\{advanced \? 'top-bar advanced' : 'top-bar simple'\} inert=\{sealed\} aria-hidden=\{sealed \|\| undefined\}>/);
+  const app = await read('../src/App.tsx');
+  assert.match(app, /sealed=\{Boolean\(blind\.session\)\}/);
+  // The standing line names the saved winner; not while the lineup is seats.
+  assert.match(await read('../src/components/SpeedDatePanel.tsx'), /\{!blindShow && standingLine\(lineupStanding\(/);
+  // "See the results" goes to Results and Your taste.
+  assert.match(app, /onClose=\{closeBlindReveal\}/);
+  assert.match(app, /selectNav\('history'\);\n\s*requestTasteFocus\(\);/);
+});

@@ -4,6 +4,7 @@ import { blindPickSaveNote, maskName } from '../lib/blindMode';
 import { normalizeModelKey } from '../lib/modelKey';
 import { getLineupModelName } from '../lib/modelCatalog';
 import { useDialog } from '../lib/useDialog';
+import { sealSiblings } from '../lib/sealSiblings';
 import type { BlindSession } from '../lib/useBlindShow';
 import type { BenchmarkPromptResult } from '../types';
 import { AvatarBust } from './Avatars';
@@ -22,11 +23,16 @@ export function BlindOverlay({ session, onPick, onSkip, onClose }: {
 }) {
   // Escape skips the pick, or closes the reveal: either way, the normal results.
   const panelRef = useDialog<HTMLDivElement>(session.stage === 'picking' ? onSkip : onClose);
+  // Opaque is only paint. The window behind holds the judge's ranking, the
+  // report bar and Results; out of the Tab order and the accessibility tree
+  // until this closes.
+  const [cover, setCover] = useState<HTMLElement | null>(null);
+  useEffect(() => (cover ? sealSiblings(cover) : undefined), [cover]);
   const seated = session.lineup
     .map((model) => session.results.find((result) => normalizeModelKey(result.model) === normalizeModelKey(model)))
     .filter((result) => result !== undefined);
   return (
-    <div className="blind-overlay" role="presentation">
+    <div ref={setCover} className="blind-overlay" role="presentation">
       <div ref={panelRef} className="blind-overlay-panel" role="dialog" aria-modal="true" aria-labelledby="blind-overlay-title">
         {session.stage === 'picking' ? (
           <BlindPickStep
