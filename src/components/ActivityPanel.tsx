@@ -18,7 +18,6 @@ import { renderLabel, type RenderActivity, type RenderOutcome } from '../lib/ren
 import { Elapsed } from './Elapsed';
 import { Code2, Download, FileText, Film, Gauge, History, Lightbulb, Play, RefreshCw, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { formatLocale } from '../lib/formatLocale';
 
 export function ActivityPanel({
   runProgress,
@@ -162,7 +161,8 @@ type ActivityJob = {
                 <button type="button" onClick={() => onOpenReport(report.id)}>
                   <strong>{describeReport(report)}</strong>
                   <em>
-                    {new Date(report.completedAt).toLocaleString(formatLocale())}
+                    {/* The same short form as every other time on this screen. */}
+                    {formatHistoryTime(report.completedAt)}
                     {` · ${displaySuiteName(report.suiteName)}`}
                   </em>
                   {/* safeStorage drops answer text first when the browser runs

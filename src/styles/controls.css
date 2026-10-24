@@ -92,6 +92,12 @@ a.mini-button { text-decoration: none; }
 }
 .btn-link:not(:disabled):hover { text-decoration-color: currentColor; }
 
+/* A copy icon says what happened beside it, not only in its tooltip. The note
+   stays in the page while empty, or a screen reader would not hear it fill. */
+.copy-command { display: inline-flex; align-items: center; }
+.copy-command-note { color: var(--muted); font-size: var(--fs-ui); white-space: nowrap; }
+.copy-command-note:not(:empty) { margin-left: var(--s2); }
+
 /* A choice among a few: the chosen one is outlined in the accent. */
 .chip {
   display: inline-flex;

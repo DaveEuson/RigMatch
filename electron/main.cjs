@@ -438,32 +438,15 @@ function createWindow() {
     openExternalSafe(url);
   });
 
-  // Electron grants every permission a renderer asks for unless a handler says
-  // otherwise, which sat oddly beside contextIsolation, the sandbox, the CSP
-  // and the host allowlists. RigMatch needs two: the microphone, for the
-  // listening test, and notifications, for What's New's "tell me about new
-  // models" switch, which asks only when someone turns it on (refused, the
-  // switch could never turn on). Everything else — camera, geolocation,
-  // clipboard reads, MIDI, USB, serial — is refused, and refused audibly
-  // rather than silently, so a future feature that needs one fails loudly here
-  // instead of mysteriously in the renderer.
-  const ALLOWED_PERMISSIONS = new Set(['media', 'audioCapture', 'notifications']);
+  // Which permissions, and for whom: security.permissionRefusal.
+  const isTrustedUrl = (url) => security.isTrustedRendererUrl(url, {
+    isDev: isDev(),
+    packagedIndexPath: path.join(__dirname, '..', 'dist', 'index.html'),
+  });
   const decide = (permission, details = {}) => {
-    const allowed = ALLOWED_PERMISSIONS.has(permission);
-    if (!allowed) {
-      console.warn(`[permissions] refused "${permission}": not in ALLOWED_PERMISSIONS`);
-      return false;
-    }
-    // "media" is the camera as well as the microphone. Only sound is needed,
-    // and before this the camera queried as granted.
-    if (permission === 'media') {
-      const types = details.mediaTypes ?? (details.mediaType ? [details.mediaType] : []);
-      if (types.some((type) => type !== 'audio')) {
-        console.warn(`[permissions] refused "media" for ${types.join(', ')}: only audio is allowed`);
-        return false;
-      }
-    }
-    return true;
+    const refusal = security.permissionRefusal(permission, details, { isTrustedUrl });
+    if (refusal) console.warn(`[permissions] refused "${permission}": ${refusal}`);
+    return !refusal;
   };
   win.webContents.session.setPermissionRequestHandler((_contents, permission, callback, details) => {
     callback(decide(permission, details));

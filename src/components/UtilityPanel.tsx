@@ -187,7 +187,7 @@ export function UtilityPanel({
   );
   const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
   const scoreExplainerRef = useDialog<HTMLDivElement>(() => setScoreExplainerOpen(false));
-  const [scoreCopied, setScoreCopied] = useState(false);
+  const [scoreCopy, setScoreCopy] = useState<CopyState>('idle');
   const [ollamaUpdateLatest, setOllamaUpdateLatest] = useState<string | null>(null);
   const [isCheckingOllamaUpdate, setIsCheckingOllamaUpdate] = useState(false);
   /** Why the last Check could not say, when it could not. It failed without a word. */
@@ -256,9 +256,11 @@ export function UtilityPanel({
 
   const copyScorecard = useCallback(() => {
     const text = buildShareableScorecard(rankedModelScores, taskPicks, system);
-    void navigator.clipboard.writeText(text).then(() => {
-      setScoreCopied(true);
-      setTimeout(() => setScoreCopied(false), 2500);
+    // Through copyText: the bare writeText had no catch, so a refused copy was
+    // an unhandled rejection and the button said nothing.
+    void copyText(text).then((ok) => {
+      setScoreCopy(ok ? 'copied' : 'failed');
+      window.setTimeout(() => setScoreCopy('idle'), ok ? 2500 : 4000);
     });
   }, [rankedModelScores, taskPicks, system]);
 
@@ -412,7 +414,7 @@ export function UtilityPanel({
                   onClick={copyScorecard}
                   title="Copy the results as Markdown, for Reddit, Discord and the like"
                 >
-                  {scoreCopied ? 'Copied' : 'Copy results'}
+                  {scoreCopy === 'copied' ? 'Copied' : scoreCopy === 'failed' ? 'Couldn’t copy' : 'Copy results'}
                 </button>
               )}
               <button type="button" className="btn btn-line btn-sm" onClick={() => setScoreExplainerOpen(true)}>
@@ -790,7 +792,7 @@ export function UtilityPanel({
                 title="Copy hardware + version info to clipboard"
               >
                 <Copy aria-hidden="true" />
-                {diagnosticsCopy === 'copied' ? 'Copied' : diagnosticsCopy === 'failed' ? 'Copy failed' : 'Copy diagnostics'}
+                {diagnosticsCopy === 'copied' ? 'Copied' : diagnosticsCopy === 'failed' ? 'Couldn’t copy' : 'Copy diagnostics'}
               </button>
             </div>
           </div>
