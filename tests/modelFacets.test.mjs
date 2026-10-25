@@ -21,6 +21,7 @@ const quick = (overrides = {}) => ({
   'good-score': 0,
   'low-score': 0,
   huge: 112,
+  'unknown-size': 61,
   ...overrides,
 });
 
@@ -33,6 +34,7 @@ const quickFilters = (counts = quick()) => [
   { id: 'good-score', label: 'B or better', count: counts['good-score'] },
   { id: 'low-score', label: 'Below B', count: counts['low-score'] },
   { id: 'huge', label: 'Too Big', count: counts.huge },
+  { id: 'unknown-size', label: 'Size unknown', count: counts['unknown-size'] },
 ];
 
 const row = (displayName, sizeGb, installed = false) => ({
@@ -44,10 +46,10 @@ const row = (displayName, sizeGb, installed = false) => ({
   runtime: 'ollama',
 });
 
-test('the rail groups the eight quick filters by the question they answer', () => {
+test('the rail groups the nine quick filters by the question they answer', () => {
   const groups = buildQuickFacetGroups(quickFilters(), '12 GB');
   assert.deepEqual(groups.map((g) => g.id), ['fit', 'local', 'score']);
-  assert.deepEqual(groups[0].items.map((i) => i.id), ['fits-vram', 'huge']);
+  assert.deepEqual(groups[0].items.map((i) => i.id), ['fits-vram', 'huge', 'unknown-size']);
   assert.deepEqual(groups[1].items.map((i) => i.id), ['installed', 'unscored', 'scored']);
   assert.deepEqual(groups[2].items.map((i) => i.id), ['good-score', 'low-score']);
 });

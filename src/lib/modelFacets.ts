@@ -10,9 +10,9 @@ import type { ModelRow } from '../types';
  * rail's whole job is that the answer is already on screen: the groups, the
  * options, and the count each one would leave you with.
  *
- * Grouping is fixed rather than derived because the eight quick filters answer
+ * Grouping is fixed rather than derived because the nine quick filters answer
  * three genuinely different questions — will it run here, do I already have it,
- * and how did it do — and a flat list of eight makes the reader sort that out
+ * and how did it do — and a flat list of nine makes the reader sort that out
  * for themselves every time.
  */
 export type FacetGroupId = 'fit' | 'local' | 'score';
@@ -20,7 +20,7 @@ export type FacetGroupId = 'fit' | 'local' | 'score';
 const QUICK_FILTER_GROUPS: Array<{ id: FacetGroupId; label: string; members: ModelQuickFilterId[] }> = [
   // Label is filled in with the real VRAM figure below — "Fits your 12 GB" says
   // more than "Fits" for the same width.
-  { id: 'fit', label: 'Fits your rig', members: ['fits-vram', 'huge'] },
+  { id: 'fit', label: 'Fits your rig', members: ['fits-vram', 'huge', 'unknown-size'] },
   { id: 'local', label: 'On your PC', members: ['installed', 'unscored', 'scored'] },
   { id: 'score', label: 'How it scored', members: ['good-score', 'low-score'] },
 ];
@@ -30,7 +30,7 @@ export type FacetGroup = { id: string; label: string; items: FacetItem[] };
 
 /**
  * 'all' is not a facet. It is the absence of one, which the rail expresses by
- * having nothing ticked — so offering it as a ninth button would be a control
+ * having nothing ticked — so offering it as a tenth button would be a control
  * that does the same thing as unticking the button above it.
  */
 export function buildQuickFacetGroups(

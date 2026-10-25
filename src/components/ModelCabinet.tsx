@@ -601,10 +601,13 @@ export function ModelCabinet({
   );
   // Say what each number counts — the catalog total, the installed count, and the
   // VRAM-fit count are different measures and read as contradictory when all three
-  // are just "N models".
+  // are just "N models". The total leaves out what this computer can never run
+  // (MLX builds off a Mac): the table never shows those, so counting them made
+  // a total the three fit filters could not add up to.
+  const catalogCount = useMemo(() => rows.filter(passesPlatform).length, [rows, passesPlatform]);
   const modelCountLabel = query || quickFilter !== 'all' || taskFilter || activeDeveloperFilter !== 'all' || newOnly || countryFilter
-    ? `${visibleRows.length} of ${rows.length} shown`
-    : `${rows.length} in catalog`;
+    ? `${visibleRows.length} of ${catalogCount} shown`
+    : `${catalogCount} in catalog`;
   const vramLabel = vramGb > 0 ? `${formatGb(vramGb)} VRAM` : 'detected VRAM';
   const activeQuickFilter = quickFilters.find((filter) => filter.id === quickFilter);
   const activeDeveloperLabel = activeDeveloperFilter === 'all'

@@ -161,7 +161,10 @@ export function TopBar({
           <span>Donate</span>
         </button>
         {advanced && onOpenSettings && (
-          <button type="button" className="top-bar-settings" onClick={onOpenSettings}>
+          // Named like Donate: below 1600px the word hides, and with it the
+          // button's only name. It was the one unnamed control on any Advanced
+          // screen in the 0.10.0 check.
+          <button type="button" className="top-bar-settings" onClick={onOpenSettings} title="Settings" aria-label="Settings">
             <UiIcon name="gear" size={18} />
             <span>Settings</span>
           </button>
