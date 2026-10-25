@@ -165,7 +165,7 @@ test('a terminal gets the show: the marquee and the Top Match, in ASCII', () => 
   const speed = Math.round(top.grade.tokensPerSecond);
   assert.equal(lines.at(-1), `Tonight's Top Match: ${top.row.name} (${top.grade.letter}, ~${speed} tok/s). Say hi: ollama run ${top.row.name}`);
   assert.match(table, ascii);
-  assert.match(formatTable(ranked, card, { provider: 'lm-studio', show: true }), new RegExp(`Find it with: lms get ${top.row.name.replace(/[.]/g, '\\.')}$`));
+  assert.ok(formatTable(ranked, card, { provider: 'lm-studio', show: true }).endsWith(`Find it with: lms get ${top.row.name}`));
 
   // Too narrow for the sign, the plain title, and the Top Match still fits.
   const narrow = formatTable(ranked, card, { ollamaReachable: true, columns: 40, show: true }).split('\n');
