@@ -4,6 +4,26 @@ Every RigMatch release, newest first. These are the same notes the app shows in
 Update Center — this file and the GitHub release pages are generated from
 `src/data/releaseNotes.ts`, so there is only one place to write them.
 
+## 0.10.0 — Fit Check
+_Beta build_
+
+- Every model on the Models list and its page now has a Fit grade from A to F, before you test anything. It weighs whether the model fits your graphics memory, how fast it should run, and how good it is for its size. Click the grade to see the reasons. Scores measured on another computer don't count toward it.
+- Run npx rigmatch-fit in a terminal to see the models that will run well on your computer, with each one's Fit grade, size, speed and the command to get it. Models you already have are marked, and --json prints the list for scripts. Add --measure to test your PC for real: it runs RigScore's speed test through your own Ollama on the test models you have installed, which takes a few minutes, and prints measured speeds and a score you can set beside another computer's.
+- Model rows have a small copy button for the download command (ollama pull, or LM Studio's), for when you'd rather use a terminal.
+- RigScore, under My PC > Speed score in Advanced Mode, runs the same test on any computer and gives one number you can compare. An RTX 4070 scores about 1000, and the same PC can vary by 10 to 15 percent from one run to the next. A line beside the number says what that speed means for you, and past runs are kept. A tier too big for your card says "Not run" instead of 0, and the test won't start while a show or chat is using the graphics card.
+- Turn on "Blind show" above the lineup in Advanced Mode and the contestants become Contestant 1, 2 and 3, with their names, sizes and scores hidden while they answer. At the end you pick your favourite from their answers side by side. RigMatch then shows who each one was, who the judge picked, and whether you agreed. Blind shows are off unless you turn them on.
+- Your blind picks add up into a ranking of your own, "Your taste", on Results, kept apart from the judge's scores. Only blind picks count, because a pick made knowing the names says less about the answers. Clear Scores clears the ranking, and clearing one model's score tells you how many of your picks go with it.
+- The General question set now asks each contestant to draw something as an SVG picture, like a pelican riding a bicycle (an idea from Simon Willison's pelican benchmark). The drawings appear on stage and side by side in the results. A judge that can see pictures looks at the drawing, any other judge reads its code, and the note says which. RigMatch cleans every drawing before showing it, so nothing in one can run or load anything. A model that runs out of time is left out of the score instead of getting 0.
+- In RigMatch Chat, "Ask a second model too" sends each message to two models and shows their answers side by side. Each keeps its own conversation. Stop and Regenerate work on each side, and "Keep this one" goes back to a normal chat with that model. If the two won't fit in your graphics memory together, Chat warns that they may take turns. If you go back to an older RigMatch Chat afterwards, it deletes the second model's answers the next time it saves.
+- Links in RigMatch Chat's answers open in your web browser. They used to replace Chat's window with the page, with no way back.
+- What's New shows 20 models a page, with Previous and Next. A family's new versions share one row, so a burst of new tags no longer pushes everything else off the list. The scope tabs can be clicked again.
+- Copy results and every other copy button work again. In 0.9.9 they copied nothing, and Copy results didn't say so.
+- The "Report ready" bar no longer covers buttons and scores after a show, such as the page buttons in What's New and the scores on Winner.
+- On Comparison's Ranking, the Accuracy fader no longer squashes into the list below it.
+- The "First date" achievement now waits until the show is over. It used to arrive when the first contestant finished.
+- Results > Runs shows every date in your regional format. Some rows used a different style.
+- RigMatch now runs on Electron 42.11.18, which has this month's security fixes, including one that stops trusting certificates from a compromised authority.
+
 ## 0.9.9 — Tells You Why
 _Beta build_
 

@@ -206,10 +206,10 @@ npm run build      # production build
 The Fit grade from the Models list, in a terminal: which models will run well on this computer, best first, with the command that gets each one. It grades the chat models in a snapshot of Ollama's library bundled with each release (this one from October 2026), reads your graphics card the way the app does, and asks a local Ollama, if one is running, which models you already have. Nothing is downloaded and nothing leaves your computer.
 
 ```bash
-npm install
-npm run build:cli
-node cli/dist/rigmatch-fit.mjs
+npx rigmatch-fit
 ```
+
+It needs Node 20 or newer. To run it from a clone of this repo instead: `npm install`, `npm run build:cli`, then `node cli/dist/rigmatch-fit.mjs`.
 
 ```text
 Grade  Model             Size    Speed      Fit         Command
