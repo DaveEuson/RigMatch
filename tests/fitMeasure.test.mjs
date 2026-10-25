@@ -543,7 +543,7 @@ test('a cloud model is refused: it runs on Ollama\'s servers, not on this card, 
     // Listed as installed with a remote host, or just named like a cloud tag: both refused, and nothing is asked of Ollama.
     for (const model of ['gpt-oss:120b-cloud', 'glm-remote', 'kimi-k2:1t-cloud']) {
       const run = await runCommand({ model, json: false }, ollama);
-      assert.match(run.error.message, new RegExp(`^${model.replace(/[.:]/g, '\\$&')} runs on Ollama's servers, not on this computer`), model);
+      assert.ok(run.error.message.startsWith(`${model} runs on Ollama's servers, not on this computer`), `${model}: ${run.error.message}`);
       assert.match(run.error.message, /the prompts would leave it\. rigmatch-fit --measure runs local models only\./);
     }
     assert.equal(ollama.calls.some((call) => call.path === '/api/generate'), false);
