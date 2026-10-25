@@ -147,9 +147,9 @@ export function tiersToRun(machine: RigMachineFit, installed: readonly string[])
   return RIG_TIERS.filter((tier) => tierAvailability(tier, machine, installed).kind === 'ready');
 }
 
-export type RigHeadline = {
+export type RigHeadline<T extends { tier: RigTierId; measure: TierMeasure } = RigResult> = {
   /** The Standard tier's result, or until it has one, the first tier that does. */
-  result: RigResult | null;
+  result: T | null;
   isHeadlineTier: boolean;
   /**
    * The speed band, for the headline tier only. Light's 3B model writes fast on
@@ -158,9 +158,14 @@ export type RigHeadline = {
   band: SpeedBand | null;
 };
 
-export function rigHeadline(latest: Partial<Record<RigTierId, RigResult>>): RigHeadline {
+/**
+ * The headline: the Standard tier's result, or the first tier that has one (so a
+ * card that can never hold Standard still has a headline). Generic over what a
+ * result is, so the command-line speed test (cli/measure.ts) uses it too.
+ */
+export function rigHeadline<T extends { tier: RigTierId; measure: TierMeasure }>(latest: Partial<Record<RigTierId, T>>): RigHeadline<T> {
   const result = latest[RIG_HEADLINE_TIER]
-    ?? RIG_TIERS.map((tier) => latest[tier.id]).find((entry): entry is RigResult => Boolean(entry))
+    ?? RIG_TIERS.map((tier) => latest[tier.id]).find((entry): entry is T => Boolean(entry))
     ?? null;
   const isHeadlineTier = result?.tier === RIG_HEADLINE_TIER;
   return { result, isHeadlineTier, band: result && isHeadlineTier ? speedBand(result.measure.decodeTps) : null };
@@ -172,7 +177,7 @@ function listNames(names: string[]): string {
 }
 
 /** What is measured: a tier, or any installed model (no tier, so no size rule or points). */
-type RigTarget = { label: string; model: string; sizeGb?: number; minVramGb?: number };
+type RigTarget = { label: string; model: string; sizeGb?: number; minVramGb?: number; /** "tier" or "model": what a stopped run saved nothing for. */ noun?: string };
 type RigFailure = { kind: 'not-installed' | 'too-big' | 'busy' | 'stopped' | 'failed'; message: string };
 type RigDoneReply = Extract<RigRunReply, { status: 'done' }>;
 
@@ -195,7 +200,7 @@ function failureFor(target: RigTarget, reply: Exclude<RigRunReply, RigDoneReply>
     case 'busy':
       return {
         kind: 'busy',
-        message: `Ollama has ${listNames(reply.loadedModels)} loaded by another program. It shares the graphics card and would slow the test, so RigMatch leaves it alone and waits. Ollama lets an idle model go after about five minutes, so close what is using it or wait, then run again.`,
+        message: `Ollama has ${listNames(reply.loadedModels)} loaded by another program. It shares the graphics card and would slow the test, so RigMatch leaves it alone and does not start. Ollama lets an idle model go after about five minutes, so close what is using it or wait, then run again.`,
       };
     case 'shared': {
       const who = [
@@ -208,7 +213,7 @@ function failureFor(target: RigTarget, reply: Exclude<RigRunReply, RigDoneReply>
       };
     }
     case 'stopped':
-      return { kind: 'stopped', message: 'Stopped. Nothing was saved for this tier.' };
+      return { kind: 'stopped', message: `Stopped. Nothing was saved for this ${target.noun ?? 'tier'}.` };
     case 'failed':
       return { kind: 'failed', message: `The test did not finish: ${reply.error}` };
   }
@@ -264,7 +269,7 @@ export type RigModelOutcome =
   | RigFailure;
 
 export function assembleModelResult(model: string, reply: RigRunReply): RigModelOutcome {
-  if (reply.status !== 'done') return failureFor({ label: model, model }, reply);
+  if (reply.status !== 'done') return failureFor({ label: model, model, noun: 'model' }, reply);
   const measure = measureOf(reply);
   if ('kind' in measure) return measure;
   return { kind: 'measured', measure, stamp: { tier: 'model', ...stampParts(model, reply) }, gpuShare: reply.gpuShare };

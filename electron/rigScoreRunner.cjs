@@ -77,7 +77,8 @@ function normalizeRigRequest(request = {}) {
     prompts,
     warmupRuns,
     measuredRuns,
-    minVramGb: boundedNumber(request.minVramGb, 0, 1024, 0),
+    // A plain model has no tier, so no card-size rule: Ollama says if it does not fit.
+    minVramGb: request.tier === 'model' ? 0 : boundedNumber(request.minVramGb, 0, 1024, 0),
     options: {
       num_ctx: wholeNumber(options.num_ctx, 512, 32768, 4096),
       num_predict: wholeNumber(options.num_predict, 16, 2048, 256),

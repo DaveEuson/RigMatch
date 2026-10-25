@@ -4,10 +4,10 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const {
-  normalizeRigRequest, readRigRun, weightsDigest, sameModel, isOutOfMemory, sharedWith, runRigTier,
+  normalizeRigRequest, readRigRun, weightsDigest, sameModel, isOutOfMemory, sharedWith, runRigTier, unloadOllamaModel,
 } = require('../electron/rigScoreRunner.cjs');
 const { RIG_TIERS, RIG_WORKLOAD } = await import('../src/lib/rigScore.ts');
-const { rigRunRequest, assembleTierResult } = await import('../src/lib/rigScoreRun.ts');
+const { rigRunRequest, rigModelRequest, assembleTierResult, assembleModelResult } = await import('../src/lib/rigScoreRun.ts');
 
 const light = RIG_TIERS.find((tier) => tier.id === 'light');
 const extreme = RIG_TIERS.find((tier) => tier.id === 'extreme');
@@ -111,6 +111,78 @@ test('a request is checked: a known tier, one prompt per run, and only the optio
   assert.throws(() => normalizeRigRequest({ ...request, tier: 'ultra' }), /Unknown RigScore tier/);
   assert.throws(() => normalizeRigRequest({ ...request, prompts: request.prompts.slice(1) }), /one prompt for each run/);
   assert.throws(() => normalizeRigRequest({ ...request, model: '../etc/passwd' }));
+});
+
+test("a plain model (tier 'model') is a request with no tier: no card-size rule, and it runs on a card too small for any tier", async () => {
+  const request = rigModelRequest('gemma3:12b', 'fit-model');
+  assert.equal(request.tier, 'model');
+  assert.equal(request.minVramGb, 0);
+  assert.equal(request.prompts.length, RIG_WORKLOAD.warmupRuns + RIG_WORKLOAD.measuredRuns, "the app's workload, prompt for prompt");
+  assert.deepEqual(request.prompts, rigRunRequest(light, 'x').prompts);
+  // However the caller fills in the size rule, a model has none.
+  const plan = normalizeRigRequest({ ...request, minVramGb: 24 });
+  assert.deepEqual([plan.tier, plan.model, plan.minVramGb], ['model', 'gemma3:12b', 0]);
+  assert.throws(() => normalizeRigRequest({ ...request, model: 'a b' }), /unsupported characters|not valid/);
+  assert.throws(() => normalizeRigRequest({ ...request, tier: 'modle' }), /Unknown RigScore tier/);
+
+  const ollama = fakeOllama({ installed: ['gemma3:12b'], generate: (_body, index) => reply(41, 1850, index === 0 ? 1.8 : 0.02) });
+  const answer = await run(ollama, { request, readMachine: async () => ({ ...machine, vramGb: 0, isUnifiedMemory: false }) });
+  assert.equal(answer.status, 'done', "a 0 GB card is Ollama's to answer for, not the runner's");
+  assert.equal(ollama.generates().length, 4);
+  assert.deepEqual(ollama.unloads, ['gemma3:12b']);
+  const outcome = assembleModelResult('gemma3:12b', answer);
+  assert.equal(outcome.kind, 'measured');
+  assert.equal(outcome.stamp.tier, 'model');
+  assert.equal(Math.round(outcome.measure.decodeTps), 41);
+  assert.equal(outcome.measure.loadSeconds, 1.8, 'the cold load, as for a tier');
+  // A stop says "model" for one, and "tier" for a tier.
+  assert.equal(assembleModelResult('gemma3:12b', { status: 'stopped' }).message, 'Stopped. Nothing was saved for this model.');
+  assert.equal(assembleTierResult(light, { status: 'stopped' }, 'x').message, 'Stopped. Nothing was saved for this tier.');
+  // Not installed: no size to quote for a model that is not a tier.
+  assert.equal(assembleModelResult('gemma3:12b', { status: 'not-installed' }).message, 'gemma3:12b is not installed.');
+  // Another program has a model loaded: said without "waits", since nothing waits.
+  assert.doesNotMatch(assembleModelResult('gemma3:12b', { status: 'busy', loadedModels: ['mistral:7b'] }).message, /waits/);
+});
+
+test('unloadOllamaModel asks for keep_alive 0 and says whether the model left: true, false, or an error', async () => {
+  const calls = [];
+  const listing = (names) => ({ models: names.map((name) => ({ name })) });
+  const make = (ps, fail = false) => async (url, options = {}) => {
+    const path = new URL(url).pathname;
+    calls.push({ path, body: options.body ? JSON.parse(options.body) : null });
+    if (path === '/api/generate' && fail) throw new Error('connection refused');
+    return path === '/api/ps' ? ps() : {};
+  };
+
+  // Gone on the first look: true.
+  calls.length = 0;
+  assert.equal(await unloadOllamaModel({ fetchJson: make(() => listing([])), baseUrl: 'http://x', model: 'qwen3:8b' }), true);
+  assert.deepEqual(calls[0], { path: '/api/generate', body: { model: 'qwen3:8b', keep_alive: 0 } });
+  assert.deepEqual(calls.map((call) => call.path), ['/api/generate', '/api/ps']);
+
+  // Gone after a few looks: true, having asked once.
+  calls.length = 0;
+  let looks = 0;
+  assert.equal(await unloadOllamaModel({ fetchJson: make(() => listing(++looks < 3 ? ['qwen3:8b'] : [])), baseUrl: 'http://x', model: 'qwen3:8b', pollMs: 5 }), true);
+  assert.equal(calls.filter((call) => call.path === '/api/generate').length, 1);
+  assert.equal(calls.filter((call) => call.path === '/api/ps').length, 3);
+
+  // Another model is listed, not this one: gone.
+  assert.equal(await unloadOllamaModel({ fetchJson: make(() => listing(['mistral:7b'])), baseUrl: 'http://x', model: 'qwen3:8b' }), true);
+
+  // Still listed when the time is up: false. Not a throw, since the unload itself worked.
+  const started = Date.now();
+  assert.equal(await unloadOllamaModel({ fetchJson: make(() => listing(['qwen3:8b'])), baseUrl: 'http://x', model: 'qwen3:8b', settleMs: 60, pollMs: 10 }), false);
+  assert.ok(Date.now() - started >= 50, 'it waited the time it was given');
+  // No time to wait: asked, and not looked at.
+  calls.length = 0;
+  assert.equal(await unloadOllamaModel({ fetchJson: make(() => listing(['qwen3:8b'])), baseUrl: 'http://x', model: 'qwen3:8b', settleMs: 0 }), false);
+  assert.deepEqual(calls.map((call) => call.path), ['/api/generate']);
+
+  // The request itself failing is an error, for the caller to decide about.
+  await assert.rejects(unloadOllamaModel({ fetchJson: make(() => listing([]), true), baseUrl: 'http://x', model: 'qwen3:8b' }), /connection refused/);
+  // A /api/ps that fails while waiting counts as "not listed": nothing says it is still there.
+  assert.equal(await unloadOllamaModel({ fetchJson: async (url) => { if (new URL(url).pathname === '/api/ps') throw new Error('timeout'); return {}; }, baseUrl: 'http://x', model: 'qwen3:8b', settleMs: 50, pollMs: 5 }), true);
 });
 
 test('a tier runs a warm-up then three timed runs, unloads after, and only the timed runs count', async () => {
