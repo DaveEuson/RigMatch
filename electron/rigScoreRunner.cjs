@@ -15,10 +15,15 @@
  * Pure apart from the calls it is handed (fetchJson, the machine reading, the
  * unload), so tests drive it with a fake Ollama.
  */
-const { buildBenchmarkGenerateBody, normalizePositiveNumber } = require('./benchmarkScoring.cjs');
+const { buildBenchmarkGenerateBody, isUnsupportedThinkError: thinkRefused, normalizePositiveNumber } = require('./ollamaRequest.cjs');
 const { assertValidModelName } = require('./security.cjs');
 
-const RIG_TIER_IDS = new Set(['light', 'standard', 'heavy', 'extreme']);
+/**
+ * The four tiers, and "model": any installed model on the same workload, which
+ * the command-line `rigmatch-fit --measure <model>` asks for. It has no tier,
+ * so no card-size rule and no points.
+ */
+const RIG_TIER_IDS = new Set(['light', 'standard', 'heavy', 'extreme', 'model']);
 /**
  * Long enough to carry the model from one run to the next, short enough that a
  * run cut off by a crash frees the card soon after. The runner unloads the
@@ -72,7 +77,8 @@ function normalizeRigRequest(request = {}) {
     prompts,
     warmupRuns,
     measuredRuns,
-    minVramGb: boundedNumber(request.minVramGb, 0, 1024, 0),
+    // A plain model has no tier, so no card-size rule: Ollama says if it does not fit.
+    minVramGb: request.tier === 'model' ? 0 : boundedNumber(request.minVramGb, 0, 1024, 0),
     options: {
       num_ctx: wholeNumber(options.num_ctx, 512, 32768, 4096),
       num_predict: wholeNumber(options.num_predict, 16, 2048, 256),
@@ -86,6 +92,30 @@ const seconds = (nanoseconds) => {
   const value = normalizePositiveNumber(nanoseconds);
   return value == null ? 0 : value / 1_000_000_000;
 };
+
+/**
+ * Ask Ollama to drop a model, then wait until /api/ps shows it gone: true when
+ * it went, false when it was still listed after `settleMs`. Throws only when
+ * the unload request itself fails.
+ *
+ * The request returns before the memory is released (measured at 107 ms to
+ * return and 485 ms until /api/ps showed the card free), so the next model
+ * would start loading beside the last one. Bounded, so a wedged unload delays
+ * a run by seconds rather than stalling it. The app's benchmark and speed test
+ * and the command-line speed test all unload this way.
+ */
+async function unloadOllamaModel({ fetchJson, baseUrl, model, settleMs = 3000, pollMs = 100 }) {
+  await fetchJson(`${baseUrl}/api/generate`, { method: 'POST', body: JSON.stringify({ model, keep_alive: 0 }) }, 8000);
+  const deadline = Date.now() + settleMs;
+  while (Date.now() < deadline) {
+    const ps = await fetchJson(`${baseUrl}/api/ps`, {}, 3000).catch(() => null);
+    const stillLoaded = Array.isArray(ps?.models)
+      && ps.models.some((entry) => entry?.name === model || entry?.model === model);
+    if (!stillLoaded) return true;
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+  return false;
+}
 
 /** One reply's timings, in the shape src/lib/rigScore.ts measures (RigRun). */
 function readRigRun(reply = {}) {
@@ -167,7 +197,7 @@ async function runRigTier({
   readMachine,
   unloadModel,
   beforeRun = async () => {},
-  isUnsupportedThinkError = () => false,
+  isUnsupportedThinkError = thinkRefused,
   signal,
   onProgress = () => {},
   now = () => Date.now(),
@@ -286,4 +316,5 @@ module.exports = {
   isOutOfMemory,
   sharedWith,
   runRigTier,
+  unloadOllamaModel,
 };

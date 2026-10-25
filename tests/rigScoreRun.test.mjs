@@ -166,6 +166,17 @@ test('the headline and its speed band are the Standard tier; a Light result alon
   assert.equal(both.band.id, 'fast');
 });
 
+test("the headline works on anything with a tier and a measure, so the command line uses the app's own rule", () => {
+  const at = (id, decodeTps) => ({ tier: id, measure: { decodeTps }, extra: `${id} line` });
+  // Standard when it ran, whatever else did.
+  const both = rigHeadline({ light: at('light', 150), standard: at('standard', 66), heavy: at('heavy', 40) });
+  assert.deepEqual([both.result.extra, both.isHeadlineTier, both.band.id], ['standard line', true, 'excellent']);
+  // A card that cannot hold Standard: the first tier that ran, with no band.
+  const small = rigHeadline({ light: at('light', 150), heavy: at('heavy', 40) });
+  assert.deepEqual([small.result.extra, small.isHeadlineTier, small.band], ['light line', false, null]);
+  assert.deepEqual(rigHeadline({}), { result: null, isHeadlineTier: false, band: null });
+});
+
 test('the reference day is written as a day, and not moved a day west of Greenwich', () => {
   const zone = process.env.TZ;
   process.env.TZ = 'America/Los_Angeles';
