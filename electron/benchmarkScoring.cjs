@@ -1,19 +1,10 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 const { findAgentTask } = require('./agentTools.cjs');
 const { checkDrawing } = require('./drawingRound.cjs');
+// Shared with the speed test's runner, which must not carry this file's scoring.
+const { buildBenchmarkGenerateBody, isUnsupportedThinkError, normalizePositiveNumber } = require('./ollamaRequest.cjs');
 
 const BENCHMARK_THINK_DISABLED = true;
-
-function buildBenchmarkGenerateBody({ model, prompt, keepAlive, options }) {
-  return {
-    model,
-    prompt,
-    stream: false,
-    keep_alive: keepAlive,
-    think: false,
-    options,
-  };
-}
 
 /**
  * The one coding question this scorer knows the answer to.
@@ -294,27 +285,6 @@ function isStableBenchmarkRun(result) {
   if (!reason || reason === 'complete' || reason === 'stop') return true;
 
   return !/(?:length|timeout|error|cancel|abort|fail)/.test(reason);
-}
-
-/**
- * An Ollama too old for the `think` switch refuses the whole request with an
- * error naming it. Callers ask again without it. Shared by the main process
- * and the command-line speed test (cli/), which both send think:false.
- */
-function isUnsupportedThinkError(error) {
-  const message = String(error?.message || error || 'Unknown error').toLowerCase();
-  return message.includes('think')
-    && (
-      message.includes('unknown')
-      || message.includes('unsupported')
-      || message.includes('invalid')
-      || message.includes('unrecognized')
-    );
-}
-
-function normalizePositiveNumber(value) {
-  const numberValue = Number(value);
-  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
 }
 
 function durationNsToMs(value) {

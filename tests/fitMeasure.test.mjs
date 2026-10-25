@@ -192,7 +192,7 @@ test("the command shares the app's runner and unload, and Ctrl+C stops the run r
   assert.match(measure, /import runner from '\.\.\/electron\/rigScoreRunner\.cjs';/);
   assert.match(main, /const \{ runRigTier, unloadOllamaModel \} = require\('\.\/rigScoreRunner\.cjs'\);/);
   assert.match(main, /if \(await unloadOllamaModel\(\{ fetchJson, baseUrl, model, settleMs: UNLOAD_SETTLE_TIMEOUT_MS \}\)\) return;/);
-  assert.doesNotMatch(main, /^function isUnsupportedThinkError/m, 'the think check lives in benchmarkScoring.cjs now');
+  assert.doesNotMatch(main, /^function isUnsupportedThinkError/m, 'the think check lives in ollamaRequest.cjs now');
   // The first Ctrl+C aborts the run, so the runner unloads on its way out; a second one leaves.
   assert.match(entry, /process\.on\('SIGINT', \(\) => \{\n\s*interrupts \+= 1;\n\s*if \(interrupts > 1\) process\.exit\(130\);\n\s*controller\.abort\(\);/);
   assert.match(entry, /signal: controller\.signal,/);

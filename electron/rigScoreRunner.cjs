@@ -15,7 +15,7 @@
  * Pure apart from the calls it is handed (fetchJson, the machine reading, the
  * unload), so tests drive it with a fake Ollama.
  */
-const { buildBenchmarkGenerateBody, isUnsupportedThinkError: thinkRefused, normalizePositiveNumber } = require('./benchmarkScoring.cjs');
+const { buildBenchmarkGenerateBody, isUnsupportedThinkError: thinkRefused, normalizePositiveNumber } = require('./ollamaRequest.cjs');
 const { assertValidModelName } = require('./security.cjs');
 
 /**

@@ -232,7 +232,13 @@ A      qwen3:8b          4.8 GB  ~63 tok/s  Sweet spot  ollama pull qwen3:8b
 
 `--measure` is the speed test from My PC › Speed score, run from a terminal through your own Ollama: Light (`llama3.2:3b`), Standard (`qwen3:8b`), Heavy (`qwen3:14b`) and, on a 24 GB card, Extreme (`qwen3:30b-a3b`). It prints each tier's writing and reading speed, points against the reference PC (1,000 is an RTX 4070 12 GB) and what the speed feels like, with the Standard tier as the headline. It never downloads a model (a missing one gets its `ollama pull` command), waits rather than share the card with another program's model, and unloads what it loaded. `--json` with it prints the measures and each one's stamp.
 
-RIGSCORE_README_OUTPUT
+```text
+Tier      Model          Writing    Reading      Points  Feels
+Light     llama3.2:3b    148 tok/s  8,947 tok/s  1,052   Excellent
+Standard  qwen3:8b       69 tok/s   3,910 tok/s  1,042   Excellent
+Heavy     qwen3:14b      40 tok/s   2,144 tok/s  1,043   Fast
+Extreme   qwen3:30b-a3b  Not run: needs 24 GB of graphics memory, and this PC has 12 GB.
+```
 
 A is the best pick for this computer and F will not fit. The grade weighs answer quality (by size and model family), estimated speed, and the room left in graphics memory. It is a different scale from the Match Score, which RigMatch measures by actually running the model. The bundled file runs on Node 20 or later on Windows, macOS and Linux; its only dependency is [systeminformation](https://www.npmjs.com/package/systeminformation).
 
