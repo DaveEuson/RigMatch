@@ -230,13 +230,13 @@ A      qwen3:8b          4.8 GB  ~63 tok/s  Sweet spot  ollama pull qwen3:8b
 | `--measure` | Measure the real speed with RigScore's test on the tier models you have (takes minutes) |
 | `--measure <model>` | Measure one installed model's real speed, beside its estimate |
 
-`--measure` is the speed test from My PC › Speed score, run from a terminal through your own Ollama: Light (`llama3.2:3b`), Standard (`qwen3:8b`), Heavy (`qwen3:14b`) and, on a 24 GB card, Extreme (`qwen3:30b-a3b`). It prints each tier's writing and reading speed, points against the reference PC (1,000 is an RTX 4070 12 GB) and what the speed feels like, with the Standard tier as the headline. It never downloads a model (a missing one gets its `ollama pull` command), waits rather than share the card with another program's model, warns when the card is already busy, and unloads what it loaded. `--json` with it prints the measures and each one's stamp.
+`--measure` is the speed test from My PC › Speed score, run from a terminal through your own Ollama: Light (`llama3.2:3b`), Standard (`qwen3:8b`), Heavy (`qwen3:14b`) and, on a 24 GB card, Extreme (`qwen3:30b-a3b`). It prints each tier's writing and reading speed, points against the reference PC (1,000 is an RTX 4070 12 GB) and what the speed feels like, with the Standard tier as the headline. It never downloads a model (a missing one gets its `ollama pull` command), refuses to start rather than share the card with another program's model, warns when an NVIDIA card is already busy, and unloads what it loaded. `--json` with it prints the measures and each one's stamp.
 
 ```text
-Tier      Model          Writing    Reading      Points  Feels
-Light     llama3.2:3b    151 tok/s  9,070 tok/s  1,067   Excellent
-Standard  qwen3:8b       70 tok/s   3,831 tok/s  1,039   Excellent
-Heavy     qwen3:14b      42 tok/s   2,202 tok/s  1,076   Fast
+Tier      Model          Writing    Reading       Points  Feels
+Light     llama3.2:3b    166 tok/s  10,085 tok/s  1,182   Excellent
+Standard  qwen3:8b       79 tok/s   4,358 tok/s   1,177   Excellent
+Heavy     qwen3:14b      46 tok/s   2,393 tok/s   1,180   Fast
 Extreme   qwen3:30b-a3b  Not run: needs 24 GB of graphics memory, and this PC has 12 GB.
 ```
 
