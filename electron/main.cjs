@@ -23,6 +23,7 @@ const {
   summarizeDoneReasons,
   summarizePromptStatuses,
   isStableBenchmarkRun,
+  isUnsupportedThinkError,
   normalizePositiveNumber,
   durationNsToMs,
   estimateTokens,
@@ -32,7 +33,7 @@ const {
 } = require('./benchmarkScoring.cjs');
 const { scoreQualityWithJudge } = require('./judgeScoring.cjs');
 const { DRAWING_ANSWER_TOKENS, DRAWING_TIMEOUT_MS, checkDrawing, drawingTimedOut, drawingJudgeMode, drawingNote } = require('./drawingRound.cjs');
-const { runRigTier } = require('./rigScoreRunner.cjs');
+const { runRigTier, unloadOllamaModel } = require('./rigScoreRunner.cjs');
 const security = require('./security.cjs');
 const { chatMessageText, chatHistory } = require('./chatDock.cjs');
 const gpuContention = require('./gpuContention.cjs');
@@ -3479,25 +3480,9 @@ function broadcastBenchmarkStatus() {
 async function unloadBenchmarkModel(baseUrl, model) {
   if (!baseUrl || !model) return;
   try {
-    await fetchJson(
-      `${baseUrl}/api/generate`,
-      { method: 'POST', body: JSON.stringify({ model, keep_alive: 0 }) },
-      8000,
-    );
-
-    // The request returns before the memory is actually released — measured at
-    // 107ms to return and 485ms until /api/ps showed the card free. Without
-    // waiting, the next contestant starts loading while the previous one is
-    // still releasing, which is a smaller version of the same unfairness.
-    // Bounded so a wedged unload delays a run by a second rather than stalling it.
-    const deadline = Date.now() + UNLOAD_SETTLE_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      const ps = await fetchJson(`${baseUrl}/api/ps`, {}, 3000).catch(() => null);
-      const stillLoaded = Array.isArray(ps?.models)
-        && ps.models.some((entry) => entry?.name === model || entry?.model === model);
-      if (!stillLoaded) return;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+    // keep_alive 0, then wait for /api/ps to show the card free
+    // (unloadOllamaModel, shared with the command-line speed test).
+    if (await unloadOllamaModel({ fetchJson, baseUrl, model, settleMs: UNLOAD_SETTLE_TIMEOUT_MS })) return;
     await appendAppLog({
       level: 'warn',
       source: 'benchmark',
@@ -4839,17 +4824,6 @@ async function lmStudioToolChat(baseUrl, model, messages, signal) {
   const reply = toolReplyFromOpenAi(await fetchJson(`${baseUrl.replace(/\/$/, '')}/chat/completions`, { method: 'POST', signal, body }, BENCHMARK_TIMEOUT_MS));
   if (!reply.eval_duration) reply.eval_duration = Math.max(1, Date.now() - startedAt) * 1e6;
   return reply;
-}
-
-function isUnsupportedThinkError(error) {
-  const message = getLogErrorMessage(error).toLowerCase();
-  return message.includes('think')
-    && (
-      message.includes('unknown')
-      || message.includes('unsupported')
-      || message.includes('invalid')
-      || message.includes('unrecognized')
-    );
 }
 
 function normalizeLocalProvider(provider, baseUrl = '') {

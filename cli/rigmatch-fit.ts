@@ -8,10 +8,13 @@
  *   npx rigmatch-fit --json           every model, for scripts
  *   npx rigmatch-fit --provider lmstudio
  *   npx rigmatch-fit --vram 16        grade for a 16 GB card instead of this one
+ *   npx rigmatch-fit --measure        RigScore's speed test on the tier models installed here
+ *   npx rigmatch-fit --measure qwen3.5:9b   one installed model's real speed, beside the estimate
  *
  * Reads the hardware the way the RigMatch app does (resolveGpuPool in
  * electron/systemProfile.cjs) and asks a local Ollama, if one answers, what is
  * installed. Nothing is downloaded and nothing is sent anywhere else.
+ * --measure runs models on that Ollama (measure.ts) and unloads them after.
  */
 
 import { execFile } from 'node:child_process';
@@ -20,23 +23,40 @@ import { parseArgs } from 'node:util';
 import si from 'systeminformation';
 import pkg from './package.json' with { type: 'json' };
 import systemProfile from '../electron/systemProfile.cjs';
+import security from '../electron/security.cjs';
 import { catalogRows, formatTable, ollamaUrl, rankModels, toJson, type FitHardware, type InstalledModel, type Provider } from './fitCheck.ts';
+import {
+  checkMeasureArgs, formatIntro, formatModelDone, formatModelIntro, formatModelReport, formatProgress, formatReport, formatTierDone,
+  measureModel, measureTiers, planTiers, runRequest, toMeasureJson, toModelJson, type MeasureDeps,
+} from './measure.ts';
 
 const HELP = `rigmatch-fit ${pkg.version}: which local AI models will run well on this computer
 
 Usage: rigmatch-fit [options]
+       rigmatch-fit --measure [model] [--json]
 
   --all               List every model, including ones that will not fit
   --installed         List only the models Ollama already has, graded
   --json              Print every model as JSON, for scripts (with --installed, only those)
   --provider <name>   ollama (default) or lmstudio: which download command to print
   --vram <GB>         Grade for a graphics card with this much memory instead of this one
+  --measure           Run RigScore's speed test on the tier models installed here:
+                      Light llama3.2:3b, Standard qwen3:8b, Heavy qwen3:14b, and
+                      Extreme qwen3:30b-a3b on a 24 GB card. Takes minutes.
+  --measure <model>   Measure one installed model's real speed with the same test
   -h, --help          Show this
   -v, --version       Show the version
 
 Fit grade A is the best pick for this computer and F will not fit. It weighs
 answer quality by size and family, the estimated speed, and the room left in
-graphics memory. The RigMatch app measures the real speed and quality.`;
+graphics memory.
+
+--measure runs the models on this computer's Ollama, so the speeds are real:
+writing and reading tokens a second, and points against the reference PC
+(1,000 is an RTX 4070 12 GB), comparable with the RigMatch app and other PCs.
+It never downloads a model: a missing one gets its "ollama pull" command. It
+will not run while another program has a model loaded, and unloads what it
+loaded when it finishes. Ctrl+C stops it and unloads.`;
 
 /** main.cjs's runCommand: { output, error } and never a throw. */
 function run(command: string, args: string[], timeoutMs: number): Promise<{ output: string; error: string | null }> {
@@ -93,14 +113,177 @@ async function installedOllamaModels(): Promise<InstalledModel[] | null> {
   }
 }
 
+/**
+ * A JSON request to the local Ollama, abortable by Ctrl+C and by a timeout.
+ * The shape rigScoreRunner.cjs expects of main.cjs's fetchJson: a stop says
+ * so ("Request stopped", AbortError), and Ollama's own error text is kept, so
+ * "requires more system memory" reads as too big.
+ */
+async function fetchJson(url: string, options: { method?: string; body?: string; signal?: AbortSignal } = {}, timeoutMs = 4000): Promise<unknown> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const stop = () => controller.abort();
+  options.signal?.addEventListener('abort', stop, { once: true });
+  if (options.signal?.aborted) controller.abort();
+  try {
+    const response = await fetch(url, {
+      method: options.method ?? 'GET',
+      body: options.body,
+      headers: options.body ? { 'Content-Type': 'application/json' } : undefined,
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      let detail = text.slice(0, 300);
+      try { detail = String((JSON.parse(text) as { error?: unknown }).error ?? detail); } catch { /* not JSON */ }
+      throw new Error(`${response.status} ${response.statusText} from Ollama: ${detail}`);
+    }
+    return text ? JSON.parse(text) : {};
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw Object.assign(new Error(options.signal?.aborted ? 'Request stopped' : `Ollama did not finish within ${Math.round(timeoutMs / 1000)} s.`), { name: 'AbortError' });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener('abort', stop);
+  }
+}
+
+/** The NVIDIA driver, for the stamp, read the way the app reads it (nvidia-smi's header). */
+async function driverVersion(gpu: string): Promise<string | undefined> {
+  if (!/nvidia/i.test(gpu)) return undefined;
+  const { output } = await run('nvidia-smi', [], 3500);
+  return systemProfile.parseNvidiaSmiHeader(output).driverVersion ?? undefined;
+}
+
+/**
+ * --measure: the speed test. Ollama on this computer only, since another
+ * computer's card cannot be read and its score would carry the wrong stamp.
+ * Refuses while another program has a model loaded, and never unloads it.
+ */
+async function measureMain(model: string | undefined, json: boolean): Promise<number> {
+  const baseUrl = ollamaUrl();
+  try {
+    security.assertLocalhostUrl(baseUrl);
+  } catch {
+    throw new Error(`--measure runs on this computer's Ollama only, and OLLAMA_HOST points to ${baseUrl}. RigMatch cannot read another computer's graphics card, so its numbers would carry the wrong card.`);
+  }
+  if (model !== undefined) {
+    try { security.assertValidModelName(model); } catch { throw new Error(`"${model}" is not a model name Ollama uses, such as qwen3:8b.`); }
+  }
+  const installed = await installedOllamaModels();
+  if (installed === null) throw new Error(`Ollama did not answer at ${baseUrl}. --measure runs the models on it, so start Ollama and try again.`);
+  const loaded = ((await fetchJson(`${baseUrl}/api/ps`, {}, 3000)) as { models?: Array<{ name?: string }> }).models ?? [];
+  if (loaded.length) {
+    const names = loaded.map((entry) => entry.name).filter(Boolean).join(', ');
+    throw new Error(`Ollama has ${names} loaded by another program. It shares the graphics card and would slow the test, so rigmatch-fit leaves it alone. Ollama lets an idle model go after about five minutes; close what is using it or wait, then run again.`);
+  }
+
+  const hardware = await detectHardware(undefined);
+  const names = installed.map((entry) => entry.name);
+  const ranked = rankModels(catalogRows(), hardware, { installed });
+  const estimates = new Map(ranked.map((entry) => [entry.row.name, entry.grade.tokensPerSecond ?? null] as const));
+  const show = Boolean(process.stdout.isTTY) && !json;
+  const columns = process.stdout.isTTY ? process.stdout.columns : undefined;
+  // Who sees the progress: stdout in a terminal, as part of the show; stderr
+  // otherwise, so piped output and --json stay clean.
+  const say = (text: string) => (show ? process.stdout : process.stderr).write(`${text}\n`);
+  const live = show ? process.stdout : process.stderr;
+  const rewrite = Boolean(live.isTTY);
+  let lastLine = '';
+  const progress = (text: string) => {
+    if (text === lastLine) return;
+    lastLine = text;
+    if (rewrite) live.write(`\r${text}${' '.repeat(Math.max(0, (live.columns ?? 80) - text.length - 1))}`);
+    else live.write(`${text}\n`);
+  };
+  const endProgress = (text: string) => {
+    if (rewrite) live.write(`\r${text}${' '.repeat(Math.max(0, (live.columns ?? 80) - text.length - 1))}\n`);
+    else live.write(`${text}\n`);
+    lastLine = '';
+  };
+
+  // Ctrl+C: stop the run in flight; the runner unloads the model on its way
+  // out. A second Ctrl+C leaves at once.
+  const controller = new AbortController();
+  let interrupts = 0;
+  process.on('SIGINT', () => {
+    interrupts += 1;
+    if (interrupts > 1) process.exit(130);
+    controller.abort();
+    live.write(`${rewrite ? '\n' : ''}Stopping: unloading the model...\n`);
+  });
+
+  const driver = await driverVersion(hardware.gpu);
+  const deps: MeasureDeps = {
+    baseUrl,
+    fetchJson,
+    signal: controller.signal,
+    readMachine: async () => ({
+      gpu: hardware.gpu,
+      vramGb: hardware.vramGb,
+      isUnifiedMemory: hardware.unifiedMemory,
+      driverVersion: driver,
+      appVersion: `rigmatch-fit ${pkg.version}`,
+    }),
+  };
+
+  // In a terminal the report follows the intro on screen; piped, the intro
+  // went to stderr, so the report carries the title and the card itself.
+  const header = show ? undefined : hardware;
+
+  if (model !== undefined) {
+    // "gemma3" is what Ollama lists as gemma3:latest.
+    const name = names.includes(model) || model.includes(':') ? model : `${model}:latest`;
+    const target = { label: name, model: name };
+    const ranked = rankedFor(name);
+    // Not installed: nothing to time, so no intro; the report says how to get it.
+    if (names.includes(name)) say(formatModelIntro(name, hardware, { estimateTps: ranked?.grade.tokensPerSecond ?? null, sizeGb: ranked?.row.sizeGb ?? null }, { show, columns }));
+    const report = await measureModel(name, {
+      installed: names,
+      hardware,
+      estimateTps: ranked?.grade.tokensPerSecond ?? null,
+      run: (request) => runRequest(deps, request, (phase) => progress(formatProgress(target, phase))),
+    });
+    if (lastLine) endProgress(formatModelDone(report));
+    if (!json) say('');
+    console.log(json ? JSON.stringify(toModelJson(report, hardware, pkg.version), null, 2) : formatModelReport(report, { show, columns, header }));
+    return controller.signal.aborted ? 130 : report.status === 'measured' ? 0 : 1;
+  }
+
+  const plan = planTiers(hardware, names, estimates);
+  say(formatIntro(hardware, plan, { show, columns }));
+  if (!plan.some((entry) => entry.kind === 'run')) {
+    const report = await measureTiers(plan, async () => ({ status: 'stopped' }));
+    console.log(json ? JSON.stringify(toMeasureJson(report, hardware, pkg.version), null, 2) : show ? '' : formatReport(report, { columns, header }));
+    return 1;
+  }
+  if (!show) say('');
+  const report = await measureTiers(plan, (request, tier) => runRequest(deps, request, (phase) => progress(formatProgress(tier, phase))), {
+    onTierStart: (tier) => progress(formatProgress(tier, { phase: 'checking' })),
+    onTierEnd: (line) => endProgress(formatTierDone(line)),
+  });
+  if (!json) say('');
+  console.log(json ? JSON.stringify(toMeasureJson(report, hardware, pkg.version), null, 2) : formatReport(report, { show, columns, header }));
+  if (report.stopped || controller.signal.aborted) return 130;
+  return report.busy || report.lines.some((line) => line.status === 'failed') ? 1 : 0;
+
+  function rankedFor(name: string) {
+    return ranked.find((entry) => entry.row.name === name || entry.row.aliases?.includes(name));
+  }
+}
+
 async function main(): Promise<number> {
-  const { values } = parseArgs({
+  const { values, positionals } = parseArgs({
+    allowPositionals: true,
     options: {
       all: { type: 'boolean', default: false },
       installed: { type: 'boolean', default: false },
       json: { type: 'boolean', default: false },
       provider: { type: 'string', default: 'ollama' },
       vram: { type: 'string' },
+      measure: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
     },
@@ -113,6 +296,8 @@ async function main(): Promise<number> {
     console.log(pkg.version);
     return 0;
   }
+  const measuring = checkMeasureArgs(values, positionals);
+  if (measuring) return measureMain(measuring.model, values.json);
   const providerName = values.provider.toLowerCase().replace(/[\s_-]/g, '');
   if (providerName !== 'ollama' && providerName !== 'lmstudio') {
     throw new Error(`--provider is ollama or lmstudio, not "${values.provider}".`);

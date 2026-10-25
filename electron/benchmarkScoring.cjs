@@ -296,6 +296,22 @@ function isStableBenchmarkRun(result) {
   return !/(?:length|timeout|error|cancel|abort|fail)/.test(reason);
 }
 
+/**
+ * An Ollama too old for the `think` switch refuses the whole request with an
+ * error naming it. Callers ask again without it. Shared by the main process
+ * and the command-line speed test (cli/), which both send think:false.
+ */
+function isUnsupportedThinkError(error) {
+  const message = String(error?.message || error || 'Unknown error').toLowerCase();
+  return message.includes('think')
+    && (
+      message.includes('unknown')
+      || message.includes('unsupported')
+      || message.includes('invalid')
+      || message.includes('unrecognized')
+    );
+}
+
 function normalizePositiveNumber(value) {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
@@ -343,6 +359,7 @@ module.exports = {
   summarizeDoneReasons,
   summarizePromptStatuses,
   isStableBenchmarkRun,
+  isUnsupportedThinkError,
   normalizePositiveNumber,
   durationNsToMs,
   estimateTokens,

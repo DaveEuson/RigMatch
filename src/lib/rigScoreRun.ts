@@ -24,10 +24,10 @@ import {
 } from './rigScore.ts';
 import { rigPrompt } from './rigScorePassage.ts';
 
-/** What the screen sends the runner for one tier. */
+/** What the screen sends the runner for one tier ("model": any installed model, no tier). */
 export type RigRunRequest = {
   progressId: string;
-  tier: RigTierId;
+  tier: RigTierId | 'model';
   model: string;
   /** The runner refuses a card below this, with a fresh reading. */
   minVramGb: number;
@@ -94,12 +94,25 @@ export type RigOutcome =
 
 /** The request for one tier: the fixed workload, a prompt per run. */
 export function rigRunRequest(tier: RigTier, progressId: string): RigRunRequest {
+  return workloadRequest(tier.id, tier.model, tier.minVramGb, progressId);
+}
+
+/**
+ * The same workload on any installed model, for `rigmatch-fit --measure
+ * <model>`: its real speed beside the estimate. Not a tier, so the runner
+ * makes no card-size check and the result has no points.
+ */
+export function rigModelRequest(model: string, progressId: string): RigRunRequest {
+  return workloadRequest('model', model, 0, progressId);
+}
+
+function workloadRequest(tier: RigRunRequest['tier'], model: string, minVramGb: number, progressId: string): RigRunRequest {
   const runs = RIG_WORKLOAD.warmupRuns + RIG_WORKLOAD.measuredRuns;
   return {
     progressId,
-    tier: tier.id,
-    model: tier.model,
-    minVramGb: tier.minVramGb,
+    tier,
+    model,
+    minVramGb,
     prompts: Array.from({ length: runs }, (_, index) => rigPrompt(index + 1)),
     options: {
       num_ctx: RIG_WORKLOAD.numCtx,
@@ -158,17 +171,25 @@ function listNames(names: string[]): string {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
-/** What the runner's answer means, in the screen's words; a measure and a stamp when it ran. */
-export function assembleTierResult(tier: RigTier, reply: RigRunReply, completedAt: string): RigOutcome {
+/** What is measured: a tier, or any installed model (no tier, so no size rule or points). */
+type RigTarget = { label: string; model: string; sizeGb?: number; minVramGb?: number };
+type RigFailure = { kind: 'not-installed' | 'too-big' | 'busy' | 'stopped' | 'failed'; message: string };
+type RigDoneReply = Extract<RigRunReply, { status: 'done' }>;
+
+/** Every answer but a finished run, in the screen's words. */
+function failureFor(target: RigTarget, reply: Exclude<RigRunReply, RigDoneReply>): RigFailure {
   switch (reply.status) {
     case 'not-installed':
-      return { kind: 'not-installed', message: `${tier.model} is not installed. It is a ${formatGb(tier.sizeGb)} download.` };
+      return {
+        kind: 'not-installed',
+        message: `${target.model} is not installed.${target.sizeGb ? ` It is a ${formatGb(target.sizeGb)} download.` : ''}`,
+      };
     case 'too-big': {
-      if (reply.error) return { kind: 'too-big', message: `Not run: ${tier.model} did not fit in this PC's memory.` };
+      if (reply.error || !target.minVramGb) return { kind: 'too-big', message: `Not run: ${target.model} did not fit in this PC's memory.` };
       const have = reply.machine?.vramGb;
       return {
         kind: 'too-big',
-        message: `Not run: the ${tier.label} tier needs ${tier.minVramGb} GB of graphics memory${have ? `, and this PC has ${formatGb(have)}` : ''}.`,
+        message: `Not run: the ${target.label} tier needs ${target.minVramGb} GB of graphics memory${have ? `, and this PC has ${formatGb(have)}` : ''}.`,
       };
     }
     case 'busy':
@@ -179,7 +200,7 @@ export function assembleTierResult(tier: RigTier, reply: RigRunReply, completedA
     case 'shared': {
       const who = [
         ...reply.loadedModels,
-        ...(reply.sameModel ? [`another program's use of ${tier.model}`] : []),
+        ...(reply.sameModel ? [`another program's use of ${target.model}`] : []),
       ];
       return {
         kind: 'busy',
@@ -190,39 +211,61 @@ export function assembleTierResult(tier: RigTier, reply: RigRunReply, completedA
       return { kind: 'stopped', message: 'Stopped. Nothing was saved for this tier.' };
     case 'failed':
       return { kind: 'failed', message: `The test did not finish: ${reply.error}` };
-    case 'done': {
-      // The load is the warm-up's: the timed runs find the model already loaded.
-      const measure = measureTier(reply.runs, RIG_WORKLOAD.measuredRuns, reply.coldLoadSeconds ?? 0);
-      if (!measure) {
-        return {
-          kind: 'failed',
-          message: `Fewer than ${RIG_WORKLOAD.measuredRuns} runs gave usable timings, so there is no score. The model stopped too early or Ollama reported no times.`,
-        };
-      }
-      const stamp: RigStamp = {
-        tier: tier.id,
-        model: tier.model,
-        modelDigest: reply.modelDigest,
-        quantization: reply.quantization,
-        workloadVersion: RIG_WORKLOAD.version,
-        numCtx: RIG_WORKLOAD.numCtx,
-        ollamaVersion: reply.ollamaVersion,
-        driverVersion: reply.machine.driverVersion,
-        gpu: reply.machine.gpu,
-        vramGb: reply.machine.vramGb,
-        appVersion: reply.machine.appVersion,
-      };
-      return {
-        kind: 'measured',
-        result: {
-          id: `${tier.id}-${completedAt}`,
-          completedAt,
-          tier: tier.id,
-          measure,
-          stamp,
-          gpuShare: reply.gpuShare,
-        },
-      };
-    }
   }
+}
+
+/** A finished run's measure, or why its timings are no evidence. */
+function measureOf(reply: RigDoneReply): TierMeasure | RigFailure {
+  // The load is the warm-up's: the timed runs find the model already loaded.
+  return measureTier(reply.runs, RIG_WORKLOAD.measuredRuns, reply.coldLoadSeconds ?? 0) ?? {
+    kind: 'failed',
+    message: `Fewer than ${RIG_WORKLOAD.measuredRuns} runs gave usable timings, so there is no score. The model stopped too early or Ollama reported no times.`,
+  };
+}
+
+/** The stamp's parts that do not name a tier. */
+function stampParts(model: string, reply: RigDoneReply): Omit<RigStamp, 'tier'> {
+  return {
+    model,
+    modelDigest: reply.modelDigest,
+    quantization: reply.quantization,
+    workloadVersion: RIG_WORKLOAD.version,
+    numCtx: RIG_WORKLOAD.numCtx,
+    ollamaVersion: reply.ollamaVersion,
+    driverVersion: reply.machine.driverVersion,
+    gpu: reply.machine.gpu,
+    vramGb: reply.machine.vramGb,
+    appVersion: reply.machine.appVersion,
+  };
+}
+
+/** What the runner's answer means, in the screen's words; a measure and a stamp when it ran. */
+export function assembleTierResult(tier: RigTier, reply: RigRunReply, completedAt: string): RigOutcome {
+  if (reply.status !== 'done') return failureFor(tier, reply);
+  const measure = measureOf(reply);
+  if ('kind' in measure) return measure;
+  return {
+    kind: 'measured',
+    result: {
+      id: `${tier.id}-${completedAt}`,
+      completedAt,
+      tier: tier.id,
+      measure,
+      stamp: { tier: tier.id, ...stampParts(tier.model, reply) },
+      gpuShare: reply.gpuShare,
+    },
+  };
+}
+
+/** Any installed model's measure (rigModelRequest): the same workload, a stamp with no tier. */
+export type RigModelStamp = Omit<RigStamp, 'tier'> & { tier: 'model' };
+export type RigModelOutcome =
+  | { kind: 'measured'; measure: TierMeasure; stamp: RigModelStamp; gpuShare: number | null }
+  | RigFailure;
+
+export function assembleModelResult(model: string, reply: RigRunReply): RigModelOutcome {
+  if (reply.status !== 'done') return failureFor({ label: model, model }, reply);
+  const measure = measureOf(reply);
+  if ('kind' in measure) return measure;
+  return { kind: 'measured', measure, stamp: { tier: 'model', ...stampParts(model, reply) }, gpuShare: reply.gpuShare };
 }
