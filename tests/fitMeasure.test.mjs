@@ -231,8 +231,8 @@ test('a speed far below the grade\'s estimate is said, with its reason, on the r
   assert.equal(farBelowEstimate({ decodeTps: 2.4 }, 35), true);
   assert.equal(farBelowEstimate({ decodeTps: 17 }, 35), true, 'under half');
   assert.equal(farBelowEstimate({ decodeTps: 18 }, 35), false);
-  // Measured against the estimates on the reference card: 0.9 to 1.3 times, never flagged.
-  for (const [measured, estimate] of [[148, 158], [66, 61], [40, 35], [60, 49]]) assert.equal(farBelowEstimate({ decodeTps: measured }, estimate), false, `${measured} against ${estimate}`);
+  // Measured against the estimates on the reference card: 0.9 to 1.5 times, never flagged.
+  for (const [measured, estimate] of [[148, 158], [66, 61], [40, 35], [60, 49], [71, 49]]) assert.equal(farBelowEstimate({ decodeTps: measured }, estimate), false, `${measured} against ${estimate}`);
   assert.equal(farBelowEstimate({ decodeTps: 2 }, null), false, 'no estimate, nothing to compare with');
   assert.equal(farBelowEstimate({ decodeTps: 2 }, 0), false);
 

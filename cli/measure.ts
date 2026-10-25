@@ -162,8 +162,8 @@ export async function checkCard(
 
 /**
  * A speed far below the grade's own estimate for this model on this card. The
- * grade is a guess, and normally within about 30% either way (measured here:
- * 0.9 to 1.3 times it), so under half means something other than the model is
+ * grade is a guess, and a measured speed runs from a little under it to well
+ * over (here 0.9 to 1.5 times it), so under half means something other than the model is
  * in the way: another program on the card, or a model that did not sit wholly
  * on it. Said on the result, because the points read as a slow PC otherwise.
  */
