@@ -8,10 +8,13 @@
  *   npx rigmatch-fit --json           every model, for scripts
  *   npx rigmatch-fit --provider lmstudio
  *   npx rigmatch-fit --vram 16        grade for a 16 GB card instead of this one
+ *   npx rigmatch-fit --measure        RigScore's speed test on the tier models installed here
+ *   npx rigmatch-fit --measure qwen3.5:9b   one installed model's real speed, beside the estimate
  *
  * Reads the hardware the way the RigMatch app does (resolveGpuPool in
  * electron/systemProfile.cjs) and asks a local Ollama, if one answers, what is
  * installed. Nothing is downloaded and nothing is sent anywhere else.
+ * --measure runs models on that Ollama (measure.ts) and unloads them after.
  */
 
 import { execFile } from 'node:child_process';
@@ -20,23 +23,40 @@ import { parseArgs } from 'node:util';
 import si from 'systeminformation';
 import pkg from './package.json' with { type: 'json' };
 import systemProfile from '../electron/systemProfile.cjs';
-import { catalogRows, formatTable, ollamaUrl, rankModels, toJson, type FitHardware, type InstalledModel, type Provider } from './fitCheck.ts';
+import { catalogRows, formatTable, ollamaUrl, rankModels, toJson, type FitHardware, type Provider } from './fitCheck.ts';
+import { checkMeasureArgs } from './measure.ts';
+import { runMeasureCommand } from './measureCommand.ts';
+import { fetchJson, installedOllamaModels, toGb } from './ollamaHttp.ts';
 
 const HELP = `rigmatch-fit ${pkg.version}: which local AI models will run well on this computer
 
 Usage: rigmatch-fit [options]
+       rigmatch-fit --measure [model] [--json]
 
   --all               List every model, including ones that will not fit
   --installed         List only the models Ollama already has, graded
   --json              Print every model as JSON, for scripts (with --installed, only those)
   --provider <name>   ollama (default) or lmstudio: which download command to print
   --vram <GB>         Grade for a graphics card with this much memory instead of this one
+  --measure           Run RigScore's speed test on the tier models installed here:
+                      Light llama3.2:3b, Standard qwen3:8b, Heavy qwen3:14b, and
+                      Extreme qwen3:30b-a3b on a 24 GB card. Takes minutes.
+  --measure <model>   Measure one installed model's real speed with the same test
   -h, --help          Show this
   -v, --version       Show the version
 
 Fit grade A is the best pick for this computer and F will not fit. It weighs
 answer quality by size and family, the estimated speed, and the room left in
-graphics memory. The RigMatch app measures the real speed and quality.`;
+graphics memory.
+
+--measure runs the models on this computer's Ollama, so the speeds are real:
+writing and reading tokens a second, and points against the reference PC
+(1,000 is an RTX 4070 12 GB), comparable with the RigMatch app and other PCs.
+It never downloads a model: a missing one gets its "ollama pull" command. It
+will not run while another program has a model loaded, warns when something
+else is using an NVIDIA card, and unloads what it loaded when it finishes.
+Ctrl+C stops it and unloads. It runs local models only: a cloud model runs
+on Ollama's servers, so it is refused.`;
 
 /** main.cjs's runCommand: { output, error } and never a throw. */
 function run(command: string, args: string[], timeoutMs: number): Promise<{ output: string; error: string | null }> {
@@ -46,8 +66,6 @@ function run(command: string, args: string[], timeoutMs: number): Promise<{ outp
     });
   });
 }
-
-const toGb = (bytes: number) => Math.round((bytes / 1024 ** 3) * 10) / 10;
 
 async function detectHardware(vramFlag: string | undefined): Promise<FitHardware> {
   const common = { platform: process.platform, arch: os.arch() };
@@ -79,28 +97,23 @@ async function detectHardware(vramFlag: string | undefined): Promise<FitHardware
   };
 }
 
-/** The installed models, or null when Ollama does not answer within a second and a half. */
-async function installedOllamaModels(): Promise<InstalledModel[] | null> {
-  try {
-    const response = await fetch(`${ollamaUrl()}/api/tags`, { signal: AbortSignal.timeout(1500) });
-    if (!response.ok) return null;
-    const body = await response.json() as { models?: Array<{ name?: string; size?: number; details?: { parameter_size?: string } }> };
-    return (body.models ?? [])
-      .filter((model) => typeof model.name === 'string' && model.name)
-      .map((model) => ({ name: String(model.name), sizeGb: toGb(Number(model.size) || 0), params: model.details?.parameter_size }));
-  } catch {
-    return null;
-  }
+/** The NVIDIA driver, for the stamp, read the way the app reads it (nvidia-smi's header). */
+async function driverVersion(gpu: string): Promise<string | undefined> {
+  if (!/nvidia/i.test(gpu)) return undefined;
+  const { output } = await run('nvidia-smi', [], 3500);
+  return systemProfile.parseNvidiaSmiHeader(output).driverVersion ?? undefined;
 }
 
 async function main(): Promise<number> {
-  const { values } = parseArgs({
+  const { values, positionals } = parseArgs({
+    allowPositionals: true,
     options: {
       all: { type: 'boolean', default: false },
       installed: { type: 'boolean', default: false },
       json: { type: 'boolean', default: false },
       provider: { type: 'string', default: 'ollama' },
       vram: { type: 'string' },
+      measure: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
     },
@@ -113,6 +126,22 @@ async function main(): Promise<number> {
     console.log(pkg.version);
     return 0;
   }
+  const measuring = checkMeasureArgs(values, positionals);
+  if (measuring) {
+    return runMeasureCommand({ model: measuring.model, json: values.json }, {
+      baseUrl: ollamaUrl(),
+      out: process.stdout,
+      err: process.stderr,
+      platform: process.platform,
+      version: pkg.version,
+      detectHardware: () => detectHardware(undefined),
+      driverVersion,
+      run,
+      fetchJson,
+      installedModels: installedOllamaModels,
+      interrupt: process,
+    });
+  }
   const providerName = values.provider.toLowerCase().replace(/[\s_-]/g, '');
   if (providerName !== 'ollama' && providerName !== 'lmstudio') {
     throw new Error(`--provider is ollama or lmstudio, not "${values.provider}".`);
@@ -124,7 +153,7 @@ async function main(): Promise<number> {
 
   const [hardware, installed] = await Promise.all([
     detectHardware(values.vram),
-    provider === 'ollama' ? installedOllamaModels() : Promise.resolve(null),
+    provider === 'ollama' ? installedOllamaModels(ollamaUrl()) : Promise.resolve(null),
   ]);
   const ollamaReachable = installed !== null;
   if (values.installed && !ollamaReachable) {

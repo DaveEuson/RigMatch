@@ -1,19 +1,10 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 const { findAgentTask } = require('./agentTools.cjs');
 const { checkDrawing } = require('./drawingRound.cjs');
+// Shared with the speed test's runner, which must not carry this file's scoring.
+const { buildBenchmarkGenerateBody, isUnsupportedThinkError, normalizePositiveNumber } = require('./ollamaRequest.cjs');
 
 const BENCHMARK_THINK_DISABLED = true;
-
-function buildBenchmarkGenerateBody({ model, prompt, keepAlive, options }) {
-  return {
-    model,
-    prompt,
-    stream: false,
-    keep_alive: keepAlive,
-    think: false,
-    options,
-  };
-}
 
 /**
  * The one coding question this scorer knows the answer to.
@@ -296,11 +287,6 @@ function isStableBenchmarkRun(result) {
   return !/(?:length|timeout|error|cancel|abort|fail)/.test(reason);
 }
 
-function normalizePositiveNumber(value) {
-  const numberValue = Number(value);
-  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
-}
-
 function durationNsToMs(value) {
   const numberValue = normalizePositiveNumber(value);
   return numberValue == null ? null : Math.round(numberValue / 1_000_000);
@@ -343,6 +329,7 @@ module.exports = {
   summarizeDoneReasons,
   summarizePromptStatuses,
   isStableBenchmarkRun,
+  isUnsupportedThinkError,
   normalizePositiveNumber,
   durationNsToMs,
   estimateTokens,

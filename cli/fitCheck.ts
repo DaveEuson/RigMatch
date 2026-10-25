@@ -37,7 +37,11 @@ export type FitHardware = {
 };
 
 /** What Ollama's /api/tags lists: sizes in GiB, as the app reads them. */
-export type InstalledModel = { name: string; sizeGb: number; params?: string };
+export type InstalledModel = {
+  name: string; sizeGb: number; params?: string;
+  /** One of Ollama's cloud models: listed here, but it runs on Ollama's servers, not on this computer. */
+  remote?: boolean;
+};
 
 /**
  * Where Ollama listens, read from OLLAMA_HOST the way Ollama's own client
@@ -204,7 +208,7 @@ const gb = (value: number) => `${Math.round(value * 10) / 10} GB`;
 const fitLabel = (grade: FitGrade) => grade.fit.label.replace(/\s*·.*$/, '');
 
 /** Words to lines no wider than the terminal. Unlimited when it is not a terminal. */
-function wrap(text: string, columns: number | undefined): string[] {
+export function wrap(text: string, columns: number | undefined): string[] {
   if (!columns || text.length <= columns) return [text];
   const lines: string[] = [];
   let line = '';
@@ -223,12 +227,18 @@ function wrap(text: string, columns: number | undefined): string[] {
  * The show's sign, bulbs and all, for people reading in a terminal. Plain
  * ASCII like everything else here, and 41 columns wide.
  */
-const MARQUEE_BORDER = `${'o-*-'.repeat(10)}o`;
-const MARQUEE = [
-  MARQUEE_BORDER,
-  ...['R I G M A T C H     fit check', 'Who will your PC go home with?'].map((text) => `|   ${pad(text, MARQUEE_BORDER.length - 5)}|`),
-  MARQUEE_BORDER,
-];
+export const MARQUEE_BORDER = `${'o-*-'.repeat(10)}o`;
+
+/** The sign with a show's name and its question: "fit check", or the speed test's. */
+export function marquee(title: string, question: string): string[] {
+  return [
+    MARQUEE_BORDER,
+    ...[`R I G M A T C H     ${title}`, question].map((text) => `|   ${pad(text, MARQUEE_BORDER.length - 5)}|`),
+    MARQUEE_BORDER,
+  ];
+}
+
+const MARQUEE = marquee('fit check', 'Who will your PC go home with?');
 
 /**
  * The card line, in plain ASCII. Windows PowerShell 5.1 reads a captured
