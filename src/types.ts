@@ -2,6 +2,7 @@
 import type { BenchmarkQuestionType } from './benchmarkSuite.ts';
 import type { TaskScores } from './lib/taskScores.ts';
 import type { HardwareFit } from './lib/modelCatalog.ts';
+import type { RigProgress, RigRunReply, RigRunRequest } from './lib/rigScoreRun.ts';
 
 export type SystemProfile = {
   hostname: string;
@@ -703,6 +704,10 @@ export type AgentArcadeApi = {
   reportDrawingPicture?: (result: { id: string; png: string | null }) => Promise<{ ok: boolean }>;
   getActiveBenchmark: () => Promise<BenchmarkStatus>;
   onBenchmarkStatus?: (callback: (status: BenchmarkStatus) => void) => () => void;
+  /** RigScore's speed test, one tier at a time (electron/rigScoreRunner.cjs). */
+  runRigScore?: (request: RigRunRequest) => Promise<RigRunReply>;
+  cancelRigScore?: (progressId: string) => Promise<void>;
+  onRigScoreProgress?: (callback: (update: RigProgress) => void) => () => void;
   onPullProgress?: (callback: (update: PullProgressUpdate) => void) => () => void;
   sendChat: (request: { model: string; message: string; baseUrl?: string; provider?: LocalModelProvider; images?: string[]; history?: ChatTurn[] }) => Promise<ChatResponse>;
   getLogs: (limit?: number) => Promise<AppLogResponse>;

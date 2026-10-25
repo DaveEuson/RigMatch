@@ -1,0 +1,140 @@
+/* RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE. */
+
+/* My PC › Speed score. One panel surface (the headline and its scale); the
+   tables, the stamp and the history sit on the page, as My PC's do. */
+
+/* Scrolls: .stage-content clips, so a page that does not scroll cannot be
+   read to the bottom. */
+.app-shell[data-ui-mode='advanced'] .panel.rigscore-page {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  overflow-y: auto;
+  padding-bottom: var(--s5);
+}
+
+.rigscore-notes:empty { display: none; }
+.rigscore-notes { display: grid; gap: var(--s1); margin: 0 var(--s5) var(--s3); }
+.rigscore-notes p { margin: 0; color: var(--text); font: 400 var(--fs-ui) / 1.45 var(--ui); }
+.rigscore-page > .gpu-contention-note { margin: 0 var(--s5) var(--s3); }
+
+/* The headline and the scale beside it -------------------------------------- */
+.rigscore-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: var(--s5);
+  margin: 0 var(--s5) var(--s3);
+  padding: var(--s5);
+  border-radius: var(--r-panel);
+  background: var(--panel);
+}
+.rigscore-headline { display: grid; align-content: start; gap: var(--s2); min-width: 0; }
+.rigscore-kicker { color: var(--muted); font: 400 var(--fs-ui) / 1.3 var(--ui); }
+.rigscore-number { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2); margin: 0; }
+/* The UI face, not the figure one: a monospaced comma takes a whole cell, and
+   "1,001" read as "1 , 001" at this size. */
+.rigscore-number strong { color: var(--text-strong); font: 700 64px / 1 var(--ui); font-variant-numeric: tabular-nums; }
+.rigscore-number span { color: var(--text); font: 400 var(--fs-body) / 1.2 var(--ui); }
+.rigscore-empty { margin: 0; color: var(--text-strong); font: 400 var(--fs-h2) / 1.2 var(--display); }
+.rigscore-band { margin: 0; color: var(--text-strong); font: 400 var(--fs-body) / 1.4 var(--ui); }
+.rigscore-band b { color: var(--gold); }
+.rigscore-sub { max-width: 60ch; margin: 0; color: var(--text); font: 400 var(--fs-ui) / 1.45 var(--ui); }
+
+.rigscore-scale { display: grid; align-content: start; margin: 0; padding: 0; list-style: none; }
+.rigscore-scale li {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 2px var(--s3);
+  padding: var(--s2) 0 var(--s2) var(--s3);
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid transparent;
+}
+.rigscore-scale li:last-child { border-bottom: 0; }
+.rigscore-scale li[aria-current='true'] { border-left-color: var(--gold); background: var(--panel-hover); }
+.rigscore-scale b { color: var(--text-strong); font: 700 var(--fs-ui) / 1.3 var(--ui); }
+.rigscore-scale span { color: var(--muted); font: 500 13px / 1.3 var(--figure); }
+.rigscore-scale em { grid-column: 2; color: var(--text); font: 400 var(--fs-ui) / 1.4 var(--ui); font-style: normal; }
+
+/* Tiers and past runs ----------------------------------------------------- */
+/* Fixed columns, so a long status wraps inside its own instead of pushing the
+   table past the window. App.css sets every cell to nowrap, with a border and a
+   clickable hover these rows do not have. */
+.rigscore-table {
+  width: calc(100% - 2 * var(--s5));
+  margin: 0 var(--s5) var(--s3);
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: var(--fs-ui);
+}
+.rigscore-table th,
+.rigscore-table td {
+  height: auto;
+  padding: var(--s2) var(--s3) var(--s2) 0;
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.rigscore-table th {
+  background: none;
+  color: var(--muted);
+  font: 400 var(--fs-ui) / 1.2 var(--ui);
+}
+.rigscore-table td {
+  color: var(--text-strong);
+  vertical-align: top;
+  line-height: 1.4;
+}
+.rigscore-table tbody tr { cursor: default; }
+.rigscore-table tbody tr:hover { background: none; }
+.rigscore-tiers th:nth-child(1) { width: 11%; }
+.rigscore-tiers th:nth-child(2) { width: 19%; }
+.rigscore-tiers th:nth-child(3) { width: 13%; }
+.rigscore-tiers th:nth-child(4) { width: 16%; }
+.rigscore-tiers th:nth-child(5) { width: 17%; }
+.rigscore-history th:nth-child(1) { width: 18%; }
+.rigscore-history th:nth-child(2) { width: 10%; }
+.rigscore-history th:nth-child(3) { width: 13%; }
+.rigscore-history th:nth-child(4) { width: 15%; }
+.rigscore-history th:nth-child(5) { width: 17%; }
+.rigscore-table td > small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font: 400 var(--fs-small) / 1.4 var(--ui);
+}
+.rigscore-table tr.running td { background: var(--panel-hover); }
+.rigscore-table .figure { font: 500 var(--fs-ui) / 1.4 var(--figure); }
+.rigscore-dim { color: var(--muted); }
+.rigscore-tiers td:first-child small { color: var(--gold); }
+.rigscore-status > span { color: var(--text); }
+.rigscore-status .rigscore-message { color: var(--text); }
+
+/* The stamp -------------------------------------------------------------- */
+.rigscore-stamp {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--s3) var(--s5);
+  margin: 0 var(--s5) var(--s3);
+}
+.rigscore-stamp div { display: grid; gap: 2px; min-width: 0; }
+.rigscore-stamp dt { color: var(--muted); font: 400 var(--fs-ui) / 1.3 var(--ui); }
+.rigscore-stamp dd { margin: 0; color: var(--text-strong); font: 500 var(--fs-ui) / 1.4 var(--figure); overflow-wrap: anywhere; }
+
+.rigscore-footnote { max-width: 90ch; margin: var(--s3) var(--s5) 0; color: var(--muted); font: 400 var(--fs-ui) / 1.5 var(--ui); }
+
+@media (max-width: 920px) {
+  .rigscore-hero { grid-template-columns: minmax(0, 1fr); padding: var(--s4); }
+  .rigscore-number strong { font-size: 48px; }
+}
+
+/* Narrow: each row stacks into labelled pairs, so nothing scrolls sideways. */
+@media (max-width: 760px) {
+  .rigscore-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .rigscore-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2) var(--s3); padding: var(--s3) 0; border-bottom: 1px solid var(--line); }
+  .rigscore-table td { padding: 0; border: 0; }
+  .rigscore-table td::before { content: attr(data-label); display: block; color: var(--muted); font: 400 var(--fs-small) / 1.3 var(--ui); }
+  .rigscore-status { grid-column: 1 / -1; }
+}

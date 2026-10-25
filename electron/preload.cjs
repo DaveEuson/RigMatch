@@ -95,6 +95,14 @@ const api = {
     ipcRenderer.on('benchmark:status', listener);
     return () => ipcRenderer.removeListener('benchmark:status', listener);
   },
+  // RigScore: one tier of the speed test at a time (electron/rigScoreRunner.cjs).
+  runRigScore: (request) => ipcRenderer.invoke('rigscore:run', request),
+  cancelRigScore: (progressId) => ipcRenderer.invoke('rigscore:cancel', progressId),
+  onRigScoreProgress: (callback) => {
+    const listener = (_event, update) => callback(update);
+    ipcRenderer.on('rigscore:progress', listener);
+    return () => ipcRenderer.removeListener('rigscore:progress', listener);
+  },
   onPullProgress: (callback) => {
     const listener = (_event, update) => callback(update);
     ipcRenderer.on('ollama:pullProgress', listener);

@@ -11,6 +11,7 @@ import {
 import { buildBenchmarkPromptPlan, normalizeBenchmarkQuestionCount } from './benchmarkSuite.ts';
 import type { AdvancedGenerateProgress, AgentArcadeApi, BenchmarkProgressUpdate, PullProgressUpdate, UpdateChannel } from './types.ts';
 import { calculatePreciseTotal, gradeForMatchScore } from './lib/scoring.ts';
+import { createRigScoreDemo } from './lib/rigScoreDemo.ts';
 
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
@@ -454,6 +455,7 @@ const fallbackApi: AgentArcadeApi = {
   async startOllamaInstall() { /* no-op in preview */ },
   async cancelOllamaInstall() { /* no-op in preview */ },
   async launchOllamaInstaller() { /* no-op in preview */ },
+  ...createRigScoreDemo(() => demoOllama.models.map((model) => model.name), demoSystem.gpu.vramGb),
 };
 
 export const agentArcadeApi: AgentArcadeApi = window.agentArcade ?? fallbackApi;
