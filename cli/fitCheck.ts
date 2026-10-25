@@ -37,7 +37,11 @@ export type FitHardware = {
 };
 
 /** What Ollama's /api/tags lists: sizes in GiB, as the app reads them. */
-export type InstalledModel = { name: string; sizeGb: number; params?: string };
+export type InstalledModel = {
+  name: string; sizeGb: number; params?: string;
+  /** One of Ollama's cloud models: listed here, but it runs on Ollama's servers, not on this computer. */
+  remote?: boolean;
+};
 
 /**
  * Where Ollama listens, read from OLLAMA_HOST the way Ollama's own client

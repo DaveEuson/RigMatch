@@ -25,11 +25,13 @@ import {
   type RigPoints,
   type RigStamp,
   type RigTier,
+  type RigTierId,
   type TierMeasure,
 } from '../src/lib/rigScore.ts';
 import {
   assembleModelResult,
   assembleTierResult,
+  rigHeadline,
   rigModelRequest,
   rigRunRequest,
   tierAvailability,
@@ -51,26 +53,86 @@ export type MeasureDeps = {
   readMachine: () => Promise<RigMachine>;
   signal?: AbortSignal;
   now?: () => number;
+  /**
+   * The models this run has loaded and unloaded, so the next run can tell a
+   * model it is still waiting on Ollama to release from another program's.
+   * Shared by every request of one command; the default is to track nothing.
+   */
+  loadedHere?: Set<string>;
+  /** How long to wait for a model to leave the card after unloading it. Ollama frees one in about half a second. */
+  unloadSettleMs?: number;
+  /** How long a run waits, before checking for another program's models, for this run's own to be gone. */
+  freeWaitMs?: number;
 };
+
+/** Long enough for a big model to leave a slow card; the app waits 3 s, and that was not enough here. */
+export const UNLOAD_SETTLE_MS = 15_000;
 
 const runRigTier = runner.runRigTier as (deps: MeasureDeps & {
   request: RigRunRequest;
   unloadModel: (baseUrl: string, model: string) => Promise<unknown>;
+  beforeRun?: () => Promise<void>;
   onProgress?: (update: Phase) => void;
 }) => Promise<RigRunReply>;
 const unloadOllamaModel = runner.unloadOllamaModel as (args: {
-  fetchJson: MeasureDeps['fetchJson']; baseUrl: string; model: string;
+  fetchJson: MeasureDeps['fetchJson']; baseUrl: string; model: string; settleMs?: number; pollMs?: number;
 }) => Promise<boolean>;
+const sameModel = runner.sameModel as (listed: string, wanted: string) => boolean;
 
-/** One request through the shared runner, unloading what it loaded however it ends. */
-export function runRequest(deps: MeasureDeps, request: RigRunRequest, onProgress?: (update: Phase) => void): Promise<RigRunReply> {
-  return runRigTier({
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+type PsListing = { models?: Array<{ name?: string; model?: string }> } | null;
+const listedIn = (listing: PsListing, model: string) => (listing?.models ?? []).some((entry) => sameModel(entry.name || entry.model || '', model));
+
+/**
+ * Before a run looks for another program's models, wait for this command's own
+ * last model to be gone from Ollama. Unloading is asked for and returns, but the
+ * card is not free until a moment later (a big model on a slow card took longer
+ * than the app's 3 seconds), and the next run's check would see the model this
+ * run had just unloaded and blame another program for it.
+ */
+async function waitForOwnModels(deps: MeasureDeps): Promise<void> {
+  const ours = [...(deps.loadedHere ?? [])];
+  if (!ours.length) return;
+  const deadline = Date.now() + (deps.freeWaitMs ?? UNLOAD_SETTLE_MS);
+  let asked = false;
+  while (!deps.signal?.aborted) {
+    const listing = await deps.fetchJson(`${deps.baseUrl}/api/ps`, { signal: deps.signal }, 3000).catch(() => null) as PsListing;
+    const still = ours.filter((model) => listedIn(listing, model));
+    if (!still.length) return;
+    if (!asked) {
+      // Ours, and still there: ask again, once, without waiting on it here.
+      asked = true;
+      for (const model of still) await unloadOllamaModel({ fetchJson: deps.fetchJson, baseUrl: deps.baseUrl, model, settleMs: 0 }).catch(() => false);
+    }
+    if (Date.now() >= deadline) return;
+    await sleep(100);
+  }
+}
+
+/**
+ * One request through the shared runner, unloading what it loaded however it ends.
+ *
+ * A "busy" answer that names only models this command loaded is not another
+ * program's doing: Ollama has not finished releasing them. It says so, rather
+ * than blaming another program and stopping the queue.
+ */
+export async function runRequest(deps: MeasureDeps, request: RigRunRequest, onProgress?: (update: Phase) => void): Promise<RigRunReply> {
+  const reply = await runRigTier({
     ...deps,
     request,
+    beforeRun: () => waitForOwnModels(deps),
     // Best effort: keep_alive frees the card soon anyway.
-    unloadModel: (baseUrl, model) => unloadOllamaModel({ fetchJson: deps.fetchJson, baseUrl, model }).catch(() => false),
+    unloadModel: async (baseUrl, model) => {
+      deps.loadedHere?.add(model);
+      return unloadOllamaModel({ fetchJson: deps.fetchJson, baseUrl, model, settleMs: deps.unloadSettleMs ?? UNLOAD_SETTLE_MS }).catch(() => false);
+    },
     onProgress,
   });
+  if (reply.status === 'busy' && deps.loadedHere?.size && reply.loadedModels.every((name) => [...deps.loadedHere ?? []].some((ours) => sameModel(name, ours)))) {
+    return { status: 'failed', error: `Ollama has not finished releasing ${reply.loadedModels.join(' and ')}, which this run had just unloaded. Run again in a moment.` };
+  }
+  return reply;
 }
 
 // ---- The command line -------------------------------------------------------
@@ -105,18 +167,22 @@ export function checkMeasureArgs(
  * (electron/gpuContention.cjs): the app checks before a test and warns, because
  * a game, a render or a browser tab held the card for a whole run once and the
  * score read as a slow PC. Ollama's own listing cannot see that, since it only
- * knows its models. NVIDIA only here (nvidia-smi); other vendors read as
- * 'unknown', which says nothing rather than 'clear'.
+ * knows its models. NVIDIA only here (nvidia-smi); other vendors, and a
+ * machine without nvidia-smi, read as 'unknown', which says nothing rather
+ * than 'clear'.
  */
 export type CardNote = {
+  /** 'busy' and 'heavy' mean the readings say so; a known program merely being open leaves it 'clear'. */
   level: 'clear' | 'busy' | 'heavy' | 'unknown';
+  /** Why, from the readings (utilisation, memory in use). Empty unless busy or heavy. */
   reasons: string[];
+  /** Known graphics-heavy programs that are open, whatever the card is doing. */
   apps: string[];
-  /** The app's sentence for it, "Before starting: ...", empty when clear or unknown. */
+  /** The sentence for the intro: the app's "Before starting: ..." if busy, a softer line if a program is open, else empty. */
   message: string;
 };
 
-type CommandRunner = (command: string, args: string[], timeoutMs: number) => Promise<{ output: string; error: string | null }>;
+export type CommandRunner = (command: string, args: string[], timeoutMs: number) => Promise<{ output: string; error: string | null }>;
 
 const assessCard = contention.assessGpuContention as (
   reading: unknown, apps?: string[], options?: { unifiedMemory?: boolean },
@@ -152,11 +218,21 @@ export async function checkCard(
   if (!median) return { level: 'unknown', reasons: [], apps: [], message: '' };
   const apps = contention.matchKnownGpuApps(await processNames(run, platform).catch(() => []));
   const assessment = assessCard(median, apps, { unifiedMemory });
+  // The app calls the card "busy" when a known graphics-heavy program is merely
+  // open (Steam on most gaming PCs), even with the card itself idle. Said so,
+  // that is false: "busy" here means a reading says so. A program that is open
+  // gets its own, softer line, and is listed so a script can see it.
+  const measurablyBusy = assessment.reasons.length > 0 && (assessment.level === 'busy' || assessment.level === 'heavy');
+  const open = assessment.apps.join(' and ');
   return {
-    level: assessment.level,
+    level: measurablyBusy ? assessment.level : 'clear',
     reasons: assessment.reasons,
     apps: assessment.apps,
-    message: assessment.level === 'busy' || assessment.level === 'heavy' ? contention.describeGpuContention(assessment) : '',
+    message: measurablyBusy
+      ? contention.describeGpuContention(assessment)
+      : assessment.apps.length
+        ? `${open} ${assessment.apps.length === 1 ? 'is' : 'are'} open, and can use the graphics card, but the card itself reads quiet, so this should not matter. Closing ${assessment.apps.length === 1 ? 'it' : 'them'} gives the most accurate result.`
+        : '',
   };
 }
 
@@ -166,6 +242,12 @@ export async function checkCard(
  * over (here 0.9 to 1.5 times it), so under half means something other than the model is
  * in the way: another program on the card, or a model that did not sit wholly
  * on it. Said on the result, because the points read as a slow PC otherwise.
+ *
+ * The 0.5 rests on one card: the ratios above are from an RTX 4070 12 GB, and
+ * no other card's has been looked at. On a card the grade's speed model fits
+ * worse, it could flag a healthy run, or miss a disturbed one. So it is a note
+ * on the result, never a refusal, and the card check (checkCard) is the other,
+ * independent signal. Move it when a second card's numbers are in.
  */
 export const FAR_BELOW_ESTIMATE = 0.5;
 export function farBelowEstimate(measure: Pick<TierMeasure, 'decodeTps'>, estimateTps: number | null): boolean {
@@ -177,19 +259,36 @@ export function farBelowEstimate(measure: Pick<TierMeasure, 'decodeTps'>, estima
 export type PlanEntry =
   | { tier: RigTier; kind: 'run'; estimateTps: number | null }
   | { tier: RigTier; kind: 'missing'; command: string }
-  | { tier: RigTier; kind: 'too-big'; needGb: number; haveGb: number };
+  | { tier: RigTier; kind: 'too-big'; needGb: number; haveGb: number }
+  /** The tag Ollama lists for this tier is a cloud model: it would run on Ollama's servers. */
+  | { tier: RigTier; kind: 'cloud' };
+
+/**
+ * A cloud model: Ollama lists it like any other, but it runs on Ollama's
+ * servers. Measured, its speed would be a data centre's, stamped with this
+ * PC's card, and the prompts would leave this computer. Ollama marks one with a
+ * remote host in /api/tags; a name ending in -cloud or :cloud is the same
+ * thing before it has been pulled.
+ */
+export const CLOUD_TAG = /[:-]cloud$/i;
+export const isCloudModel = (model: { name: string; remote?: boolean }) => Boolean(model.remote) || CLOUD_TAG.test(model.name);
+
+export const cloudMessage = (model: string) => `${model} runs on Ollama's servers, not on this computer, so there is nothing of this PC to measure, and the prompts would leave it. rigmatch-fit --measure runs local models only.`;
 
 /**
  * Every tier, and what happens to it here: run, if it is installed and this
  * card holds it; the download command, if it is missing (printed, never run);
- * "not run" if the card is too small, never a zero.
+ * "not run" if the card is too small, never a zero; left alone if the tag is
+ * a cloud model.
  */
 export function planTiers(
   hardware: Pick<FitHardware, 'vramGb' | 'unifiedMemory'>,
   installed: readonly string[],
   estimates: ReadonlyMap<string, number | null> = new Map(),
+  cloud: ReadonlySet<string> = new Set(),
 ): PlanEntry[] {
-  return RIG_TIERS.map((tier) => {
+  return RIG_TIERS.map((tier): PlanEntry => {
+    if (cloud.has(tier.model)) return { tier, kind: 'cloud' };
     const availability = tierAvailability(tier, { vramGb: hardware.vramGb, isUnifiedMemory: hardware.unifiedMemory }, installed);
     if (availability.kind === 'too-big') return { tier, kind: 'too-big', needGb: availability.needGb, haveGb: availability.haveGb };
     if (availability.kind === 'needs-download') return { tier, kind: 'missing', command: pullCommand(tier.model) };
@@ -226,7 +325,7 @@ export type MeasuredTier = {
 export type TierLine =
   | MeasuredTier
   | { tier: RigTier; status: 'missing'; command: string }
-  | { tier: RigTier; status: 'too-big'; message: string }
+  | { tier: RigTier; status: 'too-big' | 'cloud'; message: string }
   /** Not reached: an earlier tier was stopped, or found the card busy. */
   | { tier: RigTier; status: 'skipped' }
   | { tier: RigTier; status: 'busy' | 'stopped' | 'failed'; message: string };
@@ -240,6 +339,26 @@ export type MeasureReport = {
   /** What the graphics card was doing before and after the runs (checkCard); filled in by the caller. */
   card?: { before: CardNote | null; after: CardNote | null };
 };
+
+/**
+ * Path-shaped text taken out of a message, as "<path>". Ollama's own errors can
+ * carry one ("unable to load model: C:\Users\Alice Smith\.ollama\models\blobs\
+ * sha256-..."), and a path holds the person's name. The terminal output is
+ * pasted into bug reports and --json into scripts, so neither prints one.
+ *
+ * A path runs to the end of its line or the next quote, spaces included, since
+ * a user name can have one and cutting there would leave half of it showing.
+ * That drops the words after a path on its line, which is the cheaper mistake.
+ */
+export function scrubPaths(text: string): string {
+  return text
+    // A Windows drive (not the "p:/" inside "http://"), or a \\server\share.
+    .replace(/(?<![A-Za-z0-9])[A-Za-z]:[\\/][^\r\n"'<>|]*/g, '<path>')
+    .replace(/\\\\[^\s\\/]+\\[^\r\n"'<>|]*/g, '<path>')
+    // A home-relative path, or an absolute one with at least two parts.
+    .replace(/(?<=^|[\s"'(:=])~[\\/][^\r\n"'<>|]*/g, '<path>')
+    .replace(/(?<=^|[\s"'(:=])\/(?:[^\s/"'<>|]+\/)+[^\r\n"'<>|]*/g, '<path>');
+}
 
 const tooBigMessage = (needGb: number, haveGb: number) => `Not run: needs ${needGb} GB of graphics memory, and this PC has ${Math.round(haveGb * 10) / 10} GB.`;
 
@@ -268,6 +387,7 @@ export async function measureTiers(
     const { tier } = entry;
     if (entry.kind === 'missing') { lines.push({ tier, status: 'missing', command: entry.command }); continue; }
     if (entry.kind === 'too-big') { lines.push({ tier, status: 'too-big', message: tooBigMessage(entry.needGb, entry.haveGb) }); continue; }
+    if (entry.kind === 'cloud') { lines.push({ tier, status: 'cloud', message: cloudMessage(tier.model) }); continue; }
     if (stopped || busy) { lines.push({ tier, status: 'skipped' }); continue; }
     onTierStart?.(tier);
     const outcome = assembleTierResult(tier, await run(rigRunRequest(tier, `fit-${tier.id}`), tier), now());
@@ -277,9 +397,9 @@ export async function measureTiers(
     } else if (outcome.kind === 'not-installed') {
       line = { tier, status: 'missing', command: pullCommand(tier.model) };
     } else if (outcome.kind === 'too-big') {
-      line = { tier, status: 'too-big', message: outcome.message };
+      line = { tier, status: 'too-big', message: scrubPaths(outcome.message) };
     } else {
-      line = { tier, status: outcome.kind, message: outcome.message };
+      line = { tier, status: outcome.kind, message: scrubPaths(outcome.message) };
       if (outcome.kind === 'stopped') stopped = true;
       if (outcome.kind === 'busy') busy = true;
     }
@@ -302,13 +422,20 @@ export function formatTierDone(line: TierLine): string {
     case 'failed': return `${lead}did not finish`;
     case 'missing': return `${lead}not installed`;
     case 'too-big': return `${lead}did not fit`;
+    case 'cloud': return `${lead}a cloud model, not run`;
     case 'skipped': return `${lead}not run`;
   }
 }
 
-/** The headline, as the app has it: the Standard tier, with points and its speed band. */
+/**
+ * The headline, as the app has it (rigHeadline): the Standard tier, or when it
+ * did not run, the first tier that did. A card that can never hold Standard
+ * (6 GB) still has a headline: the biggest tier it could run.
+ */
 export function headlineOf(report: MeasureReport): MeasuredTier | null {
-  return report.lines.find((line): line is MeasuredTier => line.status === 'measured' && line.tier.id === RIG_HEADLINE_TIER) ?? null;
+  const measured: Partial<Record<RigTierId, { tier: RigTierId; measure: TierMeasure; line: MeasuredTier }>> = {};
+  for (const line of report.lines) if (line.status === 'measured') measured[line.tier.id] = { tier: line.tier.id, measure: line.measure, line };
+  return rigHeadline(measured).result?.line ?? null;
 }
 
 // ---- One model -----------------------------------------------------------------
@@ -347,12 +474,12 @@ export async function measureModel(
   if (!installed.includes(model)) return { ...base, status: 'missing', command: pullCommand(model) };
   if (base.tier) {
     const outcome = assembleTierResult(base.tier, await run(rigRunRequest(base.tier, `fit-${base.tier.id}`)), new Date().toISOString());
-    if (outcome.kind !== 'measured') return { ...base, status: outcome.kind === 'not-installed' ? 'failed' : outcome.kind, message: outcome.message };
+    if (outcome.kind !== 'measured') return { ...base, status: outcome.kind === 'not-installed' ? 'failed' : outcome.kind, message: scrubPaths(outcome.message) };
     const line = measuredLine(base.tier, outcome.result.measure, outcome.result.stamp, outcome.result.gpuShare);
     return { ...base, status: 'measured', measure: line.measure, stamp: line.stamp, gpuShare: line.gpuShare, points: line.points, band: line.band };
   }
   const outcome = assembleModelResult(model, await run(rigModelRequest(model, 'fit-model')));
-  if (outcome.kind !== 'measured') return { ...base, status: outcome.kind === 'not-installed' ? 'failed' : outcome.kind, message: outcome.message };
+  if (outcome.kind !== 'measured') return { ...base, status: outcome.kind === 'not-installed' ? 'failed' : outcome.kind, message: scrubPaths(outcome.message) };
   return { ...base, status: 'measured', measure: outcome.measure, stamp: outcome.stamp, gpuShare: outcome.gpuShare, points: null, band: speedBand(outcome.measure.decodeTps) };
 }
 
@@ -422,6 +549,7 @@ export function formatIntro(hardware: FitHardware, plan: PlanEntry[], { show = f
   for (const entry of plan) {
     if (entry.kind === 'missing') prose.push(`${entry.tier.label} needs ${entry.tier.model}, which is not installed. Get it with: ${entry.command} (${entry.tier.sizeGb} GB), then measure again.`);
     if (entry.kind === 'too-big') prose.push(`${entry.tier.label} (${entry.tier.model}) is not run: ${tooBigMessage(entry.needGb, entry.haveGb).replace(/^Not run: /, '')}`);
+    if (entry.kind === 'cloud') prose.push(`${entry.tier.label} (${entry.tier.model}) is not run: ${cloudMessage(entry.tier.model)}`);
   }
   if (running.length) {
     const who = running.map((entry) => `${entry.tier.label} (${entry.tier.model})`).join(', ');
@@ -435,13 +563,28 @@ export function formatIntro(hardware: FitHardware, plan: PlanEntry[], { show = f
   return [...lines, ...prose.flatMap((text) => wrap(text, columns)), ...(show && running.length ? ['', 'Speed dates'] : [])].join('\n');
 }
 
-/** A progress line for one tier, as Ollama works through it. */
+/**
+ * A progress line for one tier, as Ollama works through it. A model that is
+ * not a tier has no label of its own and goes by its name, once.
+ */
 export function formatProgress(tier: Pick<RigTier, 'label' | 'model'>, phase: Phase): string {
   const what = phase.phase === 'checking' ? 'checking Ollama'
     : phase.phase === 'loading' ? 'loading, and a warm-up run (not timed)'
       : phase.phase === 'unloading' ? 'unloading'
         : `timed run ${phase.run} of ${phase.of}`;
-  return `${tier.label}, ${tier.model}: ${what}`;
+  return `${tier.label === tier.model ? tier.model : `${tier.label}, ${tier.model}`}: ${what}`;
+}
+
+/**
+ * A line that fits a terminal's width, for the progress line that is redrawn in
+ * place with a carriage return. A longer one wraps, and the redraw then
+ * rewrites only the last row, leaving fragments of the line above on screen.
+ * Cut with "...", and padded to blot out whatever the last line left.
+ */
+export function fitLine(text: string, columns: number): string {
+  const room = Math.max(8, columns - 1);
+  const clipped = text.length > room ? `${text.slice(0, room - 3)}...` : text;
+  return clipped.padEnd(room);
 }
 
 /** Before one model's runs: the sign, the card, and how long. */
@@ -488,14 +631,25 @@ export function formatReport(report: MeasureReport, { show = false, columns, hea
   if (notes.length) lines.push('', ...notes.flatMap((text) => wrap(text, columns)));
 
   const headline = headlineOf(report);
+  const standard = RIG_TIERS.find((tier) => tier.id === RIG_HEADLINE_TIER);
+  const standardLine = report.lines.find((line) => line.tier.id === RIG_HEADLINE_TIER);
   const closing: string[] = [];
   if (headline) {
     const score = headline.points.kind === 'points' ? `${number(headline.points.points)} points` : `${tps(headline.measure.decodeTps)} tok/s writing`;
-    const feel = `${headline.band.label}: ${headline.band.feel.charAt(0).toLowerCase()}${headline.band.feel.slice(1)}`;
-    closing.push(show ? `Tonight's RigScore: ${score} on the ${headline.tier.label} tier. ${feel}` : `RigScore: ${score} (${headline.tier.label} tier, ${headline.tier.model}). ${feel}`);
+    if (headline.tier.id === RIG_HEADLINE_TIER) {
+      const feel = `${headline.band.label}: ${headline.band.feel.charAt(0).toLowerCase()}${headline.band.feel.slice(1)}`;
+      closing.push(show ? `Tonight's RigScore: ${score} on the ${headline.tier.label} tier. ${feel}` : `RigScore: ${score} (${headline.tier.label} tier, ${headline.tier.model}). ${feel}`);
+    } else {
+      // Standard did not run, so the first tier that did is the headline, as in the app, with
+      // no speed band: a small model writing fast says little about the models most people want.
+      closing.push(show ? `Tonight's RigScore: ${score} on the ${headline.tier.label} tier.` : `RigScore: ${score} (${headline.tier.label} tier, ${headline.tier.model}).`);
+      if (standardLine?.status === 'too-big') closing.push(`The usual headline is the ${standard?.label} tier, which this card cannot hold, so this is the biggest tier it ran.`);
+      else if (standardLine?.status === 'missing') closing.push(`The usual headline is the ${standard?.label} tier: get ${standard?.model} (${standardLine.command}) to score it.`);
+    }
   } else if (!report.stopped && !report.busy) {
-    const standard = RIG_TIERS.find((tier) => tier.id === RIG_HEADLINE_TIER);
-    closing.push(`No RigScore yet: the headline is the ${standard?.label} tier, ${standard?.model}.`);
+    closing.push(standardLine?.status === 'missing'
+      ? `No RigScore yet: the headline is the ${standard?.label} tier, ${standard?.model}.`
+      : 'No RigScore: no tier was measured.');
   }
   closing.push(`1,000 points is the reference PC, an ${RIG_REFERENCE_MACHINE}. Twice as fast at both writing and reading is 2,000. Writing is how fast the answer comes out; reading is how fast the prompt goes in.`);
   lines.push('', ...closing.flatMap((text) => wrap(text, columns)));
@@ -569,6 +723,15 @@ const pointsJson = (points: RigPoints | null) => (points?.kind === 'points'
   ? { points: points.points, pointsNote: points.notes.join(' ') || null }
   : { points: null, pointsNote: points?.kind === 'pending' ? 'reference not measured yet' : points ? points.notes.join(' ') : null });
 
+/**
+ * What a script is told when a run did not finish. Not Ollama's own error
+ * text, which can carry a file path ("unable to load model: <path to the
+ * blob>") and a path holds the person's name: the terminal gets that text with
+ * the path taken out (scrubPaths), the JSON gets none of it.
+ */
+const FAILED_IN_JSON = 'The test did not finish.';
+const messageForJson = (status: string, message: string) => (status === 'failed' ? FAILED_IN_JSON : scrubPaths(message));
+
 /** What the card was doing, for the JSON: the level and why, nothing else. */
 const cardJson = (note: CardNote | null | undefined) => (note ? { level: note.level, reasons: note.reasons, apps: note.apps } : null);
 
@@ -595,10 +758,17 @@ export function toMeasureJson(report: MeasureReport, hardware: FitHardware, vers
         };
         case 'missing': return { ...base, command: line.command, sizeGb: line.tier.sizeGb };
         case 'skipped': return base;
-        default: return { ...base, message: line.message };
+        default: return { ...base, message: messageForJson(line.status, line.message) };
       }
     }),
-    headline: headline ? { tier: headline.tier.id, ...pointsJson(headline.points), writingTps: round(headline.measure.decodeTps), band: headline.band.id } : null,
+    // The Standard tier, or when it did not run the first tier that did (the app's rigHeadline);
+    // a speed band only for Standard, as in the app.
+    headline: headline
+      ? {
+        tier: headline.tier.id, isHeadlineTier: headline.tier.id === RIG_HEADLINE_TIER, ...pointsJson(headline.points),
+        writingTps: round(headline.measure.decodeTps), band: headline.tier.id === RIG_HEADLINE_TIER ? headline.band.id : null,
+      }
+      : null,
     stopped: report.stopped,
     busy: report.busy,
     contention: { before: cardJson(report.card?.before), after: cardJson(report.card?.after) },
@@ -616,5 +786,5 @@ export function toModelJson(report: ModelReport, hardware: FitHardware, version:
     };
   }
   if (report.status === 'missing') return { ...base, command: report.command };
-  return { ...base, message: report.message };
+  return { ...base, message: messageForJson(report.status, report.message) };
 }
