@@ -36,7 +36,7 @@ import { formatLocale } from './formatLocale.ts';
 
 export type ModelSortKey = 'name' | 'params' | 'size' | 'skill' | 'maker' | 'origin' | 'source' | 'status' | 'score' | 'speed' | 'pulls' | 'added';
 export type SortDirection = 'asc' | 'desc';
-export type ModelQuickFilterId = 'all' | 'installed' | 'fits-vram' | 'scored' | 'unscored' | 'good-score' | 'low-score' | 'huge';
+export type ModelQuickFilterId = 'all' | 'installed' | 'fits-vram' | 'scored' | 'unscored' | 'good-score' | 'low-score' | 'huge' | 'unknown-size';
 export type ListTestResult = {
   winner: string;
   results: TestedModelScore[];
@@ -1951,7 +1951,20 @@ export function getModelQuickFilters(
     { id: 'good-score', label: 'B or better', count: rows.filter((row) => isGoodScore(getModelScore(row, scores))).length },
     { id: 'low-score', label: 'Below B', count: rows.filter((row) => isLowScore(getModelScore(row, scores))).length },
     { id: 'huge', label: 'Too Big', count: rows.filter((row) => getHardwareFit(row, vramGb).tone === 'out-of-league').length },
+    // The third answer to "will it fit": a model with no listed size is
+    // neither, so with only Good fit and Too Big, 44 of 351 were out of reach
+    // of both. The three counts now add up to the total.
+    { id: 'unknown-size', label: 'Size unknown', count: rows.filter((row) => isSizeUnknownFit(getHardwareFit(row, vramGb))).length },
   ];
+}
+
+/**
+ * Neither a good fit nor too big. Not simply tone 'unknown': a video model
+ * waiting on a download token is 'unknown' and recommended too, and it would
+ * have counted under Good fit and here at once.
+ */
+function isSizeUnknownFit(fit: HardwareFit) {
+  return !fit.recommend && fit.tone !== 'out-of-league';
 }
 
 export function modelMatchesQuickFilter(
@@ -1967,6 +1980,7 @@ export function modelMatchesQuickFilter(
   if (filter === 'good-score') return isGoodScore(score);
   if (filter === 'low-score') return isLowScore(score);
   if (filter === 'huge') return getHardwareFit(row, vramGb).tone === 'out-of-league';
+  if (filter === 'unknown-size') return isSizeUnknownFit(getHardwareFit(row, vramGb));
   return true;
 }
 

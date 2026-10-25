@@ -2,7 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { getModelQuickFilters, getHardwareFit } = await import('../src/lib/modelCatalog.ts');
+const { getModelQuickFilters, getHardwareFit, modelMatchesQuickFilter } = await import('../src/lib/modelCatalog.ts');
+const { asHardwareFit } = await import('../src/lib/videoLineup.ts');
 
 /**
  * A filter should be named for what it selects.
@@ -72,5 +73,32 @@ test('no filter is named after an internal concept', () => {
       !/\brig\b|\bvram-safe\b|\bpicks\b/i.test(label),
       `filter "${id}" is labeled "${label}", which names RigMatch's idea rather than the user's`,
     );
+  }
+});
+
+test('every model sits under exactly one fit filter, and the counts add up', () => {
+  // The Windows check of 0.10.0: Good fit 222 + Too Big 85 was 307 of 351.
+  // The other 44 had no listed size ("Fit ?") and no fit filter reached them.
+  const rows = [
+    row('tiny:1b', 1),
+    row('mid:7b', 4),
+    row('huge:70b', 40),
+    row('mystery:latest', undefined, ''),
+    row('cloudy:cloud', 0, ''),
+    // A video model that fits but waits on a download token: tone "unknown",
+    // yet recommended. By tone alone it sat under Good fit and Size unknown.
+    { ...row('gated-video', 9), fitOverride: asHardwareFit({ status: 'needs-token', label: 'Needs a token', detail: '' }) },
+    { ...row('offloaded-video', 30), fitOverride: asHardwareFit({ status: 'offload', label: 'Fits with offloading', detail: '' }) },
+  ];
+  const fitIds = ['fits-vram', 'huge', 'unknown-size'];
+  const filters = getModelQuickFilters(rows, {}, 12);
+  const counts = fitIds.map((id) => filters.find((f) => f.id === id)?.count);
+  assert.deepEqual(counts, [4, 1, 2]);
+  assert.equal(counts.reduce((sum, n) => sum + n, 0), rows.length);
+  assert.equal(filters.find((f) => f.id === 'unknown-size').label, 'Size unknown', 'the word the rows already use');
+
+  for (const r of rows) {
+    const homes = fitIds.filter((id) => modelMatchesQuickFilter(r, id, undefined, 12));
+    assert.equal(homes.length, 1, `${r.displayName} is under ${homes.join(', ') || 'no fit filter'}`);
   }
 });
