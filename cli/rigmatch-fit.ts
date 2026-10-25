@@ -26,8 +26,8 @@ import systemProfile from '../electron/systemProfile.cjs';
 import security from '../electron/security.cjs';
 import { catalogRows, formatTable, ollamaUrl, rankModels, toJson, type FitHardware, type InstalledModel, type Provider } from './fitCheck.ts';
 import {
-  checkMeasureArgs, formatIntro, formatModelDone, formatModelIntro, formatModelReport, formatProgress, formatReport, formatTierDone,
-  measureModel, measureTiers, planTiers, runRequest, toMeasureJson, toModelJson, type MeasureDeps,
+  checkCard, checkMeasureArgs, formatIntro, formatModelDone, formatModelIntro, formatModelReport, formatProgress, formatReport, formatTierDone,
+  measureModel, measureTiers, planTiers, runRequest, toMeasureJson, toModelJson, type CardNote, type MeasureDeps,
 } from './measure.ts';
 
 const HELP = `rigmatch-fit ${pkg.version}: which local AI models will run well on this computer
@@ -55,8 +55,9 @@ graphics memory.
 writing and reading tokens a second, and points against the reference PC
 (1,000 is an RTX 4070 12 GB), comparable with the RigMatch app and other PCs.
 It never downloads a model: a missing one gets its "ollama pull" command. It
-will not run while another program has a model loaded, and unloads what it
-loaded when it finishes. Ctrl+C stops it and unloads.`;
+will not run while another program has a model loaded, warns when something
+else is using the graphics card, and unloads what it loaded when it finishes.
+Ctrl+C stops it and unloads.`;
 
 /** main.cjs's runCommand: { output, error } and never a throw. */
 function run(command: string, args: string[], timeoutMs: number): Promise<{ output: string; error: string | null }> {
@@ -229,6 +230,12 @@ async function measureMain(model: string | undefined, json: boolean): Promise<nu
     }),
   };
 
+  // Is something besides Ollama using the card? Said before the runs, as the
+  // app says it, and read again after them: a heavy program on the card for the
+  // whole run reads as a slow PC. It warns and goes on, as the app does.
+  const card: { before: CardNote | null; after: CardNote | null } = { before: null, after: null };
+  const readCard = () => checkCard(run, { platform: process.platform, unifiedMemory: hardware.unifiedMemory });
+
   // In a terminal the report follows the intro on screen; piped, the intro
   // went to stderr, so the report carries the title and the card itself.
   const header = show ? undefined : hardware;
@@ -239,13 +246,18 @@ async function measureMain(model: string | undefined, json: boolean): Promise<nu
     const target = { label: name, model: name };
     const ranked = rankedFor(name);
     // Not installed: nothing to time, so no intro; the report says how to get it.
-    if (names.includes(name)) say(formatModelIntro(name, hardware, { estimateTps: ranked?.grade.tokensPerSecond ?? null, sizeGb: ranked?.row.sizeGb ?? null }, { show, columns }));
-    const report = await measureModel(name, {
+    if (names.includes(name)) {
+      card.before = await readCard();
+      say(formatModelIntro(name, hardware, { estimateTps: ranked?.grade.tokensPerSecond ?? null, sizeGb: ranked?.row.sizeGb ?? null }, { show, columns, before: card.before }));
+    }
+    const measured = await measureModel(name, {
       installed: names,
       hardware,
       estimateTps: ranked?.grade.tokensPerSecond ?? null,
       run: (request) => runRequest(deps, request, (phase) => progress(formatProgress(target, phase))),
     });
+    if (measured.status === 'measured') card.after = await readCard();
+    const report = { ...measured, card };
     if (lastLine) endProgress(formatModelDone(report));
     if (!json) say('');
     console.log(json ? JSON.stringify(toModelJson(report, hardware, pkg.version), null, 2) : formatModelReport(report, { show, columns, header }));
@@ -253,17 +265,20 @@ async function measureMain(model: string | undefined, json: boolean): Promise<nu
   }
 
   const plan = planTiers(hardware, names, estimates);
-  say(formatIntro(hardware, plan, { show, columns }));
+  if (plan.some((entry) => entry.kind === 'run')) card.before = await readCard();
+  say(formatIntro(hardware, plan, { show, columns, before: card.before }));
   if (!plan.some((entry) => entry.kind === 'run')) {
     const report = await measureTiers(plan, async () => ({ status: 'stopped' }));
     console.log(json ? JSON.stringify(toMeasureJson(report, hardware, pkg.version), null, 2) : show ? '' : formatReport(report, { columns, header }));
     return 1;
   }
   if (!show) say('');
-  const report = await measureTiers(plan, (request, tier) => runRequest(deps, request, (phase) => progress(formatProgress(tier, phase))), {
+  const measured = await measureTiers(plan, (request, tier) => runRequest(deps, request, (phase) => progress(formatProgress(tier, phase))), {
     onTierStart: (tier) => progress(formatProgress(tier, { phase: 'checking' })),
     onTierEnd: (line) => endProgress(formatTierDone(line)),
   });
+  if (measured.lines.some((line) => line.status === 'measured')) card.after = await readCard();
+  const report = { ...measured, card };
   if (!json) say('');
   console.log(json ? JSON.stringify(toMeasureJson(report, hardware, pkg.version), null, 2) : formatReport(report, { show, columns, header }));
   if (report.stopped || controller.signal.aborted) return 130;

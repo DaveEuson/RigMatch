@@ -59,26 +59,31 @@ NVIDIA GeForce RTX 4070, 12 GB graphics memory, 61.6 GB system memory
 Extreme (qwen3:30b-a3b) is not run: needs 24 GB of graphics memory, and this PC has 12 GB.
 Tonight's speed dates: Light (llama3.2:3b), Standard (qwen3:8b), Heavy (qwen3:14b). This takes about
 2 minutes: each loads its model, warms it up, then times 3 runs. Ctrl+C stops and unloads.
+Before starting: your graphics card looks busy. Steam is running. Scores may come out a little lower
+than this computer can really do. Closing other graphics-heavy programs gives the most accurate
+result.
 
 Speed dates
-Light, llama3.2:3b: 148 tok/s writing, 8,947 tok/s reading, 1,052 points
-Standard, qwen3:8b: 69 tok/s writing, 3,910 tok/s reading, 1,042 points
-Heavy, qwen3:14b: 40 tok/s writing, 2,144 tok/s reading, 1,043 points
+Light, llama3.2:3b: 151 tok/s writing, 9,070 tok/s reading, 1,067 points
+Standard, qwen3:8b: 70 tok/s writing, 3,831 tok/s reading, 1,039 points
+Heavy, qwen3:14b: 42 tok/s writing, 2,202 tok/s reading, 1,076 points
 
 Tier      Model          Writing    Reading      Points  Feels
-Light     llama3.2:3b    148 tok/s  8,947 tok/s  1,052   Excellent
-Standard  qwen3:8b       69 tok/s   3,910 tok/s  1,042   Excellent
-Heavy     qwen3:14b      40 tok/s   2,144 tok/s  1,043   Fast
+Light     llama3.2:3b    151 tok/s  9,070 tok/s  1,067   Excellent
+Standard  qwen3:8b       70 tok/s   3,831 tok/s  1,039   Excellent
+Heavy     qwen3:14b      42 tok/s   2,202 tok/s  1,076   Fast
 Extreme   qwen3:30b-a3b  Not run: needs 24 GB of graphics memory, and this PC has 12 GB.
 
-Tonight's RigScore: 1,042 points on the Standard tier. Excellent: long answers and code arrive in
+Tonight's RigScore: 1,039 points on the Standard tier. Excellent: long answers and code arrive in
 seconds.
 1,000 points is the reference PC, an RTX 4070 12 GB on Ollama 0.35.1. Twice as fast at both writing
 and reading is 2,000. Writing is how fast the answer comes out; reading is how fast the prompt goes
 in.
 ```
 
-That is a real run on the reference card, so it lands near 1,000. A computer with a slower card scores less, and a faster one more.
+That is a real run on the reference card, so it lands near 1,000: the same card scored between 1,004 and 1,174 on the Standard tier across runs, because a card's speed moves 10 to 15 percent with its clocks and what else the desktop is doing. A computer with a slower card scores less, and a faster one more.
+
+It checks the card before and after the runs, as the app does. If something else is heavily using it, the result says so; so does a measured speed far below the grade's estimate, which is how a card shared with another program shows up.
 
 Piped into a file or another program, the show's dressing is gone and the progress goes to stderr, so what is printed is a plain title, the card, the table and the closing lines. `--json` prints the measures, each tier's stamp and its points instead.
 
@@ -95,14 +100,14 @@ npx rigmatch-fit --measure qwen3.5:9b
 
 ```text
 Model       Writing   Estimated  Reading      Loads in  Points
-qwen3.5:9b  60 tok/s  ~49 tok/s  2,861 tok/s  6.3 s     -
+qwen3.5:9b  71 tok/s  ~49 tok/s  3,136 tok/s  3.1 s     -
 
 Excellent: long answers and code arrive in seconds.
 Points are for the four RigScore tier models (--measure on its own runs them). This is this model's
 own speed on the same test.
 ```
 
-Estimated is the fit grade's guess from the model's size and your card (here 49 tok/s); Writing is the real speed (60). Only the four tier models get points, since the points compare like with like: the same weights on every computer.
+Estimated is the fit grade's guess from the model's size and your card (here 49 tok/s); Writing is the real speed (71). Only the four tier models get points, since the points compare like with like: the same weights on every computer.
 
 It does not run while another program has a model loaded in Ollama, because the two would share the card and the numbers would be low; it says so and leaves that model alone. It unloads every model it loaded when it finishes, and Ctrl+C stops it and unloads. It runs only against Ollama on this computer, since another computer's card cannot be read.
 

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const {
   checkMeasureArgs, planTiers, estimateSeconds, describeDuration, measureTiers, measureModel, headlineOf,
   formatIntro, formatReport, formatModelReport, formatProgress, toMeasureJson, toModelJson, tierFor,
+  checkCard, farBelowEstimate, formatModelIntro,
 } = await import('../cli/measure.ts');
 const { RIG_REFERENCES, RIG_TIERS, RIG_WORKLOAD } = await import('../src/lib/rigScore.ts');
 
@@ -136,12 +137,12 @@ test('--json has the measures, each stamp and points, and nothing about who ran 
   const plan = planTiers(card12, ['llama3.2:3b', 'qwen3:8b']);
   const report = await measureTiers(plan, async (request) => atReference(request));
   const json = toMeasureJson(report, card12, '0.1.0');
-  assert.deepEqual(Object.keys(json), ['tool', 'version', 'mode', 'hardware', 'workload', 'reference', 'tiers', 'headline', 'stopped', 'busy']);
+  assert.deepEqual(Object.keys(json), ['tool', 'version', 'mode', 'hardware', 'workload', 'reference', 'tiers', 'headline', 'stopped', 'busy', 'contention']);
   assert.equal(json.mode, 'measure');
   assert.deepEqual(json.workload, { version: 1, numCtx: 4096, numPredict: 256, promptTokens: 1500, warmupRuns: 1, measuredRuns: 3 });
   assert.deepEqual(json.tiers.map((entry) => [entry.tier, entry.status]), [['light', 'measured'], ['standard', 'measured'], ['heavy', 'missing'], ['extreme', 'too-big']]);
   const standard = json.tiers[1];
-  assert.deepEqual(Object.keys(standard), ['tier', 'model', 'status', 'writingTps', 'readingTps', 'loadSeconds', 'runs', 'gpuShare', 'points', 'pointsNote', 'band', 'stamp']);
+  assert.deepEqual(Object.keys(standard), ['tier', 'model', 'status', 'writingTps', 'readingTps', 'loadSeconds', 'runs', 'gpuShare', 'points', 'pointsNote', 'band', 'estimatedTps', 'belowEstimate', 'stamp']);
   assert.equal(standard.points, 1000);
   assert.equal(standard.band, 'excellent');
   assert.deepEqual(Object.keys(standard.stamp).sort(), ['appVersion', 'driverVersion', 'gpu', 'model', 'modelDigest', 'numCtx', 'ollamaVersion', 'quantization', 'tier', 'vramGb', 'workloadVersion']);
@@ -180,6 +181,107 @@ test('one model: its real speed beside the estimate, with points only when it is
   const missing = await measureModel('phi4:14b', { installed: [], hardware, estimateTps: 30, run: async () => { throw new Error('never run'); } });
   assert.deepEqual([missing.status, missing.command], ['missing', 'ollama pull phi4:14b']);
   assert.equal(tierFor('qwen3:30b-a3b', hardware), null, 'too big for 12 GB: measured as a plain model, no points');
+});
+
+/** A command runner that answers nvidia-smi and the process list from fixed text. */
+const commands = ({ smi = ['2300, 12282, 30'], processes = '"System Idle Process","0","Services","0","8 K"\r\n"explorer.exe","4242","Console","1","90,000 K"\r\n', platform = 'win32' } = {}) => {
+  const asked = [];
+  let sample = 0;
+  const run = async (command, args) => {
+    asked.push(command);
+    if (command === 'nvidia-smi') {
+      const output = smi[Math.min(sample, smi.length - 1)];
+      sample += 1;
+      return output === null ? { output: '', error: 'nvidia-smi was not found' } : { output, error: null };
+    }
+    if ((command === 'tasklist' && platform === 'win32') || (command === 'ps' && platform !== 'win32')) return { output: processes, error: null };
+    throw new Error(`unexpected ${command} ${args.join(' ')}`);
+  };
+  return { run, asked };
+};
+
+test('before and after the runs it asks whether something else is using the card, as the app does', async () => {
+  const idle = await checkCard(commands().run, { platform: 'win32', samples: 5, gapMs: 0 });
+  assert.deepEqual([idle.level, idle.message], ['clear', ''], 'a desktop at 30% is not busy');
+
+  // Another program on the card: the app's thresholds (45% busy, 70% heavy) and its words.
+  const { run, asked } = commands({ smi: ['2400, 12282, 92'], processes: '"steamwebhelper.exe","77","Console","1","9 K"\r\n"explorer.exe","4","Console","1","1 K"\r\n' });
+  const heavy = await checkCard(run, { platform: 'win32', samples: 5, gapMs: 0 });
+  assert.equal(heavy.level, 'heavy');
+  assert.match(heavy.message, /^Before starting: the graphics card is already 92% busy\. Steam is running\. Scores from this run will be noticeably lower than this computer can really do\./);
+  assert.equal(asked.filter((command) => command === 'nvidia-smi').length, 5, 'a median of five readings, not one');
+  assert.ok(asked.includes('tasklist'));
+  const busy = await checkCard(commands({ smi: ['2400, 12282, 55'] }).run, { platform: 'win32', samples: 3, gapMs: 0 });
+  assert.equal(busy.level, 'busy');
+  assert.match(busy.message, /a little lower than this computer can really do/);
+
+  // A median, so one spike does not make a busy card: three clear readings and two spikes.
+  const spiky = await checkCard(commands({ smi: ['2300, 12282, 30', '2300, 12282, 95', '2300, 12282, 28', '2300, 12282, 97', '2300, 12282, 31'] }).run, { platform: 'win32', samples: 5, gapMs: 0 });
+  assert.equal(spiky.level, 'clear');
+
+  // No nvidia-smi (AMD, Apple, a Mac or Linux box without it): unknown, said nowhere, never "clear".
+  const none = await checkCard(commands({ smi: [null], platform: 'linux' }).run, { platform: 'linux', samples: 2, gapMs: 0 });
+  assert.deepEqual([none.level, none.message], ['unknown', '']);
+  const linux = await checkCard(commands({ smi: ['2400, 12282, 80'], platform: 'linux', processes: 'blender\nbash\n' }).run, { platform: 'linux', samples: 2, gapMs: 0 });
+  assert.equal(linux.level, 'heavy');
+  assert.match(linux.message, /Blender is running/);
+});
+
+test('a speed far below the grade\'s estimate is said, with its reason, on the result', async () => {
+  assert.equal(farBelowEstimate({ decodeTps: 2.4 }, 35), true);
+  assert.equal(farBelowEstimate({ decodeTps: 17 }, 35), true, 'under half');
+  assert.equal(farBelowEstimate({ decodeTps: 18 }, 35), false);
+  // Measured against the estimates on the reference card: 0.9 to 1.3 times, never flagged.
+  for (const [measured, estimate] of [[148, 158], [66, 61], [40, 35], [60, 49]]) assert.equal(farBelowEstimate({ decodeTps: measured }, estimate), false, `${measured} against ${estimate}`);
+  assert.equal(farBelowEstimate({ decodeTps: 2 }, null), false, 'no estimate, nothing to compare with');
+  assert.equal(farBelowEstimate({ decodeTps: 2 }, 0), false);
+
+  // The contended run from the real PC: Heavy at 2.4 tok/s with its model wholly on the card.
+  const plan = planTiers(card12, ['llama3.2:3b', 'qwen3:14b'], new Map([['llama3.2:3b', 158], ['qwen3:14b', 35]]));
+  const report = await measureTiers(plan, async (request) => (request.tier === 'heavy' ? reply(2.4, 80) : atReference(request)));
+  const heavy = report.lines.find((line) => line.tier.id === 'heavy');
+  assert.equal(heavy.estimateTps, 35);
+  const text = formatReport(report, { header: card12 });
+  assert.match(text, /^Heavy: writing 2\.4 tok\/s is far below the ~35 tok\/s estimated for this card\. Something else may have been using the graphics card, or the model did not sit wholly on it/m);
+  assert.doesNotMatch(text.split('\n').filter((line) => /^Light:/.test(line)).join(' '), /far below/, 'the tier at its estimate is not flagged');
+  const json = toMeasureJson(report, card12, '0.1.0');
+  assert.deepEqual(json.tiers.filter((entry) => entry.status === 'measured').map((entry) => [entry.tier, entry.estimatedTps, entry.belowEstimate]),
+    [['light', 158, false], ['heavy', 35, true]]);
+
+  const model = await measureModel('qwen3:14b', { installed: ['qwen3:14b'], hardware: card12, estimateTps: 35, run: async () => reply(6.8, 2054) });
+  assert.match(formatModelReport(model), /writing 6\.8 tok\/s is far below the ~35 tok\/s estimated/);
+  assert.equal(toModelJson(model, card12, '0.1.0').belowEstimate, true);
+});
+
+test('a busy card is said before the runs and after, in the text and in the JSON', async () => {
+  const heavy = { level: 'heavy', reasons: ['the graphics card is already 92% busy'], apps: ['Steam'], message: 'Before starting: the graphics card is already 92% busy. Steam is running. Scores from this run will be noticeably lower than this computer can really do. Closing other graphics-heavy programs gives the most accurate result.' };
+  const clear = { level: 'clear', reasons: [], apps: [], message: '' };
+  const plan = planTiers(card12, ['llama3.2:3b', 'qwen3:8b']);
+
+  const intro = formatIntro(card12, plan, { before: heavy });
+  assert.match(intro, /Before starting: the graphics card is already 92% busy\. Steam is running\./);
+  assert.doesNotMatch(formatIntro(card12, plan, { before: clear }), /Before starting/);
+  assert.doesNotMatch(formatIntro(card12, plan, {}), /Before starting/);
+  assert.doesNotMatch(formatIntro(card12, planTiers(card12, []), { before: heavy }), /Before starting/, 'nothing runs, so nothing to warn about');
+  assert.match(formatModelIntro('qwen3:8b', card12, { estimateTps: 61, sizeGb: 4.9 }, { before: heavy }), /Before starting: the graphics card is already 92% busy/);
+
+  const report = { ...(await measureTiers(plan, async (request) => atReference(request))), card: { before: heavy, after: heavy } };
+  assert.match(formatReport(report), /After the runs, the graphics card is already 92% busy\. Steam is running\. Something else was probably using the graphics card during them, so these numbers are lower than this PC can do\./);
+  const clean = { ...report, card: { before: clear, after: clear } };
+  assert.doesNotMatch(formatReport(clean), /After the runs/);
+  // Steam open, with the card itself quiet: said before the runs, as the app says it, but the runs were not disturbed.
+  const steamOnly = { level: 'busy', reasons: [], apps: ['Steam'], message: 'Before starting: your graphics card looks busy. Steam is running. Scores may come out a little lower than this computer can really do.' };
+  assert.doesNotMatch(formatReport({ ...report, card: { before: steamOnly, after: steamOnly } }), /After the runs/);
+  assert.match(formatIntro(card12, plan, { before: steamOnly }), /Before starting: your graphics card looks busy\. Steam is running\./);
+  assert.deepEqual(toMeasureJson(report, card12, '0.1.0').contention, {
+    before: { level: 'heavy', reasons: ['the graphics card is already 92% busy'], apps: ['Steam'] },
+    after: { level: 'heavy', reasons: ['the graphics card is already 92% busy'], apps: ['Steam'] },
+  });
+  assert.deepEqual(toMeasureJson(await measureTiers(plan, async (request) => atReference(request)), card12, '0.1.0').contention, { before: null, after: null });
+
+  const one = await measureModel('gemma3:12b', { installed: ['gemma3:12b'], hardware: { vramGb: 12, unifiedMemory: false }, estimateTps: 40, run: async () => reply(41, 1850) });
+  assert.match(formatModelReport({ ...one, card: { before: heavy, after: heavy } }), /After the runs, the graphics card is already 92% busy/);
+  assert.equal(toModelJson({ ...one, card: { before: heavy, after: clear } }, card12, '0.1.0').contention.before.level, 'heavy');
 });
 
 test("the command shares the app's runner and unload, and Ctrl+C stops the run rather than the process", async () => {

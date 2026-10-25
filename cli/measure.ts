@@ -14,6 +14,7 @@
  * hardware reading, Ollama and Ctrl+C.
  */
 import runner from '../electron/rigScoreRunner.cjs';
+import contention from '../electron/gpuContention.cjs';
 import { pullCommand } from '../src/lib/modelGrade.ts';
 import {
   RIG_HEADLINE_TIER,
@@ -97,6 +98,80 @@ export function checkMeasureArgs(
   return { model: positionals[0] };
 }
 
+// ---- Is something else using the card? --------------------------------------------
+
+/**
+ * What the graphics card was doing, in the app's own words and thresholds
+ * (electron/gpuContention.cjs): the app checks before a test and warns, because
+ * a game, a render or a browser tab held the card for a whole run once and the
+ * score read as a slow PC. Ollama's own listing cannot see that, since it only
+ * knows its models. NVIDIA only here (nvidia-smi); other vendors read as
+ * 'unknown', which says nothing rather than 'clear'.
+ */
+export type CardNote = {
+  level: 'clear' | 'busy' | 'heavy' | 'unknown';
+  reasons: string[];
+  apps: string[];
+  /** The app's sentence for it, "Before starting: ...", empty when clear or unknown. */
+  message: string;
+};
+
+type CommandRunner = (command: string, args: string[], timeoutMs: number) => Promise<{ output: string; error: string | null }>;
+
+const assessCard = contention.assessGpuContention as (
+  reading: unknown, apps?: string[], options?: { unifiedMemory?: boolean },
+) => { level: CardNote['level']; reasons: string[]; apps: string[] };
+
+const LINE_BREAK = /\r?\n/;
+
+/** The process names the platform lists, for the known graphics-heavy programs. */
+async function processNames(run: CommandRunner, platform: string): Promise<string[]> {
+  if (platform === 'win32') {
+    // tasklist's CSV: the image name is the first quoted field of each row.
+    const { output } = await run('tasklist', ['/FO', 'CSV', '/NH'], 4000);
+    return output.split(LINE_BREAK).map((line) => line.match(/^"([^"]+)"/)?.[1]).filter((name): name is string => Boolean(name));
+  }
+  const { output } = await run('ps', ['-eo', 'comm='], 4000);
+  return output.split(LINE_BREAK).map((line) => line.trim()).filter(Boolean);
+}
+
+export async function checkCard(
+  run: CommandRunner,
+  { platform, unifiedMemory = false, samples = 5, gapMs = 220 }: { platform: string; unifiedMemory?: boolean; samples?: number; gapMs?: number },
+): Promise<CardNote> {
+  const readings: unknown[] = [];
+  for (let index = 0; index < samples; index += 1) {
+    const { output } = await run('nvidia-smi', ['--query-gpu=memory.used,memory.total,utilization.gpu', '--format=csv,noheader,nounits'], 4000);
+    const reading = output ? contention.parseNvidiaGpuQuery(output) : null;
+    if (reading) readings.push(reading);
+    if (index < samples - 1 && gapMs > 0) await new Promise((resolve) => setTimeout(resolve, gapMs));
+  }
+  // A median of several, as the app takes: a single reading of an ordinary
+  // desktop lands anywhere from 12% to 44%.
+  const median = contention.medianReading(readings);
+  if (!median) return { level: 'unknown', reasons: [], apps: [], message: '' };
+  const apps = contention.matchKnownGpuApps(await processNames(run, platform).catch(() => []));
+  const assessment = assessCard(median, apps, { unifiedMemory });
+  return {
+    level: assessment.level,
+    reasons: assessment.reasons,
+    apps: assessment.apps,
+    message: assessment.level === 'busy' || assessment.level === 'heavy' ? contention.describeGpuContention(assessment) : '',
+  };
+}
+
+/**
+ * A speed far below the grade's own estimate for this model on this card. The
+ * grade is a guess, and normally within about 30% either way (measured here:
+ * 0.9 to 1.3 times it), so under half means something other than the model is
+ * in the way: another program on the card, or a model that did not sit wholly
+ * on it. Said on the result, because the points read as a slow PC otherwise.
+ */
+export const FAR_BELOW_ESTIMATE = 0.5;
+export function farBelowEstimate(measure: Pick<TierMeasure, 'decodeTps'>, estimateTps: number | null): boolean {
+  return Boolean(estimateTps && estimateTps > 0 && measure.decodeTps < estimateTps * FAR_BELOW_ESTIMATE);
+}
+
 // ---- The plan ----------------------------------------------------------------
 
 export type PlanEntry =
@@ -143,7 +218,11 @@ export function describeDuration(seconds: number): string {
 
 // ---- Running the tiers ---------------------------------------------------------
 
-export type MeasuredTier = { tier: RigTier; status: 'measured'; measure: TierMeasure; stamp: RigStamp; gpuShare: number | null; points: RigPoints; band: SpeedBand };
+export type MeasuredTier = {
+  tier: RigTier; status: 'measured'; measure: TierMeasure; stamp: RigStamp; gpuShare: number | null; points: RigPoints; band: SpeedBand;
+  /** The fit grade's guess for this model on this card, to check the measure against. */
+  estimateTps: number | null;
+};
 export type TierLine =
   | MeasuredTier
   | { tier: RigTier; status: 'missing'; command: string }
@@ -158,12 +237,14 @@ export type MeasureReport = {
   stopped: boolean;
   /** Another program's model was in the way: the test did not run, or did not keep its numbers. */
   busy: boolean;
+  /** What the graphics card was doing before and after the runs (checkCard); filled in by the caller. */
+  card?: { before: CardNote | null; after: CardNote | null };
 };
 
 const tooBigMessage = (needGb: number, haveGb: number) => `Not run: needs ${needGb} GB of graphics memory, and this PC has ${Math.round(haveGb * 10) / 10} GB.`;
 
-function measuredLine(tier: RigTier, measure: TierMeasure, stamp: RigStamp, gpuShare: number | null): MeasuredTier {
-  return { tier, status: 'measured', measure, stamp, gpuShare, points: rigPoints(measure, stamp), band: speedBand(measure.decodeTps) };
+function measuredLine(tier: RigTier, measure: TierMeasure, stamp: RigStamp, gpuShare: number | null, estimateTps: number | null = null): MeasuredTier {
+  return { tier, status: 'measured', measure, stamp, gpuShare, points: rigPoints(measure, stamp), band: speedBand(measure.decodeTps), estimateTps };
 }
 
 /**
@@ -192,7 +273,7 @@ export async function measureTiers(
     const outcome = assembleTierResult(tier, await run(rigRunRequest(tier, `fit-${tier.id}`), tier), now());
     let line: TierLine;
     if (outcome.kind === 'measured') {
-      line = measuredLine(tier, outcome.result.measure, outcome.result.stamp, outcome.result.gpuShare);
+      line = measuredLine(tier, outcome.result.measure, outcome.result.stamp, outcome.result.gpuShare, entry.kind === 'run' ? entry.estimateTps : null);
     } else if (outcome.kind === 'not-installed') {
       line = { tier, status: 'missing', command: pullCommand(tier.model) };
     } else if (outcome.kind === 'too-big') {
@@ -238,6 +319,8 @@ export type ModelReport = {
   estimateTps: number | null;
   /** The tier this model is, when it is one: then it has points. */
   tier: RigTier | null;
+  /** What the graphics card was doing before and after the run (checkCard); filled in by the caller. */
+  card?: { before: CardNote | null; after: CardNote | null };
 } & (
   | { status: 'measured'; measure: TierMeasure; stamp: RigStamp | RigModelStamp; gpuShare: number | null; points: RigPoints | null; band: SpeedBand }
   | { status: 'missing'; command: string }
@@ -288,8 +371,11 @@ function pointsCell(points: RigPoints | null): string {
 }
 
 /** The notes a measured tier carries: a spill, points it cannot have, what differs from the reference. */
-function notesFor(label: string, line: { gpuShare: number | null; points: RigPoints | null }): string[] {
+function notesFor(label: string, line: { gpuShare: number | null; points: RigPoints | null; measure: TierMeasure; estimateTps: number | null }): string[] {
   const notes: string[] = [];
+  if (farBelowEstimate(line.measure, line.estimateTps)) {
+    notes.push(`${label}: writing ${tps(line.measure.decodeTps)} tok/s is far below the ~${number(line.estimateTps ?? 0)} tok/s estimated for this card. Something else may have been using the graphics card, or the model did not sit wholly on it, so this number is lower than this PC can do. Close other programs and run again before trusting it.`);
+  }
   if (line.gpuShare !== null && line.gpuShare < 0.99) {
     notes.push(`${label} ran ${Math.round(line.gpuShare * 100)}% on the graphics card; the rest spilled into system memory.`);
   }
@@ -304,14 +390,31 @@ function notesFor(label: string, line: { gpuShare: number | null; points: RigPoi
  * card, for a report printed on its own (piped, where the intro went to
  * stderr); in a terminal the intro above it has already said both.
  */
-export type PrintOptions = { show?: boolean; columns?: number; header?: FitHardware };
+export type PrintOptions = {
+  show?: boolean; columns?: number; header?: FitHardware;
+  /** What the card was doing before the runs: a busy one is said in the intro. */
+  before?: CardNote | null;
+};
+
+/**
+ * After the runs, a card that is still busy: something else was probably on it
+ * during them. Only when the card itself reads busy (utilisation or memory):
+ * a known program merely being open, Steam on most gaming PCs, is said before
+ * the runs, as the app says it, but does not mean the runs were disturbed.
+ */
+function afterNote(card: CardNote | null | undefined): string[] {
+  if (!card || (card.level !== 'busy' && card.level !== 'heavy') || card.reasons.length === 0) return [];
+  const reasons = card.reasons.join(' and ');
+  const named = card.apps.length ? ` ${card.apps.join(' and ')} ${card.apps.length === 1 ? 'is' : 'are'} running.` : '';
+  return [`After the runs, ${reasons}.${named} Something else was probably using the graphics card during them, so these numbers are lower than this PC can do. Close other graphics-heavy programs and run again.`];
+}
 
 const headerLines = (title: string, header: FitHardware | undefined, columns: number | undefined) => (header
   ? [title, ...wrap(describeHardware(header), columns), '']
   : []);
 
 /** What comes before the runs: who is on tonight, what is not, and how long it takes. */
-export function formatIntro(hardware: FitHardware, plan: PlanEntry[], { show = false, columns }: PrintOptions = {}): string {
+export function formatIntro(hardware: FitHardware, plan: PlanEntry[], { show = false, columns, before }: PrintOptions = {}): string {
   const sign = show && (!columns || columns >= MARQUEE_BORDER.length);
   const running = plan.filter((entry) => entry.kind === 'run');
   const lines = [...(sign ? marquee('speed test', 'How fast is your PC, really?') : ['RigMatch speed test']), describeHardware(hardware)];
@@ -327,6 +430,7 @@ export function formatIntro(hardware: FitHardware, plan: PlanEntry[], { show = f
   } else {
     prose.push('Nothing to measure: no RigScore tier model is installed that this card can hold.');
   }
+  if (running.length && before?.message) prose.push(before.message);
   // In a terminal the runs that follow are the show's speed dates.
   return [...lines, ...prose.flatMap((text) => wrap(text, columns)), ...(show && running.length ? ['', 'Speed dates'] : [])].join('\n');
 }
@@ -345,7 +449,7 @@ export function formatModelIntro(
   model: string,
   hardware: FitHardware,
   { estimateTps, sizeGb }: { estimateTps: number | null; sizeGb: number | null },
-  { show = false, columns }: PrintOptions = {},
+  { show = false, columns, before }: PrintOptions = {},
 ): string {
   const sign = show && (!columns || columns >= MARQUEE_BORDER.length);
   const time = describeDuration(estimateSeconds([{ sizeGb: sizeGb ?? 5, estimateTps }]));
@@ -353,6 +457,7 @@ export function formatModelIntro(
     ...(sign ? marquee('speed test', 'How fast is your PC, really?') : ['RigMatch speed test']),
     ...wrap(describeHardware(hardware), columns),
     ...wrap(`${show ? 'Tonight\'s speed date' : 'Measuring'}: ${model}. This takes ${time}: it loads the model, warms it up, then times ${RIG_WORKLOAD.measuredRuns} runs. Ctrl+C stops and unloads.`, columns),
+    ...(before?.message ? wrap(before.message, columns) : []),
     ...(show ? ['', 'Speed date'] : []),
   ].join('\n');
 }
@@ -379,6 +484,7 @@ export function formatReport(report: MeasureReport, { show = false, columns, hea
   const notes = report.lines.flatMap((line) => (line.status === 'measured' ? notesFor(line.tier.label, line) : []));
   if (report.busy) notes.push('Another program had a model loaded in Ollama, so RigMatch left it alone and stopped. Run again when nothing else is using Ollama.');
   if (report.stopped) notes.push('Stopped with Ctrl+C. The model was unloaded, and nothing was kept for the tier that was running.');
+  if (report.lines.some((line) => line.status === 'measured')) notes.push(...afterNote(report.card?.after));
   if (notes.length) lines.push('', ...notes.flatMap((text) => wrap(text, columns)));
 
   const headline = headlineOf(report);
@@ -417,7 +523,8 @@ export function formatModelReport(report: ModelReport, { show = false, columns, 
       ...notesFor(report.model, report),
       report.tier ? `${report.model} is RigScore's ${report.tier.label} tier, so it has points against the reference PC, an ${RIG_REFERENCE_MACHINE}.`
         : 'Points are for the four RigScore tier models (--measure on its own runs them). This is this model\'s own speed on the same test.',
-      'Estimated is the fit grade\'s guess from the size and the card; writing is measured.'];
+      'Estimated is the fit grade\'s guess from the size and the card; writing is measured.',
+      ...afterNote(report.card?.after)];
     lines.push(...prose.flatMap((text) => wrap(text, columns)));
     if (show) lines.push('', ...wrap(`Tonight's date: ${report.model} writes ${tps(report.measure.decodeTps)} tok/s here.${report.points?.kind === 'points' ? ` ${number(report.points.points)} points.` : ''}`, columns));
   } else if (report.status === 'missing') {
@@ -462,6 +569,9 @@ const pointsJson = (points: RigPoints | null) => (points?.kind === 'points'
   ? { points: points.points, pointsNote: points.notes.join(' ') || null }
   : { points: null, pointsNote: points?.kind === 'pending' ? 'reference not measured yet' : points ? points.notes.join(' ') : null });
 
+/** What the card was doing, for the JSON: the level and why, nothing else. */
+const cardJson = (note: CardNote | null | undefined) => (note ? { level: note.level, reasons: note.reasons, apps: note.apps } : null);
+
 /**
  * --measure --json: the measures, each tier's stamp and points. The stamp
  * carries what must match for two results to be compared, and nothing about
@@ -479,7 +589,10 @@ export function toMeasureJson(report: MeasureReport, hardware: FitHardware, vers
     tiers: report.lines.map((line) => {
       const base = { tier: line.tier.id, model: line.tier.model, status: line.status };
       switch (line.status) {
-        case 'measured': return { ...base, ...measureJson(line.measure, line.gpuShare), ...pointsJson(line.points), band: line.band.id, stamp: line.stamp };
+        case 'measured': return {
+          ...base, ...measureJson(line.measure, line.gpuShare), ...pointsJson(line.points), band: line.band.id,
+          estimatedTps: line.estimateTps, belowEstimate: farBelowEstimate(line.measure, line.estimateTps), stamp: line.stamp,
+        };
         case 'missing': return { ...base, command: line.command, sizeGb: line.tier.sizeGb };
         case 'skipped': return base;
         default: return { ...base, message: line.message };
@@ -488,13 +601,20 @@ export function toMeasureJson(report: MeasureReport, hardware: FitHardware, vers
     headline: headline ? { tier: headline.tier.id, ...pointsJson(headline.points), writingTps: round(headline.measure.decodeTps), band: headline.band.id } : null,
     stopped: report.stopped,
     busy: report.busy,
+    contention: { before: cardJson(report.card?.before), after: cardJson(report.card?.after) },
   };
 }
 
 /** --measure <model> --json. */
 export function toModelJson(report: ModelReport, hardware: FitHardware, version: string) {
   const base = { tool: 'rigmatch-fit', version, mode: 'measure-model', hardware: hardwareJson(hardware), workload: workloadJson(), model: report.model, tier: report.tier?.id ?? null, estimatedTps: report.estimateTps, status: report.status };
-  if (report.status === 'measured') return { ...base, ...measureJson(report.measure, report.gpuShare), ...pointsJson(report.points), band: report.band.id, stamp: report.stamp };
+  if (report.status === 'measured') {
+    return {
+      ...base, ...measureJson(report.measure, report.gpuShare), ...pointsJson(report.points), band: report.band.id,
+      belowEstimate: farBelowEstimate(report.measure, report.estimateTps), stamp: report.stamp,
+      contention: { before: cardJson(report.card?.before), after: cardJson(report.card?.after) },
+    };
+  }
   if (report.status === 'missing') return { ...base, command: report.command };
   return { ...base, message: report.message };
 }
