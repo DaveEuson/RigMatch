@@ -220,6 +220,17 @@ function wrap(text: string, columns: number | undefined): string[] {
 }
 
 /**
+ * The show's sign, bulbs and all, for people reading in a terminal. Plain
+ * ASCII like everything else here, and 41 columns wide.
+ */
+const MARQUEE_BORDER = `${'o-*-'.repeat(10)}o`;
+const MARQUEE = [
+  MARQUEE_BORDER,
+  ...['R I G M A T C H     fit check', 'Who will your PC go home with?'].map((text) => `|   ${pad(text, MARQUEE_BORDER.length - 5)}|`),
+  MARQUEE_BORDER,
+];
+
+/**
  * The card line, in plain ASCII. Windows PowerShell 5.1 reads a captured
  * program's output in the console's code page, and the "·" these used turned
  * into "┬╖" there.
@@ -235,19 +246,24 @@ export function describeHardware(hardware: FitHardware): string {
  * The table people read: ASCII only, and no wider than the terminal. When it
  * would wrap, the command column goes first (it repeats the model's name)
  * with one line saying how to get any of them, then the Fit column.
+ *
+ * `show` adds the game-show dressing, the marquee and a closing Top Match
+ * line, for a terminal. Output piped to a file or a script stays plain.
  */
 export function formatTable(
   models: RankedModel[],
   hardware: FitHardware,
-  { provider = 'ollama', ollamaReachable = false, all = false, installedOnly = false, limit = 20, columns }: {
-    provider?: Provider; ollamaReachable?: boolean; all?: boolean; installedOnly?: boolean; limit?: number; columns?: number;
+  { provider = 'ollama', ollamaReachable = false, all = false, installedOnly = false, limit = 20, columns, show = false }: {
+    provider?: Provider; ollamaReachable?: boolean; all?: boolean; installedOnly?: boolean; limit?: number; columns?: number; show?: boolean;
   } = {},
 ): string {
   const running = models.filter(inDefaultList);
   const installed = models.filter((model) => model.installed);
   const shown = installedOnly ? installed : all ? models : running.slice(0, limit);
   const markedHere = shown.filter((model) => model.installed).length;
-  const prose: string[] = ['RigMatch fit check', describeHardware(hardware)];
+  // A terminal too narrow for the sign gets the plain title.
+  const marquee = show && (!columns || columns >= MARQUEE_BORDER.length);
+  const prose: string[] = [describeHardware(hardware)];
   if (hardware.source === 'flag') prose.push('Graded for the graphics memory you gave with --vram, not this computer\'s.');
   if (hardware.driverProblem) prose.push(gpuDriverMessage(hardware.driverProblem));
   if (provider === 'lm-studio') {
@@ -264,7 +280,7 @@ export function formatTable(
             : markedHere === 0 ? `Ollama is running with ${plural(count, 'model')} installed, none of them in this list. --installed lists them.`
               : `Ollama is running with ${plural(count, 'model')} installed: ${markedHere} in this list, marked *. --installed lists all ${count}.`);
   }
-  const lines = prose.flatMap((text) => wrap(text, columns));
+  const lines = [...(marquee ? MARQUEE : ['RigMatch fit check']), ...prose.flatMap((text) => wrap(text, columns))];
   lines.push('');
 
   const header = ['Grade', 'Model', 'Size', 'Speed', 'Fit', provider === 'lm-studio' ? 'Search in LM Studio' : 'Command'];
@@ -294,6 +310,13 @@ export function formatTable(
     : `The best ${shown.length} of ${running.length} models that run here. --all lists every model, --json prints them for scripts.`);
   footer.push('Speeds are estimates from the size and the card. RigMatch measures the real ones: https://github.com/DaveEuson/RigMatch');
   lines.push('', ...footer.flatMap((text) => wrap(text, columns)));
+  // The best model that runs here, whichever list is showing.
+  const top = running[0];
+  if (show && top) {
+    const speed = top.grade.tokensPerSecond ? `, ~${Math.round(top.grade.tokensPerSecond)} tok/s` : '';
+    const hello = provider === 'lm-studio' ? `Find it with: lms get ${top.row.name}` : `Say hi: ollama run ${top.row.name}`;
+    lines.push('', ...wrap(`Tonight's Top Match: ${top.row.name} (${top.grade.letter}${speed}). ${hello}`, columns));
+  }
   return lines.join('\n');
 }
 
