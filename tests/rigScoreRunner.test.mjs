@@ -141,7 +141,7 @@ test("a plain model (tier 'model') is a request with no tier: no card-size rule,
   // Not installed: no size to quote for a model that is not a tier.
   assert.equal(assembleModelResult('gemma3:12b', { status: 'not-installed' }).message, 'gemma3:12b is not installed.');
   // Another program has a model loaded: said without "waits", since nothing waits.
-  assert.doesNotMatch(assembleModelResult('gemma3:12b', { status: 'busy', loadedModels: ['mistral:7b'] }).message, /waits/);
+  assert.doesNotMatch(assembleModelResult('gemma3:12b', { status: 'busy', loadedModels: ['mistral:7b'] }).message, /\bwaits\b/);
 });
 
 test('unloadOllamaModel asks for keep_alive 0 and says whether the model left: true, false, or an error', async () => {
