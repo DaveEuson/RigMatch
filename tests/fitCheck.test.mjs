@@ -151,6 +151,35 @@ test('the table is ASCII, fits the terminal, and says what it left out', () => {
   assert.match(formatTable(ranked, card, { columns: 50 }), /^Grade +Model +Size +Speed$/m, 'narrower, it goes too');
 });
 
+test('a terminal gets the show: the marquee and the Top Match, in ASCII', () => {
+  const ranked = rankModels(catalogRows(), card, { installed: [{ name: 'qwen3.5:9b', sizeGb: 6.1, params: '9.0B' }] });
+  const top = ranked.filter(inDefaultList)[0];
+  const table = formatTable(ranked, card, { ollamaReachable: true, columns: 100, show: true });
+  const lines = table.split('\n');
+  assert.equal(lines[0], 'o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o');
+  assert.equal(lines[1], '|   R I G M A T C H     fit check       |');
+  assert.equal(lines[2], '|   Who will your PC go home with?      |');
+  assert.equal(lines[3], lines[0]);
+  assert.equal(lines[4], 'NVIDIA GeForce RTX 4070, 12 GB graphics memory, 32 GB system memory');
+  assert.ok(lines.slice(0, 4).every((line) => line.length === 41), 'the sign is one width');
+  const speed = Math.round(top.grade.tokensPerSecond);
+  assert.equal(lines.at(-1), `Tonight's Top Match: ${top.row.name} (${top.grade.letter}, ~${speed} tok/s). Say hi: ollama run ${top.row.name}`);
+  assert.match(table, ascii);
+  assert.match(formatTable(ranked, card, { provider: 'lm-studio', show: true }), new RegExp(`Find it with: lms get ${top.row.name.replace(/[.]/g, '\\.')}$`));
+
+  // Too narrow for the sign, the plain title, and the Top Match still fits.
+  const narrow = formatTable(ranked, card, { ollamaReachable: true, columns: 40, show: true }).split('\n');
+  assert.equal(narrow[0], 'RigMatch fit check');
+  const match = narrow.findIndex((line) => line.startsWith("Tonight's Top Match:"));
+  assert.ok(match > 0);
+  for (const line of narrow.slice(match)) assert.ok(line.length <= 40, `${line.length} > 40: ${line}`);
+
+  // Piped into a file or a script, none of it.
+  const plain = formatTable(ranked, card, { ollamaReachable: true });
+  assert.equal(plain.split('\n')[0], 'RigMatch fit check');
+  assert.doesNotMatch(plain, /o-\*-o|Top Match/);
+});
+
 test('the driver advice matches the problem', () => {
   const ranked = rankModels(catalogRows(), card);
   assert.match(formatTable(ranked, { ...card, driverProblem: 'reboot-required' }), /Your NVIDIA driver was updated, but the old one is still running\. Restart your computer/);

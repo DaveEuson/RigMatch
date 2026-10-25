@@ -137,6 +137,8 @@ async function main(): Promise<number> {
       provider, ollamaReachable, all: values.all, installedOnly: values.installed,
       // Only a terminal has a width; piped into a file or another program, nothing is cut.
       columns: process.stdout.isTTY ? process.stdout.columns : undefined,
+      // The marquee and the Top Match line are for people, not for pipes.
+      show: Boolean(process.stdout.isTTY),
     }));
   return 0;
 }

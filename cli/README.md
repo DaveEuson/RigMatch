@@ -7,17 +7,25 @@ npx rigmatch-fit
 ```
 
 ```text
-RigMatch fit check
+o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o
+|   R I G M A T C H     fit check       |
+|   Who will your PC go home with?      |
+o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o
 NVIDIA GeForce RTX 4070, 12 GB graphics memory, 61.6 GB system memory
-Ollama is running with 9 models installed: 3 in this list, marked *. --installed lists all 9.
+Ollama is running with 11 models installed: 4 in this list, marked *. --installed lists all 11.
 
 Grade  Model             Size    Speed      Fit         Command
 A      qwen3.5:9b *      6.1 GB  ~49 tok/s  Sweet spot  ollama run qwen3.5:9b
 A      qwen3-vl:8b       5.7 GB  ~53 tok/s  Sweet spot  ollama pull qwen3-vl:8b
 A      mistral-nemo:12b  6.6 GB  ~46 tok/s  Sweet spot  ollama pull mistral-nemo:12b
-A      deepseek-r1:8b    4.8 GB  ~63 tok/s  Sweet spot  ollama pull deepseek-r1:8b
-A      qwen3:8b          4.8 GB  ~63 tok/s  Sweet spot  ollama pull qwen3:8b
+A      ministral-3:8b    5.6 GB  ~54 tok/s  Sweet spot  ollama pull ministral-3:8b
+A      qwen3:8b *        4.9 GB  ~61 tok/s  Sweet spot  ollama run qwen3:8b
+...
+
+Tonight's Top Match: qwen3.5:9b (A, ~49 tok/s). Say hi: ollama run qwen3.5:9b
 ```
+
+The sign and the Top Match line are for a terminal. Piped into a file or another program, the output starts with a plain "RigMatch fit check" line, and `--json` has neither.
 
 ## Options
 
