@@ -3,6 +3,29 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.10.0',
+    label: 'Blind Dates',
+    date: 'Beta build',
+    notes: [
+      'Blind shows. Turn on "Blind show" above the lineup in Advanced Mode, and the contestants become Contestant 1, 2 and 3: their names, sizes and scores stay hidden while they answer. At the end you pick your favourite from their answers side by side, and RigMatch reveals who each one was, who the judge picked, and whether you agreed. It\'s off unless you turn it on.',
+      'Your taste. Every blind pick adds up into a ranking of your own on Results, separate from the judge\'s scores. Only blind picks count, since a pick made knowing the names says less about the answers. Clear Scores clears it, and clearing one model\'s score tells you how many of your picks go with it.',
+      'The drawing round. The General question set now asks every contestant to draw something, like a pelican riding a bicycle (after Simon Willison\'s pelican benchmark), as an SVG picture. The drawings show on stage and side by side in the results. A judge that can see pictures looks at the drawing; any other judge reads its code, and the note says which. Every drawing is cleaned before it\'s shown, so nothing in one can run or load anything, and a model that runs out of time is left out of the score instead of getting 0.',
+      'A Fit grade on every model. The Models list and each model\'s page show a grade from A to F before you test anything: whether the model fits your graphics memory, how fast it should run, and how good it is for its size. Click it for the reasons in plain words. Scores measured on another computer don\'t count toward it.',
+      'Model rows have a quiet copy button for the download command (ollama pull, or LM Studio\'s), for when you\'d rather use a terminal.',
+      'rigmatch-fit for the terminal: npx rigmatch-fit lists the models that will run well on your computer with their Fit grade, size, speed and command, and marks the ones you already have. --json prints the list for scripts.',
+      'RigScore. My PC > Speed score in Advanced Mode runs the same fixed test on any computer and gives one number you can compare, where 1000 is an RTX 4070. A line beside it says what the speed means for you, and past runs are kept. A tier too big for your card says "Not run" instead of 0, and the test won\'t start while a show or chat is using the graphics card.',
+      'Ask two models at once, in RigMatch Chat. "Ask a second model too" sends each message to two models and shows their answers side by side, each keeping its own conversation. Stop and Regenerate work on each side, and "Keep this one" goes back to a normal chat with that model. If both won\'t fit in your graphics memory together, Chat says they may take turns. Going back to an older RigMatch Chat afterwards deletes the second model\'s answers the next time it saves.',
+      'Links in RigMatch Chat\'s answers open in your web browser. They used to replace Chat\'s window with the page, with no way back.',
+      'What\'s New has pages: 20 models a page with Previous and Next. A family\'s new versions share one row, so a burst of new tags no longer pushes everything else away, and the scope tabs can be clicked again.',
+      'Copy results, and every other copy button in the app, works again. In 0.9.9 they copied nothing, and Copy results didn\'t say so.',
+      'The "Report ready" bar no longer sits on top of buttons and scores after a show, such as the page buttons in What\'s New and the scores on Winner.',
+      'On Comparison\'s Ranking, the Accuracy fader no longer squashes into the list below it.',
+      'The "First date" achievement waits until the show is over. It used to arrive when the first contestant finished.',
+      'Results > Runs shows every date in your regional format. Some rows used a different style.',
+      'RigMatch now runs on Electron 42.11.18, with this month\'s security fixes, including one that stops trusting certificates from a compromised authority.',
+    ],
+  },
+  {
     version: '0.9.9',
     label: 'Tells You Why',
     date: 'Beta build',

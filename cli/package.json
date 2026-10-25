@@ -1,7 +1,6 @@
 {
   "name": "rigmatch-fit",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.10.0",
   "description": "Which local AI models will run well on this computer: RigMatch's fit grade, in a terminal",
   "type": "module",
   "bin": {
