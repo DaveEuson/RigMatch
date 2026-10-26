@@ -28,7 +28,9 @@ Everything runs on your machine. No account, no telemetry, and no cloud unless y
 
 **RigMatch is donationware.** Every feature is free, and nothing is locked if you don't donate. If it helps you, you can [buy me a coffee](https://buymeacoffee.com/daveeuson).
 
-- 🖥️ **Reads your real rig**. GPU, VRAM, RAM and disk decide which contestants even qualify
+**RigMatch is source-available, not open source.** The code is public so you can check what the app does, but the licence doesn't let you copy or redistribute it (see [License](#license)).
+
+- 🖥️ **Reads your real rig**. GPU, VRAM, RAM and disk decide which contestants even qualify, and every model gets a Fit grade from A to F before you download it
 - 💛 **Speed Dating benchmarks**. Every model answers the same questions, live on stage
 - 🏆 **Match Score (0–100)** — speed, quality and fit, scored on your PC
 - 💬 **Chat with the winner** in RigMatch Chat, or skip the show and start chatting
@@ -65,7 +67,7 @@ RigMatch asks before it downloads anything, then shows live progress while your 
 
 ### 4 · Show — Speed Dating, live on stage
 
-One sheet before the start says which questions run, who marks them and how hard your computer will work. Then every contestant answers the same questions on the game-show stage, one at a time, with live scores. Stop ends the whole show.
+One sheet before the start says which questions run, who marks them and how hard your computer will work. Then every contestant answers the same questions on the game-show stage, one at a time, with live scores. One of the questions asks each model to draw a pelican riding a bicycle as an SVG picture, an idea from [Simon Willison's pelican benchmark](https://simonwillison.net/tags/pelican-riding-a-bicycle/). Stop ends the whole show.
 
 <p align="center"><img src="docs/images/04-compare.png" alt="Show step — the Speed Dating stage" width="100%"></p>
 
@@ -77,7 +79,7 @@ The reveal: your Top Match under the lights with its grade, Match Score and the 
 
 ## Chatting with your models
 
-**RigMatch Chat** is the chat window that comes with RigMatch. Open it from **Chat** in the top bar, from the Winner screen, or from the Just want to chat? card. It lists your Ollama models with their Match Scores, and it remembers only what you ask it to keep, in a "What it remembers" panel you can read and add to. LM Studio models chat in a panel inside RigMatch instead, because RigMatch Chat lists only Ollama's models.
+**RigMatch Chat** is the chat window that comes with RigMatch. Open it from **Chat** in the top bar, from the Winner screen, or from the Just want to chat? card. It lists your Ollama models with their Match Scores, and it remembers only what you ask it to keep, in a "What it remembers" panel you can read and add to. **Ask a second model too** sends each message to two models and shows their answers side by side; "Keep this one" goes back to a normal chat with the one you preferred. LM Studio models chat in a panel inside RigMatch instead, because RigMatch Chat lists only Ollama's models.
 
 ## Pictures, video and sound
 
@@ -89,13 +91,17 @@ The full control room, with its tabs in the top bar. Your Top Match carries over
 
 - **Models**: every model RigMatch knows, each with a Fit grade for your PC (A to F, with the reasons a click away), filters for what it can do, plus downloads
 - **What's New**: models that just appeared in Ollama's catalog
-- **Comparison**: run a show with the models, questions and judge you choose, and add skill tests such as Build an app or the Code challenge
+- **Comparison**: run a show with the models, questions and judge you choose, and add skill tests such as Build an app or the Code challenge. Turn on **Blind show** and the contestants become Contestant 1, 2 and 3, with names, sizes and scores hidden; at the end you pick your favourite from their answers side by side, then RigMatch shows who each one was and whether the judge agreed with you
 - **Labs**: picture, video and sound makers given the same prompt, and listening tests
-- **Results**: your Top Match and its measurements, the ranking, and every test you've run, with a fader between accuracy and speed
-- **My PC**: your hardware, Setup Doctor and logs
+- **Results**: your Top Match and its measurements, the ranking, and every test you've run, with a fader between accuracy and speed. **Your taste** ranks models by your blind picks alone, kept apart from the judge's scores
+- **My PC**: your hardware, Setup Doctor and logs, and **Speed score** (RigScore): the same test on any computer, giving one number you can compare. An RTX 4070 scores about 1,000, and one PC can vary by 10 to 15 percent between runs
 - **Settings** (the gear): one section at a time, picked from a list
 
-<p align="center"><img src="docs/images/advanced-models.png" alt="Advanced Mode — the Models tab" width="100%"></p>
+<p align="center"><img src="docs/images/advanced-models.png" alt="Advanced Mode — the Models tab, with the reasons behind qwen3:14b's Fit grade A open" width="100%"></p>
+
+<p align="center"><img src="docs/images/blind-show.png" alt="A blind show on the Comparison stage — Contestant 1, 2 and 3 with their names hidden, and Contestant 2's pelican drawing" width="100%"></p>
+
+<p align="center"><img src="docs/images/speed-score.png" alt="My PC › Speed score — 1,031 points on the Standard tier on an RTX 4070, with each tier's speed" width="100%"></p>
 
 ## Getting started
 
@@ -216,9 +222,13 @@ Grade  Model             Size    Speed      Fit         Command
 A      qwen3.5:9b *      6.1 GB  ~49 tok/s  Sweet spot  ollama run qwen3.5:9b
 A      qwen3-vl:8b       5.7 GB  ~53 tok/s  Sweet spot  ollama pull qwen3-vl:8b
 A      mistral-nemo:12b  6.6 GB  ~46 tok/s  Sweet spot  ollama pull mistral-nemo:12b
-A      deepseek-r1:8b    4.8 GB  ~63 tok/s  Sweet spot  ollama pull deepseek-r1:8b
-A      qwen3:8b          4.8 GB  ~63 tok/s  Sweet spot  ollama pull qwen3:8b
+A      ministral-3:8b    5.6 GB  ~54 tok/s  Sweet spot  ollama pull ministral-3:8b
+A      qwen3:8b *        4.9 GB  ~61 tok/s  Sweet spot  ollama run qwen3:8b
+...
+The best 20 of 202 models that run here.
 ```
+
+Models marked `*` are already in your Ollama, so their command is `ollama run`.
 
 | Option | Does |
 |---|---|

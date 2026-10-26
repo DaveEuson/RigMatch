@@ -75,6 +75,27 @@
       .top-match-score .figure { color: var(--text-strong); font-size: 48px; line-height: 1.1; }
       .top-match p { max-width: 52ch; margin: 0; font-size: 16px; }
 
+      /* Real screenshots beside a few lines of text; .flip puts the picture first. */
+      .feature { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: center; gap: 36px; }
+      .feature.flip > :first-child { order: 2; }
+      .feature-copy { display: flex; flex-direction: column; gap: 14px; }
+      .feature-copy p { margin: 0; color: var(--muted); }
+      .feature-copy p strong { color: var(--text-strong); font-weight: 700; }
+      .shot { margin: 0; }
+      .shot img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 12px; }
+      .shot figcaption { margin-top: 8px; color: var(--muted); font-size: 14px; }
+      .wide-shot { margin: 24px 0 0; }
+      @media (max-width: 860px) {
+        .feature { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+        .feature.flip > :first-child { order: 0; }
+      }
+
+      /* The fit check in a terminal, as text. */
+      .terminal { margin: 0; padding: 16px 18px; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: #120f1b; color: var(--text); font: 500 13px / 1.5 var(--figure); white-space: pre; }
+      .terminal .prompt { color: var(--gold); }
+      .terminal .dim { color: var(--muted); }
+      code { font-family: var(--figure); font-size: 0.92em; color: var(--text-strong); }
+
       /* The score. */
       .pillars { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 12px; margin: 24px 0 0; padding: 0; list-style: none; }
       .pillars li { display: flex; flex-direction: column; gap: 6px; padding: 18px; border-radius: 12px; background: var(--panel); }
@@ -177,6 +198,53 @@
         </div>
       </section>
 
+      <section id="fit" class="wrap">
+        <div class="feature">
+          <div class="feature-copy">
+            <h2>See what fits before you download</h2>
+            <p>Every model gets a <strong>Fit grade</strong> for your computer, from A to F, before you test or download anything. It weighs whether the model fits in your graphics memory, how fast it should run and how good it is for its size. Click a grade to read the reasons.</p>
+          </div>
+          <figure class="shot"><a href="./shots/fit-grade.webp"><img src="./shots/fit-grade.webp" width="740" height="506" loading="lazy" alt="The Models list in RigMatch, with a Fit grade beside each model's size. The reasons for qwen3:14b are open: Fit grade A, fits in your graphics memory with 3.4 GB spare, about 25 words a second, strong for its size." /></a></figure>
+        </div>
+        <div class="feature-copy" style="margin-top: 40px;">
+          <h3 style="margin: 0; font-size: 24px;">Or ask from a terminal</h3>
+          <p class="lede-muted"><code>npx rigmatch-fit</code> prints the same grades for the models that run well on your computer, best first, with the command to get each one. It needs Node 20 or newer and downloads no models. Add <code>--measure</code> to time the ones you already have.</p>
+          <pre class="terminal" tabindex="0" role="region" aria-label="The output of npx rigmatch-fit on an RTX 4070: a marquee sign, the graphics card, a table of models graded A with their size, estimated speed and the command to get each, and tonight's Top Match, qwen3.5:9b."><span class="prompt">&gt;</span> npx rigmatch-fit
+o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o
+|   R I G M A T C H     fit check       |
+|   Who will your PC go home with?      |
+o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o
+NVIDIA GeForce RTX 4070, 12 GB graphics memory
+
+Grade  Model             Size    Speed      Fit         Command
+A      qwen3.5:9b *      6.1 GB  ~49 tok/s  Sweet spot  ollama run qwen3.5:9b
+A      qwen3-vl:8b       5.7 GB  ~53 tok/s  Sweet spot  ollama pull qwen3-vl:8b
+A      mistral-nemo:12b  6.6 GB  ~46 tok/s  Sweet spot  ollama pull mistral-nemo:12b
+A      qwen3:8b *        4.9 GB  ~61 tok/s  Sweet spot  ollama run qwen3:8b
+A      gemma4:12b *      7.5 GB  ~40 tok/s  Good fit    ollama run gemma4:12b
+<span class="dim">...</span>
+Tonight's Top Match: qwen3.5:9b (A, ~49 tok/s).</pre>
+        </div>
+      </section>
+
+      <section id="blind" class="wrap">
+        <div class="feature flip">
+          <div class="feature-copy">
+            <h2>Blind dates</h2>
+            <p>Turn on <strong>Blind show</strong> in Advanced Mode and the contestants become Contestant 1, 2 and 3. Their names, sizes and scores stay hidden while they answer.</p>
+            <p>At the end you read their answers side by side and pick the one you’d rather use. Then the names come out, with the judge’s winner beside your pick. Your picks add up into a ranking of your own, <strong>Your taste</strong>, kept apart from the judge’s scores.</p>
+          </div>
+          <figure class="shot"><a href="./shots/blind-stage.webp"><img src="./shots/blind-stage.webp" width="1140" height="516" loading="lazy" alt="A blind show on stage: Contestant 1, 2 and 3 with question-mark faces instead of model avatars. Contestant 2 has drawn a picture; the other two drawings were cut off." /></a></figure>
+        </div>
+        <figure class="shot wide-shot"><a href="./shots/blind-reveal.webp"><img src="./shots/blind-reveal.webp" width="1260" height="292" loading="lazy" alt="The reveal: Contestant 1 was Llama3.2, marked Your pick, 89 Match. Contestant 2 was Gemma3, 89 Match. Contestant 3 was Granite4, marked Match winner, 94 Match." /></a><figcaption>The reveal from a real blind show with llama3.2:3b, gemma3:4b and granite4:3b. The pick went to Llama 3.2; the best Match score went to Granite 4.</figcaption></figure>
+      </section>
+
+      <section id="pelicans" class="wrap">
+        <h2>Can it draw a pelican riding a bicycle?</h2>
+        <p class="lede-muted" style="margin-top: 16px;">The General question set now includes a drawing round, borrowed from <a href="https://simonwillison.net/tags/pelican-riding-a-bicycle/">Simon Willison’s pelican benchmark</a>. Each model answers with an SVG picture. RigMatch cleans it so nothing in it can run, then the judge scores it.</p>
+        <figure class="shot wide-shot"><a href="./shots/pelicans.webp"><img src="./shots/pelicans.webp" width="1200" height="1010" loading="lazy" alt="Nine drawings of a pelican riding a bicycle, one per model, with scores: gemma4:12b 88, qwen3.5:9b 78, gemma3:12b 40, granite4:3b 35, mistral:7b 35, gemma3:4b 35, qwen2.5:7b 25, qwen3:0.6b 15 (a single black circle), and llama3.2:3b ran out of room before finishing." /></a><figcaption>Nine local models on one RTX 4070, one run each at temperature 0, scored by a local judge that looked at each picture.</figcaption></figure>
+      </section>
+
       <section id="score" class="wrap">
         <h2>One honest number</h2>
         <p class="lede-muted" style="margin-top: 16px;">The Match Score blends four measurements, all taken on your computer. Slide between accuracy first and speed first and the ranking updates, without running anything again.</p>
@@ -186,6 +254,16 @@
           <li><div><b>Finish rate</b><span class="figure">× 0.18</span></div><p>Whether it finishes its answers, without errors or running out of time.</p></li>
           <li><div><b>Fit</b><span class="figure">× 0.16</span></div><p>How comfortably it sits in your memory, leaving room for everything else.</p></li>
         </ul>
+      </section>
+
+      <section id="speed" class="wrap">
+        <div class="feature">
+          <div class="feature-copy">
+            <h2>How fast is your PC, really?</h2>
+            <p><strong>Speed score</strong>, under My PC in Advanced Mode, runs the same test on any computer and gives one number you can set beside someone else’s. An RTX 4070 scores about 1,000, and the same PC can vary by 10 to 15 percent from one run to the next.</p>
+          </div>
+          <figure class="shot"><a href="./shots/speed-score.webp"><img src="./shots/speed-score.webp" width="1440" height="812" loading="lazy" alt="The Speed score screen: 1,031 points on the Standard tier with qwen3:8b, rated Excellent. Tiers: Light, llama3.2:3b, 145 tokens a second, 1,043 points; Standard, qwen3:8b, 68 tokens a second, 1,031 points; Heavy, qwen3:14b, 24 tokens a second, 765 points; Extreme not run because it needs 24 GB." /></a><figcaption>A real run on an RTX 4070, with a warning that Steam was using the card.</figcaption></figure>
+        </div>
       </section>
 
       <section id="tests" class="wrap">
@@ -198,6 +276,16 @@
           <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 3c.6 3.9 2.6 5.9 6.5 6.5-3.9.6-5.9 2.6-6.5 6.5-.6-3.9-2.6-5.9-6.5-6.5C7.4 8.9 9.4 6.9 10 3Z" style="fill:var(--accent);stroke:var(--accent)"></path><path d="M18 14.5c.3 1.9 1.1 2.7 3 3-1.9.3-2.7 1.1-3 3-.3-1.9-1.1-2.7-3-3 1.9-.3 2.7-1.1 3-3Z"></path></svg><div><b>Video, sound and music</b><span>Clips from ComfyUI’s video and audio models, with your eye and ear as the judge.</span></div></li>
           <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3.5h12a1 1 0 0 1 1 1v16l-7-4-7 4v-16a1 1 0 0 1 1-1Z"></path><path d="M12 13c-2.4-1.6-3.2-3-3.2-4.2 0-1 .8-1.8 1.7-1.8.7 0 1.2.3 1.5.9.3-.6.8-.9 1.5-.9.9 0 1.7.8 1.7 1.8 0 1.2-.8 2.6-3.2 4.2Z" style="fill:var(--accent)" stroke="none"></path></svg><div><b>Listening and reading pictures</b><span>Speech to text and questions about a picture, each with an answer to check against.</span></div></li>
         </ul>
+      </section>
+
+      <section id="chat" class="wrap">
+        <div class="feature flip">
+          <div class="feature-copy">
+            <h2>Ask two models at once</h2>
+            <p>In RigMatch Chat, <strong>Ask a second model too</strong> sends each message to two models and shows their answers side by side. Each keeps its own conversation, and <strong>Keep this one</strong> goes back to a normal chat with the one you preferred.</p>
+          </div>
+          <figure class="shot"><a href="./shots/chat-split.webp"><img src="./shots/chat-split.webp" width="1000" height="542" loading="lazy" alt="RigMatch Chat with two answers side by side to the question why a bigger AI model needs more graphics memory: Llama 3.2 3B on the left, Gemma 3 4B on the right, each with Regenerate and Keep this one." /></a></figure>
+        </div>
       </section>
 
       <section class="wrap" aria-labelledby="report-title">
@@ -215,13 +303,13 @@
         <div class="local">
           <div>
             <h2>Nothing leaves your computer</h2>
-            <p>Models run through Ollama and ComfyUI on your own hardware. No account, no telemetry. The one exception is a cloud judge, which you’d have to choose yourself, and RigMatch shows what it would send before every run.</p>
+            <p>Models run through Ollama and ComfyUI on your own hardware. No account, no telemetry. The exceptions are the OpenRouter judge and Ollama’s cloud models, which you’d have to choose yourself, and RigMatch shows what would leave your computer before every run.</p>
           </div>
           <ul>
             <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" style="fill:var(--green);stroke:var(--green)"></circle><path d="M7.5 12.3l3 3 6-6.3" style="stroke:var(--bg)" stroke-width="2.6"></path></svg>No account</li>
             <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" style="fill:var(--green);stroke:var(--green)"></circle><path d="M7.5 12.3l3 3 6-6.3" style="stroke:var(--bg)" stroke-width="2.6"></path></svg>No telemetry</li>
             <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" style="fill:var(--green);stroke:var(--green)"></circle><path d="M7.5 12.3l3 3 6-6.3" style="stroke:var(--bg)" stroke-width="2.6"></path></svg>Models stay on your disk</li>
-            <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" style="fill:var(--green);stroke:var(--green)"></circle><path d="M7.5 12.3l3 3 6-6.3" style="stroke:var(--bg)" stroke-width="2.6"></path></svg>Source on GitHub</li>
+            <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" style="fill:var(--green);stroke:var(--green)"></circle><path d="M7.5 12.3l3 3 6-6.3" style="stroke:var(--bg)" stroke-width="2.6"></path></svg>Source-available on GitHub</li>
           </ul>
         </div>
       </section>
@@ -229,7 +317,7 @@
       <section id="download" class="wrap download">
         <div class="apps"><img src="./icons/rigmatch-256.svg" alt="RigMatch icon" /><img src="./icons/rigmatch-chat-256.svg" alt="RigMatch Chat icon" /></div>
         <h2>Meet your PC’s perfect match.</h2>
-        <p>RigMatch and RigMatch Chat, free, with every feature. They’re donationware: if they help, you can <a href="https://buymeacoffee.com/daveeuson">buy me a coffee</a>, and nothing is locked if you don’t. You’ll also need Ollama; RigMatch walks you through setting it up.</p>
+        <p>RigMatch and RigMatch Chat, free, with every feature. They’re donationware: if they help, you can <a href="https://buymeacoffee.com/daveeuson">buy me a coffee</a>, and nothing is locked if you don’t. You’ll also need Ollama; RigMatch walks you through setting it up. The code is public so you can check what the apps do, but it’s source-available, not open source.</p>
         <div class="hero-actions">
           <a class="btn btn-gold btn-lg" href="https://github.com/DaveEuson/RigMatch/releases/latest"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3.5v10" style="stroke:var(--accent)"></path><path d="M7.5 9.5 12 14l4.5-4.5" style="stroke:var(--accent)"></path><path d="M3.5 15v2.5a3 3 0 0 0 3 3h11a3 3 0 0 0 3-3V15"></path></svg>Windows</a>
           <a class="btn btn-line btn-lg" href="https://github.com/DaveEuson/RigMatch/releases/latest"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3.5v10" style="stroke:var(--accent)"></path><path d="M7.5 9.5 12 14l4.5-4.5" style="stroke:var(--accent)"></path><path d="M3.5 15v2.5a3 3 0 0 0 3 3h11a3 3 0 0 0 3-3V15"></path></svg>macOS</a>
