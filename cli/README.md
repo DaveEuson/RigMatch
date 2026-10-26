@@ -1,6 +1,6 @@
 # rigmatch-fit
 
-Which local AI models will run well on this computer? `rigmatch-fit` reads your graphics card and memory, grades every chat model in a snapshot of Ollama's library for this PC, and prints the best picks with the command that gets each one (or runs it, if you have it already). The snapshot ships with each release; this one is from October 2026.
+Which local AI models will run well on this computer? `rigmatch-fit` reads your graphics card and memory, grades every chat model in a snapshot of Ollama's library for this PC, and prints the best picks with the command that gets each one (or runs it, if you have it already). The snapshot ships with each release; this one is from 26 October 2026.
 
 Those speeds are estimates. `rigmatch-fit --measure` [measures the real ones](#measure-the-real-speed) through your own Ollama, with a score you can set beside another computer's.
 

@@ -135,6 +135,7 @@ import {
   isHostBenchmarkReady,
   canGenerateText,
   canJoinComparison,
+  canSeatInSimplePick,
   lacksChatFormat,
   noChatFormatReason,
   canHearAudio,
@@ -260,7 +261,8 @@ import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById
 import { readHuggingFaceToken } from './lib/huggingFaceToken';
 import { goalById, goalsAfterWelcome, presetIdForGoal } from './lib/goals';
 import { isDockWorthyPullProgress, modelMatchesTask, nextDockExpiry } from './lib/modelCatalog';
-import { chooseLineup, isSpecialistModel } from './lib/chooseLineup';
+import { chooseLineup } from './lib/chooseLineup';
+import { NON_CHAT_NOTE, nonChatKind } from './lib/modelKind';
 import { modelIdentities, sameModel } from './lib/modelKey.ts';
 import { gpuDriverMessage } from './lib/gpuDriver';
 import { codeJudgeFor, labJudgeFor } from './lib/labJudge.ts';
@@ -1147,13 +1149,11 @@ function App() {
       // can never sit in one — showing them as pickable contestants and then
       // silently refusing the pick was the cold walkthrough's worst finding.
       // They live in Models and run in the Lab; the video/image dream filters
-      // say so instead of listing them.
-      .filter((row) => canJoinComparison(row) && !isSpecialistModel(row.displayName))
-      .filter((row) => getPlatformFit(row.displayName, system.platform).compatible)
-      // A model still to download needs Ollama. Without it the card queued a
-      // download that never started, and "Choose for me" filled the lineup
-      // with them, leaving Next disabled with no reason given.
-      .filter((row) => row.installed || ollama.ready)
+      // say so instead of listing them. Decision and speech models are kept
+      // out the same way, and a model still to download needs Ollama: without
+      // it the card queued a download that never started, and "Choose for me"
+      // filled the lineup with them, leaving Next disabled with no reason.
+      .filter((row) => canSeatInSimplePick(row, system.platform, ollama.ready))
       // An LM Studio model takes every round, on LM Studio (labBaseUrl); the
       // listening round's own filter keeps out models that cannot hear.
       .map((row) => ({ row, fit: getHardwareFit(row, vramGb) }))
@@ -3327,7 +3327,10 @@ function App() {
       return;
     }
     if (!canJoinComparison(row)) {
-      setActivity(`${row.displayName} cannot join Speed Dating — the comparison is a conversation, and this model does not chat. Generation models race each other in the Lab, where every model gets the same prompt and seed.`);
+      const kind = nonChatKind(row);
+      setActivity(kind
+        ? `${row.displayName} cannot join Speed Dating — the comparison is a conversation. ${NON_CHAT_NOTE[kind]}`
+        : `${row.displayName} cannot join Speed Dating — the comparison is a conversation, and this model does not chat. Generation models race each other in the Lab, where every model gets the same prompt and seed.`);
       return;
     }
     const hardwareFit = getHardwareFit(row, system.gpu.vramGb);
