@@ -64,19 +64,19 @@
       <section aria-labelledby="describe">
         <h2 id="describe">Describing it</h2>
         <p class="copy-block"><b>In one line</b>RigMatch tests AI models on your own PC and tells you which one runs best on it.</p>
-        <p class="copy-block"><b>In a paragraph</b>Picking a local AI model means reading about parameters, quantization and VRAM, and the answer is different on every computer. RigMatch skips that. It runs the same questions through each model you pick, on your own machine, and scores each one on answer quality, speed, stability and how well it fits your hardware. The winner is your Top Match. It is built as a dating game show: the models are contestants, the tests are speed dates, and a host narrates. It is free, has no account, and sends nothing anywhere.</p>
-        <p class="copy-block"><b>In 140 characters</b>A free app that makes AI models compete on your own PC and crowns the best match. No account, no cloud.</p>
+        <p class="copy-block"><b>In a paragraph</b>Picking a local AI model means reading about parameters, quantization and VRAM, and the answer is different on every computer. RigMatch skips that. It runs the same questions through each model you pick, on your own machine, and scores each one on answer quality, speed, stability and how well it fits your hardware. The winner is your Top Match. It is built as a dating game show: the models are contestants, the tests are speed dates, and a host narrates. It is free, has no account, and runs on your own computer: nothing is sent anywhere unless you choose the OpenRouter judge or one of Ollama’s cloud models.</p>
+        <p class="copy-block"><b>In 140 characters</b>A free app that makes AI models compete on your own PC and crowns the best match. Free, no account, local by default.</p>
       </section>
 
       <section aria-labelledby="facts">
         <h2 id="facts">Quick facts</h2>
         <dl class="facts">
-          <dt>What it is</dt><dd>A desktop app that benchmarks local AI models through Ollama and ranks them on the PC they will run on</dd>
-          <dt>Version</dt><dd>0.9.7, a beta (October 2026)</dd>
+          <dt>What it is</dt><dd>A desktop app that benchmarks local AI models through Ollama or LM Studio and ranks them on the PC they will run on</dd>
+          <dt>Version</dt><dd>0.10.0, a beta (October 2026)</dd>
           <dt>Platforms</dt><dd>Windows, macOS (Intel and Apple Silicon), Linux (x64 and ARM64)</dd>
           <dt>Price</dt><dd>Free. Every feature is open to everyone; donations are optional</dd>
           <dt>Needs</dt><dd><a href="https://ollama.com">Ollama</a>, installed on the same computer. A graphics card is recommended</dd>
-          <dt>Privacy</dt><dd>No account, no telemetry, nothing leaves the computer. The one optional exception is a cloud judge you switch on yourself, which says so where you turn it on</dd>
+          <dt>Privacy</dt><dd>No account, no telemetry. Nothing leaves the computer unless you choose one of two things yourself: the OpenRouter judge, or a test of one of Ollama’s cloud models. The sheet before every show says what would leave</dd>
           <dt>Source</dt><dd>Source-available, not open source: the code is public so anyone can read it and check these claims, but it is not licensed for reuse</dd>
           <dt>Author</dt><dd>Dave Euson, working alone</dd>
           <dt>Links</dt><dd><a href="./">Site</a> · <a href="./app/">Browser demo</a> · <a href="https://github.com/DaveEuson/RigMatch">Source</a> · <a href="https://github.com/DaveEuson/RigMatch/releases/latest">Downloads</a> · <a href="./ajax/">The Ajax report</a></dd>
@@ -97,7 +97,7 @@
         <ul class="points">
           <li><b>It is a beta.</b> There are few users so far, and bugs are likely. Release notes list what changed and what is known to be wrong.</li>
           <li><b>A score belongs to one machine.</b> A Match Score of 92 on one PC says nothing about another, and the app says so.</li>
-          <li><b>It tests the models you have.</b> It works through Ollama. It does not test cloud models, because a data-centre model would always win and the result would mean nothing about your PC.</li>
+          <li><b>It tests the models on your computer.</b> It works through Ollama or LM Studio. It can also run one of Ollama’s cloud models, but that model runs in a data center, so its result says nothing about your PC, and the sheet before the show says its questions leave your computer.</li>
         </ul>
       </section>
 
@@ -113,12 +113,12 @@
       </section>
 
       <section aria-labelledby="icon">
-        <h2 id="icon">Icon and colours</h2>
+        <h2 id="icon">Icon and colors</h2>
         <div class="icon-row">
           <img src="./press/rigmatch-icon-512.png" width="96" height="96" alt="The RigMatch icon: a small retro television with a heart on its screen." />
           <p><a href="./press/rigmatch-icon-512.png" download>PNG, 512 × 512</a> · <a href="./press/rigmatch-icon.svg" download>SVG</a></p>
         </div>
-        <ul class="swatches" aria-label="Brand colours">
+        <ul class="swatches" aria-label="Brand colors">
           <li><i style="background:#1b1726"></i>Stage plum #1b1726</li>
           <li><i style="background:#efbc5a"></i>Gold #efbc5a</li>
           <li><i style="background:#e37185"></i>Pink #e37185</li>

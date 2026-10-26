@@ -5,7 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RigMatch · Find the AI your computer was made for</title>
-    <meta name="description" content="RigMatch tests local AI models on your own PC and crowns a Top Match: a score measured on your machine, not taken from a leaderboard. Free for Windows, macOS and Linux. Nothing leaves your computer." />
+    <meta name="description" content="RigMatch tests local AI models on your own PC and crowns a Top Match: a score measured on your machine, not taken from a leaderboard. Free for Windows, macOS and Linux, with no account, and it runs on your own computer." />
     <link rel="icon" type="image/svg+xml" href="./icons/rigmatch-32.svg" />
     <link rel="stylesheet" href="./site.css" />
     <meta name="theme-color" content="#1b1726" />
@@ -18,7 +18,7 @@
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="RigMatch: find the AI your computer was made for" />
-    <meta name="twitter:description" content="Local models take the stage on your own PC. One walks away as your Top Match. Nothing leaves your computer." />
+    <meta name="twitter:description" content="Local models take the stage on your own PC. One walks away as your Top Match. Free, with no account." />
     <meta name="twitter:image" content="https://daveeuson.github.io/RigMatch/og-image.png" />
     <style>
       section { padding-block: 56px 24px; }
@@ -77,7 +77,9 @@
 
       /* Real screenshots beside a few lines of text; .flip puts the picture first. */
       .feature { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: center; gap: 36px; }
+      .feature.flip { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
       .feature.flip > :first-child { order: 2; }
+      .shot a { cursor: zoom-in; }
       .feature-copy { display: flex; flex-direction: column; gap: 14px; }
       .feature-copy p { margin: 0; color: var(--muted); }
       .feature-copy p strong { color: var(--text-strong); font-weight: 700; }
@@ -85,8 +87,10 @@
       .shot img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 12px; }
       .shot figcaption { margin-top: 8px; color: var(--muted); font-size: 14px; }
       .wide-shot { margin: 24px 0 0; }
+      .gallery { max-width: 760px; }
+      .score-shot { max-width: 720px; }
       @media (max-width: 860px) {
-        .feature { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+        .feature, .feature.flip { grid-template-columns: minmax(0, 1fr); gap: 20px; }
         .feature.flip > :first-child { order: 0; }
       }
 
@@ -198,53 +202,6 @@
         </div>
       </section>
 
-      <section id="fit" class="wrap">
-        <div class="feature">
-          <div class="feature-copy">
-            <h2>See what fits before you download</h2>
-            <p>Every model gets a <strong>Fit grade</strong> for your computer, from A to F, before you test or download anything. It weighs whether the model fits in your graphics memory, how fast it should run and how good it is for its size. Click a grade to read the reasons.</p>
-          </div>
-          <figure class="shot"><a href="./shots/fit-grade.webp"><img src="./shots/fit-grade.webp" width="740" height="506" loading="lazy" alt="The Models list in RigMatch, with a Fit grade beside each model's size. The reasons for qwen3:14b are open: Fit grade A, fits in your graphics memory with 3.4 GB spare, about 25 words a second, strong for its size." /></a></figure>
-        </div>
-        <div class="feature-copy" style="margin-top: 40px;">
-          <h3 style="margin: 0; font-size: 24px;">Or ask from a terminal</h3>
-          <p class="lede-muted"><code>npx rigmatch-fit</code> prints the same grades for the models that run well on your computer, best first, with the command to get each one. It needs Node 20 or newer and downloads no models. Add <code>--measure</code> to time the ones you already have.</p>
-          <pre class="terminal" tabindex="0" role="region" aria-label="The output of npx rigmatch-fit on an RTX 4070: a marquee sign, the graphics card, a table of models graded A with their size, estimated speed and the command to get each, and tonight's Top Match, qwen3.5:9b."><span class="prompt">&gt;</span> npx rigmatch-fit
-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o
-|   R I G M A T C H     fit check       |
-|   Who will your PC go home with?      |
-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o
-NVIDIA GeForce RTX 4070, 12 GB graphics memory
-
-Grade  Model             Size    Speed      Fit         Command
-A      qwen3.5:9b *      6.1 GB  ~49 tok/s  Sweet spot  ollama run qwen3.5:9b
-A      qwen3-vl:8b       5.7 GB  ~53 tok/s  Sweet spot  ollama pull qwen3-vl:8b
-A      mistral-nemo:12b  6.6 GB  ~46 tok/s  Sweet spot  ollama pull mistral-nemo:12b
-A      qwen3:8b *        4.9 GB  ~61 tok/s  Sweet spot  ollama run qwen3:8b
-A      gemma4:12b *      7.5 GB  ~40 tok/s  Good fit    ollama run gemma4:12b
-<span class="dim">...</span>
-Tonight's Top Match: qwen3.5:9b (A, ~49 tok/s).</pre>
-        </div>
-      </section>
-
-      <section id="blind" class="wrap">
-        <div class="feature flip">
-          <div class="feature-copy">
-            <h2>Blind dates</h2>
-            <p>Turn on <strong>Blind show</strong> in Advanced Mode and the contestants become Contestant 1, 2 and 3. Their names, sizes and scores stay hidden while they answer.</p>
-            <p>At the end you read their answers side by side and pick the one you’d rather use. Then the names come out, with the judge’s winner beside your pick. Your picks add up into a ranking of your own, <strong>Your taste</strong>, kept apart from the judge’s scores.</p>
-          </div>
-          <figure class="shot"><a href="./shots/blind-stage.webp"><img src="./shots/blind-stage.webp" width="1140" height="516" loading="lazy" alt="A blind show on stage: Contestant 1, 2 and 3 with question-mark faces instead of model avatars. Contestant 2 has drawn a picture; the other two drawings were cut off." /></a></figure>
-        </div>
-        <figure class="shot wide-shot"><a href="./shots/blind-reveal.webp"><img src="./shots/blind-reveal.webp" width="1260" height="292" loading="lazy" alt="The reveal: Contestant 1 was Llama3.2, marked Your pick, 89 Match. Contestant 2 was Gemma3, 89 Match. Contestant 3 was Granite4, marked Match winner, 94 Match." /></a><figcaption>The reveal from a real blind show with llama3.2:3b, gemma3:4b and granite4:3b. The pick went to Llama 3.2; the best Match score went to Granite 4.</figcaption></figure>
-      </section>
-
-      <section id="pelicans" class="wrap">
-        <h2>Can it draw a pelican riding a bicycle?</h2>
-        <p class="lede-muted" style="margin-top: 16px;">The General question set now includes a drawing round, borrowed from <a href="https://simonwillison.net/tags/pelican-riding-a-bicycle/">Simon Willison’s pelican benchmark</a>. Each model answers with an SVG picture. RigMatch cleans it so nothing in it can run, then the judge scores it.</p>
-        <figure class="shot wide-shot"><a href="./shots/pelicans.webp"><img src="./shots/pelicans.webp" width="1200" height="1010" loading="lazy" alt="Nine drawings of a pelican riding a bicycle, one per model, with scores: gemma4:12b 88, qwen3.5:9b 78, gemma3:12b 40, granite4:3b 35, mistral:7b 35, gemma3:4b 35, qwen2.5:7b 25, qwen3:0.6b 15 (a single black circle), and llama3.2:3b ran out of room before finishing." /></a><figcaption>Nine local models on one RTX 4070, one run each at temperature 0, scored by a local judge that looked at each picture.</figcaption></figure>
-      </section>
-
       <section id="score" class="wrap">
         <h2>One honest number</h2>
         <p class="lede-muted" style="margin-top: 16px;">The Match Score blends four measurements, all taken on your computer. Slide between accuracy first and speed first and the ranking updates, without running anything again.</p>
@@ -254,16 +211,6 @@ Tonight's Top Match: qwen3.5:9b (A, ~49 tok/s).</pre>
           <li><div><b>Finish rate</b><span class="figure">× 0.18</span></div><p>Whether it finishes its answers, without errors or running out of time.</p></li>
           <li><div><b>Fit</b><span class="figure">× 0.16</span></div><p>How comfortably it sits in your memory, leaving room for everything else.</p></li>
         </ul>
-      </section>
-
-      <section id="speed" class="wrap">
-        <div class="feature">
-          <div class="feature-copy">
-            <h2>How fast is your PC, really?</h2>
-            <p><strong>Speed score</strong>, under My PC in Advanced Mode, runs the same test on any computer and gives one number you can set beside someone else’s. An RTX 4070 scores about 1,000, and the same PC can vary by 10 to 15 percent from one run to the next.</p>
-          </div>
-          <figure class="shot"><a href="./shots/speed-score.webp"><img src="./shots/speed-score.webp" width="1440" height="812" loading="lazy" alt="The Speed score screen: 1,031 points on the Standard tier with qwen3:8b, rated Excellent. Tiers: Light, llama3.2:3b, 145 tokens a second, 1,043 points; Standard, qwen3:8b, 68 tokens a second, 1,031 points; Heavy, qwen3:14b, 24 tokens a second, 765 points; Extreme not run because it needs 24 GB." /></a><figcaption>A real run on an RTX 4070, with a warning that Steam was using the card.</figcaption></figure>
-        </div>
       </section>
 
       <section id="tests" class="wrap">
@@ -278,14 +225,62 @@ Tonight's Top Match: qwen3.5:9b (A, ~49 tok/s).</pre>
         </ul>
       </section>
 
+      <section id="pelicans" class="wrap">
+        <h2>Can it draw a pelican riding a bicycle?</h2>
+        <p class="lede-muted" style="margin-top: 16px;">The standard question set now includes a drawing round, borrowed from <a href="https://simonwillison.net/tags/pelican-riding-a-bicycle/">Simon Willison’s pelican benchmark</a>. Each model has to answer with a drawing written as code (SVG). RigMatch cleans it so nothing in it can run, then the judge model scores it.</p>
+        <figure class="shot wide-shot gallery"><a href="./shots/pelicans.webp"><img src="./shots/pelicans.webp" width="1200" height="1010" loading="lazy" alt="Nine drawings of a pelican riding a bicycle, one per model, each with its score." /></a><figcaption>Nine local models on one RTX 4070, one run each, with the same settings for every model. gemma4:12b scored highest at 88, qwen3:0.6b drew a single black circle, and llama3.2:3b ran out of room before finishing. The scores are one 12B model’s opinion: gemma3:12b judged the others, and gemma4:12b judged gemma3:12b’s drawing. Tap or click any screenshot on this page to enlarge it.</figcaption></figure>
+      </section>
+
       <section id="chat" class="wrap">
         <div class="feature flip">
           <div class="feature-copy">
             <h2>Ask two models at once</h2>
-            <p>In RigMatch Chat, <strong>Ask a second model too</strong> sends each message to two models and shows their answers side by side. Each keeps its own conversation, and <strong>Keep this one</strong> goes back to a normal chat with the one you preferred.</p>
+            <p>In RigMatch Chat, <strong>Ask a second model too</strong> sends each message to two models and shows their answers side by side. Each keeps its own conversation, and <strong>Keep this one</strong> goes back to a normal chat with the one you preferred. If the two don’t both fit in your graphics memory, Chat warns that they may take turns.</p>
           </div>
-          <figure class="shot"><a href="./shots/chat-split.webp"><img src="./shots/chat-split.webp" width="1000" height="542" loading="lazy" alt="RigMatch Chat with two answers side by side to the question why a bigger AI model needs more graphics memory: Llama 3.2 3B on the left, Gemma 3 4B on the right, each with Regenerate and Keep this one." /></a></figure>
+          <figure class="shot"><a href="./shots/chat-split.webp"><img src="./shots/chat-split.webp" width="1000" height="542" loading="lazy" alt="RigMatch Chat with Llama 3.2 3B and Gemma 3 4B answering the same question side by side." /></a></figure>
         </div>
+      </section>
+
+      <section id="fit" class="wrap">
+        <div class="feature">
+          <div class="feature-copy">
+            <h2>See what fits before you download</h2>
+            <p>On the Models list in Advanced Mode, each model gets an estimated <strong>Fit grade</strong> for your computer, from A to F, before you test or download anything. It weighs whether the model fits in your graphics memory, how fast it should run and how good it is for its size, and shows a question mark when a model’s size isn’t known. Click a grade to read the reasons.</p>
+          </div>
+          <figure class="shot"><a href="./shots/fit-grade.webp"><img src="./shots/fit-grade.webp" width="658" height="438" loading="lazy" alt="The Models list in Advanced Mode, with Fit grades on four sizes of Gemma 3 and the reasons for one open." /></a><figcaption>gemma3:4b and gemma3:12b get an A on a 12 GB card. gemma3:27b gets an F: too big for 12 GB of graphics memory.</figcaption></figure>
+        </div>
+        <div class="feature-copy" style="margin-top: 40px;">
+          <h3 style="margin: 0; font-size: 24px;">Or ask from a terminal</h3>
+          <p class="lede-muted"><code>npx rigmatch-fit</code> prints the same grades for the models that run well on your computer, best first, with the command to get each one. Models you already have are marked *. It needs Node.js 20 or newer, a free download from <a href="https://nodejs.org">nodejs.org</a> that includes <code>npx</code>, and it downloads no models. Its speeds are estimates, in words per second (tok/s). <code>--measure</code> times the four test models (llama3.2:3b, qwen3:8b, qwen3:14b and, on a 24 GB card, qwen3:30b-a3b) if you have them, or one model you name.</p>
+          <pre class="terminal" tabindex="0" role="region" aria-label="Example output of npx rigmatch-fit on an RTX 4070"><span class="prompt">&gt;</span> npx rigmatch-fit
+o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o
+|   R I G M A T C H     fit check       |
+|   Who will your PC go home with?      |
+o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o-*-o
+NVIDIA GeForce RTX 4070, 12 GB graphics memory, 61.6 GB system memory
+Ollama is running with 11 models installed: 4 in this list, marked *. --installed lists all 11.
+
+Grade  Model             Size    Speed      Fit         Command
+A      qwen3.5:9b *      6.1 GB  ~49 tok/s  Sweet spot  ollama run qwen3.5:9b
+A      qwen3-vl:8b       5.7 GB  ~53 tok/s  Sweet spot  ollama pull qwen3-vl:8b
+A      mistral-nemo:12b  6.6 GB  ~46 tok/s  Sweet spot  ollama pull mistral-nemo:12b
+A      ministral-3:8b    5.6 GB  ~54 tok/s  Sweet spot  ollama pull ministral-3:8b
+A      qwen3:8b *        4.9 GB  ~61 tok/s  Sweet spot  ollama run qwen3:8b
+<span class="dim">...</span>
+Tonight's Top Match: qwen3.5:9b (A, ~49 tok/s). Say hi: ollama run qwen3.5:9b</pre>
+        </div>
+      </section>
+
+      <section id="blind" class="wrap">
+        <h2>Blind dates</h2>
+        <p class="lede-muted" style="margin-top: 16px;">Turn on <strong>Blind show</strong> in Advanced Mode and the contestants become Contestant 1, 2 and 3, with their names, sizes and scores hidden while they answer. At the end you read their answers side by side and pick the one you’d rather use. Then the names come out, with the Match winner beside your pick. Your picks add up into a ranking of your own, <strong>Your taste</strong>, kept apart from the judge’s scores.</p>
+        <figure class="shot wide-shot"><a href="./shots/blind-reveal.webp"><img src="./shots/blind-reveal.webp" width="1260" height="292" loading="lazy" alt="The reveal, naming each contestant beside its Match score." /></a><figcaption>The reveal from a real blind show with llama3.2:3b, gemma3:4b and granite4:3b. The pick went to Llama 3.2; Granite 4 had the best Match score, 94.</figcaption></figure>
+      </section>
+
+      <section id="speed" class="wrap">
+        <h2>How fast is your PC, really?</h2>
+        <p class="lede-muted" style="margin-top: 16px;"><strong>Speed score</strong>, under My PC in Advanced Mode, runs the same test (RigScore) on any computer and gives one number you can set beside someone else’s. Higher is faster. An RTX 4070 scores about 1,000 in the app; the same PC can read 15 to 20 percent higher or lower from run to run, and the command-line test usually reads a little higher.</p>
+        <figure class="shot wide-shot score-shot"><a href="./shots/speed-score.webp"><img src="./shots/speed-score.webp" width="720" height="180" loading="lazy" alt="The Speed score screen showing 1,031 points, rated Excellent." /></a><figcaption>A real run on an RTX 4070: 1,031 points on the Standard test, with qwen3:8b writing about 68 words a second (tok/s).</figcaption></figure>
       </section>
 
       <section class="wrap" aria-labelledby="report-title">
@@ -302,8 +297,8 @@ Tonight's Top Match: qwen3.5:9b (A, ~49 tok/s).</pre>
       <section class="wrap">
         <div class="local">
           <div>
-            <h2>Nothing leaves your computer</h2>
-            <p>Models run through Ollama and ComfyUI on your own hardware. No account, no telemetry. The exceptions are the OpenRouter judge and Ollama’s cloud models, which you’d have to choose yourself, and RigMatch shows what would leave your computer before every run.</p>
+            <h2>Local by default</h2>
+            <p>Models run through Ollama and ComfyUI on your own hardware. No account, no telemetry. The exceptions are the OpenRouter judge and Ollama’s cloud models, which you’d have to choose yourself, and RigMatch shows what would leave your computer before every show.</p>
           </div>
           <ul>
             <li><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" style="fill:var(--green);stroke:var(--green)"></circle><path d="M7.5 12.3l3 3 6-6.3" style="stroke:var(--bg)" stroke-width="2.6"></path></svg>No account</li>

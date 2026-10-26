@@ -24,13 +24,13 @@
 
 Picking a local LLM is confusing: parameter counts, quantization, VRAM, context windows… RigMatch skips all of that. It **benchmarks models on your actual hardware** through [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai), scores each one on **speed, answer quality, and hardware fit**, and crowns a **Top Match** with a 0–100 Match Score.
 
-Everything runs on your machine. No account, no telemetry, and no cloud unless you turn on the OpenRouter judge (see [Privacy](#privacy)).
+Everything runs on your machine. No account, no telemetry, and no cloud unless you turn on the OpenRouter judge or test one of Ollama's cloud models (see [Privacy](#privacy)).
 
 **RigMatch is donationware.** Every feature is free, and nothing is locked if you don't donate. If it helps you, you can [buy me a coffee](https://buymeacoffee.com/daveeuson).
 
-**RigMatch is source-available, not open source.** The code is public so you can check what the app does, but the licence doesn't let you copy or redistribute it (see [License](#license)).
+**RigMatch is source-available, not open source.** The code is public so you can check what the app does, but the license doesn't let you copy or redistribute it (see [License](#license)).
 
-- 🖥️ **Reads your real rig**. GPU, VRAM, RAM and disk decide which contestants even qualify, and every model gets a Fit grade from A to F before you download it
+- 🖥️ **Reads your real rig**. GPU, VRAM, RAM and disk decide which contestants even qualify, and the Models list in Advanced Mode gives each model an estimated Fit grade from A to F before you download it
 - 💛 **Speed Dating benchmarks**. Every model answers the same questions, live on stage
 - 🏆 **Match Score (0–100)** — speed, quality and fit, scored on your PC
 - 💬 **Chat with the winner** in RigMatch Chat, or skip the show and start chatting
@@ -67,7 +67,7 @@ RigMatch asks before it downloads anything, then shows live progress while your 
 
 ### 4 · Show — Speed Dating, live on stage
 
-One sheet before the start says which questions run, who marks them and how hard your computer will work. Then every contestant answers the same questions on the game-show stage, one at a time, with live scores. One of the questions asks each model to draw a pelican riding a bicycle as an SVG picture, an idea from [Simon Willison's pelican benchmark](https://simonwillison.net/tags/pelican-riding-a-bicycle/). Stop ends the whole show.
+One sheet before the start says which questions run, who marks them and how hard your computer will work. Then every contestant answers the same questions on the game-show stage, one at a time, with live scores. One of the questions asks each model to draw a pelican riding a bicycle, as a drawing written in code (SVG), an idea from [Simon Willison's pelican benchmark](https://simonwillison.net/tags/pelican-riding-a-bicycle/). Stop ends the whole show.
 
 <p align="center"><img src="docs/images/04-compare.png" alt="Show step — the Speed Dating stage" width="100%"></p>
 
@@ -79,7 +79,7 @@ The reveal: your Top Match under the lights with its grade, Match Score and the 
 
 ## Chatting with your models
 
-**RigMatch Chat** is the chat window that comes with RigMatch. Open it from **Chat** in the top bar, from the Winner screen, or from the Just want to chat? card. It lists your Ollama models with their Match Scores, and it remembers only what you ask it to keep, in a "What it remembers" panel you can read and add to. **Ask a second model too** sends each message to two models and shows their answers side by side; "Keep this one" goes back to a normal chat with the one you preferred. LM Studio models chat in a panel inside RigMatch instead, because RigMatch Chat lists only Ollama's models.
+**RigMatch Chat** is the chat window that comes with RigMatch. Open it from **Chat** in the top bar, from the Winner screen, or from the Just want to chat? card. It lists your Ollama models with their Match Scores, and it remembers only what you ask it to keep, in a "What it remembers" panel you can read and add to. **Ask a second model too** sends each message to two models and shows their answers side by side; "Keep this one" goes back to a normal chat with the one you preferred. If the two don't both fit in graphics memory, Chat warns that they may take turns. LM Studio models chat in a panel inside RigMatch instead, because RigMatch Chat lists only Ollama's models.
 
 ## Pictures, video and sound
 
@@ -89,17 +89,17 @@ The reveal: your Top Match under the lights with its grade, Match Score and the 
 
 The full control room, with its tabs in the top bar. Your Top Match carries over.
 
-- **Models**: every model RigMatch knows, each with a Fit grade for your PC (A to F, with the reasons a click away), filters for what it can do, plus downloads
+- **Models**: every model RigMatch knows, each with an estimated Fit grade for your PC (A to F, with the reasons a click away; a question mark when its size isn't known), filters for what it can do, plus downloads
 - **What's New**: models that just appeared in Ollama's catalog
-- **Comparison**: run a show with the models, questions and judge you choose, and add skill tests such as Build an app or the Code challenge. Turn on **Blind show** and the contestants become Contestant 1, 2 and 3, with names, sizes and scores hidden; at the end you pick your favourite from their answers side by side, then RigMatch shows who each one was and whether the judge agreed with you
+- **Comparison**: run a show with the models, questions and judge you choose, and add skill tests such as Build an app or the Code challenge. Turn on **Blind show** and the contestants become Contestant 1, 2 and 3, with names, sizes and scores hidden; at the end you pick your favorite from their answers side by side, then RigMatch shows who each one was and which was the Match winner
 - **Labs**: picture, video and sound makers given the same prompt, and listening tests
 - **Results**: your Top Match and its measurements, the ranking, and every test you've run, with a fader between accuracy and speed. **Your taste** ranks models by your blind picks alone, kept apart from the judge's scores
-- **My PC**: your hardware, Setup Doctor and logs, and **Speed score** (RigScore): the same test on any computer, giving one number you can compare. An RTX 4070 scores about 1,000, and one PC can vary by 10 to 15 percent between runs
+- **My PC**: your hardware, Setup Doctor and logs, and **Speed score** (RigScore): the same test on any computer, giving one number you can compare. Higher is faster. An RTX 4070 scores about 1,000 in the app; the same PC can read 15 to 20 percent higher or lower from run to run, and the command-line test usually reads a little higher. A heavy tier drops a lot when another program is holding the graphics card
 - **Settings** (the gear): one section at a time, picked from a list
 
-<p align="center"><img src="docs/images/advanced-models.png" alt="Advanced Mode — the Models tab, with the reasons behind qwen3:14b's Fit grade A open" width="100%"></p>
+<p align="center"><img src="docs/images/advanced-models.png" alt="Advanced Mode — the Models tab, with Fit grades on four Gemma 3 sizes and the reasons for gemma3:27b's F open" width="100%"></p>
 
-<p align="center"><img src="docs/images/blind-show.png" alt="A blind show on the Comparison stage — Contestant 1, 2 and 3 with their names hidden, and Contestant 2's pelican drawing" width="100%"></p>
+<p align="center"><img src="docs/images/blind-show.webp" alt="A blind show on the Comparison stage — Contestant 1, 2 and 3 with their names hidden, and Contestant 2's pelican drawing" width="100%"></p>
 
 <p align="center"><img src="docs/images/speed-score.png" alt="My PC › Speed score — 1,031 points on the Standard tier on an RTX 4070, with each tier's speed" width="100%"></p>
 
@@ -237,7 +237,7 @@ Models marked `*` are already in your Ollama, so their command is `ollama run`.
 | `--json` | Print every model as JSON, for scripts (with `--installed`, only those) |
 | `--provider lmstudio` | Print LM Studio's `lms get` commands instead of `ollama pull` |
 | `--vram 16` | Grade for a card with 16 GB instead of this one |
-| `--measure` | Measure the real speed with RigScore's test on the tier models you have (takes minutes) |
+| `--measure` | Measure the real speed with the Speed score test on the tier models you have (takes minutes) |
 | `--measure <model>` | Measure one installed model's real speed, beside its estimate |
 
 `--measure` is the speed test from My PC › Speed score, run from a terminal through your own Ollama: Light (`llama3.2:3b`), Standard (`qwen3:8b`), Heavy (`qwen3:14b`) and, on a 24 GB card, Extreme (`qwen3:30b-a3b`). It prints each tier's writing and reading speed, points against the reference PC (1,000 is an RTX 4070 12 GB) and what the speed feels like, with the Standard tier as the headline. It never downloads a model (a missing one gets its `ollama pull` command), refuses to start rather than share the card with another program's model, warns when an NVIDIA card is already busy, and unloads what it loaded. `--json` with it prints the measures and each one's stamp.
