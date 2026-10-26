@@ -45,6 +45,7 @@ export function ActivityPanel({
   render = null,
   onOpenRender,
   lastRender = null,
+  testsListed = false,
 }: {
   runProgress: RunProgress | null;
   skillRunStatus: SkillRunStatus;
@@ -79,6 +80,11 @@ export function ActivityPanel({
   onOpenRender?: (render: RenderActivity) => void;
   /** How the last render ended, until another one does. */
   lastRender?: RenderOutcome | null;
+  /**
+   * The Tests column is beside this screen, so the finished tests are listed
+   * there and not here twice: this keeps to what is running.
+   */
+  testsListed?: boolean;
 }) {
   const [previewApp, setPreviewApp] = useState<{ html: string; model: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; model: string } | null>(null);
@@ -142,11 +148,15 @@ type ActivityJob = {
         <div>
           <span>Activity</span>
           <strong>{anythingRunning ? 'Work in progress on this computer' : 'Job monitor'}</strong>
-          <em>Live jobs report here as they run, and recent results stay below — open the app or image a test produced.</em>
+          <em>
+            {testsListed
+              ? 'Live jobs report here as they run. Finished tests are listed under Tests.'
+              : 'Live jobs report here as they run, and recent results stay below — open the app or image a test produced.'}
+          </em>
         </div>
       </div>
 
-      {runReports.length > 0 && (
+      {!testsListed && runReports.length > 0 && (
         <article className="activity-card activity-reports">
           <div className="activity-card-head">
             <FileText aria-hidden="true" />
@@ -322,69 +332,71 @@ type ActivityJob = {
         </button>
       </article>
 
-      <article className="activity-card">
-        <div className="activity-card-head">
-          <History aria-hidden="true" />
-          <strong>Recent results</strong>
-          <b className="activity-state idle">{recentJobs.length}</b>
-        </div>
-        {recentJobs.length === 0 ? (
-          <em>Run a test and its result lands here — with a viewer for the app or image it produced.</em>
-        ) : (
-          <ul className="activity-results-list">
-            {recentJobs.map((job) => (
-              <li key={job.key}>
-                <AvatarBust model={job.model} size="tiny" />
-                <div className="activity-result-info">
-                  <strong>{job.model}</strong>
-                  <em>{job.label} · {formatHistoryTime(job.completedAt)}</em>
-                </div>
-                <span className={`score-row-grade ${getScoreTone(job.score)}`}>{job.scoreLabel ?? job.score} · {job.grade}</span>
-                {job.kind === 'app' && (
-                  <button
-                    type="button"
-                    className="mini-button"
-                    onClick={() => job.html && setPreviewApp({ html: job.html, model: job.model })}
-                    disabled={!job.html}
-                    title={job.html ? 'Play the generated app in a sandbox' : 'This answer had no runnable app to preview'}
-                  >
-                    <Play aria-hidden="true" />
-                    Play It
-                  </button>
-                )}
-                {job.kind === 'image' && (
-                  <button
-                    type="button"
-                    className="mini-button"
-                    onClick={() => job.imageDataUrl && setPreviewImage({ src: job.imageDataUrl, model: job.model })}
-                    disabled={!job.imageDataUrl}
-                    title={job.imageDataUrl ? 'View the generated image' : 'No image was saved for this run'}
-                  >
-                    <Lightbulb aria-hidden="true" />
-                    View
-                  </button>
-                )}
-                {job.kind === 'benchmark' && (
-                  <>
-                    <button type="button" className="mini-button outline" onClick={onOpenScorecards}>
-                      Scorecard
-                    </button>
+      {!testsListed && (
+        <article className="activity-card">
+          <div className="activity-card-head">
+            <History aria-hidden="true" />
+            <strong>Recent results</strong>
+            <b className="activity-state idle">{recentJobs.length}</b>
+          </div>
+          {recentJobs.length === 0 ? (
+            <em>Run a test and its result lands here — with a viewer for the app or image it produced.</em>
+          ) : (
+            <ul className="activity-results-list">
+              {recentJobs.map((job) => (
+                <li key={job.key}>
+                  <AvatarBust model={job.model} size="tiny" />
+                  <div className="activity-result-info">
+                    <strong>{job.model}</strong>
+                    <em>{job.label} · {formatHistoryTime(job.completedAt)}</em>
+                  </div>
+                  <span className={`score-row-grade ${getScoreTone(job.score)}`}>{job.scoreLabel ?? job.score} · {job.grade}</span>
+                  {job.kind === 'app' && (
                     <button
                       type="button"
                       className="mini-button"
-                      onClick={() => onRerunTest(job.model)}
-                      title={`Run the compatibility test on ${job.model} again`}
+                      onClick={() => job.html && setPreviewApp({ html: job.html, model: job.model })}
+                      disabled={!job.html}
+                      title={job.html ? 'Play the generated app in a sandbox' : 'This answer had no runnable app to preview'}
                     >
-                      <RefreshCw aria-hidden="true" />
-                      Rerun
+                      <Play aria-hidden="true" />
+                      Play It
                     </button>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </article>
+                  )}
+                  {job.kind === 'image' && (
+                    <button
+                      type="button"
+                      className="mini-button"
+                      onClick={() => job.imageDataUrl && setPreviewImage({ src: job.imageDataUrl, model: job.model })}
+                      disabled={!job.imageDataUrl}
+                      title={job.imageDataUrl ? 'View the generated image' : 'No image was saved for this run'}
+                    >
+                      <Lightbulb aria-hidden="true" />
+                      View
+                    </button>
+                  )}
+                  {job.kind === 'benchmark' && (
+                    <>
+                      <button type="button" className="mini-button outline" onClick={onOpenScorecards}>
+                        Scorecard
+                      </button>
+                      <button
+                        type="button"
+                        className="mini-button"
+                        onClick={() => onRerunTest(job.model)}
+                        title={`Run the compatibility test on ${job.model} again`}
+                      >
+                        <RefreshCw aria-hidden="true" />
+                        Rerun
+                      </button>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
+      )}
 
       <AdvancedCapabilityLab
         selectedModel={selectedModel}

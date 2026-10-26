@@ -81,6 +81,7 @@ export function UtilityPanel({
   onShowWelcome,
   sectionRequest,
   topMatch,
+  noTests = false,
   onDeleteModel,
   onRefreshLogs,
   onClearScore,
@@ -124,6 +125,8 @@ export function UtilityPanel({
   sectionRequest?: { id: SettingsSectionId; at: number } | null;
   /** The Top Match card, shown at the head of the Scorecards. */
   topMatch?: ReactNode;
+  /** Nothing has been tested: the Top Match says so, and the empty boards stay out of the way. */
+  noTests?: boolean;
   onDeleteModel: (row: ModelRow) => void;
   onRefreshLogs: () => void;
   onClearScore: (model: string) => void;
@@ -386,7 +389,13 @@ export function UtilityPanel({
         </div>
       )}
 
-      {panel === 'history' && !labChannel && (
+      {panel === 'history' && !labChannel && noTests && (
+        <div className="utility-body">
+          <YourTaste />
+        </div>
+      )}
+
+      {panel === 'history' && !labChannel && !noTests && (
         <div className="utility-body">
           <div className="results-toolbar">
             <BalanceFader
