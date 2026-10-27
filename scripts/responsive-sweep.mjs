@@ -50,7 +50,10 @@ const stop = () => lease.stop();
 const browser = await chromium.launch({ headless: true });
 const findings = [];
 
-for (const mode of ['beginner', 'advanced']) {
+// 'results' is Advanced Mode on its Results tab, where the list of tests sits
+// beside the screen: a layout the other two never show.
+const MODES = ['beginner', 'advanced', 'results'];
+for (const mode of MODES) {
   for (const size of SIZES) {
     const context = await browser.newContext({
       viewport: { width: size.w, height: size.h },
@@ -67,9 +70,13 @@ for (const mode of ['beginner', 'advanced']) {
       localStorage.setItem('rigmatch:first-run-tutorial:v1', 'seen');
       localStorage.setItem('rigmatch:mode-splash:v1', 'chosen');
       localStorage.setItem('rigmatch:goals-offered:v1', 'yes');
-    }, mode);
+    }, mode === 'beginner' ? 'beginner' : 'advanced');
     await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForSelector(mode === 'beginner' ? '.sw-shell' : '.top-bar-tabs', { timeout: 20000 }).catch(() => {});
+    if (mode === 'results') {
+      await page.locator('.top-tab', { hasText: 'Results' }).click().catch(() => {});
+      await page.waitForSelector('.test-list', { timeout: 10000 }).catch(() => {});
+    }
     await page.waitForTimeout(700);
 
     const report = await page.evaluate(() => {
@@ -256,7 +263,7 @@ await browser.close();
 stop();
 
 console.log(`\n${findings.length === 0
-  ? `Clean across ${SIZES.length * 2} size/mode combinations.`
-  : `${findings.length} of ${SIZES.length * 2} combinations flagged something.`}`);
+  ? `Clean across ${SIZES.length * MODES.length} size/mode combinations.`
+  : `${findings.length} of ${SIZES.length * MODES.length} combinations flagged something.`}`);
 if (wantShots) console.log(`Screenshots: ${outDir}`);
 process.exit(0);

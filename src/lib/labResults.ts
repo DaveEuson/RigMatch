@@ -243,7 +243,7 @@ export function getAllDemoArtifacts(): Array<DemoArtifact & { at: string; challe
 }
 
 /** One result's viewable artifacts, if it produced any. */
-function demoArtifactsFor(result: AdvancedLabResult): DemoArtifact[] {
+export function demoArtifactsFor(result: AdvancedLabResult): DemoArtifact[] {
   const model = result.model;
   if (result.challenge === 'app-builder') {
     const html = extractHtmlDocument(result.response);

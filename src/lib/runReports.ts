@@ -1,4 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
+import type { BenchmarkQuestion } from '../benchmarkSuite.ts';
 import type { BenchmarkResult, ModelRow, TestedModelScore } from '../types';
 import { normalizeModelKey } from './modelKey.ts';
 import { formatMatchScore } from './scoring.ts';
@@ -140,6 +141,16 @@ export function reportRows(results: Array<{ model: string }>, modelRows: ModelRo
     ready: false,
     installLabel: 'Not on this computer now',
   });
+}
+
+/**
+ * A saved report's own questions, read from its answers: a Difficult Subjects
+ * report reopened while General was selected showed General's questions over
+ * Difficult Subjects' answers. Undefined once the answers were dropped.
+ */
+export function reportQuestionPlan(report: StoredRunReport): BenchmarkQuestion[] | undefined {
+  const first = report.transcripts ? Object.values(report.transcripts)[0] : undefined;
+  return first?.prompts.map((p) => ({ id: p.id, label: p.label, prompt: p.prompt, type: p.type ?? 'assistant' }));
 }
 
 /** Anything that is not a well-formed report list reads as no reports at all. */

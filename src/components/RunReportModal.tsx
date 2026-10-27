@@ -47,12 +47,6 @@ export function RunReportModal({
 }) {
   const dialogRef = useDialog<HTMLDivElement>(onClose);
   const tested = result.results;
-  // Keyed from the run's own results rather than the app-wide score map, so the
-  // report describes this run even if a later test overwrites a model's score.
-  const scoresByModel = Object.fromEntries(tested.map((score) => [score.model, score]));
-  // Whether this report still has answers to show. A stored report can outlive
-  // its transcript; the modal has to know the difference.
-  const answersKept = rows.some((row) => (benchmarks[row.displayName]?.prompts?.length ?? 0) > 0);
   const questionCount = rows
     .map((row) => benchmarks[row.displayName]?.prompts.length ?? 0)
     .reduce((most, count) => Math.max(most, count), 0);
@@ -75,48 +69,7 @@ export function RunReportModal({
           </button>
         </header>
 
-        <ol className="run-report-ranking" aria-label="Ranking">
-          {tested.map((score, index) => (
-            <li key={score.model} className={score.model === result.winner ? 'winner' : ''}>
-              <b>{index + 1}</b>
-              <span>{score.model}</span>
-              <em>
-                {score.sobriety} quality · {score.speed} speed · {getResponseEstimate(score.speed)}
-              </em>
-              <strong>{formatMatchScore(score)} · {score.grade}</strong>
-            </li>
-          ))}
-        </ol>
-
-        {/* Best at what, straight after the ranking — the two questions someone
-            with three models has, in the order they ask them. */}
-        <TaskMatrix models={tested.map((score) => score.model)} scores={scoresByModel} />
-
-        {/* The answers themselves. Same component the Comparison screen uses,
-            so the report cannot drift from the transcript it is reporting on.
-
-            Unless they are gone: safeStorage drops answer text first when the
-            browser runs out of room, and the panel's own empty state says "Run
-            Speed Dating to see answers side by side" — which is wrong here and
-            in the worst way, because the run did happen and that sentence tells
-            the reader to repeat work they already did. */}
-        <div className="run-report-transcript">
-          {answersKept ? (
-            <SpeedDateTranscriptPanel
-              rows={rows}
-              benchmarks={benchmarks}
-              questionPlan={questionPlan}
-              runProgress={null}
-              initialViewMode="by-question"
-            />
-          ) : (
-            <p className="run-report-noanswers">
-              The answers from this run were not kept — they are dropped first when the
-              browser runs out of saved space, so newer runs keep theirs. The scores above
-              are the full result.
-            </p>
-          )}
-        </div>
+        <RunReportBody result={result} rows={rows} benchmarks={benchmarks} questionPlan={questionPlan} />
 
         <footer className="run-report-foot">
           <span>Saved to Scorecards. This report is the same run, read straight away.</span>
@@ -129,5 +82,76 @@ export function RunReportModal({
         </footer>
       </div>
     </div>
+  );
+}
+
+/**
+ * The report itself, with no frame: the ranking, best at what, and the answers.
+ * The modal wraps it; the Results screen's test list shows it beside the list.
+ */
+export function RunReportBody({
+  result,
+  rows,
+  benchmarks,
+  questionPlan,
+}: {
+  result: ListTestResult;
+  rows: ModelRow[];
+  benchmarks: Record<string, BenchmarkResult>;
+  questionPlan: BenchmarkQuestion[];
+}) {
+  const tested = result.results;
+  // Keyed from the run's own results rather than the app-wide score map, so the
+  // report describes this run even if a later test overwrites a model's score.
+  const scoresByModel = Object.fromEntries(tested.map((score) => [score.model, score]));
+  // Whether this report still has answers to show. A stored report can outlive
+  // its transcript; the report has to know the difference.
+  const answersKept = rows.some((row) => (benchmarks[row.displayName]?.prompts?.length ?? 0) > 0);
+
+  return (
+    <>
+      <ol className="run-report-ranking" aria-label="Ranking">
+        {tested.map((score, index) => (
+          <li key={score.model} className={score.model === result.winner ? 'winner' : ''}>
+            <b>{index + 1}</b>
+            <span>{score.model}</span>
+            <em>
+              {score.sobriety} quality · {score.speed} speed · {getResponseEstimate(score.speed)}
+            </em>
+            <strong>{formatMatchScore(score)} · {score.grade}</strong>
+          </li>
+        ))}
+      </ol>
+
+      {/* Best at what, straight after the ranking — the two questions someone
+          with three models has, in the order they ask them. */}
+      <TaskMatrix models={tested.map((score) => score.model)} scores={scoresByModel} />
+
+      {/* The answers themselves. Same component the Comparison screen uses,
+          so the report cannot drift from the transcript it is reporting on.
+
+          Unless they are gone: safeStorage drops answer text first when the
+          browser runs out of room, and the panel's own empty state says "Run
+          Speed Dating to see answers side by side" — which is wrong here and
+          in the worst way, because the run did happen and that sentence tells
+          the reader to repeat work they already did. */}
+      <div className="run-report-transcript">
+        {answersKept ? (
+          <SpeedDateTranscriptPanel
+            rows={rows}
+            benchmarks={benchmarks}
+            questionPlan={questionPlan}
+            runProgress={null}
+            initialViewMode="by-question"
+          />
+        ) : (
+          <p className="run-report-noanswers">
+            The answers from this run were not kept — they are dropped first when the
+            browser runs out of saved space, so newer runs keep theirs. The scores above
+            are the full result.
+          </p>
+        )}
+      </div>
+    </>
   );
 }
