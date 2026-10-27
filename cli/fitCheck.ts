@@ -18,6 +18,7 @@ import ollamaCatalog from '../electron/ollamaCatalog.cjs';
 import { gradeModel, mixtureSpillFit, pullCommand, type FitGrade, type GradeRow } from '../src/lib/modelGrade.ts';
 import { canGenerateText, isEmbeddingModel } from '../src/lib/modelCatalog.ts';
 import { isSpecialistModel } from '../src/lib/chooseLineup.ts';
+import { NON_CHAT_NOTE, NON_CHAT_TAG, nonChatKind, type NonChatKind } from '../src/lib/modelKind.ts';
 import { gpuDriverMessage, type GpuDriverProblem } from '../src/lib/gpuDriver.ts';
 
 export type Provider = 'ollama' | 'lm-studio';
@@ -71,6 +72,8 @@ export type RankedModel = {
   installed: boolean;
   /** `ollama run` for a model you have, under the name Ollama lists it by; a download command otherwise. */
   command: string;
+  /** Set for a model that does not chat (a decision model): it is listed, but not graded as one. */
+  kind: NonChatKind | null;
 };
 
 type SnapshotSize = { inputs?: string[]; sizeGb?: number; cloudOnly?: boolean };
@@ -97,8 +100,9 @@ const toGiB = (decimalGb: number) => Math.round(((decimalGb * 1e9) / 1024 ** 3) 
  * `latest` is kept only where no plain size weighs the same, since it is
  * usually one of them under another name; that size then answers to
  * family:latest as well, which is what Ollama lists after `ollama pull gemma3`.
- * Embedding models and image makers are left out: the question here is which
- * model to chat with.
+ * Embedding models, image makers and speech models are left out: the question
+ * here is which model to chat with. Decision models (kev, d3) stay in, marked,
+ * for --all and --installed: they are real models, just not chat ones.
  */
 export function catalogRows(families: Record<string, SnapshotFamily> = snapshot.families as Record<string, SnapshotFamily>): CatalogRow[] {
   const rows: CatalogRow[] = [];
@@ -119,13 +123,16 @@ export function catalogRows(families: Record<string, SnapshotFamily> = snapshot.
         name, displayName: name, params: /^\d/.test(params) ? params : '', sizeGb: toGiB(size.sizeGb ?? 0), capabilities,
         description: facts.description, ...(twin && twin[0] === tag ? { aliases: [`${family}:latest`] } : {}),
       };
-      if (isChatModel(row)) rows.push(row);
+      if (isListed(row)) rows.push(row);
     }
   }
   return rows;
 }
 
-function isChatModel(row: GradeRow): boolean {
+/** Worth a row in the list: a chat model, or a decision model shown as what it is. */
+function isListed(row: GradeRow): boolean {
+  const kind = nonChatKind(row);
+  if (kind) return kind === 'decision';
   return canGenerateText(row) && !isEmbeddingModel(row.name);
 }
 
@@ -147,7 +154,7 @@ export function rankModels(
   const extra: CatalogRow[] = (installed ?? [])
     .filter((model) => !known.has(model.name))
     .map((model) => ({ name: model.name, displayName: model.name, params: model.params ?? '', sizeGb: model.sizeGb || null }))
-    .filter(isChatModel);
+    .filter(isListed);
   return [...catalog, ...extra]
     .map((listed) => {
       const have = [listed.name, ...(listed.aliases ?? [])].map((name) => byName.get(name)).find(Boolean);
@@ -161,9 +168,13 @@ export function rankModels(
         grade: gradeModel(row, hardware),
         installed: Boolean(have),
         command: have && provider === 'ollama' ? `ollama run ${have.name}` : pullCommand(row.name, provider),
+        kind: nonChatKind(row),
       };
     })
-    .sort((a, b) => (b.grade.points ?? -1) - (a.grade.points ?? -1)
+    // Models that do not chat go after the ones that do: their points are the
+    // fit alone, and a 600M decision model would otherwise outrank a chat model.
+    .sort((a, b) => Number(Boolean(a.kind)) - Number(Boolean(b.kind))
+      || (b.grade.points ?? -1) - (a.grade.points ?? -1)
       || (b.row.sizeGb ?? 0) - (a.row.sizeGb ?? 0)
       || a.row.name.localeCompare(b.row.name));
 }
@@ -173,21 +184,22 @@ export function rankModels(
  * coding agents, SQL, maths, function calling, classification and decision
  * models, document reading and extraction, fact-checking, medicine and
  * translation. Read from the family name, or from its page's description
- * where the name does not say ("a 4B decision model … for fast
- * classification"). The safety classifiers and OCR models Simple Mode leaves
- * out are caught by isSpecialistModel.
+ * where the name does not say ("fast classification"). The safety classifiers
+ * and OCR models Simple Mode leaves out are caught by isSpecialistModel, and
+ * the models that do not chat at all (decision, speech) by nonChatKind, the
+ * definition the app shares.
  */
 const NICHE_FAMILY = /code|coder|devstral|sql|math|nexusraven|firefunction|tool-use|medllama|medgemma|meditron|translategemma/i;
 const NICHE_DESCRIPTION = new RegExp([
   'code completion', 'text-to-sql', 'function calling', String.raw`\bfor (?:agentic )?coding\b`, 'agentic software engineer',
-  'classification', 'decision model', 'into decisions', 'document understanding', 'information extraction',
+  'classification', 'document understanding', 'information extraction',
   'fact-checking', 'to markdown', 'semantic search', 'detect risks', 'safety reasoning',
 ].join('|'), 'i');
 
-/** A model for conversation in general, as opposed to one job (NICHE_FAMILY). */
+/** A model for conversation in general, as opposed to one job (NICHE_FAMILY) or none at all (nonChatKind). */
 export function isGeneralModel(row: GradeRow): boolean {
   const name = row.displayName ?? row.name;
-  return !isSpecialistModel(name) && !NICHE_FAMILY.test(name.split(':')[0]) && !NICHE_DESCRIPTION.test(row.description ?? '');
+  return !nonChatKind(row) && !isSpecialistModel(name) && !NICHE_FAMILY.test(name.split(':')[0]) && !NICHE_DESCRIPTION.test(row.description ?? '');
 }
 
 /**
@@ -294,12 +306,13 @@ export function formatTable(
   lines.push('');
 
   const header = ['Grade', 'Model', 'Size', 'Speed', 'Fit', provider === 'lm-studio' ? 'Search in LM Studio' : 'Command'];
+  // A model that does not chat has no letter: its grade would only be its fit.
   const cells = shown.map((model) => [
-    model.grade.letter,
+    model.kind ? '-' : model.grade.letter,
     `${model.row.name}${model.installed ? ' *' : ''}`,
     model.row.sizeGb ? gb(model.row.sizeGb) : '?',
     model.grade.tokensPerSecond ? `~${Math.round(model.grade.tokensPerSecond)} tok/s` : '-',
-    fitLabel(model.grade),
+    model.kind ? `${NON_CHAT_TAG[model.kind]} (${fitLabel(model.grade)})` : fitLabel(model.grade),
     model.command,
   ]);
   const widthOf = (keep: number[]) => keep.reduce((sum, column) => sum + Math.max(header[column].length, ...cells.map((row) => row[column].length)), 0)
@@ -318,6 +331,10 @@ export function formatTable(
   footer.push(installedOnly || all
     ? `${installedOnly ? plural(shown.length, 'installed model') : `All ${models.length} models`}. Fit grade A is the best pick for this computer, F will not fit.`
     : `The best ${shown.length} of ${running.length} models that run here. --all lists every model, --json prints them for scripts.`);
+  // One line per kind shown, in the app's own words.
+  for (const kind of new Set(shown.flatMap((model) => (model.kind ? [model.kind] : [])))) {
+    footer.push(`${NON_CHAT_NOTE[kind]} It has no Fit grade; the Fit column is whether it fits.`);
+  }
   footer.push('Speeds are estimates from the size and the card. RigMatch measures the real ones: https://github.com/DaveEuson/RigMatch');
   lines.push('', ...footer.flatMap((text) => wrap(text, columns)));
   // The best model that runs here, whichever list is showing.
@@ -351,10 +368,10 @@ export function toJson(
     },
     provider,
     ollamaReachable: provider === 'ollama' ? ollamaReachable : null,
-    models: models.map(({ row, grade, installed, command }) => ({
+    models: models.map(({ row, grade, installed, command, kind }) => ({
       model: row.name,
-      grade: grade.letter,
-      points: grade.points,
+      grade: kind ? null : grade.letter,
+      points: kind ? null : grade.points,
       verdict: grade.verdict,
       fit: fitLabel(grade),
       sizeGb: row.sizeGb,
@@ -364,7 +381,9 @@ export function toJson(
       speedSource: grade.speedSource,
       installed,
       command,
-      why: grade.reasons.join('; '),
+      why: kind ? NON_CHAT_NOTE[kind] : grade.reasons.join('; '),
+      // "chat", or the kind of model that does not (decision): it has a fit but no grade or points.
+      kind: kind ?? 'chat',
     })),
   };
 }

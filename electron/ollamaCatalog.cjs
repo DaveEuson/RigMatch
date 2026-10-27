@@ -112,11 +112,16 @@ function sortOllamaFamilyRows(rows) {
   });
 }
 
-const OLLAMA_BADGES = ['vision', 'tools', 'thinking', 'embedding', 'audio', 'cloud'];
+// "decision" and "speech" are Ollama's own capability names (types/model/
+// capability.go). d3, kev and the other decision families carry the first;
+// no speech page has carried the second yet, so phonon is told apart by its
+// description (src/lib/modelKind.ts).
+const OLLAMA_BADGES = ['vision', 'tools', 'thinking', 'embedding', 'audio', 'cloud', 'decision', 'speech'];
 
 /**
  * What a family page says about the whole family: the capability badges under
- * its name (rounded spans: vision, tools, thinking, embedding, audio, cloud)
+ * its name (rounded spans: vision, tools, thinking, embedding, audio, cloud,
+ * decision, speech)
  * and its one-line description.
  *
  * This replaced /search?c=<capability>, which returned only the top twenty
@@ -173,8 +178,12 @@ function ollamaCapabilitiesFor({ name, tag, inputs, badges = [], description = '
   if (/^x\//i.test(String(name))) {
     return /image[- ]generation|text-to-image|generat\w*\s+(?:an?\s+)?images?\b/i.test(description) ? ['image'] : null;
   }
+  // A speech model returns audio, and a decision model returns a verdict
+  // instead of a reply: neither "completes", so neither is given the word that
+  // every chat filter looks for.
+  if (badges.includes('speech')) return ['speech'];
   if (!inputs && badges.length === 0) return null;
-  const capabilities = ['completion'];
+  const capabilities = [badges.includes('decision') ? 'decision' : 'completion'];
   if (inputs ? inputs.includes('image') : badges.includes('vision')) capabilities.push('vision');
   const hearingSizes = HEARING_SIZES[String(name).toLowerCase()];
   if (badges.includes('audio') && (!hearingSizes || hearingSizes.test(String(tag)))) capabilities.push('audio');

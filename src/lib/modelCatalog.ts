@@ -20,6 +20,7 @@ import type { NavId } from '../types';
 import { getDisplayCountry, getModelFamily, getModelOrigin } from './modelOrigins.ts';
 import { normalizeModelKey } from './modelKey.ts';
 import { isSpecialistModel } from './chooseLineup.ts';
+import { NON_CHAT_NOTE, nonChatKind } from './modelKind.ts';
 import { MATCH_GRADE_BANDS, compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore } from './scoring.ts';
 import { formatBytes, formatBytesPerSecond, formatGb, hashString, formatThroughput } from './format.ts';
 import {
@@ -124,6 +125,10 @@ export function getModelCapabilities(row: CapabilityBearing): string[] | null {
  * Unknown capabilities mean an older provider or a catalog entry, and those
  * are assumed runnable — the previous behavior, and wrong only for the handful
  * of image models.
+ *
+ * A decision model (kev, d3) or a speech model (phonon) is settled the same
+ * way, from modelKind.ts, because they are listed as ordinary text models:
+ * the command line asks that module too, so the two cannot disagree.
  */
 export function canGenerateText(row: CapabilityBearing & { generationKind?: string }): boolean {
   // A ComfyUI checkpoint is settled before any capability lookup: it produces
@@ -132,6 +137,7 @@ export function canGenerateText(row: CapabilityBearing & { generationKind?: stri
   // catalog entries are not excluded, and without this line it quietly
   // qualified Stable Diffusion for a conversation benchmark.
   if (row.generationKind) return false;
+  if (nonChatKind(row)) return false;
   const capabilities = getModelCapabilities(row);
   if (capabilities) return capabilities.includes('completion');
   return !isLikelyImageGenerationModel(row.displayName ?? row.name ?? '');
@@ -213,6 +219,22 @@ export function canJoinComparison(row: ModelRow): boolean {
   // conversation a show is.
   return row.runtime !== 'comfyui' && canGenerateText(row) && !isEmbeddingModel(row.displayName)
     && !row.cloudOnly && !isCloudModel(row.displayName) && !lacksChatFormat(row);
+}
+
+/**
+ * Whether Simple Mode's Pick screen may show this model as a card.
+ *
+ * The cards seat a Speed Dating lineup, so a card has to be a model that can
+ * join one, and a specialist the show would score on a job it never claimed
+ * (a safety classifier, a document reader) stays in Advanced Mode. A model
+ * still to download needs Ollama to be there to fetch it, and an MLX build
+ * needs a Mac. Speech and decision models fail the first test (canGenerateText),
+ * which is why kev led the list before this was one function.
+ */
+export function canSeatInSimplePick(row: ModelRow, platform: string, ollamaReady: boolean): boolean {
+  return canJoinComparison(row) && !isSpecialistModel(row.displayName)
+    && getPlatformFit(row.displayName, platform).compatible
+    && (row.installed || ollamaReady);
 }
 
 /**
@@ -1233,6 +1255,8 @@ export function describeAbilities(row: ModelRow): string[] {
   if (isEmbeddingModel(row.displayName) || (reported.includes('embedding') && !reported.includes('completion'))) {
     return ['Turns text into search data. It does not chat'];
   }
+  const kind = nonChatKind(row);
+  if (kind) return [NON_CHAT_NOTE[kind]];
   // Ollama's image models report 'image' and nothing else.
   if (isImageGenerationModel(row)) return ['Makes images'];
   // Whether a model has a chat format is only known once it is installed, so
@@ -1404,6 +1428,10 @@ export function getModelBenchmarkBlocker(row: ModelRow | undefined, host: Networ
   // ask. The row action cell and the shortlist were gated for this; the
   // detail panel's TEST MODEL calls straight through to here and was not.
   if (row && lacksChatFormat(row)) return noChatFormatReason(row.displayName);
+  const kind = row && nonChatKind(row);
+  if (row && kind) {
+    return `${row.displayName} cannot be tested this way — the test asks questions and grades the answers. ${NON_CHAT_NOTE[kind]}`;
+  }
   if (row && !canJoinComparison(row)) {
     return `${row.displayName} cannot be tested this way — the test asks questions and grades the answers, and this model draws instead of chatting. Run it from the Lab.`;
   }
@@ -1620,18 +1648,9 @@ export function canWatchVideo(row: CapabilityBearing): boolean {
     .test(row.displayName ?? row.name ?? '');
 }
 
-/**
- * Models that produce audio — TTS and music.
- *
- * Name-only, because no local provider reports an audio-output capability and
- * none runs one yet. Same contract as the video chips: recognizable the day
- * they exist, hidden until then.
- */
-export function isLikelyAudioGenerationModel(name: string): boolean {
-  const lower = (name || '').toLowerCase();
-  if (/whisper|transcribe/.test(lower)) return false; // hears, does not speak
-  return /\btts\b|text-?to-?speech|kokoro|orpheus|\bbark\b|musicgen|stable-?audio|ace-?step|parler/.test(lower);
-}
+// Models that produce audio live in modelKind.ts with the other kinds that do
+// not chat; re-exported so the Makes audio filter and its tests keep one door.
+export { isLikelyAudioGenerationModel } from './modelKind.ts';
 
 /** Models that generate video. No local backend runs these yet, so the filter
    is usually empty — it exists so such models are recognizable when they exist. */
@@ -1691,6 +1710,10 @@ function allGoodForTags(row: ModelRow): string[] {
       : row.generationKind === 'audio' ? ['makes audio']
       : ['reads prompts for image and video models'];
   }
+  // A decision or audio model has no chat to be good for, whatever its name
+  // resembles in the personality table.
+  const kind = nonChatKind(row);
+  if (kind) return [kind === 'decision' ? 'scores text' : 'makes audio'];
   const profile = getModelProfile(row.displayName);
   // What it was made for, not the "coding, chat, utility" a name-based profile
   // guessed for starcoder2: with no chat format, chat is the one thing it
@@ -1790,6 +1813,11 @@ export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolea
     // A checkpoint is not a chat model; it matches none of the text tasks.
     return false;
   }
+  // A decision or speech model matches no goal but its own: d3 reads pictures,
+  // but to score them, so "Reads images" would offer a model that cannot
+  // answer. Audio makers are found by Makes audio, name or not.
+  const kind = nonChatKind(row);
+  if (kind) return task === 'audiogen' && kind === 'audio';
   if (task === 'uncensored') return isUncensoredModel(row.displayName);
   if (task === 'imagegen') return isImageGenerationModel(row);
   if (task === 'videogen') return isLikelyVideoGenerationModel(row.displayName);
@@ -1803,7 +1831,7 @@ export function modelMatchesTask(row: ModelRow, task: ModelTaskFilterId): boolea
   // for a model nothing describes.
   if (task === 'vision' && getModelCapabilities(row)) return canReadImages(row);
   if (task === 'videoread') return canWatchVideo(row);
-  if (task === 'audiogen') return isLikelyAudioGenerationModel(row.displayName);
+  if (task === 'audiogen') return false;
   // Chat, writing, code and reasoning are things said in words: an embedding
   // model only turns text into numbers, and an OCR model only transcribes a
   // picture, though both carried "chat" from the default profile.

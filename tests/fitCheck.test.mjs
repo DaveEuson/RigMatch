@@ -52,8 +52,10 @@ test('ranking is by points, and an installed model is graded on what Ollama says
     { name: 'nomic-embed-text:latest', sizeGb: 0.3, params: '137M' },
   ];
   const ranked = rankModels(catalogRows(), card, { installed });
-  for (let i = 1; i < ranked.length; i += 1) {
-    assert.ok((ranked[i - 1].grade.points ?? -1) >= (ranked[i].grade.points ?? -1), 'best points first');
+  // Decision models are listed after every chat model (nonChatModels.test.mjs), so the order is the chat models'.
+  const chat = ranked.filter((model) => !model.kind);
+  for (let i = 1; i < chat.length; i += 1) {
+    assert.ok((chat[i - 1].grade.points ?? -1) >= (chat[i].grade.points ?? -1), 'best points first');
   }
   // The app's Models list takes Ollama's size and parameter count for a
   // model you have (mergeModelRows), so the terminal does too.
@@ -219,7 +221,7 @@ test('--json carries the fields a script needs, in ASCII', () => {
   assert.deepEqual(json.hardware, { gpu: card.gpu, vramGb: 12, unifiedMemory: false, ramGb: 32, platform: 'win32', arch: 'x64', source: 'detected' });
   assert.equal(json.models.length, ranked.length, 'every model, not the first 20');
   assert.deepEqual(Object.keys(json.models[0]), [
-    'model', 'grade', 'points', 'verdict', 'fit', 'sizeGb', 'params', 'spareGb', 'tokensPerSecond', 'speedSource', 'installed', 'command', 'why',
+    'model', 'grade', 'points', 'verdict', 'fit', 'sizeGb', 'params', 'spareGb', 'tokensPerSecond', 'speedSource', 'installed', 'command', 'why', 'kind',
   ]);
   const verdicts = new Set(json.models.map((model) => model.verdict));
   for (const verdict of verdicts) assert.match(verdict, /^(runs-well|barely-runs|wont-fit|unknown)$/);
