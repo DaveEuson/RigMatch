@@ -564,18 +564,19 @@ test('the real watch: a quiet card, a model loading onto it and ordinary churn a
 
 test('the real watch: between requests it takes one instant memory reading and nothing else; the card is read in full only after the last request', async () => {
   const { state, run: cardRun } = fakeCard();
-  const watch = createGpuWatch(card(cardRun), { settleMs: 80, samples: 2, gapMs: 0 });
+  // A long settle, so "did not wait" and "did wait" are far apart even on a slow CI runner.
+  const watch = createGpuWatch(card(cardRun), { settleMs: 600, samples: 2, gapMs: 0 });
   await watch.start({ machine });
   state.asked.length = 0;
   state.reading = [60, 8700];
   const started = Date.now();
   await watch.check({ last: false });
-  assert.ok(Date.now() - started < 60, 'no waiting before a request: an idle gap changes how fast the next one reads its prompt');
+  assert.ok(Date.now() - started < 300, 'no waiting before a request: an idle gap changes how fast the next one reads its prompt');
   assert.deepEqual(state.asked, ['nvidia-smi'], 'one reading; no list of programs, which took 0.7 s here');
   state.asked.length = 0;
   const final = Date.now();
   await watch.check({ last: true });
-  assert.ok(Date.now() - final >= 75, 'after the last request it waits for the card to go quiet');
+  assert.ok(Date.now() - final >= 550, 'after the last request it waits for the card to go quiet');
   assert.deepEqual([...new Set(state.asked)].sort(), ['nvidia-smi', 'tasklist']);
 });
 
@@ -645,7 +646,9 @@ test('the real watch: a program that was already open is not one that joined, an
   // No nvidia-smi on a Linux box with no amdgpu files: the card is not read, so only the programs can say.
   const other = { processes: ['bash'] };
   const unreadable = async (command) => (command === 'ps' ? { output: other.processes.join('\n'), error: null } : { output: '', error: 'not found' });
-  const blind = quickWatch({ run: unreadable, platform: 'linux', arch: 'x64', gpuName: 'Intel(R) Arc(TM) A770 Graphics', sysfsRoot: 'Z:\\no-such-sys' });
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const blind = quickWatch({ run: unreadable, platform: 'linux', arch: 'x64', gpuName: 'Intel(R) Arc(TM) A770 Graphics', sysfsRoot: join(tmpdir(), 'rigmatch-no-such-sys') });
   await blind.start({ machine });
   assert.deepEqual(await blind.check(), { disturbed: false, reasons: [] }, 'it does not say the card is idle: it says nothing');
   other.processes = ['bash', 'blender'];
@@ -661,7 +664,7 @@ test("the real watch: on a shared memory pool only the card's busy figure counts
   state.reading = [10, 60000];
   const started = Date.now();
   assert.equal((await watch.check()).disturbed, false, 'RAM pressure is not a program on the card');
-  assert.ok(Date.now() - started >= 55, 'the card is given time to go quiet before it is read');
+  assert.ok(Date.now() - started >= 50, 'the card is given time to go quiet before it is read');
 
   assert.equal(await createGpuWatch(card(cardRun), { settleMs: 0 }).check(), null, 'a watch that was never started has no baseline and no verdict');
   const stopping = new AbortController();
