@@ -308,7 +308,9 @@
 .app-shell[data-ui-mode='advanced'] .news-head h2 { margin: 0; color: var(--text-strong); font: 400 var(--fs-h1) / 1.1 var(--display); }
 .app-shell[data-ui-mode='advanced'] .news-head p { max-width: 72ch; margin: 4px 0 0; color: var(--text); font-size: var(--fs-ui); }
 .app-shell[data-ui-mode='advanced'] .news-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s4); }
-.app-shell[data-ui-mode='advanced'] .news-switch { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; border: 0; background: none; color: var(--text-strong); font: 400 15px / 1.2 var(--ui); cursor: pointer; }
+.app-shell[data-ui-mode='advanced'] .news-switch { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; border: 0; border-radius: 8px; background: none; color: var(--text-strong); font: 400 15px / 1.2 var(--ui); cursor: pointer; transition: background var(--t-fast), box-shadow var(--t-fast); }
+.app-shell[data-ui-mode='advanced'] .news-switch:not(:disabled):hover { background: var(--panel-hover); box-shadow: 0 0 0 6px var(--panel-hover); }
+.app-shell[data-ui-mode='advanced'] .news-switch[aria-checked='false']:not(:disabled):hover .news-switch-track { border-color: var(--text); }
 .app-shell[data-ui-mode='advanced'] .news-switch-track { position: relative; width: 44px; height: 24px; flex: none; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--panel-2); transition: background var(--t-fast), border-color var(--t-fast); }
 .app-shell[data-ui-mode='advanced'] .news-switch-track i { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: left var(--t-fast); }
 .app-shell[data-ui-mode='advanced'] .news-switch[aria-checked='true'] .news-switch-track { border-color: var(--green); background: var(--green); }
