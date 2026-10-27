@@ -24,12 +24,17 @@ const WINDOWS_IDLE = readFileSync(path.join(process.cwd(), 'tests', 'fixtures', 
 const M4_IDLE = '      "PerformanceStatistics" = {"In use system memory (driver)"=0,"Alloc system memory"=2629632000,"Tiler Utilization %"=0,"recoveryCount"=0,"lastRecoveryTime"=0,"Renderer Utilization %"=0,"TiledSceneBytes"=0,"Device Utilization %"=0,"SplitSceneCount"=0,"Allocated PB Size"=75628544,"In use system memory"=763723776}';
 const NOT_FOUND = { output: '', error: 'spawn ENOENT' };
 
-/** A `run` that answers by command name and writes down what it was asked. */
+/**
+ * A `run` that answers by command name and writes down what it was asked.
+ * The name is cut at either kind of separator by hand: the Windows PowerShell
+ * path the probe builds has backslashes, and path.basename on a Linux or macOS
+ * host does not split on them, so it never found the answer there.
+ */
 function fakeRun(answers) {
   const calls = [];
   const run = async (command, args, timeoutMs) => {
     calls.push({ command, args, timeoutMs });
-    const answer = answers[path.basename(command).replace(/\.exe$/i, '')] ?? NOT_FOUND;
+    const answer = answers[command.split(/[\\/]/).pop().replace(/\.exe$/i, '')] ?? NOT_FOUND;
     if (typeof answer === 'function') return answer(args);
     if (answer instanceof Error) throw answer;
     return answer;
