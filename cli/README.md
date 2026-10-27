@@ -128,6 +128,6 @@ It reads this computer's graphics card and memory, and asks Ollama at `127.0.0.1
 
 Needs Node.js 20 or later, on Windows, macOS or Linux.
 
-## Licence
+## License
 
 Source-available, not open source. See [LICENSE](LICENSE). The source is at [github.com/DaveEuson/RigMatch](https://github.com/DaveEuson/RigMatch/tree/main/cli).

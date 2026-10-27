@@ -155,9 +155,9 @@ export function SelectedContestantCard({
         <div className="contestant-radar-row">
           <ScoreRadar speed={score.speed} sobriety={score.sobriety} fit={score.fit} />
           <div className="contestant-radar-scores">
-            {/* These are 0–100 sub-scores, not measurements. "Speed score" keeps it
-                from being read as the tokens/sec figure shown in the models table. */}
-            <div title="0–100 speed sub-score (not tokens/sec)"><span>Speed score</span><strong>{score.speed}</strong></div>
+            {/* These are 0–100 sub-scores, not measurements. The title says so, and
+                "Speed score" is the name of My PC's RigScore page. */}
+            <div title="0–100 speed sub-score (not tokens/sec)"><span>Speed</span><strong>{score.speed}</strong></div>
             {/* The sub-score above tops out at 100 tok/s, so most models on capable
                 hardware tie at 100. Show the measured rate too, which keeps ranking. */}
             {score.tokensPerSecond != null && (
