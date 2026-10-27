@@ -31,6 +31,10 @@ npx tauri build
 
 Output: `src-tauri/target/release/rigmatch-chat.exe` (Windows) or `rigmatch-chat` (Mac/Linux)
 
+## Running it for a test
+
+Chat saves your conversations, memories and settings in your user profile, so a test that launches it writes into your real history. Set `RIGMATCH_CHAT_DATA_DIR` to the full path of a throwaway folder first and Chat keeps everything there instead, creating the folder if it is missing; a RigMatch started with it set passes it on to the Chat it opens. A value Chat cannot use (empty, a relative path, a path containing `..`, or a folder that cannot be made) stops it with exit code 2 and a message on stderr, never a fall back to your real folder. On a Mac the page's own settings are not kept at all in such a run, because WebKit has no folder to point at.
+
 ## Standalone Use
 
 RigMatch Chat works without RigMatch. It reads any Ollama instance on localhost and lets you chat with any installed model directly.

@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use sysinfo::System;
 use tauri::ipc::Channel;
 
+mod data_dir;
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct OllamaModel {
     pub name: String,
@@ -392,11 +394,21 @@ fn send_stream_line(line: &str, on_token: &Channel<StreamEvent>) -> Result<bool,
 // startup and did it again on every launch, with no way back from inside the
 // app. A file in the app data directory has no such ceiling.
 
-fn conversations_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+/// The folder `RIGMATCH_CHAT_DATA_DIR` named at startup, if it was set. Read
+/// once in `run`, so no command can see a different answer than the window did.
+struct ChatDataDir(Option<std::path::PathBuf>);
+
+/// Every file Chat writes goes through here, so there is one place that decides
+/// which folder it lands in.
+fn store_path(app: &tauri::AppHandle, file: &str) -> Result<std::path::PathBuf, String> {
     use tauri::Manager;
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir.join("conversations.json"))
+    let chosen = app.state::<ChatDataDir>();
+    let dir = data_dir::store_dir(chosen.0.as_deref(), || app.path().app_data_dir().map_err(|e| e.to_string()))?;
+    Ok(dir.join(file))
+}
+
+fn conversations_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    store_path(app, "conversations.json")
 }
 
 fn read_json_file(path: &std::path::Path) -> Result<Option<String>, String> {
@@ -450,10 +462,7 @@ fn write_conversations(app: tauri::AppHandle, contents: String) -> Result<(), St
 /// belongs to the user, not to any one thread, and keeping it separate means
 /// clearing chat history does not silently take it too.
 fn memories_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
-    use tauri::Manager;
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir.join("memories.json"))
+    store_path(app, "memories.json")
 }
 
 #[tauri::command]
@@ -903,9 +912,37 @@ pub fn run() {
         }
     }
 
+    // A test that sets RIGMATCH_CHAT_DATA_DIR believes it cannot reach the real
+    // chat history, so a value that cannot be used stops the launch here, before
+    // any window or file exists, rather than falling back to the real folder.
+    let chosen_dir = match data_dir::prepare(std::env::var_os(data_dir::ENV_VAR).as_deref()) {
+        Ok(dir) => dir,
+        Err(why) => {
+            eprintln!("RigMatch Chat did not start: {why}. It does not fall back to your real chat folder; fix the value or unset it.");
+            std::process::exit(2);
+        }
+    };
+
+    let mut context: tauri::Context<tauri::Wry> = tauri::generate_context!();
+    if chosen_dir.is_some() {
+        // Tauri builds the config's windows itself, before `setup`, with the web
+        // profile (where the page keeps its settings) in the per-user default
+        // place. Under an override `open_windows_in` builds them instead.
+        for window in &mut context.config_mut().app.windows {
+            window.create = false;
+        }
+    }
+
     tauri::Builder::default()
+        .manage(ChatDataDir(chosen_dir.clone()))
         .manage(SysInfoState(std::sync::Mutex::new(System::new())))
         .manage(ActiveStreams::default())
+        .setup(move |app| {
+            if let Some(dir) = &chosen_dir {
+                open_windows_in(app, dir)?;
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_ollama_version,
             list_ollama_models,
@@ -934,8 +971,20 @@ pub fn run() {
             odysseus_running,
             open_link,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running RigMatch Chat");
+}
+
+/// Build the windows the config describes, with the web profile inside `dir`.
+fn open_windows_in(app: &tauri::App, dir: &std::path::Path) -> tauri::Result<()> {
+    for config in app.config().app.windows.clone() {
+        let window = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?.data_directory(dir.join("webview"));
+        // WKWebView has no folder to point at, so a Mac run keeps its web data
+        // in a store that is never written down instead.
+        let window = if cfg!(target_os = "macos") { window.incognito(true) } else { window };
+        window.build()?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
