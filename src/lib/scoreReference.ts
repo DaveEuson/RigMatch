@@ -11,10 +11,10 @@ import { MATCH_GRADE_BANDS } from './scoring.ts';
  */
 
 export const SCORE_WEIGHTS = [
-  { label: 'Quality', pct: 34, detail: 'Average per-prompt answer quality score (0–100). Fixed rules check what can be checked: does the JSON parse, does the truth-trap get a humble answer, does the format match. Open-ended answers are marked by a judge model, a local one unless you chose a cloud judge.' },
-  { label: 'Speed', pct: 32, detail: 'Median tokens/sec across 3 timed runs on your hardware × 1.5, plus a bonus for responses under ~6 s. This reflects your machine, not some cloud baseline.' },
-  { label: 'Reliability', pct: 18, detail: 'Percentage of prompts that returned a non-empty response. A model that crashes or stalls hurts here.' },
-  { label: 'Computer Fit', pct: 16, detail: 'How well the model size matches a typical home rig. Tiny 1–3B models score highest (96); 70B+ models score lowest (38) unless you have 48 GB+ VRAM.' },
+  { label: 'Quality', pct: 34, detail: 'Average per-prompt answer quality score (0–100). Fixed rules check what can be checked: does the JSON parse, does the truth-trap get a humble answer, does the format match. Open-ended answers are marked by a judge model, a local one unless you chose a cloud judge. Answers nothing can mark, like everyday chat with no judge, are left out of the average.' },
+  { label: 'Speed', pct: 32, detail: 'Average generation speed across the answers, scaled so 5 tokens a second scores 0 and 100 or more scores 100. This reflects your machine, not some cloud baseline.' },
+  { label: 'Reliability', pct: 18, detail: 'The share of answers that finished cleanly: not empty, not failed, and not cut off at the token limit. A model that crashes, stalls or rambles past the limit hurts here. A drawing that ran out of time is not counted either way.' },
+  { label: 'Computer Fit', pct: 16, detail: 'How big the model is, read from its name: up to 3B scores 96, up to 9B 88, up to 15B 74, up to 34B 58, larger 38, and 82 when the name has no size. It does not look at your graphics memory; the Fit grade on the Models list does.' },
 ];
 
 // Grade rows derived from the single canonical band list, so every table in the

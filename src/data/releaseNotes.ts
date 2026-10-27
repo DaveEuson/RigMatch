@@ -19,6 +19,7 @@ export const releaseNotes: ReleaseNoteEntry[] = [
       'RigScore on one PC can vary by 15 to 20 percent from one run to the next, not the 10 to 15 the 0.10.0 notes said. Allow for that when you compare two computers.',
       'Set RIGMATCH_CHAT_DATA_DIR to a full folder path before starting RigMatch Chat and it keeps its chats, memories and settings there instead of in your profile, so a test can\'t touch your real chats. If the value isn\'t a full path Chat can use, it refuses to start and says why, rather than falling back to your own chats.',
       'On a model\'s card, the 0 to 100 speed rating is now called "Speed". "Speed score" is the name of the My PC page, and the two looked like the same number.',
+      'The "How we score" panel now says what the score does. Speed is an average scaled from 5 to 100 tokens a second. Reliability counts an answer cut off at the token limit as unfinished. The Fit part reads only the model\'s size from its name, not your graphics memory. The scores themselves haven\'t changed.',
     ],
   },
   {
