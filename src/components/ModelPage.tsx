@@ -12,6 +12,7 @@ import type { StoredRunReport } from '../lib/runReports';
 import type { BenchmarkResult, ModelRow, NetworkHost, SystemProfile, TestedModelScore } from '../types';
 import { AvatarBust } from './Avatars';
 import { CopyCommandButton, FitGradeChip } from './FitGrade';
+import { NON_CHAT_NOTE, NON_CHAT_TAG, nonChatKind } from '../lib/modelKind';
 import { ProfileQuestionTranscript } from './ProfileQuestionTranscript';
 import { ResultExplanationCard } from './ResultExplanationCard';
 import { ShareScorecard } from './ShareScorecard';
@@ -97,6 +98,7 @@ export function ModelPage({
   const fitGrade = row
     ? gradeRow(row, hardware, { score, benchmark, bandwidthGbps: measuredBandwidth(rows, modelScores, hardware) })
     : null;
+  const kind = row ? nonChatKind(row) : null;
   const command = row && row.runtime !== 'comfyui' ? pullCommand(model, row.localProvider === 'lm-studio' ? 'lm-studio' : 'ollama') : null;
 
 
@@ -142,8 +144,8 @@ export function ModelPage({
 
       {fitGrade && (
         <div className="mp-fit">
-          <FitGradeChip grade={fitGrade} model={model} />
-          <p>{fitGrade.summary}</p>
+          {kind ? <strong>{NON_CHAT_TAG[kind]}</strong> : <FitGradeChip grade={fitGrade} model={model} />}
+          <p>{kind ? NON_CHAT_NOTE[kind] : fitGrade.summary}</p>
           {command && (
             <span className="mp-command">
               <code>{command}</code>

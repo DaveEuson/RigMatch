@@ -101,27 +101,9 @@ test('the chip is hidden by the catalog, not deleted from the code', () => {
 //   bakllava       -> ['completion', 'vision']
 //   deepseek-ocr   -> ['completion', 'vision']
 
-function loadCapabilityFns() {
-  const src = fs.readFileSync('src/lib/modelCatalog.ts', 'utf8');
-  const grab = (name) => {
-    const start = src.indexOf(`export function ${name}(`);
-    assert.ok(start >= 0, `${name} not found`);
-    const end = src.indexOf('\n}', start);
-    return src.slice(start, end + 2)
-      .replace('export function', 'function')
-      .replace(/\(row: CapabilityBearing\): boolean \{/, '(row) {')
-      // The signature can carry an intersection type — the annotation runs to
-      // the LAST "): boolean {" on the line, so match greedily.
-      .replace(/\(row: CapabilityBearing & .+\): boolean \{/, '(row) {')
-      .replace(/\(row: CapabilityBearing\): string\[\] \| null \{/, '(row) {')
-      .replace(/\(model: string\): boolean \{/, '(model) {');
-  };
-  const body = ['getModelCapabilities', 'isLikelyImageGenerationModel', 'canGenerateText', 'isImageGenerationModel']
-    .map(grab).join('\n');
-  return new Function(`${body}\nreturn { getModelCapabilities, canGenerateText, isImageGenerationModel };`)();
-}
-
-const { canGenerateText, isImageGenerationModel } = loadCapabilityFns();
+// The real functions, not a copy of their source: canGenerateText now asks
+// modelKind.ts as well, which a slice of modelCatalog.ts cannot reach.
+const { canGenerateText, isImageGenerationModel } = await import('../src/lib/modelCatalog.ts');
 
 test('what the provider reports beats what the name suggests', () => {
   // A model called "canary" that reports completion is a chat model, whatever

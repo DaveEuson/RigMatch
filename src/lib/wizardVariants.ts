@@ -12,6 +12,29 @@
  * runHistory.ts.
  */
 
+type FitRanked = {
+  row: { installed?: boolean; sizeGb: number | null };
+  fit: { tone: string };
+};
+
+const FIT_RANK: Record<string, number> = { 'sweet-spot': 0, good: 1, tight: 2 };
+
+/**
+ * The Pick grid's order: the best fit tone first, and among models of one tone
+ * the ones already on this computer, then the largest that still fits.
+ *
+ * Installed came after size, so a newcomer's top cards each needed a 6 GB
+ * download while their one installed model sat in the middle. A model they can
+ * start with now beats a bigger one they have to wait for. Largest-that-fits
+ * stays the tie-break inside each group: a capable GPU is still steered to more
+ * model, and ascending size once put phi3:mini on top of a 24 GB card.
+ */
+export function compareForWizard(a: FitRanked, b: FitRanked): number {
+  return (FIT_RANK[a.fit.tone] ?? 9) - (FIT_RANK[b.fit.tone] ?? 9)
+    || Number(Boolean(b.row.installed)) - Number(Boolean(a.row.installed))
+    || (b.row.sizeGb ?? 0) - (a.row.sizeGb ?? 0);
+}
+
 type VariantLike = {
   /** Friendly display name — the grouping key ("Gemma4", "Qwen2.5-coder"). */
   name: string;
