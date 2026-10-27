@@ -14,7 +14,10 @@ _Beta build_
 - RigMatch's list of what each Ollama model can do is refreshed for 263 families, including Bonsai 2 and Nemotron 3.5. Sizes and tags (vision, tools, thinking and so on) are current, so models land under the right filters.
 - A drawing with a big, repetitive style block could freeze RigMatch for anywhere from a few seconds to over a minute while it was checked, and a small model that loops can write exactly that. The check now gets half a second at most and takes a few milliseconds on a real drawing. A drawing that goes over is scored like one that can't be shown, and the note says it was too complicated to check.
 - The Blind show switch now reacts when you point at it, like the other controls, and so does the "Tell me when a new one lands" switch in What's New.
+- RigMatch now checks whether another program is using your graphics card before a test, and in rigmatch-fit --measure, on any graphics card in Windows and on AMD cards in Linux. It used to read only NVIDIA cards, so on other cards a busy card looked the same as a quiet one. When it can't read the card, it says it couldn't check.
+- RigScore now watches the graphics card while it runs. If another program starts using the card partway through, the run is marked "Not a clean score" with the reason, and it isn't compared with other runs. rigmatch-fit --measure says the same. A run nothing disturbed scores exactly as before, and the watch adds about 3 seconds to the Light test.
 - RigScore on one PC can vary by 15 to 20 percent from one run to the next, not the 10 to 15 the 0.10.0 notes said. Allow for that when you compare two computers.
+- Set RIGMATCH_CHAT_DATA_DIR to a full folder path before starting RigMatch Chat and it keeps its chats, memories and settings there instead of in your profile, so a test can't touch your real chats. If the value isn't a full path Chat can use, it refuses to start and says why, rather than falling back to your own chats.
 - On a model's card, the 0 to 100 speed rating is now called "Speed". "Speed score" is the name of the My PC page, and the two looked like the same number.
 
 ## 0.10.0 — Fit Check
