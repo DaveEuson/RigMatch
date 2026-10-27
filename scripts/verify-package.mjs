@@ -162,7 +162,7 @@ const PRESENT = [
   ['the drawing cleaner ships beside the main process', listing, '/electron/drawingRound.cjs'],
   ['the drawing round is asked', js, 'Generate an SVG of'],
   ['drawings line up side by side', css, 'drawing-gallery'],
-  ['a blind show asks for a favourite', js, 'Pick your favourite'],
+  ['a blind show asks for a favorite', js, 'Pick your favorite'],
   ['each model shows a Fit grade', css, 'fit-grade-pop'],
   ["What's New is paged", css, 'news-pager-steps'],
 ];
