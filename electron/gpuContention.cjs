@@ -183,43 +183,6 @@ function parseNvidiaGpuQuery(output) {
 }
 
 /**
- * Parse `rocm-smi --showmemuse --showuse --csv` (AMD).
- *
- * UNVERIFIED — written from documented output, no AMD hardware available:
- *   device,GPU memory use (%),GPU use (%)
- *   card0,42,17
- *
- * Returns null on anything unexpected so an unparsed format reads as "unknown"
- * rather than a fabricated reading.
- */
-function parseRocmSmiQuery(output, vramTotalMb = null) {
-  const lines = String(output ?? '')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean);
-  const dataLine = lines.find((l) => /^card\d/i.test(l));
-  if (!dataLine) return null;
-
-  const cells = dataLine.split(',').map((c) => c.trim());
-  const numbers = cells.map((c) => Number(c.replace('%', ''))).filter((n) => Number.isFinite(n));
-  if (numbers.length < 2) return null;
-
-  const [memoryUsePercent, utilizationPercent] = numbers.slice(-2);
-  if (memoryUsePercent < 0 || memoryUsePercent > 100) return null;
-  if (utilizationPercent < 0 || utilizationPercent > 100) return null;
-
-  // rocm-smi reports memory as a percentage; convert only if a total is known.
-  const total = Number.isFinite(vramTotalMb) && vramTotalMb > 0 ? vramTotalMb : null;
-  return {
-    vramUsedMb: total ? Math.round((memoryUsePercent / 100) * total) : null,
-    vramTotalMb: total,
-    vramUsedPercent: memoryUsePercent,
-    utilizationPercent,
-    source: 'rocm-smi',
-  };
-}
-
-/**
  * Parse `ioreg -r -d 1 -w 0 -c AGXAccelerator` (Apple Silicon).
  *
  * systeminformation reports no GPU utilization at all on Apple Silicon — model
@@ -620,7 +583,6 @@ module.exports = {
   BUSY_VRAM_SHARE,
   HEAVY_VRAM_SHARE,
   parseNvidiaGpuQuery,
-  parseRocmSmiQuery,
   parseIoregGpuStats,
   parseWindowsGpuProbe,
   pickWindowsAdapter,

@@ -555,8 +555,10 @@ export type GpuContention = {
   vramUsedPercent: number | null;
   /** The full sentence to show the user. Empty when there is nothing to say. */
   message: string;
-  /** Which tool produced the reading: nvidia-smi, rocm-smi, systeminformation. */
+  /** Which tool produced the reading: nvidia-smi, windows-counters, amdgpu-sysfs, ioreg, systeminformation. */
   source: string | null;
+  /** Why the card could not be read, when level is 'unknown'. */
+  reason?: string;
 };
 
 /** What ComfyUI reports about itself, or why it could not be reached. */

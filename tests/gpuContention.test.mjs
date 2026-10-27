@@ -8,7 +8,6 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const {
   parseNvidiaGpuQuery,
-  parseRocmSmiQuery,
   parseIoregGpuStats,
   parseWindowsGpuProbe,
   pickWindowsAdapter,
@@ -69,29 +68,9 @@ test('blank lines and comment headers are skipped', () => {
   assert.equal(reading.vramUsedMb, 100);
 });
 
-// ── rocm-smi parsing (AMD — unverified against real hardware) ────────────────
-
-test('parses the documented rocm-smi CSV shape', () => {
-  const out = 'device,GPU memory use (%),GPU use (%)\ncard0,42,17';
-  const reading = parseRocmSmiQuery(out, 16384);
-  assert.equal(reading.vramUsedPercent, 42);
-  assert.equal(reading.utilizationPercent, 17);
-  assert.equal(reading.vramUsedMb, Math.round(0.42 * 16384));
-  assert.equal(reading.source, 'rocm-smi');
-});
-
-test('rocm-smi without a known VRAM total still reports percentages', () => {
-  const reading = parseRocmSmiQuery('card0,42,17');
-  assert.equal(reading.vramUsedPercent, 42);
-  assert.equal(reading.vramUsedMb, null, 'must not invent an absolute figure');
-  assert.equal(reading.vramTotalMb, null);
-});
-
-test('unexpected rocm-smi output yields null rather than a guess', () => {
-  for (const bad of ['', null, 'rocm-smi: not found', 'device,GPU use (%)\n', 'card0,150,17']) {
-    assert.equal(parseRocmSmiQuery(bad), null, `${JSON.stringify(bad)} must not parse`);
-  }
-});
+// rocm-smi is not read: its CSV columns and whether "GPU memory use (%)" is
+// memory in use or memory activity could not be confirmed from AMD's sources, and
+// it reads the same amdgpu files that are read directly below (see parseAmdSysfs).
 
 // ── known-app matching ───────────────────────────────────────────────────────
 
@@ -192,8 +171,8 @@ test('percentages in the message are whole numbers', () => {
   assert.ok(!/51\.4/.test(message), 'a fractional percent reads as false precision');
 });
 
-test('AMD percentage-only readings assess the same as NVIDIA absolute ones', () => {
-  const amd = assessGpuContention({ vramUsedPercent: 60, utilizationPercent: 10, source: 'rocm-smi' });
+test('percentage-only readings assess the same as absolute ones', () => {
+  const amd = assessGpuContention({ vramUsedPercent: 60, utilizationPercent: 10, source: 'test' });
   assert.equal(amd.level, 'heavy');
   assert.equal(amd.vramUsedPercent, 60);
 });
