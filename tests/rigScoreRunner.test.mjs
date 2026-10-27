@@ -420,7 +420,7 @@ test('the main process runs one speed test at a time, never beside a show, on th
 
 // ---- The mid-run watch: did a program that is not Ollama's come to use the card? ----------------------
 
-const { createGpuWatch } = require('../electron/gpuProbe.cjs');
+const { createGpuWatch, OWN_RUNNER_APP_LABELS } = require('../electron/gpuProbe.cjs');
 
 /** A watch that writes down when it is called, what was in flight, and answers from `verdicts[n]` for its nth check. */
 function stubWatch(ollama, verdicts = []) {
@@ -436,8 +436,9 @@ function stubWatch(ollama, verdicts = []) {
   return {
     events,
     inFlightAtCall: [],
+    lastFlags: [],
     async start(args) { this.inFlightAtCall.push(inFlight); this.machine = args.machine; events.push('start'); },
-    async check() { this.inFlightAtCall.push(inFlight); events.push('check'); const verdict = verdicts[checks]; checks += 1; return verdict ?? { disturbed: false, reasons: [] }; },
+    async check(args) { this.inFlightAtCall.push(inFlight); this.lastFlags.push(args.last); events.push('check'); const verdict = verdicts[checks]; checks += 1; return verdict ?? { disturbed: false, reasons: [] }; },
   };
 }
 
@@ -472,6 +473,7 @@ test('the watch starts before the model loads, looks after every request and nev
   await run(ollama, { watch });
   assert.deepEqual(watch.events, ['start', 'generate', 'check', 'generate', 'check', 'generate', 'check', 'generate', 'check'], 'a warm-up and three timed runs, each followed by a look');
   assert.ok(watch.inFlightAtCall.every((count) => count === 0), 'no request was in flight when it looked');
+  assert.deepEqual(watch.lastFlags, [false, false, false, true], 'only after the final request is it told it may take its time');
   assert.deepEqual(watch.machine, machine, 'it is told which card this is');
 });
 
@@ -550,11 +552,31 @@ test('the real watch: a quiet card, a model loading onto it and ordinary churn a
   await watch.start({ machine });
   // The model's own weights arrive between the baseline and the first look: 6 GB, and a busy desktop.
   state.reading = [41, 8700];
-  assert.deepEqual(await watch.check(), { disturbed: false, reasons: [] }, 'the first look after the load is what memory is then compared with');
+  assert.deepEqual(await watch.check({ last: false }), { disturbed: false, reasons: [] }, 'the first look after the load is what memory is then compared with');
   state.reading = [38, 8900];
-  assert.equal((await watch.check()).disturbed, false, '200 MB of churn');
+  assert.equal((await watch.check({ last: false })).disturbed, false, '200 MB of churn');
+  // Right after a request the card's busy figure is the model's own: not judged between requests.
+  state.reading = [99, 8900];
+  assert.equal((await watch.check({ last: false })).disturbed, false, 'the model at work is not a program joining');
   state.reading = [44, 8000];
-  assert.equal((await watch.check()).disturbed, false, 'a card that frees some is no one joining');
+  assert.equal((await watch.check({ last: true })).disturbed, false, 'a card that frees some, and goes quiet, is no one joining');
+});
+
+test('the real watch: between requests it takes one instant memory reading and nothing else; the card is read in full only after the last request', async () => {
+  const { state, run: cardRun } = fakeCard();
+  const watch = createGpuWatch(card(cardRun), { settleMs: 80, samples: 2, gapMs: 0 });
+  await watch.start({ machine });
+  state.asked.length = 0;
+  state.reading = [60, 8700];
+  const started = Date.now();
+  await watch.check({ last: false });
+  assert.ok(Date.now() - started < 60, 'no waiting before a request: an idle gap changes how fast the next one reads its prompt');
+  assert.deepEqual(state.asked, ['nvidia-smi'], 'one reading; no list of programs, which took 0.7 s here');
+  state.asked.length = 0;
+  const final = Date.now();
+  await watch.check({ last: true });
+  assert.ok(Date.now() - final >= 75, 'after the last request it waits for the card to go quiet');
+  assert.deepEqual([...new Set(state.asked)].sort(), ['nvidia-smi', 'tasklist']);
 });
 
 test('the real watch: a program that takes the card, or its memory, or opens, is seen', async () => {
@@ -562,20 +584,55 @@ test('the real watch: a program that takes the card, or its memory, or opens, is
   const watch = quickWatch(card(cardRun));
   await watch.start({ machine });
   state.reading = [25, 8000];
-  await watch.check();
+  await watch.check({ last: false });
 
-  state.reading = [92, 8100];
-  const busy = await watch.check();
-  assert.equal(busy.disturbed, true);
-  assert.deepEqual(busy.reasons, ['the graphics card was 92% busy between the runs']);
-
+  // Memory taken between two requests is seen at once.
   state.reading = [25, 9300];
-  const memory = await watch.check();
+  const memory = await watch.check({ last: false });
   assert.deepEqual(memory.reasons, ['about 1.3 GB more graphics memory was in use than when the model had loaded']);
 
   state.reading = [25, 8000];
   state.processes = ['explorer.exe', 'obs64.exe'];
-  assert.deepEqual((await watch.check()).reasons, ['OBS Studio started while the test ran']);
+  assert.deepEqual((await watch.check({ last: true })).reasons, ['OBS Studio started while the test ran']);
+
+  // At the end, a card that is hammered.
+  state.processes = ['explorer.exe'];
+  state.reading = [92, 8100];
+  const busy = await watch.check({ last: true });
+  assert.equal(busy.disturbed, true);
+  assert.deepEqual(busy.reasons, ['the graphics card was 92% busy between the runs']);
+});
+
+test("the real watch: Ollama's own runner, which has the name of a llama.cpp server, is not a program that joined", async () => {
+  const { state, run: cardRun } = fakeCard();
+  const watch = quickWatch(card(cardRun));
+  await watch.start({ machine });
+  // Loading the model starts llama-server.exe (seen on Ollama 0.40.5); the test's own.
+  state.processes = ['explorer.exe', 'ollama.exe', 'llama-server.exe'];
+  assert.deepEqual(await watch.check({ last: true }), { disturbed: false, reasons: [] });
+  state.processes = ['explorer.exe', 'ollama.exe', 'llama-server.exe', 'blender.exe'];
+  assert.deepEqual((await watch.check({ last: true })).reasons, ['Blender started while the test ran']);
+  assert.deepEqual(OWN_RUNNER_APP_LABELS, ['a llama.cpp server']);
+});
+
+test('the real watch: a card read through PowerShell is never read between requests, only after the last', async () => {
+  const { readFileSync } = await import('node:fs');
+  const windowsOutput = readFileSync(new URL('./fixtures/gpu-windows-probe-idle.json', import.meta.url), 'utf8');
+  const asked = [];
+  const slowRun = async (command) => {
+    asked.push(command.replace(/^.*[\\/]/, ''));
+    if (/powershell/i.test(command)) return { output: windowsOutput, error: null };
+    if (command === 'tasklist') return { output: '"explorer.exe","4","Console","1","1 K"\r\n', error: null };
+    return { output: '', error: 'not found' };
+  };
+  const watch = quickWatch({ run: slowRun, platform: 'win32', arch: 'x64', gpuName: 'AMD Radeon(TM) Graphics', env: {} });
+  await watch.start({ machine });
+  asked.length = 0;
+  assert.equal(await watch.check({ last: false }), null, 'no verdict, and no idle gap spent on PowerShell');
+  assert.deepEqual(asked, [], 'nothing was run');
+  const final = await watch.check({ last: true });
+  assert.deepEqual(final, { disturbed: false, reasons: [] });
+  assert.ok(asked.includes('powershell.exe') && asked.includes('tasklist'));
 });
 
 test('the real watch: a program that was already open is not one that joined, and a card it cannot read is judged by what it can see', async () => {
@@ -583,7 +640,7 @@ test('the real watch: a program that was already open is not one that joined, an
   state.processes = ['explorer.exe', 'steamwebhelper.exe'];
   const watch = quickWatch(card(cardRun));
   await watch.start({ machine });
-  assert.equal((await watch.check()).disturbed, false, 'Steam was open when the test began');
+  assert.equal((await watch.check({ last: true })).disturbed, false, 'Steam was open when the test began');
 
   // No nvidia-smi on a Linux box with no amdgpu files: the card is not read, so only the programs can say.
   const other = { processes: ['bash'] };

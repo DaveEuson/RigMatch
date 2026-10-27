@@ -515,10 +515,11 @@ function assessGpuContention(reading, knownApps = [], options = {}) {
 /**
  * Mid-run: did something join the card while a speed test ran?
  *
- * The reading is taken between the test's requests, never during one, after the
- * card's own sampling window has passed (nvidia-smi's utilization is "the past
- * sample period", up to a second), so the model's own work is not in it. What
- * is left is another program's. Three signals, each against a baseline:
+ * Judging only; when and how the card is read is gpuProbe.createGpuWatch's,
+ * which reads utilization only after the card has had time to go quiet
+ * (nvidia-smi's utilization is "the past sample period", up to a second), so the
+ * model's own work is not in it. What is left is another program's. Three
+ * signals, each against a baseline:
  *   - utilization: at the "heavy" threshold or above, whenever it started (a
  *     card hammered between a test's requests is hammered for the test, and the
  *     next tier of the same test begins with the program already there); or at
@@ -536,7 +537,7 @@ const MIDRUN_UTILIZATION_RISE = 20;
 const MIDRUN_VRAM_GROWTH_MB = 1024;
 const MIDRUN_VRAM_GROWTH_SHARE = 0.08;
 
-function judgeMidRun({ baseline = null, reference = null, current = null, baselineApps = [], currentApps = [], unifiedMemory = false } = {}) {
+function judgeMidRun({ baseline = null, reference = null, current = null, baselineApps = [], currentApps = [], ignoreApps = [], unifiedMemory = false } = {}) {
   const reasons = [];
   const finite = (value) => Number.isFinite(value);
   if (current) {
@@ -553,7 +554,7 @@ function judgeMidRun({ baseline = null, reference = null, current = null, baseli
       if (grew >= step) reasons.push(`about ${(grew / 1024).toFixed(1)} GB more graphics memory was in use than when the model had loaded`);
     }
   }
-  const before = new Set(baselineApps);
+  const before = new Set([...baselineApps, ...ignoreApps]);
   const started = (Array.isArray(currentApps) ? currentApps : []).filter((app) => !before.has(app));
   if (started.length) reasons.push(`${started.join(' and ')} started while the test ran`);
   return { disturbed: reasons.length > 0, reasons };

@@ -71,7 +71,7 @@ export type MeasureDeps = {
    * it (gpuProbe.createGpuWatch); shared by every request of one command, which
    * start() takes a new baseline for each time. The default is not to watch.
    */
-  watch?: { start: (args: { machine: RigMachine }) => Promise<void>; check: (args: { signal?: AbortSignal }) => Promise<{ disturbed: boolean; reasons: string[] } | null> };
+  watch?: { start: (args: { machine: RigMachine }) => Promise<void>; check: (args: { signal?: AbortSignal; last?: boolean }) => Promise<{ disturbed: boolean; reasons: string[] } | null> };
 };
 
 /** Long enough for a big model to leave a slow card; the app waits 3 s, and that was not enough here. */

@@ -189,9 +189,9 @@ function sharedWith(listing, model, now) {
  *  - signal: aborts the run (Stop)
  *  - onProgress(update)
  *  - now(): the clock, for reading Ollama's expiry times
- *  - watch: { start({ machine }), check({ signal }) } (gpuProbe.createGpuWatch). Looks at the
- *    graphics card between the requests, never during one, and says if a
- *    program that is not Ollama's came to use it. It changes nothing about the
+ *  - watch: { start({ machine }), check({ signal, last }) } (gpuProbe.createGpuWatch).
+ *    Looks at the graphics card after each request, never during one, and says
+ *    if a program that is not Ollama's came to use it. It changes nothing about the
  *    run, the timings or what is sent to Ollama; a finished run it saw
  *    disturbed carries `disturbed: true` and `disturbedBy` (the reasons), and
  *    the numbers in it are the same ones an unwatched run would have.
@@ -312,10 +312,14 @@ async function timedRuns({ plan, baseUrl, fetchJson, isUnsupportedThinkError, si
     if (!warmup) runs.push(readRigRun(reply));
 
     // And the card itself, for a program that is not Ollama's (a game, a render):
-    // between this request and the next, so nothing in a request is touched. Its
-    // reasons are kept for the result, which stays as measured.
+    // between this request and the next, so nothing in a request is touched, and
+    // with `last` set after the final one, which is when the watch may take its
+    // time (an idle gap before a request changes how fast that request reads its
+    // prompt, so the watch waits only when no request follows). Its reasons are
+    // kept for the result, which stays as measured.
     if (watch) {
-      const verdict = await Promise.resolve().then(() => watch.check({ signal })).catch(() => null);
+      const last = index === plan.prompts.length - 1;
+      const verdict = await Promise.resolve().then(() => watch.check({ signal, last })).catch(() => null);
       if (signal?.aborted) return { status: 'stopped' };
       for (const reason of verdict?.disturbed ? verdict.reasons : []) {
         if (!disturbedBy.includes(reason)) disturbedBy.push(reason);
