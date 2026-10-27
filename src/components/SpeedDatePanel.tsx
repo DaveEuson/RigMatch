@@ -96,7 +96,7 @@ export function SpeedDatePanel({
   onBalanceChange: (value: number) => void;
   /** Saved Lab results: Reading pictures ranks the lineup's own descriptions. */
   labResults: Record<string, AdvancedLabResult>;
-  /** Blind mode: names hidden until the viewer has picked a favourite. */
+  /** Blind mode: names hidden until the viewer has picked a favorite. */
   blindOn?: boolean;
   onBlindChange?: (on: boolean) => void;
 }) {
@@ -199,7 +199,7 @@ export function SpeedDatePanel({
                 lineup") behind the pick step. */}
             {!blindShow && standingLine(lineupStanding(leader ?? undefined, lineupNames), winnerResult?.total)}
             {/* What the switch does, said where it can be read while it is on. */}
-            {blindOn && onBlindChange && ' Blind show is on: names stay hidden until you pick your favourite.'}
+            {blindOn && onBlindChange && ' Blind show is on: names stay hidden until you pick your favorite.'}
           </p>
         </div>
         <div className="page-head-actions">
