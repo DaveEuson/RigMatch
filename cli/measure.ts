@@ -178,6 +178,9 @@ export type CardNote = {
   reasons: string[];
   /** Known graphics-heavy programs that are open, whatever the card is doing. */
   apps: string[];
+  /** The readings themselves (the median of the samples), null when the card could not be read. */
+  vramUsedPercent: number | null;
+  utilizationPercent: number | null;
   /** The sentence for the intro: the app's "Before starting: ..." if busy, a softer line if a program is open, else empty. */
   message: string;
 };
@@ -186,7 +189,7 @@ export type CommandRunner = (command: string, args: string[], timeoutMs: number)
 
 const assessCard = contention.assessGpuContention as (
   reading: unknown, apps?: string[], options?: { unifiedMemory?: boolean },
-) => { level: CardNote['level']; reasons: string[]; apps: string[] };
+) => { level: CardNote['level']; reasons: string[]; apps: string[]; vramUsedPercent: number | null; utilizationPercent: number | null };
 
 const LINE_BREAK = /\r?\n/;
 
@@ -215,7 +218,7 @@ export async function checkCard(
   // A median of several, as the app takes: a single reading of an ordinary
   // desktop lands anywhere from 12% to 44%.
   const median = contention.medianReading(readings);
-  if (!median) return { level: 'unknown', reasons: [], apps: [], message: '' };
+  if (!median) return { level: 'unknown', reasons: [], apps: [], vramUsedPercent: null, utilizationPercent: null, message: '' };
   const apps = contention.matchKnownGpuApps(await processNames(run, platform).catch(() => []));
   const assessment = assessCard(median, apps, { unifiedMemory });
   // The app calls the card "busy" when a known graphics-heavy program is merely
@@ -228,6 +231,8 @@ export async function checkCard(
     level: measurablyBusy ? assessment.level : 'clear',
     reasons: assessment.reasons,
     apps: assessment.apps,
+    vramUsedPercent: assessment.vramUsedPercent,
+    utilizationPercent: assessment.utilizationPercent,
     message: measurablyBusy
       ? contention.describeGpuContention(assessment)
       : assessment.apps.length
@@ -486,10 +491,10 @@ export async function measureModel(
 // ---- Printing ------------------------------------------------------------------
 
 /** Plain ASCII numbers with a comma, whatever the locale: the output stays ASCII. */
-const number = (value: number) => Math.round(value).toLocaleString('en-US');
+export const number = (value: number) => Math.round(value).toLocaleString('en-US');
 /** As the app rounds a speed: a tenth below 20, whole above (format.ts formatThroughputValue). */
-const tps = (value: number) => (value >= 20 ? number(value) : String(Math.round(value * 10) / 10));
-const pad = (text: string, width: number) => text + ' '.repeat(Math.max(0, width - text.length));
+export const tps = (value: number) => (value >= 20 ? number(value) : String(Math.round(value * 10) / 10));
+export const pad = (text: string, width: number) => text + ' '.repeat(Math.max(0, width - text.length));
 
 function pointsCell(points: RigPoints | null): string {
   if (!points) return '-';
@@ -529,7 +534,7 @@ export type PrintOptions = {
  * a known program merely being open, Steam on most gaming PCs, is said before
  * the runs, as the app says it, but does not mean the runs were disturbed.
  */
-function afterNote(card: CardNote | null | undefined): string[] {
+export function afterNote(card: CardNote | null | undefined): string[] {
   if (!card || (card.level !== 'busy' && card.level !== 'heavy') || card.reasons.length === 0) return [];
   const reasons = card.reasons.join(' and ');
   const named = card.apps.length ? ` ${card.apps.join(' and ')} ${card.apps.length === 1 ? 'is' : 'are'} running.` : '';

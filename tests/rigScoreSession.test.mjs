@@ -97,18 +97,20 @@ test('App sees a running speed test, counts it as the card being busy, and shows
   assert.match(live, /export const rigScoreSession = createRigSession\(agentArcadeApi\);/);
   assert.match(panel, /from '\.\.\/lib\/rigScoreLive'/);
   assert.doesNotMatch(panel, /createRigSession\(/, 'the screen makes no session of its own');
-  assert.match(app, /import \{ RIG_SCORE_BUSY, rigScoreSession, useRigScoreSession \} from '\.\/lib\/rigScoreLive';/);
+  assert.match(app, /import \{ RIG_SCORE_BUSY, rigScoreBusy, rigScoreSession, useRigScoreSession \} from '\.\/lib\/rigScoreLive';/);
+  // A context check holds the card as a tier does (lib/rigScoreSession.ts rigScoreBusy).
+  assert.match(app, /const rigScoreRunning = rigScoreBusy\(rigSession\);/);
   // gpuBusy gates Labs, the lab buttons and RigMatch Chat's requests to test.
   assert.match(app, /const gpuBusy = [^\n]*\|\| rigScoreRunning;/);
   assert.match(app, /if \(gpuBusy \|\| skillRunStatus\.phase === 'running'\) \{\n\s*await answer\(\{ started: false/);
   // Both ways a show starts say so instead of starting.
   for (const start of ['const startBenchmark = useCallback(async', 'const runListTest = useCallback(async']) {
     const body = app.slice(app.indexOf(start), app.indexOf(start) + 600);
-    assert.match(body, /if \(rigScoreSession\.getState\(\)\.running\) \{\n\s*tellUser\(RIG_SCORE_BUSY\);/, start);
+    assert.match(body, /if \(rigScoreBusy\(rigScoreSession\.getState\(\)\)\) \{\n\s*tellUser\(RIG_SCORE_BUSY\);/, start);
   }
   assert.match(app, /disabled=\{isBenchmarking \|\| isListTesting \|\| rigScoreRunning\}/);
   // The load strip names it from any screen, with a Stop.
-  assert.match(app, /Running the speed test\n\s*<\/button>\n\s*<button type="button" className="running-stop" onClick=\{rigScoreSession\.stop\}>Stop<\/button>/);
+  assert.match(app, /\{rigSession\.endurance \? 'Running the context check' : 'Running the speed test'\}\n\s*<\/button>\n\s*<button type="button" className="running-stop" onClick=\{rigScoreSession\.stop\}>Stop<\/button>/);
 });
 
 test('progress from a run that is not this one is ignored', async () => {

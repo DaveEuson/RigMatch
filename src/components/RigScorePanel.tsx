@@ -19,6 +19,7 @@ import { rigHeadline, tierAvailability, tiersToRun, type RigProgress } from '../
 import { RIG_SPEED_BANDS, bandRange, promptWaitSeconds, speedBand } from '../lib/rigScoreScale';
 import { rigScoreSession as session, useRigScoreSession } from '../lib/rigScoreLive';
 import type { GpuContention, OllamaStatus, PullProgressUpdate, SystemProfile } from '../types';
+import { ContextEndurance } from './ContextEndurance';
 import { GpuContentionNote } from './GpuContentionNote';
 import './RigScorePanel.css';
 
@@ -87,7 +88,7 @@ export function RigScorePanel({
   const rows = useMemo(() => historyRows(state.history), [state.history]);
   const runnable = tiersToRun(machine, installed);
   const running = state.running;
-  const canRun = ollama.ready && !busy && !running && Boolean(agentArcadeApi.runRigScore);
+  const canRun = ollama.ready && !busy && !running && !state.endurance && Boolean(agentArcadeApi.runRigScore);
 
   // The headline is the Standard tier. Until it has a result, the hero shows
   // the tier that has one, says what the Standard tier needs, and gives no
@@ -352,6 +353,8 @@ export function RigScorePanel({
           </table>
         </>
       )}
+
+      <ContextEndurance models={ollama.models} ready={ollama.ready} busy={busy} />
 
       <p className="rigscore-footnote">
         1,000 points is the reference PC, an {RIG_REFERENCE_MACHINE}

@@ -18,6 +18,11 @@ import { RIG_REFERENCES, RIG_TIERS } from '../../src/lib/rigScore.ts';
  * prefill. Speeds are Ollama's own fields: durations in nanoseconds.
  *  - generateError: answers /api/generate with a 500 and this text.
  *  - remote: names listed with a remote host, as Ollama's cloud models are.
+ *  - onGenerate(body): for the context-endurance check, which needs replies that
+ *    depend on the prompt and the context. Returns { reply, ps }: the reply to
+ *    send, and fields for the model's /api/ps entry (size, size_vram,
+ *    context_length). It may throw to answer with a 500. Absent, the fixed
+ *    answer above is sent.
  *
  * Not a test file (no .test.mjs), so run-tests does not collect it.
  */
@@ -32,6 +37,7 @@ export async function fakeOllama({
   stall = false,
   stallModels = [],
   generateError = null,
+  onGenerate = null,
 } = {}) {
   const tierOf = (model) => RIG_TIERS.find((entry) => entry.model === model);
   const speedsFor = (model) => {
@@ -68,7 +74,7 @@ export async function fakeOllama({
           ],
         });
       }
-      if (request.url === '/api/ps') return send({ models: state.loaded.map((entry) => ({ name: entry.name, size: entry.size, size_vram: entry.size_vram, expires_at: entry.expires_at })) });
+      if (request.url === '/api/ps') return send({ models: state.loaded.map((entry) => ({ name: entry.name, size: entry.size, size_vram: entry.size_vram, expires_at: entry.expires_at, context_length: entry.context_length })) });
       if (request.url === '/api/version') return send({ version: '0.35.1' });
       if (request.url === '/api/show') {
         return send({ modelfile: `FROM /models/blobs/${digestFor(parsed?.model)}`, details: { quantization_level: 'Q4_K_M' } });
@@ -83,13 +89,18 @@ export async function fakeOllama({
           return send({ done: true });
         }
         if (generateError) return send({ error: generateError }, 500);
+        let custom = null;
+        if (onGenerate) {
+          try { custom = onGenerate(parsed); } catch (error) { return send({ error: String(error?.message ?? error) }, 500); }
+        }
         state.loaded = [
           ...state.loaded.filter((entry) => entry.name !== parsed.model),
-          { name: parsed.model, size: 100, size_vram: 100, expires_at: new Date(Date.now() + 110_000).toISOString() },
+          // ps.absent: the model is gone from /api/ps as soon as it has answered, as when Ollama evicts it for another's.
+          ...(custom?.ps?.absent ? [] : [{ name: parsed.model, size: 100, size_vram: 100, expires_at: new Date(Date.now() + 110_000).toISOString(), ...custom?.ps }]),
         ];
         if (stall || stallModels.includes(parsed.model)) { stalled.push(response); return undefined; }
         const speeds = speedsFor(parsed.model);
-        const answer = () => send({
+        const answer = () => send(custom?.reply ?? {
           prompt_eval_count: 1486,
           prompt_eval_duration: (1486 / speeds.prefill) * 1e9,
           eval_count: 256,
@@ -126,5 +137,46 @@ export async function fakeOllama({
       for (const socket of sockets) socket.destroy();
       server.close(resolve);
     }),
+  };
+}
+
+/** The prompt's token count for a model whose tokenizer costs `perLine` a log line and `fixed` for the rest. */
+export const tokensFor = (prompt, perLine, fixed) => Math.round(fixed + perLine * (prompt.match(/\[LOG_SEQ_/g) ?? []).length);
+
+/**
+ * An onGenerate for the context-endurance check: a model as Ollama would run
+ * it. A prompt costs `fixed + perLine * lines` tokens; one longer than the
+ * context is cut to about half of it without an error (so the passkey goes);
+ * each context has its own speeds and share on the card. `contextCap` is what
+ * OLLAMA_NUM_PARALLEL above 1 does, `forget` the contexts at which the model
+ * loses the passkey, `evict` the contexts after which Ollama has unloaded it
+ * (to make room for another program's model), `onStage(numCtx, body)` a hook
+ * to disturb the run.
+ */
+export function simulatedModel({
+  perLine = 33, fixed = 90, write = { 2048: 100, 8192: 80, 16384: 60 }, read = { 2048: 2000, 8192: 3000, 16384: 2800 },
+  share = { 2048: 1, 8192: 1, 16384: 1 }, contextCap = null, forget = [], evict = [], onStage = () => {},
+} = {}) {
+  return (body) => {
+    const numCtx = body.options.num_ctx;
+    const effective = contextCap ? Math.min(numCtx, contextCap) : numCtx;
+    let tokens = tokensFor(body.prompt, perLine, fixed);
+    let cut = false;
+    if (tokens > effective) { tokens = Math.round(effective / 2) + 2; cut = true; }
+    const passkey = body.prompt.match(/passkey is "(RM-\d+)"/)?.[1];
+    const answering = body.options.num_predict > 1;
+    onStage(numCtx, body);
+    return {
+      reply: {
+        prompt_eval_count: tokens,
+        prompt_eval_duration: (tokens / read[numCtx]) * 1e9,
+        eval_count: answering ? 80 : 1,
+        eval_duration: ((answering ? 80 : 1) / write[numCtx]) * 1e9,
+        load_duration: 2e9,
+        response: answering && !cut && !forget.includes(numCtx) ? JSON.stringify({ passkey, summary: 'Bandwidth sets how fast weights stream.' }) : '{"passkey": "unknown"}',
+        done: true,
+      },
+      ps: { size: 10e9, size_vram: 10e9 * share[numCtx], context_length: effective, absent: evict.includes(numCtx) },
+    };
   };
 }

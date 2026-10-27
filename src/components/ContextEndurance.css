@@ -1,0 +1,53 @@
+/* RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE. */
+
+/* My PC › Speed score › Context endurance. Sits on the page like the tables
+   above it: no panel of its own, and the one gold button stays the speed test's. */
+.endurance-lede { max-width: 80ch; margin: 0 var(--s5) var(--s3); color: var(--text); font: 400 var(--fs-ui) / 1.5 var(--ui); }
+
+.endurance-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s3); margin: 0 var(--s5) var(--s3); }
+.endurance-pick { display: grid; gap: var(--s1); min-width: 0; }
+.endurance-pick span { color: var(--muted); font: 400 var(--fs-small) / 1.3 var(--ui); }
+.endurance-pick select {
+  min-width: 220px;
+  max-width: 100%;
+  min-height: var(--h-control);
+  padding: 0 var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: var(--stage);
+  color: var(--text-strong);
+  font: 400 var(--fs-ui) / 1.4 var(--ui);
+  cursor: pointer;
+}
+.endurance-pick select:disabled { cursor: default; opacity: 0.6; }
+.endurance-cost { align-self: center; max-width: 52ch; color: var(--muted); font: 400 var(--fs-ui) / 1.4 var(--ui); }
+
+.endurance-status { display: grid; gap: var(--s1); margin: 0 var(--s5) var(--s3); }
+.endurance-status p { margin: 0; color: var(--text); font: 400 var(--fs-ui) / 1.45 var(--ui); }
+.endurance-status p.rigscore-dim { color: var(--muted); }
+
+.endurance-verdict { display: grid; gap: var(--s1); max-width: 80ch; margin: 0 var(--s5) var(--s3); }
+.endurance-verdict p { margin: 0; color: var(--text); font: 400 var(--fs-ui) / 1.5 var(--ui); }
+.endurance-verdict .endurance-headline { color: var(--text-strong); font: 400 var(--fs-body) / 1.4 var(--ui); }
+.endurance-verdict .endurance-note { color: var(--muted); }
+
+.endurance-table th:nth-child(1) { width: 17%; }
+.endurance-table th:nth-child(2) { width: 17%; }
+.endurance-table th:nth-child(3) { width: 24%; }
+.endurance-table th:nth-child(4) { width: 22%; }
+.endurance-table th:nth-child(5) { width: 10%; }
+.endurance-table td > strong { color: var(--text-strong); font: 700 var(--fs-ui) / 1.4 var(--ui); }
+.endurance-failed { color: var(--text); }
+
+/* A bar is a share of something: the 2K speed for writing, the whole model for the card. */
+.endurance-bar { display: block; height: 6px; margin: var(--s1) 0; border-radius: 3px; background: var(--line); overflow: hidden; }
+.endurance-bar i { display: block; height: 100%; border-radius: 3px; background: var(--blue); }
+.endurance-bar.is-flagged i { background: var(--red); }
+
+@media (max-width: 760px) {
+  .endurance-controls { align-items: stretch; }
+  .endurance-pick { flex: 1 1 100%; }
+  .endurance-pick select { width: 100%; min-width: 0; }
+  .endurance-table tr { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .endurance-table td[colSpan] { grid-column: 1 / -1; }
+}

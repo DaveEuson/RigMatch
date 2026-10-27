@@ -34,6 +34,7 @@ const {
 const { scoreQualityWithJudge } = require('./judgeScoring.cjs');
 const { DRAWING_ANSWER_TOKENS, DRAWING_TIMEOUT_MS, checkDrawing, drawingTimedOut, drawingJudgeMode, drawingNote } = require('./drawingRound.cjs');
 const { runRigTier, unloadOllamaModel } = require('./rigScoreRunner.cjs');
+const { runEndurance } = require('./enduranceRunner.cjs');
 const security = require('./security.cjs');
 const { chatMessageText, chatHistory } = require('./chatDock.cjs');
 const gpuContention = require('./gpuContention.cjs');
@@ -540,7 +541,9 @@ const SCORES_MAX_ENTRIES = 500;   // N-07: reject oversized payloads from render
 let benchmarkRunning = false;     // N-06: single-benchmark mutex
 let activeBenchmark = null;       // authoritative running state mirrored to the renderer
 // RigScore's speed test (rigScoreRunner.cjs): { progressId, abort, finished }
-// while one tier runs. Never beside a show: both would share the card.
+// while one tier runs. Never beside a show: both would share the card. The
+// context check (enduranceRunner.cjs) takes the same slot, so it is never
+// beside a show or a speed test either, and Stop and quit end it the same way.
 let activeRigScore = null;
 let lastLogClearAt = 0;           // N-03: rate-limit log clearing
 const activePullControllers = new Map(); // keyed by progressId for safe per-download cancellation
@@ -1148,6 +1151,7 @@ function registerHandlers() {
     return benchmarkStatusPayload();
   });
   handleLogged('rigscore:run', 'rigscore', (event, request) => runRigScore(request, event.sender));
+  handleLogged('endurance:run', 'rigscore', (event, request) => runContextEndurance(request, event.sender));
   ipcMain.handle('rigscore:cancel', (event, progressId) => {
     assertTrustedIpcSender(event);
     if (typeof progressId === 'string' && progressId && activeRigScore?.progressId === progressId) {
@@ -3546,6 +3550,42 @@ async function runRigScore(request = {}, sender) {
       signal: activeRigScore.abort.signal,
       onProgress: (update) => {
         if (!sender.isDestroyed()) sender.send('rigscore:progress', { id: progressId, ...update });
+      },
+    });
+  } finally {
+    activeRigScore = null;
+    finished();
+  }
+}
+
+/**
+ * The context-endurance check on the local Ollama (enduranceRunner.cjs): one
+ * model at 2K, 8K and 16K. Local only, for the reason runRigScore gives. It
+ * holds the speed test's slot, and Stop is the speed test's rigscore:cancel.
+ */
+async function runContextEndurance(request = {}, sender) {
+  if (benchmarkRunning) throw new Error('A test is running. The context check waits until it has finished.');
+  if (activeRigScore) throw new Error('A speed test is already running.');
+  const progressId = typeof request?.progressId === 'string' && request.progressId
+    ? request.progressId
+    : `endurance-${Date.now().toString(36)}`;
+  let finished;
+  activeRigScore = { progressId, abort: new AbortController(), finished: new Promise((resolve) => { finished = resolve; }) };
+  try {
+    return await runEndurance({
+      request,
+      baseUrl: OLLAMA_LOCAL_URL,
+      fetchJson,
+      readMachine: readRigMachine,
+      unloadModel: unloadBenchmarkModel,
+      beforeRun: async () => {
+        await releaseOllamaLabModels();
+        await releaseOllamaChatModels();
+      },
+      isUnsupportedThinkError,
+      signal: activeRigScore.abort.signal,
+      onProgress: (update) => {
+        if (!sender.isDestroyed()) sender.send('endurance:progress', { id: progressId, ...update });
       },
     });
   } finally {

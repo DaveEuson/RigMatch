@@ -2,6 +2,7 @@
 import type { BenchmarkQuestionType } from './benchmarkSuite.ts';
 import type { TaskScores } from './lib/taskScores.ts';
 import type { HardwareFit } from './lib/modelCatalog.ts';
+import type { EnduranceProgress, EnduranceRunReply, EnduranceRunRequest } from './lib/contextEndurance.ts';
 import type { RigProgress, RigRunReply, RigRunRequest } from './lib/rigScoreRun.ts';
 
 export type SystemProfile = {
@@ -708,6 +709,9 @@ export type AgentArcadeApi = {
   runRigScore?: (request: RigRunRequest) => Promise<RigRunReply>;
   cancelRigScore?: (progressId: string) => Promise<void>;
   onRigScoreProgress?: (callback: (update: RigProgress) => void) => () => void;
+  /** Context endurance, one model at a time; stopped with cancelRigScore, which shares its slot. */
+  runEndurance?: (request: EnduranceRunRequest) => Promise<EnduranceRunReply>;
+  onEnduranceProgress?: (callback: (update: EnduranceProgress) => void) => () => void;
   onPullProgress?: (callback: (update: PullProgressUpdate) => void) => () => void;
   sendChat: (request: { model: string; message: string; baseUrl?: string; provider?: LocalModelProvider; images?: string[]; history?: ChatTurn[] }) => Promise<ChatResponse>;
   getLogs: (limit?: number) => Promise<AppLogResponse>;

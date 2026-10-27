@@ -52,12 +52,62 @@ export type MeasureEnv = {
  * The address is read as the app reads one (assertLocalhostUrl): its parsed
  * host must be localhost, 127.0.0.1 or ::1, however it was spelled.
  */
-export function assertLocalOllama(baseUrl: string): void {
+export function assertLocalOllama(baseUrl: string, flag = '--measure'): void {
   try {
     security.assertLocalhostUrl(baseUrl);
   } catch {
-    throw new Error(`--measure runs on this computer's Ollama only, and OLLAMA_HOST points to ${baseUrl}. RigMatch cannot read another computer's graphics card, so its numbers would carry the wrong card.`);
+    throw new Error(`${flag} runs on this computer's Ollama only, and OLLAMA_HOST points to ${baseUrl}. RigMatch cannot read another computer's graphics card, so its numbers would carry the wrong card.`);
   }
+}
+
+/**
+ * Where progress goes and how it is drawn: stdout in a terminal, as part of the
+ * show; stderr otherwise, so piped output and --json stay clean. In a terminal
+ * a line is redrawn in place.
+ */
+export function liveOutput(env: Pick<MeasureEnv, 'out' | 'err'>, show: boolean) {
+  const live = show ? env.out : env.err;
+  const rewrite = Boolean(live.isTTY);
+  const width = live.columns ?? 80;
+  let lastLine = '';
+  return {
+    live,
+    rewrite,
+    say: (text: string) => live.write(`${text}\n`),
+    progress: (text: string) => {
+      if (text === lastLine) return;
+      lastLine = text;
+      if (rewrite) live.write(`\r${fitLine(text, width)}`);
+      else live.write(`${text}\n`);
+    },
+    endProgress: (text: string) => {
+      if (rewrite) live.write(`\r${fitLine(text, width)}\n`);
+      else live.write(`${text}\n`);
+      lastLine = '';
+    },
+    /** A progress line is on screen that has not been ended. */
+    hasProgress: () => Boolean(lastLine),
+  };
+}
+
+/**
+ * Ctrl+C: stop the run in flight; the runner unloads the model on its way out.
+ * A second Ctrl+C leaves at once. Call `off` when the run is over.
+ */
+export function stopOnInterrupt(env: Pick<MeasureEnv, 'interrupt' | 'leave'>, output: { live: Output; rewrite: boolean }) {
+  const controller = new AbortController();
+  let interrupts = 0;
+  const onInterrupt = () => {
+    interrupts += 1;
+    if (interrupts > 1) {
+      (env.leave ?? ((code: number) => process.exit(code)))(130);
+      return;
+    }
+    controller.abort();
+    output.live.write(`${output.rewrite ? '\n' : ''}Stopping: unloading the model...\n`);
+  };
+  env.interrupt?.on('SIGINT', onInterrupt);
+  return { signal: controller.signal, off: () => { env.interrupt?.off('SIGINT', onInterrupt); } };
 }
 
 /**
@@ -66,7 +116,7 @@ export function assertLocalOllama(baseUrl: string): void {
  * Resolves to the exit code, and throws for a refusal (main prints it).
  */
 export async function runMeasureCommand({ model, json }: { model: string | undefined; json: boolean }, env: MeasureEnv): Promise<number> {
-  const { baseUrl, out, err, fetchJson } = env;
+  const { baseUrl, out, fetchJson } = env;
   assertLocalOllama(baseUrl);
   if (model !== undefined) {
     try { security.assertValidModelName(model); } catch { throw new Error(`"${model}" is not a model name Ollama uses, such as qwen3:8b.`); }
@@ -90,46 +140,16 @@ export async function runMeasureCommand({ model, json }: { model: string | undef
   const estimates = new Map(ranked.map((entry) => [entry.row.name, entry.grade.tokensPerSecond ?? null] as const));
   const show = Boolean(out.isTTY) && !json;
   const columns = out.isTTY ? out.columns : undefined;
-  // Who sees the progress: stdout in a terminal, as part of the show; stderr
-  // otherwise, so piped output and --json stay clean.
-  const live = show ? out : err;
-  const say = (text: string) => live.write(`${text}\n`);
-  const rewrite = Boolean(live.isTTY);
-  const width = live.columns ?? 80;
-  let lastLine = '';
-  const progress = (text: string) => {
-    if (text === lastLine) return;
-    lastLine = text;
-    if (rewrite) live.write(`\r${fitLine(text, width)}`);
-    else live.write(`${text}\n`);
-  };
-  const endProgress = (text: string) => {
-    if (rewrite) live.write(`\r${fitLine(text, width)}\n`);
-    else live.write(`${text}\n`);
-    lastLine = '';
-  };
-
-  // Ctrl+C: stop the run in flight; the runner unloads the model on its way
-  // out. A second Ctrl+C leaves at once.
-  const controller = new AbortController();
-  let interrupts = 0;
-  const onInterrupt = () => {
-    interrupts += 1;
-    if (interrupts > 1) {
-      (env.leave ?? ((code: number) => process.exit(code)))(130);
-      return;
-    }
-    controller.abort();
-    live.write(`${rewrite ? '\n' : ''}Stopping: unloading the model...\n`);
-  };
-  env.interrupt?.on('SIGINT', onInterrupt);
+  const output = liveOutput(env, show);
+  const { say, progress, endProgress } = output;
+  const interrupt = stopOnInterrupt(env, output);
 
   try {
     const driver = await env.driverVersion(hardware.gpu);
     const deps: MeasureDeps = {
       baseUrl,
       fetchJson,
-      signal: controller.signal,
+      signal: interrupt.signal,
       readMachine: async () => ({
         gpu: hardware.gpu,
         vramGb: hardware.vramGb,
@@ -172,10 +192,10 @@ export async function runMeasureCommand({ model, json }: { model: string | undef
       });
       if (measured.status === 'measured') card.after = await readCard();
       const report = { ...measured, card };
-      if (lastLine) endProgress(formatModelDone(report));
+      if (output.hasProgress()) endProgress(formatModelDone(report));
       if (!json) say('');
       out.write(`${json ? JSON.stringify(toModelJson(report, hardware, env.version), null, 2) : formatModelReport(report, { show, columns, header })}\n`);
-      return controller.signal.aborted ? 130 : report.status === 'measured' ? 0 : 1;
+      return interrupt.signal.aborted ? 130 : report.status === 'measured' ? 0 : 1;
     }
 
     const plan = planTiers(hardware, names, estimates, cloud);
@@ -195,9 +215,9 @@ export async function runMeasureCommand({ model, json }: { model: string | undef
     const report = { ...measured, card };
     if (!json) say('');
     out.write(`${json ? JSON.stringify(toMeasureJson(report, hardware, env.version), null, 2) : formatReport(report, { show, columns, header })}\n`);
-    if (report.stopped || controller.signal.aborted) return 130;
+    if (report.stopped || interrupt.signal.aborted) return 130;
     return report.busy || report.lines.some((line) => line.status === 'failed') ? 1 : 0;
   } finally {
-    env.interrupt?.off('SIGINT', onInterrupt);
+    interrupt.off();
   }
 }

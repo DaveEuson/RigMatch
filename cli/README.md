@@ -41,6 +41,8 @@ The sign and the Top Match line are for a terminal. Piped into a file or another
 | `--measure` | Measure this PC's real speed with RigScore's test, on the tier models you have (minutes, not seconds) |
 | `--measure <model>` | Measure one installed model's real speed, beside its estimate |
 | `--measure --json` | The measures, each one's stamp and points, for scripts |
+| `--endurance <model>` | Find where one installed model slows down or loses its place as the context grows, at 2K, 8K and 16K (a few minutes) |
+| `--endurance <model> --json` | The stages, the verdict and what the card was doing, for scripts |
 
 ## Measure the real speed
 
@@ -109,6 +111,30 @@ own speed on the same test.
 Estimated is the fit grade's guess from the model's size and your card (here 49 tok/s); Writing is the real speed (72). Only the four tier models get points, since the points compare like with like: the same weights on every computer.
 
 It does not start while another program has a model loaded in Ollama, because the two would share the card and the numbers would be low; it says so, exits, and leaves that model alone. It unloads every model it loaded when it finishes, and waits for each to leave the card before the next, so a slow release is not mistaken for another program. Ctrl+C stops it and unloads. It runs only against Ollama on this computer, since another computer's card cannot be read, and only local models: one of Ollama's cloud models (a `-cloud` tag, or one Ollama lists with a remote host) is refused, because it runs on Ollama's servers, not on this card, and the prompts would leave this computer.
+
+## Where a model slows down
+
+The speed test, like every RigMatch test, runs at a short context (2K). A long chat, a long document or a whole project fills much more of it, and a model that is fast at 2K can crawl at 16K. `--endurance` finds where, on your card:
+
+```bash
+npx rigmatch-fit --endurance qwen3:14b
+```
+
+```text
+Stage          Context  Prompt  Writing     Reading      Loads in  On the card  Passkey  Feels
+Quick chat     2K       287     46 tok/s    2,229 tok/s  2.9 s     100%         kept     Fast
+Long page      8K       6,235   40 tok/s    2,108 tok/s  3.6 s     100%         kept     Fast
+Whole project  16K      14,692  15.4 tok/s  1,483 tok/s  4.9 s     87%          kept     Usable
+
+Slows down past 8K: part of the model moves to system memory.
+At 16K it writes at 15.4 tok/s, 34% of its 2K speed. Only 87% of the model fits on the graphics card there; the rest runs from system memory.
+```
+
+It loads the model at each size (the context changes, so Ollama reloads it) and fills the context with a fake server log that hides a passkey 55% of the way in. Each stage reports the prompt Ollama counted, the writing and reading speed, the load time on its own (it is not in the speeds), how much of the model sits on the graphics card, and whether the passkey came back. The verdict names the first size where writing falls under 55% of the 2K speed, less than 92% of the model sits on the graphics card, or the passkey is lost: "Holds up to 16K on your card", "Slows down past 8K: part of the model moves to system memory", "Loses the middle of long inputs past 8K". Those cut-offs were set on three models on one card (an RTX 4070 12 GB), so treat the verdict as a guide.
+
+Ollama silently cuts a prompt that is longer than the context, so the command measures how many tokens a line costs on the model first, and checks after every stage that the prompt Ollama counted is within 15% of the size meant. A stage that is not is marked "wrong size", left out of the verdict and said so; it is never reported as the model's failure. It also reads the context Ollama really gave the model, and says so when `OLLAMA_NUM_PARALLEL` above 1 has split it.
+
+Where a model gives out moves with what else is using the card, so the card is read before and after (NVIDIA only) and named in the result. The same care as `--measure`: it does not start while another program has a model loaded, ends the run and keeps nothing if one loads during it (Ollama then unloads this model to make room), unloads only what it loaded, stops cleanly on Ctrl+C, and runs only against Ollama on this computer and only local models. LM Studio does not report how much of a model is on the card, so `--endurance` works only with Ollama. `--json` prints the stages, the verdict and the card's baseline.
 
 ## The Fit grade
 

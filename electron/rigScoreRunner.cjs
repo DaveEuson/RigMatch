@@ -313,6 +313,7 @@ module.exports = {
   readRigRun,
   weightsDigest,
   sameModel,
+  listedNames,
   isOutOfMemory,
   sharedWith,
   runRigTier,

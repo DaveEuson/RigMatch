@@ -10,11 +10,13 @@
  *   npx rigmatch-fit --vram 16        grade for a 16 GB card instead of this one
  *   npx rigmatch-fit --measure        RigScore's speed test on the tier models installed here
  *   npx rigmatch-fit --measure qwen3.5:9b   one installed model's real speed, beside the estimate
+ *   npx rigmatch-fit --endurance qwen3:14b  where one installed model slows down as the context grows
  *
  * Reads the hardware the way the RigMatch app does (resolveGpuPool in
  * electron/systemProfile.cjs) and asks a local Ollama, if one answers, what is
  * installed. Nothing is downloaded and nothing is sent anywhere else.
- * --measure runs models on that Ollama (measure.ts) and unloads them after.
+ * --measure and --endurance run models on that Ollama (measure.ts,
+ * endurance.ts) and unload them after.
  */
 
 import { execFile } from 'node:child_process';
@@ -24,6 +26,8 @@ import si from 'systeminformation';
 import pkg from './package.json' with { type: 'json' };
 import systemProfile from '../electron/systemProfile.cjs';
 import { catalogRows, formatTable, ollamaUrl, rankModels, toJson, type FitHardware, type Provider } from './fitCheck.ts';
+import { checkEnduranceArgs } from './endurance.ts';
+import { runEnduranceCommand } from './enduranceCommand.ts';
 import { checkMeasureArgs } from './measure.ts';
 import { runMeasureCommand } from './measureCommand.ts';
 import { fetchJson, installedOllamaModels, toGb } from './ollamaHttp.ts';
@@ -32,6 +36,7 @@ const HELP = `rigmatch-fit ${pkg.version}: which local AI models will run well o
 
 Usage: rigmatch-fit [options]
        rigmatch-fit --measure [model] [--json]
+       rigmatch-fit --endurance <model> [--json]
 
   --all               List every model, including ones that will not fit
   --installed         List only the models Ollama already has, graded
@@ -42,6 +47,8 @@ Usage: rigmatch-fit [options]
                       Light llama3.2:3b, Standard qwen3:8b, Heavy qwen3:14b, and
                       Extreme qwen3:30b-a3b on a 24 GB card. Takes minutes.
   --measure <model>   Measure one installed model's real speed with the same test
+  --endurance <model> Find where one installed model slows down or loses its place as
+                      the context grows, at 2K, 8K and 16K. Takes a few minutes.
   -h, --help          Show this
   -v, --version       Show the version
 
@@ -56,7 +63,14 @@ It never downloads a model: a missing one gets its "ollama pull" command. It
 will not run while another program has a model loaded, warns when something
 else is using an NVIDIA card, and unloads what it loaded when it finishes.
 Ctrl+C stops it and unloads. It runs local models only: a cloud model runs
-on Ollama's servers, so it is refused.`;
+on Ollama's servers, so it is refused.
+
+--endurance checks the context the same way: it fills 2K, 8K and 16K with a
+prompt that hides a passkey, and reports the writing and reading speed, how
+much of the model sits on the graphics card, and whether the passkey came
+back. It says where the model first slows down or loses its place on your
+card. It takes the same care as --measure, and needs Ollama: LM Studio does
+not say how much of a model is on the card.`;
 
 /** main.cjs's runCommand: { output, error } and never a throw. */
 function run(command: string, args: string[], timeoutMs: number): Promise<{ output: string; error: string | null }> {
@@ -114,6 +128,7 @@ async function main(): Promise<number> {
       provider: { type: 'string', default: 'ollama' },
       vram: { type: 'string' },
       measure: { type: 'boolean', default: false },
+      endurance: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
     },
@@ -126,22 +141,23 @@ async function main(): Promise<number> {
     console.log(pkg.version);
     return 0;
   }
+  const env = {
+    baseUrl: ollamaUrl(),
+    out: process.stdout,
+    err: process.stderr,
+    platform: process.platform,
+    version: pkg.version,
+    detectHardware: () => detectHardware(undefined),
+    driverVersion,
+    run,
+    fetchJson,
+    installedModels: installedOllamaModels,
+    interrupt: process,
+  };
+  const enduring = checkEnduranceArgs(values, positionals);
+  if (enduring) return runEnduranceCommand({ model: enduring.model, json: values.json }, env);
   const measuring = checkMeasureArgs(values, positionals);
-  if (measuring) {
-    return runMeasureCommand({ model: measuring.model, json: values.json }, {
-      baseUrl: ollamaUrl(),
-      out: process.stdout,
-      err: process.stderr,
-      platform: process.platform,
-      version: pkg.version,
-      detectHardware: () => detectHardware(undefined),
-      driverVersion,
-      run,
-      fetchJson,
-      installedModels: installedOllamaModels,
-      interrupt: process,
-    });
-  }
+  if (measuring) return runMeasureCommand({ model: measuring.model, json: values.json }, env);
   const providerName = values.provider.toLowerCase().replace(/[\s_-]/g, '');
   if (providerName !== 'ollama' && providerName !== 'lmstudio') {
     throw new Error(`--provider is ollama or lmstudio, not "${values.provider}".`);

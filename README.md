@@ -229,6 +229,7 @@ A      qwen3:8b          4.8 GB  ~63 tok/s  Sweet spot  ollama pull qwen3:8b
 | `--vram 16` | Grade for a card with 16 GB instead of this one |
 | `--measure` | Measure the real speed with RigScore's test on the tier models you have (takes minutes) |
 | `--measure <model>` | Measure one installed model's real speed, beside its estimate |
+| `--endurance <model>` | Find where one installed model slows down or loses its place as the context grows, at 2K, 8K and 16K (a few minutes) |
 
 `--measure` is the speed test from My PC › Speed score, run from a terminal through your own Ollama: Light (`llama3.2:3b`), Standard (`qwen3:8b`), Heavy (`qwen3:14b`) and, on a 24 GB card, Extreme (`qwen3:30b-a3b`). It prints each tier's writing and reading speed, points against the reference PC (1,000 is an RTX 4070 12 GB) and what the speed feels like, with the Standard tier as the headline. It never downloads a model (a missing one gets its `ollama pull` command), refuses to start rather than share the card with another program's model, warns when an NVIDIA card is already busy, and unloads what it loaded. `--json` with it prints the measures and each one's stamp.
 
@@ -239,6 +240,8 @@ Standard  qwen3:8b       79 tok/s   4,358 tok/s   1,177   Excellent
 Heavy     qwen3:14b      46 tok/s   2,393 tok/s   1,180   Fast
 Extreme   qwen3:30b-a3b  Not run: needs 24 GB of graphics memory, and this PC has 12 GB.
 ```
+
+`--endurance <model>` does the same for the context. The speed test runs at a short context, so this fills 2K, 8K and 16K with a prompt that hides a passkey and says where that model slows down, moves part of itself to system memory, or loses the passkey, on your card. It takes the same care as `--measure`, and it is also in the app, under My PC › Speed score.
 
 A is the best pick for this computer and F will not fit. The grade weighs answer quality (by size and model family), estimated speed, and the room left in graphics memory. It is a different scale from the Match Score, which RigMatch measures by actually running the model. The bundled file runs on Node 20 or later on Windows, macOS and Linux; its only dependency is [systeminformation](https://www.npmjs.com/package/systeminformation).
 
