@@ -1,14 +1,22 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const {
   parseNvidiaGpuQuery,
-  parseRocmSmiQuery,
   parseIoregGpuStats,
+  parseWindowsGpuProbe,
+  pickWindowsAdapter,
+  parseAmdSysfs,
+  describeUnreadable,
+  judgeMidRun,
+  MIDRUN_UTILIZATION_RISE,
+  MIDRUN_VRAM_GROWTH_MB,
+  MIDRUN_VRAM_GROWTH_SHARE,
   matchKnownGpuApps,
   assessGpuContention,
   describeGpuContention,
@@ -64,29 +72,9 @@ test('blank lines and comment headers are skipped', () => {
   assert.equal(reading.vramUsedMb, 100);
 });
 
-// ── rocm-smi parsing (AMD — unverified against real hardware) ────────────────
-
-test('parses the documented rocm-smi CSV shape', () => {
-  const out = 'device,GPU memory use (%),GPU use (%)\ncard0,42,17';
-  const reading = parseRocmSmiQuery(out, 16384);
-  assert.equal(reading.vramUsedPercent, 42);
-  assert.equal(reading.utilizationPercent, 17);
-  assert.equal(reading.vramUsedMb, Math.round(0.42 * 16384));
-  assert.equal(reading.source, 'rocm-smi');
-});
-
-test('rocm-smi without a known VRAM total still reports percentages', () => {
-  const reading = parseRocmSmiQuery('card0,42,17');
-  assert.equal(reading.vramUsedPercent, 42);
-  assert.equal(reading.vramUsedMb, null, 'must not invent an absolute figure');
-  assert.equal(reading.vramTotalMb, null);
-});
-
-test('unexpected rocm-smi output yields null rather than a guess', () => {
-  for (const bad of ['', null, 'rocm-smi: not found', 'device,GPU use (%)\n', 'card0,150,17']) {
-    assert.equal(parseRocmSmiQuery(bad), null, `${JSON.stringify(bad)} must not parse`);
-  }
-});
+// rocm-smi is not read: its CSV columns and whether "GPU memory use (%)" is
+// memory in use or memory activity could not be confirmed from AMD's sources, and
+// it reads the same amdgpu files that are read directly below (see parseAmdSysfs).
 
 // ── known-app matching ───────────────────────────────────────────────────────
 
@@ -187,8 +175,8 @@ test('percentages in the message are whole numbers', () => {
   assert.ok(!/51\.4/.test(message), 'a fractional percent reads as false precision');
 });
 
-test('AMD percentage-only readings assess the same as NVIDIA absolute ones', () => {
-  const amd = assessGpuContention({ vramUsedPercent: 60, utilizationPercent: 10, source: 'rocm-smi' });
+test('percentage-only readings assess the same as absolute ones', () => {
+  const amd = assessGpuContention({ vramUsedPercent: 60, utilizationPercent: 10, source: 'test' });
   assert.equal(amd.level, 'heavy');
   assert.equal(amd.vramUsedPercent, 60);
 });
@@ -376,6 +364,206 @@ test('non-Apple or unexpected ioreg output yields null', () => {
   }
   // Out-of-range values are rejected rather than clamped silently.
   assert.equal(parseIoregGpuStats('"PerformanceStatistics" = {"Device Utilization %"=400}'), null);
+});
+
+// ── Windows: the GPU performance counters, any vendor ───────────────────────
+
+// Real output of the PowerShell script in electron/gpuProbe.cjs, run on Windows
+// 11 with three adapters: an NVIDIA RTX 4070 (luid 17162), an AMD Radeon
+// integrated GPU (18823) and the Basic Render Driver (187f0). Three samples; the
+// engines at zero are left out by the script. Microsoft documents no counter
+// names or instance format for these counters (the DirectX blog post on Task
+// Manager, devblogs.microsoft.com/directx/gpus-in-the-task-manager, says only
+// that the GPU figure is "the percentage utilization of the busiest engine"), so
+// the shape is pinned to what a real PC printed, and the nvidia-smi figures taken
+// beside it agreed (4135 MiB used, 36%). A discrete AMD or Intel card has not
+// been run.
+const WINDOWS_IDLE = readFileSync(path.join(process.cwd(), 'tests', 'fixtures', 'gpu-windows-probe-idle.json'), 'utf8');
+
+test('real Windows counter output reads the named card: its memory, and its busiest engine', () => {
+  const readings = parseWindowsGpuProbe(WINDOWS_IDLE, { gpuName: 'NVIDIA GeForce RTX 4070' });
+  assert.equal(readings.length, 3, 'one reading per sample');
+  const [first] = readings;
+  assert.equal(first.source, 'windows-counters');
+  assert.equal(first.vramTotalMb, 12010, 'the registry holds the full 64-bit size: 12593397760 bytes');
+  assert.equal(Math.round(first.vramUsedMb), 4154, 'Dedicated Usage 4356247552 bytes');
+  // pid 11828 on the 3D engine at 17% and pid 4 on a copy engine at 1%: the busiest engine, not their sum.
+  assert.equal(first.utilizationPercent, 17);
+  assert.equal(first.memoryShared, false);
+});
+
+test('the AMD integrated GPU is read when it is the card, and its small memory slice is not judged', () => {
+  const readings = parseWindowsGpuProbe(WINDOWS_IDLE, { gpuName: 'AMD Radeon(TM) Graphics' });
+  assert.equal(readings.length, 3);
+  assert.equal(Math.round(readings[0].vramTotalMb), 2022, 'a 2 GB carve-out of system RAM, not a card');
+  assert.equal(readings[0].memoryShared, true);
+  assert.equal(readings[0].utilizationPercent, 0, 'no engine of this adapter was above zero, which is a real answer');
+  // 95% of a carve-out in use is how a desktop looks; it must not be called a busy card.
+  const full = { ...readings[0], vramUsedMb: 1920, utilizationPercent: 4 };
+  assert.equal(assessGpuContention(full).level, 'clear');
+  assert.equal(assessGpuContention({ ...full, utilizationPercent: 80 }).level, 'heavy', 'its utilization still counts');
+});
+
+test('with no name to go by, the adapter with the most dedicated memory is read; the software renderer never is', () => {
+  assert.equal(parseWindowsGpuProbe(WINDOWS_IDLE)[0].vramTotalMb, 12010);
+  assert.equal(parseWindowsGpuProbe(WINDOWS_IDLE, { gpuName: 'No graphics card found' })[0].vramTotalMb, 12010);
+  const onlySoftware = JSON.stringify({ adapters: [{ luid: '187f0', vendor: '1414', name: 'Microsoft Basic Render Driver', bytes: 0 }], samples: [{ mem: [{ n: 'luid_0x00000000_0x000187F0_phys_0', b: 0 }], eng: [] }] });
+  assert.deepEqual(parseWindowsGpuProbe(onlySoftware), [], 'software rendering is not a card: not checked');
+  assert.equal(pickWindowsAdapter([{ luid: '1', vendor: '1414', name: 'Microsoft Basic Render Driver', bytes: 99 }, { luid: '2', vendor: '1002', name: 'AMD Radeon RX 7800 XT', bytes: 5 }]).luid, '2');
+});
+
+test('processes sharing an engine add up, and the busiest engine of the card is the figure', () => {
+  const sample = (engines) => JSON.stringify({
+    adapters: [{ luid: '17162', vendor: '10de', name: 'NVIDIA GeForce RTX 4070', bytes: 12593397760 }, { luid: '100018823', vendor: '1002', name: 'AMD Radeon RX 7800 XT', bytes: 17163091968 }],
+    samples: [{ mem: [{ n: 'luid_0x00000000_0x00017162_phys_0', b: 1e9 }, { n: 'luid_0x00000001_0x00018823_phys_0', b: 2e9 }], eng: engines }],
+  });
+  const engines = [
+    { n: 'pid_100_luid_0x00000000_0x00017162_phys_0_eng_0_engtype_3D', u: 20 },
+    { n: 'pid_200_luid_0x00000000_0x00017162_phys_0_eng_0_engtype_3D', u: 25 },
+    { n: 'pid_100_luid_0x00000000_0x00017162_phys_0_eng_4_engtype_Compute_0', u: 30 },
+    { n: 'pid_300_luid_0x00000001_0x00018823_phys_0_eng_0_engtype_3D', u: 90 },
+  ];
+  assert.equal(parseWindowsGpuProbe(sample(engines), { gpuName: 'RTX 4070' })[0].utilizationPercent, 45, 'two processes on engine 0 (20 + 25) beat the compute engine (30)');
+  // A high LUID part is matched across the registry's single number and the counters' two.
+  assert.equal(parseWindowsGpuProbe(sample(engines), { gpuName: 'Radeon RX 7800 XT' })[0].utilizationPercent, 90, 'luid 0x1_00018823 is 100018823');
+  const over = [{ n: 'pid_1_luid_0x00000000_0x00017162_phys_0_eng_0_engtype_3D', u: 80 }, { n: 'pid_2_luid_0x00000000_0x00017162_phys_0_eng_0_engtype_3D', u: 70 }];
+  assert.equal(parseWindowsGpuProbe(sample(over), { gpuName: 'RTX 4070' })[0].utilizationPercent, 100, 'capped at 100');
+});
+
+test('a sample with no memory row for the card is skipped, so unreadable counters never read as idle', () => {
+  const data = JSON.parse(WINDOWS_IDLE);
+  data.samples[0].mem = data.samples[0].mem.filter((row) => !/00017162/.test(row.n));
+  const readings = parseWindowsGpuProbe(JSON.stringify(data), { gpuName: 'RTX 4070' });
+  assert.equal(readings.length, 2, 'the sample the counters did not answer for is dropped');
+  data.samples.forEach((s) => { s.mem = []; });
+  assert.deepEqual(parseWindowsGpuProbe(JSON.stringify(data), { gpuName: 'RTX 4070' }), []);
+  assert.equal(assessGpuContention(medianReading([])).level, 'unknown');
+});
+
+test('Windows probe output that is not the probe\'s yields nothing, and noise around the JSON is tolerated', () => {
+  for (const bad of ['', null, undefined, 'Get-CimInstance : Invalid class', '{', '{"adapters":[]}', '{"adapters":[{"luid":"zz","vendor":"10de","name":"x","bytes":1}],"samples":[{}]}', '[1,2]']) {
+    assert.deepEqual(parseWindowsGpuProbe(bad), [], `${JSON.stringify(bad)} must not parse`);
+  }
+  assert.equal(parseWindowsGpuProbe(`WARNING: something\n${WINDOWS_IDLE}\nmore noise`, { gpuName: 'RTX 4070' }).length, 3);
+});
+
+// ── Linux: AMD, from the amdgpu driver's sysfs files ────────────────────────
+
+// docs.kernel.org/gpu/amdgpu/driver-misc.html ("GPU Memory Usage Information"):
+//   mem_info_vram_total  "returns the total amount of VRAM in bytes"
+//   mem_info_vram_used   "returns the total amount of currently used VRAM in bytes"
+// docs.kernel.org/gpu/amdgpu/thermal.html (the "*_busy_percent" section):
+//   gpu_busy_percent     "reading how busy the GPU is as a percentage"
+// Each file holds one decimal number and a newline. The values are an RX 7900
+// XTX (24560 MiB) from the machine in issue #145, in the shape the docs describe.
+test('amdgpu sysfs values parse to a reading', () => {
+  const reading = parseAmdSysfs({ vramUsed: '3221225472\n', vramTotal: '25753026560\n', busyPercent: '17\n' });
+  assert.equal(reading.vramUsedMb, 3072);
+  assert.equal(reading.vramTotalMb, 24560);
+  assert.equal(reading.utilizationPercent, 17);
+  assert.equal(reading.memoryShared, false);
+  assert.equal(reading.source, 'amdgpu-sysfs');
+  assert.equal(parseAmdSysfs({ vramUsed: '0\n', vramTotal: '536870912\n', busyPercent: '0\n' }).memoryShared, true, 'a Radeon 610M\'s 512 MB carve-out');
+});
+
+test('half-readable or impossible sysfs values are not checked, never idle', () => {
+  const ok = { vramUsed: '1\n', vramTotal: '1073741824\n', busyPercent: '5\n' };
+  assert.ok(parseAmdSysfs(ok));
+  for (const bad of [
+    {}, { ...ok, busyPercent: null }, { ...ok, vramUsed: null }, { ...ok, vramTotal: '' }, { ...ok, vramTotal: '0\n' },
+    { ...ok, busyPercent: 'N/A\n' }, { ...ok, busyPercent: '101\n' }, { ...ok, vramUsed: '2147483648\n' }, { ...ok, busyPercent: '-3\n' },
+  ]) {
+    assert.equal(parseAmdSysfs(bad), null, `${JSON.stringify(bad)} must not parse`);
+  }
+});
+
+// ── Not checked: always says so, and why ────────────────────────────────────
+
+test('a card that cannot be read is unknown with the reason said, on every platform', () => {
+  for (const [platform, arch, gpuName, reason] of [
+    ['linux', 'x64', 'Intel(R) Arc(TM) A770 Graphics', /no way to read an Intel graphics card's load on Linux/],
+    ['linux', 'x64', 'AMD Radeon RX 7800 XT', /AMD driver did not report/],
+    ['linux', 'x64', 'NVIDIA GeForce RTX 4070', /nvidia-smi did not report/],
+    ['linux', 'x64', '', /cannot read this graphics card's load on Linux/],
+    ['win32', 'x64', 'AMD Radeon RX 7800 XT', /Windows did not report/],
+    ['darwin', 'arm64', 'Apple M4', /macOS did not report/],
+    ['darwin', 'x64', 'AMD Radeon Pro 5500M', /unless it is Apple Silicon/],
+    ['freebsd', 'x64', '', /no way to read this graphics card/],
+  ]) {
+    const why = describeUnreadable({ platform, arch, gpuName });
+    assert.match(why, reason, `${platform} ${gpuName}`);
+    const assessment = assessGpuContention(null, [], { reason: why });
+    assert.equal(assessment.level, 'unknown');
+    assert.equal(assessment.reason, why);
+    assert.ok(describeGpuContention(assessment).includes(`graphics card. ${why} If something heavy is open`), 'the reason sits between the two sentences');
+    assert.match(describeGpuContention(assessment), /If something heavy is open, close it for the most accurate scores\.$/);
+  }
+  // Without a reason the sentence is the one it always was.
+  assert.equal(describeGpuContention({ level: 'unknown' }), 'RigMatch could not check whether other programs are using your graphics card. If something heavy is open, close it for the most accurate scores.');
+  assert.deepEqual(Object.keys(assessGpuContention(null)), ['level', 'reasons', 'apps', 'utilizationPercent', 'vramUsedPercent'], 'no reason key unless there is one');
+});
+
+test('a shared pool with nothing but memory in the reading is not checked, rather than clear', () => {
+  assert.equal(assessGpuContention({ vramUsedMb: 90000, vramTotalMb: 131072 }, [], { unifiedMemory: true }).level, 'unknown');
+  assert.equal(assessGpuContention({ vramUsedMb: 400, vramTotalMb: 2048, memoryShared: true }).level, 'unknown');
+  assert.equal(assessGpuContention({ vramUsedMb: 400, vramTotalMb: 2048, memoryShared: true, utilizationPercent: 3 }).level, 'clear');
+});
+
+test('the median keeps a reading marked as a shared pool', () => {
+  const shared = { vramUsedMb: 40, vramTotalMb: 2022, utilizationPercent: 4, memoryShared: true, source: 'windows-counters' };
+  assert.equal(medianReading([shared, { ...shared, utilizationPercent: 6 }]).memoryShared, true);
+  assert.equal('memoryShared' in medianReading([rtx(2521, 20)]), false);
+});
+
+// ── Mid-run: did something join the card while a test ran? ──────────────────
+
+const midRun = (current, extra = {}) => judgeMidRun({
+  baseline: { utilizationPercent: 20, vramUsedMb: 2500, vramTotalMb: 12282 },
+  reference: { utilizationPercent: 25, vramUsedMb: 8000, vramTotalMb: 12282 },
+  current: { vramTotalMb: 12282, ...current },
+  ...extra,
+});
+
+test('mid-run: utilization counts when it is heavy, or busy and well above where it began', () => {
+  assert.equal(midRun({ utilizationPercent: 44, vramUsedMb: 8000 }).disturbed, false, 'the top of normal desktop noise');
+  assert.equal(midRun({ utilizationPercent: 46, vramUsedMb: 8000 }).disturbed, true, 'busy, and 26 points above a baseline of 20');
+  assert.deepEqual(midRun({ utilizationPercent: 91.6, vramUsedMb: 8000 }).reasons, ['the graphics card was 92% busy between the runs']);
+  // A desktop that began at 40% is not "joined" by 48% or 58%, but is by 60%.
+  const busyStart = { baseline: { utilizationPercent: 40, vramUsedMb: 2500, vramTotalMb: 12282 } };
+  assert.equal(midRun({ utilizationPercent: 48, vramUsedMb: 8000 }, busyStart).disturbed, false);
+  assert.equal(midRun({ utilizationPercent: 58, vramUsedMb: 8000 }, busyStart).disturbed, false);
+  assert.equal(midRun({ utilizationPercent: 60, vramUsedMb: 8000 }, busyStart).disturbed, true);
+  assert.equal(midRun({ utilizationPercent: 80, vramUsedMb: 8000 }, { baseline: null }).disturbed, true, 'no baseline reading: from zero');
+  // A card hammered between the requests is hammered for the test, however long the program had been there:
+  // the next tier of a test starts with it already in its baseline.
+  const alreadyThere = { baseline: { utilizationPercent: 95, vramUsedMb: 9000, vramTotalMb: 12282 } };
+  assert.equal(midRun({ utilizationPercent: 96, vramUsedMb: 8000 }, alreadyThere).disturbed, true);
+  assert.equal(midRun({ utilizationPercent: 60, vramUsedMb: 8000 }, alreadyThere).disturbed, false, 'only the gray zone is judged against where it began');
+  assert.equal(MIDRUN_UTILIZATION_RISE, 20);
+});
+
+test('mid-run: memory counts as a step beyond ordinary churn, scaled to the card, and never on a shared pool', () => {
+  assert.equal(midRun({ utilizationPercent: 10, vramUsedMb: 8000 + 1023 }).disturbed, false, 'under a gigabyte is a browser tab');
+  assert.equal(midRun({ utilizationPercent: 10, vramUsedMb: 8000 + 1100 }).disturbed, true);
+  assert.deepEqual(midRun({ utilizationPercent: 10, vramUsedMb: 8000 + 2150 }).reasons, ['about 2.1 GB more graphics memory was in use than when the model had loaded']);
+  // On a 48 GB card the step is 8% of it, 3.8 GB.
+  const big = (used) => judgeMidRun({ reference: { vramUsedMb: 20000 }, current: { vramUsedMb: used, vramTotalMb: 49152, utilizationPercent: 5 } });
+  assert.equal(big(20000 + 3000).disturbed, false);
+  assert.equal(big(20000 + 4000).disturbed, true);
+  // No earlier reading to compare with (the first look), a shared pool, or a memory slice marked as shared: not judged.
+  assert.equal(judgeMidRun({ current: { vramUsedMb: 50000, vramTotalMb: 12282, utilizationPercent: 5 } }).disturbed, false);
+  assert.equal(midRun({ utilizationPercent: 10, vramUsedMb: 30000 }, { unifiedMemory: true }).disturbed, false);
+  assert.equal(midRun({ utilizationPercent: 10, vramUsedMb: 30000, memoryShared: true }).disturbed, false);
+  assert.equal(MIDRUN_VRAM_GROWTH_MB, 1024);
+  assert.equal(MIDRUN_VRAM_GROWTH_SHARE, 0.08);
+});
+
+test('mid-run: a known graphics-heavy program that opened since the start is named; one that was already open is not', () => {
+  assert.deepEqual(judgeMidRun({ baselineApps: ['Steam'], currentApps: ['Steam', 'OBS Studio'] }), { disturbed: true, reasons: ['OBS Studio started while the test ran'] });
+  assert.deepEqual(judgeMidRun({ baselineApps: ['Steam'], currentApps: ['Steam'] }), { disturbed: false, reasons: [] });
+  assert.deepEqual(judgeMidRun({ currentApps: ['Blender', 'HandBrake'] }).reasons, ['Blender and HandBrake started while the test ran']);
+  assert.deepEqual(judgeMidRun({}), { disturbed: false, reasons: [] }, 'nothing to go on says nothing');
+  assert.deepEqual(judgeMidRun({ current: null, reference: null }), { disturbed: false, reasons: [] });
 });
 
 test('systemd-resolved is not DaVinci Resolve, but Resolve is', () => {

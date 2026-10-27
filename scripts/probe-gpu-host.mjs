@@ -9,12 +9,14 @@
  *   node scripts/probe-gpu-host.mjs --json     # machine-readable, for pasting
  *
  * Written for hardware we cannot test locally: NVIDIA Grace parts (GB10 in the
- * DGX Spark, GH200), Jetson, AMD via rocm-smi, Apple Silicon. It needs only
- * Node and a shell, so it runs on a headless rented box in about ten seconds —
- * no display, no Electron, no build.
+ * DGX Spark, GH200), Jetson, AMD and Intel cards on Windows (the GPU counters)
+ * and AMD on Linux (the amdgpu files), Apple Silicon. It needs only Node and a
+ * shell, so it runs on a headless rented box in about ten seconds — no display,
+ * no Electron, no build.
  *
  * The point is to answer three questions:
- *   1. Does nvidia-smi/rocm-smi output on this machine parse at all?
+ *   1. Does the card's output on this machine (nvidia-smi, the Windows GPU
+ *      counters, the amdgpu files, ioreg) parse at all?
  *   2. Is the memory pool detected as unified, and is that correct?
  *   3. Would the contention thresholds behave sensibly here, or fire constantly?
  *
@@ -30,6 +32,7 @@ import { createRequire } from 'node:module';
 const run = promisify(execFile);
 const require = createRequire(import.meta.url);
 const gpu = require(path.join(process.cwd(), 'electron', 'gpuContention.cjs'));
+const probe = require(path.join(process.cwd(), 'electron', 'gpuProbe.cjs'));
 
 const json = process.argv.includes('--json');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -64,7 +67,14 @@ const report = {
 const nvidiaName = await tryRun('nvidia-smi', ['--query-gpu=name', '--format=csv,noheader']);
 const nvidiaQuery = await tryRun('nvidia-smi',
   ['--query-gpu=memory.used,memory.total,utilization.gpu', '--format=csv,noheader,nounits']);
-const rocm = await tryRun('rocm-smi', ['--showmemuse', '--showuse', '--csv']);
+// Windows, any card: the GPU counters through WMI, in the one PowerShell run the
+// app makes. Its raw JSON is kept below: a discrete AMD or Intel card has not been
+// run by anyone yet, and this is what is needed to check the adapter match.
+const windowsProbe = process.platform === 'win32'
+  ? await tryRun(probe.windowsPowerShell(), ['-NoProfile', '-NonInteractive', '-Command', probe.windowsProbeScript(3, 220)], 25000)
+  : { ok: false, output: '' };
+// Linux AMD: the amdgpu driver's files, best card first.
+const amdSysfs = process.platform === 'linux' ? probe.readAmdSysfs() : null;
 // Apple Silicon: IOKit is the only sudo-free source of GPU load, and the only
 // one that works at all — systeminformation returns null utilization there.
 const ioreg = process.platform === 'darwin'
@@ -72,21 +82,26 @@ const ioreg = process.platform === 'darwin'
   : { ok: false, output: '' };
 
 report.tools['nvidia-smi'] = nvidiaName.ok;
-report.tools['rocm-smi'] = rocm.ok;
+report.tools['windows-counters'] = windowsProbe.ok;
+report.tools['amdgpu-sysfs'] = Boolean(amdSysfs);
 report.tools.ioreg = ioreg.ok;
 report.tools.gpuName = nvidiaName.ok ? nvidiaName.output.split('\n')[0] : null;
 
 // Raw output is kept verbatim: if a parser fails, this is what is needed to fix it.
 report.tools.rawNvidiaQuery = nvidiaQuery.output || null;
-report.tools.rawRocm = rocm.ok ? rocm.output.slice(0, 400) : null;
+report.tools.rawWindowsProbe = windowsProbe.ok ? windowsProbe.output.slice(0, 6000) : null;
 
 // ── do our parsers handle it ─────────────────────────────────────────────────
 const nvidiaReading = gpu.parseNvidiaGpuQuery(nvidiaQuery.output);
 report.parsed.nvidia = nvidiaReading;
-report.parsed.rocm = rocm.ok ? gpu.parseRocmSmiQuery(rocm.output) : null;
+report.parsed.windows = windowsProbe.ok ? (gpu.parseWindowsGpuProbe(windowsProbe.output)[0] ?? null) : null;
+report.parsed.amdSysfs = amdSysfs;
 report.parsed.ioreg = ioreg.ok ? gpu.parseIoregGpuStats(ioreg.output) : null;
 if (ioreg.ok && !report.parsed.ioreg) {
   report.verdict.push('FAIL: ioreg answered but RigMatch could not parse it. Capture the PerformanceStatistics line.');
+}
+if (windowsProbe.ok && !report.parsed.windows) {
+  report.verdict.push('FAIL: the Windows GPU counters answered but RigMatch could not read a card from them. Raw output is in tools.rawWindowsProbe.');
 }
 
 // systeminformation is the app's only source on macOS, where neither vendor CLI
@@ -108,7 +123,7 @@ try {
     }
     : null;
 
-  if (!report.tools['nvidia-smi'] && !report.tools['rocm-smi'] && !report.parsed.ioreg) {
+  if (!report.parsed.nvidia && !report.parsed.windows && !report.parsed.amdSysfs && !report.parsed.ioreg) {
     if (report.parsed.systeminformation?.usableForContention) {
       report.verdict.push('OK: no vendor CLI here, but systeminformation reports GPU utilization, so contention can still be assessed.');
     } else {
@@ -132,9 +147,6 @@ try {
 
 if (nvidiaQuery.ok && !nvidiaReading) {
   report.verdict.push('FAIL: nvidia-smi answered but RigMatch could not parse it. Raw output is in tools.rawNvidiaQuery.');
-}
-if (rocm.ok && !report.parsed.rocm) {
-  report.verdict.push('FAIL: rocm-smi answered but RigMatch could not parse it. Raw output is in tools.rawRocm.');
 }
 
 // ── the pool a model must fit into ───────────────────────────────────────────
@@ -189,14 +201,21 @@ if (nvidiaReading) {
 }
 
 // ── how would the thresholds behave here ─────────────────────────────────────
-if (nvidiaReading || report.parsed.rocm || report.parsed.ioreg) {
+if (nvidiaReading || report.parsed.windows || report.parsed.amdSysfs || report.parsed.ioreg) {
+  // Through the same probe the app and rigmatch-fit use, so what is judged here
+  // is what they would judge.
+  const context = {
+    run: async (command, args, timeoutMs) => {
+      const result = await tryRun(command, args, timeoutMs);
+      return { output: result.output, error: result.ok ? null : result.error };
+    },
+    platform: process.platform,
+    arch: os.arch(),
+    gpuName: report.tools.gpuName ?? '',
+  };
   const readings = [];
   for (let i = 0; i < 5; i += 1) {
-    const q = await tryRun('nvidia-smi',
-      ['--query-gpu=memory.used,memory.total,utilization.gpu', '--format=csv,noheader,nounits']);
-    const r = gpu.parseNvidiaGpuQuery(q.output)
-      ?? (rocm.ok ? gpu.parseRocmSmiQuery((await tryRun('rocm-smi', ['--showmemuse', '--showuse', '--csv'])).output) : null)
-      ?? (ioreg.ok ? gpu.parseIoregGpuStats((await tryRun('ioreg', ['-r', '-d', '1', '-w', '0', '-c', 'AGXAccelerator'])).output) : null);
+    const { reading: r } = await probe.sampleGpuLoad(context, { samples: 1, gapMs: 0 });
     if (r) { readings.push(r); report.samples.push({ util: r.utilizationPercent, usedMb: r.vramUsedMb }); }
     if (i < 4) await sleep(250);
   }
@@ -204,7 +223,7 @@ if (nvidiaReading || report.parsed.rocm || report.parsed.ioreg) {
   const median = gpu.medianReading(readings);
   const assessment = gpu.assessGpuContention(median, [], { unifiedMemory: unified });
   report.assessment = {
-    median: median ? { util: median.utilizationPercent, usedMb: median.vramUsedMb, samples: median.samples } : null,
+    median: median ? { util: median.utilizationPercent, usedMb: median.vramUsedMb, samples: median.samples, source: median.source } : null,
     level: assessment.level,
     message: gpu.describeGpuContention(assessment) || '(clear — no warning shown)',
   };
@@ -222,7 +241,8 @@ if (nvidiaReading || report.parsed.rocm || report.parsed.ioreg) {
     );
   }
 } else {
-  report.assessment = { level: 'unknown', message: 'No GPU tool answered; RigMatch would report "could not check".' };
+  const why = gpu.describeUnreadable({ platform: process.platform, arch: os.arch(), gpuName: report.tools.gpuName ?? '' });
+  report.assessment = { level: 'unknown', message: `No GPU tool answered; RigMatch would report "could not check". ${why}` };
 }
 
 if (!report.verdict.length) report.verdict.push('OK: parsing, unified-memory detection, and thresholds all look correct on this host.');
@@ -239,11 +259,12 @@ if (json) {
   line('system memory', `${report.host.totalMemGb} GB`);
   console.log('\nGPU tooling');
   line('nvidia-smi', report.tools['nvidia-smi'] ? 'present' : 'absent');
-  line('rocm-smi', report.tools['rocm-smi'] ? 'present' : 'absent');
+  if (process.platform === 'win32') line('Windows GPU counters', report.tools['windows-counters'] ? (report.parsed.windows ? 'present, parsed' : 'present, PARSE FAILED') : 'absent');
+  if (process.platform === 'linux') line('amdgpu files', report.parsed.amdSysfs ? 'present, parsed' : 'absent');
   if (process.platform === 'darwin') line('ioreg (Apple GPU)', report.tools.ioreg ? (report.parsed.ioreg ? 'present, parsed' : 'present, PARSE FAILED') : 'absent');
   line('gpu name', report.tools.gpuName ?? '(none reported)');
   console.log('\nRigMatch detection');
-  const reading = report.parsed.nvidia || report.parsed.rocm || report.parsed.ioreg;
+  const reading = report.parsed.nvidia || report.parsed.windows || report.parsed.amdSysfs || report.parsed.ioreg;
   line('parsed a reading', reading ? `yes (via ${reading.source})` : 'NO — no usable source');
   if (report.parsed.systeminformation) {
     const si = report.parsed.systeminformation;

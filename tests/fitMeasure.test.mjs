@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fakeOllama } from './support/fakeOllama.mjs';
@@ -10,7 +11,7 @@ import { fakeOllama } from './support/fakeOllama.mjs';
 const {
   checkMeasureArgs, planTiers, estimateSeconds, describeDuration, measureTiers, measureModel, headlineOf,
   formatIntro, formatReport, formatModelReport, formatProgress, toMeasureJson, toModelJson, tierFor,
-  checkCard, farBelowEstimate, formatModelIntro, scrubPaths, fitLine, isCloudModel,
+  checkCard, farBelowEstimate, formatModelIntro, scrubPaths, fitLine, isCloudModel, formatTierDone, formatModelDone,
 } = await import('../cli/measure.ts');
 const { runMeasureCommand, assertLocalOllama } = await import('../cli/measureCommand.ts');
 const { fetchJson, installedOllamaModels } = await import('../cli/ollamaHttp.ts');
@@ -225,9 +226,13 @@ test('before and after the runs it asks whether something else is using the card
   const spiky = await checkCard(commands({ smi: ['2300, 12282, 30', '2300, 12282, 95', '2300, 12282, 28', '2300, 12282, 97', '2300, 12282, 31'] }).run, { platform: 'win32', samples: 5, gapMs: 0 });
   assert.equal(spiky.level, 'clear');
 
-  // No nvidia-smi (AMD, Apple, a Mac or Linux box without it): unknown, said nowhere, never "clear".
-  const none = await checkCard(commands({ smi: [null], platform: 'linux' }).run, { platform: 'linux', samples: 2, gapMs: 0 });
-  assert.deepEqual([none.level, none.message], ['unknown', '']);
+  // A card nothing can read (no nvidia-smi, and a Linux box with no amdgpu files): unknown, said with the reason, never "clear".
+  const none = await checkCard(commands({ smi: [null], platform: 'linux' }).run, { platform: 'linux', samples: 2, gapMs: 0, sysfsRoot: join(tmpdir(), 'rigmatch-no-such-sys') });
+  assert.deepEqual([none.level, none.reason], ['unknown', "RigMatch cannot read this graphics card's load on Linux."]);
+  assert.equal(none.message, "RigMatch could not check whether other programs are using your graphics card. RigMatch cannot read this graphics card's load on Linux. If something heavy is open, close it for the most accurate scores.");
+  const intel = await checkCard(commands({ smi: [null], platform: 'linux' }).run, { platform: 'linux', gpuName: 'Intel(R) Arc(TM) A770 Graphics', samples: 2, gapMs: 0, sysfsRoot: join(tmpdir(), 'rigmatch-no-such-sys') });
+  assert.equal(intel.level, 'unknown');
+  assert.match(intel.message, /no way to read an Intel graphics card's load on Linux/);
   const linux = await checkCard(commands({ smi: ['2400, 12282, 80'], platform: 'linux', processes: 'blender\nbash\n' }).run, { platform: 'linux', samples: 2, gapMs: 0 });
   assert.equal(linux.level, 'heavy');
   assert.match(linux.message, /Blender is running/);
@@ -282,16 +287,95 @@ test('a busy card is said before the runs and after, in the text and in the JSON
   assert.doesNotMatch(quiet.message, /looks busy|Before starting/);
   assert.doesNotMatch(formatReport({ ...report, card: { before: quiet, after: quiet } }), /After the runs/);
   assert.match(formatIntro(card12, plan, { before: quiet }), /Steam is open, and can use the graphics card, but the card itself reads quiet/);
-  assert.deepEqual(toMeasureJson({ ...report, card: { before: quiet, after: quiet } }, card12, '0.1.0').contention.before, { level: 'clear', reasons: [], apps: ['Steam'] });
+  // The JSON also names which reading it came from, so a result from another vendor's path can be told apart.
+  assert.deepEqual(toMeasureJson({ ...report, card: { before: quiet, after: quiet } }, card12, '0.1.0').contention.before, { level: 'clear', reasons: [], apps: ['Steam'], source: 'nvidia-smi' });
   assert.deepEqual(toMeasureJson(report, card12, '0.1.0').contention, {
     before: { level: 'heavy', reasons: ['the graphics card is already 92% busy'], apps: ['Steam'] },
     after: { level: 'heavy', reasons: ['the graphics card is already 92% busy'], apps: ['Steam'] },
+  });
+  const unreadable = { level: 'unknown', reasons: [], apps: [], message: '', reason: "Windows did not report the graphics card's load." };
+  assert.deepEqual(toMeasureJson({ ...report, card: { before: unreadable, after: null } }, card12, '0.1.0').contention, {
+    before: { level: 'unknown', reasons: [], apps: [], reason: "Windows did not report the graphics card's load." },
+    after: null,
   });
   assert.deepEqual(toMeasureJson(await measureTiers(plan, async (request) => atReference(request)), card12, '0.1.0').contention, { before: null, after: null });
 
   const one = await measureModel('gemma3:12b', { installed: ['gemma3:12b'], hardware: { vramGb: 12, unifiedMemory: false }, estimateTps: 40, run: async () => reply(41, 1850) });
   assert.match(formatModelReport({ ...one, card: { before: heavy, after: heavy } }), /After the runs, the graphics card is already 92% busy/);
   assert.equal(toModelJson({ ...one, card: { before: heavy, after: clear } }, card12, '0.1.0').contention.before.level, 'heavy');
+});
+
+test('a run something else disturbed says so in the text and the JSON, with its numbers as measured; a clean run has no such field', async () => {
+  const plan = planTiers(card12, ['llama3.2:3b', 'qwen3:8b']);
+  const why = ['the graphics card was 92% busy between the runs'];
+  const run = async (request) => (request.tier === 'standard' ? { ...atReference(request), disturbed: true, disturbedBy: why } : atReference(request));
+  const report = await measureTiers(plan, run);
+  const standard = report.lines.find((line) => line.tier.id === 'standard');
+  const light = report.lines.find((line) => line.tier.id === 'light');
+  assert.deepEqual([standard.disturbed, standard.disturbedBy, standard.points.points], [true, why, 1000], 'the points are what they are: nothing is scored differently');
+  assert.equal('disturbed' in light, false);
+
+  const text = formatReport(report, { header: card12 });
+  assert.match(text, /^Standard: Something else used the graphics card while this ran \(the graphics card was 92% busy between the runs\), so the numbers are lower than this PC can do\. Close other graphics-heavy programs and run it again for a score you can compare\. This is not a clean score\./m);
+  assert.match(text, /That RigScore is not a clean score: something else used the graphics card while its tier ran\./);
+  assert.doesNotMatch(text.split('\n').filter((line) => /^Light:/.test(line)).join(' '), /clean score/);
+  assert.match(formatTierDone(standard), /, 1,000 points, disturbed$/);
+  assert.doesNotMatch(formatTierDone(light), /disturbed/);
+  assert.match(text, ascii);
+
+  const json = toMeasureJson(report, card12, '0.1.0');
+  const [lightJson, standardJson] = json.tiers;
+  assert.deepEqual([standardJson.disturbed, standardJson.disturbedBy, standardJson.points], [true, why, 1000]);
+  assert.equal(json.headline.disturbed, true);
+  assert.deepEqual(Object.keys(lightJson), ['tier', 'model', 'status', 'writingTps', 'readingTps', 'loadSeconds', 'runs', 'gpuShare', 'points', 'pointsNote', 'band', 'estimatedTps', 'belowEstimate', 'stamp'], 'a clean tier keeps the keys it had');
+  assert.deepEqual(Object.keys(json), ['tool', 'version', 'mode', 'hardware', 'workload', 'reference', 'tiers', 'headline', 'stopped', 'busy', 'contention'], 'no new top-level key');
+  const { disturbed, disturbedBy, ...asClean } = standardJson;
+  assert.deepEqual(asClean, toMeasureJson(await measureTiers(plan, async (request) => atReference(request)), card12, '0.1.0').tiers[1]);
+
+  // One model.
+  const one = await measureModel('qwen3:8b', { installed: ['qwen3:8b'], hardware: { vramGb: 12, unifiedMemory: false }, estimateTps: 61, run: async (request) => ({ ...atReference(request), disturbed: true, disturbedBy: why }) });
+  assert.equal(one.disturbed, true);
+  assert.match(formatModelDone(one), /, disturbed$/);
+  assert.match(formatModelReport(one), /This is not a clean score\./);
+  assert.deepEqual([toModelJson(one, card12, '0.1.0').disturbed, toModelJson(one, card12, '0.1.0').disturbedBy], [true, why]);
+  const cleanOne = await measureModel('gemma3:12b', { installed: ['gemma3:12b'], hardware: { vramGb: 12, unifiedMemory: false }, estimateTps: 40, run: async () => reply(41, 1850) });
+  assert.equal('disturbed' in toModelJson(cleanOne, card12, '0.1.0'), false);
+});
+
+test('a full --measure run: a program that takes the card mid-run is named on its tiers, and a quiet run has no disturbance anywhere', async () => {
+  // The card is quiet until the third request to the model, then something else holds it at 95%.
+  const ollama = await fakeOllama({ installed: TIERS_INSTALLED });
+  try {
+    const generated = () => ollama.calls.filter((call) => call.path === '/api/generate' && call.body.keep_alive !== 0).length;
+    const run = async (command) => {
+      if (command === 'nvidia-smi') return { output: `2400, 12282, ${generated() >= 3 ? 95 : 20}`, error: null };
+      if (command === 'tasklist') return { output: '"explorer.exe","4","Console","1","1 K"\r\n', error: null };
+      throw new Error(`unexpected ${command}`);
+    };
+    const busy = await runCommand({ model: undefined, json: true }, ollama, { run: { run } });
+    assert.equal(busy.error, null);
+    assert.equal(busy.code, 0, busy.err);
+    const json = JSON.parse(busy.out);
+    const measured = json.tiers.filter((entry) => entry.status === 'measured');
+    assert.equal(measured.length, 3);
+    assert.ok(measured.every((entry) => entry.disturbed === true && entry.disturbedBy.includes('the graphics card was 95% busy between the runs')), 'every tier from the third request on met it, the later ones with it already there');
+    assert.equal(measured[1].points, 1000, 'on the reference weights at the reference speed, whatever was on the card');
+    assert.equal(json.headline.disturbed, true);
+    assert.equal(json.contention.after.level, 'heavy', 'and the card read again afterwards says the same');
+    assert.deepEqual(ollama.state.loaded, [], 'and what it loaded is unloaded');
+  } finally {
+    await ollama.close();
+  }
+
+  const quietOllama = await fakeOllama({ installed: TIERS_INSTALLED });
+  try {
+    const quiet = await runCommand({ model: undefined, json: true }, quietOllama);
+    assert.equal(quiet.code, 0, quiet.err);
+    assert.equal(quiet.out.includes('disturbed'), false, 'nothing in a clean run\'s JSON mentions it');
+    assert.doesNotMatch(quiet.err, /disturbed|not a clean score/);
+  } finally {
+    await quietOllama.close();
+  }
 });
 
 test('the command shares the app\'s runner and unload and think check, not copies of them', async () => {
@@ -341,6 +425,7 @@ function startCommand(args, ollama, { hardware = card12, tty = false, columns, r
     freeWaitMs: 1500,
     cardSamples: 2,
     cardGapMs: 0,
+    watchSettleMs: 0,
     ...env,
   }).then((code) => ({ code, error: null }), (error) => ({ code: undefined, error }))
     .then((done) => ({ ...done, out: out.text, err: err.text, left: () => left }));

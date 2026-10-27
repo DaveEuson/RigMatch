@@ -86,7 +86,7 @@ For the Rust companion audit, run `cargo audit` from `rigmatch-chat/src-tauri`.
 
 - Fresh install opens RigMatch and shows the expected version.
 - Upgrade install over the previous beta keeps existing scorecards/settings.
-- RigMatch Chat launches from the main app without a "not found" error.
+- RigMatch Chat launches from the main app without a "not found" error. Any scripted version of this step must set `RIGMATCH_CHAT_DATA_DIR` to a temp folder first, or its test chats land in the real history (`rigmatch-chat/README.md`).
 - Check Local detects Ollama, installed models, CPU, RAM, VRAM, and storage.
 - Provider Support copy names the current version and says Ollama runs downloads while LM Studio can be tested when its local server is running.
 - A five-model Speed Dating lineup completes and writes scorecards.
