@@ -12,6 +12,8 @@ export const releaseNotes: ReleaseNoteEntry[] = [
       'On Simple Mode\'s Pick screen, models you already have now come first among models that fit equally well.',
       'Speech and decision models no longer show up as chat picks. Models like phonon (speech), and d3 and kev (decision models, which score text instead of chatting), used to get a Fit grade and could land as your top match, in a show, or in Just Chat. They now carry a "Decision model" or "Audio model" tag, have no Fit grade, and stay out of lineups. In rigmatch-fit, decision models appear only under --all and --installed, and speech models don\'t appear.',
       'RigMatch\'s list of what each Ollama model can do is refreshed for 263 families, including Bonsai 2 and Nemotron 3.5. Sizes and tags (vision, tools, thinking and so on) are current, so models land under the right filters.',
+      'A drawing with a big, repetitive style block could freeze RigMatch for anywhere from a few seconds to over a minute while it was checked, and a small model that loops can write exactly that. The check now gets half a second at most and takes a few milliseconds on a real drawing. A drawing that goes over is scored like one that can\'t be shown, and the note says it was too complicated to check.',
+      'The Blind show switch now reacts when you point at it, like the other controls, and so does the "Tell me when a new one lands" switch in What\'s New.',
       'RigScore on one PC can vary by 15 to 20 percent from one run to the next, not the 10 to 15 the 0.10.0 notes said. Allow for that when you compare two computers.',
       'On a model\'s card, the 0 to 100 speed rating is now called "Speed". "Speed score" is the name of the My PC page, and the two looked like the same number.',
     ],
