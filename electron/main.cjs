@@ -37,6 +37,7 @@ const { runRigTier, unloadOllamaModel } = require('./rigScoreRunner.cjs');
 const security = require('./security.cjs');
 const { chatMessageText, chatHistory } = require('./chatDock.cjs');
 const gpuContention = require('./gpuContention.cjs');
+const gpuProbe = require('./gpuProbe.cjs');
 const { fitWindowToScreen } = require('./windowFit.cjs');
 const { missingLibraries, debianPackagesFor } = require('./companionLibraries.cjs');
 const {
@@ -2289,114 +2290,55 @@ async function getCudaStatus(primaryGpu = {}, { checkForUpdates = false } = {}) 
 // advice comes from an allowlist of known-heavy apps, never from the GPU driver's
 // own process list.
 
-/** Split command output into lines, tolerating CRLF from Windows tools. */
-function splitOutputLines(output) {
-  return String(output || '').split(/\r?\n/);
-}
-
-async function listRunningProcessNames() {
-  try {
-    if (process.platform === 'win32') {
-      // tasklist CSV: the image name is the first quoted field on each row.
-      const { output } = await runCommand('tasklist', ['/FO', 'CSV', '/NH'], 4000);
-      return splitOutputLines(output)
-        .map((line) => (line.match(/^"([^"]+)"/) || [])[1])
-        .filter(Boolean);
-    }
-    const { output } = await runCommand('ps', ['-eo', 'comm='], 4000);
-    return splitOutputLines(output).map((line) => line.trim()).filter(Boolean);
-  } catch {
-    // Process listing is best-effort: without it we simply name no apps.
-    return [];
-  }
-}
-
 /**
- * Read aggregate GPU load. Returns null when it cannot be determined, which the
- * assessment reports as "unknown" rather than "clear".
- *
- * NVIDIA is verified against real hardware. The AMD and Apple branches follow
- * documented output but are unverified — they are written to return null on
- * anything unexpected so a wrong reading is never produced.
+ * The system scan's own GPU reading (systeminformation), the last resort for a
+ * card nothing else reads. null when the scan has no load figure.
  */
-async function readGpuLoad(profile) {
-  const nvidia = await runCommand(
-    'nvidia-smi',
-    ['--query-gpu=memory.used,memory.total,utilization.gpu', '--format=csv,noheader,nounits'],
-    4000,
-  );
-  if (nvidia.output) {
-    const reading = gpuContention.parseNvidiaGpuQuery(nvidia.output);
-    if (reading) return reading;
-  }
-
-  // AMD. rocm-smi reports memory as a percentage, so pass the known total (from
-  // the system scan) to convert; without it the percentage alone still works.
-  const amd = await runCommand('rocm-smi', ['--showmemuse', '--showuse', '--csv'], 4000);
-  if (amd.output) {
-    const total = profile?.gpu?.vramGb ? profile.gpu.vramGb * 1024 : null;
-    const reading = gpuContention.parseRocmSmiQuery(amd.output, total);
-    if (reading) return reading;
-  }
-
-  // Apple Silicon: systeminformation reports utilizationGpu as null here —
-  // verified on an M4, where it returns the model and vendor but no load figure
-  // at all. IOKit has the real numbers and, unlike powermetrics, needs no sudo.
-  if (process.platform === 'darwin') {
-    const ioreg = await runCommand('ioreg', ['-r', '-d', '1', '-w', '0', '-c', 'AGXAccelerator'], 5000);
-    if (ioreg.output) {
-      const reading = gpuContention.parseIoregGpuStats(ioreg.output);
-      if (reading) return reading;
-    }
-  }
-
-  // Last resort: whatever the system scan already collected.
+function scanGpuReading(profile) {
   const gpu = profile?.gpu;
-  if (gpu && Number.isFinite(gpu.gpuLoadPercent)) {
-    return {
-      vramUsedMb: Number.isFinite(gpu.vramUsedGb) ? gpu.vramUsedGb * 1024 : null,
-      vramTotalMb: Number.isFinite(gpu.vramGb) && gpu.vramGb > 0 ? gpu.vramGb * 1024 : null,
-      utilizationPercent: gpu.gpuLoadPercent,
-      source: 'systeminformation',
-    };
-  }
-
-  return null;
+  if (!gpu || !Number.isFinite(gpu.gpuLoadPercent)) return null;
+  return {
+    vramUsedMb: Number.isFinite(gpu.vramUsedGb) ? gpu.vramUsedGb * 1024 : null,
+    vramTotalMb: Number.isFinite(gpu.vramGb) && gpu.vramGb > 0 ? gpu.vramGb * 1024 : null,
+    utilizationPercent: gpu.gpuLoadPercent,
+    source: 'systeminformation',
+  };
 }
 
-/**
- * Sample the GPU a few times and take the median. A single reading of an
- * ordinary desktop can land anywhere between 12% and 44%, so a spot check would
- * warn at random; the median of five is stable.
- */
-async function sampleGpuLoad(profile, samples = 5, gapMs = 220) {
-  const readings = [];
-  for (let i = 0; i < samples; i += 1) {
-    const reading = await readGpuLoad(profile);
-    if (reading) readings.push(reading);
-    // No pause after the last sample — this gates a button press.
-    if (i < samples - 1) await new Promise((resolve) => setTimeout(resolve, gapMs));
-  }
-  return gpuContention.medianReading(readings);
+/** How the card is read: gpuProbe.cjs, with this app's command runner and what the system scan knows. */
+function gpuProbeContext(profile) {
+  return {
+    run: runCommand,
+    platform: process.platform,
+    arch: process.arch,
+    gpuName: profile?.gpu?.model,
+    fallback: scanGpuReading(profile),
+  };
 }
 
 async function getGpuContention() {
-  // The scan supplies the VRAM total (rocm-smi reports memory only as a
-  // percentage) and the Apple fallback reading. It is cheap relative to the
-  // benchmark this gates, and never fatal — a failed scan just means less to
-  // work with, which the assessment reports as "unknown".
+  // The scan names the card (a PC can have several) and has the last-resort
+  // reading. It is cheap relative to the benchmark this gates, and never fatal:
+  // a failed scan just means less to work with, which the assessment reports as
+  // "unknown".
   const profile = await getSystemProfile().catch(() => null);
-  const [reading, processNames] = await Promise.all([sampleGpuLoad(profile), listRunningProcessNames()]);
+  // The median of several readings: a single one of an ordinary desktop can land
+  // anywhere between 12% and 44%, so a spot check would warn at random.
+  const [load, processNames] = await Promise.all([
+    gpuProbe.sampleGpuLoad(gpuProbeContext(profile)),
+    gpuProbe.listProcessNames(runCommand),
+  ]);
   const apps = gpuContention.matchKnownGpuApps(processNames);
-  const assessment = gpuContention.assessGpuContention(reading, apps, {
+  const assessment = gpuContention.assessGpuContention(load.reading, apps, {
     // On a shared pool, "memory in use" includes ordinary RAM, so that criterion
     // would warn on a machine that is merely busy rather than GPU-busy.
     unifiedMemory: Boolean(profile?.gpu?.isUnifiedMemory),
+    reason: load.unreadable ?? undefined,
   });
   return {
     ...assessment,
     message: gpuContention.describeGpuContention(assessment),
-    source: reading?.source ?? null,
+    source: load.source,
   };
 }
 

@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fakeOllama } from './support/fakeOllama.mjs';
@@ -225,9 +226,13 @@ test('before and after the runs it asks whether something else is using the card
   const spiky = await checkCard(commands({ smi: ['2300, 12282, 30', '2300, 12282, 95', '2300, 12282, 28', '2300, 12282, 97', '2300, 12282, 31'] }).run, { platform: 'win32', samples: 5, gapMs: 0 });
   assert.equal(spiky.level, 'clear');
 
-  // No nvidia-smi (AMD, Apple, a Mac or Linux box without it): unknown, said nowhere, never "clear".
-  const none = await checkCard(commands({ smi: [null], platform: 'linux' }).run, { platform: 'linux', samples: 2, gapMs: 0 });
-  assert.deepEqual([none.level, none.message], ['unknown', '']);
+  // A card nothing can read (no nvidia-smi, and a Linux box with no amdgpu files): unknown, said with the reason, never "clear".
+  const none = await checkCard(commands({ smi: [null], platform: 'linux' }).run, { platform: 'linux', samples: 2, gapMs: 0, sysfsRoot: join(tmpdir(), 'rigmatch-no-such-sys') });
+  assert.deepEqual([none.level, none.reason], ['unknown', "RigMatch cannot read this graphics card's load on Linux."]);
+  assert.equal(none.message, "RigMatch could not check whether other programs are using your graphics card. RigMatch cannot read this graphics card's load on Linux. If something heavy is open, close it for the most accurate scores.");
+  const intel = await checkCard(commands({ smi: [null], platform: 'linux' }).run, { platform: 'linux', gpuName: 'Intel(R) Arc(TM) A770 Graphics', samples: 2, gapMs: 0, sysfsRoot: join(tmpdir(), 'rigmatch-no-such-sys') });
+  assert.equal(intel.level, 'unknown');
+  assert.match(intel.message, /no way to read an Intel graphics card's load on Linux/);
   const linux = await checkCard(commands({ smi: ['2400, 12282, 80'], platform: 'linux', processes: 'blender\nbash\n' }).run, { platform: 'linux', samples: 2, gapMs: 0 });
   assert.equal(linux.level, 'heavy');
   assert.match(linux.message, /Blender is running/);
@@ -282,10 +287,16 @@ test('a busy card is said before the runs and after, in the text and in the JSON
   assert.doesNotMatch(quiet.message, /looks busy|Before starting/);
   assert.doesNotMatch(formatReport({ ...report, card: { before: quiet, after: quiet } }), /After the runs/);
   assert.match(formatIntro(card12, plan, { before: quiet }), /Steam is open, and can use the graphics card, but the card itself reads quiet/);
-  assert.deepEqual(toMeasureJson({ ...report, card: { before: quiet, after: quiet } }, card12, '0.1.0').contention.before, { level: 'clear', reasons: [], apps: ['Steam'] });
+  // The JSON also names which reading it came from, so a result from another vendor's path can be told apart.
+  assert.deepEqual(toMeasureJson({ ...report, card: { before: quiet, after: quiet } }, card12, '0.1.0').contention.before, { level: 'clear', reasons: [], apps: ['Steam'], source: 'nvidia-smi' });
   assert.deepEqual(toMeasureJson(report, card12, '0.1.0').contention, {
     before: { level: 'heavy', reasons: ['the graphics card is already 92% busy'], apps: ['Steam'] },
     after: { level: 'heavy', reasons: ['the graphics card is already 92% busy'], apps: ['Steam'] },
+  });
+  const unreadable = { level: 'unknown', reasons: [], apps: [], message: '', reason: "Windows did not report the graphics card's load." };
+  assert.deepEqual(toMeasureJson({ ...report, card: { before: unreadable, after: null } }, card12, '0.1.0').contention, {
+    before: { level: 'unknown', reasons: [], apps: [], reason: "Windows did not report the graphics card's load." },
+    after: null,
   });
   assert.deepEqual(toMeasureJson(await measureTiers(plan, async (request) => atReference(request)), card12, '0.1.0').contention, { before: null, after: null });
 
