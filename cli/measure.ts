@@ -15,6 +15,7 @@
  */
 import runner from '../electron/rigScoreRunner.cjs';
 import contention from '../electron/gpuContention.cjs';
+import probe from '../electron/gpuProbe.cjs';
 import { pullCommand } from '../src/lib/modelGrade.ts';
 import {
   RIG_HEADLINE_TIER,
@@ -167,9 +168,9 @@ export function checkMeasureArgs(
  * (electron/gpuContention.cjs): the app checks before a test and warns, because
  * a game, a render or a browser tab held the card for a whole run once and the
  * score read as a slow PC. Ollama's own listing cannot see that, since it only
- * knows its models. NVIDIA only here (nvidia-smi); other vendors, and a
- * machine without nvidia-smi, read as 'unknown', which says nothing rather
- * than 'clear'.
+ * knows its models. The card is read by electron/gpuProbe.cjs, as the app reads
+ * it (NVIDIA, any card on Windows, AMD on Linux, Apple Silicon). A card nothing
+ * can read is 'unknown', which says so and why, and is never 'clear'.
  */
 export type CardNote = {
   /** 'busy' and 'heavy' mean the readings say so; a known program merely being open leaves it 'clear'. */
@@ -178,46 +179,42 @@ export type CardNote = {
   reasons: string[];
   /** Known graphics-heavy programs that are open, whatever the card is doing. */
   apps: string[];
-  /** The sentence for the intro: the app's "Before starting: ..." if busy, a softer line if a program is open, else empty. */
+  /** The sentence for the intro: the app's "Before starting: ..." if busy, a softer line if a program is open, "could not check" if unknown, else empty. */
   message: string;
+  /** What the reading came from ('nvidia-smi', 'windows-counters', 'amdgpu-sysfs', 'ioreg'); absent when there was none. */
+  source?: string;
+  /** Why the card could not be read, when level is 'unknown'. */
+  reason?: string;
 };
 
 export type CommandRunner = (command: string, args: string[], timeoutMs: number) => Promise<{ output: string; error: string | null }>;
 
 const assessCard = contention.assessGpuContention as (
-  reading: unknown, apps?: string[], options?: { unifiedMemory?: boolean },
-) => { level: CardNote['level']; reasons: string[]; apps: string[] };
+  reading: unknown, apps?: string[], options?: { unifiedMemory?: boolean; reason?: string },
+) => { level: CardNote['level']; reasons: string[]; apps: string[]; reason?: string };
 
-const LINE_BREAK = /\r?\n/;
-
-/** The process names the platform lists, for the known graphics-heavy programs. */
-async function processNames(run: CommandRunner, platform: string): Promise<string[]> {
-  if (platform === 'win32') {
-    // tasklist's CSV: the image name is the first quoted field of each row.
-    const { output } = await run('tasklist', ['/FO', 'CSV', '/NH'], 4000);
-    return output.split(LINE_BREAK).map((line) => line.match(/^"([^"]+)"/)?.[1]).filter((name): name is string => Boolean(name));
-  }
-  const { output } = await run('ps', ['-eo', 'comm='], 4000);
-  return output.split(LINE_BREAK).map((line) => line.trim()).filter(Boolean);
-}
+type GpuLoad = { reading: { source: string } | null; source: string | null; unreadable: string | null };
+const sampleGpuLoad = probe.sampleGpuLoad as (
+  context: { run: CommandRunner; platform: string; arch?: string; gpuName?: string; sysfsRoot?: string },
+  options?: { samples?: number; gapMs?: number },
+) => Promise<GpuLoad>;
+const listProcessNames = probe.listProcessNames as (run: CommandRunner, platform: string) => Promise<string[]>;
 
 export async function checkCard(
   run: CommandRunner,
-  { platform, unifiedMemory = false, samples = 5, gapMs = 220 }: { platform: string; unifiedMemory?: boolean; samples?: number; gapMs?: number },
+  { platform, arch, gpuName, sysfsRoot, unifiedMemory = false, samples = 5, gapMs = 220 }: {
+    platform: string; arch?: string; gpuName?: string; sysfsRoot?: string; unifiedMemory?: boolean; samples?: number; gapMs?: number;
+  },
 ): Promise<CardNote> {
-  const readings: unknown[] = [];
-  for (let index = 0; index < samples; index += 1) {
-    const { output } = await run('nvidia-smi', ['--query-gpu=memory.used,memory.total,utilization.gpu', '--format=csv,noheader,nounits'], 4000);
-    const reading = output ? contention.parseNvidiaGpuQuery(output) : null;
-    if (reading) readings.push(reading);
-    if (index < samples - 1 && gapMs > 0) await new Promise((resolve) => setTimeout(resolve, gapMs));
-  }
   // A median of several, as the app takes: a single reading of an ordinary
   // desktop lands anywhere from 12% to 44%.
-  const median = contention.medianReading(readings);
-  if (!median) return { level: 'unknown', reasons: [], apps: [], message: '' };
-  const apps = contention.matchKnownGpuApps(await processNames(run, platform).catch(() => []));
-  const assessment = assessCard(median, apps, { unifiedMemory });
+  const load = await sampleGpuLoad({ run, platform, arch, gpuName, sysfsRoot }, { samples, gapMs });
+  if (!load.reading) {
+    const unreadable = assessCard(null, [], { reason: load.unreadable ?? undefined });
+    return { level: 'unknown', reasons: [], apps: [], message: contention.describeGpuContention(unreadable), ...(load.unreadable ? { reason: load.unreadable } : {}) };
+  }
+  const apps = contention.matchKnownGpuApps(await listProcessNames(run, platform).catch(() => []));
+  const assessment = assessCard(load.reading, apps, { unifiedMemory });
   // The app calls the card "busy" when a known graphics-heavy program is merely
   // open (Steam on most gaming PCs), even with the card itself idle. Said so,
   // that is false: "busy" here means a reading says so. A program that is open
@@ -228,6 +225,7 @@ export async function checkCard(
     level: measurablyBusy ? assessment.level : 'clear',
     reasons: assessment.reasons,
     apps: assessment.apps,
+    ...(load.source ? { source: load.source } : {}),
     message: measurablyBusy
       ? contention.describeGpuContention(assessment)
       : assessment.apps.length
@@ -732,8 +730,13 @@ const pointsJson = (points: RigPoints | null) => (points?.kind === 'points'
 const FAILED_IN_JSON = 'The test did not finish.';
 const messageForJson = (status: string, message: string) => (status === 'failed' ? FAILED_IN_JSON : scrubPaths(message));
 
-/** What the card was doing, for the JSON: the level and why, nothing else. */
-const cardJson = (note: CardNote | null | undefined) => (note ? { level: note.level, reasons: note.reasons, apps: note.apps } : null);
+/**
+ * What the card was doing, for the JSON: the level and why, which reading it
+ * came from, and when it could not be read, the reason. Nothing else.
+ */
+const cardJson = (note: CardNote | null | undefined) => (note
+  ? { level: note.level, reasons: note.reasons, apps: note.apps, ...(note.source ? { source: note.source } : {}), ...(note.reason ? { reason: note.reason } : {}) }
+  : null);
 
 /**
  * --measure --json: the measures, each tier's stamp and points. The stamp

@@ -31,8 +31,10 @@ export type MeasureEnv = {
   detectHardware: () => Promise<FitHardware>;
   /** The NVIDIA driver, for the stamp; undefined when it cannot be read. */
   driverVersion: (gpu: string) => Promise<string | undefined>;
-  /** nvidia-smi, and the process list, for the card check. */
+  /** The card check's programs (nvidia-smi, PowerShell on Windows, ioreg on a Mac) and the process list. */
   run: CommandRunner;
+  /** Where Linux's /sys is (default "/"); a test points it at a fixture tree. */
+  sysfsRoot?: string;
   fetchJson: MeasureDeps['fetchJson'];
   installedModels: (baseUrl: string) => Promise<InstalledModel[] | null>;
   /** Ctrl+C. The first press stops the run and unloads; a second one leaves at once. */
@@ -144,9 +146,12 @@ export async function runMeasureCommand({ model, json }: { model: string | undef
 
     // Is something besides Ollama using the card? Said before the runs and read
     // again after them: a heavy program on the card for the whole run reads as a
-    // slow PC. It warns and goes on, as the app does (NVIDIA cards only).
+    // slow PC. It warns and goes on, as the app does.
     const card: { before: CardNote | null; after: CardNote | null } = { before: null, after: null };
-    const readCard = () => checkCard(env.run, { platform: env.platform, unifiedMemory: hardware.unifiedMemory, samples: env.cardSamples, gapMs: env.cardGapMs });
+    const readCard = () => checkCard(env.run, {
+      platform: env.platform, arch: hardware.arch, gpuName: hardware.gpu, sysfsRoot: env.sysfsRoot,
+      unifiedMemory: hardware.unifiedMemory, samples: env.cardSamples, gapMs: env.cardGapMs,
+    });
 
     // In a terminal the report follows the intro on screen; piped, the intro
     // went to stderr, so the report carries the title and the card itself.
