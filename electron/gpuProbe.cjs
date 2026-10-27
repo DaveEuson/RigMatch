@@ -114,6 +114,12 @@ function readAmdSysfs(root = '/') {
   return readings.sort((a, b) => b.vramTotalMb - a.vramTotalMb)[0] ?? null;
 }
 
+/** One nvidia-smi reading (about 60 ms), or null. */
+async function readNvidiaOnce(run) {
+  const { output } = await safeRun(run, 'nvidia-smi', NVIDIA_QUERY, 4000);
+  return output ? contention.parseNvidiaGpuQuery(output) : null;
+}
+
 async function collect(readOnce, samples, gapMs) {
   const readings = [];
   for (let index = 0; index < samples; index += 1) {
@@ -142,10 +148,7 @@ async function sampleGpuLoad(ctx, { samples = 5, gapMs = 220 } = {}) {
     return reading ? { reading, source: reading.source, unreadable: null } : null;
   };
 
-  const readNvidia = async () => {
-    const { output } = await safeRun(run, 'nvidia-smi', NVIDIA_QUERY, 4000);
-    return output ? contention.parseNvidiaGpuQuery(output) : null;
-  };
+  const readNvidia = () => readNvidiaOnce(run);
   const first = await readNvidia();
   if (first) {
     // The first sample found the tool out and counts; the gap follows it.
@@ -186,10 +189,132 @@ async function listProcessNames(run, platform = process.platform) {
   return lines(output).map((line) => line.trim()).filter(Boolean);
 }
 
+/**
+ * How long to let the card go quiet after the last request before reading its
+ * utilization. nvidia-smi's utilization is "the past sample period", between
+ * 1/6 s and 1 s, so a reading taken sooner would still contain the model's own
+ * work and read as another program's.
+ */
+const WATCH_SETTLE_MS = 1100;
+
+/**
+ * Ollama's own model runner is named llama-server.exe on current versions
+ * (seen on 0.40.5: it starts when a model loads and ends when it unloads), which
+ * is also the name the allowlist gives "a llama.cpp server". A runner that
+ * appears while a test loads its model is the test's own, so that label is not
+ * counted as a program that joined.
+ */
+const OWN_RUNNER_APP_LABELS = ['a llama.cpp server'];
+
+const pause = (ms, signal) => new Promise((resolve) => {
+  if (ms <= 0 || signal?.aborted) { resolve(); return; }
+  const timer = setTimeout(done, ms);
+  function done() { clearTimeout(timer); signal?.removeEventListener?.('abort', done); resolve(); }
+  signal?.addEventListener?.('abort', done, { once: true });
+});
+
+/**
+ * A watch for a speed test (rigScoreRunner.cjs takes it as `watch`): did
+ * something join the graphics card while the test ran? start() is called once
+ * before the model loads and records what the card and the open programs were
+ * doing then; check() is called after each of the test's requests, never during
+ * one, and says whether anything has joined since (gpuContention.judgeMidRun).
+ *
+ * What it may do between two requests is bounded by a measurement, not by taste.
+ * On the RTX 4070 here, an idle gap of 2 s before a request cut the next
+ * request's prompt-reading speed from about 8,400 to about 5,500 tok/s (one run
+ * 1,700), because the card clocks down while it waits; a gap of 0.4 s changed
+ * nothing. The score counts that speed, so a between-requests check that waits
+ * would change what is timed. So:
+ *   - between requests it takes at most one instant memory reading (nvidia-smi,
+ *     about 60 ms, or the amdgpu files), and only from a source that answers that
+ *     fast; no waiting, no listing programs (tasklist took 0.7 s), no PowerShell;
+ *   - after the LAST request, when nothing timed follows, it waits for the card
+ *     to go quiet and reads everything: utilization, memory and the programs.
+ * A program that joined and left between two requests is not seen; one that is
+ * still there at the end, or that took memory, is.
+ *
+ * It reads and lists, and nothing else: no request to Ollama, no model loaded
+ * or unloaded. A card it cannot read is watched for known programs only. Any
+ * failure is "no verdict", never an error in the run.
+ *
+ * `context` is what sampleGpuLoad takes, or a function from the machine reading
+ * the runner has ({ gpu, isUnifiedMemory, ... }) to it; it may also say
+ * `unifiedMemory`, to leave the memory check out on a shared pool.
+ */
+function createGpuWatch(context, { settleMs = WATCH_SETTLE_MS, samples = 2, gapMs = 150 } = {}) {
+  let ctx = null;
+  let baseline = null;
+  let baselineApps = [];
+  let reference = null;
+  let instant = null;
+
+  const apps = async () => contention.matchKnownGpuApps(await listProcessNames(ctx.run, ctx.platform ?? process.platform));
+  // The first reading after the model has loaded is what memory is compared with
+  // from then on, lowered if the card frees some: the model's own weights are in
+  // it, and so is anything that was already there.
+  const remember = (reading) => {
+    if (!reading || !Number.isFinite(reading.vramUsedMb)) return;
+    reference = reference ? { ...reference, vramUsedMb: Math.min(reference.vramUsedMb, reading.vramUsedMb) } : reading;
+  };
+
+  return {
+    async start({ machine } = {}) {
+      ctx = typeof context === 'function' ? await context(machine ?? {}) : context;
+      const load = await sampleGpuLoad(ctx, { samples: 3, gapMs: 150 });
+      baseline = load.reading;
+      baselineApps = await apps();
+      reference = null;
+      // Only a source that answers in milliseconds may be read between requests.
+      instant = load.source === 'nvidia-smi' ? () => readNvidiaOnce(ctx.run)
+        : load.source === 'amdgpu-sysfs' ? async () => readAmdSysfs(ctx.sysfsRoot ?? '/')
+          : null;
+    },
+
+    async check({ signal, last = true } = {}) {
+      if (!ctx) return null;
+      try {
+        if (!last) {
+          const reading = instant ? await instant() : null;
+          if (!reading) return null;
+          // Memory only: utilization right after a request is the model's own.
+          const verdict = contention.judgeMidRun({
+            reference,
+            current: { vramUsedMb: reading.vramUsedMb, vramTotalMb: reading.vramTotalMb, memoryShared: reading.memoryShared },
+            unifiedMemory: Boolean(ctx.unifiedMemory),
+          });
+          remember(reading);
+          return verdict;
+        }
+        await pause(settleMs, signal);
+        if (signal?.aborted) return null;
+        const [{ reading }, currentApps] = await Promise.all([sampleGpuLoad(ctx, { samples, gapMs }), apps()]);
+        const verdict = contention.judgeMidRun({
+          baseline,
+          reference,
+          current: reading,
+          baselineApps,
+          currentApps,
+          ignoreApps: OWN_RUNNER_APP_LABELS,
+          unifiedMemory: Boolean(ctx.unifiedMemory),
+        });
+        remember(reading);
+        return verdict;
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
 module.exports = {
+  OWN_RUNNER_APP_LABELS,
+  WATCH_SETTLE_MS,
   WINDOWS_PROBE_BODY,
+  createGpuWatch,
   listProcessNames,
   readAmdSysfs,
+  readNvidiaOnce,
   sampleGpuLoad,
   windowsPowerShell,
   windowsProbeScript,

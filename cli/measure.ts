@@ -32,10 +32,12 @@ import {
 import {
   assembleModelResult,
   assembleTierResult,
+  describeDisturbance,
   rigHeadline,
   rigModelRequest,
   rigRunRequest,
   tierAvailability,
+  type RigDisturbance,
   type RigMachine,
   type RigModelStamp,
   type RigProgress,
@@ -64,6 +66,12 @@ export type MeasureDeps = {
   unloadSettleMs?: number;
   /** How long a run waits, before checking for another program's models, for this run's own to be gone. */
   freeWaitMs?: number;
+  /**
+   * Looks at the card between the runs' requests for a program that came to use
+   * it (gpuProbe.createGpuWatch); shared by every request of one command, which
+   * start() takes a new baseline for each time. The default is not to watch.
+   */
+  watch?: { start: (args: { machine: RigMachine }) => Promise<void>; check: (args: { signal?: AbortSignal; last?: boolean }) => Promise<{ disturbed: boolean; reasons: string[] } | null> };
 };
 
 /** Long enough for a big model to leave a slow card; the app waits 3 s, and that was not enough here. */
@@ -319,7 +327,7 @@ export type MeasuredTier = {
   tier: RigTier; status: 'measured'; measure: TierMeasure; stamp: RigStamp; gpuShare: number | null; points: RigPoints; band: SpeedBand;
   /** The fit grade's guess for this model on this card, to check the measure against. */
   estimateTps: number | null;
-};
+} & RigDisturbance;
 export type TierLine =
   | MeasuredTier
   | { tier: RigTier; status: 'missing'; command: string }
@@ -360,9 +368,12 @@ export function scrubPaths(text: string): string {
 
 const tooBigMessage = (needGb: number, haveGb: number) => `Not run: needs ${needGb} GB of graphics memory, and this PC has ${Math.round(haveGb * 10) / 10} GB.`;
 
-function measuredLine(tier: RigTier, measure: TierMeasure, stamp: RigStamp, gpuShare: number | null, estimateTps: number | null = null): MeasuredTier {
-  return { tier, status: 'measured', measure, stamp, gpuShare, points: rigPoints(measure, stamp), band: speedBand(measure.decodeTps), estimateTps };
+function measuredLine(tier: RigTier, measure: TierMeasure, stamp: RigStamp, gpuShare: number | null, estimateTps: number | null = null, disturbance: RigDisturbance = {}): MeasuredTier {
+  return { tier, status: 'measured', measure, stamp, gpuShare, points: rigPoints(measure, stamp), band: speedBand(measure.decodeTps), estimateTps, ...disturbanceOf(disturbance) };
 }
+
+/** Only a disturbed run has the fields; a clean one is left exactly as it was. */
+const disturbanceOf = ({ disturbed, disturbedBy }: RigDisturbance): RigDisturbance => (disturbed ? { disturbed: true, disturbedBy: disturbedBy ?? [] } : {});
 
 /**
  * The tiers in the plan, smallest first, one at a time. A busy card or Ctrl+C
@@ -391,7 +402,7 @@ export async function measureTiers(
     const outcome = assembleTierResult(tier, await run(rigRunRequest(tier, `fit-${tier.id}`), tier), now());
     let line: TierLine;
     if (outcome.kind === 'measured') {
-      line = measuredLine(tier, outcome.result.measure, outcome.result.stamp, outcome.result.gpuShare, entry.kind === 'run' ? entry.estimateTps : null);
+      line = measuredLine(tier, outcome.result.measure, outcome.result.stamp, outcome.result.gpuShare, entry.kind === 'run' ? entry.estimateTps : null, outcome.result);
     } else if (outcome.kind === 'not-installed') {
       line = { tier, status: 'missing', command: pullCommand(tier.model) };
     } else if (outcome.kind === 'too-big') {
@@ -413,7 +424,7 @@ export function formatTierDone(line: TierLine): string {
   switch (line.status) {
     case 'measured': {
       const points = line.points.kind === 'points' ? `, ${number(line.points.points)} points` : '';
-      return `${lead}${tps(line.measure.decodeTps)} tok/s writing, ${tps(line.measure.prefillTps)} tok/s reading${points}`;
+      return `${lead}${tps(line.measure.decodeTps)} tok/s writing, ${tps(line.measure.prefillTps)} tok/s reading${points}${line.disturbed ? ', disturbed' : ''}`;
     }
     case 'stopped': return `${lead}stopped`;
     case 'busy': return `${lead}not kept, Ollama was busy`;
@@ -447,7 +458,7 @@ export type ModelReport = {
   /** What the graphics card was doing before and after the run (checkCard); filled in by the caller. */
   card?: { before: CardNote | null; after: CardNote | null };
 } & (
-  | { status: 'measured'; measure: TierMeasure; stamp: RigStamp | RigModelStamp; gpuShare: number | null; points: RigPoints | null; band: SpeedBand }
+  | ({ status: 'measured'; measure: TierMeasure; stamp: RigStamp | RigModelStamp; gpuShare: number | null; points: RigPoints | null; band: SpeedBand } & RigDisturbance)
   | { status: 'missing'; command: string }
   | { status: 'busy' | 'stopped' | 'failed' | 'too-big'; message: string }
 );
@@ -473,12 +484,12 @@ export async function measureModel(
   if (base.tier) {
     const outcome = assembleTierResult(base.tier, await run(rigRunRequest(base.tier, `fit-${base.tier.id}`)), new Date().toISOString());
     if (outcome.kind !== 'measured') return { ...base, status: outcome.kind === 'not-installed' ? 'failed' : outcome.kind, message: scrubPaths(outcome.message) };
-    const line = measuredLine(base.tier, outcome.result.measure, outcome.result.stamp, outcome.result.gpuShare);
-    return { ...base, status: 'measured', measure: line.measure, stamp: line.stamp, gpuShare: line.gpuShare, points: line.points, band: line.band };
+    const line = measuredLine(base.tier, outcome.result.measure, outcome.result.stamp, outcome.result.gpuShare, null, outcome.result);
+    return { ...base, status: 'measured', measure: line.measure, stamp: line.stamp, gpuShare: line.gpuShare, points: line.points, band: line.band, ...disturbanceOf(line) };
   }
   const outcome = assembleModelResult(model, await run(rigModelRequest(model, 'fit-model')));
   if (outcome.kind !== 'measured') return { ...base, status: outcome.kind === 'not-installed' ? 'failed' : outcome.kind, message: scrubPaths(outcome.message) };
-  return { ...base, status: 'measured', measure: outcome.measure, stamp: outcome.stamp, gpuShare: outcome.gpuShare, points: null, band: speedBand(outcome.measure.decodeTps) };
+  return { ...base, status: 'measured', measure: outcome.measure, stamp: outcome.stamp, gpuShare: outcome.gpuShare, points: null, band: speedBand(outcome.measure.decodeTps), ...disturbanceOf(outcome) };
 }
 
 // ---- Printing ------------------------------------------------------------------
@@ -496,8 +507,9 @@ function pointsCell(points: RigPoints | null): string {
 }
 
 /** The notes a measured tier carries: a spill, points it cannot have, what differs from the reference. */
-function notesFor(label: string, line: { gpuShare: number | null; points: RigPoints | null; measure: TierMeasure; estimateTps: number | null }): string[] {
+function notesFor(label: string, line: { gpuShare: number | null; points: RigPoints | null; measure: TierMeasure; estimateTps: number | null } & RigDisturbance): string[] {
   const notes: string[] = [];
+  if (line.disturbed) notes.push(`${label}: ${describeDisturbance(line.disturbedBy)} This is not a clean score.`);
   if (farBelowEstimate(line.measure, line.estimateTps)) {
     notes.push(`${label}: writing ${tps(line.measure.decodeTps)} tok/s is far below the ~${number(line.estimateTps ?? 0)} tok/s estimated for this card. Something else may have been using the graphics card, or the model did not sit wholly on it, so this number is lower than this PC can do. Close other programs and run again before trusting it.`);
   }
@@ -649,6 +661,7 @@ export function formatReport(report: MeasureReport, { show = false, columns, hea
       ? `No RigScore yet: the headline is the ${standard?.label} tier, ${standard?.model}.`
       : 'No RigScore: no tier was measured.');
   }
+  if (headline?.disturbed) closing.push('That RigScore is not a clean score: something else used the graphics card while its tier ran. Close other graphics-heavy programs and run it again.');
   closing.push(`1,000 points is the reference PC, an ${RIG_REFERENCE_MACHINE}. Twice as fast at both writing and reading is 2,000. Writing is how fast the answer comes out; reading is how fast the prompt goes in.`);
   lines.push('', ...closing.flatMap((text) => wrap(text, columns)));
   return lines.join('\n');
@@ -657,7 +670,7 @@ export function formatReport(report: MeasureReport, { show = false, columns, hea
 /** How one model's run went, in one line. */
 export function formatModelDone(report: ModelReport): string {
   if (report.status !== 'measured') return `${report.model}: ${report.status === 'busy' ? 'not kept, Ollama was busy' : report.status === 'failed' ? 'did not finish' : report.status}`;
-  return `${report.model}: ${tps(report.measure.decodeTps)} tok/s writing, ${tps(report.measure.prefillTps)} tok/s reading`;
+  return `${report.model}: ${tps(report.measure.decodeTps)} tok/s writing, ${tps(report.measure.prefillTps)} tok/s reading${report.disturbed ? ', disturbed' : ''}`;
 }
 
 /** One model's measure beside its estimate. */
@@ -731,6 +744,13 @@ const FAILED_IN_JSON = 'The test did not finish.';
 const messageForJson = (status: string, message: string) => (status === 'failed' ? FAILED_IN_JSON : scrubPaths(message));
 
 /**
+ * A run something else disturbed says so, and why: `disturbed: true` and
+ * `disturbedBy`, both absent on a run nothing disturbed, so that run's JSON is
+ * what it always was. The numbers beside them are as measured.
+ */
+const disturbedJson = ({ disturbed, disturbedBy }: RigDisturbance) => (disturbed ? { disturbed: true, disturbedBy: disturbedBy ?? [] } : {});
+
+/**
  * What the card was doing, for the JSON: the level and why, which reading it
  * came from, and when it could not be read, the reason. Nothing else.
  */
@@ -758,6 +778,7 @@ export function toMeasureJson(report: MeasureReport, hardware: FitHardware, vers
         case 'measured': return {
           ...base, ...measureJson(line.measure, line.gpuShare), ...pointsJson(line.points), band: line.band.id,
           estimatedTps: line.estimateTps, belowEstimate: farBelowEstimate(line.measure, line.estimateTps), stamp: line.stamp,
+          ...disturbedJson(line),
         };
         case 'missing': return { ...base, command: line.command, sizeGb: line.tier.sizeGb };
         case 'skipped': return base;
@@ -770,6 +791,7 @@ export function toMeasureJson(report: MeasureReport, hardware: FitHardware, vers
       ? {
         tier: headline.tier.id, isHeadlineTier: headline.tier.id === RIG_HEADLINE_TIER, ...pointsJson(headline.points),
         writingTps: round(headline.measure.decodeTps), band: headline.tier.id === RIG_HEADLINE_TIER ? headline.band.id : null,
+        ...(headline.disturbed ? { disturbed: true } : {}),
       }
       : null,
     stopped: report.stopped,
@@ -785,6 +807,7 @@ export function toModelJson(report: ModelReport, hardware: FitHardware, version:
     return {
       ...base, ...measureJson(report.measure, report.gpuShare), ...pointsJson(report.points), band: report.band.id,
       belowEstimate: farBelowEstimate(report.measure, report.estimateTps), stamp: report.stamp,
+      ...disturbedJson(report),
       contention: { before: cardJson(report.card?.before), after: cardJson(report.card?.after) },
     };
   }

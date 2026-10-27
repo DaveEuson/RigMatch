@@ -3489,6 +3489,13 @@ async function runRigScore(request = {}, sender) {
       onProgress: (update) => {
         if (!sender.isDestroyed()) sender.send('rigscore:progress', { id: progressId, ...update });
       },
+      // Looks at the card between the requests for a program that is not Ollama's
+      // coming to use it (gpuProbe.cjs); it never touches a request or a model.
+      watch: gpuProbe.createGpuWatch((machine) => ({
+        ...gpuProbeContext(null),
+        gpuName: machine.gpu,
+        unifiedMemory: Boolean(machine.isUnifiedMemory),
+      })),
     });
   } finally {
     activeRigScore = null;

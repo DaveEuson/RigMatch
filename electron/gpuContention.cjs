@@ -513,6 +513,54 @@ function assessGpuContention(reading, knownApps = [], options = {}) {
 }
 
 /**
+ * Mid-run: did something join the card while a speed test ran?
+ *
+ * Judging only; when and how the card is read is gpuProbe.createGpuWatch's,
+ * which reads utilization only after the card has had time to go quiet
+ * (nvidia-smi's utilization is "the past sample period", up to a second), so the
+ * model's own work is not in it. What is left is another program's. Three
+ * signals, each against a baseline:
+ *   - utilization: at the "heavy" threshold or above, whenever it started (a
+ *     card hammered between a test's requests is hammered for the test, and the
+ *     next tier of the same test begins with the program already there); or at
+ *     the "busy" threshold and at least this many points above the baseline, so
+ *     a desktop that was already at 40% is not "joined" by a 48% reading.
+ *   - memory: grown by this much since the model finished loading. The larger of
+ *     an absolute step and a share of the card, so a browser tab's churn
+ *     (hundreds of MB) is not a program joining. Not judged on a shared pool,
+ *     where ordinary RAM use would count.
+ *   - a known graphics-heavy program (the same allowlist) that was not running
+ *     when the test began.
+ * A program that joins and leaves between two checks is not seen.
+ */
+const MIDRUN_UTILIZATION_RISE = 20;
+const MIDRUN_VRAM_GROWTH_MB = 1024;
+const MIDRUN_VRAM_GROWTH_SHARE = 0.08;
+
+function judgeMidRun({ baseline = null, reference = null, current = null, baselineApps = [], currentApps = [], ignoreApps = [], unifiedMemory = false } = {}) {
+  const reasons = [];
+  const finite = (value) => Number.isFinite(value);
+  if (current) {
+    if (finite(current.utilizationPercent)) {
+      const busy = current.utilizationPercent;
+      const was = finite(baseline?.utilizationPercent) ? baseline.utilizationPercent : 0;
+      if (busy >= HEAVY_UTILIZATION_PERCENT || (busy >= BUSY_UTILIZATION_PERCENT && busy - was >= MIDRUN_UTILIZATION_RISE)) {
+        reasons.push(`the graphics card was ${Math.round(busy)}% busy between the runs`);
+      }
+    }
+    if (!unifiedMemory && !current.memoryShared && finite(current.vramUsedMb) && finite(reference?.vramUsedMb)) {
+      const step = Math.max(MIDRUN_VRAM_GROWTH_MB, finite(current.vramTotalMb) ? MIDRUN_VRAM_GROWTH_SHARE * current.vramTotalMb : 0);
+      const grew = current.vramUsedMb - reference.vramUsedMb;
+      if (grew >= step) reasons.push(`about ${(grew / 1024).toFixed(1)} GB more graphics memory was in use than when the model had loaded`);
+    }
+  }
+  const before = new Set([...baselineApps, ...ignoreApps]);
+  const started = (Array.isArray(currentApps) ? currentApps : []).filter((app) => !before.has(app));
+  if (started.length) reasons.push(`${started.join(' and ')} started while the test ran`);
+  return { disturbed: reasons.length > 0, reasons };
+}
+
+/**
  * The one sentence shown to the user. Never instructs closing anything we are
  * not confident about, and says plainly when we could not check.
  */
@@ -588,6 +636,10 @@ module.exports = {
   pickWindowsAdapter,
   parseAmdSysfs,
   describeUnreadable,
+  judgeMidRun,
+  MIDRUN_UTILIZATION_RISE,
+  MIDRUN_VRAM_GROWTH_MB,
+  MIDRUN_VRAM_GROWTH_SHARE,
   SHARED_CARVEOUT_MAX_MB,
   matchKnownGpuApps,
   assessGpuContention,

@@ -108,6 +108,37 @@ test('a new graphics card between two runs is compared, and named', () => {
   assert.deepEqual(before.sinceThen.notes, ['Graphics card NVIDIA GeForce RTX 3060 against NVIDIA GeForce RTX 4070.']);
 });
 
+test('a disturbed run is saved with its reasons and is not a score to compare; an old entry and a clean one are as they always were', () => {
+  const clean = result('clean', '2026-10-20T10:00:00Z', 150, 3000);
+  const disturbed = { ...result('d', '2026-10-24T10:00:00Z', 90, 1800), disturbed: true, disturbedBy: ['the graphics card was 91% busy between the runs'] };
+  const parsed = parseRigHistory(JSON.parse(JSON.stringify([clean, disturbed])));
+  assert.deepEqual(parsed.find((entry) => entry.id === 'clean'), clean, 'an entry saved before the field existed comes back unchanged');
+  assert.equal('disturbed' in parsed.find((entry) => entry.id === 'clean'), false);
+  assert.deepEqual(parsed.find((entry) => entry.id === 'd'), disturbed);
+
+  // The newest clean run stands for the tier; the disturbed one only while there is none.
+  assert.equal(latestByTier(parsed).light.id, 'clean');
+  assert.equal(latestByTier([disturbed]).light.id, 'd');
+  const rows = historyRows(parsed);
+  const row = (id) => rows.find((entry) => entry.result.id === id);
+  assert.equal(row('clean').latest, true);
+  assert.equal(row('d').latest, false);
+  assert.equal(row('d').sinceThen.comparable, false, 'never set beside a clean score as faster or slower');
+  assert.match(row('d').sinceThen.notes[0], /disturbed is not compared/);
+  // A later clean run is not compared with the disturbed one either.
+  const later = result('later', '2026-10-25T10:00:00Z', 152, 3000);
+  assert.equal(historyRows([clean, disturbed, later]).find((entry) => entry.result.id === 'd').sinceThen.comparable, false);
+  assert.equal(historyRows([clean, disturbed, later]).find((entry) => entry.result.id === 'clean').sinceThen.comparable, true);
+
+  // A bad field is dropped, not the entry.
+  const odd = parseRigHistory([{ ...clean, disturbed: 'yes', disturbedBy: ['x'] }, { ...disturbed, id: 'e', disturbedBy: ['ok', 3, '', null] }]);
+  assert.equal('disturbed' in odd.find((entry) => entry.id === 'clean'), false);
+  assert.deepEqual(odd.find((entry) => entry.id === 'e').disturbedBy, ['ok']);
+  // A history saved by this version reads back in the version before it: the extra fields are ignored there.
+  const { disturbed: _flag, disturbedBy: _why, ...asBefore } = disturbed;
+  assert.deepEqual(Object.keys(asBefore), Object.keys(clean));
+});
+
 test('runs of different tiers are never compared with each other', () => {
   const rows = historyRows([
     result('light', '2026-10-24T10:00:00Z', 150, 3000),
