@@ -77,6 +77,10 @@ try {
       ...process.env,
       RIGMATCH_FORCE_BUILT_RENDERER: '1',
       RIGMATCH_BRIDGE_PORT: String(BRIDGE_PORT),
+      // The Chat button starts the real companion, which would save into the
+      // user's own chat history. This points it at the throwaway profile; the
+      // app passes the variable on to whatever it launches.
+      RIGMATCH_CHAT_DATA_DIR: join(profile, 'chat-data'),
     },
   });
 
