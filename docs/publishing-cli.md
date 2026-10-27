@@ -46,7 +46,7 @@ From a fresh folder, not the repo, so npm fetches the published package:
 npx rigmatch-fit@latest
 ```
 
-It should print "RigMatch fit check", this PC's card, and the table. `npx rigmatch-fit@latest --version` should print `0.10.0`.
+It should print "RigMatch fit check", this PC's card, and the table. `npx rigmatch-fit@latest --version` should print the version in `cli/package.json` (`0.10.1` as of the 0.10.1 release; `0.10.0` if you published before it).
 
 ## Next releases
 
