@@ -4,6 +4,17 @@ Every RigMatch release, newest first. These are the same notes the app shows in
 Update Center — this file and the GitHub release pages are generated from
 `src/data/releaseNotes.ts`, so there is only one place to write them.
 
+## 0.10.1 — Every Test, Listed
+_Beta build_
+
+- Results now has a list of every test you've run, along the side. Click one to open it again, whether it was a show (its ranking and answers), a Lab test (its checks) or a speed test (its numbers). "Overview" at the top takes you back to the Top Match screen. In a narrow window the list sits behind a "Tests" button. Opening a test never runs it.
+- On Results, the Runs tab is now "Running now" and shows only what's running. Finished tests are in the new list. Before you've run anything, Results says "No tests yet" with one button to test a model you have, or to get one.
+- On Simple Mode's Pick screen, models you already have now come first among models that fit equally well.
+- Speech and decision models no longer show up as chat picks. Models like phonon (speech), and d3 and kev (decision models, which score text instead of chatting), used to get a Fit grade and could land as your top match, in a show, or in Just Chat. They now carry a "Decision model" or "Audio model" tag, have no Fit grade, and stay out of lineups. In rigmatch-fit, decision models appear only under --all and --installed, and speech models don't appear.
+- RigMatch's list of what each Ollama model can do is refreshed for 263 families, including Bonsai 2 and Nemotron 3.5. Sizes and tags (vision, tools, thinking and so on) are current, so models land under the right filters.
+- RigScore on one PC can vary by 15 to 20 percent from one run to the next, not the 10 to 15 the 0.10.0 notes said. Allow for that when you compare two computers.
+- On a model's card, the 0 to 100 speed rating is now called "Speed". "Speed score" is the name of the My PC page, and the two looked like the same number.
+
 ## 0.10.0 — Fit Check
 _Beta build_
 
