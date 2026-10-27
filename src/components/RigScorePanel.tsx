@@ -15,7 +15,7 @@ import {
   type RigTierId,
 } from '../lib/rigScore';
 import { describeChange, historyRows, latestByTier } from '../lib/rigScoreHistory';
-import { rigHeadline, tierAvailability, tiersToRun, type RigProgress } from '../lib/rigScoreRun';
+import { describeDisturbance, rigHeadline, tierAvailability, tiersToRun, type RigProgress, type RigResult } from '../lib/rigScoreRun';
 import { RIG_SPEED_BANDS, bandRange, promptWaitSeconds, speedBand } from '../lib/rigScoreScale';
 import { rigScoreSession as session, useRigScoreSession } from '../lib/rigScoreLive';
 import type { GpuContention, OllamaStatus, PullProgressUpdate, SystemProfile } from '../types';
@@ -39,7 +39,9 @@ function progressText(progress: RigProgress | null): string {
   return `Timed run ${progress.run} of ${progress.of}…`;
 }
 
-function pointsText(points: RigPoints): string {
+function pointsText(points: RigPoints, disturbed = false): string {
+  // The points exist, but a run something else disturbed is not offered as a score.
+  if (disturbed) return 'Not a clean score';
   if (points.kind === 'points') return formatPoints(points.points);
   if (points.kind === 'pending') return 'After the reference is measured';
   return 'No points: not the same test as the reference';
@@ -152,16 +154,17 @@ export function RigScorePanel({
         <div className="rigscore-headline">
           {heroResult && heroPoints ? (
             <>
-              <span className="rigscore-kicker">RigScore · {heroTier.label} tier · {heroTier.model}</span>
-              {heroPoints.kind === 'points' ? (
+              <span className="rigscore-kicker">RigScore · {heroTier.label} tier · {heroTier.model}{heroResult.disturbed ? ' · disturbed run' : ''}</span>
+              {heroPoints.kind === 'points' && !heroResult.disturbed ? (
                 <p className="rigscore-number"><strong>{formatPoints(heroPoints.points)}</strong> <span>points</span></p>
               ) : (
                 <p className="rigscore-number"><strong>{formatTps(heroResult.measure.decodeTps)}</strong> <span>tok/s writing</span></p>
               )}
-              {heroBand && <p className="rigscore-band"><b>{heroBand.label}.</b> {heroBand.feel}</p>}
-              {heroPoints.kind === 'pending' && <p className="rigscore-sub">Points after the reference is measured.</p>}
-              {heroPoints.kind === 'not-comparable' && <p className="rigscore-sub">No points: {heroPoints.notes.join(' ')}</p>}
-              {heroPoints.kind === 'points' && heroPoints.notes.length > 0 && (
+              {heroResult.disturbed && <p className="rigscore-sub">Not a clean score. {describeDisturbance(heroResult.disturbedBy)}</p>}
+              {heroBand && !heroResult.disturbed && <p className="rigscore-band"><b>{heroBand.label}.</b> {heroBand.feel}</p>}
+              {!heroResult.disturbed && heroPoints.kind === 'pending' && <p className="rigscore-sub">Points after the reference is measured.</p>}
+              {!heroResult.disturbed && heroPoints.kind === 'not-comparable' && <p className="rigscore-sub">No points: {heroPoints.notes.join(' ')}</p>}
+              {!heroResult.disturbed && heroPoints.kind === 'points' && heroPoints.notes.length > 0 && (
                 <p className="rigscore-sub">Against the reference: {heroPoints.notes.join(' ')}</p>
               )}
               {heroResult.tier !== RIG_HEADLINE_TIER && (
@@ -211,6 +214,8 @@ export function RigScorePanel({
         <tbody>
           {RIG_TIERS.map((tier) => {
             const result = latest[tier.id];
+            // The newest run of the tier, which is not the result shown when it was disturbed.
+            const newest: RigResult | undefined = state.history.find((entry) => entry.tier === tier.id);
             const availability = tierAvailability(tier, machine, installed);
             const isRunning = running?.tier === tier.id;
             const isQueued = running?.queued.includes(tier.id) ?? false;
@@ -251,8 +256,12 @@ export function RigScorePanel({
                 </td>
                 <td data-label="Points">
                   {result
-                    ? <span className={rigPoints(result.measure, result.stamp).kind === 'points' ? 'figure' : 'rigscore-dim'}>{pointsText(rigPoints(result.measure, result.stamp))}</span>
+                    ? <span className={rigPoints(result.measure, result.stamp).kind === 'points' && !result.disturbed ? 'figure' : 'rigscore-dim'}>{pointsText(rigPoints(result.measure, result.stamp), result.disturbed)}</span>
                     : <span className="rigscore-dim">--</span>}
+                  {result?.disturbed && <small>{describeDisturbance(result.disturbedBy)}</small>}
+                  {newest?.disturbed && newest.id !== result?.id && (
+                    <small>The latest run was disturbed, so it is not used here. {describeDisturbance(newest.disturbedBy)}</small>
+                  )}
                   {result && result.gpuShare !== null && result.gpuShare < 0.99 && (
                     <small>Ran {Math.round(result.gpuShare * 100)}% on the graphics card; the rest spilled into system memory.</small>
                   )}
@@ -327,9 +336,10 @@ export function RigScorePanel({
                   <td data-label="Writing"><span className="figure">{formatTps(result.measure.decodeTps)} tok/s</span></td>
                   <td data-label="Reading the prompt"><span className="figure">{formatTps(result.measure.prefillTps)} tok/s</span></td>
                   <td data-label="Points">
-                    <span className={rigPoints(result.measure, result.stamp).kind === 'points' ? 'figure' : 'rigscore-dim'}>
-                      {pointsText(rigPoints(result.measure, result.stamp))}
+                    <span className={rigPoints(result.measure, result.stamp).kind === 'points' && !result.disturbed ? 'figure' : 'rigscore-dim'}>
+                      {pointsText(rigPoints(result.measure, result.stamp), result.disturbed)}
                     </span>
+                    {result.disturbed && <small>Disturbed: {(result.disturbedBy ?? []).join('; ') || 'something else used the graphics card'}.</small>}
                   </td>
                   <td data-label="Latest run against this one">
                     {isLatest && <span className="rigscore-dim">Latest</span>}

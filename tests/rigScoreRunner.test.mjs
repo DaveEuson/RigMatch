@@ -417,3 +417,207 @@ test('the main process runs one speed test at a time, never beside a show, on th
   assert.match(preload, /cancelRigScore: \(progressId\) => ipcRenderer\.invoke\('rigscore:cancel', progressId\)/);
   assert.match(preload, /ipcRenderer\.on\('rigscore:progress', listener\)/);
 });
+
+// ---- The mid-run watch: did a program that is not Ollama's come to use the card? ----------------------
+
+const { createGpuWatch } = require('../electron/gpuProbe.cjs');
+
+/** A watch that writes down when it is called, what was in flight, and answers from `verdicts[n]` for its nth check. */
+function stubWatch(ollama, verdicts = []) {
+  const events = [];
+  let inFlight = 0;
+  const original = ollama.fetchJson;
+  ollama.fetchJson = async (url, options) => {
+    const generating = new URL(url).pathname === '/api/generate';
+    if (generating) { inFlight += 1; events.push('generate'); }
+    try { return await original(url, options); } finally { if (generating) inFlight -= 1; }
+  };
+  let checks = 0;
+  return {
+    events,
+    inFlightAtCall: [],
+    async start(args) { this.inFlightAtCall.push(inFlight); this.machine = args.machine; events.push('start'); },
+    async check() { this.inFlightAtCall.push(inFlight); events.push('check'); const verdict = verdicts[checks]; checks += 1; return verdict ?? { disturbed: false, reasons: [] }; },
+  };
+}
+
+const withoutWatch = async () => {
+  const ollama = fakeOllama({ generate: (_body, index) => reply(100 + index, 3000, index === 0 ? 1.5 : 0.02) });
+  return { ollama, answer: await run(ollama) };
+};
+
+test('a watched run that nothing disturbs scores exactly what an unwatched one does, with the same saved shape and the same requests to Ollama', async () => {
+  const plain = await withoutWatch();
+  const ollama = fakeOllama({ generate: (_body, index) => reply(100 + index, 3000, index === 0 ? 1.5 : 0.02) });
+  const watch = stubWatch(ollama);
+  const watched = await run(ollama, { watch });
+
+  assert.deepEqual(watched, plain.answer, 'the reply, every field of it');
+  assert.deepEqual(Object.keys(watched), ['status', 'runs', 'coldLoadSeconds', 'gpuShare', 'ollamaVersion', 'modelDigest', 'quantization', 'machine'], 'no key added to a clean reply');
+  assert.deepEqual(ollama.calls, plain.ollama.calls, 'the same requests to Ollama, in the same order: no extra load, unload or listing');
+  assert.deepEqual(ollama.unloads, plain.ollama.unloads);
+
+  // And what the screen saves from it: the same result, to the key.
+  const before = assembleTierResult(light, plain.answer, '2026-10-27T10:00:00.000Z');
+  const after = assembleTierResult(light, watched, '2026-10-27T10:00:00.000Z');
+  assert.deepEqual(after, before);
+  assert.deepEqual(Object.keys(after.result), ['id', 'completedAt', 'tier', 'measure', 'stamp', 'gpuShare'], 'the shape a result has always had');
+  assert.deepEqual(after.result.measure, before.result.measure);
+  assert.equal(JSON.stringify(after.result), JSON.stringify(before.result), 'saved byte for byte the same');
+});
+
+test('the watch starts before the model loads, looks after every request and never inside one', async () => {
+  const ollama = fakeOllama({ generate: () => reply(100, 3000) });
+  const watch = stubWatch(ollama);
+  await run(ollama, { watch });
+  assert.deepEqual(watch.events, ['start', 'generate', 'check', 'generate', 'check', 'generate', 'check', 'generate', 'check'], 'a warm-up and three timed runs, each followed by a look');
+  assert.ok(watch.inFlightAtCall.every((count) => count === 0), 'no request was in flight when it looked');
+  assert.deepEqual(watch.machine, machine, 'it is told which card this is');
+});
+
+test('a run something else disturbed keeps its numbers, and says so, once per reason', async () => {
+  const plain = await withoutWatch();
+  const ollama = fakeOllama({ generate: (_body, index) => reply(100 + index, 3000, index === 0 ? 1.5 : 0.02) });
+  const watch = stubWatch(ollama, [
+    { disturbed: false, reasons: [] },
+    { disturbed: true, reasons: ['the graphics card was 91% busy between the runs'] },
+    { disturbed: true, reasons: ['the graphics card was 91% busy between the runs', 'OBS Studio started while the test ran'] },
+  ]);
+  const answer = await run(ollama, { watch });
+  assert.equal(answer.status, 'done');
+  assert.equal(answer.disturbed, true);
+  assert.deepEqual(answer.disturbedBy, ['the graphics card was 91% busy between the runs', 'OBS Studio started while the test ran']);
+  const { disturbed, disturbedBy, ...numbers } = answer;
+  assert.deepEqual(numbers, plain.answer, 'every number is the one an undisturbed run gives: nothing is scored differently');
+  const outcome = assembleTierResult(light, answer, '2026-10-27T10:00:00.000Z');
+  assert.equal(outcome.kind, 'measured', 'kept, not thrown away');
+  assert.equal(outcome.result.disturbed, true);
+  assert.deepEqual(outcome.result.disturbedBy, ['the graphics card was 91% busy between the runs', 'OBS Studio started while the test ran']);
+  assert.deepEqual(outcome.result.measure, assembleTierResult(light, plain.answer, 'x').result.measure);
+  assert.equal(assembleModelResult('gemma3:12b', answer).disturbed, true);
+});
+
+test('a watch that cannot start, fails or throws leaves the run unwatched and untouched', async () => {
+  const plain = await withoutWatch();
+  for (const watch of [
+    { start: async () => { throw new Error('no tool'); }, check: async () => { throw new Error('never reached'); } },
+    { start: async () => {}, check: async () => { throw new Error('boom'); } },
+    { start: async () => {}, check: () => { throw new Error('sync boom'); } },
+    { start: async () => {}, check: async () => null },
+  ]) {
+    const ollama = fakeOllama({ generate: (_body, index) => reply(100 + index, 3000, index === 0 ? 1.5 : 0.02) });
+    assert.deepEqual(await run(ollama, { watch }), plain.answer);
+  }
+});
+
+test('Stop while the card is being looked at is a stop, and the model is still unloaded', async () => {
+  const controller = new AbortController();
+  const ollama = fakeOllama({ generate: () => reply(100, 3000) });
+  const watch = { start: async () => {}, check: async () => { controller.abort(); return { disturbed: true, reasons: ['x'] }; } };
+  const answer = await run(ollama, { watch, signal: controller.signal });
+  assert.deepEqual(answer, { status: 'stopped' });
+  assert.deepEqual(ollama.unloads, ['llama3.2:3b']);
+});
+
+test("another program's model in Ollama still means nothing is kept, watch or no watch", async () => {
+  const ollama = fakeOllama({
+    generate: (_body, index, state) => {
+      if (index === 2) state.loaded.push({ name: 'gemma3:4b', size: 100, size_vram: 100, expires_at: THEIR_EXPIRY });
+      return reply(100, 3000);
+    },
+  });
+  const answer = await run(ollama, { watch: stubWatch(ollama) });
+  assert.deepEqual(answer, { status: 'shared', loadedModels: ['gemma3:4b'], sameModel: false });
+});
+
+/** nvidia-smi and tasklist, answered from the state a test sets: [util, usedMb] and the process rows. */
+function fakeCard() {
+  const state = { reading: [20, 2500], processes: ['explorer.exe'], asked: [] };
+  const cardRun = async (command) => {
+    state.asked.push(command);
+    if (command === 'nvidia-smi') return { output: `${state.reading[1]}, 12282, ${state.reading[0]}`, error: null };
+    if (command === 'tasklist') return { output: state.processes.map((name) => `"${name}","1","Console","1","1 K"`).join('\r\n'), error: null };
+    return { output: '', error: 'not found' };
+  };
+  return { state, run: cardRun };
+}
+const card = (cardRun, extra = {}) => ({ run: cardRun, platform: 'win32', arch: 'x64', gpuName: 'NVIDIA GeForce RTX 4070', ...extra });
+const quickWatch = (context) => createGpuWatch(context, { settleMs: 0, samples: 2, gapMs: 0 });
+
+test('the real watch: a quiet card, a model loading onto it and ordinary churn are not a program joining', async () => {
+  const { state, run: cardRun } = fakeCard();
+  const watch = quickWatch(card(cardRun));
+  await watch.start({ machine });
+  // The model's own weights arrive between the baseline and the first look: 6 GB, and a busy desktop.
+  state.reading = [41, 8700];
+  assert.deepEqual(await watch.check(), { disturbed: false, reasons: [] }, 'the first look after the load is what memory is then compared with');
+  state.reading = [38, 8900];
+  assert.equal((await watch.check()).disturbed, false, '200 MB of churn');
+  state.reading = [44, 8000];
+  assert.equal((await watch.check()).disturbed, false, 'a card that frees some is no one joining');
+});
+
+test('the real watch: a program that takes the card, or its memory, or opens, is seen', async () => {
+  const { state, run: cardRun } = fakeCard();
+  const watch = quickWatch(card(cardRun));
+  await watch.start({ machine });
+  state.reading = [25, 8000];
+  await watch.check();
+
+  state.reading = [92, 8100];
+  const busy = await watch.check();
+  assert.equal(busy.disturbed, true);
+  assert.deepEqual(busy.reasons, ['the graphics card was 92% busy between the runs']);
+
+  state.reading = [25, 9300];
+  const memory = await watch.check();
+  assert.deepEqual(memory.reasons, ['about 1.3 GB more graphics memory was in use than when the model had loaded']);
+
+  state.reading = [25, 8000];
+  state.processes = ['explorer.exe', 'obs64.exe'];
+  assert.deepEqual((await watch.check()).reasons, ['OBS Studio started while the test ran']);
+});
+
+test('the real watch: a program that was already open is not one that joined, and a card it cannot read is judged by what it can see', async () => {
+  const { state, run: cardRun } = fakeCard();
+  state.processes = ['explorer.exe', 'steamwebhelper.exe'];
+  const watch = quickWatch(card(cardRun));
+  await watch.start({ machine });
+  assert.equal((await watch.check()).disturbed, false, 'Steam was open when the test began');
+
+  // No nvidia-smi on a Linux box with no amdgpu files: the card is not read, so only the programs can say.
+  const other = { processes: ['bash'] };
+  const unreadable = async (command) => (command === 'ps' ? { output: other.processes.join('\n'), error: null } : { output: '', error: 'not found' });
+  const blind = quickWatch({ run: unreadable, platform: 'linux', arch: 'x64', gpuName: 'Intel(R) Arc(TM) A770 Graphics', sysfsRoot: 'Z:\\no-such-sys' });
+  await blind.start({ machine });
+  assert.deepEqual(await blind.check(), { disturbed: false, reasons: [] }, 'it does not say the card is idle: it says nothing');
+  other.processes = ['bash', 'blender'];
+  assert.deepEqual((await blind.check()).reasons, ['Blender started while the test ran']);
+});
+
+test("the real watch: on a shared memory pool only the card's busy figure counts, and it waits for the card to settle", async () => {
+  const { state, run: cardRun } = fakeCard();
+  const watch = createGpuWatch(card(cardRun, { unifiedMemory: true }), { settleMs: 60, samples: 1, gapMs: 0 });
+  await watch.start({ machine });
+  state.reading = [10, 2000];
+  await watch.check();
+  state.reading = [10, 60000];
+  const started = Date.now();
+  assert.equal((await watch.check()).disturbed, false, 'RAM pressure is not a program on the card');
+  assert.ok(Date.now() - started >= 55, 'the card is given time to go quiet before it is read');
+
+  assert.equal(await createGpuWatch(card(cardRun), { settleMs: 0 }).check(), null, 'a watch that was never started has no baseline and no verdict');
+  const stopping = new AbortController();
+  stopping.abort();
+  assert.equal(await watch.check({ signal: stopping.signal }), null, 'Stop ends the wait');
+});
+
+test('the main process and the command line give the runner a watch, and the runner takes one', async () => {
+  const { readFileSync } = await import('node:fs');
+  const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf-8').replace(/\r\n/g, '\n');
+  const main = read('../electron/main.cjs');
+  const runner = main.slice(main.indexOf('async function runRigScore('), main.indexOf('\n}\n', main.indexOf('async function runRigScore(')));
+  assert.match(runner, /watch: gpuProbe\.createGpuWatch\(/);
+  assert.match(read('../cli/measureCommand.ts'), /watch: createCardWatch\(/);
+  assert.match(read('../electron/rigScoreRunner.cjs'), /await watching\.start\(\{ machine \}\)/);
+});

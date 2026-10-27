@@ -186,8 +186,85 @@ async function listProcessNames(run, platform = process.platform) {
   return lines(output).map((line) => line.trim()).filter(Boolean);
 }
 
+/**
+ * How long to let the card go quiet after a request before reading it for the
+ * mid-run check. nvidia-smi's utilization is "the past sample period", between
+ * 1/6 s and 1 s, so a reading taken sooner would still contain the model's own
+ * work and read as another program's.
+ */
+const WATCH_SETTLE_MS = 1100;
+
+const pause = (ms, signal) => new Promise((resolve) => {
+  if (ms <= 0 || signal?.aborted) { resolve(); return; }
+  const timer = setTimeout(done, ms);
+  function done() { clearTimeout(timer); signal?.removeEventListener?.('abort', done); resolve(); }
+  signal?.addEventListener?.('abort', done, { once: true });
+});
+
+/**
+ * A watch for a speed test (rigScoreRunner.cjs takes it as `watch`): did
+ * something join the graphics card while the test ran? start() is called once
+ * before the model loads and records what the card and the open programs were
+ * doing then; check() is called between the test's requests, never during one,
+ * and says whether anything has joined since (gpuContention.judgeMidRun).
+ *
+ * It reads and lists, and nothing else: no request to Ollama, no model loaded
+ * or unloaded, no effect on what the test times. A card it cannot read is
+ * watched for known programs only. Any failure is "no verdict", never an error
+ * in the run.
+ *
+ * `context` is what sampleGpuLoad takes, or a function from the machine reading
+ * the runner has ({ gpu, isUnifiedMemory, ... }) to it; it may also say
+ * `unifiedMemory`, to leave the memory check out on a shared pool.
+ */
+function createGpuWatch(context, { settleMs = WATCH_SETTLE_MS, samples = 2, gapMs = 150 } = {}) {
+  let ctx = null;
+  let baseline = null;
+  let baselineApps = [];
+  let reference = null;
+
+  const apps = async () => contention.matchKnownGpuApps(await listProcessNames(ctx.run, ctx.platform ?? process.platform));
+
+  return {
+    async start({ machine } = {}) {
+      ctx = typeof context === 'function' ? await context(machine ?? {}) : context;
+      baseline = (await sampleGpuLoad(ctx, { samples: 3, gapMs: 150 })).reading;
+      baselineApps = await apps();
+      reference = null;
+    },
+
+    async check({ signal } = {}) {
+      if (!ctx) return null;
+      try {
+        await pause(settleMs, signal);
+        if (signal?.aborted) return null;
+        const { reading } = await sampleGpuLoad(ctx, { samples, gapMs });
+        const verdict = contention.judgeMidRun({
+          baseline,
+          reference,
+          current: reading,
+          baselineApps,
+          currentApps: await apps(),
+          unifiedMemory: Boolean(ctx.unifiedMemory),
+        });
+        // The first reading after the model has loaded is what memory is compared
+        // with from then on, lowered if the card frees some: the model's own
+        // weights are in it, and so is anything that was already there.
+        if (reading && Number.isFinite(reading.vramUsedMb)) {
+          reference = reference ? { ...reference, vramUsedMb: Math.min(reference.vramUsedMb, reading.vramUsedMb) } : reading;
+        }
+        return verdict;
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
 module.exports = {
+  WATCH_SETTLE_MS,
   WINDOWS_PROBE_BODY,
+  createGpuWatch,
   listProcessNames,
   readAmdSysfs,
   sampleGpuLoad,

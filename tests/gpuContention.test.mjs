@@ -13,6 +13,10 @@ const {
   pickWindowsAdapter,
   parseAmdSysfs,
   describeUnreadable,
+  judgeMidRun,
+  MIDRUN_UTILIZATION_RISE,
+  MIDRUN_VRAM_GROWTH_MB,
+  MIDRUN_VRAM_GROWTH_SHARE,
   matchKnownGpuApps,
   assessGpuContention,
   describeGpuContention,
@@ -509,6 +513,57 @@ test('the median keeps a reading marked as a shared pool', () => {
   const shared = { vramUsedMb: 40, vramTotalMb: 2022, utilizationPercent: 4, memoryShared: true, source: 'windows-counters' };
   assert.equal(medianReading([shared, { ...shared, utilizationPercent: 6 }]).memoryShared, true);
   assert.equal('memoryShared' in medianReading([rtx(2521, 20)]), false);
+});
+
+// ── Mid-run: did something join the card while a test ran? ──────────────────
+
+const midRun = (current, extra = {}) => judgeMidRun({
+  baseline: { utilizationPercent: 20, vramUsedMb: 2500, vramTotalMb: 12282 },
+  reference: { utilizationPercent: 25, vramUsedMb: 8000, vramTotalMb: 12282 },
+  current: { vramTotalMb: 12282, ...current },
+  ...extra,
+});
+
+test('mid-run: utilization counts when it is heavy, or busy and well above where it began', () => {
+  assert.equal(midRun({ utilizationPercent: 44, vramUsedMb: 8000 }).disturbed, false, 'the top of normal desktop noise');
+  assert.equal(midRun({ utilizationPercent: 46, vramUsedMb: 8000 }).disturbed, true, 'busy, and 26 points above a baseline of 20');
+  assert.deepEqual(midRun({ utilizationPercent: 91.6, vramUsedMb: 8000 }).reasons, ['the graphics card was 92% busy between the runs']);
+  // A desktop that began at 40% is not "joined" by 48% or 58%, but is by 60%.
+  const busyStart = { baseline: { utilizationPercent: 40, vramUsedMb: 2500, vramTotalMb: 12282 } };
+  assert.equal(midRun({ utilizationPercent: 48, vramUsedMb: 8000 }, busyStart).disturbed, false);
+  assert.equal(midRun({ utilizationPercent: 58, vramUsedMb: 8000 }, busyStart).disturbed, false);
+  assert.equal(midRun({ utilizationPercent: 60, vramUsedMb: 8000 }, busyStart).disturbed, true);
+  assert.equal(midRun({ utilizationPercent: 80, vramUsedMb: 8000 }, { baseline: null }).disturbed, true, 'no baseline reading: from zero');
+  // A card hammered between the requests is hammered for the test, however long the program had been there:
+  // the next tier of a test starts with it already in its baseline.
+  const alreadyThere = { baseline: { utilizationPercent: 95, vramUsedMb: 9000, vramTotalMb: 12282 } };
+  assert.equal(midRun({ utilizationPercent: 96, vramUsedMb: 8000 }, alreadyThere).disturbed, true);
+  assert.equal(midRun({ utilizationPercent: 60, vramUsedMb: 8000 }, alreadyThere).disturbed, false, 'only the gray zone is judged against where it began');
+  assert.equal(MIDRUN_UTILIZATION_RISE, 20);
+});
+
+test('mid-run: memory counts as a step beyond ordinary churn, scaled to the card, and never on a shared pool', () => {
+  assert.equal(midRun({ utilizationPercent: 10, vramUsedMb: 8000 + 1023 }).disturbed, false, 'under a gigabyte is a browser tab');
+  assert.equal(midRun({ utilizationPercent: 10, vramUsedMb: 8000 + 1100 }).disturbed, true);
+  assert.deepEqual(midRun({ utilizationPercent: 10, vramUsedMb: 8000 + 2150 }).reasons, ['about 2.1 GB more graphics memory was in use than when the model had loaded']);
+  // On a 48 GB card the step is 8% of it, 3.8 GB.
+  const big = (used) => judgeMidRun({ reference: { vramUsedMb: 20000 }, current: { vramUsedMb: used, vramTotalMb: 49152, utilizationPercent: 5 } });
+  assert.equal(big(20000 + 3000).disturbed, false);
+  assert.equal(big(20000 + 4000).disturbed, true);
+  // No earlier reading to compare with (the first look), a shared pool, or a memory slice marked as shared: not judged.
+  assert.equal(judgeMidRun({ current: { vramUsedMb: 50000, vramTotalMb: 12282, utilizationPercent: 5 } }).disturbed, false);
+  assert.equal(midRun({ utilizationPercent: 10, vramUsedMb: 30000 }, { unifiedMemory: true }).disturbed, false);
+  assert.equal(midRun({ utilizationPercent: 10, vramUsedMb: 30000, memoryShared: true }).disturbed, false);
+  assert.equal(MIDRUN_VRAM_GROWTH_MB, 1024);
+  assert.equal(MIDRUN_VRAM_GROWTH_SHARE, 0.08);
+});
+
+test('mid-run: a known graphics-heavy program that opened since the start is named; one that was already open is not', () => {
+  assert.deepEqual(judgeMidRun({ baselineApps: ['Steam'], currentApps: ['Steam', 'OBS Studio'] }), { disturbed: true, reasons: ['OBS Studio started while the test ran'] });
+  assert.deepEqual(judgeMidRun({ baselineApps: ['Steam'], currentApps: ['Steam'] }), { disturbed: false, reasons: [] });
+  assert.deepEqual(judgeMidRun({ currentApps: ['Blender', 'HandBrake'] }).reasons, ['Blender and HandBrake started while the test ran']);
+  assert.deepEqual(judgeMidRun({}), { disturbed: false, reasons: [] }, 'nothing to go on says nothing');
+  assert.deepEqual(judgeMidRun({ current: null, reference: null }), { disturbed: false, reasons: [] });
 });
 
 test('systemd-resolved is not DaVinci Resolve, but Resolve is', () => {

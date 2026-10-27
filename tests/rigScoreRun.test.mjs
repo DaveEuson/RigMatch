@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 const {
   RIG_TIERS, RIG_WORKLOAD, RIG_REFERENCES, rigPoints, referenceStamp,
 } = await import('../src/lib/rigScore.ts');
-const { rigRunRequest, tierAvailability, tiersToRun, assembleTierResult, rigHeadline } = await import('../src/lib/rigScoreRun.ts');
+const {
+  rigRunRequest, tierAvailability, tiersToRun, assembleTierResult, assembleModelResult, describeDisturbance, rigHeadline,
+} = await import('../src/lib/rigScoreRun.ts');
 const { formatDay } = await import('../src/lib/format.ts');
 const { RIG_PASSAGE, rigPrompt } = await import('../src/lib/rigScorePassage.ts');
 
@@ -75,6 +77,25 @@ test('a finished run becomes a measure and a stamp', () => {
   assert.equal(result.stamp.modelDigest, 'sha256-aaa');
   assert.equal(result.stamp.driverVersion, '610.88');
   assert.equal(result.measure.loadSeconds, 1.2, 'the cold load from the warm-up, not the 0.02 s of the timed runs');
+});
+
+test('a finished run nothing disturbed has no disturbance fields at all; a disturbed one keeps its numbers and its reasons', () => {
+  const runs = [timed(140, 3000), timed(150, 3100), timed(30, 2900)];
+  const clean = assembleTierResult(tier('light'), done(runs), '2026-10-24T21:00:00.000Z');
+  assert.deepEqual(Object.keys(clean.result), ['id', 'completedAt', 'tier', 'measure', 'stamp', 'gpuShare']);
+  assert.equal('disturbed' in assembleModelResult('gemma3:12b', done(runs)), false);
+  // `disturbed: false` on a reply (a runner that says it explicitly) is a clean run too.
+  assert.deepEqual(assembleTierResult(tier('light'), { ...done(runs), disturbed: false }, '2026-10-24T21:00:00.000Z'), clean);
+
+  const reasons = ['OBS Studio started while the test ran'];
+  const disturbed = assembleTierResult(tier('light'), { ...done(runs), disturbed: true, disturbedBy: [...reasons, '', 7] }, '2026-10-24T21:00:00.000Z');
+  assert.equal(disturbed.kind, 'measured');
+  assert.deepEqual(disturbed.result.disturbedBy, reasons, 'only real strings are kept');
+  const { disturbed: flag, disturbedBy, ...rest } = disturbed.result;
+  assert.equal(flag, true);
+  assert.deepEqual(rest, clean.result, 'the numbers, the stamp and the id are the clean run\'s');
+  assert.match(describeDisturbance(reasons), /^Something else used the graphics card while this ran \(OBS Studio started while the test ran\), so the numbers are lower than this PC can do\./);
+  assert.match(describeDisturbance(undefined), /^Something else used the graphics card while this ran, so/);
 });
 
 test('too few usable runs is a failure with no score, never a zero', () => {
