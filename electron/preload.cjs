@@ -103,6 +103,14 @@ const api = {
     ipcRenderer.on('rigscore:progress', listener);
     return () => ipcRenderer.removeListener('rigscore:progress', listener);
   },
+  // Context endurance: one model at 2K, 8K and 16K (electron/enduranceRunner.cjs).
+  // Stop is cancelRigScore: it shares the speed test's slot.
+  runEndurance: (request) => ipcRenderer.invoke('endurance:run', request),
+  onEnduranceProgress: (callback) => {
+    const listener = (_event, update) => callback(update);
+    ipcRenderer.on('endurance:progress', listener);
+    return () => ipcRenderer.removeListener('endurance:progress', listener);
+  },
   onPullProgress: (callback) => {
     const listener = (_event, update) => callback(update);
     ipcRenderer.on('ollama:pullProgress', listener);

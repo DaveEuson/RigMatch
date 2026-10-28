@@ -7,6 +7,7 @@
  * sample speeds and a stamp that names itself as the preview, so a sample can
  * never pass for a measurement.
  */
+import type { EnduranceProgress, EnduranceRunReply, EnduranceRunRequest } from './contextEndurance.ts';
 import type { RigProgress, RigRunReply, RigRunRequest } from './rigScoreRun.ts';
 
 /** Sample writing and prompt speeds per model, roughly an RTX 3060's. */
@@ -18,6 +19,7 @@ const SAMPLE_SPEEDS: Record<string, { decode: number; prefill: number }> = {
 
 export function createRigScoreDemo(installed: () => string[], vramGb: number) {
   const listeners = new Set<(update: RigProgress) => void>();
+  const enduranceListeners = new Set<(update: EnduranceProgress) => void>();
   const canceled = new Set<string>();
   const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
   const emit = (update: RigProgress) => listeners.forEach((listener) => listener(update));
@@ -54,6 +56,45 @@ export function createRigScoreDemo(installed: () => string[], vramGb: number) {
         quantization: 'Q4_K_M',
         machine,
       };
+    },
+    /** Sample stages: the largest sample model spills at 16K, the others hold up. */
+    async runEndurance(request: EnduranceRunRequest): Promise<EnduranceRunReply> {
+      const machine = { gpu: 'Sample graphics card (browser preview)', vramGb, appVersion: 'preview' };
+      const say = (update: Omit<EnduranceProgress, 'id'>) => enduranceListeners.forEach((listener) => listener({ id: request.progressId, ...update }));
+      say({ phase: 'checking' });
+      await wait(250);
+      if (!installed().includes(request.model)) return { status: 'not-installed' };
+      say({ phase: 'calibrating' });
+      await wait(500);
+      const speeds = SAMPLE_SPEEDS[request.model] ?? { decode: 20, prefill: 500 };
+      const spills = speeds.decode < 30;
+      const stages: Extract<EnduranceRunReply, { status: 'done' }>['stages'] = [];
+      for (const [index, stage] of request.stages.entries()) {
+        if (canceled.delete(request.progressId)) return { status: 'stopped' };
+        say({ phase: 'stage', stage: stage.id, index: index + 1, of: request.stages.length });
+        await wait(450);
+        const kept = [1, 0.88, spills ? 0.31 : 0.64][index] ?? 0.6;
+        const onCard = spills && index === 2 ? 0.87 : 1;
+        stages.push({
+          id: stage.id,
+          numCtx: stage.numCtx,
+          targetTokens: stage.targetTokens,
+          status: 'ok',
+          promptTokens: stage.targetTokens,
+          readingTps: speeds.prefill * (onCard < 1 ? 0.2 : 1),
+          writingTps: speeds.decode * kept,
+          loadSeconds: index === 0 ? 1.8 : 0.6,
+          gpuShare: onCard,
+          contextReported: stage.numCtx,
+          passkeyKept: true,
+          sizeOk: true,
+        });
+      }
+      return { status: 'done', stages, tokensPerLine: 33, numPredict: request.numPredict, quantization: 'Q4_K_M', machine };
+    },
+    onEnduranceProgress(callback: (update: EnduranceProgress) => void) {
+      enduranceListeners.add(callback);
+      return () => { enduranceListeners.delete(callback); };
     },
     async cancelRigScore(progressId: string) {
       canceled.add(progressId);

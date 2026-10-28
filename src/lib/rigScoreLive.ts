@@ -9,12 +9,13 @@
  */
 import { useSyncExternalStore } from 'react';
 import { agentArcadeApi } from '../api';
-import { createRigSession, type RigSessionState } from './rigScoreSession.ts';
+import { createRigSession, rigScoreBusy, type RigSessionState } from './rigScoreSession.ts';
 
 export const rigScoreSession = createRigSession(agentArcadeApi);
+export { rigScoreBusy };
 
-/** What a show or test started during a speed test says instead of starting. */
-export const RIG_SCORE_BUSY = 'The speed test on My PC is using the graphics card. This can start when it finishes, or stop it there.';
+/** What a show or test started during a speed test or a context check says instead of starting. */
+export const RIG_SCORE_BUSY = 'The speed test or context check on My PC is using the graphics card. This can start when it finishes, or stop it there.';
 
 export function useRigScoreSession(): RigSessionState {
   return useSyncExternalStore(rigScoreSession.subscribe, rigScoreSession.getState);

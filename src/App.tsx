@@ -316,7 +316,7 @@ import { attachmentBlockedReason } from './lib/chatCapabilityGuard';
 import { usePullControl } from './hooks/usePullControl';
 import { useGpuContention } from './hooks/useGpuContention';
 import { gpuBusyNote } from './lib/gpuBusyNote';
-import { RIG_SCORE_BUSY, rigScoreSession, useRigScoreSession } from './lib/rigScoreLive';
+import { RIG_SCORE_BUSY, rigScoreBusy, rigScoreSession, useRigScoreSession } from './lib/rigScoreLive';
 import { pullOutcome } from './lib/pullControl';
 import './App.css';
 import './styles/shell.css';
@@ -1870,9 +1870,9 @@ function App() {
   };
   /** The vision model that checks pictures and clips, from what is installed. */
   const pictureJudge = useMemo(() => judgeCandidates(ollama.models)[0] ?? '', [ollama.models]);
-  // The speed test on My PC (lib/rigScoreLive.ts) holds the card too.
+  // The speed test and the context check on My PC (lib/rigScoreLive.ts) hold the card too.
   const rigSession = useRigScoreSession();
-  const rigScoreRunning = Boolean(rigSession.running);
+  const rigScoreRunning = rigScoreBusy(rigSession);
   // Every test on this computer, for the Tests column beside Results. A blind
   // show's contestants stay out of it until the reveal.
   const testEntries = useMemo(
@@ -2434,7 +2434,7 @@ function App() {
 
   const startBenchmark = useCallback(async (modelOverride?: string | null, questionsOverride?: BenchmarkQuestion[]) => {
     // The main process refuses it during a speed test; say so before trying.
-    if (rigScoreSession.getState().running) {
+    if (rigScoreBusy(rigScoreSession.getState())) {
       tellUser(RIG_SCORE_BUSY);
       return;
     }
@@ -3432,7 +3432,7 @@ function App() {
   const runListTest = useCallback(async (questionsOverride?: BenchmarkQuestion[]): Promise<boolean> => {
     // The main process refuses every contestant during a speed test, and the
     // show would end with no results; say so before starting.
-    if (rigScoreSession.getState().running) {
+    if (rigScoreBusy(rigScoreSession.getState())) {
       tellUser(RIG_SCORE_BUSY);
       return false;
     }
@@ -4918,7 +4918,7 @@ function App() {
     <>
       <i className="running-dot" aria-hidden="true" />
       <button type="button" className="running-open" onClick={() => { if (uiMode === 'advanced') { selectNav('lan'); setMyPcView('speed'); } }}>
-        Running the speed test
+        {rigSession.endurance ? 'Running the context check' : 'Running the speed test'}
       </button>
       <button type="button" className="running-stop" onClick={rigScoreSession.stop}>Stop</button>
     </>

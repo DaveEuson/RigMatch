@@ -187,6 +187,9 @@ export type CardNote = {
   reasons: string[];
   /** Known graphics-heavy programs that are open, whatever the card is doing. */
   apps: string[];
+  /** The readings themselves (the median of the samples), null when the card could not be read. */
+  vramUsedPercent: number | null;
+  utilizationPercent: number | null;
   /** The sentence for the intro: the app's "Before starting: ..." if busy, a softer line if a program is open, "could not check" if unknown, else empty. */
   message: string;
   /** What the reading came from ('nvidia-smi', 'windows-counters', 'amdgpu-sysfs', 'ioreg'); absent when there was none. */
@@ -199,7 +202,7 @@ export type CommandRunner = (command: string, args: string[], timeoutMs: number)
 
 const assessCard = contention.assessGpuContention as (
   reading: unknown, apps?: string[], options?: { unifiedMemory?: boolean; reason?: string },
-) => { level: CardNote['level']; reasons: string[]; apps: string[]; reason?: string };
+) => { level: CardNote['level']; reasons: string[]; apps: string[]; vramUsedPercent: number | null; utilizationPercent: number | null; reason?: string };
 
 type GpuLoad = { reading: { source: string } | null; source: string | null; unreadable: string | null };
 const sampleGpuLoad = probe.sampleGpuLoad as (
@@ -219,7 +222,7 @@ export async function checkCard(
   const load = await sampleGpuLoad({ run, platform, arch, gpuName, sysfsRoot }, { samples, gapMs });
   if (!load.reading) {
     const unreadable = assessCard(null, [], { reason: load.unreadable ?? undefined });
-    return { level: 'unknown', reasons: [], apps: [], message: contention.describeGpuContention(unreadable), ...(load.unreadable ? { reason: load.unreadable } : {}) };
+    return { level: 'unknown', reasons: [], apps: [], vramUsedPercent: null, utilizationPercent: null, message: contention.describeGpuContention(unreadable), ...(load.unreadable ? { reason: load.unreadable } : {}) };
   }
   const apps = contention.matchKnownGpuApps(await listProcessNames(run, platform).catch(() => []));
   const assessment = assessCard(load.reading, apps, { unifiedMemory });
@@ -233,6 +236,8 @@ export async function checkCard(
     level: measurablyBusy ? assessment.level : 'clear',
     reasons: assessment.reasons,
     apps: assessment.apps,
+    vramUsedPercent: assessment.vramUsedPercent,
+    utilizationPercent: assessment.utilizationPercent,
     ...(load.source ? { source: load.source } : {}),
     message: measurablyBusy
       ? contention.describeGpuContention(assessment)
@@ -495,10 +500,10 @@ export async function measureModel(
 // ---- Printing ------------------------------------------------------------------
 
 /** Plain ASCII numbers with a comma, whatever the locale: the output stays ASCII. */
-const number = (value: number) => Math.round(value).toLocaleString('en-US');
+export const number = (value: number) => Math.round(value).toLocaleString('en-US');
 /** As the app rounds a speed: a tenth below 20, whole above (format.ts formatThroughputValue). */
-const tps = (value: number) => (value >= 20 ? number(value) : String(Math.round(value * 10) / 10));
-const pad = (text: string, width: number) => text + ' '.repeat(Math.max(0, width - text.length));
+export const tps = (value: number) => (value >= 20 ? number(value) : String(Math.round(value * 10) / 10));
+export const pad = (text: string, width: number) => text + ' '.repeat(Math.max(0, width - text.length));
 
 function pointsCell(points: RigPoints | null): string {
   if (!points) return '-';
@@ -539,7 +544,7 @@ export type PrintOptions = {
  * a known program merely being open, Steam on most gaming PCs, is said before
  * the runs, as the app says it, but does not mean the runs were disturbed.
  */
-function afterNote(card: CardNote | null | undefined): string[] {
+export function afterNote(card: CardNote | null | undefined): string[] {
   if (!card || (card.level !== 'busy' && card.level !== 'heavy') || card.reasons.length === 0) return [];
   const reasons = card.reasons.join(' and ');
   const named = card.apps.length ? ` ${card.apps.join(' and ')} ${card.apps.length === 1 ? 'is' : 'are'} running.` : '';
