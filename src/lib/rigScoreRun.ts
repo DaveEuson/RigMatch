@@ -60,6 +60,13 @@ export type RigRunReply =
     modelDigest?: string;
     quantization?: string;
     machine: RigMachine;
+    /**
+     * A program that is not Ollama's came to use the graphics card while the
+     * test ran (the runner's watch). The timings are as measured; they are low.
+     * Absent when nothing joined, or when the card could not be watched.
+     */
+    disturbed?: boolean;
+    disturbedBy?: string[];
   }
   | { status: 'not-installed' }
   | { status: 'too-big'; machine?: RigMachine; error?: string }
@@ -77,6 +84,13 @@ export type RigProgress = {
   of?: number;
 };
 
+/**
+ * Something else used the graphics card while a test ran, so its numbers are
+ * lower than this PC can do. Said on the result, and only when true: a run that
+ * nothing disturbed has neither field, so it is saved exactly as it always was.
+ */
+export type RigDisturbance = { disturbed?: true; disturbedBy?: string[] };
+
 /** One tier's result, as the screen shows it and the history keeps it. */
 export type RigResult = {
   id: string;
@@ -86,7 +100,7 @@ export type RigResult = {
   measure: TierMeasure;
   stamp: RigStamp;
   gpuShare: number | null;
-};
+} & RigDisturbance;
 
 export type RigOutcome =
   | { kind: 'measured'; result: RigResult }
@@ -244,6 +258,11 @@ function stampParts(model: string, reply: RigDoneReply): Omit<RigStamp, 'tier'> 
   };
 }
 
+/** The disturbance a finished run carries, or nothing: no key at all on a clean run. */
+function disturbanceOf(reply: RigDoneReply): RigDisturbance {
+  return reply.disturbed ? { disturbed: true, disturbedBy: (reply.disturbedBy ?? []).filter((reason) => typeof reason === 'string' && reason) } : {};
+}
+
 /** What the runner's answer means, in the screen's words; a measure and a stamp when it ran. */
 export function assembleTierResult(tier: RigTier, reply: RigRunReply, completedAt: string): RigOutcome {
   if (reply.status !== 'done') return failureFor(tier, reply);
@@ -258,6 +277,7 @@ export function assembleTierResult(tier: RigTier, reply: RigRunReply, completedA
       measure,
       stamp: { tier: tier.id, ...stampParts(tier.model, reply) },
       gpuShare: reply.gpuShare,
+      ...disturbanceOf(reply),
     },
   };
 }
@@ -265,12 +285,23 @@ export function assembleTierResult(tier: RigTier, reply: RigRunReply, completedA
 /** Any installed model's measure (rigModelRequest): the same workload, a stamp with no tier. */
 export type RigModelStamp = Omit<RigStamp, 'tier'> & { tier: 'model' };
 export type RigModelOutcome =
-  | { kind: 'measured'; measure: TierMeasure; stamp: RigModelStamp; gpuShare: number | null }
+  | ({ kind: 'measured'; measure: TierMeasure; stamp: RigModelStamp; gpuShare: number | null } & RigDisturbance)
   | RigFailure;
 
 export function assembleModelResult(model: string, reply: RigRunReply): RigModelOutcome {
   if (reply.status !== 'done') return failureFor({ label: model, model, noun: 'model' }, reply);
   const measure = measureOf(reply);
   if ('kind' in measure) return measure;
-  return { kind: 'measured', measure, stamp: { tier: 'model', ...stampParts(model, reply) }, gpuShare: reply.gpuShare };
+  return { kind: 'measured', measure, stamp: { tier: 'model', ...stampParts(model, reply) }, gpuShare: reply.gpuShare, ...disturbanceOf(reply) };
+}
+
+/**
+ * The sentence for a disturbed result, wherever it is shown: what joined the
+ * card, that the number is low, and what to do. Not a refusal: the numbers are
+ * kept, and just not offered as a score to compare.
+ */
+export function describeDisturbance(reasons: readonly string[] | undefined): string {
+  const list = (reasons ?? []).filter(Boolean);
+  const why = list.length ? ` (${list.join('; ')})` : '';
+  return `Something else used the graphics card while this ran${why}, so the numbers are lower than this PC can do. Close other graphics-heavy programs and run it again for a score you can compare.`;
 }

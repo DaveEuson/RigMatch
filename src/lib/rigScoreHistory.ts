@@ -41,9 +41,20 @@ export function isRigResult(value: unknown): value is RigResult {
 
 const newestFirst = (a: RigResult, b: RigResult) => b.completedAt.localeCompare(a.completedAt);
 
+/**
+ * A saved entry's disturbance, checked: `disturbed` is only ever true, with its
+ * reasons as a list of strings; anything else is dropped, and an entry saved
+ * before the field existed comes back as it was.
+ */
+function withCheckedDisturbance(result: RigResult): RigResult {
+  const { disturbed, disturbedBy, ...rest } = result;
+  if (disturbed !== true) return rest;
+  return { ...rest, disturbed: true, disturbedBy: Array.isArray(disturbedBy) ? disturbedBy.filter((reason): reason is string => typeof reason === 'string' && reason !== '') : [] };
+}
+
 export function parseRigHistory(raw: unknown): RigResult[] {
   if (!Array.isArray(raw)) return [];
-  return raw.filter(isRigResult).sort(newestFirst);
+  return raw.filter(isRigResult).map(withCheckedDisturbance).sort(newestFirst);
 }
 
 /** The history with a new result at the top, capped. */
@@ -64,10 +75,16 @@ export function saveRigHistory(history: RigResult[]): boolean {
   return writeLocalJson(RIG_HISTORY_KEY, history);
 }
 
-/** The newest result of each tier. */
+/**
+ * The newest result of each tier. A disturbed run (something else used the
+ * graphics card) is not a score to compare, so the newest clean run leads; a
+ * disturbed one stands for its tier only while the tier has no clean run.
+ */
 export function latestByTier(history: RigResult[]): Partial<Record<RigTierId, RigResult>> {
   const latest: Partial<Record<RigTierId, RigResult>> = {};
-  for (const result of [...history].sort(newestFirst)) latest[result.tier] ??= result;
+  const sorted = [...history].sort(newestFirst);
+  for (const result of sorted) if (!result.disturbed) latest[result.tier] ??= result;
+  for (const result of sorted) latest[result.tier] ??= result;
   return latest;
 }
 
@@ -86,6 +103,9 @@ export type RigComparison =
   | { comparable: false; notes: string[] };
 
 export function compareResults(earlier: RigResult, later: RigResult): RigComparison {
+  if (earlier.disturbed || later.disturbed) {
+    return { comparable: false, notes: ['A run something else disturbed is not compared: it was measured with the graphics card shared.'] };
+  }
   const verdict = compareStamps(earlier.stamp, later.stamp);
   if (!verdict.comparable) return { comparable: false, notes: verdict.notes };
   return { comparable: true, changePct: speedChange(earlier.measure, later.measure), notes: verdict.notes };

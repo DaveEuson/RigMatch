@@ -39,6 +39,7 @@ import { DiskGuard } from './DiskGuard';
 import { DownloadProgressInline } from './DownloadProgressInline';
 import { FirstModelWizard } from './FirstModelWizard';
 import { CopyCommandButton, FitGradeChip } from './FitGrade';
+import { NON_CHAT_NOTE, NON_CHAT_TAG, nonChatKind } from '../lib/modelKind';
 import { GenerationTestPanel, type GenerationTestContext } from './GenerationTestPanel';
 import { AudioTestPanel } from './AudioTestPanel';
 import { SkillTestPanel, type SkillTestContext } from './SkillTestPanel';
@@ -1111,6 +1112,7 @@ export function ModelCabinet({
               const hardwareFit = getHardwareFit(row, vramGb);
               const fitGrade = gradeRow(row, { vramGb, unifiedMemory, gpu: gpuModel }, { score, benchmark: rowBenchmark, bandwidthGbps: rigGbps });
               const platformFit = getPlatformFit(row.displayName, platform);
+              const rowKind = nonChatKind(row);
               const blockedLabel = downloadBlockedLabel(hardwareFit);
               const speedDateLineupFullForRow = shortlistedCount >= 5;
               // A model with no chat format cannot be in a show at all; say so on
@@ -1236,6 +1238,9 @@ export function ModelCabinet({
                     {lacksChatFormat(row) && (
                       <span className="model-warning-tag" title={noChatFormatReason(row.displayName)}>No chat format</span>
                     )}
+                    {rowKind && (
+                      <span className="model-warning-tag" title={NON_CHAT_NOTE[rowKind]}>{NON_CHAT_TAG[rowKind]}</span>
+                    )}
                     {!platformFit.compatible && (
                       <span className="platform-tag" title={platformFit.reason}>macOS only</span>
                     )}
@@ -1243,7 +1248,8 @@ export function ModelCabinet({
                   <td title={platformFit.compatible ? `${sizeRisk.message} ${hardwareFit.detail}` : platformFit.reason}>
                     <div className="size-fit-cell">
                       <span className="size-grade-line">
-                        {platformFit.compatible && <FitGradeChip grade={fitGrade} model={row.displayName} />}
+                        {/* A decision or audio model has a fit but no grade: the letter says "best pick to chat with". */}
+                        {platformFit.compatible && !rowKind && <FitGradeChip grade={fitGrade} model={row.displayName} />}
                         <span className={`size-pill ${sizeRisk.tone}`}>
                           {row.sizeGb ? `${row.sizeGb} GB` : '?'}
                         </span>
@@ -1582,7 +1588,7 @@ export function ModelCabinet({
                   </td>
                   <td title={smallest != null ? 'Smallest to largest version' : undefined}>
                     <span className="size-grade-line">
-                      {familyGrade && <FitGradeChip grade={familyGrade.grade} model={familyGrade.model} family />}
+                      {familyGrade && !nonChatKind(best) && <FitGradeChip grade={familyGrade.grade} model={familyGrade.model} family />}
                       {smallest != null && largest != null && (
                         <span className="model-family-size">
                           {smallest === largest ? `${smallest} GB` : `${smallest}–${largest} GB`}

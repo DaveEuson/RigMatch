@@ -168,7 +168,7 @@ export function BlindPickStep({
     <section className="blind-pick" aria-labelledby="blind-overlay-title">
       <header className="page-head">
         <div>
-          <h2 id="blind-overlay-title">Pick your favourite</h2>
+          <h2 id="blind-overlay-title">Pick your favorite</h2>
           <p>
             Names and scores stay hidden until you pick. Read the answers and choose the contestant you would rather use.
             {' '}An answer may still name its own model.

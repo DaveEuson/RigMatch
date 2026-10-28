@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import { describeRunFailure, showStoppedMessage } from '../src/lib/runFailure.ts';
-import { getModelScore } from '../src/lib/modelCatalog.ts';
+import { canSeatInSimplePick, getModelScore } from '../src/lib/modelCatalog.ts';
 
 /**
  * Found by a bug scan after LM Studio models started appearing in Simple Mode
@@ -47,7 +47,13 @@ test('an untested LM Studio model does not borrow a newer release\'s score', () 
 });
 
 test('Simple Mode offers no downloads without Ollama, and LM Studio models in every round', () => {
-  assert.match(app, /\.filter\(\(row\) => row\.installed \|\| ollama\.ready\)/);
+  // The rule lives in canSeatInSimplePick: a model still to download needs
+  // Ollama to fetch it, and one already installed, by either program, does not.
+  assert.match(app, /canSeatInSimplePick\(row, system\.platform, ollama\.ready\)/);
+  const download = { displayName: 'qwen3:8b', installed: false };
+  assert.equal(canSeatInSimplePick(download, 'win32', false), false);
+  assert.equal(canSeatInSimplePick(download, 'win32', true), true);
+  assert.equal(canSeatInSimplePick({ ...download, installed: true, localProvider: 'lm-studio' }, 'win32', false), true);
   assert.doesNotMatch(app, /row\.localProvider !== 'lm-studio'\)/);
   assert.match(app, /lmStudioOnly=\{!ollama\.ready && lmStudio\.ready\}/);
   assert.match(wizard, /<FoundRow label="LM Studio" value="Found and running/);

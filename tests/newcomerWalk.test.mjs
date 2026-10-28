@@ -63,7 +63,8 @@ test('safety classifiers and document readers stay out of a newcomer\'s lineup',
   for (const name of ['qwen3:14b', 'gemma3:4b', 'llama3.2:3b', 'granite4:3b', 'socrates:7b', 'mistral-small:22b']) {
     assert.ok(!isSpecialistModel(name), name);
   }
-  assert.match(app, /canJoinComparison\(row\) && !isSpecialistModel\(row\.displayName\)/);
+  // canSeatInSimplePick is canJoinComparison and !isSpecialistModel; nonChatModels.test.mjs runs it for real.
+  assert.match(app, /canSeatInSimplePick\(row, system\.platform, ollama\.ready\)/);
   // The goal before one card per name, so the card is a size that can do it.
   assert.match(app, /collapseModelVariants\(forGoal, shortlistIds\)/);
 });

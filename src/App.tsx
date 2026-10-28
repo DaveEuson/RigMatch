@@ -86,6 +86,7 @@ import {
   makeReportId,
   parseStoredReports,
   removeModelFromReports,
+  reportQuestionPlan,
   reportRows,
   reportStorageCandidates,
 } from './lib/runReports';
@@ -99,6 +100,10 @@ import { comfyConnection, type ConnectionState } from './lib/serviceStatus';
 import { LoadStrip } from './components/LoadStrip';
 import { ActivityToast } from './components/ActivityToast';
 import { TopMatchCard } from './components/TopMatchCard';
+import { NoTestsYet } from './components/NoTestsYet';
+import { TestDetail } from './components/TestDetail';
+import { TestListColumn } from './components/TestListColumn';
+import { buildTestList, findTest } from './lib/testList';
 import { LAB_CHANNELS, SHOW_CHANNELS, TOP_TABS, tabForView, viewForTab, type TopTabId } from './lib/topTabs';
 import {
   addSetValues,
@@ -135,6 +140,7 @@ import {
   isHostBenchmarkReady,
   canGenerateText,
   canJoinComparison,
+  canSeatInSimplePick,
   lacksChatFormat,
   noChatFormatReason,
   canHearAudio,
@@ -159,7 +165,7 @@ import type {
   ListTestResult,
 } from './lib/modelCatalog';
 import { clearAppStorage, dropChat, dropTranscripts, historySaveNote, writeLocal, writeLocalJson, writeLocalJsonWithFallback } from './lib/safeStorage';
-import { collapseModelVariants } from './lib/wizardVariants';
+import { collapseModelVariants, compareForWizard } from './lib/wizardVariants';
 import { restoreSavedScores } from './lib/savedHistory';
 // Same constant the Simple Mode download step gates on, so the wizard cannot
 // wave a lineup through that the run then refuses.
@@ -260,7 +266,8 @@ import { downloadPlan, formatBytesGb, generationCatalogRows, generationModelById
 import { readHuggingFaceToken } from './lib/huggingFaceToken';
 import { goalById, goalsAfterWelcome, presetIdForGoal } from './lib/goals';
 import { isDockWorthyPullProgress, modelMatchesTask, nextDockExpiry } from './lib/modelCatalog';
-import { chooseLineup, isSpecialistModel } from './lib/chooseLineup';
+import { chooseLineup } from './lib/chooseLineup';
+import { NON_CHAT_NOTE, nonChatKind } from './lib/modelKind';
 import { modelIdentities, sameModel } from './lib/modelKey.ts';
 import { gpuDriverMessage } from './lib/gpuDriver';
 import { codeJudgeFor, labJudgeFor } from './lib/labJudge.ts';
@@ -320,6 +327,7 @@ import './styles/advanced.css';
 import './styles/modelPage.css';
 import './styles/settings.css';
 import './styles/dialogs.css';
+import './styles/testList.css';
 import { matchMeasures } from './lib/matchCard';
 import { questionSetLabel } from './lib/runSheet';
 import { lazyPanel } from './lib/lazyPanel';
@@ -1141,28 +1149,23 @@ function App() {
         : 'chat';
   const wizardModels = useMemo<WizardModel[]>(() => {
     const vramGb = system.gpu.vramGb;
-    const fitRank: Record<string, number> = { 'sweet-spot': 0, good: 1, tight: 2 };
     const mapped = modelRows
       // The wizard exists to seat a Speed Dating lineup, and generation models
       // can never sit in one — showing them as pickable contestants and then
       // silently refusing the pick was the cold walkthrough's worst finding.
       // They live in Models and run in the Lab; the video/image dream filters
-      // say so instead of listing them.
-      .filter((row) => canJoinComparison(row) && !isSpecialistModel(row.displayName))
-      .filter((row) => getPlatformFit(row.displayName, system.platform).compatible)
-      // A model still to download needs Ollama. Without it the card queued a
-      // download that never started, and "Choose for me" filled the lineup
-      // with them, leaving Next disabled with no reason given.
-      .filter((row) => row.installed || ollama.ready)
+      // say so instead of listing them. Decision and speech models are kept
+      // out the same way, and a model still to download needs Ollama: without
+      // it the card queued a download that never started, and "Choose for me"
+      // filled the lineup with them, leaving Next disabled with no reason.
+      .filter((row) => canSeatInSimplePick(row, system.platform, ollama.ready))
       // An LM Studio model takes every round, on LM Studio (labBaseUrl); the
       // listening round's own filter keeps out models that cannot hear.
       .map((row) => ({ row, fit: getHardwareFit(row, vramGb) }))
       .filter((entry) => entry.fit.recommend && entry.fit.tone !== 'unknown')
-      // Prefer the best fit tone first, then the LARGEST model that still fits —
-      // a capable GPU should be steered toward more model, not the smallest one.
-      // (Sorting by ascending size here surfaced tiny models like phi3:mini as the
-      // top pick on high-VRAM rigs.)
-      .sort((a, b) => (fitRank[a.fit.tone] ?? 9) - (fitRank[b.fit.tone] ?? 9) || (b.row.sizeGb ?? 0) - (a.row.sizeGb ?? 0))
+      // Best fit tone first; among equals the installed ones, then the LARGEST
+      // model that still fits (see compareForWizard).
+      .sort(compareForWizard)
       .map(({ row, fit }): WizardModel => ({
         row,
         // Friendly name for beginners; the raw pull tag shows as subtext.
@@ -1870,6 +1873,19 @@ function App() {
   // The speed test and the context check on My PC (lib/rigScoreLive.ts) hold the card too.
   const rigSession = useRigScoreSession();
   const rigScoreRunning = rigScoreBusy(rigSession);
+  // Every test on this computer, for the Tests column beside Results. A blind
+  // show's contestants stay out of it until the reveal.
+  const testEntries = useMemo(
+    () => buildTestList(
+      { reports: runReports, history: runHistory, scores: modelScores, lab: labResults, speed: rigSession.history },
+      { hide: blindMasking ? blindLineup : undefined },
+    ),
+    [runReports, runHistory, modelScores, labResults, rigSession.history, blindMasking, blindLineup],
+  );
+  const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
+  const [testListOpen, setTestListOpen] = useState(false);
+  // A test that was cleared, or pushed out by newer ones, is no longer there to open.
+  const selectedTest = findTest(testEntries, selectedTestId);
   /** Something else holds the graphics card, so a render timed now would measure the contention. */
   const gpuBusy = isListTesting || isBenchmarking || runProgress?.phase === 'running' || Boolean(externalBenchmark?.running) || rigScoreRunning;
   /** One winner per channel, from its own measurement at its own fader. Chat and All keep the Top Match. */
@@ -2220,6 +2236,8 @@ function App() {
 
   const selectNav = useCallback((id: NavId) => {
     setActiveNavId(id);
+    setSelectedTestId(null);
+    setTestListOpen(false);
     // Changing screens is not news: with activity shown as a toast, announcing
     // every click would cover the screen you just opened.
     if (id === 'history') void loadLogs();
@@ -3328,7 +3346,10 @@ function App() {
       return;
     }
     if (!canJoinComparison(row)) {
-      setActivity(`${row.displayName} cannot join Speed Dating — the comparison is a conversation, and this model does not chat. Generation models race each other in the Lab, where every model gets the same prompt and seed.`);
+      const kind = nonChatKind(row);
+      setActivity(kind
+        ? `${row.displayName} cannot join Speed Dating — the comparison is a conversation. ${NON_CHAT_NOTE[kind]}`
+        : `${row.displayName} cannot join Speed Dating — the comparison is a conversation, and this model does not chat. Generation models race each other in the Lab, where every model gets the same prompt and seed.`);
       return;
     }
     const hardwareFit = getHardwareFit(row, system.gpu.vramGb);
@@ -4806,6 +4827,9 @@ function App() {
 
   // ---- The top bar and the load strip (the redesign's shell) ----
   const activeTab = tabForView(activeNavId, workbench);
+  /** Results has the Tests column beside it; a test chosen there takes the screen's place. */
+  const resultsSplit = uiMode === 'advanced' && activeTab === 'results';
+  const showingTest = resultsSplit && selectedTest !== null;
   const selectTab = useCallback((id: string) => {
     const view = viewForTab(id as TopTabId, workbench);
     if (view.workbench) chooseWorkbench(view.workbench);
@@ -5258,7 +5282,17 @@ function App() {
                 {scoredModelCount > 0 && (
                   <button type="button" aria-pressed={activeNavId === 'agent'} onClick={() => selectNav('agent')}>Top Pick</button>
                 )}
-                <button type="button" aria-pressed={activeNavId === 'activity'} onClick={() => selectNav('activity')}>Runs</button>
+                <button type="button" aria-pressed={activeNavId === 'activity'} onClick={() => selectNav('activity')}>Running now</button>
+                {/* Narrow windows keep the list behind this button. */}
+                <button
+                  type="button"
+                  className="test-list-toggle"
+                  aria-expanded={testListOpen}
+                  aria-controls="test-list"
+                  onClick={() => setTestListOpen((open) => !open)}
+                >
+                  Tests ({testEntries.length})
+                </button>
               </div>
             </>
           )}
@@ -5272,6 +5306,31 @@ function App() {
             </div>
           )}
         </div>
+        {resultsSplit && (
+          <TestListColumn
+            entries={testEntries}
+            selectedId={selectedTest?.id ?? null}
+            open={testListOpen}
+            onSelect={(id) => { setSelectedTestId(id); setTestListOpen(false); }}
+            onOverview={() => { setSelectedTestId(null); setTestListOpen(false); }}
+            onClose={() => setTestListOpen(false)}
+          />
+        )}
+        {showingTest && selectedTest && (
+          <TestDetail
+            entry={selectedTest}
+            reports={runReports}
+            history={runHistory}
+            scores={modelScores}
+            labResults={labResults}
+            speed={rigSession.history}
+            modelRows={modelRows}
+            // The row that was open is gone from the screen; focus goes back to the list.
+            onBack={() => { setSelectedTestId(null); setTimeout(() => document.querySelector<HTMLElement>('.test-list-overview')?.focus(), 0); }}
+            onOpenModel={(model) => { setSelectedModel(model); selectNav('agent'); }}
+            onOpenSpeed={() => { selectNav('lan'); setMyPcView('speed'); }}
+          />
+        )}
         {activeNavId === 'lan' && myPcView === 'logs' && (
           <section className="panel logs-page" aria-label="Logs">
             <header className="page-head">
@@ -5506,7 +5565,7 @@ function App() {
             onBlindChange={blind.setBlindOn}
           />
         )}
-        {activeNavId === 'agent' && (
+        {activeNavId === 'agent' && !showingTest && (
           <ModelPage
             model={selectedModel}
             benchmark={selectedBenchmark}
@@ -5531,8 +5590,9 @@ function App() {
             onExportForHatch={() => setExportHatchModel(selectedModel)}
           />
         )}
-        {activeNavId === 'activity' && (
+        {activeNavId === 'activity' && !showingTest && (
           <ActivityPanel
+            testsListed={resultsSplit}
             runReports={runReports}
             onOpenReport={(id) => { setOpenReportId(id); setReportOpen(true); }}
             runProgress={runProgress}
@@ -5560,8 +5620,9 @@ function App() {
             lastRender={renderOutcome}
           />
         )}
-        {(activeNavId === 'history' || activeNavId === 'settings') && (
+        {(activeNavId === 'history' || activeNavId === 'settings') && !showingTest && (
           <UtilityPanel
+            noTests={testEntries.length === 0}
             panel={activeNavId}
             listTestResult={shownShowResult}
             selectedHost={selectedHost}
@@ -5580,7 +5641,14 @@ function App() {
             onThemeChange={selectTheme}
             onUiModeChange={selectUiMode}
             // The Top Match leads the Scorecards, under the Results title.
-            topMatch={(
+            topMatch={testEntries.length === 0 ? (
+              <NoTestsYet
+                system={system}
+                topPick={topRigPick}
+                onTest={requestBenchmarkForModel}
+                onOpenModels={() => selectNav('models')}
+              />
+            ) : (
               <TopMatchCard
                 system={system}
                 topPick={topRigPick}
@@ -5689,12 +5757,7 @@ function App() {
         // A saved report's answers, or none: today's answers are another run's.
         const benchmarks = stored ? (stored.transcripts ?? {}) : benchmarkByModel;
         const rows = stored ? reportRows(result.results, modelRows) : shortlistedRows;
-        // A saved report's own questions, from its answers: a Difficult
-        // Subjects report reopened while General was selected showed General's
-        // questions over Difficult Subjects' answers.
-        const storedPlan = stored?.transcripts
-          ? Object.values(stored.transcripts)[0]?.prompts.map((p) => ({ id: p.id, label: p.label, prompt: p.prompt, type: p.type ?? 'assistant' }))
-          : undefined;
+        const storedPlan = stored ? reportQuestionPlan(stored) : undefined;
         return (
         <RunReportModal
           result={result}

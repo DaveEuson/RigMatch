@@ -36,6 +36,15 @@ const DRAWING_MAX_USES = 64;
 /** Past these the SVG is a render bomb rather than a picture. */
 const DRAWING_MAX_ELEMENTS = 2000;
 const DRAWING_MAX_DEPTH = 48;
+/**
+ * The most time the parse and the clean may take on one answer. A real drawing
+ * takes a few milliseconds and the work grows in step with its size, so this
+ * is a backstop, not a limit a picture meets: the main process runs this, and
+ * no answer, however it is shaped, may hold it for longer. It is checked
+ * between steps. An answer that runs past it scores as too complicated to
+ * check.
+ */
+const DRAWING_CLEAN_BUDGET_MS = 500;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
@@ -43,7 +52,7 @@ const XLINK_NS = 'http://www.w3.org/1999/xlink';
 /**
  * The elements a drawing keeps, matched exactly (SVG names are case-sensitive).
  * Anything else goes with everything inside it: script, style (its simple rules
- * are copied onto the elements first, see readStyleRules), foreignObject (HTML
+ * are copied onto the elements first, see addStyleRules), foreignObject (HTML
  * inside the SVG), image (it loads other content), a, and the animate family,
  * set included (they can rewrite an href). use stays only as a copy of a shape
  * or symbol in the same drawing (see keepUse). symbol, marker, pattern and mask
@@ -150,6 +159,23 @@ function extractSvg(answer) {
   return findSvg(block ?? text);
 }
 
+/** What the cleaner throws when an answer outruns DRAWING_CLEAN_BUDGET_MS. */
+class OutOfBudget extends Error {}
+
+/**
+ * A clock for one answer: call it between steps and it throws OutOfBudget
+ * once `ms` have gone. It reads the time on the first call and then every
+ * 32nd, so the check costs less than the steps it sits between.
+ */
+function newBudget(ms) {
+  const deadline = Date.now() + ms;
+  let calls = 0;
+  return () => {
+    calls += 1;
+    if (calls % 32 === 1 && Date.now() >= deadline) throw new OutOfBudget('The drawing took too long to check.');
+  };
+}
+
 const OPEN_TAG = /<([A-Za-z][\w.:-]*)((?:\s+[^\s=/>]+\s*=\s*(?:"[^"<]*"|'[^'<]*'))*)\s*(\/?)>/y;
 const CLOSE_TAG = /<\/([A-Za-z][\w.:-]*)\s*>/y;
 const ATTRIBUTE = /\s+([^\s=/>]+)\s*=\s*(?:"([^"<]*)"|'([^'<]*)')/g;
@@ -161,9 +187,10 @@ const ATTRIBUTE = /\s+([^\s=/>]+)\s*=\s*(?:"([^"<]*)"|'([^'<]*)')/g;
  * unquoted or duplicate attributes, a bare & or an HTML entity, a DTD. A
  * drawing that fails here would show as a broken image, so it scores as one.
  * Returns the root element as { name, attrs: [[name, value]], children }, or
- * null. Anything after the root closes is ignored.
+ * null. Anything after the root closes is ignored. Throws OutOfBudget when
+ * `tick` says the answer has taken too long (parseSvg below catches it).
  */
-function parseSvg(source) {
+function readSvg(source, tick) {
   const text = String(source ?? '');
   const top = { name: '#document', attrs: [], children: [] };
   const stack = [top];
@@ -176,6 +203,7 @@ function parseSvg(source) {
   };
 
   while (index < text.length) {
+    tick();
     if (stack.length === 1 && top.children.some((child) => typeof child !== 'string')) break;
     const lt = text.indexOf('<', index);
     if (lt < 0) {
@@ -219,9 +247,11 @@ function parseSvg(source) {
     const open = OPEN_TAG.exec(text);
     if (!open) return null;
     const attrs = [];
+    const names = new Set();
     for (const attribute of open[2].matchAll(ATTRIBUTE)) {
       const value = attribute[2] ?? attribute[3] ?? '';
-      if (attrs.some(([name]) => name === attribute[1]) || XML_ENTITIES.test(value)) return null;
+      if (names.has(attribute[1]) || XML_ENTITIES.test(value)) return null;
+      names.add(attribute[1]);
       attrs.push([attribute[1], value]);
     }
     elements += 1;
@@ -299,13 +329,20 @@ function cleanDeclaration(property, rawValue) {
   return [name, value];
 }
 
-/** The kept declarations in a block of CSS ("fill: red; stroke: blue"). */
+/**
+ * The kept declarations in a block of CSS ("fill: red; stroke: blue"), each
+ * property once: it stays where it first appears and takes the last value, as
+ * it would in a browser. A looping model can repeat one declaration
+ * thousands of times, and what follows does work for every one it keeps.
+ */
 function readDeclarations(css) {
-  return css.split(';').flatMap((part) => {
+  const declarations = new Map();
+  for (const part of css.split(';')) {
     const colon = part.indexOf(':');
     const declaration = colon > 0 ? cleanDeclaration(part.slice(0, colon), part.slice(colon + 1)) : null;
-    return declaration ? [declaration] : [];
-  });
+    if (declaration) declarations.set(declaration[0], declaration[1]);
+  }
+  return [...declarations];
 }
 
 /** CSS without its comments, found by position. */
@@ -321,18 +358,37 @@ function withoutComments(css) {
 }
 
 const SPECIFICITY = { '#': 3, '.': 2, '': 1 };
+const SIMPLE_SELECTOR = /^([.#]?)([A-Za-z_][\w-]*)$/;
+/**
+ * Rules are ranked by specificity, then by where they come in the drawing, as
+ * one number: RULE_SPAN is more rules than 32,000 characters can hold, and a
+ * rule never keeps more than DECLARATION_SPAN declarations (each property once,
+ * and STYLE_PROPERTIES has fewer than that).
+ */
+const RULE_SPAN = 1e6;
+const DECLARATION_SPAN = 64;
 
 /**
- * The rules in a drawing's <style> that it can keep: ones that select simply,
- * by element, .class or #id, with their kept declarations. At-rules, nested
- * blocks and any other selector are left out. The <style> element itself is
- * never kept; these rules are copied onto the elements they select instead,
- * because models colour whole drawings this way, and without them every
- * shape comes out black.
+ * Every rule in a drawing's <style> blocks that it can keep: ones that select
+ * simply, by element, .class or #id. At-rules, nested blocks and any other
+ * selector are left out. The <style> element itself is never kept; these rules
+ * are copied onto the elements they select instead, because models colour
+ * whole drawings this way, and without them every shape comes out black.
+ *
+ * The rules are folded as they are read, into one table per selector that
+ * holds each property it sets once: where it first appears, which rule set it
+ * last, and that rule's value. An element then looks up the few selectors that
+ * match it (styleFor), however many rules the drawing has. Reading rule by
+ * rule for every element cost selectors x declarations x elements, which took
+ * minutes on a 20,000-character <style> of repeated selectors.
  */
-function readStyleRules(css) {
-  const rules = [];
+function newStyleSheet() {
+  return { tables: new Map(), rules: 0 };
+}
+
+function addStyleRules(sheet, css, tick) {
   for (const chunk of withoutComments(css).split('}')) {
+    tick();
     const brace = chunk.indexOf('{');
     if (brace < 0) continue;
     const selectors = chunk.slice(0, brace);
@@ -341,11 +397,28 @@ function readStyleRules(css) {
     const declarations = readDeclarations(body);
     if (declarations.length === 0) continue;
     for (const selector of selectors.split(',')) {
-      const simple = /^([.#]?)([A-Za-z_][\w-]*)$/.exec(selector.trim());
-      if (simple) rules.push({ kind: simple[1], name: simple[2], declarations });
+      tick();
+      const simple = SIMPLE_SELECTOR.exec(selector.trim());
+      if (!simple) continue;
+      const key = simple[1] + simple[2];
+      let table = sheet.tables.get(key);
+      if (!table) {
+        table = new Map();
+        sheet.tables.set(key, table);
+      }
+      const order = sheet.rules;
+      sheet.rules += 1;
+      declarations.forEach(([property, value], index) => {
+        const entry = table.get(property);
+        if (entry) {
+          entry.last = order;
+          entry.value = value;
+        } else {
+          table.set(property, { first: order * DECLARATION_SPAN + index, last: order, value });
+        }
+      });
     }
   }
-  return rules;
 }
 
 /** Whether an element holds any text that is kept, from the parse rather than from markup. */
@@ -376,9 +449,10 @@ function* keptElements(node) {
 /**
  * The cleaned drawing, rebuilt from the parse rather than edited in place, so
  * nothing the reader did not understand can survive into it. Counts the shapes
- * that would actually be drawn.
+ * that would actually be drawn. Throws OutOfBudget when `tick` says it has
+ * taken too long (sanitizeSvg below catches it).
  */
-function serializeSvg(root) {
+function serializeSvg(root, tick) {
   let shapes = 0;
   let uses = 0;
   const hasViewBox = root.attrs.some(([name, value]) => name === 'viewBox' && readViewBox(value));
@@ -388,27 +462,63 @@ function serializeSvg(root) {
     const id = attribute(element, 'id');
     if (id && !byId.has(id)) byId.set(id, element);
   }
-  const rules = elements
-    .flatMap((element) => element.children.filter((child) => typeof child !== 'string' && child.name === 'style'))
-    .flatMap((style) => readStyleRules(decodeEntities(style.children.filter((child) => typeof child === 'string').join(''))));
+  const sheet = newStyleSheet();
+  for (const element of elements) {
+    for (const child of element.children) {
+      if (typeof child !== 'string' && child.name === 'style') {
+        addStyleRules(sheet, decodeEntities(child.children.filter((part) => typeof part === 'string').join('')), tick);
+      }
+    }
+  }
 
   /**
    * The element's style: the rules that select it, the most specific last,
    * then its own style attribute, which wins as it does in a browser. Rules
    * beat presentation attributes there too, so carrying them in style keeps
    * the drawing as the model drew it.
+   *
+   * A property keeps the place where the first matching rule set it and the
+   * value of the one that wins, which is the rule with the highest
+   * specificity, and among those the latest. That is what applying every
+   * matching rule in order would leave, read from the sheet's tables instead
+   * of by going through the rules.
    */
   const styleFor = (node) => {
-    const classes = attribute(node, 'class').split(/\s+/);
-    const id = attribute(node, 'id');
-    const matched = rules
-      .map((rule, order) => ({ rule, order }))
-      .filter(({ rule }) => (rule.kind === '#' ? rule.name === id : rule.kind === '.' ? classes.includes(rule.name) : rule.name === node.name))
-      .sort((a, b) => SPECIFICITY[a.rule.kind] - SPECIFICITY[b.rule.kind] || a.order - b.order);
+    tick();
     const declarations = new Map();
-    for (const { rule } of matched) for (const [name, value] of rule.declarations) declarations.set(name, value);
+    if (sheet.tables.size > 0) {
+      const wins = new Map();
+      const firsts = new Map();
+      const consider = (kind, name) => {
+        const table = sheet.tables.get(kind + name);
+        if (!table) return;
+        const specificity = SPECIFICITY[kind];
+        for (const [property, entry] of table) {
+          const rank = specificity * RULE_SPAN + entry.last;
+          if (!(wins.get(property)?.rank > rank)) wins.set(property, { rank, value: entry.value });
+          const first = specificity * RULE_SPAN * DECLARATION_SPAN + entry.first;
+          if (!(firsts.get(property) < first)) firsts.set(property, first);
+        }
+      };
+      consider('', node.name);
+      const id = attribute(node, 'id');
+      if (id) consider('#', id);
+      for (const name of new Set(attribute(node, 'class').split(/\s+/))) consider('.', name);
+      for (const [property] of [...firsts].sort((a, b) => a[1] - b[1])) declarations.set(property, wins.get(property).value);
+    }
     for (const [name, value] of readDeclarations(attribute(node, 'style'))) declarations.set(name, value);
     return [...declarations].map(([name, value]) => `${name}: ${value}`).join('; ');
+  };
+
+  /** Whether a kept element is a <use> or holds one, worked out once per element. */
+  const holdsUse = new Map();
+  const containsUse = (node) => {
+    let found = holdsUse.get(node);
+    if (found === undefined) {
+      found = node.name === 'use' || node.children.some((child) => typeof child !== 'string' && KEPT_ELEMENTS.has(child.name) && containsUse(child));
+      holdsUse.set(node, found);
+    }
+    return found;
   };
 
   /**
@@ -419,13 +529,14 @@ function serializeSvg(root) {
   const keepUse = (node) => {
     const href = attribute(node, 'href') || attribute(node, 'xlink:href');
     const target = FRAGMENT.test(href) ? byId.get(href.slice(1)) : undefined;
-    if (!target || target.name === 'svg' || [...keptElements(target)].some((element) => element.name === 'use')) return false;
+    if (!target || target.name === 'svg' || containsUse(target)) return false;
     uses += 1;
     return uses <= DRAWING_MAX_USES;
   };
 
   const write = (node, undrawn) => {
     if (typeof node === 'string') return node;
+    tick();
     if (!KEPT_ELEMENTS.has(node.name) || (node.name === 'use' && !keepUse(node))) return '';
     const isRoot = node === root;
     const hidden = undrawn || UNDRAWN.has(node.name);
@@ -449,10 +560,27 @@ function serializeSvg(root) {
   return { svg, shapes, hasViewBox };
 }
 
-/** The cleaned SVG, or null when it does not parse. */
+/** `read`, or null when the answer outruns its time budget (see DRAWING_CLEAN_BUDGET_MS). */
+function withinBudget(read) {
+  try {
+    return read(newBudget(DRAWING_CLEAN_BUDGET_MS));
+  } catch (error) {
+    if (error instanceof OutOfBudget) return null;
+    throw error;
+  }
+}
+
+/** The SVG's root element, or null when it does not parse in time. */
+function parseSvg(source) {
+  return withinBudget((tick) => readSvg(source, tick));
+}
+
+/** The cleaned SVG, or null when it does not parse in time. */
 function sanitizeSvg(svg) {
-  const root = parseSvg(svg);
-  return root ? serializeSvg(root).svg : null;
+  return withinBudget((tick) => {
+    const root = readSvg(svg, tick);
+    return root ? serializeSvg(root, tick).svg : null;
+  });
 }
 
 // Short enough to read on the tile that stands in for the picture.
@@ -460,6 +588,7 @@ const PROBLEMS = {
   missing: { score: 0, note: 'No drawing: the answer had no SVG.' },
   'too-big': { score: 10, note: `No drawing: over the ${DRAWING_SVG_MAX_CHARS.toLocaleString('en-US')}-character limit.` },
   broken: { score: 10, note: 'No drawing: the SVG was cut off or does not parse.' },
+  'too-complex': { score: 10, note: 'No drawing: the SVG was too complicated to check.' },
   empty: { score: 5, note: 'No drawing: the SVG draws nothing.' },
   'no-viewbox': { score: 30, note: 'Scored by rule: the SVG has no viewBox, which the question asked for.' },
   // Not a finding about the drawing: a slow PC, not a bad answer. The run
@@ -484,30 +613,41 @@ let lastCheck = null;
  * `svg` is the cleaned drawing whenever there is one to show, including a
  * drawing that parses but has no viewBox. `score` for a drawing that passed is
  * a placeholder: it is marked unjudged until a judge grades it.
+ *
+ * An answer that takes longer than `budgetMs` to read and clean fails as
+ * too complicated to check, so no answer can hold the caller. Only a test
+ * passes its own budget; such a result is not remembered.
  */
-function checkDrawing(answer) {
+function checkDrawing(answer, budgetMs = DRAWING_CLEAN_BUDGET_MS) {
+  const text = String(answer ?? '');
+  if (budgetMs !== DRAWING_CLEAN_BUDGET_MS) return checkDrawingText(text, budgetMs);
   // The run asks this of the same answer three times (the scorer, the
   // grader and the run itself), so the last answer is remembered.
-  const text = String(answer ?? '');
   if (lastCheck?.answer === text) return lastCheck.result;
-  const result = checkDrawingText(text);
+  const result = checkDrawingText(text, budgetMs);
   lastCheck = { answer: text, result };
   return result;
 }
 
-function checkDrawingText(text) {
+function checkDrawingText(text, budgetMs) {
   const fail = (problem, svg = null) => ({ ok: false, problem, score: PROBLEMS[problem].score, svg, note: PROBLEMS[problem].note });
   // Length first, before anything reads the answer.
   if (text.length > DRAWING_ANSWER_MAX_CHARS) return fail('too-big');
   const raw = extractSvg(text);
   if (!raw) return fail('missing');
   if (raw.length > DRAWING_SVG_MAX_CHARS) return fail('too-big');
-  const root = parseSvg(raw);
-  if (!root) return fail('broken');
-  const { svg, shapes, hasViewBox } = serializeSvg(root);
-  if (shapes === 0) return fail('empty');
-  if (!hasViewBox) return fail('no-viewbox', svg);
-  return { ok: true, problem: null, score: 50, svg, note: '' };
+  try {
+    const tick = newBudget(budgetMs);
+    const root = readSvg(raw, tick);
+    if (!root) return fail('broken');
+    const { svg, shapes, hasViewBox } = serializeSvg(root, tick);
+    if (shapes === 0) return fail('empty');
+    if (!hasViewBox) return fail('no-viewbox', svg);
+    return { ok: true, problem: null, score: 50, svg, note: '' };
+  } catch (error) {
+    if (error instanceof OutOfBudget) return fail('too-complex');
+    throw error;
+  }
 }
 
 /**
@@ -539,6 +679,7 @@ module.exports = {
   DRAWING_SVG_MAX_CHARS,
   DRAWING_ANSWER_MAX_CHARS,
   DRAWING_MAX_USES,
+  DRAWING_CLEAN_BUDGET_MS,
   KEPT_ELEMENTS,
   KEPT_ATTRIBUTES,
   extractSvg,

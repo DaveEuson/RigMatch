@@ -84,7 +84,7 @@ in.
 
 That is a real run on the reference card, so it lands near 1,000: the same card scored between 1,004 and 1,177 on the Standard tier across runs, because a card's speed moves 10 to 18 percent with its clocks and what else the desktop is doing. A computer with a slower card scores less, and a faster one more.
 
-On an NVIDIA card it also reads the card (`nvidia-smi`) before and after the runs, with the app's own thresholds, and says if something else is heavily using it. A graphics-heavy program that is merely open, such as Steam, is mentioned but is not called busy while the card reads quiet. On any card, a measured speed under half the grade's estimate is flagged on its tier, which is how a card shared with another program shows up. The estimate check rests on one card's numbers so far (an RTX 4070), so it is a note on the result, never a refusal.
+It also reads the card before and after the runs, with the app's own thresholds, and says if something else is heavily using it: through `nvidia-smi` on an NVIDIA card, the Windows graphics counters on any other card on Windows, the `amdgpu` driver's files on AMD under Linux, and `ioreg` on Apple Silicon. A card it cannot read (an Intel card under Linux, for one) is reported as not checked, with the reason, never as idle; `--json` names which reading it used. It looks at the card again between the runs' requests, never inside one, and a tier that something else used the card during is marked as disturbed, in the text and as `disturbed: true` with `disturbedBy` in `--json`. Its numbers are as measured; a run nothing disturbed has neither field. A graphics-heavy program that is merely open, such as Steam, is mentioned but is not called busy while the card reads quiet. On any card, a measured speed under half the grade's estimate is flagged on its tier, which is how a card shared with another program shows up. The estimate check rests on one card's numbers so far (an RTX 4070), so it is a note on the result, never a refusal.
 
 Piped into a file or another program, the show's dressing is gone and the progress goes to stderr, so what is printed is a plain title, the card, the table and the closing lines. `--json` prints the measures, each tier's stamp and its points instead.
 
@@ -154,6 +154,6 @@ It reads this computer's graphics card and memory, and asks Ollama at `127.0.0.1
 
 Needs Node.js 20 or later, on Windows, macOS or Linux.
 
-## Licence
+## License
 
 Source-available, not open source. See [LICENSE](LICENSE). The source is at [github.com/DaveEuson/RigMatch](https://github.com/DaveEuson/RigMatch/tree/main/cli).

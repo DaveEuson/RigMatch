@@ -15,6 +15,7 @@
  */
 import runner from '../electron/rigScoreRunner.cjs';
 import contention from '../electron/gpuContention.cjs';
+import probe from '../electron/gpuProbe.cjs';
 import { pullCommand } from '../src/lib/modelGrade.ts';
 import {
   RIG_HEADLINE_TIER,
@@ -31,10 +32,12 @@ import {
 import {
   assembleModelResult,
   assembleTierResult,
+  describeDisturbance,
   rigHeadline,
   rigModelRequest,
   rigRunRequest,
   tierAvailability,
+  type RigDisturbance,
   type RigMachine,
   type RigModelStamp,
   type RigProgress,
@@ -63,6 +66,12 @@ export type MeasureDeps = {
   unloadSettleMs?: number;
   /** How long a run waits, before checking for another program's models, for this run's own to be gone. */
   freeWaitMs?: number;
+  /**
+   * Looks at the card between the runs' requests for a program that came to use
+   * it (gpuProbe.createGpuWatch); shared by every request of one command, which
+   * start() takes a new baseline for each time. The default is not to watch.
+   */
+  watch?: { start: (args: { machine: RigMachine }) => Promise<void>; check: (args: { signal?: AbortSignal; last?: boolean }) => Promise<{ disturbed: boolean; reasons: string[] } | null> };
 };
 
 /** Long enough for a big model to leave a slow card; the app waits 3 s, and that was not enough here. */
@@ -167,9 +176,9 @@ export function checkMeasureArgs(
  * (electron/gpuContention.cjs): the app checks before a test and warns, because
  * a game, a render or a browser tab held the card for a whole run once and the
  * score read as a slow PC. Ollama's own listing cannot see that, since it only
- * knows its models. NVIDIA only here (nvidia-smi); other vendors, and a
- * machine without nvidia-smi, read as 'unknown', which says nothing rather
- * than 'clear'.
+ * knows its models. The card is read by electron/gpuProbe.cjs, as the app reads
+ * it (NVIDIA, any card on Windows, AMD on Linux, Apple Silicon). A card nothing
+ * can read is 'unknown', which says so and why, and is never 'clear'.
  */
 export type CardNote = {
   /** 'busy' and 'heavy' mean the readings say so; a known program merely being open leaves it 'clear'. */
@@ -181,46 +190,42 @@ export type CardNote = {
   /** The readings themselves (the median of the samples), null when the card could not be read. */
   vramUsedPercent: number | null;
   utilizationPercent: number | null;
-  /** The sentence for the intro: the app's "Before starting: ..." if busy, a softer line if a program is open, else empty. */
+  /** The sentence for the intro: the app's "Before starting: ..." if busy, a softer line if a program is open, "could not check" if unknown, else empty. */
   message: string;
+  /** What the reading came from ('nvidia-smi', 'windows-counters', 'amdgpu-sysfs', 'ioreg'); absent when there was none. */
+  source?: string;
+  /** Why the card could not be read, when level is 'unknown'. */
+  reason?: string;
 };
 
 export type CommandRunner = (command: string, args: string[], timeoutMs: number) => Promise<{ output: string; error: string | null }>;
 
 const assessCard = contention.assessGpuContention as (
-  reading: unknown, apps?: string[], options?: { unifiedMemory?: boolean },
-) => { level: CardNote['level']; reasons: string[]; apps: string[]; vramUsedPercent: number | null; utilizationPercent: number | null };
+  reading: unknown, apps?: string[], options?: { unifiedMemory?: boolean; reason?: string },
+) => { level: CardNote['level']; reasons: string[]; apps: string[]; vramUsedPercent: number | null; utilizationPercent: number | null; reason?: string };
 
-const LINE_BREAK = /\r?\n/;
-
-/** The process names the platform lists, for the known graphics-heavy programs. */
-async function processNames(run: CommandRunner, platform: string): Promise<string[]> {
-  if (platform === 'win32') {
-    // tasklist's CSV: the image name is the first quoted field of each row.
-    const { output } = await run('tasklist', ['/FO', 'CSV', '/NH'], 4000);
-    return output.split(LINE_BREAK).map((line) => line.match(/^"([^"]+)"/)?.[1]).filter((name): name is string => Boolean(name));
-  }
-  const { output } = await run('ps', ['-eo', 'comm='], 4000);
-  return output.split(LINE_BREAK).map((line) => line.trim()).filter(Boolean);
-}
+type GpuLoad = { reading: { source: string } | null; source: string | null; unreadable: string | null };
+const sampleGpuLoad = probe.sampleGpuLoad as (
+  context: { run: CommandRunner; platform: string; arch?: string; gpuName?: string; sysfsRoot?: string },
+  options?: { samples?: number; gapMs?: number },
+) => Promise<GpuLoad>;
+const listProcessNames = probe.listProcessNames as (run: CommandRunner, platform: string) => Promise<string[]>;
 
 export async function checkCard(
   run: CommandRunner,
-  { platform, unifiedMemory = false, samples = 5, gapMs = 220 }: { platform: string; unifiedMemory?: boolean; samples?: number; gapMs?: number },
+  { platform, arch, gpuName, sysfsRoot, unifiedMemory = false, samples = 5, gapMs = 220 }: {
+    platform: string; arch?: string; gpuName?: string; sysfsRoot?: string; unifiedMemory?: boolean; samples?: number; gapMs?: number;
+  },
 ): Promise<CardNote> {
-  const readings: unknown[] = [];
-  for (let index = 0; index < samples; index += 1) {
-    const { output } = await run('nvidia-smi', ['--query-gpu=memory.used,memory.total,utilization.gpu', '--format=csv,noheader,nounits'], 4000);
-    const reading = output ? contention.parseNvidiaGpuQuery(output) : null;
-    if (reading) readings.push(reading);
-    if (index < samples - 1 && gapMs > 0) await new Promise((resolve) => setTimeout(resolve, gapMs));
-  }
   // A median of several, as the app takes: a single reading of an ordinary
   // desktop lands anywhere from 12% to 44%.
-  const median = contention.medianReading(readings);
-  if (!median) return { level: 'unknown', reasons: [], apps: [], vramUsedPercent: null, utilizationPercent: null, message: '' };
-  const apps = contention.matchKnownGpuApps(await processNames(run, platform).catch(() => []));
-  const assessment = assessCard(median, apps, { unifiedMemory });
+  const load = await sampleGpuLoad({ run, platform, arch, gpuName, sysfsRoot }, { samples, gapMs });
+  if (!load.reading) {
+    const unreadable = assessCard(null, [], { reason: load.unreadable ?? undefined });
+    return { level: 'unknown', reasons: [], apps: [], vramUsedPercent: null, utilizationPercent: null, message: contention.describeGpuContention(unreadable), ...(load.unreadable ? { reason: load.unreadable } : {}) };
+  }
+  const apps = contention.matchKnownGpuApps(await listProcessNames(run, platform).catch(() => []));
+  const assessment = assessCard(load.reading, apps, { unifiedMemory });
   // The app calls the card "busy" when a known graphics-heavy program is merely
   // open (Steam on most gaming PCs), even with the card itself idle. Said so,
   // that is false: "busy" here means a reading says so. A program that is open
@@ -233,6 +238,7 @@ export async function checkCard(
     apps: assessment.apps,
     vramUsedPercent: assessment.vramUsedPercent,
     utilizationPercent: assessment.utilizationPercent,
+    ...(load.source ? { source: load.source } : {}),
     message: measurablyBusy
       ? contention.describeGpuContention(assessment)
       : assessment.apps.length
@@ -326,7 +332,7 @@ export type MeasuredTier = {
   tier: RigTier; status: 'measured'; measure: TierMeasure; stamp: RigStamp; gpuShare: number | null; points: RigPoints; band: SpeedBand;
   /** The fit grade's guess for this model on this card, to check the measure against. */
   estimateTps: number | null;
-};
+} & RigDisturbance;
 export type TierLine =
   | MeasuredTier
   | { tier: RigTier; status: 'missing'; command: string }
@@ -367,9 +373,12 @@ export function scrubPaths(text: string): string {
 
 const tooBigMessage = (needGb: number, haveGb: number) => `Not run: needs ${needGb} GB of graphics memory, and this PC has ${Math.round(haveGb * 10) / 10} GB.`;
 
-function measuredLine(tier: RigTier, measure: TierMeasure, stamp: RigStamp, gpuShare: number | null, estimateTps: number | null = null): MeasuredTier {
-  return { tier, status: 'measured', measure, stamp, gpuShare, points: rigPoints(measure, stamp), band: speedBand(measure.decodeTps), estimateTps };
+function measuredLine(tier: RigTier, measure: TierMeasure, stamp: RigStamp, gpuShare: number | null, estimateTps: number | null = null, disturbance: RigDisturbance = {}): MeasuredTier {
+  return { tier, status: 'measured', measure, stamp, gpuShare, points: rigPoints(measure, stamp), band: speedBand(measure.decodeTps), estimateTps, ...disturbanceOf(disturbance) };
 }
+
+/** Only a disturbed run has the fields; a clean one is left exactly as it was. */
+const disturbanceOf = ({ disturbed, disturbedBy }: RigDisturbance): RigDisturbance => (disturbed ? { disturbed: true, disturbedBy: disturbedBy ?? [] } : {});
 
 /**
  * The tiers in the plan, smallest first, one at a time. A busy card or Ctrl+C
@@ -398,7 +407,7 @@ export async function measureTiers(
     const outcome = assembleTierResult(tier, await run(rigRunRequest(tier, `fit-${tier.id}`), tier), now());
     let line: TierLine;
     if (outcome.kind === 'measured') {
-      line = measuredLine(tier, outcome.result.measure, outcome.result.stamp, outcome.result.gpuShare, entry.kind === 'run' ? entry.estimateTps : null);
+      line = measuredLine(tier, outcome.result.measure, outcome.result.stamp, outcome.result.gpuShare, entry.kind === 'run' ? entry.estimateTps : null, outcome.result);
     } else if (outcome.kind === 'not-installed') {
       line = { tier, status: 'missing', command: pullCommand(tier.model) };
     } else if (outcome.kind === 'too-big') {
@@ -420,7 +429,7 @@ export function formatTierDone(line: TierLine): string {
   switch (line.status) {
     case 'measured': {
       const points = line.points.kind === 'points' ? `, ${number(line.points.points)} points` : '';
-      return `${lead}${tps(line.measure.decodeTps)} tok/s writing, ${tps(line.measure.prefillTps)} tok/s reading${points}`;
+      return `${lead}${tps(line.measure.decodeTps)} tok/s writing, ${tps(line.measure.prefillTps)} tok/s reading${points}${line.disturbed ? ', disturbed' : ''}`;
     }
     case 'stopped': return `${lead}stopped`;
     case 'busy': return `${lead}not kept, Ollama was busy`;
@@ -454,7 +463,7 @@ export type ModelReport = {
   /** What the graphics card was doing before and after the run (checkCard); filled in by the caller. */
   card?: { before: CardNote | null; after: CardNote | null };
 } & (
-  | { status: 'measured'; measure: TierMeasure; stamp: RigStamp | RigModelStamp; gpuShare: number | null; points: RigPoints | null; band: SpeedBand }
+  | ({ status: 'measured'; measure: TierMeasure; stamp: RigStamp | RigModelStamp; gpuShare: number | null; points: RigPoints | null; band: SpeedBand } & RigDisturbance)
   | { status: 'missing'; command: string }
   | { status: 'busy' | 'stopped' | 'failed' | 'too-big'; message: string }
 );
@@ -480,12 +489,12 @@ export async function measureModel(
   if (base.tier) {
     const outcome = assembleTierResult(base.tier, await run(rigRunRequest(base.tier, `fit-${base.tier.id}`)), new Date().toISOString());
     if (outcome.kind !== 'measured') return { ...base, status: outcome.kind === 'not-installed' ? 'failed' : outcome.kind, message: scrubPaths(outcome.message) };
-    const line = measuredLine(base.tier, outcome.result.measure, outcome.result.stamp, outcome.result.gpuShare);
-    return { ...base, status: 'measured', measure: line.measure, stamp: line.stamp, gpuShare: line.gpuShare, points: line.points, band: line.band };
+    const line = measuredLine(base.tier, outcome.result.measure, outcome.result.stamp, outcome.result.gpuShare, null, outcome.result);
+    return { ...base, status: 'measured', measure: line.measure, stamp: line.stamp, gpuShare: line.gpuShare, points: line.points, band: line.band, ...disturbanceOf(line) };
   }
   const outcome = assembleModelResult(model, await run(rigModelRequest(model, 'fit-model')));
   if (outcome.kind !== 'measured') return { ...base, status: outcome.kind === 'not-installed' ? 'failed' : outcome.kind, message: scrubPaths(outcome.message) };
-  return { ...base, status: 'measured', measure: outcome.measure, stamp: outcome.stamp, gpuShare: outcome.gpuShare, points: null, band: speedBand(outcome.measure.decodeTps) };
+  return { ...base, status: 'measured', measure: outcome.measure, stamp: outcome.stamp, gpuShare: outcome.gpuShare, points: null, band: speedBand(outcome.measure.decodeTps), ...disturbanceOf(outcome) };
 }
 
 // ---- Printing ------------------------------------------------------------------
@@ -503,8 +512,9 @@ function pointsCell(points: RigPoints | null): string {
 }
 
 /** The notes a measured tier carries: a spill, points it cannot have, what differs from the reference. */
-function notesFor(label: string, line: { gpuShare: number | null; points: RigPoints | null; measure: TierMeasure; estimateTps: number | null }): string[] {
+function notesFor(label: string, line: { gpuShare: number | null; points: RigPoints | null; measure: TierMeasure; estimateTps: number | null } & RigDisturbance): string[] {
   const notes: string[] = [];
+  if (line.disturbed) notes.push(`${label}: ${describeDisturbance(line.disturbedBy)} This is not a clean score.`);
   if (farBelowEstimate(line.measure, line.estimateTps)) {
     notes.push(`${label}: writing ${tps(line.measure.decodeTps)} tok/s is far below the ~${number(line.estimateTps ?? 0)} tok/s estimated for this card. Something else may have been using the graphics card, or the model did not sit wholly on it, so this number is lower than this PC can do. Close other programs and run again before trusting it.`);
   }
@@ -656,6 +666,7 @@ export function formatReport(report: MeasureReport, { show = false, columns, hea
       ? `No RigScore yet: the headline is the ${standard?.label} tier, ${standard?.model}.`
       : 'No RigScore: no tier was measured.');
   }
+  if (headline?.disturbed) closing.push('That RigScore is not a clean score: something else used the graphics card while its tier ran. Close other graphics-heavy programs and run it again.');
   closing.push(`1,000 points is the reference PC, an ${RIG_REFERENCE_MACHINE}. Twice as fast at both writing and reading is 2,000. Writing is how fast the answer comes out; reading is how fast the prompt goes in.`);
   lines.push('', ...closing.flatMap((text) => wrap(text, columns)));
   return lines.join('\n');
@@ -664,7 +675,7 @@ export function formatReport(report: MeasureReport, { show = false, columns, hea
 /** How one model's run went, in one line. */
 export function formatModelDone(report: ModelReport): string {
   if (report.status !== 'measured') return `${report.model}: ${report.status === 'busy' ? 'not kept, Ollama was busy' : report.status === 'failed' ? 'did not finish' : report.status}`;
-  return `${report.model}: ${tps(report.measure.decodeTps)} tok/s writing, ${tps(report.measure.prefillTps)} tok/s reading`;
+  return `${report.model}: ${tps(report.measure.decodeTps)} tok/s writing, ${tps(report.measure.prefillTps)} tok/s reading${report.disturbed ? ', disturbed' : ''}`;
 }
 
 /** One model's measure beside its estimate. */
@@ -737,8 +748,20 @@ const pointsJson = (points: RigPoints | null) => (points?.kind === 'points'
 const FAILED_IN_JSON = 'The test did not finish.';
 const messageForJson = (status: string, message: string) => (status === 'failed' ? FAILED_IN_JSON : scrubPaths(message));
 
-/** What the card was doing, for the JSON: the level and why, nothing else. */
-const cardJson = (note: CardNote | null | undefined) => (note ? { level: note.level, reasons: note.reasons, apps: note.apps } : null);
+/**
+ * A run something else disturbed says so, and why: `disturbed: true` and
+ * `disturbedBy`, both absent on a run nothing disturbed, so that run's JSON is
+ * what it always was. The numbers beside them are as measured.
+ */
+const disturbedJson = ({ disturbed, disturbedBy }: RigDisturbance) => (disturbed ? { disturbed: true, disturbedBy: disturbedBy ?? [] } : {});
+
+/**
+ * What the card was doing, for the JSON: the level and why, which reading it
+ * came from, and when it could not be read, the reason. Nothing else.
+ */
+const cardJson = (note: CardNote | null | undefined) => (note
+  ? { level: note.level, reasons: note.reasons, apps: note.apps, ...(note.source ? { source: note.source } : {}), ...(note.reason ? { reason: note.reason } : {}) }
+  : null);
 
 /**
  * --measure --json: the measures, each tier's stamp and points. The stamp
@@ -760,6 +783,7 @@ export function toMeasureJson(report: MeasureReport, hardware: FitHardware, vers
         case 'measured': return {
           ...base, ...measureJson(line.measure, line.gpuShare), ...pointsJson(line.points), band: line.band.id,
           estimatedTps: line.estimateTps, belowEstimate: farBelowEstimate(line.measure, line.estimateTps), stamp: line.stamp,
+          ...disturbedJson(line),
         };
         case 'missing': return { ...base, command: line.command, sizeGb: line.tier.sizeGb };
         case 'skipped': return base;
@@ -772,6 +796,7 @@ export function toMeasureJson(report: MeasureReport, hardware: FitHardware, vers
       ? {
         tier: headline.tier.id, isHeadlineTier: headline.tier.id === RIG_HEADLINE_TIER, ...pointsJson(headline.points),
         writingTps: round(headline.measure.decodeTps), band: headline.tier.id === RIG_HEADLINE_TIER ? headline.band.id : null,
+        ...(headline.disturbed ? { disturbed: true } : {}),
       }
       : null,
     stopped: report.stopped,
@@ -787,6 +812,7 @@ export function toModelJson(report: ModelReport, hardware: FitHardware, version:
     return {
       ...base, ...measureJson(report.measure, report.gpuShare), ...pointsJson(report.points), band: report.band.id,
       belowEstimate: farBelowEstimate(report.measure, report.estimateTps), stamp: report.stamp,
+      ...disturbedJson(report),
       contention: { before: cardJson(report.card?.before), after: cardJson(report.card?.after) },
     };
   }

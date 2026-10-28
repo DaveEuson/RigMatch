@@ -41,7 +41,7 @@ const SCREENS = [
   { name: 'Lab, one at a time', tab: 'Labs', view: 'Test one at a time' },
   { name: 'Scorecards', tab: 'Results', view: 'Scorecards' },
   { name: 'Top Pick', tab: 'Results', view: 'Top Pick' },
-  { name: 'Runs', tab: 'Results', view: 'Runs' },
+  { name: 'Running now', tab: 'Results', view: 'Running now' },
   { name: 'My PC', tab: 'My PC' },
   { name: 'Speed score', tab: 'My PC', view: 'Speed score' },
   { name: 'Settings', settings: true },
@@ -58,7 +58,7 @@ const RAILS = ['comparison-rail', 'settings-rail', 'model-facets', 'cabinet-body
 
 const auditScript = (rails) => {
   const SEL = ['[role="tablist"]', '[role="group"]', 'nav', '[class*="tabs"]', '[class*="-menu"]',
-    '[class*="filters"]', '[class*="toggle"]', '[class*="picker"]', '[class*="rail"]'].join(',');
+    '[class*="filters"]', '[class*="toggle"]', '[class*="picker"]', '[class*="rail"]', '.test-list'].join(',');
   const MENU_CONTROLS = 'button, a[href], [role="tab"]';
   const label = (node) => (node.className || '').toString().split(' ').filter(Boolean).slice(0, 2).join('.')
     || node.tagName.toLowerCase();

@@ -2,6 +2,7 @@
 import type { ModelRow } from '../types';
 import { getFirstModelPicks } from './firstModel.ts';
 import { getFriendlyModelName, getHardwareFit, getModelCapabilities, isImageGenerationModel } from './modelCatalog.ts';
+import { nonChatKind } from './modelKind.ts';
 
 /**
  * The one model "Just let me chat" uses.
@@ -28,7 +29,8 @@ function canChat(row: ModelRow): boolean {
   // A model that only embeds text, or only makes pictures, has no chat to offer.
   const capabilities = getModelCapabilities(row);
   if (capabilities && capabilities.includes('embedding') && !capabilities.includes('completion')) return false;
-  return true;
+  // Nor does a decision model (kev, d3), which scores text, or a speech model.
+  return !nonChatKind(row);
 }
 
 export function pickJustChatModel(rows: ModelRow[], vramGb: number): JustChatChoice | null {

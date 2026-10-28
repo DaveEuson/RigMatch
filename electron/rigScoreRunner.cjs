@@ -189,6 +189,12 @@ function sharedWith(listing, model, now) {
  *  - signal: aborts the run (Stop)
  *  - onProgress(update)
  *  - now(): the clock, for reading Ollama's expiry times
+ *  - watch: { start({ machine }), check({ signal, last }) } (gpuProbe.createGpuWatch).
+ *    Looks at the graphics card after each request, never during one, and says
+ *    if a program that is not Ollama's came to use it. It changes nothing about the
+ *    run, the timings or what is sent to Ollama; a finished run it saw
+ *    disturbed carries `disturbed: true` and `disturbedBy` (the reasons), and
+ *    the numbers in it are the same ones an unwatched run would have.
  */
 async function runRigTier({
   request,
@@ -201,6 +207,7 @@ async function runRigTier({
   signal,
   onProgress = () => {},
   now = () => Date.now(),
+  watch = null,
 }) {
   const plan = normalizeRigRequest(request);
   if (signal?.aborted) return { status: 'stopped' };
@@ -236,7 +243,16 @@ async function runRigTier({
     const resident = listedNames(await fetchJson(`${baseUrl}/api/ps`, { signal }, 3000));
     if (resident.length) return { status: 'busy', loadedModels: resident };
 
-    return await timedRuns({ plan, baseUrl, fetchJson, isUnsupportedThinkError, signal, onProgress, now, machine, version, show, markLoading: () => { loading = true; }, markShared: () => { leaveLoaded = true; } });
+    // What the card is doing now is what later readings are compared with, so it
+    // is taken before the model loads. A watch that cannot start leaves the run
+    // unwatched; it never fails it.
+    let watching = watch;
+    if (watching) {
+      try { await watching.start({ machine }); } catch { watching = null; }
+    }
+    if (signal?.aborted) return { status: 'stopped' };
+
+    return await timedRuns({ plan, baseUrl, fetchJson, isUnsupportedThinkError, signal, onProgress, now, machine, version, show, watch: watching, markLoading: () => { loading = true; }, markShared: () => { leaveLoaded = true; } });
   } catch (error) {
     if (signal?.aborted) return { status: 'stopped' };
     if (loading && isOutOfMemory(error)) return { status: 'too-big', error: String(error?.message ?? error) };
@@ -250,7 +266,7 @@ async function runRigTier({
 }
 
 /** The warm-up and the timed runs, checking after each that nothing else came to share the card. */
-async function timedRuns({ plan, baseUrl, fetchJson, isUnsupportedThinkError, signal, onProgress, now, machine, version, show, markLoading, markShared }) {
+async function timedRuns({ plan, baseUrl, fetchJson, isUnsupportedThinkError, signal, onProgress, now, machine, version, show, watch, markLoading, markShared }) {
   let thinkSwitch = true;
   const generate = async (prompt, timeoutMs) => {
     const body = buildBenchmarkGenerateBody({ model: plan.model, prompt, keepAlive: RIG_KEEP_ALIVE, options: plan.options });
@@ -269,6 +285,7 @@ async function timedRuns({ plan, baseUrl, fetchJson, isUnsupportedThinkError, si
   const runs = [];
   let coldLoadSeconds = null;
   let gpuShare = null;
+  const disturbedBy = [];
   for (let index = 0; index < plan.prompts.length; index += 1) {
     if (signal?.aborted) return { status: 'stopped' };
     const warmup = index < plan.warmupRuns;
@@ -293,6 +310,21 @@ async function timedRuns({ plan, baseUrl, fetchJson, isUnsupportedThinkError, si
     if (sameModelElsewhere) markShared();
     if (others.length || sameModelElsewhere) return { status: 'shared', loadedModels: others, sameModel: sameModelElsewhere };
     if (!warmup) runs.push(readRigRun(reply));
+
+    // And the card itself, for a program that is not Ollama's (a game, a render):
+    // between this request and the next, so nothing in a request is touched, and
+    // with `last` set after the final one, which is when the watch may take its
+    // time (an idle gap before a request changes how fast that request reads its
+    // prompt, so the watch waits only when no request follows). Its reasons are
+    // kept for the result, which stays as measured.
+    if (watch) {
+      const last = index === plan.prompts.length - 1;
+      const verdict = await Promise.resolve().then(() => watch.check({ signal, last })).catch(() => null);
+      if (signal?.aborted) return { status: 'stopped' };
+      for (const reason of verdict?.disturbed ? verdict.reasons : []) {
+        if (!disturbedBy.includes(reason)) disturbedBy.push(reason);
+      }
+    }
   }
 
   return {
@@ -304,6 +336,7 @@ async function timedRuns({ plan, baseUrl, fetchJson, isUnsupportedThinkError, si
     modelDigest: weightsDigest(show),
     quantization: typeof show?.details?.quantization_level === 'string' ? show.details.quantization_level : undefined,
     machine,
+    ...(disturbedBy.length ? { disturbed: true, disturbedBy } : {}),
   };
 }
 

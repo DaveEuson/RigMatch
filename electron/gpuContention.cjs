@@ -24,11 +24,22 @@
  * rather than report `clear`, because "we could not check" and "the GPU is
  * quiet" lead to different, and differently honest, messages.
  *
- * Verification status: the NVIDIA path is written against real output captured
- * from an RTX 4070 on Windows. The AMD and Apple paths follow documented output
- * formats but are UNVERIFIED — no such hardware was available. They are built to
- * degrade to `unknown` on anything unexpected rather than produce a wrong
- * reading, and the parsers are unit-tested against the documented shapes.
+ * Verification status, per path (gpuProbe.cjs runs them):
+ *   - NVIDIA (nvidia-smi): real output captured from an RTX 4070 on Windows.
+ *   - Windows, any other card: the GPU performance counters, read through WMI.
+ *     Microsoft documents no counter names or instance format, so the shape is
+ *     the real output of a Windows 11 PC with three adapters (an NVIDIA card, an
+ *     AMD integrated GPU and the software renderer). A discrete AMD or Intel card
+ *     has NOT been run.
+ *   - Linux AMD: the amdgpu driver's sysfs files, whose names and units are in
+ *     the kernel documentation (docs.kernel.org/gpu/amdgpu). Not run on AMD
+ *     hardware.
+ *   - Apple Silicon (ioreg): real output captured from an M4.
+ *   - Intel on Linux, and any other card: not read. Intel documents no tool
+ *     that works without special privileges on the desktop cards, so the answer
+ *     there is `unknown`, with the reason.
+ * Every parser returns null on anything unexpected, which reads as `unknown`
+ * rather than as a wrong reading.
  */
 
 /**
@@ -172,43 +183,6 @@ function parseNvidiaGpuQuery(output) {
 }
 
 /**
- * Parse `rocm-smi --showmemuse --showuse --csv` (AMD).
- *
- * UNVERIFIED — written from documented output, no AMD hardware available:
- *   device,GPU memory use (%),GPU use (%)
- *   card0,42,17
- *
- * Returns null on anything unexpected so an unparsed format reads as "unknown"
- * rather than a fabricated reading.
- */
-function parseRocmSmiQuery(output, vramTotalMb = null) {
-  const lines = String(output ?? '')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean);
-  const dataLine = lines.find((l) => /^card\d/i.test(l));
-  if (!dataLine) return null;
-
-  const cells = dataLine.split(',').map((c) => c.trim());
-  const numbers = cells.map((c) => Number(c.replace('%', ''))).filter((n) => Number.isFinite(n));
-  if (numbers.length < 2) return null;
-
-  const [memoryUsePercent, utilizationPercent] = numbers.slice(-2);
-  if (memoryUsePercent < 0 || memoryUsePercent > 100) return null;
-  if (utilizationPercent < 0 || utilizationPercent > 100) return null;
-
-  // rocm-smi reports memory as a percentage; convert only if a total is known.
-  const total = Number.isFinite(vramTotalMb) && vramTotalMb > 0 ? vramTotalMb : null;
-  return {
-    vramUsedMb: total ? Math.round((memoryUsePercent / 100) * total) : null,
-    vramTotalMb: total,
-    vramUsedPercent: memoryUsePercent,
-    utilizationPercent,
-    source: 'rocm-smi',
-  };
-}
-
-/**
  * Parse `ioreg -r -d 1 -w 0 -c AGXAccelerator` (Apple Silicon).
  *
  * systeminformation reports no GPU utilization at all on Apple Silicon — model
@@ -262,6 +236,178 @@ function parseIoregGpuStats(output) {
   };
 }
 
+const MIB = 1024 * 1024;
+
+/**
+ * An integrated GPU's "dedicated" memory is a slice of system RAM set aside in
+ * the BIOS (a few hundred MB to a few GB), not a card's own memory, and what the
+ * GPU really uses comes out of the shared pool. A share of that slice says
+ * nothing about contention, so under this size only utilization is judged. No
+ * discrete card that can run a RigScore tier (4 GB and up) is this small.
+ */
+const SHARED_CARVEOUT_MAX_MB = 3072;
+
+/** The Microsoft Basic Render Driver (software rendering): never a card to measure. */
+const SOFTWARE_ADAPTER_VENDOR = '1414';
+
+const normalizeGpuName = (name) => String(name ?? '').toLowerCase().replace(/\((?:tm|r)\)/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** An adapter LUID as counters name it ("luid_0x00000000_0x00017162") or the registry holds it (hex), as one comparable string. */
+function luidKey(high, low) {
+  try {
+    return ((BigInt(`0x${high}`) << 32n) | BigInt(`0x${low}`)).toString(16);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Which of the PC's graphics adapters is the card to read: the one whose name
+ * is the card RigMatch detected, else the one with the most dedicated memory.
+ * The software renderer is never picked. Returns null when there is none.
+ */
+function pickWindowsAdapter(adapters, gpuName = '') {
+  const real = (Array.isArray(adapters) ? adapters : [])
+    .filter((adapter) => adapter && typeof adapter.luid === 'string' && adapter.luid && String(adapter.vendor).toLowerCase() !== SOFTWARE_ADAPTER_VENDOR);
+  if (!real.length) return null;
+  const largest = (list) => [...list].sort((a, b) => (Number(b.bytes) || 0) - (Number(a.bytes) || 0))[0];
+  const want = normalizeGpuName(gpuName);
+  if (want) {
+    const named = real.filter((adapter) => {
+      const have = normalizeGpuName(adapter.name);
+      return have && (have === want || have.includes(want) || want.includes(have));
+    });
+    if (named.length) return largest(named);
+  }
+  return largest(real);
+}
+
+/**
+ * Parse what gpuProbe.cjs's PowerShell script prints on Windows: the adapters
+ * from the DirectX registry key (name, vendor, dedicated memory, LUID), and per
+ * sample the WMI GPU performance counters (Win32_PerfFormattedData_
+ * GPUPerformanceCounters_GPUAdapterMemory and ..._GPUEngine). Any vendor, since
+ * these are Windows counters and not a vendor tool.
+ *
+ * Real captured output (Windows 11, an RTX 4070, an AMD Radeon integrated GPU
+ * and the Basic Render Driver; two of five samples, engines at zero left out by
+ * the script):
+ *   {"adapters":[{"luid":"187f0","vendor":"1414","name":"Microsoft Basic Render
+ *   Driver","bytes":0},{"luid":"17162","vendor":"10de","name":"NVIDIA GeForce
+ *   RTX 4070","bytes":12593397760},{"luid":"18823","vendor":"1002","name":"AMD
+ *   Radeon(TM) Graphics","bytes":2119970816}],"samples":[{"mem":[{"n":"luid_0x
+ *   00000000_0x00017162_phys_0","b":4338479104}],"eng":[{"n":"pid_11828_luid_0x
+ *   00000000_0x00017162_phys_0_eng_0_engtype_3D","u":25}]}, ...]}
+ *
+ * A card's utilization is that of its busiest engine, as Task Manager shows it
+ * (Microsoft: "the percentage utilization of the busiest engine as a
+ * representative of the overall GPU usage"); each engine's figure is the sum of
+ * the processes using it. A sample with no memory row for the card is skipped:
+ * without it the counters did not answer for this card, and zero engines would
+ * read as an idle one.
+ *
+ * Returns one reading per usable sample, or [] when nothing can be read.
+ */
+function parseWindowsGpuProbe(output, { gpuName = '' } = {}) {
+  const text = String(output ?? '');
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return [];
+  let data;
+  try {
+    data = JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return [];
+  }
+  const adapters = (Array.isArray(data?.adapters) ? data.adapters : []).map((adapter) => ({
+    ...adapter,
+    luid: typeof adapter?.luid === 'string' && /^[0-9a-f]+$/i.test(adapter.luid) ? BigInt(`0x${adapter.luid}`).toString(16) : '',
+  }));
+  const adapter = pickWindowsAdapter(adapters, gpuName);
+  if (!adapter || !Array.isArray(data?.samples)) return [];
+
+  const totalMb = Number(adapter.bytes) > 0 ? Number(adapter.bytes) / MIB : null;
+  const readings = [];
+  for (const sample of data.samples) {
+    const memory = (Array.isArray(sample?.mem) ? sample.mem : []).find((row) => {
+      const m = String(row?.n ?? '').match(/^luid_0x([0-9a-f]+)_0x([0-9a-f]+)_phys_\d+$/i);
+      return m && luidKey(m[1], m[2]) === adapter.luid;
+    });
+    const usedBytes = Number(memory?.b);
+    if (!memory || !Number.isFinite(usedBytes) || usedBytes < 0) continue;
+
+    // Sum the processes on each engine, then take the busiest engine.
+    const engines = new Map();
+    for (const row of Array.isArray(sample?.eng) ? sample.eng : []) {
+      const m = String(row?.n ?? '').match(/^pid_\d+_luid_0x([0-9a-f]+)_0x([0-9a-f]+)_phys_(\d+)_eng_(\d+)_engtype_/i);
+      const percent = Number(row?.u);
+      if (!m || luidKey(m[1], m[2]) !== adapter.luid || !Number.isFinite(percent) || percent < 0) continue;
+      const key = `${m[3]}:${m[4]}`;
+      engines.set(key, (engines.get(key) ?? 0) + percent);
+    }
+    const utilizationPercent = Math.min(100, Math.max(0, ...engines.values()));
+    readings.push({
+      vramUsedMb: usedBytes / MIB,
+      vramTotalMb: totalMb,
+      utilizationPercent,
+      memoryShared: totalMb !== null && totalMb < SHARED_CARVEOUT_MAX_MB,
+      source: 'windows-counters',
+    });
+  }
+  return readings;
+}
+
+/**
+ * One amdgpu card's reading from its sysfs files (Linux). The kernel
+ * documentation (docs.kernel.org/gpu/amdgpu/driver-misc.html and thermal.html)
+ * gives them as:
+ *   mem_info_vram_total  "returns the total amount of VRAM in bytes"
+ *   mem_info_vram_used   "returns the total amount of currently used VRAM in bytes"
+ *   gpu_busy_percent     "reading how busy the GPU is as a percentage"
+ * Each file holds one decimal number and a newline. Returns null unless all
+ * three parse, so a half-readable card is "not checked", not "idle".
+ */
+function parseAmdSysfs({ vramUsed, vramTotal, busyPercent } = {}) {
+  const whole = (text) => (/^\s*\d+\s*$/.test(String(text ?? '')) ? Number(text) : null);
+  const used = whole(vramUsed);
+  const total = whole(vramTotal);
+  const busy = whole(busyPercent);
+  if (used === null || total === null || busy === null || total <= 0 || used > total || busy > 100) return null;
+  const totalMb = total / MIB;
+  return {
+    vramUsedMb: used / MIB,
+    vramTotalMb: totalMb,
+    utilizationPercent: busy,
+    memoryShared: totalMb < SHARED_CARVEOUT_MAX_MB,
+    source: 'amdgpu-sysfs',
+  };
+}
+
+/**
+ * Why a card could not be read, in a plain sentence, for the "not checked"
+ * message. Says what RigMatch lacks, not that the card is idle.
+ */
+function describeUnreadable({ platform = '', arch = '', gpuName = '' } = {}) {
+  const name = String(gpuName ?? '');
+  const vendor = /nvidia|geforce|quadro|\brtx\b|\bgtx\b/i.test(name) ? 'nvidia'
+    : /\bamd\b|radeon|\bati\b/i.test(name) ? 'amd'
+      : /intel|\barc\b|iris|\buhd\b/i.test(name) ? 'intel'
+        : '';
+  if (platform === 'linux') {
+    if (vendor === 'intel') return "RigMatch has no way to read an Intel graphics card's load on Linux.";
+    if (vendor === 'amd') return "The AMD driver did not report the card's load.";
+    if (vendor === 'nvidia') return "nvidia-smi did not report the card's load.";
+    return "RigMatch cannot read this graphics card's load on Linux.";
+  }
+  if (platform === 'win32') return "Windows did not report the graphics card's load.";
+  if (platform === 'darwin') {
+    return arch === 'arm64'
+      ? "macOS did not report the graphics card's load."
+      : "RigMatch cannot read a Mac's graphics card load unless it is Apple Silicon.";
+  }
+  return "RigMatch has no way to read this graphics card's load.";
+}
+
 /**
  * Match running process names against the known-heavy allowlist.
  *
@@ -301,9 +447,12 @@ function matchKnownGpuApps(processNames, ownProcessNames = []) {
  * mean different things to a user deciding whether to trust a score.
  */
 function assessGpuContention(reading, knownApps = [], options = {}) {
-  if (!reading || typeof reading !== 'object') {
-    return { level: 'unknown', reasons: [], apps: [], utilizationPercent: null, vramUsedPercent: null };
-  }
+  // `options.reason`: why the card could not be read, kept on an unknown result.
+  const unknown = () => ({
+    level: 'unknown', reasons: [], apps: [], utilizationPercent: null, vramUsedPercent: null,
+    ...(options.reason ? { reason: options.reason } : {}),
+  });
+  if (!reading || typeof reading !== 'object') return unknown();
 
   const utilization = Number.isFinite(reading.utilizationPercent) ? reading.utilizationPercent : null;
   const vramShare = Number.isFinite(reading.vramUsedPercent)
@@ -312,9 +461,10 @@ function assessGpuContention(reading, knownApps = [], options = {}) {
       ? reading.vramUsedMb / reading.vramTotalMb
       : null);
 
-  if (utilization === null && vramShare === null) {
-    return { level: 'unknown', reasons: [], apps: [], utilizationPercent: null, vramUsedPercent: null };
-  }
+  // On a shared pool the memory figure is ignored below, so a reading with
+  // nothing else in it has told us nothing: not checked, rather than clear.
+  const judgesMemory = vramShare !== null && !options.unifiedMemory && !reading.memoryShared;
+  if (utilization === null && !judgesMemory) return unknown();
 
   const reasons = [];
   let level = 'clear';
@@ -337,7 +487,7 @@ function assessGpuContention(reading, knownApps = [], options = {}) {
   // "GPU memory" figure is the pool the CPU also uses, so ordinary RAM pressure
   // would read as GPU contention. Utilization still means what it says, so that
   // criterion stands alone there.
-  if (vramShare !== null && !options.unifiedMemory) {
+  if (judgesMemory) {
     const percent = Math.round(vramShare * 100);
     if (vramShare >= HEAVY_VRAM_SHARE) {
       raise('heavy');
@@ -363,12 +513,62 @@ function assessGpuContention(reading, knownApps = [], options = {}) {
 }
 
 /**
+ * Mid-run: did something join the card while a speed test ran?
+ *
+ * Judging only; when and how the card is read is gpuProbe.createGpuWatch's,
+ * which reads utilization only after the card has had time to go quiet
+ * (nvidia-smi's utilization is "the past sample period", up to a second), so the
+ * model's own work is not in it. What is left is another program's. Three
+ * signals, each against a baseline:
+ *   - utilization: at the "heavy" threshold or above, whenever it started (a
+ *     card hammered between a test's requests is hammered for the test, and the
+ *     next tier of the same test begins with the program already there); or at
+ *     the "busy" threshold and at least this many points above the baseline, so
+ *     a desktop that was already at 40% is not "joined" by a 48% reading.
+ *   - memory: grown by this much since the model finished loading. The larger of
+ *     an absolute step and a share of the card, so a browser tab's churn
+ *     (hundreds of MB) is not a program joining. Not judged on a shared pool,
+ *     where ordinary RAM use would count.
+ *   - a known graphics-heavy program (the same allowlist) that was not running
+ *     when the test began.
+ * A program that joins and leaves between two checks is not seen.
+ */
+const MIDRUN_UTILIZATION_RISE = 20;
+const MIDRUN_VRAM_GROWTH_MB = 1024;
+const MIDRUN_VRAM_GROWTH_SHARE = 0.08;
+
+function judgeMidRun({ baseline = null, reference = null, current = null, baselineApps = [], currentApps = [], ignoreApps = [], unifiedMemory = false } = {}) {
+  const reasons = [];
+  const finite = (value) => Number.isFinite(value);
+  if (current) {
+    if (finite(current.utilizationPercent)) {
+      const busy = current.utilizationPercent;
+      const was = finite(baseline?.utilizationPercent) ? baseline.utilizationPercent : 0;
+      if (busy >= HEAVY_UTILIZATION_PERCENT || (busy >= BUSY_UTILIZATION_PERCENT && busy - was >= MIDRUN_UTILIZATION_RISE)) {
+        reasons.push(`the graphics card was ${Math.round(busy)}% busy between the runs`);
+      }
+    }
+    if (!unifiedMemory && !current.memoryShared && finite(current.vramUsedMb) && finite(reference?.vramUsedMb)) {
+      const step = Math.max(MIDRUN_VRAM_GROWTH_MB, finite(current.vramTotalMb) ? MIDRUN_VRAM_GROWTH_SHARE * current.vramTotalMb : 0);
+      const grew = current.vramUsedMb - reference.vramUsedMb;
+      if (grew >= step) reasons.push(`about ${(grew / 1024).toFixed(1)} GB more graphics memory was in use than when the model had loaded`);
+    }
+  }
+  const before = new Set([...baselineApps, ...ignoreApps]);
+  const started = (Array.isArray(currentApps) ? currentApps : []).filter((app) => !before.has(app));
+  if (started.length) reasons.push(`${started.join(' and ')} started while the test ran`);
+  return { disturbed: reasons.length > 0, reasons };
+}
+
+/**
  * The one sentence shown to the user. Never instructs closing anything we are
  * not confident about, and says plainly when we could not check.
  */
 function describeGpuContention(assessment) {
   if (!assessment || assessment.level === 'unknown') {
-    return 'RigMatch could not check whether other programs are using your graphics card. If something heavy is open, close it for the most accurate scores.';
+    // `reason` is why the card could not be read (describeUnreadable), when known.
+    const why = assessment?.reason ? ` ${assessment.reason}` : '';
+    return `RigMatch could not check whether other programs are using your graphics card.${why} If something heavy is open, close it for the most accurate scores.`;
   }
   if (assessment.level === 'clear') return '';
 
@@ -414,6 +614,7 @@ function medianReading(readings) {
     vramTotalMb: pick('vramTotalMb'),
     vramUsedPercent: pick('vramUsedPercent'),
     utilizationPercent: pick('utilizationPercent'),
+    ...(usable[0].memoryShared ? { memoryShared: true } : {}),
     samples: usable.length,
     source: usable[0].source,
   };
@@ -430,8 +631,16 @@ module.exports = {
   BUSY_VRAM_SHARE,
   HEAVY_VRAM_SHARE,
   parseNvidiaGpuQuery,
-  parseRocmSmiQuery,
   parseIoregGpuStats,
+  parseWindowsGpuProbe,
+  pickWindowsAdapter,
+  parseAmdSysfs,
+  describeUnreadable,
+  judgeMidRun,
+  MIDRUN_UTILIZATION_RISE,
+  MIDRUN_VRAM_GROWTH_MB,
+  MIDRUN_VRAM_GROWTH_SHARE,
+  SHARED_CARVEOUT_MAX_MB,
   matchKnownGpuApps,
   assessGpuContention,
   describeGpuContention,
