@@ -207,3 +207,32 @@ export function winnerField(finished: number, picked: number): { tested: string;
     onlyOne: partial && finished === 1,
   };
 }
+
+type AccuracyResult = { model: string; name: string; accuracy?: number };
+
+/**
+ * The contestant that answered clearly better than the Top Match, if there is one.
+ *
+ * Match Score counts speed, stability and fit as well as accuracy, so a small
+ * quick model can win a balanced show while a larger one gave better answers:
+ * a 0.6B model took Grade A with accuracy 76. The card says "best mix" and
+ * shows only the winner's own accuracy, so the trade was invisible. This names
+ * who was ahead when the gap is `gap` points or more.
+ */
+export function moreAccurateThanWinner(
+  winnerModel: string,
+  results: ReadonlyArray<AccuracyResult>,
+  gap = 10,
+): { name: string; accuracy: number; winnerAccuracy: number } | null {
+  const winner = results.find((result) => result.model === winnerModel);
+  if (winner?.accuracy == null) return null;
+  let best: AccuracyResult | null = null;
+  for (const result of results) {
+    if (result.model === winnerModel || result.accuracy == null) continue;
+    if (best === null || result.accuracy > (best.accuracy ?? 0)) best = result;
+  }
+  if (best === null || best.accuracy == null) return null;
+  const accuracy = Math.round(best.accuracy);
+  const winnerAccuracy = Math.round(winner.accuracy);
+  return accuracy - winnerAccuracy >= gap ? { name: best.name, accuracy, winnerAccuracy } : null;
+}

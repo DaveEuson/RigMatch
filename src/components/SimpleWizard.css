@@ -575,6 +575,7 @@
 .sw-winner-grade b { color: var(--text-strong); font: 500 56px / 1 var(--figure); }
 .sw-winner-grade span { color: var(--text); font-size: 16px; }
 .sw-winner-why { max-width: 56ch; margin: 0; color: var(--text); font-size: 16px; }
+.sw-winner-lead { max-width: 56ch; margin: var(--s2) 0 0; color: var(--muted); font-size: var(--fs-ui); }
 .sw-winner-measures { display: flex; flex-wrap: wrap; gap: var(--s5); margin: var(--s2) 0 0; }
 .sw-winner-measures div { display: grid; gap: 2px; }
 .sw-winner-measures dt { color: var(--muted); font-size: var(--fs-ui); }
