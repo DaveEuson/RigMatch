@@ -38,6 +38,7 @@ const { runEndurance } = require('./enduranceRunner.cjs');
 const { fitFromPc, loadedFootprint } = require('./matchFit.cjs');
 const { gradeFor, totalsFromPrompts } = require('./benchmarkTotals.cjs');
 const { transientFailure, canRetest, mergeRetest } = require('./benchmarkRetest.cjs');
+const { secondJudge, combineMarks } = require('./judgePanel.cjs');
 const security = require('./security.cjs');
 const { chatMessageText, chatHistory } = require('./chatDock.cjs');
 const gpuContention = require('./gpuContention.cjs');
@@ -3754,6 +3755,28 @@ async function runBenchmarkInner(request = {}, sender, signal) {
     }
     return drawingAutoJudge;
   };
+  /** Whether a judge looks at a drawing's picture or reads its code (drawingRound.cjs). */
+  const drawingJudgeKind = async (name, local = true) => {
+    const endpoint = judgeEndpoint(name);
+    const capabilities = local && endpoint.provider === 'ollama' ? await judgeCapabilities(endpoint.baseUrl, name) : [];
+    return drawingJudgeMode({ local, provider: endpoint.provider, capabilities });
+  };
+  /**
+   * The judge averaged with the first (judgePanel.cjs): the next candidate that
+   * is a different model, and for a drawing one that judges the same way, by
+   * picture or by code. Found once a run for each first judge and kind.
+   */
+  const secondJudges = new Map();
+  const secondJudgeName = async (primary, drawing) => {
+    const key = `${drawing ? 'drawing' : 'text'}:${primary}`;
+    if (!secondJudges.has(key)) {
+      const primaryWeights = identities(primary);
+      const others = autoJudgeCandidates.filter((name) => !identities(name).some((identity) => primaryWeights.includes(identity)));
+      const kind = drawing ? await drawingJudgeKind(primary) : null;
+      secondJudges.set(key, await secondJudge(primary, others, drawing ? async (name) => (await drawingJudgeKind(name)) === kind : undefined));
+    }
+    return secondJudges.get(key);
+  };
   const sendProgress = (update) => {
     const payload = {
       id: progressId,
@@ -3850,8 +3873,8 @@ async function runBenchmarkInner(request = {}, sender, signal) {
     }
   };
 
-  // Set once the judge times out or cannot be reached; see below.
-  let judgeGaveUp = false;
+  // The judges that timed out or could not be reached; see below.
+  const judgesGaveUp = new Set();
 
   for (const [promptIndex, prompt] of benchmarkPrompts.entries()) {
     throwIfCanceled();
@@ -3865,6 +3888,8 @@ async function runBenchmarkInner(request = {}, sender, signal) {
     // checked against the judge's reasoning.
     let promptJudgeReason = '';
     let promptJudgeIssue = null;
+    // Each judge's own mark, when two marked it (judgePanel.cjs).
+    let promptJudgeMarks = null;
     // A drawing is asked once: one long answer instead of three timing runs.
     const repeats = prompt.type === 'drawing' ? 1 : BENCHMARK_REPEATS;
     // The cleaned picture and the line saying how it was scored, for a drawing.
@@ -4012,86 +4037,104 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       // A tool call is checked by rule even when a judge is on: the right tool
       // and the right date are facts, and a judge would be shown a description
       // of the call rather than the call.
-      if ((useJudge || autoJudgeThis) && !toolAnswer && runIndex === 0 && !judgeGaveUp && drawingCheck?.ok !== false) {
-        const judgeName = useJudge ? judgeModel : drawingCheck ? await drawingAutoJudgeName() : autoJudgeModel;
-        // Said while it happens. Marking an answer takes the judge model's own
-        // time, and the contestant was shown "Thinking it over…" throughout.
-        sendProgress({
-          phase: 'judging',
-          promptIndex,
-          promptId: prompt.id,
-          promptLabel: prompt.label,
-          promptType: prompt.type,
-          prompt: prompt.prompt,
-          judge: judgeName,
-          message: `${judgeName} is marking ${model}'s answer.`,
-        });
-        let judgeFailure = null;
-        let judgeOutput = '';
+      if ((useJudge || autoJudgeThis) && !toolAnswer && runIndex === 0 && drawingCheck?.ok !== false) {
         const judgedHere = !(useJudge && judgeProvider === 'openrouter');
-        // A judge that can see is shown the drawing itself, drawn to a PNG by
-        // the window that started the run; any other judge reads its SVG.
-        let picture = null;
-        if (drawingCheck) {
-          const endpoint = judgeEndpoint(judgeName);
-          const capabilities = judgedHere && endpoint.provider === 'ollama' ? await judgeCapabilities(endpoint.baseUrl, judgeName) : [];
-          if (drawingJudgeMode({ local: judgedHere, provider: endpoint.provider, capabilities }) === 'picture') {
-            picture = await requestDrawingPicture(sender, drawingCheck.svg);
-          }
-          drawingJudgedFrom = picture ? 'picture' : 'code';
-        }
-        // A judge in the other program loaded beside the contestant: Ollama
-        // and LM Studio free memory for their own models, not for each
-        // other's, so the two squeezed the card until verdicts timed out. The
-        // contestant leaves first; the warm-up after the verdict brings it back.
-        if (judgedHere && judgeEndpoint(judgeName).provider !== provider) {
-          if (provider === 'lm-studio') await unloadLmStudioModel(baseUrl, model, activeBenchmark?.lmStudioKeep ?? null);
-          else await unloadBenchmarkModel(baseUrl, model);
-        }
-        const verdict = await scoreQualityWithJudge({
-          prompt,
-          // A drawing's judge reads the cleaned SVG, not the chat around it.
-          response: drawingCheck ? drawingCheck.svg : responseText,
-          picture: Boolean(picture),
-          generate: async (judgePrompt) => {
-            try {
-              judgeOutput = String(await (useJudge && judgeProvider === 'openrouter'
-                ? openRouterGenerateText(judgeApiKey, judgeModel, judgePrompt, 400, signal)
-                : runLocalJudge(judgeEndpoint(judgeName), judgeName, judgePrompt, signal, picture)) ?? '');
-              return judgeOutput;
-            } catch (error) {
-              judgeFailure = error;
-              throw error;
-            }
-          },
-        });
-        promptJudgeScore = verdict ? verdict.score : null;
-        promptJudgeReason = verdict?.reason ?? '';
-        promptJudgeIssue = verdict ? null : judgeFailure ? `The judge could not be reached: ${getLogErrorMessage(judgeFailure)}` : `The judge answered, but not with a score RigMatch could read: "${judgeOutput.replace(/\s+/g, ' ').trim().slice(0, 160)}"`;
-        // A judge that timed out or could not be reached will do the same on
-        // every answer after this one, at up to two minutes each: a hung judge
-        // held a question for 120s while the time-left estimate climbed, and
-        // then did it again on the next. The rest of this model's answers are
-        // marked without it. An unreadable verdict is one bad answer, not a dead
-        // judge, so it does not count; nor does the user pressing Stop.
-        if (judgeFailure && !signal?.aborted) {
-          judgeGaveUp = true;
-          await appendAppLog({
-            level: 'warn',
-            source: 'benchmark',
-            message: `Judge ${judgeName} stopped answering; the rest of ${model}'s answers are marked without it`,
-            details: { model, judge: judgeName, promptId: prompt.id, error: serializeError(judgeFailure) },
+        const primaryJudge = useJudge ? judgeModel : drawingCheck ? await drawingAutoJudgeName() : autoJudgeModel;
+        // A second, different judge of the same kind, averaged with the first
+        // (judgePanel.cjs). Never a second paid cloud call: that judge is the
+        // person's own choice and costs them per answer.
+        const judges = (judgedHere ? [primaryJudge, await secondJudgeName(primaryJudge, Boolean(drawingCheck))] : [primaryJudge])
+          .filter((name) => name && !judgesGaveUp.has(name));
+        if (judges.length > 0) {
+          // Said while it happens. Marking an answer takes the judge model's own
+          // time, and the contestant was shown "Thinking it over…" throughout.
+          sendProgress({
+            phase: 'judging',
+            promptIndex,
+            promptId: prompt.id,
+            promptLabel: prompt.label,
+            promptType: prompt.type,
+            prompt: prompt.prompt,
+            judge: judges.join(' and '),
+            message: `${judges.join(' and ')} ${judges.length > 1 ? 'are' : 'is'} marking ${model}'s answer.`,
           });
+          // A judge that can see is shown the drawing itself, drawn to a PNG by
+          // the window that started the run; any other judge reads its SVG. The
+          // two judges are always the same kind, so the first one decides.
+          let picture = null;
+          if (drawingCheck) {
+            if (await drawingJudgeKind(judges[0], judgedHere) === 'picture') {
+              picture = await requestDrawingPicture(sender, drawingCheck.svg);
+            }
+            drawingJudgedFrom = picture ? 'picture' : 'code';
+          }
+          // A judge in the other program loaded beside the contestant: Ollama
+          // and LM Studio free memory for their own models, not for each
+          // other's, so the two squeezed the card until verdicts timed out. The
+          // contestant leaves first; the warm-up after the verdicts brings it back.
+          if (judgedHere && judges.some((judgeName) => judgeEndpoint(judgeName).provider !== provider)) {
+            if (provider === 'lm-studio') await unloadLmStudioModel(baseUrl, model, activeBenchmark?.lmStudioKeep ?? null);
+            else await unloadBenchmarkModel(baseUrl, model);
+          }
+          const marks = [];
+          const issues = [];
+          for (const judgeName of judges) {
+            let judgeFailure = null;
+            let judgeOutput = '';
+            const verdict = await scoreQualityWithJudge({
+              prompt,
+              // A drawing's judge reads the cleaned SVG, not the chat around it.
+              response: drawingCheck ? drawingCheck.svg : responseText,
+              picture: Boolean(picture),
+              generate: async (judgePrompt) => {
+                try {
+                  judgeOutput = String(await (useJudge && judgeProvider === 'openrouter'
+                    ? openRouterGenerateText(judgeApiKey, judgeModel, judgePrompt, 400, signal)
+                    : runLocalJudge(judgeEndpoint(judgeName), judgeName, judgePrompt, signal, picture)) ?? '');
+                  return judgeOutput;
+                } catch (error) {
+                  judgeFailure = error;
+                  throw error;
+                }
+              },
+            });
+            if (verdict) marks.push({ judge: judgeName, score: verdict.score, ...(verdict.reason ? { reason: verdict.reason } : {}) });
+            else issues.push(judgeFailure ? `${judgeName} could not be reached: ${getLogErrorMessage(judgeFailure).replace(/[.\s]+$/, '')}.` :`${judgeName} answered, but not with a score RigMatch could read: "${judgeOutput.replace(/\s+/g, ' ').trim().slice(0, 160)}".`);
+            // A judge that timed out or could not be reached will do the same on
+            // every answer after this one, at up to two minutes each: a hung judge
+            // held a question for 120s while the time-left estimate climbed, and
+            // then did it again on the next. The rest of this model's answers are
+            // marked without it. An unreadable verdict is one bad answer, not a dead
+            // judge, so it does not count; nor does the user pressing Stop.
+            if (judgeFailure && !signal?.aborted) {
+              judgesGaveUp.add(judgeName);
+              await appendAppLog({
+                level: 'warn',
+                source: 'benchmark',
+                message: `Judge ${judgeName} stopped answering; the rest of ${model}'s answers are marked without it`,
+                details: { model, judge: judgeName, promptId: prompt.id, error: serializeError(judgeFailure) },
+              });
+            }
+            throwIfCanceled();
+          }
+          const combined = combineMarks(marks);
+          promptJudgeScore = combined ? combined.score : null;
+          promptJudgeReason = marks[0]?.reason ?? '';
+          // Both marks are kept, so the answer can say who marked it and how far apart they were.
+          promptJudgeMarks = marks.length > 1 ? marks : null;
+          promptJudgeIssue = issues.length === 0 ? null
+            : marks.length > 0 ? `${issues.join(' ')} ${marks[0].judge} marked it alone.`
+              : issues.join(' ');
+          // The judges have already left (keep_alive 0 in runJudgeGenerate), but
+          // loading one can push this model out of GPU memory, and a model reloaded
+          // while a judge still held the GPU comes back split onto the CPU. Load
+          // it again now, untimed, so the next timing run measures the model and
+          // not its reload — two of this question's three runs are still to come.
+          // Stop during the verdict ends here, not after reloading the model.
+          throwIfCanceled();
+          if (judgedHere && provider === 'lm-studio') await warmLmStudioBenchmarkModel(baseUrl, model, signal);
+          else if (judgedHere) await warmBenchmarkModel(baseUrl, model, signal);
         }
-        // The judge has already left (keep_alive 0 in runJudgeGenerate), but
-        // loading it can push this model out of GPU memory, and a model reloaded
-        // while the judge still held the GPU comes back split onto the CPU. Load
-        // it again now, untimed, so the next timing run measures the model and
-        // not its reload — two of this question's three runs are still to come.
-        // Stop during the verdict ends here, not after reloading the model.
-        throwIfCanceled();
-        if (judgedHere && provider === 'lm-studio') await warmLmStudioBenchmarkModel(baseUrl, model, signal);
-        else if (judgedHere) await warmBenchmarkModel(baseUrl, model, signal);
       }
       if (drawingCheck) {
         promptDrawing = {
@@ -4209,6 +4252,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       ...(runs.some((run) => run.retriedAfter) ? { retriedAfter: runs.find((run) => run.retriedAfter).retriedAfter } : {}),
       ...(promptJudgeReason ? { judgeReason: promptJudgeReason } : {}),
       ...(promptJudgeIssue ? { judgeIssue: promptJudgeIssue } : {}),
+      ...(promptJudgeMarks ? { judgeMarks: promptJudgeMarks } : {}),
       ...(promptDrawing ? { drawing: promptDrawing } : {}),
     });
     const completedPrompt = promptResults[promptResults.length - 1];

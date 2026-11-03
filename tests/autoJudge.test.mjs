@@ -178,7 +178,7 @@ test('the judge leaves the GPU before the model under test is timed again', () =
 
   // Between the verdict and the answer's score being taken: the judge block.
   // A fixed character window broke the moment anything else joined the block.
-  const verdict = main.indexOf('promptJudgeScore = verdict ? verdict.score : null;');
+  const verdict = main.indexOf('promptJudgeScore = combined ? combined.score : null;');
   const scored = main.indexOf('const sobrietyScore = promptJudgeScore != null', verdict);
   assert.ok(verdict > 0 && scored > verdict, 'the verdict or scoring line moved; follow it');
   assert.match(main.slice(verdict, scored), /await warmBenchmarkModel\(baseUrl, model, signal\)/,

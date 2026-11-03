@@ -29,7 +29,9 @@ test('the show keeps 300 tokens; a scripted run can ask for more, and the contex
 });
 
 test('a judged answer keeps the judge\'s reason, and a missing mark says why', () => {
-  assert.match(main, /promptJudgeReason = verdict\?\.reason \?\? '';/);
+  // The first judge's reason; with two judges both marks are kept too (judgeMarks).
+  assert.match(main, /promptJudgeReason = marks\[0\]\?\.reason \?\? '';/);
+  assert.match(main, /\.\.\.\(promptJudgeMarks \? \{ judgeMarks: promptJudgeMarks \} : \{\}\)/);
   assert.match(main, /\.\.\.\(promptJudgeReason \? \{ judgeReason: promptJudgeReason \} : \{\}\)/);
   assert.match(main, /\.\.\.\(promptJudgeIssue \? \{ judgeIssue: promptJudgeIssue \} : \{\}\)/);
   // A cloud judge has room for its sentence.

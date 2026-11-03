@@ -221,6 +221,11 @@ export type BenchmarkPromptResult = {
   judgeReason?: string;
   /** Why a judge was asked and gave no mark: unreachable, or unreadable. */
   judgeIssue?: string;
+  /**
+   * Each judge's own mark when two different judges marked it; sobrietyScore
+   * is their average (electron/judgePanel.cjs). Absent for one judge or none.
+   */
+  judgeMarks?: Array<{ judge: string; score: number; reason?: string }>;
   /** A drawing question's picture, as the main process checked and cleaned it. */
   drawing?: PromptDrawing;
   /**

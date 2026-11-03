@@ -132,8 +132,10 @@ test('a judge that stops answering is not waited on for every answer', () => {
   const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
   // !toolAnswer: a tool call is checked by rule, never sent to a judge; nor is
   // a drawing that failed its checks.
-  assert.match(main, /if \(\(useJudge \|\| autoJudgeThis\) && !toolAnswer && runIndex === 0 && !judgeGaveUp && drawingCheck\?\.ok !== false\)/);
-  assert.match(main, /if \(judgeFailure && !signal\?\.aborted\) \{\s*judgeGaveUp = true;/);
+  assert.match(main, /if \(\(useJudge \|\| autoJudgeThis\) && !toolAnswer && runIndex === 0 && drawingCheck\?\.ok !== false\)/);
+  // Each judge on its own: one that stopped answering is dropped, the other goes on marking.
+  assert.match(main, /\.filter\(\(name\) => name && !judgesGaveUp\.has\(name\)\);/);
+  assert.match(main, /if \(judgeFailure && !signal\?\.aborted\) \{\s*judgesGaveUp\.add\(judgeName\);/);
   assert.match(main, /phase: 'judging',/, 'marking is announced while it happens');
 });
 
