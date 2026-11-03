@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * No emoji from the pictograph planes in the interface. A Linux machine
@@ -21,7 +22,7 @@ const PASTED_ELSEWHERE = [
   ['src/lib/modelCatalog.ts', '## 🏆 My Local AI Results'],
 ];
 
-const root = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+const root = fileURLToPath(new URL('..', import.meta.url));
 const walk = (dir) => readdirSync(join(root, dir), { withFileTypes: true }).flatMap((entry) => (
   entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]
 ));
