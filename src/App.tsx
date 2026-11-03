@@ -1815,6 +1815,7 @@ function App() {
         scoreLabel: formatMatchScore(score),
         total: score.total,
         grade: score.grade,
+        accuracy: score.sobriety,
       }))
       : shortlistedRows
       .flatMap((row) => {
@@ -1831,6 +1832,7 @@ function App() {
         scoreLabel: formatMatchScore(score),
         total: score.total,
         grade: score.grade,
+        accuracy: score.sobriety,
       }))),
     [shortlistedRows, modelScores, wizardRound, wizardSkillBoard, wizardChannel, wizardShowRanked],
   );

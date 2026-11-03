@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { createPortal } from 'react-dom';
 import { Check, HandFist, Lock, Trophy, X } from 'lucide-react';
 import type { ModelRow, OllamaInstallProgress, PullProgressUpdate, RunFailure, RunProgress, SystemProfile } from '../types';
-import { STEPS, STEP_LABELS, downloadTimeLeft, footerHint, makerFooterHint, minPicksFor, nextBlockedHint, pickShortHint, showAnnouncement, showTimeLeft, winnerField, type StepId } from '../lib/wizardCopy';
+import { STEPS, STEP_LABELS, downloadTimeLeft, footerHint, makerFooterHint, minPicksFor, moreAccurateThanWinner, nextBlockedHint, pickShortHint, showAnnouncement, showTimeLeft, winnerField, type StepId } from '../lib/wizardCopy';
 import { copyText, type CopyState } from '../lib/clipboard';
 import { Explain, ExplainText, InfoViewProvider } from './InfoView';
 import { useExplaining } from '../lib/infoContext';
@@ -242,6 +242,8 @@ type SimpleWizardProps = {
     scoreLabel: string;
     total: number;
     grade: string;
+    /** The Accuracy measure (0 to 100) of a questions show; absent for a skill round. */
+    accuracy?: number;
     /** A second measurement from the same show, e.g. the questions behind an app score. */
     note?: string;
   }>;
@@ -1901,6 +1903,11 @@ function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedO
   // early, leaves fewer finishers than picks.
   const finished = lineupResults?.length || shortlistedRows.length;
   const { tested, onlyOne } = winnerField(finished, shortlistedRows.length);
+  // Match Score counts speed and fit too, so the winner can have answered worse
+  // than someone it beat. Said once the gap is wide, for a questions show only.
+  const moreAccurate = !onlyOne && (round ?? 'chat') === 'chat' && lineupResults
+    ? moreAccurateThanWinner(winner.model, lineupResults)
+    : null;
   return (
     <div className="sw-winner crowned">
       {/* The reveal is the one moment the show gets its full lighting: the
@@ -1954,6 +1961,12 @@ function WinnerScreen({ system, winner, shortlistedRows, lineupResults, droppedO
                           ? <>The fastest of the {tested} on your PC that still answered well, with fit counted too.</>
                           : <>The best mix of speed, answer quality and fit for your PC out of the {tested}.</>}
             </p>
+            {moreAccurate && (
+              <p className="sw-winner-lead">
+                {moreAccurate.name} scored higher on accuracy ({moreAccurate.accuracy} against {moreAccurate.winnerAccuracy}).
+                {notchAt(balance)?.id === 'accuracy' ? '' : ' Choose Accuracy first below to rank by that.'}
+              </p>
+            )}
             {winner.measures && winner.measures.length > 0 && (
               <dl className="sw-winner-measures">
                 {winner.measures.map((measure) => (

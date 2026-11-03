@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import { describeRunFailure, droppedOutMessage, showStoppedMessage } from '../src/lib/runFailure.ts';
-import { minPicksFor, pickShortHint, showTimeLeft, winnerField } from '../src/lib/wizardCopy.ts';
+import { minPicksFor, moreAccurateThanWinner, pickShortHint, showTimeLeft, winnerField } from '../src/lib/wizardCopy.ts';
 import { topPickPresentation } from '../src/lib/format.ts';
 import { getCudaDetail } from '../src/lib/modelCatalog.ts';
 
@@ -161,4 +161,25 @@ test('the Winner line counts only the models that finished', () => {
   assert.deepEqual(winnerField(3, 3), { tested: '3 you tested', onlyOne: false });
   const wizard = readFileSync(new URL('../src/components/SimpleWizard.tsx', import.meta.url), 'utf-8');
   assert.match(wizard, /const \{ tested, onlyOne \} = winnerField\(finished, shortlistedRows\.length\);/);
+});
+
+test('the Winner card names a contestant that answered clearly better than the winner', () => {
+  const lineup = [
+    { model: 'qwen3:0.6b', name: 'Qwen3', accuracy: 76 },
+    { model: 'llama3.2:3b', name: 'Llama3.2', accuracy: 88 },
+    { model: 'gemma3:4b', name: 'Gemma3', accuracy: 81 },
+  ];
+  // The winner won on speed and fit; the most accurate one is named.
+  assert.deepEqual(moreAccurateThanWinner('qwen3:0.6b', lineup), { name: 'Llama3.2', accuracy: 88, winnerAccuracy: 76 });
+  // The winner is the most accurate: nothing to say.
+  assert.equal(moreAccurateThanWinner('llama3.2:3b', lineup), null);
+  // A gap under ten points is not worth a sentence (81 against 76 is 5).
+  assert.equal(moreAccurateThanWinner('qwen3:0.6b', lineup.slice(0, 1).concat(lineup[2])), null);
+  // Exactly ten is enough.
+  assert.notEqual(moreAccurateThanWinner('a', [{ model: 'a', name: 'A', accuracy: 70 }, { model: 'b', name: 'B', accuracy: 80 }]), null);
+  // No accuracy for the winner, or for anyone else: say nothing rather than guess.
+  assert.equal(moreAccurateThanWinner('a', [{ model: 'a', name: 'A' }, { model: 'b', name: 'B', accuracy: 99 }]), null);
+  assert.equal(moreAccurateThanWinner('a', [{ model: 'a', name: 'A', accuracy: 50 }, { model: 'b', name: 'B' }]), null);
+  // A winner that is not in the list (a skill round) gets no line.
+  assert.equal(moreAccurateThanWinner('zzz', lineup), null);
 });
