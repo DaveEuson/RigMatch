@@ -406,7 +406,10 @@ test('an automatic judge for a drawing is one that can see, whenever one is not 
   // The candidates already leave out the contestant and any copy of its weights.
   assert.match(main, /const autoJudgeCandidates = [\s\S]{0,200}\.filter\(\(name\) => name && name !== model && !identities\(name\)\.some/);
   assert.match(main, /for \(const name of autoJudgeCandidates\) \{[\s\S]{0,200}\.includes\('vision'\)\) \{\s*drawingAutoJudge = name;/);
-  assert.match(main, /const judgeName = useJudge \? judgeModel : drawingCheck \? await drawingAutoJudgeName\(\) : autoJudgeModel;/);
+  assert.match(main, /const primaryJudge = useJudge \? judgeModel : drawingCheck \? await drawingAutoJudgeName\(\) : autoJudgeModel;/);
+  // The second judge for a drawing judges the same way, by picture or by code (judgePanel.cjs).
+  assert.match(main, /const kind = drawing \? await drawingJudgeKind\(primary\) : null;/);
+  assert.match(main, /drawing \? async \(name\) => \(await drawingJudgeKind\(name\)\) === kind : undefined/);
 });
 
 test('the blind pick shows a drawing as a picture, never as its markup', async () => {

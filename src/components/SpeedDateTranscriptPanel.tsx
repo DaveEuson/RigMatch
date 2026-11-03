@@ -3,7 +3,7 @@ import type { BenchmarkQuestion } from '../benchmarkSuite';
 import { formatMs, getScoreTone } from '../lib/format';
 import { getBenchmarkForModel, getShortModelName } from '../lib/modelCatalog';
 import { getPromptDiagnosticText } from '../lib/promptDiagnostic';
-import { answerNote } from '../lib/answerRetest';
+import { answerNote, judgeNote } from '../lib/answerRetest';
 import { useAnswerRetest, type AnswerRetest } from '../lib/answerRetestContext';
 import type { BenchmarkPromptResult, BenchmarkResult, ModelRow, RunProgress, TranscriptViewMode } from '../types';
 import { PromptStatusPill } from './ScoreVisuals';
@@ -322,13 +322,15 @@ function AnswerNoteLine({ prompt, result, retest }: {
   retest: AnswerRetest | null;
 }) {
   const note = answerNote(prompt);
-  if (!note) return null;
+  const judged = judgeNote(prompt);
+  if (!note && !judged) return null;
   const retesting = retest?.retesting ?? null;
   const busy = retesting?.model === result.model && retesting.promptId === prompt.id;
   return (
     <div className="answer-note">
-      <p>{note.text}</p>
-      {note.retestable && retest && (busy ? (
+      {judged && <p>{judged}</p>}
+      {note && <p>{note.text}</p>}
+      {note?.retestable && retest && (busy ? (
         <span className="answer-note-busy" role="status">
           Asking it again…
           <button type="button" className="btn btn-line btn-sm" onClick={retest.stop}>Stop</button>

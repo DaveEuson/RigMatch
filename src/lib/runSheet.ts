@@ -129,7 +129,7 @@ export function sheetButtonLabel({ quick, mode, skillsOnly, duration, measured }
  */
 export function sheetSummary({
   quick, simpleRound, skillsOnly, questions, questionCount, judgedInPlan,
-  choice, judgeActive, judgeModel, cloudName, autoJudge, judgeFallback, sameAsContestant, ownPicture, nameOf,
+  choice, judgeActive, judgeModel, cloudName, autoJudge, secondJudge, judgeFallback, sameAsContestant, ownPicture, nameOf,
 }: {
   quick: boolean;
   simpleRound?: 'chat' | 'code' | 'vision' | 'listening';
@@ -145,6 +145,12 @@ export function sheetSummary({
   cloudName: string;
   /** The local model that marks what rules cannot, when no judge is in use. */
   autoJudge?: string;
+  /**
+   * The second local judge, whose marks are averaged with the first judge's
+   * (electron/judgePanel.cjs). Absent when nobody else can mark, or for a
+   * cloud judge, which is never doubled.
+   */
+  secondJudge?: string;
   /** A judge was picked but cannot mark this run. */
   judgeFallback: boolean;
   /** Whether a model is one of the contestants, under any name. */
@@ -161,8 +167,9 @@ export function sheetSummary({
         : skillsOnly ? 'None. Only the skill tests run'
           : setId === 'custom' ? `${questionCount} of your own`
             : `${questionCount} from the ${questionSetLabel(questions)} set${simpleRound === 'code' ? ', then each builds a small app' : ''}`;
+  const pair = (first: string) => (secondJudge ? `${nameOf(first)} and ${nameOf(secondJudge)}, averaged,` : nameOf(first));
   const auto = autoJudge
-    ? `Rules, plus ${nameOf(autoJudge)} for the ${openEnded}${sameAsContestant(autoJudge) ? ` (another model marks ${nameOf(autoJudge)}'s own)` : ''}`
+    ? `Rules, plus ${pair(autoJudge)} for the ${openEnded}${sameAsContestant(autoJudge) ? ` (another model marks ${nameOf(autoJudge)}'s own)` : ''}`
     : `Rules. The ${openEnded} stay unmarked: nothing else installed can read them`;
   const marked = simpleRound === 'vision'
     ? ownPicture ? "Only for an answer that engages with it: your own picture has no answer key to check against" : 'Checked against what is in the picture'
@@ -171,7 +178,7 @@ export function sheetSummary({
         // Quick runs send no judge (App.tsx, startBenchmark): all three have a right answer.
         : quick ? 'Rules check all three'
           : choice === 'cloud' && judgeActive ? `${cloudName}, through OpenRouter`
-            : choice === 'local' && judgeActive ? `${nameOf(judgeModel)}, on this computer${sameAsContestant(judgeModel) ? '. It is also a contestant' : ''}`
+            : choice === 'local' && judgeActive ? `${pair(judgeModel).replace(/,$/, '')}, on this computer${sameAsContestant(judgeModel) ? (secondJudge ? `. ${nameOf(judgeModel)} is also a contestant` : '. It is also a contestant') : ''}`
               : judgedInPlan === 0 ? 'Rules check every answer'
                 : judgeFallback ? `${auto}. The judge you picked isn't ready` : auto;
   return { asked, marked };

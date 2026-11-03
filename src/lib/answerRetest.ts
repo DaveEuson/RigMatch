@@ -16,6 +16,9 @@ export type AnswerNote = {
   retestable: boolean;
 };
 
+/** Two judges this far apart is said beside the answer; JUDGE_SPREAD_FLAG in electron/judgePanel.cjs. */
+export const JUDGE_SPREAD_FLAG = 20;
+
 const ranOutOfTime = (prompt: Pick<BenchmarkPromptResult, 'timedOut' | 'doneReason'>) =>
   prompt.timedOut === true || /^timeout$/i.test(prompt.doneReason || '');
 
@@ -40,4 +43,20 @@ export function answerNote(prompt: BenchmarkPromptResult): AnswerNote | null {
     return { text: `Asked twice: the first try ${prompt.retriedAfter === 'timed out' ? 'timed out' : 'lost the connection to Ollama'}, so RigMatch asked again.`, retestable: false };
   }
   return null;
+}
+
+/**
+ * Who marked an answer when two judges did, and whether they agreed: their
+ * marks are averaged into its score (electron/judgePanel.cjs), and a wide gap
+ * is said, because then neither mark means much on its own.
+ */
+export function judgeNote(prompt: BenchmarkPromptResult): string | null {
+  const marks = prompt.judgeMarks;
+  if (!marks || marks.length < 2) return null;
+  const [a, b] = marks;
+  const spread = Math.abs(a.score - b.score);
+  const marked = `Marked by ${a.judge} (${a.score}) and ${b.judge} (${b.score}), averaged.`;
+  return spread >= JUDGE_SPREAD_FLAG
+    ? `${marked} They are ${spread} points apart, so read this mark as rough.`
+    : marked;
 }

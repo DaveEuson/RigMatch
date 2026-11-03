@@ -120,7 +120,8 @@ test('a judge in the other program waits for the contestant to leave', () => {
   const verdict = main.indexOf('const verdict = await scoreQualityWithJudge({', judging);
   assert.ok(judging > 0 && verdict > judging, 'the judging block moved; follow it');
   const before = main.slice(judging, verdict);
-  assert.match(before, /if \(judgedHere && judgeEndpoint\(judgeName\)\.provider !== provider\) \{\n\s*if \(provider === 'lm-studio'\) await unloadLmStudioModel\(baseUrl, model, activeBenchmark\?\.lmStudioKeep \?\? null\);\n\s*else await unloadBenchmarkModel\(baseUrl, model\);/);
+  // Once, before either judge, when either of the two is in the other program.
+  assert.match(before, /if \(judgedHere && judges\.some\(\(judgeName\) => judgeEndpoint\(judgeName\)\.provider !== provider\)\) \{\n\s*if \(provider === 'lm-studio'\) await unloadLmStudioModel\(baseUrl, model, activeBenchmark\?\.lmStudioKeep \?\? null\);\n\s*else await unloadBenchmarkModel\(baseUrl, model\);/);
   // The warm-up after the verdict brings it back, as it does for a judge in the same program.
   const scored = main.indexOf('const sobrietyScore = promptJudgeScore != null', verdict);
   assert.match(main.slice(verdict, scored), /if \(judgedHere && provider === 'lm-studio'\) await warmLmStudioBenchmarkModel\(baseUrl, model, signal\);\n\s*else if \(judgedHere\) await warmBenchmarkModel\(baseUrl, model, signal\);/);

@@ -20,7 +20,9 @@ import { summarizeTaskScores } from './taskScores.ts';
  * PC (how much of the loaded model sat on the graphics card, and the room
  * left), not from the size in the model's name. See electron/matchFit.cjs.
  * Under v6 a mid-size model lost points on both that a small one kept, so a
- * v6 score and a v7 score cannot be ranked against each other.
+ * v6 score and a v7 score cannot be ranked against each other. Also in v7: an
+ * open-ended answer is marked by two different local judges, averaged
+ * (electron/judgePanel.cjs), where v6 asked one.
  */
 export const CURRENT_SCORE_SCHEMA_VERSION = 7;
 

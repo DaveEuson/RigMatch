@@ -5960,6 +5960,9 @@ function App() {
           autoJudgeModel={pendingRunMode === 'single'
             ? autoJudgeModels.find((m) => !sameModel(identityOf(m), identityOf(pendingSingleModel ?? selectedModel))) ?? ''
             : autoJudgeModels[0] ?? ''}
+          judgeCandidates={pendingRunMode === 'single'
+            ? autoJudgeModels.filter((m) => !sameModel(identityOf(m), identityOf(pendingSingleModel ?? selectedModel)))
+            : autoJudgeModels}
           sameAsContestant={(model: string) => (pendingRunMode === 'single'
             ? [pendingSingleModel ?? selectedModel]
             : shortlistedRows.filter((row) => row.installed).slice(0, 5).map((row) => row.displayName)

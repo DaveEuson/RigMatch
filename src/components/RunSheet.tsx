@@ -60,6 +60,7 @@ export function RunSheet({
   onChangeQuestionCount,
   onChangeQuestions,
   autoJudgeModel,
+  judgeCandidates = [],
   sameAsContestant,
   goalPresetId,
   goalDesire,
@@ -112,6 +113,8 @@ export function RunSheet({
   onChangeQuestions: (questions: BenchmarkQuestion[]) => void;
   /** A local model that marks the prose questions when judging is off. */
   autoJudgeModel?: string;
+  /** The local judges in the order the run tries them, for naming the second one. */
+  judgeCandidates?: string[];
   /**
    * Whether a model is one of this run's contestants under any name: Ollama's
    * qwen3:8b and LM Studio's qwen/qwen3-8b are one model (modelIdentities).
@@ -208,6 +211,10 @@ export function RunSheet({
   const judgeFallback = choice !== 'built-in' && !judgeActive;
   const judgeName = choice === 'built-in' || judgeFallback ? autoJudgeModel
     : choice === 'cloud' ? 'the OpenRouter judge' : judgeModel;
+  // The judge averaged with the first, as the run picks it (electron/judgePanel.cjs):
+  // the next one that is a different model. A cloud judge is never doubled.
+  const secondJudge = choice === 'cloud' && !judgeFallback ? undefined
+    : judgeCandidates.find((model) => model && model !== judgeName);
 
   // What this run sends off the machine: a cloud model answers remotely, and
   // the OpenRouter judge is sent each question and answer to mark.
@@ -284,7 +291,7 @@ export function RunSheet({
   const judgeNote = judgedInPlan === 0
     ? 'Every question here can be checked by rules.'
     : judgeName
-      ? `${judgedInPlan} of the ${questionCount} questions have no right answer to check against, so ${getFriendlyModelName(judgeName)} reads and marks them${judgeFallback ? ', since the judge picked below is not ready' : ''}. That is why they take longer.`
+      ? `${judgedInPlan} of the ${questionCount} questions have no right answer to check against, so ${secondJudge ? `${getFriendlyModelName(judgeName)} and ${getFriendlyModelName(secondJudge)} each read and mark them, and the two marks are averaged` : `${getFriendlyModelName(judgeName)} reads and marks them`}${judgeFallback ? ', since the judge picked below is not ready' : ''}. That is why they take longer.`
       : `${judgedInPlan} of the ${questionCount} questions need a judge to mark them, and nothing else installed can. Install a second model and RigMatch will use it.`;
 
   // What a first-timer reads instead of five sections: what is asked, who
@@ -303,6 +310,7 @@ export function RunSheet({
     judgeModel,
     cloudName: CLOUD_JUDGE_PRESETS.find((preset) => preset.id === cloudJudgeModel)?.label ?? cloudJudgeModel,
     autoJudge: judgeName,
+    secondJudge,
     judgeFallback,
     sameAsContestant: isContestant,
     ownPicture: !VISION_TEST_IMAGES.some((image) => image.src === skillSelection.recognizeImage),
