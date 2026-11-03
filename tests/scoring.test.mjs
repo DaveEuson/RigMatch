@@ -1,6 +1,7 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 
 import {
   SCORE_WEIGHTS,
@@ -244,18 +245,11 @@ test('compareBenchmarkResults ranks raw results consistently with scores', () =>
 
 // ── Match grade bands ──────────────────────────────────────────────────────────
 
-test('grade bands match electron/main.cjs gradeFor exactly', () => {
-  // main.cjs grades real runs in a separate process and can't import this module,
-  // so these boundaries are the contract between them. If you change one, change
-  // both — a mismatch means the app grades a run differently than it explains.
-  const mainCjsGradeFor = (score) => {
-    if (score >= 95) return 'S';
-    if (score >= 88) return 'A';
-    if (score >= 80) return 'B+';
-    if (score >= 72) return 'B';
-    if (score >= 64) return 'C';
-    return 'D';
-  };
+test('grade bands match the main process gradeFor exactly', () => {
+  // The main process grades real runs (electron/benchmarkTotals.cjs) and can't
+  // import this module, so these boundaries are the contract between them. This
+  // loads the real function: a copy of it here could not fail when it changed.
+  const { gradeFor: mainCjsGradeFor } = createRequire(import.meta.url)('../electron/benchmarkTotals.cjs');
   for (let score = 0; score <= 100; score += 1) {
     assert.equal(gradeForMatchScore(score), mainCjsGradeFor(score), `disagreement at ${score}`);
   }

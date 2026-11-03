@@ -223,6 +223,22 @@ export type BenchmarkPromptResult = {
   judgeIssue?: string;
   /** A drawing question's picture, as the main process checked and cleaned it. */
   drawing?: PromptDrawing;
+  /**
+   * Its share of the run's reliability: timing runs counted, and how many of
+   * them finished cleanly. Kept so a retested answer can be scored back in
+   * exactly (electron/benchmarkTotals.cjs). Absent on runs from before 0.11.0.
+   */
+  countedRuns?: number;
+  stableRuns?: number;
+  /** Every timing run behind it ran out of time (a drawing at its deadline). */
+  timedOut?: boolean;
+  /** Asked a second time during the run, because the first try failed on the PC's side. */
+  retriedAfter?: 'timed out' | 'connection lost';
+  /** Asked again after the run with "Test this question again"; the first try is kept. */
+  retest?: {
+    at: string;
+    firstTry: { status?: BenchmarkPromptResult['status']; doneReason: string; diagnostic?: string; timedOut?: boolean };
+  };
 };
 
 /**
@@ -704,6 +720,17 @@ export type AgentArcadeApi = {
     /** Where each local judge model runs, so one in LM Studio can mark an Ollama contestant and the reverse. */
     /** weights: every identity of the model (modelIdentities), so a copy under another name is still itself. */
     judgeEndpoints?: Record<string, { provider: LocalModelProvider; baseUrl?: string; weights?: string[] }>;
+  }) => Promise<BenchmarkResult>;
+  /**
+   * Ask one answer the PC broke again, with the run's settings, and get the run
+   * back scored again with it (electron/benchmarkRetest.cjs). The main process
+   * refuses any other answer. Absent in the browser preview, which has no models.
+   */
+  retestBenchmarkPrompt?: (request: {
+    previous: BenchmarkResult;
+    promptId: string;
+    progressId?: string;
+    settings: Omit<Parameters<AgentArcadeApi['runBenchmark']>[0], 'model' | 'questions' | 'questionCount' | 'progressId'>;
   }) => Promise<BenchmarkResult>;
   onBenchmarkProgress?: (callback: (update: BenchmarkProgressUpdate) => void) => () => void;
   /** A drawing to draw as a PNG for a judge that can see; answered with reportDrawingPicture. */

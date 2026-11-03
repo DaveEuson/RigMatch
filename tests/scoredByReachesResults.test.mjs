@@ -22,8 +22,9 @@ test('the saved result carries how each answer was scored', () => {
   const push = main.slice(main.indexOf('promptResults.push({'), main.indexOf('const completedPrompt = promptResults[promptResults.length - 1];'));
   assert.ok(push.length > 0, 'could not find where per-question results are saved');
   assert.match(push, /scoredBy: summarizeScoredBy\(runs\),/, 'per-question results no longer carry scoredBy');
-  // The headline answer quality is the consumer this exists for.
-  assert.match(main, /const markedResults = promptResults\.filter\(\(result\) => result\.scoredBy !== 'unjudged'\);/);
+  // The headline answer quality is the consumer this exists for (the run's totals, benchmarkTotals.cjs).
+  const totals = readFileSync(new URL('../electron/benchmarkTotals.cjs', import.meta.url), 'utf-8');
+  assert.match(totals, /const markedResults = promptResults\.filter\(\(result\) => result\.scoredBy !== 'unjudged'\);/);
 });
 
 test('a question is judged when every run used the judge’s mark', () => {

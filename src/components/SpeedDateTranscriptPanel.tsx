@@ -3,6 +3,8 @@ import type { BenchmarkQuestion } from '../benchmarkSuite';
 import { formatMs, getScoreTone } from '../lib/format';
 import { getBenchmarkForModel, getShortModelName } from '../lib/modelCatalog';
 import { getPromptDiagnosticText } from '../lib/promptDiagnostic';
+import { answerNote } from '../lib/answerRetest';
+import { useAnswerRetest, type AnswerRetest } from '../lib/answerRetestContext';
 import type { BenchmarkPromptResult, BenchmarkResult, ModelRow, RunProgress, TranscriptViewMode } from '../types';
 import { PromptStatusPill } from './ScoreVisuals';
 import { DrawingAnswer, DrawingTile } from './DrawingGallery';
@@ -27,6 +29,11 @@ export function SpeedDateTranscriptPanel({
    */
   initialViewMode?: TranscriptViewMode;
 }) {
+  // "Test this question again", where the app offers it (answerRetestContext.ts).
+  const retest = useAnswerRetest();
+  const noteFor = (prompt: BenchmarkPromptResult, result: BenchmarkResult) => (
+    <AnswerNoteLine prompt={prompt} result={result} retest={retest} />
+  );
   const liveRow = runProgress?.currentModel
     ? rows.find((row) => row.displayName === runProgress.currentModel)
     : undefined;
@@ -168,6 +175,7 @@ export function SpeedDateTranscriptPanel({
                 {getPromptDiagnosticText(prompt) && (
                   <em className="prompt-diagnostic-note">{getPromptDiagnosticText(prompt)}</em>
                 )}
+                {noteFor(prompt, benchmark)}
                 {/* Once. A highlighted copy sat above this, the same text again. */}
                 {prompt.type === 'drawing'
                   ? <DrawingAnswer prompt={prompt} by={getShortModelName(activeRow?.displayName ?? '')} />
@@ -240,12 +248,13 @@ export function SpeedDateTranscriptPanel({
                 // Find the best answer-quality score for this question across all contestants
                 const answersForQ = answeredRows.map(({ row, result }) => ({
                   row,
+                  result,
                   prompt: result.prompts[safeQuestionIndex] ?? null,
                   totalScore: result.scores.total,
                 }));
                 const bestSobriety = Math.max(0, ...answersForQ.map((a) => a.prompt?.sobrietyScore ?? 0));
 
-                return answersForQ.map(({ row, prompt, totalScore }) => {
+                return answersForQ.map(({ row, result, prompt, totalScore }) => {
                   const isBest = prompt !== null && prompt.sobrietyScore === bestSobriety && answersForQ.length > 1;
                   return (
                     <div
@@ -273,6 +282,7 @@ export function SpeedDateTranscriptPanel({
                           {getPromptDiagnosticText(prompt) && (
                             <p className="sbs-answer-missing">{getPromptDiagnosticText(prompt)}</p>
                           )}
+                          {noteFor(prompt, result)}
                           {prompt.type === 'drawing' ? (
                             <>
                               <DrawingTile drawing={prompt.drawing} alt={`Drawing by ${getShortModelName(row.displayName)}`} />
@@ -302,5 +312,38 @@ export function SpeedDateTranscriptPanel({
         )
       )}
     </section>
+  );
+}
+
+/** Why an answer went wrong, said plainly, with "Test this question again" when asking again could help. */
+function AnswerNoteLine({ prompt, result, retest }: {
+  prompt: BenchmarkPromptResult;
+  result: BenchmarkResult;
+  retest: AnswerRetest | null;
+}) {
+  const note = answerNote(prompt);
+  if (!note) return null;
+  const retesting = retest?.retesting ?? null;
+  const busy = retesting?.model === result.model && retesting.promptId === prompt.id;
+  return (
+    <div className="answer-note">
+      <p>{note.text}</p>
+      {note.retestable && retest && (busy ? (
+        <span className="answer-note-busy" role="status">
+          Asking it again…
+          <button type="button" className="btn btn-line btn-sm" onClick={retest.stop}>Stop</button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="btn btn-line btn-sm"
+          aria-disabled={retesting ? 'true' : undefined}
+          title={retesting ? 'Another answer is being asked again' : 'Asks only this question again, with the same settings, and scores the test again with the new answer'}
+          onClick={() => { if (!retesting) retest.retest(result, prompt.id); }}
+        >
+          Test this question again
+        </button>
+      ))}
+    </div>
   );
 }

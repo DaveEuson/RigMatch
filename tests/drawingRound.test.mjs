@@ -344,8 +344,10 @@ test('a drawing unfinished at its deadline is unmarked, not a 0 that also counts
   assert.match(main, /prompt\.type !== 'drawing' \? null : ranOutOfTime \? drawingTimedOut\(\) : checkDrawing\(responseText\)/);
   // ...marked as nothing, so it stays out of answer quality...
   assert.match(main, /: !ranOutOfTime && \(toolVerdict \|\| heuristicCanGrade\(prompt\.type, prompt\.prompt, responseText\)\) \? 'heuristic' : 'unjudged'/);
-  // ...and out of stability, which already counts nothing about speed.
-  assert.match(main, /const stabilityRuns = rawRuns\.filter\(\(run\) => !run\.timedOut\);/);
+  // ...and out of stability, which already counts nothing about speed: each
+  // answer's reliability count leaves its timed-out runs out (benchmarkTotals.cjs).
+  assert.match(main, /countedRuns: runs\.filter\(\(run\) => !run\.timedOut\)\.length,/);
+  assert.match(main, /stableRuns: runs\.filter\(\(run\) => !run\.timedOut && isStableBenchmarkRun\(run\)\)\.length,/);
   assert.match(main, /\.\.\.\(ranOutOfTime \? \{ timedOut: true \} : \{\}\)/);
 });
 
@@ -419,7 +421,7 @@ test('the run asks a drawing once, on its own budget, and an empty one never dra
   const { readFileSync } = await import('node:fs');
   const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
   assert.match(main, /const repeats = prompt\.type === 'drawing' \? 1 : BENCHMARK_REPEATS;/);
-  assert.match(main, /prompt\.type === 'drawing'\s*\?\s*await runDrawingPrompt\(/);
+  assert.match(main, /prompt\.type === 'drawing'\s*\?\s*(?:await )?runDrawingPrompt\(/);
   assert.match(main, /num_predict: DRAWING_ANSWER_TOKENS/);
   // The drawing runs in the run's own context, so the answer and the question
   // (91 tokens at most across nine models) must fit in it, or Ollama would
@@ -427,7 +429,8 @@ test('the run asks a drawing once, on its own budget, and an empty one never dra
   const context = Number(/BENCHMARK_GENERATE_OPTIONS = Object\.freeze\(\{[^}]*num_ctx: (\d+)/.exec(main)[1]);
   assert.ok(DRAWING_ANSWER_TOKENS + 120 <= context, `${DRAWING_ANSWER_TOKENS} answer tokens leave no room for the question in ${context}`);
   assert.match(main, /setTimeout\(stop, DRAWING_TIMEOUT_MS\)/);
-  assert.match(main, /!\(result\.type === 'drawing' && result\.status === 'no-response'\)/);
+  const totals = readFileSync(new URL('../electron/benchmarkTotals.cjs', import.meta.url), 'utf-8');
+  assert.match(totals, /!\(result\.type === 'drawing' && result\.status === 'no-response'\)/);
   // The drawing reaches the stage as soon as it is drawn.
   assert.match(main, /phase: 'prompt-complete',[\s\S]{0,400}drawing: completedPrompt\.drawing/);
 });
