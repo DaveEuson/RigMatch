@@ -1,14 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8').replace(/\r\n/g, '\n');
 const main = read('../electron/main.cjs');
 const app = read('../src/App.tsx');
 const wizard = read('../src/components/SimpleWizard.tsx');
 
-// The real function, cut out of main.cjs, so this cannot drift from what runs.
-const scoreRigFit = new Function(`${main.match(/function scoreRigFit\(model\) \{[\s\S]*?\n\}\n/)[0]}; return scoreRigFit;`)();
+// Fit from the name: what a run falls back to when nothing about the PC is known (matchFit.cjs).
+const { fitFromName: scoreRigFit } = createRequire(import.meta.url)('../electron/matchFit.cjs');
 
 test('fit is read from the whole size of a model, not the last token in its name', () => {
   assert.equal(scoreRigFit('qwen3:30b-a3b'), 58, 'the 30B must be held in memory, whatever runs per token');

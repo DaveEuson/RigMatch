@@ -15,6 +15,7 @@ const {
   clamp,
 } = require('../electron/benchmarkScoring.cjs');
 const { DRAWING_ANSWER_TOKENS, DRAWING_TIMEOUT_MS } = require('../electron/drawingRound.cjs');
+const { speedScoreFor } = require('../electron/matchFit.cjs');
 
 const DEFAULT_BASE_URL = 'http://localhost:11434';
 const DEFAULT_TIMEOUT_MS = 120000;
@@ -155,7 +156,7 @@ async function smokeModel({ args, model, prompts }) {
 
   const rigmatchRows = rows.filter((row) => row.thinkMode === 'rigmatch');
   const quality = Math.round(average(rigmatchRows.map((row) => row.sobrietyScore)));
-  const speed = clamp(Math.round((average(rigmatchRows.map((row) => row.tokensPerSecond)) - 5) / 95 * 100));
+  const speed = speedScoreFor(average(rigmatchRows.map((row) => row.tokensPerSecond)));
   // A drawing that ran out of time is what the app leaves unmarked and out of
   // stability: the PC was slow, not the answer wrong. It shows in the table,
   // and is not a release blocker.

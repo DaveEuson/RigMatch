@@ -35,6 +35,7 @@ const { scoreQualityWithJudge } = require('./judgeScoring.cjs');
 const { DRAWING_ANSWER_TOKENS, DRAWING_TIMEOUT_MS, checkDrawing, drawingTimedOut, drawingJudgeMode, drawingNote } = require('./drawingRound.cjs');
 const { runRigTier, unloadOllamaModel } = require('./rigScoreRunner.cjs');
 const { runEndurance } = require('./enduranceRunner.cjs');
+const { speedScoreFor, fitFromPc, loadedFootprint } = require('./matchFit.cjs');
 const security = require('./security.cjs');
 const { chatMessageText, chatHistory } = require('./chatDock.cjs');
 const gpuContention = require('./gpuContention.cjs');
@@ -1925,6 +1926,27 @@ async function openRigmatchUpdatePage(channel = 'release', preferredUrl = null) 
   return { url };
 }
 
+/**
+ * A model's download size in bytes, for an estimated Fit when Ollama cannot
+ * say where the loaded model sits (LM Studio, or /api/ps unreachable). 0 when
+ * the provider does not say.
+ */
+async function modelFileBytes(baseUrl, provider, model) {
+  try {
+    if (provider === 'lm-studio') {
+      const listing = await fetchJson(`${lmStudioOrigin(baseUrl.replace(/\/$/, ''))}/api/v1/models`, {}, 2500);
+      const entry = (listing?.models ?? []).find((item) => item?.key === model);
+      return Number(entry?.size_bytes) || 0;
+    }
+    const tags = await fetchJson(`${baseUrl}/api/tags`, {}, 2500);
+    const want = model.includes(':') ? model : `${model}:latest`;
+    const entry = (tags?.models ?? []).find((item) => [item?.name, item?.model].includes(want));
+    return Number(entry?.size) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** Whether Ollama lists `model` as installed. A bare name means its :latest. */
 async function ollamaHasModel(baseUrl, model) {
   try {
@@ -3776,6 +3798,13 @@ async function runBenchmarkInner(request = {}, sender, signal) {
     await warmBenchmarkModel(baseUrl, model, signal);
   }
 
+  // Where the model sits, read once it is loaded and before a judge can share
+  // the card: the Fit part of the score (matchFit.cjs). LM Studio has no such
+  // listing, so its Fit is estimated from the model's size.
+  const footprint = provider === 'lm-studio'
+    ? null
+    : loadedFootprint(await fetchJson(`${baseUrl}/api/ps`, { signal }, 3000).catch(() => null), model);
+
   sendProgress({
     phase: 'started',
     promptIndex: 0,
@@ -4162,9 +4191,17 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   // counts; it is neither a stable nor an unstable answer.
   const stabilityRuns = rawRuns.filter((run) => !run.timedOut);
   const stabilityScore = Math.round((stabilityRuns.filter(isStableBenchmarkRun).length / Math.max(1, stabilityRuns.length)) * 100);
-  // Scale official Ollama generation speed: 5 tok/s = 0, 100 tok/s = 100.
-  const speedScore = clamp(Math.round((avgTokens - 5) / 95 * 100));
-  const fitScore = scoreRigFit(model);
+  // Speed and Fit come from this PC (matchFit.cjs): 50 tok/s is full speed,
+  // and Fit is how comfortably the model sat in memory during this run.
+  const speedScore = speedScoreFor(avgTokens);
+  const machine = await readRigMachine().catch(() => null);
+  const { fit: fitScore, basis: fitBasis, gpuShare } = fitFromPc({
+    model,
+    footprint,
+    fileBytes: footprint ? 0 : await modelFileBytes(baseUrl, provider, model),
+    graphicsBytes: machine?.vramGb > 0 ? machine.vramGb * 1024 ** 3 : 0,
+    systemBytes: os.totalmem(),
+  });
   const totalScore = clamp(Math.round(speedScore * 0.32 + avgSobriety * 0.34 + stabilityScore * 0.18 + fitScore * 0.16));
   const elapsedMs = Date.now() - startedAt;
   const result = {
@@ -4184,6 +4221,10 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       total: totalScore,
       grade: gradeFor(totalScore),
     },
+    // What Fit was read from: Ollama's report of the loaded model, an estimate
+    // from its size, or (nothing known) the size in its name.
+    fitBasis,
+    ...(typeof gpuShare === 'number' ? { gpuShare: Math.round(gpuShare * 100) / 100 } : {}),
   };
   if (avgFirstToken !== null) {
     result.avgFirstTokenMs = Math.round(avgFirstToken);
@@ -4199,6 +4240,8 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       elapsedMs,
       questionCount,
       scores: result.scores,
+      fitBasis,
+      gpuShare: result.gpuShare ?? null,
       promptCount: promptResults.length,
       // How many answers nothing could mark. Answer quality is averaged over
       // the rest; if this equals promptCount the score is a length proxy and
@@ -5375,34 +5418,6 @@ async function releaseOllamaChatModels() {
   const resident = [...ollamaChatResident.values()];
   ollamaChatResident.clear();
   for (const { baseUrl, model } of resident) await unloadBenchmarkModel(baseUrl, model);
-}
-
-function scoreRigFit(model) {
-  const lower = String(model || '').toLowerCase();
-  // Read the parameter count from an anchored "NNb" token. A bare substring
-  // match let a small token match inside a larger one ("2b" inside "22b").
-  //
-  // Three more things the last token got wrong:
-  // - An expert count, "8x7b", is 56B in total, not 7B.
-  // - An active slice, "a3b" in qwen3:30b-a3b, is how much runs per token. The
-  //   30B has to be held in memory all the same, so the largest token counts.
-  // - A context marker, "-1m" in qwen2.5-14b-instruct-1m, is not a size.
-  const experts = lower.match(/(?<![\d.])(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*b\b/);
-  const tokens = [...lower.matchAll(/(?<![\d.ax])(\d+(?:\.\d+)?)\s*b\b/g)].map((token) => parseFloat(token[1]));
-  const sizes = tokens.filter(Number.isFinite);
-  if (experts) sizes.push(parseFloat(experts[1]) * parseFloat(experts[2]));
-
-  // Tiny markers that carry no "NNb" token (sub-1B and keyword sizes).
-  if (sizes.length === 0) {
-    if (/\b(mini|nano)\b/.test(lower) || /(?<![\d.])\d+(?:\.\d+)?\s*m\b/.test(lower)) return 96;
-    return 82; // size unknown
-  }
-  const params = Math.max(...sizes);
-  if (params <= 3) return 96;
-  if (params <= 9) return 88;
-  if (params <= 15) return 74;
-  if (params <= 34) return 58;
-  return 38;
 }
 
 function gradeFor(score) {
