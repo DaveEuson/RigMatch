@@ -62,12 +62,13 @@ test('an automatically picked judge steps aside for its own answers in the quest
   assert.equal(labJudgeFor('gemma4:e2b', auto, { ...options, candidates: ['gemma4:e2b'] }), null, 'nobody else can mark it');
   assert.equal(labJudgeFor('gemma4:e2b', auto, { ...options, chosen: true })?.model, 'gemma4:e2b', 'a judge the person chose stays');
 
-  // Both runs — a single model and a show — ask for the contestant's own judge.
+  // Every run (a single model, a show, and one answer asked again) asks for
+  // the contestant's own judge.
   assert.equal(has(/judgeModel: effectiveJudge\?\.model/), false, 'the one automatic judge is still sent with every run');
   assert.equal(has(/qualityMode: effectiveJudge && !quick \? 'judge' : 'heuristic'/), false);
   const perContestant = app.match(/const judge = quick \? null : skillJudgeFor\((modelToTest|row\.displayName)\);/g) ?? [];
   assert.deepEqual(perContestant.map((line) => line.includes('modelToTest') ? 'single' : 'show').sort(), ['show', 'single']);
-  assert.equal((app.match(/qualityMode: judge \? 'judge' : 'heuristic',\n\s*\.\.\.\(judge \? \{ judgeModel: judge\.model, judgeProvider: judge\.provider, judgeApiKey: judge\.apiKey \} : \{\}\),/g) ?? []).length, 2);
+  assert.equal((app.match(/qualityMode: judge \? 'judge' : 'heuristic',\n\s*\.\.\.\(judge \? \{ judgeModel: judge\.model, judgeProvider: judge\.provider, judgeApiKey: judge\.apiKey \} : \{\}\),/g) ?? []).length, 3);
 });
 
 const lab = (challenge, model, seconds, over = {}) => ({

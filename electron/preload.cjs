@@ -77,6 +77,7 @@ const api = {
     return () => ipcRenderer.removeListener('advanced-generate:progress', listener);
   },
   runBenchmark: (request) => ipcRenderer.invoke('benchmark:run', request),
+  retestBenchmarkPrompt: (request) => ipcRenderer.invoke('benchmark:retestPrompt', request),
   onBenchmarkProgress: (callback) => {
     const listener = (_event, update) => callback(update);
     ipcRenderer.on('benchmark:progress', listener);

@@ -180,3 +180,31 @@ export function describeReport(report: StoredRunReport): string {
     : '';
   return `${models} model${models === 1 ? '' : 's'} · ${report.winner} won${questions}`;
 }
+
+/**
+ * The reports with one run replaced by its retested version ("Test this
+ * question again"): the same model's run, found by its finish time, gets the
+ * new answers and score, and the report is ranked again so its winner is
+ * right. Every other report, and every report without that run, is unchanged.
+ */
+export function replaceRunInReports(
+  reports: StoredRunReport[],
+  retested: BenchmarkResult,
+  toScore: (result: BenchmarkResult, previous: TestedModelScore) => TestedModelScore,
+  rank: (results: TestedModelScore[]) => TestedModelScore[],
+): StoredRunReport[] {
+  const key = normalizeModelKey(retested.model);
+  const sameRun = (result: BenchmarkResult | undefined) => result
+    && normalizeModelKey(result.model) === key && result.completedAt === retested.completedAt;
+  return reports.map((report) => {
+    const model = Object.keys(report.transcripts ?? {}).find((name) => sameRun(report.transcripts?.[name]));
+    if (!model) return report;
+    const results = rank(report.results.map((entry) => (normalizeModelKey(entry.model) === key ? toScore(retested, entry) : entry)));
+    return {
+      ...report,
+      transcripts: { ...report.transcripts, [model]: retested },
+      results,
+      winner: results[0]?.model ?? report.winner,
+    };
+  });
+}

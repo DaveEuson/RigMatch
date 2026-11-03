@@ -223,10 +223,10 @@ test('Labs never has an automatic judge mark its own app and code', async () => 
   // Every App Builder and Code run asks for its contestant's judge.
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf-8');
   assert.doesNotMatch(app, /skillTestJudge \? \{ \.\.\.skillTestJudge/, 'a skill run still hands every contestant the same judge');
-  // App Builder and the improve pass; Code asks once, through codeSkillJudgeFor
-  // (an automatic judge while judging is off), to skip a model nobody else can
-  // mark or to mark it.
-  assert.equal(app.match(/skillJudgeFor\((?:job\.)?model\)/g)?.length, 2, 'App Builder and the improve pass');
+  // App Builder, the improve pass, and asking one answer again ("Test this
+  // question again"); Code asks once, through codeSkillJudgeFor (an automatic
+  // judge while judging is off), to skip a model nobody else can mark or to mark it.
+  assert.equal(app.match(/skillJudgeFor\((?:job\.)?model\)/g)?.length, 3, 'App Builder, the improve pass and a retest');
   assert.match(app, /const codeJudge = codeSkillJudgeFor\(job\.model\);\s*if \(!codeJudge\) \{\s*unjudgedCode\.push\(job\.model\);\s*continue;/);
   assert.match(app, /tellUser\(`The code challenge skipped \$\{names\}: no other model on this computer can mark its code/);
 });

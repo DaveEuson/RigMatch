@@ -10,7 +10,7 @@ const { execFile, spawn } = require('node:child_process');
 const fsSync = require('node:fs');
 const { promisify } = require('node:util');
 const si = require('systeminformation');
-const { buildBenchmarkPromptPlan, normalizeBenchmarkQuestionCount } = require('./benchmarkSuite.cjs');
+const { buildBenchmarkPromptPlan, normalizeBenchmarkQuestionCount, normalizeBenchmarkQuestions } = require('./benchmarkSuite.cjs');
 const {
   BENCHMARK_THINK_DISABLED,
   buildBenchmarkGenerateBody,
@@ -35,7 +35,9 @@ const { scoreQualityWithJudge } = require('./judgeScoring.cjs');
 const { DRAWING_ANSWER_TOKENS, DRAWING_TIMEOUT_MS, checkDrawing, drawingTimedOut, drawingJudgeMode, drawingNote } = require('./drawingRound.cjs');
 const { runRigTier, unloadOllamaModel } = require('./rigScoreRunner.cjs');
 const { runEndurance } = require('./enduranceRunner.cjs');
-const { speedScoreFor, fitFromPc, loadedFootprint } = require('./matchFit.cjs');
+const { fitFromPc, loadedFootprint } = require('./matchFit.cjs');
+const { gradeFor, totalsFromPrompts } = require('./benchmarkTotals.cjs');
+const { transientFailure, canRetest, mergeRetest } = require('./benchmarkRetest.cjs');
 const security = require('./security.cjs');
 const { chatMessageText, chatHistory } = require('./chatDock.cjs');
 const gpuContention = require('./gpuContention.cjs');
@@ -1128,6 +1130,7 @@ function registerHandlers() {
   handleLogged('network:scanLan', 'network', () => scanLanForOllama());
   handleLogged('network:addHostByAddress', 'network', (_event, address) => addHostByAddress(address));
   handleLogged('benchmark:run', 'benchmark', (event, request) => runBenchmark(request, event.sender));
+  handleLogged('benchmark:retestPrompt', 'benchmark', (event, request) => retestBenchmarkPrompt(request, event.sender));
   // The window's answer to requestDrawingPicture. Anything but plain base64 of
   // a sensible size is no picture, and the judge reads the code instead.
   handleLogged('drawing:pictureResult', 'benchmark', (_event, result) => {
@@ -3632,6 +3635,31 @@ async function runBenchmark(request = {}, sender) {
   }
 }
 
+/**
+ * One answer the PC broke, asked again with the run's own settings, and the
+ * run scored again with it (benchmarkRetest.cjs). Nothing else in the run is
+ * asked again. It goes through runBenchmark, so it waits its turn, warms the
+ * model, can be stopped, and frees the card after, like any test.
+ */
+async function retestBenchmarkPrompt(request = {}, sender) {
+  const previous = request?.previous;
+  const promptId = String(request?.promptId ?? '');
+  const firstTry = Array.isArray(previous?.prompts) ? previous.prompts.find((prompt) => prompt?.id === promptId) : null;
+  if (!firstTry) throw new Error('That answer is not part of this test.');
+  if (!canRetest(firstTry)) {
+    throw new Error('Only an answer the PC broke can be asked again. At temperature 0 a model gives the same answer each time, so anything else would come back unchanged.');
+  }
+  const single = await runBenchmark({
+    ...(request.settings && typeof request.settings === 'object' ? request.settings : {}),
+    model: previous.model,
+    baseUrl: previous.baseUrl,
+    progressId: typeof request.progressId === 'string' ? request.progressId : undefined,
+    retestPrompt: { id: firstTry.id, label: firstTry.label, type: firstTry.type, prompt: firstTry.prompt },
+  }, sender);
+  const answer = single.prompts.find((prompt) => prompt.id === promptId) ?? single.prompts[0];
+  return mergeRetest(previous, answer);
+}
+
 // Benchmark progressIds the user has asked to stop (via benchmark:cancel). The
 // run loop checks this between question runs; the AbortController additionally
 // aborts the in-flight generation so Stop takes effect mid-question.
@@ -3647,7 +3675,10 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   const provider = normalizeLocalProvider(request.provider, baseUrl);
   const providerLabel = getLocalProviderLabel(provider);
   const questionCount = normalizeBenchmarkQuestionCount(request.questionCount);
-  const benchmarkPrompts = buildBenchmarkPromptPlan(questionCount, request.questions);
+  // A retest asks one saved question again, under its saved id (benchmarkRetest.cjs).
+  const benchmarkPrompts = request.retestPrompt
+    ? normalizeBenchmarkQuestions([request.retestPrompt]).map((prompt) => ({ ...prompt, id: String(request.retestPrompt.id) }))
+    : buildBenchmarkPromptPlan(questionCount, request.questions);
   const progressId = typeof request.progressId === 'string' ? request.progressId : null;
 
   // LLM-as-judge quality scoring (opt-in). Local judging runs through the same
@@ -3878,15 +3909,52 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       let toolAnswer = null;
       // A drawing still unfinished at its deadline (runDrawingPrompt).
       let ranOutOfTime = false;
+      // Why this run needed a second try, when the first one failed on the PC's side.
+      let retriedAfter = null;
+      const ask = () => (prompt.type === 'tools'
+        ? runBenchmarkToolPrompt(baseUrl, model, prompt.prompt, signal, provider)
+        : prompt.type === 'drawing'
+          ? runDrawingPrompt(baseUrl, model, prompt.prompt, signal, provider)
+          : provider === 'lm-studio'
+            ? runLmStudioBenchmarkPrompt(baseUrl, model, prompt.prompt, signal)
+            : runBenchmarkPromptParity(baseUrl, model, prompt.prompt, signal));
 
       try {
-        const generateResult = prompt.type === 'tools'
-          ? await runBenchmarkToolPrompt(baseUrl, model, prompt.prompt, signal, provider)
-          : prompt.type === 'drawing'
-            ? await runDrawingPrompt(baseUrl, model, prompt.prompt, signal, provider)
-          : provider === 'lm-studio'
-            ? await runLmStudioBenchmarkPrompt(baseUrl, model, prompt.prompt, signal)
-            : await runBenchmarkPromptParity(baseUrl, model, prompt.prompt, signal);
+        let generateResult;
+        try {
+          generateResult = await ask();
+        } catch (error) {
+          // One more try when the PC dropped it: a lost connection, Ollama
+          // failing mid-answer, a reply that never finished. These ended the
+          // model's whole run, and asking again usually works. Never for
+          // Stop, a refusal, or a model too big for the PC (benchmarkRetest.cjs).
+          throwIfCanceled();
+          retriedAfter = signal?.aborted ? null : transientFailure(error);
+          if (!retriedAfter) throw error;
+          await appendAppLog({
+            level: 'warn',
+            source: 'benchmark',
+            message: `Benchmark prompt ${retriedAfter}, asking again: ${model} / ${prompt.label}`,
+            details: { model, promptId: prompt.id, runIndex: runIndex + 1, error: serializeError(error) },
+          });
+          sendProgress({
+            phase: 'prompt-run',
+            promptIndex,
+            promptId: prompt.id,
+            promptLabel: prompt.label,
+            promptType: prompt.type,
+            prompt: prompt.prompt,
+            runIndex,
+            runTotal: repeats,
+            message: `${prompt.label} ${retriedAfter}, so RigMatch is asking it again.`,
+          });
+          // Ollama reloads a runner that stopped; give it a moment to come back.
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          throwIfCanceled();
+          if (provider === 'lm-studio') await warmLmStudioBenchmarkModel(baseUrl, model, signal);
+          else await warmBenchmarkModel(baseUrl, model, signal);
+          generateResult = await ask();
+        }
         toolAnswer = generateResult.toolAnswer || null;
         ranOutOfTime = Boolean(generateResult.timedOut);
         responseText = generateResult.responseText;
@@ -4074,6 +4142,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
         thinkingDisabled,
         toolsUnsupported: Boolean(toolAnswer?.unsupported),
         ...(ranOutOfTime ? { timedOut: true } : {}),
+        ...(retriedAfter ? { retriedAfter } : {}),
       });
       rawRuns.push({ prompt, ...runs[runs.length - 1] });
 
@@ -4130,6 +4199,14 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       evalDurationMs: Math.round(median(runs.map((run) => run.evalDurationMs))),
       thinkingDisabled: runs.every((run) => run.thinkingDisabled),
       ...(runs.every((run) => run.toolsUnsupported) ? { toolsUnsupported: true } : {}),
+      // Its share of the run's reliability, kept so a retested answer can be
+      // scored back in exactly (benchmarkTotals.cjs). A drawing that ran out of
+      // time counts in neither.
+      countedRuns: runs.filter((run) => !run.timedOut).length,
+      stableRuns: runs.filter((run) => !run.timedOut && isStableBenchmarkRun(run)).length,
+      ...(runs.length > 0 && runs.every((run) => run.timedOut) ? { timedOut: true } : {}),
+      // Why a timing run had to be asked twice, said beside the answer.
+      ...(runs.some((run) => run.retriedAfter) ? { retriedAfter: runs.find((run) => run.retriedAfter).retriedAfter } : {}),
       ...(promptJudgeReason ? { judgeReason: promptJudgeReason } : {}),
       ...(promptJudgeIssue ? { judgeIssue: promptJudgeIssue } : {}),
       ...(promptDrawing ? { drawing: promptDrawing } : {}),
@@ -4156,44 +4233,16 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   // Every answer came back empty. Speed and fit still added up to a Match of
   // about 27, so a model that said nothing was ranked, and on "Speed first"
   // could place above one that answered slowly. It gave nothing to score.
-  if (rawRuns.length > 0 && rawRuns.every((run) => !String(run.response || '').trim())) {
+  // A retest asks one question, and that answer timing out again is an answer.
+  if (!request.retestPrompt && rawRuns.length > 0 && rawRuns.every((run) => !String(run.response || '').trim())) {
     throw new Error(`${model} returned an empty answer to every question, so there was nothing to score.`);
   }
 
-  // A tool question Ollama refused for this model comes back in milliseconds
-  // with nothing generated; timed, it would read as the fastest answer of the
-  // run. It scores 0 for answer quality and stays out of speed.
-  // Nor does a drawing that came back empty: one dropped at its deadline
-  // (runDrawingPrompt) generated for 90 seconds and reports no tokens, which
-  // would read as a rate near zero. It already scores 0 as no drawing.
-  const timedResults = promptResults.filter((result) => !result.toolsUnsupported
-    && !(result.type === 'drawing' && result.status === 'no-response'));
-  const avgTokens = average(timedResults.map((result) => result.tokensPerSecond));
-  const avgLatency = average(timedResults.map((result) => result.elapsedMs));
   const firstTokenSamples = rawRuns.map((r) => r.firstTokenMs).filter(Number.isFinite);
   const avgFirstToken = firstTokenSamples.length > 0 ? average(firstTokenSamples) : null;
-  /**
-   * Answer quality, from the answers something could actually mark.
-   *
-   * An 'unjudged' score is a placeholder — prose scored by its character
-   * count, or code the scorer can only confirm is code. Those were being
-   * averaged into the headline number and weighted at 0.34 of the Match
-   * total, so models were still ranked against each other partly by how long
-   * they wrote, while the crown logic was correctly refusing the same numbers.
-   * Rank on what was measured; fall back to the full set only when nothing at
-   * all could be marked, so a run still produces a score rather than a blank.
-   */
-  const markedResults = promptResults.filter((result) => result.scoredBy !== 'unjudged');
-  const unmarkedCount = promptResults.length - markedResults.length;
-  const avgSobriety = average((markedResults.length > 0 ? markedResults : promptResults)
-    .map((result) => result.sobrietyScore));
-  // A drawing that ran out of time says the PC is slow, which speed already
-  // counts; it is neither a stable nor an unstable answer.
-  const stabilityRuns = rawRuns.filter((run) => !run.timedOut);
-  const stabilityScore = Math.round((stabilityRuns.filter(isStableBenchmarkRun).length / Math.max(1, stabilityRuns.length)) * 100);
-  // Speed and Fit come from this PC (matchFit.cjs): 50 tok/s is full speed,
-  // and Fit is how comfortably the model sat in memory during this run.
-  const speedScore = speedScoreFor(avgTokens);
+  // Fit comes from this PC (matchFit.cjs): how comfortably the model sat in
+  // memory during this run. The rest is worked out from the answers alone
+  // (benchmarkTotals.cjs), the same way a retested run is scored again.
   const machine = await readRigMachine().catch(() => null);
   const { fit: fitScore, basis: fitBasis, gpuShare } = fitFromPc({
     model,
@@ -4202,7 +4251,8 @@ async function runBenchmarkInner(request = {}, sender, signal) {
     graphicsBytes: machine?.vramGb > 0 ? machine.vramGb * 1024 ** 3 : 0,
     systemBytes: os.totalmem(),
   });
-  const totalScore = clamp(Math.round(speedScore * 0.32 + avgSobriety * 0.34 + stabilityScore * 0.18 + fitScore * 0.16));
+  const totals = totalsFromPrompts(promptResults, fitScore);
+  const unmarkedCount = totals.unmarkedCount;
   const elapsedMs = Date.now() - startedAt;
   const result = {
     model,
@@ -4210,17 +4260,10 @@ async function runBenchmarkInner(request = {}, sender, signal) {
     questionCount,
     completedAt: new Date().toISOString(),
     elapsedMs,
-    avgLatencyMs: Math.round(avgLatency),
-    avgTokensPerSecond: Math.round(avgTokens * 10) / 10,
+    avgLatencyMs: totals.avgLatencyMs,
+    avgTokensPerSecond: totals.avgTokensPerSecond,
     prompts: promptResults,
-    scores: {
-      speed: speedScore,
-      sobriety: Math.round(avgSobriety),
-      stability: stabilityScore,
-      fit: fitScore,
-      total: totalScore,
-      grade: gradeFor(totalScore),
-    },
+    scores: totals.scores,
     // What Fit was read from: Ollama's report of the loaded model, an estimate
     // from its size, or (nothing known) the size in its name.
     fitBasis,
@@ -5420,11 +5463,3 @@ async function releaseOllamaChatModels() {
   for (const { baseUrl, model } of resident) await unloadBenchmarkModel(baseUrl, model);
 }
 
-function gradeFor(score) {
-  if (score >= 95) return 'S';
-  if (score >= 88) return 'A';
-  if (score >= 80) return 'B+';
-  if (score >= 72) return 'B';
-  if (score >= 64) return 'C';
-  return 'D';
-}

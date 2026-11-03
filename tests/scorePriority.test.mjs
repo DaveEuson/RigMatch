@@ -59,17 +59,17 @@ test('reliability and fit hold their share in every profile', () => {
 });
 
 test('the three copies of the weights still agree', () => {
-  // They live in scoring.ts, in a literal in electron/main.cjs, and as display
-  // percentages in scoreReference.ts. The repo's pattern for a value the main
-  // process cannot import is to duplicate it and lock it here, the same way
-  // the grade bands are locked.
-  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8');
-  const line = main.split('\n').find((l) => l.includes('const totalScore'));
-  assert.ok(line, 'main.cjs no longer has a totalScore line to check');
-  for (const [signal, key] of [['speedScore', 'speed'], ['avgSobriety', 'sobriety'], ['stabilityScore', 'stability'], ['fitScore', 'fit']]) {
+  // They live in scoring.ts, in a literal in electron/benchmarkTotals.cjs (the
+  // main process's run totals), and as display percentages in scoreReference.ts.
+  // The repo's pattern for a value the main process cannot import is to
+  // duplicate it and lock it here, the same way the grade bands are locked.
+  const totals = readFileSync(new URL('../electron/benchmarkTotals.cjs', import.meta.url), 'utf-8');
+  const line = totals.split('\n').find((l) => l.includes('const total ='));
+  assert.ok(line, 'benchmarkTotals.cjs no longer has a total line to check');
+  for (const [signal, key] of [['speed', 'speed'], ['avgSobriety', 'sobriety'], ['stability', 'stability'], ['fitScore', 'fit']]) {
     assert.ok(
       line.includes(`${signal} * ${SCORE_WEIGHTS[key]}`),
-      `main.cjs weights ${signal} differently from SCORE_WEIGHTS.${key} (${SCORE_WEIGHTS[key]})`,
+      `benchmarkTotals.cjs weights ${signal} differently from SCORE_WEIGHTS.${key} (${SCORE_WEIGHTS[key]})`,
     );
   }
   const byLabel = Object.fromEntries(DISPLAY_ROWS.map((row) => [row.label, row.pct]));

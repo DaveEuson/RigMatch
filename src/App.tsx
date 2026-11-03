@@ -86,6 +86,7 @@ import {
   makeReportId,
   parseStoredReports,
   removeModelFromReports,
+  replaceRunInReports,
   reportQuestionPlan,
   reportRows,
   reportStorageCandidates,
@@ -213,6 +214,7 @@ import { RunSheet } from './components/RunSheet';
 import { ClearScoresModal } from './components/ClearScoresModal';
 import { clearBlindTaste, clearModelFromBlindTaste, countBlindPicks, maskProgress, maskRows, maskText, readBlindTaste, requestTasteFocus, shuffleLineup } from './lib/blindMode';
 import { BlindShowContext } from './lib/blindShowContext';
+import { AnswerRetestContext, type AnswerRetest } from './lib/answerRetestContext';
 import { useBlindShow } from './lib/useBlindShow';
 import { BlindOverlay } from './components/BlindShow';
 import { ThirdPartyDownloadConsentModal } from './components/ThirdPartyDownloadConsentModal';
@@ -2603,6 +2605,91 @@ function App() {
     }
   }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectedHost, selectedModel, system.hostname, skillJudgeFor, rigStampForModel, tellUser, autoJudgeModels, judgeEndpoints]);
 
+  /**
+   * "Test this question again": one answer the PC broke, asked again with this
+   * model's current judge and settings, and the run scored again with the new
+   * answer (electron/benchmarkRetest.cjs). Every place that holds that same
+   * run (the model's latest result, its score, the show, the saved report) is
+   * updated; a different, later run of the model is left alone. Runs do not
+   * save their judge, so the retest uses the one set now.
+   */
+  const [retesting, setRetesting] = useState<{ model: string; promptId: string } | null>(null);
+  const retestAnswer = useCallback(async (previous: BenchmarkResult, promptId: string) => {
+    if (!agentArcadeApi.retestBenchmarkPrompt || retesting || isBenchmarking) return;
+    if (rigScoreBusy(rigScoreSession.getState())) {
+      tellUser(RIG_SCORE_BUSY);
+      return;
+    }
+    const model = previous.model;
+    const label = previous.prompts.find((prompt) => prompt.id === promptId)?.label ?? 'That question';
+    // The usual check before a test. An answer runs out of time when something
+    // else holds the card, and asking again while it is heavily used would only
+    // repeat it, so that waits. A card that is merely busy is said, as the run
+    // sheet says it, and the question is asked anyway.
+    const card = await agentArcadeApi.getGpuContention().catch(() => null);
+    if (card?.level === 'heavy') {
+      tellUser(`${card.message} Close it, then ask again.`);
+      return;
+    }
+    const busyNote = card?.level === 'busy' ? ` ${card.message}` : '';
+    const row = modelRows.find((candidate) => candidate.displayName === model || candidate.id === model);
+    const runtime = getModelRuntime(row, ollama);
+    const judge = skillJudgeFor(model);
+    const progressId = createRunProgressId('single');
+    activeBenchmarkProgressIdRef.current = progressId;
+    setRetesting({ model, promptId });
+    setIsBenchmarking(true);
+    setActivity(`Asking ${model} ${label} again...`);
+    try {
+      const retested = normalizeBenchmarkResultModel(await agentArcadeApi.retestBenchmarkPrompt({
+        previous,
+        promptId,
+        progressId,
+        settings: {
+          baseUrl: runtime.baseUrl,
+          provider: runtime.provider,
+          qualityMode: judge ? 'judge' : 'heuristic',
+          ...(judge ? { judgeModel: judge.model, judgeProvider: judge.provider, judgeApiKey: judge.apiKey } : {}),
+          autoJudgeModels,
+          judgeEndpoints,
+        },
+      }), model);
+      const key = normalizeModelKey(model);
+      const sameRun = (entry: { model: string; completedAt: string } | null | undefined) => Boolean(entry)
+        && normalizeModelKey(entry!.model) === key && entry!.completedAt === previous.completedAt;
+      const rescore = (entry: TestedModelScore) => ({
+        ...entry,
+        ...toTestedModelScore(retested, entry.suiteName, entry.rig, entry.balance),
+      });
+      setBenchmark((current) => (sameRun(current) ? retested : current));
+      setBenchmarkByModel((current) => (sameRun(getBenchmarkForModel(current, model, row)) ? upsertBenchmarkResults(current, [retested]) : current));
+      setModelScores((current) => {
+        const saved = Object.entries(current).find(([, score]) => sameRun(score));
+        return saved ? { ...current, [saved[0]]: rescore(saved[1]) } : current;
+      });
+      setListTestResult((current) => (current && current.results.some(sameRun)
+        ? { ...current, results: current.results.map((entry) => (sameRun(entry) ? rescore(entry) : entry)) }
+        : current));
+      setRunReports((current) => replaceRunInReports(
+        current,
+        retested,
+        (result, entry) => ({ ...entry, ...toTestedModelScore(result, entry.suiteName, entry.rig, entry.balance) }),
+        (results) => rankMatchResults(results, results[0]?.balance ?? BALANCED),
+      ));
+      const answer = retested.prompts.find((prompt) => prompt.id === promptId);
+      tellUser(answer?.timedOut
+        ? `${label} ran out of time again, so the score is unchanged. Something may still be using the graphics card.${busyNote}`
+        : `Asked “${label}” again. ${model} now scores ${retested.scores.total} (${retested.scores.grade}).${busyNote}`);
+    } catch (error) {
+      const failure = describeRunFailure(getErrorMessage(error), runtime.provider === 'lm-studio' ? 'LM Studio' : 'Ollama');
+      tellUser(failure.kind === 'stopped' ? 'You stopped asking it again. The first answer stays.' : `Could not ask it again. ${failure.reason}`);
+    } finally {
+      activeBenchmarkProgressIdRef.current = null;
+      setRetesting(null);
+      setIsBenchmarking(false);
+    }
+  }, [retesting, isBenchmarking, tellUser, modelRows, ollama, skillJudgeFor, autoJudgeModels, judgeEndpoints]);
+
   const requestQuickCheckRow = useCallback((row: ModelRow) => {
     // Through the sheet with its quick check ticked, unless someone chose to
     // start quick checks straight away.
@@ -4974,8 +5061,20 @@ function App() {
     return () => { canceled = true; clearInterval(id); };
   }, [runProgress?.phase]);
 
+  // Offered wherever answers are shown, except in a blind show before its
+  // reveal (the names stay hidden) and in the browser preview (no models).
+  const answerRetest = useMemo<AnswerRetest | null>(() => (blindMasking || !agentArcadeApi.retestBenchmarkPrompt ? null : {
+    retest: (result, promptId) => { void retestAnswer(result, promptId); },
+    retesting,
+    stop: () => {
+      const progressId = activeBenchmarkProgressIdRef.current;
+      if (progressId) void agentArcadeApi.cancelBenchmark?.(progressId);
+    },
+  }), [blindMasking, retestAnswer, retesting]);
+
   return (
     <BlindShowContext.Provider value={blindMasking}>
+    <AnswerRetestContext.Provider value={answerRetest}>
     <div
       className={`app-shell ${showGlobalLineup ? 'has-global-lineup' : 'no-global-lineup'}${!isDesktopRuntime ? ' has-demo-banner' : ''}`}
       data-theme={themeId}
@@ -6055,6 +6154,7 @@ function App() {
       )}
 
     </div>
+    </AnswerRetestContext.Provider>
     </BlindShowContext.Provider>
   );
 }
