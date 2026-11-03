@@ -256,6 +256,10 @@ export type BenchmarkResult = {
     total: number;
     grade: string;
   };
+  /** What Fit was read from: Ollama's report of the loaded model, an estimate from its size, or its name. */
+  fitBasis?: 'measured' | 'estimated' | 'name';
+  /** Share of the loaded model on the graphics card (0 to 1), when Ollama reported it. */
+  gpuShare?: number;
 };
 
 /** What a score was measured on, stamped at scoring time. */

@@ -12,9 +12,9 @@ import { MATCH_GRADE_BANDS } from './scoring.ts';
 
 export const SCORE_WEIGHTS = [
   { label: 'Quality', pct: 34, detail: 'Average per-prompt answer quality score (0–100). Fixed rules check what can be checked: does the JSON parse, does the truth-trap get a humble answer, does the format match. Open-ended answers are marked by a judge model, a local one unless you chose a cloud judge. Answers nothing can mark, like everyday chat with no judge, are left out of the average.' },
-  { label: 'Speed', pct: 32, detail: 'Average generation speed across the answers, scaled so 5 tokens a second scores 0 and 100 or more scores 100. This reflects your machine, not some cloud baseline.' },
+  { label: 'Speed', pct: 32, detail: 'Average writing speed across the answers, scaled so 5 tokens a second scores 0 and 50 or more scores 100. Past 50 a reply arrives faster than anyone reads it, so a quicker model gains nothing more. This reflects your machine, not some cloud baseline.' },
   { label: 'Reliability', pct: 18, detail: 'The share of answers that finished cleanly: not empty, not failed, and not cut off at the token limit. A model that crashes, stalls or rambles past the limit hurts here. A drawing that ran out of time is not counted either way.' },
-  { label: 'Computer Fit', pct: 16, detail: 'How big the model is, read from its name: up to 3B scores 96, up to 9B 88, up to 15B 74, up to 34B 58, larger 38, and 82 when the name has no size. It does not look at your graphics memory; the Fit grade on the Models list does.' },
+  { label: 'Computer Fit', pct: 16, detail: 'How comfortably the model sat in your memory during the test, as Ollama reported it. All of it on the graphics card with at least 15% of the card left over scores 100, down to 70 with nothing left over. Part of it in system memory scores 60 times the share on the card. On a PC whose card Ollama does not use, it is judged against system memory. For LM Studio it is estimated from the model\'s size, and only when nothing is known does it fall back to the size in the model\'s name.' },
 ];
 
 // Grade rows derived from the single canonical band list, so every table in the

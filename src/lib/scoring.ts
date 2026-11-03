@@ -15,8 +15,14 @@ import { summarizeTaskScores } from './taskScores.ts';
  * did, so answer quality averaged in answers nothing could grade (prose
  * scored by length), and every group counted as graded. The tools group also
  * gained real tool calls (electron/agentTools.cjs) alongside its json ones.
+ *
+ * v7 (0.11.0): Speed is full at 50 tok/s, not 100, and Fit is read from this
+ * PC (how much of the loaded model sat on the graphics card, and the room
+ * left), not from the size in the model's name. See electron/matchFit.cjs.
+ * Under v6 a mid-size model lost points on both that a small one kept, so a
+ * v6 score and a v7 score cannot be ranked against each other.
  */
-export const CURRENT_SCORE_SCHEMA_VERSION = 6;
+export const CURRENT_SCORE_SCHEMA_VERSION = 7;
 
 /**
  * Relative weights that make up the 0–100 Match Score. They sum to 1.0.
