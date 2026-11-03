@@ -257,15 +257,16 @@ A is the best pick for this computer and F will not fit. The grade weighs answer
 
 ## How the Match Score works
 
-Each model runs the same question set on your hardware. The score blends:
+Each model runs the same question set on your hardware. The score blends four parts:
 
-| Ingredient | What it measures |
-|---|---|
-| ⚡ Speed | Tokens/sec and first-token latency on your rig |
-| 🎯 Quality | Whether answers hold up: valid JSON, followed instructions, no invented facts. Fixed rules mark most answers. A judge model marks the open-ended ones: one of your local models, picked for you unless you choose, or an OpenRouter model if you turn that on. A quick check uses rules only |
-| 🧩 Fit | How comfortably the model sits in your VRAM/RAM |
+| Ingredient | Weight | What it measures |
+|---|---|---|
+| 🎯 Quality | 34% | Whether answers hold up: valid JSON, followed instructions, no invented facts. Fixed rules mark most answers. A judge model marks the open-ended ones: one of your local models, picked for you unless you choose, or an OpenRouter model if you turn that on. A quick check uses rules only |
+| ⚡ Speed | 32% | Average writing speed on your rig, in tokens a second: 5 scores 0, and 100 or more scores 100 |
+| 🔁 Reliability | 18% | The share of answers that finished cleanly: not empty, not failed, and not cut off at the token limit |
+| 🧩 Fit | 16% | How big the model is, read from the size in its name: 3B or under scores highest, and bigger models score less. It does not look at your graphics memory. The Fit grade on the Models list and in `rigmatch-fit` does |
 
-The result is a 0–100 Match Score and a letter grade, measured on your machine rather than a leaderboard's H100. Speed and fit are measured directly. Quality is the softest of the three, which is why the app shows the breakdown rather than only the total.
+The result is a 0–100 Match Score and a letter grade, measured on your machine rather than a leaderboard's H100. Speed and reliability are measured on your PC, and Fit comes from the model's size. Quality is the softest of the four, which is why the app shows the breakdown rather than only the total. **Rank by** on the Winner screen and the fader on Results move the weight between accuracy and speed.
 
 ## Privacy
 
