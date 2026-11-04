@@ -1,8 +1,10 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import type { BenchmarkQuestion } from '../benchmarkSuite.ts';
 import type { BenchmarkResult, ModelRow, TestedModelScore } from '../types';
+import { BALANCED } from './balance.ts';
+import { rankMatchResults } from './channelWinners.ts';
 import { normalizeModelKey } from './modelKey.ts';
-import { formatMatchScore } from './scoring.ts';
+import { formatMatchScore, toTestedModelScore } from './scoring.ts';
 
 /**
  * Every test, kept as an event you can reopen: a comparison, or one model on
@@ -179,6 +181,26 @@ export function describeReport(report: StoredRunReport): string {
     ? `, ${report.questionCount} question${report.questionCount === 1 ? '' : 's'} each`
     : '';
   return `${models} model${models === 1 ? '' : 's'} · ${report.winner} won${questions}`;
+}
+
+/**
+ * A finished run's results as its report keeps them: ranked at the fader the
+ * run used, each entry carrying that position. Without the position, a retest
+ * ranked the report again at Balanced against totals still weighted at the
+ * run's fader, and could crown the wrong model.
+ */
+export function reportResults(results: BenchmarkResult[], suiteName: string | undefined, balance: number): TestedModelScore[] {
+  return rankMatchResults(results.map((result) => toTestedModelScore(result, suiteName, undefined, balance)), balance);
+}
+
+/** One entry scored again from its retested run, keeping its suite, rig stamp and fader. */
+export function rescoreEntry(result: BenchmarkResult, entry: TestedModelScore): TestedModelScore {
+  return { ...entry, ...toTestedModelScore(result, entry.suiteName, entry.rig, entry.balance) };
+}
+
+/** A report's results ranked again at the fader they were saved at (Balanced for reports saved without one). */
+export function rerankReport(results: TestedModelScore[]): TestedModelScore[] {
+  return rankMatchResults(results, results.find((entry) => typeof entry.balance === 'number')?.balance ?? BALANCED);
 }
 
 /**

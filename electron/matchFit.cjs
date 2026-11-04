@@ -113,7 +113,11 @@ function fitFromPc({ model, footprint = null, fileBytes = 0, graphicsBytes = 0, 
   if (footprint) {
     const { share, sizeBytes, vramBytes } = footprint;
     if (share >= ALL_ON_CARD) {
-      return { fit: graphicsBytes > 0 ? roomFit(vramBytes, graphicsBytes) : 100, basis: 'measured', gpuShare: 1 };
+      // More on the graphics memory than the card RigMatch read holds: Ollama
+      // spread it over two or more cards, whose total is not known here. Judged
+      // like an unknown card, not as one card overfilled.
+      const pool = vramBytes > graphicsBytes ? 0 : graphicsBytes;
+      return { fit: pool > 0 ? roomFit(vramBytes, pool) : 100, basis: 'measured', gpuShare: 1 };
     }
     if (share > 0) return { fit: spillFit(share), basis: 'measured', gpuShare: share };
     // Nothing on the card: Ollama runs it from system memory, on a PC whose

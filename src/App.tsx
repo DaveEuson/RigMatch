@@ -88,8 +88,11 @@ import {
   removeModelFromReports,
   replaceRunInReports,
   reportQuestionPlan,
+  reportResults,
   reportRows,
   reportStorageCandidates,
+  rerankReport,
+  rescoreEntry,
 } from './lib/runReports';
 import type { NavId, NavItem } from './lib/appConfig';
 import { playCue, playJingle } from './lib/sound';
@@ -178,6 +181,7 @@ import {
   getScoreTrend,
   readRunHistory,
   removeRuns,
+  replaceRunScores,
   seedFromBenchmarkResults,
   toRunHardware,
   toRunHistoryEntry,
@@ -1111,7 +1115,7 @@ function App() {
       id: makeReportId(completedAt, winner),
       completedAt,
       winner,
-      results: rankMatchResults(results.map((r) => toTestedModelScore(r, currentSuiteName)), balance),
+      results: reportResults(results, currentSuiteName, balance),
       questionCount: Math.max(...results.map((r) => r.prompts.length)),
       suiteName: currentSuiteName,
       // The whole result, not just its prompts: the transcript panel reads
@@ -2669,10 +2673,9 @@ function App() {
       const key = normalizeModelKey(model);
       const sameRun = (entry: { model: string; completedAt: string } | null | undefined) => Boolean(entry)
         && normalizeModelKey(entry!.model) === key && entry!.completedAt === previous.completedAt;
-      const rescore = (entry: TestedModelScore) => ({
-        ...entry,
-        ...toTestedModelScore(retested, entry.suiteName, entry.rig, entry.balance),
-      });
+      const rescore = (entry: TestedModelScore) => rescoreEntry(retested, entry);
+      // The answer asked again may be the drawing, which the show's gallery keeps apart.
+      const retestedDrawing = showDrawingsFrom([retested])?.[retested.model];
       setBenchmark((current) => (sameRun(current) ? retested : current));
       setBenchmarkByModel((current) => (sameRun(getBenchmarkForModel(current, model, row)) ? upsertBenchmarkResults(current, [retested]) : current));
       setModelScores((current) => {
@@ -2680,14 +2683,19 @@ function App() {
         return saved ? { ...current, [saved[0]]: rescore(saved[1]) } : current;
       });
       setListTestResult((current) => (current && current.results.some(sameRun)
-        ? { ...current, results: current.results.map((entry) => (sameRun(entry) ? rescore(entry) : entry)) }
+        ? {
+          ...current,
+          results: current.results.map((entry) => (sameRun(entry) ? rescore(entry) : entry)),
+          ...(retestedDrawing ? { drawings: { ...current.drawings, [retested.model]: retestedDrawing } } : {}),
+        }
         : current));
-      setRunReports((current) => replaceRunInReports(
-        current,
-        retested,
-        (result, entry) => ({ ...entry, ...toTestedModelScore(result, entry.suiteName, entry.rig, entry.balance) }),
-        (results) => rankMatchResults(results, results[0]?.balance ?? BALANCED),
-      ));
+      setRunReports((current) => replaceRunInReports(current, retested, rescoreEntry, rerankReport));
+      // The timeline keeps one entry per run, so the run's entry takes the new score in place.
+      setRunHistory((current) => {
+        const next = replaceRunScores(current, retested, toTestedModelScore(retested).preciseTotal);
+        if (next !== current) writeRunHistory(next);
+        return next;
+      });
       const answer = retested.prompts.find((prompt) => prompt.id === promptId);
       tellUser(answer?.timedOut
         ? `${label} ran out of time again, so the score is unchanged. Something may still be using the graphics card.${busyNote}`

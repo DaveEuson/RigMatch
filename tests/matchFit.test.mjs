@@ -48,6 +48,14 @@ test('a model partly in system memory scores 60 times its share on the card', ()
   assert.ok(fitFromPc({ model: 'm', footprint: footprint(0.98), graphicsBytes: 12 * GB }).fit < 70);
 });
 
+test('a model spread over two cards is not scored as one card overfilled', () => {
+  // Two 12 GB cards: RigMatch reads one, Ollama puts 20 GB across both.
+  const footprint = { sizeBytes: 20 * GB, vramBytes: 20 * GB, share: 1 };
+  assert.deepEqual(fitFromPc({ model: 'qwen3:32b', footprint, graphicsBytes: 12 * GB }), { fit: 100, basis: 'measured', gpuShare: 1 });
+  // One card, filled to the top, still scores as full.
+  assert.equal(fitFromPc({ model: 'm', footprint: { sizeBytes: 12 * GB, vramBytes: 12 * GB, share: 1 }, graphicsBytes: 12 * GB }).fit, 70);
+});
+
 test('with no usable card, Fit is judged against system memory instead of 0 for every model', () => {
   const ram = 16 * GB;
   const cpu = (sizeGb) => fitFromPc({ model: 'm', footprint: { sizeBytes: sizeGb * GB, vramBytes: 0, share: 0 }, graphicsBytes: 0.5 * GB, systemBytes: ram });
@@ -88,4 +96,21 @@ test('the footprint is read from Ollama\'s /api/ps listing, for this model only'
   assert.equal(loadedFootprint({ models: [{ name: 'x:1b', size: 0, size_vram: 0 }] }, 'x:1b'), null, 'no size, no reading');
   assert.equal(loadedFootprint(null, 'x'), null);
   assert.equal(loadedFootprint({ models: [{ name: 'x:1b', size: 100 }] }, 'x:1b').share, 0, 'no size_vram: nothing on the card');
+});
+
+test('two models the same size in memory get the same Fit, whatever their names say', () => {
+  // Bonsai 2's ternary 27B (8.26 GB) and gemma3:12b (8.16 GB) on a 12 GB card.
+  // Through score version 6 Fit read the names and gave them 58 and 74.
+  const card = 12 * GB;
+  const loaded = { sizeBytes: 9.2 * GB, vramBytes: 9.2 * GB, share: 1 };
+  assert.notEqual(fitFromName('bonsai-2:27b'), fitFromName('gemma3:12b'));
+  assert.deepEqual(
+    fitFromPc({ model: 'bonsai-2:27b', footprint: loaded, graphicsBytes: card }),
+    fitFromPc({ model: 'gemma3:12b', footprint: loaded, graphicsBytes: card }),
+  );
+  // Estimated from the download (LM Studio) the same way.
+  assert.equal(
+    fitFromPc({ model: 'bonsai-2-27b', fileBytes: 8.26e9, graphicsBytes: card }).fit,
+    fitFromPc({ model: 'gemma-3-12b', fileBytes: 8.26e9, graphicsBytes: card }).fit,
+  );
 });

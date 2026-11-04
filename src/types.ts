@@ -350,6 +350,13 @@ export type TestedModelScore = {
    * asked for going in. Absent on runs from before the fader.
    */
   balance?: number;
+  /**
+   * 'model' when the run asked with the model's own settings rather than
+   * RigMatch's temperature 0 (electron/modelSettings.cjs). Such a score is not
+   * like-for-like with the rest, so it is labelled wherever it is ranked.
+   * Absent for the usual settings.
+   */
+  sampling?: 'model';
 };
 
 export type BenchmarkProgressUpdate = {

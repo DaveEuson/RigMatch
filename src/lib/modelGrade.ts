@@ -11,9 +11,8 @@
  *
  * It is called the Fit grade, on its own A–F scale, and deliberately not a
  * forecast of the Match Score. The Match Score is mostly answer quality and
- * reliability measured in a show, which nothing can predict from a file size;
- * its speed part rewards tiny models, and its fit part reads the parameter
- * count without looking at this PC. The Fit grade answers the question asked
+ * reliability measured in a show, which nothing can predict from a file size,
+ * and its speed and fit parts are measured in the show too. The Fit grade answers the question asked
  * before a show: how good a pick is this model for this computer. Different
  * letters (no S, no B+) keep the two from being read as one number.
  *
@@ -73,6 +72,8 @@ export type GradeEvidence = {
 export type GradeRow = Pick<ModelRow, 'params' | 'sizeGb' | 'fitOverride'> & CapabilityBearing & {
   name: string;
   generationKind?: ModelRow['generationKind'];
+  /** How the installed copy was squeezed, as Ollama or LM Studio names it ("Q4_K_M", "Q2_0", "4bit"). */
+  quantization?: string;
 };
 
 /**
@@ -154,6 +155,32 @@ function paramsBillions(row: Pick<GradeRow, 'params' | 'sizeGb'>): number | null
   const labelled = getParamSortValue(row.params ?? '');
   if (labelled > 0) return labelled;
   return row.sizeGb ? row.sizeGb / 0.6 : null;
+}
+
+/**
+ * The size a copy squeezed below 4 bits a weight is counted as, for answer
+ * quality. The usual download is 4-bit, and the size curve was set on those.
+ * Below that the answers get worse: llama.cpp's own perplexity figures put a
+ * 2-bit 13B between a full 7B and a full 13B. A rule of thumb, so a test on
+ * this PC replaces it. It applies to models trained at low bits too (Bonsai's
+ * ternary Q2_0), whose claim to answer like a full model is unchecked; even so,
+ * the 2-bit Bonsai 9B still grades above gemma3:4b, as its test here came out.
+ */
+const LOW_BIT_SIZE_SHARE: Record<number, number> = { 1: 0.45, 2: 0.65, 3: 0.8 };
+
+/**
+ * 1, 2 or 3 when the copy is squeezed below 4 bits, else null. Read from the
+ * installed copy's label ("Q2_K", "IQ2_XXS", "TQ1_0", "3bit") or a tag that
+ * names one ("8b-instruct-q2_K"). The label wins, since a tag can be renamed.
+ */
+function squeezedBits(row: Pick<GradeRow, 'name' | 'quantization'> & { displayName?: string }): number | null {
+  const label = String(row.quantization ?? '').trim();
+  const tag = fullName(row).toLowerCase().split(':')[1] ?? '';
+  const match = label
+    ? label.match(/^[it]?q(\d)(?:_|$)/i) ?? label.match(/^(\d)[-_ ]?bits?$/i)
+    : tag.match(/(?:^|[-_])[it]?q(\d)(?:_|-|$)/);
+  const bits = match ? Number.parseInt(match[1], 10) : null;
+  return bits && LOW_BIT_SIZE_SHARE[bits] ? bits : null;
 }
 
 /**
@@ -329,7 +356,8 @@ function speedPoints(tokensPerSecond: number): number {
  * Answer quality, 0–100: the score from a test on this PC when there is one,
  * otherwise a curve on size (1B 40, 4B 70, 8B 85, 14B and up near 100), with
  * a mixture-of-experts model counted at the geometric mean of its total and
- * active size, and an older family counted 20 points lower.
+ * active size, a copy squeezed below 4 bits as a smaller model
+ * (LOW_BIT_SIZE_SHARE), and an older family counted 20 points lower.
  *
  * Each thing the model can do beyond text (call tools, think before
  * answering, read images, hear) adds 5. Nothing else in the catalog says how
@@ -341,12 +369,15 @@ function qualityPoints(row: GradeRow, evidence: GradeEvidence): { points: number
     return { points: clamp(evidence.score.sobriety), reason: `answers scored ${Math.round(evidence.score.sobriety)} in its test here` };
   }
   const totalB = paramsBillions(row) ?? 1;
-  const effectiveB = Math.sqrt(totalB * totalB * shareOf(row));
+  // A size guessed from the download already assumes 4 bits, so only a labelled size is discounted.
+  const bits = getParamSortValue(row.params ?? '') > 0 ? squeezedBits(row) : null;
+  const effectiveB = Math.sqrt(totalB * totalB * shareOf(row)) * (bits ? LOW_BIT_SIZE_SHARE[bits] : 1);
   const older = OLDER_FAMILIES.has(familyOf(fullName(row)));
   const abilities = (getModelCapabilities(row) ?? []).filter((ability) => ABILITIES.includes(ability)).length;
   const points = clamp(40 + 15 * Math.log2(Math.max(effectiveB, 0.05)) - (older ? 20 : 0) + abilities * 5);
   const reason = older
     ? 'an older model: newer ones this size answer better'
+    : bits ? `squeezed to ${bits} bit${bits === 1 ? '' : 's'}, which costs answer quality`
     : effectiveB < 2 ? 'tiny, so expect simple answers'
       : effectiveB < 7 ? 'small but capable'
         : effectiveB < 20 ? 'strong for its size'
@@ -529,7 +560,8 @@ export function gradeRow(
 ): FitGrade {
   const here = measuredHere(score, hardware);
   const benchmarkHere = score && !here ? null : benchmark?.avgTokensPerSecond;
-  return gradeModel(row, hardware, { score: here, tokensPerSecond: benchmarkHere, bandwidthGbps });
+  const graded = row.installedModel?.quantization ? { ...row, quantization: row.installedModel.quantization } : row;
+  return gradeModel(graded, hardware, { score: here, tokensPerSecond: benchmarkHere, bandwidthGbps });
 }
 
 /**

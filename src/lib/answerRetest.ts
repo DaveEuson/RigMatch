@@ -26,6 +26,13 @@ const ranOutOfTime = (prompt: Pick<BenchmarkPromptResult, 'timedOut' | 'doneReas
 export function answerNote(prompt: BenchmarkPromptResult): AnswerNote | null {
   if (prompt.retest) {
     const when = new Date(prompt.retest.at).toLocaleString(formatLocale(), { dateStyle: 'medium', timeStyle: 'short' });
+    // Asked again and out of time again: still left out, and it can be asked once more.
+    if (ranOutOfTime(prompt)) {
+      return {
+        text: `Asked again on ${when}, and it ran out of time again, so it is still left out of the score. Something may still be using the graphics card.`,
+        retestable: typeof prompt.countedRuns === 'number',
+      };
+    }
     const first = ranOutOfTime(prompt.retest.firstTry) ? 'ran out of time' : 'went wrong';
     return { text: `Asked again on ${when}. The first try ${first}.`, retestable: false };
   }

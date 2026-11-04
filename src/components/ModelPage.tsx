@@ -4,7 +4,7 @@ import { matchMeasures } from '../lib/matchCard';
 import type { RigPick } from '../lib/modelCatalog';
 import { formatHistoryTime, getFriendlyModelName, getModelProfile } from '../lib/modelCatalog';
 import { gradeRow, measuredBandwidth, pullCommand } from '../lib/modelGrade';
-import { formatMatchScore } from '../lib/scoring';
+import { OWN_SETTINGS_NOTE, formatMatchScore } from '../lib/scoring';
 import { getResponseEstimate } from '../lib/format';
 import { modelTests, type ModelTest } from '../lib/testHistory';
 import type { RunHistory } from '../lib/runHistory';
@@ -134,7 +134,10 @@ export function ModelPage({
           {score ? (
             <>
               <b>{formatMatchScore(score)}</b>
-              <span>Match score · grade {score.grade} · replies in {getResponseEstimate(score.speed)}</span>
+              <span>
+                Match score · grade {score.grade} · replies in {getResponseEstimate(score.speed)}
+                {score.sampling === 'model' && <> · <abbr title={OWN_SETTINGS_NOTE}>asked with its own settings</abbr></>}
+              </span>
             </>
           ) : (
             <span>Not tested on this computer yet</span>

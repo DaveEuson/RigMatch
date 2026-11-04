@@ -133,7 +133,7 @@ export function fetchJson(url: string, options: FetchOptions = {}, timeoutMs = 4
 export async function installedOllamaModels(baseUrl: string): Promise<InstalledModel[] | null> {
   try {
     const body = await fetchJson(`${baseUrl}/api/tags`, {}, 1500) as {
-      models?: Array<{ name?: string; size?: number; remote_host?: string; details?: { parameter_size?: string } }>;
+      models?: Array<{ name?: string; size?: number; remote_host?: string; details?: { parameter_size?: string; quantization_level?: string } }>;
     };
     return (body.models ?? [])
       .filter((model) => typeof model.name === 'string' && model.name)
@@ -141,6 +141,7 @@ export async function installedOllamaModels(baseUrl: string): Promise<InstalledM
         name: String(model.name),
         sizeGb: toGb(Number(model.size) || 0),
         params: model.details?.parameter_size,
+        ...(model.details?.quantization_level ? { quantization: model.details.quantization_level } : {}),
         ...(model.remote_host ? { remote: true } : {}),
       }));
   } catch {

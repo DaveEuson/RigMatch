@@ -16,7 +16,7 @@ import { buildBugReportUrl, buildDiagnosticsText, buildShareableScorecard, getNa
 import { MATCH_GRADE_BAND_ROWS } from '../lib/scoreReference';
 import type { SettingsSectionId } from '../lib/settingsSections';
 import { buildSettingsRail } from '../lib/settingsSections';
-import { formatMatchScore, isLegacyScore, scoreDrift, scoreDriftLabel } from '../lib/scoring';
+import { OWN_SETTINGS_NOTE, formatMatchScore, isLegacyScore, scoreDrift, scoreDriftLabel } from '../lib/scoring';
 import { balanceSplit } from '../lib/balance';
 import { describeLabAccuracy, rankLabList, type LabChannel } from '../lib/channelWinners';
 import type { AdvancedLabResult } from '../lib/labResults';
@@ -558,6 +558,9 @@ export function UtilityPanel({
                           >
                             {scoreDriftLabel(drift)}
                           </span>
+                        )}
+                        {score.sampling === 'model' && (
+                          <span className="legacy-score-badge sampling-badge" title={OWN_SETTINGS_NOTE}>Own settings</span>
                         )}
                         <ModelDemoChips model={score.model} label="" className="inline" />
                       </span>
