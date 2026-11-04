@@ -15,6 +15,7 @@ _Beta build_
 - Context endurance, under My PC > Speed score in Advanced Mode, tests one installed model at 2K, 8K and 16K of context with a prompt that hides a passkey. It says where the model first slows down, moves part of itself to system memory, or loses the passkey, on your graphics card. Every other test runs at 2K, so a model that is quick there can crawl at 16K without anything saying so. In a terminal, rigmatch-fit --endurance with a model name does the same. It works with Ollama only and takes a few minutes.
 - The Fit grade on the Models list and in rigmatch-fit now counts a copy squeezed below 4 bits (Q3, Q2 and smaller) as a smaller model when it estimates answer quality, and its reasons say so. A test on your PC still replaces the estimate.
 - RigMatch's list of what each Ollama model can do is refreshed for 271 families, including LFM3 and MiMo v2.6. pplx-decider-flash is a decision model, so it stays out of chat picks like the other decision models.
+- RigMatch and rigmatch-fit now use systeminformation 5.33.16, which fixes three security problems in parts of it that RigMatch doesn't use (reading Windows services and network statistics).
 
 ## 0.10.1 — Every Test, Listed
 _Beta build_
