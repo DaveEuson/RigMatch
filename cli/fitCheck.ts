@@ -40,6 +40,8 @@ export type FitHardware = {
 /** What Ollama's /api/tags lists: sizes in GiB, as the app reads them. */
 export type InstalledModel = {
   name: string; sizeGb: number; params?: string;
+  /** Ollama's quantization_level ("Q4_K_M", "Q2_0"): below 4 bits the grade counts it as a smaller model. */
+  quantization?: string;
   /** One of Ollama's cloud models: listed here, but it runs on Ollama's servers, not on this computer. */
   remote?: boolean;
 };
@@ -153,13 +155,13 @@ export function rankModels(
   const known = new Set(catalog.flatMap((row) => [row.name, ...(row.aliases ?? [])]));
   const extra: CatalogRow[] = (installed ?? [])
     .filter((model) => !known.has(model.name))
-    .map((model) => ({ name: model.name, displayName: model.name, params: model.params ?? '', sizeGb: model.sizeGb || null }))
+    .map((model) => ({ name: model.name, displayName: model.name, params: model.params ?? '', sizeGb: model.sizeGb || null, quantization: model.quantization }))
     .filter(isListed);
   return [...catalog, ...extra]
     .map((listed) => {
       const have = [listed.name, ...(listed.aliases ?? [])].map((name) => byName.get(name)).find(Boolean);
       const merged: CatalogRow = have
-        ? { ...listed, sizeGb: have.sizeGb || listed.sizeGb, params: have.params || listed.params }
+        ? { ...listed, sizeGb: have.sizeGb || listed.sizeGb, params: have.params || listed.params, quantization: have.quantization }
         : listed;
       const spill = mixtureSpillFit(merged, hardware);
       const row = spill ? { ...merged, fitOverride: spill } : merged;

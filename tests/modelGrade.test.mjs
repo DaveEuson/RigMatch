@@ -367,3 +367,44 @@ test('a picture or video model says which part of its download has to fit', () =
   assert.equal(footprintFit(token, 14.3, 38.03), token, 'nothing to say about size until it can be downloaded');
   assert.equal(footprintFit(offload, 14.3, 14.5), offload, 'when the two are the same, there is nothing to explain');
 });
+
+test('a copy squeezed below 4 bits is graded as a smaller model, and says so', () => {
+  const as = (quantization, name = 'newfamily:8b') => gradeModel(row(name, '8B', 4.9, { quantization }), rtx4070);
+  const usual = as('Q4_K_M');
+  const twoBit = as('Q2_K');
+  assert.ok(twoBit.points < usual.points, `${twoBit.points} vs ${usual.points}`);
+  assert.ok(as('Q3_K_M').points < usual.points && as('Q3_K_M').points > twoBit.points, 'three bits costs less than two');
+  assert.ok(as('IQ1_S').points < twoBit.points, 'one bit costs more');
+  assert.match(twoBit.summary, /squeezed to 2 bits, which costs answer quality$/);
+  assert.match(as('TQ1_0').summary, /squeezed to 1 bit, which/);
+  // Four bits and up, float formats and no label at all grade as before.
+  for (const label of ['Q4_K_M', 'Q4_0', 'IQ4_XS', 'Q5_K_M', 'Q8_0', 'F16', 'BF16', 'MXFP4', '4bit', '8bit', undefined]) {
+    assert.equal(as(label).points, usual.points, String(label));
+  }
+  // Each way of naming it: Ollama's label, LM Studio's MLX label, a tag, and the label over the tag.
+  assert.equal(as('IQ2_XXS').points, twoBit.points);
+  assert.equal(as('3bit').points, as('Q3_K_M').points);
+  assert.equal(as(undefined, 'newfamily:8b-instruct-q2_K').points, twoBit.points, 'the tag names it');
+  assert.equal(as('Q4_K_M', 'newfamily:8b-instruct-q2_K').points, usual.points, 'the installed copy\'s own label wins');
+  // A size guessed from the download already assumes 4 bits, so it is not discounted again.
+  assert.doesNotMatch(gradeModel(row('custom:latest', '', 3.2, { quantization: 'Q2_K' }), rtx4070).summary, /squeezed/);
+});
+
+test('Bonsai\'s 2-bit 9B still grades above gemma3:4b, as its test on this card came out', () => {
+  // Both from Ollama's own listing (2026-10-26). In the test the 9B finished
+  // more and both strong judges preferred its pictures.
+  const bonsai = gradeModel(row('bonsai-2:9b', '9.0B', 2.96, { quantization: 'Q2_0', capabilities: ['completion'] }), rtx4070);
+  const gemma = gradeModel(row('gemma3:4b', '3.9B', 3.12, { quantization: 'Q4_K_M', capabilities: ['completion', 'vision'] }), rtx4070);
+  assert.ok(bonsai.points > gemma.points, `${bonsai.points} vs ${gemma.points}`);
+  assert.match(bonsai.summary, /squeezed to 2 bits/);
+});
+
+test('a Models row reads the installed copy\'s label', () => {
+  const listRow = {
+    id: 'newfamily:8b', name: 'newfamily', tag: '8b', params: '8B', sizeGb: 4.9, pack: '', source: 'Ollama', live: false,
+    displayName: 'newfamily:8b', installed: true, ready: true, installLabel: 'Installed',
+  };
+  const squeezed = gradeRow({ ...listRow, installedModel: { name: 'newfamily:8b', model: 'newfamily:8b', sizeGb: 4.9, quantization: 'Q2_K' } }, rtx4070, {});
+  assert.match(squeezed.summary, /squeezed to 2 bits/);
+  assert.doesNotMatch(gradeRow(listRow, rtx4070, {}).summary, /squeezed/);
+});

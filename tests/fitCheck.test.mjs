@@ -367,3 +367,20 @@ test('the built command is plain JS that needs only Node and systeminformation',
     rmSync(out, { recursive: true, force: true });
   }
 });
+
+test('an installed copy squeezed below 4 bits is graded on Ollama\'s own label for it', async () => {
+  const { createServer } = await import('node:http');
+  const { installedOllamaModels } = await import('../cli/ollamaHttp.ts');
+  const tags = { models: [{ name: 'qwen3:8b', size: 3.3e9, details: { parameter_size: '8.2B', quantization_level: 'Q2_K' } }] };
+  const server = createServer((request, response) => response.end(JSON.stringify(request.url === '/api/tags' ? tags : {})));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const installed = await installedOllamaModels(`http://127.0.0.1:${server.address().port}`);
+    assert.equal(installed[0].quantization, 'Q2_K');
+    const ranked = rankModels(catalogRows(), card, { installed });
+    assert.match(ranked.find((model) => model.row.name === 'qwen3:8b').grade.summary, /squeezed to 2 bits/);
+    assert.doesNotMatch(rankModels(catalogRows(), card).find((model) => model.row.name === 'qwen3:8b').grade.summary, /squeezed/);
+  } finally {
+    server.close();
+  }
+});
